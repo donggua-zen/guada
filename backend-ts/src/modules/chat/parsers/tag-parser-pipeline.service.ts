@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { CommandProviderRegistry } from "../../commands/command-provider-registry.service";
-import { ParserResult } from "../../commands/interfaces/command-provider.interface";
+import { ParserResult, CommandContext } from "../../commands/interfaces/command-provider.interface";
 
 /** 单个提取的标签 */
 export interface ExtractedTag {
@@ -48,7 +48,7 @@ export class TagParserPipeline {
    * @param text 原始文本（含标签）
    * @returns 解析结果（原始文本 + 最终文本）
    */
-  async parse(text: string): Promise<PipelineResult> {
+  async parse(text: string, ctx?: CommandContext): Promise<PipelineResult> {
     const tags = this.extractTags(text);
     if (tags.length === 0) {
       return { originalText: text, content: text };
@@ -70,7 +70,7 @@ export class TagParserPipeline {
 
       let result: ParserResult | undefined;
       try {
-        result = await parseFn(tag.attrs);
+        result = await parseFn(tag.attrs, ctx);
       } catch (error) {
         this.logger.error(`标签解析失败: [${tag.type}] ${tag.raw}`, error);
         seen.set(tag.raw, { replacement: tag.raw });

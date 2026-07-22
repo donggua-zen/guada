@@ -10,7 +10,7 @@ import {
   MessageEvent,
   Req,
 } from "@nestjs/common";
-import { Observable, Subject } from "rxjs";
+import { Observable } from "rxjs";
 import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
@@ -52,59 +52,58 @@ export class WorkspaceEventsController {
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 使用 clientId 区分不同页面，支持多页面共享 watcher
-    const finalClientId = clientId || `default_${Date.now()}`;
+    const finalClientId = clientId || "default";
 
-    // 开始监听工作目录（初始只监听根目录）
-    this.fileWatcherService.startWatching(id, workspacePath, finalClientId);
+    return new Observable<MessageEvent>((subscriber) => {
+      const response = req.res;
+      if (response?.destroyed) {
+        subscriber.complete();
+        return undefined;
+      }
 
-    // 创建 SSE 事件流
-    const eventSubject = new Subject<MessageEvent>();
+      // 开始监听工作目录（初始只监听根目录）
+      const releaseWatching = this.fileWatcherService.startWatching(
+        id,
+        workspacePath,
+        finalClientId,
+        () => subscriber.complete(),
+      );
 
-    // 注册文件变化监听器
-    const unsubscribe = this.fileWatcherService.onFileChange(id, (event: FileChangeEvent) => {
-      eventSubject.next({
-        data: event,
-      } as MessageEvent);
-    });
+      // 注册文件变化监听器
+      const unsubscribe = this.fileWatcherService.onFileChange(
+        id,
+        (event: FileChangeEvent) => {
+          subscriber.next({ data: event } as MessageEvent);
+        },
+      );
 
-    // 每 90 秒发送一次心跳，防止前端超时断开
-    const heartbeatTimer = setInterval(() => {
-      try {
-        eventSubject.next({
+      // 每 90 秒发送一次心跳，防止前端超时断开
+      const heartbeatTimer = setInterval(() => {
+        subscriber.next({
           data: JSON.stringify({
             type: "heartbeat",
             timestamp: new Date().toISOString(),
           }),
         } as MessageEvent);
-      } catch (error) {
-        clearInterval(heartbeatTimer);
-      }
-    }, 90000);
+      }, 90000);
 
-    // 当连接关闭时清理资源：减少引用计数
-    eventSubject.subscribe({
-      complete: () => {
+      const handleResponseClose = () => {
+        subscriber.complete();
+      };
+      response?.once("close", handleResponseClose);
+
+      let cleanedUp = false;
+      return () => {
+        if (cleanedUp) {
+          return;
+        }
+        cleanedUp = true;
+        response?.off("close", handleResponseClose);
         clearInterval(heartbeatTimer);
         unsubscribe();
-        this.fileWatcherService.stopWatching(id, finalClientId);
-      },
-      error: () => {
-        clearInterval(heartbeatTimer);
-        unsubscribe();
-        this.fileWatcherService.stopWatching(id, finalClientId);
-      },
+        releaseWatching();
+      };
     });
-
-    // 监听底层 HTTP 连接关闭事件（前端断开、网络中断等）
-    req.on("close", () => {
-      clearInterval(heartbeatTimer);
-      unsubscribe();
-      this.fileWatcherService.stopWatching(id, finalClientId);
-      eventSubject.complete();
-    });
-
-    // 返回 Observable
-    return eventSubject.asObservable();
   }
 
   /**
@@ -115,7 +114,7 @@ export class WorkspaceEventsController {
   async updateExpandedPaths(
     @Param("id") id: string,
     @Headers("x-client-id") clientId: string,
-    @Body() body: { expandedPaths: string[] },
+    @Body() body: { expandedPaths: string[]; version?: number },
     @CurrentUser() user: any,
   ) {
     // 验证会话归属权
@@ -127,7 +126,15 @@ export class WorkspaceEventsController {
     const finalClientId = clientId || "default";
 
     // 更新该客户端的监听范围
-    this.fileWatcherService.updateExpandedPaths(id, finalClientId, body.expandedPaths || []);
+    const expandedPaths = Array.isArray(body?.expandedPaths)
+      ? body.expandedPaths
+      : [];
+    this.fileWatcherService.updateExpandedPaths(
+      id,
+      finalClientId,
+      expandedPaths,
+      Number(body?.version) || 0,
+    );
 
     return { success: true };
   }

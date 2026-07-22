@@ -305,6 +305,9 @@ export class SessionService {
     let finalWorkspacePath = workspacePath;
     if (finalWorkspacePath === undefined || finalWorkspacePath === null) {
       finalWorkspacePath = await this.workspaceService.generateWorkspaceDir();
+    } else {
+      await this.workspaceService.validateCustomWorkspacePath(finalWorkspacePath);
+      await this.workspaceService.ensureDirectoryExists(finalWorkspacePath);
     }
 
     // 继承角色配置
@@ -343,33 +346,16 @@ export class SessionService {
     sessionSettings: any,
     characterSettings: any,
   ) {
-    // 如果 sessionSettings 为空，使用空对象
     if (!sessionSettings) {
       sessionSettings = {};
     }
 
-    // 字段白名单已由控制器层的 ValidationPipe + SessionSettingsDto 处理，
-    // 此处直接使用传入的 settings 进行业务继承逻辑。
     const filteredSettings = { ...sessionSettings };
 
-    // 第一步：处理 memory 分组的继承逻辑
-    // 如果未开启自定义配置（memoryEnabled === false），则继承角色的 memory 配置
-    if (filteredSettings.memoryEnabled === false) {
-      filteredSettings.memory = characterSettings?.memory || null;
-    } else if (!filteredSettings.memory && characterSettings?.memory) {
-      // 如果没有传递 memory 但有角色配置，则继承角色配置
-      filteredSettings.memory = characterSettings.memory;
-    } else if (filteredSettings.memory) {
-      // 开启了自定义配置，使用客户端传递的值并确保结构完整
-      const sessionMemory = filteredSettings.memory;
-
-      filteredSettings.memory = {
-        compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
-        compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
-        summaryMode: sessionMemory.summaryMode ?? SummaryMode.DEFAULT,
-        maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
-      };
-    }
+    // memory 配置始终从角色继承，会话不再支持自定义 memory 覆盖
+    filteredSettings.memory = characterSettings?.memory || null;
+    // 移除 memoryEnabled 字段，不再使用
+    delete filteredSettings.memoryEnabled;
 
     return filteredSettings;
   }
@@ -424,11 +410,13 @@ export class SessionService {
 
     // 更新会话配置
     await this.sessionRepo.update(sessionId, { workspacePath });
+    this.fileWatcherService.rebindWorkspace(sessionId, workspacePath);
 
     // 级联更新所有子会话的工作目录
     const children = await this.sessionRepo.findByParentId(sessionId);
     for (const child of children) {
       await this.sessionRepo.update(child.id, { workspacePath });
+      this.fileWatcherService.rebindWorkspace(child.id, workspacePath);
     }
   }
 
@@ -448,11 +436,11 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 停止文件监听（强制关闭，不等待引用计数）
-    this.fileWatcherService.stopWatching(sessionId, "__force_close__");
-
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
+
+    // 数据库删除成功后再停止监听并关闭对应 SSE
+    this.fileWatcherService.stopWatchingSession(sessionId);
 
     // 根据参数决定是否删除工作目录
     if (deleteWorkspace) {

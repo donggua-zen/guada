@@ -8,6 +8,7 @@ import { CharacterRepository } from "../../common/database/character.repository"
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { ISessionContext } from "../chat/session-context";
 
 /**
  * 子 Agent 默认系统提示词
@@ -225,8 +226,7 @@ export class SubAgentManager implements OnModuleInit {
    */
   async spawn(
     params: {
-      parentSessionId: string;
-      userId: string;
+      parentContext: ISessionContext;
       name: string;
       task: string;
       characterId?: string;
@@ -234,36 +234,27 @@ export class SubAgentManager implements OnModuleInit {
     mode: "foreground" | "background" = "foreground",
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
-    // 1. 获取父会话信息（继承配置）
-    const parentSession = await this.sessionRepo.findById(
-      params.parentSessionId,
-    );
-    if (!parentSession) {
-      throw new Error("父会话不存在");
-    }
+    const { parentContext } = params;
+    const parentSessionId = parentContext.sessionId;
+    const userId = parentContext.userId;
 
     // 限制子代理数量：一个会话最多创建 10 个
-    const subAgentCount = await this.sessionRepo.countByParentId(
-      params.parentSessionId,
-    );
+    const subAgentCount =
+      await this.sessionRepo.countByParentId(parentSessionId);
     if (subAgentCount >= 10) {
       throw new Error(
         "当前会话子代理数量已达上限（10个），请先关闭部分子代理后再创建",
       );
     }
 
-    // 2. 提取父会话的工具配置
-    const parentCharacterSettings = (parentSession.character?.settings ||
-      {}) as any;
-    const parentSessionSettings = (parentSession.settings || {}) as any;
+    // 从父会话上下文提取已合并的工具配置
+    // PersistentSessionContext.mergeSettings() 已自动处理
+    // sessionSettings.xxx ?? characterSettings.xxx 回退
+    const inheritedPlugins = parentContext.getSettings("plugins");
+    const inheritedSkillsConfig = parentContext.getSettings("skills");
 
-    const inheritedPlugins =
-      parentSessionSettings.plugins ?? parentCharacterSettings.plugins;
-    const inheritedSkillsConfig =
-      parentSessionSettings.skills ?? parentCharacterSettings.skills;
-
-    // 3. 角色驱动的子 Agent 创建
-    let finalModelId: string | null = parentSession.modelId;
+    // 角色驱动的子 Agent 创建
+    let finalModelId: string | null = parentContext.getModelConfig().id;
     let finalCharacterId: string | null = null;
     let finalAvatarUrl: string | undefined;
 
@@ -275,9 +266,11 @@ export class SubAgentManager implements OnModuleInit {
     const settings: Record<string, any> = {};
 
     // 思考强度：无论是否有角色，都从父会话继承
-    settings.thinkingEffort = parentSessionSettings.thinkingEffort;
+    settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
+    // 运行模式：从父会话继承，防止子代理权限逃逸（如 sandbox → normal）
+    settings.runMode = parentContext.getRunMode();
 
-    if (params.characterId) {
+    if (params.characterId && params.characterId !== "generic") {
       // ── 数据库角色模式 ──
       const character = await this.characterRepo.findById(params.characterId);
       if (!character) {
@@ -285,7 +278,7 @@ export class SubAgentManager implements OnModuleInit {
           `角色 ${params.characterId} 不存在，请检查是否输入有误，或此角色已被删除`,
         );
       }
-      finalModelId = character.modelId || parentSession.modelId;
+      finalModelId = character.modelId || parentContext.getModelConfig().id;
       finalCharacterId = params.characterId;
       finalAvatarUrl = character.avatarUrl || undefined;
       this.logger.log(
@@ -296,21 +289,15 @@ export class SubAgentManager implements OnModuleInit {
       settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
       settings.plugins = inheritedPlugins;
       settings.skills = inheritedSkillsConfig;
-      if (parentSessionSettings.memoryEnabled) {
-        settings.memory = parentSessionSettings.memory;
-      } else {
-        settings.memory = parentCharacterSettings.memory;
-      }
-      settings.memoryEnabled = true;
       // finalCharacterId 保持 null（不走 characterRepo）
     }
 
     return this.createSubSessionAndRun(
+      parentContext,
       params,
       mode,
       abortSignal,
       settings,
-      parentSession,
       finalModelId,
       finalCharacterId,
       finalAvatarUrl,
@@ -322,9 +309,8 @@ export class SubAgentManager implements OnModuleInit {
    * 抽离为私有方法，供普通角色和轻量 Agent 共用
    */
   private async createSubSessionAndRun(
+    parentContext: ISessionContext,
     params: {
-      parentSessionId: string;
-      userId: string;
       name: string;
       task: string;
       characterId?: string;
@@ -332,30 +318,32 @@ export class SubAgentManager implements OnModuleInit {
     mode: "foreground" | "background",
     abortSignal: AbortSignal | undefined,
     settings: Record<string, any>,
-    parentSession: any,
-    modelId: string,
+    modelId: string | null,
     characterId: string | null,
     avatarUrl: string | undefined,
   ): Promise<SubAgentResult> {
+    const parentSessionId = parentContext.sessionId;
+    const userId = parentContext.userId;
+
     const subSession = await this.sessionRepo.create({
-      userId: params.userId,
-      parentId: params.parentSessionId,
+      userId,
+      parentId: parentSessionId,
       title: params.name,
       characterId,
       modelId,
       settings,
       sessionType: "sub_agent",
-      workspacePath: parentSession.workspacePath,
+      workspacePath: parentContext.workspacePath,
       avatarUrl: avatarUrl || null,
     });
 
     this.logger.log(
-      `子 Agent 会话创建成功: ${subSession.id}, 父会话: ${params.parentSessionId}, 模式: ${mode}`,
+      `子 Agent 会话创建成功: ${subSession.id}, 父会话: ${parentSessionId}, 模式: ${mode}`,
     );
 
     this.eventBus.emit("subagent.created", {
-      userId: params.userId,
-      sessionId: params.parentSessionId,
+      userId,
+      sessionId: parentSessionId,
       timestamp: new Date().toISOString(),
       payload: {
         subSessionId: subSession.id,
@@ -365,13 +353,13 @@ export class SubAgentManager implements OnModuleInit {
       },
     });
 
-    this.getOrCreateState(params.parentSessionId);
+    this.getOrCreateState(parentSessionId);
 
     return this.executeSubAgentStream(
       subSession.id,
-      params.userId,
+      userId,
       params.task,
-      params.parentSessionId,
+      parentSessionId,
       mode,
       abortSignal,
     );

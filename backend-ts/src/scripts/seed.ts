@@ -116,7 +116,7 @@ async function createDefaultCharacters(userId: string, modelId: string) {
         __strategy: 'deny_nonsystem',
         mcp: { enabled: false },
         skill: { enabled: false },
-        agent_presets: { enabled: false },
+        sub_agent: { enabled: false },
       },
     },
     {
@@ -132,7 +132,7 @@ async function createDefaultCharacters(userId: string, modelId: string) {
         __strategy: 'deny_nonsystem',
         mcp: { enabled: false },
         skill: { enabled: false },
-        agent_presets: { enabled: false },
+        sub_agent: { enabled: false },
       },
     },
   ];

@@ -466,6 +466,14 @@ async function handleTreeNodeToggle(node: WorkspaceNode, expanded: boolean) {
 let collapseSyncTimer: ReturnType<typeof setTimeout> | null = null;
 const expandedPaths = ref<Set<string>>(new Set());
 
+function resetExpandedPaths() {
+    if (collapseSyncTimer) {
+        clearTimeout(collapseSyncTimer);
+        collapseSyncTimer = null;
+    }
+    expandedPaths.value = new Set();
+}
+
 function handleTreeNodeExpandToggle(node: WorkspaceNode, expanded: boolean) {
     if (expanded) {
         // 展开：取消待处理的删除，立即同步
@@ -482,15 +490,17 @@ function handleTreeNodeExpandToggle(node: WorkspaceNode, expanded: boolean) {
     }
 }
 
-async function syncExpandedPaths() {
-    if (!props.sessionId) return;
+async function syncExpandedPaths(sessionId = props.sessionId): Promise<boolean> {
+    if (!sessionId || sessionId !== props.sessionId) return false;
     try {
         await apiService.updateWorkspaceExpandedPaths(
-            props.sessionId,
+            sessionId,
             Array.from(expandedPaths.value),
         );
+        return true;
     } catch (error) {
         console.error('[WorkspaceSidebar] 同步展开状态失败:', error);
+        return false;
     }
 }
 
@@ -631,15 +641,21 @@ function updateTreeData(oldNodes: WorkspaceNode[], newNodes: WorkspaceNode[]): v
 /**
  * 加载工作目录树（使用官方节流）
  */
+let treeLoadGeneration = 0;
+
 async function loadTree(force = false) {
-    if (!props.sessionId) return;
+    const sessionId = props.sessionId;
+    if (!sessionId) return;
 
-    // 如果正在加载中，不重复请求
-    if (isLoading.value) return;
+    if (isLoading.value && !force) return;
 
+    const generation = ++treeLoadGeneration;
     isLoading.value = true;
     try {
-        const response = await apiService.getWorkspaceTree(props.sessionId);
+        const response = await apiService.getWorkspaceTree(sessionId);
+        if (generation !== treeLoadGeneration || sessionId !== props.sessionId) {
+            return;
+        }
 
         // 保存当前选中路径
         const currentSelected = selectedNodePath.value;
@@ -650,9 +666,13 @@ async function loadTree(force = false) {
         // 如果当前选中的文件还在树中，保持选中状态（由 selectedNodePath 驱动）
         selectedNodePath.value = currentSelected;
     } catch (error: any) {
-        console.error('Failed to load workspace tree:', error);
+        if (generation === treeLoadGeneration && sessionId === props.sessionId) {
+            console.error('Failed to load workspace tree:', error);
+        }
     } finally {
-        isLoading.value = false;
+        if (generation === treeLoadGeneration) {
+            isLoading.value = false;
+        }
     }
 }
 
@@ -663,7 +683,7 @@ async function loadTree(force = false) {
  */
 function refreshTree() {
     treeData.value = [];
-    loadTree();
+    loadTree(true);
 }
 
 /**
@@ -2200,28 +2220,73 @@ async function changeWorkspacePath() {
  * 处理工作目录变更确认
  */
 async function handleWorkspaceChange(workspacePath: string | null) {
-    if (!props.sessionId || !workspacePath) return;
+    const sessionId = props.sessionId;
+    if (!sessionId || !workspacePath) return;
+
+    const previousExpandedPaths = new Set(expandedPaths.value);
+    resetExpandedPaths();
+    if (!(await syncExpandedPaths(sessionId))) {
+        expandedPaths.value = previousExpandedPaths;
+        ElMessage.error('同步工作目录监听状态失败');
+        return;
+    }
 
     try {
-        // 调用 API 更新工作目录路径
-        await apiService.updateSessionWorkspacePath(props.sessionId, workspacePath);
-        ElMessage.success('工作目录已更换');
+        await apiService.updateSessionWorkspacePath(sessionId, workspacePath);
+        if (sessionId !== props.sessionId) return;
 
-        // 清空旧树数据并重新加载，确保显示新的工作目录
+        ElMessage.success('工作目录已更换');
+        watchedWorkspacePath = workspacePath;
         treeData.value = [];
-        await loadTree();
+        await loadTree(true);
     } catch (error: any) {
+        if (sessionId === props.sessionId) {
+            expandedPaths.value = previousExpandedPaths;
+            void syncExpandedPaths(sessionId);
+        }
         console.error('Failed to change workspace path:', error);
         ElMessage.error(error.message || '更换工作目录失败');
     }
 }
 
 let unsubscribeWatcher: (() => void) | null = null;
+let watchedWorkspacePath: string | null = null;
+
+async function handleWorkspaceWatcherConnected(sessionId: string) {
+    if (sessionId !== props.sessionId) return;
+
+    try {
+        const response = await apiService.getWorkspacePath(sessionId);
+        if (sessionId !== props.sessionId) return;
+
+        const nextWorkspacePath = response.workspacePath || null;
+        const workspaceChanged =
+            watchedWorkspacePath !== null &&
+            nextWorkspacePath !== watchedWorkspacePath;
+        watchedWorkspacePath = nextWorkspacePath;
+
+        if (workspaceChanged) {
+            resetExpandedPaths();
+            treeData.value = [];
+        }
+        await syncExpandedPaths(sessionId);
+        if (workspaceChanged) {
+            await loadTree(true);
+        }
+    } catch (error) {
+        console.error('[WorkspaceSidebar] 恢复工作目录监听失败:', error);
+    }
+}
 
 watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
-    // 会话切换时关闭文件预览
+    treeLoadGeneration++;
+    isLoading.value = false;
+
+    // 会话切换时关闭文件预览并清理旧会话的展开状态
     if (oldSessionId && newSessionId !== oldSessionId) {
         closePreview();
+        watchedWorkspacePath = null;
+        resetExpandedPaths();
         treeData.value = [];
         apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
@@ -2231,14 +2296,16 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     }
 
     if (newSessionId) {
-        loadTree(); // 直接调用，不受节流限制
+        loadTree(true); // 会话切换时强制启动新请求
 
-        // 连接 WorkspaceWatcher 实时监听文件变化
-        apiService.connectWorkspaceWatcher(newSessionId);
-
-        // 注册文件变化监听器
+        // 先注册变化监听器，再连接并在每次自动重连后重报展开状态
         unsubscribeWatcher = apiService.onWorkspaceChange(handleFileChange);
+        apiService.connectWorkspaceWatcher(newSessionId, () => {
+            void handleWorkspaceWatcherConnected(newSessionId);
+        });
     } else {
+        watchedWorkspacePath = null;
+        resetExpandedPaths();
         treeData.value = [];
         apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
@@ -2249,6 +2316,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
 }, { immediate: true });
 
 onUnmounted(() => {
+    watchedWorkspacePath = null;
+    resetExpandedPaths();
     apiService.disconnectWorkspaceWatcher();
     if (unsubscribeWatcher) {
         unsubscribeWatcher();

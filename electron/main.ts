@@ -16,18 +16,21 @@ import { ChildProcess, exec } from "child_process";
 import * as fs from "fs";
 // import { autoUpdater } from "electron-updater";
 import log from "electron-log";
-import { startBrowserBridge } from "./browser-bridge";
-import {
-  startBrowserBridgeTCP,
-  stopBrowserBridgeTCP,
-} from "./browser-bridge-tcp";
 import { BrowserWebviewManager } from "./browser-tab-manager";
+import {
+  BridgeServer,
+  generatePipePath,
+  generateBridgeToken,
+} from "./bridge-server";
+import { BrowserAutomationService } from "./browser-automation-service";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
 let isBackendStarting = false; // 防止重复启动
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
+let bridgeServer: BridgeServer | null = null;
+let automationService: BrowserAutomationService | null = null;
 let tray: Tray | null = null; // 系统托盘图标
 let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
 /** 当前聚合的托盘统计信息 */
@@ -677,10 +680,10 @@ async function startBackend(): Promise<void> {
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: "true", // 标识这是 Electron 环境
-          BROWSER_BRIDGE_MODE: "tcp", // 开发模式使用 TCP
-          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || "4111", // 传递端口号
+          GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
+          GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
         },
-        stdio: ["pipe", "pipe", "pipe"], // 开发模式不需 IPC
+        stdio: ["pipe", "pipe", "pipe"],
         shell: true,
       };
 
@@ -741,9 +744,10 @@ async function startBackend(): Promise<void> {
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: "true", // 标识这是 Electron 环境
-          BROWSER_BRIDGE_MODE: "ipc", // 生产模式使用 IPC
+          GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
+          GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
         },
-        stdio: ["pipe", "pipe", "pipe", "ipc"], // 增加 'ipc' 以支�?process.send
+        stdio: ["pipe", "pipe", "pipe"],
       };
 
       backendProcess = spawn(nodePath, [scriptPath], spawnOptions);
@@ -755,11 +759,11 @@ async function startBackend(): Promise<void> {
     }
 
     let isResolved = false;
-    // 监听来自后端的 IPC 消息（仅生产环境有效）
-    backendProcess.on("message", (message: any) => {
-      if (message && message.type === "PORT_READY" && !isResolved) {
-        backendPort = message.port;
-        console.log(`通过 IPC 接收到后端端口号 ${backendPort}`);
+    // 通过 BridgeServer 监听后端端口上报事件
+    bridgeServer?.onEvent("port_ready", (data: any) => {
+      if (data?.port && !isResolved) {
+        backendPort = data.port;
+        console.log(`通过 Bridge 接收到后端端口号 ${backendPort}`);
         isBackendStarting = false;
         isResolved = true;
         resolve();
@@ -773,12 +777,8 @@ async function startBackend(): Promise<void> {
         console.log(`[Backend] ${message}`);
       }
 
-      // 开发模式：通过日志检测启动成功
-      if (
-        isDev &&
-        message.includes("Application is running on") &&
-        !isResolved
-      ) {
+      // 开发模式：通过日志检测启动成功（开发环境固定端口 3000）
+      if (isDev && message.includes("Application is running on") && !isResolved) {
         isBackendStarting = false;
         isResolved = true;
         console.log(`[Backend] Application is running on port ${backendPort}`);
@@ -2006,6 +2006,16 @@ app.whenReady().then(async () => {
     // 启动后端服务（不阻塞窗口）
     log.info("Starting backend service in background...");
 
+    // 先启动 Bridge Server，后端启动时需要连接
+    const bridgePipePath = generatePipePath();
+    const bridgeToken = generateBridgeToken();
+    bridgeServer = new BridgeServer(bridgePipePath, bridgeToken);
+    await bridgeServer.start();
+
+    // 将 Bridge 路径和 token 通过环境变量传递给后端
+    process.env.GUADA_BRIDGE_PATH = bridgePipePath;
+    process.env.GUADA_BRIDGE_TOKEN = bridgeToken;
+
     // backendReadyPromise 在 startBackend 完成后 resolve（无论成功失败），供 IPC 和 Browser Bridge 使用
     backendReadyPromise = startBackend()
       .then(() => {
@@ -2020,28 +2030,18 @@ app.whenReady().then(async () => {
     // 窗口创建后，初始化 Browser Bridge（等后端就绪后再初始化）
     await backendReadyPromise;
 
-    const bridgeMode =
-      process.env.BROWSER_BRIDGE_MODE || (isDev ? "tcp" : "ipc");
+    // 注册浏览器自动化服务为 Bridge 默认 handler
+    if (windowManager && bridgeServer) {
+      automationService = new BrowserAutomationService();
+      automationService.initializeWindowManager(windowManager);
+      bridgeServer.registerDefaultHandler(async (params: any, method: string) => {
+        return automationService!.handleToolCall({ id: "0", method, params });
+      });
 
-    if (bridgeMode === "tcp") {
-      // TCP 模式（开发环境）
-      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || "4111");
-      log.info(`Starting Browser Bridge in TCP mode on port ${port}...`);
-      await startBrowserBridgeTCP(port, windowManager!);
-      process.env.BROWSER_BRIDGE_PORT = String(port);
-      log.info("Browser Bridge TCP started successfully");
+      browserBridgeInitialized = true;
+      log.info("Browser automation registered with Bridge Server");
     } else {
-      // IPC 模式（生产环境）
-      if (backendProcess) {
-        log.info("Initializing Browser Bridge with backend process (IPC mode)");
-        startBrowserBridge(windowManager!, backendProcess);
-        browserBridgeInitialized = true;
-        log.info("Browser Bridge IPC initialized successfully");
-      } else {
-        log.error(
-          "Backend process not available, cannot initialize Browser Bridge",
-        );
-      }
+      log.error("WindowManager not available, cannot initialize browser automation");
     }
 
     log.info("Application initialized");
@@ -2103,9 +2103,16 @@ app.on("activate", () => {
 app.on("before-quit", async () => {
   (app as AppExtended).isQuiting = true;
 
-  // 停止 Browser Bridge TCP Server
-  if (process.env.BROWSER_BRIDGE_MODE === "tcp") {
-    await stopBrowserBridgeTCP();
+  // 停止 Bridge Server
+  if (bridgeServer) {
+    await bridgeServer.stop();
+    bridgeServer = null;
+  }
+
+  // 清理浏览器自动化服务
+  if (automationService) {
+    await automationService.destroy();
+    automationService = null;
   }
 
   if (backendProcess) {

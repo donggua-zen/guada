@@ -73,7 +73,6 @@ export interface MemoryConfig {
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
   summaryMode?: string;
-  maxTokensLimit?: number;
 }
 
 /**
@@ -122,6 +121,8 @@ export interface ISessionContext {
   readonly sessionType: "web" | "bot" | "sub_agent";
   /** 父会话 ID（子代理场景下为主会话 ID，主会话场景下为 null） */
   readonly parentSessionId?: string | null;
+  /** 当前会话绑定的角色 ID（无角色时为 null） */
+  readonly characterId?: string | null;
 
   // === 运行模式 ===
   /** 获取当前会话运行模式 */

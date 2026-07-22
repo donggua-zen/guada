@@ -132,38 +132,42 @@
         </div>
       </ScrollContainer>
     </div>
-    <!-- 底部：主题 + 设置 + 用户 -->
-    <div class="px-3 py-1 flex items-center justify-between">
-      <div class="flex items-center gap-1">
-        <!-- 主题切换 -->
-        <div @click="toggleDark"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)">
-          <WeatherSunny20Regular v-if="isDark" class="w-4 h-4" />
-          <WeatherMoon20Filled v-else class="w-4 h-4" />
-          <span class="text-xs">{{ isDark ? '亮色' : '暗色' }}</span>
-        </div>
-
-        <!-- 设置 -->
-        <div @click="handleNavClick('setting')"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200" :class="currentActiveTab === 'setting'
-            ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-            : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
-          <component :is="Settings16Filled" class="w-4 h-4" />
-          <span class="text-xs">设置</span>
-        </div>
-      </div>
-
-      <!-- 用户头像下拉 -->
-      <el-dropdown trigger="hover" placement="top-end" @command="handleUserMenuCommand">
-        <div class="flex items-center p-1.5 rounded-lg cursor-pointer hover:bg-(--color-surface)">
-          <Avatar class="w-7 h-7" type="user" :round="true" :src="authStore.user?.avatarUrl"
+    <!-- 底部：头像 + 设置 -->
+    <div class="px-3 py-1.5 flex items-center justify-between gap-2">
+      <!-- 用户头像+名字 下拉 -->
+      <el-dropdown trigger="hover" placement="top-start" @command="handleUserMenuCommand"
+        popper-class="user-menu-dropdown" style="flex: 1 1 0%; min-width: 0;">
+        <div class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--color-sidebar-bg-hover) transition-all duration-200">
+          <Avatar class="w-7 h-7 shrink-0" type="user" :round="true" :src="authStore.user?.avatarUrl"
             :name="authStore.user?.nickname || authStore.user?.username" />
+          <span class="text-sm font-medium text-(--color-text) truncate min-w-0">
+            {{ authStore.user?.nickname || authStore.user?.username || '用户' }}
+          </span>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="profile">
               <PersonOutlined class="w-4 h-4 mr-2" />
-              个人中心
+              个人信息
+            </el-dropdown-item>
+            <!-- 颜色主题：内联三态切换 -->
+            <div class="px-5 py-2 flex items-center gap-2">
+              <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">颜色主题</span>
+              <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-gray-100 dark:bg-[#1a1b1e]">
+                <button v-for="option in themeOptions" :key="option.value"
+                  @click="setTheme(option.value)"
+                  class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                  :class="themeMode === option.value
+                    ? 'bg-white dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
+                    : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
+                  <component :is="option.icon" class="w-3.5 h-3.5" />
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <el-dropdown-item command="settings">
+              <Settings16Filled class="w-4 h-4 mr-2" />
+              设置中心
             </el-dropdown-item>
             <el-dropdown-item command="logout" divided>
               <LogOutOutlined class="w-4 h-4 mr-2" />
@@ -172,6 +176,16 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+
+      <!-- 设置 -->
+      <div @click="handleNavClick('setting')"
+        class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
+        :class="currentActiveTab === 'setting'
+          ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
+          : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
+        title="设置">
+        <component :is="Settings16Filled" class="w-4 h-4" />
+      </div>
     </div>
   </div>
 
@@ -230,13 +244,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
 import { useSessionGroupStore } from '../stores/sessionGroup'
 import { UNGROUPED_ID } from '../stores/session'
-import { useTheme } from '../composables/useTheme'
+import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
 import DropdownMenu from './ui/DropdownMenu.vue'
@@ -266,6 +280,7 @@ import {
   ChevronDown12Regular,
   WeatherSunny20Regular,
   WeatherMoon20Filled,
+  Desktop16Regular,
   Settings16Filled,
 } from '@vicons/fluent'
 import { MoreFilled, Loading } from '@element-plus/icons-vue'
@@ -278,7 +293,13 @@ const route = useRoute()
 const authStore = useAuthStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
-const { isDark, toggleDark } = useTheme()
+const { themeMode, setTheme } = useTheme()
+
+const themeOptions = [
+  { label: '浅色', value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
+  { label: '深色', value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
+  { label: '系统', value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
+]
 const { toast, prompt, confirm } = usePopup()
 
 // 删除会话确认对话框状态
@@ -870,6 +891,8 @@ const confirmDeleteSession = async () => {
 const handleUserMenuCommand = (command: string) => {
   if (command === 'profile') {
     router.replace({ name: 'SystemSettings', params: { tab: 'profile' } })
+  } else if (command === 'settings') {
+    router.replace({ name: 'SystemSettings' })
   } else if (command === 'logout') {
     confirm('提示', '确定要退出登录吗？', {
       type: 'warning',

@@ -1,6 +1,11 @@
 import { BrowserWindow } from "electron";
 import log from "electron-log/main";
 import { BrowserWindowManager, WindowInfo } from "./browser-tab-manager";
+import {
+  buildSimpleTreeFromLegacyStruct,
+  captureAccessibilitySnapshot,
+  measureSimpleTree,
+} from "./accessibility-snapshot";
 
 /**
  * 浏览器自动化工具请求接口
@@ -35,6 +40,10 @@ export interface ToolResponse {
  */
 export class BrowserAutomationService {
   private windowManager: BrowserWindowManager | null = null;
+  // 每个 session (createdBy) 的当前标签映射
+  private currentTabs = new Map<string, string>();
+  // 同一 webContents 的 CDP 快照必须串行，避免 debugger attach/command 冲突
+  private snapshotLocks = new Map<number, Promise<void>>();
 
   /**
    * 初始化窗口管理器（必须在应用启动时调用）
@@ -42,6 +51,29 @@ export class BrowserAutomationService {
   initializeWindowManager(windowManager: BrowserWindowManager): void {
     this.windowManager = windowManager;
     log.info("BrowserAutomationService initialized with WindowManager");
+  }
+
+  private async withSnapshotLock<T>(
+    webContents: Electron.WebContents,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.snapshotLocks.get(webContents.id) || Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(() => current);
+    this.snapshotLocks.set(webContents.id, queued);
+
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (this.snapshotLocks.get(webContents.id) === queued) {
+        this.snapshotLocks.delete(webContents.id);
+      }
+    }
   }
 
   /**
@@ -94,37 +126,91 @@ export class BrowserAutomationService {
   }
 
   /**
+   * 设置当前标签
+   */
+  private setCurrentTab(createdBy: string, windowId: string): void {
+    this.currentTabs.set(createdBy, windowId);
+  }
+
+  /**
+   * 获取当前标签 ID
+   */
+  private getCurrentTabId(createdBy: string): string | undefined {
+    const wid = this.currentTabs.get(createdBy);
+    if (!wid) return undefined;
+    // 验证窗口仍然存在
+    if (!this.windowManager) return undefined;
+    const windows = this.windowManager.getWindowList();
+    if (!windows.find((w) => w.windowId === wid)) {
+      this.currentTabs.delete(createdBy);
+      return undefined;
+    }
+    return wid;
+  }
+
+  /**
+   * 清除当前标签映射
+   */
+  private clearCurrentTab(createdBy: string): void {
+    this.currentTabs.delete(createdBy);
+  }
+
+  /**
+   * 确保有当前标签可用，否则抛出明确错误
+   */
+  private async ensureCurrentTab(createdBy: string): Promise<string> {
+    if (!createdBy) {
+      throw new Error("No active tab and no session context. Call browser_navigate(url, new_tab=true) first.");
+    }
+    const wid = this.getCurrentTabId(createdBy);
+    if (!wid) {
+      throw new Error(
+        `No active tab for this session. Call browser_navigate(url, new_tab=true) to open one.`,
+      );
+    }
+    return wid;
+  }
+
+  /**
    * 确保窗口存在
    */
   private async ensureWindow(
     windowId: string,
     createdBy?: string,
   ): Promise<{ windowId: string; windowInfo: WindowInfo }> {
-    if (!windowId) {
-      throw new Error("window_id is required for all browser operations");
-    }
-
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
     }
 
+    // windowId 为空时回退到当前标签
+    let resolvedWindowId = windowId;
+    if (!resolvedWindowId && createdBy) {
+      resolvedWindowId = await this.ensureCurrentTab(createdBy);
+    }
+
+    if (!resolvedWindowId) {
+      throw new Error(
+        "window_id is required (or have an active tab). Call browser_navigate(url, new_tab=true) first.",
+      );
+    }
+
     const windows = this.windowManager.getWindowList();
-    const windowInfo = windows.find((w) => w.windowId === windowId);
+    const windowInfo = windows.find((w) => w.windowId === resolvedWindowId);
 
     if (!windowInfo) {
       throw new Error(
-        `Window ${windowId} not found. Use browser_windows() to see available windows.`,
+        `Window ${resolvedWindowId} not found. Use browser_tabs(action="list") to see available tabs.`,
       );
     }
 
     // 所有权验证：如果提供了 createdBy，必须匹配窗口的 createdBy
     if (createdBy && windowInfo.metadata?.createdBy && windowInfo.metadata.createdBy !== createdBy) {
       throw new Error(
-        `Permission denied: window ${windowId} does not belong to this agent. Use browser_windows() to see your own windows.`,
+        `Permission denied: window ${resolvedWindowId} does not belong to this session.`,
       );
     }
 
-    return { windowId, windowInfo };
+    return { windowId: resolvedWindowId, windowInfo };
   }
 
   /**
@@ -152,36 +238,85 @@ export class BrowserAutomationService {
       }
 
       log.info("All windows destroyed");
+      this.currentTabs.clear();
     } catch (error) {
       log.error("Error during window destruction:", error);
     }
   }
 
   /**
-   * 导航到指定 URL
+   * 导航到指定 URL（统一接口：支持新开标签和当前标签导航）
+   *
+   * @param url       目标 URL
+   * @param newTab    true=新开标签并设为当前; false=在当前标签导航（无标签时自动创建）
+   * @param createdBy 会话标识，用于所有权隔离
+   * @param sessionPath 会话工作路径
+   * @param sessionId  会话 ID
+   * @param windowId   显式标签 ID（可选，兼容旧接口）
    */
-  async navigate(url: string, windowId: string, createdBy?: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-
+  async navigate(
+    url: string,
+    newTab: boolean,
+    createdBy: string,
+    sessionPath?: string,
+    sessionId?: string,
+  ): Promise<any> {
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
     }
 
-    log.info(`Navigating to: ${url} (window: ${wid})`);
+    let wid: string;
+
+    if (newTab) {
+      // 新开标签
+      const metadata: Record<string, any> = {};
+      if (sessionPath) metadata.sessionPath = sessionPath;
+      if (sessionId) metadata.sessionId = sessionId;
+      if (createdBy) metadata.createdBy = createdBy;
+
+      wid = await this.createWindow(url, metadata);
+      if (createdBy) this.setCurrentTab(createdBy, wid);
+
+      const wc = this.windowManager.getWebContents(wid);
+      if (wc) {
+        return {
+          success: true,
+          tab_id: wid,
+          url: wc.getURL(),
+          title: wc.getTitle(),
+        };
+      }
+      return { success: true, tab_id: wid, url, title: "" };
+    }
+
+    // 在当前标签导航（无标签时自动创建）
+    if (createdBy) {
+      const currentWid = this.getCurrentTabId(createdBy);
+      if (!currentWid) {
+        // 无当前标签，自动创建
+        return this.navigate(url, true, createdBy, sessionPath, sessionId);
+      }
+      wid = currentWid;
+    } else {
+      throw new Error("No active tab. Call browser_navigate(url, new_tab=true) first.");
+    }
+
+    // 所有权验证
+    await this.ensureWindow(wid, createdBy);
+
+    log.info(`Navigating to: ${url} (tab: ${wid})`);
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Window ${wid} not found`);
+      throw new Error(`Tab ${wid} not found`);
     }
 
-    // 统一使用 waitForPageLoad 等待页面加载完成（含子资源）
-    // 不再自行监听 did-finish-load / did-fail-load
     try {
       await webContents.loadURL(url);
       await this.waitForPageLoad(webContents);
       return {
         success: true,
-        windowId: wid,
+        tab_id: wid,
         url: webContents.getURL(),
         title: webContents.getTitle(),
       };
@@ -274,6 +409,25 @@ export class BrowserAutomationService {
 
   async getPageStruct(windowId: string, createdBy?: string): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
+    if (!webContents) {
+      throw new Error(
+        `Window ${wid} webview not ready (did-attach-webview not fired)`,
+      );
+    }
+    return this.withSnapshotLock(webContents, () =>
+      this.getPageStructUnlocked(wid, createdBy),
+    );
+  }
+
+  private async getPageStructUnlocked(
+    windowId: string,
+    createdBy?: string,
+  ): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -299,7 +453,7 @@ export class BrowserAutomationService {
       `Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`,
     );
 
-    let jsonStructure: any;
+    let structTree: any;
     let originalHtmlLength = 0;
     try {
       // 先获取原始 HTML 长度用于对比
@@ -311,249 +465,235 @@ export class BrowserAutomationService {
       log.debug(`Original HTML length: ${originalHtmlLength} chars`);
 
       log.debug("Executing JavaScript to get page structure...");
-      jsonStructure = await webContents.executeJavaScript(`
+      structTree = await webContents.executeJavaScript(`
         (function() {
           try {
             // 配置常量
             const CONFIG = {
               MAX_DEPTH: 50,              // 最大递归深度
-              SIMPLE_DEPTH: 15,           // 超过此深度仅显示 node 字段
+              SIMPLE_DEPTH: 15,           // 超过此深度仅返回 role + ref
               MAX_SIBLINGS: 10,           // 同类型子节点最大数量
               KEEP_HEAD_COUNT: 5,         // 列表省略时保留的头部数量
               KEEP_TAIL_COUNT: 3,         // 列表省略时保留的尾部数量
-              MAX_TEXT_LENGTH: 2000,      // 文本最大长度
+              MAX_TEXT_LENGTH: 100,       // 文本最大长度
               MAX_ATTR_VALUE_LENGTH: 300  // 属性值最大长度
             };
 
-            // DOM 转 JSON 的核心函数（智能压缩优化 - 方案 F）
-            function domToSmartCompress(element, depth, parentSelector) {
-              if (depth > CONFIG.MAX_DEPTH) {
-                return { node: '...', warning: 'Maximum depth exceeded' };
-              }
-              
-              const tag = element.tagName.toLowerCase();
-              const id = element.id;
-              const classes = (typeof element.className === 'string' && element.className) 
-                ? element.className.trim().split(/\\s+/).filter(Boolean) 
-                : [];
-              
-              // 构建选择器字符串: tag.class1.class2#id
-              let selectorStr = tag;
-              if (classes.length > 0) selectorStr += '.' + classes.join('.');
-              if (id) selectorStr += '#' + id;
-              
-              const currentSelector = parentSelector ? parentSelector + ' > ' + selectorStr : selectorStr;
-              
-              // 超过 SIMPLE_DEPTH 后，仅返回 node 字段
-              if (depth > CONFIG.SIMPLE_DEPTH) {
-                return { node: selectorStr };
-              }
-              
-              const node = { node: selectorStr };
-              
-              // 获取当前页面域名用于 URL 精简
-              const currentHost = window.location.host;
-              
-              // 处理其他属性（排除 class, id），直接平铺到节点对象中
-              for (let i = 0; i < element.attributes.length; i++) {
-                const attr = element.attributes[i];
-                if (['class', 'id'].includes(attr.name)) continue;
-                
-                let value = attr.value;
-                
-                // 针对 href 进行同源域名精简
+            // 清理旧 ref，在真实 DOM 上重新分配
+            document.querySelectorAll('[data-ai-ref]').forEach(function(el) {
+              el.removeAttribute('data-ai-ref');
+            });
+            var refCounter = 0;
+            function assignRef(element) {
+              var refId = 'e' + (refCounter++);
+              element.setAttribute('data-ai-ref', refId);
+              return refId;
+            }
+
+            // role 推导：显式 ARIA role > tag→role 映射 > tag 名
+            function getRole(element) {
+              var explicit = element.getAttribute('role');
+              if (explicit) return explicit;
+              var tag = element.tagName.toLowerCase();
+              var roleMap = {
+                a: 'link', button: 'button', input: 'textbox', select: 'listbox',
+                textarea: 'textbox', img: 'image', nav: 'navigation',
+                header: 'banner', footer: 'contentinfo', main: 'main',
+                aside: 'complementary', form: 'form', ul: 'list', ol: 'list',
+                li: 'listitem', table: 'table', h1: 'heading', h2: 'heading',
+                h3: 'heading', h4: 'heading', h5: 'heading', h6: 'heading',
+                body: 'document', section: 'region', article: 'article',
+                label: 'label', fieldset: 'group', dialog: 'dialog'
+              };
+              return roleMap[tag] || tag;
+            }
+
+            // text 提取：叶子节点取 textContent，截断到 MAX_TEXT_LENGTH
+            function getText(element) {
+              if (element.children.length > 0) return null;
+              var text = element.textContent ? element.textContent.trim() : '';
+              if (text.length === 0) return null;
+              return text.substring(0, CONFIG.MAX_TEXT_LENGTH);
+            }
+
+            // 获取当前页面域名用于 URL 精简
+            var currentHost = window.location.host;
+
+            // 属性白名单提取（href 同源精简）
+            function getExtraAttrs(element) {
+              var attrs = {};
+              for (var i = 0; i < element.attributes.length; i++) {
+                var attr = element.attributes[i];
+                if (attr.name === 'class' || attr.name === 'id' || attr.name === 'data-ai-ref' || attr.name === 'role') continue;
+
+                var value = attr.value;
+
+                // href 同源精简
                 if (attr.name === 'href' && value) {
-                  const protocolRegex = /^(https?:)?\\/\\//;
+                  var protocolRegex = /^(https?:)?\\/\\//;
                   if (protocolRegex.test(value)) {
                     try {
-                      const urlObj = new URL(value, window.location.href);
+                      var urlObj = new URL(value, window.location.href);
                       if (urlObj.host === currentHost) {
                         value = urlObj.pathname + urlObj.search + urlObj.hash;
-                        if (!value.startsWith('/')) value = '/' + value;
+                        if (value.charAt(0) !== '/') value = '/' + value;
                       }
                     } catch (e) {}
                   }
                 }
-                
-                // 白名单过滤：只保留 href, role 和特定的 data-*
-                if (attr.name === 'href' || attr.name === 'role') {
+
+                // 白名单：href, data-*-id, data-*-url
+                if (attr.name === 'href') {
                   // 保留
                 } else if (attr.name.startsWith('data-')) {
-                  const suffix = attr.name.substring(5).toLowerCase();
-                  if (!suffix.includes('-id') && !suffix.includes('-url')) {
-                    continue;
-                  }
+                  var suffix = attr.name.substring(5).toLowerCase();
+                  if (!suffix.includes('-id') && !suffix.includes('-url')) continue;
                 } else {
                   continue;
                 }
-                
-                // 长度大于 300 截断
+
                 if (value.length > CONFIG.MAX_ATTR_VALUE_LENGTH) {
                   value = value.substring(0, CONFIG.MAX_ATTR_VALUE_LENGTH) + '...';
                 }
-                node[attr.name] = value;
+                attrs[attr.name] = value;
               }
-              
-              // 处理文本
-              const text = element.textContent ? element.textContent.trim() : '';
-              if (element.children.length === 0 && text.length > 0) {
-                node.text = text.substring(0, CONFIG.MAX_TEXT_LENGTH);
+              return Object.keys(attrs).length > 0 ? attrs : null;
+            }
+
+            // DOM 转 ref-tree 的核心函数
+            function domToRefTree(element, depth) {
+              if (depth > CONFIG.MAX_DEPTH) {
+                return { role: '...', text: 'Maximum depth exceeded' };
               }
-              
+
+              var ref = assignRef(element);
+              var role = getRole(element);
+
+              // 超过 SIMPLE_DEPTH 后，仅返回 role + ref
+              if (depth > CONFIG.SIMPLE_DEPTH) {
+                return { role: role, ref: ref };
+              }
+
+              var node = { role: role, ref: ref };
+
+              // 文本（仅叶子节点）
+              var text = getText(element);
+              if (text) node.text = text;
+
+              // 额外属性
+              var extraAttrs = getExtraAttrs(element);
+              if (extraAttrs) {
+                var keys = Object.keys(extraAttrs);
+                for (var k = 0; k < keys.length; k++) {
+                  node[keys[k]] = extraAttrs[keys[k]];
+                }
+              }
+
               // 处理子节点（带智能压缩）
-              const children = [];
-              const childElements = Array.from(element.children);
-              
-              // 检测是否需要列表压缩
+              var children = [];
+              var childElements = getFilteredChildren(element);
+
               if (childElements.length > CONFIG.MAX_SIBLINGS) {
-                // 按选择器分组统计
-                const groupMap = new Map();
-                childElements.forEach(child => {
-                  const childTag = child.tagName.toLowerCase();
-                  const childClasses = (typeof child.className === 'string' && child.className)
+                // 按 role + class 分组
+                var groupMap = new Map();
+                childElements.forEach(function(child) {
+                  var childRole = getRole(child);
+                  var childClasses = (typeof child.className === 'string' && child.className)
                     ? child.className.trim().split(/\\s+/).filter(Boolean).join('.')
                     : '';
-                  const groupKey = childTag + (childClasses ? '.' + childClasses : '');
-                  
-                  if (!groupMap.has(groupKey)) {
-                    groupMap.set(groupKey, []);
-                  }
+                  var groupKey = childRole + (childClasses ? '.' + childClasses : '');
+                  if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
                   groupMap.get(groupKey).push(child);
                 });
-                
-                // 对每个组进行处理
-                groupMap.forEach((group, groupKey) => {
+
+                groupMap.forEach(function(group, groupKey) {
                   if (group.length > CONFIG.MAX_SIBLINGS) {
-                    // 保留头部和尾部，中间插入省略提示
-                    const headCount = Math.min(CONFIG.KEEP_HEAD_COUNT, group.length);
-                    const tailCount = Math.min(CONFIG.KEEP_TAIL_COUNT, group.length - headCount);
-                    
-                    // 添加头部元素
-                    for (let i = 0; i < headCount; i++) {
-                      const childNode = domToSmartCompress(group[i], depth + 1, currentSelector);
+                    var headCount = Math.min(CONFIG.KEEP_HEAD_COUNT, group.length);
+                    var tailCount = Math.min(CONFIG.KEEP_TAIL_COUNT, group.length - headCount);
+
+                    for (var i = 0; i < headCount; i++) {
+                      var childNode = domToRefTree(group[i], depth + 1);
                       if (childNode) children.push(childNode);
                     }
-                    
-                    // 插入省略提示
-                    const omittedCount = group.length - headCount - tailCount;
+
+                    var omittedCount = group.length - headCount - tailCount;
                     children.push({
-                      node: '...',
-                      warning: \`Omitted \${omittedCount} similar \${groupKey} elements. Use querySelector('\${currentSelector} > \${groupKey}:nth-child(n)') to access specific items.\`,
-                      omittedCount: omittedCount,
-                      elementType: groupKey
+                      role: '...',
+                      text: 'Omitted ' + omittedCount + ' similar ' + groupKey + ' elements',
+                      omittedCount: omittedCount
                     });
-                    
-                    // 添加尾部元素
-                    for (let i = group.length - tailCount; i < group.length; i++) {
-                      const childNode = domToSmartCompress(group[i], depth + 1, currentSelector);
-                      if (childNode) children.push(childNode);
+
+                    for (var j = group.length - tailCount; j < group.length; j++) {
+                      var childNode2 = domToRefTree(group[j], depth + 1);
+                      if (childNode2) children.push(childNode2);
                     }
                   } else {
-                    // 数量不多，全部添加
-                    group.forEach(child => {
-                      const childNode = domToSmartCompress(child, depth + 1, currentSelector);
+                    group.forEach(function(child) {
+                      var childNode = domToRefTree(child, depth + 1);
                       if (childNode) children.push(childNode);
                     });
                   }
                 });
               } else {
-                // 子节点数量不多，正常处理
-                for (let i = 0; i < childElements.length; i++) {
-                  const childNode = domToSmartCompress(childElements[i], depth + 1, currentSelector);
+                for (var i = 0; i < childElements.length; i++) {
+                  var childNode = domToRefTree(childElements[i], depth + 1);
                   if (childNode) children.push(childNode);
                 }
               }
-              
+
               if (children.length > 0) {
-                // 极简子节点优化：如果子节点只有 node 字段，则转为字符串数组
-                const allSimple = children.every(c => Object.keys(c).length === 1 && c.node);
-                node.child = allSimple ? children.map(c => c.node) : children;
+                // 保留完整节点对象，确保 DOM fallback 能识别深层/无文本交互控件。
+                node.children = children;
               }
-              
+
               return node;
             }
-            
-            // 克隆并清理 DOM（从 body 开始，避免 html 和 head 层）
-            const clone = document.body.cloneNode(true);
-            const unwantedSelectors = 'script, style, link, noscript, meta, iframe';
-            const unwantedElements = clone.querySelectorAll(unwantedSelectors);
-            for (let i = unwantedElements.length - 1; i >= 0; i--) {
-              if (unwantedElements[i].parentNode) unwantedElements[i].parentNode.removeChild(unwantedElements[i]);
-            }
-            
-            const svgs = clone.querySelectorAll('svg');
-            for (let i = 0; i < svgs.length; i++) {
-              while (svgs[i].attributes.length > 0) svgs[i].removeAttribute(svgs[i].attributes[0].name);
-              while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
-            }
-            
-            // 清理 blob URL 和 object URL，避免克隆后访问失败
-            function cleanBlobUrls(node) {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                const attrsToRemove = [];
-                for (let i = 0; i < node.attributes.length; i++) {
-                  const attr = node.attributes[i];
-                  // 检测 blob: 或 object URLs
-                  if (attr.value && (attr.value.startsWith('blob:') || attr.value.startsWith('object:'))) {
-                    attrsToRemove.push(attr.name);
-                  }
+
+            // 不需要的标签（遍历时跳过，不修改真实 DOM）
+            var unwantedTags = ['script', 'style', 'link', 'noscript', 'meta', 'iframe'];
+
+            // 过滤子节点：跳过无用标签和空容器
+            function getFilteredChildren(element) {
+              var result = [];
+              var childElements = Array.from(element.children);
+              for (var i = 0; i < childElements.length; i++) {
+                var child = childElements[i];
+                var tag = child.tagName.toLowerCase();
+                if (unwantedTags.indexOf(tag) !== -1) continue;
+
+                // 空容器折叠：跳过无文本、无子节点、无重要属性的容器
+                var isFormElement = ['button', 'input', 'select', 'textarea', 'form'].indexOf(tag) !== -1;
+                var isInteractive = ['a', 'label'].indexOf(tag) !== -1;
+                if (!isFormElement && !isInteractive && ['div', 'span', 'p', 'section', 'article', 'aside'].indexOf(tag) !== -1) {
+                  var hasText = child.textContent && child.textContent.trim().length > 0;
+                  var hasChildren = child.children.length > 0;
+                  var hasImportantAttrs = child.hasAttribute('id') || child.hasAttribute('role') ||
+                    (child.className && typeof child.className === 'string' &&
+                     /nav|header|footer|main|content/.test(child.className));
+                  if (!hasText && !hasChildren && !hasImportantAttrs) continue;
                 }
-                attrsToRemove.forEach(attrName => node.removeAttribute(attrName));
-                
-                // 递归处理子节点
-                Array.from(node.childNodes).forEach(cleanBlobUrls);
+
+                result.push(child);
               }
+              return result;
             }
-            cleanBlobUrls(clone);
-            
-            function removeComments(node) {
-              if (node.nodeType === Node.COMMENT_NODE) {
-                if (node.parentNode) node.parentNode.removeChild(node);
-                return;
-              }
-              Array.from(node.childNodes).forEach(removeComments);
-            }
-            removeComments(clone);
-            
-            function removeEmptyElements(node) {
-              Array.from(node.childNodes).forEach(child => {
-                if (child.nodeType === Node.ELEMENT_NODE) {
-                  removeEmptyElements(child);
-                  const tagName = child.tagName.toLowerCase();
-                  // 保留所有表单元素和交互式元素，即使是空的
-                  const isFormElement = ['button', 'input', 'select', 'textarea', 'form'].includes(tagName);
-                  const isInteractive = ['a', 'label'].includes(tagName);
-                  
-                  if (!isFormElement && !isInteractive && ['div', 'span', 'p', 'section', 'article', 'aside'].includes(tagName)) {
-                    const hasText = child.textContent && child.textContent.trim().length > 0;
-                    const hasChildren = child.children.length > 0;
-                    const hasImportantAttrs = child.hasAttribute('id') || child.hasAttribute('role') ||
-                                             (child.className && typeof child.className === 'string' && 
-                                              /nav|header|footer|main|content/.test(child.className));
-                    if (!hasText && !hasChildren && !hasImportantAttrs && child.parentNode) {
-                      child.parentNode.removeChild(child);
-                    }
-                  }
-                }
-              });
-            }
-            removeEmptyElements(clone);
-            
-            return domToSmartCompress(clone, 0, '');
+
+            // 在真实 DOM 上分配 ref 并构建 tree
+            return domToRefTree(document.body, 0);
           } catch (error) {
             console.error('Error in getPageStruct:', error);
-            return { node: 'error', text: 'Failed to parse DOM: ' + error.toString() };
+            throw error;
           }
         })()
       `);
       log.debug(
-        `Successfully got page structure, length: ${JSON.stringify(jsonStructure).length} chars`,
+        `Successfully got page structure, length: ${JSON.stringify(structTree).length} chars`,
       );
 
       // 计算并记录压缩比例
-      const jsonLength = JSON.stringify(jsonStructure).length;
+      const treeJsonLength = JSON.stringify(structTree).length;
       const compressionRatio = (
-        (1 - jsonLength / originalHtmlLength) *
+        (1 - treeJsonLength / originalHtmlLength) *
         100
       ).toFixed(2);
       log.info(`Page Structure Size Comparison:`);
@@ -561,33 +701,113 @@ export class BrowserAutomationService {
         `   Original HTML:    ${originalHtmlLength.toLocaleString()} chars`,
       );
       log.info(
-        `   Selector JSON:    ${jsonLength.toLocaleString()} chars (${compressionRatio}% reduction)`,
+        `   Struct Tree:      ${treeJsonLength.toLocaleString()} chars (${compressionRatio}% reduction)`,
       );
       log.info(
-        `   Saved:            ${(originalHtmlLength - jsonLength).toLocaleString()} chars`,
+        `   Saved:            ${(originalHtmlLength - treeJsonLength).toLocaleString()} chars`,
       );
     } catch (error: any) {
       log.warn(`Failed to get page structure: ${error.message}`);
       log.warn(`   Error name: ${error.name}`);
       log.warn(`   Error stack: ${error.stack}`);
-
-      // 降级方案：返回错误对象
-      jsonStructure = {
-        node: "error",
-        text: "Failed to parse DOM: " + error.toString(),
-      };
+      throw new Error(`Failed to get page structure: ${error.message}`);
     }
 
     const title = webContents.getTitle();
     const url = webContents.getURL();
+    const measureStruct = (node: any, depth = 0): { nodeCount: number; maxDepth: number } => {
+      if (!node || typeof node === "string") {
+        return { nodeCount: 0, maxDepth: depth };
+      }
+      let nodeCount = 1;
+      let maxDepth = depth;
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) {
+          const measured = measureStruct(child, depth + 1);
+          nodeCount += measured.nodeCount;
+          maxDepth = Math.max(maxDepth, measured.maxDepth);
+        }
+      }
+      return { nodeCount, maxDepth };
+    };
 
     return {
       success: true,
       windowId: wid,
       url,
       title,
-      struct: jsonStructure,
+      type: "struct",
+      struct: structTree,
+      stats: {
+        originalHtmlLength,
+        outputLength: JSON.stringify(structTree).length,
+        ...measureStruct(structTree),
+      },
     };
+  }
+
+  /**
+   * 获取精简无障碍树快照。CDP 不可用时回退到旧 DOM struct 压缩。
+   */
+  async getPageSimpleSnapshot(
+    windowId: string,
+    createdBy?: string,
+  ): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
+    if (!webContents) {
+      throw new Error(
+        `Window ${wid} webview not ready (did-attach-webview not fired)`,
+      );
+    }
+
+    await this.waitForPageLoad(webContents);
+    const startedAt = Date.now();
+
+    try {
+      const captured = await this.withSnapshotLock(webContents, () =>
+        captureAccessibilitySnapshot(webContents),
+      );
+      return {
+        success: true,
+        windowId: wid,
+        url: webContents.getURL(),
+        title: webContents.getTitle(),
+        type: "simple",
+        source: "ax",
+        snapshot: captured.tree,
+        stats: {
+          ...captured.stats,
+          durationMs: Date.now() - startedAt,
+          outputLength: JSON.stringify(captured.tree).length,
+        },
+      };
+    } catch (error: any) {
+      log.warn(`Accessibility snapshot failed, using DOM fallback: ${error.message}`);
+      const legacy = await this.getPageStruct(wid, createdBy);
+      const snapshot = buildSimpleTreeFromLegacyStruct(legacy.struct);
+      const measured = measureSimpleTree(snapshot);
+      return {
+        success: true,
+        windowId: wid,
+        url: legacy.url,
+        title: legacy.title,
+        type: "simple",
+        source: "dom-fallback",
+        snapshot,
+        stats: {
+          rawNodeCount: legacy.stats?.nodeCount || 0,
+          ...measured,
+          omittedNodeCount: 0,
+          durationMs: Date.now() - startedAt,
+          outputLength: JSON.stringify(snapshot).length,
+        },
+      };
+    }
   }
 
   async getPageText(windowId: string, createdBy?: string): Promise<any> {
@@ -805,6 +1025,33 @@ export class BrowserAutomationService {
     };
   }
 
+  /**
+   * 统一快照接口：simple（默认）/ struct / summary。
+   */
+  async snapshot(type: string, createdBy: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow("", createdBy);
+    if (type === "summary") {
+      return this.getPageSummary(wid, createdBy);
+    }
+    if (type === "struct") {
+      return this.getPageStruct(wid, createdBy);
+    }
+    if (type === "simple") {
+      return this.getPageSimpleSnapshot(wid, createdBy);
+    }
+    throw new Error(`Unknown snapshot type: ${type}`);
+  }
+
+  /**
+   * 将 ref ID（如 "e0"）解析为 CSS 属性选择器；非 ref 格式原样返回
+   */
+  private resolveSelector(selector: string): string {
+    if (/^e\d+$/.test(selector)) {
+      return `[data-ai-ref="${selector}"]`;
+    }
+    return selector;
+  }
+
   async waitForSelector(
     selector: string,
     timeout: number = 10000,
@@ -819,35 +1066,41 @@ export class BrowserAutomationService {
 
     log.info(`Waiting for selector: ${selector} (tab: ${wid})`);
 
+    const cssSelector = this.resolveSelector(selector);
+
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new Error(`Tab ${wid} not found`);
     }
 
-    const result = await webContents.executeJavaScript(`
-      new Promise((resolve, reject) => {
-        const element = document.querySelector('${selector}')
-        if (element) {
-          resolve({ found: true, exists: true })
-          return
-        }
-
-        const observer = new MutationObserver(() => {
-          const el = document.querySelector('${selector}')
-          if (el) {
-            observer.disconnect()
+    const selectorLiteral = JSON.stringify(cssSelector);
+    const safeTimeout = Number.isFinite(timeout) ? Math.max(0, timeout) : 10000;
+    const result = await this.withSnapshotLock(webContents, () =>
+      webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const element = document.querySelector(${selectorLiteral})
+          if (element) {
             resolve({ found: true, exists: true })
+            return
           }
+
+          const observer = new MutationObserver(() => {
+            const el = document.querySelector(${selectorLiteral})
+            if (el) {
+              observer.disconnect()
+              resolve({ found: true, exists: true })
+            }
+          })
+
+          observer.observe(document.body, { childList: true, subtree: true })
+
+          setTimeout(() => {
+            observer.disconnect()
+            resolve({ found: false, exists: false })
+          }, ${safeTimeout})
         })
-
-        observer.observe(document.body, { childList: true, subtree: true })
-
-        setTimeout(() => {
-          observer.disconnect()
-          resolve({ found: false, exists: false })
-        }, ${timeout})
-      })
-    `);
+      `),
+    );
 
     return {
       success: true,
@@ -865,32 +1118,37 @@ export class BrowserAutomationService {
 
     log.info(`Clicking element: ${selector} (tab: ${wid})`);
 
+    const cssSelector = this.resolveSelector(selector);
+
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new Error(`Tab ${wid} not found`);
     }
 
-    const result = await webContents.executeJavaScript(`
-      new Promise((resolve) => {
-        const element = document.querySelector('${selector}')
-        if (element) {
-          // 使用 MouseEvent 触发点击，以支持 Vue/React 等框架的事件绑定
-          const rect = element.getBoundingClientRect()
-          const x = rect.left + rect.width / 2
-          const y = rect.top + rect.height / 2
-          element.dispatchEvent(new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: x,
-            clientY: y,
-          }))
-          resolve({ success: true, clicked: true })
-        } else {
-          resolve({ success: false, clicked: false, error: 'Element not found' })
-        }
-      })
-    `);
+    const selectorLiteral = JSON.stringify(cssSelector);
+    const result = await this.withSnapshotLock(webContents, () =>
+      webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const element = document.querySelector(${selectorLiteral})
+          if (element) {
+            // 使用 MouseEvent 触发点击，以支持 Vue/React 等框架的事件绑定
+            const rect = element.getBoundingClientRect()
+            const x = rect.left + rect.width / 2
+            const y = rect.top + rect.height / 2
+            element.dispatchEvent(new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: x,
+              clientY: y,
+            }))
+            resolve({ success: true, clicked: true })
+          } else {
+            resolve({ success: false, clicked: false, error: 'Element not found' })
+          }
+        })
+      `),
+    );
 
     return {
       windowId: wid,
@@ -910,26 +1168,36 @@ export class BrowserAutomationService {
       throw new Error("TabManager not initialized");
     }
 
+    if (typeof value !== "string") {
+      throw new Error("value is required when action is input");
+    }
+
     log.info(`Filling form field: ${selector} (tab: ${wid})`);
+
+    const cssSelector = this.resolveSelector(selector);
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new Error(`Tab ${wid} not found`);
     }
 
-    const result = await webContents.executeJavaScript(`
-      new Promise((resolve) => {
-        const element = document.querySelector('${selector}')
-        if (element) {
-          element.value = '${value.replace(/'/g, "\\'")}'
-          element.dispatchEvent(new Event('input', { bubbles: true }))
-          element.dispatchEvent(new Event('change', { bubbles: true }))
-          resolve({ success: true, filled: true })
-        } else {
-          resolve({ success: false, filled: false, error: 'Element not found' })
-        }
-      })
-    `);
+    const selectorLiteral = JSON.stringify(cssSelector);
+    const valueLiteral = JSON.stringify(value);
+    const result = await this.withSnapshotLock(webContents, () =>
+      webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const element = document.querySelector(${selectorLiteral})
+          if (element) {
+            element.value = ${valueLiteral}
+            element.dispatchEvent(new Event('input', { bubbles: true }))
+            element.dispatchEvent(new Event('change', { bubbles: true }))
+            resolve({ success: true, filled: true })
+          } else {
+            resolve({ success: false, filled: false, error: 'Element not found' })
+          }
+        })
+      `),
+    );
 
     return {
       windowId: wid,
@@ -1026,8 +1294,131 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 打开新标签页
-   * 支持传递会话路径和会话 ID 用于文件存储隔离和会话归属
+   * 统一标签管理
+   *
+   * @param action    list | select | close | close_all
+   * @param createdBy 会话标识
+   * @param index     标签在列表中的位置 (0-based)
+   * @param tabId     显式标签 ID（优先于 index）
+   */
+  async tabsManage(
+    action: string,
+    createdBy: string,
+    index?: number,
+    tabId?: string,
+  ): Promise<any> {
+    if (!this.windowManager) {
+      return { success: false, message: "WindowManager not initialized" };
+    }
+
+    // 获取当前 session 的标签列表
+    const sessionWindows = this.getWindowList().filter(
+      (w) => !createdBy || w.metadata?.createdBy === createdBy,
+    );
+
+    const currentTabId = createdBy ? this.getCurrentTabId(createdBy) : undefined;
+
+    switch (action) {
+      case "list": {
+        return {
+          success: true,
+          tabs: sessionWindows.map((w, i) => ({
+            index: i,
+            tab_id: w.windowId,
+            url: w.url,
+            title: w.title,
+            is_current: w.windowId === currentTabId,
+          })),
+          current_tab_id: currentTabId || null,
+          count: sessionWindows.length,
+        };
+      }
+
+      case "select": {
+        let targetWid: string | undefined;
+        if (tabId) {
+          targetWid = tabId;
+        } else if (typeof index === "number") {
+          targetWid = sessionWindows[index]?.windowId;
+        }
+
+        if (!targetWid) {
+          throw new Error(
+            `Tab not found. Use browser_tabs(action="list") to see available tabs.`,
+          );
+        }
+
+        const found = sessionWindows.find((w) => w.windowId === targetWid);
+        if (!found) {
+          throw new Error(`Tab ${targetWid} does not belong to this session.`);
+        }
+
+        if (createdBy) this.setCurrentTab(createdBy, targetWid);
+
+        const wc = this.windowManager.getWebContents(targetWid);
+        return {
+          success: true,
+          tab_id: targetWid,
+          url: wc ? wc.getURL() : found.url,
+          title: wc ? wc.getTitle() : found.title,
+        };
+      }
+
+      case "close": {
+        let targetWid: string | undefined;
+        if (tabId) {
+          targetWid = tabId;
+        } else if (typeof index === "number") {
+          targetWid = sessionWindows[index]?.windowId;
+        } else {
+          // 关闭当前标签
+          targetWid = currentTabId;
+        }
+
+        if (!targetWid) {
+          return { success: false, message: "No tab to close" };
+        }
+
+        await this.windowManager.closeWindow(targetWid);
+
+        // 如果关闭的是当前标签，自动切换到相邻标签
+        let newCurrentTabId: string | null = null;
+        if (targetWid === currentTabId && createdBy) {
+          const remaining = this.getWindowList().filter(
+            (w) => w.metadata?.createdBy === createdBy,
+          );
+          if (remaining.length > 0) {
+            newCurrentTabId = remaining[0].windowId;
+            this.setCurrentTab(createdBy, newCurrentTabId);
+          } else {
+            this.clearCurrentTab(createdBy);
+          }
+        }
+
+        return {
+          success: true,
+          closed_tab_id: targetWid,
+          current_tab_id: newCurrentTabId,
+        };
+      }
+
+      case "close_all": {
+        let count = 0;
+        for (const w of sessionWindows) {
+          await this.windowManager.closeWindow(w.windowId);
+          count++;
+        }
+        if (createdBy) this.clearCurrentTab(createdBy);
+        return { success: true, closed_count: count };
+      }
+
+      default:
+        throw new Error(`Unknown tabs action: ${action}`);
+    }
+  }
+
+  /**
+   * 打开新标签页（兼容旧接口）
    */
   async openNewWindow(
     url: string,
@@ -1043,20 +1434,21 @@ export class BrowserAutomationService {
       url,
       Object.keys(metadata).length > 0 ? metadata : undefined,
     );
+    if (createdBy) this.setCurrentTab(createdBy, wid);
 
     return {
       success: true,
       windowId: wid,
+      tab_id: wid,
       url: url,
-      message: "Tab created in background (not activated)",
+      message: "Tab created and set as current",
     };
   }
 
   /**
-   * 关闭指定标签
+   * 关闭指定标签（兼容旧接口）
    */
   async closeWindow(windowId: string, createdBy?: string): Promise<any> {
-    // 验证所有权
     try {
       await this.ensureWindow(windowId, createdBy);
     } catch (e: any) {
@@ -1085,6 +1477,7 @@ export class BrowserAutomationService {
     for (const w of windows) {
       await this.windowManager.closeWindow(w.windowId);
     }
+    this.clearCurrentTab(createdBy);
     return { success: true, closed: windows.length };
   }
 
@@ -1095,12 +1488,13 @@ export class BrowserAutomationService {
     if (!this.windowManager) {
       return { success: false, message: "TabManager not initialized" };
     }
-    const logs = this.windowManager.getConsoleLogs(windowId);
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    const logs = this.windowManager.getConsoleLogs(wid);
     // 读取后清空缓冲区，下次调用只返回新日志
-    this.windowManager.clearConsoleLogs(windowId);
+    this.windowManager.clearConsoleLogs(wid);
     return {
       success: true,
-      windowId,
+      tab_id: wid,
       logs: logs || [],
       recent: (logs || []).slice(-50).join("\n"),
     };
@@ -1127,42 +1521,53 @@ export class BrowserAutomationService {
     timeout: number = 60000,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error("Page load timeout"));
-      }, timeout);
+      let settled = false;
+      let timer: NodeJS.Timeout;
 
-      // 检查是否已经加载完成（did-stop-loading 已触发，页面资源全部加载完毕）
+      const cleanup = () => {
+        clearTimeout(timer);
+        webContents.removeListener("did-stop-loading", onStopLoading);
+        webContents.removeListener("did-fail-load", onFailLoad);
+      };
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const onStopLoading = () => succeed();
+      const onFailLoad = (
+        _event: Electron.Event,
+        errorCode: number,
+        errorDescription: string,
+        _validatedURL: string,
+        isMainFrame: boolean,
+      ) => {
+        // ERR_ABORTED 常由重定向/JS 跳转触发；子框架失败也不代表主页面失败。
+        if (errorCode === -3 || !isMainFrame) return;
+        fail(new Error(`Page load failed: ${errorCode} - ${errorDescription}`));
+      };
+
+      timer = setTimeout(() => fail(new Error("Page load timeout")), timeout);
+
       const currentUrl = webContents.getURL();
       if (
         !webContents.isLoading() &&
         currentUrl !== "" &&
         currentUrl !== "about:blank"
       ) {
-        clearTimeout(timer);
-        resolve();
+        succeed();
         return;
       }
 
-      // 主事件：did-stop-loading 表示页面及其所有子资源加载完毕
-      webContents.once("did-stop-loading", () => {
-        clearTimeout(timer);
-        resolve();
-      });
-
-      // 加载失败
-      webContents.once(
-        "did-fail-load",
-        (
-          _event: Electron.Event,
-          errorCode: number,
-          errorDescription: string,
-        ) => {
-          clearTimeout(timer);
-          reject(
-            new Error(`Page load failed: ${errorCode} - ${errorDescription}`),
-          );
-        },
-      );
+      webContents.on("did-stop-loading", onStopLoading);
+      webContents.on("did-fail-load", onFailLoad);
     });
   }
 
@@ -1179,69 +1584,114 @@ export class BrowserAutomationService {
 
     try {
       switch (method) {
+        // ── 新统一接口 ──
+
         case "browser_navigate":
-          return await this.navigate(params.url, params.window_id, params.created_by);
+          return await this.navigate(
+            params.url,
+            params.new_tab || false,
+            params.created_by,
+            params.session_path,
+            params.session_id,
+          );
+
+        case "browser_tabs":
+          return await this.tabsManage(
+            params.action,
+            params.created_by,
+            params.index,
+            params.tab_id || params.window_id,
+          );
+
+        case "browser_snapshot":
+          return await this.snapshot(
+            params.type || "simple",
+            params.created_by,
+          );
+
+        // ── 保留接口（操作当前标签）──
 
         case "browser_evaluate":
           return await this.executeJavaScript(
             params.code,
-            params.window_id,
+            "",
             params.is_async || false,
             params.created_by,
           );
 
-        case "browser_page_struct":
-          return await this.getPageStruct(params.window_id, params.created_by);
-
         case "browser_page_text":
-          return await this.getPageText(params.window_id, params.created_by);
-
-        case "browser_page_summary":
-          return await this.getPageSummary(params.window_id, params.created_by);
+          return await this.getPageText(
+            "",
+            params.created_by,
+          );
 
         case "browser_wait":
           return await this.waitForSelector(
             params.selector,
             params.timeout,
-            params.window_id,
+            "",
             params.created_by,
           );
 
         case "browser_click":
-          return await this.click(params.selector, params.window_id, params.created_by);
+          return await this.click(
+            params.selector,
+            "",
+            params.created_by,
+          );
 
         case "browser_input":
           return await this.fillForm(
             params.selector,
             params.value,
-            params.window_id,
+            "",
             params.created_by,
           );
 
         case "browser_interact":
           if (params.action === "click") {
-            return await this.click(params.selector, params.window_id, params.created_by);
+            return await this.click(
+              params.selector,
+              "",
+              params.created_by,
+            );
           } else {
             return await this.fillForm(
               params.selector,
               params.value,
-              params.window_id,
+              "",
               params.created_by,
             );
           }
 
         case "browser_console":
-          return await this.getConsoleLogs(params.window_id, params.created_by);
+          return await this.getConsoleLogs(
+            "",
+            params.created_by,
+          );
 
-        case "browser_navigate_history":
+        case "browser_history":
+        case "browser_navigate_history": {
           if (params.action === "back") {
-            return await this.goBack(params.window_id, params.created_by);
+            return await this.goBack(
+              "",
+              params.created_by,
+            );
           } else {
-            return await this.goForward(params.window_id, params.created_by);
+            return await this.goForward(
+              "",
+              params.created_by,
+            );
           }
+        }
 
         case "browser_reload":
-          return await this.reload(params.window_id, params.created_by);
+          return await this.reload(
+            "",
+            params.created_by,
+          );
+
+        // ── 兼容旧接口（仍接受 window_id）──
 
         case "browser_new_window":
           return await this.openNewWindow(
@@ -1251,22 +1701,25 @@ export class BrowserAutomationService {
             params?.created_by,
           );
 
+        case "browser_page_struct":
+          return await this.snapshot("struct", params.created_by);
+
+        case "browser_page_summary":
+          return await this.snapshot("summary", params.created_by);
+
         case "browser_close":
-          return await this.closeWindow(params.window_id, params.created_by);
+          return await this.tabsManage(
+            "close",
+            params.created_by,
+            undefined,
+            params.window_id,
+          );
 
         case "browser_close_by_creator":
           return await this.closeWindowsByCreator(params.created_by);
 
         case "browser_windows":
-          return {
-            success: true,
-            windows: params?.session_id
-              ? this.getWindowList().filter(
-                  (w) => w.metadata?.createdBy === params.session_id,
-                )
-              : this.getWindowList(),
-            count: this.getWindowCount(),
-          };
+          return await this.tabsManage("list", params.created_by || params.session_id);
 
         default:
           throw new Error(`Unknown method: ${method}`);

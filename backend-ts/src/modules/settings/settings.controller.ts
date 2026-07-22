@@ -5,6 +5,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
+import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_PLUGINS } from "../../constants/settings.constants";
 
 @Controller()
@@ -13,6 +14,7 @@ export class SettingsController {
     private readonly settingsService: SettingsService,
     private readonly toolOrchestrator: ToolOrchestrator,
     private readonly pluginManager: PluginManager,
+    private readonly workspaceService: WorkspaceService,
   ) { }
 
   /**
@@ -35,6 +37,33 @@ export class SettingsController {
   async setAutoLoginStatus(@Body() body: { enabled: boolean }) {
     await this.settingsService.setAutoLoginEnabled(body.enabled);
     return { success: true };
+  }
+
+  /**
+   * 获取全局工作目录基路径
+   * 注意：必须放在 /settings/:group 之前，避免路由冲突
+   */
+  @UseGuards(AuthGuard)
+  @Get("settings/workspace-base-dir")
+  async getWorkspaceBaseDir() {
+    const dirPath = await this.workspaceService.getEffectiveBaseDir();
+    return { workspaceBaseDir: dirPath };
+  }
+
+  /**
+   * 设置全局工作目录基路径
+   * 注意：必须放在 /settings/:group 之前，避免路由冲突
+   */
+  @UseGuards(AuthGuard)
+  @Put("settings/workspace-base-dir")
+  async setWorkspaceBaseDir(@Body() body: { workspaceBaseDir: string | null }) {
+    if (body.workspaceBaseDir) {
+      if (!path.isAbsolute(body.workspaceBaseDir)) {
+        throw new Error('工作目录基路径必须是绝对路径');
+      }
+    }
+    await this.settingsService.setWorkspaceBaseDir(body.workspaceBaseDir);
+    return { success: true, workspaceBaseDir: body.workspaceBaseDir };
   }
 
   @Public()
@@ -76,32 +105,6 @@ export class SettingsController {
     }
 
     return this.settingsService.getSettings();
-  }
-
-
-  /**
-   * 获取全局工作目录基路径
-   */
-  @UseGuards(AuthGuard)
-  @Get("settings/workspace-base-dir")
-  async getWorkspaceBaseDir() {
-    const dirPath = await this.settingsService.getWorkspaceBaseDir();
-    return { workspaceBaseDir: dirPath };
-  }
-
-  /**
-   * 设置全局工作目录基路径
-   */
-  @UseGuards(AuthGuard)
-  @Put("settings/workspace-base-dir")
-  async setWorkspaceBaseDir(@Body() body: { workspaceBaseDir: string | null }) {
-    if (body.workspaceBaseDir) {
-      if (!path.isAbsolute(body.workspaceBaseDir)) {
-        throw new Error('工作目录基路径必须是绝对路径');
-      }
-    }
-    await this.settingsService.setWorkspaceBaseDir(body.workspaceBaseDir);
-    return { success: true, workspaceBaseDir: body.workspaceBaseDir };
   }
 
   /**

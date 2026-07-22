@@ -1,3 +1,10 @@
+/** 命令请求上下文（由调用方传递，供 provider 做会话级过滤） */
+export interface CommandContext {
+  sessionId?: string;
+  characterId?: string | null;
+  userId?: string;
+}
+
 /** 解析器单次产出 */
 export interface ParserResult {
   /** 原地替换文本（针对单个标签） */
@@ -23,11 +30,11 @@ export interface ICommandProvider {
   /** 触发方式 */
   trigger: 'slash' | 'mention';
   /** 获取命令列表 */
-  fetchItems(): CommandItem[] | Promise<CommandItem[]>;
+  fetchItems(ctx?: CommandContext): CommandItem[] | Promise<CommandItem[]>;
   /**
    * 解析标签属性，返回替换文本 + 可选附录
    * 接收从 [/type:name key="val"] 中提取的 attrs（name 已合并入内）
    * 返回 undefined 表示不支持的解析，原样保留
    */
-  parse(attrs: Record<string, string>): ParserResult | undefined | Promise<ParserResult | undefined>;
+  parse(attrs: Record<string, string>, ctx?: CommandContext): ParserResult | undefined | Promise<ParserResult | undefined>;
 }

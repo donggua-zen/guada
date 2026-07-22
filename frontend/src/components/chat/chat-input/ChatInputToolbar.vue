@@ -29,7 +29,7 @@
 
   <!-- 工作目录选择弹窗 -->
   <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
-    :current-workspace-path="config?.workspacePath || null" @select="handleWorkspaceSelect" />
+    :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
 
   <!-- 分组选择弹窗 -->
   <el-dialog v-model="groupSelectorVisible" title="请选择分组" width="360px" :close-on-click-modal="false">
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
@@ -79,9 +79,17 @@ const groupButtonRef = ref<any>(null)
 // 初始化时加载分组列表
 sessionGroupStore.loadGroups()
 
+// 获取基础目录，计算公共目录路径
+onMounted(() => {
+  workspaceStore.ensureBaseDir()
+})
+
+const publicPath = computed(() => workspaceStore.getPublicPath())
+
 const displayWorkspacePath = computed(() => {
   const fullPath = props.config?.workspacePath
   if (!fullPath) return '自动创建'
+  if (publicPath.value && fullPath === publicPath.value) return '公共目录'
   const normalized = fullPath.replace(/\\/g, '/')
   const segments = normalized.split('/').filter(Boolean)
   return segments[segments.length - 1] || fullPath
@@ -127,6 +135,17 @@ const openWorkspaceDialog = () => {
 }
 
 const handleWorkspaceSelect = (workspacePath: string | null) => {
+  // 判断选择类型并记录
+  let mode: 'auto' | 'public' | 'custom'
+  if (workspacePath === null) {
+    mode = 'auto'
+  } else if (publicPath.value && workspacePath === publicPath.value) {
+    mode = 'public'
+  } else {
+    mode = 'custom'
+  }
+  workspaceStore.setLastChoice(mode, workspacePath)
+
   if (workspacePath) {
     workspaceStore.addRecent(workspacePath)
   }

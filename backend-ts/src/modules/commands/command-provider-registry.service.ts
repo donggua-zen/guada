@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ICommandProvider, CommandItem, ParserResult } from "./interfaces/command-provider.interface";
+import { ICommandProvider, CommandItem, ParserResult, CommandContext } from "./interfaces/command-provider.interface";
 
 export interface AggregatedItem extends CommandItem {
   /** 提供者 id，如 "skill" */
@@ -48,12 +48,12 @@ export class CommandProviderRegistry {
   }
 
   /** 按触发方式获取所有 items（每个 item 附带 providerId） */
-  async getItems(trigger: 'slash' | 'mention'): Promise<AggregatedItem[]> {
+  async getItems(trigger: 'slash' | 'mention', ctx?: CommandContext): Promise<AggregatedItem[]> {
     const result: AggregatedItem[] = [];
     for (const [, provider] of this.providers) {
       if (provider.trigger !== trigger) continue;
       try {
-        const items = await provider.fetchItems();
+        const items = await provider.fetchItems(ctx);
         for (const item of items) {
           // 校验 name 只能包含字母数字下划线连字符
           if (!item.name || !this.NAME_RE.test(item.name)) {
@@ -87,9 +87,9 @@ export class CommandProviderRegistry {
   }
 
   /** 按 type/id 获取解析器（供 TagParserPipeline 使用） */
-  getParser(type: string): ((attrs: Record<string, string>) => Promise<ParserResult | undefined>) | undefined {
+  getParser(type: string): ((attrs: Record<string, string>, ctx?: CommandContext) => Promise<ParserResult | undefined>) | undefined {
     const provider = this.providers.get(type);
     if (!provider?.parse) return undefined;
-    return (attrs: Record<string, string>) => Promise.resolve(provider.parse!(attrs));
+    return (attrs: Record<string, string>, ctx?: CommandContext) => Promise.resolve(provider.parse!(attrs, ctx));
   }
 }

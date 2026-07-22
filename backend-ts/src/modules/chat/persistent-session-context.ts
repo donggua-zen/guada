@@ -39,6 +39,7 @@ interface MergedSettings {
   systemPrompt: string;
   thinkingEffort?: string;
   memory: any;
+  maxTokensLimit?: number | null;
   plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
   agents?: Record<string, boolean>; // 角色级 Agent 偏好 { agentId: true/false }
@@ -65,6 +66,9 @@ export class PersistentSessionContext implements ISessionContext {
   readonly userId: string;
   readonly sessionType: "web" | "bot" | "sub_agent";
   readonly parentSessionId?: string | null;
+  get characterId(): string | null {
+    return this.session.characterId || null;
+  }
 
   private readonly logger = new Logger(PersistentSessionContext.name);
 
@@ -219,7 +223,7 @@ export class PersistentSessionContext implements ISessionContext {
           );
           this.history = this.history.map((msg) => ({
             ...msg,
-            reasoningContent: msg.reasoningContent ?? "",
+            reasoningContent: msg.role === "assistant" ? (msg.reasoningContent ?? " ") : undefined,
           }));
         } else {
           this.logger.debug(
@@ -239,7 +243,7 @@ export class PersistentSessionContext implements ISessionContext {
           .lastIndexOf("user");
         const startIndex = lastUserIndex >= 0 ? lastUserIndex : 0;
         this.history = this.history.map((msg, index) => {
-          if (index >= startIndex) {
+          if (index >= startIndex && msg.role === "assistant") {
             return { ...msg, reasoningContent: msg.reasoningContent ?? " " };
           } else {
             const { reasoningContent, ...rest } = msg as any;
@@ -562,7 +566,6 @@ export class PersistentSessionContext implements ISessionContext {
       compressionTriggerRatio: memory?.compressionTriggerRatio,
       compressionTargetRatio: memory?.compressionTargetRatio,
       summaryMode,
-      maxTokensLimit: memory?.maxTokensLimit,
     };
   }
 
@@ -671,7 +674,7 @@ export class PersistentSessionContext implements ISessionContext {
 
     const effectiveContextWindow = this.calcEffectiveContextWindow(
       model,
-      merged.memory,
+      merged.maxTokensLimit,
     );
 
     const thinkingEffort = features.includes("thinking")
@@ -721,16 +724,11 @@ export class PersistentSessionContext implements ISessionContext {
       agents: mergedAgents,
     };
 
-    // 记忆/压缩配置（独立继承）
-    const memoryEnabled = sessionSettings.memoryEnabled;
-    const sessionMemory = sessionSettings.memory || {};
-    const characterMemory = characterSettings.memory || {};
+    // 记忆/压缩配置：始终从角色继承，会话不再覆盖
+    merged.memory = { ...characterSettings.memory };
 
-    if (memoryEnabled !== false) {
-      merged.memory = { ...characterMemory, ...sessionMemory };
-    } else {
-      merged.memory = { ...characterMemory };
-    }
+    // maxTokensLimit：会话级别独立配置
+    merged.maxTokensLimit = sessionSettings.maxTokensLimit ?? null;
 
     // thinkingEffort
     merged.thinkingEffort = sessionSettings.thinkingEffort;
@@ -738,9 +736,8 @@ export class PersistentSessionContext implements ISessionContext {
     return merged;
   }
 
-  private calcEffectiveContextWindow(model: any, memoryConfig: any): number {
+  private calcEffectiveContextWindow(model: any, maxTokensLimit?: number | null): number {
     const modelContextWindow = model?.config?.contextWindow || 128000;
-    const maxTokensLimit = memoryConfig?.maxTokensLimit;
     return maxTokensLimit
       ? Math.min(modelContextWindow, maxTokensLimit)
       : modelContextWindow;

@@ -1,52 +1,76 @@
 <template>
   <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="340" :anchor-el="anchorEl"
     :max-height="480">
-    <div class="ws-popover">
+    <div class="flex flex-col gap-0.5">
       <!-- 最近选择 -->
       <template v-if="recentList.length > 0">
-        <div class="ws-section-header">最近选择</div>
-        <div v-for="path in recentList" :key="path"
-          class="ws-item"
-          :class="{ 'ws-item-active': path === currentWorkspacePath }"
+        <div class="text-[11px] font-medium text-[#999] dark:text-[#6b7280] px-2 py-1 select-none">最近选择</div>
+        <div v-for="path in filteredRecentList" :key="path"
+          class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
+          :class="path === currentWorkspacePath
+            ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
+            : 'hover:bg-(--color-sidebar-bg-hover)'"
           @click="handleSelect(path)">
-          <el-icon size="16" class="ws-item-icon shrink-0">
+          <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
             <Folder20Regular />
           </el-icon>
-          <div class="ws-item-text">
-            <span class="ws-item-name">{{ getFolderName(path) }}</span>
-            <span class="ws-item-path">{{ getParentPath(path) }}</span>
+          <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+            <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ getFolderName(path) }}</span>
+            <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ path }}</span>
           </div>
-          <el-icon v-if="path === currentWorkspacePath" size="14" class="ws-item-check shrink-0">
+          <el-icon v-if="path === currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
             <Checkmark16Filled />
           </el-icon>
         </div>
-        <div class="ws-divider"></div>
+        <div class="h-px bg-[#eee] dark:bg-white/8 mx-2 my-1.5"></div>
       </template>
 
+      <!-- 使用公共目录 -->
+      <div v-if="publicPath"
+        class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
+        :class="publicPath === currentWorkspacePath
+          ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
+          : 'hover:bg-(--color-sidebar-bg-hover)'"
+        @click="handleSelect(publicPath)">
+        <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
+          <PeopleCommunity16Regular />
+        </el-icon>
+        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0">使用公共目录</span>
+          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ publicPath }}</span>
+        </div>
+        <el-icon v-if="publicPath === currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
+          <Checkmark16Filled />
+        </el-icon>
+      </div>
+
       <!-- 自动创建 -->
-      <div class="ws-item"
-        :class="{ 'ws-item-active': !currentWorkspacePath }"
+      <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
+        :class="!currentWorkspacePath
+          ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
+          : 'hover:bg-(--color-sidebar-bg-hover)'"
         @click="handleSelect(null)">
-        <el-icon size="16" class="ws-item-icon shrink-0">
+        <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
           <FolderAdd24Regular />
         </el-icon>
-        <div class="ws-item-text">
-          <span class="ws-item-name">自动创建</span>
-          <span class="ws-item-path">使用系统默认目录</span>
+        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">自动创建</span>
+          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">创建随机名称的工作目录</span>
         </div>
-        <el-icon v-if="!currentWorkspacePath" size="14" class="ws-item-check shrink-0">
+        <el-icon v-if="!currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
           <Checkmark16Filled />
         </el-icon>
       </div>
 
       <!-- 打开文件夹（仅 Electron） -->
       <template v-if="isElectron">
-        <div class="ws-item" @click="handleOpenFolder">
-          <el-icon size="16" class="ws-item-icon shrink-0">
+        <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--color-sidebar-bg-hover)"
+          @click="handleOpenFolder">
+          <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
             <Desktop16Regular />
           </el-icon>
-          <div class="ws-item-text">
-            <span class="ws-item-name">选择本地文件夹</span>
+          <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+            <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap">选择本地文件夹</span>
           </div>
         </div>
       </template>
@@ -55,8 +79,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -64,6 +89,7 @@ const props = defineProps<{
   visible: boolean
   anchorEl: HTMLElement | null
   currentWorkspacePath?: string | null
+  publicPath?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -72,21 +98,22 @@ const emit = defineEmits<{
 }>()
 
 const workspaceStore = useWorkspaceStore()
-const recentList = workspaceStore.recentList
+const recentList = computed(() => workspaceStore.recentList)
+
+// 过滤掉公共目录，避免与固定入口重复
+const filteredRecentList = computed(() => {
+  if (!publicPath.value) return recentList.value
+  return recentList.value.filter((p: string) => p !== publicPath.value)
+})
 
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
+
+const publicPath = computed(() => props.publicPath || null)
 
 function getFolderName(path: string): string {
   const normalized = path.replace(/\\/g, '/')
   const segments = normalized.split('/').filter(Boolean)
   return segments[segments.length - 1] || path
-}
-
-function getParentPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
-  const idx = normalized.lastIndexOf('/')
-  if (idx <= 0) return ''
-  return normalized.substring(0, idx)
 }
 
 function handleSelect(path: string | null) {
@@ -109,103 +136,3 @@ async function handleOpenFolder() {
   }
 }
 </script>
-
-<style scoped>
-.ws-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ws-section-header {
-  font-size: 11px;
-  font-weight: 500;
-  color: #999;
-  padding: 4px 8px;
-  user-select: none;
-}
-
-.dark .ws-section-header {
-  color: #6b7280;
-}
-
-.ws-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.ws-item:hover {
-  background: var(--color-sidebar-bg-hover, #f5f5f5);
-}
-
-.dark .ws-item:hover {
-  background: var(--color-sidebar-bg-hover, rgba(255, 255, 255, 0.06));
-}
-
-.ws-item-active {
-  background: var(--color-sidebar-bg-active, #e8f0fe);
-}
-
-.ws-item-active:hover {
-  background: var(--color-sidebar-bg-active, #e8f0fe);
-}
-
-.ws-item-icon {
-  color: #666;
-}
-
-.dark .ws-item-icon {
-  color: #9ca3af;
-}
-
-.ws-item-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.ws-item-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dark .ws-item-name {
-  color: #e5e7eb;
-}
-
-.ws-item-path {
-  font-size: 11px;
-  color: #999;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dark .ws-item-path {
-  color: #6b7280;
-}
-
-.ws-item-check {
-  color: var(--el-color-primary, #409eff);
-}
-
-.ws-divider {
-  height: 1px;
-  background: #eee;
-  margin: 6px 8px;
-}
-
-.dark .ws-divider {
-  background: rgba(255, 255, 255, 0.08);
-}
-</style>
