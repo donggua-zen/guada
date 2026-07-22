@@ -40,10 +40,10 @@
           <template v-if="showButtons.thinkingButton && currentModel">
             <!-- 思考强度按钮 -->
             <el-button ref="thinkingButtonRef" class="tool-btn" text @click.stop="toggleThinkingPopover">
-              <el-icon size="20" :class="{ 'thinking-active': localThinkingEffort !== 'off' }">
+              <el-icon size="20" :class="{ 'thinking-active': localThinkingEffort !== 'none' }">
                 <LightbulbFilament24Regular />
               </el-icon>
-              <span class="text-xs font-medium" :class="{ 'thinking-active-text': localThinkingEffort !== 'off' }">{{
+              <span class="text-xs font-medium" :class="{ 'thinking-active-text': localThinkingEffort !== 'none' }">{{
                 getThinkingEffortShortLabel(localThinkingEffort) }}</span>
             </el-button>
 
@@ -682,7 +682,7 @@ watch(() => currentModel.value?.config, (config) => {
 }, { immediate: true });
 
 // 思考强度相关
-const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'high' | 'max' | ...
+const localThinkingEffort = ref<string>('none'); // 'none' | 'low' | 'medium' | 'high' | 'max' | ...
 const thinkingButtonRef = ref<any>(null);
 const thinkingPopoverVisible = ref(false);
 
@@ -695,13 +695,13 @@ const thinkingEffortOptions = computed(() => {
 watch(() => currentModel.value, (newModel) => {
   if (newModel) {
     const options = getModelThinkingEfforts(newModel, providers.value);
-    // 如果当前选择的值不在新选项中，重置为第一个非 'off' 选项或 'off'
+    // 如果当前选择的值不在新选项中，重置为第一个非 'none' 选项或 'none'
     if (!options.includes(localThinkingEffort.value)) {
-      const nonOffOptions = options.filter(e => e !== 'off');
-      localThinkingEffort.value = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+      const nonOffOptions = options.filter(e => e !== 'none');
+      localThinkingEffort.value = nonOffOptions.length > 0 ? nonOffOptions[0] : 'none';
     }
   } else {
-    localThinkingEffort.value = 'off';
+    localThinkingEffort.value = 'none';
   }
 }, { immediate: true });
 
@@ -727,7 +727,7 @@ const getThinkingEffortShortLabel = (effort: string) => {
 const handleThinkingEffortChange = (effort: string) => {
   // 构建配置变更对象
   const configChanges = {
-    thinkingEffort: effort, // 始终发送 effort 值，包括 'off'
+    thinkingEffort: effort, // 始终发送 effort 值，包括 'none'
   };
 
   console.log('Thinking effort changed:', configChanges);
@@ -921,10 +921,10 @@ const selectAndCloseModel = (modelId: string) => {
   // 确定要使用的 thinkingEffort 值
   let newThinkingEffort = localThinkingEffort.value;
 
-  // 如果当前值不在新模型的选项中，重置为第一个非 'off' 选项或 'off'
+  // 如果当前值不在新模型的选项中，重置为第一个非 'none' 选项或 'none'
   if (!options.includes(localThinkingEffort.value)) {
-    const nonOffOptions = options.filter(e => e !== 'off');
-    newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+    const nonOffOptions = options.filter(e => e !== 'none');
+    newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'none';
 
     // 同步更新本地状态
     localThinkingEffort.value = newThinkingEffort;

@@ -35,12 +35,14 @@
             </div>
             <div class="flex items-center gap-1">
               <!-- 新建会话按钮（始终显示） -->
-              <div :title="`在「${group.name}」中新建会话`" @click.stop="openNewSession(group.id)">
-                <div
-                  class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
-                  <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
+              <el-tooltip :content="`在「${group.name}」中新建会话`" placement="bottom">
+                <div @click.stop="openNewSession(group.id)">
+                  <div
+                    class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
+                    <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
+                  </div>
                 </div>
-              </div>
+              </el-tooltip>
             </div>
           </div>
 
@@ -178,14 +180,15 @@
       </el-dropdown>
 
       <!-- 设置 -->
-      <div @click="handleNavClick('setting')"
-        class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
-        :class="currentActiveTab === 'setting'
-          ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-          : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
-        title="设置">
-        <component :is="Settings16Filled" class="w-4 h-4" />
-      </div>
+      <el-tooltip content="设置" placement="bottom">
+        <div @click="handleNavClick('setting')"
+          class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
+          :class="currentActiveTab === 'setting'
+            ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
+            : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+          <component :is="Settings16Filled" class="w-4 h-4" />
+        </div>
+      </el-tooltip>
     </div>
   </div>
 

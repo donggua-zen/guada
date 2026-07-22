@@ -189,7 +189,7 @@ export class ImageRecognitionPlugin extends PluginBase {
       }
 
       const model = visualModelConfig.modelName;
-      const thinkingEffort = resolveThinkingEffort(visualModelConfig, "off");
+      const thinkingEffort = resolveThinkingEffort(visualModelConfig, "none");
 
       // Read image, resize if total pixels exceed the limit, then convert to base64
       let imageBuffer: Buffer = await fs.readFile(physicalPath);

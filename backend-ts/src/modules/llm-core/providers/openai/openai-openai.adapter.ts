@@ -17,7 +17,7 @@ export class OpenAIOpenAIAdapter extends OpenAIAdapter {
     if (params.thinkingEffort !== undefined) {
       const effort = params.thinkingEffort;
       
-      // OpenAI o 系列和 GPT-5 只支持强度值，不支持 'off' 或 'on'
+      // OpenAI o 系列和 GPT-5 只支持强度值，不支持 'none' 或 'on'
       // 如果传入无效值，使用默认值 medium
       if (['low', 'medium', 'high'].includes(effort)) {
         requestParams.reasoning_effort = effort;

@@ -15,7 +15,7 @@ export class SiliconFlowOpenAIAdapter extends OpenAIAdapter {
 
     // 硅基流动特有：将 thinkingEffort 转换为 enable_thinking（根级别）
     if (params.thinkingEffort !== undefined) {
-      requestParams.enable_thinking = params.thinkingEffort !== "off";
+      requestParams.enable_thinking = params.thinkingEffort !== "none";
     }
 
     return requestParams;

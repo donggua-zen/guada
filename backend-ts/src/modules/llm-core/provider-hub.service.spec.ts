@@ -70,7 +70,7 @@ describe('ProviderHub', () => {
       'deepseek-ai/DeepSeek-V3.2'
     );
     
-    expect(efforts).toContain('off');
+    expect(efforts).toContain('none');
     expect(efforts).toContain('low');
     expect(efforts).toContain('medium');
     expect(efforts).toContain('high');
@@ -97,7 +97,7 @@ describe('ProviderHub', () => {
       'Qwen/Qwen3.5-397B-A17B'
     );
     
-    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
+    expect(efforts).toEqual(['none', 'low', 'medium', 'high', 'xhigh']);
   });
 
   it('should infer thinking efforts for Kimi models', () => {
@@ -109,7 +109,7 @@ describe('ProviderHub', () => {
       'moonshotai/Kimi-K2-Thinking'
     );
     
-    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
+    expect(efforts).toEqual(['none', 'low', 'medium', 'high', 'xhigh']);
   });
 
   it('should handle unknown model gracefully', () => {
@@ -121,7 +121,7 @@ describe('ProviderHub', () => {
       'unknown/new-model-123'
     );
     
-    // 硅基流动的默认配置是 ['off', 'low', 'medium', 'high', 'xhigh']
-    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
+    // 硅基流动的默认配置是 ['none', 'low', 'medium', 'high', 'xhigh']
+    expect(efforts).toEqual(['none', 'low', 'medium', 'high', 'xhigh']);
   });
 });

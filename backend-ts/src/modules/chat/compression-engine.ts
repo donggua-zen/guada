@@ -616,7 +616,7 @@ Summary:`;
       messages: [{ role: "user", content: promptStr }],
       temperature: 0.4,
       maxTokens: 4000,
-      thinkingEffort: resolveThinkingEffort(compressionModel, "off"),
+      thinkingEffort: resolveThinkingEffort(compressionModel, "none"),
       stream: false,
       providerConfig: compressionModel.provider,
     });

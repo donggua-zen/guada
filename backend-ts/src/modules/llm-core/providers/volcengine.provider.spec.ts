@@ -50,7 +50,7 @@ describe('VolcEngineProvider', () => {
   it('should infer thinking efforts for Doubao models', () => {
     const efforts = provider.getModelThinkingEfforts('doubao-seed-2-0-pro-260215');
     
-    expect(efforts).toContain('off');
+    expect(efforts).toContain('none');
     expect(efforts).toContain('minimal');
     expect(efforts).toContain('low');
     expect(efforts).toContain('medium');
@@ -61,7 +61,7 @@ describe('VolcEngineProvider', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v3-2-251201');
     
     // DeepSeek 在火山引擎上仅支持开关模式
-    expect(efforts).toEqual(['off', 'on']);
+    expect(efforts).toEqual(['none', 'on']);
   });
 
   it('should return empty array for embedding models', () => {
@@ -74,17 +74,17 @@ describe('VolcEngineProvider', () => {
     const efforts = provider.getModelThinkingEfforts('unknown-model');
     
     // 未知模型默认返回开关模式
-    expect(efforts).toEqual(['off', 'on']);
+    expect(efforts).toEqual(['none', 'on']);
   });
 
   it('should return correct thinking efforts for doubao models', () => {
     const efforts = provider.getModelThinkingEfforts('doubao-seed-2-0-pro-260215');
-    expect(efforts).toEqual(['off', 'minimal', 'low', 'medium', 'high']);
+    expect(efforts).toEqual(['none', 'minimal', 'low', 'medium', 'high']);
   });
 
   it('should return simple on/off for non-doubao models', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v3-2-251201');
-    expect(efforts).toEqual(['off', 'on']);
+    expect(efforts).toEqual(['none', 'on']);
   });
 
   it('should return empty array for embedding models', () => {

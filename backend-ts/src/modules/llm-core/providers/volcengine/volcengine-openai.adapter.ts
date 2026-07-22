@@ -17,7 +17,7 @@ export class VolcEngineOpenAIAdapter extends OpenAIAdapter {
     if (params.thinkingEffort !== undefined) {
       const effort = params.thinkingEffort;
       
-      if (effort === 'off') {
+      if (effort === 'none') {
         // off: 禁用思考
         requestParams.reasoning_effort = undefined;
         requestParams.thinking = { type: 'disabled' };

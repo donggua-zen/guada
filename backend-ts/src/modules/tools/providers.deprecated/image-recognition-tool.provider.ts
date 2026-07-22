@@ -238,7 +238,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       messages,
       providerConfig: visualModelConfig.provider,
       stream: false,
-      thinkingEffort: resolveThinkingEffort(visualModelConfig, 'off'),
+      thinkingEffort: resolveThinkingEffort(visualModelConfig, 'none'),
       timeout: 60,
       abortSignal,
     }) as Promise<any>;

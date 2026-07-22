@@ -33,7 +33,7 @@ export class MoonshotProvider implements IModelProvider {
   }
   
   // Moonshot 仅支持开关模式
-  private defaultThinkingEfforts: string[] = ['off', 'on'];
+  private defaultThinkingEfforts: string[] = ['none', 'on'];
   
   private models: ModelDefinition[] = [
     createMultimodalModel('kimi-k2.5', ConfigFragments.ContextWindow._256K),

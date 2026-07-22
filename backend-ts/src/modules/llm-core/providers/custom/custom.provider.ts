@@ -73,8 +73,8 @@ export class CustomProvider implements IModelProvider {
    * 自定义供应商不提供默认配置，由调用方决定
    */
   getModelThinkingEfforts(modelName: string): string[] {
-    // 自定义供应商：根据协议在调用方过滤 'off'
+    // 自定义供应商：根据协议在调用方过滤 'none'
     // （Anthropic adaptive thinking 不支持 off，由 getModelsAndProviders 处理）
-    return ['off', 'low', 'medium', 'high', 'xhigh'];
+    return ['none', 'low', 'medium', 'high', 'xhigh'];
   }
 }

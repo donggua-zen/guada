@@ -14,8 +14,8 @@
             </el-tooltip>
             <!-- 非预览模式：显示工作目录路径 -->
             <el-tooltip v-else :content="currentWorkspacePath || ''" placement="bottom" :disabled="!currentWorkspacePath">
-                <div class="ml-1 px-2 flex items-center min-w-0 no-drag">
-                    <span class="text-xs text-gray-500 dark:text-[#8b8d95] truncate">{{ currentWorkspacePath || '' }}</span>
+                <div class="ml-1 px-2 flex items-center min-w-0">
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95] truncate">{{ currentWorkspacePath ? currentWorkspacePath.replace(/\\/g, '/').split('/').pop() : '' }}</span>
                 </div>
             </el-tooltip>
 
