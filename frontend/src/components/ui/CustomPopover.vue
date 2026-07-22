@@ -6,11 +6,11 @@
                 :class="popperClass" :style="popoverStyle" @click.stop
                 @mouseenter="$emit('mouseenter', $event)" @mouseleave="$emit('mouseleave', $event)">
                 <!-- Header 槽位 -->
-                <div v-if="$slots.header" class="px-0.5">
+                <div v-if="$slots.header" class="">
                     <slot name="header"></slot>
                 </div>
                 <!-- 默认内容 -->
-                <div class="popover-content px-0.5">
+                <div class="popover-content">
                     <slot></slot>
                 </div>
             </div>
@@ -52,6 +52,7 @@ const emit = defineEmits<{
 
 const popoverRef = ref<HTMLElement | null>(null)
 const positionStyle = ref<Record<string, any>>({})
+let resizeObserver: ResizeObserver | null = null
 
 // 计算并更新位置
 const updatePosition = () => {
@@ -88,38 +89,35 @@ const updatePosition = () => {
         }
 
         // 计算垂直位置：优先显示在按钮上方
-        const spaceAbove = rect.top // 按钮上方的可用空间
-        const spaceBelow = window.innerHeight - rect.bottom // 按钮下方的可用空间
+        const spaceAbove = rect.top
+        const spaceBelow = window.innerHeight - rect.bottom
 
-        let top: number
+        let showAbove: boolean
 
-        // 如果上方空间足够，显示在上方；否则显示在下方
         if (spaceAbove >= actualHeight + spacing) {
-            // 显示在按钮上方
-            top = rect.top - actualHeight - spacing
+            showAbove = true
         } else if (spaceBelow >= actualHeight + spacing) {
-            // 显示在按钮下方
-            top = rect.bottom + spacing
+            showAbove = false
         } else {
-            // 上下空间都不够，选择空间较大的一侧
-            if (spaceAbove > spaceBelow) {
-                top = rect.top - actualHeight - spacing
-            } else {
-                top = rect.bottom + spacing
+            showAbove = spaceAbove > spaceBelow
+        }
+
+        if (showAbove) {
+            // 上方：用 bottom 定位，高度变化时底部不变，不跳动
+            positionStyle.value = {
+                position: 'fixed',
+                left: `${left}px`,
+                bottom: `${window.innerHeight - rect.top + spacing}px`,
+                top: 'auto'
             }
-        }
-
-        // 确保不超出视口上下边界
-        if (top < 10) {
-            top = 10
-        } else if (top + actualHeight > window.innerHeight - 10) {
-            top = window.innerHeight - actualHeight - 10
-        }
-
-        positionStyle.value = {
-            position: 'fixed',
-            left: `${left}px`,
-            top: `${top}px`
+        } else {
+            // 下方：用 top 定位
+            positionStyle.value = {
+                position: 'fixed',
+                left: `${left}px`,
+                top: `${rect.bottom + spacing}px`,
+                bottom: 'auto'
+            }
         }
     })
 }
@@ -185,6 +183,14 @@ watch(() => props.show, async (newVal) => {
         await nextTick()
         updatePosition()
 
+        // 监听内容尺寸变化，自动重新定位
+        if (popoverRef.value && !resizeObserver) {
+            resizeObserver = new ResizeObserver(() => {
+                if (props.show) updatePosition()
+            })
+            resizeObserver.observe(popoverRef.value)
+        }
+
         // 延迟添加监听器，避免立即触发关闭
         await nextTick()
         document.addEventListener('click', handleGlobalClick, true)
@@ -193,6 +199,10 @@ watch(() => props.show, async (newVal) => {
         window.addEventListener('scroll', handleWindowEvent, true)
     } else {
         // 移除所有监听器
+        if (resizeObserver) {
+            resizeObserver.disconnect()
+            resizeObserver = null
+        }
         document.removeEventListener('click', handleGlobalClick, true)
         document.removeEventListener('keydown', handleEscKey)
         window.removeEventListener('resize', handleWindowEvent)
@@ -202,6 +212,10 @@ watch(() => props.show, async (newVal) => {
 
 // 组件卸载时清理监听器
 onUnmounted(() => {
+    if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+    }
     document.removeEventListener('click', handleGlobalClick, true)
     document.removeEventListener('keydown', handleEscKey)
     window.removeEventListener('resize', handleWindowEvent)

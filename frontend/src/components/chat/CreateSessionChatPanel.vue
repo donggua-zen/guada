@@ -16,6 +16,7 @@
       <AgentSwitcherBar :character="currentCharacter" @select="handleCharacterSelect" />
       <div class="w-full relative z-30 -mt-4">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
+          :character-id="currentSession.characterId || ''"
           @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
           @send="sendMessage" />
       </div>
@@ -40,7 +41,7 @@ import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
 import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
-import { DEFAULT_SUMMARY_MODE } from '@/constants'
+import { useWorkspaceStore } from '@/stores/workspace';
 // 组件导入
 import { ChatInput } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
@@ -138,22 +139,11 @@ const currentSession = ref<any>({
   title: "新建对话",
   workspacePath: null,  // 工作目录路径，默认为 null 使用系统默认目录
   settings: {
-    referencedKbs: userSelectedKnowledgeBaseIds.value, // 新增：从 localStorage 加载知识库选择
+    referencedKbs: userSelectedKnowledgeBaseIds.value,
     modelName: null,
-    // 新增：memoryEnabled 控制是否启用自定义配置
-    memoryEnabled: false,  // 默认使用角色配置
-    // 思考强度配置 - 从 localStorage 恢复用户上次选择
     thinkingEffort: userSelectedThinkingEffort.value,
-
-    // 运行模式 - 默认工作模式
     runMode: 'normal',
-    // 新增：memory 分组配置（压缩与记忆配置）
-    memory: {
-      compressionTriggerRatio: 0.8,
-      compressionTargetRatio: 0.5,
-      summaryMode: DEFAULT_SUMMARY_MODE, // 默认记忆同步模式
-      maxTokensLimit: null
-    }
+    maxTokensLimit: null
   }
 })
 
@@ -235,13 +225,6 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
       // 切换角色时，重置会话设置
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
-        memoryEnabled: false,  // 默认使用角色配置
-        memory: {
-          compressionTriggerRatio: newCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
-          compressionTargetRatio: newCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-          summaryMode: newCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
-          maxTokensLimit: newCharacter.settings?.memory?.maxTokensLimit || null
-        }
       };
 
       // 更新本地存储的配置信息
@@ -329,13 +312,6 @@ const loadCharacters = async (): Promise<void> => {
         // 设置会话配置
         currentSession.value.settings = {
           ...currentSession.value.settings,
-          memoryEnabled: false,  // 默认使用角色配置
-          memory: {
-            compressionTriggerRatio: targetCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
-            compressionTargetRatio: targetCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-            summaryMode: targetCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
-            maxTokensLimit: targetCharacter.settings?.memory?.maxTokensLimit || null
-          }
         };
 
         // 同步更新 lastModelConfig，确保一致性
@@ -381,13 +357,6 @@ const handleCharacterSelect = (character: any): void => {
 
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
-    memoryEnabled: false,
-    memory: {
-      compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
-      compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
-      summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
-      maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
-    }
   };
 
   if (selectedModelId) {
@@ -405,28 +374,25 @@ const handleCharacterSelect = (character: any): void => {
  * 与 handleConfigChange 中的处理逻辑一一对应，方便对照维护
  */
 const chatInputConfig = computed(() => ({
-  // 模型 ID - 对应 handleConfigChange 中的 config.modelId
+  // 模型 ID
   modelId: currentModelId.value,
 
-  // 思考强度 - 对应 handleConfigChange 中的 config.thinkingEffort
+  // 思考强度
   thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
 
-  // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
-  memoryEnabled: currentSession.value?.settings?.memoryEnabled,
+  // Token 上限（会话级别独立配置）
+  maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
 
-  // 记忆配置详情 - 对应 handleConfigChange 中的 config.memory
-  memory: currentSession.value?.settings?.memory || null,
-
-  // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
+  // 知识库 IDs
   knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
 
-  // 运行模式 - 对应 handleConfigChange 中的 config.runMode
+  // 运行模式
   runMode: currentSession.value?.settings?.runMode || 'normal',
 
-  // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
+  // 工作目录路径
   workspacePath: currentSession.value?.workspacePath || null,
 
-  // 分组 ID - 对应 handleConfigChange 中的 config.groupId
+  // 分组 ID
   groupId: currentSession.value?.groupId || null,
 }));
 
@@ -451,22 +417,9 @@ const handleConfigChange = (config: any): void => {
     console.log('保存 thinkingEffort 到会话和本地存储:', config.thinkingEffort);
   }
 
-  // 处理记忆配置开关
-  if (typeof config.memoryEnabled !== 'undefined') {
-    currentSession.value.settings.memoryEnabled = config.memoryEnabled;
-    console.log('保存 memoryEnabled 到会话:', config.memoryEnabled);
-  }
-
-  // 处理记忆配置详情
-  if (typeof config.memory !== 'undefined') {
-    currentSession.value.settings = {
-      ...(currentSession.value.settings || {}),
-      memory: {
-        ...(currentSession.value.settings?.memory || {}),
-        ...config.memory
-      }
-    };
-    console.log('保存 memory 配置到会话:', config.memory);
+  // 处理 Token 上限（会话级别独立配置）
+  if (typeof config.maxTokensLimit !== 'undefined') {
+    currentSession.value.settings.maxTokensLimit = config.maxTokensLimit;
   }
 
   // 处理知识库选择
@@ -498,6 +451,8 @@ const handleConfigChange = (config: any): void => {
 
 // 前往角色管理页面
 
+const workspaceStore = useWorkspaceStore()
+
 onMounted(() => {
   title.value = "你今天想聊点什么";
   // 先加载模型列表，再加载角色列表
@@ -511,7 +466,57 @@ onMounted(() => {
   if (groupId && typeof groupId === 'string') {
     currentSession.value.groupId = groupId;
   }
+  // 根据上次选择初始化工作目录
+  initWorkspacePath()
 });
+
+async function initWorkspacePath() {
+  await workspaceStore.ensureBaseDir()
+  const publicPath = workspaceStore.getPublicPath()
+  const lastChoice = workspaceStore.getLastChoice()
+
+  if (!lastChoice) {
+    // 无记录 → 默认公共目录
+    if (publicPath) {
+      currentSession.value.workspacePath = publicPath
+      workspaceStore.addRecent(publicPath)
+    }
+    return
+  }
+
+  if (lastChoice.mode === 'auto') {
+    currentSession.value.workspacePath = null
+    return
+  }
+
+  if (lastChoice.mode === 'public') {
+    if (publicPath) {
+      currentSession.value.workspacePath = publicPath
+      workspaceStore.addRecent(publicPath)
+    }
+    return
+  }
+
+  if (lastChoice.mode === 'custom' && lastChoice.path) {
+    // 检查路径是否仍在最近列表中
+    if (workspaceStore.recentList.includes(lastChoice.path)) {
+      currentSession.value.workspacePath = lastChoice.path
+    } else {
+      // 路径不在列表中 → 回退到公共目录
+      if (publicPath) {
+        currentSession.value.workspacePath = publicPath
+        workspaceStore.addRecent(publicPath)
+      }
+    }
+    return
+  }
+
+  // 兜底
+  if (publicPath) {
+    currentSession.value.workspacePath = publicPath
+    workspaceStore.addRecent(publicPath)
+  }
+}
 
 // 监听 groupId 查询参数变化（已在新建面板时点击其他分组的情况）
 watch(() => route.query.groupId, (newGroupId) => {

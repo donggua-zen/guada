@@ -247,7 +247,7 @@ export class SessionsController {
     }
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
-    const planFile = path.join(workspacePath, ".guada", "plan", "main.json");
+    const planFile = path.join(workspacePath, ".guada", "plan", `${id}.json`);
 
     try {
       const raw = await fsPromises.readFile(planFile, "utf-8");

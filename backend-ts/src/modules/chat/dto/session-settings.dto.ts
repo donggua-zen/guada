@@ -16,10 +16,6 @@ class MemorySettingsDto {
   @IsOptional()
   @IsString()
   summaryMode?: string;
-
-  @IsOptional()
-  @IsNumber()
-  maxTokensLimit?: number;
 }
 
 /**
@@ -54,4 +50,8 @@ export class SessionSettingsDto {
   @IsOptional()
   @IsString()
   runMode?: string; // "normal" | "sandbox" | "plan"
+
+  @IsOptional()
+  @IsNumber()
+  maxTokensLimit?: number; // 会话级别 Token 上限，独立于角色 memory 配置
 }

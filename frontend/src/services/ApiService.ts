@@ -247,8 +247,8 @@ class ApiService {
   }
 
   // ========== 工作目录实时监听 ==========
-  connectWorkspaceWatcher(sessionId: string): void {
-    this.workspaceWatcherService.connect(sessionId);
+  connectWorkspaceWatcher(sessionId: string, onConnected?: () => void): void {
+    this.workspaceWatcherService.connect(sessionId, onConnected);
   }
 
   disconnectWorkspaceWatcher(): void {

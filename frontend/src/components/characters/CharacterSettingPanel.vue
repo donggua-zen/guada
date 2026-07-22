@@ -100,24 +100,6 @@
 
               <!-- 记忆与压缩 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                <!-- Token 上限 -->
-                <el-form-item prop="maxTokensLimit" class="!mb-0">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Token 上限 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
-                    </div>
-                    <div class="w-1/2">
-                      <el-input v-model="maxTokensLimitDisplay" placeholder="不限制" clearable @input="handleMaxTokensInput"
-                        @blur="formatMaxTokensDisplay">
-                        <template #suffix>
-                          <span class="text-gray-400 text-sm">Tokens</span>
-                        </template>
-                      </el-input>
-                      <div class="text-xs text-gray-400 mt-1">支持输入数字或带K/M后缀（如 128K、1M），留空表示不限制</div>
-                    </div>
-                  </div>
-                </el-form-item>
                 <!-- 触发阈值 -->
                 <el-form-item prop="compressionTriggerRatio" class="!mb-0">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
@@ -583,7 +565,6 @@ const characterForm = reactive({
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
   summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
-  maxTokensLimit: null, // Token 上限（null 表示不限制）
 })
 
 // 验证规则
@@ -688,16 +669,24 @@ const mcpAllowlistServers = ref<string[]>([]);
 const allSkillsDisabled = ref(false);
 // Skills 白名单模式（新技能默认不开启）
 const skillsAllowlistMode = ref(false);
+// 通用子代理（虚拟角色，不出现在角色列表中）
+const GENERIC_AGENT = {
+  id: 'generic',
+  title: '通用子代理',
+  description: '适用于通用任务的子代理，无需特定角色设定',
+};
 // 是否全部禁用预设助手
 const allAgentsDisabled = ref(false);
 // 助手白名单模式（默认 true = 白名单，新助手默认关闭）
 const agentsAllowlistMode = ref(true);
-// 预设助手列表（排除当前角色）
+// 预设助手列表（排除当前角色，含虚拟通用子代理）
 const presetCharacters = ref<any[]>([]);
 const loadingAgents = ref(false);
 // 助手偏好 { characterId: true/false }
 const enabledAgents = reactive<Record<string, boolean>>({});
-const maxTokensLimitDisplay = ref('');
+
+
+
 
 // 是否自动启用全部工具
 const allToolsEnabled = computed(() => {
@@ -773,10 +762,7 @@ watch(() => props.data, (newVal, oldVal) => {
   const memoryConfig = newVal.settings?.memory || {};
   characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
   characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
-  characterForm.summaryMode = memoryConfig.summaryMode ?? DEFAULT_SUMMARY_MODE; // 默认记忆同步模式
-  characterForm.maxTokensLimit = memoryConfig.maxTokensLimit ?? newVal.settings?.maxTokensLimit ?? null;
-  // 同步更新显示值
-  maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
+  characterForm.summaryMode = memoryConfig.summaryMode ?? DEFAULT_SUMMARY_MODE;
   // 加载已启用的插件
   characterForm.enabledTools = newVal.settings?.plugins || [];
   // 加载角色插件设置（新格式：{ pluginId: { enabled: true/false } }）
@@ -836,7 +822,7 @@ watch(() => props.data, (newVal, oldVal) => {
   }
 
   // 加载预设助手偏好
-  allAgentsDisabled.value = newVal.settings?.plugins?.agent_presets?.enabled === false;
+  allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled === false;
   const agentsConfig = newVal.settings?.agents;
   agentsAllowlistMode.value = agentsConfig ? agentsConfig.__default === false : true;
   // 重建 enabledAgents
@@ -890,7 +876,8 @@ const handleSkillToggle = (skillId, enabled) => {
 // ── 预设助手 ──
 const getAgentEffectiveEnabled = (char) => {
   if (char.id in enabledAgents) return (enabledAgents as any)[char.id];
-  return false;
+  // 未显式配置：白名单模式默认关闭，黑名单模式默认开启
+  return !agentsAllowlistMode.value;
 };
 const handleAgentToggle = (charId, enabled) => {
   (enabledAgents as any)[charId] = enabled;
@@ -903,14 +890,22 @@ const loadPresetCharacters = async () => {
   try {
     const response = await apiService.fetchCharacters();
     const allChars = response.items || [];
-    // 排除当前正在编辑的角色
-    presetCharacters.value = allChars.filter(c => c.id !== characterForm.id);
+    // 排除当前正在编辑的角色，并在列表开头插入虚拟通用子代理
+    presetCharacters.value = [
+      GENERIC_AGENT,
+      ...allChars.filter(c => c.id !== characterForm.id),
+    ];
   } catch (err) {
     console.error('加载预设助手失败:', err);
   } finally {
     loadingAgents.value = false;
   }
 };
+
+// 角色切换时刷新预设助手列表
+watch(() => characterForm.id, () => {
+  loadPresetCharacters();
+}, { immediate: true })
 
 // 模式切换时同步初始状态
 const handleMcpModeChange = (mode) => {
@@ -1129,7 +1124,6 @@ onMounted(async () => {
   loadModels();
   loadMCPServers();
   loadSkills();
-  loadPresetCharacters();
   loadCharacterGroups();  // 加载分组列表
   // query 由 watch 统一接管（immediate + isNew 判断）
 })
@@ -1170,7 +1164,6 @@ const getFormData = () => {
         'compressionTriggerRatio': characterForm.compressionTriggerRatio,
         'compressionTargetRatio': characterForm.compressionTargetRatio,
         'summaryMode': characterForm.summaryMode,
-        'maxTokensLimit': characterForm.maxTokensLimit,
       },
       // 插件配置
       'plugins': (() => {
@@ -1206,7 +1199,7 @@ const getFormData = () => {
           // Skills：始终显式写入 enabled 状态，true=启用 false=全部禁用
           result.skill = { enabled: !allSkillsDisabled.value };
           // 预设 Agent
-          result.agent_presets = { enabled: !allAgentsDisabled.value };
+          result.sub_agent = { enabled: !allAgentsDisabled.value };
           return result;
         };
         // 全部禁用：保留原有配置值，追加 __default 以便切回时恢复白名单模式
@@ -1289,82 +1282,6 @@ const validate = async () => {
     console.error('Validation error:', errors);
     return false;
   }
-}
-
-function format(value) {
-  if (value === null || value === "")
-    return "不限制";
-  return value.toLocaleString("en-US");
-}
-
-/**
- * 格式化 Token 值为显示字符串
- * @param value - Token 数值或 null
- * @returns 格式化后的字符串（如 "128K"、"1M" 或 "50,000"）
- */
-function formatTokenValue(value) {
-  if (!value) return '';
-  const num = Number(value);
-  if (isNaN(num)) return '';
-
-  // 如果大于等于 1,000,000 且是整百万，使用 M 后缀
-  if (num >= 1000000 && num % 1000000 === 0) {
-    return (num / 1000000) + 'M';
-  }
-  // 如果大于等于 1000 且是整千，使用 K 后缀
-  if (num >= 1000 && num % 1000 === 0) {
-    return (num / 1000) + 'K';
-  }
-  // 否则使用千位分隔符
-  return num.toLocaleString();
-}
-
-/**
- * 解析用户输入的 Token 值
- * @param input - 用户输入的字符串
- * @returns 解析后的数字或 null
- */
-function parseTokenValue(input) {
-  if (!input || input.trim() === '') return null;
-
-  const trimmed = input.trim();
-  const lowerTrimmed = trimmed.toLowerCase();
-
-  // 支持 M/m 后缀（百万）
-  if (lowerTrimmed.endsWith('m')) {
-    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
-    const num = Number(numStr);
-    if (isNaN(num)) return null;
-    return Math.round(num * 1000000);
-  }
-
-  // 支持 K/k 后缀（千）
-  if (lowerTrimmed.endsWith('k')) {
-    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
-    const num = Number(numStr);
-    if (isNaN(num)) return null;
-    return Math.round(num * 1000);
-  }
-
-  // 普通数字（可能带逗号）
-  const cleanStr = trimmed.replace(/,/g, '');
-  const num = Number(cleanStr);
-  return isNaN(num) ? null : num;
-}
-
-/**
- * 处理 Token 上限输入
- */
-function handleMaxTokensInput(value) {
-  const parsed = parseTokenValue(value);
-  characterForm.maxTokensLimit = parsed;
-}
-
-/**
- * 失焦时格式化显示
- */
-function formatMaxTokensDisplay() {
-  maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
 }
 
 // 清除头像文件（上传成功后由父组件调用）

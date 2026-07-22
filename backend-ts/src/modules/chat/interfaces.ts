@@ -28,7 +28,6 @@ export interface MemoryConfig {
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
   summaryMode?: 'disabled' | 'fast' | 'memory_sync'; // 摘要模式
-  maxTokensLimit?: number;
 }
 
 // 压缩统计信息（便于扩展）

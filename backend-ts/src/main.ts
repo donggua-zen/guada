@@ -108,12 +108,21 @@ async function bootstrap() {
 
   console.log(`Application is running on: http://localhost:${actualPort}`);
 
-  // 如果是在 fork/child_process 环境中，通过 IPC 向父进程发送端口信息
-  if (process.send) {
-    console.log(`正在通过 IPC 发送端口: ${actualPort}`);
-    process.send({ type: 'PORT_READY', port: actualPort });
+  // 通过 Bridge 通道向 Electron 上报端口
+  const bridgePipePath = process.env.GUADA_BRIDGE_PATH;
+  if (bridgePipePath) {
+    try {
+      const { BridgeClient } = await import("./modules/bridge/bridge-client");
+      // 获取已初始化的 BridgeClient 实例
+      const bridgeClient = app.get(BridgeClient);
+      await bridgeClient.ready;
+      bridgeClient.emit("port_ready", { port: actualPort });
+      console.log(`已通过 Bridge 上报端口: ${actualPort}`);
+    } catch (err: any) {
+      console.warn("通过 Bridge 上报端口失败:", err?.message || err);
+    }
   } else {
-    console.log('⚠️  process.send 不可用，当前不在 IPC 环境中');
+    console.log("非 Electron 环境，跳过端口上报");
   }
 }
 bootstrap();

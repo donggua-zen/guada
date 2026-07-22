@@ -23,7 +23,7 @@ export class WorkspaceWatcherService {
   private currentClientId: string;
 
   constructor(private getBaseURL: () => string) {
-    // 使用全局客户端标识（localStorage 持久化，刷新页面保持不变）
+    // 使用页面级客户端标识，同一页面内的 SSE 和普通请求保持一致
     this.currentClientId = getClientId();
   }
 
@@ -37,7 +37,7 @@ export class WorkspaceWatcherService {
   /**
    * 连接到指定会话的工作目录事件流（SSE）
    */
-  connect(sessionId: string): void {
+  connect(sessionId: string, onConnected?: () => void): void {
     // 如果已连接同一会话，不做任何操作
     if (this.currentSessionId === sessionId && this.eventSource) {
       return;
@@ -50,29 +50,42 @@ export class WorkspaceWatcherService {
 
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
     const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events`;
-
-    this.eventSource = new EventSourcePolyfill(url, {
+    const eventSource = new EventSourcePolyfill(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         "X-Client-Id": this.currentClientId,
       },
       heartbeatTimeout: 180000,
     });
+    this.eventSource = eventSource;
 
-    this.eventSource.onopen = () => {
+    eventSource.onopen = () => {
+      if (this.eventSource !== eventSource) {
+        return;
+      }
       console.log("[WorkspaceWatcher] SSE 连接已建立");
+      onConnected?.();
     };
 
-    this.eventSource.onmessage = (event) => {
+    eventSource.onmessage = (event) => {
+      if (this.eventSource !== eventSource) {
+        return;
+      }
       try {
         const data = JSON.parse(event.data) as FileChangeEvent;
+        if (data.sessionId && data.sessionId !== this.currentSessionId) {
+          return;
+        }
         this.notifyListeners(data);
       } catch (error) {
         console.error("[WorkspaceWatcher] 解析事件失败:", error);
       }
     };
 
-    this.eventSource.onerror = (error) => {
+    eventSource.onerror = (error) => {
+      if (this.eventSource !== eventSource) {
+        return;
+      }
       console.error("[WorkspaceWatcher] SSE 连接错误:", error);
     };
   }

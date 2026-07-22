@@ -180,8 +180,7 @@ When you are ready to act, before running a command, consider whether or not you
     const workspaceDir = ctx?.session?.workspacePath;
     if (!workspaceDir) throw new Error("missing workspace directory");
 
-    const isSubAgent = ctx?.session?.sessionType === "sub_agent";
-    const fileName = isSubAgent ? `${ctx.session.sessionId}.json` : "main.json";
+    const fileName = `${ctx.session.sessionId}.json`;
     return path.join(workspaceDir, ".guada", "plan", fileName);
   }
 

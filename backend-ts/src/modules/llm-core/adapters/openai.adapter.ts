@@ -163,6 +163,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
     if (params.stream) {
       requestParams.stream_options = { include_usage: true };
     }
+    console.log(requestParams);
     return requestParams;
   }
 
@@ -273,7 +274,8 @@ export class OpenAIAdapter implements IProtocolAdapter {
       };
       if ((delta as any)?.reasoning_content) responseChunk.type = "think";
       if (choice.finish_reason) responseChunk.type = "finish";
-
+      console.log(chunk);
+      
       if ((chunk as any).usage) {
         const rawUsage = (chunk as any).usage;
         responseChunk.usage = {

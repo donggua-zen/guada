@@ -86,7 +86,7 @@
 
       <div class="w-full flex items-center relative" style="margin-top: -16px;z-index: 30;">
         <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-          :session-id="effectiveSessionId" :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly"
+          :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''" :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly"
           mode="chat" @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
           <template #right-actions-before>
             <!-- 上下文使用率：圆形进度条 -->
@@ -430,25 +430,11 @@ const currentModelId = computed({
  * 与 handleConfigChange 中的处理逻辑一一对应，方便对照维护
  */
 const chatInputConfig = computed(() => ({
-  // 模型 ID - 对应 handleConfigChange 中的 config.modelId
   modelId: currentModelId.value,
-
-  // 思考强度 - 对应 handleConfigChange 中的 config.thinkingEffort
   thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
-
-  // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
-  memoryEnabled: currentSession.value?.settings?.memoryEnabled,
-
-  // 记忆配置详情 - 对应 handleConfigChange 中的 config.memory
-  memory: currentSession.value?.settings?.memory || null,
-
-  // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
+  maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
-
-  // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
   workspacePath: currentSession.value?.workspacePath || null,
-
-  // 运行模式
   runMode: currentSession.value?.settings?.runMode || 'normal',
 }));
 
@@ -464,22 +450,9 @@ const handleConfigChange = (config: any) => {
     currentSession.value.modelId = config.modelId;
   }
 
-  // 处理记忆配置开关
-  if (typeof config.memoryEnabled !== 'undefined') {
-    currentSession.value.settings.memoryEnabled = config.memoryEnabled;
-    console.log('保存 memoryEnabled 到会话:', config.memoryEnabled);
-  }
-
-  // 处理记忆配置详情
-  if (typeof config.memory !== 'undefined') {
-    if (!currentSession.value.settings.memory) {
-      currentSession.value.settings.memory = {};
-    }
-    currentSession.value.settings.memory = {
-      ...currentSession.value.settings.memory,
-      ...config.memory
-    };
-    console.log('保存 memory 配置到会话:', config.memory);
+  // 处理 Token 上限（会话级别独立配置）
+  if (typeof config.maxTokensLimit !== 'undefined') {
+    currentSession.value.settings.maxTokensLimit = config.maxTokensLimit;
   }
 
   // 处理思考强度变更

@@ -1,35 +1,41 @@
 <template>
-  <CustomPopover :show="visible" @update:show="onMainShowChange" :width="300" :max-height="440"
-    :anchor-el="anchorEl" popper-class="model-popover compact-popover">
+  <CustomPopover :show="visible" @update:show="onMainShowChange" :width="300" :max-height="440" :anchor-el="anchorEl"
+    popper-class="model-popover compact-popover">
     <div class="model-panel">
       <!-- 已选择模型（hover 弹出全部模型） -->
-      <div v-if="currentModel" class="current-model-section">
+      <div class="current-model-section">
         <div ref="currentModelRef" class="current-model-card" @mouseenter="openCascade('browse', currentModelRef)"
           @mouseleave="scheduleCloseCascade">
-          <div class="w-8 h-8 shrink-0">
-            <Avatar :src="getModelAvatarPath(currentModel.modelName, currentModelProviderName) || undefined"
-              :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
-              class="w-full h-full" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
-              {{ getModelDisplayName(currentModel.modelName) }}
+          <template v-if="currentModel">
+            <div class="w-8 h-8 shrink-0">
+              <Avatar :src="getModelAvatarPath(currentModel.modelName, currentModelProviderName) || undefined"
+                :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
+                class="w-full h-full" />
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-              <span class="truncate">{{ currentModelProviderName }}</span>
-              <template v-for="feature in (currentModel?.config?.features || [])" :key="feature">
-                <el-icon :size="12">
-                  <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                  <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                </el-icon>
-              </template>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+                {{ getModelDisplayName(currentModel.modelName) }}
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <span class="truncate">{{ currentModelProviderName }}</span>
+                <template v-for="feature in (currentModel?.config?.features || [])" :key="feature">
+                  <el-icon :size="12">
+                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                  </el-icon>
+                </template>
+              </div>
             </div>
-          </div>
+          </template>
+          <template v-else>
+            <span class="text-sm flex-1 py-3 text-gray-400">选择模型，鼠标悬停此处以选择模式</span>
+          </template>
           <el-icon size="14" class="text-gray-400 shrink-0">
             <ChevronRight24Regular />
           </el-icon>
         </div>
       </div>
+
 
       <!-- 推理强度 - 级联 -->
       <template v-if="thinkingEffortOptions.length > 0">
@@ -80,9 +86,9 @@
   </CustomPopover>
 
   <!-- 级联：全部模型列表 -->
-  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'"
-    @update:show="onCascadeShowChange" :width="300" :max-height="400" :position="cascadePosition"
-    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
+  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'" @update:show="onCascadeShowChange"
+    :width="300" :max-height="400" :position="cascadePosition" @mouseenter="cancelCloseCascade"
+    @mouseleave="scheduleCloseCascade">
     <template v-for="provider in filteredProviders" :key="provider.id">
       <div class="provider-group">
         <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
@@ -96,15 +102,14 @@
             }" @click.stop="handleSelect(model.id)">
             <div class="w-8 h-8 shrink-0">
               <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
-                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false"
-                class="w-full h-full" />
+                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" class="w-full h-full" />
             </div>
             <div class="flex-1 min-w-0">
               <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
                 {{ getModelDisplayName(model.modelName) }}
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                <span class="truncate">{{ provider.name }}</span>
+                <!-- <span class="truncate">{{ provider.name }}</span> -->
                 <template v-for="feature in (model.config?.features || [])" :key="feature">
                   <el-icon :size="12">
                     <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
@@ -125,11 +130,11 @@
   </CustomPopover>
 
   <!-- 级联：推理强度列表 -->
-  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'"
-    @update:show="onCascadeShowChange" :width="180" :max-height="300" :position="cascadePosition"
-    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
+  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'" @update:show="onCascadeShowChange"
+    :width="180" :max-height="300" :position="cascadePosition" @mouseenter="cancelCloseCascade"
+    @mouseleave="scheduleCloseCascade">
     <div v-for="effort in thinkingEffortOptions" :key="effort"
-      class="te-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm"
+      class="te-item flex items-center justify-between px-2 py-1 mb-0.5 last:mb-0 rounded-xl cursor-pointer transition-all text-sm"
       :class="{
         'te-item-active': thinkingEffortValue === effort
       }" @click.stop="$emit('select-thinking-effort', effort)">
@@ -265,7 +270,7 @@ async function openCascade(type: 'browse' | 'thinking', triggerEl: HTMLElement |
     const rect = triggerEl.getBoundingClientRect()
     const menuWidth = type === 'browse' ? 300 : 180
     const menuHeight = type === 'browse' ? 400 : 200
-    const gap = 10
+    const gap = 5
 
     const spaceRight = window.innerWidth - rect.right
     const spaceLeft = rect.left
@@ -337,7 +342,6 @@ watch(() => props.visible, (newVal) => {
 .model-panel {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .section-label {
@@ -431,5 +435,4 @@ watch(() => props.visible, (newVal) => {
   font-size: 0.75rem;
   margin-bottom: 0.25rem;
 }
-
 </style>

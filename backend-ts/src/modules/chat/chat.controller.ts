@@ -77,7 +77,10 @@ export class ChatController {
     // 如果需要解析标签，对用户消息内容进行解析
     if (userMessage?.content) {
       try {
-        const parsed = await this.tagParserPipeline.parse(userMessage.content);
+        const parsed = await this.tagParserPipeline.parse(userMessage.content, {
+          sessionId,
+          userId: user.id,
+        });
         if (parsed.content !== parsed.originalText) {
           source.parseResult = { content: parsed.content };
         }

@@ -3,7 +3,7 @@ import type { PaginatedResponse } from "@/types/common";
 
 export interface SkillsApi {
   fetchSkills(): Promise<PaginatedResponse<any>>;
-  fetchCommands(trigger: string): Promise<{ items: any[]; total: number }>;
+  fetchCommands(trigger: string, characterId?: string): Promise<{ items: any[]; total: number }>;
   fetchSkillDetail(skillId: string): Promise<any>;
   fetchSkillDocumentation(skillId: string): Promise<{ content: string }>;
   scanSkills(): Promise<any>;
@@ -24,8 +24,11 @@ export const skillsApi: SkillsApi = {
     return await this._request("/skills");
   },
 
-  async fetchCommands(this: ApiContext, trigger: string) {
-    return await this._request(`/commands?trigger=${trigger}`);
+  async fetchCommands(this: ApiContext, trigger: string, characterId?: string) {
+    const query = characterId
+      ? `/commands?trigger=${trigger}&characterId=${characterId}`
+      : `/commands?trigger=${trigger}`;
+    return await this._request(query);
   },
 
   async fetchSkillDetail(this: ApiContext, skillId: string) {

@@ -27,25 +27,18 @@
       <!-- Tiptap 编辑器（替换 textarea） -->
       <div class="editor-container">
         <template v-if="props.readonly">
-          <div class="readonly-placeholder" style="min-height: 58px; padding: 0 8px; font-size: var(--size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
+          <div class="readonly-placeholder"
+            style="min-height: 58px; padding: 0 8px; font-size: var(--size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
             子代理会话为只读模式
           </div>
         </template>
         <template v-else>
           <component :is="EditorContent" :editor="editor" class="message-editor" />
           <!-- 命令选择弹窗 -->
-          <CommandPicker
-            v-if="commandPickerVisible"
-            ref="commandPickerRef"
-            :visible="commandPickerVisible"
-            :items="commandsCache[commandTrigger]"
-          :query="pickerQuery"
-          :selected-index="selectedIndex"
-          :trigger="commandTrigger"
-          @select="selectCommand"
-          @close="closeCommandPicker"
-          @update:selected-index="selectedIndex = $event"
-        />
+          <CommandPicker v-if="commandPickerVisible" ref="commandPickerRef" :visible="commandPickerVisible"
+            :items="commandsCache[commandTrigger]" :query="pickerQuery" :selected-index="selectedIndex"
+            :trigger="commandTrigger" @select="selectCommand" @close="closeCommandPicker"
+            @update:selected-index="selectedIndex = $event" />
         </template>
       </div>
 
@@ -86,30 +79,36 @@
         <div class="right-actions flex items-center gap-1">
           <slot name="right-actions-before" />
           <!-- 模型选择按钮 -->
-          <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn">
+          <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
+            :class="{ 'is-open': modelButtonExpanded }" :style="{ width: modelButtonWidth }">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
-            <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel }}</span>
+            <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
+            }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <el-tooltip v-if="!props.readonly" content="会话设置" placement="top">
-            <button class="tool-btn" @click.stop="openSettingsPanel">
-              <el-icon size="16">
-                <Settings24Regular />
-              </el-icon>
+          <el-tooltip v-if="!props.readonly" content="Token 上限" placement="top">
+            <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
+              <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
           </el-tooltip>
+          <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
+            :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
           <!-- 发送/停止按钮 -->
           <el-tooltip v-if="!streaming" content="发送" placement="top">
             <button class="send-btn" @click="sendMessage"
               :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
-              <el-icon size="20"><Send24Filled /></el-icon>
+              <el-icon size="20">
+                <Send24Filled />
+              </el-icon>
             </button>
           </el-tooltip>
           <el-tooltip v-else content="停止生成" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
-              <el-icon size="20"><Stop24Filled /></el-icon>
+              <el-icon size="20">
+                <Stop24Filled />
+              </el-icon>
             </button>
           </el-tooltip>
         </div>
@@ -121,10 +120,6 @@
         :thinking-effort-options="thinkingEffortOptions" :thinking-effort-value="localThinkingEffort"
         @select="handleModelSelect" @favorite-changed="handleFavoriteChanged"
         @select-thinking-effort="handleThinkingEffortChange" />
-
-      <!-- 会话设置模态框 -->
-      <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="sessionMemoryConfig"
-        @confirm="applySessionSettings" @cancel="settingsDialogVisible = false" />
     </div>
   </div>
 </template>
@@ -133,7 +128,7 @@
 <script setup lang="ts">
 // @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
-import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage, ElMessageBox } from 'element-plus';
+import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessageBox } from 'element-plus';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -143,7 +138,7 @@ import ElSliderOptional from '../ui/ElSliderOptional.vue';
 import CustomPopover from '../ui/CustomPopover.vue';
 import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
-import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
+import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
 import RunModePopover from './chat-input/RunModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
@@ -159,7 +154,7 @@ import {
 import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular,
+  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, BookSearch24Regular,
   Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
 } from '@vicons/fluent'
 import {
@@ -187,8 +182,9 @@ const models = ref([]);
 const providers = ref([]);
 // 弹窗触发按钮引用
 const modelButtonRef = ref<any>(null);
-// 会话设置对话框相关
-const settingsDialogVisible = ref(false);
+// Token 上限 popover
+const settingsButtonRef = ref<HTMLElement | null>(null);
+const settingsPopoverVisible = ref(false);
 // 知识库选择器相关
 const knowledgeBases = ref<any[]>([]); // 知识库列表
 
@@ -211,6 +207,8 @@ const commandPickerRef = ref<any>();
 const settingsPanelVisible = ref(false)
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
+const modelButtonExpanded = ref(false)
+const modelButtonWidth = ref<string | undefined>()
 const attachPopoverVisible = ref(false)
 const attachButtonRef = ref<any>(null)
 
@@ -265,22 +263,16 @@ const props = defineProps({
   buttons: { type: Object, default: () => [] },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
+  characterId: { type: String, default: null },
   // 模式：create 为创建会话模式，chat 为对话模式
   mode: { type: String, default: 'chat' },
   config: {
     type: Object,
     default: () => ({
       modelId: null,
-      thinkingEffort: 'off', // 思考强度配置
-      workspacePath: null, // 工作目录路径
-      // 新增：记忆与压缩配置分组
-      memory: {
-        useCustom: true, // 默认开启自定义，方便用户直接看到设置
-        compressionTriggerRatio: 0.8,
-        compressionTargetRatio: 0.5,
-        summaryMode: 'memory_sync', // 默认记忆同步模式
-        maxTokensLimit: null,
-      },
+      thinkingEffort: 'off',
+      workspacePath: null,
+      maxTokensLimit: null,
       knowledgeBaseIds: [],
     })
   },
@@ -470,17 +462,24 @@ const selectedKnowledgeBases = computed(() => {
   return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
 });
 
-// 为会话设置对话框构造配置对象（将 memoryEnabled 映射为 useCustom）
-const sessionMemoryConfig = computed(() => {
-  const config = props.config;
-  if (!config) return {};
-
-  return {
-    useCustom: config.memoryEnabled ?? true,
-    ...config.memory,
-    workspacePath: config.workspacePath || null,
-  };
+// Token 上限标签
+const maxTokensLabel = computed(() => {
+  const v = props.config?.maxTokensLimit;
+  if (!v) return '不限';
+  if (v >= 1000000 && v % 1000000 === 0) return `${v / 1000000}M`;
+  if (v >= 1000 && v % 1000 === 0) return `${v / 1000}K`;
+  return '自定义';
 });
+
+// 切换 Token 上限 popover
+const toggleSettingsPopover = () => {
+  settingsPopoverVisible.value = !settingsPopoverVisible.value;
+};
+
+// 处理 Token 上限变更
+const handleMaxTokensChange = (val: number | null) => {
+  emit('config-change', { maxTokensLimit: val });
+};
 
 //  新增：有效的已选择知识库数量（只统计实际存在的知识库）
 const selectedKnowledgeBasesCount = computed(() => {
@@ -552,15 +551,78 @@ const createFileObject = (file, fileType, isPasted = false) => {
 };
 
 // 打开模型面板
+const MODEL_BUTTON_MAX_WIDTH = 200
+const MODEL_BUTTON_TRANSITION_MS = 200
+let modelOpenTimer: ReturnType<typeof setTimeout> | null = null;
+let modelCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function measureModelButtonNaturalWidth(): number {
+  const button = modelButtonRef.value as HTMLElement | null
+  if (!button) return 80
+
+  const clone = button.cloneNode(true) as HTMLElement
+  clone.classList.remove('is-open')
+  clone.style.position = 'fixed'
+  clone.style.visibility = 'hidden'
+  clone.style.pointerEvents = 'none'
+  clone.style.width = 'auto'
+  clone.style.maxWidth = `${MODEL_BUTTON_MAX_WIDTH}px`
+  clone.style.left = '-9999px'
+  document.body.appendChild(clone)
+  const width = Math.min(MODEL_BUTTON_MAX_WIDTH, Math.max(80, clone.getBoundingClientRect().width))
+  clone.remove()
+  return width
+}
+
+function collapseModelButton() {
+  if (modelOpenTimer) {
+    clearTimeout(modelOpenTimer)
+    modelOpenTimer = null
+  }
+  if (modelCloseTimer) clearTimeout(modelCloseTimer)
+
+  modelButtonExpanded.value = false
+  modelButtonWidth.value = `${measureModelButtonNaturalWidth()}px`
+  modelCloseTimer = setTimeout(() => {
+    modelButtonWidth.value = undefined
+    modelCloseTimer = null
+  }, MODEL_BUTTON_TRANSITION_MS)
+}
+
 const openModelPanel = () => {
-  // 如果面板已经打开，则关闭它（实现切换效果）
   if (modelPanelVisible.value) {
     modelPanelVisible.value = false
     return
   }
 
-  modelPanelVisible.value = true
+  const button = modelButtonRef.value as HTMLElement | null
+  if (!button) return
+
+  if (modelOpenTimer) clearTimeout(modelOpenTimer)
+  if (modelCloseTimer) {
+    clearTimeout(modelCloseTimer)
+    modelCloseTimer = null
+  }
+
+  // 从当前自适应宽度开始，再在下一帧过渡到最大宽度
+  modelButtonWidth.value = `${button.getBoundingClientRect().width}px`
+  modelButtonExpanded.value = true
+  requestAnimationFrame(() => {
+    modelButtonWidth.value = `${MODEL_BUTTON_MAX_WIDTH}px`
+  })
+
+  modelOpenTimer = setTimeout(() => {
+    modelPanelVisible.value = true
+    modelOpenTimer = null
+  }, MODEL_BUTTON_TRANSITION_MS)
 };
+
+// 外部点击或 ESC 关闭弹窗时，反向收起按钮
+watch(modelPanelVisible, (val) => {
+  if (!val && modelButtonExpanded.value) {
+    collapseModelButton()
+  }
+})
 
 // 处理模型选择
 const handleModelSelect = (modelId: string) => {
@@ -621,19 +683,6 @@ const reloadModels = async () => {
   models.value = [];
   providers.value = [];
   await loadModels();
-};
-
-// 打开会话设置模态框
-const openSettingsPanel = () => {
-  settingsDialogVisible.value = true
-};
-
-// 应用会话设置（模态框确认）
-const applySessionSettings = (configChanges: any) => {
-  console.log('Applying session settings:', configChanges);
-  emit('config-change', configChanges);
-  ElMessage.success('会话配置已更新');
-  settingsDialogVisible.value = false
 };
 
 // 附件弹窗切换
@@ -1054,7 +1103,7 @@ const selectCommand = (item: any) => {
 // ==================== 命令数据加载（按需 + 缓存） ====================
 const loadCommands = async (trigger: 'slash' | 'mention') => {
   try {
-    const res = await apiService.fetchCommands(trigger);
+    const res = await apiService.fetchCommands(trigger, props.characterId || undefined);
     commandsCache[trigger] = res.items || [];
   } catch (error) {
     console.error('获取命令列表失败:', error);
@@ -1205,6 +1254,9 @@ onMounted(() => {
 
 // 清理事件监听器和预览 URL
 onUnmounted(() => {
+  if (modelOpenTimer) clearTimeout(modelOpenTimer)
+  if (modelCloseTimer) clearTimeout(modelCloseTimer)
+
   // 销毁编辑器
   if (editor.value) {
     editor.value.destroy();
@@ -1361,7 +1413,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 180px;
+  max-width: 200px;
+  min-width: 80px;
   overflow: hidden;
   transition: all 0.2s;
   outline: none;
@@ -1374,6 +1427,12 @@ onUnmounted(() => {
 }
 
 .model-selector-btn:active {
+  background: var(--color-sidebar-bg-active);
+}
+
+.model-selector-btn.is-open {
+  width: 200px;
+  max-width: 200px;
   background: var(--color-sidebar-bg-active);
 }
 

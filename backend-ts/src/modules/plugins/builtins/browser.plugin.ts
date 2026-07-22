@@ -1,28 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import * as http from "http";
 import * as path from "path";
 import * as fs from "fs";
+import * as yaml from "js-yaml";
 import { z } from "zod";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
+import { BridgeClient } from "../../bridge/bridge-client";
 
 @Injectable()
 export class BrowserPlugin extends PluginBase {
   private readonly logger = new Logger(BrowserPlugin.name);
-  private pendingRequests = new Map<
-    string,
-    {
-      resolve: (v: any) => void;
-      reject: (r: any) => void;
-      timeout: NodeJS.Timeout;
-    }
-  >();
-  private requestIdCounter = 0;
-  private bridgeMode: "ipc" | "tcp" = "ipc";
-  private tcpBaseUrl = "";
 
   manifest = {
     id: "browser",
@@ -32,19 +22,11 @@ export class BrowserPlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(private workspaceService: WorkspaceService) {
+  constructor(
+    private workspaceService: WorkspaceService,
+    private bridgeClient: BridgeClient,
+  ) {
     super();
-    this.bridgeMode = (process.env.BROWSER_BRIDGE_MODE as any) || "ipc";
-    if (this.bridgeMode === "tcp") {
-      this.tcpBaseUrl = `http://127.0.0.1:${process.env.BROWSER_BRIDGE_PORT || "4111"}/browser-tool`;
-    }
-    if (process.send) {
-      process.on("message", (message: any) => {
-        if (message && message.type === "BROWSER_TOOL_RESPONSE") {
-          this.handleResponse(message.data);
-        }
-      });
-    }
   }
 
   /**
@@ -59,84 +41,182 @@ export class BrowserPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    // 注册浏览器工具包（ToolKit 方式）
     api.registerToolKit({
       id: "browser",
       name: "Browser Automation",
       loadMode: "lazy",
       activator: "Use this toolkit when browser automation is needed",
       onLoad: (toolkit) => {
+        // ── 1. 统一导航 ──
         toolkit.registerTool({
-          name: "browser_new_window",
+          name: "browser_navigate",
           description:
-            "Open a new independent window, returns window_id. Supports passing metadata for session isolation and scope identification.",
+            "Navigate to a URL. Set new_tab=true to open in a new tab (auto-set as current), false to navigate in the current tab (auto-creates one if none exists). Returns tab list and page snapshot. Use load_delay (seconds, default 3s) to wait for dynamic content before snapshot. After navigation or interaction, call browser_snapshot again to refresh element refs.",
           inputSchema: z.object({
-            url: z.string().describe("URL to open"),
+            url: z.string().describe("URL to navigate to"),
+            new_tab: z
+              .boolean()
+              .optional()
+              .describe(
+                "true=open new tab and set as current, false=navigate in current tab (default false)",
+              ),
+            type: z
+              .enum(["simple", "struct", "summary"])
+              .optional()
+              .describe(
+                "Snapshot type: 'simple' (compact accessibility YAML, default), 'struct' (detailed DOM structure JSON), or 'summary' (text/links/headings)",
+              ),
             load_delay: z
               .number()
               .optional()
               .describe(
-                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
-              ),
-            metadata: z
-              .object({
-                scope: z
-                  .string()
-                  .optional()
-                  .describe("Scope identifier for session isolation"),
-                purpose: z
-                  .string()
-                  .optional()
-                  .describe("Purpose description for the window"),
-              })
-              .optional()
-              .describe(
-                "Optional metadata, e.g. { scope: 'session_123', purpose: 'research' }",
+                "Seconds to wait after page load before snapshot (default 3s)",
               ),
           }),
           execute: async (args, ctx, signal) => {
-            // session_id 解析到主会话：子代理用 parentSessionId，主代理用 sessionId
             const ownerSessionId =
               ctx?.session.parentSessionId || ctx?.session.sessionId;
-            return await this.executeWithContent(
-              "browser_new_window",
+            const result = await this.executeWithSnapshot(
+              "browser_navigate",
               {
-                ...args,
+                url: args.url,
+                new_tab: args.new_tab || false,
+                type: args.type || "simple",
                 session_path: ctx?.session.workspacePath,
                 session_id: ownerSessionId,
                 created_by: ctx?.session.sessionId,
               },
+              args.load_delay,
+              args.type || "simple",
+              signal,
+            );
+            return this.formatNavigateResult(
+              result,
+              ctx?.session.sessionId || "",
               signal,
             );
           },
-          display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
+          display: { action: "访问网页", argsKey: "url", icon: "browser" },
         });
+
+        // ── 2. 标签管理 ──
         toolkit.registerTool({
-          name: "browser_navigate",
+          name: "browser_tabs",
           description:
-            "Navigate to the specified URL, returns page title, URL, and page summary content",
+            "Manage browser tabs. action='list' returns all tabs with index, url, title, and is_current marker. action='select' switches current tab by index (AI-level only, does not affect frontend display). action='close' closes current tab or specified index (auto-switches to next available). action='close_all' closes every tab. Only tabs created by this session are visible.",
           inputSchema: z.object({
-            url: z.string().describe("URL to navigate to"),
-            window_id: z.string().describe("Target window ID (required)"),
-            load_delay: z
+            action: z
+              .enum(["list", "select", "close", "close_all"])
+              .describe(
+                "'list'=show all tabs, 'select'=switch to a tab, 'close'=close a tab, 'close_all'=close all tabs",
+              ),
+            index: z
               .number()
               .optional()
               .describe(
-                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+                "Tab position (0-based, from browser_tabs list). Required for 'select'. Optional for 'close' (defaults to current tab)",
               ),
           }),
-          execute: async (args, ctx, signal) =>
-            this.executeWithContent(
-              "browser_navigate",
-              { ...args, created_by: ctx?.session.sessionId },
+          execute: async (args, ctx, signal) => {
+            const result = await this.sendRequest(
+              "browser_tabs",
+              {
+                action: args.action,
+                index: args.index,
+                created_by: ctx?.session.sessionId,
+              },
               signal,
-            ),
-          display: { action: "访问", argsKey: "url", icon: "browser" },
+            );
+            this.assertSuccess(result);
+            return this.formatTabsResult(
+              result,
+              ctx?.session.sessionId || "",
+              signal,
+            );
+          },
+          display: { action: "标签管理", argsKey: "action", icon: "browser" },
         });
+
+        // ── 3. 页面快照 ──
+        toolkit.registerTool({
+          name: "browser_snapshot",
+          description:
+            "Get the current page snapshot. type='simple' (default) returns compact accessibility YAML with interactive ref IDs for browser_interact. type='struct' returns a detailed DOM role/ref tree as JSON for elements missing from accessibility semantics. type='summary' returns text, links, and headings.",
+          inputSchema: z.object({
+            type: z
+              .enum(["simple", "struct", "summary"])
+              .optional()
+              .describe(
+                "'simple'=compact accessibility YAML (default), 'struct'=detailed DOM JSON, 'summary'=text/links/headings",
+              ),
+          }),
+          execute: async (args, ctx, signal) => {
+            const result = await this.sendRequest(
+              "browser_snapshot",
+              {
+                type: args.type || "simple",
+                created_by: ctx?.session.sessionId,
+              },
+              signal,
+            );
+            this.assertSuccess(result);
+            return this.formatSnapshot(result, args.type || "simple");
+          },
+          display: { action: "页面快照", argsKey: "type", icon: "browser" },
+        });
+
+        // ── 4. 交互操作 ──
+        toolkit.registerTool({
+          name: "browser_interact",
+          description:
+            "Interact with the page: click an element or fill text into an input field. Use action='click' to click, action='input' to fill text.",
+          inputSchema: z
+            .object({
+              action: z
+                .enum(["click", "input"])
+                .describe("Interaction type: 'click' or 'input'"),
+              selector: z
+                .string()
+                .describe(
+                  "Element ref ID (e.g. 'e0') from page snapshot, or CSS selector",
+                ),
+              value: z
+                .string()
+                .optional()
+                .describe("Text to fill in (required when action='input')"),
+            })
+            .superRefine((args, ctx) => {
+              if (args.action === "input" && args.value === undefined) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: ["value"],
+                  message: "value is required when action is input",
+                });
+              }
+            }),
+          execute: async (args, ctx, signal) => {
+            const method =
+              args.action === "click" ? "browser_click" : "browser_input";
+            const result = await this.sendRequest(
+              method,
+              {
+                selector: args.selector,
+                value: args.value,
+                created_by: ctx?.session.sessionId,
+              },
+              signal,
+            );
+            this.assertSuccess(result);
+            return this.formatInteractResult(args, result);
+          },
+          display: { action: "交互操作", argsKey: "action", icon: "browser" },
+        });
+
+        // ── 5. 执行 JavaScript ──
         toolkit.registerTool({
           name: "browser_evaluate",
           description:
-            "Execute JavaScript code in the specified window and return the result. Supports passing code directly as a string or a file path (relative to the session working directory).",
+            "Execute JavaScript code in the current tab and return the result. Pass code directly as a string, or use file_path for a JS file (relative to the session working directory; use either, not both). Within the page, window._browserBridge.saveLocalFile() / .readLocalFile() / .getCookies() / .setCookie() / .removeCookie() operate on local files in the session directory. await is naturally available.",
           inputSchema: z.object({
             code: z
               .string()
@@ -146,13 +226,11 @@ export class BrowserPlugin extends PluginBase {
               .string()
               .optional()
               .describe(
-                "JavaScript file path (relative to the session working directory; use either this or code)",
+                "JavaScript file path (relative to session working directory; use either this or code)",
               ),
-            window_id: z.string().describe("Target window ID (required)"),
           }),
           execute: async (args, ctx, signal) => {
-            const { code, file_path, window_id } = args;
-            if (!window_id) throw new Error("window_id is required");
+            const { code, file_path } = args;
             if (!code && !file_path)
               throw new Error("Must provide either code or file_path");
             if (code && file_path)
@@ -166,12 +244,12 @@ export class BrowserPlugin extends PluginBase {
               "browser_evaluate",
               {
                 code: finalCode,
-                window_id,
                 created_by: ctx?.session.sessionId,
               },
               signal,
             );
-            return result;
+            this.assertSuccess(result);
+            return this.formatEvaluateResult(result);
           },
           display: {
             action: "执行JavaScript",
@@ -179,195 +257,91 @@ export class BrowserPlugin extends PluginBase {
             icon: "browser",
           },
         });
-        toolkit.registerTool({
-          name: "browser_page_struct",
-          description:
-            "Get the structured JSON of the page in the specified window (optimized for selectors, significantly reduces token usage)",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-          }),
-          execute: async (args, ctx, signal) => {
-            const r = await this.sendRequest(
-              "browser_page_struct",
-              { ...args, created_by: ctx?.session.sessionId },
-              signal,
-            );
-            return r;
-          },
-          display: { action: "提取页面结构", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_page_summary",
-          description:
-            "Get the page summary of the specified window (extracts text, links, and heading hierarchy)",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-          }),
-          execute: async (args, ctx, signal) => {
-            const r = await this.sendRequest(
-              "browser_page_summary",
-              { ...args, created_by: ctx?.session.sessionId },
-              signal,
-            );
-            return r;
-          },
-          display: { action: "提取页面摘要", icon: "browser" },
-        });
+
+        // ── 6. 导航操作 ──
         toolkit.registerTool({
           name: "browser_history",
           description:
-            "Navigate history: go back or forward in the browser. Use action='back' to go to the previous page, action='forward' to go to the next page.",
+            "Page navigation: action='back' goes to previous page, 'forward' goes to next page, 'reload' refreshes the current tab. Returns the tab list and a compact accessibility snapshot after the operation.",
           inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
             action: z
-              .enum(["back", "forward"])
-              .describe("Navigation direction: 'back' or 'forward'"),
+              .enum(["back", "forward", "reload"])
+              .describe("Navigation action: 'back', 'forward', or 'reload'"),
             load_delay: z
               .number()
               .optional()
               .describe(
-                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+                "Seconds to wait after page load before snapshot (default 3s)",
               ),
-          }),
-          execute: async (args, ctx, signal) => {
-            return this.executeWithContent(
-              "browser_history",
-              { ...args, created_by: ctx?.session.sessionId },
-              signal,
-            );
-          },
-          display: { action: "导航历史", argsKey: "action", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_reload",
-          description: "Reload the page in the specified window",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-            load_delay: z
-              .number()
-              .optional()
-              .describe(
-                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
-              ),
-          }),
-          execute: async (args, ctx, signal) =>
-            this.executeWithContent(
-              "browser_reload",
-              { ...args, created_by: ctx?.session.sessionId },
-              signal,
-            ),
-          display: { action: "刷新页面", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_interact",
-          description:
-            "Interact with the page: click an element or fill text into an input field. Use action='click' to click, action='input' to fill text.",
-          inputSchema: z.object({
-            action: z
-              .enum(["click", "input"])
-              .describe("Interaction type: 'click' or 'input'"),
-            selector: z.string().describe("CSS selector of the target element"),
-            value: z
-              .string()
-              .optional()
-              .describe("Text to fill in (required when action='input')"),
-            window_id: z.string().describe("Target window ID"),
           }),
           execute: async (args, ctx, signal) => {
             const method =
-              args.action === "click" ? "browser_click" : "browser_input";
-            return this.sendRequest(
+              args.action === "reload" ? "browser_reload" : "browser_history";
+            const result = await this.executeWithSnapshot(
               method,
-              { ...args, created_by: ctx?.session.sessionId },
+              {
+                action: args.action,
+                created_by: ctx?.session.sessionId,
+              },
+              args.load_delay,
+              "simple",
+              signal,
+            );
+            return this.formatNavigateResult(
+              result,
+              ctx?.session.sessionId || "",
               signal,
             );
           },
-          display: { action: "交互操作", argsKey: "action", icon: "browser" },
+          display: { action: "导航操作", argsKey: "action", icon: "browser" },
         });
 
-        toolkit.registerTool({
-          name: "browser_close",
-          description: "Close the specified window and clear all browsing data",
-          inputSchema: z.object({
-            window_id: z.string().describe("Window ID to close"),
-          }),
-          execute: async (args, ctx, signal) =>
-            this.sendRequest(
-              "browser_close",
-              { ...args, created_by: ctx?.session.sessionId },
-              signal,
-            ),
-          display: { action: "关闭窗口", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_windows",
-          description:
-            "Get the list of all windows in the current session, including window ID, URL, title, etc.",
-          inputSchema: z.object({}),
-          execute: async (args, ctx, signal) => {
-            const r = await this.sendRequest(
-              "browser_windows",
-              { ...args, session_id: ctx?.session.sessionId },
-              signal,
-            );
-            return r;
-          },
-          display: { action: "获取窗口列表", icon: "browser" },
-        });
+        // ── 7. 控制台日志 ──
         toolkit.registerTool({
           name: "browser_console",
           description:
-            "Get the console logs from the specified window (including page errors, warnings, and log outputs). Use this to debug page issues or check script execution results.",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-          }),
+            "Get console logs from the current tab — page errors, warnings, and log outputs. Logs are cleared after each read, so each call returns only new logs.",
+          inputSchema: z.object({}),
           execute: async (args, ctx, signal) => {
-            return this.sendRequest(
+            const result = await this.sendRequest(
               "browser_console",
-              { ...args, created_by: ctx?.session.sessionId },
+              {
+                created_by: ctx?.session.sessionId,
+              },
               signal,
             );
+            this.assertSuccess(result);
+            return this.formatConsoleResult(result);
           },
           display: { action: "查看控制台日志", icon: "browser" },
         });
 
-        // 使用说明提示词
+        // ── 使用说明 ──
         toolkit.registerPrompt({
           frequency: "REGULAR",
           description: "浏览器控制工具使用说明",
           content: [
-            "# Browser Tools",
+            "# Browser Tools Workflow",
             "",
-            "## Multi-Window Support",
-            "- Always use `browser_new_window(url)` first to open a new window",
-            "- After `browser_new_window` / `browser_navigate` / `browser_history` / `browser_reload` operations, **the page summary is automatically returned**",
-            "- For dynamically loaded pages (SPA, etc.), use the `load_delay` parameter (seconds, default 3s) to control the wait time before summary extraction",
-            "- `browser_page_struct` returns a JSON structure optimized for selectors",
-            "- All windows are **completely incognito** by default — no data is retained after closing",
+            "## Current Tab",
+            "- Most tools operate on the **current tab** automatically",
+            "- `browser_navigate(url, new_tab=true)` opens a new tab and sets it as current",
+            "- `browser_navigate(url)` navigates in the current tab (auto-creates one if none exists)",
+            "- Use `browser_tabs(action=\"list\")` to see all tabs, `browser_tabs(action=\"select\", index=N)` to switch current tab",
             "",
-            "## Debugging",
-            "- Use `browser_console(window_id)` to view console logs (logs are cleared after each read, so each call returns only new logs)",
-            "- Use `browser_evaluate` to execute JavaScript for debugging",
+            "## Snapshot & Interaction",
+            "- `browser_navigate` and `browser_history` auto-return a snapshot after the operation",
+            "- Use `browser_snapshot` to re-capture page state when needed (e.g. after JS-driven content changes)",
+            "- Simple snapshots return interactive ref IDs (e.g. 'e0') — use these as selector in `browser_interact`",
+            "- Use a struct snapshot only when accessibility semantics omit an element you need",
             "",
-            "## Advanced Usage",
-            "- `browser_evaluate` supports `code` or `file_path` (relative to the session directory); `await` is naturally available",
-            "- Within a page, you can use `window._browserBridge.saveLocalFile()` / `.readLocalFile()` / `.getCookies()` / `.setCookie()` / `.removeCookie()` to operate local files (automatically saved to the session working directory)",
+            "## Session Isolation",
+            "- All tabs are **incognito** — no data persists after closing",
+            "- Tabs are **session-isolated** — each agent only sees its own tabs",
           ].join("\n"),
         });
       },
     });
-  }
-
-  // ── 响应处理 ──
-  // ── 响应处理 ──
-
-  private handleResponse(response: any) {
-    const pending = this.pendingRequests.get(response.id);
-    if (!pending) return;
-    clearTimeout(pending.timeout);
-    this.pendingRequests.delete(response.id);
-    if (response.error) pending.reject(new Error(response.error));
-    else pending.resolve(response.result);
   }
 
   /**
@@ -375,7 +349,7 @@ export class BrowserPlugin extends PluginBase {
    */
   async closeWindowsByCreator(createdBy: string): Promise<void> {
     try {
-      await this.sendRequest("browser_close_by_creator", {
+      await this.bridgeClient.request("browser_close_by_creator", {
         created_by: createdBy,
       });
       this.logger.log(`已清理子 Agent ${createdBy} 的浏览器窗口`);
@@ -387,49 +361,226 @@ export class BrowserPlugin extends PluginBase {
   private async sendRequest(
     method: string,
     params: any,
-    abortSignal?: AbortSignal,
+    _abortSignal?: AbortSignal,
   ): Promise<any> {
-    if (this.bridgeMode === "tcp")
-      return this.sendTCPRequest(method, params, abortSignal);
-    return this.sendIPCRequest(method, params, abortSignal);
+    return this.bridgeClient.request(method, params);
   }
 
-  private async executeWithContent(
+  // ── 纯文本格式化 ──
+
+  /**
+   * 统一断言：服务层返回 success=false 时抛异常
+   */
+  private assertSuccess(result: any): void {
+    if (result?.success === false) {
+      throw new Error(result?.message || result?.error || "Operation failed.");
+    }
+  }
+
+  /**
+   * 获取标签列表纯文本（附带在 navigate/history 等操作结果后）
+   */
+  private async fetchTabsText(
+    createdBy: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    try {
+      const tabsResult = await this.sendRequest(
+        "browser_tabs",
+        { action: "list", created_by: createdBy },
+        signal,
+      );
+      return this.formatTabsList(tabsResult);
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * 将 tabs list 返回格式化为纯文本
+   */
+  private formatTabsList(tabsResult: any): string {
+    const tabs = tabsResult?.tabs;
+    if (!Array.isArray(tabs) || tabs.length === 0) return "No tabs.";
+    return tabs
+      .map((t: any, i: number) => {
+        const marker = t.is_current ? " [current]" : "";
+        return `${i}. [${t.title || "Untitled"}][${t.url}]${marker}`;
+      })
+      .join("\n");
+  }
+
+  /**
+   * 将 snapshot 返回格式化为纯文本：simple=YAML，struct=JSON，summary=可读文本。
+   */
+  private formatSnapshotText(snapshot: any, type: string): string {
+    if (type === "simple") {
+      const tree = snapshot?.snapshot ?? snapshot;
+      return yaml
+        .dump(tree, {
+          lineWidth: -1,
+          noRefs: true,
+          sortKeys: false,
+          quotingType: '"',
+        })
+        .trimEnd();
+    }
+
+    if (type === "struct") {
+      const struct = snapshot?.struct ?? snapshot;
+      return typeof struct === "string"
+        ? struct
+        : JSON.stringify(struct, null, 2);
+    }
+
+    const parts: string[] = [];
+    if (snapshot.text) {
+      const text = snapshot.text.substring(0, 5000);
+      parts.push(`--- Page Text ---\n${text}`);
+    }
+    if (snapshot.headings?.length) {
+      parts.push("\n--- Headings ---");
+      for (const h of snapshot.headings) {
+        parts.push(`${"  ".repeat(h.level - 1)}H${h.level}: ${h.text}`);
+      }
+    }
+    if (snapshot.links?.length) {
+      parts.push("\n--- Links ---");
+      for (const l of snapshot.links.slice(0, 50)) {
+        parts.push(`  [${l.text}] -> ${l.href}`);
+      }
+      if (snapshot.links.length > 50)
+        parts.push(`  ... and ${snapshot.links.length - 50} more links`);
+    }
+    return parts.join("\n");
+  }
+
+  /**
+   * browser_navigate / browser_history 的结果格式化
+   * 返回: tabs + snapshot
+   */
+  private async formatNavigateResult(
+    result: any,
+    createdBy: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const parts: string[] = [];
+
+    // tabs
+    const tabsText = await this.fetchTabsText(createdBy, signal);
+    if (tabsText) parts.push(`Tabs:\n${tabsText}`);
+
+    // snapshot
+    if (result?.type === "simple" && result?.snapshot) {
+      parts.push(`\nSnapshot:\n${this.formatSnapshotText(result, "simple")}`);
+    } else if (result?.type === "struct" && result?.struct) {
+      parts.push(`\nSnapshot:\n${this.formatSnapshotText(result, "struct")}`);
+    } else if (result?.text || result?.headings || result?.links) {
+      parts.push(`\nSnapshot:\n${this.formatSnapshotText(result, "summary")}`);
+    }
+
+    return parts.join("\n") || "Navigation completed.";
+  }
+
+  /**
+   * browser_tabs 的结果格式化
+   */
+  private async formatTabsResult(
+    result: any,
+    createdBy: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    // close_all 特殊处理
+    if (result?.closed_count !== undefined) {
+      return `Closed ${result.closed_count} tab(s).`;
+    }
+
+    // list / select / close — 都返回标签列表
+    // 优先用 result 中的 tabs，没有则重新拉取
+    if (result?.tabs) {
+      return this.formatTabsList(result);
+    }
+    // select/close 返回的不是 tabs 列表，需要主动拉取
+    const tabsText = await this.fetchTabsText(createdBy, signal);
+    if (tabsText) return tabsText;
+
+    return result?.closed_tab_id
+      ? `Closed tab ${result.closed_tab_id}. No remaining tabs.`
+      : "No tabs.";
+  }
+
+  /**
+   * browser_snapshot 的结果格式化
+   */
+  private formatSnapshot(snapshot: any, type: string): string {
+    return this.formatSnapshotText(snapshot, type);
+  }
+
+  /**
+   * browser_interact 的结果格式化
+   */
+  private formatInteractResult(args: any, result: any): string {
+    if (args.action === "click") {
+      return `Clicked: ${args.selector}`;
+    }
+    return `Filled: ${args.selector} = ${args.value}`;
+  }
+
+  /**
+   * browser_evaluate 的结果格式化
+   */
+  private formatEvaluateResult(result: any): string {
+    const val = result?.result;
+    if (val === undefined) return "undefined";
+    if (typeof val === "string") return val;
+    try {
+      return JSON.stringify(val, null, 2);
+    } catch {
+      return String(val);
+    }
+  }
+
+  /**
+   * browser_console 的结果格式化
+   */
+  private formatConsoleResult(result: any): string {
+    const logs = result?.logs;
+    if (!Array.isArray(logs) || logs.length === 0) return "No console output.";
+    return logs.join("\n");
+  }
+
+  private async executeWithSnapshot(
     method: string,
     args: any,
+    loadDelay: number | undefined,
+    snapshotType: string,
     signal?: AbortSignal,
   ): Promise<any> {
-    // 提取 load_delay，不传给 Electron 端操作
-    const { load_delay, ...restArgs } = args;
-    const delayMs = (load_delay ?? 3) * 1000;
+    const delayMs = (loadDelay ?? 3) * 1000;
 
-    // 先执行主操作（导航/后退/前进/刷新等）
-    const result = await this.sendRequest(method, restArgs, signal);
-    if (result?.success === false) return result;
-    if (result?.windowId && !restArgs.window_id)
-      restArgs.window_id = result.windowId;
+    // 执行主操作（导航/后退/前进/刷新等）
+    const result = await this.sendRequest(method, args, signal);
+    this.assertSuccess(result);
 
-    // 等待动态内容加载后再取摘要
+    // 从返回结果中获取 tab_id
+    const tabId = result?.tab_id || result?.windowId;
+    if (!tabId) return result;
+
+    // 等待动态内容加载
     if (delayMs > 0) {
       await this.sleep(delayMs, signal);
     }
 
-    // 操作成功后自动跟随获取页面摘要，避免 LLM 多一轮成对调用
-    try {
-      const summary = await this.sendRequest(
-        "browser_page_summary",
-        { window_id: restArgs.window_id },
-        signal,
-      );
-      if (summary?.success === false) {
-        this.logger.warn("get page summary failed");
-        return result;
-      }
-      return { ...result, ...summary };
-    } catch {
-      // 获取摘要失败不影响主操作结果
-      return result;
-    }
+    // 自动获取快照；失败统一抛异常，避免把缺失快照误判为成功导航
+    const snapshot = await this.sendRequest(
+      "browser_snapshot",
+      { type: snapshotType, created_by: args.created_by },
+      signal,
+    );
+    this.assertSuccess(snapshot);
+    return typeof snapshot === "string"
+      ? { ...result, snapshot }
+      : { ...result, ...snapshot };
   }
 
   /** 可被 AbortSignal 提前中断的延时 */
@@ -443,99 +594,6 @@ export class BrowserPlugin extends PluginBase {
           () => {
             clearTimeout(timer);
             resolve();
-          },
-          { once: true },
-        );
-      }
-    });
-  }
-
-  private sendTCPRequest(
-    method: string,
-    params: any,
-    abortSignal?: AbortSignal,
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const id = String(++this.requestIdCounter);
-      const req = http.request(
-        this.tcpBaseUrl,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          timeout: 60000,
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            try {
-              const response = JSON.parse(data);
-              if (response.error) {
-                reject(new Error(response.error));
-              } else {
-                resolve(response.result);
-              }
-            } catch {
-              resolve(data);
-            }
-          });
-        },
-      );
-      req.on("error", (err) => reject(err));
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Request timeout"));
-      });
-      if (abortSignal) {
-        if (abortSignal.aborted) {
-          req.destroy();
-          reject(new Error("Request was aborted"));
-          return;
-        }
-        abortSignal.addEventListener(
-          "abort",
-          () => {
-            req.destroy();
-          },
-          { once: true },
-        );
-      }
-      req.write(JSON.stringify({ id, method, params }));
-      req.end();
-    });
-  }
-
-  private sendIPCRequest(
-    method: string,
-    params: any,
-    abortSignal?: AbortSignal,
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!process.send) {
-        reject(new Error("IPC not available"));
-        return;
-      }
-      const id = String(++this.requestIdCounter);
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(id);
-        reject(new Error("Request timeout"));
-      }, 60000);
-      this.pendingRequests.set(id, { resolve, reject, timeout });
-      const request = { id, method, params };
-      process.send({ type: "BROWSER_TOOL_CALL", data: request });
-      if (abortSignal) {
-        if (abortSignal.aborted) {
-          clearTimeout(timeout);
-          this.pendingRequests.delete(id);
-          reject(new Error("Request was aborted"));
-          return;
-        }
-        abortSignal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timeout);
-            this.pendingRequests.delete(id);
-            reject(new Error("Request was aborted"));
           },
           { once: true },
         );
@@ -557,55 +615,20 @@ export class BrowserPlugin extends PluginBase {
     context?: PluginContext,
   ): Promise<string> {
     if (!filePath || typeof filePath !== "string")
-      throw new Error("文件路径不能为空");
+      throw new Error("filePath is required and must be a string");
     try {
       const resolvedPath = this.resolveJsFilePath(filePath, context);
       await fs.promises.access(resolvedPath);
       const stats = await fs.promises.stat(resolvedPath);
-      if (!stats.isFile()) throw new Error(`${resolvedPath} 不是一个文件`);
+      if (!stats.isFile()) throw new Error(`${resolvedPath} is not a file`);
       if (stats.size > 5 * 1024 * 1024)
-        throw new Error(`文件过大: ${stats.size} bytes (最大允许 5MB)`);
+        throw new Error(
+          `File size is too large: ${stats.size} bytes (max 5MB)`,
+        );
       const content = await fs.promises.readFile(resolvedPath, "utf-8");
       return content;
     } catch (error: any) {
-      throw new Error(`读取 JavaScript 文件失败: ${error.message}`);
+      throw new Error(`Failed to read JavaScript file: ${error.message}`);
     }
-  }
-
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ) {
-    const prefix = isExecuting ? "正在" : "已";
-    let action: string,
-      toolArgs: string | undefined,
-      toolType = "browser";
-    switch (toolName) {
-      case "browser_new_window":
-        action = `${prefix}打开新窗口`;
-        toolArgs = args.url;
-        break;
-      case "browser_navigate":
-        action = `${prefix}访问网页`;
-        toolArgs =
-          args.url?.length > 40 ? args.url.substring(0, 40) + "..." : args.url;
-        break;
-      case "browser_interact":
-        action = `${prefix}交互`;
-        toolArgs = args.action + ": " + (args.selector || "");
-        break;
-      case "browser_page_struct":
-        action = `${prefix}获取页面结构`;
-        break;
-      case "browser_evaluate":
-        action = `${prefix}执行 JavaScript`;
-        toolType = "code";
-        toolArgs = args.code || args.file_path;
-        break;
-      default:
-        action = `${prefix}操作浏览器`;
-    }
-    return { action, args: toolArgs, toolName, toolType };
   }
 }
