@@ -37,8 +37,8 @@ export class ImageRecognitionPlugin extends PluginBase {
 
   manifest = {
     id: "image_recognition",
-    name: "Image Recognition",
-    description: "Image content recognition tool",
+    name: "图像识别",
+    description: "图像内容识别工具",
     version: "1.0.0",
     category: "core" as const,
   };

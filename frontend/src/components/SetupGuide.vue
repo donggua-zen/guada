@@ -164,15 +164,15 @@ const nextStep = async () => {
 }
 
 const goToSecuritySettings = () => {
-  router.push({ name: 'SystemSettings', params: { tab: 'security' } })
+  router.replace({ name: 'SystemSettings', params: { tab: 'security' } })
 }
 
 const goToProviderSettings = () => {
-  router.push('/models')
+  router.replace('/models')
 }
 
 const goToDefaultModelSettings = () => {
-  router.push('/setting/default-models')
+  router.replace('/setting/default-models')
 }
 
 const finishGuide = () => {
@@ -183,7 +183,7 @@ const finishGuide = () => {
   ElMessage.success('恭喜！您已完成初始设置。')
   
   // 完成后跳转到对话页面
-  router.push('/chat')
+  router.replace('/chat/new-session')
 }
 
 // 边界检查：防止窗口缩小时弹窗被遮挡
