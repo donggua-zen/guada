@@ -273,7 +273,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
       };
       if ((delta as any)?.reasoning_content) responseChunk.type = "think";
       if (choice.finish_reason) responseChunk.type = "finish";
-      console.log(chunk);
       if ((chunk as any).usage) {
         const rawUsage = (chunk as any).usage;
         responseChunk.usage = {

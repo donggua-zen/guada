@@ -27,12 +27,7 @@ export class SubAgentPlugin extends PluginBase {
   /**
    * 校验 agentId 是否被当前会话的 agents 配置允许
    *
-   * 与 prompt 中的列表过滤逻辑保持一致：
-   * - generic / 空 → 始终允许（内置默认子代理）
-   * - agents: false → 拒绝所有非 generic 角色
-   * - __default === false（白名单）→ 仅允许显式 true 的角色
-   * - 其他（黑名单）→ 排除显式 false 的角色
-   * - 无配置 → 允许所有
+   * 固定白名单模式：仅允许显式 true 的角色（generic 始终允许）
    */
   private isAgentAllowed(agentId: string, ctx?: PluginContext): boolean {
     if (!agentId || agentId === "generic") return true;
@@ -42,11 +37,8 @@ export class SubAgentPlugin extends PluginBase {
     if (charAgentCfg === false) return false;
 
     if (typeof charAgentCfg === "object" && charAgentCfg !== null) {
-      if (charAgentCfg.__default === false) {
-        return charAgentCfg[agentId] === true;
-      } else {
-        return charAgentCfg[agentId] !== false;
-      }
+      // 固定白名单：仅允许显式 true 的角色
+      return charAgentCfg[agentId] === true;
     }
 
     return true;
@@ -64,7 +56,19 @@ export class SubAgentPlugin extends PluginBase {
         if (ctx.session.sessionType === "sub_agent") {
           return { loadMode: "none" as const };
         }
-        return { loadMode: "eager" as const };
+        // 无已启用子代理时不注入工具（避免无意义占用）
+        const agentsCfg = ctx.session?.getSettings?.("agents");
+        const hasEnabledAgent =
+          typeof agentsCfg === "object" &&
+          agentsCfg !== null &&
+          Object.entries(agentsCfg).some(
+            ([k, v]) => !k.startsWith("__") && v === true,
+          );
+        return {
+          loadMode: hasEnabledAgent
+            ? ("eager" as const)
+            : ("none" as const),
+        };
       },
     });
 
@@ -76,8 +80,12 @@ The sub-agent has its own independent conversation context and tool capabilities
       inputSchema: z.object({
         name: z
           .string()
-          .describe('Name of the sub-agent (concise and clear, e.g. "Financial Report Analysis", "Code Generation")'),
-        task: z.string().describe("Specific task description for the sub-agent to complete"),
+          .describe(
+            'Name of the sub-agent (concise and clear, e.g. "Financial Report Analysis", "Code Generation")',
+          ),
+        task: z
+          .string()
+          .describe("Specific task description for the sub-agent to complete"),
         agentId: z.string().describe("Character ID"),
         mode: z
           .enum(["foreground", "background"])
@@ -172,15 +180,13 @@ The sub-agent has its own independent conversation context and tool capabilities
             );
             if (agents.length === 0) return "[No sub-agents running.]";
             const lines = agents.map(
-              (a: any) =>
-                `- ${a.name} (${a.subSessionId}) [${a.status}]`,
+              (a: any) => `- ${a.name} (${a.subSessionId}) [${a.status}]`,
             );
             return `Active sub-agents:\n${lines.join("\n")}`;
           }
 
           case "close": {
-            if (!sessionId)
-              throw new Error("Missing sessionId parameter.");
+            if (!sessionId) throw new Error("Missing sessionId parameter.");
             try {
               await this.subAgentManager.closeSubAgent(
                 sessionId,
@@ -242,7 +248,8 @@ The sub-agent has its own independent conversation context and tool capabilities
         const genericAgent = {
           id: "generic",
           title: "Generic Sub-Agent",
-          description: "A sub-agent suitable for general-purpose tasks, no specific character settings required",
+          description:
+            "A sub-agent suitable for general-purpose tasks, no specific character settings required",
         };
 
         const { items } = await this.characterRepo.findAll(0, 200);
@@ -259,17 +266,10 @@ The sub-agent has its own independent conversation context and tool capabilities
 
         if (charAgentCfg && typeof charAgentCfg === "object") {
           const allCandidates = [genericAgent, ...dbCandidates];
-          if (charAgentCfg.__default === false) {
-            // 白名单：只保留显式 true 的角色
-            agents = allCandidates.filter(
-              (c: any) => charAgentCfg[c.id] === true,
-            );
-          } else {
-            // 黑名单：排除显式 false 的角色
-            agents = allCandidates.filter(
-              (c: any) => charAgentCfg[c.id] !== false,
-            );
-          }
+          // 固定白名单：只保留显式 true 的角色
+          agents = allCandidates.filter(
+            (c: any) => charAgentCfg[c.id] === true,
+          );
         } else {
           // 无配置：不注入任何角色
           agents = [];

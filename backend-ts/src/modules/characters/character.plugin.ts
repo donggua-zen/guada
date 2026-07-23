@@ -50,13 +50,8 @@ export class CharacterPlugin extends PluginBase {
         if (agentCfg === false) {
           filtered = [];
         } else if (typeof agentCfg === "object" && agentCfg !== null) {
-          if (agentCfg.__default === false) {
-            // 白名单：只保留显式 true 的角色
-            filtered = candidates.filter((c: any) => agentCfg[c.id] === true);
-          } else {
-            // 黑名单：排除显式 false 的角色
-            filtered = candidates.filter((c: any) => agentCfg[c.id] !== false);
-          }
+          // 固定白名单：只保留显式 true 的角色
+          filtered = candidates.filter((c: any) => agentCfg[c.id] === true);
         } else {
           // 无 agents 配置：返回全部角色
           filtered = candidates;

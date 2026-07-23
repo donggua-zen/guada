@@ -132,6 +132,7 @@ declare module 'vue' {
     ScrollContainer: typeof import('./../components/ui/ScrollContainer.vue')['default']
     ScrollToBottomButton: typeof import('./../components/ui/ScrollToBottomButton.vue')['default']
     SearchSettings: typeof import('./../components/setting/SearchSettings.vue')['default']
+    SegmentedToggle: typeof import('./../components/ui/SegmentedToggle.vue')['default']
     SessionAgentList: typeof import('./../components/chat/SessionAgentList.vue')['default']
     SessionBrowserWindowList: typeof import('./../components/chat/SessionBrowserWindowList.vue')['default']
     SessionGroupManage: typeof import('./../components/setting/SessionGroupManage.vue')['default']
