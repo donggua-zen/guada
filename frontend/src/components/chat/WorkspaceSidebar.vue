@@ -1,15 +1,19 @@
 <template>
-    <div class="workspace-sidebar h-full flex flex-col">
+    <div class="workspace-sidebar h-full flex flex-col relative">
         <!-- 顶部工具栏：预览模式下显示资源管理器按钮 + 浏览器标签 + 窗口控制 -->
         <div v-if="isElectron"
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 资源管理器切换按钮（任何预览模式都显示：文件预览或 webview 预览） -->
-            <el-tooltip v-if="browserStore.activeWindowId || selectedFile" content="返回工作目录" placement="bottom">
-                <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-text) no-drag ml-1 flex items-center"
-                    @click="showFileTree">
-                    <el-icon class="w-5 h-5">
-                        <FolderOpened />
-                    </el-icon>
+            <el-tooltip v-if="browserStore.activeWindowId || selectedFile" content="返回工作目录" placement="bottom" :disabled="isTreePanelVisible">
+                <div ref="workspaceBtnRef" class="cursor-pointer px-2 py-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] no-drag ml-1 flex items-center gap-1 shrink-0"
+                    @click="showFileTree"
+                    @mouseenter="showTreePanel"
+                    @mouseleave="hideTreePanel">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"/>
+                        <polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                    <span class="text-xs">返回工作目录</span>
                 </div>
             </el-tooltip>
             <!-- 非预览模式：显示工作目录路径 -->
@@ -65,15 +69,15 @@
             <WindowControls class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <div v-show="!selectedFile && !browserStore.activeWindowId" class="h-full flex flex-col flex-1 min-h-0">
+        <div :class="treeContainerClass" :style="isPreviewMode ? treePanelStyle : {}" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
             <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
-            <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
-            <div v-if="isElectron" class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <SessionBrowserWindowList v-if="isElectron" v-show="!isPreviewMode" :session-id="props.sessionId" />
+            <div v-if="isElectron" v-show="!isPreviewMode" class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
             <!-- 子代理任务列表 -->
-            <SessionAgentList :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+            <SessionAgentList v-show="!isPreviewMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
                 @switch="emit('switch-agent', $event)" />
             <!-- 计划事项列表 -->
-            <SessionPlanList :session-id="props.sessionId" />
+            <SessionPlanList v-show="!isPreviewMode" :session-id="props.sessionId" />
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -156,23 +160,23 @@
 
                     <span class="font-medium text-gray-600 dark:text-[#8b8d95] truncate ml-2">
                         {{ selectedFile?.name }}
-                    </span>
-                </div>
-
-                <div class="flex items-center gap-1 shrink-0">
+                    </span><div class="flex items-center gap-1 shrink-0">
                     <!-- 手动刷新预览按钮 -->
                     <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
-                        <el-icon :size="16">
+                        <el-icon :size="14">
                             <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
                         </el-icon>
                     </button>
                     <!-- 返回目录树按钮 -->
                     <button class="preview-close-btn" title="关闭预览" @click="closePreview">
-                        <el-icon :size="16">
+                        <el-icon :size="14">
                             <Dismiss20Regular class="text-gray-500 dark:text-[#8b8d95]" />
                         </el-icon>
                     </button>
                 </div>
+                </div>
+
+                
             </div>
 
             <div class="flex-1 flex overflow-auto min-h-0 p-1">
@@ -360,6 +364,70 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI !== undef
 // 浏览器 webview store（用于预览占位与文件预览互斥）
 const browserStore = useBrowserWebviewStore();
 
+// ── 悬浮目录树面板 ──
+const isPreviewMode = computed(() => !!selectedFile.value || !!browserStore.activeWindowId);
+const isTreePanelVisible = ref(false);
+const workspaceBtnRef = ref<HTMLElement | null>(null);
+const treePanelStyle = ref<Record<string, string>>({});
+let treeHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+const TREE_PANEL_WIDTH = 320;
+const TREE_PANEL_HEIGHT = 420;
+const TREE_PANEL_GAP = 4;
+
+function updateTreePanelPosition() {
+    if (!workspaceBtnRef.value) return;
+    const rect = workspaceBtnRef.value.getBoundingClientRect();
+    let left = rect.left - TREE_PANEL_WIDTH - TREE_PANEL_GAP;
+    if (left < TREE_PANEL_GAP) left = TREE_PANEL_GAP;
+    const top = rect.bottom + TREE_PANEL_GAP;
+    treePanelStyle.value = {
+        position: 'fixed',
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${TREE_PANEL_WIDTH}px`,
+        height: `${TREE_PANEL_HEIGHT}px`,
+    };
+}
+
+const treeContainerClass = computed(() => {
+    if (!isPreviewMode.value) {
+        return 'h-full flex flex-col flex-1 min-h-0';
+    }
+    return [
+        'tree-floating-panel',
+        { 'tree-floating-visible': isTreePanelVisible.value },
+    ];
+});
+
+function showTreePanel() {
+    if (!isPreviewMode.value) return;
+    if (treeHideTimer) {
+        clearTimeout(treeHideTimer);
+        treeHideTimer = null;
+    }
+    updateTreePanelPosition();
+    isTreePanelVisible.value = true;
+}
+
+function hideTreePanel() {
+    if (!isPreviewMode.value) return;
+    if (treeHideTimer) clearTimeout(treeHideTimer);
+    treeHideTimer = setTimeout(() => {
+        isTreePanelVisible.value = false;
+    }, 1000);
+}
+
+watch(isPreviewMode, (preview) => {
+    if (!preview) {
+        isTreePanelVisible.value = false;
+        if (treeHideTimer) {
+            clearTimeout(treeHideTimer);
+            treeHideTimer = null;
+        }
+    }
+});
+
 // ── 浏览器标签操作 ──
 
 function truncateTabTitle(title: string, maxLen = 12): string {
@@ -516,6 +584,7 @@ async function syncExpandedPaths(sessionId = props.sessionId): Promise<boolean> 
 function handleTreeNodeSelect(node: WorkspaceNode) {
     if (node.isDirectory) return;
     selectedNodePath.value = node.path;
+    browserStore.setActive(null);
     handleFileSelect(node);
 }
 
@@ -2342,6 +2411,10 @@ onUnmounted(() => {
         unsubscribeWatcher();
         unsubscribeWatcher = null;
     }
+    if (treeHideTimer) {
+        clearTimeout(treeHideTimer);
+        treeHideTimer = null;
+    }
     closeContextMenu();
 });
 </script>
@@ -2612,6 +2685,36 @@ onUnmounted(() => {
 .tab-close:hover {
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
+}
+
+/* ── 悬浮目录树面板（预览模式下） ── 视觉风格对齐 CustomPopover */
+.tree-floating-panel {
+    position: fixed;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 0 16px rgba(0, 0, 0, 0.10);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    padding-bottom: 4px;
+}
+
+.dark .tree-floating-panel {
+    background: var(--color-surface, #242529);
+    border-color: var(--color-surface-border, #2e3035);
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+}
+
+.tree-floating-panel.tree-floating-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 </style>

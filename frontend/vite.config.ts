@@ -15,7 +15,13 @@ export default defineConfig({
   // Electron 环境使用相对路径，Web 环境使用根路径
   base: process.env.ELECTRON === 'true' ? './' : '/',
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag: string) => tag === 'webview',
+        },
+      },
+    }),
     tailwindcss(),
     visualizer({
       open: false,           // 构建完成后自动打开报告

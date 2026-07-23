@@ -76,14 +76,6 @@
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
         </svg>
       </button>
-
-      <!-- 关闭按钮 -->
-      <button class="nav-btn close-btn" title="关闭预览" @click="close">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
     </div>
 
     <!-- 空壳占位区域：webview 实际覆盖在此区域上方（由 BrowserWebviewLayer 定位） -->
