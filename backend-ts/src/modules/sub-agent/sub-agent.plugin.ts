@@ -249,7 +249,7 @@ The sub-agent has its own independent conversation context and tool capabilities
           id: "generic",
           title: "Generic Sub-Agent",
           description:
-            "A sub-agent suitable for general-purpose tasks, no specific character settings required",
+            "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
 
         const { items } = await this.characterRepo.findAll(0, 200);
