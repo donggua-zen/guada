@@ -1221,7 +1221,6 @@ onMounted(() => {
       },
     });
     editor.value = tiptapEditor;
-    console.log('[ChatInput] Tiptap editor created:', tiptapEditor);
 
     // 将编辑器处理器挂载到 DOM 元素，供全局右键菜单使用（解耦方式）
     const editorEl = document.querySelector('.message-editor');
