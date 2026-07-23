@@ -118,6 +118,26 @@ async function bootstrap() {
       await bridgeClient.ready;
       bridgeClient.emit("port_ready", { port: actualPort });
       console.log(`已通过 Bridge 上报端口: ${actualPort}`);
+
+      // 监听 Electron 退出信号，优雅关闭
+      bridgeClient.on("shutdown", async () => {
+        console.log("收到 Bridge shutdown 信号，正在优雅关闭...");
+        try {
+          // 强制关闭所有 HTTP 连接（包括 keep-alive），使 app.close() 不再挂起
+          const server = app.getHttpServer();
+          if (typeof (server as any).closeAllConnections === "function") {
+            (server as any).closeAllConnections();
+          }
+          // app.close() 可能因残留连接挂起，设 2s 超时兜底
+          await Promise.race([
+            app.close(),
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } catch (e) {
+          console.error("关闭应用时出错:", e);
+        }
+        process.exit(0);
+      });
     } catch (err: any) {
       console.warn("通过 Bridge 上报端口失败:", err?.message || err);
     }
