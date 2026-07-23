@@ -1,5 +1,5 @@
 <template>
-  <div class="turn-wrapper" :class="{ 'turn-wrapper--last': isLast }">
+  <div class="turn-wrapper" :class="{ 'turn-wrapper--last': isLast }" :data-message-id="turn.user?.id">
     <!-- ============================================ -->
     <!-- User 部分 -->
     <!-- ============================================ -->

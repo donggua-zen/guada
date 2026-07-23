@@ -1,35 +1,16 @@
 <template>
-  <div class="chat-outline-container fixed right-4 top-1/2 -translate-y-1/2 z-30">
-    <!-- 默认指示器 -->
-    <div v-show="!isExpanded" class="outline-indicator w-1 h-12 bg-gray-300 dark:bg-[#3a3c40] rounded-full cursor-pointer hover:bg-gray-400 dark:hover:bg-[#55575c] transition-colors"
-      @mouseenter="isExpanded = true">
-    </div>
-
-    <!-- 展开的面板 -->
-    <transition name="outline-fade">
-      <div v-if="isExpanded" class="outline-panel-wrapper"
-        @mouseleave="isExpanded = false">
-        <div
-          class="outline-panel bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#2e3035] rounded-lg shadow-lg max-h-[80vh] overflow-y-auto scrollbar-hide"
-          style="width: 280px;">
-          <div class="py-2">
-            <div v-for="item in outlineItems" :key="item.id"
-              class="outline-item px-3 py-2 cursor-pointer text-gray-700 dark:text-[#e8e9ed] transition-colors"
-              :class="{
-                'hover:bg-gray-50 dark:hover:bg-[#2a2c30]': activeId !== item.id,
-                'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-l-blue-500': activeId === item.id,
-              }"
-              @click="handleItemClick(item.id)">
-              <div class="text-sm truncate">{{ item.title }}</div>
-            </div>
-
-            <div v-if="outlineItems.length === 0" class="px-3 py-4 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
-              暂无对话内容
-            </div>
-          </div>
-        </div>
+  <div v-if="outlineItems.length > 0" class="chat-outline-container"
+    @mouseenter="isExpanded = true"
+    @mouseleave="isExpanded = false">
+    <div class="outline-panel" :class="{ 'is-expanded': isExpanded }">
+      <div v-for="item in outlineItems" :key="item.id"
+        class="outline-item"
+        :class="{ 'is-active': activeId === item.id }"
+        @click="handleItemClick(item.id)">
+        <span class="outline-title">{{ item.title }}</span>
+        <span class="outline-line"></span>
       </div>
-    </transition>
+    </div>
   </div>
 </template>
 
@@ -116,44 +97,124 @@ function handleItemClick(messageId: string) {
 <style scoped>
 .chat-outline-container {
   position: fixed;
-  right: 1rem;
-  top: 50%;
-}
-
-.outline-indicator {
-  position: relative;
-  transform: translateY(-50%);
-}
-
-.outline-panel-wrapper {
-  position: absolute;
-  right: 0;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 30;
 }
 
-.scrollbar-hide {
+.outline-panel {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 20px;
+  padding: 6px 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 80vh;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: width 0.25s ease, padding 0.25s ease, background-color 0.25s ease,
+    box-shadow 0.25s ease, border-color 0.25s ease;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
+.outline-panel::-webkit-scrollbar {
   display: none;
 }
 
-/* 纯渐变动画，无平移 */
-.outline-fade-enter-active,
-.outline-fade-leave-active {
-  transition: opacity 0.25s ease;
+.outline-panel.is-expanded {
+  width: 280px;
+  padding: 6px 10px 6px 10px;
+  background-color: var(--el-bg-color, #fff);
+  border-color: var(--el-border-color-light, #e4e7ed);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.outline-fade-enter-from,
-.outline-fade-leave-to {
-  opacity: 0;
+.dark .outline-panel.is-expanded {
+  background-color: #232428;
+  border-color: #2e3035;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
+
+/* —— 列表项 —— */
 
 .outline-item {
-  border-left: 2px solid transparent;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: none;
+}
+
+/* —— 标题文字（展开时淡入） —— */
+
+.outline-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--el-text-color-placeholder, #a8abb2);
+  opacity: 0;
+  transition: opacity 0.1s ease, color 0.2s ease;
+}
+
+.dark .outline-title {
+  color: #6b6d75;
+}
+
+.outline-panel.is-expanded .outline-title {
+  opacity: 1;
+  transition: opacity 0.15s ease 0.1s, color 0.2s ease;
+}
+
+.outline-panel.is-expanded .outline-item:hover .outline-title {
+  color: var(--el-text-color-primary, #303133);
+}
+
+.dark .outline-panel.is-expanded .outline-item:hover .outline-title {
+  color: #e8e9ed;
+}
+
+.outline-panel.is-expanded .outline-item.is-active .outline-title {
+  color: var(--el-color-primary, #409eff);
+  font-weight: 500;
+}
+
+.dark .outline-panel.is-expanded .outline-item.is-active .outline-title {
+  color: #79bbff;
+}
+
+/* —— 短横线指示器（始终可见） —— */
+
+.outline-line {
+  flex-shrink: 0;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--el-text-color-disabled, #c0c4cc);
+  transition: background-color 0.2s ease, width 0.2s ease;
+}
+
+.dark .outline-line {
+  background-color: #3a3c40;
+}
+
+.outline-item:hover .outline-line {
+  background-color: var(--el-text-color-secondary, #909399);
+}
+
+.dark .outline-item:hover .outline-line {
+  background-color: #55575c;
+}
+
+.outline-item.is-active .outline-line {
+  background-color: var(--el-color-primary, #409eff);
+  width: 16px;
 }
 </style>
