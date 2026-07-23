@@ -57,7 +57,8 @@ export class SubAgentPlugin extends PluginBase {
       id: "subagent",
       name: "Sub-Agent",
       loadMode: "eager",
-      activator: "Call this toolkit when you need to create a sub-agent to execute an independent task",
+      activator:
+        "Call this toolkit when you need to create a sub-agent to execute an independent task",
       handler: async (ctx) => {
         // sub_agent 会话禁止递归加载子代理工具
         if (ctx.session.sessionType === "sub_agent") {
@@ -70,31 +71,27 @@ export class SubAgentPlugin extends PluginBase {
     // ── spawn：创建 + 执行子代理 ──
     subKit.registerTool({
       name: "subagent_spawn",
-      description: `创建一个子代理独立执行指定任务。
-子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话 ID。`,
+      description: `Create a sub-agent to execute an independent task.
+The sub-agent has its own independent conversation context and tool capabilities. Returns the sub-session ID immediately after creation.`,
       inputSchema: z.object({
         name: z
           .string()
-          .describe('子代理的名称（简洁明了，如"财报分析"、"代码生成"）'),
-        task: z.string().describe("子代理需要完成的具体任务描述（越详细越好）"),
-        agentId: z
-          .string()
-          .optional()
-          .describe("角色 ID（可选，不传则创建通用子代理）"),
+          .describe('Name of the sub-agent (concise and clear, e.g. "Financial Report Analysis", "Code Generation")'),
+        task: z.string().describe("Specific task description for the sub-agent to complete"),
+        agentId: z.string().describe("Character ID"),
         mode: z
           .enum(["foreground", "background"])
           .optional()
           .describe(
-            "执行模式：foreground=等待完成（默认），background=后台运行立即返回",
+            "Execution mode: foreground=wait for completion (default), background=run in background and return immediately",
           ),
       }),
       execute: async (args, ctx, abortSignal) => {
         // 校验 agentId 是否被允许
         if (args.agentId && !this.isAgentAllowed(args.agentId, ctx)) {
-          return {
-            success: false,
-            message: `角色 "${args.agentId}" 未被允许使用，请在角色设置中启用该角色后重试`,
-          };
+          throw new Error(
+            `Agent "${args.agentId}" is not allowed. Please enable it in the character settings and try again.`,
+          );
         }
 
         this.logger.log(
@@ -110,16 +107,17 @@ export class SubAgentPlugin extends PluginBase {
           args.mode || "foreground",
           abortSignal,
         );
-        return {
-          success: true,
-          sessionId: result.subSessionId,
-          status: result.status,
-          content: result.status === "completed" ? result.content : undefined,
-          message:
-            result.status === "running"
-              ? "子代理已创建并开始执行，请使用 subagent_manager wait 获取结果"
-              : "子代理执行完成",
-        };
+        if (result.status === "running") {
+          return `[Sub-agent running. Session ID: ${result.subSessionId}. Use subagent_manager wait to get the result.]`;
+        }
+        const parts: string[] = [];
+        if (result.content) parts.push(result.content);
+        const tag =
+          result.status === "error"
+            ? `[Sub-agent ended with error. Session ID: ${result.subSessionId}${result.error ? `. Reason: ${result.error}` : ""}]`
+            : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
+        parts.push(tag);
+        return parts.join("\n");
       },
       display: { action: "创建子代理", argsKey: "name", icon: "generic" },
     });
@@ -127,14 +125,14 @@ export class SubAgentPlugin extends PluginBase {
     // ── manager：管理子代理（wait / list / close / send_message）──
     subKit.registerTool({
       name: "subagent_manager",
-      description: `管理子代理：等待完成 / 关闭 / 列表 / 发送消息`,
+      description: `Manage sub-agents: wait for completion / close / list / send message`,
       inputSchema: z.object({
         action: z.enum(["wait", "list", "close", "send_message"]),
         sessionId: z
           .string()
           .optional()
-          .describe("close 或 send_message 时需要"),
-        message: z.string().optional().describe("send_message 时需要"),
+          .describe("Required for close or send_message"),
+        message: z.string().optional().describe("Required for send_message"),
       }),
       execute: async (args, ctx, abortSignal) => {
         const { action, sessionId, message } = args as {
@@ -151,32 +149,38 @@ export class SubAgentPlugin extends PluginBase {
               abortSignal,
             );
             if (completed.length === 0) {
-              return { success: true, message: "没有进行中的子代理任务" };
+              return "[No active sub-agent tasks.]";
             }
-            return {
-              success: true,
-              completedSubAgents: completed.map((c: any) => ({
-                sessionId: c.subSessionId,
-                name: c.name,
-                status: c.result?.status,
-                content: c.result?.content,
-                reasoningContent: c.result?.reasoningContent,
-                finishReason: c.result?.finishReason,
-              })),
-              message: `以下子代理已完成: ${completed.map((c: any) => c.name).join(", ")}`,
-            };
+            const parts: string[] = [];
+            for (const c of completed) {
+              const r = c.result;
+              const lines: string[] = [];
+              if (r.content) lines.push(r.content);
+              const tag =
+                r.status === "error"
+                  ? `[Sub-agent "${c.name}" ended with error. Session ID: ${c.subSessionId}${r.error ? `. Reason: ${r.error}` : ""}]`
+                  : `[Sub-agent "${c.name}" completed. Session ID: ${c.subSessionId}]`;
+              lines.push(tag);
+              parts.push(lines.join("\n"));
+            }
+            return parts.join("\n\n");
           }
 
           case "list": {
             const agents = await this.subAgentManager.getSubAgents(
               ctx?.session.sessionId,
             );
-            return { success: true, sub_agents: agents, total: agents.length };
+            if (agents.length === 0) return "[No sub-agents running.]";
+            const lines = agents.map(
+              (a: any) =>
+                `- ${a.name} (${a.subSessionId}) [${a.status}]`,
+            );
+            return `Active sub-agents:\n${lines.join("\n")}`;
           }
 
           case "close": {
             if (!sessionId)
-              return { success: false, message: "缺少 sessionId" };
+              throw new Error("Missing sessionId parameter.");
             try {
               await this.subAgentManager.closeSubAgent(
                 sessionId,
@@ -184,15 +188,15 @@ export class SubAgentPlugin extends PluginBase {
                 ctx?.session.userId,
                 ctx?.session.workspacePath,
               );
-              return { success: true, message: "子代理已关闭并删除" };
+              return "Sub-agent closed and deleted successfully.";
             } catch (e: any) {
-              return { success: false, message: e.message || "关闭子代理失败" };
+              throw new Error(e.message || "Failed to close sub-agent.");
             }
           }
 
           case "send_message": {
             if (!sessionId || !message)
-              return { success: false, message: "缺少 sessionId 或 message" };
+              throw new Error("Missing sessionId or message parameter.");
             try {
               const result = await this.subAgentManager.sendMessage(
                 {
@@ -204,24 +208,24 @@ export class SubAgentPlugin extends PluginBase {
                 "foreground",
                 abortSignal,
               );
-              return {
-                success: true,
-                sessionId: result.subSessionId,
-                status: result.status,
-                content:
-                  result.status === "completed" ? result.content : undefined,
-                message:
-                  result.status === "running"
-                    ? "消息已发送，子代理开始执行"
-                    : "子代理执行完成",
-              };
+              if (result.status === "running") {
+                return `[Message sent. Sub-agent is running. Session ID: ${result.subSessionId}]`;
+              }
+              const parts: string[] = [];
+              if (result.content) parts.push(result.content);
+              const tag =
+                result.status === "error"
+                  ? `[Sub-agent ended with error. Session ID: ${result.subSessionId}${result.error ? `. Reason: ${result.error}` : ""}]`
+                  : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
+              parts.push(tag);
+              return parts.join("\n");
             } catch (e: any) {
-              return { success: false, message: e.message || "发送消息失败" };
+              throw new Error(e.message || "Failed to send message.");
             }
           }
 
           default:
-            return { success: false, message: `未知操作: ${action}` };
+            throw new Error(`Unknown action: ${action}`);
         }
       },
       display: { action: "管理子代理", argsKey: "action", icon: "generic" },
@@ -230,15 +234,15 @@ export class SubAgentPlugin extends PluginBase {
     // ── Prompt: 子代理使用指南 + 可用角色列表 ──
     subKit.registerPrompt({
       frequency: "REGULAR",
-      description: "子代理使用指南及可用角色列表",
+      description: "Sub-agent usage guide and available agents list",
       content: async (context: PluginContext) => {
         if (context?.session.sessionType === "sub_agent") return "";
 
         // ── 构建可用角色列表 ──
         const genericAgent = {
           id: "generic",
-          title: "通用子代理",
-          description: "适用于通用任务的子代理，无需特定角色设定",
+          title: "Generic Sub-Agent",
+          description: "A sub-agent suitable for general-purpose tasks, no specific character settings required",
         };
 
         const { items } = await this.characterRepo.findAll(0, 200);
@@ -253,16 +257,18 @@ export class SubAgentPlugin extends PluginBase {
 
         let agents: any[];
 
-        if (charAgentCfg === false) {
-          agents = [];
-        } else if (typeof charAgentCfg === "object" && charAgentCfg !== null) {
+        if (charAgentCfg && typeof charAgentCfg === "object") {
           const allCandidates = [genericAgent, ...dbCandidates];
           if (charAgentCfg.__default === false) {
             // 白名单：只保留显式 true 的角色
-            agents = allCandidates.filter((c: any) => charAgentCfg[c.id] === true);
+            agents = allCandidates.filter(
+              (c: any) => charAgentCfg[c.id] === true,
+            );
           } else {
             // 黑名单：排除显式 false 的角色
-            agents = allCandidates.filter((c: any) => charAgentCfg[c.id] !== false);
+            agents = allCandidates.filter(
+              (c: any) => charAgentCfg[c.id] !== false,
+            );
           }
         } else {
           // 无配置：不注入任何角色

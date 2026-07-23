@@ -162,7 +162,7 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatSnapshot(result, args.type || "simple");
           },
-          display: { action: "页面快照", argsKey: "type", icon: "browser" },
+          display: { action: "获取页面快照", argsKey: "type", icon: "browser" },
         });
 
         // ── 4. 交互操作 ──
