@@ -15,7 +15,7 @@ import { ISessionContext } from "./session-context";
  * 流订阅回调
  */
 export interface StreamCallbacks {
-  onEvent: (data: string) => void;
+  onEvent: (data: EventChunk) => void;
   onComplete: (reason: string) => void;
   onError: (err: any) => void;
 }
