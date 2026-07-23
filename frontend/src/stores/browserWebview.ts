@@ -54,6 +54,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   const canGoForward = ref(false)
   const isLoading = ref(false)
 
+  /** 活跃 webview 是否静音（默认静音，避免突然播放声音吓人） */
+  const isMuted = ref(true)
+
   /** 活跃 webview 的 DOM 元素引用（shallowRef 避免 Vue 对 DOM 做深层响应式） */
   const activeWebviewEl = shallowRef<HTMLElement | null>(null)
 
@@ -120,6 +123,15 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     if (state.isLoading !== undefined) isLoading.value = state.isLoading
   }
 
+  /** 切换静音状态 */
+  function toggleMuted(): void {
+    isMuted.value = !isMuted.value
+    const wv = activeWebviewEl.value as any
+    if (wv) {
+      wv.setAudioMuted(isMuted.value)
+    }
+  }
+
   function clearAll(): void {
     webviews.value.clear()
     activeWindowId.value = null
@@ -168,6 +180,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     canGoBack,
     canGoForward,
     isLoading,
+    isMuted,
     activeWebviewEl,
     // getters
     sessionWebviews,
@@ -184,6 +197,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     setDragging,
     setActiveWebviewEl,
     setNavState,
+    toggleMuted,
     clearAll,
   }
 })

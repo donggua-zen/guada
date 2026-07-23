@@ -62,6 +62,21 @@
         <span v-if="store.isLoading" class="loading-spinner"></span>
       </div>
 
+      <!-- 静音切换按钮 -->
+      <button class="nav-btn" :title="store.isMuted ? '取消静音' : '静音'" @click="store.toggleMuted()">
+        <!-- 静音状态：喇叭带斜线 -->
+        <svg v-if="store.isMuted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <line x1="23" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+        <!-- 非静音状态：喇叭带声波 -->
+        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+      </button>
+
       <!-- 关闭按钮 -->
       <button class="nav-btn close-btn" title="关闭预览" @click="close">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

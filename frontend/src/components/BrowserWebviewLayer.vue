@@ -42,6 +42,14 @@ const webviewEls = new Map<string, HTMLElement>()
 function setWebviewRef(windowId: string, el: HTMLElement | null): void {
   if (el) {
     webviewEls.set(windowId, el)
+    // dom-ready 后才能调用 setAudioMuted 等方法
+    const wv = el as any
+    const applyMute = () => { wv.setAudioMuted?.(store.isMuted) }
+    if (wv.isReady) {
+      applyMute()
+    } else {
+      wv.addEventListener('dom-ready', applyMute, { once: true })
+    }
     // 如果是当前活跃窗口，同步到 store
     if (windowId === store.activeWindowId) {
       store.setActiveWebviewEl(el)
@@ -70,29 +78,43 @@ function syncNavState(el: HTMLElement): void {
   }
 }
 
+/** 非活跃 webview 的默认后台渲染尺寸，确保 agent 创建的窗口即使未被用户打开也能正常渲染 */
+const DEFAULT_BG_WIDTH = 1280
+const DEFAULT_BG_HEIGHT = 720
+
 /**
  * 计算 webview wrapper 的样式
  * 活跃 webview：跟随预览占位区域位置，visibility: visible
- * 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度）
+ * 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度），使用默认分辨率确保后台渲染
  * 拖拽中：pointer-events: none（防止 webview 截获鼠标事件导致拖拽中断）
  */
 function getWebviewStyle(windowId: string): Record<string, string> {
   const isActive = windowId === store.activeWindowId
   const rect: PreviewRect | null = store.previewRect
 
-  // 坐标始终跟随预览区域（无 rect 时回退到 0），隐藏时仅切换 visibility + z-index
-  const base: Record<string, string> = {
+  if (!isActive) {
+    // 非活跃 webview：使用默认尺寸渲染，但不可见
+    return {
+      visibility: 'hidden',
+      zIndex: '-1',
+      left: '0px',
+      top: '0px',
+      width: `${DEFAULT_BG_WIDTH}px`,
+      height: `${DEFAULT_BG_HEIGHT}px`,
+      pointerEvents: 'none',
+    }
+  }
+
+  // 活跃 webview：跟随预览占位区域
+  return {
+    visibility: 'visible',
+    zIndex: '40',
     left: rect ? `${rect.x}px` : '0px',
     top: rect ? `${rect.y}px` : '0px',
-    width: rect ? `${rect.width}px` : '0px',
-    height: rect ? `${rect.height}px` : '0px',
+    width: rect ? `${rect.width}px` : `${DEFAULT_BG_WIDTH}px`,
+    height: rect ? `${rect.height}px` : `${DEFAULT_BG_HEIGHT}px`,
+    pointerEvents: store.isDragging ? 'none' : 'auto',
   }
-
-  if (!isActive) {
-    return { ...base, visibility: 'hidden', zIndex: '-1', pointerEvents: 'none' }
-  }
-
-  return { ...base, visibility: 'visible', zIndex: '40', pointerEvents: store.isDragging ? 'none' : 'auto' }
 }
 
 /**
@@ -167,6 +189,8 @@ watch(
       if (el) {
         store.setActiveWebviewEl(el)
         syncNavState(el)
+        // 切换标签时同步静音状态（webview 已 ready 才会到这里）
+        ;(el as any).setAudioMuted?.(store.isMuted)
       } else {
         store.setActiveWebviewEl(null)
       }

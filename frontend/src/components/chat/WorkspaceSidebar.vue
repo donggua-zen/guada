@@ -381,6 +381,15 @@ function activateBrowserWindow(windowId: string): void {
     }
 }
 
+// 浏览器预览激活/关闭时通知父组件调整分割比例
+watch(() => browserStore.activeWindowId, (active) => {
+    if (active) {
+        emit('preview-open');
+    } else {
+        emit('preview-close');
+    }
+});
+
 /** 关闭浏览器窗口：关闭后切换到后一个标签，全部关闭则退出预览模式 */
 async function closeBrowserWindow(windowId: string): Promise<void> {
     if (!window.electronAPI) return;
@@ -421,23 +430,14 @@ async function createNewBrowserWindow(): Promise<void> {
         if (!result.success) {
             ElMessage.warning(result.error || '创建窗口失败');
         }
-    } catch (e) {
-        console.error('Failed to create browser window:', e);
+        } catch (e) {
+            console.error('Failed to create browser window:', e);
+        }
     }
-}
 
-// 浏览器预览激活/关闭时通知父组件调整分割比例
-watch(() => browserStore.activeWindowId, (active) => {
-    if (active) {
-        emit('preview-open');
-    } else {
-        emit('preview-close');
-    }
-});
-
-/**
- * 异步加载目录的子节点
- */
+    /**
+     * 异步加载目录的子节点
+     */
 async function loadChildren(node: WorkspaceNode): Promise<WorkspaceNode[]> {
     if (!props.sessionId) return [];
     try {
