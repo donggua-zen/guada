@@ -53,7 +53,7 @@ function handleSelect(mode: string) {
 
 <style scoped>
 .popover-content {
-  padding: 4px 0;
+  padding: 0;
 }
 
 .rm-item:hover {
