@@ -163,7 +163,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
     if (params.stream) {
       requestParams.stream_options = { include_usage: true };
     }
-    console.log(requestParams);
     return requestParams;
   }
 
