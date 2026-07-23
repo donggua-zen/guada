@@ -367,9 +367,11 @@ const browserStore = useBrowserWebviewStore();
 // ── 悬浮目录树面板 ──
 const isPreviewMode = computed(() => !!selectedFile.value || !!browserStore.activeWindowId);
 const isTreePanelVisible = ref(false);
+const treeTransitionReady = ref(false);
 const workspaceBtnRef = ref<HTMLElement | null>(null);
 const treePanelStyle = ref<Record<string, string>>({});
 let treeHideTimer: ReturnType<typeof setTimeout> | null = null;
+let treeShowTimer: ReturnType<typeof setTimeout> | null = null;
 
 const TREE_PANEL_WIDTH = 320;
 const TREE_PANEL_HEIGHT = 420;
@@ -396,7 +398,10 @@ const treeContainerClass = computed(() => {
     }
     return [
         'tree-floating-panel',
-        { 'tree-floating-visible': isTreePanelVisible.value },
+        {
+            'tree-floating-visible': isTreePanelVisible.value,
+            'tree-transition-ready': treeTransitionReady.value,
+        },
     ];
 });
 
@@ -406,12 +411,20 @@ function showTreePanel() {
         clearTimeout(treeHideTimer);
         treeHideTimer = null;
     }
-    updateTreePanelPosition();
-    isTreePanelVisible.value = true;
+    if (isTreePanelVisible.value) return;
+    if (treeShowTimer) clearTimeout(treeShowTimer);
+    treeShowTimer = setTimeout(() => {
+        updateTreePanelPosition();
+        isTreePanelVisible.value = true;
+    }, 300);
 }
 
 function hideTreePanel() {
     if (!isPreviewMode.value) return;
+    if (treeShowTimer) {
+        clearTimeout(treeShowTimer);
+        treeShowTimer = null;
+    }
     if (treeHideTimer) clearTimeout(treeHideTimer);
     treeHideTimer = setTimeout(() => {
         isTreePanelVisible.value = false;
@@ -421,10 +434,19 @@ function hideTreePanel() {
 watch(isPreviewMode, (preview) => {
     if (!preview) {
         isTreePanelVisible.value = false;
+        treeTransitionReady.value = false;
         if (treeHideTimer) {
             clearTimeout(treeHideTimer);
             treeHideTimer = null;
         }
+        if (treeShowTimer) {
+            clearTimeout(treeShowTimer);
+            treeShowTimer = null;
+        }
+    } else {
+        nextTick(() => {
+            treeTransitionReady.value = true;
+        });
     }
 });
 
@@ -2415,6 +2437,10 @@ onUnmounted(() => {
         clearTimeout(treeHideTimer);
         treeHideTimer = null;
     }
+    if (treeShowTimer) {
+        clearTimeout(treeShowTimer);
+        treeShowTimer = null;
+    }
     closeContextMenu();
 });
 </script>
@@ -2701,8 +2727,12 @@ onUnmounted(() => {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transform: translateY(-8px) scale(0.98);
     padding-bottom: 4px;
+}
+
+.tree-floating-panel.tree-transition-ready {
+    transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
 }
 
 .dark .tree-floating-panel {
@@ -2715,6 +2745,7 @@ onUnmounted(() => {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+    transform: translateY(0) scale(1);
 }
 
 </style>
