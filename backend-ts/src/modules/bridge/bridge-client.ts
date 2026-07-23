@@ -10,7 +10,7 @@
  *   bridgeClient.on("some_event", (data) => { ... });
  */
 
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import * as net from "net";
 import { EventEmitter } from "events";
 
@@ -21,7 +21,7 @@ interface PendingRequest {
 }
 
 @Injectable()
-export class BridgeClient implements OnModuleInit {
+export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BridgeClient.name);
   private socket: net.Socket | null = null;
   private connected = false;
@@ -57,6 +57,21 @@ export class BridgeClient implements OnModuleInit {
     this.connect();
   }
 
+  onModuleDestroy() {
+    // 取消重连定时器，防止 app.close() 期间反复创建新 socket
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    // 销毁当前 socket
+    if (this.socket) {
+      this.socket.destroy();
+      this.socket = null;
+    }
+    this.connected = false;
+    this.authenticated = false;
+  }
+
   /**
    * 等待连接就绪
    */
@@ -79,6 +94,13 @@ export class BridgeClient implements OnModuleInit {
 
       // 发送鉴权消息
       this.send({ type: "auth", token: this.token });
+
+      // 服务端不回确认消息，连接成功即视为就绪
+      if (!this.authenticated) {
+        this.authenticated = true;
+        this.readyResolve();
+        this.logger.log("Bridge authenticated and ready");
+      }
     });
 
     this.socket.on("data", (data) => {

@@ -27,6 +27,7 @@ let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
 let isBackendStarting = false; // 防止重复启动
+let isBackendStopping = false; // 标记后端正在被主动停止（非异常退出）
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let bridgeServer: BridgeServer | null = null;
@@ -777,13 +778,13 @@ async function startBackend(): Promise<void> {
         console.log(`[Backend] ${message}`);
       }
 
-      // 开发模式：通过日志检测启动成功（开发环境固定端口 3000）
-      if (isDev && message.includes("Application is running on") && !isResolved) {
-        isBackendStarting = false;
-        isResolved = true;
-        console.log(`[Backend] Application is running on port ${backendPort}`);
-        resolve();
-      }
+      // // 开发模式：通过日志检测启动成功（开发环境固定端口 3000）
+      // if (isDev && message.includes("Application is running on") && !isResolved) {
+      //   isBackendStarting = false;
+      //   isResolved = true;
+      //   console.log(`[Backend] Application is running on port ${backendPort}`);
+      //   resolve();
+      // }
     });
 
     // 处理 stderr
@@ -805,7 +806,7 @@ async function startBackend(): Promise<void> {
     backendProcess.on("exit", (code) => {
       log.info(`后端进程退出，退出码: ${code}`);
       isBackendStarting = false; // 重置标志
-      if (code !== 0 && code !== null) {
+      if (code !== 0 && code !== null && !isBackendStopping) {
         log.error(`后端进程异常退出，退出码: ${code}`);
       }
     });
@@ -1193,6 +1194,7 @@ function createWindow() {
 
   // 前端加载完成后检查更新
   mainWindow.webContents.on("did-finish-load", () => {
+    if ((app as AppExtended).isQuiting) return;
     log.info("Frontend loaded, checking for updates...");
     doCheckForUpdates();
 
@@ -2126,8 +2128,7 @@ app.on("window-all-closed", () => {
   // 停止后端服务
   if (backendProcess) {
     console.log("Stopping backend service...");
-
-    // 根据平台选择适当的终止方法
+    isBackendStopping = true;
     if (process.platform === "win32") {
       // Windows: 使用 taskkill 命令终止进程树
       const { exec } = require("child_process");
@@ -2170,36 +2171,77 @@ app.on("activate", () => {
 });
 
 // 应用退出前清理
-app.on("before-quit", async () => {
+let isCleaningUp = false;
+app.on("before-quit", async (event) => {
   (app as AppExtended).isQuiting = true;
 
-  // 停止 Bridge Server
+  if (isCleaningUp) return;
+  isCleaningUp = true;
+  event.preventDefault();
+
+  // 0. 显示退出画面，浏览器导航会断开前端 keep-alive HTTP 连接
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const shutdownHtml = `<html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;flex-direction:column"><div style="width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:#4a9eff;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:20px"></div><p>正在退出...</p></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body></html>`;
+    mainWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(shutdownHtml)}`,
+    );
+
+    // 等待导航完成，确保前端 HTTP 连接全部断开
+    await new Promise<void>((resolve) => {
+      mainWindow!.webContents.once("did-finish-load", resolve);
+      setTimeout(resolve, 1500); // 兜底
+    });
+  }
+
+  // 1. 通过 Bridge 发送优雅关闭信号，等待后端自行退出
+  if (bridgeServer && backendProcess && !backendProcess.killed) {
+    isBackendStopping = true;
+    console.log("Sending graceful shutdown to backend...");
+    bridgeServer.broadcast("shutdown", {});
+
+    // 等待后端优雅退出（最多 5 秒）
+    let backendExited = false;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 5000);
+      backendProcess?.once("exit", (code) => {
+        clearTimeout(timer);
+        backendExited = true;
+        console.log(`Backend exited with code ${code}`);
+        resolve();
+      });
+    });
+
+    // 如果后端仍未退出，强制终止
+    if (!backendExited && backendProcess && !backendProcess.killed) {
+      console.log("Backend did not exit gracefully, force killing...");
+      if (process.platform === "win32") {
+        const { execSync } = require("child_process");
+        try {
+          execSync(`taskkill /pid ${backendProcess.pid} /T /F`, {
+            stdio: "ignore",
+          });
+        } catch (error) {
+          console.error("Failed to kill backend process:", error);
+        }
+      } else {
+        backendProcess.kill("SIGKILL");
+      }
+    }
+    backendProcess = null;
+  }
+
+  // 2. 停止 Bridge Server
   if (bridgeServer) {
     await bridgeServer.stop();
     bridgeServer = null;
   }
 
-  // 清理浏览器自动化服务
+  // 3. 清理浏览器自动化服务
   if (automationService) {
     await automationService.destroy();
     automationService = null;
   }
 
-  if (backendProcess) {
-    // 根据平台选择适当的终止方法
-    if (process.platform === "win32") {
-      // Windows: 使用 taskkill 命令终止进程
-      const { execSync } = require("child_process");
-      try {
-        execSync(`taskkill /pid ${backendProcess.pid} /T /F`, {
-          stdio: "ignore",
-        });
-      } catch (error) {
-        console.error("Failed to kill backend process:", error);
-      }
-    } else {
-      // Unix-like systems: 发送 SIGTERM 信号
-      backendProcess.kill("SIGTERM");
-    }
-  }
+  // 继续退出流程
+  app.quit();
 });
