@@ -84,6 +84,40 @@ hljs.registerLanguage('plaintext', plaintext)
 let markedInstance: Marked | null = null
 
 /**
+ * HTML 属性转义，防止 href 中含特殊字符导致注入
+ */
+function escapeHtmlAttribute(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+}
+
+/**
+ * 全局点击事件委托：拦截 markdown 渲染的外部链接，避免内联 onclick 注入风险
+ */
+let linkClickHandlerInstalled = false
+function installLinkClickHandler(): void {
+    if (linkClickHandlerInstalled || typeof document === 'undefined') return
+    linkClickHandlerInstalled = true
+    document.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as HTMLElement
+        const link = target.closest('a[data-url]') as HTMLAnchorElement | null
+        if (!link) return
+        const url = link.dataset.url
+        if (!url) return
+        e.preventDefault()
+        const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
+        if (isElectron) {
+            ;(window as any).electronAPI.openExternal(url)
+        } else {
+            window.open(url, '_blank', 'noopener,noreferrer')
+        }
+    })
+}
+
+/**
  * 自定义渲染器类型
  */
 interface CustomRenderer extends Renderer {
@@ -169,8 +203,8 @@ function createMarkedInstance(options?: MarkdownOptions): Marked {
             const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
 
             if (isElectron) {
-                // Electron 环境：添加 data-url 属性和点击事件处理
-                return `<a href="#" data-url="${href}"${title} onclick="event.preventDefault(); window.electronAPI.openExternal('${href}'); return false;">${text}</a>`
+                // Electron 环境：通过 data-url + 事件委托处理，避免内联 onclick 注入风险
+                return `<a href="#" data-url="${escapeHtmlAttribute(href)}"${title}>${text}</a>`
             } else {
                 // Web 环境：使用 target="_blank" 和 rel 属性
                 return `<a href="${href}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`
@@ -243,6 +277,7 @@ export function useMarkdown(options?: MarkdownOptions): UseMarkdownReturn {
     if (!markedInstance) {
         markedInstance = createMarkedInstance(options)
     }
+    installLinkClickHandler()
 
     const parseMarkdown = (content: string): string => {
         if (!content?.trim()) return ""

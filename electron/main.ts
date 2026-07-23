@@ -1049,6 +1049,54 @@ function applyTraySettings() {
   }
 }
 
+// 判断是否为本地地址（允许在主窗口内导航）
+function isLocalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "file:") return true;
+    if (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "[::1]"
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// 判断是否为安全的外部链接（仅允许 http/https）
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+// 拦截外部链接：弹窗确认后用系统默认浏览器打开
+async function handleExternalUrl(url: string): Promise<void> {
+  if (!isSafeExternalUrl(url)) {
+    log.warn(`[Security] Blocked non-http(s) URL: ${url}`);
+    return;
+  }
+  const result = await dialog.showMessageBox(mainWindow!, {
+    type: "question",
+    title: "打开外部链接",
+    message: "即将在默认浏览器中打开以下链接：",
+    detail: url,
+    buttons: ["打开", "取消"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (result.response === 0) {
+    await shell.openExternal(url);
+  }
+}
+
 // 创建窗口
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -1123,6 +1171,24 @@ function createWindow() {
   // 窗口准备好后显示
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
+  });
+
+  // 拦截 window.open() 和 target="_blank" 链接
+  mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
+    if (isLocalUrl(url)) {
+      return { action: "allow" };
+    }
+    handleExternalUrl(url);
+    return { action: "deny" };
+  });
+
+  // 拦截页面内导航（如点击 <a href="..."> 链接）
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isLocalUrl(url)) {
+      return; // 允许本地导航
+    }
+    event.preventDefault();
+    handleExternalUrl(url);
   });
 
   // 前端加载完成后检查更新
@@ -1594,6 +1660,10 @@ function setupIpcHandlers() {
   // 打开外部链接
   ipcMain.handle("open-external", async (_, url: string) => {
     try {
+      if (!isSafeExternalUrl(url)) {
+        log.warn(`[Security] Blocked open-external for non-http(s) URL: ${url}`);
+        return { success: false, error: "仅允许 http/https 协议" };
+      }
       await shell.openExternal(url);
       return { success: true };
     } catch (error) {

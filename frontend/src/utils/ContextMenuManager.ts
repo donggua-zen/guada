@@ -11,6 +11,8 @@
  * 不依赖任何编辑器实现（Tiptap/Quill 等）。
  */
 
+import { openExternalLink } from "./modelUtils";
+
 export interface MenuItem {
   label: string;
   type?: "normal" | "separator";
@@ -448,7 +450,7 @@ class ContextMenuManager {
     if (link && link.href) {
       items.push({
         label: "在新窗口打开",
-        action: () => window.open(link.href, "_blank"),
+        action: () => openExternalLink(link.href),
       });
       items.push({
         label: "复制链接地址",
