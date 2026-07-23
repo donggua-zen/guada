@@ -139,7 +139,8 @@
       <!-- 用户头像+名字 下拉 -->
       <el-dropdown trigger="hover" placement="top-start" @command="handleUserMenuCommand"
         popper-class="user-menu-dropdown" style="flex: 1 1 0%; min-width: 0;">
-        <div class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--color-sidebar-bg-hover) transition-all duration-200">
+        <div
+          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--color-sidebar-bg-hover) transition-all duration-200">
           <Avatar class="w-7 h-7 shrink-0" type="user" :round="true" :src="authStore.user?.avatarUrl"
             :name="authStore.user?.nickname || authStore.user?.username" />
           <span class="text-sm font-medium text-(--color-text) truncate min-w-0">
@@ -156,8 +157,7 @@
             <div class="px-5 py-2 flex items-center gap-2">
               <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">颜色主题</span>
               <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-gray-100 dark:bg-[#1a1b1e]">
-                <button v-for="option in themeOptions" :key="option.value"
-                  @click="setTheme(option.value)"
+                <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
                   class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
                   :class="themeMode === option.value
                     ? 'bg-white dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
@@ -929,6 +929,8 @@ function initSessionEventListeners() {
       return
     }
     const { payload } = event
+    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
+      return
     if (payload?.session) {
       const session = payload.session
       // 避免重复添加
@@ -969,7 +971,7 @@ function initSessionEventListeners() {
     }
     const { sessionId, payload } = event
 
-    if (payload?.session?.sessionType === 'sub_agent')
+    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
       return
 
     // 直接更新统一数据源
