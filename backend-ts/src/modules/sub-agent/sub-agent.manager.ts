@@ -16,23 +16,23 @@ import { ISessionContext } from "../chat/session-context";
  * 当子 Agent 没有自定义角色提示词时，使用此提示词作为基础身份定义。
  * 通过 session.settings.systemPrompt 注入，与工具配置走相同的继承机制。
  */
-const SUB_AGENT_DEFAULT_PROMPT = `你是一个子 Agent（Sub Agent），被主 Agent 委派执行特定任务。
+const SUB_AGENT_DEFAULT_PROMPT = `You are a Sub Agent, delegated by the main Agent to execute a specific task.
 
-## 核心职责
-- 专注于主 Agent 分配的任务，深入分析并独立完成
-- 使用可用的工具收集信息、处理数据、执行操作
-- 返回清晰、结构化的结果，便于主 Agent 整合
+## Core Responsibilities
+- Focus on the task assigned by the main Agent, analyze deeply and complete it independently
+- Use available tools to gather information, process data, and perform actions
+- Return clear, structured results for the main Agent to integrate
 
-## 行为准则
-- 主动使用工具完成任务，不要仅依赖已有知识
-- 遇到复杂问题时，分解为多个步骤逐步解决
-- 任务完成后，给出简洁的总结和关键结论
-- 如果任务无法完成，说明原因和已尝试的方案
+## Guidelines
+- Proactively use tools to complete the task; do not rely solely on existing knowledge
+- When facing complex problems, break them down into multiple steps and solve them incrementally
+- When the task is complete, provide a concise summary and key conclusions
+- If the task cannot be completed, explain the reason and what approaches have been attempted
 
-## 注意事项
-- 你的工具权限由主 Agent 分配，请充分利用
-- 工作目录与主 Agent 共享，注意文件操作的一致性
-- 不要询问用户，自主决策并执行任务`;
+## Notes
+- Your tool permissions are assigned by the main Agent; make full use of them
+- The working directory is shared with the main Agent; be mindful of file operation consistency
+- Do not ask the user questions; make decisions and execute the task independently`;
 
 /**
  * 子 Agent 执行结果
@@ -169,10 +169,10 @@ export class SubAgentManager implements OnModuleInit {
     subSessionId: string,
   ): string {
     const lines: string[] = [
-      "# 子 Agent 对话记录",
+      "# Sub-Agent Conversation Log",
       "",
-      `**会话 ID**: ${subSessionId}`,
-      `**消息条数**: ${messages.length}`,
+      `**Session ID**: ${subSessionId}`,
+      `**Message Count**: ${messages.length}`,
       "",
       "---",
       "",
@@ -184,7 +184,7 @@ export class SubAgentManager implements OnModuleInit {
         continue;
       }
 
-      const role = msg.role === "user" ? "用户" : "助手";
+      const role = msg.role === "user" ? "User" : "Assistant";
       lines.push(`### ${role}`);
       lines.push("");
 
@@ -243,7 +243,7 @@ export class SubAgentManager implements OnModuleInit {
       await this.sessionRepo.countByParentId(parentSessionId);
     if (subAgentCount >= 10) {
       throw new Error(
-        "当前会话子代理数量已达上限（10个），请先关闭部分子代理后再创建",
+        "The maximum number of sub-agents (10) for this session has been reached. Please close some sub-agents before creating new ones.",
       );
     }
 
@@ -275,7 +275,7 @@ export class SubAgentManager implements OnModuleInit {
       const character = await this.characterRepo.findById(params.characterId);
       if (!character) {
         throw new Error(
-          `角色 ${params.characterId} 不存在，请检查是否输入有误，或此角色已被删除`,
+          `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
         );
       }
       finalModelId = character.modelId || parentContext.getModelConfig().id;
@@ -385,15 +385,15 @@ export class SubAgentManager implements OnModuleInit {
     // 1. 验证子会话存在且属于该父会话
     const subSession = await this.sessionRepo.findById(params.sessionId);
     if (!subSession) {
-      throw new Error("子 Agent 会话不存在");
+      throw new Error("Sub-agent session does not exist.");
     }
     if (subSession.parentId !== params.parentSessionId) {
-      throw new Error("子 Agent 不属于该父会话");
+      throw new Error("Sub-agent does not belong to this parent session.");
     }
 
     // 2. 检查子 Agent 是否正在运行
     if (this.isSubAgentRunning(params.sessionId)) {
-      throw new Error("子 Agent 正在运行中，请等待完成后再发送消息");
+      throw new Error("Sub-agent is currently running. Please wait for it to complete before sending a message.");
     }
 
     this.logger.log(
@@ -502,7 +502,7 @@ export class SubAgentManager implements OnModuleInit {
    */
   private async getSubAgentName(subSessionId: string): Promise<string> {
     const session = await this.sessionRepo.findById(subSessionId);
-    return session?.title || "未知子 Agent";
+    return session?.title || "Unknown Sub-Agent";
   }
 
   /**
@@ -554,7 +554,7 @@ export class SubAgentManager implements OnModuleInit {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.removeCompleter(parentSessionId, completer);
-        reject(new Error("等待子 Agent 完成超时"));
+        reject(new Error("Timeout waiting for sub-agent to complete."));
       }, timeoutMs);
 
       // 监听 abortSignal，中止时清理并返回空数组
@@ -718,7 +718,7 @@ export class SubAgentManager implements OnModuleInit {
       }
       agents.push({
         subSessionId: session.id,
-        name: session.title || "子 Agent",
+        name: session.title || "Sub-Agent",
         status,
       });
     }
@@ -841,8 +841,8 @@ export class SubAgentManager implements OnModuleInit {
     // 无等待者 → 投递消息到信箱
     if (isComplete && options.enqueueResult !== false) {
       const content = isComplete
-        ? `${name} 已完成工作`
-        : `子任务 "${name}" 执行失败，错误信息：${options.errorMsg}`;
+        ? `${name} has completed its work.`
+        : `Sub-task "${name}" failed. Error: ${options.errorMsg}`;
 
       const source: any = { type: "sub_agent" };
       if (isComplete) {
@@ -976,7 +976,7 @@ export class SubAgentManager implements OnModuleInit {
         .catch((err) => {
           // startStream 本身抛出异常（如会话不存在）
           const errorMsg = err instanceof Error ? err.message : String(err);
-          reject(new Error(`子 Agent 流启动失败: ${errorMsg}`));
+          reject(new Error(`Failed to start sub-agent stream: ${errorMsg}`));
         });
     });
   }
