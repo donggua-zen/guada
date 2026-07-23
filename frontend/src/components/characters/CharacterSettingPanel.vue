@@ -203,14 +203,12 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <el-switch :model-value="allDisabled" @update:model-value="handleAllDisabledToggle" inline-prompt
-                        active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部插件</span>
+                      <span class="text-sm text-gray-500">功能开关</span>
+                      <el-switch :model-value="!allDisabled" @update:model-value="(v) => handleAllDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allDisabled }]">
-                      <span class="text-sm text-gray-500">新增插件默认开启</span>
-                      <el-switch :model-value="!allowlistMode" @update:model-value="(v) => allowlistMode = !v"
-                        :disabled="allDisabled" />
+                      <span class="text-sm text-gray-500">新增插件</span>
+                      <SegmentedToggle v-model="allowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
                 </el-form-item>
@@ -252,14 +250,12 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <el-switch :model-value="allMcpDisabled" @update:model-value="handleAllMcpDisabledToggle"
-                        inline-prompt active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部 MCP 工具</span>
+                      <span class="text-sm text-gray-500">功能开关</span>
+                      <el-switch :model-value="!allMcpDisabled" @update:model-value="(v) => handleAllMcpDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allMcpDisabled }]">
-                      <span class="text-sm text-gray-500">新服务器默认启动</span>
-                      <el-switch :model-value="!mcpAllowlistMode" @update:model-value="(v) => mcpAllowlistMode = !v"
-                        :disabled="allMcpDisabled" />
+                      <span class="text-sm text-gray-500">新增MCP</span>
+                      <SegmentedToggle v-model="mcpAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
                 </el-form-item>
@@ -316,14 +312,12 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <el-switch :model-value="allSkillsDisabled" @update:model-value="handleAllSkillsDisabledToggle"
-                        inline-prompt active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部 Skills</span>
+                      <span class="text-sm text-gray-500">功能开关</span>
+                      <el-switch :model-value="!allSkillsDisabled" @update:model-value="(v) => handleAllSkillsDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allSkillsDisabled }]">
-                      <span class="text-sm text-gray-500">新技能默认启动</span>
-                      <el-switch :model-value="!skillsAllowlistMode" @update:model-value="(v) => skillsAllowlistMode = !v"
-                        :disabled="allSkillsDisabled" />
+                      <span class="text-sm text-gray-500">新增技能</span>
+                      <SegmentedToggle v-model="skillsAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
                 </el-form-item>
@@ -377,14 +371,8 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <el-switch :model-value="allAgentsDisabled" @update:model-value="handleAllAgentsDisabledToggle"
-                        inline-prompt active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部子代理</span>
-                    </div>
-                    <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allAgentsDisabled }]">
-                      <span class="text-sm text-gray-500">新助手默认启动</span>
-                      <el-switch :model-value="!agentsAllowlistMode" @update:model-value="(v) => agentsAllowlistMode = !v"
-                        :disabled="allAgentsDisabled" />
+                      <span class="text-sm text-gray-500">功能开关</span>
+                      <el-switch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
                     </div>
                   </div>
                 </el-form-item>
@@ -467,9 +455,16 @@ import { apiService } from '../../services/ApiService'
 
 import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
+import SegmentedToggle from '../ui/SegmentedToggle.vue'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 
 const { toast, notify } = usePopup()
+
+// 工具栏目"全部禁用/自定义"分段按钮选项
+const autoEnableOptions = [
+  { label: '自动启用', value: false },
+  { label: '保持禁用', value: true }
+]
 
 // Slider 百分比格式化函数
 const formatSliderTooltip = (val: number): string => {
@@ -677,13 +672,11 @@ const GENERIC_AGENT = {
 };
 // 是否全部禁用子代理
 const allAgentsDisabled = ref(false);
-// 助手白名单模式（默认 true = 白名单，新助手默认关闭）
-const agentsAllowlistMode = ref(true);
+// 助手偏好 { characterId: true/false }
+const enabledAgents = reactive<Record<string, boolean>>({});
 // 子代理列表（排除当前角色，含虚拟通用子代理）
 const presetCharacters = ref<any[]>([]);
 const loadingAgents = ref(false);
-// 助手偏好 { characterId: true/false }
-const enabledAgents = reactive<Record<string, boolean>>({});
 
 
 
@@ -821,10 +814,10 @@ watch(() => props.data, (newVal, oldVal) => {
     characterForm.enabledSkills = {};
   }
 
-  // 加载子代理偏好
-  allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled === false;
+  // 加载子代理偏好（固定白名单：仅显式 true 的角色被启用）
+  // 默认禁用：无配置时 allAgentsDisabled = true
+  allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled !== true;
   const agentsConfig = newVal.settings?.agents;
-  agentsAllowlistMode.value = agentsConfig ? agentsConfig.__default === false : true;
   // 重建 enabledAgents
   for (const key of Object.keys(enabledAgents)) delete (enabledAgents as any)[key];
   if (typeof agentsConfig === 'object' && !Array.isArray(agentsConfig)) {
@@ -875,9 +868,7 @@ const handleSkillToggle = (skillId, enabled) => {
 
 // ── 子代理 ──
 const getAgentEffectiveEnabled = (char) => {
-  if (char.id in enabledAgents) return (enabledAgents as any)[char.id];
-  // 未显式配置：白名单模式默认关闭，黑名单模式默认开启
-  return !agentsAllowlistMode.value;
+  return (enabledAgents as any)[char.id] ?? false;
 };
 const handleAgentToggle = (charId, enabled) => {
   (enabledAgents as any)[charId] = enabled;
@@ -1236,23 +1227,16 @@ const getFormData = () => {
         }
         return Object.keys(skillsOut).length > 0 ? skillsOut : undefined;
       })(),
-      // 子代理配置（按模式保存）
+      // 子代理配置（固定白名单：仅存显式 true）
       'agents': (() => {
         const agentsOut: Record<string, any> = {};
         for (const char of presetCharacters.value) {
-          const effectiveEnabled = getAgentEffectiveEnabled(char);
-          if (agentsAllowlistMode.value) {
-            // 白名单：当前显示为 ON 的全部存 true
-            if (effectiveEnabled) agentsOut[char.id] = true;
-          } else {
-            // 黑名单：当前显示为 OFF 的全部存 false
-            if (!effectiveEnabled) agentsOut[char.id] = false;
+          if (getAgentEffectiveEnabled(char)) {
+            agentsOut[char.id] = true;
           }
         }
-        if (agentsAllowlistMode.value) {
-          agentsOut.__default = false;
-        }
-        return Object.keys(agentsOut).length > 0 ? agentsOut : undefined;
+        agentsOut.__default = false;
+        return Object.keys(agentsOut).length > 1 ? agentsOut : undefined;
       })(),
     }
   }

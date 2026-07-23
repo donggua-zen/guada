@@ -35,7 +35,7 @@ import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 /**
  * 合并后的会话设置
  */
-interface MergedSettings {
+interface EffectiveSettings {
   systemPrompt: string;
   thinkingEffort?: string;
   memory: any;
@@ -79,7 +79,7 @@ export class PersistentSessionContext implements ISessionContext {
   private thinkingEffortValue!: string | undefined;
   private toolApprovalConfig!: ToolApprovalConfig;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
-  private mergedSettings!: MergedSettings;
+  private effectiveSettings!: EffectiveSettings;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
@@ -135,30 +135,40 @@ export class PersistentSessionContext implements ISessionContext {
    * 由工厂在构造后调用。
    */
   async initialize(): Promise<void> {
-    // 先解析工作目录，后续 prepareSessionData 直接使用 this._workspacePath
+    // 1. 解析工作目录
     this._workspacePath =
       await this.workspaceService.resolveSessionWorkspaceDir(this.session);
 
-    const prep = await this.prepareSessionData();
-    const model = prep.model;
+    // 2. 解析模型、合并设置
+    const model = await this.resolveModel();
+    const merged = this.buildEffectiveSettings();
+    const features = model?.config?.features || [];
 
-    // 一次性构建所有 DTO，避免 getter 中的延迟计算和缓存逻辑
-    this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
-    this.thinkingEffortValue = prep.features.includes("thinking")
-      ? prep.mergedSettings.thinkingEffort || "none"
+    // 3. 构建所有 DTO
+    this.modelConfig = this.buildModelConfig(model, merged);
+    this.thinkingEffortValue = features.includes("thinking")
+      ? merged.thinkingEffort || "none"
       : undefined;
-    this.resolvedPlugins = prep.resolvedPlugins;
-    this.mergedSettings = prep.mergedSettings;
+    this.effectiveSettings = merged;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
-    this.memoryConfig = await this.buildMemoryConfig(
-      prep.mergedSettings.memory,
+    this.memoryConfig = await this.buildMemoryConfig(merged.memory);
+    this.effectiveContextWindow = this.calcEffectiveContextWindow(
+      model,
+      merged.maxTokensLimit,
     );
-    this.effectiveContextWindow = prep.effectiveContextWindow;
 
-    // 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan/sandbox）
+    // 4. 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan/sandbox）
     const savedRunMode = this.session.settings?.runMode;
     if (savedRunMode === "plan" || savedRunMode === "sandbox") {
       this.runMode = savedRunMode;
+    }
+
+    // 5. 插件决议放在最后：所有字段已赋值，handler 可通过 getSettings() 正常读取
+    if (features.includes("tools")) {
+      this.resolvedPlugins = await this.pluginManager.resolvePlugins(
+        this,
+        merged.plugins,
+      );
     }
   }
 
@@ -508,7 +518,7 @@ export class PersistentSessionContext implements ISessionContext {
 
   private buildModelConfig(
     model: any,
-    _mergedSettings: MergedSettings,
+    _effectiveSettings: EffectiveSettings,
   ): ModelConfig {
     if (!model) {
       throw new Error(`Session ${this.sessionId} has no resolved model`);
@@ -632,61 +642,6 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   /**
-   * 准备会话数据：解析模型、合并设置、注入工具提示词、计算上下文窗口。
-   *
-   * 这是 ISessionContext 初始化的核心方法，一次性完成所有数据准备工作。
-   * 根据模型特性（tools / thinking）决定是否注入工具运行时。
-   */
-  private async prepareSessionData(): Promise<{
-    model: any;
-    mergedSettings: MergedSettings;
-    effectiveContextWindow: number;
-    thinkingEffort: string | undefined;
-    resolvedPlugins: ResolvedPluginInfo[];
-    pluginsConfig: any;
-    features: string[];
-  }> {
-    const model = await this.resolveModel();
-
-    const merged = this.mergeSettings();
-
-    const features = model?.config?.features || [];
-    const supportsTools = features.includes("tools");
-
-    let resolvedPlugins: ResolvedPluginInfo[] = [];
-    let pluginsConfig: any = undefined;
-
-    if (supportsTools) {
-      // 一次决议
-      const resolved = await this.pluginManager.resolvePlugins(
-        this,
-        merged.plugins,
-      );
-      resolvedPlugins = resolved;
-      pluginsConfig = merged.plugins;
-    }
-
-    const effectiveContextWindow = this.calcEffectiveContextWindow(
-      model,
-      merged.maxTokensLimit,
-    );
-
-    const thinkingEffort = features.includes("thinking")
-      ? merged.thinkingEffort || "none"
-      : undefined;
-
-    return {
-      model,
-      mergedSettings: merged,
-      effectiveContextWindow,
-      thinkingEffort,
-      resolvedPlugins,
-      pluginsConfig,
-      features,
-    };
-  }
-
-  /**
    * 合并会话设置与角色默认配置。
    *
    * 优先级规则：
@@ -696,7 +651,7 @@ export class PersistentSessionContext implements ISessionContext {
    * - 模型参数（temperature/topP等）：仅从会话设置读取（创建会话时已从角色继承，见 filterAndMergeSessionSettings）
    * - tools / mcpServers：会话设置 > 角色设置
    */
-  private mergeSettings(): MergedSettings {
+  private buildEffectiveSettings(): EffectiveSettings {
     const sessionSettings = this.session.settings || {};
     const characterSettings = this.session.character?.settings || {};
 
@@ -709,7 +664,7 @@ export class PersistentSessionContext implements ISessionContext {
     let systemPrompt =
       sessionSettings.systemPrompt || characterSettings.systemPrompt || "";
 
-    const merged: MergedSettings = {
+    const merged: EffectiveSettings = {
       systemPrompt,
       thinkingEffort: undefined,
       memory: {},
@@ -755,7 +710,7 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   private async buildPreludeMessages(): Promise<MessageRecord[]> {
-    const systemPrompts: string[] = [this.mergedSettings.systemPrompt];
+    const systemPrompts: string[] = [this.effectiveSettings.systemPrompt];
     const userPrompts: string[] = [];
 
     // 分别计算系统提示词和摘要的 Token 数
@@ -880,8 +835,8 @@ export class PersistentSessionContext implements ISessionContext {
 
   /** 获取合并后的会话设置（指定字段或全部） */
   getSettings(field?: string): any {
-    if (field) return (this.mergedSettings as any)[field];
-    return this.mergedSettings;
+    if (field) return (this.effectiveSettings as any)[field];
+    return this.effectiveSettings;
   }
 
   getToolApprovalConfig(): ToolApprovalConfig {
