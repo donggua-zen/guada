@@ -24,12 +24,10 @@
                   </el-tooltip>
                   <!-- 更多操作下拉菜单 -->
                   <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
-                    <el-tooltip content="更多操作" placement="bottom">
-                      <div
-                        class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center">
-                        <MoreVertOutlined class="w-5 h-5" />
-                      </div>
-                    </el-tooltip>
+                    <div
+                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center">
+                      <MoreVertOutlined class="w-5 h-5" />
+                    </div>
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item command="clear">

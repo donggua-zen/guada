@@ -368,7 +368,7 @@
           </div>
         </div>
 
-        <!-- 预设助手 -->
+        <!-- 子代理 -->
         <div v-show="tabsValue === 'agent_presets'" class="flex-1 overflow-hidden">
           <div class="px-0 py-6 h-full overflow-y-auto">
             <div class="px-0">
@@ -379,7 +379,7 @@
                     <div class="flex items-center gap-2">
                       <el-switch :model-value="allAgentsDisabled" @update:model-value="handleAllAgentsDisabledToggle"
                         inline-prompt active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部预设助手</span>
+                      <span class="text-sm text-gray-500">禁用全部子代理</span>
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allAgentsDisabled }]">
                       <span class="text-sm text-gray-500">新助手默认启动</span>
@@ -400,7 +400,7 @@
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无可用的预设助手</div>
+                  <div>暂无可用的子代理</div>
                   <div class="text-sm mt-2">请先创建其他助手</div>
                 </div>
 
@@ -540,7 +540,7 @@ const sidebarGroups = [
       { label: '本地工具', path: 'local_tools', icon: ToolOutlined },
       { label: 'MCP 工具', path: 'mcp_tools', icon: ApiOutlined },
       { label: 'Skills', path: 'skills', icon: Code24Regular },
-      { label: '预设助手', path: 'agent_presets', icon: Bot24Regular },
+      { label: '子代理', path: 'agent_presets', icon: Bot24Regular },
     ]
   }
 ]
@@ -675,11 +675,11 @@ const GENERIC_AGENT = {
   title: '通用子代理',
   description: '适用于通用任务的子代理，无需特定角色设定',
 };
-// 是否全部禁用预设助手
+// 是否全部禁用子代理
 const allAgentsDisabled = ref(false);
 // 助手白名单模式（默认 true = 白名单，新助手默认关闭）
 const agentsAllowlistMode = ref(true);
-// 预设助手列表（排除当前角色，含虚拟通用子代理）
+// 子代理列表（排除当前角色，含虚拟通用子代理）
 const presetCharacters = ref<any[]>([]);
 const loadingAgents = ref(false);
 // 助手偏好 { characterId: true/false }
@@ -821,7 +821,7 @@ watch(() => props.data, (newVal, oldVal) => {
     characterForm.enabledSkills = {};
   }
 
-  // 加载预设助手偏好
+  // 加载子代理偏好
   allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled === false;
   const agentsConfig = newVal.settings?.agents;
   agentsAllowlistMode.value = agentsConfig ? agentsConfig.__default === false : true;
@@ -873,7 +873,7 @@ const handleSkillToggle = (skillId, enabled) => {
   characterForm.enabledSkills = { ...characterForm.enabledSkills };
 };
 
-// ── 预设助手 ──
+// ── 子代理 ──
 const getAgentEffectiveEnabled = (char) => {
   if (char.id in enabledAgents) return (enabledAgents as any)[char.id];
   // 未显式配置：白名单模式默认关闭，黑名单模式默认开启
@@ -896,13 +896,13 @@ const loadPresetCharacters = async () => {
       ...allChars.filter(c => c.id !== characterForm.id),
     ];
   } catch (err) {
-    console.error('加载预设助手失败:', err);
+    console.error('加载子代理失败:', err);
   } finally {
     loadingAgents.value = false;
   }
 };
 
-// 角色切换时刷新预设助手列表
+// 角色切换时刷新子代理列表
 watch(() => characterForm.id, () => {
   loadPresetCharacters();
 }, { immediate: true })
@@ -1236,7 +1236,7 @@ const getFormData = () => {
         }
         return Object.keys(skillsOut).length > 0 ? skillsOut : undefined;
       })(),
-      // 预设助手配置（按模式保存）
+      // 子代理配置（按模式保存）
       'agents': (() => {
         const agentsOut: Record<string, any> = {};
         for (const char of presetCharacters.value) {
