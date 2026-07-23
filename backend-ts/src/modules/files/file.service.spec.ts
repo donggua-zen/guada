@@ -57,7 +57,7 @@ describe("FileService ownership checks", () => {
     expect(fileRepo.create).not.toHaveBeenCalled();
   });
 
-  it("does not copy another user's file", async () => {
+  it("does not copy a file from another session", async () => {
     prisma.message.findUnique.mockResolvedValue({
       id: "message-1",
       sessionId: "session-1",
@@ -68,11 +68,10 @@ describe("FileService ownership checks", () => {
       sessionId: "session-2",
       uploadUserId: "user-2",
     });
-    prisma.session.findFirst.mockResolvedValue(null);
 
     await expect(
       service.copyFile("file-1", "message-1", "user-1"),
-    ).rejects.toThrow("File not found");
+    ).rejects.toThrow("File does not belong to this session");
 
     expect(fileRepo.create).not.toHaveBeenCalled();
   });

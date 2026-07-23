@@ -1,8 +1,24 @@
 import { generateDisplayMessage } from "../../src/modules/plugins/utils/display-formatter";
 import { ToolCallRequest } from "../../src/modules/tools/interfaces/tool-provider.interface";
 import { ToolHandlerDef } from "../../src/modules/plugins/types/plugin.types";
+import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
+
+// Helper: register a tool in PluginRegistry so generateDisplayMessage can find it
+function registerTool(toolEntry: ToolHandlerDef) {
+  const manifest = { id: "test_plugin", name: "Test", version: "1.0", description: "" };
+  (PluginRegistry as any).registerManifest(manifest);
+  (PluginRegistry as any).getTools("test_plugin").push(toolEntry);
+}
+
+function clearRegistry() {
+  (PluginRegistry as any).clearPlugin("test_plugin");
+}
 
 describe("generateDisplayMessage", () => {
+  afterEach(() => {
+    clearRegistry();
+  });
+
   // ── 新 action/argsKey/icon 字段 ──
 
   describe("action/argsKey/icon fields", () => {
@@ -21,7 +37,8 @@ describe("generateDisplayMessage", () => {
         argsKey: "url",
         icon: "browser",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.action).toBe("正在访问网页");
       expect(result.args).toBe("https://example.com");
       expect(result.toolType).toBe("browser");
@@ -41,7 +58,8 @@ describe("generateDisplayMessage", () => {
         action: "写入文件",
         icon: "edit",
       };
-      const result = generateDisplayMessage(request, false, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, false);
       expect(result.action).toBe("已写入文件");
       expect(result.toolType).toBe("edit");
     });
@@ -61,7 +79,8 @@ describe("generateDisplayMessage", () => {
         action: "访问",
         argsKey: "url",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.args!.length).toBeLessThanOrEqual(63); // 60 + "..."
       expect(result.args).toContain("...");
     });
@@ -79,7 +98,8 @@ describe("generateDisplayMessage", () => {
         handler: async () => "ok",
         action: "执行命令",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.action).toBe("正在执行命令");
       expect(result.args).toBe("ls -la");
     });
@@ -98,7 +118,8 @@ describe("generateDisplayMessage", () => {
         action: "执行代码",
         icon: "code",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.toolType).toBe("code");
     });
 
@@ -115,7 +136,8 @@ describe("generateDisplayMessage", () => {
         handler: async () => "ok",
         action: "通用操作",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.toolType).toBe("generic");
     });
   });
@@ -170,7 +192,8 @@ describe("generateDisplayMessage", () => {
         formatDisplayMessage: (args: any, isExecuting: boolean) =>
           isExecuting ? `正在处理 ${args.input}` : `已处理 ${args.input}`,
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.action).toBe("正在处理 data");
     });
   });
@@ -190,7 +213,8 @@ describe("generateDisplayMessage", () => {
         parameters: { type: "object", properties: {} },
         handler: async () => "ok",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.action).toBe("Some Tool");
     });
 
@@ -223,7 +247,8 @@ describe("generateDisplayMessage", () => {
         action: "读取文件",
         argsKey: "file_path",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       expect(result.args).toBe("/home/user/documents/report.pdf");
     });
 
@@ -240,7 +265,8 @@ describe("generateDisplayMessage", () => {
         handler: async () => "ok",
         action: "读取文件",
       };
-      const result = generateDisplayMessage(request, true, undefined, toolEntry);
+      registerTool(toolEntry);
+      const result = generateDisplayMessage(request, true);
       // 无 argsKey 时提取文件名
       expect(result.args).toBe("doc.txt");
     });

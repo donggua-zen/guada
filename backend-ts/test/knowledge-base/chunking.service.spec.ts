@@ -48,10 +48,7 @@ describe('ChunkingService', () => {
 
   beforeEach(() => {
     mockTokenizer = createMockTokenizer();
-    service = new ChunkingService(mockTokenizer as unknown as TokenizerService, {
-      chunkSize: 100,
-      overlapSize: 20,
-    });
+    service = new ChunkingService(mockTokenizer as unknown as TokenizerService);
   });
 
   afterEach(async () => {
@@ -80,7 +77,7 @@ describe('ChunkingService', () => {
     it('应该将长文本拆分为多个块', async () => {
       // 构建一段超过 chunkSize 的长文本（约 300 token 的中文）
       const longText = Array(50).fill('这是一段用于测试分块功能的中文文本。').join('');
-      const result = await service.chunkText(longText);
+      const result = await service.chunkText(longText, { chunkSize: 100, overlapSize: 20 });
 
       expect(result.length).toBeGreaterThan(1);
 
@@ -89,7 +86,7 @@ describe('ChunkingService', () => {
         expect(chunk.content).toBeDefined();
         expect(chunk.metadata.tokenCount).toBeGreaterThan(0);
         expect(chunk.metadata.chunkSize).toBeGreaterThan(0);
-        expect(['sentence', 'token', 'overflow']).toContain(chunk.metadata.strategy);
+        expect(['sentence', 'token', 'overflow']).toContain(chunk.metadata.strategy.toLowerCase());
       }
     });
 
@@ -116,7 +113,7 @@ describe('ChunkingService', () => {
 
     it('应该正确处理带重叠的分块', async () => {
       const text = Array(30).fill('重叠分块测试用于验证相邻分块间的内容连续性。').join('');
-      const result = await service.chunkText(text);
+      const result = await service.chunkText(text, { chunkSize: 100, overlapSize: 20 });
 
       // 如果有多个分块，验证相邻分块间存在重叠
       if (result.length >= 2) {

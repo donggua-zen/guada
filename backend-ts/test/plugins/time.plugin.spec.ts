@@ -67,7 +67,7 @@ describe('TimePlugin', () => {
     it('should return current time string for prompt injection', () => {
       const result = (plugin as any).getCurrentTimeString();
       expect(typeof result).toBe('string');
-      expect(result).toContain('# 当前时间信息');
+      expect(result).toContain('# Current Time');
     });
   });
 });
