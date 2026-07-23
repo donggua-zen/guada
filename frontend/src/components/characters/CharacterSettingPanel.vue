@@ -673,7 +673,7 @@ const skillsAllowlistMode = ref(false);
 const GENERIC_AGENT = {
   id: 'generic',
   title: '通用子代理',
-  description: '适用于通用任务的子代理，无需特定角色设定',
+  description: '适用于通用任务的子代理，无需特定角色设定，权限继承父角色设置',
 };
 // 是否全部禁用子代理
 const allAgentsDisabled = ref(false);

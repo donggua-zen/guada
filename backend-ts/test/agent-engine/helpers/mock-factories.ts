@@ -15,7 +15,7 @@ export function createMockSessionRepo(sessionData?: any) {
 
 /**
  * SessionLockService Mock 工厂
- * 支持模拟锁状态,用于测试并发控制
+ * 支持模拟锁状态，用于测试并发控制
  */
 export function createMockSessionLockService(options?: { shouldFail?: boolean }) {
   const locks = new Map<string, boolean>();
@@ -105,6 +105,16 @@ export function createMockToolOrchestrator(options?: {
 }
 
 /**
+ * SessionTokenTracker Mock 工厂
+ */
+export function createMockTokenTracker() {
+  return {
+    addUsage: jest.fn().mockResolvedValue(undefined),
+    getStats: jest.fn().mockReturnValue(null),
+  };
+}
+
+/**
  * 创建 ISessionContext Mock（合并后包含对话状态）
  */
 export function createMockSessionContext(options?: {
@@ -115,34 +125,53 @@ export function createMockSessionContext(options?: {
     sessionId: 'test-session-001',
     userId: 'test-user',
     sessionType: 'web' as const,
+    parentSessionId: null,
+    characterId: null,
+    workspacePath: '',
+    getRunMode: jest.fn(() => 'normal' as const),
+    setRunMode: jest.fn().mockResolvedValue(undefined),
     getModelConfig: jest.fn((): any => ({
       id: 'model-1',
       modelName: 'gpt-4',
       name: 'GPT-4',
-      provider: { id: 'p1', provider: 'openai' },
+      provider: { id: 'p1', provider: 'openai', protocol: 'openai' },
       modelType: 'chat',
-      config: { features: ['tools', 'thinking'], contextWindow: options?.contextWindow || 8000 },
+      config: { features: ['tools', 'thinking'], contextWindow: options?.contextWindow || 8000, temperature: 0.7, topP: 1.0, frequencyPenalty: 0 },
     })),
     getModelParams: jest.fn(() => ({ temperature: 0.7, topP: 1.0, frequencyPenalty: 0 })),
     supportsFeature: jest.fn((f: string) => ['tools', 'thinking'].includes(f)),
-    getSystemPrompt: jest.fn(() => 'You are a helpful assistant.'),
     getThinkingEffort: jest.fn(() => options?.thinkingEffort || 'medium'),
-    getToolContext: jest.fn(() => ({ getFlatTools: jest.fn(() => []) })),
+    getResolvedPlugins: jest.fn((): any[] => [
+      {
+        enabled: true,
+        effective: 'global',
+        plugin: { id: 'test_plugin', name: 'Test', version: '1.0', description: '' },
+        enabledTools: [
+          { name: 'tool_load', description: 'Load tool', parameters: { type: 'object' as const, properties: {} }, handler: async () => 'ok' },
+        ],
+        allTools: [],
+        enabledToolKits: [],
+      },
+    ]),
+    getSettings: jest.fn(() => ({})),
     getToolApprovalConfig: jest.fn(() => ({ enabled: false, requiresApproval: [] })),
     getMemoryConfig: jest.fn(() => ({})),
     getEffectiveContextWindow: jest.fn(() => options?.contextWindow || 8000),
     getWorkspacePath: jest.fn(() => ''),
-    isVirtual: jest.fn(() => false),
+    setMessageCursor: jest.fn(),
     // 对话状态方法
     initialize: jest.fn().mockResolvedValue(undefined),
     getMessages: jest.fn().mockResolvedValue([]),
-    getHistory: jest.fn(() => []),
+    getHistory: jest.fn().mockResolvedValue([]),
     appendParts: jest.fn().mockResolvedValue(undefined),
     persist: jest.fn().mockResolvedValue(undefined),
+    addUserMessage: jest.fn().mockResolvedValue({ id: 'user-msg-id', contents: [{ id: 'content-001' }] }),
     addAssistantMessageVersion: jest.fn().mockResolvedValue('assistant-msg-id'),
     generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
     getTokenCount: jest.fn(() => 0),
-    forceCompress: jest.fn().mockResolvedValue([]),
+    getTokenBreakdown: jest.fn(() => ({ systemPrompt: 0, summary: 0, userPrompt: 0, history: 0, tools: 0 })),
+    shouldCompress: jest.fn().mockResolvedValue(false),
+    compress: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -204,10 +233,14 @@ export function createAllMocks(options?: {
       finalizeAll: jest.fn(() => []),
       getDisplayMessage: jest.fn((index: number) => ({ index, message: `tool ${index}` })),
       initialize: jest.fn(),
+      format: jest.fn((name: string, _args: any, isExecuting: boolean) =>
+        isExecuting ? `正在调用 ${name}` : `已调用 ${name}`
+      ),
     },
     streamManager: {
       broadcast: jest.fn(),
       stopStream: jest.fn(),
     },
+    tokenTracker: createMockTokenTracker(),
   };
 }
