@@ -99,9 +99,9 @@ export class ChatController {
 
     // 定义回调函数，将流事件写入 HTTP 响应
     const callbacks = {
-      onEvent: (data: string) => {
+      onEvent: (data) => {
         if (!res.writableEnded) {
-          res.write(`data: ${data}\n\n`);
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
         }
       },
       onComplete: () => {

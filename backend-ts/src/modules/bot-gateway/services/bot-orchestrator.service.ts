@@ -234,10 +234,16 @@ export class BotOrchestrator {
 
     const capabilities = adapter.getCapabilities();
 
-    const sendReply = (content: string, extra: any = {}) => {
+    const sendReply = (
+      content: string,
+      extra: {
+        streamId?: string;
+        finish?: boolean;
+      } = {},
+    ) => {
       if (capabilities.supportsStreaming && adapter.sendStreamReply) {
         adapter.sendStreamReply({ ...baseReply, content }, extra);
-      } else {
+      } else if (extra.finish === true) {
         adapter.sendMessage({ ...baseReply, content });
       }
     };
@@ -290,11 +296,12 @@ export class BotOrchestrator {
           source: { type: "bot", platform: config.platform, botId },
         },
         {
-          onEvent: (data) => {
-            const chunk = JSON.parse(data);
+          onEvent: (chunk) => {
             if (chunk.type === "text" && chunk.content) {
               accumulatedContent += chunk.content;
-              sendReply(accumulatedContent, { streamId, finish: false });
+              if (capabilities.supportsStreaming) {
+                sendReply(accumulatedContent, { streamId, finish: false });
+              }
             }
           },
           onComplete: async (reason) => {

@@ -12,7 +12,7 @@ export type StreamEvent = EventChunk;
  */
 interface StreamSubscriber {
   id: string;
-  subject: Subject<{ data: string }>;
+  subject: Subject<EventChunk>;
   connectedAt: Date;
 }
 
@@ -102,7 +102,7 @@ export class SessionStreamManager {
   subscribe(
     sessionId: string,
     subscriberId: string,
-    onEvent: (data: string) => void,
+    onEvent: (data: EventChunk) => void,
     onComplete: (reason: string) => void,
     onError: (err: any) => void,
     lastContentId: string | null = null,
@@ -112,7 +112,7 @@ export class SessionStreamManager {
       return null;
     }
 
-    const subject = new Subject<{ data: string }>();
+    const subject = new Subject<EventChunk>();
     const subscriber: StreamSubscriber = {
       id: subscriberId,
       subject,
@@ -123,7 +123,7 @@ export class SessionStreamManager {
 
     // 建立订阅，将事件转发到调用方提供的回调
     const subscription = subject.subscribe({
-      next: (event) => onEvent(event.data),
+      next: (event) => onEvent(event),
       complete: () => {
         const stream = this.activeStreams.get(sessionId);
         onComplete(stream?.stopReason || "completed");
@@ -144,7 +144,7 @@ export class SessionStreamManager {
       }
 
       try {
-        subject.next({ data: JSON.stringify(event) });
+        subject.next(event);
         sentCount++;
       } catch (error) {
         this.logger.warn(
@@ -191,10 +191,9 @@ export class SessionStreamManager {
     }
 
     // 广播到所有订阅者
-    const data = JSON.stringify(event);
     for (const subscriber of stream.subscribers.values()) {
       try {
-        subscriber.subject.next({ data });
+        subscriber.subject.next(event);
       } catch (error) {
         this.logger.warn(
           `Failed to send to subscriber ${subscriber.id}, removing`,

@@ -932,21 +932,16 @@ export class SubAgentManager implements OnModuleInit {
             regenerationMode: "overwrite",
           },
           {
-            onEvent: (data: string) => {
-              try {
-                const event = JSON.parse(data);
-                // 只关注 finish 事件，它携带该轮迭代的完整累计内容
-                if (event.type === "finish") {
-                  capturedResult = {
-                    subSessionId,
-                    status: event.error ? "error" : "completed",
-                    content: event.content || "",
-                    finishReason: event.finishReason,
-                    error: event.error,
-                  };
-                }
-              } catch {
-                // JSON 解析失败，忽略异常事件
+            onEvent: (event) => {
+              // 只关注 finish 事件，它携带该轮迭代的完整累计内容
+              if (event.type === "finish") {
+                capturedResult = {
+                  subSessionId,
+                  status: event.error ? "error" : "completed",
+                  content: event.content || "",
+                  finishReason: event.finishReason,
+                  error: event.error,
+                };
               }
             },
             onComplete: (reason) => {
