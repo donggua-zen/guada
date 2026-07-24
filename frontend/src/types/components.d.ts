@@ -112,7 +112,6 @@ declare module 'vue' {
     MCPServers: typeof import('./../components/plugins/MCPServers.vue')['default']
     MemoPanel: typeof import('./../components/chat/MemoPanel.vue')['default']
     MessageActions: typeof import('./../components/chat/message-item/MessageActions.vue')['default']
-    MessageItem: typeof import('./../components/chat/MessageItem.vue')['default']
     MessageSkeleton: typeof import('./../components/chat/MessageSkeleton.vue')['default']
     MessageThinkingSection: typeof import('./../components/chat/message-item/MessageThinkingSection.vue')['default']
     MessageToolCalls: typeof import('./../components/chat/message-item/MessageToolCalls.vue')['default']

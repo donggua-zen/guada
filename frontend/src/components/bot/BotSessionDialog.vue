@@ -20,12 +20,13 @@
 
       <!-- 消息列表 -->
       <div v-else-if="messages.length > 0" class="message-list">
-        <MessageItem
-          v-for="message in messages"
-          :key="message.id"
-          :message="message"
-          :avatar="getMessageAvatar(message)"
-          :is-last="false"
+        <TurnItem
+          v-for="(turn, index) in visibleTurns"
+          :key="turn.user.id"
+          :turn="turn"
+          :character-name="props.session?.character?.title"
+          :character-avatar="props.session?.character?.avatarUrl"
+          :is-last="index === visibleTurns.length - 1"
           :allow-generate="false"
           @delete="handleDeleteMessage"
           @edit="handleEditMessage"
@@ -49,7 +50,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
-import MessageItem from '../chat/MessageItem.vue'
+import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
 import type { Message } from '@/types/message'
 
@@ -74,6 +75,28 @@ const sessionTitle = computed(() => {
 const loading = ref(false)
 const messages = ref<Message[]>([])
 
+// 将扁平消息列表按 user 消息分组为轮次
+const turns = computed(() => {
+  const map: Record<string, { user: any; assistants: any[] }> = {}
+  const order: string[] = []
+  for (const msg of messages.value) {
+    if (msg.role === 'user') {
+      map[msg.id] = { user: msg, assistants: [] }
+      order.push(msg.id)
+    } else if (msg.role === 'assistant' && msg.parentId) {
+      if (!map[msg.parentId]) {
+        map[msg.parentId] = { user: null, assistants: [] }
+        order.push(msg.parentId)
+      }
+      map[msg.parentId].assistants.push(msg)
+    }
+  }
+  return order.map((id) => map[id])
+})
+
+// 过滤：只保留有 user 消息的组
+const visibleTurns = computed(() => turns.value.filter((t) => t.user))
+
 // 监听对话框打开,加载消息
 watch(dialogVisible, async (visible) => {
   if (visible && props.session) {
@@ -94,17 +117,6 @@ const loadMessages = async () => {
     ElMessage.error('加载消息失败')
   } finally {
     loading.value = false
-  }
-}
-
-// 获取消息头像
-const getMessageAvatar = (message: Message): string | undefined => {
-  if (message.role === 'user') {
-    // 用户头像可以从 authStore 获取,这里暂时返回 undefined
-    return undefined
-  } else {
-    // AI 头像使用会话的角色头像
-    return props.session?.character?.avatarUrl
   }
 }
 
@@ -153,7 +165,7 @@ const handleEditMessage = async (message: Message) => {
 
 // 复制消息
 const handleCopyMessage = (message: Message) => {
-  // MessageItem 组件内部已经处理了复制逻辑
+  // TurnItem 组件内部已经处理了复制逻辑
   // 这里可以添加额外的处理
 }
 </script>
