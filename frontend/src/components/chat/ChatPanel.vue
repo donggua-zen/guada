@@ -135,7 +135,6 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 import { useSessionTokenStats } from '@/composables/useSessionTokenStats'
 
 // 组件导入
-import MessageItem from "./MessageItem.vue";
 import TurnItem from "./TurnItem.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";

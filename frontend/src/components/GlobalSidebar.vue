@@ -25,8 +25,11 @@
             class="group-header flex items-center justify-between pl-2.5 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600"
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
-              <span class="relative w-4 h-4 shrink-0">
-                <FolderOpen24Regular class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0" />
+              <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
+                <FolderOpen16Regular class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-yellow-600" />
+                <!-- <svg class="w-3.5 h-3.5 absolute inset-0 transition-opacity duration-200 group-hover:opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                </svg> -->
                 <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
                   :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
               </span>
@@ -55,18 +58,18 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item flex items-center gap-2 py-1.5 pr-2 pl-2.5 mx-2  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item flex items-center gap-2 py-1.5 pr-2 pl-2 mx-2  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId
                 }" @click="selectSession(session)">
                 <!-- 状态指示器 -->
-                <div class="status-indicator w-2.5 h-2.5 shrink-0 flex items-center justify-center">
+                <div class="status-indicator w-3 h-3 shrink-0 flex items-center justify-center">
                   <div v-if="getSessionWorking(session.id)"
                     class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                   <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"
                     class="w-1 h-1 rounded-full bg-red-500" />
-                  <!-- <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" /> -->
+                  <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
                 </div>
 
                 <div class="session-info flex-1 min-w-0 flex items-center">
@@ -115,7 +118,7 @@
 
               <!-- 分组内加载更多 -->
               <div v-if="groupHasMoreSessions(group.id) || sessionGroupStore.loadingMoreGroupId === group.id"
-                class="py-2 px-5 text-center">
+                class="py-1 px-9 text-left">
                 <div v-if="sessionGroupStore.loadingMoreGroupId === group.id"
                   class="flex items-center justify-center gap-2 text-xs text-gray-500">
                   <el-icon class="animate-spin" size="14">
@@ -278,7 +281,7 @@ import {
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
-  FolderOpen24Regular,
+  FolderOpen16Regular,
   Archive20Regular,
   ChevronDown12Regular,
   WeatherSunny20Regular,
