@@ -125,8 +125,9 @@ export class ShellPlugin extends PluginBase {
         // 判断是否使用沙盒执行
         const runMode = ctx?.session.getRunMode?.();
         let useSandbox = false;
+        let sandboxExe: string | null = null;
         if (runMode === "sandbox") {
-          const sandboxExe = isWindows ? await this.resolveSandboxExe() : null;
+          sandboxExe = isWindows ? await this.resolveSandboxExe() : null;
           if (sandboxExe) {
             useSandbox = true;
           } else {
@@ -139,7 +140,6 @@ export class ShellPlugin extends PluginBase {
         let spawnArgs: string[];
         let spawnCmd: string;
         if (useSandbox) {
-          const sandboxExe = (await this.resolveSandboxExe())!;
           spawnCmd = sandboxExe;
           spawnArgs = ["-c", `cmd /c ${command}`, "--workspace", cwd];
         } else {
