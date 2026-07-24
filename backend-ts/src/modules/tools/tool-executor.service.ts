@@ -176,7 +176,7 @@ export class ToolExecutor {
         return {
           toolCallId,
           name: fullToolName,
-          content: `In plan mode, only read-only (safe) tools are allowed. "${fullToolName}" is a ${toolEntry.dangerLevel} level tool and has been blocked. Exit plan mode to execute write operations.`,
+          content: `The user has enabled plan mode. In this mode, only safe-level tools (typically read-only) are available. "${fullToolName}" is a ${toolEntry.dangerLevel} level tool and has been blocked. Unless the user disables plan mode, do not attempt to call this tool again. If the task cannot be completed without this tool, stop your work and inform the user.`,
           isError: true,
         };
       }
