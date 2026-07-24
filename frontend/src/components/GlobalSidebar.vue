@@ -22,7 +22,7 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between pl-2.5 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600"
+            class="group-header flex items-center justify-between pl-2.5 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
