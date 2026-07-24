@@ -39,7 +39,9 @@ export class ShellPlugin extends PluginBase {
 
     if (isElectron && (process as any).resourcesPath) {
       // 生产环境：resources/sandbox/sandbox.exe
-      candidates.push(path.join((process as any).resourcesPath, "sandbox", "sandbox.exe"));
+      candidates.push(
+        path.join((process as any).resourcesPath, "sandbox", "sandbox.exe"),
+      );
     }
 
     // 开发环境或回退：从 cwd 向上查找 sandbox/sandbox.exe
@@ -64,7 +66,9 @@ export class ShellPlugin extends PluginBase {
       }
     }
 
-    this.logger.warn("sandbox.exe not found, sandbox mode will fall back to normal mode");
+    this.logger.warn(
+      "sandbox.exe not found, sandbox mode will fall back to normal mode",
+    );
     this.sandboxExePath = null;
     return null;
   }
@@ -121,13 +125,13 @@ export class ShellPlugin extends PluginBase {
         // 判断是否使用沙盒执行
         const runMode = ctx?.session.getRunMode?.();
         let useSandbox = false;
-        if (runMode === "sandbox" && isWindows) {
-          const sandboxExe = await this.resolveSandboxExe();
+        if (runMode === "sandbox") {
+          const sandboxExe = isWindows ? await this.resolveSandboxExe() : null;
           if (sandboxExe) {
             useSandbox = true;
           } else {
-            this.logger.warn(
-              "Sandbox mode requested but sandbox.exe not found, falling back to normal execution",
+            throw new Error(
+              "The user has enabled sandbox mode, but the sandbox environment is currently unavailable. Please use other tools or inform the user.",
             );
           }
         }
@@ -360,9 +364,7 @@ export class ShellPlugin extends PluginBase {
               throw new Error(`Process ${processId} does not exist`);
             }
             if (entry.status !== "running") {
-              throw new Error(
-                `Process ${processId} has ended, cannot write`,
-              );
+              throw new Error(`Process ${processId} has ended, cannot write`);
             }
 
             if (!entry.childProcess.stdin) {
