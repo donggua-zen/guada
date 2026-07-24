@@ -3,9 +3,9 @@
     <!-- 标题栏左侧面板 -->
     <TitlebarLeftPanel />
     <!-- 导航菜单 -->
-    <div class="px-3 py-2 space-y-0.5">
+    <div class="px-2.5 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
-        class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
+        class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
           ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
           : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
@@ -22,16 +22,15 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between pl-3 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group"
-            :class="isGroupExpanded(group.id) ? 'text-(--color-text)' : 'text-(--color-text-gray)'"
+            class="group-header flex items-center justify-between pl-2.5 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600"
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
+              <span class="relative w-4 h-4 shrink-0">
+                <FolderOpen24Regular class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0" />
+                <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                  :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
+              </span>
               <span class="text-sm font-medium">{{ group.name }}</span>
-              <!-- 展开/折叠箭头（hover时显示） -->
-              <i class="w-3 transition-all duration-200 opacity-0 group-hover:opacity-100"
-                :class="isGroupExpanded(group.id) ? '' : '-rotate-90'">
-                <ChevronDown12Regular />
-              </i>
             </div>
             <div class="flex items-center gap-1">
               <!-- 新建会话按钮（始终显示） -->
@@ -62,12 +61,12 @@
                   'session-item-inactive': session.id !== currentSessionId
                 }" @click="selectSession(session)">
                 <!-- 状态指示器 -->
-                <div class="status-indicator w-1.5 h-1.5 shrink-0 flex items-center justify-center">
+                <div class="status-indicator w-2.5 h-2.5 shrink-0 flex items-center justify-center">
                   <div v-if="getSessionWorking(session.id)"
                     class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                   <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"
                     class="w-1 h-1 rounded-full bg-red-500" />
-                  <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
+                  <!-- <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" /> -->
                 </div>
 
                 <div class="session-info flex-1 min-w-0 flex items-center">
@@ -279,6 +278,7 @@ import {
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
+  FolderOpen24Regular,
   Archive20Regular,
   ChevronDown12Regular,
   WeatherSunny20Regular,

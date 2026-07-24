@@ -58,9 +58,7 @@ export class MigrationService implements OnModuleInit {
       return;
     }
 
-    this.logger.log(
-      `发现 ${userMessages.length} 条用户消息需要迁移...`,
-    );
+    this.logger.log(`发现 ${userMessages.length} 条用户消息需要迁移...`);
 
     let migratedCount = 0;
     for (const userMsg of userMessages) {
@@ -87,6 +85,10 @@ export class MigrationService implements OnModuleInit {
         const inactiveContents = assistantMsg.contents.filter(
           (c: any) => c.turnsId !== activeTurnsId,
         );
+        if (inactiveContents.length === assistantMsg.contents.length) {
+          inactiveContents.length = 0;
+          inactiveContents.push(...assistantMsg.contents.slice(0, -2));
+        }
         if (inactiveContents.length > 0) {
           await this.prisma.messageContent.deleteMany({
             where: {
@@ -114,15 +116,19 @@ export class MigrationService implements OnModuleInit {
     // 写入标记文件
     await this.writeMarker();
 
-    this.logger.log(
-      `消息版本迁移完成，共迁移 ${migratedCount} 条`,
-    );
+    this.logger.log(`消息版本迁移完成，共迁移 ${migratedCount} 条`);
   }
 
   private async writeMarker(): Promise<void> {
     try {
-      await fs.promises.mkdir(path.dirname(this.markerFile), { recursive: true });
-      await fs.promises.writeFile(this.markerFile, new Date().toISOString(), "utf-8");
+      await fs.promises.mkdir(path.dirname(this.markerFile), {
+        recursive: true,
+      });
+      await fs.promises.writeFile(
+        this.markerFile,
+        new Date().toISOString(),
+        "utf-8",
+      );
       this.logger.log(`迁移标记文件已写入: ${this.markerFile}`);
     } catch (error: any) {
       this.logger.warn(`写入迁移标记文件失败: ${error.message}`);
