@@ -85,10 +85,6 @@ export class MigrationService implements OnModuleInit {
         const inactiveContents = assistantMsg.contents.filter(
           (c: any) => c.turnsId !== activeTurnsId,
         );
-        if (inactiveContents.length === assistantMsg.contents.length) {
-          inactiveContents.length = 0;
-          inactiveContents.push(...assistantMsg.contents.slice(0, -2));
-        }
         if (inactiveContents.length > 0) {
           await this.prisma.messageContent.deleteMany({
             where: {
