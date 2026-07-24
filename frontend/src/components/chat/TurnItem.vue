@@ -535,7 +535,6 @@ const handleClick = (event: MouseEvent) => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
   border-radius: 6px;
   color: var(--el-text-color-secondary);
   font-size: 13px;

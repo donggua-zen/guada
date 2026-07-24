@@ -45,7 +45,7 @@
   --color-secondary-text: #fff;
   --color-secondary-text-disabled: #fff;
 
-  --color-text: #333333;
+  --color-text: #171717;
   --color-text-gray: #666;
   --color-text-disabled: #9ca3af;
   --color-surface: rgb(247, 247, 250);
@@ -58,7 +58,7 @@
   --color-bubble-user-text: #1f2937;
   --color-bubble-user-border: #ebf5ff;
   --color-bubble-assitant-bg: none;
-  --color-bubble-assitant-text: #1f2937;
+  --color-bubble-assitant-text: #171717;
   --color-bubble-assitant-border: none;
 
   --color-sidebar-bg: var(--color-surface);
@@ -82,7 +82,7 @@
   --color-conversation-bg-hover: var(--color-conversation-bg-active);
   --color-conversation-text-hover: var(--color-conversation-text-active);
 
-  --size-text-base: 16px;
+  --size-text-base: 15px;
   --size-text-sm: 14px;
 
   /* --color-gray-50: #f9fafb;

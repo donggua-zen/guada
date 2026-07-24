@@ -9,7 +9,7 @@
     <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
     <template v-if="showSkeleton">
       <div class="absolute inset-0 z-1 h-full overflow-hidden">
-        <div class="px-5 max-w-205 mx-auto h-full flex flex-col py-10 ">
+        <div class="px-5 max-w-195 mx-auto h-full flex flex-col py-10 ">
           <MessageSkeleton :count="2" />
         </div>
       </div>
@@ -20,7 +20,7 @@
         class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
         @scroll="handleScroll">
-        <div class="max-w-205 mx-auto pt-5 pb-14">
+        <div class="max-w-195 mx-auto pt-5 pb-14">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -71,7 +71,7 @@
   </div>
   <!-- 输入区域 -->
   <div class="pb-2 w-full px-6 ">
-    <div class="max-w-205 flex flex-col items-start mx-auto relative">
+    <div class="max-w-195 flex flex-col items-start mx-auto relative">
       <!-- Agent 切换栏（子代理只读模式隐藏） -->
       <!-- <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" /> -->
 
