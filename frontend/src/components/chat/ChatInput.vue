@@ -1,7 +1,7 @@
 <template>
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
-    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#252525]" :class="styleClass">
+    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#2d2d2d]" :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
