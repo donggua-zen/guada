@@ -41,13 +41,10 @@
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
-        <MessageActions v-if="true" :is-assistant="false" :is-last="false"
-          :allow-generate="allowGenerate" :content-versions="[]" :current-version-index="0"
-          :time-full="userTime.full" :time-friendly="userTime.firendly"
-          @copy="emit('copy', turn.user)"
-          @generate="emit('generate', turn.user)"
-          @edit="emit('edit', turn.user)"
-          @delete="emit('delete', turn.user)" />
+        <MessageActions v-if="true" :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
+          :content-versions="[]" :current-version-index="0" :time-full="userTime.full"
+          :time-friendly="userTime.firendly" @copy="emit('copy', turn.user)" @generate="emit('generate', turn.user)"
+          @edit="emit('edit', turn.user)" @delete="emit('delete', turn.user)" />
       </div>
     </div>
 
@@ -63,8 +60,8 @@
                 type="assistant" :name="displayName"></Avatar>
               <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
                 displayName }}</span>
-              <span v-if="currentModelName && currentModelName !== 'unknown'"
-                class="text-[1em] text-gray-400 mt-0.5">{{ currentModelName }}</span>
+              <span v-if="currentModelName && currentModelName !== 'unknown'" class="text-[1em] text-gray-400 mt-0.5">{{
+                currentModelName }}</span>
             </div>
           </div>
         </div>
@@ -78,13 +75,13 @@
               </template>
             </template>
             <div v-else class="process-group">
-              <div v-if="group.isCollapsible && !(streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
+              <div
+                v-if="group.isCollapsible && !(streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
                 class="process-group__header" @click="toggleGroup(group.id)">
                 <span class="process-group__title">
                   调用了 {{ countToolCalls(group.items) }} 个工具
                 </span>
-                <el-icon size="14" class="process-group__arrow"
-                  :class="{ 'is-expanded': isGroupExpanded(group.id) }">
+                <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded(group.id) }">
                   <ArrowRightTwotone />
                 </el-icon>
               </div>
@@ -92,8 +89,7 @@
                 v-show="!group.isCollapsible || isGroupExpanded(group.id) || (streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
                 class="process-group__body py-1 space-y-1">
                 <template v-for="item in group.items" :key="item.id">
-                  <MessageThinkingSection v-if="item.type === 'think'"
-                    :reasoning-content="item.reasoningContent || ''"
+                  <MessageThinkingSection v-if="item.type === 'think'" :reasoning-content="item.reasoningContent || ''"
                     :is-thinking="item.source.state?.isThinking || false"
                     :is-streaming="item.source.state?.isStreaming || false"
                     :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
@@ -113,7 +109,8 @@
           </el-alert>
 
           <!-- 继续执行按钮 -->
-          <div v-if="assistantMetadata && !streamingState.isStreaming && assistantMetadata.finishReason === 'max_iterations_reached'"
+          <div
+            v-if="assistantMetadata && !streamingState.isStreaming && assistantMetadata.finishReason === 'max_iterations_reached'"
             class="max-iterations-notice mt-3">
             <el-alert type="warning" :closable="false">
               <template #title>
@@ -144,7 +141,8 @@
               </span>
               <span class="token-item">
                 <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span
-                  class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.totalTokens) }}</span>
+                  class="text-gray-500 dark:text-gray-300">{{
+                    formatTokenNumber(tokenUsage.totalTokens) }}</span>
               </span>
             </div>
           </div>
@@ -153,12 +151,9 @@
         <!-- 操作按钮（含版本切换） -->
         <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
           :allow-generate="false" :content-versions="siblingVersions" :current-version-index="currentVersionIndex"
-          :time-full="assistantTime.full" :time-friendly="assistantTime.firendly"
-          @copy="emit('copy', activeAssistant)"
-          @regenerate="emit('regenerate', activeAssistant)"
-          @switch-version="switchContent"
-          @edit="emit('edit', activeAssistant)"
-          @delete="emit('delete', activeAssistant)" />
+          :time-full="assistantTime.full" :time-friendly="assistantTime.firendly" @copy="emit('copy', activeAssistant)"
+          @regenerate="emit('regenerate', activeAssistant)" @switch-version="switchContent"
+          @edit="emit('edit', activeAssistant)" @delete="emit('delete', activeAssistant)" />
       </div>
     </template>
 
@@ -419,6 +414,9 @@ const handleClick = (event: MouseEvent) => {
   margin-top: 20px;
   margin-bottom: 25px;
   contain: layout style;
+      font-family: Segoe UI Variable, Segoe UI, Microsoft YaHei UI, sans-serif;
+    --font-family-default: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    --font-family-heading: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
 .turn-wrapper:last-child {
@@ -468,6 +466,10 @@ const handleClick = (event: MouseEvent) => {
   padding: 0;
   box-shadow: none;
   border: none;
+}
+
+.assistant-section .message-item__card strong {
+  color: var(--color-bubble-assitant-text-strong);
 }
 
 .assistant-section .message-item__wrapper {
@@ -602,6 +604,7 @@ const handleClick = (event: MouseEvent) => {
     opacity: 0;
     transform: translateY(-5px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

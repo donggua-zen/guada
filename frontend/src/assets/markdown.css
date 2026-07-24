@@ -22,7 +22,7 @@
   margin-bottom: 0.5em;
   font-weight: 600;
   font-size: var(--size-text-base);
-  color: inherit;
+  color: var(--color-bubble-assitant-text-strong);
 }
 
 .markdown-text h1 {
