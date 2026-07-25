@@ -26,6 +26,8 @@ export interface ToolCallItem {
   name: string;
   arguments: string; // JSON 字符串
   metadata?: Record<string, any>; // 运行时扩展字段（如 displayMessage）
+  /** 工具执行结果状态：success / error / rejected，由 agent-engine 在执行后设置 */
+  outcome?: "success" | "error" | "rejected";
 }
 
 /**

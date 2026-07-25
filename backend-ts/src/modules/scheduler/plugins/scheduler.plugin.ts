@@ -115,7 +115,7 @@ export class SchedulerPlugin extends PluginBase {
           },
         });
       },
-      display: { action: "创建定时任务", argsKey: "name", icon: "time" },
+      display: { actionType: "scheduler_create", argsKey: "name", icon: "time" },
     });
 
     schedKit.registerTool({
@@ -144,7 +144,7 @@ export class SchedulerPlugin extends PluginBase {
           })),
         });
       },
-      display: { action: "列出定时任务", icon: "time" },
+      display: { actionType: "scheduler_list", icon: "time" },
     });
 
     schedKit.registerTool({
@@ -160,7 +160,7 @@ export class SchedulerPlugin extends PluginBase {
         await this.schedulerService.deleteTask(args.task_id, userId);
         return JSON.stringify({ success: true, message: "任务已删除" });
       },
-      display: { action: "删除定时任务", icon: "time" },
+      display: { actionType: "scheduler_delete", icon: "time" },
     });
 
     schedKit.registerTool({
@@ -187,7 +187,7 @@ export class SchedulerPlugin extends PluginBase {
           },
         });
       },
-      display: { action: "切换定时任务状态", icon: "time" },
+      display: { actionType: "scheduler_toggle", icon: "time" },
     });
 
     schedKit.registerPrompt({
@@ -222,33 +222,5 @@ export class SchedulerPlugin extends PluginBase {
         "3. It is recommended to set a reasonable task name for the user to facilitate future management",
       ].join("\n"),
     });
-  }
-
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ) {
-    const prefix = isExecuting ? "正在" : "已";
-    switch (toolName) {
-      case "scheduler_create_task":
-        return { action: `${prefix}创建定时任务`, args: args.name, toolName };
-      case "scheduler_list_tasks":
-        return { action: `${prefix}获取定时任务列表`, toolName };
-      case "scheduler_delete_task":
-        return {
-          action: `${prefix}删除定时任务`,
-          args: args.task_id,
-          toolName,
-        };
-      case "scheduler_toggle_task":
-        return {
-          action: `${prefix}切换任务状态`,
-          args: args.task_id,
-          toolName,
-        };
-      default:
-        return { action: `${prefix}执行定时任务操作`, toolName };
-    }
   }
 }

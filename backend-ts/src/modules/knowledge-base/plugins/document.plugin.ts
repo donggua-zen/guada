@@ -70,7 +70,7 @@ export class DocumentPlugin extends PluginBase {
           is_truncated: totalChars > max_chars,
         });
       },
-      display: { action: "解析文档", argsKey: "file_path", icon: "read" },
+      display: { actionType: "doc_parse", argsKey: "file_path", icon: "read" },
     });
 
     api.registerTool({
@@ -128,7 +128,7 @@ export class DocumentPlugin extends PluginBase {
           results,
         });
       },
-      display: { action: "批量解析文档", icon: "read" },
+      display: { actionType: "doc_batch_parse", icon: "read" },
     });
 
     api.registerPrompt({

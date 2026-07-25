@@ -95,9 +95,8 @@
                     :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
                     :metadata="item.source.metadata" />
                   <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
-                    :tool-responses="item.toolResponses"
-                    :is-executing="streamingState.isStreaming && !item.toolResponses?.length"
-                    :content-id="item.source.id" />
+                    :tool-responses="item.toolResponses" :content-id="item.source.id"
+                    :is-streaming="streamingState.isStreaming" />
                 </template>
               </div>
             </div>
@@ -414,10 +413,8 @@ const handleClick = (event: MouseEvent) => {
   margin-top: 20px;
   margin-bottom: 25px;
   contain: layout style;
-      font-family: Segoe UI Variable, Segoe UI, Microsoft YaHei UI, sans-serif;
-    --font-family-default: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-    --font-family-heading: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
+
 
 .turn-wrapper:last-child {
   min-height: 260px;

@@ -45,7 +45,7 @@ export class TimePlugin extends PluginBase {
           throw new Error(`获取时间信息失败：${error.message}`);
         }
       },
-      display: { action: "获取当前时间", icon: "time" },
+      display: { actionType: "time", icon: "time" },
     });
 
     api.registerPrompt({

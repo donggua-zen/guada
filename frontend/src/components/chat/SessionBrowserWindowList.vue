@@ -82,7 +82,7 @@ async function closeWindow(windowId: string): Promise<void> {
 
   try {
     await window.electronAPI.closeBrowserWindow(windowId)
-    // store 中的数据由 window-closed 事件驱动移除
+    // store 中的数据由 browser:destroy-webview 事件驱动移除
   } catch (error) {
     console.error('[SessionBrowserWindowList] Failed to close window:', error)
   }
@@ -100,7 +100,7 @@ async function createNewWindow(): Promise<void> {
     if (!result.success) {
       alert('窗口数量已达上限（最多6个窗口）')
     }
-    // 窗口创建由 browser:create-webview + window-created 事件驱动
+    // 窗口创建由 browser:create-webview 事件驱动
   } catch (error) {
     console.error('[SessionBrowserWindowList] Failed to create window:', error)
   }

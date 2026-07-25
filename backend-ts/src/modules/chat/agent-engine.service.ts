@@ -10,6 +10,7 @@ import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
+import { partialParse } from "partial-json-parser";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
@@ -274,10 +275,9 @@ export class AgentEngine {
         isResumeMode = false;
       } else {
         const currentTurnThinkingInfo = new ThinkingTimeInfo();
-        let lastAcc: LLMResponseChunk | undefined;
+        let streamAborted = false;
 
         try {
-          // 执行 LLM 流式请求，获取原始 chunk 和累加结果
           const streamResult = this.executeLLMStream(
             historyMessages,
             sessionContext.getModelConfig(),
@@ -311,7 +311,6 @@ export class AgentEngine {
               contentId,
             );
             if (yieldEvent) {
-              // finish 事件附带当前会话上下文统计，供前端直接更新环形指示器
               if (yieldEvent.type === "finish") {
                 yieldEvent.contextStats = {
                   usedTokens: sessionContext.getTokenCount(),
@@ -322,79 +321,111 @@ export class AgentEngine {
               yield yieldEvent;
             }
 
-            // 保存最新累加状态，流结束后写入 assistantResponse
-            lastAcc = { ...accumulated };
-          }
-
-          // 流结束后，将 accumulated 写入 assistantResponse
-          if (lastAcc) {
-            assistantResponse.content = lastAcc.content || "";
-            if (lastAcc.reasoningContent) {
-              assistantResponse.reasoningContent = lastAcc.reasoningContent;
+            // 直接写入 assistantResponse，无需中间变量
+            assistantResponse.content = accumulated.content || "";
+            if (accumulated.reasoningContent) {
+              assistantResponse.reasoningContent = accumulated.reasoningContent;
             }
-            if (lastAcc.toolCalls) {
-              assistantResponse.toolCalls = lastAcc.toolCalls;
+            if (accumulated.toolCalls) {
+              assistantResponse.toolCalls = accumulated.toolCalls;
             }
-            if (lastAcc.usage) {
-              assistantResponse.metadata.usage = lastAcc.usage;
-              // 累计会话级 token 消费（含缓存命中数）
-              this.tokenTracker.addUsage(
-                sessionContext.getWorkspacePath(),
-                lastAcc.usage.promptTokens,
-                lastAcc.usage.completionTokens,
-                lastAcc.usage.cachedTokens?.read,
-              );
+            if (accumulated.usage) {
+              assistantResponse.metadata.usage = accumulated.usage;
             }
-            // 保存 Anthropic thinking signature，用于后续多轮回传
-            if (lastAcc.signature) {
-              assistantResponse.metadata.signature = lastAcc.signature;
+            if (accumulated.signature) {
+              assistantResponse.metadata.signature = accumulated.signature;
             }
-            if (lastAcc.redactedData) {
-              assistantResponse.metadata.redactedData = lastAcc.redactedData;
+            if (accumulated.redactedData) {
+              assistantResponse.metadata.redactedData =
+                accumulated.redactedData;
             }
-            assistantResponse.metadata = {
-              ...assistantResponse.metadata,
-              finishReason: lastAcc.finishReason,
-              thinkingDurationMs: this.calculateThinkingDuration(
-                currentTurnThinkingInfo,
-              ),
-            };
+            if (accumulated.finishReason) {
+              assistantResponse.metadata.finishReason =
+                accumulated.finishReason;
+            }
+            assistantResponse.metadata.thinkingDurationMs =
+              this.calculateThinkingDuration(currentTurnThinkingInfo);
           }
         } catch (error) {
-          // 由外部捕获并处理流式异常
+          streamAborted = true;
           const streamError =
             error instanceof Error ? error : new Error(String(error));
           this.logger.error(
             `Stream error in agent loop:${streamError.message}`,
             streamError.stack,
           );
-          // 使用 handleStreamError 分类处理错误并设置状态
           this.handleStreamError(
             assistantResponse,
             currentTurnThinkingInfo,
             streamError,
           );
-          if (!abortSignal || !abortSignal.aborted) {
-            yield {
-              type: "finish",
-              finishReason: assistantResponse.metadata?.finishReason || "error",
-              error: streamError.message,
-              usage: lastAcc?.usage,
-              contentId,
-              contextStats: {
-                usedTokens: sessionContext.getTokenCount(),
-                effectiveContextWindow:
-                  sessionContext.getEffectiveContextWindow(),
-              },
-            };
+
+          // 中止时修复不完整的 toolCalls
+          if (assistantResponse.toolCalls) {
+            assistantResponse.toolCalls = assistantResponse.toolCalls.map(
+              (tc: any) => ({
+                ...tc,
+                arguments: this.repairToolCallArguments(tc.arguments),
+                metadata: {
+                  ...(tc.metadata || {}),
+                  displayMessage: this.displayManager.format(
+                    tc.name,
+                    tc.arguments,
+                    false,
+                  ),
+                },
+              }),
+            );
           }
         }
 
+        // 共享后处理：token 统计（正常和中止都需要，如果 usage 已到达）
+        if (assistantResponse.metadata?.usage) {
+          this.tokenTracker.addUsage(
+            sessionContext.getWorkspacePath(),
+            assistantResponse.metadata.usage.promptTokens,
+            assistantResponse.metadata.usage.completionTokens,
+            assistantResponse.metadata.usage.cachedTokens?.read,
+          );
+        }
+
+        // 发送 finish 事件
+        yield {
+          type: "finish",
+          finishReason: assistantResponse.metadata?.finishReason || "error",
+          error: streamAborted
+            ? assistantResponse.metadata?.error || "Stream aborted"
+            : undefined,
+          usage: assistantResponse.metadata?.usage,
+          contentId,
+          contextStats: {
+            usedTokens: sessionContext.getTokenCount(),
+            effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
+          },
+        };
+
         parts.push(assistantResponse);
+
+        // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
+        if (streamAborted && assistantResponse.toolCalls) {
+          for (const tc of assistantResponse.toolCalls) {
+            parts.push({
+              role: "tool",
+              name: tc.name,
+              content: JSON.stringify({
+                success: false,
+                message: "request aborted by user",
+              }),
+              toolCallId: tc.id,
+              messageId: responseMessageId,
+            });
+          }
+        }
       }
 
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-      if (assistantResponse.toolCalls && tools) {
+      // 中止时不执行工具（已在 catch 中注入合成响应）
+      if (assistantResponse.toolCalls && tools && !abortSignal?.aborted) {
         // 【工具轮次限制】检查是否达到最大工具调用轮次
         const MAX_TOOL_ITERATIONS = 100;
         if (iterationCount >= MAX_TOOL_ITERATIONS) {
@@ -425,6 +456,9 @@ export class AgentEngine {
             },
           };
 
+          // 持久化前确保所有 toolCalls 都有 displayMessage
+          this.ensureDisplayMessages(assistantResponse);
+
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await sessionContext.appendParts(parts);
           break;
@@ -451,6 +485,7 @@ export class AgentEngine {
                 sessionContext.getEffectiveContextWindow(),
             },
           };
+          this.ensureDisplayMessages(assistantResponse);
           await sessionContext.appendParts(parts);
           break;
         }
@@ -463,8 +498,8 @@ export class AgentEngine {
               name: tr.name,
               content: tr.content,
               toolCallId: tr.toolCallId,
+              outcome: tr.outcome,
             })),
-            displayMessages: execResult.displayMessages,
             contentId,
           };
 
@@ -480,6 +515,9 @@ export class AgentEngine {
           needToContinue = true;
         }
       }
+
+      // 持久化前确保所有 toolCalls 都有 displayMessage（防止流式阶段遗漏）
+      this.ensureDisplayMessages(assistantResponse);
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       if (parts.length > 0) {
@@ -733,6 +771,50 @@ export class AgentEngine {
     // 清理数组空洞（thinking block 可能占用了低索引但未创建 toolCalls 条目）
     // 使用 filter 去除 undefined 条目，保持连续
     target.toolCalls = target.toolCalls.filter(Boolean);
+  }
+
+  /**
+   * 修复不完整的工具调用参数 JSON
+   *
+   * 用户中止流式输出时，toolCall.arguments 可能是截断的 JSON 字符串。
+   * 使用 partialParse 解析后重新序列化为合法 JSON，确保下游消费方（LLM 回传、持久化）不报错。
+   *
+   * @param args 原始参数字符串（可能不完整）
+   * @returns 合法 JSON 字符串
+   */
+  private repairToolCallArguments(args: string): string {
+    if (!args || typeof args !== "string") return "{}";
+    try {
+      JSON.parse(args);
+      return args;
+    } catch {
+      try {
+        const parsed = partialParse(args);
+        return JSON.stringify(parsed);
+      } catch {
+        return "{}";
+      }
+    }
+  }
+
+  /**
+   * 确保所有 toolCalls 都有 displayMessage
+   *
+   * 在持久化前调用，防止流式阶段的 toEventChunk 遗漏设置 displayMessage。
+   * 如果已有 displayMessage 则跳过，否则用当前 toolName 和 arguments 重新生成。
+   */
+  private ensureDisplayMessages(response: MessageRecord): void {
+    if (!response.toolCalls) return;
+    for (const tc of response.toolCalls) {
+      if (!tc.metadata) tc.metadata = {};
+      if (!tc.metadata.displayMessage) {
+        tc.metadata.displayMessage = this.displayManager.format(
+          tc.name,
+          tc.arguments,
+          false,
+        );
+      }
+    }
   }
 
   /**
@@ -1068,11 +1150,10 @@ Scan history. ONLY trigger an update if:
     abortSignal?: AbortSignal,
   ): Promise<{
     toolResponses: any[];
-    displayMessages: (string | undefined)[];
     approvalContext?: any;
   }> {
     const toolCalls = assistantResponse.toolCalls;
-    if (!toolCalls) return { toolResponses: [], displayMessages: [] };
+    if (!toolCalls) return { toolResponses: [] };
     // 1. 分为三组
     const { pendingTools, approvedTools, rejectedTools } =
       this.classifyToolsByApproval(
@@ -1085,7 +1166,6 @@ Scan history. ONLY trigger an update if:
     if (pendingTools.length > 0) {
       return {
         toolResponses: [],
-        displayMessages: [],
         approvalContext: {
           type: "approval",
           status: "pending",
@@ -1097,7 +1177,6 @@ Scan history. ONLY trigger an update if:
 
     // 3. 执行 approved + 为 rejected 生成错误响应
     const toolResponses: any[] = [];
-    const displayMessages: (string | undefined)[] = [];
 
     if (approvedTools.length > 0) {
       const results = await this.toolOrchestrator.executeBatch(
@@ -1125,14 +1204,11 @@ Scan history. ONLY trigger an update if:
         );
         if (tc) {
           if (!tc.metadata) tc.metadata = {};
-          tc.metadata.displayMessage = this.displayManager.format(
-            tc.name,
-            tc.arguments,
-            false,
-          );
-          displayMessages.push(tc.metadata.displayMessage);
-        } else {
-          displayMessages.push(undefined);
+          // 从执行结果中取 isError，标记工具 outcome
+          const result = results[approvedTools.indexOf(at)];
+          tc.outcome = result?.isError ? "error" : "success";
+          // 同步写入 toolResponse，供 yield 事件透传给前端
+          if (result) result.outcome = tc.outcome;
         }
       }
     }
@@ -1149,9 +1225,15 @@ Scan history. ONLY trigger an update if:
         name: rejected.name,
         content: JSON.stringify({ success: false, message: errorMessage }),
         isError: true,
+        outcome: "rejected",
       });
+      // 标记被拒绝的工具
+      const tc = assistantResponse.toolCalls?.find(
+        (t: any) => t.id === rejected.id,
+      );
+      if (tc) tc.outcome = "rejected";
     }
 
-    return { toolResponses, displayMessages };
+    return { toolResponses };
   }
 }

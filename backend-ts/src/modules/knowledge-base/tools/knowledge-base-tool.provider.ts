@@ -436,46 +436,6 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     return "知识库检索与管理工具，支持语义搜索、文件浏览和内容查询。若用户提供了知识库信息，除非明确要求，否则仅限于使用此工具集回答。";
   }
 
-  /**
-   * 生成知识库工具的展示文案
-   */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
-    const prefix = isExecuting ? '正在' : '已';
-    
-    let action: string;
-    let toolArgs: string | undefined;
-    
-    switch (toolName) {
-      case 'kb_search':
-        action = `${prefix}搜索知识库`;
-        toolArgs = args.query;
-        break;
-
-      case 'kb_list_files':
-        action = `${prefix}列出文件`;
-        break;
-
-      case 'kb_get_chunks':
-        action = `${prefix}获取分块内容`;
-        break;
-
-      case 'kb_add_document':
-        action = `${prefix}添加文档`;
-        toolArgs = args.file_name || args.file_path;
-        break;
-
-      default:
-        action = `${prefix}操作知识库`;
-    }
-    
-    return {
-      action,
-      args: toolArgs,
-      toolName: toolName,
-      toolType: this.pluginId // 使用 pluginId 作为 toolType，前端会映射到 BookSearch24Regular
-    };
-  }
-
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       pluginId: this.pluginId,

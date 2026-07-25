@@ -14,28 +14,23 @@ export class ToolCallDisplayUtil {
   ): ToolDisplayInfo {
 
     let actualToolName = toolName;
-    let extractedParams: Record<string, any> = {};
 
+    // 解包 tool_use：提取实际工具名
     if (typeof args === "string" && args.trim().length > 0) {
       try {
         const parsed = partialParse(args);
         if (parsed && typeof parsed === "object") {
-          if (toolName === "tool_use") {
-            if (parsed.tool_name) actualToolName = parsed.tool_name;
-            if (parsed.arguments && typeof parsed.arguments === "object") extractedParams = parsed.arguments;
-          } else {
-            extractedParams = parsed;
+          if (toolName === "tool_use" && parsed.tool_name) {
+            actualToolName = parsed.tool_name;
           }
         }
       } catch (error) {
         this.logger.debug(`JSON 解析失败: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } else if (typeof args === "object" && args !== null) {
-      extractedParams = args;
     }
 
     return generateDisplayMessage(
-      { id: "", name: actualToolName, arguments: extractedParams },
+      { id: "", name: actualToolName, arguments: {} },
       isExecuting,
     );
   }

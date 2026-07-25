@@ -125,19 +125,6 @@ export class ShellToolProvider implements IToolProvider {
     };
   }
 
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): ToolDisplayInfo {
-    const cmd = args.command;
-    return {
-      action: isExecuting ? "正在执行命令" : "已执行命令",
-      args: cmd?.length > 60 ? cmd.substring(0, 60) + "..." : cmd,
-      toolName: toolName,
-    };
-  }
-
   /**
    * 执行系统命令。
    *

@@ -109,7 +109,7 @@ Sometimes, you may need to change plans in the middle of a task: call \`action="
       execute: async (args, ctx) => {
         return this.handlePlan(args, ctx);
       },
-      display: { action: "管理计划", argsKey: "action", icon: "generic" },
+      display: { actionType: "plan", argsKey: "action", icon: "generic" },
     });
 
     // ── 计划状态 user 提示词（仅首次加载 + 压缩后重建时注入） ──

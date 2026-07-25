@@ -244,11 +244,11 @@ describe('AgentEngine - completions', () => {
       // 验证 tool_call 事件包含工具调用信息
       const toolCallEvent = events.find((e) => e.type === 'tool_call');
       expect(toolCallEvent).toBeDefined();
-      // tool_calls_response 事件应包含 displayMessages
+      // tool_calls_response 事件应包含工具执行结果
       const toolResponseEvent = events.find((e) => e.type === 'tool_calls_response');
       expect(toolResponseEvent).toBeDefined();
-      expect(toolResponseEvent?.displayMessages).toBeDefined();
-      expect(toolResponseEvent?.displayMessages!.length).toBeGreaterThan(0);
+      expect(toolResponseEvent?.toolCallsResponse).toBeDefined();
+      expect(toolResponseEvent?.toolCallsResponse!.length).toBeGreaterThan(0);
     });
   });
 

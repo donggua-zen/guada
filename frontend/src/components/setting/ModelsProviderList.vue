@@ -134,7 +134,8 @@ const getProviderIcon = (item) => {
   // 根据 provider ID 匹配本地图标文件
   const providerId = (item.provider || item.id || '').toLowerCase();
   if (providerId && providerId !== 'custom') {
-    return fixFrontendAssetUrl(`/images/providers/${providerId}.svg`);
+    const ext = providerId === 'xqapi' ? 'png' : 'svg';
+    return fixFrontendAssetUrl(`/images/providers/${providerId}.${ext}`);
   }
   return null;
 }

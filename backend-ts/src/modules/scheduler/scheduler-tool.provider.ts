@@ -377,46 +377,4 @@ export class SchedulerToolProvider implements IToolProvider {
       promptFrequency: "REGULAR",
     };
   }
-
-  /**
-   * 生成展示文案
-   */
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): ToolDisplayInfo {
-    const prefix = isExecuting ? "正在" : "已";
-
-    switch (toolName) {
-      case "scheduler_create_task":
-        return {
-          action: `${prefix}创建定时任务`,
-          args: args.name,
-          toolName: `${this.pluginId}__${toolName}`,
-        };
-      case "scheduler_list_tasks":
-        return {
-          action: `${prefix}获取定时任务列表`,
-          toolName: `${this.pluginId}__${toolName}`,
-        };
-      case "scheduler_delete_task":
-        return {
-          action: `${prefix}删除定时任务`,
-          args: args.task_id,
-          toolName: `${this.pluginId}__${toolName}`,
-        };
-      case "scheduler_toggle_task":
-        return {
-          action: `${prefix}切换任务状态`,
-          args: args.task_id,
-          toolName: `${this.pluginId}__${toolName}`,
-        };
-      default:
-        return {
-          action: `${prefix}执行定时任务操作`,
-          toolName: `${this.pluginId}__${toolName}`,
-        };
-    }
-  }
 }

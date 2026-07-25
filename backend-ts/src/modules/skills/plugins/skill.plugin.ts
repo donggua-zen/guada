@@ -93,7 +93,7 @@ export class SkillPlugin extends PluginBase {
           path: result.path,
         };
       },
-      display: { action: "读取技能", argsKey: "name", icon: "book" },
+      display: { actionType: "skill_read", argsKey: "name", icon: "book" },
       dangerLevel: "info",
     });
 

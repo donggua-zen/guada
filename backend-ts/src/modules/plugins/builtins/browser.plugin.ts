@@ -45,7 +45,8 @@ export class BrowserPlugin extends PluginBase {
       id: "browser",
       name: "Browser Automation",
       loadMode: "lazy",
-      activator: "Use this toolkit when browser automation is needed",
+      activator:
+        "Use this toolkit for navigating to URLs, reading page content, interacting with elements (clicks, form inputs), extracting page snapshots, executing JavaScript in page context, viewing console logs, taking screenshots, and managing browser tabs. Essential for web browsing, front-end debugging, and any task that requires interacting with or inspecting live web pages.",
       onLoad: (toolkit) => {
         // ── 1. 统一导航 ──
         toolkit.registerTool({
@@ -96,7 +97,7 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { action: "访问网页", argsKey: "url", icon: "browser" },
+          display: { actionType: "navigate", argsKey: "url", icon: "browser" },
         });
 
         // ── 2. 标签管理 ──
@@ -134,7 +135,7 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { action: "标签管理", argsKey: "action", icon: "browser" },
+          display: { actionType: "tabs", argsKey: "action", icon: "browser" },
         });
 
         // ── 3. 页面快照 ──
@@ -162,7 +163,7 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatSnapshot(result, args.type || "simple");
           },
-          display: { action: "获取页面快照", argsKey: "type", icon: "browser" },
+          display: { actionType: "snapshot", argsKey: "type", icon: "browser" },
         });
 
         // ── 4. 交互操作 ──
@@ -209,7 +210,7 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatInteractResult(args, result);
           },
-          display: { action: "交互操作", argsKey: "action", icon: "browser" },
+          display: { actionType: "interact", argsKey: "action", icon: "browser" },
         });
 
         // ── 5. 执行 JavaScript ──
@@ -252,7 +253,7 @@ export class BrowserPlugin extends PluginBase {
             return this.formatEvaluateResult(result);
           },
           display: {
-            action: "执行JavaScript",
+            actionType: "evaluate",
             argsKey: "code",
             icon: "browser",
           },
@@ -293,7 +294,7 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { action: "导航操作", argsKey: "action", icon: "browser" },
+          display: { actionType: "history", argsKey: "action", icon: "browser" },
         });
 
         // ── 7. 控制台日志 ──
@@ -313,7 +314,43 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatConsoleResult(result);
           },
-          display: { action: "查看控制台日志", icon: "browser" },
+          display: { actionType: "console", icon: "browser" },
+        });
+
+        // ── 8. 截图 ──
+        toolkit.registerTool({
+          name: "browser_screenshot",
+          description:
+            "Take a screenshot of the current tab and save it as a PNG file. Returns the saved file path and image dimensions. If no file path is provided, the screenshot is saved to the session workspace directory with an auto-generated filename.",
+          inputSchema: z.object({
+            file_path: z
+              .string()
+              .optional()
+              .describe(
+                "File path to save the screenshot. Can be absolute or relative to the session working directory. If omitted, saves to session workspace as screenshot-<timestamp>.png",
+              ),
+          }),
+          execute: async (args, ctx, signal) => {
+            const result = await this.sendRequest(
+              "browser_screenshot",
+              {
+                created_by: ctx?.session.sessionId,
+                file_path: args.file_path,
+                session_path: ctx?.session.workspacePath,
+              },
+              signal,
+            );
+            this.assertSuccess(result);
+            const parts: string[] = [];
+            if (result.saved_path) {
+              parts.push(`Screenshot saved: ${result.saved_path}`);
+            }
+            parts.push(
+              `Dimensions: ${result.width}x${result.height}`,
+            );
+            return parts.join("\n");
+          },
+          display: { actionType: "screenshot", icon: "browser" },
         });
 
         // ── 使用说明 ──
@@ -334,6 +371,7 @@ export class BrowserPlugin extends PluginBase {
             "- Use `browser_snapshot` to re-capture page state when needed (e.g. after JS-driven content changes)",
             "- Simple snapshots return interactive ref IDs (e.g. 'e0') — use these as selector in `browser_interact`",
             "- Use a struct snapshot only when accessibility semantics omit an element you need",
+            "- Use `browser_screenshot(file_path?)` to capture a visual screenshot of the current page",
             "",
             "## Session Isolation",
             "- All tabs are **incognito** — no data persists after closing",

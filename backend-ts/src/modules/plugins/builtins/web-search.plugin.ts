@@ -81,7 +81,7 @@ export class WebSearchPlugin extends PluginBase {
             return await this.executeSearch(args, provider);
           },
           display: {
-            action: "网络搜索",
+            actionType: "web_search",
             argsKey: "q",
             icon: "search",
           },
@@ -101,7 +101,7 @@ export class WebSearchPlugin extends PluginBase {
               return await this.executeReadWebpage(args, provider);
             },
             display: {
-              action: "Read webpage content",
+              actionType: "web_parser",
               argsKey: "url",
               icon: "browser",
             },

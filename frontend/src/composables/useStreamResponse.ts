@@ -56,7 +56,6 @@ interface StreamResponse {
   reasoningContent?: string;
   toolCalls?: any[];
   toolCallsResponse?: any[];
-  displayMessages?: any[];
   usage?: any;
   finishReason?: string;
   error?: string;
@@ -331,33 +330,27 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
   /**
    * 处理工具调用响应
-   * 从 tool_calls_response 事件接收执行完毕后的展示文案，更新到 toolCalls metadata 中
-   * （文案不持久化到工具结果，仅通过事件传送给前端更新显示状态）
+   * 从 tool_calls_response 事件接收执行结果，更新到 toolCalls metadata 中
    */
   function handleToolCallsResponse(
     content: MessageContent,
     toolCallsResponse: any[],
-    displayMessages?: any[],
   ): void {
     if (!content.metadata) {
       content.metadata = {};
     }
     content.metadata.toolCallsResponse = toolCallsResponse;
 
-    // 更新展示文案为完成状态（从 tool_calls_response 携带的最新文案）
+    // 同步工具执行结果状态到 toolCalls（流式期间即时显示 outcome 图标）
     if (
-      displayMessages &&
-      displayMessages.length > 0 &&
+      toolCallsResponse &&
+      toolCallsResponse.length > 0 &&
       content.metadata.toolCalls
     ) {
-      for (let i = 0; i < displayMessages.length; i++) {
-        const dm = displayMessages[i];
-        if (dm) {
-          if (!content.metadata.toolCalls[i]?.metadata) {
-            if (!content.metadata.toolCalls[i]) continue;
-            content.metadata.toolCalls[i].metadata = {};
-          }
-          content.metadata.toolCalls[i].metadata.displayMessage = dm;
+      for (let i = 0; i < toolCallsResponse.length; i++) {
+        const outcome = toolCallsResponse[i]?.outcome;
+        if (outcome && content.metadata.toolCalls[i]) {
+          content.metadata.toolCalls[i].outcome = outcome;
         }
       }
     }
@@ -645,7 +638,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           handleToolCallsResponse(
             message!.contents[contentIndex],
             response.toolCallsResponse,
-            response.displayMessages,
           );
           continue;
         }

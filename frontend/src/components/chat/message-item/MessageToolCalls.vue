@@ -5,14 +5,17 @@
       <div
         class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="openSingleToolDialog(toolIndex)">
-        <el-icon v-if="props.isExecuting" class="shrink-0 animate-spin" size="14">
+        <el-icon v-if="isExecuting" class="shrink-0 animate-spin" size="14">
           <SpinnerIos20Filled />
+        </el-icon>
+        <el-icon v-else-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="14" style="color: #f56c6c;">
+          <ErrorCircle16Regular />
         </el-icon>
         <el-icon v-else class="shrink-0" size="14">
           <component :is="getToolIconComponent(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-2 truncate text-gray-400 dark:text-gray-500 ">
-          <span class="text-gray-700 dark:text-gray-300 font-medium">{{ getActionText(tool) }}</span>
+          <span class="text-gray-700 dark:text-gray-300 font-medium">{{ getActionText(tool, toolIndex) }}</span>
           <span v-if="getArgsText(tool)" class="text-sm ml-2">{{ getArgsText(tool)
           }}</span>
         </div>
@@ -37,8 +40,11 @@
       </div>
       <div v-else-if="selectedTool" class="tool-call-detail">
         <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
-          <el-icon v-if="props.isExecuting" size="18" class="text-blue-500 animate-spin">
+          <el-icon v-if="isExecuting" size="18" class="text-blue-500 animate-spin">
             <SpinnerIos20Filled />
+          </el-icon>
+          <el-icon v-else-if="selectedTool?.outcome === 'error' || selectedTool?.outcome === 'rejected'" size="18" style="color:#f56c6c">
+            <ErrorCircle16Regular />
           </el-icon>
           <el-icon v-else size="18" class="text-blue-500">
             <component :is="getToolIconComponent(selectedTool)" />
@@ -79,10 +85,14 @@
 
         <div v-if="currentToolResponses && currentToolResponses[selectedToolIndex]" class="mt-4">
           <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center">
-            <el-icon size="14" class="mr-1 text-green-500">
+            <el-icon v-if="selectedTool?.outcome === 'error' || selectedTool?.outcome === 'rejected'" size="14" class="mr-1" style="color:#f56c6c">
+              <ErrorCircle16Regular />
+            </el-icon>
+            <el-icon v-else size="14" class="mr-1 text-green-500">
               <CheckCircleOutlined />
             </el-icon>
-            执行结果
+            <span v-if="selectedTool?.outcome === 'error' || selectedTool?.outcome === 'rejected'">执行失败</span>
+            <span v-else>执行结果</span>
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
             <!-- JSON 解码成功且为简单对象 → 表格展示 -->
@@ -118,7 +128,7 @@
 import { computed, ref, watch } from 'vue';
 import { ElIcon, ElDialog, ElButton } from 'element-plus';
 import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
-import { Wrench24Filled, SpinnerIos20Filled } from '@vicons/fluent';
+import { Wrench24Filled, SpinnerIos20Filled, ErrorCircle16Regular } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { Loading } from '@/components/icons';
 import { getToolIconByNamespace } from '@/utils/toolIconMapper';
@@ -127,17 +137,17 @@ import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
 
 interface ToolDisplayInfo {
-  action: string;
-  args?: string;
-  toolName?: string;
-  toolType?: string;
-  extra?: Record<string, any>;
+  actionType: string;
+  toolType: string;
+  argsKey?: string;
+  toolName: string;
 }
 
 interface ToolCall {
   name?: string;
   arguments?: any;
   args?: any;
+  outcome?: 'success' | 'error' | 'rejected';  // 工具执行结果状态
   metadata?: {
     displayMessage?: ToolDisplayInfo | string;  // 支持结构化数据或字符串（兼容）
     [key: string]: any;
@@ -147,11 +157,20 @@ interface ToolCall {
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: any[];
-  isExecuting: boolean;
+  isExecuting?: boolean;
+  isStreaming?: boolean;
   contentId?: string;  // 消息内容 ID，用于懒加载完整数据
 }>();
 
 const { toast } = usePopup();
+
+// 内部计算执行状态：流式已结束或有 outcome 或有 toolResponses 即视为已完成
+const isExecuting = computed(() => {
+  if (props.isStreaming === false) return false;
+  if (props.toolResponses && props.toolResponses.length > 0) return false;
+  if (props.toolCalls?.some((tc) => tc.outcome)) return false;
+  return true;
+});
 
 const showDialog = ref(false);
 const keepElement = ref(false);
@@ -192,17 +211,12 @@ const currentToolResponses = computed(() => {
 });
 
 /**
- * 判断是否需要懒加载（arguments 或 content 为空）
- * 执行中的工具不尝试懒加载（数据尚未入库）
+ * 判断是否需要懒加载：只要执行完毕且存在 contentId 就从远端获取完整数据
  */
 const needsLazyLoad = computed(() => {
   if (!props.contentId) return false;
-  if (props.isExecuting) return false;
-  // 检查第一个工具调用是否有参数
-  const firstTool = props.toolCalls?.[0];
-  if (!firstTool) return false;
-  // 如果 arguments 和 args 都为空，则需要懒加载
-  return !firstTool.arguments && !firstTool.args;
+  if (isExecuting.value) return false;
+  return true;
 });
 
 /**
@@ -251,60 +265,133 @@ const getToolIconComponent = (tool: ToolCall) => {
 };
 
 /**
- * 获取工具调用的展示文本（支持结构化数据）
+ * actionType → 展示文案映射表
+ * 当前硬编码中文，后续替换为 i18n 翻译表即可
  */
-const getDisplayText = (tool: ToolCall): string => {
+const ACTION_TEXT_MAP: Record<string, { executing: string; completed: string }> = {
+  read:        { executing: '正在读取文件',   completed: '已读取文件' },
+  write:       { executing: '正在写入文件',   completed: '已写入文件' },
+  edit:        { executing: '正在替换文本',   completed: '已替换文本' },
+  delete:      { executing: '正在删除文件',   completed: '已删除文件' },
+  search:      { executing: '正在搜索文件',   completed: '已搜索文件' },
+  grep:        { executing: '正在搜索内容',   completed: '已搜索内容' },
+  navigate:    { executing: '正在访问网页',   completed: '已访问网页' },
+  tabs:        { executing: '正在管理标签',   completed: '已管理标签' },
+  snapshot:    { executing: '正在获取快照',   completed: '已获取快照' },
+  interact:    { executing: '正在执行交互',   completed: '已执行交互' },
+  evaluate:    { executing: '正在执行脚本',   completed: '已执行脚本' },
+  history:     { executing: '正在导航',       completed: '已导航' },
+  console:     { executing: '正在查看日志',   completed: '已查看日志' },
+  screenshot:  { executing: '正在截图',       completed: '已截图' },
+  recognize:   { executing: '正在识别图片',   completed: '已识别图片' },
+  memory:      { executing: '正在编辑记忆',   completed: '已编辑记忆' },
+  plan:        { executing: '正在管理计划',   completed: '已管理计划' },
+  time:        { executing: '正在获取时间',   completed: '已获取时间' },
+  web_search:  { executing: '正在搜索网络',   completed: '已搜索网络' },
+  web_parser:  { executing: '正在读取网页',   completed: '已读取网页' },
+  shell:       { executing: '正在执行命令',   completed: '已执行命令' },
+  process:     { executing: '正在管理进程',   completed: '已管理进程' },
+  doc_parse:   { executing: '正在解析文档',   completed: '已解析文档' },
+  doc_batch_parse: { executing: '正在批量解析文档', completed: '已批量解析文档' },
+  clear_session:   { executing: '正在清空会话',   completed: '已清空会话' },
+  kb_search:       { executing: '正在搜索知识库',  completed: '已搜索知识库' },
+  kb_list:         { executing: '正在列出文件',    completed: '已列出文件' },
+  kb_get_chunks:   { executing: '正在获取分块',    completed: '已获取分块' },
+  kb_add_document: { executing: '正在添加文档',    completed: '已添加文档' },
+  scheduler_create:{ executing: '正在创建定时任务', completed: '已创建定时任务' },
+  scheduler_list:  { executing: '正在获取任务列表', completed: '已获取任务列表' },
+  scheduler_delete:{ executing: '正在删除定时任务', completed: '已删除定时任务' },
+  scheduler_toggle:{ executing: '正在切换任务状态', completed: '已切换任务状态' },
+  skill_read:      { executing: '正在读取技能',   completed: '已读取技能' },
+  sub_agent_create:{ executing: '正在创建子代理',   completed: '已创建子代理' },
+  sub_agent_manage:{ executing: '正在管理子代理',   completed: '已管理子代理' },
+  tool_load_kit:   { executing: '正在加载工具包',   completed: '已加载工具包' },
+  tool_use:        { executing: '正在调用工具',     completed: '已调用工具' },
+  tool_call:       { executing: '正在调用工具',     completed: '已调用工具' },
+  tool_load:       { executing: '正在加载工具',     completed: '已加载工具' },
+  default:         { executing: '正在调用工具',     completed: '已调用工具' },
+};
+
+/**
+ * 判断单个工具是否正在执行
+ */
+const isToolExecuting = (tool: ToolCall, index: number): boolean => {
+  if (props.isStreaming === false) return false;
+  if (tool.outcome) return false;
+  if (props.toolResponses && props.toolResponses[index]) return false;
+  return true;
+};
+
+/**
+ * 获取动作文本
+ */
+const getActionText = (tool: ToolCall, toolIndex: number): string => {
   const displayInfo = tool.metadata?.displayMessage;
 
-  if (!displayInfo) {
-    return tool.name || 'Unknown Tool';
-  }
-
-  // 如果是结构化数据
-  if (typeof displayInfo === 'object' && displayInfo !== null) {
+  if (displayInfo && typeof displayInfo === 'object') {
     const info = displayInfo as ToolDisplayInfo;
-    // 组合 action 和 args
-    if (info.args) {
-      return `${info.action} ${info.args}`;
+    if (info.actionType) {
+      const executing = isToolExecuting(tool, toolIndex);
+      const texts = ACTION_TEXT_MAP[info.actionType] || ACTION_TEXT_MAP.default;
+      return executing ? texts.executing : texts.completed;
     }
-    return info.action;
   }
 
-  // 否则是字符串（兼容旧数据）
-  return displayInfo as string;
+  // displayMessage 缺失时，尝试用 tool.name 作为 actionType 查找
+  const fallbackKey = tool.name || '';
+  const fallbackTexts = ACTION_TEXT_MAP[fallbackKey] || ACTION_TEXT_MAP[fallbackKey.toLowerCase()];
+  if (fallbackTexts) {
+    const executing = isToolExecuting(tool, toolIndex);
+    return executing ? fallbackTexts.executing : fallbackTexts.completed;
+  }
+
+  return tool.name || 'Unknown Tool';
 };
 
 /**
- * 获取动作文本（深色）
+ * 格式化参数摘要
  */
-const getActionText = (tool: ToolCall): string => {
-  const displayInfo = tool.metadata?.displayMessage;
-
-  if (!displayInfo) {
-    return tool.name || 'Unknown Tool';
+function formatArgSummary(value: any): string {
+  if (typeof value !== 'string') return String(value);
+  if (value.includes('/') || value.includes('\\')) {
+    return value.split(/[\/\\]/).pop() || value;
   }
-
-  // 如果是结构化数据，返回 action
-  if (typeof displayInfo === 'object' && displayInfo !== null) {
-    return (displayInfo as ToolDisplayInfo).action;
-  }
-
-  // 否则是字符串（兼容旧数据）
-  return displayInfo as string;
-};
+  return value.length > 60 ? value.substring(0, 60) + '...' : value;
+}
 
 /**
- * 获取参数文本（灰色）
+ * 获取参数文本（从累积的 arguments 中提取）
  */
 const getArgsText = (tool: ToolCall): string | undefined => {
   const displayInfo = tool.metadata?.displayMessage;
+  if (!displayInfo || typeof displayInfo !== 'object') return undefined;
 
-  // 如果是结构化数据，返回 args
-  if (typeof displayInfo === 'object' && displayInfo !== null) {
-    return (displayInfo as ToolDisplayInfo).args;
+  const info = displayInfo as ToolDisplayInfo;
+
+  let params: Record<string, any> | undefined;
+  try {
+    const raw = typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments);
+    const parsed = partialParse(raw);
+    if (tool.name === 'tool_use' && parsed?.arguments) {
+      params = parsed.arguments;
+    } else {
+      params = parsed;
+    }
+  } catch {
+    return undefined;
   }
 
-  // 否则没有参数
+  if (!params || typeof params !== 'object') return undefined;
+
+  if (info.argsKey && params[info.argsKey]) {
+    return formatArgSummary(params[info.argsKey]);
+  }
+
+  for (const value of Object.values(params)) {
+    if (typeof value === 'string' && value.length > 0) {
+      return formatArgSummary(value);
+    }
+  }
   return undefined;
 };
 

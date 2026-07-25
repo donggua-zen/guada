@@ -7,7 +7,9 @@
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
           :ext="file.fileExtension" :size="file.fileSize"
           :preview-url="file.fileType === 'image' ? previewUrls.get(file.id) : undefined" closable
-          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" @close="removeFile(file.id)">
+          :clickable="file.isPasted && file.originalContent && file.fileType === 'text'"
+          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" @close="removeFile(file.id)"
+          @click="showFilePreview(file)">
         </FileItem>
       </div>
 
@@ -120,6 +122,15 @@
         :thinking-effort-options="thinkingEffortOptions" :thinking-effort-value="localThinkingEffort"
         @select="handleModelSelect" @favorite-changed="handleFavoriteChanged"
         @select-thinking-effort="handleThinkingEffortChange" />
+
+      <!-- 粘贴文本预览弹窗（利用 el-dialog 原生滚动） -->
+      <el-dialog v-model="previewDialogVisible" :title="'原始内容预览 - ' + previewFileName" width="640px"
+        :close-on-click-modal="false" destroy-on-close class="pasted-preview-dialog" @close="closeFilePreview">
+        <pre class="pasted-preview-text">{{ previewContent }}</pre>
+        <template #footer>
+          <el-button @click="closeFilePreview">关闭</el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -535,6 +546,8 @@ const getFileExtensionsFromType = (type) => {
 
 const createFileObject = (file, fileType, isPasted = false) => {
   const timestamp = Date.now();
+  // 检测是否有通过粘贴附加的原始文本内容
+  const hasOriginalContent = file._originalContent;
 
   return {
     id: fileIdCounter++,
@@ -544,6 +557,10 @@ const createFileObject = (file, fileType, isPasted = false) => {
     fileType: FILE_TYPES[fileType].type,
     displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
     file: file,
+    // 标记是否为粘贴自动转换的文件
+    isPasted: !!hasOriginalContent || isPasted,
+    // 粘贴转换的原始文本内容（仅粘贴转文件时有值）
+    originalContent: hasOriginalContent || undefined,
     // 新增：上传进度状态
     uploadProgress: 0,
     uploadStatus: null, // 'queued' | 'uploading' | 'uploaded' | 'failed'
@@ -858,6 +875,8 @@ const handlePaste = async (event) => {
     // 超长文本 → 转为 .txt 文件
     const blob = new Blob([pastedText], { type: 'text/plain' });
     const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' });
+    // 在 File 对象上挂载原始文本，供 createFileObject 检测并存储
+    file._originalContent = pastedText;
     filesToProcess.push(file);
   } else if (pastedText) {
     // 短文本 → 插入到 Tiptap 编辑器
@@ -880,6 +899,24 @@ const handlePaste = async (event) => {
   }
 };
 
+
+// 内容预览相关（粘贴自动转换的文本文件预览）
+const previewDialogVisible = ref(false);
+const previewContent = ref('');
+const previewFileName = ref('');
+
+const showFilePreview = (file: any) => {
+  if (!file.isPasted || !file.originalContent) return;
+  previewContent.value = file.originalContent;
+  previewFileName.value = file.displayName;
+  previewDialogVisible.value = true;
+};
+
+const closeFilePreview = () => {
+  previewDialogVisible.value = false;
+  previewContent.value = '';
+  previewFileName.value = '';
+};
 
 const removeFile = (fileId) => {
   const index = uploadFiles.value.findIndex(file => file.id === fileId);
@@ -1476,5 +1513,28 @@ onUnmounted(() => {
 
 .send-btn.stop-btn:active {
   background-color: #e64242;
+}
+
+/* ========== 粘贴文本预览弹窗样式 ========== */
+
+/* 弹窗 body 利用 el-dialog 原生滚动 */
+.pasted-preview-dialog :deep(.el-dialog__body) {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.pasted-preview-text {
+  margin: 0;
+  padding: 16px;
+  background: var(--el-fill-color-light, #f5f7fa);
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Menlo', monospace;
+  color: var(--el-text-color-primary, #303133);
 }
 </style>

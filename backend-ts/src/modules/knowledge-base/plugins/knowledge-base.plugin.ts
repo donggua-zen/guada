@@ -116,7 +116,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         });
         return parts.join("\n\n");
       },
-      display: { action: "搜索知识库", argsKey: "query", icon: "search" },
+      display: { actionType: "kb_search", argsKey: "query", icon: "search" },
     });
 
     kbKit.registerTool({
@@ -159,7 +159,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         }
         return lines.join("\n");
       },
-      display: { action: "列出知识库文件", icon: "search" },
+      display: { actionType: "kb_list", icon: "search" },
     });
 
     kbKit.registerTool({
@@ -198,7 +198,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         });
         return parts.join("\n\n");
       },
-      display: { action: "获取文件分块", argsKey: "file_id", icon: "search" },
+      display: { actionType: "kb_get_chunks", argsKey: "file_id", icon: "search" },
     });
 
     kbKit.registerTool({
@@ -239,7 +239,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         }
       },
       display: {
-        action: "添加文档到知识库",
+        actionType: "kb_add_document",
         argsKey: "source_file_path",
         icon: "edit",
       },

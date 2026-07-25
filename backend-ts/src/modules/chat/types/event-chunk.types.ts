@@ -49,7 +49,6 @@ export interface EventChunk {
     content: string;
     toolCallId: string;
   }>;
-  displayMessages?: any[]; // 工具执行完毕后携带的最新展示文案，不持久化到工具结果
 
   // ===== 完成信息（finish）=====
   finishReason?: string;

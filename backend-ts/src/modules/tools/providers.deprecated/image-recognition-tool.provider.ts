@@ -111,40 +111,6 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     };
   }
 
-  /**
-   * 生成图片识别工具的展示文案
-   */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
-    const prefix = isExecuting ? '正在' : '已';
-
-    let action: string;
-    let toolType: string = this.pluginId;
-    let target: string;
-
-    switch (toolName) {
-      case 'image_recognize':
-        action = `${prefix}识别图片`;
-        target = args.image_id || '';
-        break;
-
-      case 'image_recognize_by_path':
-        action = `${prefix}识别图片`;
-        target = args.image_path || '';
-        break;
-
-      default:
-        action = `${prefix}识别`;
-        target = args.image_id || args.image_path || '';
-    }
-
-    return {
-      action,
-      args: target,
-      toolName: toolName,
-      toolType,
-    };
-  }
-
   private async handleRecognize(request: ToolCallRequest, abortSignal?: AbortSignal): Promise<string> {
     const args = request.arguments;
     const { image_id } = args;

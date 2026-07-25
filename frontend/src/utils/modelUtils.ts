@@ -173,8 +173,8 @@ export function isElectronEnv(): boolean {
 }
 
 /**
- * 打开外部链接（根据环境自动选择打开方式）
- * - Electron 环境：使用 electronAPI.openExternal 在系统默认浏览器中打开
+ * 打开外部链接（根据设置决定打开方式）
+ * - Electron 环境：根据用户设置（内置浏览器 / 外部浏览器 / 每次询问）
  * - Web 环境：使用 window.open 在新标签页中打开
  *
  * @param url 要打开的 URL
@@ -183,14 +183,13 @@ export function openExternalLink(url: string): void {
   if (!url) return;
 
   if (isElectronEnv()) {
-    // Electron 环境：使用系统默认浏览器打开
-    try {
-      (window as any).electronAPI.openExternal(url);
-    } catch (error) {
-      console.error("Failed to open external link:", error);
-      // 降级处理：在新窗口打开
-      window.open(url, "_blank");
-    }
+    // Electron 环境：通过 linkOpener 根据用户设置选择打开方式
+    import('@/utils/linkOpener').then(({ openLink }) => {
+      openLink(url)
+    }).catch((error) => {
+      console.error('Failed to load linkOpener, falling back to openExternal:', error)
+      ;(window as any).electronAPI?.openExternal?.(url)
+    })
   } else {
     // Web 环境：在新标签页打开
     window.open(url, "_blank", "noopener,noreferrer");
