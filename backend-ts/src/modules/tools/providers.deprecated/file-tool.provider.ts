@@ -6,7 +6,6 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
-  ToolDisplayInfo,
   ToolDefinition,
 } from "../interfaces/tool-provider.interface";
 import { WorkspaceService } from "../../../common/services/workspace.service";

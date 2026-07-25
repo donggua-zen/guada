@@ -41,21 +41,6 @@ export interface ToolCallResponse {
 }
 
 /**
- * 工具调用展示信息（语义结构）
- * 后端只发送静态配置，前端负责生成展示文案
- */
-export interface ToolDisplayInfo {
-  /** 动作类型枚举（前端用于映射展示文案，i18n 翻译键） */
-  actionType: string;
-  /** 工具类型标识（前端图标映射） */
-  toolType: string;
-  /** 从 args 中提取摘要的字段名 */
-  argsKey?: string;
-  /** 原始工具名 */
-  toolName: string;
-}
-
-/**
  * 工具加载模式
  */
 export type ToolLoadMode = 'eager' | 'lazy' | 'none';

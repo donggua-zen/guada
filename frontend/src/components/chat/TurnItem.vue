@@ -107,6 +107,12 @@
             {{ assistantMetadata.error }}
           </el-alert>
 
+          <!-- 用户终止提示 -->
+          <div v-if="assistantMetadata?.finishReason === 'user_cancel'"
+            class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+            已手动终止
+          </div>
+
           <!-- 继续执行按钮 -->
           <div
             v-if="assistantMetadata && !streamingState.isStreaming && assistantMetadata.finishReason === 'max_iterations_reached'"

@@ -251,6 +251,26 @@ export class SessionStreamManager {
   }
 
   /**
+   * 中止底层 LLM 请求（不关闭流）
+   *
+   * 仅触发 abortController.abort()，让 Agent 引擎捕获中止后
+   * 生成 finish 事件并广播，再由 runAgentEngine 自然结束流。
+   * 与 stopStream 的区别：不关闭订阅者连接，保留 finish 事件的传输通道。
+   */
+  abortStream(sessionId: string): void {
+    const stream = this.activeStreams.get(sessionId);
+    if (!stream) {
+      return;
+    }
+    try {
+      stream.abortController.abort();
+    } catch (error) {
+      this.logger.warn(`Error aborting stream for ${sessionId}:`, error);
+    }
+    this.logger.log(`Stream aborted for session ${sessionId}`);
+  }
+
+  /**
    * 停止流式任务
    *
    * @param sessionId 会话 ID

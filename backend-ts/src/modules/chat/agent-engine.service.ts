@@ -9,7 +9,6 @@ import { PluginContext } from "../plugins/types/plugin.types";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
-import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { partialParse } from "partial-json-parser";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { ISessionContext, ModelConfig } from "./session-context";
@@ -56,7 +55,6 @@ export class AgentEngine {
   constructor(
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
-    private displayManager: ToolCallDisplayUtil,
     private tokenTracker: SessionTokenTracker,
   ) {}
 
@@ -343,8 +341,6 @@ export class AgentEngine {
               assistantResponse.metadata.finishReason =
                 accumulated.finishReason;
             }
-            assistantResponse.metadata.thinkingDurationMs =
-              this.calculateThinkingDuration(currentTurnThinkingInfo);
           }
         } catch (error) {
           streamAborted = true;
@@ -359,24 +355,31 @@ export class AgentEngine {
             currentTurnThinkingInfo,
             streamError,
           );
+        }
 
-          // 中止时修复不完整的 toolCalls
-          if (assistantResponse.toolCalls) {
-            assistantResponse.toolCalls = assistantResponse.toolCalls.map(
-              (tc: any) => ({
-                ...tc,
-                arguments: this.repairToolCallArguments(tc.arguments),
-                metadata: {
-                  ...(tc.metadata || {}),
-                  displayMessage: this.displayManager.format(
-                    tc.name,
-                    tc.arguments,
-                    false,
-                  ),
-                },
-              }),
-            );
-          }
+        // LLM SDK 收到 abort 信号后可能直接关闭流（不抛异常），需手动检测
+        if (!streamAborted && abortSignal?.aborted) {
+          streamAborted = true;
+          this.handleStreamError(
+            assistantResponse,
+            currentTurnThinkingInfo,
+            new Error("AbortError"),
+          );
+        }
+
+        // 流结束后计算思考时长（仅一次，确保在所有 recordThinkingFinished 调用之后）
+        assistantResponse.metadata.thinkingDurationMs =
+          this.calculateThinkingDuration(currentTurnThinkingInfo);
+
+        // 中止时修复不完整的 toolCalls
+        if (streamAborted && assistantResponse.toolCalls) {
+          assistantResponse.toolCalls = assistantResponse.toolCalls.map(
+            (tc: any) => ({
+              ...tc,
+              arguments: this.repairToolCallArguments(tc.arguments),
+              outcome: "aborted",
+            }),
+          );
         }
 
         // 共享后处理：token 统计（正常和中止都需要，如果 usage 已到达）
@@ -389,21 +392,7 @@ export class AgentEngine {
           );
         }
 
-        // 发送 finish 事件
-        yield {
-          type: "finish",
-          finishReason: assistantResponse.metadata?.finishReason || "error",
-          error: streamAborted
-            ? assistantResponse.metadata?.error || "Stream aborted"
-            : undefined,
-          usage: assistantResponse.metadata?.usage,
-          contentId,
-          contextStats: {
-            usedTokens: sessionContext.getTokenCount(),
-            effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
-          },
-        };
-
+        // 先将 assistantResponse 和合成工具响应放入 parts
         parts.push(assistantResponse);
 
         // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
@@ -420,7 +409,24 @@ export class AgentEngine {
               messageId: responseMessageId,
             });
           }
+          await sessionContext.appendParts(parts);
+          parts.length = 0;
         }
+
+        // 发送 finish 事件
+        yield {
+          type: "finish",
+          finishReason: assistantResponse.metadata?.finishReason || "error",
+          error: streamAborted
+            ? assistantResponse.metadata?.error || "Stream aborted"
+            : undefined,
+          usage: assistantResponse.metadata?.usage,
+          contentId,
+          contextStats: {
+            usedTokens: sessionContext.getTokenCount(),
+            effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
+          },
+        };
       }
 
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
@@ -456,9 +462,6 @@ export class AgentEngine {
             },
           };
 
-          // 持久化前确保所有 toolCalls 都有 displayMessage
-          this.ensureDisplayMessages(assistantResponse);
-
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await sessionContext.appendParts(parts);
           break;
@@ -485,7 +488,6 @@ export class AgentEngine {
                 sessionContext.getEffectiveContextWindow(),
             },
           };
-          this.ensureDisplayMessages(assistantResponse);
           await sessionContext.appendParts(parts);
           break;
         }
@@ -515,9 +517,6 @@ export class AgentEngine {
           needToContinue = true;
         }
       }
-
-      // 持久化前确保所有 toolCalls 都有 displayMessage（防止流式阶段遗漏）
-      this.ensureDisplayMessages(assistantResponse);
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       if (parts.length > 0) {
@@ -635,31 +634,10 @@ export class AgentEngine {
 
     if (chunk.type === "finish" || chunk.finishReason) {
       eventType = "finish";
-      if (accumulated.toolCalls) {
-        // LLM 流式结束但工具尚未执行，标记为"正在进行"（isExecuting=true）
-        // 等工具执行完毕后（executeAgentLoop 中）再更新为"已完成"（isExecuting=false）
-        accumulated.toolCalls.forEach((tc) => {
-          if (!tc.metadata) tc.metadata = {};
-          tc.metadata.displayMessage = this.displayManager.format(
-            tc.name,
-            tc.arguments,
-            true,
-          );
-        });
-      }
     } else if (chunk.type === "think" || chunk.reasoningContent) {
       eventType = "think";
     } else if (chunk.type === "tool_call" || chunk.toolCalls) {
       eventType = "tool_call";
-      // 将文案注入到 toolCalls 的 metadata 中，确保刷新后仍可显示
-      chunk.toolCalls!.forEach((tc) => {
-        if (!tc.metadata) tc.metadata = {};
-        tc.metadata.displayMessage = this.displayManager.format(
-          tc.name,
-          tc.arguments,
-          true,
-        );
-      });
     } else if (chunk.type === "text" || chunk.content) {
       eventType = "text";
     } else if (chunk.usage) {
@@ -708,11 +686,11 @@ export class AgentEngine {
 
     if (
       streamError.name === "AbortError" ||
-      streamError.message.includes("abort")
+      streamError.message.toLowerCase().includes("abort")
     ) {
-      // 用户主动中止（客户端断开连接），标记为 user_abort 以便前端展示友好提示
-      currentChunk.metadata.finishReason = "user_abort";
-      currentChunk.metadata.error = "User aborted the request";
+      // 用户主动中止（客户端断开连接），标记为 user_cancel 以便前端展示友好提示
+      currentChunk.metadata.finishReason = "user_cancel";
+      currentChunk.metadata.error = undefined;
     } else if (
       streamError.message.includes("timed out") ||
       streamError.message.includes("timeout")
@@ -736,8 +714,7 @@ export class AgentEngine {
    * 累加工具调用参数（处理流式分片）
    *
    * LLM 在流式输出工具调用时，会将参数分成多个块逐步发送。
-   * 该方法负责将这些分片按 index 合并为完整的工具调用对象，
-   * 并委托 ToolCallDisplayUtil 管理展示文案的更新。
+   * 该方法负责将这些分片按 index 合并为完整的工具调用对象。
    *
    * @param target 目标 LLM 响应块，其 toolCalls 数组会被原地修改
    * @param deltaCalls 本次收到的增量工具调用分片数组
@@ -798,26 +775,6 @@ export class AgentEngine {
   }
 
   /**
-   * 确保所有 toolCalls 都有 displayMessage
-   *
-   * 在持久化前调用，防止流式阶段的 toEventChunk 遗漏设置 displayMessage。
-   * 如果已有 displayMessage 则跳过，否则用当前 toolName 和 arguments 重新生成。
-   */
-  private ensureDisplayMessages(response: MessageRecord): void {
-    if (!response.toolCalls) return;
-    for (const tc of response.toolCalls) {
-      if (!tc.metadata) tc.metadata = {};
-      if (!tc.metadata.displayMessage) {
-        tc.metadata.displayMessage = this.displayManager.format(
-          tc.name,
-          tc.arguments,
-          false,
-        );
-      }
-    }
-  }
-
-  /**
    * 记录思考结束时间
    *
    * 仅在思考已开始但尚未结束时记录结束时间，避免重复设置。
@@ -861,14 +818,23 @@ export class AgentEngine {
       );
       this.logger.log(`Thinking duration calculated: ${durationMs}ms`);
       return durationMs;
-    } else {
-      this.logger.warn(
-        `Thinking timestamps incomplete. ` +
-          `Has start: ${currentTurnThinkingInfo.thinkingStartedAt !== null}, ` +
-          `Has finish: ${currentTurnThinkingInfo.thinkingFinishedAt !== null}`,
-      );
+    }
+
+    // 两个时间戳都为空：模型未产生思维链，属于正常情况，无需告警
+    if (
+      !currentTurnThinkingInfo.thinkingStartedAt &&
+      !currentTurnThinkingInfo.thinkingFinishedAt
+    ) {
       return null;
     }
+
+    // 仅一个时间戳存在：思考时间追踪不完整，可能存在逻辑问题
+    this.logger.warn(
+      `Thinking timestamps incomplete. ` +
+        `Has start: ${currentTurnThinkingInfo.thinkingStartedAt !== null}, ` +
+        `Has finish: ${currentTurnThinkingInfo.thinkingFinishedAt !== null}`,
+    );
+    return null;
   }
 
   /**

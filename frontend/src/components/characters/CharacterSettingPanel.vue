@@ -1,5 +1,5 @@
 <template>
-  <div class="character-setting-panel-root h-full">
+  <div class="character-setting-panel-root h-full" v-loading="pageLoading" element-loading-text="正在加载角色设置...">
     <div class="flex h-full overflow-hidden">
       <!-- 侧边栏 -->
       <div class="w-40 shrink-0 overflow-y-auto py-3">
@@ -508,7 +508,7 @@ const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 
 // 响应式数据
 const isSimpleStyle = computed(() => props.simple)
-const loading = ref(false)
+const pageLoading = ref(false)
 
 // 模型数据
 const models = ref([]);
@@ -519,6 +519,28 @@ const basicFormRef = ref(null)
 const promptFormRef = ref(null)
 
 const tabsValue = ref(props.tab)
+
+// 初始表单数据对照（用于检测是否有未保存的变更）
+// 在 loadAllData 全部就绪后记录
+// 必须用 ref，否则 hasChanges computed 无法追踪变化
+const _initialFormData = ref<any>(null)
+
+// 深度比较两个值（忽略对象 key 顺序）
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true
+  if (a == null || b == null) return a === b
+  if (typeof a !== typeof b) return false
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((v, i) => deepEqual(v, b[i]))
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a), kb = Object.keys(b)
+    if (ka.length !== kb.length) return false
+    return ka.every(k => k in b && deepEqual(a[k], b[k]))
+  }
+  return a === b
+}
 
 // 侧边栏分组
 const sidebarGroups = [
@@ -645,7 +667,6 @@ const characterGroups = ref([]);
 
 // 本地工具数据
 const localTools = ref([]);
-const loadingTools = ref(false);
 
 // 角色工具设置（pluginId -> boolean | 'all'）
 const characterToolSettings = ref({});
@@ -827,10 +848,9 @@ watch(() => props.data, (newVal, oldVal) => {
     }
   }
 
-  // 加载本地工具列表
-  // 新角色：立即 query（immediate）；编辑角色：数据从未加载 → 已加载时 query；弹窗重开：immediate 时已有数据 → query
+  // 首次加载（新建或真实数据到达）→ 触发统一数据加载
   if (props.isNew || (newVal?.id && !oldVal?.id)) {
-    loadLocalTools();
+    loadAllData();
   }
 
 }, { immediate: true })
@@ -893,10 +913,68 @@ const loadPresetCharacters = async () => {
   }
 };
 
+// 统一加载所有异步数据（并行请求，全部就绪后记录初始快照）
+async function loadAllData() {
+  pageLoading.value = true
+  try {
+    const [modelsResp, mcpsResp, skillsResp, groupsResp, charsResp] = await Promise.all([
+      apiService.fetchModels(),
+      apiService.getMcpServers(),
+      apiService.fetchSkills(),
+      apiService.fetchCharacterGroups(),
+      apiService.fetchCharacters(),
+    ])
+
+    // 模型
+    models.value = []
+    providers.value = []
+    modelsResp.items.forEach((provider: any) => {
+      models.value.push(...provider.models)
+      delete provider.models
+      providers.value.push(provider)
+    })
+
+    // MCP 服务器
+    mcpServers.value = mcpsResp.items.filter((s: any) => s.enabled)
+
+    // Skills
+    skillsList.value = Array.isArray(skillsResp?.items)
+      ? skillsResp.items.filter((s: any) => s.enabled !== false)
+      : []
+    if (skillsAllowlistMode.value) {
+      for (const skill of skillsList.value) {
+        if (!(skill.id in characterForm.enabledSkills)) {
+          characterForm.enabledSkills[skill.id] = false
+        }
+      }
+    }
+
+    // 角色分组
+    characterGroups.value = groupsResp
+
+    // 子代理列表（排除当前角色 + 通用虚拟子代理）
+    const allChars = charsResp.items || []
+    presetCharacters.value = [
+      GENERIC_AGENT,
+      ...allChars.filter((c: any) => c.id !== characterForm.id),
+    ]
+
+    // 所有数据就绪后记录初始快照
+    _initialFormData.value = getFormData()
+    console.log('[loadAllData] DONE, snapshot recorded')
+  } catch (err) {
+    console.error('加载角色设置数据失败', err)
+  } finally {
+    pageLoading.value = false
+  }
+}
+
 // 角色切换时刷新子代理列表
 watch(() => characterForm.id, () => {
-  loadPresetCharacters();
-}, { immediate: true })
+  if (characterForm.id) {
+    loadPresetCharacters();
+  }
+})
 
 // 模式切换时同步初始状态
 const handleMcpModeChange = (mode) => {
@@ -1005,28 +1083,6 @@ const handleLocalToolToggle = (pluginId, enabled) => {
   console.log(`本地工具 ${pluginId} ${enabled ? '启用' : '禁用'}`);
 }
 
-const loadSkills = async () => {
-  loadingSkills.value = true;
-  try {
-    const response = await apiService.fetchSkills();
-    skillsList.value = Array.isArray(response?.items)
-      ? response.items.filter(s => s.enabled !== false)
-      : [];
-    // 白名单模式：未在 enabledSkills 中的技能初始化显示为关闭
-    if (skillsAllowlistMode.value) {
-      for (const skill of skillsList.value) {
-        if (!(skill.id in characterForm.enabledSkills)) {
-          characterForm.enabledSkills[skill.id] = false;
-        }
-      }
-    }
-  } catch (err) {
-    console.error('加载 Skills 失败:', err);
-  } finally {
-    loadingSkills.value = false;
-  }
-};
-
 const loadModels = async () => {
   try {
     const response = await apiService.fetchModels()
@@ -1073,15 +1129,6 @@ watch(mcpAllowlistMode, (newMode) => {
   }
 });
 
-// 加载角色分组列表
-const loadCharacterGroups = async () => {
-  try {
-    characterGroups.value = await apiService.fetchCharacterGroups()
-  } catch (error) {
-    console.error('获取角色分组列表失败:', error)
-  }
-}
-
 const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
 }
@@ -1111,12 +1158,7 @@ watch(allowlistMode, () => {
 
 // 生命周期
 onMounted(async () => {
-  // if (!isSimpleStyle.value)
-  loadModels();
-  loadMCPServers();
-  loadSkills();
-  loadCharacterGroups();  // 加载分组列表
-  // query 由 watch 统一接管（immediate + isNew 判断）
+  // 首次挂载时，所有异步数据由 props.data watch 统一触发 loadAllData
 })
 
 onUnmounted(() => {
@@ -1273,11 +1315,27 @@ const clearAvatarFile = () => {
   characterForm.avatarFile = null;
 }
 
+// 检测表单是否有未保存的变更
+const hasChanges = computed(() => {
+  if (!_initialFormData.value) {
+    console.log('[hasChanges] NO INITIAL DATA')
+    return true
+  }
+  const current = getFormData()
+  const equal = deepEqual(current, _initialFormData.value)
+  console.log('[hasChanges] RE-EVAL', { equal, snapshotExists: !!_initialFormData.value })
+  if (!equal) {
+    console.log('[hasChanges] MISMATCH', JSON.stringify(current), JSON.stringify(_initialFormData.value))
+  }
+  return !equal
+})
+
 // 暴露方法给父组件
 defineExpose({
   clearAvatarFile,
   validate,
-  getFormData
+  getFormData,
+  hasChanges
 })
 
 // 移除不再需要的 parse 和 format 方法（已删除 max_memory_tokens 和 short_term_memory_tokens）

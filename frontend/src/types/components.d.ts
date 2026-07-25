@@ -172,4 +172,7 @@ declare module 'vue' {
     WorkspaceTree: typeof import('./../components/chat/WorkspaceTree.vue')['default']
     WorkspaceTreeNode: typeof import('./../components/chat/WorkspaceTreeNode.vue')['default']
   }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
+  }
 }

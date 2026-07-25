@@ -3,7 +3,6 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
-  ToolDisplayInfo,
 } from '../interfaces/tool-provider.interface'
 import * as http from 'http'
 import * as path from 'path'

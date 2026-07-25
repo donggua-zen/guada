@@ -5,7 +5,6 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
-  ToolDisplayInfo,
   ToolDefinition,
 } from "../../tools/interfaces/tool-provider.interface";
 import { FileParserService } from "../file-parser.service";

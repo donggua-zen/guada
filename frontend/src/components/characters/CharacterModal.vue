@@ -13,7 +13,7 @@
 
         <template #footer>
             <el-button @click="handleClose">取消</el-button>
-            <el-button type="primary" @click="handleSave" :loading="saving">应用全部设置</el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">应用全部设置</el-button>
         </template>
     </el-dialog>
 </template>
@@ -44,6 +44,7 @@ const visible = ref(false)
 const saving = ref(false)
 const currentCharacter = ref<any>({})
 const settingPanelRef = ref<any>(null)
+const panelHasChanges = ref(true)
 
 // 监听显示状态
 watch(() => props.show, (newVal) => {
@@ -71,6 +72,14 @@ watch(visible, async (newVal) => {
 const handleClose = (): void => {
     visible.value = false
 }
+
+// 同步子组件表单变更状态
+watch(() => settingPanelRef.value, (instance) => {
+    if (!instance) return;
+    watch(() => (instance as any).hasChanges?.value ?? true, (val) => {
+        panelHasChanges.value = val
+    }, { immediate: true })
+}, { immediate: true })
 
 // 保存逻辑
 const handleSave = async (): Promise<void> => {
