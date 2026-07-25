@@ -182,7 +182,6 @@ export class ToolExecutor {
       }
     }
 
-
     try {
       let validatedArgs = toolArgs;
       if (toolEntry._zodSchema) {
@@ -223,7 +222,7 @@ export class ToolExecutor {
       return {
         toolCallId,
         name: fullToolName,
-        content: JSON.stringify({ success: false, message: errorMsg }),
+        content: `Tool execution failed: ${errorMsg}`,
         isError: true,
       };
     }

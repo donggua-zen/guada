@@ -87,15 +87,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeBrowserWindow: (windowId: string) => 
     ipcRenderer.invoke('browser:close-window', { windowId }),
   getBrowserWindows: () => ipcRenderer.invoke('browser:get-windows'),
-  onBrowserWindowUpdated: (callback: (event: any, data: any) => void) => {
-    ipcRenderer.on('window-updated', callback)
-  },
-  onBrowserWindowClosed: (callback: (event: any, data: any) => void) => {
-    ipcRenderer.on('window-closed', callback)
-  },
-  onBrowserWindowCreated: (callback: (event: any, data: any) => void) => {
-    ipcRenderer.on('window-created', callback)
-  },
 
   // 浏览器窗口后台/前台模式控制
   hideBrowserWindow: (windowId: string) =>

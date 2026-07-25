@@ -1,5 +1,7 @@
 import { BrowserWindow } from "electron";
 import log from "electron-log/main";
+import * as path from "path";
+import * as fs from "fs";
 import { BrowserWindowManager, WindowInfo } from "./browser-tab-manager";
 import {
   buildSimpleTreeFromLegacyStruct,
@@ -312,7 +314,10 @@ export class BrowserAutomationService {
     }
 
     try {
-      await webContents.loadURL(url);
+      // loadURL 在页面重定向/JS 跳转时会 reject (ERR_ABORTED -3)，
+      // 但页面实际上可能已成功加载，因此忽略 loadURL 的 reject，
+      // 统一由 waitForPageLoad 判断最终加载状态。
+      await webContents.loadURL(url).catch(() => {});
       await this.waitForPageLoad(webContents);
       return {
         success: true,
@@ -326,41 +331,64 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 获取页面截图
-   * TODO: 暂时注释，待后续优化
+   * 截图当前页面，保存到本地文件
    */
-  // async screenshot(options: { format?: 'png' | 'jpeg'; quality?: number; windowId?: string } = {}): Promise<any> {
-  //   const { windowId, ...screenshotOptions } = options
-  //   const { wid } = await this.ensureTab(windowId)
+  async screenshot(
+    createdBy: string,
+    filePath?: string,
+    sessionPath?: string,
+  ): Promise<any> {
+    if (!this.windowManager) {
+      throw new Error("WindowManager not initialized");
+    }
 
-  //   if (!this.windowManager) {
-  //     throw new Error('TabManager not initialized')
-  //   }
+    const { windowId: wid } = await this.ensureWindow("", createdBy);
 
-  //   log.info(`Taking screenshot (tab: ${wid})...`)
+    log.info(`Taking screenshot (tab: ${wid})...`);
 
-  //   const webContents = this.windowManager.getWebContents(wid)
-  //   if (!webContents) {
-  //     throw new Error(`Tab ${wid} not found`)
-  //   }
+    const webContents = this.windowManager.getWebContents(wid);
+    if (!webContents) {
+      throw new Error(`Tab ${wid} not found`);
+    }
 
-  //   // 等待页面完全加载
-  //   await this.waitForPageLoad(webContents)
+    await this.waitForPageLoad(webContents);
 
-  //   const image = await webContents.capturePage()
-  //   const buffer = screenshotOptions.format === 'jpeg'
-  //     ? image.toJPEG(screenshotOptions.quality || 90)
-  //     : image.toPNG()
+    const image = await webContents.capturePage();
+    const buffer = image.toPNG();
+    const base64 = buffer.toString("base64");
 
-  //   const base64 = buffer.toString('base64')
+    let savedPath: string | undefined;
 
-  //   return {
-  //     success: true,
-  //     windowId: wid,
-  //     format: screenshotOptions.format || 'png',
-  //     data: base64,
-  //   }
-  // }
+    // 保存到文件
+    const targetPath = filePath
+      ? path.isAbsolute(filePath)
+        ? filePath
+        : sessionPath
+          ? path.join(sessionPath, filePath)
+          : undefined
+      : sessionPath
+        ? path.join(sessionPath, `screenshot-${Date.now()}.png`)
+        : undefined;
+
+    if (targetPath) {
+      const dir = path.dirname(targetPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      await fs.promises.writeFile(targetPath, buffer);
+      savedPath = targetPath;
+      log.info(`Screenshot saved: ${savedPath}`);
+    }
+
+    return {
+      success: true,
+      tab_id: wid,
+      format: "png",
+      saved_path: savedPath,
+      width: image.getSize().width,
+      height: image.getSize().height,
+    };
+  }
 
   /**
    * 执行 JavaScript 代码
@@ -1482,15 +1510,16 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 获取窗口控制台日志
+  /**
+   * 获取当前标签控制台日志
    */
-  async getConsoleLogs(windowId: string, createdBy?: string): Promise<any> {
+  async getConsoleLogs(createdBy: string): Promise<any> {
     if (!this.windowManager) {
       return { success: false, message: "TabManager not initialized" };
     }
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    const logs = this.windowManager.getConsoleLogs(wid);
-    // 读取后清空缓冲区，下次调用只返回新日志
+    const { windowId: wid } = await this.ensureWindow("", createdBy);
+    // 复制一份再清空，避免返回的引用被 clearConsoleLogs 清空
+    const logs = [...this.windowManager.getConsoleLogs(wid)];
     this.windowManager.clearConsoleLogs(wid);
     return {
       success: true,
@@ -1498,19 +1527,6 @@ export class BrowserAutomationService {
       logs: logs || [],
       recent: (logs || []).slice(-50).join("\n"),
     };
-  }
-
-  /**
-   * 清空窗口控制台日志
-   */
-  async clearConsoleLogs(windowId: string, createdBy?: string): Promise<any> {
-    if (!this.windowManager) {
-      return { success: false, message: "TabManager not initialized" };
-    }
-    const consoleLogs = (this.windowManager as any).consoleLogs;
-    const logs = consoleLogs?.get(windowId);
-    if (logs) logs.length = 0;
-    return { success: true, windowId };
   }
 
   /**
@@ -1666,8 +1682,14 @@ export class BrowserAutomationService {
 
         case "browser_console":
           return await this.getConsoleLogs(
-            "",
             params.created_by,
+          );
+
+        case "browser_screenshot":
+          return await this.screenshot(
+            params.created_by,
+            params.file_path,
+            params.session_path,
           );
 
         case "browser_history":

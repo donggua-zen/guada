@@ -127,7 +127,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         parts.push(tag);
         return parts.join("\n");
       },
-      display: { action: "创建子代理", argsKey: "name", icon: "generic" },
+      display: { actionType: "sub_agent_create", argsKey: "name", icon: "generic" },
     });
 
     // ── manager：管理子代理（wait / list / close / send_message）──
@@ -234,7 +234,7 @@ The sub-agent has its own independent conversation context and tool capabilities
             throw new Error(`Unknown action: ${action}`);
         }
       },
-      display: { action: "管理子代理", argsKey: "action", icon: "generic" },
+      display: { actionType: "sub_agent_manage", argsKey: "action", icon: "generic" },
     });
 
     // ── Prompt: 子代理使用指南 + 可用角色列表 ──

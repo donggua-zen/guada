@@ -235,30 +235,6 @@ function handleSetVisibility(_event: any, data: { windowId: string; visible: boo
   }
 }
 
-function handleWindowUpdated(_event: any, data: any): void {
-  store.updateWebview(data.windowId, {
-    title: data.title,
-    url: data.url,
-    isVisible: data.isVisible,
-  })
-}
-
-function handleWindowCreated(_event: any, data: any): void {
-  const existing = store.webviews.get(data.windowId)
-  if (existing) {
-    store.updateWebview(data.windowId, {
-      title: data.title,
-      url: data.url,
-      metadata: data.metadata,
-    })
-  }
-}
-
-function handleWindowClosed(_event: any, data: { windowId: string }): void {
-  webviewEls.delete(data.windowId)
-  store.removeWebview(data.windowId)
-}
-
 onMounted(() => {
   const api = window.electronAPI
   if (!api) return
@@ -267,11 +243,6 @@ onMounted(() => {
   api.onCreateWebview?.(handleCreateWebview)
   api.onDestroyWebview?.(handleDestroyWebview)
   api.onSetWebviewVisibility?.(handleSetVisibility)
-
-  // 监听窗口状态更新
-  api.onBrowserWindowUpdated?.(handleWindowUpdated)
-  api.onBrowserWindowCreated?.(handleWindowCreated)
-  api.onBrowserWindowClosed?.(handleWindowClosed)
 })
 
 onUnmounted(() => {

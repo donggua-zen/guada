@@ -1798,9 +1798,16 @@ function setupIpcHandlers() {
         const encoding = options?.encoding || "utf8";
 
         if (encoding === "base64") {
-          // base64 模式：将 base64 字符串解码为 Buffer 后异步写入
-          const base64Data =
+          // base64 模式：剥离 data URI 前缀后解码为 Buffer 写入
+          let base64Data =
             typeof data === "string" ? data : JSON.stringify(data);
+          // 处理 data URI 格式：data:image/png;base64,iVBOR...
+          const dataUriMatch = base64Data.match(
+            /^data:[^;]+;base64,(.*)$/,
+          );
+          if (dataUriMatch) {
+            base64Data = dataUriMatch[1];
+          }
           await fs.promises.writeFile(
             filePath,
             Buffer.from(base64Data, "base64"),

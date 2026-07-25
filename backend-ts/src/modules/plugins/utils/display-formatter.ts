@@ -3,8 +3,8 @@ import { ToolHandlerDef } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 
 /**
- * 生成工具调用的展示文案
- * 内部自动按工具名从 PluginRegistry 查找 display 配置
+ * 生成工具调用的展示信息（静态配置）
+ * 后端只返回语义结构，前端负责生成展示文案
  */
 export function generateDisplayMessage(
   request: ToolCallRequest,
@@ -19,59 +19,26 @@ export function generateDisplayMessage(
       );
     }
     if (request.name === "tool_call") {
-      return { action: isExecuting ? "正在调用工具" : "已调用工具", args: request.arguments?.pluginId, toolName: request.name, toolType: "generic" };
+      return { actionType: "tool_call", toolType: "generic", toolName: request.name };
     }
     if (request.name === "tool_load") {
-      return { action: isExecuting ? "正在加载工具" : "已加载工具", args: request.arguments?.pluginId, toolName: request.name, toolType: "generic" };
+      return { actionType: "tool_load", toolType: "generic", toolName: request.name };
     }
 
     // 从 PluginRegistry 查找工具定义，提取 display 配置
     const toolEntry: ToolHandlerDef | undefined = PluginRegistry.findToolByName(request.name);
-    if (toolEntry?.action) {
-      const prefix = isExecuting ? "正在" : "已";
-      let argsSummary: string | undefined;
-      if (toolEntry.argsKey && request.arguments?.[toolEntry.argsKey]) {
-        const val = request.arguments[toolEntry.argsKey];
-        argsSummary = typeof val === "string" ? (val.length > 60 ? val.substring(0, 60) + "..." : val) : String(val);
-      } else if (request.arguments && typeof request.arguments === "object") {
-        for (const value of Object.values(request.arguments)) {
-          if (typeof value === "string" && value.length > 0) {
-            argsSummary = value.includes("/") || value.includes("\\") ? value.split(/[\/\\]/).pop() || value : value;
-            break;
-          }
-        }
-      }
+    if (toolEntry) {
       return {
-        action: `${prefix}${toolEntry.action}`,
-        args: argsSummary,
-        toolName: request.name,
+        actionType: toolEntry.actionType || request.name,
         toolType: toolEntry.icon || "generic",
+        argsKey: toolEntry.argsKey,
+        toolName: request.name,
       };
     }
 
-    // 自定义展示文案（旧式方法级）
-    if (toolEntry?.formatDisplayMessage) {
-      const customAction = toolEntry.formatDisplayMessage(request.arguments, isExecuting);
-      return { action: customAction, toolName: request.name, toolType: toolEntry.icon || "generic" };
-    }
-
     // 通用降级
-    return generateGenericDisplayInfo(request.name, request.arguments, isExecuting);
+    return { actionType: request.name, toolType: "generic", toolName: request.name };
   } catch {
-    return { action: isExecuting ? "正在调用工具" : "已调用工具", toolName: request.name, toolType: "generic" };
+    return { actionType: "generic", toolType: "generic", toolName: request.name };
   }
-}
-
-function generateGenericDisplayInfo(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
-  const readableName = toolName.split("__").pop()?.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || toolName;
-  let argsSummary: string | undefined;
-  if (args && typeof args === "object") {
-    for (const value of Object.values(args)) {
-      if (typeof value === "string" && value.length > 0) {
-        argsSummary = value.includes("/") || value.includes("\\") ? value.split(/[\/\\]/).pop() || value : value;
-        break;
-      }
-    }
-  }
-  return { action: `${readableName}`, args: argsSummary, toolName, toolType: "generic" };
 }

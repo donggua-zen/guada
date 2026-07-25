@@ -273,61 +273,6 @@ export class FileToolProvider implements IToolProvider {
   }
 
   /**
-   * 生成文件工具的展示文案
-   */
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): ToolDisplayInfo {
-    const prefix = isExecuting ? "正在" : "已";
-    const fileName = args.file_path || args.path || args.path;
-
-    let action: string;
-    let toolType: string = this.pluginId;
-    switch (toolName) {
-      case "write":
-        action = `${prefix}写入`;
-        toolType = "edit";
-        break;
-
-      case "read":
-        action = `${prefix}读取`;
-        toolType = "read";
-        break;
-
-      case "list":
-        action = `${prefix}读取`;
-        toolType = "search";
-        break;
-
-      case "delete":
-        action = `${prefix}删除`;
-        break;
-
-      case "edit":
-        action = `${prefix}修改`;
-        toolType = "edit";
-        break;
-
-      case "grep":
-        action = `${prefix}搜索`;
-        toolType = "search";
-        break;
-
-      default:
-        action = `${prefix}操作`;
-    }
-
-    return {
-      action,
-      args: fileName,
-      toolName: toolName,
-      toolType,
-    };
-  }
-
-  /**
    * 解析文件路径：委托给 WorkspaceService
    */
   private resolvePath(filePath: string, context?: Record<string, any>): string {

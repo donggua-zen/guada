@@ -146,41 +146,6 @@ export class DocumentToolProvider implements IToolProvider {
   }
 
   /**
-   * 生成文档工具的展示文案
-   */
-  formatDisplayMessage(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): ToolDisplayInfo {
-    const prefix = isExecuting ? "正在" : "已";
-    const fileName = args.file_path
-      ? path.basename(args.file_path)
-      : args.file_paths?.length
-        ? `${args.file_paths.length} 个文件`
-        : undefined;
-
-    let action: string;
-    switch (toolName) {
-      case "doc_parse":
-        action = `${prefix}解析文档`;
-        break;
-      case "doc_batch_parse":
-        action = `${prefix}批量解析文档`;
-        break;
-      default:
-        action = `${prefix}处理文档`;
-    }
-
-    return {
-      action,
-      args: fileName,
-      toolName: `document__${toolName}`,
-      toolType: this.pluginId,
-    };
-  }
-
-  /**
    * 解析单个文档
    */
   private async handleParse(

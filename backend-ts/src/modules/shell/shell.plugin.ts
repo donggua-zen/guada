@@ -223,7 +223,7 @@ export class ShellPlugin extends PluginBase {
           abortSignal?.removeEventListener("abort", onAbort);
         }
       },
-      display: { action: "执行命令", argsKey: "command", icon: "shell" },
+      display: { actionType: "shell", argsKey: "command", icon: "shell" },
       dangerLevel: "critical",
     });
 
@@ -385,7 +385,7 @@ export class ShellPlugin extends PluginBase {
             throw new Error(`Unknown action: ${action}`);
         }
       },
-      display: { action: "管理进程", argsKey: "action", icon: "terminal" },
+      display: { actionType: "process", argsKey: "action", icon: "terminal" },
       dangerLevel: "high",
     });
 

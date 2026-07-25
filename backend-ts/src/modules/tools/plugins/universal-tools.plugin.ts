@@ -77,7 +77,7 @@ export class UniversalToolsPlugin extends PluginBase {
       execute: async (args: { name: string }, ctx?: ToolExecCtx) => {
         return this.handleToolLearn(args.name, ctx!);
       },
-      display: { action: "学习工具包", argsKey: "name", icon: "tool" },
+      display: { actionType: "tool_load_kit", argsKey: "name", icon: "tool" },
     });
 
     // tool_use
@@ -109,7 +109,7 @@ export class UniversalToolsPlugin extends PluginBase {
         );
         return result.content;
       },
-      display: { action: "使用工具", argsKey: "tool_name", icon: "tool" },
+      display: { actionType: "tool_use", argsKey: "tool_name", icon: "tool" },
     });
 
     // 工具包记忆提示词：注入到 user 消息（压缩后自动恢复 AI 正在使用的工具包定义）

@@ -496,7 +496,7 @@ async function closeBrowserWindow(windowId: string): Promise<void> {
         console.error('Failed to close browser window:', e);
     }
 
-    // store 中的记录由 window-closed 事件异步移除，等待一个 tick 后切换
+    // store 中的记录由 browser:destroy-webview 事件异步移除，等待一个 tick 后切换
     await nextTick();
 
     if (nextTab && browserStore.sessionWebviews.some(t => t.windowId === nextTab.windowId)) {

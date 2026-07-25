@@ -2,6 +2,17 @@
   margin-bottom: 10px;
   margin-top: 0;
 }
+.markdown-text strong,.markdown-text h1,.markdown-text h2,.markdown-text h3,.markdown-text h4,.markdown-text h5,.markdown-text h6 {
+  font-family:
+    Segoe UI Variable,
+    Segoe UI,
+    Microsoft YaHei UI,
+    sans-serif !important;
+  --font-family-default:
+    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --font-family-heading:
+    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
 
 .markdown-text > :last-child {
   margin-top: 0;
@@ -29,7 +40,6 @@
   font-size: 16px;
   /* padding-bottom: 0.5em; */
 }
-
 
 .markdown-text h6 {
   color: #6a737d;
@@ -154,8 +164,6 @@ ol > *:not(li) {
   word-wrap: break-word;
   font-size: var(--size-text-base) !important;
 }
-
-
 
 .markdown-text blockquote {
   border-left: 4px solid #dfe2e5;

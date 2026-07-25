@@ -7,7 +7,6 @@ import {
   app,
 } from "electron";
 import * as path from "path";
-import * as fs from "fs";
 import * as url from "url";
 import log from "electron-log/main";
 
@@ -48,6 +47,14 @@ export class BrowserWebviewManager {
   private maxWindows: number = Infinity;
   private nextWindowId = 1;
 
+  // FIFO 队列：createWindow 按顺序 push，did-attach-webview 按顺序 shift
+  private pendingAttachQueue: string[] = [];
+  // windowId → { resolve, reject, timer }，did-attach-webview 时 resolve
+  private pendingResolvers = new Map<
+    string,
+    { resolve: (wc: WebContents) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
+
   constructor(_maxWindows?: number) {
     // 参数已忽略，不再限制窗口数量
   }
@@ -66,9 +73,13 @@ export class BrowserWebviewManager {
     );
 
     // 前端页面刷新时，所有 <webview> DOM 元素销毁，需清理 Manager 中的残留记录
-    // 避免主进程状态与前端不一致（前端 store 已被刷新清空）
-    mainWindow.webContents.on("did-start-navigation", (_e, _url, _isInPlace, isMainFrame) => {
-      if (isMainFrame) {
+    // 仅在真正离开应用页面时才清理（刷新/导航到非 app URL）
+    mainWindow.webContents.on("did-start-navigation", (_e, url, _isInPlace, isMainFrame) => {
+      if (!isMainFrame) return;
+      const isAppUrl = url.startsWith("http://localhost:5173") ||
+                       url.startsWith("file://") ||
+                       url === "about:blank";
+      if (!isAppUrl) {
         this.handleFrontendReload();
       }
     });
@@ -83,48 +94,56 @@ export class BrowserWebviewManager {
    * 通知前端同步清空 store。
    */
   private handleFrontendReload(): void {
-    if (this.webviews.size === 0) return;
+    if (this.webviews.size === 0 && this.pendingAttachQueue.length === 0) return;
     log.info(`Frontend reloading, clearing ${this.webviews.size} webview records`);
+
+    // reject 所有 pending createWindow Promise
+    for (const [windowId, resolver] of this.pendingResolvers) {
+      clearTimeout(resolver.timer);
+      resolver.reject(new Error("Frontend reloaded, webview creation aborted"));
+    }
+    this.pendingResolvers.clear();
+    this.pendingAttachQueue.length = 0;
+
     this.webviews.clear();
   }
 
   /**
-   * 处理 webview attach 事件：匹配 partition → windowId，设置事件监听
+   * 处理 webview attach 事件：FIFO 队列取出 windowId，设置事件监听
+   *
+   * IPC 事件有序、Vue v-for 有序、Electron attach 有序 → FIFO 顺序可靠
    */
   private handleWebviewAttach(webviewWC: WebContents): void {
-    // 通过 session 匹配找到对应的 windowId
-    let matchedWindowId: string | null = null;
+    const windowId = this.pendingAttachQueue.shift();
 
-    for (const [windowId, wv] of this.webviews.entries()) {
-      if (wv.webContents) continue; // 已匹配
-      try {
-        const expectedSession = session.fromPartition(wv.partition, {
-          cache: true,
-        });
-        if (webviewWC.session === expectedSession) {
-          matchedWindowId = windowId;
-          break;
-        }
-      } catch {
-        // session 可能已失效
-      }
-    }
-
-    if (!matchedWindowId) {
+    if (!windowId) {
       log.warn(
-        `did-attach-webview: no matching pending webview for webContentsId ${webviewWC.id}`,
+        `did-attach-webview: no pending window in queue for webContentsId ${webviewWC.id}`,
       );
       return;
     }
 
-    const wv = this.webviews.get(matchedWindowId)!;
+    const wv = this.webviews.get(windowId);
+    if (!wv) {
+      log.warn(`did-attach-webview: windowId ${windowId} not in webviews map`);
+      return;
+    }
+
     wv.webContents = webviewWC;
 
     log.info(
-      `Webview attached for window ${matchedWindowId}, webContentsId: ${webviewWC.id}`,
+      `Webview attached for window ${windowId}, webContentsId: ${webviewWC.id}`,
     );
 
-    this.setupWebviewEvents(webviewWC, matchedWindowId);
+    this.setupWebviewEvents(webviewWC, windowId);
+
+    // resolve createWindow() 的 Promise
+    const resolver = this.pendingResolvers.get(windowId);
+    if (resolver) {
+      clearTimeout(resolver.timer);
+      this.pendingResolvers.delete(windowId);
+      resolver.resolve(webviewWC);
+    }
   }
 
   /**
@@ -138,35 +157,28 @@ export class BrowserWebviewManager {
     const logs = wv.consoleLogs;
     logs.length = 0;
 
-    (webviewWC as any).on(
+    webviewWC.on(
       "console-message",
-      (event: Electron.ConsoleMessageEvent) => {
-        const levelNames: Record<number, string> = {
-          0: "verbose",
-          1: "info",
-          2: "warning",
-          3: "error",
-        };
-        const line = `[${levelNames[event.level] || "log"}] ${event.message}`;
+      (
+        details: any,
+        deprecatedLevel: number,
+        deprecatedMessage: string,
+      ) => {
+        const level = typeof details?.level === "string"
+          ? details.level
+          : ["verbose", "info", "warning", "error"][deprecatedLevel] || "log";
+        const message = details?.message ?? deprecatedMessage ?? "";
+        if (!message) return;
+        const line = `[${level}] ${message}`;
         logs.push(line);
         if (logs.length > 200) logs.shift();
       },
     );
 
-    // 主框架导航开始时清空控制台日志
-    (webviewWC as any).on(
-      "did-start-navigation",
-      (
-        _e: any,
-        _url: string,
-        _isInPlace: boolean,
-        isMainFrame: boolean,
-      ) => {
-        if (isMainFrame) {
-          logs.length = 0;
-        }
-      },
-    );
+    // 导航开始时清空上一页的日志（did-start-loading 在整个加载周期只触发一次，不会因重定向重复）
+    webviewWC.on("did-start-loading", () => {
+      logs.length = 0;
+    });
 
     // 设置 Edge User Agent
     const edgeUserAgent =
@@ -183,24 +195,11 @@ export class BrowserWebviewManager {
       return { action: "deny" };
     });
 
-    // 监听页面标题变化
-    webviewWC.on(
-      "page-title-updated",
-      (_event: Electron.Event, title: string) => {
-        const w = this.webviews.get(windowId);
-        if (w) {
-          w.info.title = title;
-          this.notifyWindowUpdate(windowId);
-        }
-      },
-    );
-
-    // 监听导航完成
+    // 监听导航完成 — 注入反检测脚本和新标签页内容
     webviewWC.on("did-finish-load", () => {
       const w = this.webviews.get(windowId);
       if (w) {
         w.info.url = webviewWC.getURL();
-        this.notifyWindowUpdate(windowId);
       }
       const currentUrl = webviewWC.getURL();
 
@@ -294,6 +293,7 @@ export class BrowserWebviewManager {
   /**
    * 创建新的 webview 窗口
    * 通过 IPC 通知前端创建 <webview> 元素，主进程等待 did-attach-webview 事件
+   * Promise 在 webview attach 完成后才 resolve，前端调用方可直接使用结果
    */
   async createWindow(
     url?: string,
@@ -304,12 +304,10 @@ export class BrowserWebviewManager {
     }
 
     const windowId = `win_${this.nextWindowId++}`;
-    // 所有浏览器自动化窗口共享同一个 session（与主程序的默认 session 隔离）
     const partition = "persist:browser_shared";
 
     log.info(`Creating new webview window: ${windowId}`);
 
-    // 预创建 session（确保 did-attach-webview 时可以匹配）
     session.fromPartition(partition, { cache: true });
 
     const now = Date.now();
@@ -331,6 +329,9 @@ export class BrowserWebviewManager {
       partition,
     });
 
+    // 入队等待 did-attach-webview 匹配
+    this.pendingAttachQueue.push(windowId);
+
     // 通知前端创建 <webview> 元素
     this.mainWindow.webContents.send("browser:create-webview", {
       windowId,
@@ -342,8 +343,27 @@ export class BrowserWebviewManager {
 
     log.info(`Webview window created: ${windowId} (total: ${this.webviews.size})`);
 
-    // 通知前端新窗口已创建
-    this.notifyWindowCreated(windowId);
+    // 等待 did-attach-webview 事件 resolve（10s 超时）
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingResolvers.delete(windowId);
+        // 从队列中移除超时的 windowId
+        const idx = this.pendingAttachQueue.indexOf(windowId);
+        if (idx !== -1) this.pendingAttachQueue.splice(idx, 1);
+        reject(new Error(`Webview attach timeout for ${windowId}`));
+      }, 10000);
+
+      this.pendingResolvers.set(windowId, {
+        resolve: () => resolve(),
+        reject,
+        timer,
+      });
+    }).catch((err) => {
+      // attach 超时：清理记录，向上抛出
+      this.webviews.delete(windowId);
+      log.error(err.message);
+      throw err;
+    });
 
     return windowInfo;
   }
@@ -354,6 +374,14 @@ export class BrowserWebviewManager {
   async closeWindow(windowId: string): Promise<boolean> {
     const wv = this.webviews.get(windowId);
     if (!wv) {
+      // 可能在 pending 状态（attach 未完成）就被关闭
+      const idx = this.pendingAttachQueue.indexOf(windowId);
+      if (idx !== -1) this.pendingAttachQueue.splice(idx, 1);
+      const resolver = this.pendingResolvers.get(windowId);
+      if (resolver) {
+        clearTimeout(resolver.timer);
+        this.pendingResolvers.delete(windowId);
+      }
       return false;
     }
 
@@ -367,20 +395,7 @@ export class BrowserWebviewManager {
         });
       }
 
-      // 清理控制台日志文件（异步）
-      const sPath = wv.info.metadata?.sessionPath;
-      if (sPath) {
-        const logFile = path.join(
-          sPath,
-          ".browser-work",
-          "console",
-          windowId + ".log",
-        );
-        fs.promises.unlink(logFile).catch(() => {});
-      }
-
       this.webviews.delete(windowId);
-      this.notifyWindowClosed(windowId);
 
       return true;
     } catch (error) {
@@ -558,7 +573,6 @@ export class BrowserWebviewManager {
         visible: false,
       });
     }
-    this.notifyWindowUpdate(windowId);
     log.info(`Window ${windowId} hidden (background mode)`);
   }
 
@@ -577,7 +591,6 @@ export class BrowserWebviewManager {
         visible: true,
       });
     }
-    this.notifyWindowUpdate(windowId);
     log.info(`Window ${windowId} shown (foreground mode)`);
   }
 
@@ -603,57 +616,6 @@ export class BrowserWebviewManager {
   isWindowVisible(windowId: string): boolean {
     const wv = this.webviews.get(windowId);
     return wv ? wv.info.isVisible : false;
-  }
-
-  /**
-   * 通知前端窗口已创建
-   */
-  private notifyWindowCreated(windowId: string): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const wv = this.webviews.get(windowId);
-      if (wv) {
-        this.mainWindow.webContents.send("window-created", {
-          windowId,
-          title: wv.info.title,
-          url: wv.info.url,
-          isActive: wv.info.isActive,
-          isVisible: wv.info.isVisible,
-          metadata: wv.info.metadata,
-          animate: true,
-        });
-      }
-    }
-  }
-
-  /**
-   * 通知前端窗口更新
-   */
-  private notifyWindowUpdate(windowId: string): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const wv = this.webviews.get(windowId);
-      if (wv) {
-        const wc = wv.webContents;
-        this.mainWindow.webContents.send("window-updated", {
-          windowId,
-          title: (wc && !wc.isDestroyed() ? wc.getTitle() : "") || wv.info.title,
-          url: (wc && !wc.isDestroyed() ? wc.getURL() : "") || wv.info.url,
-          isActive: wv.info.isActive,
-          isVisible: wv.info.isVisible,
-          metadata: wv.info.metadata,
-        });
-      }
-    }
-  }
-
-  /**
-   * 通知前端窗口已关闭
-   */
-  private notifyWindowClosed(windowId: string): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("window-closed", {
-        windowId,
-      });
-    }
   }
 
   /**

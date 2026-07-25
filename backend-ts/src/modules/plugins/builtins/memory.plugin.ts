@@ -1441,7 +1441,7 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
 
         return this.handleMemoryEdit(args, ctx);
       },
-      display: { action: "编辑记忆", argsKey: "action", icon: "generic" },
+      display: { actionType: "memory", argsKey: "action", icon: "generic" },
       dangerLevel: "safe",
     });
   }

@@ -91,7 +91,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             }
             return this.recognizeImage(physicalPath, prompt, abortSignal);
           },
-          display: { action: "Recognize image", argsKey: "image_id", icon: "vision" },
+          display: { actionType: "recognize", argsKey: "image_id", icon: "vision" },
         });
 
         toolkit.registerTool({
@@ -123,7 +123,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             }
             return this.recognizeImage(physicalPath, prompt, abortSignal);
           },
-          display: { action: "Recognize image", argsKey: "image_path", icon: "vision" },
+          display: { actionType: "recognize", argsKey: "image_path", icon: "vision" },
         });
       },
     });

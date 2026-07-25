@@ -109,23 +109,13 @@ export interface ToolHandlerDef {
   /** 危险等级标记 */
   dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   /**
-   * 自定义工具调用展示文案
-   * @param args 工具参数
-   * @param isExecuting 是否正在执行
-   * @returns 展示文案
-   */
-  formatDisplayMessage?(
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): string;
-  /**
    * 所属工具集 ID（用于按工具集分组加载，由 @ToolSet 统一控制加载模式）
    */
   toolSet?: string;
   /** 前端图标标识（如 "browser"、"code"、"edit"） */
   icon?: string;
-  /** 可读动作描述（如 "访问网页"、"点击元素"） */
-  action?: string;
+  /** 动作类型枚举（前端用于映射展示文案） */
+  actionType?: string;
   /** 从 args 中提取摘要的字段名（默认自动取第一个字符串参数） */
   argsKey?: string;
 }
@@ -194,7 +184,7 @@ export interface ToolKitHandle {
       ctx?: PluginContext,
       signal?: AbortSignal,
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
-    display?: { action?: string; argsKey?: string; icon?: string };
+    display?: { actionType?: string; argsKey?: string; icon?: string };
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void;
   registerRawTool(def: ToolHandlerDef): void;

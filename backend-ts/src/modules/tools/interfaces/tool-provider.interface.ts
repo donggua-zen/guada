@@ -36,25 +36,23 @@ export interface ToolCallResponse {
   name: string;
   content: string;
   isError?: boolean;
+  /** 工具执行结果状态，由 agent-engine 在执行后设置 */
+  outcome?: "success" | "error" | "rejected";
 }
 
 /**
- * 工具调用展示信息（结构化）
+ * 工具调用展示信息（语义结构）
+ * 后端只发送静态配置，前端负责生成展示文案
  */
 export interface ToolDisplayInfo {
-  /** 动作描述（如：“正在写入文件”、“已读取文件”） */
-  action: string;
-  /** 关键参数摘要（如：“xxxxxx.txt”） */
-  args?: string;
+  /** 动作类型枚举（前端用于映射展示文案，i18n 翻译键） */
+  actionType: string;
+  /** 工具类型标识（前端图标映射） */
+  toolType: string;
+  /** 从 args 中提取摘要的字段名 */
+  argsKey?: string;
   /** 原始工具名 */
-  toolName?: string;
-  /**
-   * 工具类型标识（用于前端图标映射）
-   * 默认使用 pluginId，仅在需要特殊图标时显式指定
-   */
-  toolType?: string;
-  /** 额外信息（可选，用于扩展） */
-  extra?: Record<string, any>;
+  toolName: string;
 }
 
 /**
@@ -159,12 +157,4 @@ export interface IToolProvider {
    * @returns 简短的工具类别描述
    */
   getBriefDescription?(context?: ProviderContext): Promise<string>;
-  /**
-   * 生成工具调用的展示文案（在 LLM 输出参数后立即调用）
-   * @param toolName 工具名称
-   * @param args 工具参数（可能不完整，流式累积中）
-   * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
-   * @returns 结构化的展示信息或自然语言字符串（向后兼容）
-   */
-  formatDisplayMessage?(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo | string;
 }

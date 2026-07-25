@@ -111,29 +111,17 @@ export class MessageService {
   }
 
   /**
-   * 剥离工具调用的详细参数和结果，减少传输数据量
-   *
-   * 保留展示所需的 metadata.displayMessage 等信息，仅清空大体积数据。
+   * 剥离工具调用的执行结果，减少传输数据量
    *
    * 处理逻辑：
-   * - assistant 消息：清空 metadata.toolCalls 中的 arguments
    * - tool 消息：清空 content（工具执行结果），保留 metadata.toolCallId 用于关联
+   * - toolCallsResponse：清空 content（如果后端已聚合）
    */
   private stripToolCallDetails(content: any): any {
     const result = { ...content };
 
-    // 处理 assistant 消息的 toolCalls
     if (content.metadata) {
       const metadata = { ...content.metadata };
-
-      // 清空 toolCalls 中的 arguments（保留展示信息如 displayMessage）
-      if (metadata.toolCalls && Array.isArray(metadata.toolCalls)) {
-        metadata.toolCalls = metadata.toolCalls.map((tc: any) => ({
-          ...tc,
-          arguments: undefined,
-          args: undefined,
-        }));
-      }
 
       // 清空 toolCallsResponse 中的 content（如果后端已聚合）
       if (

@@ -163,7 +163,7 @@ export class FilePlugin extends PluginBase {
         }
         return result;
       },
-      display: { action: "读取文件", argsKey: "file_path", icon: "read" },
+      display: { actionType: "read", argsKey: "file_path", icon: "read" },
       dangerLevel: "safe",
     });
 
@@ -358,7 +358,7 @@ export class FilePlugin extends PluginBase {
 
         return output;
       },
-      display: { action: "搜索文件", argsKey: "pattern", icon: "search" },
+      display: { actionType: "search", argsKey: "pattern", icon: "search" },
       dangerLevel: "safe",
     });
 
@@ -390,7 +390,7 @@ export class FilePlugin extends PluginBase {
         });
         return `File written: ${resolvedPath} (${content.length} chars)`;
       },
-      display: { action: "写入文件", argsKey: "file_path", icon: "edit" },
+      display: { actionType: "write", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
     });
 
@@ -450,7 +450,7 @@ export class FilePlugin extends PluginBase {
         });
         return `File ${resolvedPath} modified (1 replacement)`;
       },
-      display: { action: "替换文本", argsKey: "file_path", icon: "edit" },
+      display: { actionType: "edit", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
     });
 
@@ -481,7 +481,7 @@ export class FilePlugin extends PluginBase {
         }
         throw new Error(`${resolvedPath} is not a valid file or directory`);
       },
-      display: { action: "删除文件", argsKey: "path", icon: "edit" },
+      display: { actionType: "delete", argsKey: "path", icon: "edit" },
       dangerLevel: "critical",
     });
 
@@ -841,7 +841,7 @@ export class FilePlugin extends PluginBase {
 
         return outputLines.join("\n");
       },
-      display: { action: "搜索", argsKey: "pattern", icon: "search" },
+      display: { actionType: "grep", argsKey: "pattern", icon: "search" },
       dangerLevel: "safe",
     });
 

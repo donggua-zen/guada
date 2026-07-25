@@ -106,7 +106,7 @@ export class Toolkit implements ToolKitHandle {
 
 
 
-    display?: { action?: string; argsKey?: string; icon?: string };
+    display?: { actionType?: string; argsKey?: string; icon?: string };
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void {
     const zodSchema = def.inputSchema as any;
@@ -153,7 +153,7 @@ export class Toolkit implements ToolKitHandle {
       dangerLevel: def.dangerLevel,
       toolSet: this.id,
       icon: def.display?.icon,
-      action: def.display?.action,
+      actionType: def.display?.actionType,
       argsKey,
     };
 

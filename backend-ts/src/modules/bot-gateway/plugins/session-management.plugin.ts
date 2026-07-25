@@ -74,7 +74,7 @@ export class SessionManagementPlugin extends PluginBase {
           archivedExternalId: newExternalId,
         });
       },
-      display: { action: "清空会话", icon: "chat" },
+      display: { actionType: "clear_session", icon: "chat" },
     });
 
     sessionKit.registerPrompt({
