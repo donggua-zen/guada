@@ -20,7 +20,7 @@
         class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
         @scroll="handleScroll">
-        <div class="max-w-195 mx-auto pt-5 pb-14">
+        <div class="max-w-195 mx-auto pt-5 pb-4">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -55,7 +55,7 @@
 
           <!-- 流式输出状态指示 -->
           <div v-if="isStreaming && !sessionStore.sessionIsCompressing(currentSession?.id || '')"
-            class="flex items-center text-gray-500 pb-8">
+            class="flex items-center text-gray-500 pb-8 -mt-5">
             <el-icon class="is-loading mr-2" size="14">
               <Loading />
             </el-icon>

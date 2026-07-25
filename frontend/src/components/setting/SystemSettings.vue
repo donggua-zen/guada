@@ -1,6 +1,6 @@
 <template>
     <div class="h-full flex">
-        <Teleport to="#settings-sidebar-portal">
+        <Teleport v-if="portalReady" to="#settings-sidebar-portal">
         <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
         <div class="h-full sidebar-transparent-bg flex flex-col overflow-hidden">
             <!-- 返回应用 -->
@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import OcrSettings from './OcrSettings.vue'
@@ -245,6 +245,9 @@ const getDefaultTabPath = () => {
 
 const currentTabValue = ref(getDefaultTabPath())
 
+// Teleport 目标就绪标志：确保 #settings-sidebar-portal 已挂载到 DOM
+const portalReady = ref(false)
+
 // 当前标签标题
 const currentTabLabel = computed(() => {
     const item = filteredSidebarItems.value.find(i => i.path === currentTabValue.value)
@@ -278,5 +281,9 @@ onMounted(() => {
         const tabParam = Array.isArray(route.params.tab) ? route.params.tab[0] : (route.params.tab as string)
         currentTabValue.value = tabParam
     }
+    // 等待 DOM 提交完成后再启用 Teleport，避免刷新时目标尚未插入 document
+    nextTick(() => {
+        portalReady.value = !!document.getElementById('settings-sidebar-portal')
+    })
 })
 </script>

@@ -76,7 +76,7 @@ const handleClose = (): void => {
 // 同步子组件表单变更状态
 watch(() => settingPanelRef.value, (instance) => {
     if (!instance) return;
-    watch(() => (instance as any).hasChanges?.value ?? true, (val) => {
+    watch(() => (instance as any).hasChanges, (val) => {
         panelHasChanges.value = val
     }, { immediate: true })
 }, { immediate: true })

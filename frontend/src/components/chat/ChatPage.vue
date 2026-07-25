@@ -14,18 +14,14 @@
                 <template #actions>
                   <!-- 工作目录切换 -->
                   <el-tooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
-                  <div
-                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                    @click="layoutStore.toggleWorkspace()" :class="{'bg-gray-100 dark:bg-[#2a2c30]': layoutStore.workspaceVisible}">
-                    <el-icon class="w-5 h-5">
-                      <TextBulletListLtr16Filled />
-                    </el-icon>
+                  <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
+                    @click="layoutStore.toggleWorkspace()">
+                    <PanelLeft16Regular class="w-5 h-5" />
                   </div>
                   </el-tooltip>
                   <!-- 更多操作下拉菜单 -->
                   <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
-                    <div
-                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center">
+                    <div class="header-icon-btn">
                       <MoreVertOutlined class="w-5 h-5" />
                     </div>
                     <template #dropdown>
@@ -109,7 +105,7 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { TextBulletListLtr16Filled } from "@vicons/fluent";
+import { PanelLeft16Regular } from "@vicons/fluent";
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
