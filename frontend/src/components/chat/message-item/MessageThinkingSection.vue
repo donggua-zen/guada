@@ -1,7 +1,7 @@
 <template>
   <div class="process-section thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
+      class="thinking-section__header mb-1 flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
       @click.stop="handleToggle">
       <div class="flex items-center">
         <el-icon v-if="isThinking" size="14" class="shrink-0 animate-spin">
@@ -28,14 +28,12 @@
 
       </div>
     </div>
-    <div class="process-timeline border-l border-gray-300 dark:border-gray-700 min-h-2 ml-1.5"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElIcon } from 'element-plus';
-import { ArrowRightTwotone } from '@vicons/material';
 import { Lightbulb24Regular, SpinnerIos20Filled } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration } from '../../../utils/messageUtils';

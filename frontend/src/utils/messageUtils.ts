@@ -175,6 +175,24 @@ export interface DisplayItem {
 }
 
 /**
+ * 判断一个 DisplayItem 是否已完成
+ * - think: isThinking 为 false 即完成
+ * - tool: 所有 toolCall 都有 outcome 或有 toolResponses 即完成
+ */
+export function isItemCompleted(item: DisplayItem): boolean {
+  if (item.type === 'think') {
+    return !item.source.state?.isThinking;
+  }
+  if (item.type === 'tool') {
+    const calls = item.toolCalls || [];
+    const responses = item.toolResponses;
+    if (responses && responses.length > 0) return true;
+    return calls.length > 0 && calls.every((tc: any) => tc.outcome);
+  }
+  return true;
+}
+
+/**
  * 展示分组接口
  * 用于将连续的 think/tool 聚合为「中间处理过程」
  */

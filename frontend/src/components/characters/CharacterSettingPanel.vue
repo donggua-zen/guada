@@ -961,7 +961,6 @@ async function loadAllData() {
 
     // 所有数据就绪后记录初始快照
     _initialFormData.value = getFormData()
-    console.log('[loadAllData] DONE, snapshot recorded')
   } catch (err) {
     console.error('加载角色设置数据失败', err)
   } finally {
@@ -1317,17 +1316,9 @@ const clearAvatarFile = () => {
 
 // 检测表单是否有未保存的变更
 const hasChanges = computed(() => {
-  if (!_initialFormData.value) {
-    console.log('[hasChanges] NO INITIAL DATA')
-    return true
-  }
+  if (!_initialFormData.value) return true
   const current = getFormData()
-  const equal = deepEqual(current, _initialFormData.value)
-  console.log('[hasChanges] RE-EVAL', { equal, snapshotExists: !!_initialFormData.value })
-  if (!equal) {
-    console.log('[hasChanges] MISMATCH', JSON.stringify(current), JSON.stringify(_initialFormData.value))
-  }
-  return !equal
+  return !deepEqual(current, _initialFormData.value)
 })
 
 // 暴露方法给父组件

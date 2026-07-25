@@ -3,9 +3,7 @@
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
       <el-tooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? '收起侧边栏' : '展开侧边栏'" placement="bottom">
-        <div
-          class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
-          @click="layoutStore.toggleSidebar()">
+        <div class="header-icon-btn" @click="layoutStore.toggleSidebar()">
           <LeftBarIcon class="w-5 h-5" />
         </div>
       </el-tooltip>
@@ -31,7 +29,7 @@
 <script setup lang="ts">
 import { useLayoutStore } from '@/stores/layout'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
-import WindowControls from './WindowControls.vue'
+import WindowControls from '@/components/WindowControls.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
@@ -55,5 +53,29 @@ defineProps<{
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+</style>
+
+<style>
+.header-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 8px;
+    color: var(--color-text-gray);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.header-icon-btn:hover {
+    background: var(--color-sidebar-bg-hover);
+    color: var(--color-text);
+}
+
+.header-icon-btn.active {
+    background: var(--color-sidebar-bg-hover);
+    color: var(--color-text);
 }
 </style>

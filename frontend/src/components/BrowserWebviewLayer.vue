@@ -105,14 +105,26 @@ function getWebviewStyle(windowId: string): Record<string, string> {
     }
   }
 
-  // 活跃 webview：跟随预览占位区域
+  // 活跃 webview：跟随预览占位区域，但 previewRect 为空时隐藏（防止闪到左上角）
+  if (!rect) {
+    return {
+      visibility: 'hidden',
+      zIndex: '-1',
+      left: '0px',
+      top: '0px',
+      width: `${DEFAULT_BG_WIDTH}px`,
+      height: `${DEFAULT_BG_HEIGHT}px`,
+      pointerEvents: 'none',
+    }
+  }
+
   return {
     visibility: 'visible',
     zIndex: '40',
-    left: rect ? `${rect.x}px` : '0px',
-    top: rect ? `${rect.y}px` : '0px',
-    width: rect ? `${rect.width}px` : `${DEFAULT_BG_WIDTH}px`,
-    height: rect ? `${rect.height}px` : `${DEFAULT_BG_HEIGHT}px`,
+    left: `${rect.x}px`,
+    top: `${rect.y}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
     pointerEvents: store.isDragging ? 'none' : 'auto',
   }
 }
