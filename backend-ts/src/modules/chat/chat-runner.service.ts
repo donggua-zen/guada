@@ -524,14 +524,15 @@ export class ChatRunnerService {
       );
 
       for await (const chunk of iterator) {
-        // 捕获最后一次 finishReason，用于 finally 判断是否跳过队列处理
         if (chunk.finishReason) {
           lastFinishReason = chunk.finishReason;
         }
         this.streamManager.broadcast(sessionId, chunk as EventChunk);
       }
 
-      this.streamManager.stopStream(sessionId, "completed");
+      // Agent 引擎内部已捕获 abort 并 yield finish 事件，这里自然结束
+      const reason = abortController.signal.aborted ? "user_cancel" : "completed";
+      this.streamManager.stopStream(sessionId, reason);
 
       const streamFinishedEvent: StreamFinishedEvent = {
         userId,
@@ -539,7 +540,7 @@ export class ChatRunnerService {
         timestamp: new Date().toISOString(),
         source: clientId,
         payload: {
-          reason: "completed",
+          reason,
           workspacePath: sessionContext.workspacePath,
           sessionType: sessionContext.sessionType,
         },

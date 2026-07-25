@@ -5,7 +5,6 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
-  ToolDisplayInfo,
   ToolDefinition,
 } from "../interfaces/tool-provider.interface";
 

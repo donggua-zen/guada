@@ -21,7 +21,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -59,7 +58,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -91,7 +89,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -143,7 +140,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -189,7 +185,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -232,7 +227,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -291,7 +285,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -329,7 +322,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -357,7 +349,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -386,7 +377,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -415,7 +405,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -443,7 +432,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 
@@ -472,7 +460,6 @@ describe('AgentEngine - completions', () => {
       const agentEngine = new AgentEngine(
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.displayManager as any,
         mocks.tokenTracker as any,
       );
 

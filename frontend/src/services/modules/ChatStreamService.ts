@@ -168,13 +168,10 @@ export class ChatStreamService {
   /**
    * 取消指定会话的响应
    *
-   * 这会调用后端停止接口真正终止 Agent 循环
+   * 只通知后端停止 Agent 循环，不中断本地 fetch。
+   * 后端会发送 finish 事件后自然关闭 SSE 流，前端能正确收到最终状态。
    */
   async cancelResponse(sessionId: string): Promise<void> {
-    // 1. 中止本地 fetch
-    this.cancelLocalFetch(sessionId);
-
-    // 2. 调用后端停止接口（真正终止 Agent 循环）
     try {
       const accessToken = this.getAccessToken();
       await fetch(`${this.getBaseURL()}/chat/stream/${sessionId}/stop`, {
@@ -186,6 +183,8 @@ export class ChatStreamService {
       });
     } catch (error) {
       console.error("Failed to stop stream:", error);
+      // 后端 stop 请求失败时，降级为本地中止
+      this.cancelLocalFetch(sessionId);
     }
   }
 }

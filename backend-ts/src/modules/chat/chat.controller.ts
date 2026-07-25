@@ -166,6 +166,11 @@ export class ChatController {
 
   /**
    * 手动停止会话流
+   *
+   * 仅中止底层 LLM 请求，不直接关闭 SSE 连接。
+   * Agent 引擎捕获中止后会生成 finish 事件并广播，
+   * runAgentEngine 循环结束后才调用 stopStream 关闭流。
+   * 这确保前端能收到完整的 finish 事件。
    */
   @Post("stream/:sessionId/stop")
   async stopStream(@Param("sessionId") sessionId: string) {
@@ -175,7 +180,8 @@ export class ChatController {
       return { success: false, message: "No active stream" };
     }
 
-    this.streamManager.stopStream(sessionId, "user_cancel");
+    // 只中止底层 LLM 请求，不关闭流
+    this.streamManager.abortStream(sessionId);
     return { success: true };
   }
 

@@ -170,8 +170,6 @@ export class MessageService {
       );
     }
 
-    // 验证消息所有权
-
     const metadata = (content.metadata || {}) as Record<string, any>;
     const toolCalls = metadata.toolCalls || [];
 
@@ -179,6 +177,7 @@ export class MessageService {
     const allContents = await this.contentRepo.findByMessageId(
       content.messageId,
     );
+
     const toolResponseMap = new Map<string, any>();
     for (const tc of allContents) {
       const tcMetadata = tc.metadata as Record<string, any>;

@@ -12,6 +12,17 @@ import { z } from "zod";
 export class FilePlugin extends PluginBase {
   private readonly logger = new Logger(FilePlugin.name);
 
+  private static readonly IGNORE_PATTERNS = [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.nuxt/**",
+    "**/.output/**",
+    "**/coverage/**",
+  ];
+
   manifest = {
     id: "file",
     name: "文件工具",
@@ -170,7 +181,7 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "glob",
       description:
-        "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits.",
+        "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits. Automatically skips node_modules/.git/dist/build directories.",
       inputSchema: z.object({
         pattern: z
           .string()
@@ -207,154 +218,33 @@ export class FilePlugin extends PluginBase {
         // fast-glob deep 语义：1=当前目录, 2=一级, ... N=N-1级
         const deep = depth !== undefined ? depth + 1 : undefined;
 
-        const files = await fg(pattern, {
+        const stream = fg.stream(pattern, {
           cwd: basePath,
           deep,
           onlyFiles: true,
           dot: false,
           absolute: false,
+          ignore: FilePlugin.IGNORE_PATTERNS,
         });
 
-        const result = limit ? files.slice(0, limit) : files;
-        const total = files.length;
+        const files: string[] = [];
+        let hasMore = false;
 
-        let output = `${total} files found:`;
-        for (const f of result) {
+        for await (const entry of stream) {
+          if (files.length >= limit) {
+            hasMore = true;
+            break;
+          }
+          files.push(entry as string);
+        }
+
+        let output = `${files.length} files found:`;
+        for (const f of files) {
           output += `\n                 ${f}`;
         }
-        if (total > result.length) {
-          output += `\n(Results truncated, ${total - result.length} more files omitted.)`;
+        if (hasMore) {
+          output += `\n(More results exist. Use a more specific pattern or increase limit to see more.)`;
         }
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         return output;
       },
@@ -467,7 +357,7 @@ export class FilePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { path: targetPath } = args;
-        if (!targetPath) throw new Error("路径不能为空");
+        if (!targetPath) throw new Error("path is required");
         const resolvedPath = this.resolvePath(targetPath, ctx);
         this.validateWritePath(targetPath, ctx);
         this.logger.log(`删除文件/目录: ${targetPath} -> ${resolvedPath}`);
@@ -488,7 +378,7 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "grep",
       description:
-        "Search file contents. Supports single-file or recursive directory search (automatically skips node_modules/.git). When pattern is all lowercase, the search is case-insensitive; when it contains uppercase letters, it is case-sensitive.",
+        "Search file contents. Supports single-file or recursive directory search (automatically skips node_modules/.git/dist/build). When pattern is all lowercase, the search is case-insensitive; when it contains uppercase letters, it is case-sensitive.",
       inputSchema: z.object({
         pattern: z.string().describe("Regex pattern"),
         path: z
@@ -497,13 +387,6 @@ export class FilePlugin extends PluginBase {
           .describe(
             "Target file or directory path, defaults to the working directory. If a directory is given, it will be searched recursively",
           ),
-        context: z
-          .number()
-          .int()
-          .min(0)
-          .max(10)
-          .optional()
-          .describe("Number of context lines around each match, default 3"),
         max_results: z
           .number()
           .int()
@@ -516,7 +399,6 @@ export class FilePlugin extends PluginBase {
         const {
           pattern,
           path: targetPath,
-          context = 3,
           max_results = 50,
         } = args;
         if (!pattern) throw new Error("pattern is required");
@@ -537,6 +419,7 @@ export class FilePlugin extends PluginBase {
             cwd: basePath,
             onlyFiles: true,
             dot: false,
+            ignore: FilePlugin.IGNORE_PATTERNS,
           });
           files.push(...entries.map((e) => path.join(basePath, e)));
         }
@@ -552,292 +435,28 @@ export class FilePlugin extends PluginBase {
 
         const outputLines: string[] = [];
         let total = 0;
+        const BATCH_SIZE = 20;
 
-        for (const fp of files) {
-          try {
-            const content = await fs.readFile(fp, "utf-8");
-            const lines = content.replace(/\r\n/g, "\n").split("\n");
-            const relPath = path.relative(relativeRoot, fp);
-            let fileMatchCount = 0;
+        for (let i = 0; i < files.length && total < max_results; i += BATCH_SIZE) {
+          const batch = files.slice(i, Math.min(i + BATCH_SIZE, files.length));
+          const results = await Promise.allSettled(
+            batch.map((fp) =>
+              this.grepInFile(fp, regex, relativeRoot, max_results - total),
+            ),
+          );
 
-            for (
-              let i = 0;
-              i < lines.length && fileMatchCount < max_results;
-              i++
-            ) {
-              regex.lastIndex = 0;
-              const m = regex.exec(lines[i]);
-              if (m) {
-                const matchIdx = m.index;
-                const matchLen = m[0].length;
-                const ctxLen = 50;
-                const cStart = Math.max(0, matchIdx - ctxLen);
-                const cEnd = Math.min(
-                  lines[i].length,
-                  matchIdx + matchLen + ctxLen,
-                );
-                const snippet = lines[i].substring(cStart, cEnd).trim();
-                const funcName = this.findEnclosingFunction(lines, i);
-                const funcSuffix = funcName ? `    ← in ${funcName}()` : "";
-                outputLines.push(
-                  `${relPath}:${i + 1}: ${snippet}${funcSuffix}`,
-                );
-                fileMatchCount++;
-                total++;
-              }
+          for (const result of results) {
+            if (result.status === "fulfilled" && result.value) {
+              outputLines.push(...result.value.lines);
+              total += result.value.count;
+              if (total >= max_results) break;
             }
-          } catch {
-            continue;
           }
         }
 
         if (outputLines.length === 0) {
           return "No matches found.";
         }
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         return outputLines.join("\n");
       },
@@ -922,5 +541,46 @@ export class FilePlugin extends PluginBase {
       }
     }
     return null;
+  }
+
+  private async grepInFile(
+    filePath: string,
+    regex: RegExp,
+    relativeRoot: string,
+    remaining: number,
+  ): Promise<{ lines: string[]; count: number }> {
+    const lines: string[] = [];
+    let count = 0;
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      const fileLines = content.replace(/\r\n/g, "\n").split("\n");
+      const relPath = path.relative(relativeRoot, filePath);
+
+      // 并发调用时 clone regex 避免 lastIndex 竞态
+      const localRegex = new RegExp(regex.source, regex.flags);
+
+      for (let i = 0; i < fileLines.length && count < remaining; i++) {
+        localRegex.lastIndex = 0;
+        const m = localRegex.exec(fileLines[i]);
+        if (m) {
+          const matchIdx = m.index;
+          const matchLen = m[0].length;
+          const ctxLen = 50;
+          const cStart = Math.max(0, matchIdx - ctxLen);
+          const cEnd = Math.min(
+            fileLines[i].length,
+            matchIdx + matchLen + ctxLen,
+          );
+          const snippet = fileLines[i].substring(cStart, cEnd).trim();
+          const funcName = this.findEnclosingFunction(fileLines, i);
+          const funcSuffix = funcName ? `    ← in ${funcName}()` : "";
+          lines.push(`${relPath}:${i + 1}: ${snippet}${funcSuffix}`);
+          count++;
+        }
+      }
+    } catch {
+      // skip unreadable files
+    }
+    return { lines, count };
   }
 }

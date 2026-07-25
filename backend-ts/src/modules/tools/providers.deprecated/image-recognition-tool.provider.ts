@@ -4,7 +4,6 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
-  ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { FileRepository } from "../../../common/database/file.repository";
 import { UploadPathService } from "../../../common/services/upload-path.service";

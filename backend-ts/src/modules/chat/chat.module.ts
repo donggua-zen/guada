@@ -24,7 +24,6 @@ import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
-import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { MigrationService } from "./migration.service";
@@ -52,7 +51,6 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     FileWatcherService,
     SessionEventsService,
     ChatRunnerService,
-    ToolCallDisplayUtil,
     SessionTokenTracker,
 
     // 标签解析器管道

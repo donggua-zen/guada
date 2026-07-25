@@ -227,16 +227,6 @@ export function createAllMocks(options?: {
       contextWindow: options?.contextWindow,
       thinkingEffort: options?.thinkingEffort,
     }),
-    displayManager: {
-      clear: jest.fn(),
-      injectDisplayMessages: jest.fn(),
-      finalizeAll: jest.fn(() => []),
-      getDisplayMessage: jest.fn((index: number) => ({ index, message: `tool ${index}` })),
-      initialize: jest.fn(),
-      format: jest.fn((name: string, _args: any, isExecuting: boolean) =>
-        isExecuting ? `正在调用 ${name}` : `已调用 ${name}`
-      ),
-    },
     streamManager: {
       broadcast: jest.fn(),
       stopStream: jest.fn(),

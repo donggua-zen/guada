@@ -423,7 +423,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       metadata.finishReason = response.finishReason;
     }
 
-    // 处理错误情况
+    // 处理错误情况（user_cancel 不是错误，不需要特殊处理）
     if (response.finishReason === "error") {
       console.error("Error in stream:", response.error);
       metadata.error = response.error;
