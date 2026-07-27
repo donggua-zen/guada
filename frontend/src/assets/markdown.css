@@ -2,7 +2,13 @@
   margin-bottom: 10px;
   margin-top: 0;
 }
-.markdown-text strong,.markdown-text h1,.markdown-text h2,.markdown-text h3,.markdown-text h4,.markdown-text h5,.markdown-text h6 {
+.markdown-text strong,
+.markdown-text h1,
+.markdown-text h2,
+.markdown-text h3,
+.markdown-text h4,
+.markdown-text h5,
+.markdown-text h6 {
   font-family:
     Segoe UI Variable,
     Segoe UI,
@@ -30,14 +36,18 @@
 .markdown-text h4,
 .markdown-text h5,
 .markdown-text h6 {
+  margin-top: 1em;
   margin-bottom: 0.5em;
   font-weight: 600;
   font-size: var(--size-text-base);
   color: var(--color-bubble-assitant-text-strong);
 }
 
-.markdown-text h1 {
-  font-size: 16px;
+.markdown-text h1,
+.markdown-text h2,
+.markdown-text h3,
+.markdown-text h4 {
+  font-size: 18px;
   /* padding-bottom: 0.5em; */
 }
 
@@ -184,43 +194,33 @@ ol > *:not(li) {
   justify-items: center;
 }
 
-/* 表格样式优化 - 添加滚动条支持 */
+/* 表格样式优化 - 仅行间分割线，无网格线和外边框 */
 .markdown-text table {
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
-  border: 1px solid #dfe2e5;
-  border-radius: 8px;
-  overflow: hidden;
+  min-width: 100%;
 }
 
 .markdown-text table th,
 .markdown-text table td {
-  border-right: 1px solid #dfe2e5;
-  border-top: 1px solid #dfe2e5;
+  border-bottom: 1px solid #eef0f3;
   vertical-align: top;
   padding: 6px 8px;
-  min-width: 100px;
 }
 
-.dark .markdown-text table,
 .dark .markdown-text table th,
 .dark .markdown-text table td {
   border-color: var(--color-border);
 }
 
-.markdown-text table th:last-child,
-.markdown-text table td:last-child {
-  border-right: none;
-}
-
-.markdown-text table thead th {
-  border-top: none;
+.markdown-text table tbody tr:last-child td,
+.markdown-text table tbody tr:last-child th {
+  border-bottom: none;
 }
 
 .markdown-text table th {
   background-color: #f3f3f5;
-  text-align: center;
-  position: sticky;
+  text-align: left;
   left: 0;
   z-index: 1;
 }
@@ -238,7 +238,7 @@ ol > *:not(li) {
 .markdown-text hr {
   height: 0px;
   border-top: 2px dotted #efefef;
-  margin: 8px 0;
+  margin: 22px 0;
 }
 
 .dark .markdown-text hr {
@@ -273,7 +273,7 @@ ol > *:not(li) {
 /* 添加第一列居中对齐的样式 */
 .markdown-text table td:first-child,
 .markdown-text table th:first-child {
-  text-align: center;
+  max-width: 200px;
 }
 
 /* 响应式表格样式 */

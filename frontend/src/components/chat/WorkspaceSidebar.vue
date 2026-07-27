@@ -30,13 +30,7 @@
                     @drop.prevent="onTabDrop(index)"
                     @dragend="onTabDragEnd">
                     <!-- 文件图标 -->
-                    <span v-if="tab.type === 'file'" class="tab-globe">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                    </span>
+                    <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
                     <!-- 浏览器图标 -->
                     <template v-else>
                         <img v-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt=""
@@ -299,6 +293,7 @@ import { VsCode } from '@/components/icons';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
+import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
