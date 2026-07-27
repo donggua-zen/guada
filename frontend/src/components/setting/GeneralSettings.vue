@@ -98,10 +98,10 @@ const loadSettings = async () => {
 
 // 选择文件夹
 const selectFolder = async () => {
-  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
-  if (isElectron && (window as any).electronAPI?.selectFolder) {
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+  if (isElectron && window.electronAPI?.selectFolder) {
     try {
-      const selectedPath = await (window as any).electronAPI.selectFolder()
+      const selectedPath = await window.electronAPI.selectFolder()
       if (selectedPath) {
         settingsForm.workspaceBaseDir = selectedPath
         ElMessage.success('已选择文件夹')

@@ -795,7 +795,7 @@ watch(() => props.data, (newVal, oldVal) => {
     for (const [pluginId, cfg] of Object.entries(pluginsConfig)) {
       if (pluginId === '__strategy' || pluginId === '__default') continue;
       if (typeof cfg === 'object' && cfg !== null) {
-        characterToolSettings.value[pluginId] = (cfg as any).enabled !== false;
+        characterToolSettings.value[pluginId] = (cfg as Record<string, unknown>).enabled !== false;
       } else {
         characterToolSettings.value[pluginId] = cfg === true;
       }
@@ -840,11 +840,11 @@ watch(() => props.data, (newVal, oldVal) => {
   allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled !== true;
   const agentsConfig = newVal.settings?.agents;
   // 重建 enabledAgents
-  for (const key of Object.keys(enabledAgents)) delete (enabledAgents as any)[key];
+  for (const key of Object.keys(enabledAgents)) delete enabledAgents[key];
   if (typeof agentsConfig === 'object' && !Array.isArray(agentsConfig)) {
     for (const [key, val] of Object.entries(agentsConfig)) {
       if (key === '__default' || key.startsWith('__')) continue;
-      (enabledAgents as any)[key] = val;
+      enabledAgents[key] = val as boolean;
     }
   }
 
@@ -888,10 +888,10 @@ const handleSkillToggle = (skillId, enabled) => {
 
 // ── 子代理 ──
 const getAgentEffectiveEnabled = (char) => {
-  return (enabledAgents as any)[char.id] ?? false;
+  return enabledAgents[char.id] ?? false;
 };
 const handleAgentToggle = (charId, enabled) => {
-  (enabledAgents as any)[charId] = enabled;
+  enabledAgents[charId] = enabled;
 };
 const handleAllAgentsDisabledToggle = async (val) => {
   allAgentsDisabled.value = val;

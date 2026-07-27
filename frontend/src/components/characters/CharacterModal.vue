@@ -43,7 +43,7 @@ const emit = defineEmits<{
 const visible = ref(false)
 const saving = ref(false)
 const currentCharacter = ref<any>({})
-const settingPanelRef = ref<any>(null)
+const settingPanelRef = ref<InstanceType<typeof CharacterSettingPanel> | null>(null)
 const panelHasChanges = ref(true)
 
 // 监听显示状态
@@ -76,7 +76,7 @@ const handleClose = (): void => {
 // 同步子组件表单变更状态
 watch(() => settingPanelRef.value, (instance) => {
     if (!instance) return;
-    watch(() => (instance as any).hasChanges, (val) => {
+    watch(() => instance.hasChanges, (val) => {
         panelHasChanges.value = val
     }, { immediate: true })
 }, { immediate: true })
@@ -93,11 +93,7 @@ const handleSave = async (): Promise<void> => {
     try {
         const data = settingPanelRef.value.getFormData();
         let character: any = null;
-        let characterData = { ...data };
-        const avatarFile = data.avatarFile;
-
-        delete characterData.avatarFile;
-        delete characterData.avatarUrl;
+        const { avatarFile, avatarUrl: _avatarUrl, ...characterData } = data;
 
         if (currentCharacter.value && currentCharacter.value.id) {
             const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);

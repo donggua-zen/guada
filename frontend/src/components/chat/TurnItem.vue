@@ -26,7 +26,7 @@
         <!-- 知识库 -->
         <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
           v-if="turn.user.contents?.[0]?.metadata?.referencedKbs?.length > 0">
-          <div v-for="kb in turn.user.contents[0].metadata.referencedKbs" :key="kb.id">
+          <div v-for="kb in turn.user.contents?.[0]?.metadata?.referencedKbs" :key="kb.id">
             <div
               class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
               <MenuBookOutlined class="w-4 h-4" />
@@ -35,13 +35,13 @@
           </div>
         </div>
         <!-- 文件列表 -->
-        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="turn.user.files?.length > 0">
+        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(turn.user.files?.length ?? 0) > 0">
           <FileItem v-for="file, index in turn.user.files" :key="file.id" :name="file.displayName" :type="file.fileType"
             :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
-        <MessageActions v-if="true" :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
+        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
           :content-versions="[]" :current-version-index="0" :time-full="userTime.full"
           :time-friendly="userTime.firendly" @copy="emit('copy', turn.user)" @generate="emit('generate', turn.user)"
           @edit="emit('edit', turn.user)" @delete="emit('delete', turn.user)" />
@@ -74,57 +74,50 @@
                   :content="item.content || ''" />
               </template>
             </template>
-            <!-- 流式过程中最后一组：始终折叠为标题行 -->
-            <div v-else-if="streamingState.isStreaming && groupIndex === displayGroups.length - 1 && group.items.length > 1" class="process-group">
-              <div class="process-group__header" @click="toggleGroup('last-active')">
-                <el-icon size="14" class="shrink-0 shimmer-icon">
+            <div v-else class="process-group">
+              <!-- 分组标题 -->
+              <div v-if="group.isCollapsible || isLastActive(groupIndex)" class="process-group__header"
+                :class="{ 'shimmer-text': isLastActive(groupIndex) && !isGroupExpanded('last-active') }"
+                @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
+                <el-icon v-if="isLastActive(groupIndex)" size="14" class="shrink-0">
                   <component :is="getLastGroupIcon(group)" class="text-gray-500" />
                 </el-icon>
-                <span class="process-group__title shimmer-text">
-                  {{ getLastGroupTitle(group, isGroupExpanded('last-active')) }}
+                <template v-if="isLastActive(groupIndex)">
+                  <span class="shimmer-text-children min-w-0 flex items-center">
+                    <span class="shrink-0 font-medium">
+                      {{ getLastGroupTitleParts(group, isGroupExpanded('last-active')).action }}
+                    </span>
+                    <span v-if="getLastGroupTitleParts(group, isGroupExpanded('last-active')).args" class="text-sm ml-2 truncate">
+                      {{ getLastGroupTitleParts(group, isGroupExpanded('last-active')).args }}
+                    </span>
+                  </span>
+                </template>
+                <span v-else class="process-group__title truncate font-medium">
+                  {{ getCompletedGroupTitle(group) }}
                 </span>
-                <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded('last-active') }">
+                <el-icon size="14" class="process-group__arrow"
+                  :class="{ 'is-expanded': isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) }">
                   <ArrowRightTwotone />
                 </el-icon>
               </div>
-              <div v-show="isGroupExpanded('last-active')" class="process-group__body">
-                <template v-for="item in group.items" :key="item.id">
-                  <MessageThinkingSection v-if="item.type === 'think'" :reasoning-content="item.reasoningContent || ''"
-                    :is-thinking="item.source.state?.isThinking || false"
-                    :is-streaming="item.source.state?.isStreaming || false"
-                    :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
-                    :metadata="item.source.metadata" />
-                  <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
-                    :tool-responses="item.toolResponses" :content-id="item.source.id"
-                    :is-streaming="streamingState.isStreaming" />
-                </template>
-              </div>
-            </div>
-            <!-- 常规分组（非最后一组，或最后一组无需拆分时） -->
-            <div v-else class="process-group">
-              <div
-                v-if="group.isCollapsible"
-                class="process-group__header" @click="toggleGroup(group.id)">
-                <span class="process-group__title">
-                  调用了 {{ countToolCalls(group.items) }} 个工具
-                </span>
-                <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded(group.id) }">
-                  <ArrowRightTwotone />
-                </el-icon>
-              </div>
-              <div
-                v-show="!group.isCollapsible || isGroupExpanded(group.id)"
-                class="process-group__body py-1">
-                <template v-for="item in group.items" :key="item.id">
-                  <MessageThinkingSection v-if="item.type === 'think'" :reasoning-content="item.reasoningContent || ''"
-                    :is-thinking="item.source.state?.isThinking || false"
-                    :is-streaming="item.source.state?.isStreaming || false"
-                    :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
-                    :metadata="item.source.metadata" />
-                  <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
-                    :tool-responses="item.toolResponses" :content-id="item.source.id"
-                    :is-streaming="streamingState.isStreaming" />
-                </template>
+              <!-- 分组内容 -->
+              <div class="process-group__collapsible"
+                :class="{ 'is-expanded': isLastActive(groupIndex) ? isGroupExpanded('last-active') : (!group.isCollapsible || isGroupExpanded(group.id)) }">
+                <div class="process-group__body">
+                  <div class="process-group__body-scroll space-y-3" :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }">
+                    <template v-for="item in group.items" :key="item.id">
+                      <MessageThinkingSection v-if="item.type === 'think'"
+                        :reasoning-content="item.reasoningContent || ''"
+                        :is-thinking="item.source.state?.isThinking || false"
+                        :is-streaming="item.source.state?.isStreaming || false"
+                        :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
+                        :metadata="item.source.metadata" />
+                      <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
+                        :tool-responses="item.toolResponses" :content-id="item.source.id"
+                        :is-streaming="streamingState.isStreaming" />
+                    </template>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -202,8 +195,8 @@ import { InsightsTwotone, MenuBookOutlined, ArrowRightTwotone } from "@vicons/ma
 import { Alert16Regular, Lightbulb24Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
-import { getCurrentTurns, groupContentsForDisplay, countToolCalls, type DisplayGroup, type DisplayItem } from '@/utils/messageUtils';
-import { getToolIcon as _getToolIcon, getToolConfig, resolveToolName as _resolveToolName, getArgsText, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
+import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
+import { getToolIcon as _getToolIcon, getToolConfig, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -213,22 +206,21 @@ import MessageActions from './message-item/MessageActions.vue';
 const { toast } = usePopup();
 
 const props = defineProps<{
-  turn: { user: any; assistants: any[] };
+  turn: { user: Message; assistants: Message[] };
   isLast: boolean;
   allowGenerate: boolean;
   characterName?: string;
   characterAvatar?: string;
-  avatar?: string;
 }>();
 
 const emit = defineEmits<{
-  switch: [message: any, versionId: string]
-  delete: [message: any]
-  edit: [message: any]
-  copy: [message: any]
-  generate: [message: any]
-  regenerate: [message: any]
-  continue: [message: any]
+  switch: [message: Message, versionId: string]
+  delete: [message: Message]
+  edit: [message: Message]
+  copy: [message: Message]
+  generate: [message: Message]
+  regenerate: [message: Message]
+  continue: [message: Message]
 }>();
 
 // ============================================
@@ -252,13 +244,13 @@ const isGroupExpanded = (groupId: string): boolean => {
 // 版本管理
 // ============================================
 const siblingVersions = computed(() =>
-  props.turn.assistants.map((a: any) => a.id)
+  props.turn.assistants.map((a) => a.id)
 );
 
 const activeAssistant = computed(() => {
   const user = props.turn.user;
   const activeId = user?.currentVersionId;
-  if (activeId) return props.turn.assistants.find((a: any) => a.id === activeId);
+  if (activeId) return props.turn.assistants.find((a) => a.id === activeId);
   return props.turn.assistants[props.turn.assistants.length - 1];
 });
 
@@ -279,8 +271,8 @@ const switchContent = (direction: 'prev' | 'next') => {
     return;
   }
   const targetId = siblingVersions.value[newIndex];
-  const targetMsg = props.turn.assistants.find((a: any) => a.id === targetId);
-  if (targetMsg) {
+  const targetMsg = props.turn.assistants.find((a) => a.id === targetId);
+  if (targetMsg && activeAssistant.value) {
     emit('switch', activeAssistant.value, targetId);
   }
 };
@@ -290,40 +282,56 @@ const switchContent = (direction: 'prev' | 'next') => {
 // ============================================
 const turnsCache = computed(() => {
   if (!activeAssistant.value) return [];
-  return getCurrentTurns(activeAssistant.value as any);
+  return getCurrentTurns(activeAssistant.value);
 });
 
 const displayGroups = computed<DisplayGroup[]>(() => {
   return groupContentsForDisplay(turnsCache.value);
 });
 
-// 统计步骤数（think 算1个，tool 按实际调用数算）
-const countSteps = (items: DisplayItem[]): number => {
-  return items.reduce((sum, item) => {
-    if (item.type === 'tool' && item.toolCalls?.length) {
-      return sum + item.toolCalls.length;
-    }
-    return sum + 1;
-  }, 0);
-};
-
-// 获取最后一组的图标（取最后一个 tool item 的工具图标，think 用 Lightbulb）
+// 获取最后一组的图标
 const getLastGroupIcon = (group: DisplayGroup) => {
-  const lastToolItem = [...group.items].reverse().find(i => i.type === 'tool');
-  if (lastToolItem && lastToolItem.toolCalls?.length) {
-    return _getToolIcon(lastToolItem.toolCalls[0] as ToolCall);
+  const lastItem = group.items[group.items.length - 1];
+  if (lastItem?.type === 'tool' && lastItem.toolCalls?.length) {
+    return _getToolIcon(lastItem.toolCalls[lastItem.toolCalls.length - 1] as ToolCall);
   }
   return Lightbulb24Regular;
 };
 
-// 获取最后一组的标题文案
-const getLastGroupTitle = (group: DisplayGroup, expanded: boolean) => {
-  const steps = countSteps(group.items);
-  if (expanded) return `已执行 ${steps} 个步骤`;
+// 流式过程中最后一组且需折叠为标题行
+const isLastActiveGroup = computed(() => {
+  if (!streamingState.value.isStreaming) return null;
+  const groups = displayGroups.value;
+  if (groups.length === 0) return null;
+  const lastGroup = groups[groups.length - 1];
+  return lastGroup.type === 'process' ? 'last-active' : null;
+});
 
-  const lastToolItem = [...group.items].reverse().find(i => i.type === 'tool');
-  if (lastToolItem && lastToolItem.toolCalls?.length) {
-    const lastTool = lastToolItem.toolCalls[lastToolItem.toolCalls.length - 1] as ToolCall;
+// 判断当前 group 是否为流式过程中需特殊处理的最后一组
+const isLastActive = (groupIndex: number): boolean => {
+  if (!isLastActiveGroup.value) return false;
+  return groupIndex === displayGroups.value.length - 1;
+};
+const getLastGroupTitleParts = (group: DisplayGroup, expanded: boolean) => {
+  const steps = countSteps(group.items);
+  if (expanded) return { action: `已执行 ${steps} 个步骤`, args: '' };
+
+  const lastItem = group.items[group.items.length - 1];
+
+  // 最后一个步骤是思考
+  if (lastItem.type === 'think') {
+    const isThinking = lastItem.source.state?.isThinking;
+    if (isThinking) {
+      const text = (lastItem.reasoningContent || '').replace(/\n/g, ' ').trim();
+      const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
+      return { action: '正在思考...', args: preview };
+    }
+    return { action: '已深度思考', args: '' };
+  }
+
+  // 最后一个步骤是工具
+  if (lastItem.type === 'tool' && lastItem.toolCalls?.length) {
+    const lastTool = lastItem.toolCalls[lastItem.toolCalls.length - 1] as ToolCall;
     const config = getToolConfig(lastTool);
     const allToolCalls = group.items
       .filter(i => i.type === 'tool')
@@ -332,21 +340,58 @@ const getLastGroupTitle = (group: DisplayGroup, expanded: boolean) => {
       _resolveToolName(tc as ToolCall) === _resolveToolName(lastTool)
     );
     if (allSameType && allToolCalls.length > 1) {
-      return (config.aggregate || DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps));
+      return { action: (config.aggregate || DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps)), args: '' };
     }
-    // 单个工具：拼接参数摘要，与 MessageToolCalls 展示一致
     const args = getArgsText(lastTool);
-    return args ? `${config.text.executing} ${args}` : config.text.executing;
+    return { action: config.text.executing, args: args || '' };
   }
 
-  const lastThinkItem = [...group.items].reverse().find(i => i.type === 'think');
-  if (lastThinkItem) return '正在思考...';
-
-  return (DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps));
+  return { action: (DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps)), args: '' };
 };
 
-// ============================================
-// 用户部分
+// 获取常规分组（已完成）的标题文案
+const getCompletedGroupTitle = (group: DisplayGroup) => {
+  const items = group.items;
+
+  // 纯思考：根据实际状态显示
+  const hasThink = items.some(i => i.type === 'think');
+  const toolItems = items.filter(i => i.type === 'tool');
+  if (toolItems.length === 0) {
+    const thinkItem = items.find(i => i.type === 'think');
+    const isThinking = thinkItem?.source.state?.isThinking;
+    if (isThinking) {
+      const text = (thinkItem?.reasoningContent || '').replace(/\n/g, ' ').trim();
+      const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
+      return preview ? `正在思考... ${preview}` : '正在思考...';
+    }
+    return '已深度思考';
+  }
+
+  // 收集所有工具调用
+  const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
+  if (allToolCalls.length === 0) {
+    return hasThink ? '已深度思考' : '已执行';
+  }
+
+  const firstTool = allToolCalls[0] as ToolCall;
+  const firstName = _resolveToolName(firstTool);
+  const allSameType = allToolCalls.every(tc => _resolveToolName(tc as ToolCall) === firstName);
+
+  if (allSameType && allToolCalls.length > 1) {
+    const config = getToolConfig(firstTool);
+    return (config.aggregate || DEFAULT_CONFIG.aggregate!).replace('{n}', String(allToolCalls.length)).replace('正在', '已');
+  }
+
+  if (allSameType && allToolCalls.length === 1) {
+    const config = getToolConfig(firstTool);
+    const args = getArgsText(firstTool);
+    return args ? `${config.text.completed} ${args}` : config.text.completed;
+  }
+
+  // 混合工具
+  const steps = countSteps(items);
+  return `已执行 ${steps} 个步骤`;
+};
 // ============================================
 const userContent = computed(() => {
   const content = props.turn.user?.contents?.[0];
@@ -401,8 +446,6 @@ const assistantMetadata = computed(() => {
 
 const streamingState = computed(() => ({
   isStreaming: activeAssistant.value?.state?.isStreaming ?? false,
-  isThinking: activeAssistant.value?.state?.isThinking ?? false,
-  isPlaceholder: false,
 }));
 
 const currentModelName = computed(() => {
@@ -539,7 +582,6 @@ const handleClick = (event: MouseEvent) => {
 .assistant-section .message-item__card {
   background: var(--color-bubble-assitant-bg);
   color: var(--color-bubble-assitant-text);
-  border: 1px solid var(--assistant-bubble-border-color);
   margin-right: auto;
   width: 100%;
   padding: 0;
@@ -613,9 +655,10 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .process-group__header {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   border-radius: 6px;
   color: var(--el-text-color-regular);
   font-size: 13px;
@@ -633,8 +676,14 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .process-group__arrow {
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
   color: var(--el-text-color-placeholder);
+  opacity: 0;
+}
+
+.process-group__header:hover .process-group__arrow,
+.process-group__arrow.is-expanded {
+  opacity: 1;
 }
 
 .process-group__arrow.is-expanded {
@@ -643,45 +692,66 @@ const handleClick = (event: MouseEvent) => {
 
 .process-group__title {
   line-height: 1.4;
+  min-width: 0;
 }
 
-/* 流式过程中的文字波纹效果 */
-.shimmer-text {
-  background: linear-gradient(
-    90deg,
-    var(--el-text-color-regular) 0%,
-    var(--el-text-color-regular) 35%,
-    var(--el-color-primary-light-5) 50%,
-    var(--el-text-color-regular) 65%,
-    var(--el-text-color-regular) 100%
-  );
-  background-size: 250% 100%;
+/* 流式过程中的文字波纹效果（action + args 一起波纹） */
+.shimmer-text-children {
+  background: linear-gradient(90deg,
+      var(--shimmer-base, #a8aab3) 0%,
+      var(--shimmer-base, #a8aab3) 25%,
+      var(--shimmer-highlight, #ffffff) 50%,
+      var(--shimmer-base, #a8aab3) 75%,
+      var(--shimmer-base, #a8aab3) 100%);
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer-slide 2.5s linear infinite;
+  animation: shimmer-slide 1.5s linear infinite;
 }
 
 @keyframes shimmer-slide {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 
-.shimmer-icon {
-  animation: shimmer-pulse 2s ease-in-out infinite;
+.process-group__collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes shimmer-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+.process-group__collapsible.is-expanded {
+  grid-template-rows: 1fr;
 }
 
 .process-group__body {
+  min-height: 0;
   overflow: hidden;
+}
+
+.process-group__body-scroll {
+  overflow-y: auto;
+  max-height: 400px;
+  /* 真实遮罩渐变（不叠加背景色，壁纸不受影响） */
+  -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0,
+      black 16px,
+      black calc(100% - 16px),
+      transparent 100%);
+  mask-image: linear-gradient(to bottom,
+      transparent 0,
+      black 16px,
+      black calc(100% - 16px),
+      transparent 100%);
+}
+
+/* 不可折叠的分组（单项内容）不需要遮罩和滚动限制 */
+.process-group__body-scroll.no-mask {
+  -webkit-mask-image: none;
+  mask-image: none;
+  max-height: none;
+  overflow: visible;
 }
 
 /* 知识库 */
@@ -706,11 +776,6 @@ const handleClick = (event: MouseEvent) => {
   align-items: center;
   font-size: 12px;
   white-space: nowrap;
-}
-
-.token-item strong {
-  font-weight: 600;
-  color: inherit;
 }
 
 @keyframes fadeIn {

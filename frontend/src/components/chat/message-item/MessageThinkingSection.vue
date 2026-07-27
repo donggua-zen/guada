@@ -1,33 +1,31 @@
 <template>
-  <div class="process-section thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
+  <div class="process-section thinking-section">
+    <!-- 标题行 -->
     <div
-      class="thinking-section__header mb-1 flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
+      class="thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200"
       @click.stop="handleToggle">
-      <div class="flex items-center">
-        <el-icon v-if="isThinking" size="14" class="shrink-0 animate-spin">
-          <SpinnerIos20Filled />
-        </el-icon>
-        <el-icon v-else size="14" class="shrink-0">
-          <Lightbulb24Regular />
-        </el-icon>
-        <span class="text-gray-600 dark:text-gray-400 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
-        <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
-          {{ formattedDuration }}
-        </span>
-        <!-- <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']" size="14">
-          <ArrowRightTwotone />
-        </el-icon> -->
-      </div>
+      <el-icon v-if="isThinking" size="14" class="shrink-0 animate-spin">
+        <SpinnerIos20Filled />
+      </el-icon>
+      <el-icon v-else size="14" class="shrink-0">
+        <Lightbulb24Regular />
+      </el-icon>
+      <span class="text-gray-600 dark:text-gray-400 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
+      <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
+        {{ formattedDuration }}
+      </span>
     </div>
-    <div class="thinking-section__container" :class="{ 'thinking-section__container--expanded': isExpanded }">
-      <div class="thinking-section__content-wrapper flex">
-        <div class="flex border-l ml-1.5 pl-4 text-sm border-gray-300 dark:border-gray-700">
-          <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
-            :content="reasoningContent" />
-        </div>
 
+    <!-- 内容区：折叠时显示最多3行 + 渐变遮罩，展开时全量显示 -->
+    <div class="thinking-section__content-wrapper border-l ml-1.5 pl-4 text-sm border-gray-300 dark:border-gray-700">
+      <div
+        class="thinking-content"
+        :class="{ 'is-collapsed': !isExpanded && !isThinking }">
+        <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+          :content="reasoningContent" />
       </div>
     </div>
+
   </div>
 </template>
 
@@ -41,7 +39,6 @@ import { formatDuration } from '../../../utils/messageUtils';
 const props = defineProps<{
   reasoningContent: string;
   isThinking: boolean;
-  isStreaming: boolean;
   thinkingDurationMs: number | null | undefined;
   metadata?: Record<string, any>;
 }>();
@@ -66,6 +63,7 @@ const thinkingDuration = computed(() => {
 const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
 });
+
 watch(() => props.isThinking, (isThinking: boolean) => {
   if (isThinking) {
     isExpanded.value = true;
@@ -86,28 +84,38 @@ watch(() => props.isThinking, (isThinking: boolean) => {
   user-select: none;
 }
 
-.thinking-section__container {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+
+.thinking-content {
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.thinking-content.is-collapsed {
+  max-height: 4.5em;
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black 2.5em,
+    transparent 4.5em
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black 2.5em,
+    transparent 4.5em
+  );
 }
 
-.thinking-section__container--expanded {
-  grid-template-rows: 1fr;
-}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
 
-.thinking-section__content-wrapper {
-  min-height: 0;
-  opacity: 0;
-  /* transform: translateY(-8px); */
-  transition: opacity 0.25s ease, transform 0.25s ease;
-  overflow: hidden;
-  /* padding-bottom: 8px; */
-}
-
-.thinking-section__container--expanded .thinking-section__content-wrapper {
-  opacity: 1;
-  transform: translateY(0);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

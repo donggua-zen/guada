@@ -1,6 +1,7 @@
 // stores/fileUpload.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
+import type { AxiosError } from 'axios'
 import type { KBFile } from './knowledgeBase'
 
 /**
@@ -242,7 +243,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 console.error('上传失败:', error)
                 updateUploadStatus(task.id, {
                     status: 'failed',
-                    errorMessage: (error as any).response?.data?.detail || '上传失败'
+                    errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || '上传失败'
                 })
                 onProgressUpdate?.(task)
                 setTimeout(() => processUploadQueue(), 100)
@@ -477,7 +478,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             console.error('会话文件上传失败:', error)
             updateUploadStatus(task.id, {
                 status: 'failed',
-                errorMessage: (error as any).response?.data?.detail || '上传失败'
+                errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || '上传失败'
             })
             onProgressUpdate?.(task)
             throw error

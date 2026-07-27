@@ -72,7 +72,7 @@ const renderWithDiffDOM = async () => {
             // 应用差异
             if (!diffEngine) return;
 
-            const result = diffEngine.apply(markdownContainerRef.value, diffs) as any;
+            const result = diffEngine.apply(markdownContainerRef.value, diffs);
 
             if (result !== false && result !== undefined) {
                 // 5. 更新记录

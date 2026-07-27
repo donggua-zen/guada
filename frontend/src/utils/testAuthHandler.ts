@@ -5,6 +5,7 @@
  */
 
 import { triggerAuthRedirect } from './globalErrorHandler'
+import { AuthError } from './errors'
 
 /**
  * 模拟 API 调用产生 401 错误
@@ -13,9 +14,7 @@ export function simulateAuthError() {
   console.log('模拟认证错误...')
   
   // 模拟一个被 reject 的 Promise
-  const authError = new Error('Authentication required')
-  ;(authError as any).isAuthError = true
-  ;(authError as any).statusCode = 401
+  const authError = new AuthError('Authentication required', 401)
   
   // 创建一个未捕获的 Promise rejection
   Promise.reject(authError)

@@ -262,6 +262,7 @@ import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import { apiService } from '@/services/ApiService'
+import type { SessionGroup } from '@/types/session'
 import { ElMessageBox } from 'element-plus'
 
 import {
@@ -327,7 +328,7 @@ const groupContextMenu = ref({
   visible: false,
   x: 0,
   y: 0,
-  group: null as any,
+  group: null as SessionGroup | null,
 })
 
 // 分组右键菜单项
@@ -337,19 +338,19 @@ const groupContextMenuItems = computed<ContextMenuItem[]>(() => {
   return [
     {
       label: '重命名',
-      icon: Edit16Regular as any,
+      icon: markRaw(Edit16Regular),
       onClick: () => handleRenameGroup(group),
     },
     {
       label: '删除',
-      icon: Delete20Regular as any,
+      icon: markRaw(Delete20Regular),
       onClick: () => handleDeleteGroup(group),
     },
   ]
 })
 
 // 打开分组右键菜单
-const openGroupContextMenu = (event: MouseEvent, group: any) => {
+const openGroupContextMenu = (event: MouseEvent, group: SessionGroup) => {
   // 未分组只做右键菜单不做实际处理（不可重命名/删除）
   if (group.id === UNGROUPED_ID) return
   groupContextMenu.value = {

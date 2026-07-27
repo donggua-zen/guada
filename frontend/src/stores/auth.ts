@@ -45,9 +45,8 @@ export const useAuthStore = defineStore('auth', () => {
             const result = await apiService.login(credentials)
             console.log('登录响应:', result)
 
-            // 处理可能的响应格式
-            const accessToken = (result as any).accessToken || (result as any).data?.accessToken
-            const userData = (result as any).user || (result as any).data?.user
+            const accessToken = result.accessToken
+            const userData = result.user
 
             if (!accessToken) {
                 throw new Error('登录失败：未获取到 token')

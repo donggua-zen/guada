@@ -43,7 +43,7 @@ function setWebviewRef(windowId: string, el: HTMLElement | null): void {
   if (el) {
     webviewEls.set(windowId, el)
     // dom-ready 后才能调用 setAudioMuted 等方法
-    const wv = el as any
+    const wv = el as ElectronWebviewElement
     const applyMute = () => { wv.setAudioMuted?.(store.isMuted) }
     if (wv.isReady) {
       applyMute()
@@ -67,7 +67,7 @@ function setWebviewRef(windowId: string, el: HTMLElement | null): void {
  * 从 webview DOM 元素同步导航状态到 store
  */
 function syncNavState(el: HTMLElement): void {
-  const wv = el as any
+  const wv = el as ElectronWebviewElement
   try {
     store.setNavState({
       canGoBack: !!wv.canGoBack,
@@ -202,7 +202,7 @@ watch(
         store.setActiveWebviewEl(el)
         syncNavState(el)
         // 切换标签时同步静音状态（webview 已 ready 才会到这里）
-        ;(el as any).setAudioMuted?.(store.isMuted)
+        ;(el as ElectronWebviewElement).setAudioMuted?.(store.isMuted)
       } else {
         store.setActiveWebviewEl(null)
       }

@@ -100,11 +100,11 @@ const handleConfirm = () => {
 // 选择文件夹
 const selectFolder = async () => {
   // 检测是否在 Electron 环境中
-  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
   
-  if (isElectron && (window as any).electronAPI?.selectFolder) {
+  if (isElectron && window.electronAPI?.selectFolder) {
     try {
-      const selectedPath = await (window as any).electronAPI.selectFolder();
+      const selectedPath = await window.electronAPI.selectFolder();
       if (selectedPath) {
         workspacePath.value = selectedPath;
         ElMessage.success('已选择文件夹');

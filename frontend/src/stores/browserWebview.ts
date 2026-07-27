@@ -126,7 +126,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   /** 切换静音状态 */
   function toggleMuted(): void {
     isMuted.value = !isMuted.value
-    const wv = activeWebviewEl.value as any
+    const wv = activeWebviewEl.value as ElectronWebviewElement | null
     if (wv) {
       wv.setAudioMuted(isMuted.value)
     }

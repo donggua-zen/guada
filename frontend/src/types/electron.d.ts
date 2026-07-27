@@ -19,6 +19,7 @@ export interface ElectronAPI {
   getBackendPort: () => Promise<number | null>
   /** 同步查询后端就绪状态（阻塞，用于 Vue 挂载前确定初始值） */
   getBackendStatusSync: () => { ready: boolean }
+  showNotification: (title: string, body: string) => Promise<void>
   minimizeWindow: () => void
   maximizeWindow: () => void
   closeWindow: () => void
@@ -30,7 +31,22 @@ export interface ElectronAPI {
   showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
   openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
   selectFolder: () => Promise<string | null>
-  
+
+  // 原生剪贴板操作（同步，无需用户授权）
+  clipboard: {
+    readText: () => string
+    writeText: (text: string) => void
+    readHTML: () => string
+    writeHTML: (html: string) => void
+    clear: () => void
+  }
+
+  // 剪贴板操作（通过 IPC，更可靠）
+  clipboardIPC: {
+    writeText: (text: string) => Promise<{ success: boolean; error?: string }>
+    readText: () => Promise<{ success: boolean; text?: string; error?: string }>
+  }
+
   // 窗口管理（新 API - 浏览器自动化窗口）
   createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any; error?: string }>
   activateBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
@@ -53,12 +69,16 @@ export interface ElectronAPI {
 
   // 托盘悬浮窗统计推送
   updateTrayStats: (stats: { running: number; unread: number }) => void
-  
+
+  // 托盘悬浮窗配置（显隐 + 透明度）
+  updateTraySettings: (settings: { enabled: boolean; opacity: number }) => void
+
   // Debug 菜单
   showDebugMenu: () => Promise<void>
-  
+
   // 右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
+  onTabMenuAction: (callback: (event: any, data: any) => void) => void
 
   // 自动更新相关
   checkForUpdates: () => Promise<{ success: boolean; data?: any; error?: string }>

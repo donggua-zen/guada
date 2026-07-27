@@ -161,6 +161,7 @@ const emit = defineEmits<{
   select: [sessionId: string]
   rename: [session: any]
   delete: [session: any]
+  export: [session: any]
   create: []
   loadMore: [] // 请求加载更多会话
 }>()
@@ -221,7 +222,7 @@ const handleDropdownSelect = (command: string, session: any): void => {
   } else if (command === 'delete') {
     emit('delete', session)
   } else if (command === 'export') {
-    emit('export' as any, session)
+    emit('export', session)
   }
 }
 

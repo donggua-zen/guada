@@ -608,13 +608,12 @@ function onTabBarWheel(e: WheelEvent): void {
     el.scrollLeft += e.deltaY;
 }
 
-/** 点击工作区按钮：退出预览模式，显示目录树（保留标签状态） */
+/** 点击工作区按钮：退出预览模式，显示目录树（保留标签选中状态） */
 function showFileTree(): void {
     if (isPreviewMode.value) {
         isPreviewMode.value = false;
         emit('preview-close');
     }
-    browserStore.setActive(null);
 }
 
 /** 点击预览区按钮：进入预览模式，无标签时显示空状态页 */
@@ -1154,7 +1153,7 @@ function isPathInExpandedDir(_filePath: string): boolean {
  */
 function handleFileChange(event: FileChangeEvent) {
     // 忽略心跳消息
-    if ((event as any).type === 'heartbeat') {
+    if (event.type === 'heartbeat') {
         return;
     }
 
@@ -1289,12 +1288,12 @@ function closeContextMenu() {
 async function writeToClipboard(text: string): Promise<void> {
     if (!text) return;
 
-    const win = window as any;
+    const electronAPI = window.electronAPI;
 
     // 优先使用 Electron IPC 方式
-    if (win.electronAPI?.clipboardIPC?.writeText) {
+    if (electronAPI?.clipboardIPC?.writeText) {
         try {
-            const result = await win.electronAPI.clipboardIPC.writeText(text);
+            const result = await electronAPI.clipboardIPC.writeText(text);
             if (!result.success) {
                 throw new Error(result.error);
             }
@@ -1305,9 +1304,9 @@ async function writeToClipboard(text: string): Promise<void> {
     }
 
     // 尝试直接调用 preload 暴露的 clipboard API
-    if (win.electronAPI?.clipboard?.writeText) {
+    if (electronAPI?.clipboard?.writeText) {
         try {
-            win.electronAPI.clipboard.writeText(text);
+            electronAPI.clipboard.writeText(text);
             return;
         } catch (error) {
             console.warn('[Workspace] 直接调用失败，尝试 Web API:', error);

@@ -1,6 +1,6 @@
 import { type Component } from 'vue';
 import {
-  Wrench24Filled, Edit32Filled, Search16Regular, BookOpen24Filled, BookSearch24Regular,
+  Wrench24Filled, Edit32Filled, Search16Filled, BookOpen24Filled, BookSearch24Regular,
   Code24Regular, WindowWrench16Regular,
 } from '@vicons/fluent';
 import Terminal from '@/components/icons/Terminal.vue';
@@ -37,11 +37,11 @@ export const DEFAULT_CONFIG: ToolDisplayConfig = {
 
 export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   read:    { text: { executing: '正在读取文件', completed: '已读取文件' }, aggregate: '正在读取{n}个文件', argsKey: 'file_path', icon: BookOpen24Filled },
-  glob:    { text: { executing: '正在搜索文件', completed: '已搜索文件' }, aggregate: '正在执行{n}次搜索', argsKey: 'pattern', icon: Search16Regular },
+  glob:    { text: { executing: '正在搜索文件', completed: '已搜索文件' }, aggregate: '正在执行{n}次搜索', argsKey: 'pattern', icon: Search16Filled },
   write:   { text: { executing: '正在写入文件', completed: '已写入文件' }, aggregate: '正在写入{n}个文件', argsKey: 'file_path', icon: Edit32Filled, inlineContent: { key: 'content', mode: 'code' } },
   edit:    { text: { executing: '正在替换文本', completed: '已替换文本' }, aggregate: '正在编辑{n}个文件', argsKey: 'file_path', icon: Edit32Filled },
   delete:  { text: { executing: '正在删除文件', completed: '已删除文件' }, aggregate: '正在删除{n}个文件', argsKey: 'path', icon: Edit32Filled },
-  grep:    { text: { executing: '正在搜索内容', completed: '已搜索内容' }, aggregate: '正在执行{n}次搜索', argsKey: 'pattern', icon: Search16Regular },
+  grep:    { text: { executing: '正在搜索内容', completed: '已搜索内容' }, aggregate: '正在执行{n}次搜索', argsKey: 'pattern', icon: Search16Filled },
 
   browser_navigate:   { text: { executing: '正在访问网页', completed: '已访问网页' }, argsKey: 'url', icon: WindowWrench16Regular },
   browser_tabs:       { text: { executing: '正在管理标签', completed: '已管理标签' }, argsKey: 'action', icon: WindowWrench16Regular },
@@ -52,15 +52,15 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   browser_console:    { text: { executing: '正在查看日志', completed: '已查看日志' }, icon: WindowWrench16Regular },
   browser_screenshot: { text: { executing: '正在截图', completed: '已截图' }, icon: WindowWrench16Regular },
 
-  image_recognize:         { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_id', icon: Search16Regular },
-  image_recognize_by_path: { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_path', icon: Search16Regular },
+  image_recognize:         { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_id', icon: Search16Filled },
+  image_recognize_by_path: { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_path', icon: Search16Filled },
 
   memory: { text: { executing: '正在编辑记忆', completed: '已编辑记忆' }, argsKey: 'action', icon: Wrench24Filled },
   plan:   { text: { executing: '正在管理计划', completed: '已管理计划' }, argsKey: 'action', icon: Wrench24Filled },
 
   get_current_time: { text: { executing: '正在获取时间', completed: '已获取时间' }, icon: Wrench24Filled },
 
-  web_search: { text: { executing: '正在搜索网络', completed: '已搜索网络' }, argsKey: 'q', icon: Search16Regular },
+  web_search: { text: { executing: '正在搜索网络', completed: '已搜索网络' }, argsKey: 'q', icon: Search16Filled },
   web_parser: { text: { executing: '正在读取网页', completed: '已读取网页' }, argsKey: 'url', icon: WindowWrench16Regular },
 
   terminal: { text: { executing: '正在执行命令', completed: '已执行命令' }, aggregate: '正在执行{n}条命令', argsKey: 'command', icon: Terminal },
@@ -107,14 +107,6 @@ export function getToolConfig(tool: ToolCall): ToolDisplayConfig {
 
 export function getToolIcon(tool: ToolCall): Component {
   return getToolConfig(tool).icon || DEFAULT_CONFIG.icon!;
-}
-
-export function getToolActionText(tool: ToolCall, isExecuting: boolean): string {
-  const config = getToolConfig(tool);
-  if (tool.outcome === 'aborted') {
-    return `${config.text.completed}（已终止）`;
-  }
-  return isExecuting ? config.text.executing : config.text.completed;
 }
 
 export function formatArgSummary(value: any): string {
@@ -199,3 +191,4 @@ export function countSteps(items: any[]): number {
     return sum + 1;
   }, 0);
 }
+

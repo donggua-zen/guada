@@ -56,7 +56,7 @@ class ContextMenuManager {
    * 检查是否在 Electron 环境中
    */
   private isElectron(): boolean {
-    return !!(window as any).electronAPI;
+    return !!window.electronAPI;
   }
 
   /**
@@ -132,12 +132,12 @@ class ContextMenuManager {
    * 安全读取剪贴板文本（优先使用 IPC 异步 API）
    */
   private async readClipboardText(): Promise<string> {
-    const win = window as any;
+    const electronAPI = window.electronAPI;
 
     // 优先使用 IPC 方式（更可靠）
-    if (win.electronAPI?.clipboardIPC?.readText) {
+    if (electronAPI?.clipboardIPC?.readText) {
       try {
-        const result = await win.electronAPI.clipboardIPC.readText();
+        const result = await electronAPI.clipboardIPC.readText();
         if (result.success) {
           return result.text || "";
         }
@@ -148,9 +148,9 @@ class ContextMenuManager {
     }
 
     // 回退：直接调用 preload 暴露的同步 API
-    if (win.electronAPI?.clipboard?.readText) {
+    if (electronAPI?.clipboard?.readText) {
       try {
-        const text = win.electronAPI.clipboard.readText();
+        const text = electronAPI.clipboard.readText();
         if (text) return text;
       } catch (error) {
         console.warn("[ContextMenu] 同步 clipboard 调用失败:", error);
@@ -178,12 +178,12 @@ class ContextMenuManager {
       return;
     }
 
-    const win = window as any;
+    const electronAPI = window.electronAPI;
 
     // 优先使用 IPC 方式（更可靠）
-    if (win.electronAPI?.clipboardIPC?.writeText) {
+    if (electronAPI?.clipboardIPC?.writeText) {
       try {
-        const result = await win.electronAPI.clipboardIPC.writeText(text);
+        const result = await electronAPI.clipboardIPC.writeText(text);
 
         if (!result.success) {
           console.error("[ContextMenu] IPC 写入失败:", result.error);
@@ -193,7 +193,7 @@ class ContextMenuManager {
         console.error("[ContextMenu] IPC 调用异常:", error);
         this.fallbackWriteToClipboard(text);
       }
-    } else if (win.electronAPI?.clipboard?.writeText) {
+    } else if (electronAPI?.clipboard?.writeText) {
       this.fallbackWriteToClipboard(text);
     } else {
       console.error("[ContextMenu] 所有剪贴板 API 都不可用");
@@ -204,11 +204,11 @@ class ContextMenuManager {
    * 回退方案：直接调用 preload 暴露的 clipboard API
    */
   private fallbackWriteToClipboard(text: string): void {
-    const win = window as any;
+    const electronAPI = window.electronAPI;
 
-    if (win.electronAPI?.clipboard?.writeText) {
+    if (electronAPI?.clipboard?.writeText) {
       try {
-        win.electronAPI.clipboard.writeText(text);
+        electronAPI.clipboard.writeText(text);
       } catch (error) {
         console.error("[ContextMenu] 直接调用失败:", error);
         this.webAPIFallback(text);
@@ -241,8 +241,8 @@ class ContextMenuManager {
    * 组件需在 DOM 元素上设置 data-editor-handler 属性和 __editorHandler 对象
    */
   private getEditorHandler(target: HTMLElement): EditorHandler | null {
-    const el = target.closest("[data-editor-handler]");
-    return el ? (el as any).__editorHandler || null : null;
+    const el = target.closest("[data-editor-handler]") as (HTMLElement & { __editorHandler?: EditorHandler }) | null;
+    return el?.__editorHandler || null;
   }
 
   /**

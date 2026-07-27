@@ -1260,9 +1260,9 @@ onMounted(() => {
     editor.value = tiptapEditor;
 
     // 将编辑器处理器挂载到 DOM 元素，供全局右键菜单使用（解耦方式）
-    const editorEl = document.querySelector('.message-editor');
+    const editorEl = document.querySelector('.message-editor') as (HTMLElement & { __editorHandler?: unknown }) | null;
     if (editorEl) {
-      (editorEl as any).__editorHandler = {
+      editorEl.__editorHandler = {
         getSelectionText: () => {
           return tiptapEditor.state.doc.textBetween(
             tiptapEditor.state.selection.from,

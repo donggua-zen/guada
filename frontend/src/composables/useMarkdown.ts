@@ -200,7 +200,7 @@ function createMarkedInstance(options?: MarkdownOptions): Marked {
             const text = this.parser?.parseInline(token.tokens) || token.text
 
             // 检测是否为 Electron 环境
-            const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
+            const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
             if (isElectron) {
                 // Electron 环境：通过 data-url + 事件委托处理，避免内联 onclick 注入风险

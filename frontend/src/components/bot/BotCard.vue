@@ -163,7 +163,7 @@ const fetchQrStatus = async () => {
     if (result.status === 'qr_ready') {
       qrCodeUrl.value = result.qrCodeUrl
     } else {
-      qrMessage.value = (result as any).message || ''
+      qrMessage.value = result.message || ''
     }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '获取二维码失败')

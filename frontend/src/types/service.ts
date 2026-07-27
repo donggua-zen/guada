@@ -219,9 +219,8 @@ export interface ResetPasswordCheckResponse {
  * 重置密码请求
  */
 export interface ResetPasswordRequest {
-    old_password?: string
-    new_password: string
-    token?: string
+    username?: string
+    password: string
 }
 
 

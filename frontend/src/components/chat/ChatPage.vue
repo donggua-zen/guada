@@ -215,7 +215,7 @@ function handleStreamStarted(event: any) {
 
   // 如果是主会话的流，通知 ChatPanel 订阅流
   if (sessionId === mainSession.value?.id) {
-    const chatPanel = chatPanelRef.value as any;
+    const chatPanel = chatPanelRef.value;
     if (chatPanel && chatPanel.subscribeToActiveStream) {
       const replaceMessageId = event.payload?.replaceMessageId;
       if (replaceMessageId) {
@@ -302,7 +302,7 @@ watch(() => mainSession.value?.id, (sessionId) => {
 
 
 // 判断是否为 Electron 环境
-const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
 // 会话列表组件引用，用于调用组件内部方法
 // ChatPanel 组件引用，用于调用组件内部方法
@@ -415,7 +415,7 @@ const updateSessionById = async (sessionId: string, data: any) => {
     // 只复制允许的字段并批量更新
     for (const field of allowedFields) {
       if (field in data) {
-        (session as any)[field] = data[field];
+        (session as unknown as Record<string, unknown>)[field] = data[field];
       }
     }
   }
@@ -523,7 +523,7 @@ async function clearChat() {
       await apiService.clearSessionMessages(mainSession.value.id);
       sessionStore.clearSessionMessages(mainSession.value.id);
       // 重新加载消息列表
-      const chatPanel = chatPanelRef.value as any;
+      const chatPanel = chatPanelRef.value;
       if (chatPanel && chatPanel.loadMessages) {
         chatPanel.loadMessages(mainSession.value.id);
       }
@@ -541,7 +541,7 @@ async function clearChat() {
  * 处理滚动到指定消息
  */
 function handleScrollToMessage(messageId: string) {
-  const chatPanel = chatPanelRef.value as any;
+  const chatPanel = chatPanelRef.value;
   if (chatPanel && chatPanel.scrollToMessage) {
     chatPanel.scrollToMessage(messageId);
   }

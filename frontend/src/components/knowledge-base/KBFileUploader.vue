@@ -444,7 +444,7 @@ async function handleFolderSelect(event: Event) {
         })
         .map(file => {
             // 获取浏览器提供的相对路径
-            const browserRelativePath = (file as any).webkitRelativePath || file.name
+            const browserRelativePath = file.webkitRelativePath || file.name
             
             // 关键修复:拼接当前文件夹路径
             const relativePath = props.currentFolderPath

@@ -74,7 +74,7 @@ onMounted(async () => {
       const savedScenario = localStorage.getItem('VITE_MOCK_SCENARIO')
       if (savedScenario && savedScenario in scenarios.value) {
         selectedScenario.value = savedScenario
-        currentConfig.value = getScenarioConfig(savedScenario as any)
+        currentConfig.value = getScenarioConfig(savedScenario)
       }
     } catch (e) {
       console.warn('⚠️ Mock 模块加载失败:', e)
@@ -111,7 +111,7 @@ async function handleScenarioChange() {
   if (selectedScenario.value) {
     try {
       const { getScenarioConfig } = await import('@/services/mockStreamService')
-      currentConfig.value = getScenarioConfig(selectedScenario.value as any)
+      currentConfig.value = getScenarioConfig(selectedScenario.value)
       localStorage.setItem('VITE_MOCK_SCENARIO', selectedScenario.value)
 
       // 重新初始化 API Service（同步）

@@ -20,6 +20,7 @@ export interface Message {
   createdAt?: string;
   files?: FileAttachment[];
   index?: number;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -175,24 +176,6 @@ export interface DisplayItem {
 }
 
 /**
- * 判断一个 DisplayItem 是否已完成
- * - think: isThinking 为 false 即完成
- * - tool: 所有 toolCall 都有 outcome 或有 toolResponses 即完成
- */
-export function isItemCompleted(item: DisplayItem): boolean {
-  if (item.type === 'think') {
-    return !item.source.state?.isThinking;
-  }
-  if (item.type === 'tool') {
-    const calls = item.toolCalls || [];
-    const responses = item.toolResponses;
-    if (responses && responses.length > 0) return true;
-    return calls.length > 0 && calls.every((tc: any) => tc.outcome);
-  }
-  return true;
-}
-
-/**
  * 展示分组接口
  * 用于将连续的 think/tool 聚合为「中间处理过程」
  */
@@ -205,51 +188,15 @@ export interface DisplayGroup {
   isExpanded: boolean;
 }
 
-/** 计算分组中实际工具调用总次数（一个 tool item 可能携带多个 toolCalls） */
-export function countToolCalls(items: DisplayItem[]): number {
+/** 计算分组中实际步骤数（think 算1个，tool 按调用数算） */
+export function countSteps(items: DisplayItem[]): number {
   return items.reduce((sum, item) => {
     if (item.type === 'tool' && item.toolCalls?.length) {
       return sum + item.toolCalls.length;
     }
-    return sum;
+    return sum + 1;
   }, 0);
 }
-
-/**
- * 将消息内容列表按展示规则分组
- *
- * 核心规则：content（小 content）是唯一的分隔符
- * - 单个大 content 内部顺序：think → content → tool，顺序不可变
- * - 以 content 为界，把 think/tool 分别归入前后的 process 组
- * - content 自身单独成组
- * - 连续多个 think/tool（可来自不同大 content）聚合成一个 process 组
- * - process 组按包含的 think/tool 数量 > 1 时可折叠
- *
- * 示例：
- *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
- *   think → tool → think → content → tool → think → content
- *   分组：【process: think tool think】→【content】→【process: tool think】→【content】
- *
- * @param contents - 消息内容数组
- * @returns 展示分组数组
- */
-/**
- * 增量分组缓存
- * 用于优化流式输出时的分组计算性能
- */
-interface GroupCache {
-  // 缓存的源数据引用（用于快速判断是否需要重新计算）
-  contentsRef: MessageContent[];
-  // 缓存的扁平化结果
-  items: DisplayItem[];
-  // 缓存的分组结果
-  groups: DisplayGroup[];
-  // 最后处理的 content 索引（用于增量计算）
-  lastContentIndex: number;
-}
-
-// 全局缓存（按消息 ID 隔离，避免不同消息间的缓存冲突）
-const groupCacheMap = new Map<string, GroupCache>();
 
 /**
  * 将单个大 content 拆分为 DisplayItem 列表
@@ -303,25 +250,6 @@ function flattenContents(contents: MessageContent[]): DisplayItem[] {
 }
 
 /**
- * 计算 process 组是否可折叠
- * 规则：如果包含 tool 类型项，按工具调用数量判断；否则按 item 数量判断
- */
-function calculateIsCollapsible(processItems: DisplayItem[]): boolean {
-  if (processItems.length === 0) return false;
-
-  let count = 0;
-  for (const item of processItems) {
-    if (item.type === "tool" && item.toolCalls?.length) {
-      count += item.toolCalls.length;
-    } else {
-      count += 1;
-    }
-  }
-
-  return count > 1;
-}
-
-/**
  * 执行分组逻辑
  */
 function doGrouping(items: DisplayItem[]): DisplayGroup[] {
@@ -334,7 +262,7 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
       id: `process-${currentProcess[0].id}`,
       type: "process",
       items: [...currentProcess],
-      isCollapsible: calculateIsCollapsible(currentProcess),
+      isCollapsible: true,
       isExpanded: false,
     });
     currentProcess = [];
@@ -384,7 +312,6 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
  */
 export function groupContentsForDisplay(
   contents: MessageContent[],
-  _messageId?: string,
 ): DisplayGroup[] {
   if (!contents || contents.length === 0) return [];
 
