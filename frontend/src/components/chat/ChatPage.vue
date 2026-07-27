@@ -426,6 +426,7 @@ const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === 'new-session') {
     mainSession.value = null;
     sessionStore.activeSessionId = "new-session";
+    isPreviewMode.value = false;
     return;
   }
   sessionStore.activeSessionId = sessionId;

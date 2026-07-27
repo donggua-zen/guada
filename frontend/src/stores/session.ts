@@ -114,7 +114,7 @@ export const useSessionStore = defineStore('session', () => {
     const getSessionsByGroup = (groupId: string | null): Session[] => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId && !s.archived)
+            .filter(s => (s.groupId || null) === targetGroupId && !s.archived && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
             .sort((a, b) => {
                 const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
                 const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
@@ -129,7 +129,7 @@ export const useSessionStore = defineStore('session', () => {
     const getGroupTotal = (groupId: string | null): number => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId).length
+            .filter(s => (s.groupId || null) === targetGroupId && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent').length
     }
 
     /**

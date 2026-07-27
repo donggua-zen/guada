@@ -100,7 +100,7 @@
                     <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
                             <el-icon size="16">
-                                <FolderOpened />
+                                <WindowsExplorer />
                             </el-icon>
                         </el-button>
                     </el-tooltip>
@@ -172,12 +172,6 @@
                         <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
                             <el-icon :size="14">
                                 <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
-                            </el-icon>
-                        </button>
-                        <!-- 关闭当前文件标签 -->
-                        <button class="preview-close-btn" title="关闭预览" @click="closeFileTab(activeFileTabPath!)">
-                            <el-icon :size="14">
-                                <Dismiss20Regular class="text-gray-500 dark:text-[#8b8d95]" />
                             </el-icon>
                         </button>
                     </div>
@@ -295,11 +289,11 @@
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, FolderOpened, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
+import { Refresh, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
 import { Dismiss20Regular, Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, Folder16Regular, Window16Regular } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
-import { VsCode } from '@/components/icons';
+import { VsCode, WindowsExplorer } from '@/components/icons';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
@@ -312,7 +306,7 @@ import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
-import { usePreviewTabCache } from '@/composables/usePreviewTabCache';
+import { usePreviewTabCache, type UnifiedTab } from '@/composables/usePreviewTabCache';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
 import WindowControls from '@/components/WindowControls.vue';
 
@@ -323,13 +317,6 @@ interface SelectedFile {
     size: number;
     content: string;
     mimeType: string;
-}
-
-interface FileTab {
-    path: string;
-    name: string;
-    extension: string;
-    size: number;
 }
 
 type PreviewMode = 'rendered' | 'source';
@@ -349,10 +336,10 @@ const emit = defineEmits<{
 const treeData = ref<WorkspaceNode[]>([]);
 const isLoading = ref(false);
 const selectedFile = ref<SelectedFile | null>(null);
-const fileTabs = ref<FileTab[]>([]);
-const activeFileTabPath = ref<string | null>(null);
-/** 统一标签顺序：存储 'file:<path>' 或 'browser:<windowId>'，按创建顺序 */
-const tabOrder = ref<string[]>([]);
+/** 统一标签列表（文件 + 浏览器，按顺序排列，唯一数据源） */
+const tabs = ref<UnifiedTab[]>([]);
+/** 当前激活的标签统一标识（'file:<path>' 或 'browser:<windowId>'） */
+const activeTabKey = ref<string | null>(null);
 const fileContent = ref('');
 const previewLoading = ref(false);
 const workspaceDialogVisible = ref(false);
@@ -398,7 +385,7 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     if (isElectron) {
         items.push({
             label: '在资源管理器中打开',
-            icon: FolderOpened,
+            icon: WindowsExplorer,
             onClick: handleOpenInExplorer,
         });
         // 文件/目录支持以 VSCode 打开
@@ -429,47 +416,6 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI !== undef
 const browserStore = useBrowserWebviewStore();
 const previewTabCache = usePreviewTabCache();
 
-// ── 统一标签列表（文件 + 浏览器，按创建顺序） ──
-interface UnifiedTab {
-    type: 'file' | 'browser';
-    key: string;       // 'file:<path>' 或 'browser:<windowId>'
-    // file
-    path?: string;
-    name?: string;
-    extension?: string;
-    size?: number;
-    // browser
-    windowId?: string;
-    title?: string;
-    favicon?: string;
-}
-
-/** 统一标签列表（直接 ref，由 watch 同步，供 vuedraggable 使用） */
-const unifiedTabs = ref<UnifiedTab[]>([]);
-
-/** 从 fileTabs + browserStore.sessionWebviews 重建 unifiedTabs */
-function rebuildUnifiedTabs(): void {
-    const result: UnifiedTab[] = [];
-    for (const key of tabOrder.value) {
-        if (key.startsWith('file:')) {
-            const path = key.slice(5);
-            const tab = fileTabs.value.find(t => t.path === path);
-            if (tab) {
-                result.push({ type: 'file', key, path: tab.path, name: tab.name, extension: tab.extension, size: tab.size });
-            }
-        } else if (key.startsWith('browser:')) {
-            const windowId = key.slice(8);
-            const wv = browserStore.sessionWebviews.find(w => w.windowId === windowId);
-            if (wv) {
-                result.push({ type: 'browser', key, windowId: wv.windowId, title: wv.title, favicon: wv.favicon });
-            }
-        }
-    }
-    unifiedTabs.value = result;
-}
-
-watch([fileTabs, () => browserStore.sessionWebviews, tabOrder], rebuildUnifiedTabs, { deep: true });
-
 // ── 原生 HTML5 拖拽排序 ──
 let dragSourceIndex = -1;
 let suppressClick = false;
@@ -488,9 +434,9 @@ function onTabDragOver(_index: number): void {
 
 function onTabDrop(targetIndex: number): void {
     if (dragSourceIndex < 0 || dragSourceIndex === targetIndex) return;
-    // 只修改 tabOrder，让 watch 的 rebuildUnifiedTabs 统一重建 unifiedTabs
-    const item = tabOrder.value.splice(dragSourceIndex, 1)[0];
-    tabOrder.value.splice(targetIndex, 0, item);
+    // 直接操作 tabs 数组
+    const item = tabs.value.splice(dragSourceIndex, 1)[0];
+    tabs.value.splice(targetIndex, 0, item);
     dragSourceIndex = -1;
 }
 
@@ -503,11 +449,7 @@ function onTabDragEnd(): void {
 
 function onTabClick(tab: UnifiedTab): void {
     if (suppressClick) return;
-    if (tab.type === 'file') {
-        switchToFileTab(tab.path!);
-    } else {
-        activateBrowserWindow(tab.windowId!);
-    }
+    void activateTab(tab);
 }
 
 // ── 悬浮目录树面板 ──
@@ -660,9 +602,11 @@ watch(() => browserStore.activeWindowId, (active) => {
     }
 });
 
-// 监听浏览器标签新增，自动加入统一顺序
+// 监听浏览器标签变化：新增加入顺序，移除清理顺序
 watch(() => browserStore.sessionWebviews.map(w => w.windowId), (newIds, oldIds) => {
     const oldSet = new Set(oldIds || []);
+    const newSet = new Set(newIds);
+    // 新增
     for (const id of newIds) {
         if (!oldSet.has(id)) {
             const key = `browser:${id}`;
@@ -671,20 +615,46 @@ watch(() => browserStore.sessionWebviews.map(w => w.windowId), (newIds, oldIds) 
             }
         }
     }
+    // 移除
+    for (const id of oldSet) {
+        if (!newSet.has(id)) {
+            const key = `browser:${id}`;
+            const idx = tabOrder.value.indexOf(key);
+            if (idx !== -1) tabOrder.value.splice(idx, 1);
+            // 如果移除的是当前激活的标签，清除激活
+            if (browserStore.activeWindowId === id) {
+                browserStore.setActive(null);
+                closePreview();
+            }
+        }
+    }
+    // 所有标签都关闭了，自动退出预览模式
+    if (newIds.length === 0 && fileTabs.value.length === 0 && isPreviewMode.value) {
+        isPreviewMode.value = false;
+        emit('preview-close');
+    }
 }, { deep: true });
 
 // ── 预览标签缓存：保存当前会话状态到 localStorage ──
+
+/** 计算当前激活标签的统一标识 */
+function computeActiveTabKey(): string | null {
+    if (browserStore.activeWindowId) return `browser:${browserStore.activeWindowId}`;
+    if (activeFileTabPath.value) return `file:${activeFileTabPath.value}`;
+    return null;
+}
+
 function savePreviewCache(): void {
     if (!props.sessionId) return;
     previewTabCache.saveSession(props.sessionId, {
         isPreviewMode: isPreviewMode.value,
-        activeFileTabPath: activeFileTabPath.value,
-        fileTabs: fileTabs.value.map(t => t.path),
+        activeTabKey: computeActiveTabKey(),
+        fileTabPaths: fileTabs.value.map(t => t.path),
     });
 }
 
-// 自动保存：当预览状态、文件标签、激活标签变化时
-watch([isPreviewMode, activeFileTabPath, fileTabs], () => {
+// 自动保存：当预览状态、文件标签、激活标签、浏览器激活变化时
+watch([isPreviewMode, activeFileTabPath, fileTabs, () => browserStore.activeWindowId], () => {
     savePreviewCache();
 }, { deep: true });
 
@@ -693,14 +663,14 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
     const cached = previewTabCache.getSession(sessionId);
     if (!cached) return;
 
-    // 恢复文件标签（仅路径，名称等从树中查找或从路径推导）
-    fileTabs.value = cached.fileTabs.map(path => {
+    // 恢复文件标签
+    fileTabs.value = cached.fileTabPaths.map(path => {
         const name = path.replace(/\\/g, '/').split('/').pop() || path;
         const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
         return { path, name, extension: ext, size: 0 };
     });
     // 重建统一顺序：文件标签 + 已存在的浏览器标签
-    tabOrder.value = cached.fileTabs.map(path => `file:${path}`);
+    tabOrder.value = cached.fileTabPaths.map(path => `file:${path}`);
     for (const wv of browserStore.sessionWebviews) {
         const key = `browser:${wv.windowId}`;
         if (!tabOrder.value.includes(key)) {
@@ -714,10 +684,20 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
         emit('preview-open');
     }
 
-    // 恢复激活的文件标签（重新加载文件内容）
-    if (cached.activeFileTabPath && fileTabs.value.some(t => t.path === cached.activeFileTabPath)) {
+    // 恢复激活的标签（按统一标识 prefix 分发）
+    if (cached.activeTabKey) {
         await nextTick();
-        await switchToFileTab(cached.activeFileTabPath);
+        if (cached.activeTabKey.startsWith('file:')) {
+            const path = cached.activeTabKey.slice(5);
+            if (fileTabs.value.some(t => t.path === path)) {
+                await switchToFileTab(path);
+            }
+        } else if (cached.activeTabKey.startsWith('browser:')) {
+            const windowId = cached.activeTabKey.slice(8);
+            if (browserStore.sessionWebviews.some(w => w.windowId === windowId)) {
+                browserStore.setActive(windowId);
+            }
+        }
     }
 }
 

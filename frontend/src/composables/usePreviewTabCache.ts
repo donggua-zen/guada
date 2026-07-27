@@ -1,15 +1,33 @@
 import { useStorage } from '@vueuse/core'
 
 /**
+ * 统一标签（文件 / 浏览器），同时用于 UI 渲染和持久化缓存
+ */
+export interface UnifiedTab {
+    type: 'file' | 'browser';
+    key: string;       // 'file:<path>' 或 'browser:<windowId>'
+    // file
+    path?: string;
+    name?: string;
+    extension?: string;
+    size?: number;
+    // browser
+    windowId?: string;
+    title?: string;
+    favicon?: string;
+    url?: string;
+}
+
+/**
  * 单个会话的预览标签缓存
  */
 export interface SessionPreviewCache {
     /** 是否处于预览模式 */
     isPreviewMode: boolean
-    /** 当前激活的文件标签路径 */
-    activeFileTabPath: string | null
-    /** 文件标签路径列表（按打开顺序） */
-    fileTabs: string[]
+    /** 当前激活的标签统一标识（如 'file:src/index.ts' 或 'browser:win_123'），无则为 null */
+    activeTabKey: string | null
+    /** 完整标签列表（含浏览器元数据，保留顺序） */
+    tabs: UnifiedTab[]
 }
 
 const MAX_SESSIONS = 10
@@ -17,9 +35,9 @@ const MAX_SESSIONS = 10
 /**
  * 预览标签缓存 composable
  *
- * 使用 localStorage 持久化每个会话的预览状态（文件路径列表 + 预览模式开关）。
+ * 使用 localStorage 持久化每个会话的完整预览状态（标签列表 + 预览模式开关 + 激活标签）。
  * 采用 LRU 策略，最多保留最近 MAX_SESSIONS 个会话。
- * 浏览器标签不持久化（由 browserStore 管理）。
+ * 浏览器标签的元数据（title/favicon/url）也一并持久化，webview 生命周期由 browserStore 管理。
  */
 export function usePreviewTabCache() {
     /** 所有会话的缓存，按最近使用排序（index 0 = 最近） */

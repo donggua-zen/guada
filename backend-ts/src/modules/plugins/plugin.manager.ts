@@ -11,7 +11,6 @@ import {
   ToolKitLoadMode,
   ResolvedPluginInfo,
 } from "./types/plugin.types";
-import { IToolProvider } from "../tools/interfaces/tool-provider.interface";
 import { PluginApiImpl } from "./api/plugin-api";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SG_PLUGINS } from "../../constants/settings.constants";
@@ -160,16 +159,6 @@ export class PluginManager {
     for (const cp of cmdProviders) {
       this.commandRegistry.register(cp);
     }
-  }
-
-  /**
-   * 将旧 IToolProvider 包装并注册
-   * @deprecated 使用 registerPlugin 替代
-   */
-  async registerLegacyProvider(provider: IToolProvider): Promise<void> {
-    throw new Error(
-      "registerLegacyProvider 已废弃，请将 provider 迁移为 PluginBase 使用 registerPlugin",
-    );
   }
 
   /**
