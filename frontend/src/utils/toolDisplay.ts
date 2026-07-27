@@ -1,7 +1,7 @@
 import { type Component } from 'vue';
 import {
   Wrench24Filled, Edit32Filled, Search16Filled, CalendarAgenda20Regular, BookSearch24Regular,
-  Code24Regular, WindowWrench16Regular,TaskListSquareLtr20Regular
+  Code24Regular, WindowWrench16Regular,TaskListSquareLtr20Regular,EyeTracking16Filled
 } from '@vicons/fluent';
 import Terminal from '@/components/icons/Terminal.vue';
 import { parse as partialParse } from 'partial-json';
@@ -52,8 +52,8 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   browser_console:    { text: { executing: '正在查看日志', completed: '已查看日志' }, icon: WindowWrench16Regular },
   browser_screenshot: { text: { executing: '正在截图', completed: '已截图' }, icon: WindowWrench16Regular },
 
-  image_recognize:         { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_id', icon: Search16Filled },
-  image_recognize_by_path: { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_path', icon: Search16Filled },
+  image_recognize:         { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_id', icon: EyeTracking16Filled },
+  image_recognize_by_path: { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_path', icon: EyeTracking16Filled },
 
   memory: { text: { executing: '正在编辑记忆', completed: '已编辑记忆' }, argsKey: 'action', icon: Wrench24Filled },
   plan:   { text: { executing: '正在管理计划', completed: '已管理计划' }, argsKey: 'action', icon: TaskListSquareLtr20Regular },

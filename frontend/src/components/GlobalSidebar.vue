@@ -1001,7 +1001,7 @@ function initSessionEventListeners() {
   apiService.onSessionEvent('stream_started', (event) => {
     const { sessionId, payload } = event
 
-    if (payload?.session?.sessionType === 'sub_agent')
+    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
       return
     // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
     sessionStore.setSidebarFlag(sessionId, 'working', true)
@@ -1035,7 +1035,7 @@ function initSessionEventListeners() {
   apiService.onSessionEvent('stream_finished', (event) => {
     const { sessionId, payload } = event
     // 注意，这里 payload 中没有 session 字段，只有 sessionType
-    if (payload?.sessionType === 'sub_agent')
+    if (payload?.sessionType === 'sub_agent' || payload?.sessionType === 'bot')
       return
     console.log('[GlobalSidebar] 会话流已结束:', sessionId)
 
