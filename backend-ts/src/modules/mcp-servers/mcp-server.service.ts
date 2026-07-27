@@ -16,20 +16,32 @@ export class McpServerService {
   /**
    * 验证 MCP 服务器配置
    */
-  private validateServerConfig(url: string, headers?: Record<string, any>): {
+  private validateServerConfig(
+    url: string,
+    headers?: Record<string, any>,
+    type?: string,
+    command?: string,
+  ): {
     valid: boolean;
     errors: string[];
   } {
     const errors: string[] = [];
 
-    // 验证 URL
-    if (!url) {
-      errors.push("URL is required");
+    if (type === "stdio") {
+      // stdio 协议：验证 command
+      if (!command) {
+        errors.push("Command is required for stdio protocol");
+      }
     } else {
-      try {
-        new URL(url);
-      } catch {
-        errors.push("Invalid URL format");
+      // HTTP 协议（sse / streamableHttp）：验证 URL
+      if (!url) {
+        errors.push("URL is required");
+      } else {
+        try {
+          new URL(url);
+        } catch {
+          errors.push("Invalid URL format");
+        }
       }
     }
 
@@ -106,12 +118,12 @@ export class McpServerService {
           );
         } else {
           this.logger.warn(
-            `Failed to automatically fetch tools from ${serverUrl}: ${errorMessage}`,
+            `Failed to automatically fetch tools from ${serverUrl || command}: ${errorMessage}`,
           );
         }
       } else {
         this.logger.warn(
-          `Failed to automatically fetch tools from ${serverUrl}: ${errorMessage}`,
+          `Failed to automatically fetch tools from ${serverUrl || command}: ${errorMessage}`,
         );
       }
       
@@ -138,7 +150,7 @@ export class McpServerService {
 
   async createServer(data: any, userId: string) {
     // 验证配置
-    const validation = this.validateServerConfig(data.url, data.headers);
+    const validation = this.validateServerConfig(data.url, data.headers, data.type, data.command);
     if (!validation.valid) {
       throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
     }
@@ -208,11 +220,13 @@ export class McpServerService {
       throw new Error("MCP Server not found or unauthorized");
     }
 
-    // 如果更新了 URL 或 headers，验证新配置
-    if (data.url !== undefined || data.headers !== undefined) {
+    // 如果更新了 URL、headers 或 type，验证新配置
+    if (data.url !== undefined || data.headers !== undefined || data.type !== undefined) {
       const urlToValidate = data.url !== undefined ? data.url : currentServer.url;
       const headersToValidate = data.headers !== undefined ? data.headers : currentServer.headers;
-      const validation = this.validateServerConfig(urlToValidate, headersToValidate);
+      const typeToValidate = data.type !== undefined ? data.type : currentServer.type;
+      const commandToValidate = data.command !== undefined ? data.command : currentServer.command;
+      const validation = this.validateServerConfig(urlToValidate, headersToValidate, typeToValidate, commandToValidate);
       if (!validation.valid) {
         throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
       }
@@ -220,6 +234,13 @@ export class McpServerService {
 
     // 检查是否需要重新获取工具列表
     let needRefreshTools = false;
+
+    // 计算合并后的有效值（用于后续工具刷新）
+    const effectiveType = data.type !== undefined ? data.type : currentServer.type;
+    const effectiveCommand = data.command !== undefined ? data.command : currentServer.command;
+    const effectiveArgs = data.args !== undefined ? data.args : currentServer.args;
+    const effectiveEnv = data.env !== undefined ? data.env : currentServer.env;
+    const effectiveCwd = data.cwd !== undefined ? data.cwd : currentServer.cwd;
     let serverUrl = currentServer.url;
     let headers = (currentServer.headers as Record<string, any>) || {};
 
@@ -235,6 +256,20 @@ export class McpServerService {
         needRefreshTools = true;
         headers = newHeaders;
       }
+    }
+
+    // stdio 协议：检测 command/args/env/cwd 变更
+    if (data.command !== undefined && data.command !== currentServer.command) {
+      needRefreshTools = true;
+    }
+    if (data.args !== undefined && JSON.stringify(data.args) !== JSON.stringify(currentServer.args)) {
+      needRefreshTools = true;
+    }
+    if (data.env !== undefined && JSON.stringify(data.env) !== JSON.stringify(currentServer.env)) {
+      needRefreshTools = true;
+    }
+    if (data.cwd !== undefined && data.cwd !== currentServer.cwd) {
+      needRefreshTools = true;
     }
 
     // 准备更新数据
@@ -259,20 +294,20 @@ export class McpServerService {
       try {
         let toolsDict: Record<string, any>;
         
-        if (data.type === "stdio" && data.command) {
+        if (effectiveType === "stdio" && effectiveCommand) {
           // stdio 协议
           toolsDict = await this.fetchToolsFromServer(
             null,
             null,
-            data.type,
-            data.command,
-            data.args,
-            data.env,
-            data.cwd,
+            effectiveType,
+            effectiveCommand,
+            effectiveArgs as any[],
+            effectiveEnv as Record<string, string>,
+            effectiveCwd || undefined,
           );
         } else if (serverUrl) {
           // HTTP 协议
-          toolsDict = await this.fetchToolsFromServer(serverUrl, headers, data.type);
+          toolsDict = await this.fetchToolsFromServer(serverUrl, headers, effectiveType);
         } else {
           return server;
         }
@@ -330,14 +365,29 @@ export class McpServerService {
       throw new Error("MCP Server not found or unauthorized");
     }
 
-    if (!server.url) {
-      throw new Error("Server URL is required");
-    }
-
     const headers = (server.headers as Record<string, any>) || {};
     
     try {
-      const toolsDict = await this.fetchToolsFromServer(server.url, headers, server.type);
+      let toolsDict: Record<string, any>;
+
+      if (server.type === "stdio" && server.command) {
+        // stdio 协议
+        toolsDict = await this.fetchToolsFromServer(
+          null,
+          null,
+          server.type,
+          server.command,
+          server.args as any[],
+          server.env as Record<string, string>,
+          server.cwd || undefined,
+        );
+      } else {
+        // HTTP 协议
+        if (!server.url) {
+          throw new Error("Server URL is required");
+        }
+        toolsDict = await this.fetchToolsFromServer(server.url, headers, server.type);
+      }
 
       if (Object.keys(toolsDict).length === 0) {
         // 提供更详细的错误提示
