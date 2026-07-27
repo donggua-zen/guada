@@ -4,11 +4,11 @@
     <div
       class="thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200"
       @click.stop="handleToggle">
-      <el-icon v-if="isThinking" size="14" class="shrink-0 animate-spin">
+      <el-icon v-if="isThinking" size="15" class="shrink-0 animate-spin">
         <SpinnerIos20Filled />
       </el-icon>
-      <el-icon v-else size="14" class="shrink-0">
-        <Lightbulb24Regular />
+      <el-icon v-else size="15" class="shrink-0">
+        <BrainCircuit20Regular />
       </el-icon>
       <span class="text-gray-600 dark:text-gray-400 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
       <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElIcon } from 'element-plus';
-import { Lightbulb24Regular, SpinnerIos20Filled } from '@vicons/fluent';
+import { BrainCircuit20Regular, SpinnerIos20Filled } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration } from '../../../utils/messageUtils';
 

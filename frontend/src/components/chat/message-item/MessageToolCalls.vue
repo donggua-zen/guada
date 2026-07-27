@@ -5,14 +5,14 @@
       <div
         class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="openSingleToolDialog(toolIndex)">
-        <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="14"
+        <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="15"
           style="color: #f56c6c;">
           <component :is="getToolIcon(tool)" />
         </el-icon>
-        <el-icon v-else-if="tool.outcome === 'aborted'" class="shrink-0" size="14" style="color: #c0c4cc;">
+        <el-icon v-else-if="tool.outcome === 'aborted'" class="shrink-0" size="15" style="color: #c0c4cc;">
           <component :is="getToolIcon(tool)" />
         </el-icon>
-        <el-icon v-else class="shrink-0" size="14" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
+        <el-icon v-else class="shrink-0" size="15" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
           <component :is="getToolIcon(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-2 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">

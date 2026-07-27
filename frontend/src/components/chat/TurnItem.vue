@@ -104,7 +104,9 @@
               <div class="process-group__collapsible"
                 :class="{ 'is-expanded': isLastActive(groupIndex) ? isGroupExpanded('last-active') : (!group.isCollapsible || isGroupExpanded(group.id)) }">
                 <div class="process-group__body">
-                  <div class="process-group__body-scroll space-y-3" :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }">
+                  <div class="process-group__body-scroll space-y-2" :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
+                    :ref="isLastActive(groupIndex) ? 'activeBodyRef' : undefined"
+                    @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
                     <template v-for="item in group.items" :key="item.id">
                       <MessageThinkingSection v-if="item.type === 'think'"
                         :reasoning-content="item.reasoningContent || ''"
@@ -189,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
 import { InsightsTwotone, MenuBookOutlined, ArrowRightTwotone } from "@vicons/material";
 import { Alert16Regular, Lightbulb24Regular } from "@vicons/fluent";
@@ -229,6 +231,18 @@ const emit = defineEmits<{
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const expandedGroups = ref<Set<string>>(new Set());
+
+// 激活分组内容区 ref，用于自动滚动
+const activeBodyRef = ref<HTMLElement | null>(null);
+// 标记用户是否手动滚动了
+let userScrolledAway = false;
+
+// 用户滚动检测：距底部超过 40px 视为手动滚动
+const onActiveBodyScroll = (e: Event) => {
+  const el = e.target as HTMLElement;
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+  userScrolledAway = !atBottom;
+};
 
 const toggleGroup = (groupId: string) => {
   const set = expandedGroups.value;
@@ -288,6 +302,16 @@ const turnsCache = computed(() => {
 const displayGroups = computed<DisplayGroup[]>(() => {
   return groupContentsForDisplay(turnsCache.value);
 });
+
+// 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
+watch(turnsCache, () => {
+  if (!streamingState.value.isStreaming) return;
+  nextTick(() => {
+    const el = activeBodyRef.value;
+    if (!el || userScrolledAway) return;
+    el.scrollTop = el.scrollHeight;
+  });
+}, { deep: true });
 
 // 获取最后一组的图标
 const getLastGroupIcon = (group: DisplayGroup) => {
@@ -660,7 +684,7 @@ const handleClick = (event: MouseEvent) => {
   gap: 6px;
   max-width: 100%;
   border-radius: 6px;
-  color: var(--el-text-color-regular);
+  color: var(--el-text-color-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: background-color 0.2s ease;

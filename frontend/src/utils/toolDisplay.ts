@@ -1,7 +1,7 @@
 import { type Component } from 'vue';
 import {
-  Wrench24Filled, Edit32Filled, Search16Filled, BookOpen24Filled, BookSearch24Regular,
-  Code24Regular, WindowWrench16Regular,
+  Wrench24Filled, Edit32Filled, Search16Filled, CalendarAgenda20Regular, BookSearch24Regular,
+  Code24Regular, WindowWrench16Regular,TaskListSquareLtr20Regular
 } from '@vicons/fluent';
 import Terminal from '@/components/icons/Terminal.vue';
 import { parse as partialParse } from 'partial-json';
@@ -36,7 +36,7 @@ export const DEFAULT_CONFIG: ToolDisplayConfig = {
 };
 
 export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
-  read:    { text: { executing: '正在读取文件', completed: '已读取文件' }, aggregate: '正在读取{n}个文件', argsKey: 'file_path', icon: BookOpen24Filled },
+  read:    { text: { executing: '正在读取文件', completed: '已读取文件' }, aggregate: '正在读取{n}个文件', argsKey: 'file_path', icon: CalendarAgenda20Regular },
   glob:    { text: { executing: '正在搜索文件', completed: '已搜索文件' }, aggregate: '正在执行{n}次搜索', argsKey: 'pattern', icon: Search16Filled },
   write:   { text: { executing: '正在写入文件', completed: '已写入文件' }, aggregate: '正在写入{n}个文件', argsKey: 'file_path', icon: Edit32Filled, inlineContent: { key: 'content', mode: 'code' } },
   edit:    { text: { executing: '正在替换文本', completed: '已替换文本' }, aggregate: '正在编辑{n}个文件', argsKey: 'file_path', icon: Edit32Filled },
@@ -56,7 +56,7 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   image_recognize_by_path: { text: { executing: '正在识别图片', completed: '已识别图片' }, argsKey: 'image_path', icon: Search16Filled },
 
   memory: { text: { executing: '正在编辑记忆', completed: '已编辑记忆' }, argsKey: 'action', icon: Wrench24Filled },
-  plan:   { text: { executing: '正在管理计划', completed: '已管理计划' }, argsKey: 'action', icon: Wrench24Filled },
+  plan:   { text: { executing: '正在管理计划', completed: '已管理计划' }, argsKey: 'action', icon: TaskListSquareLtr20Regular },
 
   get_current_time: { text: { executing: '正在获取时间', completed: '已获取时间' }, icon: Wrench24Filled },
 
@@ -66,8 +66,8 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   terminal: { text: { executing: '正在执行命令', completed: '已执行命令' }, aggregate: '正在执行{n}条命令', argsKey: 'command', icon: Terminal },
   process:  { text: { executing: '正在管理进程', completed: '已管理进程' }, argsKey: 'action', icon: Terminal },
 
-  doc_parse:        { text: { executing: '正在解析文档', completed: '已解析文档' }, argsKey: 'file_path', icon: BookOpen24Filled },
-  doc_batch_parse:  { text: { executing: '正在批量解析文档', completed: '已批量解析文档' }, icon: BookOpen24Filled },
+  doc_parse:        { text: { executing: '正在解析文档', completed: '已解析文档' }, argsKey: 'file_path', icon: CalendarAgenda20Regular },
+  doc_batch_parse:  { text: { executing: '正在批量解析文档', completed: '已批量解析文档' }, icon: CalendarAgenda20Regular },
 
   clear_session: { text: { executing: '正在清空会话', completed: '已清空会话' }, icon: Wrench24Filled },
 
@@ -81,7 +81,7 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   scheduler_delete_task: { text: { executing: '正在删除定时任务', completed: '已删除定时任务' }, icon: Wrench24Filled },
   scheduler_toggle_task: { text: { executing: '正在切换任务状态', completed: '已切换任务状态' }, icon: Wrench24Filled },
 
-  skill_lean: { text: { executing: '正在读取技能', completed: '已读取技能' }, argsKey: 'name', icon: BookOpen24Filled },
+  skill_lean: { text: { executing: '正在读取技能', completed: '已读取技能' }, argsKey: 'name', icon: CalendarAgenda20Regular },
 
   subagent_spawn:   { text: { executing: '正在创建子代理', completed: '已创建子代理' }, argsKey: 'name', icon: Wrench24Filled },
   subagent_manager: { text: { executing: '正在管理子代理', completed: '已管理子代理' }, argsKey: 'action', icon: Wrench24Filled },
