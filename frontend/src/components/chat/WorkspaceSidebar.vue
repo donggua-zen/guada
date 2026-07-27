@@ -20,12 +20,12 @@
             </div>
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
-            <div ref="tabBarRef" v-if="isPreviewMode && unifiedTabs.length > 0"
+            <div ref="tabBarRef" v-if="isPreviewMode && tabs.length > 0"
                 class="flex items-center gap-0.5 flex-1 overflow-x-auto no-drag browser-tabs-scroll"
                 @wheel="onTabBarWheel">
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
-                <div v-for="(tab, index) in unifiedTabs" :key="tab.key" class="browser-tab"
-                    :class="{ active: tab.type === 'file' ? (!browserStore.activeWindowId && activeFileTabPath === tab.path) : (browserStore.activeWindowId === tab.windowId) }"
+                <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
+                    :class="{ active: activeTabKey === tab.key }"
                     :title="tab.type === 'file' ? tab.name : (tab.title || '未命名窗口')" draggable="true"
                     @click="onTabClick(tab)" @dragstart="onTabDragStart(index, $event)"
                     @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
@@ -47,7 +47,7 @@
                     <span class="tab-title">{{ truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口'))
                         }}</span>
                     <span class="tab-close"
-                        @click.stop="tab.type === 'file' ? closeFileTab(tab.path!) : closeBrowserWindow(tab.windowId!)">
+                        @click.stop="closeTab(tab)">
                         <el-icon size="10">
                             <Close />
                         </el-icon>
@@ -65,7 +65,7 @@
             </div>
 
             <!-- 弹性占位 -->
-            <div v-if="!isPreviewMode || unifiedTabs.length === 0" class="flex-1"></div>
+            <div v-if="!isPreviewMode || tabs.length === 0" class="flex-1"></div>
 
             <!-- 窗口控制按钮 -->
             <WindowControls class="no-drag" />
@@ -208,7 +208,7 @@
                     <div v-if="fileNotFound" class="w-full h-full flex items-center justify-center p-4">
                         <div class="text-center">
                             <p class="text-gray-400 dark:text-gray-500 text-sm">文件已不存在</p>
-                            <el-button @click="closeFileTab(activeFileTabPath!)" size="small" class="mt-3">
+                            <el-button @click="closeTab(tabs.find(t => t.key === activeTabKey)!)" size="small" class="mt-3">
                                 关闭标签
                             </el-button>
                         </div>
@@ -244,7 +244,7 @@
         </div>
 
         <!-- 空状态页（预览模式但无激活标签时显示） -->
-        <div v-if="isPreviewMode && !selectedFile && !browserStore.activeWindowId"
+        <div v-if="isPreviewMode && !activeTabKey"
             class="flex flex-col items-center justify-center h-full w-full flex-1">
             <div class="text-center">
                 <svg class="w-12 h-12 mx-auto mb-3 text-gray-200 dark:text-[#3a3c40]" viewBox="0 0 24 24" fill="none"
@@ -577,59 +577,39 @@ function deselectAllTabs(): void {
         isPreviewMode.value = true;
         emit('preview-open');
     }
+    activeTabKey.value = null;
     browserStore.setActive(null);
     closePreview();
 }
 
-/** 点击浏览器标签：切换预览 */
-function activateBrowserWindow(windowId: string): void {
-    if (browserStore.activeWindowId !== windowId) {
-        browserStore.setActive(windowId);
-        // 清除文件标签选中状态，否则 switchToFileTab 会误判为"已激活"而跳过
-        activeFileTabPath.value = null;
-        if (!isPreviewMode.value) {
-            isPreviewMode.value = true;
-            emit('preview-open');
-        }
-    }
-}
+// ── 浏览器 store 同步：增删标签 + 元数据更新（单向 store → tabs） ──
+// watch 源使用 fingerprint 数组（仅 windowId/title/favicon/url），避免 setActive 修改 isVisible 时冗余触发
+watch(() => browserStore.sessionWebviews.map(w => ({
+    windowId: w.windowId, title: w.title, favicon: w.favicon, url: w.url,
+})), (webviews) => {
+    const ids = new Set(webviews.map(w => w.windowId));
 
-// 浏览器窗口激活时进入预览模式
-watch(() => browserStore.activeWindowId, (active) => {
-    if (active && !isPreviewMode.value) {
-        isPreviewMode.value = true;
-        emit('preview-open');
-    }
-});
+    // 移除已关闭的浏览器标签
+    const toRemove = tabs.value
+        .filter(t => t.type === 'browser' && !ids.has(t.windowId!))
+        .map(t => t.key);
+    for (const key of toRemove) handleTabRemoved(key);
 
-// 监听浏览器标签变化：新增加入顺序，移除清理顺序
-watch(() => browserStore.sessionWebviews.map(w => w.windowId), (newIds, oldIds) => {
-    const oldSet = new Set(oldIds || []);
-    const newSet = new Set(newIds);
-    // 新增
-    for (const id of newIds) {
-        if (!oldSet.has(id)) {
-            const key = `browser:${id}`;
-            if (!tabOrder.value.includes(key)) {
-                tabOrder.value.push(key);
-            }
+    // 新增 + 更新元数据
+    for (const wv of webviews) {
+        const key = `browser:${wv.windowId}`;
+        const existing = tabs.value.find(t => t.key === key);
+        if (!existing) {
+            tabs.value.push({ type: 'browser', key, windowId: wv.windowId, title: wv.title, favicon: wv.favicon, url: wv.url });
+        } else {
+            existing.title = wv.title;
+            existing.favicon = wv.favicon;
+            existing.url = wv.url;
         }
     }
-    // 移除
-    for (const id of oldSet) {
-        if (!newSet.has(id)) {
-            const key = `browser:${id}`;
-            const idx = tabOrder.value.indexOf(key);
-            if (idx !== -1) tabOrder.value.splice(idx, 1);
-            // 如果移除的是当前激活的标签，清除激活
-            if (browserStore.activeWindowId === id) {
-                browserStore.setActive(null);
-                closePreview();
-            }
-        }
-    }
-    // 所有标签都关闭了，自动退出预览模式
-    if (newIds.length === 0 && fileTabs.value.length === 0 && isPreviewMode.value) {
+
+    // 全部标签关闭时退出预览模式
+    if (tabs.value.length === 0 && isPreviewMode.value) {
         isPreviewMode.value = false;
         emit('preview-close');
     }
@@ -637,25 +617,20 @@ watch(() => browserStore.sessionWebviews.map(w => w.windowId), (newIds, oldIds) 
 
 // ── 预览标签缓存：保存当前会话状态到 localStorage ──
 
-/** 计算当前激活标签的统一标识 */
-function computeActiveTabKey(): string | null {
-    if (browserStore.activeWindowId) return `browser:${browserStore.activeWindowId}`;
-    if (activeFileTabPath.value) return `file:${activeFileTabPath.value}`;
-    return null;
-}
-
 function savePreviewCache(): void {
     if (!props.sessionId) return;
     previewTabCache.saveSession(props.sessionId, {
         isPreviewMode: isPreviewMode.value,
-        activeTabKey: computeActiveTabKey(),
-        fileTabPaths: fileTabs.value.map(t => t.path),
+        activeTabKey: activeTabKey.value,
+        tabs: tabs.value.map(t => ({ ...t })),
     });
 }
 
-// 自动保存：当预览状态、文件标签、激活标签、浏览器激活变化时
-watch([isPreviewMode, activeFileTabPath, fileTabs, () => browserStore.activeWindowId], () => {
-    savePreviewCache();
+// 自动保存：当预览状态、标签列表、激活标签变化时
+// isRestoring 期间跳过，避免 restorePreviewCache 过程中多次写入中间态
+let isRestoring = false;
+watch([isPreviewMode, activeTabKey, tabs], () => {
+    if (!isRestoring) savePreviewCache();
 }, { deep: true });
 
 // ── 预览标签缓存：从 localStorage 恢复会话状态 ──
@@ -663,172 +638,142 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
     const cached = previewTabCache.getSession(sessionId);
     if (!cached) return;
 
-    // 恢复文件标签
-    fileTabs.value = cached.fileTabPaths.map(path => {
-        const name = path.replace(/\\/g, '/').split('/').pop() || path;
-        const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
-        return { path, name, extension: ext, size: 0 };
+    isRestoring = true;
+
+    // 恢复完整标签列表（保留顺序）
+    tabs.value = cached.tabs.map(t => ({ ...t }));
+
+    // 过滤掉 webview 已不存在的浏览器标签（页面刷新场景）
+    tabs.value = tabs.value.filter(tab => {
+        if (tab.type === 'browser') {
+            return browserStore.allWebviews.some(w => w.windowId === tab.windowId);
+        }
+        return true;
     });
-    // 重建统一顺序：文件标签 + 已存在的浏览器标签
-    tabOrder.value = cached.fileTabPaths.map(path => `file:${path}`);
+
+    // 补充 store 中存在但缓存中没有的浏览器标签
     for (const wv of browserStore.sessionWebviews) {
         const key = `browser:${wv.windowId}`;
-        if (!tabOrder.value.includes(key)) {
-            tabOrder.value.push(key);
+        if (!tabs.value.some(t => t.key === key)) {
+            tabs.value.push({ type: 'browser', key, windowId: wv.windowId, title: wv.title, favicon: wv.favicon, url: wv.url });
         }
     }
 
-    // 恢复预览模式
+    // 恢复预览模式 + 激活标签
+    // 仅当缓存记录为预览模式时才激活标签，否则保持工作区模式（activateTab 会强制进入预览模式）
     if (cached.isPreviewMode) {
         isPreviewMode.value = true;
         emit('preview-open');
-    }
-
-    // 恢复激活的标签（按统一标识 prefix 分发）
-    if (cached.activeTabKey) {
-        await nextTick();
-        if (cached.activeTabKey.startsWith('file:')) {
-            const path = cached.activeTabKey.slice(5);
-            if (fileTabs.value.some(t => t.path === path)) {
-                await switchToFileTab(path);
-            }
-        } else if (cached.activeTabKey.startsWith('browser:')) {
-            const windowId = cached.activeTabKey.slice(8);
-            if (browserStore.sessionWebviews.some(w => w.windowId === windowId)) {
-                browserStore.setActive(windowId);
-            }
+        if (cached.activeTabKey) {
+            await nextTick();
+            const tab = tabs.value.find(t => t.key === cached.activeTabKey);
+            if (tab) await activateTab(tab);
         }
     }
+
+    isRestoring = false;
+    savePreviewCache();
 }
 
-/** 关闭浏览器窗口：关闭后切换到后一个标签，全部关闭则退出预览模式 */
-async function closeBrowserWindow(windowId: string): Promise<void> {
-    if (!window.electronAPI) return;
+// ── 统一标签操作 ──
 
-    try {
-        await window.electronAPI.closeBrowserWindow(windowId);
-    } catch (e) {
-        console.error('Failed to close browser window:', e);
-    }
-
-    // store 中的记录由 browser:destroy-webview 事件异步移除，等待一个 tick 后切换
-    await nextTick();
-
-    // 从统一顺序中移除
-    const tabKey = `browser:${windowId}`;
-    const orderIdx = tabOrder.value.indexOf(tabKey);
-    if (orderIdx !== -1) tabOrder.value.splice(orderIdx, 1);
-
-    // 从统一顺序中查找相邻标签
-    const nextOrderKey = tabOrder.value[orderIdx] || tabOrder.value[orderIdx - 1] || null;
-    if (nextOrderKey) {
-        if (nextOrderKey.startsWith('file:')) {
-            browserStore.setActive(null);
-            await switchToFileTab(nextOrderKey.slice(5));
-        } else if (nextOrderKey.startsWith('browser:')) {
-            browserStore.setActive(nextOrderKey.slice(8));
-        }
-        return;
-    }
-
-    // 没有标签了，自动返回工作区
-    browserStore.setActive(null);
-    closePreview();
-    showFileTree();
-}
-
-/** 切换到文件标签 */
-async function switchToFileTab(filePath: string): Promise<void> {
+/** 激活标签（统一入口，替代 switchToFileTab + activateBrowserWindow） */
+async function activateTab(tab: UnifiedTab): Promise<void> {
     if (!props.sessionId) return;
-    const tab = fileTabs.value.find(t => t.path === filePath);
-    if (!tab) return;
+    if (activeTabKey.value === tab.key) return;
 
-    // 已经是当前激活的标签，不重复加载
-    if (activeFileTabPath.value === filePath && selectedFile.value?.path === filePath) return;
+    activeTabKey.value = tab.key;
 
-    // 取消浏览器激活
-    browserStore.setActive(null);
-    activeFileTabPath.value = filePath;
-
-    // 确保预览模式开启
-    if (!isPreviewMode.value) {
-        isPreviewMode.value = true;
-        emit('preview-open');
-    }
-
-    // 用标签元数据重建 selectedFile，然后重新加载内容
-    selectedFile.value = {
-        name: tab.name,
-        path: tab.path,
-        extension: tab.extension,
-        size: tab.size,
-        content: '',
-        mimeType: ''
-    };
-    previewError.value = '';
-    previewLoading.value = false;
-    fileContentHash.value = '';
-
-    const ext = tab.extension;
-    if (isTextFile(ext)) {
-        previewMode.value = 'text';
-        if (isHtmlFile.value) {
-            if (isElectron && window.location.protocol === 'file:') {
-                await loadHtmlPreviewLocal({ name: tab.name, path: tab.path, isDirectory: false, hasChildren: false } as WorkspaceNode);
-            } else {
-                htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, tab.path);
-            }
-            await loadFileContent(tab.path);
-        } else {
-            await loadFileContent(tab.path);
+    if (tab.type === 'file') {
+        browserStore.setActive(null);
+        if (!isPreviewMode.value) {
+            isPreviewMode.value = true;
+            emit('preview-open');
         }
-    } else if (isImageFile(ext)) {
-        previewMode.value = 'image';
-        if (isElectron && window.location.protocol === 'file:') {
-            await loadImageLocal({ name: tab.name, path: tab.path, isDirectory: false, hasChildren: false } as WorkspaceNode);
-        } else {
-            if (tab.size && tab.size > 20 * 1024 * 1024) {
-                previewError.value = '文件过大暂不支持预览';
+
+        const fileTab = tabs.value.find(t => t.key === tab.key);
+        if (!fileTab) return;
+
+        selectedFile.value = {
+            name: fileTab.name!,
+            path: fileTab.path!,
+            extension: fileTab.extension!,
+            size: fileTab.size!,
+            content: '',
+            mimeType: ''
+        };
+        previewError.value = '';
+        previewLoading.value = false;
+        fileContentHash.value = '';
+
+        const ext = fileTab.extension!;
+        if (isTextFile(ext)) {
+            previewMode.value = 'text';
+            if (isHtmlFile.value) {
+                if (isElectron && window.location.protocol === 'file:') {
+                    await loadHtmlPreviewLocal({ name: fileTab.name!, path: fileTab.path!, isDirectory: false, hasChildren: false } as WorkspaceNode);
+                } else {
+                    htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, fileTab.path!);
+                }
+                await loadFileContent(fileTab.path!);
             } else {
-                imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, tab.path);
+                await loadFileContent(fileTab.path!);
             }
+        } else if (isImageFile(ext)) {
+            previewMode.value = 'image';
+            if (isElectron && window.location.protocol === 'file:') {
+                await loadImageLocal({ name: fileTab.name!, path: fileTab.path!, isDirectory: false, hasChildren: false } as WorkspaceNode);
+            } else {
+                if (fileTab.size && fileTab.size > 20 * 1024 * 1024) {
+                    previewError.value = '文件过大暂不支持预览';
+                } else {
+                    imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, fileTab.path!);
+                }
+            }
+        } else {
+            previewMode.value = 'unsupported';
         }
     } else {
-        previewMode.value = 'unsupported';
+        browserStore.setActive(tab.windowId!);
+        if (!isPreviewMode.value) {
+            isPreviewMode.value = true;
+            emit('preview-open');
+        }
     }
 }
 
-/** 关闭文件标签：移除后切换到相邻标签，全部关闭则显示空状态 */
-async function closeFileTab(filePath: string): Promise<void> {
-    const closedIndex = fileTabs.value.findIndex(t => t.path === filePath);
-    if (closedIndex === -1) return;
-
-    fileTabs.value.splice(closedIndex, 1);
-    // 从统一顺序中移除
-    const tabKey = `file:${filePath}`;
-    const orderIdx = tabOrder.value.indexOf(tabKey);
-    if (orderIdx !== -1) tabOrder.value.splice(orderIdx, 1);
-
-    // 如果关闭的不是当前激活的标签，仅更新列表
-    if (activeFileTabPath.value !== filePath) return;
-
-    // 从统一顺序中查找相邻标签
-    const nextOrderKey = tabOrder.value[orderIdx] || tabOrder.value[orderIdx - 1] || null;
-    if (nextOrderKey) {
-        if (nextOrderKey.startsWith('file:')) {
-            await switchToFileTab(nextOrderKey.slice(5));
-        } else if (nextOrderKey.startsWith('browser:')) {
-            activeFileTabPath.value = null;
+/** 内部：从 tabs 移除标签并处理相邻切换 */
+function handleTabRemoved(key: string): void {
+    const idx = tabs.value.findIndex(t => t.key === key);
+    if (idx === -1) return;
+    tabs.value.splice(idx, 1);
+    if (activeTabKey.value === key) {
+        const next = tabs.value[idx] || tabs.value[idx - 1] || null;
+        if (next) {
+            void activateTab(next);
+        } else {
+            activeTabKey.value = null;
+            browserStore.setActive(null);
             closePreview();
-            browserStore.setActive(nextOrderKey.slice(8));
+            isPreviewMode.value = false;
+            emit('preview-close');
         }
-        return;
     }
+}
 
-    // 没有标签了，自动返回工作区
-    activeFileTabPath.value = null;
-    closePreview();
-    showFileTree();
+/** 关闭标签（统一入口，替代 closeFileTab + closeBrowserWindow） */
+async function closeTab(tab: UnifiedTab): Promise<void> {
+    if (tab.type === 'browser' && tab.windowId) {
+        if (window.electronAPI) {
+            try {
+                await window.electronAPI.closeBrowserWindow(tab.windowId);
+            } catch (e) {
+                console.error('Failed to close browser window:', e);
+            }
+        }
+        await nextTick();
+    }
+    handleTabRemoved(tab.key);
 }
 
 /** 新建浏览器窗口：加载简约新建标签页 */
@@ -846,6 +791,7 @@ async function createNewBrowserWindow(): Promise<void> {
         if (!result.success) {
             ElMessage.warning(result.error || '创建窗口失败');
         } else if (result.window?.windowId) {
+            activeTabKey.value = `browser:${result.window.windowId}`;
             browserStore.setActive(result.window.windowId);
         }
     } catch (e) {
@@ -1210,8 +1156,10 @@ function updateNodeLocal(event: FileChangeEvent) {
             }
             // 如果删除的是已打开的文件标签，关闭对应标签
             const unlinkPath = normalizedPath;
-            if (fileTabs.value.some(t => t.path === unlinkPath)) {
-                closeFileTab(unlinkPath);
+            const unlinkKey = `file:${unlinkPath}`;
+            const unlinkTab = tabs.value.find(t => t.key === unlinkKey);
+            if (unlinkTab) {
+                void closeTab(unlinkTab);
             }
             break;
         }
@@ -1518,8 +1466,10 @@ async function handleDelete() {
         if (result.success) {
             ElMessage.success('删除成功');
             // 如果删除的是已打开的文件标签，关闭对应标签
-            if (fileTabs.value.some(t => t.path === node.path)) {
-                closeFileTab(node.path);
+            const deleteTabKey = `file:${node.path}`;
+            const deleteTab = tabs.value.find(t => t.key === deleteTabKey);
+            if (deleteTab) {
+                void closeTab(deleteTab);
             }
         }
     } catch (error: any) {
@@ -1558,19 +1508,20 @@ async function handleFileSelect(node: WorkspaceNode) {
     // 取消浏览器激活，切换到文件预览
     browserStore.setActive(null);
 
-    // 添加到文件标签（去重）
+    // 添加到统一标签列表（去重）
     const tabKey = `file:${node.path}`;
-    const existingTab = fileTabs.value.find(t => t.path === node.path);
+    const existingTab = tabs.value.find(t => t.key === tabKey);
     if (!existingTab) {
-        fileTabs.value.push({
+        tabs.value.push({
+            type: 'file',
+            key: tabKey,
             name: node.name,
             path: node.path,
             extension: ext,
             size: node.size || 0,
         });
-        tabOrder.value.push(tabKey);
     }
-    activeFileTabPath.value = node.path;
+    activeTabKey.value = tabKey;
 
     // 总是打开预览面板
     selectedFile.value = {
@@ -1749,7 +1700,6 @@ function handleManualRefresh() {
  */
 function closePreview() {
     selectedFile.value = null;
-    activeFileTabPath.value = null;
     fileContent.value = '';
     previewError.value = '';
     fileNotFound.value = false;
@@ -1924,8 +1874,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
             emit('preview-close');
         }
         closePreview();
-        fileTabs.value = [];
-        tabOrder.value = [];
+        tabs.value = [];
+        activeTabKey.value = null;
         watchedWorkspacePath = null;
         resetExpandedPaths();
         treeData.value = [];

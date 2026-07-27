@@ -475,7 +475,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
    ========================================== */
 *::-webkit-scrollbar {
   width: 6px;
-  height: 8px;
+  height: 6px;
 }
 
 *::-webkit-scrollbar-track {

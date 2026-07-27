@@ -46,7 +46,9 @@ export const workspaceApi: WorkspaceApi = {
   getWorkspaceHtmlPreviewUrl(this: ApiContext, sessionId: string, filePath: string) {
     const baseUrl = this.baseURL.replace(/\/$/, '');
     const token = sessionStorage.getItem("token") || localStorage.getItem("token") || '';
-    return `${baseUrl}/sessions/${sessionId}/workspace/html-preview/${encodeURIComponent(filePath)}?token=${encodeURIComponent(token)}`;
+    // 按路径段编码，保留 / 作为路径分隔符，使浏览器能正确解析相对资源（CSS/JS 等）
+    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+    return `${baseUrl}/sessions/${sessionId}/workspace/html-preview/${encodedPath}?token=${encodeURIComponent(token)}`;
   },
 
   async deleteWorkspaceFile(this: ApiContext, sessionId: string, filePath: string) {

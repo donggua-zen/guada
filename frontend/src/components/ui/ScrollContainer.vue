@@ -145,6 +145,7 @@ defineExpose({
 
 /* 默认状态：滚动条透明（隐藏） */
 .scroll-container::-webkit-scrollbar-thumb {
+    min-height: 80px;
     background-color: transparent;
     border-radius: 8px;
     background-clip: content-box;

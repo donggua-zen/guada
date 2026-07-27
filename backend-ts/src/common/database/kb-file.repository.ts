@@ -134,19 +134,26 @@ export class KBFileRepository {
 
   /**
    * 根据路径和父ID查找文件或文件夹
+   * @param isDirectory true=只查文件夹, false=只查文件, undefined=都查（默认）
    */
   async findByPathAndParent(
     kbId: string,
     name: string,
     parentFolderId: string | null,
+    isDirectory?: boolean,
   ) {
+    const where: any = {
+      knowledgeBaseId: kbId,
+      displayName: name,
+      parentFolderId: parentFolderId,
+    };
+
+    if (isDirectory !== undefined) {
+      where.isDirectory = isDirectory;
+    }
+
     return this.prisma.kBFile.findFirst({
-      where: {
-        knowledgeBaseId: kbId,
-        displayName: name,
-        parentFolderId: parentFolderId,
-        isDirectory: true,
-      },
+      where,
     });
   }
 

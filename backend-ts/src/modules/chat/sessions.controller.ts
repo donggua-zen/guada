@@ -501,10 +501,18 @@ export class SessionsController {
   @Public()
   async htmlPreview(
     @Param("id") id: string,
-    @Param("filePath") filePath: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    // Express 5 通配符 *filePath 在多段路径下仅捕获最后一段，
+    // 从原始 URL 提取完整路径以确保 pvz/index.html 等多段路径正确解析
+    const prefix = `/workspace/html-preview/`;
+    const urlPath = (req.originalUrl || req.url || '').split('?')[0];
+    const prefixIdx = urlPath.indexOf(prefix);
+    const filePath = prefixIdx !== -1
+      ? decodeURIComponent(urlPath.substring(prefixIdx + prefix.length))
+      : '';
+
     if (!filePath) {
       throw new HttpException("File path is required", HttpStatus.BAD_REQUEST);
     }

@@ -65,43 +65,25 @@ export class ImageRecognitionPlugin extends PluginBase {
         toolkit.registerTool({
           name: "image_recognize",
           description:
-            "Recognize image content and return a detailed text description. Use this tool when the user asks about an uploaded image.",
+            'Recognize image content and return a detailed text description. Use source="id" for an uploaded image file ID, or source="path" for a file system path.',
           inputSchema: z.object({
+            source: z
+              .enum(["id", "path"])
+              .describe(
+                'The source type of the image: "id" for an uploaded file ID (use image_id), "path" for a file system path (use image_path)',
+              ),
             image_id: z
-              .string()
-              .describe("Uploaded image file ID, usually obtained from the message context"),
-            prompt: z
               .string()
               .optional()
               .describe(
-                "Custom prompt to guide the image recognition, e.g. 'What text is shown in this image?' or 'Describe the layout of this UI screenshot.' If not provided, a default detailed-description prompt is used.",
+                "Uploaded image file ID, required when source='id', usually obtained from the message context",
               ),
-          }),
-          execute: async (args, _ctx, abortSignal) => {
-            const { image_id, prompt } = args;
-            if (!image_id) throw new Error("Missing parameter: image_id");
-            const file = await this.fileRepo.findById(image_id);
-            if (!file || file.fileType !== "image")
-              throw new Error(`Invalid image ID or file type is not an image: ${image_id}`);
-            const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-            try {
-              await fs.access(physicalPath);
-            } catch {
-              throw new Error(`Image file not found: ${physicalPath}`);
-            }
-            return this.recognizeImage(physicalPath, prompt, abortSignal);
-          },
-          display: { actionType: "recognize", argsKey: "image_id", icon: "vision" },
-        });
-
-        toolkit.registerTool({
-          name: "image_recognize_by_path",
-          description:
-            "Recognize image content from a file path and return a detailed text description. Use this tool when the user provides an absolute or relative image path.",
-          inputSchema: z.object({
             image_path: z
               .string()
-              .describe("Path to the image file, can be an absolute path or a relative path relative to the working directory"),
+              .optional()
+              .describe(
+                "Path to the image file, required when source='path'. Can be an absolute path or a path relative to the working directory",
+              ),
             prompt: z
               .string()
               .optional()
@@ -110,20 +92,42 @@ export class ImageRecognitionPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, abortSignal) => {
-            const { image_path, prompt } = args;
-            if (!image_path) throw new Error("Image path cannot be empty");
-            const physicalPath = this.workspaceService.resolveFilePath(
-              image_path,
-              ctx?.session.workspacePath,
-            );
+            const { source, image_id, image_path, prompt } = args;
+            let physicalPath: string;
+
+            if (source === "id") {
+              if (!image_id)
+                throw new Error("image_id is required when source='id'");
+              const file = await this.fileRepo.findById(image_id);
+              if (!file || file.fileType !== "image")
+                throw new Error(
+                  `Invalid image ID or file type is not an image: ${image_id}`,
+                );
+              physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+            } else if (source === "path") {
+              if (!image_path)
+                throw new Error("image_path is required when source='path'");
+              physicalPath = this.workspaceService.resolveFilePath(
+                image_path,
+                ctx?.session.workspacePath,
+              );
+            } else {
+              throw new Error("source must be either 'id' or 'path'");
+            }
+
             try {
               await fs.access(physicalPath);
             } catch {
               throw new Error(`Image file not found: ${physicalPath}`);
             }
+
             return this.recognizeImage(physicalPath, prompt, abortSignal);
           },
-          display: { actionType: "recognize", argsKey: "image_path", icon: "vision" },
+          display: {
+            actionType: "recognize",
+            argsKey: "source",
+            icon: "vision",
+          },
         });
       },
     });
