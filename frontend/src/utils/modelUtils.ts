@@ -166,37 +166,6 @@ export function useModelDisplay(modelName: string, providerName?: string) {
 }
 
 /**
- * 判断是否在 Electron 环境中
- */
-export function isElectronEnv(): boolean {
-  return !!window.electronAPI;
-}
-
-/**
- * 打开外部链接（根据设置决定打开方式）
- * - Electron 环境：根据用户设置（内置浏览器 / 外部浏览器 / 每次询问）
- * - Web 环境：使用 window.open 在新标签页中打开
- *
- * @param url 要打开的 URL
- */
-export function openExternalLink(url: string): void {
-  if (!url) return;
-
-  if (isElectronEnv()) {
-    // Electron 环境：通过 linkOpener 根据用户设置选择打开方式
-    import('@/utils/linkOpener').then(({ openLink }) => {
-      openLink(url)
-    }).catch((error) => {
-      console.error('Failed to load linkOpener, falling back to openExternal:', error)
-      window.electronAPI?.openExternal?.(url)
-    })
-  } else {
-    // Web 环境：在新标签页打开
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-}
-
-/**
  * 获取模型的思考强度选项
  * @param model 模型对象（包含 providerId 和 features）
  * @param providers 供应商列表（从 API 获取，仅用于备用）

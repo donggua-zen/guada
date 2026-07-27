@@ -436,7 +436,8 @@ import {
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
-import { getModelDisplayName, getModelAvatarPath, openExternalLink } from '@/utils/modelUtils'
+import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 
 // Element Plus 组件导入
 import {
@@ -1197,7 +1198,7 @@ const handleOpenApiKeyUrl = () => {
   )
 
   if (template?.apiKeyUrl) {
-    openExternalLink(template.apiKeyUrl)
+    openInExternalBrowser(template.apiKeyUrl)
   } else {
     notify.warning('提示', '该供应商暂未配置 API Key 获取地址', { duration: 2000 })
   }

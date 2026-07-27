@@ -55,7 +55,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Loading, Cpu, Document } from '@element-plus/icons-vue'
 import { useBotStore } from '@/stores/bot'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import BotCard from './BotCard.vue'
 import BotModal from './BotModal.vue'
 import type { BotInstance } from '@/types/bot'
@@ -87,7 +87,7 @@ const showCreateDialog = () => {
 
 // 打开使用说明文档
 const handleOpenDocs = () => {
-  openExternalLink('https://ai.dingd.cn/docs/bot')
+  openInExternalBrowser('https://ai.dingd.cn/docs/bot')
 }
 
 // 编辑机器人

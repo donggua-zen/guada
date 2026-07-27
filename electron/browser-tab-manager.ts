@@ -157,21 +157,25 @@ export class BrowserWebviewManager {
     const logs = wv.consoleLogs;
     logs.length = 0;
 
+    webviewWC.on("console-message", (event: any) => {
+      const level = typeof event?.level === "string" ? event.level : "log";
+      const message = event?.message ?? "";
+      if (!message) return;
+      const line = `[${level}] ${message}`;
+      logs.push(line);
+      if (logs.length > 200) logs.shift();
+    });
+
+    let mainFrameLoadFailed = false;
+
+    // 新的主框架导航开始后，允许正常页面在完成时重新注入脚本。
+    // Chromium 的内部错误页不会可靠地反映在 getURL() 中，因此不能只靠 URL 判断。
     webviewWC.on(
-      "console-message",
-      (
-        details: any,
-        deprecatedLevel: number,
-        deprecatedMessage: string,
-      ) => {
-        const level = typeof details?.level === "string"
-          ? details.level
-          : ["verbose", "info", "warning", "error"][deprecatedLevel] || "log";
-        const message = details?.message ?? deprecatedMessage ?? "";
-        if (!message) return;
-        const line = `[${level}] ${message}`;
-        logs.push(line);
-        if (logs.length > 200) logs.shift();
+      "did-start-navigation",
+      (_event, navigationUrl, _isInPlace, isMainFrame) => {
+        if (isMainFrame && !navigationUrl.startsWith("chrome-error://")) {
+          mainFrameLoadFailed = false;
+        }
       },
     );
 
@@ -209,8 +213,10 @@ export class BrowserWebviewManager {
         return;
       }
 
-      // 每次页面加载完成后重新注入反检测脚本
+      // 失败导航也可能触发 did-finish-load，且 getURL() 仍返回原目标 URL。
+      // 只有当前主框架导航未失败时才向页面执行脚本。
       if (
+        !mainFrameLoadFailed &&
         currentUrl &&
         !currentUrl.startsWith("chrome-error://") &&
         !currentUrl.startsWith("about:")
@@ -222,14 +228,19 @@ export class BrowserWebviewManager {
       }
     });
 
-    // 监听加载失败
+    // 加载失败只记录并通知前端，不在回调内取消或重入导航。
+    // Chromium 仍可能在 did-fail-load 后完成内部错误页处理，回调内 loadURL 会造成导航重入。
     webviewWC.on(
       "did-fail-load",
       (
         _event: Electron.Event,
         errorCode: number,
         errorDescription: string,
+        validatedURL: string,
+        isMainFrame: boolean,
       ) => {
+        if (!isMainFrame) return;
+        mainFrameLoadFailed = true;
         log.error(
           `Window ${windowId} webview failed to load: ${errorCode} - ${errorDescription}`,
         );
@@ -238,14 +249,9 @@ export class BrowserWebviewManager {
             windowId,
             errorCode,
             errorDescription,
+            validatedURL,
             url: webviewWC.getURL(),
           });
-        }
-        // 导航到 about:blank 阻止 chrome-error 页加载
-        if (webviewWC.getURL().startsWith("chrome-error://")) {
-          console.warn("Blocked chrome-error:// navigation");
-          _event.preventDefault();
-          webviewWC.loadURL("about:blank").catch(() => {});
         }
       },
     );
@@ -262,11 +268,7 @@ export class BrowserWebviewManager {
 
     log.info(`Window ${windowId} webview webContentsId: ${webviewWC.id}`);
 
-    // 注入反检测脚本
-    try {
-      if (!webviewWC.isDestroyed())
-        this.injectAntiDetectionScript(webviewWC);
-    } catch {}
+    // 仅在 did-finish-load 后注入反检测脚本，避免 attach/失败导航期间操作 guest renderer。
 
     // 设置右键菜单
     this.setupContextMenu(webviewWC, windowId);

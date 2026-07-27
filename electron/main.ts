@@ -9,6 +9,7 @@ import {
   dialog,
   clipboard,
   screen,
+  crashReporter,
 } from "electron";
 import * as path from "path";
 import * as os from "os";
@@ -93,6 +94,12 @@ log.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}";
 // 将 console 输出重定向到日志文件（可选，生产环境建议启用）
 // Object.assign(console, log.functions)
 
+crashReporter.start({
+  uploadToServer: false,
+  compress: false,
+});
+log.info(`[CrashReporter] dumps directory: ${app.getPath("crashDumps")}`);
+
 // 单实例锁：确保同一时间只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock();
 // ── 进程级异常保护 ──
@@ -108,6 +115,30 @@ process.on("unhandledRejection", (reason) => {
   log.error(`[Process] Unhandled rejection: ${msg}`);
   if (stack) log.error("[Process] Stack:", stack);
   // 不退出，让应用继续运行
+});
+
+app.on("render-process-gone", (_event, webContents, details) => {
+  log.error(
+    `[Process] Renderer gone: webContentsId=${webContents.id}, reason=${details.reason}, exitCode=${details.exitCode}, url=${webContents.getURL()}`,
+  );
+});
+
+app.on("child-process-gone", (_event, details) => {
+  log.error(
+    `[Process] Child process gone: type=${details.type}, reason=${details.reason}, exitCode=${details.exitCode}, serviceName=${details.serviceName || ""}, name=${details.name || ""}`,
+  );
+});
+
+app.on("before-quit", () => {
+  log.warn("[Process] before-quit received");
+});
+
+app.on("will-quit", () => {
+  log.warn("[Process] will-quit received");
+});
+
+app.on("quit", (_event, exitCode) => {
+  log.warn(`[Process] quit completed, exitCode=${exitCode}`);
 });
 
 if (!gotTheLock) {
@@ -2020,6 +2051,14 @@ function setupIpcHandlers() {
     "browser:get-user-scripts",
     async (event, currentUrl: string) => {
       try {
+        if (
+          !currentUrl ||
+          currentUrl.startsWith("chrome-error://") ||
+          currentUrl.startsWith("about:")
+        ) {
+          return { success: true, scripts: [] };
+        }
+
         const senderId = (event.sender as any).id;
         const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
         if (!windowId) {

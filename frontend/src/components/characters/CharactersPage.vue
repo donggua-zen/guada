@@ -27,7 +27,7 @@ import CharacterListTab from './CharacterListTab.vue'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import type { CharacterGroup } from '@/types/character'
 import { useSessionStore } from '@/stores/session'
 
@@ -159,7 +159,7 @@ const startNewChat = async (character: any): Promise<void> => {
 }
 
 const openDocs = (): void => {
-  openExternalLink('https://ai.dingd.cn/docs/assistant')
+  openInExternalBrowser('https://ai.dingd.cn/docs/assistant')
 }
 
 const handleSaved = async (characterData: any): Promise<void> => {

@@ -53,7 +53,6 @@
           <template #pane2>
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
               :agent-tabs="agentTabs" :active-tab-id="activeTabId"
-              @preview-open="isPreviewMode = true" @preview-close="isPreviewMode = false"
               @switch-agent="switchTab" />
           </template>
         </LiteSplitpanes>
@@ -308,11 +307,9 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
-// 工作目录预览模式状态（用于独立分割比例）
-const isPreviewMode = ref(false);
 // 根据当前模式计算工作目录分割比例
 const workspaceSize = computed(() =>
-  isPreviewMode.value ? layoutStore.workspacePreviewSplitSize : layoutStore.workspaceSplitSize,
+  layoutStore.workspacePreviewMode ? layoutStore.workspacePreviewSplitSize : layoutStore.workspaceSplitSize,
 );
 // 控制设置模态框的显示与隐藏
 // 布局状态
@@ -393,7 +390,7 @@ function onPaneResized(size: number) {
 
   // 保存工作目录分割位置（根据当前模式分别保存）
   if (layoutStore.workspaceVisible && isElectron) {
-    if (isPreviewMode.value) {
+    if (layoutStore.workspacePreviewMode) {
       layoutStore.setWorkspacePreviewSplitSize(size);
     } else {
       layoutStore.setWorkspaceSplitSize(size);
@@ -426,7 +423,7 @@ const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === 'new-session') {
     mainSession.value = null;
     sessionStore.activeSessionId = "new-session";
-    isPreviewMode.value = false;
+    layoutStore.workspacePreviewMode = false;
     return;
   }
   sessionStore.activeSessionId = sessionId;
@@ -594,7 +591,7 @@ onMounted(async () => {
 // 工作目录隐藏时重置预览模式状态
 watch(() => layoutStore.workspaceVisible, (visible) => {
   if (!visible) {
-    isPreviewMode.value = false;
+    layoutStore.workspacePreviewMode = false;
   }
 });
 

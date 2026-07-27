@@ -53,7 +53,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
-import { setLinkOpenMode, type LinkOpenMode } from '@/utils/linkOpener'
+import { setLinkOpenMode, type LinkOpenMode } from '@/utils/workspacePreview'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const clearing = ref(false)

@@ -97,7 +97,7 @@ function escapeHtmlAttribute(str: string): string {
 /**
  * 全局点击事件委托：拦截 markdown 渲染的外部链接
  * 通过 data-url + 事件委托避免内联 onclick 注入风险
- * 链接打开方式由 linkOpener 根据用户设置决定（内置浏览器 / 外部浏览器 / 每次询问）
+ * 链接打开方式由 workspacePreview 根据用户设置决定（内置浏览器 / 外部浏览器 / 每次询问）
  */
 let linkClickHandlerInstalled = false
 function installLinkClickHandler(): void {
@@ -111,7 +111,7 @@ function installLinkClickHandler(): void {
         if (!url) return
         e.preventDefault()
         // 动态导入避免循环依赖，且不影响首屏加载
-        import('@/utils/linkOpener').then(({ openLink }) => {
+        import('@/utils/workspacePreview').then(({ openLink }) => {
             openLink(url)
         })
     })

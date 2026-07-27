@@ -160,7 +160,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { ModelProvider, Model } from '@/types/api'
@@ -229,7 +229,7 @@ const configDocButtonText = computed(() => {
 
 // 打开配置教程页面
 const openConfigDoc = () => {
-  openExternalLink(configDocUrl.value)
+  openInExternalBrowser(configDocUrl.value)
 }
 
 // 表单数据

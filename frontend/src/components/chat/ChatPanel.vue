@@ -1001,7 +1001,8 @@ async function subscribeToActiveStream() {
   sessionStore.setSessionIsStreaming(currentSessionId.value, true);
 
   // 以订阅模式启动流式响应（用于刷新重连/多窗口观察）
-  handleStreamResponseAsSubscriber(currentSessionId.value);
+  // 不能 await：该 Promise 会持续到整个 SSE 流结束，否则页面加载态无法结束。
+  void handleStreamResponseAsSubscriber(currentSessionId.value);
 }
 
 /**
@@ -1011,14 +1012,18 @@ async function handleStreamResponseAsSubscriber(
   streamingSessionId: string,
 ) {
   try {
-    // 获取当前会话最后一个 contentId，用于后端过滤已完成的 content
+    // 从后往前查找最后一个有 contents 的消息，用于后端过滤已完成的 content
+    // 注意：最后一条消息可能是刚创建的空助手消息（contents 为空），
+    // 此时需要向前回溯，否则 lastContentId 为 null 会导致整个 eventBuffer 被重放，
+    // 包括 user_message 事件，从而造成用户消息重复。
     const messages = sessionStore.getMessages(streamingSessionId);
-    const lastAssistantMessage = messages
-      .filter((m: any) => m.role === 'assistant')
-      .pop();
-    const lastContentId = lastAssistantMessage?.contents?.length > 0
-      ? lastAssistantMessage.contents[lastAssistantMessage.contents.length - 1].id
-      : null;
+    let lastContentId: string | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].contents?.length > 0) {
+        lastContentId = messages[i].contents[messages[i].contents.length - 1].id;
+        break;
+      }
+    }
 
     const handler = useStreamResponse(sessionStore, apiService)
     await handler.processStream(

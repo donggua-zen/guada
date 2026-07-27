@@ -105,7 +105,7 @@
                 :class="{ 'is-expanded': isLastActive(groupIndex) ? isGroupExpanded('last-active') : (!group.isCollapsible || isGroupExpanded(group.id)) }">
                 <div class="process-group__body">
                   <div class="process-group__body-scroll space-y-2" :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
-                    :ref="isLastActive(groupIndex) ? 'activeBodyRef' : undefined"
+                    :ref="(el) => { if (isLastActive(groupIndex)) activeBodyRef = el as HTMLElement }"
                     @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
                     <template v-for="item in group.items" :key="item.id">
                       <MessageThinkingSection v-if="item.type === 'think'"

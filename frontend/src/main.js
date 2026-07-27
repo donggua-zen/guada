@@ -280,6 +280,6 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
 app.mount("#app");
 
 // 加载链接打开方式设置（从后端同步到 localStorage 缓存）
-import("@/utils/linkOpener").then(({ loadLinkOpenMode }) => {
+import("@/utils/workspacePreview").then(({ loadLinkOpenMode }) => {
   loadLinkOpenMode();
 });

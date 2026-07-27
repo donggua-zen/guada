@@ -1,6 +1,7 @@
 // stores/browserWebview.ts
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
+import { useLayoutStore } from '@/stores/layout'
 
 /**
  * Webview 状态接口
@@ -87,6 +88,11 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     // 同步更新 isVisible 状态
     for (const [id, wv] of webviews.value.entries()) {
       wv.isVisible = id === windowId
+    }
+    // 激活窗口时进入预览模式，取消激活时由调用方控制是否退出
+    if (windowId) {
+      const layoutStore = useLayoutStore()
+      layoutStore.workspacePreviewMode = true
     }
     // 清空活跃 webview 元素引用（BrowserWebviewLayer 会重新设置）
     if (!windowId) {
