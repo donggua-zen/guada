@@ -79,7 +79,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 
 const { notify } = usePopup()
 
@@ -121,7 +121,7 @@ watch(() => ({
 
 // 打开 OCR 使用说明
 const openOcrDocs = () => {
-  openExternalLink('https://ai.dingd.cn/docs/ocr')
+  openInExternalBrowser('https://ai.dingd.cn/docs/ocr')
 }
 
 // 加载 OCR 分组设置

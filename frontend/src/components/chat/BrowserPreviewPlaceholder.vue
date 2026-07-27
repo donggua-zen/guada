@@ -137,7 +137,7 @@ function stopLoading(): void {
   if (wv) wv.stop()
 }
 
-function navigateToUrl(): void {
+async function navigateToUrl(): Promise<void> {
   const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (!wv) return
 
@@ -154,7 +154,13 @@ function navigateToUrl(): void {
     }
   }
 
-  wv.setAttribute('src', target)
+  try {
+    await wv.loadURL(target)
+  } catch (error) {
+    // Chromium may reject loadURL on a redirect or aborted navigation;
+    // the webview navigation events remain the source of truth.
+    console.warn('浏览器导航请求失败:', error)
+  }
   addressBarRef.value?.blur()
 }
 

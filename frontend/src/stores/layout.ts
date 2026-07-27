@@ -1,7 +1,7 @@
 // stores/layout.ts
 import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
-import { watch } from 'vue'
+import { watch, ref } from 'vue'
 import { apiService } from '@/services/ApiService'
 
 /**
@@ -20,6 +20,9 @@ export const useLayoutStore = defineStore('layout', () => {
 
   // 工作目录预览模式分割比例（持久化，默认 pane1=50%, pane2=50%）
   const workspacePreviewSplitSize = useStorage('workspacePreviewSplitSize', 50)
+
+  // 工作目录预览模式（非持久化，会话级运行时状态）
+  const workspacePreviewMode = ref(false)
 
   // 壁纸与透明度设置（持久化到 localStorage）
   const wallpaperUrl = useStorage<string | null>('wallpaperUrl', null)
@@ -250,6 +253,7 @@ export const useLayoutStore = defineStore('layout', () => {
     workspaceVisible,
     workspaceSplitSize,
     workspacePreviewSplitSize,
+    workspacePreviewMode,
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,

@@ -93,7 +93,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import { ElMessage } from 'element-plus'
 
 const { notify } = usePopup()
@@ -126,9 +126,9 @@ watch(() => [providerKeys.bocha, providerKeys.tavily, providerKeys.metaso], () =
 })
 
 // 打开链接
-const openBochaUrl = () => openExternalLink('https://open.bochaai.com')
-const openMetasoUrl = () => openExternalLink('https://metaso.cn/search-api')
-const openTavilyUrl = () => openExternalLink('https://app.tavily.com')
+const openBochaUrl = () => openInExternalBrowser('https://open.bochaai.com')
+const openMetasoUrl = () => openInExternalBrowser('https://metaso.cn/search-api')
+const openTavilyUrl = () => openInExternalBrowser('https://app.tavily.com')
 
 // 切换供应商即时保存 + 触发插件重载以重新注册工具
 const handleProviderChange = async (val: string) => {

@@ -283,7 +283,7 @@ import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/f
 import { MenuBookOutlined } from '@vicons/material'
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -989,7 +989,7 @@ function checkAndAutoCloseModal(allTasks: any[]) {
  * 打开使用说明文档
  */
 const handleOpenDocs = () => {
-  openExternalLink('https://ai.dingd.cn/docs/knowledge')
+  openInExternalBrowser('https://ai.dingd.cn/docs/knowledge')
 }
 
 /**

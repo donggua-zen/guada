@@ -182,7 +182,7 @@
 
             <!-- 底部提示 -->
             <div class="mt-6 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
-                访问<span class="text-blue-500 cursor-pointer hover:underline" @click="openExternalLink('https://ai.dingd.cn/skills')">技能市场</span>获取更多推荐技能
+                访问<span class="text-blue-500 cursor-pointer hover:underline" @click="openInExternalBrowser('https://ai.dingd.cn/skills')">技能市场</span>获取更多推荐技能
             </div>
         </div>
 
@@ -323,7 +323,7 @@ import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import { useMarkdown } from '@/composables/useMarkdown'
-import { openExternalLink } from '@/utils/modelUtils'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 
 interface SkillManifest {
     name: string
@@ -548,7 +548,7 @@ function handleViewSourceCode(marketSkill: MarketSkillWithStatus) {
         ElMessage.warning('该技能暂无源码链接')
         return
     }
-    openExternalLink(gitUrl)
+    openInExternalBrowser(gitUrl)
 }
 
 /**
@@ -814,7 +814,7 @@ async function handleUninstallSkill(skillId: string) {
  * 打开 Skills 使用说明文档
  */
 function handleOpenSkillsDocs() {
-    openExternalLink('https://ai.dingd.cn/docs/skills')
+    openInExternalBrowser('https://ai.dingd.cn/docs/skills')
 }
 
 /**
@@ -862,7 +862,7 @@ function handleOpenDetailUrl(marketSkill: MarketSkillWithStatus) {
         ElMessage.warning('该技能暂无详情链接')
         return
     }
-    openExternalLink(marketSkill.detailUrl)
+    openInExternalBrowser(marketSkill.detailUrl)
 }
 
 onMounted(async () => {

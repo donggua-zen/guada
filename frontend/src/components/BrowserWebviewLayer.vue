@@ -11,7 +11,6 @@
         :ref="(el: Element | ComponentPublicInstance | null) => setWebviewRef(wv.windowId, el as HTMLElement | null)"
         :partition="wv.partition"
         :preload="wv.preloadUrl"
-        :src="wv.url"
         autosize="on"
         allowpopups
         @did-navigate="onNavigate($event, wv.windowId)"
@@ -42,8 +41,16 @@ const webviewEls = new Map<string, HTMLElement>()
 function setWebviewRef(windowId: string, el: HTMLElement | null): void {
   if (el) {
     webviewEls.set(windowId, el)
-    // dom-ready 后才能调用 setAudioMuted 等方法
     const wv = el as ElectronWebviewElement
+
+    // 初始 URL 只在 webview DOM 节点第一次绑定时设置一次。
+    // 当前 URL 会由 did-navigate 同步到 store，但不能再反向驱动 src，避免重复导航。
+    if (!wv.hasAttribute('src')) {
+      const initialUrl = store.webviews.get(windowId)?.url
+      if (initialUrl) wv.setAttribute('src', initialUrl)
+    }
+
+    // dom-ready 后才能调用 setAudioMuted 等方法
     const applyMute = () => { wv.setAudioMuted?.(store.isMuted) }
     if (wv.isReady) {
       applyMute()

@@ -158,13 +158,21 @@ async function injectUserScripts() {
   }
 }
 
-// document 就绪后尽早执行
-console.log('[BrowserPreload] Preload loaded, readyState=' + document.readyState)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('[BrowserPreload] DOMContentLoaded fired')
+// 错误页和空文档不执行用户脚本。失败导航期间 Chromium 仍可能执行 preload，
+// 此时继续发起 IPC 会与内部错误页导航并发。
+const isErrorDocument =
+  location.protocol === 'chrome-error:' ||
+  location.href === '' ||
+  location.href === 'about:blank'
+
+if (!isErrorDocument) {
+  console.log('[BrowserPreload] Preload loaded, readyState=' + document.readyState)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('[BrowserPreload] DOMContentLoaded fired')
+      injectUserScripts()
+    }, { once: true })
+  } else {
     injectUserScripts()
-  }, { once: true })
-} else {
-  injectUserScripts()
+  }
 }

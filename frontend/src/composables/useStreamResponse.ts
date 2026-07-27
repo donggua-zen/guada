@@ -204,8 +204,9 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       .find((msg: Message) => msg.id === response.messageId);
 
     if (!existingMessage) {
-      console.error("Message not found:", response.messageId);
-      throw new Error("Message not found");
+      // subscribe 模式下可能因缓冲区溢出丢失 create 事件，此处容错而非中断整个流
+      console.warn("[subscribe] Message not found, skipping:", response.messageId);
+      return null;
     }
 
     // 查找对应的内容块
@@ -214,8 +215,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     );
 
     if (existingContentIndex < 0) {
-      console.error("Content not found:", response.contentId);
-      throw new Error("Content not found");
+      console.warn("[subscribe] Content not found, skipping:", response.contentId);
+      return null;
     }
 
     // 更新消息状态为流式中

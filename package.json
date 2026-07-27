@@ -25,6 +25,7 @@
     "test:browser-snapshot:unit": "cd electron && tsc && cd .. && node scripts/test-accessibility-snapshot.js",
     "test:browser-snapshot:fixture": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js",
     "test:browser-snapshot:bilibili": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js https://www.bilibili.com/",
+    "test:webview-navigation-crash": "node --test --test-concurrency=1 scripts/test-webview-navigation-crash.js",
     "build:seed-template": "cd backend-ts && cross-env NODE_ENV=production DATABASE_URL=file:../data/seed_template.db npm run db:seed --force",
     "build:electron:clean": "node scripts/clean-release.js",
     "build:electron:pre": "npm run build:seed-template && npm run build:electron:clean && npm run build:electron-ts",
