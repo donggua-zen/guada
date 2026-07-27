@@ -1,6 +1,6 @@
 <template>
-  <!-- 消息内容区域 -->
-  <div class="flex-1 overflow-hidden w-full items-center relative">
+  <!-- 消息+输入 区域容器 -->
+  <div class="flex-1 overflow-hidden w-full relative">
     <template v-if="!isLoading && currentSessionId && activeMessages.length === 0 && currentSession?.character">
       <!-- 欢迎页 -->
       <WelcomeScreen :session="currentSession" />
@@ -17,10 +17,10 @@
 
     <template v-if="!isLoading">
       <ScrollContainer ref="scrollContainerRef"
-        class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
+        class="h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
         @scroll="handleScroll">
-        <div class="max-w-192 mx-auto pt-5 pb-4">
+        <div class="max-w-192 mx-auto pt-5 pb-36">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -67,41 +67,42 @@
       <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
         @click="handleScrollToBottomClick" />
     </template>
-  </div>
-  <!-- 输入区域 -->
-  <div class="pb-2 w-full px-6 ">
-    <div class="max-w-192 flex flex-col items-start mx-auto relative">
-      <!-- Agent 切换栏（子代理只读模式隐藏） -->
-      <!-- <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" /> -->
 
-      <!-- 编辑模式提示条 -->
-      <div v-if="editMode"
-        class="-mb-1.5 w-full flex items-center px-4 pt-2 pb-6 rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a]">
-        <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
-        <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-          取消编辑
-        </el-button>
-      </div>
+    <!-- 输入区域 - 浮动叠加 -->
+    <div class="absolute bottom-0 left-6 right-6 z-30 px-6 pb-2">
+      <div class="max-w-192 flex flex-col items-start mx-auto relative">
+        <!-- Agent 切换栏（子代理只读模式隐藏） -->
+        <!-- <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" /> -->
 
-      <div class="w-full flex items-center relative" style="margin-top: -16px;z-index: 30;">
-        <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-          :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''" :config="chatInputConfig"
-          :streaming="isStreaming" :readonly="readonly" mode="chat" @config-change="handleConfigChange"
-          @send="handleSendMessage" @abort="abortResponse">
-          <template #right-actions-before>
-            <!-- 上下文使用率：圆形进度条 -->
-            <el-tooltip :content="contextTooltip" placement="top">
-              <button class="context-ring-btn" @click="memoPanelVisible = true">
-                <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
-                  <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
-                  <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
-                    :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset" stroke-linecap="round"
-                    transform="rotate(-90 18 18)" />
-                </svg>
-              </button>
-            </el-tooltip>
-          </template>
-        </ChatInput>
+        <!-- 编辑模式提示条 -->
+        <div v-if="editMode"
+          class="-mb-1.5 max-w-full w-full flex items-center px-4 pt-2 pb-6 rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a]">
+          <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
+          <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+            取消编辑
+          </el-button>
+        </div>
+
+        <div class="w-full flex items-center relative">
+          <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+            :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''" :config="chatInputConfig"
+            :streaming="isStreaming" :readonly="readonly" mode="chat" @config-change="handleConfigChange"
+            @send="handleSendMessage" @abort="abortResponse">
+            <template #right-actions-before>
+              <!-- 上下文使用率：圆形进度条 -->
+              <el-tooltip :content="contextTooltip" placement="top">
+                <button class="context-ring-btn" @click="memoPanelVisible = true">
+                  <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
+                    <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
+                    <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
+                      :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset" stroke-linecap="round"
+                      transform="rotate(-90 18 18)" />
+                  </svg>
+                </button>
+              </el-tooltip>
+            </template>
+          </ChatInput>
+        </div>
       </div>
     </div>
   </div>
@@ -1082,6 +1083,14 @@ function scrollToMessage(messageId: string) {
   will-change: transform;
   transform: translateZ(0);
   contain: layout style paint;
+  /* 底部渐变遮罩：仅作用于 content-box，滚动条在 padding 区域不受影响 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 40px), transparent calc(100% - 15px));
+  /* -webkit-mask-clip: content-box; */
+  -webkit-mask-origin: content-box;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 40px), transparent calc(100% - 15px));
+  /* mask-clip: content-box;
+  mask-clip: content-box; */
+  mask-origin: content-box;
 }
 
 

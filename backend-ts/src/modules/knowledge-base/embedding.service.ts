@@ -11,6 +11,9 @@ export type EmbeddingProgressCallback = (
   total: number,
 ) => Promise<void> | void;
 
+/** 每批最大条数 */
+const BATCH_SIZE = 10;
+
 /**
  * Embedding 服务
  *
@@ -24,11 +27,14 @@ export class EmbeddingService {
   /**
    * 批量获取文本嵌入向量
    *
+   * 使用 OpenAI SDK 的批量 input 参数，每批最多 BATCH_SIZE 条，
+   * 显著减少 API 调用次数。
+   *
    * @param texts 待向量化的文本数组
    * @param baseUrl API 基础 URL
    * @param apiKey API 密钥
    * @param modelName 模型名称
-   * @param onProgress 进度回调（每处理完一条触发）
+   * @param onProgress 进度回调（每处理完一批触发）
    * @returns 向量数组，每个元素对应一个输入文本的嵌入向量
    */
   async getEmbeddings(
@@ -52,28 +58,40 @@ export class EmbeddingService {
 
     this.logger.log(`开始批量向量化 ${totalTexts} 个文本片段...`);
 
-    for (let i = 0; i < texts.length; i++) {
+    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+      const batch = texts.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(totalTexts / BATCH_SIZE);
+
       try {
         const response = await client.embeddings.create({
           model: modelName,
-          input: texts[i],
+          input: batch,
         });
 
-        const embedding = response.data[0].embedding;
-        embeddings.push(embedding);
+        // 按 index 排序确保顺序一致（API 可能不保证返回顺序）
+        const sorted = response.data.sort((a, b) => a.index - b.index);
+        for (const item of sorted) {
+          embeddings.push(item.embedding);
+        }
 
-        // 每处理一条（或至少每 3 条）触发进度回调
+        const processed = Math.min(i + BATCH_SIZE, totalTexts);
         if (onProgress) {
-          await onProgress(i + 1, totalTexts);
+          await onProgress(processed, totalTexts);
         }
 
-        // 每处理 10 个或最后一个时记录日志
-        if ((i + 1) % 10 === 0 || i === totalTexts - 1) {
-          this.logger.log(`向量化进度：${i + 1}/${totalTexts}`);
-        }
+        this.logger.log(
+          `向量化进度：${processed}/${totalTexts}（批次 ${batchNum}/${totalBatches}）`,
+        );
       } catch (error: any) {
-        this.logger.error(`第 ${i + 1} 个文本向量化失败：${error.message}`);
-        throw new Error(`文本 ${i + 1} 向量化失败：${error.message}`);
+        const startIdx = i + 1;
+        const endIdx = Math.min(i + BATCH_SIZE, totalTexts);
+        this.logger.error(
+          `第 ${startIdx}-${endIdx} 个文本向量化失败：${error.message}`,
+        );
+        throw new Error(
+          `文本 ${startIdx}-${endIdx} 向量化失败：${error.message}`,
+        );
       }
     }
 

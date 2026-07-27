@@ -203,6 +203,7 @@ export class KbFileService implements OnModuleInit {
         kbId,
         part,
         currentParentId,
+        true, // 只查找文件夹
       );
 
       if (!folder) {
@@ -604,54 +605,49 @@ export class KbFileService implements OnModuleInit {
       }
 
       // 7. 批量向量化
-      const SKIP_VECTORIZATION = false;
       let allEmbeddings: number[][] = [];
 
-      if (!SKIP_VECTORIZATION) {
-        const modelWithProvider = await this.prisma.model.findUnique({
-          where: { id: kb.embeddingModelId },
-          include: { provider: true },
-        });
+      const modelWithProvider = await this.prisma.model.findUnique({
+        where: { id: kb.embeddingModelId },
+        include: { provider: true },
+      });
 
-        if (!modelWithProvider) {
-          throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
-        }
-
-        this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
-        await updateProgress(88, `正在批量向量化 (${chunks.length} 个分块)...`);
-
-        // 向量化进度映射：每条完成 → 全局百分比 88%~93%
-        allEmbeddings = await this.embeddingService.getEmbeddings(
-          chunks,
-          modelWithProvider.provider.apiUrl || "",
-          modelWithProvider.provider.apiKey || "",
-          modelWithProvider.modelName,
-          async (current, total) => {
-            const pct = 88 + Math.round((current / total) * 5);
-            await updateProgress(pct, `向量化进度：${current}/${total}`);
-          },
-        );
-
-        await updateProgress(93, "向量化完成，正在存储...");
-
-        // 存储到向量数据库
-        const tableId = `kb_${knowledgeBaseId}`;
-        const documents = chunks.map((content, idx) => ({
-          id: `chunk_${idx}_${fileId}`,
-          documentId: fileId,
-          content,
-          embedding: allEmbeddings[idx],
-          metadata: {
-            knowledgeBaseId: knowledgeBaseId,
-            fileName: displayName,
-            chunkIndex: idx,
-          },
-        }));
-        await this.vectorDb.addDocuments(tableId, documents);
-        this.logger.log(`成功存储 ${documents.length} 个向量文档`);
-      } else {
-        this.logger.warn(`[调试模式] 跳过向量化`);
+      if (!modelWithProvider) {
+        throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
       }
+
+      this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
+      await updateProgress(88, `正在批量向量化 (${chunks.length} 个分块)...`);
+
+      // 向量化进度映射：每条完成 → 全局百分比 88%~93%
+      allEmbeddings = await this.embeddingService.getEmbeddings(
+        chunks,
+        modelWithProvider.provider.apiUrl || "",
+        modelWithProvider.provider.apiKey || "",
+        modelWithProvider.modelName,
+        async (current, total) => {
+          const pct = 88 + Math.round((current / total) * 5);
+          await updateProgress(pct, `向量化进度：${current}/${total}`);
+        },
+      );
+
+      await updateProgress(93, "向量化完成，正在存储...");
+
+      // 存储到向量数据库
+      const tableId = `kb_${knowledgeBaseId}`;
+      const documents = chunks.map((content, idx) => ({
+        id: `chunk_${idx}_${fileId}`,
+        documentId: fileId,
+        content,
+        embedding: allEmbeddings[idx],
+        metadata: {
+          knowledgeBaseId: knowledgeBaseId,
+          fileName: displayName,
+          chunkIndex: idx,
+        },
+      }));
+      await this.vectorDb.addDocuments(tableId, documents);
+      this.logger.log(`成功存储 ${documents.length} 个向量文档`);
 
       await updateProgress(95, "正在保存分块到数据库...");
 
@@ -681,9 +677,7 @@ export class KbFileService implements OnModuleInit {
         (sum, chunk) => sum + chunk.metadata.tokenCount,
         0,
       );
-      const completeMessage = SKIP_VECTORIZATION
-        ? "处理完成（调试模式：跳过向量化）"
-        : "处理完成";
+      const completeMessage = "处理完成";
       await this.fileRepo.updateProcessingStatus(
         fileId,
         "completed",
@@ -964,13 +958,21 @@ export class KbFileService implements OnModuleInit {
     folderId: string,
     kbId: string,
   ): Promise<void> {
-    // 查找该文件夹下的所有子项
-    const { items } = await this.fileRepo.findChildren(folderId, 0, 1000);
+    // 分页查找该文件夹下的所有子项（避免子项过多时漏删）
+    let allItems: any[] = [];
+    let skip = 0;
+    const pageLimit = 1000;
+    while (true) {
+      const { items } = await this.fileRepo.findChildren(folderId, skip, pageLimit);
+      allItems = allItems.concat(items);
+      if (items.length < pageLimit) break;
+      skip += pageLimit;
+    }
 
-    this.logger.log(`文件夹 ${folderId} 下有 ${items.length} 个子项`);
+    this.logger.log(`文件夹 ${folderId} 下有 ${allItems.length} 个子项`);
 
     // 递归处理每个子项
-    for (const item of items) {
+    for (const item of allItems) {
       if (item.isDirectory) {
         // 如果是子文件夹，递归删除
         await this.deleteFolderRecursive(item.id, kbId);

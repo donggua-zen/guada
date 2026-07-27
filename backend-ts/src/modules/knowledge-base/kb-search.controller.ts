@@ -76,17 +76,6 @@ export class KbSearchController {
       searchRequest.enableBM25Rerank ?? true, // 新增：是否启用 BM25 重排，默认 true
     );
 
-    // 调试日志：检查底层返回的分数
-    console.log(
-      "Raw Vector DB Results:",
-      results.map((r) => ({
-        id: r.id,
-        score: r.score,
-        sem: r.semanticScore,
-        bm25: r.bm25Score,
-      })),
-    );
-
     // 格式化结果
     const formattedResults = results.map((result: SearchResult) => ({
       content: result.content,
@@ -97,12 +86,6 @@ export class KbSearchController {
       keywordScore: result.bm25Score || 0, // 关键词分数
       finalScore: result.score || 0, // 最终分数
     }));
-
-    const searchMode =
-      searchRequest.use_hybrid_search !== false ? "混合搜索" : "纯语义搜索";
-    console.log(
-      `${searchMode}完成：query='${searchRequest.query}', results=${formattedResults.length}`,
-    );
 
     return {
       query: searchRequest.query,

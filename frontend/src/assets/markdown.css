@@ -205,7 +205,7 @@ ol > *:not(li) {
 .markdown-text table td {
   border-bottom: 1px solid #eef0f3;
   vertical-align: top;
-  padding: 6px 8px;
+  padding: 8px 0;
 }
 
 .dark .markdown-text table th,
@@ -219,7 +219,6 @@ ol > *:not(li) {
 }
 
 .markdown-text table th {
-  background-color: #f3f3f5;
   text-align: left;
   left: 0;
   z-index: 1;
