@@ -77,11 +77,11 @@ defineExpose({
 /* 按钮基础样式 */
 .scroll-to-bottom-btn {
     position: absolute;
-    bottom: 20px; /* 输入框上方，留出足够空间 */
+    bottom: 140px; /* 输入框上方，留出足够空间 */
     left: 50%;
     transform: translateX(-50%);
-    width: 44px;
-    height: 44px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     background-color: var(--color-primary, #3b82f6);
     border: none;
@@ -121,8 +121,8 @@ defineExpose({
 
 /* 滚动图标 */
 .scroll-icon {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     color: white;
 }
 
