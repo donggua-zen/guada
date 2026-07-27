@@ -12,7 +12,7 @@
       </h1>
     </div>
     <!-- 已选角色 + 抽屉切换 -->
-    <div class="w-full max-w-200 flex flex-col items-start mx-auto relative">
+    <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
       <AgentSwitcherBar :character="currentCharacter" @select="handleCharacterSelect" />
       <div class="w-full relative z-30 -mt-4">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"

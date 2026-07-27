@@ -5,13 +5,17 @@
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
-                <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }"
-                    title="工作区" @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
-                    <el-icon :size="20"><Folder16Regular /></el-icon>
+                <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }" title="工作区"
+                    @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
+                    <el-icon :size="20">
+                        <Folder16Regular />
+                    </el-icon>
                 </button>
-                <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId"
-                    title="预览区" @click="enterPreviewMode">
-                    <el-icon :size="20"><Window16Regular /></el-icon>
+                <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId" title="预览区"
+                    @click="enterPreviewMode">
+                    <el-icon :size="20">
+                        <Window16Regular />
+                    </el-icon>
                 </button>
             </div>
 
@@ -22,13 +26,9 @@
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                 <div v-for="(tab, index) in unifiedTabs" :key="tab.key" class="browser-tab"
                     :class="{ active: tab.type === 'file' ? (!browserStore.activeWindowId && activeFileTabPath === tab.path) : (browserStore.activeWindowId === tab.windowId) }"
-                    :title="tab.type === 'file' ? tab.name : (tab.title || '未命名窗口')"
-                    draggable="true"
-                    @click="onTabClick(tab)"
-                    @dragstart="onTabDragStart(index, $event)"
-                    @dragover.prevent="onTabDragOver(index)"
-                    @drop.prevent="onTabDrop(index)"
-                    @dragend="onTabDragEnd">
+                    :title="tab.type === 'file' ? tab.name : (tab.title || '未命名窗口')" draggable="true"
+                    @click="onTabClick(tab)" @dragstart="onTabDragStart(index, $event)"
+                    @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
                     <!-- 文件图标 -->
                     <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
                     <!-- 浏览器图标 -->
@@ -44,8 +44,10 @@
                             </svg>
                         </span>
                     </template>
-                    <span class="tab-title">{{ truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口')) }}</span>
-                    <span class="tab-close" @click.stop="tab.type === 'file' ? closeFileTab(tab.path!) : closeBrowserWindow(tab.windowId!)">
+                    <span class="tab-title">{{ truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口'))
+                        }}</span>
+                    <span class="tab-close"
+                        @click.stop="tab.type === 'file' ? closeFileTab(tab.path!) : closeBrowserWindow(tab.windowId!)">
                         <el-icon size="10">
                             <Close />
                         </el-icon>
@@ -54,8 +56,7 @@
 
                 <!-- 新建标签按钮：进入预览模式并取消当前选中（显示空状态页） -->
                 <el-tooltip content="新建" placement="bottom">
-                    <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId"
-                        @click="deselectAllTabs">
+                    <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="deselectAllTabs">
                         <el-icon size="14">
                             <Plus />
                         </el-icon>
@@ -70,10 +71,13 @@
             <WindowControls class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <div :class="treeContainerClass" :style="isPreviewMode ? treePanelStyle : {}" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
+        <div :class="treeContainerClass" :style="isPreviewMode ? treePanelStyle : {}" @mouseenter="showTreePanel"
+            @mouseleave="hideTreePanel">
             <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
-            <SessionBrowserWindowList v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="!isPreviewMode" :session-id="props.sessionId" />
-            <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="!isPreviewMode" class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <SessionBrowserWindowList v-if="isElectron && browserStore.sessionWebviews.length > 0"
+                v-show="!isPreviewMode" :session-id="props.sessionId" />
+            <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="!isPreviewMode"
+                class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
             <!-- 子代理任务列表 -->
             <SessionAgentList v-show="!isPreviewMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
                 @switch="emit('switch-agent', $event)" />
@@ -135,7 +139,8 @@
         <BrowserPreviewPlaceholder v-if="isElectron" v-show="isPreviewMode && !!browserStore.activeWindowId" />
 
         <!-- 文件预览面板 -->
-        <div v-show="isPreviewMode && selectedFile && !browserStore.activeWindowId" class="flex flex-col h-full w-full  flex-1">
+        <div v-show="isPreviewMode && selectedFile && !browserStore.activeWindowId"
+            class="flex flex-col h-full w-full  flex-1">
             <!-- 标题栏 -->
             <div
                 class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
@@ -161,23 +166,24 @@
 
                     <span class="font-medium text-gray-600 dark:text-[#8b8d95] truncate ml-2">
                         {{ selectedFile?.name }}
-                    </span><div class="flex items-center gap-1 shrink-0">
-                    <!-- 手动刷新预览按钮 -->
-                    <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
-                        <el-icon :size="14">
-                            <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
-                        </el-icon>
-                    </button>
-                    <!-- 关闭当前文件标签 -->
-                    <button class="preview-close-btn" title="关闭预览" @click="closeFileTab(activeFileTabPath!)">
-                        <el-icon :size="14">
-                            <Dismiss20Regular class="text-gray-500 dark:text-[#8b8d95]" />
-                        </el-icon>
-                    </button>
-                </div>
+                    </span>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <!-- 手动刷新预览按钮 -->
+                        <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
+                            <el-icon :size="14">
+                                <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
+                            </el-icon>
+                        </button>
+                        <!-- 关闭当前文件标签 -->
+                        <button class="preview-close-btn" title="关闭预览" @click="closeFileTab(activeFileTabPath!)">
+                            <el-icon :size="14">
+                                <Dismiss20Regular class="text-gray-500 dark:text-[#8b8d95]" />
+                            </el-icon>
+                        </button>
+                    </div>
                 </div>
 
-                
+
             </div>
 
             <div class="flex-1 flex overflow-auto min-h-0 p-1">
@@ -247,7 +253,8 @@
         <div v-if="isPreviewMode && !selectedFile && !browserStore.activeWindowId"
             class="flex flex-col items-center justify-center h-full w-full flex-1">
             <div class="text-center">
-                <svg class="w-12 h-12 mx-auto mb-3 text-gray-200 dark:text-[#3a3c40]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <svg class="w-12 h-12 mx-auto mb-3 text-gray-200 dark:text-[#3a3c40]" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <path d="M3 9h18" />
                     <path d="M9 21V9" />
@@ -256,14 +263,17 @@
                 <div class="flex items-center gap-2 justify-center">
                     <button v-if="isElectron" class="empty-state-btn" :disabled="!props.sessionId"
                         @click="createNewBrowserWindow">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10" />
-                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            <path
+                                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                         <span>新建浏览器</span>
                     </button>
                     <button class="empty-state-btn" @click="showFileTree">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                         </svg>
                         <span>选择文件</span>
@@ -858,14 +868,14 @@ async function createNewBrowserWindow(): Promise<void> {
         } else if (result.window?.windowId) {
             browserStore.setActive(result.window.windowId);
         }
-        } catch (e) {
-            console.error('Failed to create browser window:', e);
-        }
+    } catch (e) {
+        console.error('Failed to create browser window:', e);
     }
+}
 
-    /**
-     * 异步加载目录的子节点
-     */
+/**
+ * 异步加载目录的子节点
+ */
 async function loadChildren(node: WorkspaceNode): Promise<WorkspaceNode[]> {
     if (!props.sessionId) return [];
     try {
@@ -1718,830 +1728,6 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
             return;
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         // 更新内容和哈希
         fileContentHash.value = newHash;
         selectedFile.value!.content = response.content;
@@ -3182,5 +2368,4 @@ onUnmounted(() => {
 .dark .empty-state-btn {
     border-color: var(--color-surface-border, #2e3035);
 }
-
 </style>

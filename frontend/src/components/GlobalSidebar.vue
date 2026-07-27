@@ -1,5 +1,5 @@
 <template>
-  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
+  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden shadow-[inset_-4px_0_12px_rgba(0,0,0,0.03)] dark:shadow-[inset_-4px_0_12px_rgba(0,0,0,0.3)]">
     <!-- 标题栏左侧面板 -->
     <TitlebarLeftPanel />
     <!-- 导航菜单 -->
