@@ -76,12 +76,6 @@ export class MCPToolProvider implements IToolProvider {
             targetServer = server;
             break;
           }
-          // 兼容无前缀的查找
-          const prefixedName = `mcp__${toolName}`;
-          if (tools[prefixedName]) {
-            targetServer = server;
-            break;
-          }
         }
       }
 
