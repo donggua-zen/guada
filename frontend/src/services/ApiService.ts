@@ -14,6 +14,7 @@ import axios, {
 import { useStorage } from "@vueuse/core";
 import type { StreamEvent } from "@/types/service";
 import { getClientId } from "@/utils/clientId";
+import { NetworkError, AuthError, ApiError } from "@/utils/errors";
 import { ChatStreamService } from "./modules/ChatStreamService";
 import {
   WorkspaceWatcherService,
@@ -108,20 +109,16 @@ class ApiService {
           !error.response
         ) {
           console.warn("后端服务连接失败，请稍后重试");
-          const networkError = new Error(
+          throw new NetworkError(
             "无法连接到后端服务，请确保应用已完全启动",
           );
-          (networkError as any).isNetworkError = true;
-          throw networkError;
         }
 
         if (
           error.response?.status === 401 &&
           !error.config?.url?.includes("/auth/login")
         ) {
-          const authError = new Error("Authentication required");
-          (authError as any).isAuthError = true;
-          (authError as any).statusCode = 401;
+          const authError = new AuthError("Authentication required", 401);
 
           setTimeout(() => {
             import("@/utils/globalErrorHandler").then(
@@ -147,9 +144,7 @@ class ApiService {
           }
         }
 
-        const friendlyError = new Error(errorMessage);
-        (friendlyError as any).statusCode = error.response?.status;
-        throw friendlyError;
+        throw new ApiError(errorMessage, error.response?.status);
       },
     );
 

@@ -118,27 +118,27 @@ function updateRect(): void {
 // ── 浏览器导航操作 ──
 
 function goBack(): void {
-  const wv = store.activeWebviewEl as any
+  const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (wv && wv.canGoBack) wv.goBack()
 }
 
 function goForward(): void {
-  const wv = store.activeWebviewEl as any
+  const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (wv && wv.canGoForward) wv.goForward()
 }
 
 function refresh(): void {
-  const wv = store.activeWebviewEl as any
+  const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (wv) wv.reload()
 }
 
 function stopLoading(): void {
-  const wv = store.activeWebviewEl as any
+  const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (wv) wv.stop()
 }
 
 function navigateToUrl(): void {
-  const wv = store.activeWebviewEl as any
+  const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (!wv) return
 
   let target = addressInput.value.trim()

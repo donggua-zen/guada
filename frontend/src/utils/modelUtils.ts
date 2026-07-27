@@ -169,7 +169,7 @@ export function useModelDisplay(modelName: string, providerName?: string) {
  * 判断是否在 Electron 环境中
  */
 export function isElectronEnv(): boolean {
-  return !!(window as any).electronAPI;
+  return !!window.electronAPI;
 }
 
 /**
@@ -188,7 +188,7 @@ export function openExternalLink(url: string): void {
       openLink(url)
     }).catch((error) => {
       console.error('Failed to load linkOpener, falling back to openExternal:', error)
-      ;(window as any).electronAPI?.openExternal?.(url)
+      window.electronAPI?.openExternal?.(url)
     })
   } else {
     // Web 环境：在新标签页打开

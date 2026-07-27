@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onUnmounted, watch, nextTick, type CSSProperties } from 'vue';
 
 const props = defineProps({
   /** pane1 的百分比尺寸 (0~100)，pane2 = 100 - splitSize */
@@ -151,27 +151,27 @@ const paneWidths = computed(() => {
 /**
  * Pane1 样式
  */
-const pane1Style = computed(() => {
+const pane1Style = computed<CSSProperties>(() => {
   if (isPane2Collapsed.value) {
-    return { flex: '1', minWidth: '0', minHeight: '0' } as any;
+    return { flex: '1', minWidth: '0', minHeight: '0' };
   }
   return {
     width: paneWidths.value.p1,
     flexShrink: 0,
-  } as any;
+  };
 });
 
 /**
  * Pane2 样式
  */
-const pane2Style = computed(() => {
+const pane2Style = computed<CSSProperties>(() => {
   if (isPane1Collapsed.value) {
-    return { flex: '1', minWidth: '0', minHeight: '0' } as any;
+    return { flex: '1', minWidth: '0', minHeight: '0' };
   }
   return {
     width: paneWidths.value.p2,
     flexShrink: 0,
-  } as any;
+  };
 });
 
 // ==================== 拖拽逻辑 ====================

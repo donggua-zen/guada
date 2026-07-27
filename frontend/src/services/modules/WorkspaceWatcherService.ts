@@ -10,7 +10,7 @@ import { getClientId } from "@/utils/clientId";
  * 工作目录文件变化事件
  */
 export interface FileChangeEvent {
-  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
+  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "heartbeat";
   path: string;
   sessionId: string;
   timestamp: number;

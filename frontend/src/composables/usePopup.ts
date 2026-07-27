@@ -307,8 +307,12 @@ export function usePopup(): UsePopupReturn {
             })
         },
 
-        loading: (content: string, duration: number = 0): any => {
-            return (ElMessage as any).loading({
+        loading: (content: string, duration: number = 0) => {
+            // ElMessage.loading 不在 Element Plus 类型定义中，但运行时可用
+            const messageFn = ElMessage as typeof ElMessage & {
+                loading(opts: Record<string, unknown>): unknown
+            };
+            return messageFn.loading({
                 message: content,
                 duration,
                 showClose: true

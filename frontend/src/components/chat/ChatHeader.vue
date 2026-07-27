@@ -107,7 +107,7 @@ const emit = defineEmits<{
 }>();
 
 // 判断是否为 Electron 环境
-const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
 const handleSelect = (command: string): void => {
     emit('select-more-option', command);

@@ -106,7 +106,7 @@ const filteredRecentList = computed(() => {
   return recentList.value.filter((p: string) => p !== publicPath.value)
 })
 
-const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
+const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 
 const publicPath = computed(() => props.publicPath || null)
 
@@ -122,9 +122,9 @@ function handleSelect(path: string | null) {
 }
 
 async function handleOpenFolder() {
-  if (!isElectron || !(window as any).electronAPI?.selectFolder) return
+  if (!isElectron || !window.electronAPI?.selectFolder) return
   try {
-    const selectedPath = await (window as any).electronAPI.selectFolder()
+    const selectedPath = await window.electronAPI.selectFolder()
     if (selectedPath) {
       emit('select', selectedPath)
     }

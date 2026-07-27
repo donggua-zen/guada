@@ -65,8 +65,8 @@ function isSafeUrl(url: string): boolean {
 
 /** 在内置浏览器中打开 */
 async function openInInternalBrowser(url: string): Promise<void> {
-  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
-  if (!isElectron || !(window as any).electronAPI?.createBrowserWindow) {
+  const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+  if (!isElectron || !window.electronAPI?.createBrowserWindow) {
     // 非桌面端降级为新标签页
     window.open(url, '_blank', 'noopener,noreferrer')
     return
@@ -82,7 +82,7 @@ async function openInInternalBrowser(url: string): Promise<void> {
       // store 未初始化时忽略
     }
 
-    const result = await (window as any).electronAPI.createBrowserWindow(url, {
+    const result = await window.electronAPI!.createBrowserWindow(url, {
       sessionId,
       createdBy: sessionId,
     })
@@ -97,15 +97,15 @@ async function openInInternalBrowser(url: string): Promise<void> {
   } catch (error) {
     console.error('[linkOpener] Failed to open in internal browser:', error)
     // 降级到外部浏览器
-    ;(window as any).electronAPI?.openExternal?.(url)
+    window.electronAPI?.openExternal?.(url)
   }
 }
 
 /** 在外部浏览器中打开 */
 function openInExternalBrowser(url: string): void {
-  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
+  const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
   if (isElectron) {
-    ;(window as any).electronAPI.openExternal(url)
+    window.electronAPI!.openExternal(url)
   } else {
     window.open(url, '_blank', 'noopener,noreferrer')
   }

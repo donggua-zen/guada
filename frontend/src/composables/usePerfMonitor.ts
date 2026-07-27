@@ -46,7 +46,7 @@ export function usePerfMonitor() {
     lastTime = performance.now();
 
     // 记录初始内存
-    const mem = (performance as any).memory;
+    const mem = performance.memory;
     startMemory = mem ? mem.usedJSHeapSize : 0;
 
     // 监听 LongTask
@@ -104,7 +104,7 @@ export function usePerfMonitor() {
     const frameTime = frameCount > 0 ? (duration * 1000) / frameCount : 0;
 
     // 计算内存变化
-    const mem = (performance as any).memory;
+    const mem = performance.memory;
     const endMemory = mem ? mem.usedJSHeapSize : 0;
     const memoryDelta = endMemory - startMemory;
 

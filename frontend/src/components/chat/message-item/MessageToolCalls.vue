@@ -1,6 +1,6 @@
 <template>
-  <div class="process-section tool-calls-section">
-    <div class="mb-1" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
+  <div class="process-section tool-calls-section space-y-2">
+    <div class="" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
       <!-- 循环展示每个工具调用 -->
       <div
         class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
@@ -15,15 +15,14 @@
         <el-icon v-else class="shrink-0" size="14" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
           <component :is="getToolIcon(tool)" class="text-gray-500" />
         </el-icon>
-        <div class="ml-2 truncate text-gray-400 dark:text-gray-500 ">
-          <span
+        <div class="ml-2 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
+          <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>
-          <span v-if="getArgsText(tool)" class="text-sm ml-2">{{ getArgsText(tool)
-            }}</span>
+          <span v-if="getArgsText(tool)" class="text-sm ml-2 truncate">{{ getArgsText(tool) }}</span>
         </div>
       </div>
-      <!-- 内联内容区（流式展示 write/terminal 等工具的关键参数） -->
+      <!-- 内联内容区（暂时禁用，待交互方案确定后启用）
       <div v-if="getInlineContent(tool) && isToolExecuting(tool, toolIndex)" class="inline-content-container"
         :class="{ 'inline-content-container--expanded': true }">
         <div class="inline-content-wrapper">
@@ -33,6 +32,7 @@
           </div>
         </div>
       </div>
+      -->
     </div>
   </div>
 
@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElIcon, ElDialog, ElButton } from 'element-plus';
 import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
 import { ErrorCircle16Regular } from '@vicons/fluent';
@@ -150,15 +150,13 @@ import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
 import {
   type ToolCall,
-
   resolveToolName, getToolConfig, getToolIcon,
-  getToolArgs, getArgsText, getInlineContent,
+  formatArgSummary, getToolArgs, getArgsText,
 } from '@/utils/toolDisplay';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: any[];
-  isExecuting?: boolean;
   isStreaming?: boolean;
   contentId?: string;
 }>();
@@ -199,19 +197,6 @@ const getToolDisplayName = (tool: ToolCall): string => {
   }
   return tool.name || 'Unknown Tool';
 };
-
-// ── 内联内容（流式展示工具参数）──
-
-const inlineContentRefs = ref<HTMLElement[]>([]);
-
-// 流式时自动滚动到底部
-watch(() => props.toolCalls, () => {
-  nextTick(() => {
-    for (const el of inlineContentRefs.value) {
-      if (el) el.scrollTop = el.scrollHeight;
-    }
-  });
-}, { deep: true });
 
 // ── 弹窗 & 懒加载 ──
 
@@ -319,10 +304,10 @@ const formatToolArgs = (args: any): string => {
 const extractResultContent = (response: any): any => {
   if (!response) return null;
   try {
-    const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+    const parsed = typeof response === 'string' ? partialParse(response) : response;
     if (parsed.content) {
       try {
-        return typeof parsed.content === 'string' ? JSON.parse(parsed.content) : parsed.content;
+        return typeof parsed.content === 'string' ? partialParse(parsed.content) : parsed.content;
       } catch {
         return parsed.content;
       }
@@ -394,54 +379,5 @@ const parseResult = (response: any): Record<string, any> => {
   flex: 1;
   word-break: break-word;
   white-space: pre-wrap;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.inline-content-container {
-  display: grid;
-  grid-template-rows: 1fr;
-  overflow: hidden;
-}
-
-.inline-content-wrapper {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.inline-content-pre {
-  max-height: 300px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  line-height: 1.5;
-  margin: 0;
-  padding: 4px 0;
-}
-
-.shimmer-icon {
-  animation: shimmer-pulse 2s ease-in-out infinite;
-}
-
-@keyframes shimmer-pulse {
-
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-
-  50% {
-    opacity: 1;
-  }
 }
 </style>

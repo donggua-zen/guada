@@ -323,7 +323,7 @@ const handleLogin = async (): Promise<void> => {
                     password: form.password,
                 }
                 
-                await apiService.resetPrimayPassword(resetData as any);
+                await apiService.resetPrimayPassword(resetData);
                 await confirmSuccess('设置成功', '密码设置成功，点击确认跳转到首页');
                 router.replace('/')
 

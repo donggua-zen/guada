@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, type Component } from 'vue'
 
 // 导入所有图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -101,7 +101,7 @@ const progressText = computed(() => {
 })
 
 // 文件类型到图标的映射
-const fileIconMap = {
+const fileIconMap: Record<string, string> = {
     // 代码文件
     'js': fileCodeIcon,
     'ts': fileCodeIcon,
@@ -151,9 +151,9 @@ const fileIconMap = {
 }
 
 // 计算属性：根据文件类型返回对应的图标 - 类型化
-const fileIcon = computed((): any => {
+const fileIcon = computed((): string => {
     const lowerType = props.ext?.toLowerCase()
-    return (fileIconMap as any)[lowerType || ''] || fileTxtIcon
+    return fileIconMap[lowerType || ''] || fileTxtIcon
 })
 
 // 格式化文件大小 - 类型化

@@ -235,6 +235,10 @@ html.dark {
   /* 标题栏样式变量 */
   --titlebar-text-color: #222;
   --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
+
+  /* 流式波纹动画配色 */
+  --shimmer-base: #606266;
+  --shimmer-highlight: #c0c4cc;
 }
 
 html.dark {
@@ -252,6 +256,10 @@ html.dark {
   /* #a8aab3 - 柔和的灰白色 */
   --titlebar-hover-bg: rgba(255, 255, 255, 0.06);
   /* 更柔和的悬停效果 */
+
+  /* 流式波纹动画配色（暗色模式） */
+  --shimmer-base: #a8aab3;
+  --shimmer-highlight: #ffffff;
 }
 
 /* .el-button:not(.el-button--large) {

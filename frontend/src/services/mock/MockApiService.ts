@@ -27,7 +27,7 @@ export function createMockMethods() {
       if (scenarioName) {
         try {
           const { getScenarioConfig } = await import("../mockStreamService");
-          defaultConfig = getScenarioConfig(scenarioName as any);
+          defaultConfig = getScenarioConfig(scenarioName);
         } catch (e) {
           console.warn("[Mock] 场景配置加载失败:", e);
         }

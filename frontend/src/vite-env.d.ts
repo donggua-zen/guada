@@ -11,8 +11,8 @@ declare module '*.vue' {
 declare module 'diff-dom' {
   export class DiffDOM {
     constructor(options?: any)
-    apply(element: Element, diff: any[]): Element
-    remove(element: Element, diff: any[]): Element
+    apply(element: Element, diff: any[]): Element | false
+    remove(element: Element, diff: any[]): Element | false
   }
   export default DiffDOM
 }
@@ -66,67 +66,27 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-// Electron API 类型声明
-interface ElectronAPI {
-  platform: string
-  versions: {
-    node: string
-    chrome: string
-    electron: string
-  }
-  getAppInfo: () => Promise<any>
-  showNotification: (title: string, body: string) => Promise<void>
-  migrateData: () => Promise<{ success: boolean; message: string }>
-  minimizeWindow: () => void
-  maximizeWindow: () => void
-  closeWindow: () => void
-  isMaximized: () => Promise<boolean>
-  checkForUpdates: () => Promise<{ success: boolean; error?: string }>
-  startDownloadUpdate: () => Promise<void>
-  installAndRestart: () => void
-  onUpdateStatus: (callback: (status: any) => void) => void
-  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
-  toggleDevTools: () => void
-  openUserDataFolder: () => void
-  openInstallFolder: () => void
-  openFolder: (folderPath: string) => Promise<void>
-  showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
-  openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
-  
-  // 窗口管理（新 API - 浏览器自动化窗口）
-  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any; error?: string }>
-  activateBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
-  closeBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
-  getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
-  
-  // 浏览器窗口后台/前台模式控制
-  hideBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
-  showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
-  toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
-  getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
-  
-  // Webview 生命周期事件（主进程 → 前端）
-  onCreateWebview?: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => void
-  onDestroyWebview?: (callback: (event: any, data: { windowId: string }) => void) => void
-  onSetWebviewVisibility?: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => void
-  
-  // 清空所有浏览器自动化 session 数据
-  clearBrowserData: () => Promise<{ success: boolean; error?: string }>
-  
-  // 托盘悬浮窗统计推送
-  updateTrayStats: (stats: { running: number; unread: number }) => void
-  
-  // 托盘悬浮窗配置（显隐 + 透明度）
-  updateTraySettings: (settings: { enabled: boolean; opacity: number }) => void
-  
-  // 调试菜单
-  showDebugMenu: () => Promise<void>
-  
-  // 右键菜单
-  showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
+// Electron API 类型声明已统一至 src/types/electron.d.ts
 
+// ── 非标准 / 浏览器专有 API 类型补充 ──
+
+/** Electron <webview> 自定义元素 */
+interface ElectronWebviewElement extends HTMLElement {
+  isReady?: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  goBack(): void
+  goForward(): void
+  reload(): void
+  stop(): void
+  setAudioMuted(muted: boolean): void
 }
 
-interface Window {
-  electronAPI?: ElectronAPI
+/** Chrome 专有 performance.memory */
+interface Performance {
+  memory?: {
+    jsHeapSizeLimit: number
+    totalJSHeapSize: number
+    usedJSHeapSize: number
+  }
 }

@@ -50,7 +50,7 @@ const DEFAULT_CONFIG: MockConfig = {
 /**
  * 预设场景配置
  */
-export const MOCK_SCENARIOS = {
+export const MOCK_SCENARIOS: Record<string, MockConfig> = {
   /** 正常文本输出 */
   NORMAL_TEXT: {
     enableThinking: false,
@@ -422,6 +422,6 @@ export function getAvailableScenarios(): Record<string, MockConfig> {
 /**
  * 根据场景名称获取配置
  */
-export function getScenarioConfig(scenarioName: keyof typeof MOCK_SCENARIOS): MockConfig {
+export function getScenarioConfig(scenarioName: string): MockConfig {
   return MOCK_SCENARIOS[scenarioName]
 }
