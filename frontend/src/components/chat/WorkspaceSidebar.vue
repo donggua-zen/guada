@@ -34,7 +34,7 @@
                     <!-- 浏览器图标 -->
                     <template v-else>
                         <img v-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt=""
-                            @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
+                            @error="onFaviconImageError($event, tab)" />
                         <span v-else class="tab-globe">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
@@ -547,6 +547,17 @@ watch(isPreviewMode, (preview) => {
 
 function truncateTabTitle(title: string, maxLen = 12): string {
     return title.length <= maxLen ? title : title.substring(0, maxLen) + '...';
+}
+
+function onFaviconImageError(event: Event, tab: UnifiedTab): void {
+    console.warn('[Favicon] sidebar image failed', {
+        windowId: tab.windowId,
+        chars: tab.favicon?.length || 0,
+    })
+    if (tab.windowId) {
+        browserStore.updateWebview(tab.windowId, { favicon: undefined })
+    }
+    ;(event.target as HTMLImageElement).style.display = 'none'
 }
 
 /** 标签栏鼠标滚轮横向滚动 */

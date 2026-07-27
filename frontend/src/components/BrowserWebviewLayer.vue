@@ -16,7 +16,6 @@
         @did-navigate="onNavigate($event, wv.windowId)"
         @did-navigate-in-page="onNavigateInPage($event, wv.windowId)"
         @page-title-updated="onTitleUpdated($event, wv.windowId)"
-        @page-favicon-updated="onFaviconUpdated($event, wv.windowId)"
         @did-stop-loading="onStopLoading($event, wv.windowId)"
         @did-start-loading="onStartLoading($event, wv.windowId)"
       />
@@ -176,11 +175,19 @@ function onTitleUpdated(event: any, windowId: string): void {
   }
 }
 
-function onFaviconUpdated(event: any, windowId: string): void {
-  // page-favicon-updated 事件的 favicons 是一个数组，取第一个
-  const favicons = event?.favicons
-  if (favicons && favicons.length > 0) {
-    store.updateWebview(windowId, { favicon: favicons[0] })
+function handleWindowFaviconUpdated(
+  _event: any,
+  data: { windowId: string; favicon: string },
+): void {
+  if (data?.windowId && data.favicon) {
+    console.info('[Favicon] renderer received', {
+      windowId: data.windowId,
+      chars: data.favicon.length,
+      prefix: data.favicon.slice(0, 32),
+    })
+    store.updateWebview(data.windowId, { favicon: data.favicon })
+  } else {
+    console.warn('[Favicon] renderer received invalid payload', data?.windowId)
   }
 }
 
@@ -262,6 +269,7 @@ onMounted(() => {
   api.onCreateWebview?.(handleCreateWebview)
   api.onDestroyWebview?.(handleDestroyWebview)
   api.onSetWebviewVisibility?.(handleSetVisibility)
+  api.onWindowFaviconUpdated?.(handleWindowFaviconUpdated)
 })
 
 onUnmounted(() => {
