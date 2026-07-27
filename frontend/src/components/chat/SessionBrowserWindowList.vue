@@ -24,7 +24,7 @@
         }" @click="activateWindow(win.windowId)">
         <!-- 网页 favicon -->
         <img v-if="win.favicon" :src="win.favicon" class="w-4 h-4 rounded-sm shrink-0 object-contain" alt=""
-          @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
+          @error="onFaviconImageError($event, win.windowId)" />
         <span v-else class="w-4 h-4 shrink-0 flex items-center justify-center text-gray-400">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
@@ -74,6 +74,12 @@ const store = useBrowserWebviewStore()
 function truncateTitle(title: string, maxLength: number = 20): string {
   if (title.length <= maxLength) return title
   return title.substring(0, maxLength) + '...'
+}
+
+function onFaviconImageError(event: Event, windowId: string): void {
+  console.warn('[Favicon] window list image failed', { windowId })
+  store.updateWebview(windowId, { favicon: undefined })
+  ;(event.target as HTMLImageElement).style.display = 'none'
 }
 
 /** 判断窗口是否激活（通过 activeTabKey 而非 store.activeWindowId） */

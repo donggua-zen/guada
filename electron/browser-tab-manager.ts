@@ -184,6 +184,14 @@ export class BrowserWebviewManager {
       logs.length = 0;
     });
 
+    // 在 guest 页面上下文中读取 favicon 并转换为 data URL，复用目标页面的 session/cookie。
+    webviewWC.on("page-favicon-updated", (_event, favicons) => {
+      log.info(
+        `[Favicon] event window=${windowId} pageUrl=${webviewWC.getURL()} candidates=${Array.isArray(favicons) ? favicons.length : 0}`,
+      );
+      this.updateFaviconFromPage(webviewWC, windowId, favicons);
+    });
+
     // 设置 Edge User Agent
     const edgeUserAgent =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0";
@@ -281,6 +289,114 @@ export class BrowserWebviewManager {
         wv.webContents = undefined;
         log.info(`Window ${windowId} webContents destroyed`);
       }
+    });
+  }
+
+  /**
+   * 将页面 favicon 在 guest session 内转换为 data URL，避免主窗口直接请求目标站点图标。
+   */
+  private updateFaviconFromPage(
+    webContents: WebContents,
+    windowId: string,
+    favicons: string[],
+  ): void {
+    const wv = this.webviews.get(windowId);
+    if (!wv || webContents.isDestroyed() || !favicons?.length) return;
+
+    const candidates = [...favicons]
+      .map((icon) => {
+        try {
+          return new URL(icon, webContents.getURL()).href;
+        } catch {
+          return null;
+        }
+      })
+      .filter((icon): icon is string => Boolean(icon));
+
+    if (!candidates.length) {
+      log.warn(`[Favicon] no valid candidates window=${windowId}`);
+      return;
+    }
+
+    log.info(
+      `[Favicon] normalized window=${windowId} candidates=${candidates.map((candidate) => {
+        try {
+          const parsed = new URL(candidate);
+          return `${parsed.origin}${parsed.pathname}`;
+        } catch {
+          return "invalid";
+        }
+      }).join(" | ")}`,
+    );
+
+    const pageUrl = webContents.getURL();
+    const guestSession = webContents.session as Electron.Session & {
+      fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+    };
+
+    (async () => {
+      for (const [index, candidate] of candidates.entries()) {
+        try {
+          log.info(`[Favicon] fetch start window=${windowId} index=${index} url=${candidate}`);
+          if (candidate.startsWith("data:image/")) {
+            log.info(`[Favicon] data candidate accepted window=${windowId} index=${index}`);
+            return candidate;
+          }
+          if (!guestSession.fetch) {
+            log.warn(`[Favicon] session.fetch unavailable window=${windowId}`);
+            return null;
+          }
+
+          const response = await guestSession.fetch(candidate, {
+            credentials: "include",
+            headers: { Referer: pageUrl },
+          });
+          const contentType = response.headers.get("content-type") || "";
+          log.info(
+            `[Favicon] fetch response window=${windowId} index=${index} status=${response.status} ok=${response.ok} mime=${contentType}`,
+          );
+          if (!response.ok) continue;
+          if (!contentType.startsWith("image/")) continue;
+
+          const buffer = Buffer.from(await response.arrayBuffer());
+          log.info(`[Favicon] response bytes window=${windowId} index=${index} bytes=${buffer.length}`);
+          if (buffer.length === 0) continue;
+          return `data:${contentType.split(";", 1)[0]};base64,${buffer.toString("base64")}`;
+        } catch (error: any) {
+          log.warn(
+            `[Favicon] fetch failed window=${windowId} index=${index} error=${error?.message || String(error)}`,
+          );
+        }
+      }
+      log.warn(`[Favicon] all candidates failed window=${windowId}`);
+      return null;
+    })().then((favicon) => {
+      const current = this.webviews.get(windowId);
+      if (!current || webContents.isDestroyed()) {
+        log.warn(`[Favicon] result discarded window=${windowId} reason=window-destroyed`);
+        return;
+      }
+      if (webContents.getURL() !== pageUrl) {
+        log.warn(`[Favicon] result discarded window=${windowId} reason=navigated old=${pageUrl} current=${webContents.getURL()}`);
+        return;
+      }
+      if (typeof favicon !== "string") {
+        log.warn(`[Favicon] no data URL produced window=${windowId}`);
+        return;
+      }
+      current.info.favicon = favicon;
+      log.info(`[Favicon] data URL ready window=${windowId} chars=${favicon.length}`);
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send("window-favicon-updated", {
+          windowId,
+          favicon,
+        });
+        log.info(`[Favicon] IPC sent window=${windowId}`);
+      } else {
+        log.warn(`[Favicon] IPC skipped window=${windowId} reason=main-window-unavailable`);
+      }
+    }).catch((error) => {
+      log.warn(`[Favicon] conversion failed window=${windowId} error=${error?.message || String(error)}`);
     });
   }
 
