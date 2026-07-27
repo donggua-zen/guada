@@ -71,17 +71,17 @@
     <!-- 输入区域 - 浮动叠加 -->
     <div class="absolute bottom-0 left-6 right-6 z-30 px-6 pb-2">
       <div class="max-w-192 flex flex-col items-start mx-auto relative">
-        <!-- Agent 切换栏（子代理只读模式隐藏） -->
-        <!-- <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" /> -->
-
         <!-- 编辑模式提示条 -->
-        <div v-if="editMode"
-          class="-mb-1.5 max-w-full w-full flex items-center px-4 pt-2 pb-6 rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a]">
-          <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
-          <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-            取消编辑
-          </el-button>
+        <div v-if="editMode" class="max-w-full w-full flex px-4">
+          <div
+            class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
+            <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
+            <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+              取消编辑
+            </el-button>
+          </div>
         </div>
+
 
         <div class="w-full flex items-center relative">
           <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
