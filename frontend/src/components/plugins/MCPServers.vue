@@ -496,13 +496,13 @@ const handleSaveServer = async () => {
             // 更新列表中的数据
             const index = servers.value.findIndex(s => s.id === serverForm.value.id)
             if (index !== -1) {
-                servers.value[index] = response || response.data
+                servers.value[index] = response
             }
             toast.success('更新成功')
         } else {
             // 添加新服务器
             const response = await apiService.createMcpServer(submitData)
-            servers.value.unshift(response || response.data)
+            servers.value.unshift(response)
             toast.success('添加成功')
         }
 
@@ -644,20 +644,31 @@ const handleImportJson = async () => {
 
         for (const serverData of serversToImport) {
             try {
+                const isStdio = serverData.type === 'stdio'
+
                 // 转换数据格式
                 const submitData = {
                     name: serverData.name || serverData.key || '未命名服务器',
-                    url: serverData.baseUrl || serverData.url || '',
+                    url: isStdio ? null : (serverData.baseUrl || serverData.url || ''),
                     description: serverData.description || `导入自配置文件：${serverData.key || 'unknown'}`,
-                    headers: serverData.headers || {},
+                    headers: isStdio ? null : (serverData.headers || {}),
                     enabled: serverData.isActive !== undefined ? serverData.isActive : true,
-                    // 传递协议类型（如果存在）
-                    type: serverData.type || undefined
+                    type: serverData.type || undefined,
+                    command: isStdio ? (serverData.command || '') : null,
+                    args: isStdio ? (serverData.args || []) : null,
+                    env: isStdio ? (serverData.env || {}) : null,
+                    cwd: isStdio ? (serverData.cwd || null) : null,
                 }
 
                 // 验证必填字段
-                if (!submitData.name || !submitData.url) {
-                    throw new Error(`缺少必填字段：name 或 url`)
+                if (!submitData.name) {
+                    throw new Error(`缺少必填字段：name`)
+                }
+                if (isStdio && !submitData.command) {
+                    throw new Error(`缺少必填字段：command`)
+                }
+                if (!isStdio && !submitData.url) {
+                    throw new Error(`缺少必填字段：url`)
                 }
 
                 // 调用 API 创建
@@ -739,8 +750,7 @@ const handleToggleServer = async (server) => {
         // 更新列表中的状态
         const index = servers.value.findIndex(s => s.id === server.id)
         if (index !== -1) {
-            const responseData = response || response.data
-            servers.value[index].enabled = responseData.enabled
+            servers.value[index].enabled = response.enabled
         }
 
         toast.success(server.enabled ? '已启用' : '已禁用')

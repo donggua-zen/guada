@@ -3,9 +3,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import * as process from "process";
-
-
 
 /**
  * MCP 工具调用结果接口
@@ -15,16 +12,6 @@ export interface McpToolCallResult {
   result?: any;
   content?: string;
   error?: string;
-}
-
-/**
- * Stdio 服务器参数接口
- */
-export interface StdioServerParams {
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  cwd?: string;
 }
 
 /**
@@ -38,30 +25,6 @@ export interface McpServerConfig {
   args?: string[]; // stdio 协议的参数
   env?: Record<string, string>; // stdio 协议的环境变量
   cwd?: string; // stdio 协议的工作目录
-}
-
-/**
- * JSON-RPC 2.0 请求接口
- */
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  method: string;
-  params?: any;
-  id: number | string;
-}
-
-/**
- * JSON-RPC 2.0 响应接口
- */
-interface JsonRpcResponse {
-  jsonrpc: "2.0";
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-  id: number | string;
 }
 
 /**
@@ -128,7 +91,7 @@ export class McpClientService {
         transport = new StdioClientTransport({
           command: config.command,
           args: config.args || [],
-          env: config.env,
+          env: { ...process.env, ...config.env },
           cwd: config.cwd,
         });
       } else if (specifiedType === "sse") {
@@ -255,7 +218,7 @@ export class McpClientService {
       }
 
       this.logger.log(
-        `Fetched ${Object.keys(toolsDict).length} tools from ${config.url}`,
+        `Fetched ${Object.keys(toolsDict).length} tools from ${config.url || config.command}`,
       );
       return toolsDict;
     });
@@ -278,8 +241,6 @@ export class McpClientService {
   ): Promise<McpToolCallResult> {
     try {
       return await this.withClient(config, async (client) => {
-        console.log(`   Arguments: `, toolArgs);
-
         const result = await client.callTool({
           name: toolName,
           arguments: toolArgs,
@@ -336,7 +297,7 @@ export class McpClientService {
       return true;
     } catch (error: any) {
       this.logger.warn(
-        `Health check failed for ${config.url}: ${error.message}`,
+        `Health check failed for ${config.url || config.command}: ${error.message}`,
       );
       return false;
     }
