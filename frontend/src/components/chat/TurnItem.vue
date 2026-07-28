@@ -76,7 +76,7 @@
             </template>
             <div v-else class="process-group">
               <!-- 分组标题 -->
-              <div v-if="group.isCollapsible" class="process-group__header text-[13px] group"
+              <div v-if="group.isCollapsible" class="process-group__header text-[14px] group"
                 :class="{ 'shimmer-text': isLastActive(groupIndex), 'text-gray-600 dark:text-gray-400': !isLastActive(groupIndex) }"
                 @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
@@ -339,7 +339,7 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
       const completedSteps = steps - currentItemSteps;
       return { icon: Wrench24Filled, action: `正在执行${currentItemSteps}个步骤` + (completedSteps ? `,已完成${completedSteps}个步骤` : ``), args: '' };
     }
-    return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
+    return { icon: Wrench24Filled, action: `已执行${steps}个步骤`, args: '' };
   }
   const toolItems = items.filter(i => i.type === 'tool');
   const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);

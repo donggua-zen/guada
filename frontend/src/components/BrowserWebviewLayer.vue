@@ -26,8 +26,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
+import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
+import { useLayoutStore } from '@/stores/layout'
+import { useTabStore } from '@/stores/tab'
 
 const store = useBrowserWebviewStore()
 
@@ -248,6 +250,17 @@ function handleCreateWebview(_event: any, data: {
     isVisible: false,
     metadata: data.metadata,
   })
+
+  // 新建标签自动打开预览模式（最小实现：当前会话的窗口创建即激活）
+  if (data.metadata?.sessionId && data.metadata.sessionId === store.currentSessionId) {
+    const layoutStore = useLayoutStore()
+    layoutStore.workspaceVisible = true
+    nextTick(() => {
+      const tabStore = useTabStore()
+      tabStore.enterPreviewMode()
+      tabStore.selectTab(`browser:${data.windowId}`)
+    })
+  }
 }
 
 function handleDestroyWebview(_event: any, data: { windowId: string }): void {

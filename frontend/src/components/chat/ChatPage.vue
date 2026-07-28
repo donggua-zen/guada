@@ -625,6 +625,9 @@ onUnmounted(() => {
     unsubscribeSubAgentClosed();
     unsubscribeSubAgentClosed = null;
   }
+  // 清理当前会话标记：currentSessionId 表示"用户正在看的会话"，
+  // 离开聊天页后不应再命中自动预览等基于该状态的条件
+  browserWebviewStore.setCurrentSession(null);
 });
 
 
