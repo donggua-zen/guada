@@ -16,7 +16,7 @@
                   <el-tooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
                     @click="layoutStore.toggleWorkspace()">
-                    <PanelLeft16Regular class="w-5 h-5" />
+                    <PanelRightExpand20Filled class="w-5 h-5" />
                   </div>
                   </el-tooltip>
                   <!-- 更多操作下拉菜单 -->
@@ -53,7 +53,7 @@
           <template #pane2>
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
               :agent-tabs="agentTabs" :active-tab-id="activeTabId"
-              @switch-agent="switchTab" />
+              @switch-agent="switchTab" @insert-to-input="handleInsertToInput" />
           </template>
         </LiteSplitpanes>
       </div>
@@ -104,7 +104,7 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelLeft16Regular } from "@vicons/fluent";
+import { PanelRightExpand20Filled } from "@vicons/fluent";
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
@@ -542,6 +542,16 @@ function handleScrollToMessage(messageId: string) {
   const chatPanel = chatPanelRef.value;
   if (chatPanel && chatPanel.scrollToMessage) {
     chatPanel.scrollToMessage(messageId);
+  }
+}
+
+/**
+ * 将路径插入到聊天输入框光标处
+ */
+function handleInsertToInput(path: string) {
+  const chatPanel = chatPanelRef.value;
+  if (chatPanel && chatPanel.insertText) {
+    chatPanel.insertText(path);
   }
 }
 

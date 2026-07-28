@@ -1306,6 +1306,16 @@ onUnmounted(() => {
   });
   previewUrls.value.clear();
 });
+
+/**
+ * 在光标处插入文本
+ */
+function insertText(text: string) {
+  if (!editor.value || !text) return;
+  editor.value.chain().focus().insertContent(text).scrollIntoView().run();
+}
+
+defineExpose({ insertText });
 </script>
 <style scoped>
 /* 思考按钮激活状态 - 灯泡亮起 */

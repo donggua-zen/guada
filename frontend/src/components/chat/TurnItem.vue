@@ -41,10 +41,10 @@
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
-        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
-          :content-versions="[]" :current-version-index="0" :time-full="userTime.full"
-          :time-friendly="userTime.firendly" @copy="emit('copy', turn.user)" @generate="emit('generate', turn.user)"
-          @edit="emit('edit', turn.user)" @delete="emit('delete', turn.user)" />
+        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate" :content-versions="[]"
+          :current-version-index="0" :time-full="userTime.full" :time-friendly="userTime.firendly"
+          @copy="emit('copy', turn.user)" @generate="emit('generate', turn.user)" @edit="emit('edit', turn.user)"
+          @delete="emit('delete', turn.user)" />
       </div>
     </div>
 
@@ -76,36 +76,29 @@
             </template>
             <div v-else class="process-group">
               <!-- 分组标题 -->
-              <div v-if="group.isCollapsible || isLastActive(groupIndex)" class="process-group__header"
-                :class="{ 'shimmer-text': isLastActive(groupIndex) && !isGroupExpanded('last-active') }"
+              <div v-if="group.isCollapsible" class="process-group__header text-[13px] group"
+                :class="{ 'shimmer-text': isLastActive(groupIndex), 'text-gray-600 dark:text-gray-400': !isLastActive(groupIndex) }"
                 @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
-                <el-icon v-if="isLastActive(groupIndex)" size="14" class="shrink-0">
-                  <component :is="getLastGroupIcon(group)" class="text-gray-500" />
-                </el-icon>
-                <template v-if="isLastActive(groupIndex)">
-                  <span class="shimmer-text-children min-w-0 flex items-center">
-                    <span class="shrink-0 font-medium">
-                      {{ getLastGroupTitleParts(group, isGroupExpanded('last-active')).action }}
-                    </span>
-                    <span v-if="getLastGroupTitleParts(group, isGroupExpanded('last-active')).args" class="text-sm ml-2 truncate">
-                      {{ getLastGroupTitleParts(group, isGroupExpanded('last-active')).args }}
-                    </span>
+                <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
+                  <span class="relative w-[15px] h-[15px] shrink-0 flex items-center justify-center">
+                    <component :is="parts.icon" v-if="!isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id)"
+                      class="absolute inset-0 w-[15px] h-[15px] transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
+                    <ChevronDown12Regular class="absolute inset-0 w-[15px] h-[15px] transition-all duration-200"
+                      :class="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+                      :style="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
+                  <span class="shrink-0 font-medium">{{ parts.action }}</span>
+                  <span v-if="parts.args" class="text-sm font-mono truncate"
+                    :class="{ 'text-gray-400 dark:text-gray-400': !isLastActive(groupIndex) }">{{ parts.args }}</span>
                 </template>
-                <span v-else class="process-group__title truncate font-medium">
-                  {{ getCompletedGroupTitle(group) }}
-                </span>
-                <el-icon size="14" class="process-group__arrow"
-                  :class="{ 'is-expanded': isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) }">
-                  <ArrowRightTwotone />
-                </el-icon>
               </div>
               <!-- 分组内容 -->
               <div class="process-group__collapsible"
                 :class="{ 'is-expanded': isLastActive(groupIndex) ? isGroupExpanded('last-active') : (!group.isCollapsible || isGroupExpanded(group.id)) }">
                 <div class="process-group__body">
-                  <div class="process-group__body-scroll space-y-2" :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
-                    :ref="(el) => { if (isLastActive(groupIndex)) activeBodyRef = el as HTMLElement }"
+                  <div class="process-group__body-scroll space-y-2"
+                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
+                    :ref="isLastActive(groupIndex) ? setActiveBodyRef : undefined"
                     @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
                     <template v-for="item in group.items" :key="item.id">
                       <MessageThinkingSection v-if="item.type === 'think'"
@@ -193,12 +186,12 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
-import { InsightsTwotone, MenuBookOutlined, ArrowRightTwotone } from "@vicons/material";
-import { Alert16Regular, Lightbulb24Regular } from "@vicons/fluent";
+import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
+import { Alert16Regular, Lightbulb24Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
-import { getToolIcon as _getToolIcon, getToolConfig, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
+import { getToolConfig, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -236,6 +229,11 @@ const expandedGroups = ref<Set<string>>(new Set());
 const activeBodyRef = ref<HTMLElement | null>(null);
 // 标记用户是否手动滚动了
 let userScrolledAway = false;
+
+// ref 绑定函数
+const setActiveBodyRef = (el: Element | { $el: HTMLElement } | null) => {
+  activeBodyRef.value = (el as any)?.$el || (el as HTMLElement) || null;
+};
 
 // 用户滚动检测：距底部超过 40px 视为手动滚动
 const onActiveBodyScroll = (e: Event) => {
@@ -313,15 +311,6 @@ watch(turnsCache, () => {
   });
 }, { deep: true });
 
-// 获取最后一组的图标
-const getLastGroupIcon = (group: DisplayGroup) => {
-  const lastItem = group.items[group.items.length - 1];
-  if (lastItem?.type === 'tool' && lastItem.toolCalls?.length) {
-    return _getToolIcon(lastItem.toolCalls[lastItem.toolCalls.length - 1] as ToolCall);
-  }
-  return Lightbulb24Regular;
-};
-
 // 流式过程中最后一组且需折叠为标题行
 const isLastActiveGroup = computed(() => {
   if (!streamingState.value.isStreaming) return null;
@@ -336,85 +325,49 @@ const isLastActive = (groupIndex: number): boolean => {
   if (!isLastActiveGroup.value) return false;
   return groupIndex === displayGroups.value.length - 1;
 };
-const getLastGroupTitleParts = (group: DisplayGroup, expanded: boolean) => {
-  const steps = countSteps(group.items);
-  if (expanded) return { action: `已执行 ${steps} 个步骤`, args: '' };
-
-  const lastItem = group.items[group.items.length - 1];
-
-  // 最后一个步骤是思考
-  if (lastItem.type === 'think') {
-    const isThinking = lastItem.source.state?.isThinking;
-    if (isThinking) {
-      const text = (lastItem.reasoningContent || '').replace(/\n/g, ' ').trim();
-      const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
-      return { action: '正在思考...', args: preview };
-    }
-    return { action: '已深度思考', args: '' };
-  }
-
-  // 最后一个步骤是工具
-  if (lastItem.type === 'tool' && lastItem.toolCalls?.length) {
-    const lastTool = lastItem.toolCalls[lastItem.toolCalls.length - 1] as ToolCall;
-    const config = getToolConfig(lastTool);
-    const allToolCalls = group.items
-      .filter(i => i.type === 'tool')
-      .flatMap(i => i.toolCalls || []);
-    const allSameType = allToolCalls.length > 0 && allToolCalls.every(tc =>
-      _resolveToolName(tc as ToolCall) === _resolveToolName(lastTool)
-    );
-    if (allSameType && allToolCalls.length > 1) {
-      return { action: (config.aggregate || DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps)), args: '' };
-    }
-    const args = getArgsText(lastTool);
-    return { action: config.text.executing, args: args || '' };
-  }
-
-  return { action: (DEFAULT_CONFIG.aggregate!).replace('{n}', String(steps)), args: '' };
-};
-
-// 获取常规分组（已完成）的标题文案
-const getCompletedGroupTitle = (group: DisplayGroup) => {
+// 统一的分组标题生成：active=true 时显示"正在"，active=false 时显示"已"
+// 内部自行判断展开状态，返回 { icon, action, args }
+const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
+  const groupId = active ? 'last-active' : group.id;
+  const expanded = isGroupExpanded(groupId);
   const items = group.items;
+  const steps = countSteps(items);
+  if (expanded) return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
 
-  // 纯思考：根据实际状态显示
-  const hasThink = items.some(i => i.type === 'think');
   const toolItems = items.filter(i => i.type === 'tool');
-  if (toolItems.length === 0) {
+  const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
+
+  // 纯思考（无工具）
+  if (allToolCalls.length === 0) {
     const thinkItem = items.find(i => i.type === 'think');
     const isThinking = thinkItem?.source.state?.isThinking;
     if (isThinking) {
       const text = (thinkItem?.reasoningContent || '').replace(/\n/g, ' ').trim();
       const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
-      return preview ? `正在思考... ${preview}` : '正在思考...';
+      return { icon: Lightbulb24Regular, action: '正在思考...', args: preview };
     }
-    return '已深度思考';
+    return { icon: Lightbulb24Regular, action: '已深度思考', args: '' };
   }
 
-  // 收集所有工具调用
-  const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
-  if (allToolCalls.length === 0) {
-    return hasThink ? '已深度思考' : '已执行';
-  }
-
-  const firstTool = allToolCalls[0] as ToolCall;
-  const firstName = _resolveToolName(firstTool);
-  const allSameType = allToolCalls.every(tc => _resolveToolName(tc as ToolCall) === firstName);
+  // 判断是否所有工具同类型
+  const refTool = allToolCalls[allToolCalls.length - 1] as ToolCall;
+  const allSameType = allToolCalls.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
 
   if (allSameType && allToolCalls.length > 1) {
-    const config = getToolConfig(firstTool);
-    return (config.aggregate || DEFAULT_CONFIG.aggregate!).replace('{n}', String(allToolCalls.length)).replace('正在', '已');
+    const config = getToolConfig(refTool);
+    const agg = config.aggregate || DEFAULT_CONFIG.aggregate!;
+    const text = active ? agg.executing : agg.completed;
+    return { icon: config.icon || DEFAULT_CONFIG.icon!, action: text.replace('{n}', String(allToolCalls.length)), args: '' };
   }
 
   if (allSameType && allToolCalls.length === 1) {
-    const config = getToolConfig(firstTool);
-    const args = getArgsText(firstTool);
-    return args ? `${config.text.completed} ${args}` : config.text.completed;
+    const config = getToolConfig(refTool);
+    const args = getArgsText(refTool);
+    return { icon: config.icon || DEFAULT_CONFIG.icon!, action: active ? config.text.executing : config.text.completed, args: args || '' };
   }
 
-  // 混合工具
-  const steps = countSteps(items);
-  return `已执行 ${steps} 个步骤`;
+  // 混合工具 — 通用图标
+  return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
 };
 // ============================================
 const userContent = computed(() => {
@@ -637,7 +590,6 @@ const handleClick = (event: MouseEvent) => {
 
 .assistant-section .message-item__text {
   margin-bottom: 8px;
-  margin-top: 8px;
 }
 
 .message-item__wrapper {
@@ -684,8 +636,6 @@ const handleClick = (event: MouseEvent) => {
   gap: 6px;
   max-width: 100%;
   border-radius: 6px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   user-select: none;
@@ -699,28 +649,13 @@ const handleClick = (event: MouseEvent) => {
   color: var(--el-text-color-primary);
 }
 
-.process-group__arrow {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-  color: var(--el-text-color-placeholder);
-  opacity: 0;
-}
-
-.process-group__header:hover .process-group__arrow,
-.process-group__arrow.is-expanded {
-  opacity: 1;
-}
-
-.process-group__arrow.is-expanded {
-  transform: rotate(90deg);
-}
-
 .process-group__title {
   line-height: 1.4;
   min-width: 0;
 }
 
 /* 流式过程中的文字波纹效果（action + args 一起波纹） */
-.shimmer-text-children {
+.shimmer-text {
   background: linear-gradient(90deg,
       var(--shimmer-base, #a8aab3) 0%,
       var(--shimmer-base, #a8aab3) 25%,
@@ -735,8 +670,13 @@ const handleClick = (event: MouseEvent) => {
 }
 
 @keyframes shimmer-slide {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .process-group__collapsible {

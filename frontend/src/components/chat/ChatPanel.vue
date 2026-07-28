@@ -69,7 +69,7 @@
     </template>
 
     <!-- 输入区域 - 浮动叠加 -->
-    <div class="absolute bottom-0 left-6 right-6 z-30 px-6 pb-2">
+    <div class="absolute bottom-0 left-6 right-6 z-30 pb-2">
       <div class="max-w-192 flex flex-col items-start mx-auto relative">
         <!-- 编辑模式提示条 -->
         <div v-if="editMode" class="max-w-full w-full flex px-4">
@@ -84,7 +84,7 @@
 
 
         <div class="w-full flex items-center relative">
-          <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+          <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
             :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''" :config="chatInputConfig"
             :streaming="isStreaming" :readonly="readonly" mode="chat" @config-change="handleConfigChange"
             @send="handleSendMessage" @abort="abortResponse">
@@ -224,6 +224,7 @@ const {
 
 // 响应式数据
 const scrollContainerRef = ref<any>(null);
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const needScrollToBottom = ref(false);
 let scrollTicking = false;
 let lastScrollTop = 0;
@@ -1053,6 +1054,7 @@ defineExpose({
   scrollToMessage,
   subscribeToActiveStream,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
+  insertText: (text: string) => chatInputRef.value?.insertText(text),
 });
 
 /**

@@ -333,6 +333,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     'switch-agent': [tabId: string];
+    'insert-to-input': [path: string];
 }>();
 
 const treeData = ref<WorkspaceNode[]>([]);
@@ -382,6 +383,12 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
             label: '复制路径',
             icon: CopyDocument,
             onClick: handleCopyFilePath,
+        },
+        {
+            label: '添加到会话',
+            icon: Plus,
+            divider: true,
+            onClick: handleInsertToInput,
         },
     ];
     if (isElectron) {
@@ -582,6 +589,11 @@ function enterPreviewMode(): void {
     if (!isPreviewMode.value) {
         layoutStore.workspacePreviewMode = true;
     }
+    // 进入预览模式时，若有选中标签但内容未加载（如会话恢复后），补充加载
+    if (activeTabKey.value && !selectedFile.value) {
+        const tab = tabs.value.find(t => t.key === activeTabKey.value);
+        if (tab) void activateTab(tab);
+    }
 }
 
 /** 取消所有标签选中，显示空状态页 */
@@ -682,7 +694,6 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
     }
 
     // 恢复预览模式 + 激活标签
-    // 仅当缓存记录为预览模式时才激活标签，否则保持工作区模式（activateTab 会强制进入预览模式）
     if (cached.isPreviewMode) {
         layoutStore.workspacePreviewMode = true;
         if (cached.activeTabKey) {
@@ -690,6 +701,10 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             const tab = tabs.value.find(t => t.key === cached.activeTabKey);
             if (tab) await activateTab(tab);
         }
+    } else {
+        // 非预览模式：恢复 activeTabKey 但不触发预览（activateTab 会强制进入预览模式）
+        // 用户切回预览模式时标签选中状态仍然保留
+        activeTabKey.value = cached.activeTabKey;
     }
 
     isRestoring = false;
@@ -701,8 +716,8 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
 /** 激活标签（统一入口，替代 switchToFileTab + activateBrowserWindow） */
 async function activateTab(tab: UnifiedTab): Promise<void> {
     if (!props.sessionId) return;
-    // 已在预览模式且标签已激活 → 跳过；否则需进入/恢复预览模式
-    if (activeTabKey.value === tab.key && isPreviewMode.value) return;
+    // 已在预览模式且标签已激活且有内容 → 跳过；否则需进入/恢复预览模式
+    if (activeTabKey.value === tab.key && isPreviewMode.value && selectedFile.value) return;
 
     activeTabKey.value = tab.key;
 
@@ -1373,6 +1388,16 @@ async function handleOpenInExplorer() {
         console.error('Failed to open in explorer:', error);
         ElMessage.error('打开失败');
     }
+    closeContextMenu();
+}
+
+/**
+ * 将节点路径插入到聊天输入框光标处
+ */
+function handleInsertToInput() {
+    const node = contextMenu.value.node;
+    if (!node) return;
+    emit('insert-to-input', node.path);
     closeContextMenu();
 }
 
