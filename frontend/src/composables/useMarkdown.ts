@@ -167,14 +167,14 @@ function createMarkedInstance(options?: MarkdownOptions): Marked {
         table(table: Tokens.Table): string {
             let h = '<thead><tr>'
             table.header.forEach(header => {
-                h += `<th align="${header.align || 'left'}">${this.parser?.parseInline(header.tokens)}</th>`
+                h += `<th _align="${header.align || 'left'}">${this.parser?.parseInline(header.tokens)}</th>`
             })
             h += '</tr></thead><tbody>'
 
             table.rows.forEach(row => {
                 h += '<tr>'
                 row.forEach(item => {
-                    h += `<td align="${item.align || 'left'}">${this.parser?.parseInline(item.tokens)}</td>`
+                    h += `<td _align="${item.align || 'left'}">${this.parser?.parseInline(item.tokens)}</td>`
                 })
                 h += '</tr>'
             })
