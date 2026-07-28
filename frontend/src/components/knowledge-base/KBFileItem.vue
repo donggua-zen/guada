@@ -232,7 +232,7 @@ function formatSize(bytes: number): string {
  * 获取状态标签类型
  */
 const statusType = computed(() => {
-    const types: Record<string, string> = {
+    const types: Record<string, 'primary' | 'success' | 'info' | 'warning' | 'danger'> = {
         'queued': 'info',
         'uploading': 'warning',
         'uploaded': 'success', // 上传完成显示绿色

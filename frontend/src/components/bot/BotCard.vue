@@ -133,8 +133,8 @@ const isOperating = computed(() => {
 })
 
 // 处理开关切换
-const handleToggle = (enabled: boolean) => {
-  if (enabled) {
+const handleToggle = (val: string | number | boolean) => {
+  if (val) {
     emit('start', props.bot.id)
   } else {
     emit('stop', props.bot.id)
@@ -259,7 +259,7 @@ const getPlatformName = (platform: string) => {
 }
 
 // 获取状态类型
-const getStatusType = (status: string, runtimeStatus: string | null) => {
+const getStatusType = (status: string, runtimeStatus: string | null): 'primary' | 'success' | 'info' | 'warning' | 'danger' => {
   if (status === 'stopped') return 'info'
   if (runtimeStatus === 'ERROR' || status === 'error') return 'danger'
   if (runtimeStatus === 'CONNECTING') return 'warning'

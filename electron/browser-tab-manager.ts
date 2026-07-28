@@ -678,6 +678,19 @@ export class BrowserWebviewManager {
   }
 
   /**
+   * 临时设置 webview 可渲染（visibility:visible + 离屏定位），不改变 activeWindowId。
+   * 供截图等操作在 webview 隐藏时使用，操作完成后应恢复 false。
+   */
+  setWebviewRenderable(windowId: string, renderable: boolean): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("browser:set-webview-renderable", {
+        windowId,
+        renderable,
+      });
+    }
+  }
+
+  /**
    * 隐藏窗口（后台模式）— 通知前端切换 CSS
    */
   hideWindow(windowId: string): void {

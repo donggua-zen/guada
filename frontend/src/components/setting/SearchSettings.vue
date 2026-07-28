@@ -201,7 +201,8 @@ const handleSave = async () => {
 }
 
 // 切换插件状态
-const handlePluginToggle = async (enabled: boolean) => {
+const handlePluginToggle = async (val: string | number | boolean) => {
+  const enabled = !!val
   pluginLoading.value = true
   try {
     const res = await apiService.updateGlobalToolStatus('web-search', enabled)

@@ -97,8 +97,8 @@ function handleClose() {
   visible.value = false
 }
 
-function getStatusType(status: string): string {
-  const types: Record<string, string> = {
+function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
+  const types: Record<string, 'primary' | 'success' | 'info' | 'warning' | 'danger'> = {
     'queued': 'info',
     'uploading': 'warning',
     'uploaded': 'success',

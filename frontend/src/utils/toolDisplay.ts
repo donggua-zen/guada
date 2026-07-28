@@ -9,6 +9,8 @@ import {
   WindowWrench16Regular,
   TaskListSquareLtr20Regular,
   EyeTracking16Filled,
+  Window16Regular,
+  WindowConsole20Filled,
 } from "@vicons/fluent";
 import Terminal from "@/components/icons/Terminal.vue";
 import { parse as partialParse } from "partial-json";
@@ -127,7 +129,7 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   },
   browser_screenshot: {
     text: { executing: "正在截图", completed: "已截图" },
-    icon: WindowWrench16Regular,
+    icon: Window16Regular,
     aggregate: { executing: "正在截图{n}个网页", completed: "已截图{n}个网页" },
   },
 
@@ -174,12 +176,12 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
     text: { executing: "正在执行命令", completed: "已执行命令" },
     aggregate: { executing: "正在执行{n}条命令", completed: "已执行{n}条命令" },
     argsKey: "command",
-    icon: Terminal,
+    icon: WindowConsole20Filled,
   },
   process: {
     text: { executing: "正在管理进程", completed: "已管理进程" },
     argsKey: "action",
-    icon: Terminal,
+    icon: WindowConsole20Filled,
     aggregate: { executing: "正在管理进程", completed: "已管理进程" },
   },
 

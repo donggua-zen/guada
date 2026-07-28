@@ -599,11 +599,15 @@ watch(() => browserStore.activeWindowId, () => {
 })
 
 // 浏览器标签增删 + 元数据同步
-watch(() => browserStore.sessionWebviews.map(w => ({
-    windowId: w.windowId, title: w.title, favicon: w.favicon, url: w.url,
-})), (webviews) => {
-    tabStore.syncBrowserTabs(webviews)
-}, { deep: true })
+// 使用字符串 fingerprint（基元类型，按值比较）避免 setActive 修改 isVisible 时
+// map() 产生新对象引用导致 { deep: true } watch 误触发和 re-entrancy
+watch(() => browserStore.sessionWebviews.map(w =>
+    `${w.windowId}\0${w.title}\0${w.favicon || ''}\0${w.url}`
+).join('\n'), () => {
+    tabStore.syncBrowserTabs(browserStore.sessionWebviews.map(w => ({
+        windowId: w.windowId, title: w.title, favicon: w.favicon, url: w.url,
+    })))
+})
 
 // ── 预览标签缓存：保存当前会话状态到 localStorage ──
 
@@ -1802,8 +1806,9 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     treeLoadGeneration++;
     isLoading.value = false;
 
-    // 会话切换时关闭文件预览并清理旧会话的展开状态
-    if (oldSessionId && newSessionId !== oldSessionId) {
+    // 会话切换或组件重新挂载时清理旧状态
+    // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
+    if (newSessionId !== oldSessionId) {
         tabStore.exitPreviewMode()
         closePreview();
         tabStore.clearAll();

@@ -81,7 +81,8 @@
                 @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
                   <span class="relative w-[15px] h-[15px] shrink-0 flex items-center justify-center">
-                    <component :is="parts.icon" v-if="!isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id)"
+                    <component :is="parts.icon"
+                      v-if="!isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id)"
                       class="absolute inset-0 w-[15px] h-[15px] transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
                     <ChevronDown12Regular class="absolute inset-0 w-[15px] h-[15px] transition-all duration-200"
                       :class="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
@@ -332,8 +333,14 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
   const expanded = isGroupExpanded(groupId);
   const items = active ? group.items.slice(-1) : group.items;
   const steps = countSteps(group.items);
-  if (expanded) return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
-
+  if (expanded) {
+    if (active) {
+      const currentItemSteps = countSteps(items);
+      const completedSteps = steps - currentItemSteps;
+      return { icon: Wrench24Filled, action: `正在执行${currentItemSteps}个步骤` + (completedSteps ? `,已完成${completedSteps}个步骤` : ``), args: '' };
+    }
+    return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
+  }
   const toolItems = items.filter(i => i.type === 'tool');
   const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
 
@@ -367,7 +374,7 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
   }
 
   // 混合工具 — 通用图标
-  return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
+  return { icon: Wrench24Filled, action: active ? `正在执行${countSteps(items)}个步骤` : `已执行${steps}个步骤`, args: '' };
 };
 // ============================================
 const userContent = computed(() => {

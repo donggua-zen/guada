@@ -97,41 +97,45 @@ const DEFAULT_BG_HEIGHT = 720
 function getWebviewStyle(windowId: string): Record<string, string> {
   const isActive = windowId === store.activeWindowId
   const rect: PreviewRect | null = store.previewRect
+  const isRenderable = store.renderableOverrides.has(windowId)
 
-  if (!isActive) {
-    // 非活跃 webview：使用默认尺寸渲染，但不可见
+  // 活跃且可见的 webview：正常显示（截图也走这个路径，已可见无需离屏）
+  if (isActive && rect) {
     return {
-      visibility: 'hidden',
+      visibility: 'visible',
+      zIndex: '40',
+      left: `${rect.x}px`,
+      top: `${rect.y}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      pointerEvents: store.isDragging ? 'none' : 'auto',
+    }
+  }
+
+  // 非活跃或活跃但无 rect 的 webview
+  if (isRenderable) {
+    // 临时渲染模式：在视口内但透明不可见（opacity:0 不影响合成器产帧，离屏则不产帧）
+    return {
+      visibility: 'visible',
       zIndex: '-1',
       left: '0px',
       top: '0px',
       width: `${DEFAULT_BG_WIDTH}px`,
       height: `${DEFAULT_BG_HEIGHT}px`,
+      opacity: '0',
       pointerEvents: 'none',
     }
   }
 
-  // 活跃 webview：跟随预览占位区域，但 previewRect 为空时隐藏（防止闪到左上角）
-  if (!rect) {
-    return {
-      visibility: 'hidden',
-      zIndex: '-1',
-      left: '0px',
-      top: '0px',
-      width: `${DEFAULT_BG_WIDTH}px`,
-      height: `${DEFAULT_BG_HEIGHT}px`,
-      pointerEvents: 'none',
-    }
-  }
-
+  // 默认：visibility:hidden 节省渲染开销
   return {
-    visibility: 'visible',
-    zIndex: '40',
-    left: `${rect.x}px`,
-    top: `${rect.y}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`,
-    pointerEvents: store.isDragging ? 'none' : 'auto',
+    visibility: 'hidden',
+    zIndex: '-1',
+    left: '0px',
+    top: '0px',
+    width: `${DEFAULT_BG_WIDTH}px`,
+    height: `${DEFAULT_BG_HEIGHT}px`,
+    pointerEvents: 'none',
   }
 }
 
@@ -261,6 +265,10 @@ function handleSetVisibility(_event: any, data: { windowId: string; visible: boo
   }
 }
 
+function handleSetRenderable(_event: any, data: { windowId: string; renderable: boolean }): void {
+  store.setRenderableOverride(data.windowId, data.renderable)
+}
+
 onMounted(() => {
   const api = window.electronAPI
   if (!api) return
@@ -269,6 +277,7 @@ onMounted(() => {
   api.onCreateWebview?.(handleCreateWebview)
   api.onDestroyWebview?.(handleDestroyWebview)
   api.onSetWebviewVisibility?.(handleSetVisibility)
+  api.onSetWebviewRenderable?.(handleSetRenderable)
   api.onWindowFaviconUpdated?.(handleWindowFaviconUpdated)
 })
 

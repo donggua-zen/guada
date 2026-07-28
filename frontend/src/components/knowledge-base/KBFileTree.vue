@@ -823,8 +823,8 @@ function formatSize(bytes: number): string {
 /**
  * 获取状态类�?
  */
-function getStatusType(status: string): string {
-  const types: Record<string, string> = {
+function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
+  const types: Record<string, 'primary' | 'success' | 'info' | 'warning' | 'danger'> = {
     'pending': 'info',
     'processing': 'warning',
     'completed': 'success',
