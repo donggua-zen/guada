@@ -248,12 +248,23 @@ app.use(router);
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router);
 
+// 加载链接打开方式设置（从后端同步到 localStorage 缓存）。
+// 必须在后端就绪后调用：冷启动时若抢在 NestJS 监听端口之前发请求，
+// 会产生 ERR_CONNECTION_REFUSED 噪音日志（功能无影响，但干扰排查）。
+function loadLinkOpenModeWhenReady() {
+  import("@/utils/workspacePreview").then(({ loadLinkOpenMode }) => {
+    loadLinkOpenMode();
+  });
+}
+
 // 后端未就绪时才注册异步等待（已就绪说明是刷新场景，无需再监听）
 if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
   // 超时保护：60 秒后显示错误
   const timeoutId = setTimeout(() => {
     if (!backendReady.value) {
       backendError.value = "后端启动超时，请检查后端进程或重启应用";
+      // 兜底：后端超时仍尝试加载（内部 catch 会降级到 localStorage 缓存）
+      loadLinkOpenModeWhenReady();
     }
   }, 60000);
 
@@ -261,9 +272,10 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
     clearTimeout(timeoutId);
     if (backendError.value) return; // 已显示超时错误，不再覆盖
     if (data.port) {
-      console.log(`🔗 后端已就绪，端口: ${data.port}`);
+      console.log(` 后端已就绪，端口: ${data.port}`);
       apiService.initBackendUrl().then(() => {
         backendReady.value = true;
+        loadLinkOpenModeWhenReady();
         // 如果当前在加载页，跳回原始目标
         if (router.currentRoute.value.path === "/empty") {
           const redirect = router.currentRoute.value.query.redirect || "/";
@@ -275,11 +287,9 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
       backendError.value = data.error || "后端启动失败";
     }
   });
+} else {
+  // 非 Electron（Web 直连）或后端已就绪（刷新场景）：直接加载
+  loadLinkOpenModeWhenReady();
 }
 
 app.mount("#app");
-
-// 加载链接打开方式设置（从后端同步到 localStorage 缓存）
-import("@/utils/workspacePreview").then(({ loadLinkOpenMode }) => {
-  loadLinkOpenMode();
-});
