@@ -144,11 +144,11 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
     icon: Wrench24Filled,
     aggregate: { executing: "正在编辑{n}次记忆", completed: "已编辑{n}次记忆" },
   },
-  plan: {
-    text: { executing: "正在管理计划", completed: "已管理计划" },
+  todo: {
+    text: { executing: "正在管理待办", completed: "已管理待办" },
     argsKey: "action",
     icon: TaskListSquareLtr20Regular,
-    aggregate: { executing: "正在管理{n}个计划", completed: "已管理{n}个计划" },
+    aggregate: { executing: "正在管理{n}个待办", completed: "已管理{n}个待办" },
   },
 
   get_current_time: {

@@ -88,7 +88,7 @@
                       :style="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
                   <span class="shrink-0 font-medium">{{ parts.action }}</span>
-                  <span v-if="parts.args" class="text-sm font-mono truncate"
+                  <span v-if="parts.args" class="text-sm truncate"
                     :class="{ 'text-gray-400 dark:text-gray-400': !isLastActive(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
@@ -187,7 +187,7 @@
 import { computed, ref, watch, nextTick } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
-import { Alert16Regular, Lightbulb24Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
+import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
@@ -330,8 +330,8 @@ const isLastActive = (groupIndex: number): boolean => {
 const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
   const groupId = active ? 'last-active' : group.id;
   const expanded = isGroupExpanded(groupId);
-  const items = group.items;
-  const steps = countSteps(items);
+  const items = active ? group.items.slice(-1) : group.items;
+  const steps = countSteps(group.items);
   if (expanded) return { icon: Wrench24Filled, action: `已执行 ${steps} 个步骤`, args: '' };
 
   const toolItems = items.filter(i => i.type === 'tool');
@@ -344,9 +344,9 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
     if (isThinking) {
       const text = (thinkItem?.reasoningContent || '').replace(/\n/g, ' ').trim();
       const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
-      return { icon: Lightbulb24Regular, action: '正在思考...', args: preview };
+      return { icon: BrainCircuit20Regular, action: '正在思考...', args: preview };
     }
-    return { icon: Lightbulb24Regular, action: '已深度思考', args: '' };
+    return { icon: BrainCircuit20Regular, action: '已深度思考', args: '' };
   }
 
   // 判断是否所有工具同类型

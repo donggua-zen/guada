@@ -83,8 +83,8 @@
             <!-- 子代理任务列表 -->
             <SessionAgentList v-show="!isPreviewMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
                 @switch="emit('switch-agent', $event)" />
-            <!-- 计划事项列表 -->
-            <SessionPlanList v-show="!isPreviewMode" :session-id="props.sessionId" />
+            <!-- 待办事项列表 -->
+            <SessionTodoList v-show="!isPreviewMode" :session-id="props.sessionId" />
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -128,7 +128,7 @@
             <!-- 目录树内容 -->
             <div class="flex-1 overflow-auto min-w-0">
                 <div v-if="!treeData.length" class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
-                    暂无文件，请先设置工作目录
+                    暂无文件
                 </div>
 
                 <WorkspaceTree v-else :nodes="treeData" :selected-path="selectedNodePath" :loading-paths="loadingPaths"
@@ -303,7 +303,7 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
-import SessionPlanList from './SessionPlanList.vue';
+import SessionTodoList from './SessionTodoList.vue';
 import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';

@@ -125,11 +125,11 @@ export interface EnqueueMessageEvent {
 }
 
 /**
- * 计划更新事件（内部模块间使用）
+ * 待办更新事件（内部模块间使用）
  *
- * 事件名：plan.updated
+ * 事件名：todo.updated
  */
-export interface PlanUpdatedEvent {
+export interface TodoUpdatedEvent {
   userId: string;
   sessionId: string;
   timestamp: string;
@@ -149,7 +149,7 @@ export function toSessionEvent(
     | SessionDeletedEvent
     | SubAgentCreatedEvent
     | SubAgentClosedEvent
-    | PlanUpdatedEvent,
+    | TodoUpdatedEvent,
 ): SessionEvent {
   return {
     type,

@@ -4,10 +4,7 @@
     <div
       class="thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200"
       @click.stop="handleToggle">
-      <el-icon v-if="isThinking" size="15" class="shrink-0 animate-spin">
-        <SpinnerIos20Filled />
-      </el-icon>
-      <el-icon v-else size="15" class="shrink-0">
+      <el-icon size="15" class="shrink-0">
         <BrainCircuit20Regular />
       </el-icon>
       <span class="text-gray-600 dark:text-gray-400 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
@@ -17,10 +14,8 @@
     </div>
 
     <!-- 内容区：折叠时显示最多3行 + 渐变遮罩，展开时全量显示 -->
-    <div class="thinking-section__content-wrapper border-l ml-1.5 pl-4 text-sm border-gray-300 dark:border-gray-700">
-      <div
-        class="thinking-content"
-        :class="{ 'is-collapsed': !isExpanded && !isThinking }">
+    <div class="thinking-section__content-wrapper border-l ml-1.75 pl-4 text-sm border-gray-300 dark:border-gray-700">
+      <div class="thinking-content" :class="{ 'is-collapsed': !isExpanded && !isThinking }">
         <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
           :content="reasoningContent" />
       </div>
@@ -32,7 +27,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElIcon } from 'element-plus';
-import { BrainCircuit20Regular, SpinnerIos20Filled } from '@vicons/fluent';
+import { BrainCircuit20Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration } from '../../../utils/messageUtils';
 
@@ -93,18 +88,14 @@ watch(() => props.isThinking, (isThinking: boolean) => {
 .thinking-content.is-collapsed {
   max-height: 4.5em;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    black 0,
-    black 2.5em,
-    transparent 4.5em
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    black 0,
-    black 2.5em,
-    transparent 4.5em
-  );
+  -webkit-mask-image: linear-gradient(to bottom,
+      black 0,
+      black 2.5em,
+      transparent 4.5em);
+  mask-image: linear-gradient(to bottom,
+      black 0,
+      black 2.5em,
+      transparent 4.5em);
 }
 
 @keyframes fadeIn {

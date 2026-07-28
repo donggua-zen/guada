@@ -1,18 +1,18 @@
 <template>
-  <div v-if="hasPlan" class="session-plan-list">
+  <div v-if="hasTodo" class="session-todo-list">
     <!-- 头部 -->
     <div class="shrink-0 flex items-center justify-between px-2">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-        计划事项
+        待办事项
       </h3>
       <span class="text-xs text-gray-400 dark:text-[#6b6d73]">
-        {{ doneCount }}/{{ planItems.length }}
+        {{ doneCount }}/{{ todoItems.length }}
       </span>
     </div>
 
-    <!-- 计划列表 -->
+    <!-- 待办列表 -->
     <div class="overflow-y-auto py-2 px-1 space-y-0.5" style="max-height: 200px;">
-      <div v-for="(item, i) in planItems" :key="i"
+      <div v-for="(item, i) in todoItems" :key="i"
         class="mx-1 px-2 py-1 flex items-center gap-2 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30] transition-all duration-200">
         <!-- 状态图标 -->
         <span class="shrink-0 w-3.5 h-3.5 flex items-center justify-center">
@@ -43,7 +43,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Check, Loading } from '@element-plus/icons-vue';
 import { apiService } from '@/services/ApiService';
 
-interface PlanItem {
+interface TodoItem {
   content: string;
   status: string;
 }
@@ -52,43 +52,43 @@ const props = defineProps<{
   sessionId: string | null;
 }>();
 
-const planItems = ref<PlanItem[]>([]);
+const todoItems = ref<TodoItem[]>([]);
 
-const hasPlan = computed(() => planItems.value.length > 0 && planItems.value.some(i => i.status !== 'completed'));
-const doneCount = computed(() => planItems.value.filter(i => i.status === 'completed').length);
+const hasTodo = computed(() => todoItems.value.length > 0 && todoItems.value.some(i => i.status !== 'completed'));
+const doneCount = computed(() => todoItems.value.filter(i => i.status === 'completed').length);
 
-async function loadPlan() {
+async function loadTodo() {
   if (!props.sessionId) {
-    planItems.value = [];
+    todoItems.value = [];
     return;
   }
   try {
-    const res = await apiService.getSessionPlan(props.sessionId);
-    planItems.value = res.items || [];
+    const res = await apiService.getSessionTodo(props.sessionId);
+    todoItems.value = res.items || [];
   } catch {
-    planItems.value = [];
+    todoItems.value = [];
   }
 }
 
-let unsubscribePlanUpdated: (() => void) | null = null;
+let unsubscribeTodoUpdated: (() => void) | null = null;
 
-watch(() => props.sessionId, () => loadPlan(), { immediate: true });
+watch(() => props.sessionId, () => loadTodo(), { immediate: true });
 
 onMounted(() => {
-  unsubscribePlanUpdated = apiService.onSessionEvent('plan_updated', (event) => {
+  unsubscribeTodoUpdated = apiService.onSessionEvent('todo_updated', (event) => {
     if (event.sessionId === props.sessionId) {
-      loadPlan();
+      loadTodo();
     }
   });
 });
 
 onUnmounted(() => {
-  if (unsubscribePlanUpdated) unsubscribePlanUpdated();
+  if (unsubscribeTodoUpdated) unsubscribeTodoUpdated();
 });
 </script>
 
 <style scoped>
-.session-plan-list {
+.session-todo-list {
   padding-top: 0.5rem;
 }
 </style>

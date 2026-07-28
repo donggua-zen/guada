@@ -285,7 +285,7 @@ export interface SessionApi {
   }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   updateSessionWorkspacePath(sessionId: string, workspacePath: string): Promise<{ success: boolean }>;
-  getSessionPlan(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
+  getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
 }
 
 export const sessionApi: SessionApi = {
@@ -430,7 +430,7 @@ export const sessionApi: SessionApi = {
     });
   },
 
-  async getSessionPlan(this: ApiContext, sessionId: string) {
-    return await this._request(`/sessions/${sessionId}/plan`);
+  async getSessionTodo(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/todo`);
   },
 };

@@ -287,7 +287,7 @@ export class CompressionEngine implements ICompressionStrategy {
       const msg = prunedMessages[i];
       if (msg.role === "tool") {
         // 保护 tool_learn 结果不被裁剪（含工具定义XML，裁剪后AI将丢失工具使用说明）
-        if (msg.name === "tool_learn" || msg.name === "plan") {
+        if (msg.name === "tool_learn" || msg.name === "todo") {
           continue;
         }
 
