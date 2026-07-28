@@ -48,7 +48,7 @@
                                 <el-switch
                                     :model-value="skill.enabled !== false"
                                     :loading="updatingSkills.has(skill.id)"
-                                    @update:model-value="(val: boolean) => handleToggleSkill(skill.id, val)"
+                                    @update:model-value="(val: string | number | boolean) => handleToggleSkill(skill.id, !!val)"
                                     size="small"
                                     :active-text="skill.enabled !== false ? '启用' : '禁用'"
                                     inline-prompt

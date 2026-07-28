@@ -49,6 +49,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   /** 分割面板拖拽中标志（拖拽时屏蔽 webview 指针事件） */
   const isDragging = ref(false)
 
+  /** 截图等操作临时需要渲染的 webview（visibility:visible 但离屏定位），不改变 activeWindowId */
+  const renderableOverrides = ref<Set<string>>(new Set())
+
   /** 活跃 webview 的导航状态（由 BrowserWebviewLayer 从 webview 事件同步） */
   const canGoBack = ref(false)
   const canGoForward = ref(false)
@@ -107,10 +110,22 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     activeWindowId.value = null
     previewRect.value = null
     activeWebviewEl.value = null
+    renderableOverrides.value.clear()
+    renderableOverrides.value = new Set()
   }
 
   function setDragging(val: boolean): void {
     isDragging.value = val
+  }
+
+  function setRenderableOverride(windowId: string, renderable: boolean): void {
+    if (renderable) {
+      renderableOverrides.value.add(windowId)
+    } else {
+      renderableOverrides.value.delete(windowId)
+    }
+    // 触发响应式
+    renderableOverrides.value = new Set(renderableOverrides.value)
   }
 
   function setActiveWebviewEl(el: HTMLElement | null): void {
@@ -137,6 +152,8 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     activeWindowId.value = null
     previewRect.value = null
     activeWebviewEl.value = null
+    renderableOverrides.value.clear()
+    renderableOverrides.value = new Set()
   }
 
   // ── Getters ──
@@ -177,6 +194,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     previewRect,
     currentSessionId,
     isDragging,
+    renderableOverrides,
     canGoBack,
     canGoForward,
     isLoading,
@@ -195,6 +213,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     setPreviewRect,
     setCurrentSession,
     setDragging,
+    setRenderableOverride,
     setActiveWebviewEl,
     setNavState,
     toggleMuted,

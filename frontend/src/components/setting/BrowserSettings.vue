@@ -74,7 +74,8 @@ async function loadLinkOpenMode(): Promise<void> {
 }
 
 // 保存链接打开方式设置
-async function onLinkOpenModeChange(mode: LinkOpenMode): Promise<void> {
+async function onLinkOpenModeChange(val: string | number | boolean | undefined): Promise<void> {
+  const mode = val as LinkOpenMode
   setLinkOpenMode(mode)
   try {
     await apiService.updateGroupSettings('browser', { linkOpenMode: mode })

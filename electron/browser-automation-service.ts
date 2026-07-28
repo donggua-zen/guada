@@ -346,53 +346,122 @@ export class BrowserAutomationService {
 
     log.info(`Taking screenshot (tab: ${wid})...`);
 
-    const webContents = this.windowManager.getWebContents(wid);
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
     if (!webContents) {
       throw new Error(`Tab ${wid} not found`);
     }
 
     await this.waitForPageLoad(webContents);
 
-    const image = await webContents.capturePage();
-    const buffer = image.toPNG();
-    const base64 = buffer.toString("base64");
+    // webview visibility:hidden 时 Chromium 不产生合成器帧，CDP/capturePage 都无法截图。
+    // 临时将 webview 设为可渲染（视口内 + opacity:0），截图后恢复。
+    // 无条件调用：前端的 getWebviewStyle 会判断是否已可见，已可见时不受影响。
+    this.windowManager.setWebviewRenderable(wid, true);
+    // 等待合成器产生帧
+    await new Promise((r) => setTimeout(r, 300));
 
-    let savedPath: string | undefined;
-
-    // 保存到文件
-    const targetPath = filePath
-      ? path.isAbsolute(filePath)
-        ? filePath
-        : sessionPath
-          ? path.join(sessionPath, filePath)
-          : undefined
-      : sessionPath
-        ? path.join(sessionPath, `screenshot-${Date.now()}.png`)
-        : undefined;
-
-    if (targetPath) {
-      const dir = path.dirname(targetPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+    try {
+      // 优先使用 capturePage()，失败则回退到 CDP
+      let buffer: Buffer;
+      let imgWidth: number;
+      let imgHeight: number;
+      try {
+        const image = await this.withTimeout(
+          webContents.capturePage(),
+          10000,
+          "capturePage timeout",
+        );
+        buffer = image.toPNG();
+        const size = image.getSize();
+        imgWidth = size.width;
+        imgHeight = size.height;
+      } catch (e: any) {
+        log.warn(`capturePage failed (${e.message}), falling back to CDP`);
+        buffer = await this.cdpCaptureScreenshot(webContents);
+        imgWidth = buffer.readUInt32BE(16);
+        imgHeight = buffer.readUInt32BE(20);
       }
-      await fs.promises.writeFile(targetPath, buffer);
-      savedPath = targetPath;
-      log.info(`Screenshot saved: ${savedPath}`);
-    }
 
-    return {
-      success: true,
-      tab_id: wid,
-      format: "png",
-      saved_path: savedPath,
-      width: image.getSize().width,
-      height: image.getSize().height,
-    };
+      let savedPath: string | undefined;
+
+      // 保存到文件
+      const targetPath = filePath
+        ? path.isAbsolute(filePath)
+          ? filePath
+          : sessionPath
+            ? path.join(sessionPath, filePath)
+            : undefined
+        : sessionPath
+          ? path.join(sessionPath, `screenshot-${Date.now()}.png`)
+          : undefined;
+
+      if (targetPath) {
+        const dir = path.dirname(targetPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        await fs.promises.writeFile(targetPath, buffer);
+        savedPath = targetPath;
+        log.info(`Screenshot saved: ${savedPath}`);
+      }
+
+      return {
+        success: true,
+        tab_id: wid,
+        format: "png",
+        saved_path: savedPath,
+        width: imgWidth,
+        height: imgHeight,
+      };
+    } finally {
+      this.windowManager.setWebviewRenderable(wid, false);
+    }
   }
 
   /**
-   * 执行 JavaScript 代码
+   * 为 Promise 添加超时保护
    */
+  private async withTimeout<T>(
+      promise: Promise<T>,
+      ms: number,
+      label: string,
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(label)), ms),
+      ),
+    ]);
+  }
+
+  /**
+   * 通过 CDP Page.captureScreenshot 截图。
+   * 与 capturePage() 不同，CDP 截图在 webview visibility:hidden 时也能工作。
+   */
+  private async cdpCaptureScreenshot(
+    webContents: Electron.WebContents,
+  ): Promise<Buffer> {
+    const debuggerApi = webContents.debugger;
+    let attachedByUs = false;
+    try {
+      if (!debuggerApi.isAttached()) {
+        debuggerApi.attach("1.3");
+        attachedByUs = true;
+      }
+      const result = await debuggerApi.sendCommand("Page.captureScreenshot", {
+        format: "png",
+      });
+      if (!result?.data) {
+        throw new Error("CDP captureScreenshot returned no image data");
+      }
+      return Buffer.from(result.data, "base64");
+    } finally {
+      if (attachedByUs && debuggerApi.isAttached()) {
+        debuggerApi.detach();
+      }
+    }
+  }
+
   /**
    * 执行 JavaScript 代码
    * @param code JavaScript 代码

@@ -48,7 +48,7 @@
                     class="flex items-center gap-2 px-3 py-2 transition-colors duration-150 hover:bg-(--color-sidebar-bg-hover)"
                     :class="idx < archivedSessions.length - 1 ? 'border-b border-gray-50 dark:border-gray-700/30' : ''">
                     <el-checkbox :model-value="selectedIds.has(session.id)"
-                        @change="(val: boolean) => toggleSelect(session.id, val)" />
+                        @change="(val: string | number | boolean) => toggleSelect(session.id, val)" />
                     <span class="flex-1 truncate text-sm text-(--color-text)">{{ session.title }}</span>
                     <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
@@ -145,8 +145,8 @@ const handlePageChange = () => {
     loadArchivedSessions()
 }
 
-const toggleSelect = (sessionId: string, checked: boolean) => {
-    if (checked) {
+const toggleSelect = (sessionId: string, val: string | number | boolean) => {
+    if (val) {
         selectedIds.value.add(sessionId)
     } else {
         selectedIds.value.delete(sessionId)
@@ -155,8 +155,8 @@ const toggleSelect = (sessionId: string, checked: boolean) => {
     selectAll.value = archivedSessions.value.length > 0 && selectedIds.value.size === archivedSessions.value.length
 }
 
-const handleSelectAll = (checked: boolean) => {
-    if (checked) {
+const handleSelectAll = (val: string | number | boolean) => {
+    if (val) {
         selectedIds.value = new Set(archivedSessions.value.map(s => s.id))
     } else {
         selectedIds.value = new Set()

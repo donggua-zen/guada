@@ -78,11 +78,12 @@ export const useTabStore = defineStore('tab', () => {
 
     // ── 浏览器 store 同步 ──
 
-    /** 外部激活浏览器窗口时，同步 activeTabKey（selectTab 已提前设置则为 no-op） */
+    /** 外部激活浏览器窗口时，同步 activeTabKey 并自动进入预览模式 */
     function syncActiveWindowId(): void {
         const active = browserStore.activeWindowId
         if (active && activeTabKey.value !== `browser:${active}`) {
             activeTabKey.value = `browser:${active}`
+            enterPreviewMode()
         }
     }
 

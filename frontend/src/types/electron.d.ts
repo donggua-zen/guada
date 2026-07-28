@@ -63,6 +63,7 @@ export interface ElectronAPI {
   onCreateWebview?: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => void
   onDestroyWebview?: (callback: (event: any, data: { windowId: string }) => void) => void
   onSetWebviewVisibility?: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => void
+  onSetWebviewRenderable?: (callback: (event: any, data: { windowId: string; renderable: boolean }) => void) => void
   onWindowFaviconUpdated?: (callback: (event: any, data: { windowId: string; favicon: string }) => void) => void
 
   // 清空所有浏览器自动化 session 数据

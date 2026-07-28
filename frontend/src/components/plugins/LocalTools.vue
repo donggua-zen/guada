@@ -31,7 +31,7 @@
               <el-switch
                 :model-value="tool.enabled"
                 :loading="updatingTools.has(tool.pluginId)"
-                @update:model-value="(val: boolean) => handleToggleTool(tool.pluginId, val)"
+                @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
                 inline-prompt
                 active-text="启动"
                 inactive-text="禁用"

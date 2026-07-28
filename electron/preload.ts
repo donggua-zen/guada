@@ -108,6 +108,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSetWebviewVisibility: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => {
     ipcRenderer.on('browser:set-webview-visibility', callback)
   },
+  onSetWebviewRenderable: (callback: (event: any, data: { windowId: string; renderable: boolean }) => void) => {
+    ipcRenderer.on('browser:set-webview-renderable', callback)
+  },
   onWindowFaviconUpdated: (callback: (event: any, data: { windowId: string; favicon: string }) => void) => {
     ipcRenderer.on('window-favicon-updated', callback)
   },
