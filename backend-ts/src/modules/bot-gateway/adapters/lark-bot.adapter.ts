@@ -42,7 +42,7 @@ export class LarkBotAdapter extends BaseBotAdapter {
       supportsPushMessage: true,      // 支持主动推送
       supportsTemplateCard: false,    // 暂不支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
-      handlesReconnectInternally: false, // 需要外部 BotInstanceManager 统一管理重连
+      handlesReconnectInternally: true, // 飞书 SDK 内部维护断线重连循环
     };
   }
 
@@ -167,19 +167,19 @@ export class LarkBotAdapter extends BaseBotAdapter {
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down Lark bot: ${this.config?.name}`);
 
-    // 关闭 WebSocket 连接
+    // 关闭 WebSocket 连接及 SDK 内部重连循环
     if (this.wsClient) {
       try {
-        // WSClient 可能没有 stop 方法，直接置空即可
-        this.wsClient = null;
+        this.wsClient.close();
         this.logger.log('Lark bot disconnected gracefully');
       } catch (error: any) {
         this.logger.error(`Error during shutdown: ${error.message}`);
+      } finally {
+        this.wsClient = null;
       }
     }
 
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
   }
 
   async reconnect(): Promise<void> {

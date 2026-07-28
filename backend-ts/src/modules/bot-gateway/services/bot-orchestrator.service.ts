@@ -7,7 +7,6 @@ import {
   BotConfig,
 } from "../interfaces/bot-platform.interface";
 import { ChatRunnerService } from "../../chat/chat-runner.service";
-import { SessionService } from "../../chat/session.service";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { buildExternalId } from "../utils/external-id";
@@ -36,7 +35,6 @@ export class BotOrchestrator {
 
   constructor(
     private chatRunner: ChatRunnerService,
-    private sessionService: SessionService,
     private sessionMapper: SessionMapperService,
     private workspaceService: WorkspaceService,
   ) {}
@@ -233,6 +231,7 @@ export class BotOrchestrator {
     };
 
     const capabilities = adapter.getCapabilities();
+    let sendChain = Promise.resolve();
 
     const sendReply = (
       content: string,
@@ -240,12 +239,22 @@ export class BotOrchestrator {
         streamId?: string;
         finish?: boolean;
       } = {},
-    ) => {
-      if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-        adapter.sendStreamReply({ ...baseReply, content }, extra);
-      } else if (extra.finish === true) {
-        adapter.sendMessage({ ...baseReply, content });
-      }
+    ): Promise<void> => {
+      const operation = sendChain.then(async () => {
+        if (capabilities.supportsStreaming && adapter.sendStreamReply) {
+          const sent = await adapter.sendStreamReply(
+            { ...baseReply, content },
+            extra,
+          );
+          if (!sent) throw new Error("Platform rejected stream reply");
+        } else if (extra.finish === true) {
+          await adapter.sendMessage({ ...baseReply, content });
+        }
+      });
+
+      // 保持内部队列可继续执行，同时向当前调用方传播本次发送错误。
+      sendChain = operation.catch(() => undefined);
+      return operation;
     };
 
     try {
@@ -300,22 +309,36 @@ export class BotOrchestrator {
             if (chunk.type === "text" && chunk.content) {
               accumulatedContent += chunk.content;
               if (capabilities.supportsStreaming) {
-                sendReply(accumulatedContent, { streamId, finish: false });
+                void sendReply(accumulatedContent, {
+                  streamId,
+                  finish: false,
+                }).catch((error: Error) => {
+                  this.logger.error(`Failed to send stream reply: ${error.message}`);
+                });
               }
             }
           },
-          onComplete: async (reason) => {
-            sendReply(accumulatedContent || "抱歉,我暂时无法回复。", {
+          onComplete: () => {
+            void sendReply(accumulatedContent || "抱歉,我暂时无法回复。", {
               streamId,
               finish: true,
-            });
-            this.logger.log(
-              `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
-            );
+            })
+              .then(() => {
+                this.logger.log(
+                  `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
+                );
+              })
+              .catch((error: Error) => {
+                this.logger.error(`Failed to send final reply: ${error.message}`);
+              });
           },
-          onError: async (err) => {
+          onError: (err) => {
             this.logger.error(`Stream error: ${err.message}`);
-            sendReply(err.message || "抱歉,我暂时无法回复。", { finish: true });
+            void sendReply(err.message || "抱歉,我暂时无法回复。", {
+              finish: true,
+            }).catch((error: Error) => {
+              this.logger.error(`Failed to send error reply: ${error.message}`);
+            });
           },
         },
       );
@@ -325,9 +348,11 @@ export class BotOrchestrator {
         error.stack,
       );
 
-      // 向用户发送原始错误消息
+      // 向用户发送错误消息
       try {
-        sendReply(error.message, { finish: true });
+        await sendReply(error.message || "抱歉,我暂时无法回复。", {
+          finish: true,
+        });
         this.logger.log(
           `Sent error message to ${firstMessage.senderName || firstMessage.senderId}`,
         );

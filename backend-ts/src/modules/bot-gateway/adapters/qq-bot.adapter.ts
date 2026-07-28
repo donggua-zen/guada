@@ -226,7 +226,6 @@ export class QQBotAdapter extends BaseBotAdapter {
     }
 
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
   }
 
   async reconnect(): Promise<void> {

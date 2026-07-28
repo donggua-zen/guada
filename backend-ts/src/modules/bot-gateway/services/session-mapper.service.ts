@@ -1,13 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import * as path from 'path';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { MessageRepository } from '../../../common/database/message.repository';
 import { SessionRepository } from '../../../common/database/session.repository';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base.repository';
-import { UploadPathService } from '../../../common/services/upload-path.service';
 import { WorkspaceService } from '../../../common/services/workspace.service';
 import { appendResetMarker } from '../utils/external-id';
 
@@ -26,7 +23,6 @@ export class SessionMapperService {
     private sessionRepo: SessionRepository,
     private settingsStorage: SettingsStorage,
     private kbRepo: KnowledgeBaseRepository,
-    private uploadPathService: UploadPathService,
     private workspaceService: WorkspaceService,
   ) { }
 

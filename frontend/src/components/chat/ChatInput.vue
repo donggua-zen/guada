@@ -1,7 +1,9 @@
 <template>
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
-    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white/80 dark:bg-[#2d2d2d]/80 backdrop-blur-xl backdrop-saturate-150" :class="styleClass">
+    <div
+      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white/80 dark:bg-[#2d2d2d]/80 backdrop-blur-xl backdrop-saturate-150"
+      :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
@@ -87,7 +89,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-            }}</span>
+              }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <el-tooltip v-if="!props.readonly" content="Token 上限" placement="top">
@@ -1374,11 +1376,15 @@ defineExpose({ insertText });
 /* 命令徽标样式 */
 :deep(.command-badge) {
   display: inline;
-  color: var(--el-color-primary);
-  font-size: inherit;
+  font-size: 12px;
   line-height: inherit;
   cursor: pointer;
   user-select: none;
+  background: #f3f3f3;
+  color: var(--color-text);
+  padding:0 8px;
+  border-radius: 4px;
+  margin-right: 4px;
 }
 
 /* 保留旧样式兼容 */

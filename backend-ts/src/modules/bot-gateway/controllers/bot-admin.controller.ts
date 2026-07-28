@@ -14,17 +14,13 @@ import {
 import { AuthGuard } from '../../auth/auth.guard';
 import { BotAdminService } from '../services/bot-admin.service';
 import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
-import { PrismaService } from '../../../common/database/prisma.service';
 
 @Controller('bot-admin')
 @UseGuards(AuthGuard)  // 所有接口都需要登录
 export class BotAdminController {
   private readonly logger = new Logger(BotAdminController.name);
 
-  constructor(
-    private botService: BotAdminService,
-    private prisma: PrismaService,
-  ) { }
+  constructor(private botService: BotAdminService) { }
 
   /**
    * 获取所有支持的平台列表
@@ -206,39 +202,11 @@ export class BotAdminController {
     @Query('limit') limit = 20,
     @Query('botId') botId?: string,
   ) {
-    const userId = req.user.id;
-
-    // 构建查询条件
-    const whereCondition: any = {
-      userId,
-      sessionType: 'bot'
-    };
-
-    // 如果指定了botId，则添加过滤条件
-    if (botId) {
-      whereCondition.botId = botId;
-    }
-
-    const [items, total] = await Promise.all([
-      this.prisma.session.findMany({
-        where: whereCondition,
-        orderBy: [{ lastActiveAt: "desc" }],
-        skip: Number(skip),
-        take: Number(limit),
-        include: {
-          character: true,
-        },
-      }),
-      this.prisma.session.count({
-        where: whereCondition
-      }),
-    ]);
-
-    return {
-      items,
-      total,
-      page: Math.floor(Number(skip) / Number(limit)) + 1,
-      pageSize: Number(limit),
-    };
+    return this.botService.getBotSessions(
+      req.user.id,
+      Number(skip),
+      Number(limit),
+      botId,
+    );
   }
 }

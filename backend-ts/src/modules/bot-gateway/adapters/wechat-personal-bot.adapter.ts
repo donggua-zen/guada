@@ -320,14 +320,6 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
     }
 
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
-  }
-
-  async reconnect(): Promise<void> {
-    this.logger.log(`Attempting to reconnect WeChat Personal bot...`);
-    if (this.config) {
-      await this.connect(this.config);
-    }
   }
 
   /**

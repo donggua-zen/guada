@@ -54,10 +54,15 @@ export abstract class BaseBotAdapter implements IBotPlatform {
   abstract shutdown(): Promise<void>;
 
   /**
-   * 重连（子类可选实现，默认抛出异常）
+   * 使用当前配置重新建立连接。
    */
   async reconnect(): Promise<void> {
-    throw new Error('Reconnect not implemented for this platform');
+    if (!this.config) {
+      throw new Error('Bot configuration is not available for reconnect');
+    }
+
+    await this.shutdown();
+    await this.connect(this.config);
   }
 
   /**
@@ -117,14 +122,5 @@ export abstract class BaseBotAdapter implements IBotPlatform {
    */
   async downloadAttachment(_message: BotMessage, _saveDir: string): Promise<string[]> {
     return [];
-  }
-
-  /**
-   * 完成所有 Subject（供子类在 shutdown 时调用）
-   */
-  protected completeSubjects(): void {
-    this.messageSubject.complete();
-    this.disconnectSubject.complete();
-    this.connectSubject.complete();
   }
 }
