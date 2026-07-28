@@ -1,6 +1,6 @@
 {
   "name": "guada",
-  "version": "0.4.6",
+  "version": "0.4.8",
   "description": "GuaDa Application with Web and Electron support",
   "private": true,
   "main": "electron/dist/main.js",
