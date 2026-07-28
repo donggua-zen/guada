@@ -3,7 +3,7 @@
  *
  * 职责：
  * 1. 链接打开方式管理（用户偏好：内置浏览器 / 外部浏览器 / 每次询问）
- * 2. 文件预览（通过 store 传递给 WorkspaceSidebar）
+ * 2. 文件预览（通过 tabStore 直接操作）
  * 3. URL 预览（在内置浏览器中打开）
  *
  * 所有预览操作都会自动确保工作区侧边栏可见 + 进入预览模式。
@@ -14,7 +14,7 @@ import { nextTick } from 'vue'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
-import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
+import { useTabStore } from '@/stores/tab'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 
 // ── 链接打开方式偏好管理 ──
@@ -76,8 +76,6 @@ function isSafeUrl(url: string): boolean {
     }
 }
 
-// ── 预览 API（统一入口） ──
-
 /** 弹窗询问用户选择打开方式 */
 async function showLinkChoiceDialog(url: string): Promise<void> {
     try {
@@ -100,27 +98,48 @@ async function showLinkChoiceDialog(url: string): Promise<void> {
     }
 }
 
+// ── 预览 API（统一入口） ──
+
 /**
  * 预览工作区文件（打开文件预览标签）
  *
- * 确保侧边栏可见 + 进入预览模式，然后通过 store 传递文件路径给 WorkspaceSidebar。
+ * 直接通过 tabStore 操作：添加标签 + 选中 + 进入预览模式。
+ * WorkspaceSidebar 的 watch 会自动加载文件内容。
  */
-export function previewFile(filePath: string): void {
+export async function previewFile(filePath: string): Promise<void> {
     const sessionStore = useSessionStore()
     if (!sessionStore.activeSessionId) return
 
     const layoutStore = useLayoutStore()
+    const wasVisible = layoutStore.workspaceVisible
     layoutStore.workspaceVisible = true
-    layoutStore.workspacePreviewMode = true
 
-    const previewStore = useWorkspacePreviewStore()
-    previewStore.requestFile(filePath)
+    // 侧边栏从隐藏→可见时，WorkspaceSidebar 需要一个 tick 完成挂载并注册 watch
+    if (!wasVisible) {
+        await nextTick()
+    }
+
+    const tabStore = useTabStore()
+    const name = filePath.replace(/\\/g, '/').split('/').pop() || filePath
+    const ext = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : ''
+    const tabKey = `file:${filePath}`
+
+    tabStore.addTab({
+        type: 'file',
+        key: tabKey,
+        name,
+        path: filePath,
+        extension: ext,
+        size: 0,
+    })
+    tabStore.enterPreviewMode()
+    tabStore.selectTab(tabKey)
 }
 
 /**
  * 预览 URL（在内置浏览器中打开）
  *
- * 确保侧边栏可见 + 进入预览模式，然后创建浏览器窗口并激活。
+ * 创建浏览器窗口，setActive 后 tabStore 的 watch 自动同步标签。
  */
 export async function previewUrl(url: string): Promise<void> {
     const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
@@ -148,14 +167,14 @@ export async function previewUrl(url: string): Promise<void> {
             const wasVisible = layoutStore.workspaceVisible
             layoutStore.workspaceVisible = true
 
-            // 侧边栏从隐藏→可见时，WorkspaceSidebar 需要一个 tick 完成挂载并注册 watch
-            // 在此之前 setActive 的 activeWindowId 变化会被错过，导致标签不选中
+            // 侧边栏从隐藏→可见时，WorkspaceSidebar 需要一个 tick 完成挂载
             if (!wasVisible) {
                 await nextTick()
             }
 
-            const store = useBrowserWebviewStore()
-            store.setActive(result.window.windowId)
+            const tabStore = useTabStore()
+            tabStore.enterPreviewMode()
+            tabStore.selectTab(`browser:${result.window.windowId}`)
         }
     } catch (error) {
         console.error('[workspacePreview] Failed to open URL:', error)
@@ -204,6 +223,6 @@ export function preview(target: string): void {
     if (/^https?:\/\//i.test(target)) {
         void previewUrl(target)
     } else {
-        previewFile(target)
+        void previewFile(target)
     }
 }

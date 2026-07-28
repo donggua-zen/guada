@@ -161,7 +161,6 @@ export class DiscordBotAdapter extends BaseBotAdapter {
     }
     
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
   }
 
 

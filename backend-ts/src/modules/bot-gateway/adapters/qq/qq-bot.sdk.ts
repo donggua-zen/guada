@@ -4,6 +4,7 @@
  * 基于QQ官方API实现，支持WebSocket和Webhook两种模式
  * 参考: https://bot.q.qq.com/wiki/
  */
+import { Logger } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 
@@ -175,6 +176,7 @@ interface GatewayResponse {
  * QQ官方机器人客户端
  */
 export class QQBot extends EventEmitter {
+  private readonly logger = new Logger(QQBot.name);
   private config: Required<QQBotConfig>;
   private accessToken: string = '';
   private tokenExpireTime: number = 0;
@@ -259,8 +261,8 @@ export class QQBot extends EventEmitter {
 
       this.emit('token_refreshed');
       return this.accessToken;
-    } catch (error) {
-      console.error('Failed to refresh access token:', error);
+    } catch (error: any) {
+      this.logger.error(`Failed to refresh access token: ${error.message}`);
       throw error;
     }
   }
@@ -326,11 +328,11 @@ export class QQBot extends EventEmitter {
       });
 
       this.ws.on('error', (error: Error) => {
-        console.error('QQ Bot WebSocket error:', error);
+        this.logger.error(`QQ Bot WebSocket error: ${error.message}`);
         this.emit('error', error);
       });
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
+    } catch (error: any) {
+      this.logger.error(`Failed to connect WebSocket: ${error.message}`);
       this.emit('error', error);
       throw error;
     }
@@ -360,8 +362,8 @@ export class QQBot extends EventEmitter {
             ? [5000, 15000, 30000][attempt - 1] || 30000
             : Math.pow(2, attempt - 1) * 1000;
 
-          console.warn(
-            `Get gateway URL failed (attempt ${attempt}/${maxRetries}): ${error.message}. Retrying in ${delay}ms...`
+          this.logger.warn(
+            `Get gateway URL failed (attempt ${attempt}/${maxRetries}): ${error.message}. Retrying in ${delay}ms...`,
           );
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -424,7 +426,7 @@ export class QQBot extends EventEmitter {
    * 开始心跳
    */
   private startHeartbeat(interval: number): void {
-    console.log(`Starting heartbeat with interval ${interval}ms`);
+    this.logger.debug(`Starting heartbeat with interval ${interval}ms`);
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
@@ -444,7 +446,7 @@ export class QQBot extends EventEmitter {
 
         // 设置心跳 ACK 超时检测
         this.heartbeatAckTimeout = setTimeout(() => {
-          console.warn('[QQBot] Heartbeat ACK timeout, connection may be dead');
+          this.logger.warn('Heartbeat ACK timeout, connection may be dead');
           // 强制终止连接，触发 on close 事件让上层重连
           this.ws?.terminate();
         }, this.HEARTBEAT_ACK_TIMEOUT);
@@ -537,7 +539,7 @@ export class QQBot extends EventEmitter {
 
     // 401 鉴权失败：只重置 Token，保留 session 尝试用新 Token RESUME
     if (code === 401) {
-      console.warn('[QQBot] Authentication failed (401), resetting token only');
+      this.logger.warn('Authentication failed (401), resetting token only');
       this.accessToken = '';
       this.tokenExpireTime = 0;
       // sessionId 和 lastSeq 保留，尝试用新 Token RESUME
@@ -631,11 +633,9 @@ export class QQBot extends EventEmitter {
         // 忽略读取错误
       }
 
-      console.error(
-        `Failed to get gateway URL: ${response.status} ${response.statusText}\n` +
-        `Response body: ${errorBody}\n` +
-        `AppId: ${this.config.appId}\n` +
-        `BaseURL: ${this.baseURL}`
+      this.logger.error(
+        `Failed to get gateway URL: ${response.status} ${response.statusText}` +
+        `${errorBody ? `; response body: ${errorBody}` : ''}`,
       );
 
       throw new Error(

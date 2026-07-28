@@ -94,12 +94,12 @@ GET /platforms
     ]
   },
   {
-    "platform": "wechat",
-    "displayName": "微信机器人",
+    "platform": "wechat-personal",
+    "displayName": "微信个人号",
     "icon": "wechat",
-    "description": "接入企业微信或微信公众号",
+    "description": "通过扫码登录接入微信个人号",
     "fields": [
-      // ... 微信的配置字段
+      // ... 微信个人号的配置字段
     ]
   },
   {
@@ -132,7 +132,7 @@ GET /platforms/:platform/fields
 **认证**: 需要登录
 
 **参数**:
-- `platform`: 平台标识 (qq, wechat, discord)
+- `platform`: 平台标识（qq、lark、discord、wecom、wechat-personal、mock）
 
 **说明**: 
 - ⚠️ **此接口已不推荐使用**,因为 `GET /platforms` 已经包含所有平台的字段定义

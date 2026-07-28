@@ -52,6 +52,40 @@ export class BotAdminService {
   }
 
   /**
+   * 获取 Bot 会话列表
+   */
+  async getBotSessions(
+    userId: string,
+    skip: number,
+    limit: number,
+    botId?: string,
+  ) {
+    const where: any = {
+      userId,
+      sessionType: 'bot',
+    };
+    if (botId) where.botId = botId;
+
+    const [items, total] = await Promise.all([
+      this.prisma.session.findMany({
+        where,
+        orderBy: { lastActiveAt: 'desc' },
+        skip,
+        take: limit,
+        include: { character: true },
+      }),
+      this.prisma.session.count({ where }),
+    ]);
+
+    return {
+      items,
+      total,
+      page: Math.floor(skip / limit) + 1,
+      pageSize: limit,
+    };
+  }
+
+  /**
    * 获取单个机器人实例
    */
   async getInstance(id: string) {

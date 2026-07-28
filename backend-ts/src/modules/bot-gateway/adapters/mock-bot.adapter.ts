@@ -1,5 +1,4 @@
 import { Logger } from '@nestjs/common';
-import { Subject } from 'rxjs';
 import {
   BotConfig,
   BotResponse,
@@ -7,7 +6,6 @@ import {
   PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 import { BaseBotAdapter } from './base-bot.adapter';
-import { PlatformUtilsService } from '../services/platform-utils.service';
 
 /**
  * 模拟机器人适配器（用于测试重连机制）
@@ -21,13 +19,6 @@ export class MockBotAdapter extends BaseBotAdapter {
   private readonly logger = new Logger(MockBotAdapter.name);
   // 控制定时器
   private disconnectTimer: NodeJS.Timeout | null = null;
-  private destroy$ = new Subject<void>();
-
-  constructor(
-    private _platformUtils: PlatformUtilsService,
-  ) {
-    super();
-  }
 
   getPlatform(): string {
     return 'mock';
@@ -88,12 +79,7 @@ export class MockBotAdapter extends BaseBotAdapter {
     // 清除定时器
     this.stopDisconnectTimer();
 
-    // 通知所有订阅者销毁
-    this.destroy$.next();
-    this.destroy$.complete();
-
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
     this.logger.log(`Mock bot shutdown completed`);
   }
 

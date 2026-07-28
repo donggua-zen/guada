@@ -245,7 +245,6 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
     }
 
     this.status = BotStatus.STOPPED;
-    this.completeSubjects();
   }
 
   /**

@@ -78,6 +78,7 @@ import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
+import { useTabStore } from "@/stores/tab";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
 import type { Character } from '@/types/character';
@@ -316,6 +317,7 @@ const workspaceSize = computed(() =>
 const layoutStore = useLayoutStore();
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
+const tabStore = useTabStore();
 
 // 登录信息
 const authStore = useAuthStore();
@@ -423,7 +425,7 @@ const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === 'new-session') {
     mainSession.value = null;
     sessionStore.activeSessionId = "new-session";
-    layoutStore.workspacePreviewMode = false;
+    tabStore.exitPreviewMode();
     return;
   }
   sessionStore.activeSessionId = sessionId;
@@ -601,7 +603,7 @@ onMounted(async () => {
 // 工作目录隐藏时重置预览模式状态
 watch(() => layoutStore.workspaceVisible, (visible) => {
   if (!visible) {
-    layoutStore.workspacePreviewMode = false;
+    tabStore.exitPreviewMode();
   }
 });
 

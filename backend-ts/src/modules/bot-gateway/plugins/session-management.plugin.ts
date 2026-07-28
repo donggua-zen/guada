@@ -27,9 +27,11 @@ export class SessionManagementPlugin extends PluginBase {
       id: "session",
       name: "会话管理",
       loadMode: "none",
-      handler: (ctx: any) => ({
+      handler: (ctx: PluginContext) => ({
         loadMode:
-          ctx.sessionType === "bot" ? ("eager" as const) : ("none" as const),
+          ctx?.session?.sessionType === "bot"
+            ? ("eager" as const)
+            : ("none" as const),
       }),
     });
 

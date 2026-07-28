@@ -58,7 +58,7 @@ export interface BotConfig {
   /** 机器人ID */
   id: string;
   /** 平台类型 */
-  platform: 'qq' | 'wechat' | 'discord' | 'lark' | 'wecom' | 'wechat-personal' | 'mock';
+  platform: 'qq' | 'discord' | 'lark' | 'wecom' | 'wechat-personal' | 'mock';
   /** 机器人名称 */
   name: string;
   /** 平台特定配置(包含认证信息和其他平台相关配置) */
