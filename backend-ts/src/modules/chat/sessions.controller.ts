@@ -239,18 +239,18 @@ export class SessionsController {
     return { workspacePath };
   }
 
-  @Get("sessions/:id/plan")
-  async getSessionPlan(@Param("id") id: string, @CurrentUser() user: any) {
+  @Get("sessions/:id/todo")
+  async getSessionTodo(@Param("id") id: string, @CurrentUser() user: any) {
     const session = await this.sessionService.getSessionById(id, user.id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
-    const planFile = path.join(workspacePath, ".guada", "plan", `${id}.json`);
+    const todoFile = path.join(workspacePath, ".guada", "todo", `${id}.json`);
 
     try {
-      const raw = await fsPromises.readFile(planFile, "utf-8");
+      const raw = await fsPromises.readFile(todoFile, "utf-8");
       const store = JSON.parse(raw);
       return { items: store.items || [] };
     } catch (e: any) {

@@ -307,7 +307,13 @@ const extractResultContent = (response: any): any => {
     const parsed = typeof response === 'string' ? partialParse(response) : response;
     if (parsed.content) {
       try {
-        return typeof parsed.content === 'string' ? partialParse(parsed.content) : parsed.content;
+        const parsedContent = typeof parsed.content === 'string' ? partialParse(parsed.content) : parsed.content;
+        // partialParse 会将 "[ ] step1" 等非 JSON 文本误解析为空数组 []
+        // 此时回退到原始字符串
+        if (Array.isArray(parsedContent) && parsedContent.length === 0) {
+          return parsed.content;
+        }
+        return parsedContent;
       } catch {
         return parsed.content;
       }

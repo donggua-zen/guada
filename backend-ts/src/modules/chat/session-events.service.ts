@@ -10,10 +10,9 @@ import {
   SessionDeletedEvent,
   SubAgentCreatedEvent,
   SubAgentClosedEvent,
-  PlanUpdatedEvent,
+  TodoUpdatedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
-
 /**
  * 会话事件类型
  */
@@ -28,7 +27,7 @@ export type SessionEventType =
   | "user_message_created"
   | "sub_agent_create"
   | "sub_agent_closed"
-  | "plan_updated";
+  | "todo_updated";
 
 /**
  * 会话事件
@@ -232,13 +231,13 @@ export class SessionEventsService implements OnModuleDestroy {
   }
 
   /**
-   * 监听内部 plan.updated 事件，转发给 SSE 客户端
+   * 监听内部 todo.updated 事件，转发给 SSE 客户端
    */
-  @OnEvent("plan.updated")
-  handlePlanUpdated(event: PlanUpdatedEvent) {
+  @OnEvent("todo.updated")
+  handleTodoUpdated(event: TodoUpdatedEvent) {
     this.broadcastToUser(
       event.userId,
-      toSessionEvent("plan_updated", event),
+      toSessionEvent("todo_updated", event),
     );
   }
 
