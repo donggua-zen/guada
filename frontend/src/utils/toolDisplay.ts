@@ -129,13 +129,14 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
   },
   browser_screenshot: {
     text: { executing: "正在截图", completed: "已截图" },
+    argsKey: "file_path",
     icon: Window16Regular,
     aggregate: { executing: "正在截图{n}个网页", completed: "已截图{n}个网页" },
   },
 
   image_recognize: {
     text: { executing: "正在识别图片", completed: "已识别图片" },
-    argsKey: "source",
+    argsKey: "image_path",
     icon: EyeTracking16Filled,
     aggregate: { executing: "正在识别{n}张图片", completed: "已识别{n}张图片" },
   },
@@ -210,7 +211,10 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
     text: { executing: "正在搜索知识库", completed: "已搜索知识库" },
     argsKey: "query",
     icon: BookSearch24Regular,
-    aggregate: { executing: "正在搜索{n}次知识库", completed: "已搜索{n}次知识库" },
+    aggregate: {
+      executing: "正在搜索{n}次知识库",
+      completed: "已搜索{n}次知识库",
+    },
   },
   kb_list_files: {
     text: { executing: "正在列出文件", completed: "已列出文件" },
