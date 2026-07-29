@@ -1,38 +1,37 @@
 <template>
     <div class="h-full flex">
         <Teleport v-if="portalReady" to="#settings-sidebar-portal">
-        <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
-        <div class="h-full sidebar-transparent-bg flex flex-col overflow-hidden">
-            <!-- 返回应用 -->
-            <div class="px-3 pt-3 pb-2">
-                <div @click="goBack"
-                    class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover) transition-all duration-200">
-                    <ArrowBackIosNewTwotone class="w-4 h-4" />
-                    <span>返回应用</span>
-                </div>
-            </div>
-            <div class="mx-3 border-t border-gray-100 dark:border-[#2f2f2f]"></div>
-            <!-- 分组列表 -->
-            <ScrollContainer class="flex-1 py-3">
-                <div v-for="group in groupedSidebarItems" :key="group.label" class="mb-2">
-                    <div
-                        class="px-4 pt-2 pb-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                        {{ group.label }}
+            <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
+            <div
+                class="h-full sidebar-transparent-bg flex flex-col overflow-hidden shadow-[inset_-4px_0_12px_rgba(0,0,0,0.03)] dark:shadow-[inset_-4px_0_12px_rgba(0,0,0,0.3)]">
+                <!-- 返回应用 -->
+                <div class="px-3 pt-3 pb-2">
+                    <div @click="goBack"
+                        class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover) transition-all duration-200">
+                        <ArrowBackIosNewTwotone class="w-4 h-4" />
+                        <span>返回应用</span>
                     </div>
-                    <div class="px-2 space-y-1">
-                        <div v-for="item in group.items" :key="item.path"
-                            @click="handleItemClick(item.path)"
-                            class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
-                            :class="currentTabValue === item.path
-                                ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-                                : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
-                            <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
-                            <span class="text-sm font-medium">{{ item.label }}</span>
+                </div>
+                <!-- 分组列表 -->
+                <ScrollContainer class="flex-1 py-3">
+                    <div v-for="group in groupedSidebarItems" :key="group.label" class="mb-2">
+                        <div
+                            class="px-4 pt-2 pb-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+                            {{ group.label }}
+                        </div>
+                        <div class="px-2 space-y-1">
+                            <div v-for="item in group.items" :key="item.path" @click="handleItemClick(item.path)"
+                                class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
+                                :class="currentTabValue === item.path
+                                    ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
+                                    : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+                                <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
+                                <span class="text-sm font-medium">{{ item.label }}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </ScrollContainer>
-        </div>
+                </ScrollContainer>
+            </div>
         </Teleport>
 
         <!-- 内容区 -->

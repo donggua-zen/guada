@@ -29,13 +29,7 @@
                 <template #icon>
                   <PlusOutlined />
                 </template>
-                手动添加
-              </el-button>
-              <el-button type="primary" @click="handleFetchModels">
-                <template #icon>
-                  <CloudDownloadOutlined />
-                </template>
-                获取模型列表
+                添加模型
               </el-button>
             </el-space>
           </div>
@@ -198,7 +192,17 @@
 
             <div class="form-section">
               <el-form-item label="模型名称" prop="modelName">
-                <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable />
+                <div class="api-key-input-wrapper">
+                  <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable
+                    :disabled="isEditMode" />
+                  <el-button v-if="!isEditMode" type="primary" @click="handleFetchModels"
+                    :loading="fetchingModels">
+                    <template #icon>
+                      <CloudDownloadOutlined />
+                    </template>
+                    从供应商获取
+                  </el-button>
+                </div>
               </el-form-item>
 
               <el-form-item label="模型类型" prop="modelType">
@@ -320,7 +324,7 @@
       </el-dialog>
 
       <!-- 获取模型列表的模态框 -->
-      <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center
+      <el-dialog v-model="showFetchModal" title="从供应商获取模型" width="600px" align-center
         class="model-fetch-dialog dialog-with-scroll" append-to-body>
         <div class="dialog-content">
           <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
@@ -339,71 +343,29 @@
             </el-icon>
           </div>
           <div v-else class="pb-4">
-            <!-- 已添加的模型 -->
-            <div v-if="filteredAddedModels.length > 0" class="mb-6">
-              <h3 class="text-xs font-bold text-green-600 uppercase tracking-wider mb-3 ml-1">已添加的模型</h3>
+            <div v-if="filteredFetchedModels.length > 0">
               <ul
                 class="rounded-lg border border-gray-100 dark:border-[#2e3035] divide-y divide-gray-100 dark:divide-[#2e3035]">
-                <li v-for="model in filteredAddedModels" :key="model.id"
-                  class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
-                  <div class="flex-1 min-w-0 mr-4">
-                    <div class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}
-                    </div>
-                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-                      <span
-                        class="px-1.5 py-0.5 rounded bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">
-                        {{ model.modelType === 'text' ? '对话' : '嵌入' }}
-                      </span>
-                      <template v-for="feature in (model.config?.features || [])" :key="feature">
-                        <el-tooltip :content="getLableName(feature)" placement="top">
-                          <el-icon class="hover:text-primary transition-colors" :size="14">
-                            <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                            <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                            <ScienceOutlined v-else />
-                          </el-icon>
-                        </el-tooltip>
-                      </template>
-                    </div>
+                <li v-for="model in filteredFetchedModels" :key="model.modelName"
+                  class="flex items-center justify-between py-2 px-4 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
+                  <div class="flex items-center gap-2 flex-1 min-w-0 mr-4">
+                    <span class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}</span>
+                    <span v-if="model.modelType !== 'text'"
+                      class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium text-xs">
+                      嵌入
+                    </span>
+                    <template v-for="feature in (model.config?.features || [])" :key="feature">
+                      <el-tooltip :content="getLableName(feature)" placement="top">
+                        <el-icon class="hover:text-primary transition-colors" :size="14">
+                          <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                          <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                          <ScienceOutlined v-else />
+                        </el-icon>
+                      </el-tooltip>
+                    </template>
                   </div>
-                  <el-button type="danger" link size="small" @click="handleRemoveFromFetch(model)">
-                    <el-icon>
-                      <RemoveCircleTwotone />
-                    </el-icon>
-                  </el-button>
-                </li>
-              </ul>
-            </div>
-
-            <!-- 可添加的模型 -->
-            <div v-if="filteredAvailableModels.length > 0">
-              <h3 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 ml-1">可添加的模型</h3>
-              <ul
-                class="rounded-lg border border-gray-100 dark:border-[#2e3035] divide-y divide-gray-100 dark:divide-[#2e3035]">
-                <li v-for="model in filteredAvailableModels" :key="model.modelName"
-                  class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
-                  <div class="flex-1 min-w-0 mr-4">
-                    <div class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}
-                    </div>
-                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-                      <span
-                        class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
-                        {{ model.modelType === 'text' ? '对话' : '嵌入' }}
-                      </span>
-                      <template v-for="feature in (model.config?.features || [])" :key="feature">
-                        <el-tooltip :content="getLableName(feature)" placement="top">
-                          <el-icon class="hover:text-primary transition-colors" :size="14">
-                            <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                            <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                            <ScienceOutlined v-else />
-                          </el-icon>
-                        </el-tooltip>
-                      </template>
-                    </div>
-                  </div>
-                  <el-button link type="primary" size="small" @click="handleAddFromFetch(model)">
-                    <el-icon>
-                      <AddCircleTwotone />
-                    </el-icon>
+                  <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
+                    选择
                   </el-button>
                 </li>
               </ul>
@@ -426,8 +388,8 @@ import { ScrollContainer } from '../ui'
 import ModelsProviderList from '../setting/ModelsProviderList.vue'
 import Avatar from '../ui/Avatar.vue'
 import {
-  SettingsOutlined, RemoveCircleOutlineRound, AddCircleTwotone,
-  RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined,
+  SettingsOutlined, RemoveCircleOutlineRound,
+  SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined,
   LinkOutlined
 } from '@vicons/material'
 import {
@@ -940,49 +902,25 @@ const fetchModelsFromAPI = async () => {
   return data.items
 }
 
-// 从获取列表中添加模型
-const handleAddFromFetch = async (model: any) => {
-  try {
-    // 调用后台新增模型API
-    const newModel = await apiService.createModel({
-      ...model,
-      providerId: currentProviderId.value
-    })
-
-    const currentModel = fetchedModels.value.find(m => m.modelName === model.modelName)
-    if (currentModel) {
-      // 如果已存在，则更新ID
-      currentModel.id = newModel.id
+// 从获取列表中选择模型（预填充到编辑表单，不调用API）
+const handleSelectFromFetch = (model: any) => {
+  editModelForm.value = {
+    modelName: model.modelName || '',
+    modelType: model.modelType || 'text',
+    config: {
+      inputCapabilities: model.config?.inputCapabilities || ['text'],
+      outputCapabilities: model.config?.outputCapabilities || ['text'],
+      features: model.config?.features || [],
+      contextWindow: model.config?.contextWindow || null,
+      maxOutputTokens: model.config?.maxOutputTokens || null,
+      temperature: model.config?.temperature ?? null,
+      topP: model.config?.topP ?? null,
+      frequencyPenalty: model.config?.frequencyPenalty ?? null,
+      customParameters: model.config?.customParameters || {},
+      vectorDimensions: model.config?.vectorDimensions || null
     }
-
-    // 添加到本地数据
-    models.value.push(newModel)
-
-    // 触发响应式更新
-    models.value = [...models.value]
-
-    notify.success('添加成功', `模型 ${model.modelName} 已添加到列表`, { duration: 2000 })
-  } catch (error) {
-    notify.error('添加失败', '添加模型时发生错误', { duration: 2000 })
   }
-}
-
-// 从获取列表中移除模型
-const handleRemoveFromFetch = async (model: any) => {
-  try {
-    // 调用后台移除模型API
-    await apiService.deleteModel(model.id)
-
-    // 从本地数据中移除
-    const index = models.value.findIndex(m => m.modelName === model.modelName && m.providerId === currentProviderId.value)
-    if (index >= 0) {
-      models.value.splice(index, 1)
-      models.value = [...models.value]
-      notify.success('移除成功', `模型 ${model.modelName} 已从列表中移除`, { duration: 2000 })
-    }
-  } catch (error) {
-    notify.error('移除失败', '移除模型时发生错误', { duration: 2000 })
-  }
+  showFetchModal.value = false
 }
 
 // 新增模型
@@ -1292,20 +1230,6 @@ const filteredFetchedModels = computed(() => {
   const searchTerm = searchModelName.value.toLowerCase()
   return fetchedModels.value.filter(model =>
     model.modelName.toLowerCase().includes(searchTerm)
-  )
-})
-
-const filteredAddedModels = computed(() => {
-  const currentModelNames = currentModels.value.map(m => m.modelName)
-  return filteredFetchedModels.value.filter(model =>
-    currentModelNames.includes(model.modelName)
-  )
-})
-
-const filteredAvailableModels = computed(() => {
-  const currentModelNames = currentModels.value.map(m => m.modelName)
-  return filteredFetchedModels.value.filter(model =>
-    !currentModelNames.includes(model.modelName)
   )
 })
 

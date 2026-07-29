@@ -24,8 +24,15 @@ import { ConfigModule } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { SharedModule } from "../src/common/services/shared.module";
 import { LlmCoreModule } from "../src/modules/llm-core/providers.module";
-import { CompressionEngine, SummaryMode } from "../src/modules/chat/compression-engine";
-import { SessionContextStateRepository, CompressionState, CompressionStats } from "../src/common/database/session-context-state.repository";
+import {
+  CompressionEngine,
+  SummaryMode,
+} from "../src/modules/chat/compression-engine";
+import {
+  SessionContextStateRepository,
+  CompressionState,
+  CompressionStats,
+} from "../src/common/database/session-context-state.repository";
 import { TokenizerService } from "../src/common/utils/tokenizer.service";
 import { CompressionConfig } from "../src/modules/chat/interfaces";
 import { MessageRecord } from "../src/modules/llm-core/types/llm.types";
@@ -45,10 +52,18 @@ const C = {
   dim: "\x1b[2m",
 };
 
-function info(msg: string) { console.log(`${C.blue}ℹ️  ${msg}${C.reset}`); }
-function success(msg: string) { console.log(`${C.green}${msg}${C.reset}`); }
-function warn(msg: string) { console.log(`${C.yellow}⚠️  ${msg}${C.reset}`); }
-function error(msg: string) { console.log(`${C.red}❌ ${msg}${C.reset}`); }
+function info(msg: string) {
+  console.log(`${C.blue}ℹ️  ${msg}${C.reset}`);
+}
+function success(msg: string) {
+  console.log(`${C.green}${msg}${C.reset}`);
+}
+function warn(msg: string) {
+  console.log(`${C.yellow}⚠️  ${msg}${C.reset}`);
+}
+function error(msg: string) {
+  console.log(`${C.red}❌ ${msg}${C.reset}`);
+}
 function divider(title?: string) {
   const line = "─".repeat(60);
   if (title) {
@@ -76,9 +91,14 @@ function ask(question: string): Promise<string> {
     : Promise.resolve("");
 }
 
-async function confirm(msg: string, defaultYes: boolean = true): Promise<boolean> {
+async function confirm(
+  msg: string,
+  defaultYes: boolean = true,
+): Promise<boolean> {
   if (AUTO_MODE) {
-    console.log(`  ${C.dim}[自动模式] ${msg} → ${defaultYes ? "Y（继续）" : "N（跳过）"}${C.reset}`);
+    console.log(
+      `  ${C.dim}[自动模式] ${msg} → ${defaultYes ? "Y（继续）" : "N（跳过）"}${C.reset}`,
+    );
     return defaultYes;
   }
   const hint = defaultYes ? "Y/n" : "y/N";
@@ -120,11 +140,17 @@ class LocalStateRepo {
 
   private save(): void {
     if (!this.dirty) return;
-    fs.writeFileSync(this._filePath, JSON.stringify(this.data, null, 2), "utf-8");
+    fs.writeFileSync(
+      this._filePath,
+      JSON.stringify(this.data, null, 2),
+      "utf-8",
+    );
     this.dirty = false;
   }
 
-  get filePath(): string { return this._filePath; }
+  get filePath(): string {
+    return this._filePath;
+  }
 
   async findBySessionId(sessionId: string): Promise<CompressionState | null> {
     this.data = this.load(); // reload to pick up external changes
@@ -215,7 +241,9 @@ interface ExportedSessionData {
  * 将导出的 Message（含 contents 数组）转为 MessageRecord[]
  * 模仿 MessageStoreService.transformContentStructure 的逻辑
  */
-function toMessageRecords(exportedMessages: ExportedMessage[]): MessageRecord[] {
+function toMessageRecords(
+  exportedMessages: ExportedMessage[],
+): MessageRecord[] {
   const records: MessageRecord[] = [];
 
   for (const msg of exportedMessages) {
@@ -325,17 +353,28 @@ function loadMemoryIndex(workspace: string): MemoryIndex {
   if (fs.existsSync(p)) {
     try {
       return JSON.parse(fs.readFileSync(p, "utf-8"));
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
   return { memos: [], lastUpdated: new Date() };
 }
 
 function saveMemoryIndex(workspace: string, idx: MemoryIndex): void {
   fs.mkdirSync(memoryDir(workspace), { recursive: true });
-  fs.writeFileSync(memoryIndexPath(workspace), JSON.stringify(idx, null, 2), "utf-8");
+  fs.writeFileSync(
+    memoryIndexPath(workspace),
+    JSON.stringify(idx, null, 2),
+    "utf-8",
+  );
 }
 
-function memoryCapacity(workspace: string): { percent: number; used: number; limit: number; overLimit: boolean } {
+function memoryCapacity(workspace: string): {
+  percent: number;
+  used: number;
+  limit: number;
+  overLimit: boolean;
+} {
   const limit = 3000;
   const idx = loadMemoryIndex(workspace);
   const used = (idx.factual || "").length;
@@ -362,7 +401,7 @@ async function executeMemoryTool(
       if (target === "factual") {
         idx.factual = idx.factual
           ? `${idx.factual}\n${content || ""}`
-          : (content || "");
+          : content || "";
       } else if (target === "memo") {
         const title = memo_title || `memo-${Date.now()}`;
         const memoPath = path.join(memosDir(workspace), `${title}.md`);
@@ -373,7 +412,11 @@ async function executeMemoryTool(
           existing.content = content || "";
           existing.mtimeMs = Date.now();
         } else {
-          idx.memos.push({ title, content: content || "", mtimeMs: Date.now() });
+          idx.memos.push({
+            title,
+            content: content || "",
+            mtimeMs: Date.now(),
+          });
         }
       }
       idx.lastUpdated = new Date();
@@ -390,20 +433,29 @@ async function executeMemoryTool(
     }
     case "replace": {
       if (target === "factual" && idx.factual && old_text) {
-        const newContent = content !== undefined && content !== null
-          ? idx.factual.replace(old_text, content)
-          : idx.factual.replace(old_text, "");
+        const newContent =
+          content !== undefined && content !== null
+            ? idx.factual.replace(old_text, content)
+            : idx.factual.replace(old_text, "");
         if (newContent === idx.factual) {
-          return { success: false, message: `未找到匹配的旧文本: "${old_text}"` };
+          return {
+            success: false,
+            message: `未找到匹配的旧文本: "${old_text}"`,
+          };
         }
         idx.factual = newContent;
       } else if (target === "memo") {
-        const memoPath = path.join(memosDir(workspace), `${memo_title || "unknown"}.md`);
+        const memoPath = path.join(
+          memosDir(workspace),
+          `${memo_title || "unknown"}.md`,
+        );
         if (!fs.existsSync(memoPath)) {
           return { success: false, message: `备忘录 "${memo_title}" 不存在` };
         }
         fs.writeFileSync(memoPath, content || "", "utf-8");
-        const existing = idx.memos.find((m) => m.title === (memo_title || "unknown"));
+        const existing = idx.memos.find(
+          (m) => m.title === (memo_title || "unknown"),
+        );
         if (existing) {
           existing.content = content || "";
           existing.mtimeMs = Date.now();
@@ -423,7 +475,12 @@ async function executeMemoryTool(
         return { success: false, message: "search 仅支持 memos 目标" };
       }
       const results = idx.memos
-        .filter((m) => !pattern || m.title.includes(pattern) || m.content.includes(pattern))
+        .filter(
+          (m) =>
+            !pattern ||
+            m.title.includes(pattern) ||
+            m.content.includes(pattern),
+        )
         .map((m) => ({ title: m.title, content: m.content }));
       return { success: true, results };
     }
@@ -435,7 +492,7 @@ async function executeMemoryTool(
 // ── 影子轮次：记忆保存 ──────────────────────────────────────
 // 模拟 AgentEngine.runMemorySaveShadowTurn
 
-const SHADOW_SYSTEM_PROMPT = `<system>
+const SHADOW_SYSTEM_PROMPT = `<system-reminder>
 [BEGIN SILENT SYSTEM PROCESS - MEMORY MAINTENANCE]
 ⚠️ CRITICAL MODE SWITCH: You are currently executing a background system routine.
 You are NOT in a conversation with the user. Do not attempt to answer the user's previous prompt in this specific turn.
@@ -468,7 +525,7 @@ Scan history. ONLY trigger an update if:
 - Any other text (including explanations, apologies, or reasoning) will cause a system error.
 - Do not worry about the user's pending questions; the system will return to normal mode after receiving "DONE".
 [END SILENT SYSTEM PROCESS]
-</system>`;
+</system-reminder>`;
 
 async function runShadowTurn(
   llmService: LLMService,
@@ -491,24 +548,40 @@ async function runShadowTurn(
   }
 
   const shadowMsgs: MessageRecord[] = [
-    { role: "user", messageId: "shadow-0", contentId: "shadow-0", content: SHADOW_SYSTEM_PROMPT },
+    {
+      role: "user",
+      messageId: "shadow-0",
+      contentId: "shadow-0",
+      content: SHADOW_SYSTEM_PROMPT,
+    },
   ];
 
   // 日志：打印历史末尾 5 条消息结构，用于诊断 tool_calls 孤立问题
   const lastN = 5;
   const tail = cleanHistory.slice(-lastN);
-  console.log(`    ${C.dim}[DEBUG] history 共 ${cleanHistory.length} 条, 末尾 ${lastN} 条:${C.reset}`);
+  console.log(
+    `    ${C.dim}[DEBUG] history 共 ${cleanHistory.length} 条, 末尾 ${lastN} 条:${C.reset}`,
+  );
   for (const m of tail) {
     const hasTc = m.toolCalls?.length ? `toolCalls[${m.toolCalls.length}]` : "";
     const hasTid = m.toolCallId ? `toolCallId=${m.toolCallId}` : "";
-    const contentRaw = typeof m.content === "string" ? m.content : Array.isArray(m.content) ? JSON.stringify(m.content) : "";
+    const contentRaw =
+      typeof m.content === "string"
+        ? m.content
+        : Array.isArray(m.content)
+          ? JSON.stringify(m.content)
+          : "";
     const contentPreview = contentRaw.slice(0, 60).replace(/\n/g, "\\n");
-    console.log(`      ${C.dim}  ${m.role.padEnd(10)} ${hasTc} ${hasTid} "${contentPreview}"${C.reset}`);
+    console.log(
+      `      ${C.dim}  ${m.role.padEnd(10)} ${hasTc} ${hasTid} "${contentPreview}"${C.reset}`,
+    );
   }
 
   const MAX_ROUNDS = 5;
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-    console.log(`    ${C.cyan}[影子轮次 Round ${round}/${MAX_ROUNDS}]${C.reset}`);
+    console.log(
+      `    ${C.cyan}[影子轮次 Round ${round}/${MAX_ROUNDS}]${C.reset}`,
+    );
     try {
       const response = await llmService.completions({
         model: modelConfig?.modelName || "deepseek-v4-flash",
@@ -525,15 +598,21 @@ async function runShadowTurn(
 
       // 打印 AI 的思考过程与输出（完整输出，不截断）
       if (reasoning) {
-        console.log(`      ${C.dim}💭 思考:\n          ${reasoning.replace(/\n/g, "\n          ")}${C.reset}`);
+        console.log(
+          `      ${C.dim}💭 思考:\n          ${reasoning.replace(/\n/g, "\n          ")}${C.reset}`,
+        );
       }
       if (content) {
-        console.log(`      ${C.cyan}📝 输出:\n          ${content.replace(/\n/g, "\n          ")}${C.reset}`);
+        console.log(
+          `      ${C.cyan}📝 输出:\n          ${content.replace(/\n/g, "\n          ")}${C.reset}`,
+        );
       }
       if (toolCalls?.length) {
         console.log(`      ${C.yellow}AI 工具调用:${C.reset}`);
         for (const tc of toolCalls) {
-          console.log(`        ${C.bold}${tc.name}${C.reset}(${JSON.stringify(tc.arguments)})`);
+          console.log(
+            `        ${C.bold}${tc.name}${C.reset}(${JSON.stringify(tc.arguments)})`,
+          );
         }
       }
 
@@ -556,11 +635,19 @@ async function runShadowTurn(
         for (const tc of toolCalls) {
           let args: any = {};
           try {
-            args = typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments;
-          } catch { args = {}; }
+            args =
+              typeof tc.arguments === "string"
+                ? JSON.parse(tc.arguments)
+                : tc.arguments;
+          } catch {
+            args = {};
+          }
           const result = await executeMemoryTool(args, workspacePath);
-          const resultStr = typeof result === "string" ? result : JSON.stringify(result);
-          console.log(`      ${C.green}工具结果: ${resultStr.slice(0, 200)}${C.reset}`);
+          const resultStr =
+            typeof result === "string" ? result : JSON.stringify(result);
+          console.log(
+            `      ${C.green}工具结果: ${resultStr.slice(0, 200)}${C.reset}`,
+          );
           shadowMsgs.push({
             role: "tool",
             toolCallId: tc.id,
@@ -576,7 +663,9 @@ async function runShadowTurn(
         break;
       }
     } catch (err: any) {
-      console.log(`    ${C.red}[影子轮次 Round ${round} 失败: ${err.message}]${C.reset}`);
+      console.log(
+        `    ${C.red}[影子轮次 Round ${round} 失败: ${err.message}]${C.reset}`,
+      );
       break;
     }
   }
@@ -596,7 +685,9 @@ async function runShadowTurn(
       }) + "\n",
       "utf-8",
     );
-  } catch { /* non-critical */ }
+  } catch {
+    /* non-critical */
+  }
 }
 
 // ── 记忆容量信息显示（注入到压缩摘要日志中） ────────────────
@@ -622,7 +713,9 @@ async function main() {
   const jsonPath = process.argv[2];
   if (!jsonPath) {
     error("用法: npx ts-node scripts/compress-replay.ts <json-path>");
-    error("示例: npx ts-node scripts/compress-replay.ts scripts/data/session-xxx.json");
+    error(
+      "示例: npx ts-node scripts/compress-replay.ts scripts/data/session-xxx.json",
+    );
     process.exit(1);
   }
 
@@ -659,7 +752,7 @@ async function main() {
 
   info(
     `压缩配置: triggerRatio=${triggerRatio}, targetRatio=${targetRatio}, ` +
-    `contextWindow=${fmtTokens(contextWindow)}, summaryMode=${summaryModeStr}`,
+      `contextWindow=${fmtTokens(contextWindow)}, summaryMode=${summaryModeStr}`,
   );
 
   if (!provider) {
@@ -677,7 +770,7 @@ async function main() {
   if (existingState) {
     info(
       `已有压缩状态: strategy=${existingState.cleaningStrategy || "N/A"}, ` +
-      `summary=${existingState.summaryContent?.length || 0}chars`,
+        `summary=${existingState.summaryContent?.length || 0}chars`,
     );
   } else {
     info("无历史压缩状态，将从头开始模拟");
@@ -763,7 +856,9 @@ async function main() {
 
   if (resolvedDbPath) {
     console.log(`  ${C.cyan}[DB诊断] 数据库路径: ${resolvedDbPath}${C.reset}`);
-    console.log(`  ${C.cyan}[DB诊断] 文件存在: ${fs.existsSync(resolvedDbPath)}${C.reset}`);
+    console.log(
+      `  ${C.cyan}[DB诊断] 文件存在: ${fs.existsSync(resolvedDbPath)}${C.reset}`,
+    );
 
     try {
       const Database = require("better-sqlite3");
@@ -771,9 +866,13 @@ async function main() {
 
       // 检查表结构
       const tables = db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('model_provider','model') ORDER BY name")
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('model_provider','model') ORDER BY name",
+        )
         .all() as any[];
-      console.log(`  ${C.cyan}[DB诊断] model_provider/model 表: ${tables.map(t => t.name).join(', ')}${C.reset}`);
+      console.log(
+        `  ${C.cyan}[DB诊断] model_provider/model 表: ${tables.map((t) => t.name).join(", ")}${C.reset}`,
+      );
 
       // 列出所有 provider
       const allProvs = db
@@ -788,14 +887,18 @@ async function main() {
         .get("deepseek") as any;
 
       if (prov) {
-        console.log(`  ${C.green}[DB诊断] 找到 deepseek: id=${prov.id}, api_key_length=${prov.api_key ? prov.api_key.length : 0}${C.reset}`);
+        console.log(
+          `  ${C.green}[DB诊断] 找到 deepseek: id=${prov.id}, api_key_length=${prov.api_key ? prov.api_key.length : 0}${C.reset}`,
+        );
 
         // 列出该供应商下所有模型
         const allMdls = db
           .prepare("SELECT model_name FROM model WHERE provider_id = ?")
           .all(prov.id) as any[];
         const mdlNames = allMdls.map((m: any) => m.model_name).join(", ");
-        console.log(`  ${C.cyan}[DB诊断] deepseek 下模型: ${mdlNames}${C.reset}`);
+        console.log(
+          `  ${C.cyan}[DB诊断] deepseek 下模型: ${mdlNames}${C.reset}`,
+        );
 
         // 2) 精确查找 deepseek-v4-flash
         const mdl = db
@@ -816,7 +919,9 @@ async function main() {
             config: safeJson(prov.config),
           };
           effectiveModelConfig = safeJson(mdl.config);
-          info(`✅ 从数据库读取 deepseek 供应商 API Key（${effectiveModelName}）`);
+          info(
+            `✅ 从数据库读取 deepseek 供应商 API Key（${effectiveModelName}）`,
+          );
         } else {
           warn("数据库中未找到 deepseek-v4-flash 模型");
         }
@@ -877,15 +982,18 @@ async function main() {
     // 获取当前 Token 数
     let currentTokens = 0;
     try {
-      currentTokens = await moduleRef
-        .get(TokenizerService)
-        .countTokens(chatModelName, history.filter((m) => m.role !== "system"));
-    } catch { /* ignore */ }
+      currentTokens = await moduleRef.get(TokenizerService).countTokens(
+        chatModelName,
+        history.filter((m) => m.role !== "system"),
+      );
+    } catch {
+      /* ignore */
+    }
 
     console.log(
       `[msg#${i + 1}/${allMessages.length}] ${msg.role.padEnd(10)} ` +
-      `${C.dim}msgs=${history.length}, tokens=${fmtTokens(currentTokens)}${C.reset}, ` +
-      `${shouldCompress ? C.yellow + "⚡ COMPRESS" : C.green + "✓ OK"}${C.reset}`,
+        `${C.dim}msgs=${history.length}, tokens=${fmtTokens(currentTokens)}${C.reset}, ` +
+        `${shouldCompress ? C.yellow + "⚡ COMPRESS" : C.green + "✓ OK"}${C.reset}`,
     );
 
     if (!shouldCompress) continue;
@@ -894,8 +1002,10 @@ async function main() {
 
     // 执行压缩前保存当前状态快照
     const beforeLen = history.length;
-    const beforeTokens = await (moduleRef.get(TokenizerService))
-      .countTokens(chatModelName, history.filter((m) => m.role !== "system"));
+    const beforeTokens = await moduleRef.get(TokenizerService).countTokens(
+      chatModelName,
+      history.filter((m) => m.role !== "system"),
+    );
 
     // ── 执行压缩 ──
     divider(`压缩 [第 ${compressionRound} 轮] @ msg#${i + 1}`);
@@ -936,7 +1046,9 @@ async function main() {
           .countTokens(chatModelName, [
             { role: "user", content: currentCheckpoint.summaryContent },
           ]);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     const tokenBreakdown = {
       total: beforeTokens + summaryTokens,
@@ -970,27 +1082,43 @@ async function main() {
     const afterTokens = result.tokenCount ?? 0;
 
     console.log(`  ${C.bold}压缩后:${C.reset}`);
-    console.log(`    消息数:     ${afterLen} (${beforeLen - afterLen} 条被压缩)`);
-    console.log(`    Token 数:   ${fmtTokens(afterTokens)} (${fmtTokens(beforeTokens - afterTokens)} 减少)`);
-    console.log(`    压缩率:     ${fmtPercent(beforeTokens - afterTokens, beforeTokens)}`);
+    console.log(
+      `    消息数:     ${afterLen} (${beforeLen - afterLen} 条被压缩)`,
+    );
+    console.log(
+      `    Token 数:   ${fmtTokens(afterTokens)} (${fmtTokens(beforeTokens - afterTokens)} 减少)`,
+    );
+    console.log(
+      `    压缩率:     ${fmtPercent(beforeTokens - afterTokens, beforeTokens)}`,
+    );
 
     const stats = result.compressionStats;
     if (stats) {
       console.log(`  ${C.bold}阶段统计:${C.reset}`);
-      console.log(`    Stage 1 (裁剪):  ${fmtTokens(stats.beforeTokenCount ?? beforeTokens)} → ${fmtTokens(stats.afterTokenCount ?? afterTokens)}`);
+      console.log(
+        `    Stage 1 (裁剪):  ${fmtTokens(stats.beforeTokenCount ?? beforeTokens)} → ${fmtTokens(stats.afterTokenCount ?? afterTokens)}`,
+      );
       if (result.strategy === "summarized") {
         console.log(`    Stage 2 (摘要):  ✓ 已执行`);
         const summaryFull = (result.summary || "").trim();
         const summaryChars = summaryFull.length;
         let summaryTokens = 0;
         try {
-          summaryTokens = await moduleRef.get(TokenizerService).countTokens(chatModelName, [{ role: "user", content: summaryFull }]);
-        } catch { /* ignore */ }
+          summaryTokens = await moduleRef
+            .get(TokenizerService)
+            .countTokens(chatModelName, [
+              { role: "user", content: summaryFull },
+            ]);
+        } catch {
+          /* ignore */
+        }
         console.log(`    ${C.bold}摘要信息:${C.reset}`);
         console.log(`      字符数:     ${summaryChars}`);
         console.log(`      Token 数:   ${summaryTokens}`);
         console.log(`    ${C.bold}摘要完整输出:${C.reset}`);
-        console.log(`      ${C.dim}${summaryFull.replace(/\n/g, "\n      ")}${C.reset}`);
+        console.log(
+          `      ${C.dim}${summaryFull.replace(/\n/g, "\n      ")}${C.reset}`,
+        );
         totalSummaryTokens += afterTokens;
       } else {
         console.log(`    Stage 2 (摘要):  ✗ 跳过（裁剪已达标）`);
@@ -1000,7 +1128,9 @@ async function main() {
     totalPrunedTokens += beforeTokens - afterTokens;
 
     console.log(`  ${C.bold}策略:${C.reset} ${result.strategy || "N/A"}`);
-    console.log(`  ${C.bold}压缩状态文件:${C.reset} ${localStateRepo.filePath}`);
+    console.log(
+      `  ${C.bold}压缩状态文件:${C.reset} ${localStateRepo.filePath}`,
+    );
 
     // 更新 history 为压缩后的消息
     history.length = 0;
@@ -1025,25 +1155,34 @@ async function main() {
   // ── 7. 总结输出 ──────────────────────────────────────────
   divider("最终总结");
 
-  const finalTokens = history.length > 0
-    ? await (moduleRef.get(TokenizerService))
-        .countTokens(chatModelName, history.filter((m) => m.role !== "system"))
-    : 0;
+  const finalTokens =
+    history.length > 0
+      ? await moduleRef.get(TokenizerService).countTokens(
+          chatModelName,
+          history.filter((m) => m.role !== "system"),
+        )
+      : 0;
 
   console.log(`  ${C.bold}压缩轮次:${C.reset}     ${compressionRound}`);
   console.log(`  ${C.bold}最终消息数:${C.reset}   ${history.length}`);
   console.log(`  ${C.bold}最终 Token:${C.reset}   ${fmtTokens(finalTokens)}`);
   if (compressionRound > 0) {
-    console.log(`  ${C.bold}累计裁剪:${C.reset}     ${fmtTokens(totalPrunedTokens)} tokens`);
+    console.log(
+      `  ${C.bold}累计裁剪:${C.reset}     ${fmtTokens(totalPrunedTokens)} tokens`,
+    );
   }
 
   // 显示最终摘要
   const finalCheckpoint = await engine.getCheckpoint(sessionId);
   if (finalCheckpoint?.summaryContent) {
     console.log(`\n  ${C.bold}最终摘要:${C.reset}`);
-    console.log(`  ${C.dim}${finalCheckpoint.summaryContent.slice(0, 500).replace(/\n/g, "\n  ")}${C.reset}`);
+    console.log(
+      `  ${C.dim}${finalCheckpoint.summaryContent.slice(0, 500).replace(/\n/g, "\n  ")}${C.reset}`,
+    );
     if (finalCheckpoint.summaryContent.length > 500) {
-      console.log(`  ${C.dim}... (共 ${finalCheckpoint.summaryContent.length} 字符, 已截断)${C.reset}`);
+      console.log(
+        `  ${C.dim}... (共 ${finalCheckpoint.summaryContent.length} 字符, 已截断)${C.reset}`,
+      );
     }
   }
 

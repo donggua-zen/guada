@@ -29,7 +29,7 @@
             <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="top">
               <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 头像设置 -->
-                <el-form-item prop="avatarUrl" class="!mb-0">
+                <el-form-item prop="avatarUrl" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色头像 <span class="text-xs text-gray-400">(可选)</span></span>
@@ -40,7 +40,7 @@
                   </div>
                 </el-form-item>
                 <!-- 角色标题 -->
-                <el-form-item prop="title" class="!mb-0">
+                <el-form-item prop="title" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色标题</span>
@@ -52,7 +52,7 @@
                   </div>
                 </el-form-item>
                 <!-- 角色描述 -->
-                <el-form-item prop="description" class="!mb-0">
+                <el-form-item prop="description" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色描述 <span class="text-xs text-gray-400">(可选)</span></span>
@@ -65,7 +65,7 @@
                   </div>
                 </el-form-item>
                 <!-- 分组设置 -->
-                <el-form-item prop="groupId" class="!mb-0">
+                <el-form-item prop="groupId" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">分组设置 <span class="text-xs text-gray-400">(可选)</span></span>
@@ -84,11 +84,11 @@
 
               <!-- 模型选择 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                <el-form-item prop="modelId" class="!mb-0">
+                <el-form-item prop="modelId" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">模型选择 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">为此助手指定专用的 AI 模型，留空则使用默认模型</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">为此助手指定专用的 AI 模型，留空则使用默认模型。修改模型配置不会同步修改已经创建的会话。</span>
                     </div>
                     <div class="w-1/2">
                       <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型" clearable
@@ -101,7 +101,7 @@
               <!-- 记忆与压缩 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 触发阈值 -->
-                <el-form-item prop="compressionTriggerRatio" class="!mb-0">
+                <el-form-item prop="compressionTriggerRatio" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">触发阈值</span>
@@ -114,7 +114,7 @@
                   </div>
                 </el-form-item>
                 <!-- 保留目标 -->
-                <el-form-item prop="compressionTargetRatio" class="!mb-0">
+                <el-form-item prop="compressionTargetRatio" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">保留目标</span>
@@ -127,7 +127,7 @@
                   </div>
                 </el-form-item>
                 <!-- 摘要模式 -->
-                <el-form-item prop="summaryMode" class="!mb-0">
+                <el-form-item prop="summaryMode" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">摘要模式</span>
@@ -163,9 +163,6 @@
                 <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
                 <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
                 <p class="text-sm">• 记忆同步：开启后将历史对话压缩为结构化记忆，保持长期一致性；关闭后仅裁剪工具结果</p>
-              </el-alert>
-              <el-alert title="提示" type="warning" :closable="false" show-icon style="margin-top: 16px;">
-                修改模型配置不会同步修改已经创建的会话。新会话将自动继承当前配置。
               </el-alert>
             </el-form>
           </div>

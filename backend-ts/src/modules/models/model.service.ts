@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomBytes } from "crypto";
 import { ModelRepository } from "../../common/database/model.repository";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
@@ -169,24 +170,8 @@ export class ModelService {
   }
 
   /**
-   * 生成标准化的模型 ID
-   * 格式: {provider}/{modelName}
-   * @param providerType 供应商类型（如 deepseek, openai）
-   * @param modelName 模型名称
-   * @returns 标准化的模型 ID
-   */
-  private generateModelId(providerType: string, modelName: string): string {
-    // 确保 providerType 只包含安全字符（字母、数字、下划线、连字符）
-    const safeProvider = providerType.replace(/[^a-zA-Z0-9_-]/g, "-");
-    // 确保 modelName 只包含安全字符（字母、数字、下划线、连字符、点号）
-    const safeModel = modelName.replace(/[^a-zA-Z0-9._-]/g, "-");
-    return `${safeProvider}/${safeModel}`;
-  }
-
-  /**
    * 添加新的模型提供商
    * 如果模板中定义了 models，则自动创建对应的模型记录
-   * 非 custom 供应商的模型使用确定性 ID: {provider}/{modelName}
    */
   async addProvider(
     name: string,
@@ -232,8 +217,15 @@ export class ModelService {
     // 使用事务确保供应商和模型的原子性创建
     return this.modelRepo.getPrismaClient().$transaction(async (tx) => {
       // 1. 创建供应商
+      // 预置供应商使用 providerType 作为 ID（如 "openai"），自定义供应商使用短 ID
+      const providerId =
+        finalProviderType !== "custom"
+          ? finalProviderType
+          : randomBytes(6).toString("hex");
+
       const createdProvider = await tx.modelProvider.create({
         data: {
+          id: providerId,
           userId: "global",
           name: finalName,
           provider: finalProviderType,
@@ -248,14 +240,8 @@ export class ModelService {
       // 2. 如果模板中有预定义模型，批量创建
       if (templateModels && templateModels.length > 0) {
         const modelsData = templateModels.map((templateModel) => {
-          // 为非 custom 供应商生成确定性 ID: {provider}/{modelName}
-          const modelId =
-            finalProviderType !== "custom"
-              ? this.generateModelId(finalProviderType, templateModel.modelName)
-              : undefined; // custom 类型让 Prisma 自动生成 cuid()
-
           return {
-            id: modelId, // 显式指定 ID（仅非 custom 类型）
+            id: `${providerId}:${templateModel.modelName}`,
             providerId: createdProvider.id,
             modelName: templateModel.modelName,
             modelType:
@@ -264,17 +250,8 @@ export class ModelService {
           };
         });
 
-        // 使用 upsert 避免重复创建冲突
         for (const modelData of modelsData) {
-          await tx.model.upsert({
-            where: { id: modelData.id! },
-            update: {
-              // 如果已存在，更新配置信息
-              modelType: modelData.modelType,
-              config: modelData.config,
-            },
-            create: modelData,
-          });
+          await tx.model.create({ data: modelData });
         }
 
         this.logger.log(
@@ -299,6 +276,9 @@ export class ModelService {
    * 添加新模型
    */
   async addModel(data: any) {
+    if (data.providerId && data.modelName) {
+      data.id = `${data.providerId}:${data.modelName}`;
+    }
     return this.modelRepo.createModel(data);
   }
 

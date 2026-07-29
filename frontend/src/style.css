@@ -59,7 +59,7 @@
   --color-bubble-user-text: #1f2937;
   --color-bubble-user-border: #ebf5ff;
   --color-bubble-assitant-bg: none;
-  --color-bubble-assitant-text: #171717;
+  --color-bubble-assitant-text: #0d0d0d;
   --color-bubble-assitant-border: none;
   --color-bubble-assitant-text-strong: #17181a;
 
@@ -480,10 +480,12 @@ html.acrylic-enabled .sidebar-transparent-bg {
 
 *::-webkit-scrollbar-track {
   background: transparent;
-  margin: 2px 0;
+  margin: 2px;
 }
 
 *::-webkit-scrollbar-thumb {
+  width: 6px;
+
   background-color: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
   /* border: 1px solid transparent; */

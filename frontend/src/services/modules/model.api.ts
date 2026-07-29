@@ -29,7 +29,7 @@ export const modelApi: ModelApi = {
   },
 
   async fetchRemoteModels(this: ApiContext, providerId: string) {
-    return await this._request(`/providers/${providerId}/remote_models`);
+    return await this._request(`/providers/${encodeURIComponent(providerId)}/remote_models`);
   },
 
   async createModel(this: ApiContext, data: any) {
@@ -37,21 +37,21 @@ export const modelApi: ModelApi = {
   },
 
   async updateModel(this: ApiContext, modelId: string, data: any) {
-    return await this._request(`/models/${modelId}`, { method: "PUT", data });
+    return await this._request(`/models/${encodeURIComponent(modelId)}`, { method: "PUT", data });
   },
 
   async deleteModel(this: ApiContext, modelId: string) {
-    return await this._request(`/models/${modelId}`, { method: "DELETE" });
+    return await this._request(`/models/${encodeURIComponent(modelId)}`, { method: "DELETE" });
   },
 
   async toggleModelFavorite(this: ApiContext, modelId: string) {
-    return await this._request(`/models/${modelId}/favorite`, {
+    return await this._request(`/models/${encodeURIComponent(modelId)}/favorite`, {
       method: "PUT",
     });
   },
 
   async toggleModelActive(this: ApiContext, modelId: string) {
-    return await this._request(`/models/${modelId}/toggle-active`, {
+    return await this._request(`/models/${encodeURIComponent(modelId)}/toggle-active`, {
       method: "PUT",
     });
   },
@@ -68,13 +68,13 @@ export const modelApi: ModelApi = {
   },
 
   async deleteProvider(this: ApiContext, providerId: string) {
-    return await this._request(`/providers/${providerId}`, {
+    return await this._request(`/providers/${encodeURIComponent(providerId)}`, {
       method: "DELETE",
     });
   },
 
   async updateProvider(this: ApiContext, providerId: string, data: any) {
-    return await this._request(`/providers/${providerId}`, {
+    return await this._request(`/providers/${encodeURIComponent(providerId)}`, {
       method: "PUT",
       data,
     });

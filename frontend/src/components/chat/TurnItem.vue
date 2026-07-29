@@ -80,16 +80,16 @@
                 :class="{ 'shimmer-text': isLastActive(groupIndex), 'text-gray-600 dark:text-gray-400': !isLastActive(groupIndex) }"
                 @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
-                  <span class="relative w-[15px] h-[15px] shrink-0 flex items-center justify-center">
-                    <component :is="parts.icon"
-                      v-if="!isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id)"
-                      class="absolute inset-0 w-[15px] h-[15px] transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
-                    <ChevronDown12Regular class="absolute inset-0 w-[15px] h-[15px] transition-all duration-200"
-                      :class="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                      :style="isGroupExpanded(isLastActive(groupIndex) ? 'last-active' : group.id) ? {} : { transform: 'rotate(-90deg)' }" />
+                  <span class="relative w-3.75 h-3.75 shrink-0 flex items-center justify-center">
+                    <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isLastActive(groupIndex)"></span> -->
+                    <component :is="parts.icon" v-if="!isGroupExpanded(group.id)"
+                      class="absolute inset-0 w-3.75 h-3.75 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
+                    <ChevronDown12Regular class="absolute inset-0 w-3.75 h-3.75 transition-all duration-200"
+                      :class="isGroupExpanded(group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+                      :style="isGroupExpanded(group.id) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
-                  <span class="shrink-0 font-medium">{{ parts.action }}</span>
-                  <span v-if="parts.args" class="text-sm truncate"
+                  <span class="shrink-0 font-medium ml-1.5">{{ parts.action }}</span>
+                  <span v-if="parts.args" class="text-sm truncate ml-1.5"
                     :class="{ 'text-gray-400 dark:text-gray-400': !isLastActive(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
@@ -584,7 +584,7 @@ const handleClick = (event: MouseEvent) => {
 
 /* 消息文本 */
 .message-item__text {
-  line-height: 1.8;
+  line-height: calc(var(--size-text-base) * 1.6);
   color: inherit;
   max-width: 100%;
   vertical-align: middle;
@@ -634,13 +634,12 @@ const handleClick = (event: MouseEvent) => {
 
 /* 中间处理过程分组 */
 .process-group {
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 .process-group__header {
   display: flex;
   align-items: center;
-  gap: 6px;
   max-width: 100%;
   border-radius: 6px;
   cursor: pointer;

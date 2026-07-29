@@ -1,5 +1,5 @@
 .markdown-text p {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   margin-top: 0;
 }
 .markdown-text strong,
@@ -153,7 +153,7 @@ ol > *:not(li) {
 .markdown-text code {
   background-color: #f3f3f5;
   border-radius: 3px;
-  padding: 0.2em 0.4em;
+  padding: 0 0.4em;
   /* font-size: 0.9em; */
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: var(--size-text-base) !important;
@@ -205,8 +205,13 @@ ol > *:not(li) {
 .markdown-text table td {
   border-bottom: 1px solid #eef0f3;
   vertical-align: top;
-  padding: 8px 4px 8px 0;
-  min-width: 100px;
+  padding: 8px 16px 8px 0;
+  max-width: 220px;
+}
+
+.markdown-text table th:last-child,
+.markdown-text table td:last-child {
+    padding-right: 0;
 }
 
 .dark .markdown-text table th,
@@ -270,11 +275,6 @@ ol > *:not(li) {
 /* 暗色模式下的 Markdown 文本样式 */
 /* 已迁移到各个元素的选择器中，保持代码组织清晰 */
 
-/* 添加第一列居中对齐的样式 */
-.markdown-text table td:first-child,
-.markdown-text table th:first-child {
-  max-width: 200px;
-}
 
 /* 响应式表格样式 */
 @media (max-width: 768px) {
