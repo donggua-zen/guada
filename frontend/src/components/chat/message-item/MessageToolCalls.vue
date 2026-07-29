@@ -15,7 +15,7 @@
         <el-icon v-else class="shrink-0" size="15" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
           <component :is="getToolIcon(tool)" class="text-gray-500" />
         </el-icon>
-        <div class="ml-2 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
+        <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
           <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>

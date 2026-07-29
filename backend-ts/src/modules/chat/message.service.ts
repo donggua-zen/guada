@@ -687,7 +687,7 @@ export class MessageService {
         meta.type &&
         meta.type !== "client"
       ) {
-        userContent = this.wrapSystemMessage(meta, userContent);
+        userContent = this.wrapSystemReminder(meta, userContent);
       }
 
       const textParts: MessagePart[] = [{ type: "text", text: userContent }];
@@ -743,13 +743,13 @@ export class MessageService {
         return null;
       }
 
-      const lines = ["【当前引用的知识库】"];
+      const lines = ["[referenced knowledge bases]\n"];
       referencedKbs.forEach((kb: any) => {
         const name = kb.name || "未知";
         const id = kb.id || "unknown";
         const desc = kb.description || "";
-        let line = `- 名称：${name}, ID: ${id}`;
-        if (desc) line += `, 简介：${desc}`;
+        let line = `- name：${name}, id: ${id}`;
+        if (desc) line += `, description：${desc}`;
         lines.push(line);
       });
 
@@ -835,7 +835,7 @@ export class MessageService {
   /**
    * 将系统消息 metadata 包装为 XML 格式
    */
-  private wrapSystemMessage(meta: any, userContent: string): string {
+  private wrapSystemReminder(meta: any, userContent: string): string {
     const systemPayload = meta.systemPayload;
     if (Array.isArray(systemPayload) && systemPayload.length > 0) {
       const payloadXml = systemPayload
@@ -846,13 +846,13 @@ export class MessageService {
           return `<payload>${entries}</payload>`;
         })
         .join("");
-      return `<system_message note="This message is automatically triggered by the system" type="${meta.type}">${payloadXml}</system_message>`;
+      return `<system-reminder note="This message is automatically triggered by the system" type="${meta.type}">${payloadXml}</system-reminder>`;
     }
 
     const { type, ...rest } = meta;
     const tags = Object.entries(rest)
       .map(([key, value]) => `<${key}>${value}</${key}>`)
       .join("");
-    return `<system_message note="This message is automatically triggered by the system" type="${type}">${tags}<content>${userContent}</content></system_message>`;
+    return `<system-reminder note="This message is automatically triggered by the system" type="${type}">${tags}<content>${userContent}</content></system-reminder>`;
   }
 }

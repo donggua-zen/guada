@@ -1,10 +1,10 @@
 <template>
-  <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
+  <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center -translate-x-1"
     :class="[isAssistant ? 'justify-start' : 'justify-end']">
 
     <div class="message-action-button" @click="$emit('copy')">
       <el-icon :size="16">
-        <Copy20Filled />
+        <Copy16Regular />
       </el-icon>
     </div>
 
@@ -19,7 +19,7 @@
     <template v-if="isAssistant && isLast">
       <div class="message-action-button" @click="$emit('regenerate')">
         <el-icon :size="16">
-          <ArrowCounterclockwise24Filled />
+          <ArrowClockwise16Regular />
         </el-icon>
       </div>
     </template>
@@ -43,26 +43,26 @@
     <DropdownMenu @command="handleCommand">
       <div class="message-action-button">
         <el-icon :size="16" class="pointer-events-none">
-          <MoreVertical24Filled />
+          <MoreHorizontal16Regular />
         </el-icon>
       </div>
       <template #dropdown>
         <DropdownMenuItem command="edit">
           <el-icon class="mr-2">
-            <EditTwotone />
+            <Edit16Regular />
           </el-icon>
           编辑内容
         </DropdownMenuItem>
         <DropdownMenuItem command="delete">
           <el-icon class="mr-2">
-            <DeleteTwotone />
+            <Delete16Regular />
           </el-icon>
           删除消息
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
     <template v-if="isAssistant">
-      <div class="flex text-gray-500 shrink-0 items-center justify-center ml-auto">
+      <div class="flex text-gray-500 shrink-0 items-center justify-center ml-2">
         <AccessTimeTwotone class="w-3 h-3 mr-1" />
         <span class="text-xs" :title="props.timeFull">{{ props.timeFriendly }}</span>
       </div>
@@ -76,13 +76,15 @@ import { ElIcon } from 'element-plus';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
 import {
-  Copy20Filled,
-  ArrowCounterclockwise24Filled,
-  MoreVertical24Filled,
+  Copy16Regular,
+  ArrowClockwise16Regular,
+  MoreHorizontal16Regular,
   ChevronLeft24Filled,
-  ChevronRight24Filled
+  ChevronRight24Filled,
+  Delete16Regular,
+  Edit16Regular,
 } from '@vicons/fluent';
-import { EditTwotone, DeleteTwotone, ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
+import {  ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
 
 const props = defineProps<{
   isAssistant: boolean;
@@ -120,6 +122,6 @@ const handleCommand = (command: string) => {
 @reference "tailwindcss";
 
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
+  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 </style>
