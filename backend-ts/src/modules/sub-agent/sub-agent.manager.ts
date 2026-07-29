@@ -9,6 +9,7 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { ISessionContext } from "../chat/session-context";
+import { safeTruncate } from "../../common/utils/string.utils";
 
 /**
  * 子 Agent 默认系统提示词
@@ -853,7 +854,7 @@ export class SubAgentManager implements OnModuleInit {
             status: options.result!.status,
             finishReason: options.result!.finishReason,
             content:
-              options.result!.content.substring(0, 1000) +
+              safeTruncate(options.result!.content, 1000) +
               (options.result!.content.length > 1000 ? "..." : ""),
           },
         ];

@@ -13,6 +13,7 @@ import {
   ToolHandlerDef,
   ResolvedPluginInfo,
 } from "../plugins/types/plugin.types";
+import { safeTruncate } from "../../common/utils/string.utils";
 import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 
@@ -251,7 +252,7 @@ export class ToolExecutor {
     }
     if (tokenCount <= MAX_TOKENS) return content;
 
-    const preview = content.substring(0, PREVIEW_BYTES);
+    const preview = safeTruncate(content, PREVIEW_BYTES);
 
     const workspacePath = session.workspacePath;
     if (!workspacePath) {

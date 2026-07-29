@@ -56,6 +56,10 @@ export interface PluginInstance {
   manifest: PluginManifest;
   /** 启用状态（受全局和插件自身状态影响） */
   enabled: boolean;
+  /** 插件来源 */
+  source?: "builtin" | "dev" | "user";
+  /** 插件目录绝对路径（仅外部插件） */
+  pluginPath?: string;
 }
 
 /**
@@ -147,6 +151,8 @@ export class PluginManager {
       plugin,
       manifest: plugin.manifest,
       enabled: finalEnabled,
+      source: plugin.manifest.source || "builtin",
+      pluginPath: plugin.manifest.pluginPath,
     };
     this.instances.set(id, instance);
 
@@ -419,6 +425,11 @@ export class PluginManager {
 
   getPlugin(pluginId: string): PluginInstance | undefined {
     return this.instances.get(pluginId);
+  }
+
+  /** 获取插件来源 */
+  getPluginSource(pluginId: string): "builtin" | "dev" | "user" | undefined {
+    return this.instances.get(pluginId)?.source;
   }
 
   async getAllPlugins(
@@ -739,6 +750,8 @@ export class PluginManager {
         enabledTools: [],
         allTools,
         enabledToolKits: [],
+        source: manifest.source,
+        pluginPath: manifest.pluginPath,
       };
     }
 
@@ -792,6 +805,8 @@ export class PluginManager {
       enabledTools,
       allTools,
       enabledToolKits,
+      source: manifest.source,
+      pluginPath: manifest.pluginPath,
     };
   }
 

@@ -90,7 +90,10 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors(); // Enable CORS for frontend integration
+  app.enableCors({
+    origin: true,          // 反射请求的 Origin（不用通配符 *，否则浏览器拒收 credentials）
+    credentials: true,     // 允许跨域请求携带 cookie（Markdown 预览图片走 html-preview 鉴权）
+  });
 
   // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;

@@ -15,6 +15,14 @@ export interface PluginManifest {
   category?: "system" | "core" | "extended" | "user";
   /** 系统必需，不可被任何方式禁用 */
   essential?: boolean;
+  /** 图标：相对路径（"assets/logo.png"）/ data URI / http URL */
+  icon?: string;
+  /** 入口文件（仅外部插件，默认 "index.js"） */
+  main?: string;
+  /** 插件来源（内部注入，外部插件由 loader 设置） */
+  source?: "builtin" | "dev" | "user";
+  /** 插件目录绝对路径（仅外部插件） */
+  pluginPath?: string;
 }
 
 // ==================== 提示词 ====================
@@ -263,4 +271,8 @@ export interface ResolvedPluginInfo {
     activator?: string;
     enabled: boolean;
   }>;
+  /** 插件来源 */
+  source?: "builtin" | "dev" | "user";
+  /** 插件目录路径（仅外部插件） */
+  pluginPath?: string;
 }

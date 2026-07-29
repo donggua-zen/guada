@@ -7,6 +7,7 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { FileParserService } from "../file-parser.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import { safeTruncate } from "../../../common/utils/string.utils";
 
 @Injectable()
 export class DocumentPlugin extends PluginBase {
@@ -60,7 +61,7 @@ export class DocumentPlugin extends PluginBase {
           });
         const totalChars = content.length;
         const truncated =
-          totalChars > max_chars ? content.substring(0, max_chars) : content;
+          totalChars > max_chars ? safeTruncate(content, max_chars) : content;
         return JSON.stringify({
           file_path: resolvedPath,
           file_name: path.basename(resolvedPath),
@@ -104,7 +105,7 @@ export class DocumentPlugin extends PluginBase {
             if (!stats.isFile())
               throw new Error(`${resolvedPath} 不是一个文件`);
             const result = await this.fileParserService.parseFile(resolvedPath);
-            const content = result.text?.substring(0, max_chars_per_file) || "";
+            const content = result.text ? safeTruncate(result.text, max_chars_per_file) : "";
             results.push({
               file_path: resolvedPath,
               file_name: path.basename(resolvedPath),

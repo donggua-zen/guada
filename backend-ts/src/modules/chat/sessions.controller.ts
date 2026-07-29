@@ -279,7 +279,9 @@ export class SessionsController {
   async getWorkspaceFile(
     @Param("id") id: string,
     @Query("path") filePath: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
+    @Req() req: Request,
+    @Res() res: Response,
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id, user.id);
@@ -325,14 +327,22 @@ export class SessionsController {
     const content = await fsPromises.readFile(resolvedPath, 'utf-8');
     const ext = path.extname(filePath).toLowerCase();
 
-    return {
+    // 设置预览 Cookie：让后续 html-preview 图片请求自动携带鉴权（URL 无需 token）
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    if (token) {
+      const cookiePath = `/api/v1/sessions/${id}/workspace`;
+      res.setHeader('Set-Cookie', `ws_token=${token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300`);
+    }
+
+    return res.json({
       path: filePath,
       name: path.basename(filePath),
       extension: ext,
       size: stat.size,
       content: content,
       mimeType: this.getMimeType(ext)
-    };
+    });
   }
 
   @Get("sessions/:id/workspace/children")

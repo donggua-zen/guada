@@ -7,6 +7,7 @@ import {
   ParseResponse,
   SearchCapabilities,
 } from "./search-provider.interface";
+import { safeTruncate } from "../../../../common/utils/string.utils";
 
 const METASO_SEARCH_URL = "https://metaso.cn/api/v1/search";
 const METASO_READER_URL = "https://metaso.cn/api/v1/reader";
@@ -76,7 +77,7 @@ export class MetasoProvider implements SearchProvider {
         if (page.content) {
           item.content =
             page.content.length > 5000
-              ? page.content.substring(0, 5000)
+              ? safeTruncate(page.content, 5000)
               : page.content;
         }
         return item;

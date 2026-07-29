@@ -9,7 +9,7 @@
     <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
     <template v-if="showSkeleton">
       <div class="absolute inset-0 z-1 h-full overflow-hidden">
-        <div class="px-5 max-w-192 mx-auto h-full flex flex-col py-10 ">
+        <div class="px-5 max-w-186 mx-auto h-full flex flex-col py-10 ">
           <MessageSkeleton :count="2" />
         </div>
       </div>
@@ -20,7 +20,7 @@
         class="h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
         @scroll="handleScroll">
-        <div class="max-w-192 mx-auto pt-5 pb-36">
+        <div class="max-w-186 mx-auto pt-5 pb-36">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -70,7 +70,7 @@
 
     <!-- 输入区域 - 浮动叠加 -->
     <div class="absolute bottom-0 left-6 right-6 z-30 pb-2">
-      <div class="max-w-192 flex flex-col items-start mx-auto relative">
+      <div class="max-w-186 flex flex-col items-start mx-auto relative">
         <!-- 编辑模式提示条 -->
         <div v-if="editMode" class="max-w-full w-full flex px-4">
           <div

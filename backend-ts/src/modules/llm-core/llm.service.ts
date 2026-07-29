@@ -1,8 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ProviderHub } from "./provider-hub.service";
 import { IProtocolAdapter } from "./adapters/base.adapter";
-import { LLMCompletionParams } from "./types/llm.types";
+import { LLMCompletionParams, MessageRecord } from "./types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
+import { removeOrphanSurrogates } from "../../common/utils/string.utils";
 
 @Injectable()
 export class LLMService {
@@ -84,9 +85,28 @@ export class LLMService {
       }
     }
 
+    // 清洗消息中的孤立代理字符，防止 JSON 序列化产生无效转义导致 API 400
+    const sanitizedMessages = params.messages.map((msg) => {
+      const sanitized: MessageRecord = { ...msg };
+      if (typeof sanitized.content === "string") {
+        sanitized.content = removeOrphanSurrogates(sanitized.content);
+      } else if (Array.isArray(sanitized.content)) {
+        sanitized.content = sanitized.content.map((part) =>
+          part.type === "text" && part.text
+            ? { ...part, text: removeOrphanSurrogates(part.text) }
+            : part,
+        );
+      }
+      if (sanitized.reasoningContent) {
+        sanitized.reasoningContent = removeOrphanSurrogates(sanitized.reasoningContent);
+      }
+      return sanitized;
+    });
+
     const isStream = params.stream === true;
     const iterator = adapter.chatCompletion({
       ...params,
+      messages: sanitizedMessages,
       thinkingEffort, // 使用校验后的值覆盖原始值
       abortSignal, // 使用合并后的信号
     });

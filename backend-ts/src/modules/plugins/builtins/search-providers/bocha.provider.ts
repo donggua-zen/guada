@@ -7,6 +7,7 @@ import {
   ParseResponse,
   SearchCapabilities,
 } from "./search-provider.interface";
+import { safeTruncate } from "../../../../common/utils/string.utils";
 
 const BOCHA_SEARCH_URL = "https://api.bocha.cn/v1/web-search";
 
@@ -72,7 +73,7 @@ export class BochaProvider implements SearchProvider {
       if (page.summary) {
         item.content =
           page.summary.length > 2000
-            ? page.summary.substring(0, 2000)
+            ? safeTruncate(page.summary, 2000)
             : page.summary;
       } else if (page.snippet) item.summary = page.snippet;
 

@@ -15,7 +15,6 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
-import { removeOrphanSurrogates } from "../../../common/utils/string.utils";
 import { retryOn429 } from "../utils/retry.util";
 
 /**
@@ -222,7 +221,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
         role: msg.role,
         content:
           typeof rawContent === "string"
-            ? removeOrphanSurrogates(rawContent)
+            ? rawContent
             : rawContent,
       };
       if (msg.reasoningContent !== undefined)

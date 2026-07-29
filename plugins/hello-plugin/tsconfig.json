@@ -1,0 +1,9 @@
+{
+  "extends": "../../backend-ts/tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "outDir": "./dist",
+    "rootDir": "."
+  },
+  "include": ["index.ts"]
+}
