@@ -344,36 +344,36 @@ export class FilePlugin extends PluginBase {
       dangerLevel: "high",
     });
 
-    api.registerTool({
-      name: "delete",
-      description:
-        "Delete a file or directory (recursively deletes all contents). This operation cannot be undone — use with caution!",
-      inputSchema: z.object({
-        path: z
-          .string()
-          .describe(
-            "Path to the file or directory to delete, can be an absolute path or a relative path relative to the working directory",
-          ),
-      }),
-      execute: async (args, ctx) => {
-        const { path: targetPath } = args;
-        if (!targetPath) throw new Error("path is required");
-        const resolvedPath = this.resolvePath(targetPath, ctx);
-        this.validateWritePath(targetPath, ctx);
-        this.logger.log(`删除文件/目录: ${targetPath} -> ${resolvedPath}`);
-        const stats = await fs.stat(resolvedPath);
-        if (stats.isFile()) {
-          await fs.unlink(resolvedPath);
-          return `File deleted: ${resolvedPath}`;
-        } else if (stats.isDirectory()) {
-          await fs.rm(resolvedPath, { recursive: true, force: true });
-          return `Directory deleted: ${resolvedPath}`;
-        }
-        throw new Error(`${resolvedPath} is not a valid file or directory`);
-      },
-      display: { actionType: "delete", argsKey: "path", icon: "edit" },
-      dangerLevel: "critical",
-    });
+    // api.registerTool({
+    //   name: "delete",
+    //   description:
+    //     "Delete a file or directory (recursively deletes all contents). This operation cannot be undone — use with caution!",
+    //   inputSchema: z.object({
+    //     path: z
+    //       .string()
+    //       .describe(
+    //         "Path to the file or directory to delete, can be an absolute path or a relative path relative to the working directory",
+    //       ),
+    //   }),
+    //   execute: async (args, ctx) => {
+    //     const { path: targetPath } = args;
+    //     if (!targetPath) throw new Error("path is required");
+    //     const resolvedPath = this.resolvePath(targetPath, ctx);
+    //     this.validateWritePath(targetPath, ctx);
+    //     this.logger.log(`删除文件/目录: ${targetPath} -> ${resolvedPath}`);
+    //     const stats = await fs.stat(resolvedPath);
+    //     if (stats.isFile()) {
+    //       await fs.unlink(resolvedPath);
+    //       return `File deleted: ${resolvedPath}`;
+    //     } else if (stats.isDirectory()) {
+    //       await fs.rm(resolvedPath, { recursive: true, force: true });
+    //       return `Directory deleted: ${resolvedPath}`;
+    //     }
+    //     throw new Error(`${resolvedPath} is not a valid file or directory`);
+    //   },
+    //   display: { actionType: "delete", argsKey: "path", icon: "edit" },
+    //   dangerLevel: "critical",
+    // });
 
     api.registerTool({
       name: "grep",
