@@ -1,0 +1,10 @@
+{
+  "id": "hello-plugin",
+  "name": "Hello Plugin",
+  "version": "1.0.0",
+  "description": "示例外部插件 — 演示工具注册和提示词注入",
+  "author": "dev",
+  "category": "user",
+  "icon": "assets/logo.svg",
+  "main": "index.ts"
+}

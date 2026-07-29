@@ -2,6 +2,8 @@
 import { Marked, type Renderer, type Tokens, type TokenizerAndRendererExtension } from "marked"
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js/lib/core'
+import markdownCssRaw from '@/assets/markdown.css?raw'
+import hljsCssRaw from 'highlight.js/styles/foundation.css?raw'
 
 // 导入语言包
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -135,18 +137,9 @@ export interface MarkdownOptions {
 }
 
 /**
- * 获取当前认证 token
- * 优先从 localStorage 读取，否则从 sessionStorage 读取
- */
-function getAuthToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('token') || sessionStorage.getItem('token') || null;
-}
-
-/**
  * 创建 Marked 实例
  */
-function createMarkedInstance(options?: MarkdownOptions): Marked {
+export function createMarkedInstance(options?: MarkdownOptions): Marked {
     const coypysvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
   <path fill="currentColor" d="M8 7h11v14H8z" opacity=".3"/>
   <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
@@ -220,14 +213,6 @@ function createMarkedInstance(options?: MarkdownOptions): Marked {
             // 如果有自定义图片路径解析函数，使用它
             if (options?.resolveImageUrl) {
                 resolvedUrl = options.resolveImageUrl(href)
-            }
-
-            // 如果解析后的 URL 是后端接口地址，附加认证 token
-            if (resolvedUrl.includes('/workspace/raw-file?')) {
-                const token = getAuthToken();
-                if (token) {
-                    resolvedUrl += `&token=${encodeURIComponent(token)}`;
-                }
             }
 
             return `<img src="${resolvedUrl}" alt="${text}"${title} style="max-width: 100%;" />`
@@ -326,3 +311,103 @@ export function useMarkdown(options?: MarkdownOptions): UseMarkdownReturn {
 }
 
 export default useMarkdown
+
+/**
+ * 构建用于 iframe srcdoc 的完整 HTML 文档
+ * 通过 <base> 标签让浏览器原生解析所有相对路径（markdown 语法 + 内嵌 HTML <img>）
+ *
+ * @param html 已由 marked.parse() 渲染的 HTML 内容
+ * @param baseUrl <base href> 值，指向工作目录对应的资源端点
+ * @param isDark 是否暗色模式
+ */
+export function buildMarkdownSrcDoc(html: string, baseUrl: string, isDark: boolean): string {
+    const themeVars = isDark
+        ? `--color-text:#d3d3d3;--color-bg:#222;--color-surface:#222;--color-border:oklch(32% 0.02 250);--color-bubble-assitant-text-strong:#d3d3d3;--color-sidebar-bg-active:#2f3131;--size-text-base:15px;`
+        : `--color-text:#171717;--color-bg:#fff;--color-surface:#f5f5f5;--color-border:#d1d5db;--color-bubble-assitant-text-strong:#17181a;--color-sidebar-bg-active:rgba(40,5,5,0.05);--size-text-base:15px;`
+
+    return `<!DOCTYPE html><html class="${isDark ? 'dark' : ''}"><head>
+<meta charset="utf-8">
+<base href="${baseUrl}">
+<style>${markdownCssRaw}</style>
+<style>${hljsCssRaw}</style>
+<style>:root{${themeVars}}html,body{margin:0;padding:0;font-size:15px;background:var(--color-bg);color:var(--color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
+</head><body class="markdown-text" style="padding:16px;overflow-x:hidden;">
+${html}
+<script>
+(function(){
+  // 代码块复制
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.copy-code-button');
+    if(!btn) return;
+    var block = btn.closest('.custom-code-block');
+    var code = block && block.querySelector('code');
+    if(code && navigator.clipboard){
+      navigator.clipboard.writeText(code.textContent || '').catch(function(){});
+    }
+  });
+  // 链接点击 → postMessage 通知父页面
+  document.addEventListener('click', function(e){
+    var link = e.target.closest('a[data-url]') || e.target.closest('a[href]');
+    if(!link) return;
+    e.preventDefault();
+    var url = link.dataset.url || link.getAttribute('href');
+    if(url && url !== '#'){
+      parent.postMessage({ type: 'md-preview-link', url: url }, '*');
+    }
+  });
+})();
+<\/script>
+</body></html>`
+}
+
+/**
+ * 预览专用 Markdown 解析 Composable
+ * 每次调用创建独立的 Marked 实例
+ * 用于 WorkspaceSidebar 文件预览场景（配合 buildMarkdownSrcDoc + <base> 标签）
+ */
+export function usePreviewMarkdown(): UseMarkdownReturn {
+    const instance = createMarkedInstance()
+    installLinkClickHandler()
+
+    const parseMarkdown = (content: string): string => {
+        if (!content?.trim()) return ""
+
+        try {
+            const result = instance.parse(content.trim())
+            return typeof result === 'string' ? result : content
+        } catch (error) {
+            console.error("Markdown 解析错误:", error)
+            return content
+        }
+    }
+
+    const cache: MarkdownCache = new Map()
+    const parseWithCache = (content: string): string => {
+        if (!content) return ""
+
+        const cacheKey = content.length < 1000
+            ? content
+            : content.substring(0, 1000) + content.length.toString()
+
+        if (cache.has(cacheKey)) {
+            return cache.get(cacheKey)!
+        }
+
+        const result = parseMarkdown(content)
+
+        if (cache.size > 50) {
+            const firstKey = cache.keys().next().value
+            if (firstKey) {
+                cache.delete(firstKey)
+            }
+        }
+
+        cache.set(cacheKey, result)
+        return result
+    }
+
+    return {
+        parseMarkdown: parseWithCache,
+        marked: instance
+    }
+}

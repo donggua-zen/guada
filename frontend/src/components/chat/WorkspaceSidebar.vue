@@ -230,9 +230,11 @@
                         <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :src="htmlPreviewSrc"
                             class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
 
-                        <!-- Markdown 渲染模式 -->
-                        <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
-                            class="markdown-preview markdown-text" v-html="markdownHtml" />
+                        <!-- Markdown 渲染模式（iframe srcdoc + <base> 让浏览器原生解析相对路径） -->
+                        <iframe v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
+                            :srcdoc="markdownSrcDoc" ref="markdownIframeRef"
+                            class="w-full border-0" style="height: 100%;"
+                            sandbox="allow-same-origin allow-scripts" />
 
                         <!-- 源码高亮（所有文件的 source 模式 + 不支持预览的文本文件） -->
                         <div v-else-if="highlightedCode" class="code-preview-container" v-html="highlightedCode" />
@@ -288,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onUnmounted, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
@@ -297,7 +299,8 @@ import { Dismiss20Regular, Eye20Filled, Eye20Regular, Code20Filled, Code20Regula
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { useStorage, useThrottleFn } from '@vueuse/core';
-import { useMarkdown } from '@/composables/useMarkdown';
+import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown';
+import { useTheme } from '@/composables/useTheme';
 import { useHighlight } from '@/composables/useHighlight';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
@@ -355,6 +358,8 @@ const imagePreviewUrl = ref('');
 const htmlPreviewUrl = ref('');
 // HTML 预览版本号，文件变更时递增以强制 iframe 重新加载
 const htmlPreviewVersion = ref(0);
+// 缓存的工作目录绝对路径（用于 Electron file:// URL 拼接）
+const cachedWorkspacePath = ref<string | null>(null);
 
 // 正在加载子节点的目录路径集合
 const loadingPaths = ref<Set<string>>(new Set());
@@ -709,6 +714,15 @@ async function loadFilePreview(tab: UnifiedTab): Promise<void> {
                 htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, fileTab.path!)
             }
             await loadFileContent(fileTab.path!)
+        } else if (isMarkdownFile.value) {
+            // Markdown 预览：Electron file:// 模式需缓存 workspacePath（cookie 由 loadFileContent 的 getWorkspaceFile 顺带设置）
+            if (isElectron && window.location.protocol === 'file:' && !cachedWorkspacePath.value) {
+                try {
+                    const resp = await apiService.getWorkspacePath(props.sessionId!);
+                    cachedWorkspacePath.value = resp.workspacePath || null;
+                } catch { /* ignore */ }
+            }
+            await loadFileContent(fileTab.path!)
         } else {
             await loadFileContent(fileTab.path!)
         }
@@ -879,25 +893,8 @@ function handleTreeNodeSelect(node: WorkspaceNode) {
 // 预览模式：rendered=预览，source=源码，默认预览
 const currentPreviewMode = useStorage<PreviewMode>('filePreviewMode', 'rendered');
 
-// 初始化 Markdown 解析器，传入图片路径解析函数
-const { parseMarkdown } = useMarkdown({
-    resolveImageUrl: (src: string) => {
-        // 只处理相对路径（不以协议、/、# 开头的路径）
-        if (!src || /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) {
-            return src;
-        }
-        if (!props.sessionId || !selectedFile.value) {
-            return src;
-        }
-        // 计算图片相对于工作目录的路径
-        // Markdown 文件在子目录中时，相对路径基于该子目录
-        const mdFilePath = selectedFile.value.path.replace(/\\/g, '/');
-        const lastSlashIndex = mdFilePath.lastIndexOf('/');
-        const mdFileDir = lastSlashIndex > 0 ? mdFilePath.substring(0, lastSlashIndex) : '';
-        const imagePath = mdFileDir ? `${mdFileDir}/${src}` : src;
-        return apiService.getWorkspaceRawFileUrl(props.sessionId, imagePath);
-    }
-});
+// 初始化 Markdown 解析器（不再需要 resolveImageUrl，<base> 标签接管路径解析）
+const { parseMarkdown } = usePreviewMarkdown();
 
 // 初始化代码高亮
 const { highlightCode, getLanguageFromExtension, isTextFile, isImageFile } = useHighlight();
@@ -947,6 +944,48 @@ const canTogglePreview = computed(() => {
 const markdownHtml = computed(() => {
     if (!selectedFile.value || !fileContent.value) return '';
     return parseMarkdown(fileContent.value);
+});
+
+// 响应式暗色模式（跟随主程序主题切换）
+const { isDark: isDarkMode } = useTheme();
+
+// Markdown iframe srcdoc：通过 <base> 标签让浏览器原生解析所有相对路径
+const markdownSrcDoc = computed(() => {
+    if (!markdownHtml.value || !props.sessionId) return '';
+
+    // 计算 Markdown 文件所在目录（工作空间相对路径）
+    const mdFilePath = (selectedFile.value?.path || '').replace(/\\/g, '/');
+    const lastSlashIndex = mdFilePath.lastIndexOf('/');
+    const mdFileDir = lastSlashIndex > 0 ? mdFilePath.substring(0, lastSlashIndex) : '';
+
+    let baseUrl: string;
+    if (isElectron && window.location.protocol === 'file:' && cachedWorkspacePath.value) {
+        // Electron file:// 模式：本地文件路径，无需鉴权
+        const separator = cachedWorkspacePath.value.endsWith('/') || cachedWorkspacePath.value.endsWith('\\') ? '' : '/';
+        const fullPath = (cachedWorkspacePath.value + separator + mdFileDir).replace(/\\/g, '/');
+        const encodedPath = encodeURI(fullPath);
+        baseUrl = encodedPath.startsWith('/') ? `file://${encodedPath}/` : `file:///${encodedPath}/`;
+    } else {
+        // Web / Electron Dev：相对路径走 Vite proxy，cookie 同源携带
+        baseUrl = `/api/v1/sessions/${props.sessionId}/workspace/html-preview/${mdFileDir ? mdFileDir + '/' : ''}`;
+    }
+
+    return buildMarkdownSrcDoc(markdownHtml.value, baseUrl, isDarkMode.value);
+});
+
+// 监听 iframe postMessage（链接点击）
+function onMarkdownMessage(e: MessageEvent) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'md-preview-link' && e.data.url) {
+        import('@/utils/workspacePreview').then(({ openLink }) => openLink(e.data.url));
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('message', onMarkdownMessage);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('message', onMarkdownMessage);
 });
 
 // 源码高亮（仅负责渲染，不判断文件类型和模式）

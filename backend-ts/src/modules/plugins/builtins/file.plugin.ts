@@ -6,6 +6,7 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
+import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { z } from "zod";
 
 @Injectable()
@@ -95,11 +96,11 @@ export class FilePlugin extends PluginBase {
         if (unit === "char") {
           // 按字符读取
           const charLimit = limit ?? 20000;
-          const content = raw.substring(offset, offset + charLimit);
+          const content = safeSubstring(raw, offset, offset + charLimit);
           const truncated = offset + charLimit < totalChars;
 
           // 计算起始行号
-          const startLineNumber = raw.substring(0, offset).split("\n").length;
+          const startLineNumber = safeTruncate(raw, offset).split("\n").length;
           const contentLines = content.split("\n");
           const endLineNumber = startLineNumber + contentLines.length - 1;
           const padWidth = String(endLineNumber).length;
@@ -141,7 +142,7 @@ export class FilePlugin extends PluginBase {
           const ln = line + (i < totalLines - 1 ? "\n" : "");
           if (charsRead + ln.length > MAX_BYTES) {
             const avail = MAX_BYTES - charsRead;
-            partialLine = line.substring(0, avail);
+            partialLine = safeTruncate(line, avail);
             endLine = i;
             truncatedByBytes = true;
             break;
@@ -571,7 +572,7 @@ export class FilePlugin extends PluginBase {
             fileLines[i].length,
             matchIdx + matchLen + ctxLen,
           );
-          const snippet = fileLines[i].substring(cStart, cEnd).trim();
+          const snippet = safeSubstring(fileLines[i], cStart, cEnd).trim();
           const funcName = this.findEnclosingFunction(fileLines, i);
           const funcSuffix = funcName ? `    ← in ${funcName}()` : "";
           lines.push(`${relPath}:${i + 1}: ${snippet}${funcSuffix}`);

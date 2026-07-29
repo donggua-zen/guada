@@ -9,6 +9,7 @@ import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
 import { BridgeClient } from "../../bridge/bridge-client";
+import { safeTruncate } from "../../../common/utils/string.utils";
 
 @Injectable()
 export class BrowserPlugin extends PluginBase {
@@ -473,7 +474,7 @@ export class BrowserPlugin extends PluginBase {
 
     const parts: string[] = [];
     if (snapshot.text) {
-      const text = snapshot.text.substring(0, 5000);
+      const text = safeTruncate(snapshot.text, 5000);
       parts.push(`--- Page Text ---\n${text}`);
     }
     if (snapshot.headings?.length) {

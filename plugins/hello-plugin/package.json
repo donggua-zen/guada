@@ -1,0 +1,6 @@
+{
+  "name": "hello-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "示例外部插件"
+}

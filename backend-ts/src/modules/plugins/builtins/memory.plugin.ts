@@ -7,6 +7,7 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { PluginApi } from "../api/plugin-api";
+import { safeTruncate } from "../../../common/utils/string.utils";
 
 interface MemoryIndex {
   factual?: string;
@@ -1731,7 +1732,7 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
     promptParts.push("<factual-memory>");
     if (index.factual) {
       if (factualOverLimit) {
-        promptParts.push(index.factual.substring(0, this.MEMORY_LIMIT));
+        promptParts.push(safeTruncate(index.factual, this.MEMORY_LIMIT));
         promptParts.push(
           "\n⚠️ **Factual memory has reached its capacity limit** (3K). Some content cannot be displayed. Use `memory replace` to organize and compress old memories to free up space.",
         );

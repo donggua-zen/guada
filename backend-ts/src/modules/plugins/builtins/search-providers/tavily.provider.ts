@@ -7,6 +7,7 @@ import {
   ParseResponse,
   SearchCapabilities,
 } from "./search-provider.interface";
+import { safeTruncate } from "../../../../common/utils/string.utils";
 
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 const TAVILY_EXTRACT_URL = "https://api.tavily.com/extract";
@@ -67,7 +68,7 @@ export class TavilyProvider implements SearchProvider {
         if (item.raw_content) {
           result.content =
             item.raw_content.length > 5000
-              ? item.raw_content.substring(0, 5000)
+              ? safeTruncate(item.raw_content, 5000)
               : item.raw_content;
         }
         return result;

@@ -66,7 +66,24 @@ export function safeTail(str: string, count: number): string {
 /**
  * 过滤字符串中的孤立 surrogate 字符（无配对的 U+D800-U+DFFF）。
  * 作为安全截断的兜底防线。
+ *
+ * 仅删除失去配对的代理码元，保留合法的 surrogate pair（如 emoji 🎬）。
  */
 export function removeOrphanSurrogates(str: string): string {
-  return str.replace(/[\uD800-\uDFFF]/g, '');
+  // 高位代理后不跟低位代理 → 孤立高位
+  // 低位代理前没有高位代理 → 孤立低位
+  return str.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    '',
+  );
+}
+
+/**
+ * 安全截取字符串头部 N 个 code point，避免切在 surrogate pair 中间。
+ *
+ * @example
+ * safeTruncate("abc🎬def", 4)  // "abc🎬"
+ */
+export function safeTruncate(str: string, maxLen: number): string {
+  return safeSubstring(str, 0, maxLen);
 }

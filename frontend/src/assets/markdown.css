@@ -206,7 +206,8 @@ ol > *:not(li) {
   border-bottom: 1px solid #eef0f3;
   vertical-align: top;
   padding: 8px 16px 8px 0;
-  max-width: 220px;
+  min-width: 100px;
+  /* max-width: 220px; */
 }
 
 .markdown-text table th:last-child,

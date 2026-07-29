@@ -32,8 +32,12 @@ export const workspaceApi: WorkspaceApi = {
   },
 
   async getWorkspaceFile(this: ApiContext, sessionId: string, filePath: string) {
+    // 非 file:// 页面（Web / Electron Dev）覆盖为相对路径，走 Vite proxy（同源），
+    // 使 Set-Cookie 作用在页面源上，后续 img 请求才能携带 cookie
+    const isFileProto = typeof window !== 'undefined' && window.location.protocol === 'file:';
     return await this._request(
       `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
+      isFileProto ? undefined : { baseURL: '/api/v1' },
     );
   },
 

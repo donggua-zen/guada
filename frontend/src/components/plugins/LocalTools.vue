@@ -25,9 +25,20 @@
         >
           <div class="p-5 pb-4">
             <div class="flex items-start justify-between gap-2 mb-2">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
-                {{ tool.displayName }}
-              </h3>
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <img
+                  v-if="tool.icon"
+                  :src="`/api/v1/plugins/${tool.pluginId}/icon`"
+                  class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                  @error="($event.target as HTMLImageElement).style.display = 'none'"
+                />
+                <div v-else class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-[#333] flex items-center justify-center flex-shrink-0 text-lg font-bold text-gray-500 dark:text-[#8b8d95]">
+                  {{ tool.displayName?.charAt(0) || '?' }}
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] truncate">
+                  {{ tool.displayName }}
+                </h3>
+              </div>
               <el-switch
                 :model-value="tool.enabled"
                 :loading="updatingTools.has(tool.pluginId)"
@@ -38,6 +49,20 @@
                 size="large"
                 class="-mt-2"
               />
+            </div>
+            
+            <div class="flex items-center gap-2 mb-3">
+              <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
+              <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
+              <el-button
+                v-if="tool.source === 'dev' || tool.source === 'user'"
+                link
+                size="small"
+                type="danger"
+                @click="handleUninstall(tool.pluginId)"
+              >
+                卸载
+              </el-button>
             </div>
             
             <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
@@ -72,7 +97,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage, ElCollapseTransition } from 'element-plus'
+import { ElMessage, ElMessageBox, ElCollapseTransition } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 
 interface ToolMetadata {
@@ -82,6 +107,8 @@ interface ToolMetadata {
   description: string
   enabled: boolean
   isMcp: boolean
+  icon?: string
+  source?: 'builtin' | 'dev' | 'user'
   tools?: any[]
 }
 
@@ -152,11 +179,29 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
   }
 }
 
+async function handleUninstall(pluginId: string) {
+  try {
+    await ElMessageBox.confirm('确定要卸载此插件吗？插件文件将被删除。', '卸载插件', {
+      confirmButtonText: '卸载',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const response = await apiService._request(`/plugins/${pluginId}`, { method: 'DELETE' })
+    if (response.success) {
+      ElMessage.success('插件已卸载')
+      await loadGlobalTools()
+    }
+  } catch (err: any) {
+    if (err !== 'cancel' && err?.message !== 'cancel') {
+      ElMessage.error(err.message || '卸载插件失败')
+    }
+  }
+}
+
 onMounted(() => {
   loadGlobalTools()
 })
 </script>
 
 <style scoped>
-/* 移除底边框以统一风格 */
 </style>

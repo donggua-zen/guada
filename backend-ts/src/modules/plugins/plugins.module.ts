@@ -3,6 +3,7 @@ import { ModuleRef } from "@nestjs/core";
 import { AuthModule } from "../auth/auth.module";
 import { PluginManager } from "./plugin.manager";
 import { PluginsController } from "./plugins.controller";
+import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { FilePlugin } from "./builtins/file.plugin";
 import { ImageRecognitionPlugin } from "./builtins/image-recognition.plugin";
 import { MemoryPlugin } from "./builtins/memory.plugin";
@@ -22,6 +23,8 @@ import { PromptCollector } from "./prompt-collector.service";
   providers: [
     PluginManager,
     PromptCollector,
+    // ExternalPluginLoader 放在内建插件之后，确保 onModuleInit 顺序
+    ExternalPluginLoader,
     FilePlugin,
     ImageRecognitionPlugin,
     MemoryPlugin,
@@ -33,7 +36,7 @@ import { PromptCollector } from "./prompt-collector.service";
     TavilyProvider,
     BochaProvider,
   ],
-  exports: [PluginManager, PromptCollector],
+  exports: [PluginManager, PromptCollector, ExternalPluginLoader],
 })
 export class PluginsModule implements OnModuleInit {
   constructor(
@@ -55,5 +58,8 @@ export class PluginsModule implements OnModuleInit {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));
     }
 
+    // ExternalPluginLoader.onModuleInit 会自动扫描并加载外部插件
+    // NestJS 保证 module 的 onModuleInit 在 providers 之前执行
+    // 内建插件已在上方注册完毕，外部插件加载时可正确检测 id 冲突
   }
 }

@@ -3,6 +3,7 @@ import { spawn, ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
+import { safeSubstring, safeTail, safeTruncate } from "../../common/utils/string.utils";
 
 // ============================================================================
 // 类型定义
@@ -528,8 +529,8 @@ export class ProcessManagerService {
       // 字符超出 → 按字符 40% + notice + 60%
       const headLen = Math.floor(MAX_CHARS * 0.4);
       const tailLen = MAX_CHARS - headLen - 100; // 留 100 给 notice
-      const head = cleanText.substring(0, headLen);
-      const tail = cleanText.substring(cleanText.length - tailLen);
+      const head = safeTruncate(cleanText, headLen);
+      const tail = safeTail(cleanText, tailLen);
       const notice = `\n[...输出截断，共 ${charCount} 字符，仅展示首尾...]\n`;
       return head + notice + tail;
     }

@@ -208,6 +208,7 @@ interface DataPaths {
   logsDir: string; // 日志目录
   skillsDir: string; // 技能目录
   workspaceDir: string; // 工作目录
+  pluginsDir: string; // 插件目录
   isNewLayout: boolean; // 是否使用新目录结构（data/ 子目录）
 }
 
@@ -229,6 +230,7 @@ function computeDataPaths(dataHome: string): DataPaths {
       logsDir: path.join(dataHome, "logs"),
       skillsDir: path.join(dataHome, "skills"),
       workspaceDir: path.join(dataHome, "workspaces"),
+      pluginsDir: path.join(dataHome, "plugins"),
       isNewLayout: true,
     };
   }
@@ -242,6 +244,7 @@ function computeDataPaths(dataHome: string): DataPaths {
     logsDir: path.join(dataHome, "logs"),
     skillsDir: path.join(dataHome, "skills"),
     workspaceDir: path.join(dataHome, "workspace"),
+    pluginsDir: path.join(dataHome, "plugins"),
     isNewLayout: false,
   };
 }
@@ -694,6 +697,9 @@ async function startBackend(): Promise<void> {
       console.log("Backend logs directory:", paths.logsDir);
       console.log("Skills directory:", paths.skillsDir);
       console.log("Workspace directory:", paths.workspaceDir);
+      console.log("Plugins directory:", paths.pluginsDir);
+
+      const devPluginsDir = path.join(backendPath, "..", "plugins");
 
       const spawnOptions: any = {
         cwd: backendPath,
@@ -711,6 +717,8 @@ async function startBackend(): Promise<void> {
           LOGS_DIR: paths.logsDir, // 传递后端日志目录
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
+          PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
+          PLUGINS_DEV_DIR: devPluginsDir, // 开发模式外部插件目录
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
@@ -754,6 +762,7 @@ async function startBackend(): Promise<void> {
       console.log("Backend logs directory:", paths.logsDir);
       console.log("Skills directory:", paths.skillsDir);
       console.log("Workspace directory:", paths.workspaceDir);
+      console.log("Plugins directory:", paths.pluginsDir);
 
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -775,6 +784,7 @@ async function startBackend(): Promise<void> {
           LOGS_DIR: paths.logsDir, // 传递后端日志目录
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
+          PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
