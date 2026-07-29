@@ -1,24 +1,14 @@
 <template>
   <!-- Webview 浮层容器：fixed 定位，不拦截事件 -->
   <div class="browser-webview-layer">
-    <div
-      v-for="wv in store.allWebviews"
-      :key="wv.windowId"
-      class="webview-wrapper"
-      :style="getWebviewStyle(wv.windowId)"
-    >
+    <div v-for="wv in store.allWebviews" :key="wv.windowId" class="webview-wrapper"
+      :style="getWebviewStyle(wv.windowId)">
       <webview
         :ref="(el: Element | ComponentPublicInstance | null) => setWebviewRef(wv.windowId, el as HTMLElement | null)"
-        :partition="wv.partition"
-        :preload="wv.preloadUrl"
-        autosize="on"
-        allowpopups
-        @did-navigate="onNavigate($event, wv.windowId)"
-        @did-navigate-in-page="onNavigateInPage($event, wv.windowId)"
-        @page-title-updated="onTitleUpdated($event, wv.windowId)"
-        @did-stop-loading="onStopLoading($event, wv.windowId)"
-        @did-start-loading="onStartLoading($event, wv.windowId)"
-      />
+        :partition="wv.partition" :preload="wv.preloadUrl" autosize="on" allowpopups
+        @did-navigate="onNavigate($event, wv.windowId)" @did-navigate-in-page="onNavigateInPage($event, wv.windowId)"
+        @page-title-updated="onTitleUpdated($event, wv.windowId)" @did-stop-loading="onStopLoading($event, wv.windowId)"
+        @did-start-loading="onStartLoading($event, wv.windowId)" />
     </div>
     <!-- 拖拽遮罩层：覆盖在 webview 上方，阻止 webview 截获鼠标事件 -->
     <div v-if="store.isDragging && store.previewRect" class="drag-overlay" :style="getOverlayStyle()"></div>
@@ -221,8 +211,11 @@ watch(
       if (el) {
         store.setActiveWebviewEl(el)
         syncNavState(el)
-        // 切换标签时同步静音状态（webview 已 ready 才会到这里）
-        ;(el as ElectronWebviewElement).setAudioMuted?.(store.isMuted)
+        // 注意：此处不再调用 setAudioMuted。
+        // 静音状态统一由 setWebviewRef 在 webview dom-ready 时应用（每个 webview 必经），
+        // 用户切换静音由 store.toggleMuted 负责。切换激活标签时各 webview 早已 ready，
+        // 静音状态已应用，无需在此重复设置——避免在 webview 未 ready 时调用
+        // setAudioMuted 抛异常、中断 Vue 响应式更新循环。
       } else {
         store.setActiveWebviewEl(null)
       }
@@ -251,7 +244,9 @@ function handleCreateWebview(_event: any, data: {
     metadata: data.metadata,
   })
 
-  // 新建标签自动打开预览模式（最小实现：当前会话的窗口创建即激活）
+  // 新建标签自动打开预览模式：属于当前会话的窗口创建即激活。
+  // 说明：这是 AI 路径唯一的确定性触发源（主进程创建 webview 后不会主动 setActive）。
+  // 用户路径（previewUrl/createNewBrowserWindow）会再幂等执行一次 enterPreviewMode+selectTab，无害。
   if (data.metadata?.sessionId && data.metadata.sessionId === store.currentSessionId) {
     const layoutStore = useLayoutStore()
     layoutStore.workspaceVisible = true
@@ -306,7 +301,8 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* 容器不拦截事件 */
+  pointer-events: none;
+  /* 容器不拦截事件 */
   z-index: 40;
 }
 
@@ -327,8 +323,10 @@ onUnmounted(() => {
 /* 拖拽遮罩层：覆盖在 webview 上方，阻止 webview 截获鼠标事件 */
 .drag-overlay {
   position: fixed;
-  z-index: 50; /* 高于 webview(40) */
-  pointer-events: auto; /* 拦截所有鼠标事件，防止穿透到 webview */
+  z-index: 50;
+  /* 高于 webview(40) */
+  pointer-events: auto;
+  /* 拦截所有鼠标事件，防止穿透到 webview */
   background: transparent;
   cursor: col-resize;
 }
