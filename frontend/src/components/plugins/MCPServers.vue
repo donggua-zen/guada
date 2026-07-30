@@ -644,7 +644,9 @@ const handleImportJson = async () => {
 
         for (const serverData of serversToImport) {
             try {
-                const isStdio = serverData.type === 'stdio'
+                // 推断传输类型：标准 MCP 配置（Claude Desktop / Cursor 格式）中
+                // stdio 服务器通常不写 type 字段，通过 command/args 的存在来推断
+                const isStdio = serverData.type === 'stdio' || (!serverData.type && !!(serverData.command || serverData.args))
 
                 // 转换数据格式
                 const submitData = {
@@ -653,7 +655,7 @@ const handleImportJson = async () => {
                     description: serverData.description || `导入自配置文件：${serverData.key || 'unknown'}`,
                     headers: isStdio ? null : (serverData.headers || {}),
                     enabled: serverData.isActive !== undefined ? serverData.isActive : true,
-                    type: serverData.type || undefined,
+                    type: isStdio ? 'stdio' : (serverData.type || 'streamableHttp'),
                     command: isStdio ? (serverData.command || '') : null,
                     args: isStdio ? (serverData.args || []) : null,
                     env: isStdio ? (serverData.env || {}) : null,

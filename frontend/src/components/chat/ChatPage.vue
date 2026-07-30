@@ -4,8 +4,8 @@
     <template v-if="sessionStore.activeSessionId !== 'new-session'">
       <!-- 可拖拽分割区域 -->
       <div class="flex-1 overflow-hidden">
-        <LiteSplitpanes style="height: 100%;" :split-size="layoutStore.workspaceVisible ? workspaceSize : 100"
-          :min-size="30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
+        <LiteSplitpanes style="height: 100%;" :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
+          :min-size="layoutStore.workspaceFullscreen ? 0 : 30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"
               style="height: 100%; display: flex; flex-direction: column;">
@@ -600,10 +600,11 @@ onMounted(async () => {
   unsubscribeSubAgentClosed = apiService.onSessionEvent('sub_agent_closed', handleSubAgentClosed);
 });
 
-// 工作目录隐藏时重置预览模式状态
+// 工作目录隐藏时重置预览模式和全屏状态
 watch(() => layoutStore.workspaceVisible, (visible) => {
   if (!visible) {
     tabStore.exitPreviewMode();
+    layoutStore.workspaceFullscreen = false;
   }
 });
 

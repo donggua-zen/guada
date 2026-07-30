@@ -27,7 +27,11 @@ export class McpServerService {
   } {
     const errors: string[] = [];
 
-    if (type === "stdio") {
+    // 推断传输类型：当 type 未设置但 command 存在时，推断为 stdio
+    // 兼容标准 MCP 配置格式（Claude Desktop / Cursor 不写 type 字段）
+    const effectiveType = type || (command ? "stdio" : undefined);
+
+    if (effectiveType === "stdio") {
       // stdio 协议：验证 command
       if (!command) {
         errors.push("Command is required for stdio protocol");
@@ -149,8 +153,11 @@ export class McpServerService {
   }
 
   async createServer(data: any, userId: string) {
+    // 推断传输类型：当 type 未设置但 command 存在时，推断为 stdio
+    const effectiveType = data.type || (data.command ? "stdio" : undefined);
+
     // 验证配置
-    const validation = this.validateServerConfig(data.url, data.headers, data.type, data.command);
+    const validation = this.validateServerConfig(data.url, data.headers, effectiveType, data.command);
     if (!validation.valid) {
       throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
     }
@@ -159,7 +166,7 @@ export class McpServerService {
     const server = await this.mcpRepo.create({
       name: data.name,
       url: data.url || null,
-      type: data.type || null, // 保存协议类型
+      type: effectiveType || null, // 保存协议类型（含推断结果）
       description: data.description,
       headers: data.headers || null,
       command: data.command || null,
@@ -172,7 +179,7 @@ export class McpServerService {
 
     // 2. 尝试获取工具列表（不阻塞创建流程）
     try {
-      if (data.type === "stdio" && data.command) {
+      if (effectiveType === "stdio" && data.command) {
         // stdio 协议
         const toolsDict = await this.fetchToolsFromServer(
           null,
@@ -236,8 +243,9 @@ export class McpServerService {
     let needRefreshTools = false;
 
     // 计算合并后的有效值（用于后续工具刷新）
-    const effectiveType = data.type !== undefined ? data.type : currentServer.type;
     const effectiveCommand = data.command !== undefined ? data.command : currentServer.command;
+    // 推断传输类型：当 type 未设置但 command 存在时，推断为 stdio
+    const effectiveType = (data.type !== undefined ? data.type : currentServer.type) || (effectiveCommand ? "stdio" : undefined);
     const effectiveArgs = data.args !== undefined ? data.args : currentServer.args;
     const effectiveEnv = data.env !== undefined ? data.env : currentServer.env;
     const effectiveCwd = data.cwd !== undefined ? data.cwd : currentServer.cwd;
