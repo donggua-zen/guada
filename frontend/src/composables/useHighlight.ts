@@ -250,15 +250,13 @@ export function useHighlight() {
       const lang = hljs.getLanguage(language) ? language : "plaintext";
       const result = hljs.highlight(code, { language: lang });
 
-      // 高亮后按行拆分，每行包裹行号 + 代码内容
+      // 按行拆分，每行包裹行号 + 代码内容（per-line flex row，折行时行号自然对齐）
       const lines = result.value.split("\n");
-      // 根据最大行号计算行号列宽度（所有行号等宽对齐）
       const digitCount = String(lines.length).length;
       const lineNumWidth = `${Math.max(digitCount, 2)}ch`;
       const codeLines = lines
         .map((line, i) => {
           const num = i + 1;
-          // 空白行保留换行符以维持行高一致
           return `<div class="line"><span class="line-num" style="min-width:${lineNumWidth}">${num}</span><div class="line-content">${line || " "}</div></div>`;
         })
         .join("\n");
@@ -273,7 +271,7 @@ export function useHighlight() {
       const codeLines = lines
         .map((line, i) => {
           const num = i + 1;
-          return `<div class="line"><div class="line-num" style="min-width:${lineNumWidth}">${num}</div><div class="line-content">${line || " "}</div></div>`;
+          return `<div class="line"><span class="line-num" style="min-width:${lineNumWidth}">${num}</span><div class="line-content">${line || " "}</div></div>`;
         })
         .join("\n");
       return `<pre><code><div class="code-lines">${codeLines}</div></code></pre>`;

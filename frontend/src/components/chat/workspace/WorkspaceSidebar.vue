@@ -21,7 +21,7 @@
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
             <div ref="tabBarRef" v-if="isPreviewMode && tabs.length > 0"
-                class="flex items-center gap-0.5 flex-1 overflow-x-auto no-drag browser-tabs-scroll"
+                class="flex items-center gap-0.5 shrink-0 overflow-x-auto no-drag browser-tabs-scroll"
                 @wheel="onTabBarWheel">
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                 <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
@@ -66,8 +66,8 @@
                 </el-tooltip>
             </div>
 
-            <!-- 弹性占位 -->
-            <div v-if="!isPreviewMode || tabs.length === 0" class="flex-1"></div>
+            <!-- 弹性占位（拖拽区域） -->
+            <div class="flex-1"></div>
 
             <!-- 窗口控制按钮 -->
             <WindowControls class="no-drag" />
@@ -1460,10 +1460,13 @@ onUnmounted(() => {
 /* 非激活文件预览面板：visibility:hidden 保留渲染状态（含滚动位置），不触发 display:none 的重置 */
 .workspace-sidebar .panel-hidden {
     position: absolute !important;
-    inset: 0;
+    top: 2.75rem; /* 44px = h-11 工具栏高度，避免覆盖 drag-region */
+    left: 0;
+    right: 0;
+    bottom: 0;
     visibility: hidden;
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;
 }
 
 .workspace-sidebar pre {

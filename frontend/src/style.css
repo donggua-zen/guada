@@ -474,8 +474,8 @@ html.acrylic-enabled .sidebar-transparent-bg {
    适用于所有可滚动元素
    ========================================== */
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
@@ -483,9 +483,12 @@ html.acrylic-enabled .sidebar-transparent-bg {
   margin: 2px;
 }
 
-*::-webkit-scrollbar-thumb {
-  width: 6px;
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
+*::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
   background-color: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
   /* border: 1px solid transparent; */

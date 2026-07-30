@@ -134,8 +134,8 @@ defineExpose({
 
 /* 滚动条基础样式 */
 .scroll-container::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
 }
 
 .scroll-container::-webkit-scrollbar-track {
@@ -151,6 +151,7 @@ defineExpose({
     background-clip: content-box;
     transition: background-color 0.2s linear;
     transition-delay: 0.6s;
+    border: 1px solid transparent;
 }
 
 /* 滚动中或悬停时：显示滚动条 */
