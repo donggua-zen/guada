@@ -109,7 +109,7 @@ import { PanelRightExpand20Filled } from "@vicons/fluent";
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
-const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));
+const WorkspaceSidebar = defineAsyncComponent(() => import("./workspace/WorkspaceSidebar.vue"));
 
 // 子 Agent Tab 状态
 const agentTabs = ref<AgentTab[]>([

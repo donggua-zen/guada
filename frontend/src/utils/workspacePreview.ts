@@ -131,6 +131,7 @@ export async function previewFile(filePath: string): Promise<void> {
         path: filePath,
         extension: ext,
         size: 0,
+        isPreview: true,
     })
     tabStore.enterPreviewMode()
     tabStore.selectTab(tabKey)

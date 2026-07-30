@@ -27,7 +27,8 @@
                 <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
                     :class="{ active: activeTabKey === tab.key }"
                     :title="tab.type === 'file' ? tab.name : (tab.title || '未命名窗口')" draggable="true"
-                    @click="onTabClick(tab)" @dragstart="onTabDragStart(index, $event)"
+                    @click="onTabClick(tab)" @dblclick="onTabDblClick(tab)"
+                    @dragstart="onTabDragStart(index, $event)"
                     @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
                     <!-- 文件图标 -->
                     <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
@@ -44,7 +45,8 @@
                             </svg>
                         </span>
                     </template>
-                    <span class="tab-title">{{ truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口'))
+                    <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{
+                        truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口'))
                         }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
@@ -140,112 +142,17 @@
         <!-- 浏览器窗口预览占位（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
         <BrowserPreviewPlaceholder v-if="isElectron" v-show="isPreviewMode && !!browserStore.activeWindowId" />
 
-        <!-- 文件预览面板 -->
-        <div v-show="isPreviewMode && selectedFile && !browserStore.activeWindowId"
-            class="flex flex-col h-full w-full  flex-1">
-            <!-- 标题栏 -->
-            <div
-                class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
-                <div class="flex items-center gap-2 min-w-0">
-                    <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
-                    <div v-if="canTogglePreview"
-                        class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
-                        <button class="preview-mode-btn" :class="{ 'is-active': currentPreviewMode === 'rendered' }"
-                            title="预览" @click="currentPreviewMode = 'rendered'">
-                            <el-icon :size="16">
-                                <Eye20Regular v-if="currentPreviewMode !== 'rendered'" />
-                                <Eye20Filled v-else />
-                            </el-icon>
-                        </button>
-                        <button class="preview-mode-btn" :class="{ 'is-active': currentPreviewMode === 'source' }"
-                            title="源码" @click="currentPreviewMode = 'source'">
-                            <el-icon :size="16">
-                                <Code20Regular v-if="currentPreviewMode !== 'source'" />
-                                <Code20Filled v-else />
-                            </el-icon>
-                        </button>
-                    </div>
-
-                    <span class="font-medium text-gray-600 dark:text-[#8b8d95] truncate ml-2">
-                        {{ selectedFile?.name }}
-                    </span>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <!-- 手动刷新预览按钮 -->
-                        <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
-                            <el-icon :size="14">
-                                <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
-                            </el-icon>
-                        </button>
-                    </div>
-                </div>
-
-
-            </div>
-
-            <div class="flex-1 flex overflow-auto min-h-0 p-1">
-                <div v-if="previewLoading" class="flex items-center justify-center h-full w-full">
-                    <el-icon class="is-loading" size="20">
-                        <LoadingOutlined />
-                    </el-icon>
-                </div>
-
-                <!-- 图片预览 -->
-                <img v-else-if="previewMode === 'image' && !previewError" :src="imagePreviewUrl" @error="onImageError"
-                    class="image-preview w-full h-full object-contain p-2" alt="图片预览" />
-
-                <!-- 不支持的文件 -->
-                <div v-else-if="previewMode === 'unsupported' && !previewError"
-                    class="w-full h-full flex items-center justify-center">
-                    <div class="text-center">
-                        <p class="text-gray-400 dark:text-gray-500 text-sm">此文件暂不支持预览</p>
-                        <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                            在资源管理器中打开
-                        </el-button>
-                    </div>
-                </div>
-
-                <!-- 错误 / 文本内容 -->
-                <div v-else class="w-full min-h-0">
-                    <!-- 文件不存在 -->
-                    <div v-if="fileNotFound" class="w-full h-full flex items-center justify-center p-4">
-                        <div class="text-center">
-                            <p class="text-gray-400 dark:text-gray-500 text-sm">文件已不存在</p>
-                            <el-button @click="closeTab(tabs.find(t => t.key === activeTabKey)!)" size="small" class="mt-3">
-                                关闭标签
-                            </el-button>
-                        </div>
-                    </div>
-                    <!-- 其他错误 -->
-                    <div v-else-if="previewError" class="w-full h-full flex items-center justify-center p-4">
-                        <div class="text-center">
-                            <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
-                            <el-button v-if="isElectron && previewMode === 'unsupported'"
-                                @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                                在资源管理器中打开
-                            </el-button>
-                        </div>
-                    </div>
-                    <template v-else-if="previewMode === 'text'">
-                        <!-- HTML 预览模式（通过 src 直接加载，后端 Set-Cookie 鉴权） -->
-                        <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :src="htmlPreviewSrc"
-                            class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
-
-                        <!-- Markdown 渲染模式（iframe srcdoc + <base> 让浏览器原生解析相对路径） -->
-                        <iframe v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
-                            :srcdoc="markdownSrcDoc" ref="markdownIframeRef"
-                            class="w-full border-0" style="height: 100%;"
-                            sandbox="allow-same-origin allow-scripts" />
-
-                        <!-- 源码高亮（所有文件的 source 模式 + 不支持预览的文本文件） -->
-                        <div v-else-if="highlightedCode" class="code-preview-container" v-html="highlightedCode" />
-
-                        <!-- 普通文本预览（不支持高亮的文件） -->
-                        <pre v-else v-text="fileContent"
-                            class="text-sm leading-relaxed whitespace-pre-wrap break-all dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
-                    </template>
-                </div>
-            </div>
-        </div>
+        <!-- 文件预览面板（visibility:hidden 持久化，DOM 不销毁且保留滚动位置，含跨域 iframe） -->
+        <template v-if="sessionId">
+            <FilePreviewPanel v-for="tab in fileTabs" :key="tab.key"
+                :class="{ 'panel-hidden': !(isPreviewMode && activeTabKey === tab.key && !browserStore.activeWindowId) }"
+                :session-id="sessionId" :tab="tab"
+                :is-active="isPreviewMode && activeTabKey === tab.key && !browserStore.activeWindowId"
+                :content-version="fileChangeVersions[tab.path!] || 0"
+                :workspace-path="currentWorkspacePath"
+                @close="closeTab(tab)"
+                @insert-to-input="emit('insert-to-input', $event)" />
+        </template>
 
         <!-- 空状态页（预览模式但无激活标签时显示） -->
         <div v-if="isPreviewMode && !activeTabKey"
@@ -290,21 +197,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { LoadingOutlined } from '@vicons/antd';
-import { Dismiss20Regular, Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, Folder16Regular, Window16Regular } from '@vicons/fluent';
-// @ts-ignore - icons 组件尚未迁移到 TypeScript
+import { Folder16Regular, Window16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
-import { useStorage, useThrottleFn } from '@vueuse/core';
-import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown';
-import { useTheme } from '@/composables/useTheme';
-import { useHighlight } from '@/composables/useHighlight';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
-import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
+import FilePreviewPanel from './FilePreviewPanel.vue';
+import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import SessionTodoList from './SessionTodoList.vue';
 import SessionAgentList from './SessionAgentList.vue';
@@ -316,17 +218,6 @@ import { useTabStore } from '@/stores/tab';
 import { usePreviewTabCache, type UnifiedTab } from '@/composables/usePreviewTabCache';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
 import WindowControls from '@/components/WindowControls.vue';
-
-interface SelectedFile {
-    name: string;
-    path: string;
-    extension: string;
-    size: number;
-    content: string;
-    mimeType: string;
-}
-
-type PreviewMode = 'rendered' | 'source';
 
 const props = defineProps<{
     sessionId: string | null;
@@ -341,25 +232,15 @@ const emit = defineEmits<{
 
 const treeData = ref<WorkspaceNode[]>([]);
 const isLoading = ref(false);
-const selectedFile = ref<SelectedFile | null>(null);
-const fileContent = ref('');
-const previewLoading = ref(false);
 const workspaceDialogVisible = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
-const previewError = ref('');
-const fileNotFound = ref(false);
 const selectedNodePath = ref('');
 
-// 预览类型：text / image / unsupported
-const previewMode = ref<'text' | 'image' | 'unsupported' | null>(null);
-// 图片预览 URL（Electron 为 file:// 协议，非 Electron 为 rawfile URL）
-const imagePreviewUrl = ref('');
-// HTML 预览 URL（iframe src，Electron 为 file://，非 Electron 为 html-preview 端点）
-const htmlPreviewUrl = ref('');
-// HTML 预览版本号，文件变更时递增以强制 iframe 重新加载
-const htmlPreviewVersion = ref(0);
-// 缓存的工作目录绝对路径（用于 Electron file:// URL 拼接）
-const cachedWorkspacePath = ref<string | null>(null);
+// 文件变更版本号（SSE 事件递增，驱动 FilePreviewPanel 重载）
+const fileChangeVersions = ref<Record<string, number>>({});
+
+// 文件标签列表（用于 v-for 渲染 FilePreviewPanel）
+const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
 
 // 正在加载子节点的目录路径集合
 const loadingPaths = ref<Set<string>>(new Set());
@@ -461,7 +342,13 @@ function onTabClick(tab: UnifiedTab): void {
     if (suppressClick) return;
     tabStore.enterPreviewMode()
     tabStore.selectTab(tab.key)
-    // 文件内容加载由 watch 自动处理
+}
+
+/** 双击标签栏：临时标签提升为持久 */
+function onTabDblClick(tab: UnifiedTab): void {
+    if (tab.type === 'file' && tab.isPreview) {
+        tabStore.promoteTab(tab.key)
+    }
 }
 
 // ── 悬浮目录树面板 ──
@@ -594,7 +481,6 @@ function enterPreviewMode(): void {
 function deselectAllTabs(): void {
     tabStore.enterPreviewMode()
     tabStore.selectTab(null)
-    closePreview();
 }
 
 // ── 浏览器 store 同步：由 tabStore 统一管理 ──
@@ -664,7 +550,7 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
                 await nextTick()
                 tabStore.selectTab(cached.activeTabKey)
-                // 内容加载由 watch 自动处理
+                // 内容加载由 FilePreviewPanel 自动处理
             } else if (tabStore.tabs.length > 0) {
                 await nextTick()
                 tabStore.selectTab(tabStore.tabs[0].key)
@@ -683,74 +569,6 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
 
 // ── 统一标签操作 ──
 
-/**
- * 加载文件标签的预览内容（统一入口，由 watch 和 handleFileSelect 共用）
- */
-async function loadFilePreview(tab: UnifiedTab): Promise<void> {
-    if (!props.sessionId || tab.type !== 'file') return
-
-    const fileTab = tabStore.tabs.find(t => t.key === tab.key)
-    if (!fileTab) return
-
-    selectedFile.value = {
-        name: fileTab.name!,
-        path: fileTab.path!,
-        extension: fileTab.extension!,
-        size: fileTab.size!,
-        content: '',
-        mimeType: ''
-    }
-    previewError.value = ''
-    previewLoading.value = false
-    fileContentHash.value = ''
-
-    const ext = fileTab.extension!
-    if (isTextFile(ext)) {
-        previewMode.value = 'text'
-        if (isHtmlFile.value) {
-            if (isElectron && window.location.protocol === 'file:') {
-                await loadHtmlPreviewLocal({ name: fileTab.name!, path: fileTab.path!, isDirectory: false, hasChildren: false } as WorkspaceNode)
-            } else {
-                htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, fileTab.path!)
-            }
-            await loadFileContent(fileTab.path!)
-        } else if (isMarkdownFile.value) {
-            // Markdown 预览：Electron file:// 模式需缓存 workspacePath（cookie 由 loadFileContent 的 getWorkspaceFile 顺带设置）
-            if (isElectron && window.location.protocol === 'file:' && !cachedWorkspacePath.value) {
-                try {
-                    const resp = await apiService.getWorkspacePath(props.sessionId!);
-                    cachedWorkspacePath.value = resp.workspacePath || null;
-                } catch { /* ignore */ }
-            }
-            await loadFileContent(fileTab.path!)
-        } else {
-            await loadFileContent(fileTab.path!)
-        }
-    } else if (isImageFile(ext)) {
-        previewMode.value = 'image'
-        if (isElectron && window.location.protocol === 'file:') {
-            await loadImageLocal({ name: fileTab.name!, path: fileTab.path!, isDirectory: false, hasChildren: false } as WorkspaceNode)
-        } else {
-            if (fileTab.size && fileTab.size > 20 * 1024 * 1024) {
-                previewError.value = '文件过大暂不支持预览'
-            } else {
-                imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, fileTab.path!)
-            }
-        }
-    } else {
-        previewMode.value = 'unsupported'
-    }
-}
-
-// ── 内容加载 watch：当选中的文件标签变化且在预览模式时，自动加载内容（Phase 2） ──
-watch([() => tabStore.activeTabKey, () => tabStore.isPreviewMode], async ([key, preview]) => {
-    if (!preview || !key || !key.startsWith('file:')) return
-    // 内容已加载则跳过
-    if (selectedFile.value?.path && `file:${selectedFile.value.path}` === key && fileContentHash.value) return
-    const tab = tabStore.tabs.find(t => t.key === key)
-    if (tab) await loadFilePreview(tab)
-}, { immediate: true })
-
 /** 关闭标签（统一入口） */
 async function closeTab(tab: UnifiedTab): Promise<void> {
     if (tab.type === 'browser' && tab.windowId) {
@@ -762,10 +580,6 @@ async function closeTab(tab: UnifiedTab): Promise<void> {
             }
         }
         await nextTick()
-    }
-    // 如果关闭的是当前激活的标签，清理预览状态
-    if (tabStore.activeTabKey === tab.key) {
-        closePreview()
     }
     tabStore.removeTab(tab.key)
 }
@@ -884,118 +698,11 @@ async function syncExpandedPaths(sessionId = props.sessionId): Promise<boolean> 
 /**
  * 点击文件节点选中
  */
-function handleTreeNodeSelect(node: WorkspaceNode) {
+function handleTreeNodeSelect(node: WorkspaceNode, isPreview?: boolean) {
     if (node.isDirectory) return;
     selectedNodePath.value = node.path;
-    handleFileSelect(node);
+    handleFileSelect(node, isPreview);
 }
-
-// 预览模式：rendered=预览，source=源码，默认预览
-const currentPreviewMode = useStorage<PreviewMode>('filePreviewMode', 'rendered');
-
-// 初始化 Markdown 解析器（不再需要 resolveImageUrl，<base> 标签接管路径解析）
-const { parseMarkdown } = usePreviewMarkdown();
-
-// 初始化代码高亮
-const { highlightCode, getLanguageFromExtension, isTextFile, isImageFile } = useHighlight();
-
-// 当前预览文件的内容哈希，用于检测文件是否变化
-const fileContentHash = ref('');
-
-/**
- * 计算字符串的简单哈希值
- */
-function hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return hash.toString(16);
-}
-
-const isHtmlFile = computed(() => {
-    if (!selectedFile.value) return false;
-    const ext = selectedFile.value.extension.toLowerCase();
-    return ext === '.html' || ext === '.htm';
-});
-
-// iframe src：在 htmlPreviewUrl 基础上附加版本号参数，文件变更时递增版本以强制浏览器重新加载
-const htmlPreviewSrc = computed(() => {
-    if (!htmlPreviewUrl.value) return '';
-    const separator = htmlPreviewUrl.value.includes('?') ? '&' : '?';
-    return `${htmlPreviewUrl.value}${separator}_v=${htmlPreviewVersion.value}`;
-});
-
-// 判断是否为 Markdown 文件
-const isMarkdownFile = computed(() => {
-    if (!selectedFile.value) return false;
-    const ext = selectedFile.value.extension.toLowerCase();
-    return ext === '.md' || ext === '.markdown';
-});
-
-// 判断是否可以切换预览模式（仅 md 和 html）
-const canTogglePreview = computed(() => {
-    return isMarkdownFile.value || isHtmlFile.value;
-});
-
-// Markdown 渲染（仅负责渲染，不判断文件类型和模式）
-const markdownHtml = computed(() => {
-    if (!selectedFile.value || !fileContent.value) return '';
-    return parseMarkdown(fileContent.value);
-});
-
-// 响应式暗色模式（跟随主程序主题切换）
-const { isDark: isDarkMode } = useTheme();
-
-// Markdown iframe srcdoc：通过 <base> 标签让浏览器原生解析所有相对路径
-const markdownSrcDoc = computed(() => {
-    if (!markdownHtml.value || !props.sessionId) return '';
-
-    // 计算 Markdown 文件所在目录（工作空间相对路径）
-    const mdFilePath = (selectedFile.value?.path || '').replace(/\\/g, '/');
-    const lastSlashIndex = mdFilePath.lastIndexOf('/');
-    const mdFileDir = lastSlashIndex > 0 ? mdFilePath.substring(0, lastSlashIndex) : '';
-
-    let baseUrl: string;
-    if (isElectron && window.location.protocol === 'file:' && cachedWorkspacePath.value) {
-        // Electron file:// 模式：本地文件路径，无需鉴权
-        const separator = cachedWorkspacePath.value.endsWith('/') || cachedWorkspacePath.value.endsWith('\\') ? '' : '/';
-        const fullPath = (cachedWorkspacePath.value + separator + mdFileDir).replace(/\\/g, '/');
-        const encodedPath = encodeURI(fullPath);
-        baseUrl = encodedPath.startsWith('/') ? `file://${encodedPath}/` : `file:///${encodedPath}/`;
-    } else {
-        // Web / Electron Dev：相对路径走 Vite proxy，cookie 同源携带
-        baseUrl = `/api/v1/sessions/${props.sessionId}/workspace/html-preview/${mdFileDir ? mdFileDir + '/' : ''}`;
-    }
-
-    return buildMarkdownSrcDoc(markdownHtml.value, baseUrl, isDarkMode.value);
-});
-
-// 监听 iframe postMessage（链接点击）
-function onMarkdownMessage(e: MessageEvent) {
-    if (!e.data || typeof e.data !== 'object') return;
-    if (e.data.type === 'md-preview-link' && e.data.url) {
-        import('@/utils/workspacePreview').then(({ openLink }) => openLink(e.data.url));
-    }
-}
-
-onMounted(() => {
-    window.addEventListener('message', onMarkdownMessage);
-});
-onBeforeUnmount(() => {
-    window.removeEventListener('message', onMarkdownMessage);
-});
-
-// 源码高亮（仅负责渲染，不判断文件类型和模式）
-const highlightedCode = computed(() => {
-    if (!selectedFile.value || !fileContent.value) return '';
-    const lang = getLanguageFromExtension(selectedFile.value.extension.toLowerCase());
-    if (lang) return highlightCode(fileContent.value, lang);
-    return '';
-});
-
 
 /**
  * 增量更新树数据，保留已加载的子节点和展开状态
@@ -1196,9 +903,10 @@ function updateNodeLocal(event: FileChangeEvent) {
         }
 
         case 'change':
-            // 文件内容变化，刷新预览内容（如果是当前选中的文件）
-            if (selectedFile.value && selectedFile.value.path === normalizedPath) {
-                loadFileContent(normalizedPath, false, true);
+            // 递增文件变更版本号 → FilePreviewPanel 的 watch 会处理重载
+            fileChangeVersions.value = {
+                ...fileChangeVersions.value,
+                [normalizedPath]: (fileChangeVersions.value[normalizedPath] || 0) + 1
             }
             break;
     }
@@ -1450,17 +1158,27 @@ async function handleRename() {
         if (result.success) {
             ElMessage.success('重命名成功');
             // 本地更新节点名称，避免重新加载整棵树
+            const oldPath = node.path;
             node.name = newName.trim();
             if (result.newPath) {
                 node.path = result.newPath;
             }
-            // 如果当前预览的文件正好是重命名的文件，更新预览路径
-            if (selectedFile.value && selectedFile.value.path === node.path) {
-                selectedFile.value.name = newName.trim();
-                selectedFile.value.path = result.newPath || node.path;
-                const ext = newName.trim().substring(newName.trim().lastIndexOf('.')).toLowerCase();
-                selectedFile.value.extension = ext;
+            // 更新标签中的文件路径（key 变化导致旧面板卸载、新面板挂载）
+            const oldKey = `file:${oldPath}`;
+            const newKey = `file:${result.newPath || oldPath}`;
+            const oldTab = tabStore.tabs.find(t => t.key === oldKey);
+            if (oldTab) {
+                const wasActive = tabStore.activeTabKey === oldKey;
+                const newExt = newName.trim().substring(newName.trim().lastIndexOf('.')).toLowerCase();
+                tabStore.removeTab(oldKey);
+                tabStore.addTab({
+                    type: 'file', key: newKey, name: newName.trim(),
+                    path: result.newPath || oldPath, extension: newExt, size: oldTab.size || 0,
+                });
+                if (wasActive) tabStore.selectTab(newKey);
             }
+            // 清除旧路径的文件变更版本号
+            delete fileChangeVersions.value[oldPath];
         }
     } catch (error: any) {
         // ElMessageBox.prompt 取消会抛异常，忽略
@@ -1534,13 +1252,13 @@ async function handleDelete() {
  * - 图片文件（非 Electron）→ 使用 rawfile URL（后端限制 20MB）
  * - 不支持格式 → 显示"此文件暂不支持预览" + Electron 打开按钮
  */
-async function handleFileSelect(node: WorkspaceNode) {
+async function handleFileSelect(node: WorkspaceNode, isPreview: boolean = true) {
     if (node.isDirectory) return;
     if (!props.sessionId) return;
 
     const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
 
-    // 添加标签 + 选中 + 进入预览模式（内容加载由 watch 自动处理）
+    // 添加标签 + 选中 + 进入预览模式（内容加载由 FilePreviewPanel 自动处理）
     const tabKey = `file:${node.path}`;
     tabStore.addTab({
         type: 'file',
@@ -1549,181 +1267,10 @@ async function handleFileSelect(node: WorkspaceNode) {
         path: node.path,
         extension: ext,
         size: node.size || 0,
+        isPreview,
     });
     tabStore.enterPreviewMode()
     tabStore.selectTab(tabKey)
-    // 内容加载由 Phase 2 的 watch 自动处理
-}
-
-/**
- * Electron 环境下加载本地图片
- * 获取工作目录绝对路径，拼接相对路径构造 file:// URL
- */
-async function loadImageLocal(node: WorkspaceNode) {
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId!);
-        const absWorkspacePath = resp.workspacePath;
-        if (!absWorkspacePath) {
-            previewError.value = '无法获取工作目录路径';
-            return;
-        }
-        // 拼接绝对路径：工作目录 + 文件相对路径
-        const relativePath = node.path.replace(/\\/g, '/');
-        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/';
-        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/');
-        // encodeURI 编码空格、中文等特殊字符，但保留 : / 等 URL 合法字符
-        const encodedPath = encodeURI(fullPath);
-        // 构造 file:// 协议 URL，Windows 需要 / 前缀
-        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`;
-        imagePreviewUrl.value = fileUrl;
-        console.log('[WorkspaceSidebar] Image local URL:', fileUrl);
-    } catch (error: any) {
-        previewError.value = '加载图片失败';
-        console.error('[WorkspaceSidebar] Failed to load image locally:', error);
-    }
-}
-
-/**
- * Electron 环境下加载本地 HTML 文件
- * 获取工作目录绝对路径，拼接相对路径构造 file:// URL
- * 浏览器原生处理所有相对路径（CSS、图片等）
- */
-async function loadHtmlPreviewLocal(node: WorkspaceNode) {
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId!);
-        const absWorkspacePath = resp.workspacePath;
-        if (!absWorkspacePath) {
-            previewError.value = '无法获取工作目录路径';
-            return;
-        }
-        const relativePath = node.path.replace(/\\/g, '/');
-        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/';
-        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/');
-        const encodedPath = encodeURI(fullPath);
-        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`;
-        htmlPreviewUrl.value = fileUrl;
-        console.log('[WorkspaceSidebar] HTML local URL:', fileUrl);
-    } catch (error: any) {
-        previewError.value = '加载 HTML 失败';
-        console.error('[WorkspaceSidebar] Failed to load HTML locally:', error);
-    }
-}
-
-/**
- * 加载文件内容
- * @param filePath 文件路径
- * @param force 是否强制刷新，忽略哈希对比
- * @param skipLoading 是否跳过 loading 状态（用于静默刷新）
- */
-async function loadFileContent(filePath: string, force = false, skipLoading = false) {
-    if (!props.sessionId) return;
-
-    // 静默刷新时不显示 loading 状态，避免闪烁
-    if (!skipLoading) {
-        previewLoading.value = true;
-    }
-    previewError.value = '';
-    fileNotFound.value = false;
-
-    try {
-        const response = await apiService.getWorkspaceFile(props.sessionId, filePath);
-
-        // 计算新内容的哈希值
-        const newHash = hashString(response.content);
-
-        // 如果内容没有变化，不更新（保留滚动位置）
-        if (!force && fileContentHash.value && newHash === fileContentHash.value) {
-            previewLoading.value = false;
-            return;
-        }
-
-        // 更新内容和哈希
-        fileContentHash.value = newHash;
-        selectedFile.value!.content = response.content;
-        selectedFile.value!.extension = response.extension;
-        selectedFile.value!.mimeType = response.mimeType;
-        fileContent.value = response.content;
-
-        // HTML 预览：递增版本号，强制 iframe 以新 URL 重新加载
-        if (isHtmlFile.value && currentPreviewMode.value === 'rendered') {
-            htmlPreviewVersion.value++;
-        }
-    } catch (error: any) {
-        const status = error?.response?.status;
-        const msg = error?.response?.data?.message || error.message || '';
-        if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
-            fileNotFound.value = true;
-        } else if (msg.includes('File too large') || msg.includes('too large')) {
-            previewError.value = '文件过大暂不支持预览';
-        } else {
-            previewError.value = '加载文件失败';
-        }
-        console.error('Failed to load file:', error);
-    } finally {
-        previewLoading.value = false;
-    }
-}
-
-/**
- * 手动刷新预览
- */
-function handleManualRefresh() {
-    if (!selectedFile.value) return;
-    // 重新加载文件内容（force=true 绕过哈希对比）
-    loadFileContent(selectedFile.value.path, true, false);
-}
-
-/**
- * 关闭预览
- */
-function closePreview() {
-    selectedFile.value = null;
-    fileContent.value = '';
-    previewError.value = '';
-    fileNotFound.value = false;
-    previewMode.value = null;
-    imagePreviewUrl.value = '';
-    htmlPreviewUrl.value = '';
-}
-
-/**
- * 图片加载失败处理
- * - Electron: file:// 加载失败，通常是文件不存在/无法访问
- * - 非 Electron: rawfile 返回错误，通常是文件过大（超 20MB）
- */
-function onImageError(event: Event | string) {
-    const src = (typeof event === 'object' && (event as Event).target instanceof HTMLImageElement)
-        ? (event.target as HTMLImageElement).getAttribute('src')
-        : imagePreviewUrl.value;
-    console.error('[WorkspaceSidebar] Image load failed, URL:', src);
-    previewError.value = isElectron ? '图片加载失败' : '文件过大暂不支持预览';
-}
-
-/**
- * 在资源管理器中打开当前选中的文件（预览面板内的按钮使用）
- */
-async function handleOpenInExplorerForCurrent() {
-    if (!selectedFile.value || !props.sessionId || !isElectron) return;
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId);
-        const wsPath = resp.workspacePath;
-        if (!wsPath) {
-            ElMessage.error('无法获取工作目录路径');
-            return;
-        }
-        const relativePath = selectedFile.value.path.replace(/\\/g, '/');
-        const separator = wsPath.endsWith('/') || wsPath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
-        let fullPath = wsPath + separator + relativePath;
-        // 如果是文件，打开其父目录
-        const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
-        if (lastSep > 0) {
-            fullPath = fullPath.substring(0, lastSep);
-        }
-        await window.electronAPI!.openFolder(fullPath);
-    } catch (error: any) {
-        console.error('[WorkspaceSidebar] Open in explorer failed:', error);
-        ElMessage.error('打开失败');
-    }
 }
 
 /**
@@ -1849,8 +1396,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
     if (newSessionId !== oldSessionId) {
         tabStore.exitPreviewMode()
-        closePreview();
         tabStore.clearAll();
+        fileChangeVersions.value = {};
         watchedWorkspacePath = null;
         resetExpandedPaths();
         treeData.value = [];
@@ -1904,79 +1451,23 @@ onUnmounted(() => {
     closeContextMenu();
 });
 </script>
-<style>
-@import "@/assets/markdown.css";
-
-.code-preview-container pre code.hljs {
-    color: var(--color-text, #333) !important;
-}
-
-/* 代码行号样式 */
-.code-lines {
-    display: flex;
-    flex-direction: column;
-}
-
-.line {
-    display: flex;
-    min-height: 1.5em;
-}
-
-.line-num {
-    box-sizing: content-box;
-    user-select: none;
-    text-align: right;
-    padding-right: 0.75em;
-    color: #9ca3af;
-    font-variant-numeric: tabular-nums;
-    border-right: 1px solid #e5e7eb;
-    margin-right: 0.75em;
-}
-
-.dark .line-num {
-    color: #4b5563;
-    border-right-color: #374151;
-}
-
-.line-content {
-    flex: 1;
-    white-space: pre;
-}
-</style>
 <style scoped>
 .workspace-sidebar {
     width: 100%;
     height: 100%;
 }
 
+/* 非激活文件预览面板：visibility:hidden 保留渲染状态（含滚动位置），不触发 display:none 的重置 */
+.workspace-sidebar .panel-hidden {
+    position: absolute !important;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+
 .workspace-sidebar pre {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-}
-
-/* Markdown 预览容器 - 复用 markdown-text 样式 */
-.markdown-preview {
-    color: var(--color-text, #333) !important;
-}
-
-.markdown-preview {
-    padding: 16px;
-    overflow: auto;
-    height: 100%;
-}
-
-/* 代码高亮容器样式 - 双层滚动 */
-.code-preview-container {
-    overflow-y: auto;
-    overflow-x: auto;
-    min-height: 100%;
-    max-height: 100%;
-}
-
-
-
-:deep(.code-preview-container pre code.hljs) {
-    overflow-x: unset !important;
-    background-color: unset !important;
 }
 
 /* 工作目录树样式 — 已迁移到 WorkspaceTreeNode.vue */
@@ -2003,52 +1494,6 @@ onUnmounted(() => {
 .workspace-tool-btn:hover {
     background: var(--color-sidebar-bg-hover);
     color: var(--color-text);
-}
-
-/* 预览/源码模式切换按钮 */
-.preview-mode-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    background: transparent;
-    color: var(--color-text-gray);
-    transition: all 0.15s ease;
-    outline: none;
-}
-
-.preview-mode-btn:hover {
-    background: var(--color-sidebar-bg-hover);
-}
-
-.preview-mode-btn.is-active {
-    color: var(--color-text);
-    background: var(--color-bg);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-/* 关闭预览按钮 */
-.preview-close-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    background: transparent;
-    color: var(--color-text);
-    transition: all 0.15s ease;
-    outline: none;
-}
-
-.preview-close-btn:hover {
-    background: var(--color-sidebar-bg-hover);
 }
 
 .drag-region {
@@ -2148,6 +1593,11 @@ onUnmounted(() => {
 .browser-tab.active .tab-title {
     color: var(--color-text);
     font-weight: 500;
+}
+
+/* 临时标签斜体显示 */
+.browser-tab .tab-title.is-preview {
+    font-style: italic;
 }
 
 .tab-close {

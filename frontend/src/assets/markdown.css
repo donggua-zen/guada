@@ -232,12 +232,12 @@ ol > *:not(li) {
 }
 
 .dark .markdown-text table th {
-  background-color: var(--color-sidebar-bg-active);
+  /* background-color: var(--color-sidebar-bg-active); */
   color: var(--color-text);
 }
 
 .dark .markdown-text table td {
-  background-color: var(--color-surface);
+  /* background-color: var(--color-surface); */
   color: var(--color-text);
 }
 

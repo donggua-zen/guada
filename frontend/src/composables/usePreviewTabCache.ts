@@ -11,6 +11,8 @@ export interface UnifiedTab {
     name?: string;
     extension?: string;
     size?: number;
+    lastAccessedAt?: number;  // 最后访问时间戳（LRU 淘汰依据）
+    isPreview?: boolean;       // 临时标签标记（单击打开为临时，双击打开为持久）
     // browser
     windowId?: string;
     title?: string;

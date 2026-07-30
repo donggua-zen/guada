@@ -10,6 +10,8 @@ import type { UnifiedTab } from '@/composables/usePreviewTabCache'
  * tabs / activeTabKey 是唯一数据源，所有组件通过此 store 读写。
  * workspacePreviewMode 由 layoutStore 管理，tabStore 通过 computed 暴露。
  */
+const MAX_FILE_TABS = 10
+
 export const useTabStore = defineStore('tab', () => {
     const browserStore = useBrowserWebviewStore()
     const layoutStore = useLayoutStore()
@@ -44,13 +46,72 @@ export const useTabStore = defineStore('tab', () => {
             // file 标签或 null：取消浏览器激活
             browserStore.setActive(null)
         }
+        // 更新最后访问时间（LRU 依据）
+        if (key) {
+            const tab = tabs.value.find(t => t.key === key)
+            if (tab) tab.lastAccessedAt = Date.now()
+        }
     }
 
     // ── 标签增删 ──
 
     function addTab(tab: UnifiedTab): void {
-        if (!tabs.value.some(t => t.key === tab.key)) {
-            tabs.value.push(tab)
+        // 初始化访问时间
+        if (tab.type === 'file' && !tab.lastAccessedAt) {
+            tab.lastAccessedAt = Date.now()
+        }
+
+        // 已存在的标签直接返回（不触发临时标签替换）
+        if (tabs.value.some(t => t.key === tab.key)) return
+
+        // 新标签且为临时：先移除已有的其他临时标签（替换语义）
+        if (tab.type === 'file' && tab.isPreview) {
+            const existingPreview = tabs.value.find(
+                t => t.type === 'file' && t.isPreview && t.key !== tab.key
+            )
+            if (existingPreview) {
+                removeTab(existingPreview.key)
+            }
+        }
+
+        tabs.value.push(tab)
+        // 文件标签超出上限时，淘汰策略：
+        // 1. 优先淘汰临时标签（非激活的）
+        // 2. 其次淘汰 lastAccessedAt 最小（最久未访问）的非激活持久标签
+        if (tab.type === 'file') {
+            const fileTabs = tabs.value.filter(t => t.type === 'file')
+            if (fileTabs.length > MAX_FILE_TABS) {
+                evictFileTab()
+            }
+        }
+    }
+
+    /** 淘汰一个文件标签：优先临时，其次 LRU */
+    function evictFileTab(): void {
+        // 优先淘汰非激活的临时标签
+        const previewTab = tabs.value.find(
+            t => t.type === 'file' && t.isPreview && t.key !== activeTabKey.value
+        )
+        if (previewTab) {
+            removeTab(previewTab.key)
+            return
+        }
+        // 其次淘汰 lastAccessedAt 最小（最久未访问）的非激活持久标签
+        let oldest: UnifiedTab | null = null
+        for (const t of tabs.value) {
+            if (t.type !== 'file' || t.key === activeTabKey.value) continue
+            if (!oldest || (t.lastAccessedAt || 0) < (oldest.lastAccessedAt || 0)) {
+                oldest = t
+            }
+        }
+        if (oldest) removeTab(oldest.key)
+    }
+
+    /** 临时标签提升为持久 */
+    function promoteTab(key: string): void {
+        const tab = tabs.value.find(t => t.key === key)
+        if (tab && tab.isPreview) {
+            tab.isPreview = false
         }
     }
 
@@ -136,6 +197,7 @@ export const useTabStore = defineStore('tab', () => {
         addTab,
         removeTab,
         reorderTab,
+        promoteTab,
         syncActiveWindowId,
         syncBrowserTabs,
         clearAll,

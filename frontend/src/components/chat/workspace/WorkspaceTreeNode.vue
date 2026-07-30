@@ -52,7 +52,7 @@
                 :selected-path="selectedPath"
                 :loading-paths="loadingPaths"
                 :on-load="onLoad"
-                @select="(n) => $emit('select', n)"
+                @select="(n, isPreview) => $emit('select', n, isPreview)"
                 @toggle="(n, e) => $emit('toggle', n, e)"
                 @contextmenu="(e, n) => $emit('contextmenu', e, n)"
             />
@@ -79,18 +79,32 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    select: [node: WorkspaceNode];
+    select: [node: WorkspaceNode, isPreview?: boolean];
     contextmenu: [event: MouseEvent, node: WorkspaceNode];
     toggle: [node: WorkspaceNode, expanded: boolean];
 }>();
 
 const expanded = ref(false);
 
+// 单击/双击延迟区分（仅文件节点）
+let clickTimer: ReturnType<typeof setTimeout> | null = null;
+
 function handleClick() {
     if (props.node.isDirectory) {
         toggle();
+        return
+    }
+    // 文件节点：延迟区分单击/双击
+    if (clickTimer) {
+        // 第二次点击在延迟内到达 → 双击 → 持久标签
+        clearTimeout(clickTimer)
+        clickTimer = null
+        emit('select', props.node, false)
     } else {
-        emit('select', props.node);
+        clickTimer = setTimeout(() => {
+            clickTimer = null
+            emit('select', props.node, true)
+        }, 250)
     }
 }
 
