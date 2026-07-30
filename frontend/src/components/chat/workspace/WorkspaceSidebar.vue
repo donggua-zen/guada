@@ -95,7 +95,7 @@
                     <!-- 更换工作目录按钮 -->
                     <el-tooltip content="更换工作目录" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
-                            <el-icon size="16">
+                            <el-icon size="15">
                                 <Switch />
                             </el-icon>
                         </el-button>
@@ -103,7 +103,7 @@
                     <!-- 打开文件夹按钮（仅 Electron 环境） -->
                     <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
-                            <el-icon size="16">
+                            <el-icon size="15">
                                 <WindowsExplorer />
                             </el-icon>
                         </el-button>
@@ -111,7 +111,7 @@
                     <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
                     <el-tooltip v-if="isElectron" content="以 VSCode 打开工作目录" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
-                            <el-icon size="16">
+                            <el-icon size="15">
                                 <VsCode />
                             </el-icon>
                         </el-button>
@@ -119,7 +119,7 @@
                     <!-- 刷新按钮 -->
                     <el-tooltip content="刷新" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
-                            <el-icon size="16">
+                            <el-icon size="15">
                                 <Refresh />
                             </el-icon>
                         </el-button>
@@ -234,7 +234,12 @@ const treeData = ref<WorkspaceNode[]>([]);
 const isLoading = ref(false);
 const workspaceDialogVisible = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
-const selectedNodePath = ref('');
+// 树节点高亮路径：从 activeTabKey 派生，与预览标签选中自动对齐
+const selectedNodePath = computed(() => {
+    const key = tabStore.activeTabKey;
+    if (key?.startsWith('file:')) return key.slice(5);
+    return '';
+});
 
 // 文件变更版本号（SSE 事件递增，驱动 FilePreviewPanel 重载）
 const fileChangeVersions = ref<Record<string, number>>({});
@@ -700,50 +705,20 @@ async function syncExpandedPaths(sessionId = props.sessionId): Promise<boolean> 
  */
 function handleTreeNodeSelect(node: WorkspaceNode, isPreview?: boolean) {
     if (node.isDirectory) return;
-    selectedNodePath.value = node.path;
     handleFileSelect(node, isPreview);
 }
 
 /**
- * 增量更新树数据，保留已加载的子节点和展开状态
- * 通过就地修改数组元素，避免 el-tree 重新渲染
+ * 递归合并树数据，保留已加载的子节点（避免刷新时丢失懒加载的 children）
  */
-function updateTreeData(oldNodes: WorkspaceNode[], newNodes: WorkspaceNode[]): void {
-    // 创建新节点的映射表
-    const newNodeMap = new Map<string, WorkspaceNode>();
-    newNodes.forEach(node => {
-        newNodeMap.set(node.path, node);
-    });
-
-    // 删除旧数组中不存在的节点（从后往前删，避免索引问题）
-    for (let i = oldNodes.length - 1; i >= 0; i--) {
-        if (!newNodeMap.has(oldNodes[i].path)) {
-            oldNodes.splice(i, 1);
+function mergeTreeData(oldNodes: WorkspaceNode[], newNodes: WorkspaceNode[]): WorkspaceNode[] {
+    const oldMap = new Map(oldNodes.map(n => [n.path, n]));
+    return newNodes.map(newNode => {
+        const old = oldMap.get(newNode.path);
+        if (old?.children?.length) {
+            return { ...newNode, children: mergeTreeData(old.children, newNode.children || []) };
         }
-    }
-
-    // 更新或添加节点
-    newNodes.forEach((newNode, index) => {
-        const existingIndex = oldNodes.findIndex(n => n.path === newNode.path);
-
-        if (existingIndex !== -1) {
-            // 更新现有节点，保留 children（这是关键！）
-            const oldNode = oldNodes[existingIndex];
-            oldNode.name = newNode.name;
-            oldNode.size = newNode.size;
-            oldNode.hasChildren = newNode.hasChildren;
-            oldNode.isDirectory = newNode.isDirectory;
-            // 不替换 children，保持已加载的子节点和展开状态
-
-            // 如果位置变了，移动到正确位置
-            if (existingIndex !== index) {
-                oldNodes.splice(existingIndex, 1);
-                oldNodes.splice(index, 0, oldNode);
-            }
-        } else {
-            // 添加新节点
-            oldNodes.splice(index, 0, newNode);
-        }
+        return newNode;
     });
 }
 
@@ -766,14 +741,8 @@ async function loadTree(force = false) {
             return;
         }
 
-        // 保存当前选中路径
-        const currentSelected = selectedNodePath.value;
-
-        // 增量更新树数据，保留已加载的子节点和展开状态
-        updateTreeData(treeData.value, response.tree || []);
-
-        // 如果当前选中的文件还在树中，保持选中状态（由 selectedNodePath 驱动）
-        selectedNodePath.value = currentSelected;
+        // 合并树数据，保留已加载的子节点和展开状态
+        treeData.value = mergeTreeData(treeData.value, response.tree || []);
 
         // 加载工作目录路径（用于顶部工具栏显示）
         if (!currentWorkspacePath.value) {
