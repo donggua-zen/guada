@@ -239,13 +239,6 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--color-border, #d0d0d0);
 }
 
-@media (prefers-color-scheme: dark) {
-  .browser-toolbar {
-    background: transparent;
-    border-color: var(--color-border, #3e4147);
-  }
-}
-
 /* 导航按钮组 */
 .nav-btn-group {
   display: flex;
@@ -280,13 +273,12 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-@media (prefers-color-scheme: dark) {
-  .nav-btn {
-    color: #aaa;
-  }
-  .nav-btn:hover:not(:disabled) {
-    background: var(--color-hover-bg, #3e4147);
-  }
+.dark .nav-btn {
+  color: #aaa;
+}
+
+.dark .nav-btn:hover:not(:disabled) {
+  background: var(--color-hover-bg, #3e4147);
 }
 
 .close-btn:hover {
@@ -313,11 +305,9 @@ onUnmounted(() => {
   border-color: var(--color-primary, #4a90d9);
 }
 
-@media (prefers-color-scheme: dark) {
-  .address-bar-wrapper {
-    background: var(--color-bg-primary, #1a1b1e);
-    border-color: var(--color-border, #3e4147);
-  }
+.dark .address-bar-wrapper {
+  background: var(--color-bg-primary, #1a1b1e);
+  border-color: var(--color-border, #3e4147);
 }
 
 .security-icon {

@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-full w-full flex-1">
+    <div class="flex flex-col h-full min-h-0 flex-1 bg-(--color-bg)">
         <!-- 标题栏 -->
         <div
             class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
@@ -7,15 +7,15 @@
                 <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
                 <div v-if="canTogglePreview"
                     class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
-                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }"
-                        title="预览" @click="renderMode = 'rendered'">
+                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }" title="预览"
+                        @click="renderMode = 'rendered'">
                         <el-icon :size="16">
                             <Eye20Regular v-if="renderMode !== 'rendered'" />
                             <Eye20Filled v-else />
                         </el-icon>
                     </button>
-                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'source' }"
-                        title="源码" @click="renderMode = 'source'">
+                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'source' }" title="源码"
+                        @click="renderMode = 'source'">
                         <el-icon :size="16">
                             <Code20Regular v-if="renderMode !== 'source'" />
                             <Code20Filled v-else />
@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <div class="flex-1 flex overflow-auto min-h-0 p-1">
+        <div class="flex-1 flex overflow-hidden w-full min-h-0 p-1">
             <div v-if="previewLoading" class="flex items-center justify-center h-full w-full">
                 <el-icon class="is-loading" size="20">
                     <LoadingOutlined />
@@ -60,7 +60,7 @@
             </div>
 
             <!-- 错误 / 文本内容 -->
-            <div v-else class="w-full min-h-0">
+            <template v-else>
                 <!-- 文件不存在 -->
                 <div v-if="fileNotFound" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
@@ -82,23 +82,23 @@
                 </div>
                 <template v-else-if="previewType === 'text'">
                     <!-- HTML 预览模式（通过 src 直接加载，后端 Set-Cookie 鉴权） -->
-                    <iframe v-if="isHtmlFile && renderMode === 'rendered'" :src="htmlPreviewSrc"
-                        class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
+                    <iframe v-if="isHtmlFile && renderMode === 'rendered'" :src="htmlPreviewSrc" class="w-full border-0"
+                        style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
 
                     <!-- Markdown 渲染模式（iframe srcdoc + <base> 让浏览器原生解析相对路径） -->
-                    <iframe v-else-if="isMarkdownFile && renderMode === 'rendered'"
-                        :srcdoc="markdownSrcDoc" ref="markdownIframeRef"
-                        class="w-full border-0" style="height: 100%;"
-                        sandbox="allow-same-origin allow-scripts" />
+                    <iframe v-else-if="isMarkdownFile && renderMode === 'rendered'" :srcdoc="markdownSrcDoc"
+                        ref="markdownIframeRef" class="w-full border-0" style="height: 100%;background-color: transparent !important;
+    color-scheme: light; /* 强制使用浅色模式以确保透明生效 */" allowtransparency="true" sandbox="allow-same-origin allow-scripts" />
 
                     <!-- 源码高亮（所有文件的 source 模式 + 不支持预览的文本文件） -->
-                    <div v-else-if="highlightedCode" class="code-preview-container" v-html="highlightedCode" />
+                    <div v-else-if="highlightedCode" class="code-preview-container min-w-full"
+                        v-html="highlightedCode" />
 
                     <!-- 普通文本预览（不支持高亮的文件） -->
                     <pre v-else v-text="fileContent"
-                        class="text-sm leading-relaxed whitespace-pre-wrap break-all dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
+                        class="text-sm leading-relaxed whitespace-pre-wrap break-all  text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
                 </template>
-            </div>
+            </template>
         </div>
     </div>
 </template>
@@ -111,6 +111,7 @@ import { LoadingOutlined } from '@vicons/antd'
 import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular } from '@vicons/fluent'
 import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
+import { useTheme } from '@/composables/useTheme'
 import { useHighlight } from '@/composables/useHighlight'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
@@ -202,10 +203,7 @@ const markdownHtml = computed(() => {
     return parseMarkdown(fileContent.value)
 })
 
-const isDarkMode = computed(() => {
-    if (typeof document === 'undefined') return false
-    return document.documentElement.classList.contains('dark')
-})
+const { isDark: isDarkMode } = useTheme()
 
 const markdownSrcDoc = computed(() => {
     if (!markdownHtml.value || !props.sessionId) return ''
@@ -479,7 +477,17 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
     background-color: transparent !important;
 }
 
-/* 代码行号样式 */
+.code-preview-container pre {
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+}
+
+.code-preview-container code.hljs {
+    overflow: visible;
+}
+
+/* per-line 布局：每行 flex row，行号 sticky 固定 + 代码折行 */
 .code-lines {
     display: flex;
     flex-direction: column;
@@ -487,10 +495,14 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
 
 .line {
     display: flex;
+    align-items: stretch;
     min-height: 1.5em;
 }
 
 .line-num {
+    display: flex;
+    flex-shrink: 0;
+    align-self: stretch;
     box-sizing: content-box;
     user-select: none;
     text-align: right;
@@ -498,17 +510,25 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
     color: #9ca3af;
     font-variant-numeric: tabular-nums;
     border-right: 1px solid #e5e7eb;
-    margin-right: 0.75em;
+    /* sticky 固定行号：横向滚动时钉在左侧 */
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    /* 背景色防止代码透过行号显示 */
+    background: var(--color-bg, #fff);
 }
 
 .dark .line-num {
     color: #4b5563;
     border-right-color: #374151;
+    background: var(--color-bg, #222);
 }
 
 .line-content {
-    flex: 1;
-    white-space: pre;
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding-left: 1em;
+    min-width: 800px;
 }
 </style>
 
@@ -516,8 +536,10 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
 .code-preview-container {
     overflow-y: auto;
     overflow-x: auto;
-    min-height: 100%;
-    max-height: 100%;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    background-color: transparent;
 }
 
 /* 预览/源码模式切换按钮 */
