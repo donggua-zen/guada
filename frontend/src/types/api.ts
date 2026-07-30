@@ -82,11 +82,17 @@ export interface McpTool {
 export interface McpServer {
     id: string
     name: string
-    command: string
-    args?: string[]
-    env?: Record<string, string>
+    url?: string | null
+    type?: string | null
+    description?: string | null
+    headers?: Record<string, any> | null
+    command?: string | null
+    args?: string[] | null
+    env?: Record<string, string> | null
+    cwd?: string | null
     tools: McpTool[]
     isActive: boolean
+    enabled?: boolean
     createdAt?: string
     updatedAt?: string
 }

@@ -24,6 +24,9 @@ export const useLayoutStore = defineStore('layout', () => {
   // 工作目录预览模式（非持久化，会话级运行时状态）
   const workspacePreviewMode = ref(false)
 
+  // 工作目录全屏模式（非持久化，会话级运行时状态）
+  const workspaceFullscreen = ref(false)
+
   // 壁纸与透明度设置（持久化到 localStorage）
   const wallpaperUrl = useStorage<string | null>('wallpaperUrl', null)
   const sidebarOpacity = useStorage<number>('sidebarOpacity', 100)
@@ -67,10 +70,17 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
-   * 设置工作目录分割比例（预览模式）
+   * 设置工作目录预览模式分割比例
    */
   const setWorkspacePreviewSplitSize = (size: number): void => {
     workspacePreviewSplitSize.value = size
+  }
+
+  /**
+   * 切换工作目录全屏模式
+   */
+  const toggleWorkspaceFullscreen = (): void => {
+    workspaceFullscreen.value = !workspaceFullscreen.value
   }
 
   /**
@@ -254,6 +264,7 @@ export const useLayoutStore = defineStore('layout', () => {
     workspaceSplitSize,
     workspacePreviewSplitSize,
     workspacePreviewMode,
+    workspaceFullscreen,
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
@@ -266,6 +277,7 @@ export const useLayoutStore = defineStore('layout', () => {
     toggleWorkspace,
     setWorkspaceSplitSize,
     setWorkspacePreviewSplitSize,
+    toggleWorkspaceFullscreen,
     setWallpaperUrl,
     setSidebarOpacity,
     setContentOpacity,

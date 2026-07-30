@@ -1,7 +1,7 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col relative">
-        <!-- 顶部工具栏：预览模式下显示资源管理器按钮 + 浏览器标签 + 窗口控制 -->
-        <div v-if="isElectron"
+        <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制 -->
+        <div
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
@@ -69,8 +69,18 @@
             <!-- 弹性占位（拖拽区域） -->
             <div class="flex-1"></div>
 
-            <!-- 窗口控制按钮 -->
-            <WindowControls class="no-drag" />
+            <!-- 全屏按钮 -->
+            <el-tooltip :content="layoutStore.workspaceFullscreen ? '退出全屏' : '全屏'" placement="bottom">
+                <button class="sidebar-tool-btn no-drag" @click="layoutStore.toggleWorkspaceFullscreen()">
+                    <el-icon :size="16">
+                        <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
+                        <ArrowMinimize16Regular v-else />
+                    </el-icon>
+                </button>
+            </el-tooltip>
+
+            <!-- 窗口控制按钮（仅 Electron） -->
+            <WindowControls v-if="isElectron" class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
         <div :class="treeContainerClass" :style="isPreviewMode ? treePanelStyle : {}" @mouseenter="showTreePanel"
@@ -201,7 +211,7 @@ import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
