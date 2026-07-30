@@ -1,34 +1,87 @@
+import { IsString, IsNotEmpty, IsOptional, IsObject, IsBoolean, IsNumber, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class ReconnectConfigDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  maxRetries?: number;
+
+  @IsOptional()
+  @IsNumber()
+  retryInterval?: number;
+}
+
 /**
  * 创建机器人实例 DTO
  */
 export class CreateBotDto {
-  platform: string;           // 平台类型
-  name: string;               // 机器人名称
-  platformConfig: any;        // 平台特定配置(包含认证信息等)
-  reconnectConfig?: {
-    enabled?: boolean;
-    maxRetries?: number;
-    retryInterval?: number;
-  };
-  defaultCharacterId: string;   // 默认角色ID（动态读取，修改后无需重启）
-  defaultModelId?: string;      // 默认模型ID（动态读取，修改后无需重启）
-  additionalKwargs?: any;       // 扩展配置（如 knowledgeBaseIds，动态读取，修改后无需重启）
-  autoStart?: boolean;        // 是否自动启动
+  @IsString()
+  @IsNotEmpty()
+  platform: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsObject()
+  platformConfig: any;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReconnectConfigDto)
+  reconnectConfig?: ReconnectConfigDto;
+
+  @IsString()
+  @IsNotEmpty()
+  defaultCharacterId: string;
+
+  @IsOptional()
+  @IsString()
+  defaultModelId?: string;
+
+  @IsOptional()
+  @IsObject()
+  additionalKwargs?: any;
+
+  @IsOptional()
+  @IsBoolean()
+  autoStart?: boolean;
 }
 
 /**
  * 更新机器人实例 DTO
  */
 export class UpdateBotDto {
+  @IsOptional()
+  @IsString()
   name?: string;
-  platformConfig?: any;       // 平台特定配置
+
+  @IsOptional()
+  @IsObject()
+  platformConfig?: any;
+
+  @IsOptional()
+  @IsBoolean()
   enabled?: boolean;
-  reconnectConfig?: {
-    enabled?: boolean;
-    maxRetries?: number;
-    retryInterval?: number;
-  };
-  defaultCharacterId?: string;  // 默认角色ID（动态读取，修改后无需重启）
-  defaultModelId?: string;      // 默认模型ID（动态读取，修改后无需重启）
-  additionalKwargs?: any;       // 扩展配置（如 knowledgeBaseIds，动态读取，修改后无需重启）
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReconnectConfigDto)
+  reconnectConfig?: ReconnectConfigDto;
+
+  @IsOptional()
+  @IsString()
+  defaultCharacterId?: string;
+
+  @IsOptional()
+  @IsString()
+  defaultModelId?: string;
+
+  @IsOptional()
+  @IsObject()
+  additionalKwargs?: any;
 }

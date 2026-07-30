@@ -8,7 +8,7 @@
             :selected-path="selectedPath"
             :loading-paths="loadingPaths"
             :on-load="onLoad"
-            @select="(n) => $emit('select', n)"
+            @select="(n, isPreview) => $emit('select', n, isPreview)"
             @toggle="(n, e) => $emit('toggle', n, e)"
             @contextmenu="(e, n) => $emit('contextmenu', e, n)"
         />
@@ -35,7 +35,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    select: [node: WorkspaceNode];
+    select: [node: WorkspaceNode, isPreview?: boolean];
     toggle: [node: WorkspaceNode, expanded: boolean];
     contextmenu: [event: MouseEvent, node: WorkspaceNode];
 }>();

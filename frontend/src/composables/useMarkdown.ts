@@ -4,6 +4,7 @@ import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js/lib/core'
 import markdownCssRaw from '@/assets/markdown.css?raw'
 import hljsCssRaw from 'highlight.js/styles/foundation.css?raw'
+import styleCssRaw from "@/style.css?raw";
 
 // 导入语言包
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -321,17 +322,15 @@ export default useMarkdown
  * @param isDark 是否暗色模式
  */
 export function buildMarkdownSrcDoc(html: string, baseUrl: string, isDark: boolean): string {
-    const themeVars = isDark
-        ? `--color-text:#d3d3d3;--color-bg:#222;--color-surface:#222;--color-border:oklch(32% 0.02 250);--color-bubble-assitant-text-strong:#d3d3d3;--color-sidebar-bg-active:#2f3131;--size-text-base:15px;`
-        : `--color-text:#171717;--color-bg:#fff;--color-surface:#f5f5f5;--color-border:#d1d5db;--color-bubble-assitant-text-strong:#17181a;--color-sidebar-bg-active:rgba(40,5,5,0.05);--size-text-base:15px;`
-
+   
     return `<!DOCTYPE html><html class="${isDark ? 'dark' : ''}"><head>
 <meta charset="utf-8">
 <base href="${baseUrl}">
+<style>${styleCssRaw}</style>
 <style>${markdownCssRaw}</style>
 <style>${hljsCssRaw}</style>
-<style>:root{${themeVars}}html,body{margin:0;padding:0;font-size:15px;background:var(--color-bg);color:var(--color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
-</head><body class="markdown-text" style="padding:16px;overflow-x:hidden;">
+<style>:root{html,body{margin:0;padding:0;font-size:15px;background:var(--color-bg);color:var(--color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
+</head><body class="markdown-text" style="padding:16px;overflow-x:auto;overflow-y:auto;">
 ${html}
 <script>
 (function(){
