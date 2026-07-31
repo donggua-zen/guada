@@ -32,7 +32,7 @@ export class MessageService {
   private stripSystemPayload(
     metadata: Record<string, any>,
   ): Record<string, any> {
-    const { systemPayload, ...rest } = metadata;
+    const { systemPayload, runMode, systemReminder, ...rest } = metadata;
     return rest;
   }
 
@@ -690,9 +690,20 @@ export class MessageService {
         userContent = this.wrapSystemReminder(meta, userContent);
       }
 
+      // 系统提示注入（仅 LLM 路径经过 transformContentStructure，UI 不经过）
+      if (meta?.systemReminder) {
+        const reminder = `<system-reminder>${meta.systemReminder}</system-reminder>`;
+        userContent = `${reminder}\n\n${userContent}`;
+      }
+
       const textParts: MessagePart[] = [{ type: "text", text: userContent }];
 
       let metadata = {};
+
+      // 透传 runMode（供后续 addUserMessage 模式检测使用）
+      if (meta?.runMode) {
+        metadata["runMode"] = meta.runMode;
+      }
 
       const kbInfo = this.appendKbReferenceInfo(activeContent);
       if (kbInfo) {

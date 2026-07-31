@@ -172,8 +172,10 @@ export class ToolExecutor {
     }
 
     // 计划模式运行时限制：仅允许 safe 等级的只读工具
+    // 例外：terminal (run_command) 允许执行，由 shell.plugin.ts 强制走 sandbox --read-only
     if (session.getRunMode?.() === "plan") {
-      if (toolEntry.dangerLevel && toolEntry.dangerLevel !== "safe") {
+      const isTerminal = fullToolName === "run_command";
+      if (toolEntry.dangerLevel && toolEntry.dangerLevel !== "safe" && !isTerminal) {
         return {
           toolCallId,
           name: fullToolName,

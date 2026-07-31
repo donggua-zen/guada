@@ -128,13 +128,6 @@
         "to": "backend-ts/prisma.config.js"
       },
       {
-        "from": "sandbox",
-        "to": "sandbox",
-        "filter": [
-          "sandbox.exe"
-        ]
-      },
-      {
         "from": "backend-ts/static",
         "to": "backend-ts/static",
         "filter": [
@@ -162,7 +155,13 @@
       "icon": "icon.ico",
       "sign": null,
       "signDlls": false,
-      "forceCodeSigning": false
+      "forceCodeSigning": false,
+      "extraResources": [
+        {
+          "from": "sandbox/sandbox.exe",
+          "to": "sandbox/sandbox.exe"
+        }
+      ]
     },
     "mac": {
       "target": [
@@ -193,7 +192,13 @@
         }
       ],
       "icon": "build-resources/icon.png",
-      "category": "Utility"
+      "category": "Utility",
+      "extraResources": [
+        {
+          "from": "sandbox/sandbox",
+          "to": "sandbox/sandbox"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

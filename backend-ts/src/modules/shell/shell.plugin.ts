@@ -16,40 +16,45 @@ export class ShellPlugin extends PluginBase {
   private readonly logger = new Logger(ShellPlugin.name);
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
-  /** sandbox.exe 路径缓存（避免每次执行都搜索） */
-  private sandboxExePath: string | null | undefined;
+  /** sandbox 二进制路径缓存（避免每次执行都搜索） */
+  private sandboxBinPath: string | null | undefined;
 
   constructor(private readonly processManager: ProcessManagerService) {
     super();
   }
 
   /**
-   * 解析 sandbox.exe 路径
+   * 解析 sandbox 二进制路径（跨平台）
    *
-   * 开发环境：项目根目录下的 sandbox/sandbox.exe
-   * 生产环境：resources/sandbox/sandbox.exe（extraResources 打包）
+   * Windows: sandbox.exe  |  Linux: sandbox
+   *
+   * 开发环境：项目根目录下的 sandbox/{name}
+   * 生产环境：resources/sandbox/{name}（extraResources 打包）
    *
    * 结果缓存：找到后缓存路径，找不到缓存 null 避免重复 IO。
    */
-  private async resolveSandboxExe(): Promise<string | null> {
-    if (this.sandboxExePath !== undefined) return this.sandboxExePath;
+  private async resolveSandboxBin(): Promise<string | null> {
+    if (this.sandboxBinPath !== undefined) return this.sandboxBinPath;
+
+    const isWindows = process.platform === "win32";
+    const binName = isWindows ? "sandbox.exe" : "sandbox";
 
     const candidates: string[] = [];
     const isElectron = process.env.ELECTRON_APP === "true";
 
     if (isElectron && (process as any).resourcesPath) {
-      // 生产环境：resources/sandbox/sandbox.exe
+      // 生产环境：resources/sandbox/{binName}
       candidates.push(
-        path.join((process as any).resourcesPath, "sandbox", "sandbox.exe"),
+        path.join((process as any).resourcesPath, "sandbox", binName),
       );
     }
 
-    // 开发环境或回退：从 cwd 向上查找 sandbox/sandbox.exe
+    // 开发环境或回退：从 cwd 向上查找 sandbox/{binName}
     // backend-ts/dist → backend-ts → project root
     let dir = process.cwd();
     for (let i = 0; i < 4; i++) {
-      candidates.push(path.join(dir, "sandbox", "sandbox.exe"));
-      candidates.push(path.join(dir, "build", "bin", "sandbox.exe"));
+      candidates.push(path.join(dir, "sandbox", binName));
+      candidates.push(path.join(dir, "build", "bin", binName));
       const parent = path.dirname(dir);
       if (parent === dir) break;
       dir = parent;
@@ -58,8 +63,8 @@ export class ShellPlugin extends PluginBase {
     for (const candidate of candidates) {
       try {
         await fs.access(candidate, fsSync.constants.X_OK);
-        this.sandboxExePath = candidate;
-        this.logger.log(`sandbox.exe found at: ${candidate}`);
+        this.sandboxBinPath = candidate;
+        this.logger.log(`sandbox binary found at: ${candidate}`);
         return candidate;
       } catch {
         // continue
@@ -67,9 +72,9 @@ export class ShellPlugin extends PluginBase {
     }
 
     this.logger.warn(
-      "sandbox.exe not found, sandbox mode will fall back to normal mode",
+      `sandbox binary (${binName}) not found, sandbox/plan mode will be unavailable`,
     );
-    this.sandboxExePath = null;
+    this.sandboxBinPath = null;
     return null;
   }
 
@@ -77,14 +82,14 @@ export class ShellPlugin extends PluginBase {
     id: "shell",
     name: "Shell 命令行",
     description: "执行系统命令和管理后台进程",
-    version: "1.1.0",
+    version: "1.2.0",
     category: "core" as const,
   };
 
   async onLoad(api: PluginApi) {
     // ── execute 工具 ──
     api.registerTool({
-      name: "terminal",
+      name: "run_command",
       description: `Execute system commands and return output. Commands running over 1 minute will auto-switch to background. "background": true starts in background immediately.`,
       inputSchema: z.object({
         command: z
@@ -123,16 +128,20 @@ export class ShellPlugin extends PluginBase {
         const cwd = ctx?.session.workspacePath || process.cwd();
 
         // 判断是否使用沙盒执行
+        // sandbox 模式：工作目录内可写，外部只读
+        // plan 模式：全盘只读（--read-only），工作目录也变为只读
         const runMode = ctx?.session.getRunMode?.();
         let useSandbox = false;
-        let sandboxExe: string | null = null;
-        if (runMode === "sandbox") {
-          sandboxExe = isWindows ? await this.resolveSandboxExe() : null;
-          if (sandboxExe) {
+        let sandboxReadOnly = false;
+        let sandboxBin: string | null = null;
+        if (runMode === "sandbox" || runMode === "plan") {
+          sandboxBin = await this.resolveSandboxBin();
+          if (sandboxBin) {
             useSandbox = true;
+            sandboxReadOnly = runMode === "plan";
           } else {
             throw new Error(
-              "The user has enabled sandbox mode, but the sandbox environment is currently unavailable. Please use other tools or inform the user.",
+              `The user has enabled ${runMode} mode, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
             );
           }
         }
@@ -140,8 +149,12 @@ export class ShellPlugin extends PluginBase {
         let spawnArgs: string[];
         let spawnCmd: string;
         if (useSandbox) {
-          spawnCmd = sandboxExe;
-          spawnArgs = ["-c", `cmd /c ${command}`, "--workspace", cwd];
+          spawnCmd = sandboxBin;
+          // sandbox 内部会根据平台选择 cmd.exe /c 或 sh -c
+          spawnArgs = ["-c", command, "--workspace", cwd];
+          if (sandboxReadOnly) {
+            spawnArgs.push("--read-only");
+          }
         } else {
           const shell = isWindows ? "cmd" : "sh";
           const shellFlag = isWindows ? "/c" : "-c";
@@ -173,8 +186,12 @@ export class ShellPlugin extends PluginBase {
         // 纯后台模式：立即返回
         if (background) {
           const parts: string[] = [];
-          if (runMode === "sandbox") {
-            parts.push("Sandbox mode enabled, read-only outside workspace");
+          if (useSandbox) {
+            parts.push(
+              sandboxReadOnly
+                ? "Plan mode: sandbox read-only enabled, all writes blocked"
+                : "Sandbox mode enabled, read-only outside workspace",
+            );
           }
           if (result.output) {
             parts.push(`Latest output:\n---\n${result.output}\n---`);
@@ -201,8 +218,12 @@ export class ShellPlugin extends PluginBase {
           )!;
 
           const parts: string[] = [];
-          if (runMode === "sandbox") {
-            parts.push("Sandbox mode enabled, read-only outside workspace");
+          if (useSandbox) {
+            parts.push(
+              sandboxReadOnly
+                ? "Plan mode: sandbox read-only enabled, all writes blocked"
+                : "Sandbox mode enabled, read-only outside workspace",
+            );
           }
           if (pollResult.output) {
             parts.push(`Latest output:\n---\n${pollResult.output}\n---`);
@@ -285,6 +306,8 @@ export class ShellPlugin extends PluginBase {
 
             if (runMode === "sandbox") {
               parts.push("Sandbox mode enabled, read-only outside workspace");
+            } else if (runMode === "plan") {
+              parts.push("Plan mode: sandbox read-only enabled, all writes blocked");
             }
 
             if (result.output) {
@@ -385,7 +408,7 @@ export class ShellPlugin extends PluginBase {
             throw new Error(`Unknown action: ${action}`);
         }
       },
-      display: { actionType: "process", argsKey: "action", icon: "terminal" },
+      display: { actionType: "process", argsKey: "action", icon: "run_command" },
       dangerLevel: "high",
     });
 
@@ -401,7 +424,7 @@ export class ShellPlugin extends PluginBase {
 **Current System**: ${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}
           
 ## Command Execution
-- Use the \`terminal\` command to execute commands
+- Use the \`run_command\` command to execute commands
 - Commands run in the foreground by default; the tool waits for completion and returns the output (up to 8000 characters)
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - processId is typically the shell process ID, not the command's own process ID
