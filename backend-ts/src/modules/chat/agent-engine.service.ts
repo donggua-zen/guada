@@ -92,6 +92,13 @@ export class AgentEngine {
     resumeData?: any,
   ): AsyncGenerator<EventChunk> {
     const sessionId = sessionContext.sessionId;
+
+    // 预加载历史（统一提前，供 addUserMessage 做模式切换检测）
+    // multi_version 模式用 userMessage.id 作为游标，限制加载范围
+    const historyCursor =
+      regenerationMode === "multi_version" ? userMessage?.id : undefined;
+    await sessionContext.loadHistory(historyCursor);
+
     // 创建用户消息
     const createdUserMessage =
       regenerationMode === "overwrite"

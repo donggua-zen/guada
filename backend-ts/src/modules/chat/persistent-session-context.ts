@@ -289,6 +289,20 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   /**
+   * 预加载历史消息（可选传入游标限制范围）。
+   *
+   * 供调用方在 addUserMessage 前提前加载历史，使模式切换检测能读取 this.history。
+   * 若消息已加载则跳过（幂等）。
+   */
+  async loadHistory(cursor?: string): Promise<void> {
+    if (cursor) this.messageCursor = cursor;
+    if (!this.isMessagesLoaded) {
+      await this.loadMessages();
+      this.isMessagesLoaded = true;
+    }
+  }
+
+  /**
    * 获取准备发送给 LLM 的完整消息列表。
    *
    * 在首次调用时触发懒加载（loadMessages），后续复用缓存的历史数据。
@@ -334,13 +348,23 @@ export class PersistentSessionContext implements ISessionContext {
     metadata?: Record<string, any>,
     preGenAssistantId?: string,
   ) {
+    // 检测运行模式变化，将提示文案写入 message 级 metadata.systemReminder
+    const systemReminder = this.detectModeTransition(replaceMessageId);
+    const enrichedMetadata: Record<string, any> = {
+      ...metadata,
+      runMode: this.runMode,
+    };
+    if (systemReminder) {
+      enrichedMetadata.systemReminder = systemReminder;
+    }
+
     const message = await this.messageStore.addUserMessage(
       this.sessionId,
       content,
       files,
       replaceMessageId,
       knowledgeBaseIds,
-      metadata,
+      enrichedMetadata,
       preGenAssistantId,
     );
 
@@ -373,6 +397,36 @@ export class PersistentSessionContext implements ISessionContext {
       this.tokenBreakdown.history += newTokens;
     }
     return message;
+  }
+
+  /**
+   * 检测运行模式是否发生切换（基于已加载的历史消息 metadata.runMode）。
+   *
+   * 纯内存读取，零额外 DB 查询。需在 loadHistory() 之后调用。
+   *
+   * @returns 切换时的提示文案 | null（无变化）
+   */
+  private detectModeTransition(replaceMessageId?: string): string | null {
+    if (!this.isMessagesLoaded) return null;
+
+    // 找最后一条 user 消息（排除正在被替换的）
+    const userMsgs = this.history.filter(
+      (m) => m.role === "user" && m.messageId !== replaceMessageId,
+    );
+
+    const prevRunMode =
+      userMsgs.length > 0
+        ? userMsgs[userMsgs.length - 1].metadata?.runMode || "normal"
+        : "normal";
+    const currentMode = this.runMode;
+
+    if (currentMode === "plan" && prevRunMode !== "plan") {
+      return "The user has enabled Plan mode. You are restricted to read-only tools (e.g.,read, grep, glob). The run_command is also available but runs in a read-only sandbox — all file writes are blocked. Use these tools to analyze requirements, formulate a plan, and discuss the approach with the user before any changes are made.";
+    }
+    if (currentMode !== "plan" && prevRunMode === "plan") {
+      return "The user has disabled Plan mode. All tool restrictions have been lifted and you may proceed with normal operations.";
+    }
+    return null;
   }
 
   /**

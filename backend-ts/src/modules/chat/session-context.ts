@@ -79,12 +79,12 @@ export interface MemoryConfig {
  * 会话运行模式
  *
  * - normal: 默认模式，所有插件、技能完整可用
- * - sandbox: 轻沙盒模式，与 normal 一致，但 shell 命令通过 sandbox.exe 执行，
- *            限制写入仅在工作目录内（仅 Windows，非 Windows 回退到 normal）
+ * - sandbox: 轻沙盒模式，与 normal 一致，但 shell 命令通过 sandbox 执行，
+ *            限制写入仅在工作目录内
  * - memory: 记忆模式，仅暴露 file 插件工具，技能为空
  *           用于影子轮次等需要限制工具范围的场景
  * - plan: 计划模式，仅允许 safe 等级的只读工具，
- *         危险工具（write/edit/shell等）在运行时被拦截
+ *         terminal (run_command) 例外，通过 sandbox --read-only 执行（全盘只读）
  */
 export type SessionRunMode = "normal" | "sandbox" | "memory" | "plan";
 
@@ -166,6 +166,8 @@ export interface ISessionContext {
   // === 对话状态管理 ===
   /** 初始化：加载历史消息、恢复压缩状态 */
   initialize(): Promise<void>;
+  /** 预加载历史消息（可选传入游标限制范围），供调用方在 addUserMessage 前提前加载 */
+  loadHistory(cursor?: string): Promise<void>;
   /**
    * 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
    *

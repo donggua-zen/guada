@@ -173,7 +173,7 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
     aggregate: { executing: "正在读取{n}个网页", completed: "已读取{n}个网页" },
   },
 
-  terminal: {
+  run_command: {
     text: { executing: "正在执行命令", completed: "已执行命令" },
     aggregate: { executing: "正在执行{n}条命令", completed: "已执行{n}条命令" },
     argsKey: "command",

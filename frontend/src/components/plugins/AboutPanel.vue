@@ -46,6 +46,25 @@
                     </el-button>
                 </div>
             </div>
+
+            <!-- 仓库地址 -->
+            <div class="w-full bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
+                <h3 class="text-sm font-medium text-(--color-text-primary) mb-4">项目仓库</h3>
+                <div class="flex flex-col space-y-3">
+                    <div v-for="repo in repositories" :key="repo.url"
+                        class="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-(--color-bg) transition-colors"
+                        @click="openRepo(repo.url)">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-lg">{{ repo.icon }}</span>
+                            <div>
+                                <div class="text-sm text-(--color-text-primary)">{{ repo.name }}</div>
+                                <div class="text-xs text-(--color-text-secondary)">{{ repo.url }}</div>
+                            </div>
+                        </div>
+                        <el-icon class="text-(--color-text-secondary)"><Link /></el-icon>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <div v-else class="p-8 text-center text-(--color-text-secondary)">
@@ -56,8 +75,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElButton, ElIcon } from 'element-plus'
-import { Loading, CircleCheck } from '@element-plus/icons-vue'
+import { Loading, CircleCheck, Link } from '@element-plus/icons-vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 const appVersion = ref('')
@@ -65,6 +85,16 @@ const updateStatus = ref<'idle' | 'checking' | 'available' | 'not-available' | '
 const updateInfo = ref<any>(null)
 const isChecking = ref(false)
 const errorMessage = ref('')
+
+const repositories = [
+    { name: 'GitHub', url: 'https://github.com/donggua-zen/guada', icon: '🐙' },
+    { name: 'Gitee', url: 'https://gitee.com/zhendongdong/guada_ai', icon: '🇨' },
+    { name: 'GitCode', url: 'https://atomgit.com/donggua_sherlock/GuaDaAI', icon: '📦' },
+]
+
+const openRepo = (url: string) => {
+    openInExternalBrowser(url)
+}
 
 // 计算属性：自适应 Logo 路径
 const logoPath = computed(() => fixFrontendAssetUrl('/images/logo.png'))

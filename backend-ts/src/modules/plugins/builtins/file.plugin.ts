@@ -24,6 +24,38 @@ export class FilePlugin extends PluginBase {
     "**/coverage/**",
   ];
 
+  // 已知文本扩展名：直接统计行数，无需 NUL 探测
+  private static readonly TEXT_EXTENSIONS = new Set([
+    "txt", "md", "markdown", "mdx", "json", "jsonc", "json5",
+    "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx",
+    "vue", "svelte", "astro", "html", "htm", "xml", "svg",
+    "css", "scss", "sass", "less", "styl",
+    "yml", "yaml", "toml", "ini", "cfg", "conf", "env", "properties",
+    "sh", "bash", "zsh", "bat", "cmd", "ps1", "fish",
+    "sql", "graphql", "gql", "proto", "prisma",
+    "java", "kt", "kts", "go", "rs", "c", "h", "cpp", "hpp", "cc", "hh", "cs",
+    "php", "rb", "pl", "pm", "lua", "r", "swift", "scala", "clj", "cljs",
+    "ex", "exs", "erl", "hs", "dart", "zig", "vim", "jl", "nix", "tf", "tfvars",
+    "log", "csv", "tsv", "diff", "patch", "lock", "gradle", "dockerfile",
+  ]);
+
+  // 已知二进制扩展名：只显示大小，跳过行数统计（含 docx/pdf/zip/图片/音视频等）
+  private static readonly BINARY_EXTENSIONS = new Set([
+    "docx", "doc", "xlsx", "xls", "pptx", "ppt",
+    "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "tif",
+    "heic", "avif", "psd", "ai", "eps",
+    "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso", "img",
+    "exe", "dll", "so", "dylib", "bin", "dat", "class", "jar", "war",
+    "pyc", "pyd", "o", "obj", "a", "lib", "wasm",
+    "mp3", "mp4", "wav", "flac", "ogg", "aac", "m4a", "avi", "mkv", "mov",
+    "wmv", "flv", "webm",
+    "ttf", "otf", "woff", "woff2", "eot",
+    "sqlite", "db",
+  ]);
+
+  // 行数统计的文件大小上限（超过只显示大小）
+  private static readonly MAX_LINE_COUNT_SIZE = 512 * 1024;
+
   manifest = {
     id: "file",
     name: "文件工具",
@@ -182,7 +214,7 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "glob",
       description:
-        "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits. Automatically skips node_modules/.git/dist/build directories.",
+        "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits. Automatically skips node_modules/.git/dist/build directories. Each result includes the file size (B/KB/MB); text files <=512KB also include the line count, helping you gauge file scale before reading.",
       inputSchema: z.object({
         pattern: z
           .string()
@@ -225,10 +257,12 @@ export class FilePlugin extends PluginBase {
           onlyFiles: true,
           dot: false,
           absolute: false,
+          stats: true,
           ignore: FilePlugin.IGNORE_PATTERNS,
         });
 
-        const files: string[] = [];
+        const files: { path: string; size: number; lines: number | null }[] =
+          [];
         let hasMore = false;
 
         for await (const entry of stream) {
@@ -236,12 +270,40 @@ export class FilePlugin extends PluginBase {
             hasMore = true;
             break;
           }
-          files.push(entry as string);
+          let relPath: string;
+          let size = 0;
+          if (typeof entry === "string") {
+            relPath = entry;
+          } else {
+            const e = entry as unknown as {
+              path: string;
+              stats?: { size: number };
+            };
+            relPath = e.path;
+            size = e.stats?.size ?? 0;
+          }
+          files.push({ path: relPath, size, lines: null });
+        }
+
+        // 分批并行统计行数（复用 grep 的批次大小），单文件失败降级为仅大小
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < files.length; i += BATCH_SIZE) {
+          const batch = files.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(
+            batch.map((f) =>
+              this.countLinesIfTextable(path.join(basePath, f.path), f.size),
+            ),
+          );
+          results.forEach((r, idx) => {
+            if (r.status === "fulfilled") batch[idx].lines = r.value;
+          });
         }
 
         let output = `${files.length} files found:`;
         for (const f of files) {
-          output += `\n                 ${f}`;
+          output += `\n${f.path} (${this.formatSize(f.size)}`;
+          if (f.lines !== null) output += `, ${f.lines} lines`;
+          output += ")";
         }
         if (hasMore) {
           output += `\n(More results exist. Use a more specific pattern or increase limit to see more.)`;
@@ -482,6 +544,46 @@ export class FilePlugin extends PluginBase {
         ].join("\n");
       },
     });
+  }
+
+  /**
+   * 将字节数格式化为可读单位（B/KB/MB/GB，1024 进制，1 位小数）
+   */
+  private formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let value = bytes / 1024;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return `${value.toFixed(1)} ${units[unit]}`;
+  }
+
+  /**
+   * 统计文件行数。仅当：大小 <= 512KB、非已知二进制扩展名，
+   * 且未知扩展名时首块不含 NUL 字节（视为文本）才统计；
+   * 其余情况（二进制/超限/读取失败）返回 null，只显示大小。
+   * 按 0x0A 字节计数：UTF-8/GBK 等多字节编码的字符内不会出现该字节，无需解码。
+   */
+  private async countLinesIfTextable(
+    filePath: string,
+    size: number,
+  ): Promise<number | null> {
+    if (size > FilePlugin.MAX_LINE_COUNT_SIZE) return null;
+    const ext = path.extname(filePath).slice(1).toLowerCase();
+    if (FilePlugin.BINARY_EXTENSIONS.has(ext)) return null;
+    try {
+      const raw = await fs.readFile(filePath);
+      if (!FilePlugin.TEXT_EXTENSIONS.has(ext) && raw.includes(0)) {
+        return null; // 未知后缀且含 NUL 字节 → 按二进制处理
+      }
+      if (raw.length === 0) return 0;
+      return raw.toString("latin1").split("\n").length;
+    } catch {
+      return null;
+    }
   }
 
   private resolvePath(filePath: string, context?: PluginContext): string {
