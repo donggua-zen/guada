@@ -1,9 +1,200 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { spawn, ChildProcess, exec } from "child_process";
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
+import { ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
+import * as os from "os";
+import * as path from "path";
+import * as fs from "fs/promises";
+import * as fsSync from "fs";
+import { Transform, PassThrough } from "node:stream";
+import { finished } from "node:stream/promises";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
-import { safeSubstring, safeTail, safeTruncate } from "../../common/utils/string.utils";
+import { safeTruncate, safeTail } from "../../common/utils/string.utils";
+
+// ============================================================================
+// StreamingSanitizer — 流式 ANSI 清洗 + \r 进度条重建
+// 处理跨 chunk 边界的 ANSI 转义序列和 \r\n 换行
+// ============================================================================
+
+class StreamingSanitizer {
+  /** 不完整的 ANSI 转义序列（跨 chunk 边界时暂存） */
+  private partialEsc = "";
+
+  /**
+   * 输入一个 chunk，返回清洗后的文本。
+   * ANSI 转义序列跨 chunk 边界时暂存在 partialEsc 中，等下一个 chunk 补全。
+   */
+  feed(chunk: string): string {
+    let text = this.partialEsc + chunk;
+    this.partialEsc = "";
+
+    // 1. 逐字节擦除 ANSI 转义码
+    let cleaned = "";
+    let i = 0;
+    while (i < text.length) {
+      if (text.charCodeAt(i) !== 0x1b) {
+        cleaned += text[i];
+        i++;
+        continue;
+      }
+
+      // ESC found at position i
+      if (i + 1 >= text.length) {
+        // ESC at very end — save for next chunk
+        this.partialEsc = "\x1b";
+        break;
+      }
+
+      const next = text.charCodeAt(i + 1);
+      if (next === 0x5b) {
+        // CSI: ESC [
+        const escStart = i;
+        i += 2;
+        let found = false;
+        while (i < text.length) {
+          const c = text.charCodeAt(i);
+          if (c >= 0x40 && c <= 0x7e) {
+            i++;
+            found = true;
+            break;
+          }
+          i++;
+        }
+        if (!found) {
+          this.partialEsc = text.substring(escStart);
+          break;
+        }
+      } else if (next === 0x5d) {
+        // OSC: ESC ]
+        const escStart = i;
+        i += 2;
+        let found = false;
+        while (i < text.length) {
+          if (text.charCodeAt(i) === 0x07) {
+            i++;
+            found = true;
+            break;
+          }
+          if (
+            text[i] === "\x1b" &&
+            i + 1 < text.length &&
+            text[i + 1] === "\\"
+          ) {
+            i += 2;
+            found = true;
+            break;
+          }
+          i++;
+        }
+        if (!found) {
+          this.partialEsc = text.substring(escStart);
+          break;
+        }
+      } else {
+        // Two-byte escape: ESC + char
+        i += 2;
+      }
+    }
+
+    // 2. \r\n → \n
+    cleaned = cleaned.replace(/\r\n/g, "\n");
+
+    // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容
+    const lines = cleaned.split("\n");
+    const processed = lines.map((line) => {
+      const lastR = line.lastIndexOf("\r");
+      return lastR >= 0 ? line.substring(lastR + 1) : line;
+    });
+    return processed.join("\n");
+  }
+
+  /** 进程结束时调用，丢弃不完整的 ANSI 转义序列 */
+  flush(): string {
+    this.partialEsc = "";
+    return "";
+  }
+}
+
+// ============================================================================
+// SanitizerTransform — 将 StreamingSanitizer 适配为 Transform 流
+// 接收 Buffer → 解码 → 清洗 → push string，同时触发副作用回调
+// ============================================================================
+
+class SanitizerTransform extends Transform {
+  private sanitizer = new StreamingSanitizer();
+
+  constructor(
+    private encoding: string,
+    private onCleaned?: (text: string) => void,
+  ) {
+    super();
+  }
+
+  _transform(chunk: Buffer, _enc: string, cb: () => void) {
+    const raw = decodeBuffer(chunk, this.encoding);
+    const cleaned = this.sanitizer.feed(raw);
+    if (cleaned) {
+      this.push(cleaned);
+      this.onCleaned?.(cleaned);
+    }
+    cb();
+  }
+
+  _flush(cb: () => void) {
+    this.sanitizer.flush();
+    cb();
+  }
+}
+
+// ============================================================================
+// UTF-8 边界修剪工具
+// 从任意字节偏移读取时，确保不切在多字节字符中间
+// ============================================================================
+
+/** 修剪 head buffer 末尾的不完整 UTF-8 序列 */
+function trimUtf8Head(buf: Buffer): string {
+  if (buf.length === 0) return "";
+  for (let i = buf.length - 1; i >= 0 && i >= buf.length - 3; i--) {
+    const byte = buf[i];
+    if ((byte & 0xc0) !== 0x80) {
+      // Start byte found
+      const expectedLen =
+        byte < 0x80 ? 1 : byte < 0xe0 ? 2 : byte < 0xf0 ? 3 : 4;
+      if (i + expectedLen > buf.length) {
+        return buf.toString("utf-8", 0, i);
+      }
+      break;
+    }
+  }
+  return buf.toString("utf-8");
+}
+
+/** 跳过 tail buffer 开头的不完整 UTF-8 序列（连续字节） */
+function trimUtf8Tail(buf: Buffer): string {
+  if (buf.length === 0) return "";
+  let start = 0;
+  while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++;
+  return buf.toString("utf-8", start);
+}
+
+/** 解码 Buffer → string（按编码或平台默认） */
+function decodeBuffer(buffer: Buffer, encoding?: string): string {
+  if (!buffer || buffer.length === 0) return "";
+  try {
+    if (encoding) return iconv.decode(buffer, encoding);
+    return iconv.decode(
+      buffer,
+      process.platform === "win32" ? "gbk" : "utf-8",
+    );
+  } catch {
+    return buffer.toString("latin1");
+  }
+}
 
 // ============================================================================
 // 类型定义
@@ -11,7 +202,7 @@ import { safeSubstring, safeTail, safeTruncate } from "../../common/utils/string
 
 export type ProcessStatus = "running" | "completed" | "killed" | "error";
 
-export interface ProcessEntry {
+interface ProcessEntry {
   id: string;
   command: string;
   sessionId: string;
@@ -22,18 +213,23 @@ export interface ProcessEntry {
   cwd: string;
   encoding: string;
   isBackgrounded: boolean;
-  /** 完整的累积日志（最大 1MB，超出保留末尾） */
-  fullLog: string;
-  /** 自上次 poll 以来累积的输出（字符串，poll 后清空） */
-  output: string;
+  /** 日志文件路径（系统临时目录） */
+  logFilePath: string;
+  /** 字节偏移：下次 poll 读取的起始位置 */
+  readOffset: number;
+  /** 日志写入流 */
+  writeStream: fsSync.WriteStream;
+  /** 最近输出的尾部（用于 stall 检测模式匹配，仅保留 500 字符） */
+  recentTail: string;
   /** 进程结束时是否投递系统消息到信箱（默认 true） */
   notify: boolean;
-  /** 进度通知间隔（分钟），0=关闭 */
-  progressIntervalMinutes: number;
   lastOutputAt: Date;
-  progressTimer: ReturnType<typeof setInterval> | null;
-  /** 延迟清理定时器 */
-  cleanupTimer: NodeJS.Timeout | null;
+  /** Stall watchdog 定时器 */
+  stallTimer: ReturnType<typeof setTimeout> | null;
+  /** 是否已发送 stall 通知（防重复） */
+  stallNotified: boolean;
+  /** 无 poll 等待者时，进程结束后的异步投递 promise（poll 检测到则 await 后从队列取） */
+  exitPromise?: Promise<void>;
   /** 元数据 */
   startedAt: Date;
   finishedAt?: Date;
@@ -47,12 +243,14 @@ export interface PollResult {
   output: string;
   /** 本次 poll 实际等待的秒数（0=未等待） */
   waitSeconds: number;
+  /** poll 因 stall 检测提前返回时为 true */
+  stalled?: boolean;
 }
 
 export interface BackgroundResult {
   processId: string;
   status: "backgrounded";
-  /** 转入后台时截取的输出文本 */
+  /** 转入后台时的输出文本 */
   output: string;
 }
 
@@ -64,7 +262,6 @@ export interface ProcessListEntry {
   isBackgrounded: boolean;
   startedAt: Date;
   finishedAt?: Date;
-  progressIntervalMinutes: number;
 }
 
 // ============================================================================
@@ -72,7 +269,7 @@ export interface ProcessListEntry {
 // ============================================================================
 
 @Injectable()
-export class ProcessManagerService {
+export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProcessManagerService.name);
   private readonly processes = new Map<string, ProcessEntry>();
   /** 会话 → 该会话的所有进程（用于 stream.finished 时直接按会话查找） */
@@ -83,23 +280,107 @@ export class ProcessManagerService {
   /** poll 等待者管理：wait / notify 条件变量 */
   private readonly pollNotifier = new AsyncNotifier();
 
-  /** 完整日志缓冲区最大值（1MB） */
-  private readonly MAX_BUFFER_BYTES = 1024 * 1024;
-  /** 进程结束后延迟清理时间（10分钟） */
-  private readonly CLEANUP_DELAY_MS = 10 * 60 * 1000;
-  /** 进程最大存活时间兜底（30分钟） */
-  private readonly MAX_LIFETIME_MS = 30 * 60 * 1000;
-  /** 进度通知间隔（分钟），0=关闭，默认30分钟，非0不得低于15 */
-  private readonly DEFAULT_PROGRESS_INTERVAL_MINUTES = 30;
-  private readonly MIN_PROGRESS_INTERVAL_MINUTES = 15;
+  /** 小增量全读阈值（30KB）— 超过此值使用 head+tail seek */
+  private readonly POLL_FULL_READ_THRESHOLD = 30_000;
+  /** head+tail 截断总字节数（10KB） */
+  private readonly POLL_MAX_OUTPUT_BYTES = 10_000;
+  /** 截断后最大字符数 */
+  private readonly MAX_CHARS = 10_000;
+  /** 截断后最大行数 */
+  private readonly MAX_LINES = 80;
+  /** Stall watchdog 超时（45秒无输出触发检测） */
+  private readonly STALL_TIMEOUT_MS = 45_000;
+  /** GC 最大文件年龄（10天） */
+  private readonly GC_MAX_AGE_DAYS = 10;
+  /** GC 扫描间隔（2小时） */
+  private readonly GC_INTERVAL_MS = 2 * 60 * 60 * 1000;
+  /** 日志目录名 */
+  private readonly LOG_DIR_NAME = "guada-logs";
+
+  /** 交互提示符模式 — 用于判断进程是否在等待键盘输入 */
+  private static readonly PROMPT_PATTERNS = [
+    /\(y\/n\)/i,
+    /\[y\/n\]/i,
+    /\(yes\/no\)/i,
+    /\[yes\/no\]/i,
+    /Press (any key|Enter)/i,
+    /press any key to continue/i,
+    /Do you want to/i,
+    /Are you sure/i,
+    /Continue\?/i,
+    /Confirm\?/i,
+  ];
+
+  /** 截断提示（追加到截断后的输出末尾） */
+  private static readonly TRUNCATION_REMINDER =
+    "\n<system_reminder>The output above was truncated due to length. The middle portion has been omitted; only the head and tail are shown.</system_reminder>";
+
+  private gcTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly chatRunnerService: ChatRunnerService) {}
+
+  // ── 生命周期 ──
+
+  onModuleInit() {
+    this.ensureLogDir();
+    this.cleanupOldLogs();
+    this.gcTimer = setInterval(
+      () => this.cleanupOldLogs(),
+      this.GC_INTERVAL_MS,
+    );
+  }
+
+  onModuleDestroy() {
+    if (this.gcTimer) {
+      clearInterval(this.gcTimer);
+      this.gcTimer = null;
+    }
+  }
+
+  // ── 日志目录 & GC ──
+
+  private getLogDir(): string {
+    return path.join(os.tmpdir(), this.LOG_DIR_NAME);
+  }
+
+  private ensureLogDir(): void {
+    const logDir = this.getLogDir();
+    if (!fsSync.existsSync(logDir)) {
+      fsSync.mkdirSync(logDir, { recursive: true });
+    }
+  }
+
+  /** 扫描日志目录，删除超过 GC_MAX_AGE_DAYS 天的文件 */
+  private async cleanupOldLogs(): Promise<void> {
+    const logDir = this.getLogDir();
+    try {
+      const files = await fs.readdir(logDir);
+      const now = Date.now();
+      const maxAgeMs = this.GC_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+      for (const file of files) {
+        if (!file.endsWith(".log")) continue;
+        const filePath = path.join(logDir, file);
+        try {
+          const stat = await fs.stat(filePath);
+          if (now - stat.mtimeMs > maxAgeMs) {
+            await fs.unlink(filePath);
+            this.logger.debug(`GC: deleted old log file ${file}`);
+          }
+        } catch {
+          // individual file error — skip
+        }
+      }
+    } catch {
+      // dir doesn't exist or other error — ignore
+    }
+  }
 
   // ── 后台进程管理 ──
 
   /**
    * 将已启动的进程转入后台管理。
-   * 由 ShellPlugin.execute 在检测到 background 参数或执行超时时调用。
+   * stdout/stderr 经流式清洗后写入临时文件，内存不缓存日志。
    */
   background(
     childProcess: ChildProcess,
@@ -111,6 +392,11 @@ export class ProcessManagerService {
     options?: { notify?: boolean },
   ): BackgroundResult {
     const processId = childProcess.pid?.toString() || this.generateId();
+    const logFilePath = path.join(
+      this.getLogDir(),
+      `guada-${processId}-${Date.now()}.log`,
+    );
+    const writeStream = fsSync.createWriteStream(logFilePath);
 
     const entry: ProcessEntry = {
       id: processId,
@@ -123,84 +409,65 @@ export class ProcessManagerService {
       cwd,
       encoding,
       isBackgrounded: true,
-      fullLog: "",
-      output: "",
+      logFilePath,
+      readOffset: 0,
+      writeStream,
+      recentTail: "",
       notify: options?.notify ?? true,
-      progressIntervalMinutes: this.DEFAULT_PROGRESS_INTERVAL_MINUTES,
       lastOutputAt: new Date(),
-      progressTimer: null,
-      cleanupTimer: null,
+      stallTimer: null,
+      stallNotified: false,
       startedAt: new Date(),
     };
 
     this.logger.log(
-      `后台进程 ${processId} 开始，缓冲区上限 1MB: ${command.substring(0, 80)}`,
+      `后台进程 ${processId} 开始，日志文件: ${logFilePath}: ${command.substring(0, 80)}`,
     );
 
-    // 接管 stdout/stderr → 内存缓冲区（自然交错拼接）
-    childProcess.stdout?.on("data", (chunk: Buffer) => {
-      const text = this.decodeBuffer(chunk, encoding);
-      this.appendFullLog(entry, text);
-      this.appendRecent(entry, text);
+    // stdout/stderr → PassThrough 合流 → SanitizerTransform → writeStream
+    const merger = new PassThrough();
+    const sanitizerTransform = new SanitizerTransform(encoding, (cleaned) => {
+      entry.recentTail = (entry.recentTail + cleaned).slice(-500);
       this.onOutput(entry);
     });
+    merger.pipe(sanitizerTransform).pipe(writeStream);
 
-    childProcess.stderr?.on("data", (chunk: Buffer) => {
-      const text = this.decodeBuffer(chunk, encoding);
-      this.appendFullLog(entry, text);
-      this.appendRecent(entry, text);
-      this.onOutput(entry);
-    });
+    // 两个 stdio 流都结束时关闭 merger → 触发 Transform _flush → writeStream.end()
+    const stdioStreamCount =
+      (childProcess.stdout ? 1 : 0) + (childProcess.stderr ? 1 : 0);
+    let stdioEnded = 0;
+    const onStdioEnd = () => {
+      if (++stdioEnded < stdioStreamCount) return;
+      merger.end();
+    };
+
+    childProcess.stdout?.pipe(merger, { end: false });
+    childProcess.stdout?.on("end", onStdioEnd);
+    childProcess.stderr?.pipe(merger, { end: false });
+    childProcess.stderr?.on("end", onStdioEnd);
 
     childProcess.on("close", (code) => {
-      if (entry.status === "killed") return;
-      entry.status = code === 0 ? "completed" : "error";
-      entry.exitCode = code;
-      entry.finishedAt = new Date();
-
-      if (entry.progressTimer) {
-        clearInterval(entry.progressTimer);
-        entry.progressTimer = null;
-      }
-
-      this.logger.log(`后台进程 ${processId} 已结束, 退出码: ${code}`);
-
-      // 如果有人在 poll 等结果，直接 notify 即可，不必重复投递系统消息
-      if (!this.pollNotifier.hasWaiters(processId)) {
-        this.enqueueSystemMessage(entry);
-      }
-      this.pollNotifier.notify(processId);
+      if (entry.status !== "running") return;
+      this.handleProcessEnd(
+        entry,
+        code === 0 ? "completed" : "error",
+        code ?? 1,
+      );
     });
 
     childProcess.on("error", (err) => {
-      if (entry.status === "killed") return;
-      entry.status = "error";
-      entry.exitCode = 1;
-      entry.finishedAt = new Date();
-
-      if (entry.progressTimer) {
-        clearInterval(entry.progressTimer);
-        entry.progressTimer = null;
-      }
-
+      if (entry.status !== "running") return;
       this.logger.error(`后台进程 ${processId} 错误: ${err.message}`);
-
-      // 如果有人在 poll 等结果，直接 notify 即可，不必重复投递系统消息
-      if (!this.pollNotifier.hasWaiters(processId)) {
-        this.enqueueSystemMessage(entry);
-      }
-      this.pollNotifier.notify(processId);
+      this.handleProcessEnd(entry, "error", 1);
     });
 
     this.processes.set(processId, entry);
-    // 维护会话→进程索引
     if (!this.sessionProcesses.has(sessionId)) {
       this.sessionProcesses.set(sessionId, new Map());
     }
     this.sessionProcesses.get(sessionId)!.set(processId, entry);
 
-    // 自动启动进度通知（默认每 30 分钟报告一次）
-    this.startProgressTimer(entry);
+    this.resetStallTimer(entry);
 
     this.logger.log(
       `进程已转入后台: ${processId}, 命令: ${command.substring(0, 80)}`,
@@ -209,7 +476,7 @@ export class ProcessManagerService {
     return {
       processId,
       status: "backgrounded",
-      output: entry.output,
+      output: "",
     };
   }
 
@@ -240,17 +507,13 @@ export class ProcessManagerService {
     entry.status = "killed";
     entry.finishedAt = new Date();
 
-    if (entry.progressTimer) {
-      clearInterval(entry.progressTimer);
-      entry.progressTimer = null;
-    }
+    this.clearStallWatchdog(entry);
+    this.pollNotifier.notify(entry.id);
 
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
 
-    // 通知 poll 等待者
-    this.pollNotifier.notify(entry.id);
-
-    // kill 是 AI 主动行为，AI 已知晓，不投递系统消息
+    // kill 是 AI 主动行为，立即清理 entry（不投递系统消息）
+    this.cleanupProcess(entry.id, entry.sessionId);
 
     return "killed";
   }
@@ -258,7 +521,7 @@ export class ProcessManagerService {
   /**
    * 轮询后台进程状态和新输出。
    *
-   * 返回自上次 poll 以来的新增内容（使用内部游标），不重复。
+   * 使用字节偏移从日志文件读取增量，不缓存日志在内存中。
    * 如果 timeout > 0，则最多阻塞等待 timeout 毫秒等待新数据到来。
    */
   async poll(
@@ -266,82 +529,50 @@ export class ProcessManagerService {
     timeoutMs: number = 30_000,
     sessionId?: string,
   ): Promise<PollResult | null> {
-    // 最低 30s，避免 AI 无限制轮询
-    if (timeoutMs < 30_000) timeoutMs = 30_000;
+    // 0 = 立即返回（不等待），用于拦截器等内部非阻塞场景
+    // Agent 调用时的最小值限制由插件入口处理
+
     const entry = this.processes.get(processId);
     if (!entry) {
-      // 本地已清理 → 从信箱撤回消息作为 poll 结果
-      if (sessionId) {
-        const removed = this.chatRunnerService.peekQueuedMessage(
-          sessionId,
-          (item) => item.source?.processId === processId,
-        );
-        if (removed.length > 0) {
-          const payload =
-            removed[removed.length - 1].source?.systemPayload?.[0];
-          if (payload) {
-            return {
-              processId: payload.processId,
-              status: payload.status,
-              exitCode: payload.exitCode,
-              output: payload.output || "",
-              waitSeconds: 0,
-            };
-          }
-        }
-      }
-      return null;
+      return this.pollFromQueue(processId, sessionId);
     }
 
-    // 进程已结束 → 直接返回结果
+    // 进程已结束且 enqueue 路径在进行中 → 等它完成后从队列取
+    if (entry.exitPromise) {
+      await entry.exitPromise;
+      return this.pollFromQueue(processId, sessionId);
+    }
+
+    // 进程已结束 → 确保日志落盘后读取
     if (entry.status !== "running") {
+      await finished(entry.writeStream).catch(() => {});
       return this.buildPollResult(entry, 0);
     }
 
-    // poll 即视为已收到消息，重置进度通知计时器
-    if (entry.progressIntervalMinutes > 0) {
-      if (entry.progressTimer) {
-        clearInterval(entry.progressTimer);
-        entry.progressTimer = null;
-      }
-      this.startProgressTimer(entry);
-    }
 
-    // 进程还在跑，注册等待器，有新输出或超时时返回
+    // 进程还在跑，注册等待器（timeoutMs=0 时跳过等待）
     const waitStartedAt = Date.now();
-    await this.pollNotifier.wait(processId, timeoutMs);
+    if (timeoutMs > 0) {
+      await this.pollNotifier.wait(processId, timeoutMs);
+    }
     const waitSeconds = Math.round((Date.now() - waitStartedAt) / 1000);
-    return this.buildPollResult(entry, waitSeconds);
-  }
 
-  /**
-   * 修改静默监控时间
-   */
-  updateProgressMonitoring(
-    processId: string,
-    minutes: number,
-  ): ProcessEntry | null {
-    const entry = this.processes.get(processId);
-    if (!entry) return null;
-
-    // 非0值不得低于15分钟
-    if (minutes > 0 && minutes < this.MIN_PROGRESS_INTERVAL_MINUTES) {
-      minutes = this.MIN_PROGRESS_INTERVAL_MINUTES;
+    // 等待期间进程可能已结束 → 检查 enqueue 是否在进行
+    if (entry.exitPromise) {
+      await entry.exitPromise;
+      return this.pollFromQueue(processId, sessionId);
     }
 
-    entry.progressIntervalMinutes = minutes;
-
-    // 重置定时器
-    if (entry.progressTimer) {
-      clearInterval(entry.progressTimer);
-      entry.progressTimer = null;
+    // 进程已结束但无 enqueue 在进行 → 确保日志落盘
+    if (entry.status !== "running") {
+      await finished(entry.writeStream).catch(() => {});
     }
 
-    if (minutes > 0 && entry.status === "running") {
-      this.startProgressTimer(entry);
+    const result = await this.buildPollResult(entry, waitSeconds);
+    if (entry.stallNotified) {
+      result.stalled = true;
     }
-
-    return entry;
+    return result;
   }
 
   /**
@@ -359,7 +590,6 @@ export class ProcessManagerService {
           isBackgrounded: entry.isBackgrounded,
           startedAt: entry.startedAt,
           finishedAt: entry.finishedAt,
-          progressIntervalMinutes: entry.progressIntervalMinutes,
         });
       }
     }
@@ -367,7 +597,7 @@ export class ProcessManagerService {
   }
 
   /**
-   * 根据 ID 获取进程（不暴露 ChildProcess）
+   * 根据 ID 获取进程信息
    */
   get(processId: string): ProcessListEntry | null {
     const entry = this.processes.get(processId);
@@ -380,13 +610,24 @@ export class ProcessManagerService {
       isBackgrounded: entry.isBackgrounded,
       startedAt: entry.startedAt,
       finishedAt: entry.finishedAt,
-      progressIntervalMinutes: entry.progressIntervalMinutes,
     };
   }
 
-  /** 获取完整进程条目（含完整日志），供 dump_log 使用 */
-  getRawEntry(processId: string): ProcessEntry | null {
-    return this.processes.get(processId) || null;
+  /**
+   * 向后台进程的 stdin 写入数据
+   */
+  writeToStdin(processId: string, text: string): void {
+    const entry = this.processes.get(processId);
+    if (!entry) {
+      throw new Error(`Process ${processId} does not exist`);
+    }
+    if (entry.status !== "running") {
+      throw new Error(`Process ${processId} has ended, cannot write`);
+    }
+    if (!entry.childProcess.stdin) {
+      throw new Error(`stdin for process ${processId} is not available`);
+    }
+    entry.childProcess.stdin.write(text);
   }
 
   // ── 内部 cleanup ──
@@ -407,219 +648,219 @@ export class ProcessManagerService {
     return `p${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  private decodeBuffer(buffer: Buffer, encoding?: string): string {
-    if (!buffer || buffer.length === 0) return "";
-    try {
-      if (encoding) return iconv.decode(buffer, encoding);
-      return iconv.decode(
-        buffer,
-        process.platform === "win32" ? "gbk" : "utf-8",
-      );
-    } catch {
-      return buffer.toString("latin1");
-    }
-  }
-
-  /** 将新输出追加到 output 缓冲区（自然交错拼接） */
-  private appendRecent(entry: ProcessEntry, text: string): void {
-    entry.output += text;
-  }
-
-  /** 将新输出追加到完整日志缓冲区（最大 1MB，超出保留末尾） */
-  private appendFullLog(entry: ProcessEntry, text: string): void {
-    entry.fullLog += text;
-    if (entry.fullLog.length > this.MAX_BUFFER_BYTES) {
-      // 丢掉前半，保留末尾 1MB
-      entry.fullLog = entry.fullLog.slice(-this.MAX_BUFFER_BYTES);
-    }
-  }
-
-  /** 有输出时的处理：更新最后输出时间（poll 不因中间输出提前返回） */
+  /** 有输出时的处理：更新最后输出时间 + 重置 stall 状态 + 重启看门狗 */
   private onOutput(entry: ProcessEntry): void {
     entry.lastOutputAt = new Date();
+    if (entry.stallNotified) {
+      entry.stallNotified = false;
+      this.removeStallNotification(entry);
+    }
+    this.resetStallTimer(entry);
   }
 
-  // ── 输出后处理 ──
+  // ── 文件读取 & 截断 ──
 
   /**
-   * 清洗终端输出：逐字节擦除 ANSI 转义码 + 归一化换行 + \r 进度条重建
+   * 从日志文件读取增量并截断。
+   * 小增量：全读 + 行数/字符截断；大增量：head + tail seek。
    */
-  private sanitizeOutput(raw: string): string {
-    // 1. 逐字节擦除 ANSI 转义码
-    let cleaned = "";
-    let i = 0;
-    while (i < raw.length) {
-      if (raw.charCodeAt(i) === 0x1b) {
-        // ESC
-        if (i + 1 < raw.length) {
-          const next = raw.charCodeAt(i + 1);
-          if (next === 0x5b) {
-            // CSI: ESC [
-            i += 2;
-            while (i < raw.length) {
-              const c = raw.charCodeAt(i);
-              if (c >= 0x40 && c <= 0x7e) {
-                i++;
-                break;
-              } // final byte
-              i++;
-            }
-            continue;
-          } else if (next === 0x5d) {
-            // OSC: ESC ]
-            i += 2;
-            while (i < raw.length) {
-              if (raw.charCodeAt(i) === 0x07) {
-                i++;
-                break;
-              } // BEL
-              if (
-                raw[i] === "\x1B" &&
-                i + 1 < raw.length &&
-                raw[i + 1] === "\\"
-              ) {
-                i += 2;
-                break;
-              } // ST
-              i++;
-            }
-            continue;
-          } else {
-            // 两字节转义：ESC + 任一字符
-            i += 2;
-            continue;
-          }
-        }
-        i++;
-        continue;
-      }
-      cleaned += raw[i];
-      i++;
+  private async readAndTruncate(
+    logFilePath: string,
+    readOffset: number,
+    fileSize: number,
+    increment: number,
+  ): Promise<string> {
+    if (increment <= this.POLL_FULL_READ_THRESHOLD) {
+      // 小增量 — 全读 + 行/字符截断
+      const buf = Buffer.alloc(increment);
+      const fd = await fs.open(logFilePath, "r");
+      await fd.read(buf, 0, increment, readOffset);
+      await fd.close();
+      return this.truncateOutput(buf.toString("utf-8"));
     }
 
-    // 2. \r\n → \n
-    cleaned = cleaned.replace(/\r\n/g, "\n");
+    // 大增量 — head + tail seek
+    const headLen = Math.floor(this.POLL_MAX_OUTPUT_BYTES * 0.4);
+    const tailLen = this.POLL_MAX_OUTPUT_BYTES - headLen;
 
-    // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容
-    const lines = cleaned.split("\n");
-    const result = lines.map((line) => {
-      const lastR = line.lastIndexOf("\r");
-      return lastR >= 0 ? line.substring(lastR + 1) : line;
-    });
-    return result.join("\n");
+    const headBuf = Buffer.alloc(headLen);
+    const tailBuf = Buffer.alloc(tailLen);
+
+    const fd = await fs.open(logFilePath, "r");
+    await fd.read(headBuf, 0, headLen, readOffset);
+    await fd.read(tailBuf, 0, tailLen, fileSize - tailLen);
+    await fd.close();
+
+    const head = trimUtf8Head(headBuf);
+    const tail = trimUtf8Tail(tailBuf);
+
+    return (
+      head +
+      `\n[...output truncated, ${increment} bytes total (offset ${readOffset} → ${fileSize}), showing ${headLen}-byte head and ${tailLen}-byte tail...]\n` +
+      tail +
+      ProcessManagerService.TRUNCATION_REMINDER
+    );
   }
 
   /**
-   * 智能截断输出：字符优先（10K），再行数（50），40%+notice+60%
+   * 智能截断输出：字符优先（10K），再行数（80），40%+notice+60%
    */
   private truncateOutput(cleanText: string): string {
-    const MAX_CHARS = 10_000;
-    const MAX_LINES = 50;
-
     const lines = cleanText.split("\n");
     const charCount = cleanText.length;
     const lineCount = lines.length;
 
-    // 两者都未超 → 完整输出
-    if (charCount <= MAX_CHARS && lineCount <= MAX_LINES) {
+    if (charCount <= this.MAX_CHARS && lineCount <= this.MAX_LINES) {
       return cleanText;
     }
 
-    if (charCount > MAX_CHARS) {
-      // 字符超出 → 按字符 40% + notice + 60%
-      const headLen = Math.floor(MAX_CHARS * 0.4);
-      const tailLen = MAX_CHARS - headLen - 100; // 留 100 给 notice
+    if (charCount > this.MAX_CHARS) {
+      const headLen = Math.floor(this.MAX_CHARS * 0.4);
+      const tailLen = this.MAX_CHARS - headLen - 100;
       const head = safeTruncate(cleanText, headLen);
       const tail = safeTail(cleanText, tailLen);
-      const notice = `\n[...输出截断，共 ${charCount} 字符，仅展示首尾...]\n`;
-      return head + notice + tail;
+      const notice = `\n[...output truncated, ${charCount} chars total, showing head and tail...]\n`;
+      return head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER;
     }
 
-    // 仅行数超出 → 按行 40% + notice + 60%
-    const headLines = Math.floor(MAX_LINES * 0.4);
-    const tailLines = MAX_LINES - headLines - 3; // 3 行给 notice
+    const headLines = Math.floor(this.MAX_LINES * 0.4);
+    const tailLines = this.MAX_LINES - headLines - 3;
     const head = lines.slice(0, headLines).join("\n");
     const tail = lines.slice(lines.length - tailLines).join("\n");
-    const notice = `\n[...输出截断，共 ${lineCount} 行，仅展示首尾...]\n`;
-    return head + notice + tail;
+    const notice = `\n[...output truncated, ${lineCount} lines total, showing head and tail...]\n`;
+    return head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER;
   }
 
-  /** 构建 poll 结果，返回后清空缓冲区 */
-  private buildPollResult(entry: ProcessEntry, waitSeconds = 0): PollResult {
-    const rawOutput = entry.output;
-    entry.output = "";
-
-    // AI poll 看到进程结束 → 从信箱撤回消息 + 延迟清理
-    if (entry.status !== "running") {
-      this.chatRunnerService.peekQueuedMessage(
-        entry.sessionId,
-        (item) => item.source?.processId === entry.id,
-      );
-      this.scheduleCleanup(entry);
+  /** 读取自 readOffset 以来的增量输出（更新 readOffset） */
+  private async readIncrementalOutput(
+    entry: ProcessEntry,
+  ): Promise<string> {
+    let fileSize: number;
+    try {
+      const stat = await fs.stat(entry.logFilePath);
+      fileSize = stat.size;
+    } catch {
+      return "";
     }
 
-    // 后处理：清洗 → 截断
-    const cleanOutput = this.sanitizeOutput(rawOutput);
-    const finalOutput = this.truncateOutput(cleanOutput);
+    const increment = fileSize - entry.readOffset;
+    let output = "";
+    if (increment > 0) {
+      output = await this.readAndTruncate(
+        entry.logFilePath,
+        entry.readOffset,
+        fileSize,
+        increment,
+      );
+    }
+
+    entry.readOffset = fileSize;
+    return output;
+  }
+
+  /** 构建 poll 结果（进程仍在运行时） */
+  private async buildPollResult(
+    entry: ProcessEntry,
+    waitSeconds = 0,
+  ): Promise<PollResult> {
+    const output = await this.readIncrementalOutput(entry);
+
+    // AI poll 接收了消息 → 从信箱撤回
+    this.chatRunnerService.peekQueuedMessage(
+      entry.sessionId,
+      (item) => item.source?.processId === entry.id,
+    );
+
+    // 进程已结束 → 立即清理
+    if (entry.status !== "running") {
+      this.cleanupProcess(entry.id, entry.sessionId);
+    }
 
     return {
       processId: entry.id,
       status: entry.status,
       exitCode: entry.exitCode,
-      output: finalOutput,
+      output,
       waitSeconds,
     };
   }
 
-  // ── 进度通知 ──
+  /** 从消息队列获取已清理进程的 poll 结果 */
+  private pollFromQueue(
+    processId: string,
+    sessionId?: string,
+  ): PollResult | null {
+    if (!sessionId) return null;
 
-  /** 定时发送进度通知。每 progressIntervalMinutes 分钟报告一次最近输出 */
-  private startProgressTimer(entry: ProcessEntry): void {
-    if (entry.progressTimer) return;
-
-    entry.progressTimer = setInterval(
-      () => {
-        if (entry.status !== "running") return;
-
-        // poll 期间有人正在等结果，跳过通知避免重复
-        if (this.pollNotifier.hasWaiters(entry.id)) return;
-
-        this.enqueueSystemMessage(entry, "progress_report");
-
-        this.logger.log(
-          `进度通知: ${entry.id} 已运行 ${Math.round((Date.now() - entry.startedAt.getTime()) / 60000)} 分钟`,
-        );
-      },
-      entry.progressIntervalMinutes * 60 * 1000,
+    const removed = this.chatRunnerService.peekQueuedMessage(
+      sessionId,
+      (item) => item.source?.processId === processId,
     );
+    if (removed.length === 0) return null;
+
+    const payload =
+      removed[removed.length - 1].source?.systemPayload?.[0];
+    if (!payload) return null;
+
+    return {
+      processId: payload.processId,
+      status: payload.status,
+      exitCode: payload.exitCode,
+      output: payload.output || "",
+      waitSeconds: 0,
+    };
   }
 
-  // ── 系统消息投递 ──
+  // ── 进程结束处理 ──
 
-  /** 投递系统消息，每进程独立投递，投递后延迟清理 */
-  private enqueueSystemMessage(entry: ProcessEntry, event?: string): void {
-    if (!entry.notify) return;
+  /**
+   * 进程结束的统一处理：通知 poll 等待者，或投递系统消息后清理
+   */
+  private handleProcessEnd(
+    entry: ProcessEntry,
+    status: ProcessStatus,
+    exitCode: number,
+  ): void {
+    entry.status = status;
+    entry.exitCode = exitCode;
+    entry.finishedAt = new Date();
 
-    const eventType = event || entry.status;
+    this.clearStallWatchdog(entry);
+    this.logger.log(`后台进程 ${entry.id} 已结束, 退出码: ${exitCode}`);
 
-    const isProgress = eventType === "progress_report";
+    if (this.pollNotifier.hasWaiters(entry.id)) {
+      // 有 poll 等待者 → 通知，poll 会 await finished(writeStream) 后读取
+      this.pollNotifier.notify(entry.id);
+    } else {
+      // 无 poll 等待者 → 异步读取剩余输出，投递系统消息，然后清理
+      // 设置 exitPromise 让并发 poll 等待完成后从队列取
+      entry.exitPromise = this.enqueueSystemMessageFromEntry(entry).catch(
+        (err) => {
+          this.logger.error(
+            `Error handling exit for ${entry.id}: ${err.message}`,
+          );
+        },
+      );
+    }
+  }
 
-    const content = isProgress
-      ? `[进度通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 运行中（已运行 ${Math.round((Date.now() - entry.startedAt.getTime()) / 60000)} 分钟）`
-      : `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
+  /** 读取剩余输出，投递系统消息，然后清理 entry */
+  private async enqueueSystemMessageFromEntry(
+    entry: ProcessEntry,
+  ): Promise<void> {
+    // 确保日志全部落盘
+    await finished(entry.writeStream).catch(() => {});
 
-    const systemPayload: Record<string, any>[] = [
-      {
-        processId: entry.id,
-        command: entry.command,
-        status: isProgress ? "running" : entry.status,
-        exitCode: isProgress ? undefined : entry.exitCode,
-        progressIntervalMinutes: isProgress
-          ? entry.progressIntervalMinutes
-          : undefined,
-        output: entry.output,
-      },
-    ];
+    // 读取剩余增量
+    const output = await this.readIncrementalOutput(entry);
+
+    if (!entry.notify) {
+      this.cleanupProcess(entry.id, entry.sessionId);
+      return;
+    }
+
+    const content = `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
+
     this.logger.debug(`投递系统消息: ${content}`);
     this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
@@ -628,50 +869,119 @@ export class ProcessManagerService {
       source: {
         type: "process_monitor",
         processId: entry.id,
-        event: eventType,
-        systemPayload,
+        event: entry.status,
+        systemPayload: [
+          {
+            processId: entry.id,
+            command: entry.command,
+            status: entry.status,
+            exitCode: entry.exitCode,
+            output,
+          },
+        ],
       },
     });
 
-    // 进度通知不触发清理，仅进程结束时才调度清理
-    if (!isProgress) {
-      this.scheduleCleanup(entry);
-    }
-  }
-
-  // ── 延迟清理 ──
-
-  /** 安排延迟清理：10 分钟后移除，最多保留 30 分钟兜底 */
-  private scheduleCleanup(entry: ProcessEntry): void {
-    if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
-
-    const lifetimeElapsed =
-      Date.now() - (entry.finishedAt?.getTime() || Date.now());
-    const remaining = Math.max(0, this.MAX_LIFETIME_MS - lifetimeElapsed);
-    const delay = Math.min(this.CLEANUP_DELAY_MS, remaining);
-
-    if (delay <= 0) {
-      this.cleanupProcess(entry.id, entry.sessionId);
-      return;
-    }
-
-    entry.cleanupTimer = setTimeout(() => {
-      this.cleanupProcess(entry.id, entry.sessionId);
-    }, delay);
-  }
-
-  /** 重置延迟清理计时器 */
-  resetCleanupTimer(processId: string): void {
-    const entry = this.processes.get(processId);
-    if (!entry) return;
-    this.scheduleCleanup(entry);
-  }
-
-  /** 立即从内存移除进程（供 dump_log 导出后调用，释放缓冲区） */
-  removeProcess(processId: string): void {
-    const entry = this.processes.get(processId);
-    if (!entry) return;
-    if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
+    // 投递后立即清理（poll 会从消息队列获取）
     this.cleanupProcess(entry.id, entry.sessionId);
+  }
+
+  // ── Stall Watchdog ──
+
+  /** 清理 stall watchdog（定时器 + 通知撤回） */
+  private clearStallWatchdog(entry: ProcessEntry): void {
+    if (entry.stallTimer) {
+      clearTimeout(entry.stallTimer);
+      entry.stallTimer = null;
+    }
+    entry.stallNotified = false;
+    this.removeStallNotification(entry);
+  }
+
+  /** 重置 stall watchdog 定时器（每次有新输出时调用） */
+  private resetStallTimer(entry: ProcessEntry): void {
+    if (entry.stallTimer) {
+      clearTimeout(entry.stallTimer);
+    }
+    entry.stallTimer = setTimeout(() => {
+      entry.stallTimer = null;
+      this.checkStall(entry);
+    }, this.STALL_TIMEOUT_MS);
+  }
+
+  /**
+   * Stall 检测：输出停止 45 秒 + 尾部匹配交互提示符
+   * - 前台（有 poll 等待者）→ notify 唤醒 poll 提前返回
+   * - 后台（无 poll 等待者）→ 入队 stall 通知（含当前未读输出）
+   */
+  private checkStall(entry: ProcessEntry): void {
+    if (entry.status !== "running") return;
+    if (entry.stallNotified) return;
+
+    const tail = entry.recentTail;
+    if (!tail.trim()) return;
+
+    const isPrompt = ProcessManagerService.PROMPT_PATTERNS.some((pattern) =>
+      pattern.test(tail),
+    );
+    if (!isPrompt) return;
+
+    entry.stallNotified = true;
+    this.logger.log(
+      `Stall detected: process ${entry.id} appears to be waiting for keyboard input`,
+    );
+
+    if (this.pollNotifier.hasWaiters(entry.id)) {
+      this.pollNotifier.notify(entry.id);
+    } else {
+      this.enqueueStallNotification(entry).catch((err) => {
+        this.logger.error(
+          `Error enqueuing stall notification: ${err.message}`,
+        );
+      });
+    }
+  }
+
+  /** 投递 stall 通知到会话队列（含当前未读输出） */
+  private async enqueueStallNotification(
+    entry: ProcessEntry,
+  ): Promise<void> {
+    if (!entry.notify) return;
+
+    const output = await this.readIncrementalOutput(entry);
+
+    const content = `[交互提示] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 似乎在等待键盘输入`;
+
+    this.chatRunnerService.enqueueMessage({
+      sessionId: entry.sessionId,
+      userId: entry.userId,
+      content,
+      source: {
+        type: "process_monitor",
+        processId: entry.id,
+        event: "stall_detected",
+        systemPayload: [
+          {
+            processId: entry.id,
+            command: entry.command,
+            status: "running",
+            stalled: true,
+            output,
+            message:
+              'The process appears to be waiting for keyboard input. Use the process tool with action "write" to send input, or action "kill" to terminate. If this is a false positive, simply ignore this message.',
+          },
+        ],
+      },
+    });
+  }
+
+  /** 从会话队列中移除指定进程的 stall 通知（去重） */
+  private removeStallNotification(entry: ProcessEntry): void {
+    this.chatRunnerService.peekQueuedMessage(
+      entry.sessionId,
+      (item) =>
+        item.source?.processId === entry.id &&
+        item.source?.event === "stall_detected",
+    );
   }
 }

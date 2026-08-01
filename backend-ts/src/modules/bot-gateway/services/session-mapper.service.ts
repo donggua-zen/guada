@@ -34,6 +34,7 @@ export class SessionMapperService {
    * @param platform 来源平台
    * @param defaultCharacterId 默认角色 ID
    * @param defaultModelId 默认模型 ID（可选，用于模型解析优先级）
+   * @param defaultThinkingEffort 默认思考强度（可选，动态注入到 session.settings）
    * @param title 会话标题(可选,不提供则自动生成)
    */
   async getOrCreateBotSession(
@@ -42,6 +43,7 @@ export class SessionMapperService {
     platform: string,
     defaultCharacterId: string,
     defaultModelId?: string | null,
+    defaultThinkingEffort?: string | null,
     title?: string,
   ): Promise<any> {
     // 尝试查找已存在的会话（Bot 会话的 characterId 为 null）
@@ -85,6 +87,7 @@ export class SessionMapperService {
     // 动态挂载 character 和 model（确保与 Bot 配置同步）
     await this.enrichBotSessionCharacter(session, defaultCharacterId);
     await this.enrichBotSessionModel(session, defaultModelId);
+    this.enrichBotSessionThinkingEffort(session, defaultThinkingEffort);
 
     return session;
   }
@@ -171,6 +174,26 @@ export class SessionMapperService {
     // 5. 将 model 对象挂载到 session，模拟 include 的效果
     session.model = model;
     session.modelId = model.id;
+  }
+
+  /**
+   * 为 Bot 会话动态注入思考强度设置
+   *
+   * 将 Bot 实例的 defaultThinkingEffort 注入到 session.settings.thinkingEffort（仅内存，不持久化）。
+   * 这样确保修改 Bot 的思考强度后立即对所有会话生效，无需重启。
+   * 仅对支持 thinking feature 的模型实际生效（由 PersistentSessionContext 判断）。
+   *
+   * @param session 会话对象
+   * @param defaultThinkingEffort Bot 实例配置的默认思考强度（可选）
+   */
+  private enrichBotSessionThinkingEffort(
+    session: any,
+    defaultThinkingEffort?: string | null,
+  ): void {
+    if (!defaultThinkingEffort) return;
+
+    if (!session.settings) session.settings = {};
+    session.settings.thinkingEffort = defaultThinkingEffort;
   }
 
   /**

@@ -721,37 +721,59 @@ export class QQBot extends EventEmitter {
   // ============================================
 
   /**
-   * 上传媒体文件（图片、视频等）
+   * 上传媒体文件（图片、视频、文件等）
    * QQ官方要求先上传媒体获取file_info，然后在发送消息时引用
+   *
+   * 使用 JSON body + base64 编码（QQ官方 API 不支持 multipart FormData）
+   *
+   * @param filePath 本地文件路径
+   * @param fileType QQ 文件类型：1=image, 2=video, 3=audio, 4=file
+   * @param target 上传目标：group_openid 或 user_openid
+   * @param isGroup true=群聊, false=私聊(C2C)
+   * @param fileName 可选文件名（file 类型需要）
    */
   async uploadMedia(
     filePath: string,
-    fileType: 'image' | 'video' = 'image',
+    fileType: number = 1,
+    target?: string,
+    isGroup: boolean = true,
+    fileName?: string,
   ): Promise<{ file_info: string }> {
     const token = await this.getAccessToken();
 
-    // 读取文件
+    // 读取文件并 base64 编码
     const fs = await import('fs');
     const path = await import('path');
     const fileBuffer = await fs.promises.readFile(filePath);
-    const fileName = path.basename(filePath);
+    const fileBase64 = fileBuffer.toString('base64');
+    const name = fileName || path.basename(filePath);
 
-    // 构建 FormData
-    const formData = new FormData();
-    const blob = new Blob([fileBuffer], {
-      type: fileType === 'image' ? 'image/jpeg' : 'video/mp4'
-    });
-    formData.append('media', blob, fileName);
-    formData.append('srv_send_msg', 'false');  // 不立即发送
+    // 构建 JSON payload
+    const payload: Record<string, any> = {
+      file_type: fileType,
+      srv_send_msg: false,
+      file_data: fileBase64,
+    };
+
+    // file 类型需要 file_name 字段
+    if (fileType === 4) {
+      payload.file_name = name;
+    }
+
+    // 选择上传路径：群聊 /v2/groups/{group_openid}/files，私聊 /v2/users/{openid}/files
+    const uploadPath = isGroup
+      ? `/v2/groups/${target || '0'}/files`
+      : `/v2/users/${target}/files`;
 
     // 上传到QQ服务器
-    const response = await fetch(`${this.baseURL}/v2/groups/0/files`, {
+    const response = await fetch(`${this.baseURL}${uploadPath}`, {
       method: 'POST',
       headers: {
         'Authorization': `QQBot ${token}`,
         'X-Union-Appid': this.config.appId,
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

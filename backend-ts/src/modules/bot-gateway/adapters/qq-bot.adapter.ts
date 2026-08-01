@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   BotConfig,
+  BotMediaRequest,
   BotMessage,
   BotResponse,
   BotStatus,
@@ -42,6 +43,7 @@ export class QQBotAdapter extends BaseBotAdapter {
       supportsTemplateCard: false, // 暂不支持模板卡片
       supportsMultimedia: true, // 支持多媒体消息
       handlesReconnectInternally: false, // 需要外部 BotInstanceManager 统一管理重连
+      sendIntervalMs: 1000,
     };
   }
 
@@ -208,6 +210,63 @@ export class QQBotAdapter extends BaseBotAdapter {
     } catch (error: any) {
       this.logger.error(`Failed to send message: ${error.message}`);
       this.logger.error(`Error details:`, error);
+      throw error;
+    }
+  }
+
+  async sendMedia(request: BotMediaRequest): Promise<void> {
+    if (!this.client) {
+      throw new Error("QQ bot is not initialized");
+    }
+
+    const { conversationId, mediaType, filePath, caption, filename } = request;
+    const isGroup = request.sourceType === "group";
+
+    // QQ file_type: 1=image, 2=video, 4=file
+    const fileTypeMap = { image: 1, video: 2, file: 4 } as const;
+    const fileType = fileTypeMap[mediaType];
+
+    try {
+      // Step 1: Upload media to get file_info
+      this.logger.log(
+        `Uploading media: type=${mediaType}(${fileType}), file=${filePath}, target=${conversationId}, isGroup=${isGroup}`,
+      );
+      const { file_info } = await this.client.uploadMedia(
+        filePath,
+        fileType,
+        conversationId,
+        isGroup,
+        filename,
+      );
+
+      // Step 2: Send message with media reference (msg_type=7)
+      const params: any = {
+        msg_type: 7,
+        media: { file_info },
+      };
+
+      // Optional caption as text alongside media
+      if (caption) {
+        params.content = caption;
+      }
+
+      // Group passive reply needs msg_id
+      if (isGroup && request.replyToMessageId) {
+        params.msg_id = request.replyToMessageId;
+      } else if (isGroup) {
+        // Group active message without msg_id — may require extra permissions
+        this.logger.warn("Sending group media without msg_id (active message)");
+      }
+
+      if (isGroup) {
+        await this.client.sendGroupMessage(conversationId, params);
+      } else {
+        await this.client.sendC2CMessage(conversationId, params);
+      }
+
+      this.logger.log(`Sent ${mediaType} to ${conversationId}: ${filePath}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send media: ${error.message}`);
       throw error;
     }
   }

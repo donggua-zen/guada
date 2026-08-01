@@ -2,6 +2,7 @@ import {
   PluginManifest,
   ToolHandlerDef,
   ToolKitRegistration,
+  TurnInterceptor,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
 
@@ -17,6 +18,7 @@ interface PluginRegistration {
     description: string;
     handler: (context: any) => string | Promise<string>;
   }>;
+  interceptors: TurnInterceptor[];
   ctor?: new (...args: any[]) => PluginBase;
 }
 
@@ -25,7 +27,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [] });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [] });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -59,6 +61,20 @@ class PluginRegistryImpl {
   getPromptMetas(pluginId: string) {
     const reg = this.registrations.get(pluginId);
     return { prompts: reg?.prompts || [] };
+  }
+
+  /** 注册回合拦截器 */
+  registerInterceptor(pluginId: string, interceptor: TurnInterceptor) {
+    const reg = this.registrations.get(pluginId);
+    if (!reg) return;
+    if (!reg.interceptors.find((x) => x.name === interceptor.name)) {
+      reg.interceptors.push(interceptor);
+    }
+  }
+
+  /** 获取插件的所有回合拦截器 */
+  getInterceptors(pluginId: string): TurnInterceptor[] {
+    return this.registrations.get(pluginId)?.interceptors || [];
   }
 
   has(pluginId: string): boolean { return this.registrations.has(pluginId); }

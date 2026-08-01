@@ -4,7 +4,7 @@
             <!-- 对话设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">对话</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <!-- 默认对话模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
                         <div class="flex flex-col gap-1 min-w-0">
@@ -41,7 +41,7 @@
             <!-- 视觉辅助设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">视觉</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">视觉辅助模型</span>
@@ -62,7 +62,7 @@
             <!-- 历史压缩设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">压缩</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">历史压缩模型</span>

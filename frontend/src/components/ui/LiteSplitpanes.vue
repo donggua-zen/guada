@@ -358,22 +358,24 @@ onUnmounted(() => {
   flex-shrink: 0;
   width: 1px;
   cursor: col-resize;
-  background-color: var(--color-surface, #f5f5f5);
+  background-color: var(--color-sidebar-border, #f5f5f5);
   transition: background-color 0.2s ease;
   position: relative;
   z-index: 1;
 }
 
 /* 透明伪元素：视觉1px + 布局1px，但鼠标命中区4px */
-.lite-splitpanes__splitter::before {
+/* .lite-splitpanes__splitter::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
   margin-left: -2px;
-  width: 4px;
-}
+  width: 1px;
+  z-index: 999;
+  background-color: var(--color-sidebar-border, #f5f5f5);
+} */
 
 .lite-splitpanes__splitter:hover {
   background-color: var(--el-color-primary-light-8, #d9ecff);

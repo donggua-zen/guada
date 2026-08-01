@@ -2,7 +2,7 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white/80 dark:bg-[#2d2d2d]/80 backdrop-blur-xl backdrop-saturate-150"
+      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border)"
       :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -89,7 +89,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-              }}</span>
+            }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <el-tooltip v-if="!props.readonly" content="Token 上限" placement="top">
@@ -301,10 +301,8 @@ const styleClass = computed(() => {
   classes.push('rounded-[22px]');
   if (focused.value) {
     classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
-    classes.push('border border-gray-300 dark:border-transparent');
   } else {
     classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.11)] dark:shadow-none');
-    classes.push('border border-gray-300 dark:border-transparent');
   }
   return classes.join(' ') + ' ' + props.class;
 });
@@ -324,15 +322,28 @@ watch(editorContent, (val) => {
 /**
  * 将纯文本中的 [/type:name ...] 标记转换为 HTML 标签
  * 供 Tiptap 解析为 Command 节点
+ * 支持任意 key="value" 属性对（label, path, start, end, content, head, tail 等）
  */
 const parseCommandTags = (text: string): string => {
   if (!text) return text;
-  // 匹配 [/type:name label="xxx"] 或 [@type:name label="xxx"]
+  // 匹配 [/type:name key="val" key="val" ...] 或 [@type:name ...]
   return text.replace(
-    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
-    (_, prefix, provider, name, label) => {
-      const displayText = label || `${prefix}${name}`;
-      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" contenteditable="false">${displayText}</span>`;
+    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g,
+    (match, prefix, provider, name, attrsStr) => {
+      const attrs: Record<string, string> = { label: '' };
+      if (attrsStr) {
+        const attrRegex = /(\w+)="([^"]*)"/g;
+        let m: RegExpExecArray | null;
+        while ((m = attrRegex.exec(attrsStr)) !== null) {
+          attrs[m[1]] = m[2];
+        }
+      }
+      const displayText = attrs.label || `${prefix}${name}`;
+      const dataAttrs = Object.entries(attrs)
+        .filter(([k]) => k !== 'label')
+        .map(([k, v]) => ` data-${k}="${v}"`)
+        .join('');
+      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${attrs.label || ''}" data-trigger="${prefix}"${dataAttrs} class="command-badge" contenteditable="false">${displayText}</span>`;
     }
   );
 };
@@ -1317,7 +1328,39 @@ function insertText(text: string) {
   editor.value.chain().focus().insertContent(text).scrollIntoView().run();
 }
 
-defineExpose({ insertText });
+/**
+ * 插入 snip 选区徽标
+ */
+function insertBadge(data: {
+  path: string;
+  fileName: string;
+  startLine?: number;
+  endLine?: number;
+  content: string;
+  label: string;
+}) {
+  if (!editor.value) return;
+  editor.value
+    .chain()
+    .focus()
+    .insertContent({
+      type: 'command',
+      attrs: {
+        providerId: 'snip',
+        name: 'quote',
+        label: data.label,
+        trigger: '/',
+        path: data.path,
+        start: data.startLine ? String(data.startLine) : '',
+        end: data.endLine ? String(data.endLine) : '',
+        content: data.content,
+      },
+    })
+    .run();
+  editorContent.value = editor.value.getText();
+}
+
+defineExpose({ insertText, insertBadge });
 </script>
 <style scoped>
 /* 思考按钮激活状态 - 灯泡亮起 */
@@ -1382,7 +1425,7 @@ defineExpose({ insertText });
   user-select: none;
   background: #f3f3f3;
   color: var(--color-text);
-  padding:0 8px;
+  padding: 0 8px;
   border-radius: 4px;
   margin-right: 4px;
 }

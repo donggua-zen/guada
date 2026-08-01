@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
+import { PrismaService } from "../../common/database/prisma.service";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
@@ -10,7 +11,9 @@ import { AgentEngine } from "./agent-engine.service";
 import {
   createPaginatedResponse,
   PaginatedResponse,
+  CursorPaginatedResponse,
 } from "../../common/types/pagination";
+import { SearchIndexService } from "../../common/search/search-index.service";
 import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import {
@@ -42,6 +45,8 @@ export class SessionService {
     private fileWatcherService: FileWatcherService,
     private streamManager: SessionStreamManager,
     private agentEngine: AgentEngine,
+    private searchIndex: SearchIndexService,
+    private prisma: PrismaService,
   ) {}
 
   /**
@@ -711,5 +716,121 @@ export class SessionService {
    */
   async updateLastActiveAt(sessionId: string) {
     return this.sessionRepo.updateLastActiveAt(sessionId);
+  }
+
+  // ── 会话搜索 ──
+
+  /**
+   * 搜索会话 — 标题匹配 + 消息内容匹配（FTS5）
+   *
+   * 合并两种来源的匹配结果，按 lastActiveAt DESC 游标分页。
+   * 内容匹配附带 snippet（匹配上下文片段）。
+   *
+   * @param cursor base64("lastActiveAt_iso|session_id")
+   */
+  async searchSessions(
+    userId: string,
+    keyword: string,
+    cursor?: string,
+    limit: number = 20,
+    includeArchived: boolean = false,
+  ): Promise<CursorPaginatedResponse<any>> {
+    if (!keyword.trim()) {
+      return { items: [], hasMore: false, nextCursor: null };
+    }
+
+    // 1. FTS5 内容搜索
+    const ftsResults = this.searchIndex.search(keyword, 200);
+    const snippetMap = new Map<string, string>(); // sessionId → snippet
+    const contentMatchSessionIds = new Set<string>();
+    for (const r of ftsResults) {
+      if (!contentMatchSessionIds.has(r.sessionId)) {
+        contentMatchSessionIds.add(r.sessionId);
+        snippetMap.set(r.sessionId, r.snippet);
+      }
+    }
+
+    // 2. 标题搜索（Prisma contains）
+    const titleMatches = await this.sessionRepo.findByUserId(
+      userId, 0, 200, undefined, keyword, includeArchived,
+    );
+    const titleMatchSessionIds = new Set(titleMatches.items.map((s: any) => s.id));
+
+    // 3. 合并所有匹配的 session_id
+    const allMatchedIds = new Set<string>([
+      ...contentMatchSessionIds,
+      ...titleMatchSessionIds,
+    ]);
+
+    if (allMatchedIds.size === 0) {
+      return { items: [], hasMore: false, nextCursor: null };
+    }
+
+    // 4. 解析游标
+    let cursorTime: string | null = null;
+    let cursorId: string | null = null;
+    if (cursor) {
+      try {
+        const decoded = Buffer.from(cursor, "base64").toString("utf-8");
+        const sep = decoded.lastIndexOf("|");
+        if (sep > 0) {
+          cursorTime = decoded.substring(0, sep);
+          cursorId = decoded.substring(sep + 1);
+        }
+      } catch { /* invalid cursor — ignore */ }
+    }
+
+    // 5. Prisma 查询：按 session_id + userId + 游标条件
+    const where: any = {
+      userId,
+      sessionType: "web",
+      id: { in: Array.from(allMatchedIds) },
+    };
+    if (!includeArchived) where.archived = false;
+
+    if (cursorTime && cursorId) {
+      where.OR = [
+        { lastActiveAt: { lt: new Date(cursorTime) } },
+        {
+          lastActiveAt: { equals: new Date(cursorTime) },
+          id: { lt: cursorId },
+        },
+      ];
+    }
+
+    // 多取一条判断 hasMore
+    const sessions = await this.prisma.session.findMany({
+      where,
+      orderBy: [{ lastActiveAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      include: { character: true },
+    });
+
+    const hasMore = sessions.length > limit;
+    const items = hasMore ? sessions.slice(0, limit) : sessions;
+
+    // 6. 组装结果
+    const transformedItems = items.map((item: any) => {
+      const isTitleMatch = titleMatchSessionIds.has(item.id);
+      const isContentMatch = contentMatchSessionIds.has(item.id);
+      return {
+        ...item,
+        isStreaming: this.streamManager.hasActiveStream(item.id),
+        matchType: isTitleMatch ? "title" : "content",
+        matchSnippet: isContentMatch ? (snippetMap.get(item.id) ?? undefined) : undefined,
+      };
+    });
+
+    // 7. 生成 nextCursor
+    let nextCursor: string | null = null;
+    if (hasMore && items.length > 0) {
+      const last = items[items.length - 1];
+      const lastActiveAt = last.lastActiveAt
+        ? last.lastActiveAt.toISOString()
+        : last.updatedAt.toISOString();
+      nextCursor = Buffer.from(`${lastActiveAt}|${last.id}`, "utf-8").toString("base64");
+    }
+
+    return { items: transformedItems, hasMore, nextCursor };
   }
 }

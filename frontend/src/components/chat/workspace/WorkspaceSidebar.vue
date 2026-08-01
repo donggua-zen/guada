@@ -92,9 +92,6 @@
                 @create="createNewBrowserWindow" />
             <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="!isPreviewMode"
                 class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
-            <!-- 子代理任务列表 -->
-            <SessionAgentList v-show="!isPreviewMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
-                @switch="emit('switch-agent', $event)" />
             <!-- 待办事项列表 -->
             <SessionTodoList v-show="!isPreviewMode" :session-id="props.sessionId" />
             <!-- 头部 -->
@@ -161,7 +158,8 @@
                 :content-version="fileChangeVersions[tab.path!] || 0"
                 :workspace-path="currentWorkspacePath"
                 @close="closeTab(tab)"
-                @insert-to-input="emit('insert-to-input', $event)" />
+                @insert-to-input="emit('insert-to-input', $event)"
+                @insert-snip="emit('insert-snip', $event)" />
         </template>
 
         <!-- 空状态页（预览模式但无激活标签时显示） -->
@@ -219,7 +217,6 @@ import FilePreviewPanel from './FilePreviewPanel.vue';
 import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import SessionTodoList from './SessionTodoList.vue';
-import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
@@ -231,13 +228,11 @@ import WindowControls from '@/components/WindowControls.vue';
 
 const props = defineProps<{
     sessionId: string | null;
-    agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
-    activeTabId?: string;
 }>();
 
 const emit = defineEmits<{
-    'switch-agent': [tabId: string];
     'insert-to-input': [path: string];
+    'insert-snip': [data: import('@/components/chat/workspace/FilePreviewPanel.vue').SnipData];
 }>();
 
 const treeData = ref<WorkspaceNode[]>([]);

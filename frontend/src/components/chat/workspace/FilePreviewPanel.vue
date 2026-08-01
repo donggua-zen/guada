@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <div class="flex-1 flex overflow-hidden w-full min-h-0 p-1">
+        <div class="flex-1 flex overflow-hidden w-full min-h-0 p-1" @contextmenu.prevent="handleContextMenu($event)">
             <div v-if="previewLoading" class="flex items-center justify-center h-full w-full">
                 <el-icon class="is-loading" size="20">
                     <LoadingOutlined />
@@ -100,6 +100,10 @@
                 </template>
             </template>
         </div>
+
+        <!-- 右键上下文菜单 -->
+        <ContextMenu :visible="contextMenuVisible" :x="contextMenuX" :y="contextMenuY"
+            :items="contextMenuItems" @close="contextMenuVisible = false" />
     </div>
 </template>
 
@@ -109,10 +113,12 @@ import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import { LoadingOutlined } from '@vicons/antd'
 import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular } from '@vicons/fluent'
+import { DocumentCopy, Plus } from '@element-plus/icons-vue'
 import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
 import { useHighlight } from '@/composables/useHighlight'
+import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
 interface SelectedFile {
@@ -122,6 +128,15 @@ interface SelectedFile {
     size: number
     content: string
     mimeType: string
+}
+
+export interface SnipData {
+    path: string
+    fileName: string
+    startLine?: number
+    endLine?: number
+    content: string  // base64-encoded (truncated head + notice for large selections)
+    label: string
 }
 
 const props = defineProps<{
@@ -135,6 +150,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     close: []
     'insert-to-input': [path: string]
+    'insert-snip': [data: SnipData]
 }>()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
@@ -170,6 +186,16 @@ const markdownIframeRef = ref<HTMLIFrameElement | null>(null)
 // 懒加载标记
 const hasLoaded = ref(false)
 const isStale = ref(false)
+
+// ── 右键上下文菜单 ──
+
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuItems = ref<ContextMenuItem[]>([])
+
+// Markdown iframe 选区文本（由 iframe postMessage 同步）
+const iframeSelection = ref('')
 
 // ── 依赖初始化 ──
 
@@ -425,11 +451,180 @@ async function handleOpenInExplorerForCurrent(): Promise<void> {
 
 function onMarkdownMessage(e: MessageEvent): void {
     if (!e.data || typeof e.data !== 'object') return
-    if (e.data.type === 'md-preview-link' && e.data.url) {
-        // 仅处理来自当前面板 iframe 的消息
-        if (markdownIframeRef.value && e.source === markdownIframeRef.value.contentWindow) {
-            import('@/utils/workspacePreview').then(({ openLink }) => openLink(e.data.url))
+    // 仅处理来自当前面板 iframe 的消息
+    if (!markdownIframeRef.value || e.source !== markdownIframeRef.value.contentWindow) return
+
+    const data = e.data
+    if (data.type === 'md-preview-link' && data.url) {
+        import('@/utils/workspacePreview').then(({ openLink }) => openLink(data.url))
+    } else if (data.type === 'md-preview-selection') {
+        iframeSelection.value = data.text || ''
+    } else if (data.type === 'md-preview-contextmenu') {
+        // 将 iframe 内坐标转换为父页面坐标
+        const rect = markdownIframeRef.value.getBoundingClientRect()
+        showContextMenu(rect.left + data.x, rect.top + data.y, data.text || '')
+    }
+}
+
+// ── 选区提取 + Snip 构建 ──
+
+const MAX_SNIPPET_CONTENT = 2000
+const SNIPPET_HEAD = 800
+
+/** UTF-8 安全的 base64 编码 */
+function encodeBase64(text: string): string {
+    return btoa(unescape(encodeURIComponent(text)))
+}
+
+/** 从高亮代码选区中提取行号和原始文本（保留缩进） */
+function getCodeSelectionInfo(selection: Selection): { start?: number; end?: number; text?: string } {
+    if (!selection.rangeCount || selection.isCollapsed) return {}
+    const range = selection.getRangeAt(0)
+
+    function findLineEl(node: Node): HTMLElement | null {
+        let el = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement
+        while (el && !el.classList?.contains('line')) {
+            el = el.parentElement
         }
+        return el
+    }
+
+    const startLineEl = findLineEl(range.startContainer)
+    const endLineEl = findLineEl(range.endContainer)
+
+    let start: number | undefined
+    let end: number | undefined
+
+    if (startLineEl) {
+        const startText = startLineEl.querySelector('.line-num')?.textContent
+        const endText = endLineEl?.querySelector('.line-num')?.textContent
+        if (startText) {
+            start = parseInt(startText)
+            end = endText ? parseInt(endText) : start
+        }
+    }
+
+    // 提取选区文本：遍历 .line-content 元素的 textContent 以保留原始缩进
+    const container = startLineEl?.parentElement // .code-lines
+    if (container) {
+        const allLines = container.querySelectorAll(':scope > .line')
+        const lines: string[] = []
+        allLines.forEach((lineEl) => {
+            const lineNum = lineEl.querySelector('.line-num')?.textContent
+            if (!lineNum) return
+            const num = parseInt(lineNum)
+            const content = lineEl.querySelector('.line-content')?.textContent || ''
+            const inRange = start && end
+                ? (num >= Math.min(start, end) && num <= Math.max(start, end))
+                : false
+            if (inRange) lines.push(content)
+        })
+        if (lines.length > 0) {
+            return { start, end, text: lines.join('\n') }
+        }
+    }
+
+    // Fallback: 通过偏移量在 <pre> 中计算行号
+    const preEl = (range.startContainer as HTMLElement).closest?.('pre')
+        || range.startContainer.parentElement?.closest('pre')
+    if (preEl) {
+        const preRange = document.createRange()
+        preRange.selectNodeContents(preEl)
+        preRange.setEnd(range.startContainer, range.startOffset)
+        const beforeText = preRange.toString()
+        const startLine = beforeText.split('\n').length
+        const selectedText = selection.toString()
+        const endLine = startLine + selectedText.split('\n').length - 1
+        return { start: startLine, end: endLine, text: selectedText }
+    }
+
+    return {}
+}
+
+/** 构造 SnipData */
+function buildSnipData(selectedText: string, startLine?: number, endLine?: number): SnipData | null {
+    if (!selectedFile.value) return null
+
+    const path = selectedFile.value.path.replace(/\\/g, '/')
+    const fileName = selectedFile.value.name
+    const rangeLabel = startLine && endLine
+        ? (startLine === endLine ? `L${startLine}` : `L${startLine}-L${endLine}`)
+        : (startLine ? `L${startLine}` : '')
+    const label = rangeLabel ? `${path}:${rangeLabel}` : path
+
+    let payload: string
+    if (selectedText.length <= MAX_SNIPPET_CONTENT) {
+        payload = selectedText
+    } else {
+        const head = selectedText.substring(0, SNIPPET_HEAD)
+        const fileRef = `file:${path}${rangeLabel ? `:${rangeLabel}` : ''}`
+        payload = `${head}\n\n<system_reminder>The selected text has been truncated. If you need the full content, read the file at ${fileRef}.</system_reminder>`
+    }
+
+    const data: SnipData = {
+        path,
+        fileName,
+        label,
+        content: encodeBase64(payload),
+    }
+
+    if (startLine) data.startLine = startLine
+    if (endLine) data.endLine = endLine
+
+    return data
+}
+
+/** 显示右键上下文菜单 */
+function showContextMenu(x: number, y: number, selectedText: string, startLine?: number, endLine?: number) {
+    const hasSelection = selectedText.trim().length > 0
+    const items: ContextMenuItem[] = []
+
+    if (hasSelection) {
+        items.push({
+            label: '添加选区到会话',
+            icon: DocumentCopy,
+            onClick: () => {
+                const snip = buildSnipData(selectedText, startLine, endLine)
+                if (snip) emit('insert-snip', snip)
+            },
+        })
+        items.push({
+            label: '添加文件到会话',
+            icon: Plus,
+            divider: true,
+            onClick: () => {
+                if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)
+            },
+        })
+    } else {
+        items.push({
+            label: '添加文件到会话',
+            icon: Plus,
+            onClick: () => {
+                if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)
+            },
+        })
+    }
+
+    contextMenuItems.value = items
+    contextMenuX.value = x
+    contextMenuY.value = y
+    contextMenuVisible.value = true
+}
+
+/** 右键事件处理（代码预览 / 纯文本预览） */
+function handleContextMenu(event: MouseEvent) {
+    const selection = window.getSelection()
+    const selectedText = selection?.toString() || ''
+
+    if (selectedText.trim()) {
+        const info = getCodeSelectionInfo(selection!)
+        const text = info.text || selectedText
+        showContextMenu(event.clientX, event.clientY, text, info.start, info.end)
+    } else {
+        // Markdown iframe 的右键由 postMessage 触发，不走这里
+        // 非选区右键仍可添加文件
+        showContextMenu(event.clientX, event.clientY, '')
     }
 }
 

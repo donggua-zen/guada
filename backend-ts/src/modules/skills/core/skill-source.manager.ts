@@ -3,6 +3,7 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { ConfigService } from "@nestjs/config";
 import * as fs from "fs/promises";
 import * as path from "path";
+import * as os from "os";
 import { SkillDefinition, SkillSourceType } from "../interfaces/skill-manifest.interface";
 import { SkillLoaderService } from "./skill-loader.service";
 import { SkillRegistry } from "./skill-registry.service";
@@ -29,7 +30,7 @@ const WORKSPACE_SKILLS_RELATIVE = ".guada/skills";
 const DEFAULT_TTL = 3 * 60 * 60 * 1000;
 const MAX_SOURCES = 10;
 const SOURCE_PRIORITY: Record<string, number> = {
-  system: 0, global: 1, workspace: 2,
+  system: 0, agents: 1, global: 2, workspace: 3,
 };
 
 @Injectable()
@@ -38,6 +39,7 @@ export class SkillSourceManager implements OnModuleDestroy {
   private readonly sources = new Map<string, SkillSource>();
   private readonly skillsDir: string;
   private readonly systemSkillsDir: string;
+  private readonly agentsSkillsDir: string;
 
   constructor(
     private configService: ConfigService,
@@ -49,6 +51,8 @@ export class SkillSourceManager implements OnModuleDestroy {
     this.skillsDir = this.configService.get<string>("SKILLS_DIR") ||
                      path.join(process.cwd(), "skills");
     this.systemSkillsDir = path.join(this.skillsDir, ".system");
+    this.agentsSkillsDir = this.configService.get<string>("AGENTS_SKILLS_DIR") ||
+                           path.join(os.homedir(), ".agents", "skills");
     this.workspaceService.registerSafeWritePath(this.skillsDir);
   }
 
@@ -69,6 +73,15 @@ export class SkillSourceManager implements OnModuleDestroy {
       dir: this.systemSkillsDir,
       source: "system",
       baseDir: this.skillsDir,
+      persistent: true,
+    });
+
+    // agents (shared directory ~/.agents/skills/, read-only, lower priority than global)
+    await this.register({
+      key: "agents",
+      dir: this.agentsSkillsDir,
+      source: "agents",
+      baseDir: this.agentsSkillsDir,
       persistent: true,
     });
 

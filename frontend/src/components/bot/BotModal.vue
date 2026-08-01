@@ -55,6 +55,17 @@
         </div>
       </el-form-item>
 
+      <!-- 思考强度选择（仅当选中模型支持思考时显示） -->
+      <el-form-item v-if="thinkingEffortOptions.length > 0" label="思考强度">
+        <el-select v-model="formData.defaultThinkingEffort" placeholder="不设置" style="width: 100%">
+          <el-option v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabel(effort)"
+            :value="effort" />
+        </el-select>
+        <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
+          设置后对该机器人的所有会话生效
+        </div>
+      </el-form-item>
+
       <!-- 引用知识库选择（多选） -->
       <el-form-item label="引用知识库">
         <el-select v-model="formData.knowledgeBaseIds" placeholder="请选择知识库（可多选）" style="width: 100%" multiple
@@ -161,6 +172,7 @@ import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { ModelProvider, Model } from '@/types/api'
@@ -206,6 +218,18 @@ const isEdit = computed(() => !!props.bot)
 const availableModels = computed(() => {
   return allModels.value.filter(model => model.isActive)
 })
+
+// 当前选中的模型对象
+const selectedModel = computed(() => {
+  if (!formData.value.defaultModelId) return null
+  return availableModels.value.find(m => m.id === formData.value.defaultModelId) || null
+})
+
+// 选中模型的思考强度选项
+const thinkingEffortOptions = computed(() => {
+  if (!selectedModel.value) return []
+  return getModelThinkingEfforts(selectedModel.value, modelProviders.value)
+})
 const selectedPlatform = computed<PlatformMetadata | undefined>(() => {
   if (!formData.value.platform) return undefined
   return botStore.platforms.find(p => p.platform === formData.value.platform)
@@ -238,6 +262,7 @@ const formData = ref({
   name: '',
   defaultCharacterId: '',
   defaultModelId: '' as string | null, // null 表示继承自角色/全局设置
+  defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
   platformConfig: {} as Record<string, any>,
   reconnectConfig: {
@@ -280,6 +305,22 @@ const formRules = computed<FormRules>(() => {
   return rules
 })
 
+// 模型切换时同步思考强度
+watch(() => formData.value.defaultModelId, (newModelId) => {
+  if (!newModelId) {
+    formData.value.defaultThinkingEffort = null
+    return
+  }
+  const model = availableModels.value.find(m => m.id === newModelId)
+  if (!model) return
+  const efforts = getModelThinkingEfforts(model, modelProviders.value)
+  if (efforts.length === 0) {
+    formData.value.defaultThinkingEffort = null
+  } else if (!formData.value.defaultThinkingEffort || !efforts.includes(formData.value.defaultThinkingEffort)) {
+    formData.value.defaultThinkingEffort = efforts.includes('none') ? 'none' : efforts[0]
+  }
+})
+
 // 监听对话框打开，初始化表单
 watch(dialogVisible, (visible) => {
   if (visible) {
@@ -309,6 +350,7 @@ watch(dialogVisible, (visible) => {
         name: bot.name,
         defaultCharacterId: bot.defaultCharacterId || '',
         defaultModelId: bot.defaultModelId || null, // null 表示继承自角色/全局设置
+        defaultThinkingEffort: bot.defaultThinkingEffort || null,
         knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
         platformConfig: platformConfig,
         reconnectConfig: {
@@ -355,6 +397,7 @@ const resetForm = () => {
     name: '',
     defaultCharacterId: '',
     defaultModelId: null, // null 表示继承自角色/全局设置
+    defaultThinkingEffort: null,
     knowledgeBaseIds: [],
     platformConfig: {},
     reconnectConfig: {
@@ -434,6 +477,7 @@ const handleSubmit = async () => {
           name: formData.value.name,
           defaultCharacterId: formData.value.defaultCharacterId,
           defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
+          defaultThinkingEffort: formData.value.defaultThinkingEffort || undefined,
           platformConfig: formData.value.platformConfig,
           reconnectConfig: formData.value.reconnectConfig,
           additionalKwargs: {
@@ -448,6 +492,7 @@ const handleSubmit = async () => {
           name: formData.value.name,
           defaultCharacterId: formData.value.defaultCharacterId,
           defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
+          defaultThinkingEffort: formData.value.defaultThinkingEffort || undefined,
           platformConfig: formData.value.platformConfig,
           reconnectConfig: formData.value.reconnectConfig,
           autoStart: formData.value.autoStart,

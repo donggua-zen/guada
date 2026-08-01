@@ -80,8 +80,9 @@ export async function postPhotoBundle(
         image_item: {
             media: {
                 encrypt_query_param: staged.remoteHandle,
-                aes_key: Buffer.from(staged.aesKeyHex, "hex").toString("base64"),
+                aes_key: Buffer.from(staged.aesKeyHex, "utf-8").toString("base64"),
                 encrypt_type: 1,
+                taskid: staged.taskId,
             },
             mid_size: staged.cipherBudget,
         },
@@ -105,8 +106,9 @@ export async function postVideoBundle(
         video_item: {
             media: {
                 encrypt_query_param: staged.remoteHandle,
-                aes_key: Buffer.from(staged.aesKeyHex, "hex").toString("base64"),
+                aes_key: Buffer.from(staged.aesKeyHex, "utf-8").toString("base64"),
                 encrypt_type: 1,
+                taskid: staged.taskId,
             },
             video_size: staged.cipherBudget,
         },
@@ -130,8 +132,9 @@ export async function postFileBundle(
         file_item: {
             media: {
                 encrypt_query_param: staged.remoteHandle,
-                aes_key: Buffer.from(staged.aesKeyHex, "hex").toString("base64"),
+                aes_key: Buffer.from(staged.aesKeyHex, "utf-8").toString("base64"),
                 encrypt_type: 1,
+                taskid: staged.taskId,
             },
             file_name: staged.originalName,
             len: String(staged.plainBytes),

@@ -208,6 +208,9 @@ export class AgentEngine {
 
     // 工具调用轮次计数器
     let iterationCount = 0;
+    // 回合拦截器触发次数（防止无限循环）
+    let interceptorCount = 0;
+    const MAX_INTERCEPTOR_ITERATIONS = 3;
     do {
       iterationCount++;
       needToContinue = false;
@@ -541,8 +544,76 @@ export class AgentEngine {
         sessionContext.getWorkspacePath(),
         sessionContext.sessionId,
       );
+
+      // 【回合拦截器】仅在正常结束时检查（排除 abort / error / rate_limited）
+      const finishReason = assistantResponse.metadata?.finishReason;
+      const isNormalFinish =
+        !needToContinue &&
+        !abortSignal?.aborted &&
+        finishReason !== "user_cancel" &&
+        finishReason !== "error" &&
+        finishReason !== "timeout" &&
+        finishReason !== "rate_limited";
+
+      if (
+        isNormalFinish &&
+        interceptorCount < MAX_INTERCEPTOR_ITERATIONS &&
+        (await this.runTurnInterceptors(sessionContext, responseMessageId))
+      ) {
+        interceptorCount++;
+        this.logger.log(
+          `Turn interceptor injected hidden message (count=${interceptorCount})`,
+        );
+        needToContinue = true;
+      }
     } while (needToContinue);
     await sessionContext.persist();
+  }
+
+  /**
+   * 执行回合拦截器
+   *
+   * 收集所有已启用插件的 TurnInterceptor，并行调用。
+   * 如果任一拦截器返回非 null，则合并为一条 hidden user 消息追加到当前
+   * assistant 消息下（同 responseMessageId），返回 true 表示需要继续对话。
+   *
+   * @param sessionContext 会话上下文
+   * @param responseMessageId 当前 assistant 消息 ID
+   * @returns 是否注入了拦截消息（true → 触发新一轮 LLM 调用）
+   */
+  private async runTurnInterceptors(
+    sessionContext: ISessionContext,
+    responseMessageId: string,
+  ): Promise<boolean> {
+    const resolved = sessionContext.getResolvedPlugins();
+    const allInterceptors = resolved
+      .filter((rp) => rp.enabled && rp.interceptors.length > 0)
+      .flatMap((rp) => rp.interceptors);
+
+    if (allInterceptors.length === 0) return false;
+
+    const pluginCtx: PluginContext = { session: sessionContext };
+    const results = await Promise.all(
+      allInterceptors.map((i) =>
+        i.intercept(pluginCtx).catch((err) => {
+          this.logger.warn(`Interceptor ${i.name} error: ${err.message}`);
+          return null;
+        }),
+      ),
+    );
+    const messages = results.filter((r): r is string => r != null);
+    if (messages.length === 0) return false;
+
+    await sessionContext.appendParts([
+      {
+        role: "user",
+        content: messages.join("\n\n"),
+        messageId: responseMessageId,
+        contentId: sessionContext.generateId(),
+        metadata: { hidden: true },
+      },
+    ]);
+    return true;
   }
 
   /**

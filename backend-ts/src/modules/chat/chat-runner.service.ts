@@ -76,6 +76,8 @@ export class ChatRunnerService {
    * @param callbacks 流事件回调（Controller 提供 HTTP 响应处理）
    * @returns 订阅清理函数
    * @throws HttpException 各种业务错误（会话不存在、活跃流冲突、缺少内容等）
+   *
+   * @warning 该方法只为发起流/订阅流，本身不会阻塞到流结束
    */
   async startStream(
     params: {
@@ -531,7 +533,9 @@ export class ChatRunnerService {
       }
 
       // Agent 引擎内部已捕获 abort 并 yield finish 事件，这里自然结束
-      const reason = abortController.signal.aborted ? "user_cancel" : "completed";
+      const reason = abortController.signal.aborted
+        ? "user_cancel"
+        : "completed";
       this.streamManager.stopStream(sessionId, reason);
 
       const streamFinishedEvent: StreamFinishedEvent = {

@@ -22,6 +22,7 @@ export interface WireCdnLocator {
     encrypt_query_param?: string;
     aes_key?: string;
     encrypt_type?: number;
+    taskid?: string;
 }
 
 export interface WireImageSection {
@@ -125,7 +126,9 @@ export interface CdnSlotRequest {
 
 export interface CdnSlotGrant {
     upload_param?: string;
+    upload_full_url?: string;
     thumb_upload_param?: string;
+    taskid?: string;
 }
 
 export interface OutboundWireEnvelope {

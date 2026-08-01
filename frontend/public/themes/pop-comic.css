@@ -1,0 +1,249 @@
+/* ============================================================
+   主题：波普漫画（pop-comic）
+   风格：美式波普 · 利希滕斯坦 · 半调网点 · 对白气泡
+   说明：向 Roy Lichtenstein 与美式漫画书致敬。半调网点铺满背景，
+        红 / 黄 / 蓝三原色撞色，消息气泡就是漫画对白框——
+        粗黑描边、硬阴影、一角收窄。热闹、直白、充满张力。
+   ============================================================ */
+
+/* ---------- 亮色模式：漫画书页 ---------- */
+[data-theme="pop-comic"] {
+  /* 主色：漫画红 */
+  --color-primary: #ee2233;
+  --color-primary-hover: #d11a2a;
+  --color-primary-active: #a31420;
+  --color-primary-disabled: #f6a1a8;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.65);
+  --color-primary-50:  #feebec;
+  --color-primary-100: #fdd3d6;
+  --color-primary-200: #faa4a9;
+  --color-primary-300: #f56e77;
+  --color-primary-400: #f1414c;
+  --color-primary-500: #ee2233;
+  --color-primary-600: #d11a2a;
+  --color-primary-700: #a31420;
+  --color-primary-800: #750e17;
+  --color-primary-900: #47080d;
+  --color-primary-950: #240407;
+
+  /* 副色：漫画蓝 */
+  --color-secondary: #1f6fff;
+  --color-secondary-hover: #155de8;
+  --color-secondary-active: #1048b4;
+  --color-secondary-disabled: #a9c6ff;
+  --color-secondary-text: #ffffff;
+  --color-secondary-text-disabled: rgba(255, 255, 255, 0.65);
+  --color-secondary-50:  #eaf1ff;
+  --color-secondary-100: #d2e1ff;
+  --color-secondary-200: #a6c3ff;
+  --color-secondary-300: #74a1ff;
+  --color-secondary-400: #4483ff;
+  --color-secondary-500: #1f6fff;
+  --color-secondary-600: #155de8;
+  --color-secondary-700: #1048b4;
+  --color-secondary-800: #0b3380;
+  --color-secondary-900: #062052;
+  --color-secondary-950: #031029;
+
+  /* 基础表面与文字 */
+  --color-text: #141414;
+  --color-text-gray: #565656;
+  --color-text-disabled: #a3a3a3;
+  --color-surface: #ffffff;
+  --color-surface-border: #141414;
+  --color-bg: #fffdf2;
+  --color-border: #141414;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #ffe98a;
+  --color-sidebar-bg-active: #ffd500;
+  --color-sidebar-bg-hover: #fff0b3;
+  --color-sidebar-text: #141414;
+  --color-sidebar-text-hover: #141414;
+  --color-sidebar-text-active: #141414;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #ffe98a;
+  --color-titlebar-border: #141414;
+  --titlebar-text-color: #141414;
+  --titlebar-hover-bg: #ffd500;
+
+  /* 会话列表 */
+  --color-conversation-bg: #fffdf2;
+  --color-conversation-text: #141414;
+  --color-conversation-border: #141414;
+  --color-conversation-bg-active: #ffd500;
+  --color-conversation-text-active: #141414;
+  --color-conversation-bg-hover: #fff0b3;
+  --color-conversation-text-hover: #141414;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #ffd500;
+  --color-bubble-user-text: #141414;
+  --color-bubble-user-border: #141414;
+  --color-bubble-assitant-bg: #ffffff;
+  --color-bubble-assitant-text: #141414;
+  --color-bubble-assitant-border: #141414;
+  --color-bubble-assitant-text-strong: #ee2233;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #c9c9c9;
+  --shimmer-highlight: #141414;
+  --theme-font: 'Arial Black', 'Arial Narrow Bold', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 暗色模式：午夜漫展 ---------- */
+html.dark[data-theme="pop-comic"] {
+  /* 主色：霓虹漫画红 */
+  --color-primary: #ff4d5e;
+  --color-primary-hover: #ff6675;
+  --color-primary-active: #f53a4c;
+  --color-primary-disabled: #7a1e28;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.55);
+  --color-primary-50:  #240407;
+  --color-primary-100: #47080d;
+  --color-primary-200: #750e17;
+  --color-primary-300: #a31420;
+  --color-primary-400: #d11a2a;
+  --color-primary-500: #ff4d5e;
+  --color-primary-600: #ff7180;
+  --color-primary-700: #ff95a0;
+  --color-primary-800: #ffbcc2;
+  --color-primary-900: #ffdee1;
+  --color-primary-950: #fff2f3;
+
+  /* 副色：电光漫画蓝 */
+  --color-secondary: #5c9dff;
+  --color-secondary-hover: #74adff;
+  --color-secondary-active: #4489f5;
+  --color-secondary-disabled: #1d3a66;
+  --color-secondary-text: #0a1a33;
+  --color-secondary-text-disabled: rgba(10, 26, 51, 0.55);
+  --color-secondary-50:  #031029;
+  --color-secondary-100: #062052;
+  --color-secondary-200: #0b3380;
+  --color-secondary-300: #1048b4;
+  --color-secondary-400: #1f6fff;
+  --color-secondary-500: #5c9dff;
+  --color-secondary-600: #7db1ff;
+  --color-secondary-700: #9ec5ff;
+  --color-secondary-800: #c2d9ff;
+  --color-secondary-900: #e0ecff;
+  --color-secondary-950: #f2f7ff;
+
+  /* 基础表面与文字（边框用米色墨线，黑边在暗底上不可见） */
+  --color-text: #f5efe0;
+  --color-text-gray: #b0a890;
+  --color-text-disabled: #6b6552;
+  --color-surface: #211d2b;
+  --color-surface-border: #f5efe0;
+  --color-bg: #16131c;
+  --color-border: #f5efe0;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #1d1a25;
+  --color-sidebar-bg-active: #ffd500;
+  --color-sidebar-bg-hover: #2b2736;
+  --color-sidebar-text: #f5efe0;
+  --color-sidebar-text-hover: #f5efe0;
+  --color-sidebar-text-active: #141414;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #1d1a25;
+  --color-titlebar-border: #f5efe0;
+  --titlebar-text-color: #f5efe0;
+  --titlebar-hover-bg: #2b2736;
+
+  /* 会话列表 */
+  --color-conversation-bg: #16131c;
+  --color-conversation-text: #f5efe0;
+  --color-conversation-border: #f5efe0;
+  --color-conversation-bg-active: #ffd500;
+  --color-conversation-text-active: #141414;
+  --color-conversation-bg-hover: #2b2736;
+  --color-conversation-text-hover: #f5efe0;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #ffd500;
+  --color-bubble-user-text: #141414;
+  --color-bubble-user-border: #f5efe0;
+  --color-bubble-assitant-bg: #211d2b;
+  --color-bubble-assitant-text: #f5efe0;
+  --color-bubble-assitant-border: #f5efe0;
+  --color-bubble-assitant-text-strong: #ff4d5e;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #4a4456;
+  --shimmer-highlight: #f5efe0;
+  --theme-font: 'Arial Black', 'Arial Narrow Bold', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="pop-comic"] body {
+  font-family: 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 半调网点（Ben-Day dots） */
+html[data-theme="pop-comic"] body::before {
+  background-image:
+    radial-gradient(rgba(238, 34, 51, 0.08) 1.6px, transparent 1.9px),
+    radial-gradient(rgba(31, 111, 255, 0.06) 1.6px, transparent 1.9px);
+  background-size: 16px 16px, 16px 16px;
+  background-position: 0 0, 8px 8px;
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="pop-comic"] body::before {
+  background-image:
+    radial-gradient(rgba(255, 77, 94, 0.10) 1.6px, transparent 1.9px),
+    radial-gradient(rgba(92, 157, 255, 0.08) 1.6px, transparent 1.9px);
+  background-size: 16px 16px, 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+/* 用户气泡：漫画对白框——右下收窄 + 黑色硬阴影 */
+html[data-theme="pop-comic"] .user-section .message-item__card {
+  border: 2.5px solid var(--color-bubble-user-border);
+  border-radius: 18px 18px 4px 18px;
+  box-shadow: 4px 4px 0 var(--color-bubble-user-border);
+  font-weight: 700;
+}
+
+/* 助手消息：对白框——左上收窄 + 黑色硬阴影 */
+html[data-theme="pop-comic"] .assistant-section .message-item__card {
+  border: 2.5px solid var(--color-bubble-assitant-border);
+  border-radius: 4px 18px 18px 18px;
+  box-shadow: 4px 4px 0 var(--color-bubble-assitant-border);
+  padding: 14px 16px;
+}
+
+/* 左栏：整面漫画黄 + 粗黑右边线 */
+html[data-theme="pop-comic"] .global-sidebar {
+  border-right: 3px solid var(--color-border);
+  box-shadow: none;
+}
+
+/* 右栏：粗黑左边线 */
+html[data-theme="pop-comic"] .workspace-sidebar {
+  border-left: 3px solid var(--color-border);
+}
+
+/* 输入框：对话输入条也是漫画框 */
+html[data-theme="pop-comic"] .mock-inputbar {
+  border: 2.5px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+
+/* 代码块：漫画旁白框 */
+html[data-theme="pop-comic"] .md-code {
+  border: 2px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 var(--color-border);
+}

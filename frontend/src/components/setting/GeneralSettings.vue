@@ -4,7 +4,7 @@
       <!-- 登录设置分组 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">登录</h3>
-        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
           <!-- 免登录模式 -->
           <div
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
@@ -22,7 +22,7 @@
       <!-- 工作目录分组 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">工作目录</h3>
-        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
           <!-- 工作目录基路径 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4">
             <div class="flex flex-col gap-1 min-w-0 flex-1">

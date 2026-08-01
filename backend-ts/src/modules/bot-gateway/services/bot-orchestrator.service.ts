@@ -5,6 +5,9 @@ import {
   IBotPlatform,
   BotMessage,
   BotConfig,
+  BotResponse,
+  BotInstanceView,
+  BotRuntimeStatus,
 } from "../interfaces/bot-platform.interface";
 import { ChatRunnerService } from "../../chat/chat-runner.service";
 import { SessionMapperService } from "./session-mapper.service";
@@ -30,8 +33,11 @@ export class BotOrchestrator {
     { messages: BotMessage[]; timer?: NodeJS.Timeout; session?: any }
   > = new Map();
   private processingSessions: Set<string> = new Set();
+  private pendingReplies: Map<string, BotResponse[]> = new Map();
   private readonly MERGE_WINDOW_MS = 3000; // 3秒合并窗口
   private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
+  private readonly MAX_PENDING_REPLIES = 50; // 每个机器人最大待发送回复数
+  private lastSendAt = new Map<string, number>();
 
   constructor(
     private chatRunner: ChatRunnerService,
@@ -40,19 +46,38 @@ export class BotOrchestrator {
   ) {}
 
   /**
+   * 限流：确保两次发送之间至少间隔 sendIntervalMs。
+   * 如果距上次发送已超过间隔，立即返回；否则等待剩余时间。
+   * 供 Orchestrator sendReply 和 BotFileSenderPlugin 共享使用。
+   */
+  async throttleSend(botId: string, intervalMs: number): Promise<void> {
+    if (intervalMs <= 0) return;
+    const now = Date.now();
+    const last = this.lastSendAt.get(botId) ?? 0;
+    const elapsed = now - last;
+    if (elapsed < intervalMs) {
+      // Reserve the slot BEFORE waiting to prevent concurrent callers from bypassing
+      this.lastSendAt.set(botId, last + intervalMs);
+      await new Promise((r) => setTimeout(r, intervalMs - elapsed));
+    } else {
+      this.lastSendAt.set(botId, now);
+    }
+  }
+
+  /**
    * 将消息加入缓冲队列(唯一对外暴露的方法)
    *
    * @param botId 机器人ID
    * @param message 机器人消息
    * @param config 机器人配置(由调用者传入,避免反向依赖)
-   * @param adapter 适配器实例(由调用者传入,用于发送回复)
+   * @param instance 机器人实例视图（adapter + config + status）
    */
   async enqueueMessage(
     botId: string,
     message: BotMessage,
-    config: BotConfig,
-    adapter: IBotPlatform,
+    instance: BotInstanceView,
   ): Promise<void> {
+    const { config, adapter } = instance;
     // 使用 externalId 作为队列 Key，确保同一会话的消息被合并
     const platform = config.platform || "qq";
     const isGroupChat = message.sourceType === "group";
@@ -131,7 +156,7 @@ export class BotOrchestrator {
       clearTimeout(queue.timer);
     }
     queue.timer = setTimeout(async () => {
-      await this.flushQueue(queueKey, botId, config, adapter);
+      await this.flushQueue(queueKey, botId, instance);
     }, this.MERGE_WINDOW_MS);
   }
 
@@ -141,8 +166,7 @@ export class BotOrchestrator {
   private async flushQueue(
     queueKey: string,
     botId: string,
-    config: BotConfig,
-    adapter: IBotPlatform,
+    instance: BotInstanceView,
   ): Promise<void> {
     const queue = this.messageQueues.get(queueKey);
     if (!queue || queue.messages.length === 0) return;
@@ -161,8 +185,7 @@ export class BotOrchestrator {
         queueKey,
         botId,
         messagesToProcess,
-        config,
-        adapter,
+        instance,
       );
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
@@ -171,7 +194,7 @@ export class BotOrchestrator {
       this.processingSessions.delete(queueKey);
       if (queue.messages.length > 0) {
         // 如果在处理期间又有新消息进来，立即触发下一轮
-        this.flushQueue(queueKey, botId, config, adapter);
+        this.flushQueue(queueKey, botId, instance);
       } else {
         this.messageQueues.delete(queueKey);
       }
@@ -202,6 +225,7 @@ export class BotOrchestrator {
       platform,
       config.defaultCharacterId,
       config.defaultModelId,
+      config.defaultThinkingEffort,
     );
 
     this.logger.log(
@@ -218,9 +242,9 @@ export class BotOrchestrator {
     queueKey: string,
     botId: string,
     messages: BotMessage[],
-    config: BotConfig,
-    adapter: IBotPlatform,
+    instance: BotInstanceView,
   ): Promise<void> {
+    const { config, adapter } = instance;
     const firstMessage = messages[0];
 
     const baseReply = {
@@ -241,6 +265,26 @@ export class BotOrchestrator {
       } = {},
     ): Promise<void> => {
       const operation = sendChain.then(async () => {
+        // 发送前检查运行时状态
+        if (instance.status === BotRuntimeStatus.RECONNECTING) {
+          // 重连中：仅最终消息入队，中间片段丢弃
+          if (extra.finish === true) {
+            this.enqueuePendingReply(botId, { ...baseReply, content });
+            this.logger.warn(`Adapter reconnecting, queued final reply for bot ${botId}`);
+          } else {
+            this.logger.debug(`Adapter reconnecting, dropping intermediate stream fragment for bot ${botId}`);
+          }
+          return;
+        }
+
+        if (instance.status !== BotRuntimeStatus.CONNECTED) {
+          // 已停止/错误：直接丢弃，不入队
+          this.logger.warn(
+            `Bot runtime status is ${instance.status}, dropping reply for bot ${botId}`,
+          );
+          return;
+        }
+
         if (capabilities.supportsStreaming && adapter.sendStreamReply) {
           const sent = await adapter.sendStreamReply(
             { ...baseReply, content },
@@ -248,11 +292,14 @@ export class BotOrchestrator {
           );
           if (!sent) throw new Error("Platform rejected stream reply");
         } else if (extra.finish === true) {
+          const interval = capabilities.sendIntervalMs ?? 0;
+          if (interval > 0) {
+            await this.throttleSend(botId, interval);
+          }
           await adapter.sendMessage({ ...baseReply, content });
         }
       });
 
-      // 保持内部队列可继续执行，同时向当前调用方传播本次发送错误。
       sendChain = operation.catch(() => undefined);
       return operation;
     };
@@ -290,58 +337,110 @@ export class BotOrchestrator {
         )
         .join("\n\n");
 
-      const streamId = this.generateStreamId();
+      let streamId = this.generateStreamId();
       let accumulatedContent = "";
+      let hasSentAnyMessage = false;
 
-      // 通过 ChatRunner 启动标准流程
-      await this.chatRunner.startStream(
-        {
-          sessionId: session.id,
-          userId: session.userId,
-          userMessage: {
-            content: mergedContent,
-            knowledgeBaseIds: config.knowledgeBaseIds,
+      // startStream 本身不阻塞到流结束，用 Promise 包装 onComplete/onError
+      // 使 flushQueue 的 await 真正等到流结束，期间 processingSessions 保持锁定
+      await new Promise<void>((resolve) => {
+        let resolved = false;
+        const done = () => {
+          if (!resolved) {
+            resolved = true;
+            resolve();
+          }
+        };
+
+        let unsubscribe: (() => void) | undefined;
+
+        let startStreamError: any = null;
+        this.chatRunner.startStream(
+          {
+            sessionId: session.id,
+            userId: session.userId,
+            userMessage: {
+              content: mergedContent,
+              knowledgeBaseIds: config.knowledgeBaseIds,
+            },
+            source: { type: "bot", platform: config.platform, botId },
           },
-          source: { type: "bot", platform: config.platform, botId },
-        },
-        {
-          onEvent: (chunk) => {
-            if (chunk.type === "text" && chunk.content) {
-              accumulatedContent += chunk.content;
-              if (capabilities.supportsStreaming) {
-                void sendReply(accumulatedContent, {
-                  streamId,
-                  finish: false,
-                }).catch((error: Error) => {
-                  this.logger.error(`Failed to send stream reply: ${error.message}`);
-                });
+          {
+            onEvent: (chunk) => {
+              if (chunk.type === "text" && chunk.content) {
+                accumulatedContent += chunk.content;
+                if (capabilities.supportsStreaming) {
+                  void sendReply(accumulatedContent, {
+                    streamId,
+                    finish: false,
+                  }).catch((error: Error) => {
+                    this.logger.error(`Failed to send stream reply: ${error.message}`);
+                  });
+                }
+              } else if (chunk.type === "finish" && !capabilities.supportsStreaming) {
+                if (accumulatedContent.trim()) {
+                  hasSentAnyMessage = true;
+                  void sendReply(accumulatedContent, { finish: true })
+                    .catch((error: Error) => {
+                      this.logger.error(`Failed to send turn reply: ${error.message}`);
+                    });
+                  accumulatedContent = "";
+                }
               }
-            }
-          },
-          onComplete: () => {
-            void sendReply(accumulatedContent || "抱歉,我暂时无法回复。", {
-              streamId,
-              finish: true,
-            })
-              .then(() => {
-                this.logger.log(
-                  `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
-                );
+            },
+            onComplete: () => {
+              const finishSend = (content: string) =>
+                sendReply(content, { streamId, finish: true })
+                  .then(() => {
+                    this.logger.log(
+                      `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
+                    );
+                  })
+                  .catch((error: Error) => {
+                    this.logger.error(`Failed to send final reply: ${error.message}`);
+                  })
+                  .finally(() => {
+                    unsubscribe?.();
+                    done();
+                  });
+
+              if (capabilities.supportsStreaming) {
+                void finishSend(accumulatedContent || "抱歉,我暂时无法回复。");
+              } else if (accumulatedContent.trim()) {
+                void finishSend(accumulatedContent);
+              } else if (!hasSentAnyMessage) {
+                void finishSend("抱歉,我暂时无法回复。");
+              } else {
+                unsubscribe?.();
+                done();
+              }
+            },
+            onError: (err) => {
+              this.logger.error(`Stream error: ${err.message}`);
+              void sendReply(err.message || "抱歉,我暂时无法回复。", {
+                finish: true,
               })
-              .catch((error: Error) => {
-                this.logger.error(`Failed to send final reply: ${error.message}`);
-              });
+                .catch((error: Error) => {
+                  this.logger.error(`Failed to send error reply: ${error.message}`);
+                })
+                .finally(() => {
+                  unsubscribe?.();
+                  done();
+                });
+            },
           },
-          onError: (err) => {
-            this.logger.error(`Stream error: ${err.message}`);
-            void sendReply(err.message || "抱歉,我暂时无法回复。", {
-              finish: true,
-            }).catch((error: Error) => {
-              this.logger.error(`Failed to send error reply: ${error.message}`);
-            });
-          },
-        },
-      );
+        ).then((unsub) => {
+          unsubscribe = unsub;
+        }).catch((error: any) => {
+          startStreamError = error;
+          done();
+        });
+
+        // 如果 startStream 同步抛出（如 SESSION_BUSY），done() 已在 catch 中调用
+        if (startStreamError) {
+          throw startStreamError;
+        }
+      });
     } catch (error: any) {
       this.logger.error(
         `Failed to process message: ${error.message}`,
@@ -370,6 +469,48 @@ export class BotOrchestrator {
   }
 
   /**
+   * 将发送失败的回复入队，等待适配器重连后补发
+   */
+  private enqueuePendingReply(botId: string, response: BotResponse): void {
+    const queue = this.pendingReplies.get(botId) || [];
+    if (queue.length >= this.MAX_PENDING_REPLIES) {
+      queue.shift();
+      this.logger.warn(`Pending reply queue full for bot ${botId}, dropped oldest`);
+    }
+    queue.push(response);
+    this.pendingReplies.set(botId, queue);
+  }
+
+  /**
+   * 发送重连期间积压的待发送回复
+   * 由 BotInstanceManager 在适配器重连成功后调用
+   */
+  async flushPendingReplies(botId: string, instance: BotInstanceView): Promise<void> {
+    const { adapter } = instance;
+    const capabilities = adapter.getCapabilities();
+    const interval = capabilities.sendIntervalMs ?? 0;
+    const queue = this.pendingReplies.get(botId);
+    if (!queue || queue.length === 0) return;
+
+    const messages = [...queue];
+    this.pendingReplies.delete(botId);
+    this.logger.log(`Flushing ${messages.length} pending replies for bot ${botId}`);
+
+    for (const msg of messages) {
+      try {
+        if (interval > 0) {
+          await this.throttleSend(botId, interval);
+        }
+        await adapter.sendMessage(msg);
+      } catch (error: any) {
+        this.logger.error(`Failed to flush pending reply: ${error.message}`);
+        // 重新入队，下次重连后重试
+        this.enqueuePendingReply(botId, msg);
+      }
+    }
+  }
+
+  /**
    * 清理指定机器人的消息队列(在机器人停止时调用)
    */
   cleanupBot(botId: string): void {
@@ -387,6 +528,7 @@ export class BotOrchestrator {
       this.messageQueues.delete(key);
       this.processingSessions.delete(key);
     });
+    this.pendingReplies.delete(botId);
 
     this.logger.log(`Cleaned up message queues for bot: ${botId}`);
   }
@@ -402,6 +544,7 @@ export class BotOrchestrator {
     });
     this.messageQueues.clear();
     this.processingSessions.clear();
+    this.pendingReplies.clear();
     this.logger.log("Bot orchestrator cleaned up");
   }
 }

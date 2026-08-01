@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import { PlatformUtilsService } from "../services/platform-utils.service";
 import {
   BotConfig,
+  BotMediaRequest,
   BotMessage,
   BotResponse,
   BotStatus,
@@ -41,6 +42,7 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
       supportsTemplateCard: false,
       supportsMultimedia: true,
       handlesReconnectInternally: false,
+      sendIntervalMs: 1200,
     };
   }
 
@@ -271,6 +273,35 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
       );
     } catch (error: any) {
       this.logger.error(`Failed to send message: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async sendMedia(request: BotMediaRequest): Promise<void> {
+    if (!this.client || this.status !== BotStatus.CONNECTED) {
+      throw new Error("WeChat Personal bot is not connected");
+    }
+
+    const { conversationId, mediaType, filePath, filename, contentType, caption } = request;
+    const options = { filename, contentType, caption };
+
+    try {
+      switch (mediaType) {
+        case "image":
+          await this.client.sendPhotoToUser(conversationId, filePath, options);
+          break;
+        case "video":
+          await this.client.sendVideoToUser(conversationId, filePath, options);
+          break;
+        case "file":
+          await this.client.sendDocumentToUser(conversationId, filePath, options);
+          break;
+        default:
+          throw new Error(`Unsupported media type: ${mediaType}`);
+      }
+      this.logger.log(`Sent ${mediaType} to ${conversationId}: ${filePath}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send media: ${error.message}`);
       throw error;
     }
   }

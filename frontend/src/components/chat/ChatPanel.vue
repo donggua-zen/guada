@@ -82,6 +82,10 @@
           </div>
         </div>
 
+        <!-- 子代理面板（编辑模式时隐藏） -->
+        <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+          @switch="emit('switch-agent', $event)" />
+
 
         <div class="w-full flex items-center relative">
           <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
@@ -139,6 +143,7 @@ const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import { Loading } from '@element-plus/icons-vue'
 import AgentSwitcherBar from './AgentSwitcherBar.vue';
+import AgentPanel from './AgentPanel.vue';
 
 
 // 常量定义
@@ -185,6 +190,8 @@ const props = defineProps<{
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
+  agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
+  activeTabId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -192,6 +199,7 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'select-character': [character: Character]  // 切换角色
+  'switch-agent': [tabId: string]
 }>();
 
 // 计算属性 - 类型化
@@ -1055,6 +1063,7 @@ defineExpose({
   subscribeToActiveStream,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
   insertText: (text: string) => chatInputRef.value?.insertText(text),
+  insertBadge: (data: any) => chatInputRef.value?.insertBadge(data),
 });
 
 /**

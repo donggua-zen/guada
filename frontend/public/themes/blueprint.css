@@ -1,0 +1,245 @@
+/* ============================================================
+   主题：工程蓝图（blueprint）
+   风格：蓝图晒印 · 网格坐标纸 · 虚线标注 · 等宽字体
+   说明：把界面变成一张工程图纸。主辅网格线铺满背景，边框一律
+        使用虚线，圆角收敛到 2px，配以等宽字体，像一份等待
+        审批的技术图纸。暗色模式是经典的蓝晒法（Cyanotype）。
+   ============================================================ */
+
+/* ---------- 亮色模式：浅色绘图纸 ---------- */
+[data-theme="blueprint"] {
+  /* 主色：绘图蓝 */
+  --color-primary: #2060b0;
+  --color-primary-hover: #1c539a;
+  --color-primary-active: #173f75;
+  --color-primary-disabled: #a7c4e4;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.6);
+  --color-primary-50:  #edf4fb;
+  --color-primary-100: #d7e7f6;
+  --color-primary-200: #adcbe9;
+  --color-primary-300: #7ca9d9;
+  --color-primary-400: #4a82c4;
+  --color-primary-500: #2060b0;
+  --color-primary-600: #1c539a;
+  --color-primary-700: #173f75;
+  --color-primary-800: #112c53;
+  --color-primary-900: #0b1b33;
+  --color-primary-950: #060f1e;
+
+  /* 副色：标注青 */
+  --color-secondary: #0e8fa8;
+  --color-secondary-hover: #0c7d92;
+  --color-secondary-active: #095e6e;
+  --color-secondary-disabled: #a2dbe5;
+  --color-secondary-text: #ffffff;
+  --color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
+  --color-secondary-50:  #e9f9fb;
+  --color-secondary-100: #c9f0f5;
+  --color-secondary-200: #93e0ea;
+  --color-secondary-300: #55c7d8;
+  --color-secondary-400: #25a7bd;
+  --color-secondary-500: #0e8fa8;
+  --color-secondary-600: #0c7d92;
+  --color-secondary-700: #095e6e;
+  --color-secondary-800: #063f4a;
+  --color-secondary-900: #04262d;
+  --color-secondary-950: #021418;
+
+  /* 基础表面与文字 */
+  --color-text: #10314f;
+  --color-text-gray: #4d6f92;
+  --color-text-disabled: #9cb4cc;
+  --color-surface: #f8fbff;
+  --color-surface-border: #b9d2ea;
+  --color-bg: #e9f1f9;
+  --color-border: #9dbfdd;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #e2edf8;
+  --color-sidebar-bg-active: #c9def3;
+  --color-sidebar-bg-hover: #d6e6f5;
+  --color-sidebar-text: #10314f;
+  --color-sidebar-text-hover: #10314f;
+  --color-sidebar-text-active: #10314f;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #e2edf8;
+  --color-titlebar-border: #b9d2ea;
+  --titlebar-text-color: #10314f;
+  --titlebar-hover-bg: #c9def3;
+
+  /* 会话列表 */
+  --color-conversation-bg: #e9f1f9;
+  --color-conversation-text: #10314f;
+  --color-conversation-border: #b9d2ea;
+  --color-conversation-bg-active: #c9def3;
+  --color-conversation-text-active: #10314f;
+  --color-conversation-bg-hover: #d6e6f5;
+  --color-conversation-text-hover: #10314f;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #d3e5f8;
+  --color-bubble-user-text: #0e2a47;
+  --color-bubble-user-border: #2060b0;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #10314f;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #2060b0;
+
+  /* 排版与细节 */
+  --size-text-base: 14.5px;
+  --size-text-sm: 13.5px;
+  --shimmer-base: #9cb4cc;
+  --shimmer-highlight: #10314f;
+  --theme-font: 'Cascadia Code', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+}
+
+/* ---------- 暗色模式：经典蓝晒法 ---------- */
+html.dark[data-theme="blueprint"] {
+  /* 主色：图纸白线 */
+  --color-primary: #6fb7ff;
+  --color-primary-hover: #8cc6ff;
+  --color-primary-active: #55a7f5;
+  --color-primary-disabled: #2b5a8f;
+  --color-primary-text: #08203f;
+  --color-primary-text-disabled: rgba(8, 32, 63, 0.55);
+  --color-primary-50:  #06121f;
+  --color-primary-100: #0b2338;
+  --color-primary-200: #12436b;
+  --color-primary-300: #1a65a3;
+  --color-primary-400: #3390d6;
+  --color-primary-500: #6fb7ff;
+  --color-primary-600: #8cc6ff;
+  --color-primary-700: #add6ff;
+  --color-primary-800: #cce5ff;
+  --color-primary-900: #e6f2ff;
+  --color-primary-950: #f5faff;
+
+  /* 副色：荧光青 */
+  --color-secondary: #3fd4e0;
+  --color-secondary-hover: #5fdce6;
+  --color-secondary-active: #2cc3d0;
+  --color-secondary-disabled: #1b5b63;
+  --color-secondary-text: #04262d;
+  --color-secondary-text-disabled: rgba(4, 38, 45, 0.55);
+  --color-secondary-50:  #021418;
+  --color-secondary-100: #04262d;
+  --color-secondary-200: #063f4a;
+  --color-secondary-300: #095e6e;
+  --color-secondary-400: #0e8fa8;
+  --color-secondary-500: #3fd4e0;
+  --color-secondary-600: #64dde7;
+  --color-secondary-700: #8fe7ee;
+  --color-secondary-800: #bcf0f4;
+  --color-secondary-900: #e0f9fb;
+  --color-secondary-950: #f3fdfd;
+
+  /* 基础表面与文字 */
+  --color-text: #d9e9fa;
+  --color-text-gray: #8fb2d4;
+  --color-text-disabled: #4a6c92;
+  --color-surface: #0d3560;
+  --color-surface-border: #2f6296;
+  --color-bg: #0a2b4d;
+  --color-border: #2f6296;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #082544;
+  --color-sidebar-bg-active: #14497e;
+  --color-sidebar-bg-hover: #0d3560;
+  --color-sidebar-text: #d9e9fa;
+  --color-sidebar-text-hover: #d9e9fa;
+  --color-sidebar-text-active: #eaf4ff;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #082544;
+  --color-titlebar-border: #2f6296;
+  --titlebar-text-color: #d9e9fa;
+  --titlebar-hover-bg: #14497e;
+
+  /* 会话列表 */
+  --color-conversation-bg: #0a2b4d;
+  --color-conversation-text: #d9e9fa;
+  --color-conversation-border: #2f6296;
+  --color-conversation-bg-active: #14497e;
+  --color-conversation-text-active: #eaf4ff;
+  --color-conversation-bg-hover: #0d3560;
+  --color-conversation-text-hover: #d9e9fa;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #11406f;
+  --color-bubble-user-text: #eaf4ff;
+  --color-bubble-user-border: #6fb7ff;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #d9e9fa;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #6fb7ff;
+
+  /* 排版与细节 */
+  --size-text-base: 14.5px;
+  --size-text-sm: 13.5px;
+  --shimmer-base: #4a6c92;
+  --shimmer-highlight: #d9e9fa;
+  --theme-font: 'Cascadia Code', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="blueprint"] body {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 主辅双层网格坐标纸 */
+html[data-theme="blueprint"] body::before {
+  background-image:
+    linear-gradient(rgba(32, 96, 176, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 96, 176, 0.10) 1px, transparent 1px),
+    linear-gradient(rgba(32, 96, 176, 0.20) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 96, 176, 0.20) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="blueprint"] body::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+}
+
+/* 用户气泡：虚线框 + 直角，像图纸上的标注框 */
+html[data-theme="blueprint"] .user-section .message-item__card {
+  border: 1.5px dashed var(--color-bubble-user-border);
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+/* 助手消息：左侧虚线引出，像尺寸标注的延长线 */
+html[data-theme="blueprint"] .assistant-section .message-item__card {
+  border-left: 1.5px dashed var(--color-primary);
+  padding-left: 14px;
+}
+
+/* 分栏线也用虚线 */
+html[data-theme="blueprint"] .global-sidebar {
+  border-right: 1.5px dashed var(--color-border);
+  box-shadow: none;
+}
+html[data-theme="blueprint"] .workspace-sidebar {
+  border-left: 1.5px dashed var(--color-border);
+}
+
+/* 输入框：图纸标题栏式的虚线框 */
+html[data-theme="blueprint"] .mock-inputbar {
+  border: 1.5px dashed var(--color-border);
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+/* 代码块：实线框 + 直角 */
+html[data-theme="blueprint"] .md-code {
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+}

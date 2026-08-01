@@ -537,6 +537,11 @@ export class SkillsController {
         return { success: false, message: `Skill '${skillId}' is a system built-in skill and cannot be uninstalled.` };
       }
 
+      // 禁止卸载共享目录技能（~/.agents/skills/）
+      if (skill.source === 'agents') {
+        return { success: false, message: `Skill '${skillId}' is from the shared agents directory (~/.agents/skills/) and cannot be uninstalled from here. Remove the directory manually if needed.` };
+      }
+
       // 删除技能目录
       await fs.rm(path.join(skill.baseDir, skill.basePath), { recursive: true, force: true });
 

@@ -4,6 +4,7 @@ import { spawn } from "child_process";
 import * as path from "path";
 import * as fsSync from "fs";
 import * as fs from "fs/promises";
+// path/fs still used by resolveSandboxBin()
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { z } from "zod";
@@ -90,7 +91,10 @@ export class ShellPlugin extends PluginBase {
     // ── execute 工具 ──
     api.registerTool({
       name: "run_command",
-      description: `Execute system commands and return output. Commands running over 1 minute will auto-switch to background. "background": true starts in background immediately.`,
+      description: `Use the \`run_command\` command to execute commands
+- Commands run in the foreground by default; the tool waits for completion and returns the output
+- Foreground commands that exceed **1 minute** will automatically switch to background mode
+- processId is typically the shell process ID, not the command's own process ID`,
       inputSchema: z.object({
         command: z
           .string()
@@ -148,6 +152,7 @@ export class ShellPlugin extends PluginBase {
 
         let spawnArgs: string[];
         let spawnCmd: string;
+        let useShellSpawn = false;
         if (useSandbox) {
           spawnCmd = sandboxBin;
           // sandbox 内部会根据平台选择 cmd.exe /c 或 sh -c
@@ -156,10 +161,12 @@ export class ShellPlugin extends PluginBase {
             spawnArgs.push("--read-only");
           }
         } else {
-          const shell = isWindows ? "cmd" : "sh";
-          const shellFlag = isWindows ? "/c" : "-c";
-          spawnCmd = shell;
-          spawnArgs = [shellFlag, command];
+          // 直接将完整命令字符串交给 OS shell 处理（shell: true）
+          // 避免 spawn("cmd", ["/c", command]) 时 Node.js 对内嵌引号做 \" 转义，
+          // 而 cmd.exe 不认 \" 导致引号错位、命令被原样回显
+          spawnCmd = command;
+          spawnArgs = [];
+          useShellSpawn = true;
         }
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
@@ -171,7 +178,7 @@ export class ShellPlugin extends PluginBase {
         const childProcess = spawn(spawnCmd, spawnArgs, {
           cwd,
           env: { ...process.env, PYTHONUNBUFFERED: "1" },
-          shell: false,
+          shell: useShellSpawn,
         });
         const result = this.processManager.background(
           childProcess,
@@ -235,6 +242,14 @@ export class ShellPlugin extends PluginBase {
             return parts.join("\n\n");
           }
 
+          // Stall 检测：命令似乎在等待键盘输入 → 提前返回
+          if (pollResult.stalled) {
+            parts.push(
+              `[⚠️ The command appears to be waiting for keyboard input. processId: ${result.processId}. Use the process tool with action "write" to send input, or action "kill" to terminate.]`,
+            );
+            return parts.join("\n\n");
+          }
+
           // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
           parts.push(
             `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${result.processId}. Use the process tool to manage.]`,
@@ -251,21 +266,23 @@ export class ShellPlugin extends PluginBase {
     // ── process 管理工具 ──
     api.registerTool({
       name: "process",
-      description: `Manage background processes`,
+      description: `Background Process Management
+
+- Use the **process** tool to manage background processes. Additional parameters are grouped into the params object:
+- **kill** — Terminate a process, no params required:
+  \`{"action":"kill","processId":"xxx"}\`
+- **poll** — Check for new output. Optional params.timeout (seconds, minimum 30):
+   \`{"action":"poll","processId":"xxx","params":{"timeout":30}}\`
+- **write** — Write input to the process's stdin. Required params.input, optional params.appendNewline (default true):
+    \`{"action":"write","processId":"xxx","params":{"input":"y"}}\``,
       inputSchema: z.object({
-        action: z.enum([
-          "kill",
-          "poll",
-          "modify_progress_monitoring",
-          "dump_log",
-          "write",
-        ]),
+        action: z.enum(["kill", "poll", "write"]),
         processId: z.string().describe("Background process ID"),
         params: z
           .record(z.string(), z.any())
           .optional()
           .describe(
-            "Additional parameters for each action, grouped into this object. See tool description and system prompt for details.",
+            "Additional parameters for each action, grouped into this object. ",
           ),
       }),
       execute: async (args, ctx) => {
@@ -291,7 +308,11 @@ export class ShellPlugin extends PluginBase {
           }
 
           case "poll": {
-            const timeoutMs = (params.timeout || 0) * 1000;
+            let timeoutMs = (params.timeout || 0) * 1000;
+            // Agent 调用不允许低于 30 秒
+            if (timeoutMs < 30_000) {
+              timeoutMs = 30_000;
+            }
             const result = await this.processManager.poll(
               processId,
               timeoutMs,
@@ -307,7 +328,9 @@ export class ShellPlugin extends PluginBase {
             if (runMode === "sandbox") {
               parts.push("Sandbox mode enabled, read-only outside workspace");
             } else if (runMode === "plan") {
-              parts.push("Plan mode: sandbox read-only enabled, all writes blocked");
+              parts.push(
+                "Plan mode: sandbox read-only enabled, all writes blocked",
+              );
             }
 
             if (result.output) {
@@ -315,7 +338,13 @@ export class ShellPlugin extends PluginBase {
             }
 
             if (result.status === "running") {
-              parts.push("[status: running]");
+              if (result.stalled) {
+                parts.push(
+                  '[The command appears to be waiting for keyboard input. Use action "write" to send input, or action "kill" to terminate.]',
+                );
+              } else {
+                parts.push("[status: running]");
+              }
             } else {
               parts.push(
                 `[status: ${result.status}, exit code: ${result.exitCode}]`,
@@ -325,81 +354,16 @@ export class ShellPlugin extends PluginBase {
             return parts.join("\n\n");
           }
 
-          case "modify_progress_monitoring": {
-            const minutes = params.intervalMinutes ?? 30;
-            const entry = this.processManager.updateProgressMonitoring(
-              processId,
-              minutes,
-            );
-            if (entry === null) {
-              throw new Error(`Process ${processId} does not exist`);
-            }
-            const actualMinutes = entry.progressIntervalMinutes;
-            return actualMinutes > 0
-              ? `Progress notifications enabled, reporting every ${actualMinutes} minute(s). Adjust frequency as needed. Set to 0 to disable monitoring.`
-              : "Progress notifications disabled";
-          }
-
-          case "dump_log": {
-            const entry = this.processManager.getRawEntry(processId);
-            if (!entry) {
-              throw new Error(`Process ${processId} does not exist`);
-            }
-            if (!entry.fullLog && !entry.output) {
-              return `Process ${processId} has no output log`;
-            }
-
-            const targetPath =
-              params.file_path ||
-              path.join(".guada", "process", "exports", `${processId}.log`);
-            const cwd = ctx?.session.workspacePath || process.cwd();
-            const resolved = path.resolve(cwd, targetPath);
-
-            // 安全检查：确保导出路径在工作目录内
-            const workspaceNorm = cwd.replace(/\\/g, "/").replace(/\/$/, "");
-            const resolvedNorm = resolved.replace(/\\/g, "/");
-            if (
-              !resolvedNorm.startsWith(workspaceNorm + "/") &&
-              resolvedNorm !== workspaceNorm
-            ) {
-              throw new Error(
-                `Export path is not within the working directory: ${resolved}`,
-              );
-            }
-
-            await fs.mkdir(path.dirname(resolved), { recursive: true });
-            await fs.writeFile(resolved, entry.fullLog || "", "utf-8");
-
-            // 已导出到磁盘，立即释放内存缓冲区
-            this.processManager.removeProcess(processId);
-
-            return `Log exported to ${resolved}, ${(entry.fullLog || "").length} characters total`;
-          }
-
           case "write": {
             const input = params.input;
             if (!input || typeof input !== "string") {
               throw new Error("params.input cannot be empty");
             }
 
-            const entry = this.processManager.getRawEntry(processId);
-            if (!entry) {
-              throw new Error(`Process ${processId} does not exist`);
-            }
-            if (entry.status !== "running") {
-              throw new Error(`Process ${processId} has ended, cannot write`);
-            }
-
-            if (!entry.childProcess.stdin) {
-              throw new Error(
-                `stdin for process ${processId} is not available`,
-              );
-            }
-
             const appendNewline = params.appendNewline !== false;
             const textToWrite = appendNewline ? input + "\n" : input;
 
-            entry.childProcess.stdin.write(textToWrite);
+            this.processManager.writeToStdin(processId, textToWrite);
 
             return `Written ${textToWrite.length} characters to process ${processId}`;
           }
@@ -408,7 +372,11 @@ export class ShellPlugin extends PluginBase {
             throw new Error(`Unknown action: ${action}`);
         }
       },
-      display: { actionType: "process", argsKey: "action", icon: "run_command" },
+      display: {
+        actionType: "process",
+        argsKey: "action",
+        icon: "run_command",
+      },
       dangerLevel: "high",
     });
 
@@ -424,28 +392,7 @@ export class ShellPlugin extends PluginBase {
 **Current System**: ${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}
           
 ## Command Execution
-- Use the \`run_command\` command to execute commands
-- Commands run in the foreground by default; the tool waits for completion and returns the output (up to 8000 characters)
-- Foreground commands that exceed **1 minute** will automatically switch to background mode
-- processId is typically the shell process ID, not the command's own process ID
-## Background Process Management
-- Use the **process** tool to manage background processes. Additional parameters are grouped into the params object:
-- **kill** — Terminate a process, no params required:
-  \`{"action":"kill","processId":"xxx"}\`
-- **poll** — Check for new output. Optional params.timeout (seconds, minimum 30):
-   \`{"action":"poll","processId":"xxx","params":{"timeout":30}}\`
-${
-  isNotSubAgent
-    ? `
-- **modify_progress_monitoring** — Set the system's automatic monitoring report interval. intervalMinutes (minutes, 0=off, default 30):
-    \`{"action":"modify_progress_monitoring","processId":"xxx","params":{"intervalMinutes":30}}\`
-- Monitoring is enabled by default. Set to 0 to disable. Non-zero values must not be less than 15 minutes.`
-    : ""
-}
-- **dump_log** — Export the full log. Optional params.file_path:
-  \`{"action":"dump_log","processId":"xxx","params":{"file_path":"logs/my.log"}}\`
-- **write** — Write input to the process's stdin. Required params.input, optional params.appendNewline (default true):
-    \`{"action":"write","processId":"xxx","params":{"input":"y"}}\`
+
 ## Background Task Best Practices
 - Prefer foreground execution first to check initial output and verify normal startup
 - Prefer using process(action=kill, processId=xxx) to terminate processes          
@@ -454,10 +401,61 @@ ${
      ? `
 - After switching to background, you can work on other tasks in parallel, or end the current turn and wait for system notifications
 - The system will automatically notify you when a background process finishes — no need for continuous polling
-- Messages already retrieved via poll will not be re-sent as system notifications
-- For long-running tasks (expected >30 minutes), use progress notifications (enabled by default) to stay informed. Short tasks do not need to disable monitoring (the default 30-minute interval serves as a fallback).`
-     : `- After ending the conversation, all background processes will be automatically terminated. Make sure to use POLL to wait for process completion.`
+- Messages already retrieved via poll will not be re-sent as system notifications`
+     : ``
  }`;
+      },
+    });
+
+    // ── 回合拦截器：收集未接收的 shell 进程输出，子 Agent 额外检查运行状态 ──
+    api.registerInterceptor({
+      name: "shell_background_check",
+      intercept: async (ctx: PluginContext) => {
+        const session = ctx.session;
+        const isSubAgent = session.sessionType === "sub_agent";
+
+        const processes = this.processManager.listBySession(session.sessionId);
+        if (processes.length === 0) return null;
+
+        // 1. 对所有进程执行 poll(0) 收集未接收的输出
+        const pollOutputs: string[] = [];
+        const stillRunning: typeof processes = [];
+        for (const proc of processes) {
+          const result = await this.processManager.poll(
+            proc.id,
+            0,
+            session.sessionId,
+          );
+          if (!result) continue;
+          if (result.output) {
+            pollOutputs.push(
+              `[Process ${proc.id} (${proc.command}) new output]:\n${result.output}`,
+            );
+          }
+          // 仅子 Agent 检查 running 状态（主 Agent 允许后台运行，等待异步注入）
+          if (isSubAgent && result.status === "running") {
+            stillRunning.push(proc);
+          }
+        }
+
+        // 2. 无新输出且（子 Agent 无运行中进程）→ 不拦截
+        if (pollOutputs.length === 0 && stillRunning.length === 0) return null;
+
+        // 3. 组装消息
+        const parts: string[] = [];
+        if (pollOutputs.length > 0) {
+          parts.push(pollOutputs.join("\n\n"));
+        }
+        if (stillRunning.length > 0) {
+          const list = stillRunning
+            .map((p) => `- \`${p.id}\` (${p.command})`)
+            .join("\n");
+          parts.push(
+            `You have ${stillRunning.length} unfinished background processes:\n${list}\n\nYou must use the process tool to check their status (poll), wait for them to complete or terminate them (kill) before ending the current task.`,
+          );
+        }
+
+        return `<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`;
       },
     });
   }

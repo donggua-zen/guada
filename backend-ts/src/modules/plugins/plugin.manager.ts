@@ -750,6 +750,7 @@ export class PluginManager {
         enabledTools: [],
         allTools,
         enabledToolKits: [],
+        interceptors: [],
         source: manifest.source,
         pluginPath: manifest.pluginPath,
       };
@@ -805,6 +806,7 @@ export class PluginManager {
       enabledTools,
       allTools,
       enabledToolKits,
+      interceptors: PluginRegistry.getInterceptors(pluginId),
       source: manifest.source,
       pluginPath: manifest.pluginPath,
     };

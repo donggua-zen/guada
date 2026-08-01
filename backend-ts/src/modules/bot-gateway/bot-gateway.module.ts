@@ -13,6 +13,7 @@ import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
 import { PrismaService } from '../../common/database/prisma.service';
 import { SessionManagementPlugin } from './plugins/session-management.plugin';
+import { BotFileSenderPlugin } from './plugins/bot-file-sender.plugin';
 
 @Module({
   imports: [ChatModule, AuthModule, SharedModule, ToolsModule],
@@ -28,9 +29,11 @@ export class BotGatewayModule implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly prisma: PrismaService,
+    private readonly botInstanceManager: BotInstanceManager,
   ) {}
 
   async onModuleInit() {
     await this.pluginManager.registerPlugin(new SessionManagementPlugin(this.prisma));
+    await this.pluginManager.registerPlugin(new BotFileSenderPlugin(this.botInstanceManager));
   }
 }

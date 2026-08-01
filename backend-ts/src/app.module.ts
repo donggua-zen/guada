@@ -15,6 +15,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { ToolsModule } from "./modules/tools/tools.module";
 import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
 import { VectorDbModule } from "./common/vector-db";
+import { SearchModule } from "./common/search/search.module";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
 import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
 import { SkillsModule } from './modules/skills/skills.module';
@@ -41,6 +42,7 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块
+    SearchModule, // 全文搜索索引模块（FTS5，独立 DB）
     McpClientModule, // MCP 客户端模块（全局）
     SkillsModule, // Skills 集成框架模块
     ChatModule,

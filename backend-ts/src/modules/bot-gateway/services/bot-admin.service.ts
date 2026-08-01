@@ -141,6 +141,7 @@ export class BotAdminService {
         retryInterval: dto.reconnectConfig?.retryInterval ?? 5000,
         defaultCharacterId: dto.defaultCharacterId,
         defaultModelId: dto.defaultModelId,
+        defaultThinkingEffort: dto.defaultThinkingEffort,
         additionalKwargs: dto.additionalKwargs || null,
         enabled: true,
         status: 'stopped',
@@ -174,6 +175,7 @@ export class BotAdminService {
     if (dto.enabled !== undefined) updateData.enabled = dto.enabled;
     if (dto.defaultCharacterId !== undefined) updateData.defaultCharacterId = dto.defaultCharacterId;
     if (dto.defaultModelId !== undefined) updateData.defaultModelId = dto.defaultModelId;
+    if (dto.defaultThinkingEffort !== undefined) updateData.defaultThinkingEffort = dto.defaultThinkingEffort;
     if (dto.additionalKwargs !== undefined) updateData.additionalKwargs = dto.additionalKwargs;
     
     if (dto.reconnectConfig) {
@@ -262,6 +264,7 @@ export class BotAdminService {
       },
       defaultCharacterId: instance.defaultCharacterId || undefined,
       defaultModelId: instance.defaultModelId || undefined,
+      defaultThinkingEffort: instance.defaultThinkingEffort || undefined,
       // 从 additionalKwargs 中提取知识库ID列表
       knowledgeBaseIds: (instance.additionalKwargs as any)?.knowledgeBaseIds || [],
     };

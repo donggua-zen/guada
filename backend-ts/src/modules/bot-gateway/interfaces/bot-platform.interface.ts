@@ -52,6 +52,42 @@ export enum BotStatus {
 }
 
 /**
+ * 机器人实例运行时状态（管理器层面的生命周期状态）
+ *
+ * 与 BotStatus（适配器层面）的区别：
+ * - BotStatus 反映适配器的连接状态，由适配器内部维护
+ * - BotRuntimeStatus 由 BotInstanceManager 维护，反映管理器层面的生命周期
+ *
+ * 例如：适配器断开后状态为 DISCONNECTED，但管理器可能立即调度重连，
+ * 此时 runtimeStatus = RECONNECTING，而 adapter.getStatus() = DISCONNECTED。
+ */
+export enum BotRuntimeStatus {
+  /** 首次连接中（startBot 后、onConnect 前） */
+  CONNECTING = 'connecting',
+  /** 已连接，正常工作 */
+  CONNECTED = 'connected',
+  /** 断开后正在重连（含等待重连定时器的时间窗口） */
+  RECONNECTING = 'reconnecting',
+  /** 已停止或已清理 */
+  STOPPED = 'stopped',
+}
+
+/**
+ * 编排器可见的机器人实例视图
+ *
+ * 结构化类型——ManagedBotInstance 兼容此接口，可直接传入编排器。
+ * 编排器仅能访问此接口声明的字段，无法触及 reconnectAttempts、subscriptions 等内部状态。
+ */
+export interface BotInstanceView {
+  /** 适配器实例 */
+  adapter: IBotPlatform;
+  /** 机器人配置 */
+  config: BotConfig;
+  /** 运行时状态 */
+  status: BotRuntimeStatus;
+}
+
+/**
  * 机器人配置
  */
 export interface BotConfig {
@@ -84,7 +120,14 @@ export interface BotConfig {
    * 优先级：Bot实例配置 > 角色配置 > 全局默认设置
    */
   defaultModelId?: string;
-  /** 
+  /**
+   * 关联的默认思考强度
+   *
+   * 注意：此字段在每次创建会话时动态注入到 session.settings.thinkingEffort，修改后无需重启机器人
+   * 仅对支持 thinking feature 的模型生效，不支持时自动忽略
+   */
+  defaultThinkingEffort?: string;
+  /**
    * 扩展配置（如知识库ID列表等）
    * 
    * 注意：此字段在每次处理消息时动态读取，修改后无需重启机器人
@@ -116,12 +159,14 @@ export interface PlatformCapabilities {
   supportsTemplateCard: boolean;
   /** 是否支持多媒体消息 */
   supportsMultimedia: boolean;
-  /** 
+  /**
    * SDK 是否自行处理重连
    * - true: SDK 内部有完善的重连机制,外部管理器不应干预
    * - false: 需要外部 BotInstanceManager 统一管理重连逻辑
    */
   handlesReconnectInternally?: boolean;
+  /** 两次发送之间的最小间隔(ms)，0 或不填表示不限流 */
+  sendIntervalMs?: number;
 }
 
 /**
@@ -134,6 +179,30 @@ export interface BotDisconnectEvent {
   reason?: string;
   /** 时间戳 */
   timestamp: Date;
+}
+
+/**
+ * 媒体发送请求
+ */
+export interface BotMediaRequest {
+  /** 目标会话ID */
+  conversationId: string;
+  /** 媒体类型 */
+  mediaType: "image" | "video" | "file";
+  /** 本地文件路径或网络 URL */
+  filePath: string;
+  /** 文件名（可选，不传则从路径推断） */
+  filename?: string;
+  /** MIME 类型（可选） */
+  contentType?: string;
+  /** 附带文字说明（可选） */
+  caption?: string;
+  /** 消息来源类型（部分平台需要区分群聊/私聊） */
+  sourceType?: "private" | "group" | "channel";
+  /** 引用消息 ID（部分平台被动回复时需要） */
+  replyToMessageId?: string;
+  /** 原始消息帧（部分平台需要上下文） */
+  rawFrame?: any;
 }
 
 /**
@@ -230,6 +299,12 @@ export interface IBotPlatform {
    * 重新连接
    */
   reconnect?(): Promise<void>;
+
+  /**
+   * 发送媒体文件（可选实现）
+   * @param request 媒体发送请求
+   */
+  sendMedia?(request: BotMediaRequest): Promise<void>;
 }
 
 /**

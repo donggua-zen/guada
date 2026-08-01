@@ -38,6 +38,7 @@ export interface BotInstance {
   retryInterval: number;
   defaultCharacterId: string | null;
   defaultModelId: string | null;
+  defaultThinkingEffort: string | null;
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
@@ -63,6 +64,7 @@ export interface CreateBotRequest {
   };
   defaultCharacterId?: string;
   defaultModelId?: string;
+  defaultThinkingEffort?: string;
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
@@ -78,6 +80,7 @@ export interface UpdateBotRequest {
   enabled?: boolean;
   defaultCharacterId?: string;
   defaultModelId?: string;
+  defaultThinkingEffort?: string;
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
