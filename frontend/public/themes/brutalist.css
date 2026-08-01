@@ -1,0 +1,241 @@
+/* ============================================================
+   主题：粗野主义（brutalist）
+   风格：新粗野主义 · 粗黑描边 · 硬阴影 · 高饱和点缀
+   说明：白底 + 3px 纯黑边框 + 无柔化的偏移硬阴影，按钮与气泡像
+        从纸上「贴」出来的色块。拒绝渐变与圆滑的妥协，向
+        Neo-Brutalism 网页运动致敬。
+   ============================================================ */
+
+/* ---------- 亮色模式 ---------- */
+[data-theme="brutalist"] {
+  /* 主色：墨黑 */
+  --color-primary: #141414;
+  --color-primary-hover: #2b2b2b;
+  --color-primary-active: #000000;
+  --color-primary-disabled: #9e9e9e;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.65);
+  --color-primary-50:  #fafafa;
+  --color-primary-100: #f4f4f4;
+  --color-primary-200: #e0e0e0;
+  --color-primary-300: #bdbdbd;
+  --color-primary-400: #8f8f8f;
+  --color-primary-500: #5c5c5c;
+  --color-primary-600: #3d3d3d;
+  --color-primary-700: #2b2b2b;
+  --color-primary-800: #1d1d1d;
+  --color-primary-900: #141414;
+  --color-primary-950: #0a0a0a;
+
+  /* 副色：信号黄 */
+  --color-secondary: #ffcf00;
+  --color-secondary-hover: #ffd929;
+  --color-secondary-active: #e6ba00;
+  --color-secondary-disabled: #fff0a8;
+  --color-secondary-text: #141414;
+  --color-secondary-text-disabled: rgba(20, 20, 20, 0.5);
+  --color-secondary-50:  #fffbe0;
+  --color-secondary-100: #fff6b8;
+  --color-secondary-200: #ffed75;
+  --color-secondary-300: #ffe13d;
+  --color-secondary-400: #ffd714;
+  --color-secondary-500: #ffcf00;
+  --color-secondary-600: #e6ba00;
+  --color-secondary-700: #b89300;
+  --color-secondary-800: #8a6d00;
+  --color-secondary-900: #5c4900;
+  --color-secondary-950: #332a00;
+
+  /* 基础表面与文字 */
+  --color-text: #141414;
+  --color-text-gray: #5c5c5c;
+  --color-text-disabled: #a3a3a3;
+  --color-surface: #ffffff;
+  --color-surface-border: #141414;
+  --color-bg: #f4f1ea;
+  --color-border: #141414;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-bg-active: #ffcf00;
+  --color-sidebar-bg-hover: #f4f1ea;
+  --color-sidebar-text: #141414;
+  --color-sidebar-text-hover: #141414;
+  --color-sidebar-text-active: #141414;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #ffffff;
+  --color-titlebar-border: #141414;
+  --titlebar-text-color: #141414;
+  --titlebar-hover-bg: #f4f1ea;
+
+  /* 会话列表 */
+  --color-conversation-bg: #ffffff;
+  --color-conversation-text: #141414;
+  --color-conversation-border: #141414;
+  --color-conversation-bg-active: #ffcf00;
+  --color-conversation-text-active: #141414;
+  --color-conversation-bg-hover: #f4f1ea;
+  --color-conversation-text-hover: #141414;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #ffcf00;
+  --color-bubble-user-text: #141414;
+  --color-bubble-user-border: #141414;
+  --color-bubble-assitant-bg: #ffffff;
+  --color-bubble-assitant-text: #141414;
+  --color-bubble-assitant-border: #141414;
+  --color-bubble-assitant-text-strong: #d00000;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #bdbdbd;
+  --shimmer-highlight: #141414;
+  --theme-font: 'Archivo', 'Arial Black', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 暗色模式 ---------- */
+html.dark[data-theme="brutalist"] {
+  /* 主色：暗色下翻转为信号黄，按钮在黑底上炸出来 */
+  --color-primary: #ffd600;
+  --color-primary-hover: #ffdf3d;
+  --color-primary-active: #f5c400;
+  --color-primary-disabled: #6b5d00;
+  --color-primary-text: #141414;
+  --color-primary-text-disabled: rgba(20, 20, 20, 0.5);
+  --color-primary-50:  #fffbe0;
+  --color-primary-100: #fff6b8;
+  --color-primary-200: #ffed75;
+  --color-primary-300: #ffe13d;
+  --color-primary-400: #ffd714;
+  --color-primary-500: #ffd600;
+  --color-primary-600: #e6ba00;
+  --color-primary-700: #b89300;
+  --color-primary-800: #8a6d00;
+  --color-primary-900: #5c4900;
+  --color-primary-950: #332a00;
+
+  /* 副色：波普红 */
+  --color-secondary: #ff5c5c;
+  --color-secondary-hover: #ff7575;
+  --color-secondary-active: #f54b4b;
+  --color-secondary-disabled: #7a2b2b;
+  --color-secondary-text: #141414;
+  --color-secondary-text-disabled: rgba(20, 20, 20, 0.5);
+  --color-secondary-50:  #160404;
+  --color-secondary-100: #2e0808;
+  --color-secondary-200: #5c1111;
+  --color-secondary-300: #8f1b1b;
+  --color-secondary-400: #c22a2a;
+  --color-secondary-500: #ff5c5c;
+  --color-secondary-600: #ff7d7d;
+  --color-secondary-700: #ffa1a1;
+  --color-secondary-800: #ffc4c4;
+  --color-secondary-900: #ffe2e2;
+  --color-secondary-950: #fff5f5;
+
+  /* 基础表面与文字 */
+  --color-text: #f2f2f2;
+  --color-text-gray: #a8a8a8;
+  --color-text-disabled: #5c5c5c;
+  --color-surface: #1c1c1c;
+  --color-surface-border: #f2f2f2;
+  --color-bg: #121212;
+  --color-border: #f2f2f2;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #161616;
+  --color-sidebar-bg-active: #ffd600;
+  --color-sidebar-bg-hover: #242424;
+  --color-sidebar-text: #f2f2f2;
+  --color-sidebar-text-hover: #f2f2f2;
+  --color-sidebar-text-active: #141414;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #161616;
+  --color-titlebar-border: #f2f2f2;
+  --titlebar-text-color: #f2f2f2;
+  --titlebar-hover-bg: #242424;
+
+  /* 会话列表 */
+  --color-conversation-bg: #121212;
+  --color-conversation-text: #f2f2f2;
+  --color-conversation-border: #f2f2f2;
+  --color-conversation-bg-active: #ffd600;
+  --color-conversation-text-active: #141414;
+  --color-conversation-bg-hover: #242424;
+  --color-conversation-text-hover: #f2f2f2;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #ffd600;
+  --color-bubble-user-text: #141414;
+  --color-bubble-user-border: #f2f2f2;
+  --color-bubble-assitant-bg: #1c1c1c;
+  --color-bubble-assitant-text: #f2f2f2;
+  --color-bubble-assitant-border: #f2f2f2;
+  --color-bubble-assitant-text-strong: #ffd600;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #3d3d3d;
+  --shimmer-highlight: #f2f2f2;
+  --theme-font: 'Archivo', 'Arial Black', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="brutalist"] body {
+  font-family: 'Archivo', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 细点阵底纹，像廉价印刷纸 */
+html[data-theme="brutalist"] body::before {
+  background-image: radial-gradient(rgba(20, 20, 20, 0.06) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="brutalist"] body::before {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+
+/* 用户气泡：粗黑边 + 硬阴影，像贴在纸上的便签 */
+html[data-theme="brutalist"] .user-section .message-item__card {
+  border: 2.5px solid var(--color-bubble-user-border);
+  border-radius: 4px;
+  box-shadow: 5px 5px 0 var(--color-bubble-user-border);
+  font-weight: 600;
+}
+
+/* 助手消息：白底卡片 + 黑边硬阴影，强调色加粗 */
+html[data-theme="brutalist"] .assistant-section .message-item__card {
+  border: 2.5px solid var(--color-bubble-assitant-border);
+  border-radius: 4px;
+  box-shadow: 5px 5px 0 var(--color-bubble-assitant-border);
+  padding: 14px 16px;
+}
+
+/* 左栏 / 右栏：粗黑分割线，去掉柔和内阴影 */
+html[data-theme="brutalist"] .global-sidebar {
+  border-right: 3px solid var(--color-border);
+  box-shadow: none;
+}
+html[data-theme="brutalist"] .workspace-sidebar {
+  border-left: 3px solid var(--color-border);
+}
+
+/* 输入框：贴上去的色块 */
+html[data-theme="brutalist"] .mock-inputbar {
+  border: 2.5px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 5px 5px 0 var(--color-border);
+}
+
+/* 代码块同步粗野化 */
+html[data-theme="brutalist"] .md-code {
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--color-border);
+}

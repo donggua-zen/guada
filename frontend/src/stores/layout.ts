@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
 import { watch, ref } from 'vue'
 import { apiService } from '@/services/ApiService'
+import { useTheme } from '@/composables/useTheme'
 
 /**
  * 全局布局状态 Store
@@ -232,6 +233,15 @@ export const useLayoutStore = defineStore('layout', () => {
       }
       if (response.floatWidgetOpacity !== undefined) {
         floatWidgetOpacity.value = response.floatWidgetOpacity
+      }
+
+      // 同步主题预设（后端优先，覆盖本地 localStorage）
+      const { setLightThemePreset, setDarkThemePreset } = useTheme()
+      if (response.lightThemePreset) {
+        setLightThemePreset(response.lightThemePreset)
+      }
+      if (response.darkThemePreset) {
+        setDarkThemePreset(response.darkThemePreset)
       }
 
       applyWallpaperSettings()

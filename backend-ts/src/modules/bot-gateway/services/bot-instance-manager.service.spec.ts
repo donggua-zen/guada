@@ -4,6 +4,7 @@ import {
   BotMessage,
   BotResponse,
   BotStatus,
+  BotRuntimeStatus,
   PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 import { BotInstanceManager } from './bot-instance-manager.service';
@@ -371,7 +372,7 @@ describe('BotInstanceManager lifecycle', () => {
     await settleMicrotasks();
 
     expect(adapter.reconnectCalls).toBe(1);
-    expect(currentInstance().reconnecting).toBe(true);
+    expect(currentInstance().status).toBe(BotRuntimeStatus.RECONNECTING);
 
     await jest.advanceTimersByTimeAsync(500);
     expect(adapter.reconnectCalls).toBe(1);
@@ -379,7 +380,7 @@ describe('BotInstanceManager lifecycle', () => {
     reconnectConnect.resolve();
     await settleMicrotasks();
 
-    expect(currentInstance().reconnecting).toBe(false);
+    expect(currentInstance().status).toBe(BotRuntimeStatus.CONNECTED);
     expect(currentInstance().reconnectAttempts).toBe(0);
   });
 
@@ -447,7 +448,7 @@ describe('BotInstanceManager lifecycle', () => {
     await settleMicrotasks();
 
     expect(currentInstance().reconnectAttempts).toBe(1);
-    expect(currentInstance().reconnecting).toBe(true);
+    expect(currentInstance().status).toBe(BotRuntimeStatus.RECONNECTING);
     expect(currentInstance().reconnectTimer).toBeUndefined();
 
     await jest.advanceTimersByTimeAsync(1_000);
@@ -457,7 +458,8 @@ describe('BotInstanceManager lifecycle', () => {
     await settleMicrotasks();
 
     expect(currentInstance().reconnectAttempts).toBe(2);
-    expect(currentInstance().reconnecting).toBe(false);
+    // 第二次重连已调度（delay > 0），status 已提前标记为 RECONNECTING
+    expect(currentInstance().status).toBe(BotRuntimeStatus.RECONNECTING);
     expect(currentInstance().reconnectTimer).toBeDefined();
     expect(adapter.getStatus()).toBe(BotStatus.STOPPED);
 

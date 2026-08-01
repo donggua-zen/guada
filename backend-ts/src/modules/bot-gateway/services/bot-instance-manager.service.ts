@@ -9,6 +9,8 @@ import {
   IBotPlatform,
   BotConfig,
   BotStatus,
+  BotRuntimeStatus,
+  BotInstanceView,
 } from '../interfaces/bot-platform.interface';
 import { BotAdapterFactory } from './bot-adapter.factory';
 import { BotOrchestrator } from './bot-orchestrator.service';
@@ -17,10 +19,9 @@ import { PrismaService } from '../../../common/database/prisma.service';
 interface ManagedBotInstance {
   adapter: IBotPlatform;
   config: BotConfig;
+  status: BotRuntimeStatus;
   reconnectAttempts: number;
   reconnectTimer?: NodeJS.Timeout;
-  connecting: boolean;
-  reconnecting: boolean;
   reconnectTimedOut: boolean;
   disposed: boolean;
   subscriptions: Subscription[];
@@ -185,9 +186,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     const instance = {
       adapter,
       config,
+      status: BotRuntimeStatus.CONNECTING,
       reconnectAttempts: 0,
-      connecting: true,
-      reconnecting: false,
       reconnectTimedOut: false,
       disposed: false,
       subscriptions: [] as Subscription[],
@@ -201,7 +201,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       const messageSubscription = adapter.onMessage().subscribe({
         next: (message) => {
           void this.orchestrator
-            .enqueueMessage(config.id, message, config, adapter)
+            .enqueueMessage(config.id, message, instance)
             .catch((error: Error) => {
               this.logger.error(
                 `Failed to enqueue message for bot ${config.id}: ${error.message}`,
@@ -254,7 +254,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
 
       // 4. 最后才建立连接（确保不会丢失任何事件）
       await adapter.connect(config);
-      instance.connecting = false;
+      instance.status = BotRuntimeStatus.CONNECTED;
 
       this.logger.log(`Bot started successfully: ${config.id}`);
     } catch (error: any) {
@@ -340,6 +340,19 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * 获取机器人实例视图（供编排器使用）
+   */
+  getInstanceView(botId: string): BotInstanceView | undefined {
+    const instance = this.botInstances.get(botId);
+    if (!instance) return undefined;
+    return {
+      adapter: instance.adapter,
+      config: instance.config,
+      status: instance.status,
+    };
+  }
+
+  /**
    * 获取 Bot 配置（从内存中读取最新配置）
    */
   getBotConfig(botId: string): BotConfig | undefined {
@@ -404,6 +417,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     return instance.adapter.getStatus();
   }
 
+  /** 限流：委托给 Orchestrator 的共享限流器 */
+  throttleSend(botId: string, intervalMs: number): Promise<void> {
+    return this.orchestrator.throttleSend(botId, intervalMs);
+  }
+
   /**
    * 获取所有机器人状态
    */
@@ -445,7 +463,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
 
     // 防重入检查：已有待执行或正在执行的重连时跳过重复断开事件。
-    if (instance.connecting || instance.reconnectTimer || instance.reconnecting) {
+    if (instance.status === BotRuntimeStatus.CONNECTING || instance.status === BotRuntimeStatus.RECONNECTING || instance.reconnectTimer) {
       this.logger.warn(
         `Bot ${botId} already has a reconnect operation, skipping duplicate schedule`,
       );
@@ -474,8 +492,17 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     // 增加重试计数
     instance.reconnectAttempts++;
 
+    // 首次重连立即执行，后续使用配置的间隔
+    const delay = instance.reconnectAttempts === 1 ? 0 : retryInterval;
+
+    // 有延迟时立即标记为重连中，使编排器在等待期间正确判断状态；
+    // 无延迟（首次）时由定时器回调内设置，避免与上一次 finally 的重置产生竞争。
+    if (delay > 0) {
+      instance.status = BotRuntimeStatus.RECONNECTING;
+    }
+
     this.logger.log(
-      `Scheduling reconnect for bot ${botId} in ${retryInterval}ms (attempt ${instance.reconnectAttempts}/${maxRetries})`,
+      `Scheduling reconnect for bot ${botId} in ${delay}ms (attempt ${instance.reconnectAttempts}/${maxRetries})`,
     );
 
     // 设置重连定时器
@@ -485,7 +512,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       // 定时器触发前实例可能已经停止或被替换。
       if (this.botInstances.get(botId) !== instance) return;
 
-      instance.reconnecting = true;
+      instance.status = BotRuntimeStatus.RECONNECTING;
       instance.reconnectTimedOut = false;
       try {
         this.logger.log(`Attempting to reconnect bot ${botId}...`);
@@ -510,7 +537,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
             if (!instance.reconnectTimedOut) return;
 
             instance.reconnectTimedOut = false;
-            instance.reconnecting = false;
+            instance.status = BotRuntimeStatus.STOPPED;
             if (
               !instance.disposed &&
               this.botInstances.get(botId) === instance
@@ -553,12 +580,12 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         }
 
         // 重连调用本身失败时不一定会再次触发断开事件，因此按既有策略继续重试。
-        instance.reconnecting = false;
+        instance.status = BotRuntimeStatus.STOPPED;
         if (this.botInstances.get(botId) === instance) {
           this.scheduleReconnect(botId, config, error.message);
         }
       }
-    }, retryInterval);
+    }, delay);
   }
 
   /**
@@ -624,8 +651,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       clearTimeout(instance.reconnectTimer);
       instance.reconnectTimer = undefined;
     }
-    instance.reconnecting = false;
+    instance.status = BotRuntimeStatus.CONNECTED;
     instance.reconnectAttempts = 0;
+
+    // 重连成功后，补发重连期间积压的回复消息
+    void this.orchestrator.flushPendingReplies(botId, instance).catch((err) => {
+      this.logger.error(`Failed to flush pending replies for ${botId}: ${err.message}`);
+    });
   }
 
   private async handleReconnectExhausted(
@@ -684,6 +716,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
 
     instance.disposed = true;
+    instance.status = BotRuntimeStatus.STOPPED;
     this.logger.log(`Cleaning up bot instance: ${botId} (${reason})`);
 
     // 清除重连定时器

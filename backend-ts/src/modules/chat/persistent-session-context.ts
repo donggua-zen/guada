@@ -69,6 +69,12 @@ export class PersistentSessionContext implements ISessionContext {
   get characterId(): string | null {
     return this.session.characterId || null;
   }
+  get botId(): string | null {
+    return this.session.botId || null;
+  }
+  get externalId(): string | null {
+    return this.session.externalId || null;
+  }
 
   private readonly logger = new Logger(PersistentSessionContext.name);
 

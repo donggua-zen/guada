@@ -349,8 +349,9 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
     const thinkItem = items.find(i => i.type === 'think');
     const isThinking = thinkItem?.source.state?.isThinking;
     if (isThinking) {
-      const text = (thinkItem?.reasoningContent || '').replace(/\n/g, ' ').trim();
-      const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
+      const lines = (thinkItem?.reasoningContent || '').split('\n').map(l => l.trim()).filter(Boolean);
+      const lastLine = lines[lines.length - 1] || '';
+      const preview = lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
       return { icon: BrainCircuit20Regular, action: '正在思考...', args: preview };
     }
     return { icon: BrainCircuit20Regular, action: '已深度思考', args: '' };
@@ -411,10 +412,22 @@ const renderSkillBadges = (text: string): string => {
   if (!text) return text;
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return escaped.replace(
-    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
-    (_, prefix, provider, name, label) => {
-      const displayText = label || `${prefix}${name}`;
-      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" style="color: var(--el-color-primary);">${displayText}</span>`;
+    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g,
+    (match, prefix, provider, name, attrsStr) => {
+      const attrs: Record<string, string> = { label: '' };
+      if (attrsStr) {
+        const attrRegex = /(\w+)="([^"]*)"/g;
+        let m: RegExpExecArray | null;
+        while ((m = attrRegex.exec(attrsStr)) !== null) {
+          attrs[m[1]] = m[2];
+        }
+      }
+      const displayText = attrs.label || `${prefix}${name}`;
+      const dataAttrs = Object.entries(attrs)
+        .filter(([k]) => k !== 'label')
+        .map(([k, v]) => ` data-${k}="${v}"`)
+        .join('');
+      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${attrs.label || ''}" data-trigger="${prefix}"${dataAttrs} class="command-badge" style="color: var(--el-color-primary);">${displayText}</span>`;
     }
   );
 };

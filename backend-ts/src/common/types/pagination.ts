@@ -19,6 +19,21 @@ export interface PaginatedResponse<T> {
 }
 
 /**
+ * 游标分页响应类型
+ *
+ * 用于基于游标的分页接口（如搜索），避免 offset 分页的性能问题。
+ * 游标编码为 base64 字符串，客户端透传回服务端即可。
+ */
+export interface CursorPaginatedResponse<T> {
+  /** 数据列表 */
+  items: T[];
+  /** 是否还有更多数据 */
+  hasMore: boolean;
+  /** 下一页游标（hasMore 为 false 时为 null） */
+  nextCursor: string | null;
+}
+
+/**
  * 创建分页响应的辅助函数
  */
 export function createPaginatedResponse<T>(

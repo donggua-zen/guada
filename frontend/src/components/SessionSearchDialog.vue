@@ -4,16 +4,16 @@
     <!-- 搜索输入 -->
     <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <Search16Regular class="w-4 h-4 text-gray-400 shrink-0" />
-      <input ref="inputRef" v-model="keyword" type="text" placeholder="搜索会话标题..."
+      <input ref="inputRef" v-model="keyword" type="text" placeholder="搜索会话标题或内容..."
         class="flex-1 bg-transparent outline-none text-sm text-(--color-text) placeholder-gray-400"
         @keyup.enter="doSearch" @keyup.esc="dialogVisible = false" />
       <span v-if="isSearching" class="text-xs text-gray-400">搜索中...</span>
     </div>
 
     <!-- 搜索结果 -->
-    <div class="max-h-80 overflow-y-auto py-1">
+    <div ref="resultsScrollRef" class="max-h-80 overflow-y-auto py-1" @scroll="handleScroll">
       <!-- 加载状态 -->
-      <div v-if="isSearching" class="flex flex-col items-center justify-center py-10 text-gray-400">
+      <div v-if="isSearching && searchResults.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <el-icon class="animate-spin text-2xl mb-2">
           <Loading />
         </el-icon>
@@ -29,13 +29,30 @@
           </div>
           <!-- 分组内会话 -->
           <div v-for="session in group.sessions" :key="session.id"
-            class="flex items-center gap-2 px-4 py-2 mx-1 rounded-md cursor-pointer transition-colors duration-150 hover:bg-(--color-sidebar-bg-hover)"
+            class="flex flex-col gap-0.5 px-4 py-2 mx-1 rounded-md cursor-pointer transition-colors duration-150 hover:bg-(--color-sidebar-bg-hover)"
             @click="handleSelectSession(session)">
-            <div class="w-1.5 h-1.5 rounded-full bg-gray-400 opacity-50 shrink-0" />
-            <span class="flex-1 truncate text-sm text-(--color-text)" v-html="highlightText(session.title, keyword)">
-            </span>
-            <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
+            <div class="flex items-center gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-gray-400 opacity-50 shrink-0" />
+              <span class="flex-1 truncate text-sm text-(--color-text)" v-html="highlightText(session.title, keyword)">
+              </span>
+              <span v-if="session.matchType === 'content'"
+                class="text-xs text-blue-400 shrink-0 px-1 rounded bg-blue-50 dark:bg-blue-900/30">内容</span>
+              <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
+            </div>
+            <!-- 内容匹配片段 -->
+            <div v-if="session.matchSnippet" class="ml-3.5 text-xs text-gray-500 dark:text-gray-400 truncate"
+              v-html="formatSnippet(session.matchSnippet)">
+            </div>
           </div>
+        </div>
+
+        <!-- 加载更多 -->
+        <div v-if="isLoadingMore" class="flex items-center justify-center py-3 text-gray-400">
+          <el-icon class="animate-spin text-sm mr-1"><Loading /></el-icon>
+          <span class="text-xs">加载中...</span>
+        </div>
+        <div v-else-if="hasMore" class="flex items-center justify-center py-3 text-gray-400">
+          <button class="text-xs hover:text-(--color-text) transition-colors" @click="loadMore">加载更多</button>
         </div>
       </template>
 
@@ -63,7 +80,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { UNGROUPED_ID } from '@/stores/session'
-import type { Session } from '@/types/session'
+import type { SearchSessionResult } from '@/types/session'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -77,10 +94,14 @@ const dialogVisible = computed({
 })
 
 const inputRef = ref<HTMLInputElement | null>(null)
+const resultsScrollRef = ref<HTMLElement | null>(null)
 const keyword = ref('')
 const isSearching = ref(false)
 const hasSearched = ref(false)
-const searchResults = ref<Session[]>([])
+const searchResults = ref<SearchSessionResult[]>([])
+const nextCursor = ref<string | null>(null)
+const hasMore = ref(false)
+const isLoadingMore = ref(false)
 
 /** 搜索结果按分组归类，仅展示有结果的分组 */
 const groupedResults = computed(() => {
@@ -94,7 +115,7 @@ const groupedResults = computed(() => {
     updatedAt: '',
   })
 
-  const result: { id: string; name: string; sessions: Session[] }[] = []
+  const result: { id: string; name: string; sessions: SearchSessionResult[] }[] = []
   for (const group of groups) {
     const targetGroupId = group.id === UNGROUPED_ID ? null : group.id
     const sessions = searchResults.value.filter(s => (s.groupId || null) === targetGroupId)
@@ -110,14 +131,18 @@ const doSearch = async () => {
   if (!trimmed) {
     searchResults.value = []
     hasSearched.value = false
+    nextCursor.value = null
+    hasMore.value = false
     return
   }
 
   isSearching.value = true
   hasSearched.value = false
   try {
-    const data = await apiService.fetchSessions(0, 50, undefined, trimmed)
+    const data = await apiService.searchSessions(trimmed)
     searchResults.value = data.items || []
+    nextCursor.value = data.nextCursor
+    hasMore.value = data.hasMore
     hasSearched.value = true
   } catch (error) {
     console.error('搜索会话失败:', error)
@@ -136,10 +161,37 @@ watch(keyword, () => {
   } else {
     searchResults.value = []
     hasSearched.value = false
+    nextCursor.value = null
+    hasMore.value = false
   }
 })
 
-const handleSelectSession = (session: Session) => {
+const loadMore = async () => {
+  if (!hasMore.value || !nextCursor.value || isLoadingMore.value) return
+
+  isLoadingMore.value = true
+  try {
+    const data = await apiService.searchSessions(keyword.value.trim(), nextCursor.value)
+    searchResults.value = [...searchResults.value, ...(data.items || [])]
+    nextCursor.value = data.nextCursor
+    hasMore.value = data.hasMore
+  } catch (error) {
+    console.error('加载更多失败:', error)
+  } finally {
+    isLoadingMore.value = false
+  }
+}
+
+/** 滚动到底部自动加载 */
+const handleScroll = () => {
+  const el = resultsScrollRef.value
+  if (!el || !hasMore.value || isLoadingMore.value) return
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 30) {
+    loadMore()
+  }
+}
+
+const handleSelectSession = (session: SearchSessionResult) => {
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
   dialogVisible.value = false
 }
@@ -155,6 +207,8 @@ watch(dialogVisible, (visible) => {
     keyword.value = ''
     searchResults.value = []
     hasSearched.value = false
+    nextCursor.value = null
+    hasMore.value = false
   }
 })
 
@@ -172,6 +226,18 @@ function highlightText(text: string, query: string): string {
   } catch {
     return text
   }
+}
+
+/** 格式化 snippet — 将 FTS5 的 【】 标记转为高亮 */
+function formatSnippet(snippet: string): string {
+  if (!snippet) return ''
+  const escaped = snippet
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped
+    .replace(/【/g, '<mark class="bg-yellow-200 dark:bg-yellow-700 px-0.5 rounded">')
+    .replace(/】/g, '</mark>')
 }
 
 /** 格式化最后活跃时间 */

@@ -61,6 +61,23 @@ export class SessionsController {
     );
   }
 
+  @Get("sessions/search")
+  async searchSessions(
+    @Query("keyword") keyword: string | undefined,
+    @Query("cursor") cursor: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Query("includeArchived") includeArchived: string | undefined,
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.searchSessions(
+      user.id,
+      keyword?.trim() || "",
+      cursor,
+      limit ? parseInt(limit, 10) : 20,
+      includeArchived === "true",
+    );
+  }
+
   @Get("sessions/archived")
   async getArchivedSessions(
     @Query("skip") skip = 0,

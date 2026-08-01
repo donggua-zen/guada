@@ -340,6 +340,7 @@ export function buildMarkdownSrcDoc(
 <style>${markdownCssRaw}</style>
 <style>${hljsCssRaw}</style>
 <style>
+body::before{display:none;}
 body::after{display:none;}
 html,body{
   background: transparent !important;
@@ -378,6 +379,20 @@ ${html}
     if(url && url !== '#'){
       parent.postMessage({ type: 'md-preview-link', url: url }, '*');
     }
+  });
+  // 选区追踪：mouseup/keyup 时发送选中文本
+  function sendSelection(){
+    var sel = window.getSelection();
+    var text = sel ? sel.toString() : '';
+    parent.postMessage({ type: 'md-preview-selection', text: text }, '*');
+  }
+  document.addEventListener('mouseup', sendSelection);
+  document.addEventListener('keyup', sendSelection);
+  // 右键菜单 → 通知父页面（携带选区文本和坐标）
+  document.addEventListener('contextmenu', function(e){
+    var sel = window.getSelection();
+    var text = sel ? sel.toString() : '';
+    parent.postMessage({ type: 'md-preview-contextmenu', text: text, x: e.clientX, y: e.clientY }, '*');
   });
 })();
 <\/script>

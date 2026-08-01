@@ -17,6 +17,7 @@ export interface StagedCipherPayload {
     cipherBudget: number;
     originalName: string;
     mime: string;
+    taskId?: string;
 }
 
 function cdnPullUrl(handle: string, cdnRoot: string): string {
@@ -28,16 +29,12 @@ function cdnPushUrl(root: string, uploadToken: string, slotKey: string): string 
 }
 
 async function postCiphertextToEdge(
-    transport: IlinkJsonTransport,
-    uploadToken: string,
-    slotKey: string,
+    uploadUrl: string,
     key16: Buffer,
     plain: Buffer,
 ): Promise<string> {
     const body = sealAes128Ecb(plain, key16);
-    const response = await fetch(
-        cdnPushUrl(transport.cdnBaseUrl, uploadToken, slotKey),
-        {
+    const response = await fetch(uploadUrl, {
             method: "POST",
             headers: { "Content-Type": "application/octet-stream" },
             body: new Uint8Array(body),
@@ -89,14 +86,24 @@ export async function stageBinaryForPeer(params: {
         aeskey: key16.toString("hex"),
     });
 
-    if (!grant.upload_param) {
-        throw new GatewayFault("UPLOAD_URL_MISSING", "reserveCdnUploadSlot 未返回 upload_param");
+    if (!grant.upload_full_url && !grant.upload_param) {
+        throw new GatewayFault("UPLOAD_URL_MISSING", "reserveCdnUploadSlot 未返回 upload_full_url 或 upload_param");
+    }
+
+    const uploadUrl = grant.upload_full_url
+        ?? cdnPushUrl(params.transport.cdnBaseUrl, grant.upload_param!, slotKey);
+
+    // Extract taskid from upload_full_url query params if present
+    let taskId: string | undefined;
+    if (grant.upload_full_url) {
+        try {
+            const url = new URL(grant.upload_full_url);
+            taskId = url.searchParams.get("taskid") ?? undefined;
+        } catch { /* ignore parse errors */ }
     }
 
     const remoteHandle = await postCiphertextToEdge(
-        params.transport,
-        grant.upload_param,
-        slotKey,
+        uploadUrl,
         key16,
         blob.buffer,
     );
@@ -109,6 +116,7 @@ export async function stageBinaryForPeer(params: {
         cipherBudget: padded,
         originalName: blob.fileName,
         mime: blob.contentType,
+        taskId,
     };
 }
 

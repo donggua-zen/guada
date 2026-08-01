@@ -17,7 +17,7 @@
       <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">已添加的供应商</div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <div v-for="provider in items" :key="provider.id"
-          class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200">
+          class="provider-card group relative bg-(--color-surface) border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200">
           <div class="flex items-start gap-3">
             <Avatar
               :src="getProviderIcon(provider)"
@@ -67,7 +67,7 @@
       <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">可添加的供应商</div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div v-for="template in templates" :key="template.id"
-          class="provider-card template-card relative border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
+          class="provider-card template-card relative border border-gray-200 dark:border-[#232428] bg-(--color-surface) rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
           <div class="flex items-start gap-3">
             <Avatar
               :src="getProviderIcon(template)"

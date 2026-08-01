@@ -1,0 +1,268 @@
+/* ============================================================
+   主题：千禧铬彩（y2k）
+   风格：Y2K 千禧年 · 液态金属 · 镭射幻彩 · 高光胶囊
+   说明：2000 年前后的消费电子美学——银白液态铬、糖果色镭射光晕、
+        带内高光的胶囊形控件，像一台半透明的 iMac G3 或
+        刚拆封的 MD 随身听。圆润、反光、乐观。
+   ============================================================ */
+
+/* ---------- 亮色模式：银白铬面 ---------- */
+[data-theme="y2k"] {
+  /* 主色：电子蓝紫 */
+  --color-primary: #6673f0;
+  --color-primary-hover: #4f5ce0;
+  --color-primary-active: #3c46b8;
+  --color-primary-disabled: #b9c0f5;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.6);
+  --color-primary-50:  #f0f2fe;
+  --color-primary-100: #e0e4fd;
+  --color-primary-200: #c2c9fb;
+  --color-primary-300: #9da8f8;
+  --color-primary-400: #7d8af3;
+  --color-primary-500: #6673f0;
+  --color-primary-600: #4f5ce0;
+  --color-primary-700: #3c46b8;
+  --color-primary-800: #2b3288;
+  --color-primary-900: #1b1f58;
+  --color-primary-950: #0e1030;
+
+  /* 副色：糖果粉 */
+  --color-secondary: #e854ae;
+  --color-secondary-hover: #d13b97;
+  --color-secondary-active: #a82c78;
+  --color-secondary-disabled: #f2b3da;
+  --color-secondary-text: #ffffff;
+  --color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
+  --color-secondary-50:  #fdf0f8;
+  --color-secondary-100: #fbdcf0;
+  --color-secondary-200: #f6b9e0;
+  --color-secondary-300: #f191cf;
+  --color-secondary-400: #ef6fbe;
+  --color-secondary-500: #e854ae;
+  --color-secondary-600: #d13b97;
+  --color-secondary-700: #a82c78;
+  --color-secondary-800: #7a1f57;
+  --color-secondary-900: #4d1337;
+  --color-secondary-950: #2b0a1e;
+
+  /* 基础表面与文字 */
+  --color-text: #2a2f45;
+  --color-text-gray: #6b7290;
+  --color-text-disabled: #aab0c8;
+  --color-surface: #f4f6fb;
+  --color-surface-border: #d3d8e8;
+  --color-bg: #e3e7f0;
+  --color-border: #c3c9d9;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #eceff7;
+  --color-sidebar-bg-active: #dbe1f2;
+  --color-sidebar-bg-hover: #e2e7f4;
+  --color-sidebar-text: #2a2f45;
+  --color-sidebar-text-hover: #2a2f45;
+  --color-sidebar-text-active: #2a2f45;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #eceff7;
+  --color-titlebar-border: #d3d8e8;
+  --titlebar-text-color: #2a2f45;
+  --titlebar-hover-bg: #dbe1f2;
+
+  /* 会话列表 */
+  --color-conversation-bg: #e3e7f0;
+  --color-conversation-text: #2a2f45;
+  --color-conversation-border: #d3d8e8;
+  --color-conversation-bg-active: #dbe1f2;
+  --color-conversation-text-active: #2a2f45;
+  --color-conversation-bg-hover: #e2e7f4;
+  --color-conversation-text-hover: #2a2f45;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #dfe4fb;
+  --color-bubble-user-text: #232a68;
+  --color-bubble-user-border: #b9c2f2;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #2a2f45;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #4f5ce0;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #aab0c8;
+  --shimmer-highlight: #2a2f45;
+  --theme-font: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 暗色模式：午夜镭射 ---------- */
+html.dark[data-theme="y2k"] {
+  /* 主色：夜光蓝紫 */
+  --color-primary: #8f9bff;
+  --color-primary-hover: #a6b0ff;
+  --color-primary-active: #7b88f5;
+  --color-primary-disabled: #3c4380;
+  --color-primary-text: #14163a;
+  --color-primary-text-disabled: rgba(20, 22, 58, 0.55);
+  --color-primary-50:  #0e1030;
+  --color-primary-100: #1b1f58;
+  --color-primary-200: #2b3288;
+  --color-primary-300: #3c46b8;
+  --color-primary-400: #6673f0;
+  --color-primary-500: #8f9bff;
+  --color-primary-600: #a6b0ff;
+  --color-primary-700: #bec5ff;
+  --color-primary-800: #d6daff;
+  --color-primary-900: #ebedff;
+  --color-primary-950: #f6f7ff;
+
+  /* 副色：荧光粉 */
+  --color-secondary: #ff8ad4;
+  --color-secondary-hover: #ffa1dd;
+  --color-secondary-active: #f573c8;
+  --color-secondary-disabled: #6e2f56;
+  --color-secondary-text: #3d0f2e;
+  --color-secondary-text-disabled: rgba(61, 15, 46, 0.55);
+  --color-secondary-50:  #2b0a1e;
+  --color-secondary-100: #4d1337;
+  --color-secondary-200: #7a1f57;
+  --color-secondary-300: #a82c78;
+  --color-secondary-400: #e854ae;
+  --color-secondary-500: #ff8ad4;
+  --color-secondary-600: #ffa1dd;
+  --color-secondary-700: #ffb9e5;
+  --color-secondary-800: #ffd2ee;
+  --color-secondary-900: #ffe9f6;
+  --color-secondary-950: #fff5fb;
+
+  /* 基础表面与文字 */
+  --color-text: #e4e7f7;
+  --color-text-gray: #8f95b8;
+  --color-text-disabled: #4d5378;
+  --color-surface: #1a1d30;
+  --color-surface-border: #30355a;
+  --color-bg: #101221;
+  --color-border: #2c3152;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #141628;
+  --color-sidebar-bg-active: #252a4a;
+  --color-sidebar-bg-hover: #1d2038;
+  --color-sidebar-text: #e4e7f7;
+  --color-sidebar-text-hover: #e4e7f7;
+  --color-sidebar-text-active: #e4e7f7;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #141628;
+  --color-titlebar-border: #30355a;
+  --titlebar-text-color: #e4e7f7;
+  --titlebar-hover-bg: #252a4a;
+
+  /* 会话列表 */
+  --color-conversation-bg: #101221;
+  --color-conversation-text: #e4e7f7;
+  --color-conversation-border: #30355a;
+  --color-conversation-bg-active: #252a4a;
+  --color-conversation-text-active: #e4e7f7;
+  --color-conversation-bg-hover: #1d2038;
+  --color-conversation-text-hover: #e4e7f7;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #2c3262;
+  --color-bubble-user-text: #dfe4ff;
+  --color-bubble-user-border: #4a529e;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #e4e7f7;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #a6b0ff;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #4d5378;
+  --shimmer-highlight: #e4e7f7;
+  --theme-font: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="y2k"] body {
+  font-family: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 镭射幻彩光晕：粉 / 薄荷 / 蓝紫三色漂浮 */
+html[data-theme="y2k"] body::before {
+  background-image:
+    radial-gradient(800px 500px at 90% -5%, rgba(232, 84, 174, 0.16), transparent 60%),
+    radial-gradient(700px 500px at -5% 105%, rgba(102, 115, 240, 0.18), transparent 60%),
+    radial-gradient(600px 400px at 50% 110%, rgba(110, 231, 200, 0.12), transparent 60%);
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="y2k"] body::before {
+  background-image:
+    radial-gradient(800px 500px at 90% -5%, rgba(255, 138, 212, 0.12), transparent 60%),
+    radial-gradient(700px 500px at -5% 105%, rgba(143, 155, 255, 0.14), transparent 60%),
+    radial-gradient(600px 400px at 50% 110%, rgba(110, 231, 200, 0.08), transparent 60%);
+}
+
+/* 用户气泡：液态铬胶囊，顶部内高光 + 渐变 */
+html[data-theme="y2k"] .user-section .message-item__card {
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-bubble-user-bg) 55%);
+  border: 1px solid var(--color-bubble-user-border);
+  border-radius: 20px 20px 6px 20px;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    0 4px 14px rgba(102, 115, 240, 0.20);
+}
+html.dark[data-theme="y2k"] .user-section .message-item__card {
+  background: linear-gradient(180deg, #3a4178 0%, var(--color-bubble-user-bg) 60%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* 助手消息：幻彩渐变底衬 */
+html[data-theme="y2k"] .assistant-section .message-item__card {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-primary) 8%, transparent),
+    color-mix(in srgb, var(--color-secondary) 8%, transparent));
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+/* 左栏 / 右栏：铬面反光槽 */
+html[data-theme="y2k"] .global-sidebar {
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.6), inset -8px 0 18px rgba(102, 115, 240, 0.06);
+}
+html.dark[data-theme="y2k"] .global-sidebar {
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06), inset -8px 0 18px rgba(0, 0, 0, 0.25);
+}
+html[data-theme="y2k"] .workspace-sidebar {
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.6), inset 8px 0 18px rgba(232, 84, 174, 0.06);
+}
+html.dark[data-theme="y2k"] .workspace-sidebar {
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06), inset 8px 0 18px rgba(0, 0, 0, 0.25);
+}
+
+/* 输入框：全圆角胶囊 + 顶部高光 */
+html[data-theme="y2k"] .mock-inputbar {
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-surface) 70%);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    0 6px 20px rgba(102, 115, 240, 0.16);
+}
+html.dark[data-theme="y2k"] .mock-inputbar {
+  background: linear-gradient(180deg, #232748 0%, var(--color-surface) 70%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.14),
+    0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* 代码块：半透明糖壳 */
+html[data-theme="y2k"] .md-code {
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}

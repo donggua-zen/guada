@@ -56,6 +56,9 @@
                                 <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">
                                     内置
                                 </el-tag>
+                                <el-tag v-else-if="skill.source === 'agents'" type="warning" size="small" effect="light">
+                                    共享
+                                </el-tag>
                                 <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain"
                                     style="margin-top: 2px;">
                                     v{{ skill.manifest.version }}
@@ -82,7 +85,7 @@
                                     </template>
                                     重载
                                 </el-button>
-                                <el-button v-if="skill.source !== 'system'" link size="small" type="danger"
+                                <el-button v-if="skill.source !== 'system' && skill.source !== 'agents'" link size="small" type="danger"
                                     @click="handleUninstallSkill(skill.id)"
                                     :loading="uninstallingSkills.has(skill.id)">
                                     <template #icon>
@@ -90,6 +93,14 @@
                                     </template>
                                     卸载
                                 </el-button>
+                                <el-tooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
+                                    <el-button link size="small" type="danger" disabled>
+                                        <template #icon>
+                                            <DeleteOutlined />
+                                        </template>
+                                        卸载
+                                    </el-button>
+                                </el-tooltip>
                             </div>
                         </div>
                     </div>
@@ -333,7 +344,7 @@ interface SkillManifest {
     tags?: string[]
 }
 
-type SkillSource = 'global' | 'system'
+type SkillSource = 'global' | 'system' | 'agents'
 
 interface Skill {
     id: string

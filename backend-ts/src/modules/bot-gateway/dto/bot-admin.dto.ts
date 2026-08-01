@@ -44,6 +44,10 @@ export class CreateBotDto {
   defaultModelId?: string;
 
   @IsOptional()
+  @IsString()
+  defaultThinkingEffort?: string;
+
+  @IsOptional()
   @IsObject()
   additionalKwargs?: any;
 
@@ -80,6 +84,10 @@ export class UpdateBotDto {
   @IsOptional()
   @IsString()
   defaultModelId?: string;
+
+  @IsOptional()
+  @IsString()
+  defaultThinkingEffort?: string;
 
   @IsOptional()
   @IsObject()

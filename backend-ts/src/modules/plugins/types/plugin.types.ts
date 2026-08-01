@@ -246,6 +246,23 @@ export interface LLMResponseEvent {
   pluginId?: string;
 }
 
+// ==================== 回合拦截器 ====================
+
+/**
+ * 回合拦截器（Turn Interceptor）
+ *
+ * 在 AgentEngine 的 do...while 循环退出后（AI 认为对话可以结束），
+ * 但在 SSE 关闭前执行。如果拦截器返回非 null 字符串，则作为 hidden user
+ * 消息注入到当前 assistant 消息下，并触发新一轮 LLM 调用。
+ *
+ * 典型场景：shell 插件检测到子代理仍有未完成的后台进程，
+ * 注入"你必须等待任务结束"消息强制 AI 继续工作。
+ */
+export interface TurnInterceptor {
+  name: string;
+  intercept: (ctx: PluginContext) => Promise<string | null>;
+}
+
 // ==================== 插件决议信息 ====================
 
 /**
@@ -271,6 +288,8 @@ export interface ResolvedPluginInfo {
     activator?: string;
     enabled: boolean;
   }>;
+  /** 注册的回合拦截器 */
+  interceptors: TurnInterceptor[];
   /** 插件来源 */
   source?: "builtin" | "dev" | "user";
   /** 插件目录路径（仅外部插件） */

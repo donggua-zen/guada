@@ -13,7 +13,7 @@ export interface SkillManifest {
 /**
  * 技能来源类型
  */
-export type SkillSourceType = 'system' | 'global' | 'workspace';
+export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace';
 
 /**
  * 完整 Skill 定义（内存表示）

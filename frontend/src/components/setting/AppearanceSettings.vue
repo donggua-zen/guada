@@ -1,13 +1,14 @@
 <template>
   <div class="flex-1 overflow-hidden">
     <div class="space-y-8">
-      <!-- 主题模式分组 -->
+      <!-- 主题模式分组（含主题预设） -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">主题模式</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
         >
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+          <!-- 显示模式 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">显示模式</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
@@ -29,6 +30,50 @@
               </button>
             </div>
           </div>
+
+          <!-- 配色主题（当前模式） -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">配色主题</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                为当前{{ isDark ? '深色' : '浅色' }}模式选择主色调，浅色/深色可分别设置
+              </span>
+            </div>
+            <div class="shrink-0 w-52">
+              <el-select
+                v-model="selectedThemePreset"
+                @change="handleThemePresetChange"
+                placeholder="选择主题"
+                size="default"
+              >
+                <el-option
+                  v-for="theme in themePresetList"
+                  :key="theme.id"
+                  :label="theme.name"
+                  :value="theme.id"
+                >
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block w-3 h-3 rounded-full shrink-0"
+                      :style="{ backgroundColor: theme.primaryColor }"
+                    />
+                    <span
+                      class="inline-block w-3 h-3 rounded-full shrink-0"
+                      :style="{ backgroundColor: theme.secondaryColor }"
+                    />
+                    <span>{{ theme.name }}</span>
+                  </div>
+                </el-option>
+                <template #prefix>
+                  <span
+                    v-if="currentThemeInfo"
+                    class="inline-block w-3 h-3 rounded-full shrink-0"
+                    :style="{ backgroundColor: currentThemeInfo.primaryColor }"
+                  />
+                </template>
+              </el-select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -36,7 +81,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">背景壁纸</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
         >
           <!-- 壁纸预览与上传 -->
           <div class="px-4 py-3.5 flex flex-col gap-4">
@@ -97,7 +142,7 @@
       <div v-if="previewUrl">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">透明度调节</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
         >
           <!-- 侧边栏透明度 -->
           <div
@@ -153,7 +198,7 @@
       <div v-if="previewUrl">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">毛玻璃效果</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
         >
           <!-- 毛玻璃开关 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
@@ -195,7 +240,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">悬浮任务状态</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
         >
           <!-- 显隐开关 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
@@ -242,17 +287,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, markRaw } from 'vue'
-import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon } from 'element-plus'
+import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
+import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
+import { themePresets, type ThemePresetInfo } from '@/themes'
 
 const layoutStore = useLayoutStore()
-const { themeMode, setTheme } = useTheme()
+const { themeMode, setTheme, isDark, activeThemePreset, setActiveThemePreset,
+        setLightThemePreset, setDarkThemePreset } = useTheme()
+
+// 主题预设
+const themePresetList = themePresets
+// 下拉绑定当前生效的预设（浅色/暗色自动切换）
+const selectedThemePreset = ref<string>(activeThemePreset.value)
+const currentThemeInfo = computed<ThemePresetInfo | undefined>(() =>
+  themePresets.find(t => t.id === selectedThemePreset.value)
+)
+
+// 显示模式切换时，下拉同步到对应模式的预设
+watch(activeThemePreset, (val) => {
+  selectedThemePreset.value = val
+})
+
+const handleThemePresetChange = (val: string) => {
+  setActiveThemePreset(val)
+  handleSave()
+}
 
 const themeOptions = [
   { label: '浅色', value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
@@ -330,6 +395,15 @@ const loadSettings = async () => {
     settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 95
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
+    // 同步主题预设（后端优先，覆盖本地 localStorage）
+    if (response.lightThemePreset) {
+      setLightThemePreset(response.lightThemePreset)
+    }
+    if (response.darkThemePreset) {
+      setDarkThemePreset(response.darkThemePreset)
+    }
+    selectedThemePreset.value = activeThemePreset.value
+
     // 同步到 layout store
     syncToLayoutStore()
     // 同步到 Electron 主进程
@@ -354,6 +428,7 @@ const syncToLayoutStore = () => {
 // 保存设置
 const handleSave = async () => {
   try {
+    const { lightThemePreset, darkThemePreset } = useTheme()
     const dataToSave = {
       sidebarOpacity: settingsForm.sidebarOpacity,
       contentOpacity: settingsForm.contentOpacity,
@@ -362,6 +437,8 @@ const handleSave = async () => {
       wallpaperUrl: extractRelativePath(previewUrl.value),
       floatWidgetEnabled: settingsForm.floatWidgetEnabled,
       floatWidgetOpacity: settingsForm.floatWidgetOpacity,
+      lightThemePreset: lightThemePreset.value,
+      darkThemePreset: darkThemePreset.value,
     }
 
     await apiService.updateGroupSettings('appearance', dataToSave)
@@ -463,6 +540,11 @@ const handleReset = async () => {
   settingsForm.blurRadius = 20
   settingsForm.floatWidgetEnabled = false
   settingsForm.floatWidgetOpacity = 95
+
+  // 重置主题预设
+  setLightThemePreset('default')
+  setDarkThemePreset('default')
+  selectedThemePreset.value = 'default'
 
   if (previewUrl.value) {
     try {

@@ -98,7 +98,10 @@ export class MessageService {
         ...msg,
         files: filesWithAbsoluteUrls,
         contents: msg.contents
-          .filter((content) => content.role !== "tool")
+          .filter(
+            (content) =>
+              content.role !== "tool" && !content.metadata?.hidden,
+          )
           .map((content) => this.stripToolCallDetails(content)),
         metadata: msg.metadata
           ? this.stripSystemPayload(msg.metadata as Record<string, any>)

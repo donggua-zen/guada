@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse } from "@/types/session";
 
 export interface SessionApi {
   createSession(data: any): Promise<Session>;
@@ -7,6 +7,7 @@ export interface SessionApi {
   fetchSession(sessionId: string): Promise<Session>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
+  searchSessions(keyword: string, cursor?: string, limit?: number, includeArchived?: boolean): Promise<SearchSessionResponse>;
   archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: any }>;
   batchArchiveSessions(sessionIds: string[], archived: boolean): Promise<{ success: boolean; skipped: string[] }>;
   updateSession(sessionId: string, data: any): Promise<Session>;
@@ -329,6 +330,15 @@ export const sessionApi: SessionApi = {
     const url = queryString ? `/sessions/archived?${queryString}` : "/sessions/archived";
 
     return await this._request(url);
+  },
+
+  async searchSessions(this: ApiContext, keyword: string, cursor?: string, limit?: number, includeArchived?: boolean) {
+    const params = new URLSearchParams();
+    params.append("keyword", keyword);
+    if (cursor) params.append("cursor", cursor);
+    if (limit) params.append("limit", limit.toString());
+    if (includeArchived) params.append("includeArchived", "true");
+    return await this._request(`/sessions/search?${params.toString()}`);
   },
 
   async archiveSession(this: ApiContext, sessionId: string, archived: boolean) {

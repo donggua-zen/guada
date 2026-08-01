@@ -1,0 +1,242 @@
+/* ============================================================
+   主题：墨水屏（e-ink）
+   风格：电子纸 · 墨水屏 · 极简灰阶 · 纸张质感
+   说明：模拟 Kindle / reMarkable 等电子纸设备的视觉体验。
+        全灰阶配色，无饱和色，圆角收敛，细线边框。
+        主色用深灰替代彩色，交互态靠明度差而非色相变化。
+        亮色是米白纸面 + 炭灰墨迹；暗色是夜间阅读模式，
+        背景微暖深灰，文字柔白，模拟前光灯下的墨水屏。
+   ============================================================ */
+
+/* ---------- 亮色模式：米白纸面 ---------- */
+[data-theme="e-ink"] {
+  /* 主色：炭灰墨迹 */
+  --color-primary: #3a3a3a;
+  --color-primary-hover: #555555;
+  --color-primary-active: #2a2a2a;
+  --color-primary-disabled: #b0b0b0;
+  --color-primary-text: #f5f1e8;
+  --color-primary-text-disabled: rgba(245, 241, 232, 0.55);
+
+  --color-primary-50:  #f5f1e8;
+  --color-primary-100: #ebe7dc;
+  --color-primary-200: #d6d1c4;
+  --color-primary-300: #b8b3a6;
+  --color-primary-400: #8a8578;
+  --color-primary-500: #6a6558;
+  --color-primary-600: #555550;
+  --color-primary-700: #3a3a3a;
+  --color-primary-800: #2a2a2a;
+  --color-primary-900: #1a1a1a;
+  --color-primary-950: #0e0e0e;
+
+  /* 副色：淡灰，仅做区分 */
+  --color-secondary: #8a8578;
+  --color-secondary-hover: #6a6558;
+  --color-secondary-active: #555550;
+  --color-secondary-disabled: #c4bfb2;
+  --color-secondary-text: #f5f1e8;
+  --color-secondary-text-disabled: rgba(245, 241, 232, 0.55);
+  --color-secondary-50:  #f0ece2;
+  --color-secondary-100: #e2ddd0;
+  --color-secondary-200: #c9c3b4;
+  --color-secondary-300: #aaa498;
+  --color-secondary-400: #8a8578;
+  --color-secondary-500: #6a6558;
+  --color-secondary-600: #555550;
+  --color-secondary-700: #3a3a3a;
+  --color-secondary-800: #2a2a2a;
+  --color-secondary-900: #1a1a1a;
+  --color-secondary-950: #0e0e0e;
+
+  /* 基础表面与文字 */
+  --color-text: #2a2a2a;
+  --color-text-gray: #6a6558;
+  --color-text-disabled: #b0aaa0;
+  --color-surface: #ede9de;
+  --color-surface-border: #d0cabb;
+  --color-bg: #f5f1e8;
+  --color-border: #c4bfb2;
+
+  /* 侧边栏（左栏）：略深的纸面 */
+  --color-sidebar-bg: #ede9de;
+  --color-sidebar-bg-active: #d6d1c4;
+  --color-sidebar-bg-hover: #e2ddd0;
+  --color-sidebar-text: #2a2a2a;
+  --color-sidebar-text-hover: #2a2a2a;
+  --color-sidebar-text-active: #1a1a1a;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #ede9de;
+  --color-titlebar-border: #d0cabb;
+  --titlebar-text-color: #2a2a2a;
+  --titlebar-hover-bg: #d6d1c4;
+
+  /* 会话列表 */
+  --color-conversation-bg: #f5f1e8;
+  --color-conversation-text: #2a2a2a;
+  --color-conversation-border: #d0cabb;
+  --color-conversation-bg-active: #d6d1c4;
+  --color-conversation-text-active: #1a1a1a;
+  --color-conversation-bg-hover: #e2ddd0;
+  --color-conversation-text-hover: #2a2a2a;
+
+  /* 输入框背景 */
+  --color-input-bg: #f5f1e8;
+  --color-input-border: #c4bfb2;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #e2ddd0;
+  --color-bubble-user-text: #1a1a1a;
+  --color-bubble-user-border: #c4bfb2;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #2a2a2a;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #1a1a1a;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #b0aaa0;
+  --shimmer-highlight: #2a2a2a;
+}
+html.dark[data-theme="e-ink"] {
+  /* 主色：柔白墨迹 */
+  --color-primary: #c8c4b8;
+  --color-primary-hover: #d8d4c8;
+  --color-primary-active: #b0aca0;
+  --color-primary-disabled: #555550;
+  --color-primary-text: #1a1a18;
+  --color-primary-text-disabled: rgba(26, 26, 24, 0.5);
+
+  --color-primary-50:  #1a1a18;
+  --color-primary-100: #252522;
+  --color-primary-200: #3a3a36;
+  --color-primary-300: #555550;
+  --color-primary-400: #8a8578;
+  --color-primary-500: #aaa498;
+  --color-primary-600: #c8c4b8;
+  --color-primary-700: #d8d4c8;
+  --color-primary-800: #e2ddd0;
+  --color-primary-900: #ede9de;
+  --color-primary-950: #f5f1e8;
+
+  /* 副色：暖灰 */
+  --color-secondary: #8a8578;
+  --color-secondary-hover: #aaa498;
+  --color-secondary-active: #6a6558;
+  --color-secondary-disabled: #3a3a36;
+  --color-secondary-text: #1a1a18;
+  --color-secondary-text-disabled: rgba(26, 26, 24, 0.5);
+  --color-secondary-50:  #181816;
+  --color-secondary-100: #222220;
+  --color-secondary-200: #363632;
+  --color-secondary-300: #505048;
+  --color-secondary-400: #6a6558;
+  --color-secondary-500: #8a8578;
+  --color-secondary-600: #aaa498;
+  --color-secondary-700: #c8c4b8;
+  --color-secondary-800: #d8d4c8;
+  --color-secondary-900: #e2ddd0;
+  --color-secondary-950: #f0ece2;
+
+  /* 基础表面与文字 */
+  --color-text: #c8c4b8;
+  --color-text-gray: #8a8578;
+  --color-text-disabled: #555550;
+  --color-surface: #1e1e1c;
+  --color-surface-border: #3a3a36;
+  --color-bg: #181816;
+  --color-border: #3a3a36;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #1e1e1c;
+  --color-sidebar-bg-active: #3a3a36;
+  --color-sidebar-bg-hover: #28282a;
+  --color-sidebar-text: #c8c4b8;
+  --color-sidebar-text-hover: #d8d4c8;
+  --color-sidebar-text-active: #e2ddd0;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #1e1e1c;
+  --color-titlebar-border: #3a3a36;
+  --titlebar-text-color: #c8c4b8;
+  --titlebar-hover-bg: #3a3a36;
+
+  /* 会话列表 */
+  --color-conversation-bg: #181816;
+  --color-conversation-text: #c8c4b8;
+  --color-conversation-border: #3a3a36;
+  --color-conversation-bg-active: #3a3a36;
+  --color-conversation-text-active: #e2ddd0;
+  --color-conversation-bg-hover: #28282a;
+  --color-conversation-text-hover: #d8d4c8;
+
+  /* 输入框背景 */
+  --color-input-bg: #181816;
+  --color-input-border: #3a3a36;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #2a2a28;
+  --color-bubble-user-text: #d8d4c8;
+  --color-bubble-user-border: #3a3a36;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #c8c4b8;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #e2ddd0;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #555550;
+  --shimmer-highlight: #c8c4b8;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 纸张纤维纹理：极淡的横纹，模拟电子纸表面 */
+html[data-theme="e-ink"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(58, 58, 58, 0.018) 0 1px, transparent 1px 3px);
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="e-ink"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(200, 196, 184, 0.015) 0 1px, transparent 1px 3px);
+}
+
+/* 用户气泡：细线边框，像纸上批注 */
+html[data-theme="e-ink"] .user-section .message-item__card {
+  border: 1px solid var(--color-bubble-user-border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+/* 助手消息：无边框，纯净阅读 */
+html[data-theme="e-ink"] .assistant-section .message-item__card {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* 左栏 / 右栏：细线分割，无阴影 */
+html[data-theme="e-ink"] .global-sidebar {
+  border-right: 1px solid var(--color-border);
+  box-shadow: none;
+}
+html[data-theme="e-ink"] .workspace-sidebar {
+  border-left: 1px solid var(--color-border);
+}
+
+/* 输入框：细线框，圆角收敛 */
+html[data-theme="e-ink"] .mock-inputbar {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+/* 代码块：细线框 */
+html[data-theme="e-ink"] .md-code {
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  box-shadow: none;
+}

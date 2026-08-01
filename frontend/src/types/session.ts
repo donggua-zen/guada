@@ -125,3 +125,20 @@ export interface SessionListResponse {
     pageSize: number
     hasMore?: boolean
 }
+
+/**
+ * 搜索结果项（扩展 Session，附带匹配信息）
+ */
+export interface SearchSessionResult extends Session {
+    matchType: 'title' | 'content'
+    matchSnippet?: string
+}
+
+/**
+ * 搜索响应（游标分页）
+ */
+export interface SearchSessionResponse {
+    items: SearchSessionResult[]
+    hasMore: boolean
+    nextCursor: string | null
+}

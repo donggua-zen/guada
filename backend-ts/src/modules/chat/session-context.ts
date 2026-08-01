@@ -123,6 +123,10 @@ export interface ISessionContext {
   readonly parentSessionId?: string | null;
   /** 当前会话绑定的角色 ID（无角色时为 null） */
   readonly characterId?: string | null;
+  /** 机器人 ID（仅 bot 会话有值） */
+  readonly botId?: string | null;
+  /** 外部 ID（bot 会话中为 "platform:type:nativeId"，nativeId 即平台 conversationId） */
+  readonly externalId?: string | null;
 
   // === 运行模式 ===
   /** 获取当前会话运行模式 */

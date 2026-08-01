@@ -40,7 +40,8 @@
 
               <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
               <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
-                :hide-header="activeTabId !== 'main'"
+                :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+                @switch-agent="switchTab"
                 @save-settings="handleSaveSessionSettings"
                 @select-character="handleSelectCharacter" />
 
@@ -52,8 +53,7 @@
 
           <template #pane2>
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
-              :agent-tabs="agentTabs" :active-tab-id="activeTabId"
-              @switch-agent="switchTab" @insert-to-input="handleInsertToInput" />
+              @insert-to-input="handleInsertToInput" @insert-snip="handleInsertSnip" />
           </template>
         </LiteSplitpanes>
       </div>
@@ -557,6 +557,16 @@ function handleInsertToInput(path: string) {
   }
 }
 
+/**
+ * 将选区 snip 徽标插入到聊天输入框
+ */
+function handleInsertSnip(data: any) {
+  const chatPanel = chatPanelRef.value;
+  if (chatPanel && chatPanel.insertBadge) {
+    chatPanel.insertBadge(data);
+  }
+}
+
 // 监听器
 
 // 监听当前会话的变化，更新页面标题
@@ -656,7 +666,7 @@ onUnmounted(() => {
 }
 
 :deep(.splitpanes.default-theme .splitpanes__splitter) {
-  background-color: var(--color-surface, #f5f5f5);
+  background-color: var(--color-sidebar-bg, #f5f5f5);
   position: relative;
   transition: background-color 0.2s ease;
 }

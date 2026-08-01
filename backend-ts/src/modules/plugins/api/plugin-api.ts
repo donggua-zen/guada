@@ -7,6 +7,7 @@ import {
   ToolKitDef,
   ToolKitHandle,
   ToolKitRegistration,
+  TurnInterceptor,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
@@ -94,6 +95,15 @@ export interface PluginApi {
    * 插件通过此接口注册后，前端即可通过 / 或 @ 触发该命令的补全列表。
    */
   registerCommandProvider(def: ICommandProvider): void;
+
+  /**
+   * 注册回合拦截器
+   *
+   * 在 AgentEngine 的对话循环退出后（AI 认为对话可以结束）执行。
+   * 如果返回非 null 字符串，则作为 hidden user 消息注入，触发新一轮 LLM 调用。
+   * 如果返回 null，表示不需要拦截，对话正常结束。
+   */
+  registerInterceptor(def: TurnInterceptor): void;
 }
 
 // ── PluginApi 实现 ──
@@ -110,6 +120,7 @@ export class PluginApiImpl implements PluginApi {
     handler: (context: any) => string | Promise<string>;
   }> = [];
   private _commandProviders: ICommandProvider[] = [];
+  private _interceptors: TurnInterceptor[] = [];
 
   constructor(
     private pluginId: string,
@@ -265,6 +276,12 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  registerInterceptor(def: TurnInterceptor): void {
+    if (!this._interceptors.find((x) => x.name === def.name)) {
+      this._interceptors.push(def);
+    }
+  }
+
   /** 注册到 PluginRegistry */
   flush(): void {
     // 注册 manifest
@@ -301,6 +318,11 @@ export class PluginApiImpl implements PluginApi {
         }
       }
     }
+
+    // 注册 interceptors
+    for (const interceptor of this._interceptors) {
+      PluginRegistry.registerInterceptor(this.pluginId, interceptor);
+    }
   }
 
   /** 获取 prompts 供 PluginManager 消费 */
@@ -315,5 +337,10 @@ export class PluginApiImpl implements PluginApi {
   /** 获取命令提供者 供 PluginManager 消费 */
   getCommandProviders(): ICommandProvider[] {
     return this._commandProviders;
+  }
+
+  /** 获取拦截器 供 PluginManager 消费 */
+  getInterceptors(): TurnInterceptor[] {
+    return this._interceptors;
   }
 }

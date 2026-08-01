@@ -1,0 +1,252 @@
+/* ============================================================
+   主题：蒸汽朋克（steampunk）
+   风格：维多利亚工业 · 黄铜齿轮 · 皮革羊皮纸 · 铜绿包浆
+   说明：紫铜与黄铜的金属配色，羊皮纸底 + 皮革色侧栏，衬线字体、
+        双线描边与铆钉装饰，像一台黄铜外壳的差分机终端。
+        副色采用铜氧化后的「铜绿」（verdigris），拉开色彩层次。
+   ============================================================ */
+
+/* ---------- 亮色模式：羊皮纸工作台 ---------- */
+[data-theme="steampunk"] {
+  /* 主色：紫铜 */
+  --color-primary: #a55e28;
+  --color-primary-hover: #8f5021;
+  --color-primary-active: #6f3e1a;
+  --color-primary-disabled: #d9b98f;
+  --color-primary-text: #fdf6e9;
+  --color-primary-text-disabled: rgba(253, 246, 233, 0.55);
+  --color-primary-50:  #faf3ea;
+  --color-primary-100: #f3e2cd;
+  --color-primary-200: #e5c19a;
+  --color-primary-300: #d49d67;
+  --color-primary-400: #bd7a44;
+  --color-primary-500: #a55e28;
+  --color-primary-600: #8f5021;
+  --color-primary-700: #6f3e1a;
+  --color-primary-800: #4f2c12;
+  --color-primary-900: #311b0b;
+  --color-primary-950: #180d05;
+
+  /* 副色：铜绿 */
+  --color-secondary: #3e7d6f;
+  --color-secondary-hover: #356a5e;
+  --color-secondary-active: #285148;
+  --color-secondary-disabled: #a9cfc5;
+  --color-secondary-text: #f2faf7;
+  --color-secondary-text-disabled: rgba(242, 250, 247, 0.55);
+  --color-secondary-50:  #ecf5f2;
+  --color-secondary-100: #d3e9e3;
+  --color-secondary-200: #a5d1c6;
+  --color-secondary-300: #74b3a4;
+  --color-secondary-400: #4f9283;
+  --color-secondary-500: #3e7d6f;
+  --color-secondary-600: #356a5e;
+  --color-secondary-700: #285148;
+  --color-secondary-800: #1c3832;
+  --color-secondary-900: #11221e;
+  --color-secondary-950: #081210;
+
+  /* 基础表面与文字 */
+  --color-text: #3a2c1c;
+  --color-text-gray: #7a6448;
+  --color-text-disabled: #b3a181;
+  --color-surface: #f6eeda;
+  --color-surface-border: #d3bd93;
+  --color-bg: #ece0c8;
+  --color-border: #c9b48c;
+
+  /* 侧边栏（左栏）：皮革 */
+  --color-sidebar-bg: #e4d3b0;
+  --color-sidebar-bg-active: #d6bf91;
+  --color-sidebar-bg-hover: #dcc99e;
+  --color-sidebar-text: #3a2c1c;
+  --color-sidebar-text-hover: #3a2c1c;
+  --color-sidebar-text-active: #3a2c1c;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #e4d3b0;
+  --color-titlebar-border: #d3bd93;
+  --titlebar-text-color: #3a2c1c;
+  --titlebar-hover-bg: #d6bf91;
+
+  /* 会话列表 */
+  --color-conversation-bg: #ece0c8;
+  --color-conversation-text: #3a2c1c;
+  --color-conversation-border: #d3bd93;
+  --color-conversation-bg-active: #d6bf91;
+  --color-conversation-text-active: #3a2c1c;
+  --color-conversation-bg-hover: #dcc99e;
+  --color-conversation-text-hover: #3a2c1c;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #e9d5ac;
+  --color-bubble-user-text: #3a2512;
+  --color-bubble-user-border: #a55e28;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #3a2c1c;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #a55e28;
+
+  /* 排版与细节 */
+  --size-text-base: 15.5px;
+  --size-text-sm: 14px;
+  --shimmer-base: #b3a181;
+  --shimmer-highlight: #3a2c1c;
+  --theme-font: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+}
+
+/* ---------- 暗色模式：胡桃木机舱 ---------- */
+html.dark[data-theme="steampunk"] {
+  /* 主色：抛光黄铜 */
+  --color-primary: #d9a441;
+  --color-primary-hover: #e0b665;
+  --color-primary-active: #c4912f;
+  --color-primary-disabled: #6b541f;
+  --color-primary-text: #241704;
+  --color-primary-text-disabled: rgba(36, 23, 4, 0.55);
+  --color-primary-50:  #1a1206;
+  --color-primary-100: #2e2109;
+  --color-primary-200: #57400f;
+  --color-primary-300: #8a6417;
+  --color-primary-400: #bd8f27;
+  --color-primary-500: #d9a441;
+  --color-primary-600: #e0b665;
+  --color-primary-700: #e9cb8c;
+  --color-primary-800: #f2e0b8;
+  --color-primary-900: #faf1de;
+  --color-primary-950: #fdfaf3;
+
+  /* 副色：夜光铜绿 */
+  --color-secondary: #57b3a0;
+  --color-secondary-hover: #6fc0af;
+  --color-secondary-active: #45a08d;
+  --color-secondary-disabled: #265048;
+  --color-secondary-text: #081f1a;
+  --color-secondary-text-disabled: rgba(8, 31, 26, 0.55);
+  --color-secondary-50:  #081713;
+  --color-secondary-100: #0e2a24;
+  --color-secondary-200: #174a3f;
+  --color-secondary-300: #22705f;
+  --color-secondary-400: #37937e;
+  --color-secondary-500: #57b3a0;
+  --color-secondary-600: #76c2b1;
+  --color-secondary-700: #99d2c5;
+  --color-secondary-800: #bfe3d9;
+  --color-secondary-900: #e1f3ee;
+  --color-secondary-950: #f2fbf8;
+
+  /* 基础表面与文字 */
+  --color-text: #e8dcc4;
+  --color-text-gray: #a89271;
+  --color-text-disabled: #6b5a40;
+  --color-surface: #2a1f13;
+  --color-surface-border: #4a3823;
+  --color-bg: #1d150e;
+  --color-border: #4a3823;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #18110a;
+  --color-sidebar-bg-active: #3a2b18;
+  --color-sidebar-bg-hover: #251b0f;
+  --color-sidebar-text: #e8dcc4;
+  --color-sidebar-text-hover: #e8dcc4;
+  --color-sidebar-text-active: #f2e0b8;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #18110a;
+  --color-titlebar-border: #4a3823;
+  --titlebar-text-color: #e8dcc4;
+  --titlebar-hover-bg: #3a2b18;
+
+  /* 会话列表 */
+  --color-conversation-bg: #1d150e;
+  --color-conversation-text: #e8dcc4;
+  --color-conversation-border: #4a3823;
+  --color-conversation-bg-active: #3a2b18;
+  --color-conversation-text-active: #f2e0b8;
+  --color-conversation-bg-hover: #251b0f;
+  --color-conversation-text-hover: #e8dcc4;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #43301a;
+  --color-bubble-user-text: #f6e9cd;
+  --color-bubble-user-border: #d9a441;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #e8dcc4;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #d9a441;
+
+  /* 排版与细节 */
+  --size-text-base: 15.5px;
+  --size-text-sm: 14px;
+  --shimmer-base: #6b5a40;
+  --shimmer-highlight: #e8dcc4;
+  --theme-font: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="steampunk"] body {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 羊皮纸横向纤维纹理 + 角落铜光 */
+html[data-theme="steampunk"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(122, 100, 72, 0.05) 0 1px, transparent 1px 4px),
+    radial-gradient(900px 600px at 100% 0%, rgba(165, 94, 40, 0.10), transparent 60%),
+    radial-gradient(800px 500px at 0% 100%, rgba(62, 125, 111, 0.08), transparent 60%);
+  background-color: var(--color-bg);
+}
+html.dark[data-theme="steampunk"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(232, 220, 196, 0.03) 0 1px, transparent 1px 4px),
+    radial-gradient(900px 600px at 100% 0%, rgba(217, 164, 65, 0.10), transparent 60%),
+    radial-gradient(800px 500px at 0% 100%, rgba(87, 179, 160, 0.07), transparent 60%);
+}
+
+/* 用户气泡：黄铜包边 + 底部金属压边，对角圆角像铭牌 */
+html[data-theme="steampunk"] .user-section .message-item__card {
+  border: 1.5px solid var(--color-bubble-user-border);
+  border-radius: 4px 16px 4px 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 3px 0 var(--color-bubble-user-border);
+}
+html.dark[data-theme="steampunk"] .user-section .message-item__card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 0 var(--color-bubble-user-border);
+}
+
+/* 助手消息：双线铜规，如古籍栏线 */
+html[data-theme="steampunk"] .assistant-section .message-item__card {
+  border-left: 4px double var(--color-primary);
+  padding-left: 14px;
+}
+
+/* 左栏 / 右栏：铜条收边 + 铆钉点 */
+html[data-theme="steampunk"] .global-sidebar {
+  border-right: 2px solid var(--color-primary);
+  box-shadow: inset -6px 0 14px rgba(58, 44, 28, 0.10);
+}
+html[data-theme="steampunk"] .workspace-sidebar {
+  border-left: 2px solid var(--color-primary);
+  box-shadow: inset 6px 0 14px rgba(58, 44, 28, 0.10);
+}
+
+/* 输入框：压边金属槽 */
+html[data-theme="steampunk"] .mock-inputbar {
+  border: 1.5px solid var(--color-primary);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 3px 0 var(--color-primary);
+}
+
+/* 代码块：铆接钢板 */
+html[data-theme="steampunk"] .md-code {
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: inset 0 2px 6px rgba(58, 44, 28, 0.12);
+}
