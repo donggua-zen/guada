@@ -56,6 +56,9 @@ export class FilePlugin extends PluginBase {
   // 行数统计的文件大小上限（超过只显示大小）
   private static readonly MAX_LINE_COUNT_SIZE = 512 * 1024;
 
+  // Per-file write lock: serializes concurrent edit/write to the same file
+  private readonly fileLocks = new Map<string, Promise<void>>();
+
   manifest = {
     id: "file",
     name: "文件工具",
@@ -337,11 +340,13 @@ export class FilePlugin extends PluginBase {
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`写入文件: ${file_path}`);
-        await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
-        await fs.writeFile(resolvedPath, content, {
-          encoding: encoding as BufferEncoding,
+        return this.withFileLock(resolvedPath, async () => {
+          await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+          await fs.writeFile(resolvedPath, content, {
+            encoding: encoding as BufferEncoding,
+          });
+          return `File written: ${resolvedPath} (${content.length} chars)`;
         });
-        return `File written: ${resolvedPath} (${content.length} chars)`;
       },
       display: { actionType: "write", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -376,32 +381,34 @@ export class FilePlugin extends PluginBase {
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`编辑文件: ${file_path}`);
-        const content = await fs.readFile(resolvedPath, {
-          encoding: encoding as BufferEncoding,
+        return this.withFileLock(resolvedPath, async () => {
+          const content = await fs.readFile(resolvedPath, {
+            encoding: encoding as BufferEncoding,
+          });
+          if (old_text === new_text) {
+            return `File ${resolvedPath} unchanged`;
+          }
+
+          // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
+          const normContent = content.replace(/\r\n/g, "\n");
+          const normOld = old_text.replace(/\r\n/g, "\n");
+          const idx = normContent.indexOf(normOld);
+          if (idx === -1) {
+            throw new Error(`No match text found: ${old_text}`);
+          }
+
+          // 替换后统一恢复原文件的行尾风格
+          const hasCRLF = content.includes("\r\n");
+          const normResult = normContent.replace(normOld, new_text);
+          const modified = hasCRLF
+            ? normResult.replace(/\n/g, "\r\n")
+            : normResult;
+
+          await fs.writeFile(resolvedPath, modified, {
+            encoding: encoding as BufferEncoding,
+          });
+          return `File ${resolvedPath} modified (1 replacement)`;
         });
-        if (old_text === new_text) {
-          return `File ${resolvedPath} unchanged`;
-        }
-
-        // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
-        const normContent = content.replace(/\r\n/g, "\n");
-        const normOld = old_text.replace(/\r\n/g, "\n");
-        const idx = normContent.indexOf(normOld);
-        if (idx === -1) {
-          throw new Error(`No match text found: ${old_text}`);
-        }
-
-        // 替换后统一恢复原文件的行尾风格
-        const hasCRLF = content.includes("\r\n");
-        const normResult = normContent.replace(normOld, new_text);
-        const modified = hasCRLF
-          ? normResult.replace(/\n/g, "\r\n")
-          : normResult;
-
-        await fs.writeFile(resolvedPath, modified, {
-          encoding: encoding as BufferEncoding,
-        });
-        return `File ${resolvedPath} modified (1 replacement)`;
       },
       display: { actionType: "edit", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -544,6 +551,24 @@ export class FilePlugin extends PluginBase {
         ].join("\n");
       },
     });
+  }
+
+  /**
+   * Serialize concurrent write operations to the same file.
+   * Different files still run in parallel; only same-file writes are queued.
+   */
+  private withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+    const key = path.resolve(filePath).replace(/\\/g, "/");
+    const prev = this.fileLocks.get(key) || Promise.resolve();
+    const exec = prev.then(() => fn());
+    // Store a never-rejecting version so one failure doesn't break the chain
+    const stored = exec.then(() => {}, () => {});
+    this.fileLocks.set(key, stored);
+    // Clean up map entry once settled (no-op if a newer lock already replaced it)
+    stored.then(() => {
+      if (this.fileLocks.get(key) === stored) this.fileLocks.delete(key);
+    });
+    return exec;
   }
 
   /**
