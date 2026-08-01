@@ -1,0 +1,525 @@
+/* ============================================================
+   主题：涂鸦本（doodle）
+   风格：儿童简笔画 · 手绘草稿 · 蜡笔配色 · 歪七扭八
+   说明：像小孩用蜡笔在作业本上画出来的界面。边框是歪歪扭扭的
+        矢量曲线，圆角是不规则的手绘角，配色是蜡笔盒里最鲜艳的
+        那几支。不完美，但温暖、天真、充满手作感。
+   ============================================================ */
+
+/* ---------- 亮色模式：作业本纸面 ---------- */
+[data-theme="doodle"] {
+  /* 主色：蜡笔蓝 */
+  --color-primary: #3a7bd5;
+  --color-primary-hover: #2e6ab8;
+  --color-primary-active: #245a9e;
+  --color-primary-disabled: #9ec5ef;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.55);
+
+  --color-primary-50:  #eff6fe;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bee3fd;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #6ba6f5;
+  --color-primary-500: #3a7bd5;
+  --color-primary-600: #2e6ab8;
+  --color-primary-700: #245a9e;
+  --color-primary-800: #1a4072;
+  --color-primary-900: #122a4d;
+  --color-primary-950: #0a1a30;
+
+  /* 副色：蜡笔橙 */
+  --color-secondary: #e8854a;
+  --color-secondary-hover: #d6733a;
+  --color-secondary-active: #b85f2e;
+  --color-secondary-disabled: #f5c4a0;
+  --color-secondary-text: #ffffff;
+  --color-secondary-text-disabled: rgba(255, 255, 255, 0.55);
+  --color-secondary-50:  #fdf3ee;
+  --color-secondary-100: #fae3d4;
+  --color-secondary-200: #f5c7a8;
+  --color-secondary-300: #efa67a;
+  --color-secondary-400: #e8854a;
+  --color-secondary-500: #d6733a;
+  --color-secondary-600: #b85f2e;
+  --color-secondary-700: #8a4622;
+  --color-secondary-800: #5c2e16;
+  --color-secondary-900: #3a1d0d;
+  --color-secondary-950: #1f0f07;
+
+  /* 基础表面与文字 */
+  --color-text: #3a3328;
+  --color-text-gray: #7a6e5e;
+  --color-text-disabled: #b0a48f;
+  --color-surface: #fbf7ed;
+  --color-surface-border: #d4c9b0;
+  --color-bg: #f7f1e3;
+  --color-border: #c9b896;
+
+  /* 侧边栏（左栏）：略深的纸面 */
+  --color-sidebar-bg: #f2ebd9;
+  --color-sidebar-bg-active: #e0d4ba;
+  --color-sidebar-bg-hover: #ebe3cd;
+  --color-sidebar-text: #3a3328;
+  --color-sidebar-text-hover: #3a3328;
+  --color-sidebar-text-active: #2a2418;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #f2ebd9;
+  --color-titlebar-border: #d4c9b0;
+  --titlebar-text-color: #3a3328;
+  --titlebar-hover-bg: #e0d4ba;
+
+  /* 会话列表 */
+  --color-conversation-bg: #f7f1e3;
+  --color-conversation-text: #3a3328;
+  --color-conversation-border: #d4c9b0;
+  --color-conversation-bg-active: #e0d4ba;
+  --color-conversation-text-active: #2a2418;
+  --color-conversation-bg-hover: #ebe3cd;
+  --color-conversation-text-hover: #3a3328;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #e3edf8;
+  --color-bubble-user-text: #1a2a40;
+  --color-bubble-user-border: #3a7bd5;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #3a3328;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #3a7bd5;
+
+  /* 输入框 */
+  --color-input-bg: #fbf7ed;
+  --color-input-border: #c9b896;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #b0a48f;
+  --shimmer-highlight: #3a3328;
+}
+
+/* ---------- 暗色模式：夜晚涂鸦 ---------- */
+html.dark[data-theme="doodle"] {
+  /* 主色：亮蜡笔蓝 */
+  --color-primary: #6ba6f5;
+  --color-primary-hover: #8abaf7;
+  --color-primary-active: #5590e8;
+  --color-primary-disabled: #2a4868;
+  --color-primary-text: #0a1a30;
+  --color-primary-text-disabled: rgba(10, 26, 48, 0.5);
+
+  --color-primary-50:  #0a1a30;
+  --color-primary-100: #122a4d;
+  --color-primary-200: #1a4072;
+  --color-primary-300: #245a9e;
+  --color-primary-400: #3a7bd5;
+  --color-primary-500: #6ba6f5;
+  --color-primary-600: #8abaf7;
+  --color-primary-700: #a8cdf9;
+  --color-primary-800: #c5dffb;
+  --color-primary-900: #e0edfd;
+  --color-primary-950: #f0f7fe;
+
+  /* 副色：暖蜡笔橙 */
+  --color-secondary: #efa67a;
+  --color-secondary-hover: #f5c7a8;
+  --color-secondary-active: #e8854a;
+  --color-secondary-disabled: #4a2f1a;
+  --color-secondary-text: #1a0e04;
+  --color-secondary-text-disabled: rgba(26, 14, 4, 0.5);
+  --color-secondary-50:  #1f0f07;
+  --color-secondary-100: #3a1d0d;
+  --color-secondary-200: #5c2e16;
+  --color-secondary-300: #8a4622;
+  --color-secondary-400: #b85f2e;
+  --color-secondary-500: #efa67a;
+  --color-secondary-600: #f5c7a8;
+  --color-secondary-700: #f9d9c0;
+  --color-secondary-800: #fce5d4;
+  --color-secondary-900: #fef0e6;
+  --color-secondary-950: #fff7f2;
+
+  /* 基础表面与文字 */
+  --color-text: #d8d0c0;
+  --color-text-gray: #8a7e6a;
+  --color-text-disabled: #555048;
+  --color-surface: #2a2620;
+  --color-surface-border: #48403a;
+  --color-bg: #1e1b16;
+  --color-border: #48403a;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #242019;
+  --color-sidebar-bg-active: #3a3328;
+  --color-sidebar-bg-hover: #2e2920;
+  --color-sidebar-text: #d8d0c0;
+  --color-sidebar-text-hover: #e5ddcc;
+  --color-sidebar-text-active: #e5ddcc;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #242019;
+  --color-titlebar-border: #48403a;
+  --titlebar-text-color: #d8d0c0;
+  --titlebar-hover-bg: #3a3328;
+
+  /* 会话列表 */
+  --color-conversation-bg: #1e1b16;
+  --color-conversation-text: #d8d0c0;
+  --color-conversation-border: #48403a;
+  --color-conversation-bg-active: #3a3328;
+  --color-conversation-text-active: #e5ddcc;
+  --color-conversation-bg-hover: #2e2920;
+  --color-conversation-text-hover: #e5ddcc;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #2a3548;
+  --color-bubble-user-text: #c5dffb;
+  --color-bubble-user-border: #6ba6f5;
+  --color-bubble-assitant-bg: transparent;
+  --color-bubble-assitant-text: #d8d0c0;
+  --color-bubble-assitant-border: transparent;
+  --color-bubble-assitant-text-strong: #6ba6f5;
+
+  /* 输入框 */
+  --color-input-bg: #2a2620;
+  --color-input-border: #48403a;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #555048;
+  --shimmer-highlight: #d8d0c0;
+}
+
+/* ---------- 主题专属细节 ---------- */
+
+/* ============================================================
+   手绘工具库（v3）
+
+   核心技术：border-image 九宫格矢量手绘框。
+   为什么不用 feDisplacementMap 位移滤镜画边框：滤镜移动水平
+   细线时，线条 y 坐标只能取整数像素 → 慢变化必然呈现
+   「长平台 + 1px 跳变」的阶梯（1x 屏幕无亚像素渲染余地）。
+   矢量路径全程抗锯齿，任何缩放下都平滑。
+
+   框架 SVG 结构：viewBox 120x120，slice 30 切出四角（角不
+   拉伸变形），边中段的波浪随元素尺寸拉伸；stroke 6 经
+   10px 边框带渲染约 2px 线。每条边用「同侧控制点」弧线，
+   曲线才能真正走出摆幅（S 形相邻控制点会互相抵消 ~70%）。
+   ============================================================ */
+html[data-theme="doodle"] {
+  /* 蓝框：用户气泡 / 输入框聚焦 */
+  --doodle-frame-blue: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M28 11 C 40 1, 56 2, 68 12 C 76 17, 84 16, 92 11 C 106 9, 114 16, 110 28 C 118 40, 119 56, 109 68 C 104 76, 105 84, 110 92 C 114 104, 106 113, 92 109 C 80 118, 64 118, 52 108 C 44 103, 36 104, 28 109 C 16 111, 8 104, 10 92 C 3 80, 3 64, 11 52 C 16 44, 15 36, 10 28 C 8 16, 16 7, 28 11 Z' fill='none' stroke='%233a7bd5' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+  /* 灰框：输入框 / 代码块 */
+  --doodle-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M28 11 C 40 1, 56 2, 68 12 C 76 17, 84 16, 92 11 C 106 9, 114 16, 110 28 C 118 40, 119 56, 109 68 C 104 76, 105 84, 110 92 C 114 104, 106 113, 92 109 C 80 118, 64 118, 52 108 C 44 103, 36 104, 28 109 C 16 111, 8 104, 10 92 C 3 80, 3 64, 11 52 C 16 44, 15 36, 10 28 C 8 16, 16 7, 28 11 Z' fill='none' stroke='%23c9b896' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+  /* 橙圈：会话激活项圈选 */
+  --doodle-ring-orange: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M60 9 C 82 4, 110 20, 111 58 C 112 92, 88 115, 60 111 C 34 116, 9 96, 9 60 C 8 26, 36 5, 60 9 Z' fill='none' stroke='%23e8854a' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+
+  /* 轻滤镜：叠加在已有曲线形状上（助手竖线用），只加笔触抖动 */
+  --doodle-wobble-faint: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.01' numOctaves='1' result='n'/><feDisplacementMap in='SourceGraphic' in2='n' scale='1.5'/></filter></svg>#f");
+
+  /* 助手消息左侧批注竖线：正弦式贝塞尔曲线，每段控制点同侧，
+     曲线真正走到 ±6 单位摆幅（显示约 ±3px 的可见慢弯）。
+     preserveAspectRatio=none 随高度拉伸，任何长度下都平滑 */
+  --doodle-vline: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='160' viewBox='0 0 20 160'><path d='M10 2 C 2 24, 2 56, 10 80 C 18 104, 18 136, 10 158' fill='none' stroke='%2393c5fd' stroke-width='4' stroke-linecap='round'/></svg>");
+
+  /* 手绘波浪线（标题下划线 / hr 分隔线） */
+  --doodle-wave: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='8'><path d='M0 4 Q3 1.5 6 4 T12 4 T18 4 T24 4' fill='none' stroke='%23b3a37f' stroke-width='1.6' stroke-linecap='round'/></svg>");
+
+  /* 不规则圆角配方（按钮等小元素） */
+  --doodle-blob-c: 125px 14px 155px 12px / 12px 155px 14px 125px;
+  --doodle-blob-btn: 58% 42% 55% 45% / 48% 55% 45% 52%;
+
+  /* 作业本红色边距线 */
+  --doodle-margin-line: rgba(224, 91, 78, 0.32);
+  /* 纸面横线 */
+  --doodle-ruled-line: rgba(58, 123, 213, 0.07);
+}
+html.dark[data-theme="doodle"] {
+  --doodle-frame-blue: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M28 11 C 40 1, 56 2, 68 12 C 76 17, 84 16, 92 11 C 106 9, 114 16, 110 28 C 118 40, 119 56, 109 68 C 104 76, 105 84, 110 92 C 114 104, 106 113, 92 109 C 80 118, 64 118, 52 108 C 44 103, 36 104, 28 109 C 16 111, 8 104, 10 92 C 3 80, 3 64, 11 52 C 16 44, 15 36, 10 28 C 8 16, 16 7, 28 11 Z' fill='none' stroke='%236ba6f5' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+  --doodle-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M28 11 C 40 1, 56 2, 68 12 C 76 17, 84 16, 92 11 C 106 9, 114 16, 110 28 C 118 40, 119 56, 109 68 C 104 76, 105 84, 110 92 C 114 104, 106 113, 92 109 C 80 118, 64 118, 52 108 C 44 103, 36 104, 28 109 C 16 111, 8 104, 10 92 C 3 80, 3 64, 11 52 C 16 44, 15 36, 10 28 C 8 16, 16 7, 28 11 Z' fill='none' stroke='%236b6152' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+  --doodle-ring-orange: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M60 9 C 82 4, 110 20, 111 58 C 112 92, 88 115, 60 111 C 34 116, 9 96, 9 60 C 8 26, 36 5, 60 9 Z' fill='none' stroke='%23efa67a' stroke-width='6' stroke-linejoin='round' stroke-linecap='round'/></svg>");
+  --doodle-vline: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='160' viewBox='0 0 20 160'><path d='M10 2 C 2 24, 2 56, 10 80 C 18 104, 18 136, 10 158' fill='none' stroke='%233a7bd5' stroke-width='4' stroke-linecap='round'/></svg>");
+  --doodle-wave: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='8'><path d='M0 4 Q3 1.5 6 4 T12 4 T18 4 T24 4' fill='none' stroke='%236b6152' stroke-width='1.6' stroke-linecap='round'/></svg>");
+  --doodle-margin-line: rgba(232, 133, 74, 0.15);
+  --doodle-ruled-line: rgba(107, 166, 245, 0.05);
+}
+
+/* ============================================================
+   作业本纸面：横线间距 24px = 正文行高（15px × 1.6），
+   让文字恰好落在横线上。body::before 常被内容区不透明背景
+   盖住，所以横线同时画在内容容器上（双保险，参数一致可对齐）。
+   ============================================================ */
+html[data-theme="doodle"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, var(--doodle-ruled-line) 0 1px, transparent 1px 24px);
+  background-color: var(--color-bg);
+}
+
+/* 内容区：横线 + 左侧红色边距线（笔记本 margin line） */
+html[data-theme="doodle"] .content-clear-wallpaper {
+  background-image:
+    linear-gradient(var(--doodle-margin-line), var(--doodle-margin-line)),
+    repeating-linear-gradient(0deg, var(--doodle-ruled-line) 0 1px, transparent 1px 24px);
+  background-size: 2px 100%, auto;
+  background-position: 18px 0, 0 0;
+  background-repeat: no-repeat, repeat;
+}
+
+/* 侧栏：淡淡的横线 */
+html[data-theme="doodle"] .global-sidebar {
+  background-image:
+    repeating-linear-gradient(0deg, var(--doodle-ruled-line) 0 1px, transparent 1px 24px);
+}
+
+/* ============================================================
+   用户气泡：::before + border-image 矢量手绘框（零阶梯），
+   奇偶消息轻微反向倾斜，像随手贴上去的便利贴
+   注意：border 简写会重置 border-image，长 hand 必须在其后
+   ============================================================ */
+html[data-theme="doodle"] .user-section .message-item__card {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 14px 12px 16px 13px / 13px 16px 12px 14px;
+  box-shadow: 2px 3px 0 rgba(58, 51, 40, 0.10);
+}
+html[data-theme="doodle"] .user-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 10px solid transparent;
+  border-image-source: var(--doodle-frame-blue);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+html[data-theme="doodle"] .turn-wrapper:nth-child(odd) .user-section .message-item__card {
+  transform: rotate(0.4deg);
+}
+html[data-theme="doodle"] .turn-wrapper:nth-child(even) .user-section .message-item__card {
+  transform: rotate(-0.4deg);
+}
+html.dark[data-theme="doodle"] .user-section .message-item__card {
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* 助手消息：左侧批注竖线 = 贝塞尔 S 形曲线（纵向平铺，波长恒定 80px）
+   + 轻滤镜（加笔触抖动）。短消息与长消息弯曲密度一致 */
+html[data-theme="doodle"] .assistant-section .message-item__card {
+  position: relative;
+  padding-left: 18px;
+}
+html[data-theme="doodle"] .assistant-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 10px;
+  background: var(--doodle-vline) repeat-y;
+  background-size: 10px 80px;
+  filter: var(--doodle-wobble-faint);
+  pointer-events: none;
+}
+
+/* ============================================================
+   输入框（真实类名 .input-area，旧主题的 .mock-inputbar 已失效）
+   聚焦时边框变成主色，像用蓝笔重新描了一遍
+   ============================================================ */
+html[data-theme="doodle"] .input-area {
+  border: 2px solid transparent;
+  border-radius: 13px 15px 12px 16px / 16px 12px 15px 13px;
+  box-shadow: 2px 3px 0 rgba(58, 51, 40, 0.10);
+}
+html[data-theme="doodle"] .input-area::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 10px solid transparent;
+  border-image-source: var(--doodle-frame-gray);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+html[data-theme="doodle"] .input-area:focus-within::before {
+  border-image-source: var(--doodle-frame-blue);
+}
+html.dark[data-theme="doodle"] .input-area {
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* 发送按钮：捏扁的蜡笔圆点，默认歪着放，hover 扶正 */
+html[data-theme="doodle"] .send-btn {
+  border-radius: var(--doodle-blob-btn);
+  transform: rotate(-4deg);
+}
+html[data-theme="doodle"] .send-btn:hover:not(:disabled) {
+  transform: rotate(0deg) scale(1.08);
+}
+
+/* 输入框工具按钮：hover 时椭圆底色，像圈出来的 */
+html[data-theme="doodle"] .tool-btn,
+html[data-theme="doodle"] .model-selector-btn {
+  border-radius: var(--doodle-blob-btn);
+}
+
+/* ============================================================
+   会话列表：激活项不用矩形填充，改用「蜡笔圈选」——
+   一个歪扭的椭圆描边套住标题，像老师红笔圈的
+   ============================================================ */
+html[data-theme="doodle"] .session-item {
+  position: relative;
+}
+html[data-theme="doodle"] .session-item-active {
+  background-color: transparent;
+}
+html[data-theme="doodle"] .session-item-active::after {
+  content: "";
+  position: absolute;
+  inset: -2px 1px;
+  border: 9px solid transparent;
+  border-image-source: var(--doodle-ring-orange);
+  border-image-slice: 30;
+  border-image-width: 9px;
+  border-image-repeat: stretch;
+  transform: rotate(-0.5deg);
+  pointer-events: none;
+}
+
+/* 左栏 / 右栏：虚线分割（虚线本身就有手绘感） */
+html[data-theme="doodle"] .global-sidebar {
+  border-right: 2px dashed var(--color-border);
+  box-shadow: none;
+}
+html[data-theme="doodle"] .workspace-sidebar {
+  border-left: 2px dashed var(--color-border);
+}
+
+/* 标题栏：底部虚线，和侧栏虚线连成作业本格线 */
+html[data-theme="doodle"] .custom-titlebar {
+  border-bottom: 2px dashed var(--color-titlebar-border);
+}
+
+/* ============================================================
+   Markdown 正文细节
+   ============================================================ */
+
+/* 标题：底部手绘波浪线，像用彩笔划的重点 */
+html[data-theme="doodle"] .markdown-text h1,
+html[data-theme="doodle"] .markdown-text h2 {
+  border-bottom: none;
+  background: var(--doodle-wave) repeat-x left bottom / 24px 8px;
+  padding-bottom: 8px;
+}
+
+/* 链接：波浪下划线 */
+html[data-theme="doodle"] .markdown-text a {
+  color: var(--color-primary);
+  text-decoration: underline wavy var(--color-secondary) 1.5px;
+  text-underline-offset: 3px;
+}
+
+/* 引用块：双线竖杠，像荧光笔画的 */
+html[data-theme="doodle"] .markdown-text blockquote {
+  border-left: 4px double var(--color-primary-300);
+  border-radius: 2px;
+}
+
+/* 分隔线：手绘波浪线 */
+html[data-theme="doodle"] .markdown-text hr {
+  height: 8px;
+  border: none;
+  background: var(--doodle-wave) repeat-x center / 24px 8px;
+}
+
+/* 行内代码：虚线小框，像铅笔圈注（:not(pre *) 排除代码块内部） */
+html[data-theme="doodle"] .markdown-text code:not(pre code) {
+  background: transparent;
+  border: 1.5px dashed var(--color-primary-300);
+  border-radius: 8px 12px 8px 12px / 12px 8px 12px 8px;
+  padding: 0 5px;
+}
+
+/* 表格：虚线行分隔 */
+html[data-theme="doodle"] .markdown-text table th,
+html[data-theme="doodle"] .markdown-text table td {
+  border-bottom: 1.5px dashed var(--color-surface-border);
+}
+
+/* 代码块（真实选择器 .markdown-text pre，旧主题的 .md-code 已失效）：
+   矢量手绘框 + 右上角贴一段半透明「美纹纸胶带」 */
+html[data-theme="doodle"] .markdown-text pre {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 12px 15px 13px 16px / 15px 12px 16px 13px;
+  padding: 12px 14px;
+}
+html[data-theme="doodle"] .markdown-text pre::before {
+  content: "";
+  position: absolute;
+  /* 注意：pre 带 overflow:auto（长代码横向滚动），绝对定位伪元素的
+     溢出部分会计入滚动区域 → inset 用 0 画在盒内侧，避免撑出滚动条 */
+  inset: 0;
+  border: 10px solid transparent;
+  border-image-source: var(--doodle-frame-gray);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+/* 美纹纸胶带（贴在块内右上，半透明带斜纹，盖住代码也能读） */
+html[data-theme="doodle"] .markdown-text pre::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 14px;
+  width: 64px;
+  height: 17px;
+  background:
+    repeating-linear-gradient(-45deg, transparent 0 4px, rgba(255, 255, 255, 0.25) 4px 6px),
+    var(--color-primary);
+  opacity: 0.38;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transform: rotate(2.5deg);
+  pointer-events: none;
+}
+html.dark[data-theme="doodle"] .markdown-text pre::after {
+  opacity: 0.3;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================================
+   Element Plus 组件
+   ============================================================ */
+html[data-theme="doodle"] .el-button {
+  border-radius: var(--doodle-blob-c);
+  border-width: 2px;
+  font-weight: 600;
+}
+html[data-theme="doodle"] .el-dialog {
+  border-radius: 18px 24px 16px 22px / 22px 16px 24px 18px;
+}
+html[data-theme="doodle"] .el-tag {
+  border-radius: 10px 14px 10px 14px / 14px 10px 14px 10px;
+}
+
+/* ============================================================
+   手写字体点缀：只用于标题/会话标题等短文本，
+   正文保持系统字体保证可读性。
+   （若放置 woff2 手写字体到 public/fonts/，可在此 @font-face
+    引入并替换下面的字体栈，纯 CSS 即可生效）
+   ============================================================ */
+html[data-theme="doodle"] .session-title,
+html[data-theme="doodle"] .group-header,
+html[data-theme="doodle"] .markdown-text h1,
+html[data-theme="doodle"] .markdown-text h2,
+html[data-theme="doodle"] .markdown-text h3 {
+  font-family: "Segoe Print", "Ink Free", "KaiTi", "STKaiti", "楷体", cursive;
+}
+ .markdown-text h3 {
+  font-family: "Segoe Print", "Ink Free", "KaiTi", "STKaiti", "楷体", cursive;
+}
