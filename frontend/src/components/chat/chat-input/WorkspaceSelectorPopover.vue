@@ -8,7 +8,7 @@
         <div v-for="path in filteredRecentList" :key="path"
           class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
           :class="path === currentWorkspacePath
-            ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
+            ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
             : 'hover:bg-(--color-sidebar-bg-hover)'"
           @click="handleSelect(path)">
           <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">

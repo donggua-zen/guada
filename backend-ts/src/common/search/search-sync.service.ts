@@ -110,7 +110,9 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
           sessionId: r.session_id,
           role: r.role,
           content: r.content,
-          createdAt: r.created_at,
+          createdAt: r.created_at instanceof Date
+            ? r.created_at.toISOString()
+            : String(r.created_at),
         }));
 
       if (entries.length > 0) {
@@ -149,7 +151,9 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
           sessionId: r.session_id,
           role: r.role,
           content: r.content,
-          createdAt: r.created_at,
+          createdAt: r.created_at instanceof Date
+            ? r.created_at.toISOString()
+            : String(r.created_at),
         }));
 
       if (entries.length > 0) {

@@ -9,6 +9,7 @@ describe('ShellPlugin', () => {
   beforeEach(async () => {
     mockProcessManager = {
       kill: jest.fn(),
+      writeToStdin: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({

@@ -86,7 +86,7 @@ defineProps<{
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background-color: var(--el-fill-color-darker);
+  background-color: var(--color-surface);
   flex-shrink: 0;
 }
 
@@ -108,7 +108,7 @@ defineProps<{
 .skeleton-line {
   height: 16px;
   border-radius: 4px;
-  background-color: var(--el-fill-color-darker);
+  background-color: var(--color-surface);
   width: 100%;
 }
 

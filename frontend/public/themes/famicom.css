@@ -1,0 +1,270 @@
+/* ============================================================
+   主题：红白机（famicom）
+   风格：Famicom / NES 复古 · 像素纹理 · 8-bit 对话框 · 硬边塑料质感
+   说明：致敬任天堂红白机（Famicom，1983）的视觉美学。
+        亮色模式以奶白塑料外壳为底、深红为主色（红白机标志红），
+        金色副色取自卡带金属触片，整体呈现复古塑料质感与像素网格背景。
+        标题栏取红白机红色顶条，侧边栏活跃态如红色 AB 按钮。
+        暗色模式模拟深夜游戏氛围——深色背景上保留红白机的鲜艳色彩，
+        叠加 CRT 扫描线纹理，仿佛在暗室中凝视一台老式 CRT 显示器。
+        消息气泡采用硬边像素框，代码块模仿 8-bit 游戏对话框。
+   ============================================================ */
+
+/* ---------- 亮色模式：红白机塑料外壳 ---------- */
+[data-theme="famicom"] {
+  /* 主色：红白机标志红 */
+  --color-primary: #c8102e;
+  --color-primary-hover: #a50d26;
+  --color-primary-active: #8f0a20;
+  --color-primary-disabled: #e8a0aa;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.55);
+  --color-primary-50:  #fef0f1;
+  --color-primary-100: #fcdde0;
+  --color-primary-200: #f7b6bb;
+  --color-primary-300: #ef8590;
+  --color-primary-400: #dd4255;
+  --color-primary-500: #c8102e;
+  --color-primary-600: #a50d26;
+  --color-primary-700: #8f0a20;
+  --color-primary-800: #6e0819;
+  --color-primary-900: #4d0510;
+  --color-primary-950: #2c0309;
+
+  /* 副色：卡带金色 */
+  --color-secondary: #f0b400;
+  --color-secondary-hover: #d49d00;
+  --color-secondary-active: #b08200;
+  --color-secondary-disabled: #f5d985;
+  --color-secondary-text: #1a1200;
+  --color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
+  --color-secondary-50:  #fdf8e6;
+  --color-secondary-100: #f9edbf;
+  --color-secondary-200: #f4db80;
+  --color-secondary-300: #efc63d;
+  --color-secondary-400: #f5c620;
+  --color-secondary-500: #f0b400;
+  --color-secondary-600: #d49d00;
+  --color-secondary-700: #b08200;
+  --color-secondary-800: #8c6600;
+  --color-secondary-900: #684a00;
+  --color-secondary-950: #442f00;
+
+  /* 基础表面与文字 */
+  --color-text: #2a2520;
+  --color-text-gray: #6a6055;
+  --color-text-disabled: #b0a89a;
+  --color-surface: #faf6ed;
+  --color-surface-border: #c8bfa8;
+  --color-bg: #f0ebde;
+  --color-border: #8a7e6a;
+
+  /* 侧边栏（左栏）：仿红白机底座灰白塑料 */
+  --color-sidebar-bg: #e8e2d2;
+  --color-sidebar-bg-active: #c8102e;
+  --color-sidebar-bg-hover: #ddd6c4;
+  --color-sidebar-text: #2a2520;
+  --color-sidebar-text-hover: #2a2520;
+  --color-sidebar-text-active: #ffffff;
+
+  /* 标题栏：红白机红色顶条 */
+  --color-titlebar-bg: #c8102e;
+  --color-titlebar-border: #8f0a20;
+  --titlebar-text-color: #ffffff;
+  --titlebar-hover-bg: #a50d26;
+
+  /* 会话列表 */
+  --color-conversation-bg: #faf6ed;
+  --color-conversation-text: #2a2520;
+  --color-conversation-border: #c8bfa8;
+  --color-conversation-bg-active: #c8102e;
+  --color-conversation-text-active: #ffffff;
+  --color-conversation-bg-hover: #e8e2d2;
+  --color-conversation-text-hover: #2a2520;
+
+  /* 消息气泡 */
+  --color-bubble-user-bg: #c8102e;
+  --color-bubble-user-text: #ffffff;
+  --color-bubble-user-border: #8f0a20;
+  --color-bubble-assitant-bg: #faf6ed;
+  --color-bubble-assitant-text: #2a2520;
+  --color-bubble-assitant-border: #c8bfa8;
+  --color-bubble-assitant-text-strong: #c8102e;
+
+  /* 输入框 */
+  --color-input-bg: #faf6ed;
+  --color-input-border: #8a7e6a;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #c8bfa8;
+  --shimmer-highlight: #c8102e;
+}
+
+/* ---------- 暗色模式：深夜游戏厅 ---------- */
+html.dark[data-theme="famicom"] {
+  /* 主色：亮红，在深色背景上跳出来 */
+  --color-primary: #e6203a;
+  --color-primary-hover: #ee4055;
+  --color-primary-active: #d01028;
+  --color-primary-disabled: #5a0814;
+  --color-primary-text: #ffffff;
+  --color-primary-text-disabled: rgba(255, 255, 255, 0.5);
+  --color-primary-50:  #2c0309;
+  --color-primary-100: #4d0510;
+  --color-primary-200: #6e0819;
+  --color-primary-300: #8f0a20;
+  --color-primary-400: #b00d26;
+  --color-primary-500: #e6203a;
+  --color-primary-600: #ee4055;
+  --color-primary-700: #f56070;
+  --color-primary-800: #f88095;
+  --color-primary-900: #fba0b0;
+  --color-primary-950: #fdc5d0;
+
+  /* 副色：亮金，霓虹街机灯 */
+  --color-secondary: #f5c020;
+  --color-secondary-hover: #f7cd42;
+  --color-secondary-active: #e0ac00;
+  --color-secondary-disabled: #634a00;
+  --color-secondary-text: #1a1200;
+  --color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
+  --color-secondary-50:  #221800;
+  --color-secondary-100: #442f00;
+  --color-secondary-200: #684a00;
+  --color-secondary-300: #8c6600;
+  --color-secondary-400: #b08200;
+  --color-secondary-500: #f5c020;
+  --color-secondary-600: #f7cd42;
+  --color-secondary-700: #f9d96b;
+  --color-secondary-800: #fbe594;
+  --color-secondary-900: #fdf2bd;
+  --color-secondary-950: #fef8e6;
+
+  /* 基础表面与文字 */
+  --color-text: #d8d0c0;
+  --color-text-gray: #8a8275;
+  --color-text-disabled: #5a554a;
+  --color-surface: #1e1e24;
+  --color-surface-border: #3a3a42;
+  --color-bg: #141418;
+  --color-border: #3a3a42;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #1a1a20;
+  --color-sidebar-bg-active: #e6203a;
+  --color-sidebar-bg-hover: #26262e;
+  --color-sidebar-text: #d8d0c0;
+  --color-sidebar-text-hover: #e8e0d0;
+  --color-sidebar-text-active: #ffffff;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #1a1a20;
+  --color-titlebar-border: #3a3a42;
+  --titlebar-text-color: #d8d0c0;
+  --titlebar-hover-bg: #26262e;
+
+  /* 会话列表 */
+  --color-conversation-bg: #141418;
+  --color-conversation-text: #d8d0c0;
+  --color-conversation-border: #3a3a42;
+  --color-conversation-bg-active: #e6203a;
+  --color-conversation-text-active: #ffffff;
+  --color-conversation-bg-hover: #26262e;
+  --color-conversation-text-hover: #d8d0c0;
+
+  /* 消息气泡：金色描边 + 暗底卡片 */
+  --color-bubble-user-bg: #e6203a;
+  --color-bubble-user-text: #ffffff;
+  --color-bubble-user-border: #f5c020;
+  --color-bubble-assitant-bg: #1e1e24;
+  --color-bubble-assitant-text: #d8d0c0;
+  --color-bubble-assitant-border: #3a3a42;
+  --color-bubble-assitant-text-strong: #f5c020;
+
+  /* 输入框 */
+  --color-input-bg: #1e1e24;
+  --color-input-border: #3a3a42;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #3a3a42;
+  --shimmer-highlight: #e6203a;
+}
+
+/* ---------- 主题专属细节 ---------- */
+/* 像素网格背景纹理（亮色：4px 网格，极淡） */
+html[data-theme="famicom"] body::before {
+  background-image:
+    linear-gradient(rgba(42, 37, 32, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42, 37, 32, 0.035) 1px, transparent 1px);
+  background-size: 4px 4px;
+  background-color: var(--color-bg);
+}
+
+/* 暗色模式：CRT 扫描线 + 像素网格 */
+html.dark[data-theme="famicom"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 4px),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 4px, 4px 4px, 4px 4px;
+}
+
+/* 用户气泡：红色 + 硬边像素框 + 偏移硬阴影 */
+html[data-theme="famicom"] .user-section .message-item__card {
+  border: 2px solid var(--color-bubble-user-border);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+}
+
+/* 助手消息：奶白卡片 + 硬边像素框 */
+html[data-theme="famicom"] .assistant-section .message-item__card {
+  border: 2px solid var(--color-bubble-assitant-border);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.1);
+  padding: 14px 16px;
+}
+
+/* 暗色模式：金色描边 + 彩色发光阴影 */
+html.dark[data-theme="famicom"] .user-section .message-item__card {
+  border-color: var(--color-bubble-user-border);
+  box-shadow: 3px 3px 0 rgba(245, 192, 32, 0.15);
+}
+html.dark[data-theme="famicom"] .assistant-section .message-item__card {
+  box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.12);
+}
+
+/* 左栏：红色粗线分割，像游戏 UI 边界 */
+html[data-theme="famicom"] .global-sidebar {
+  border-right: 3px solid var(--color-primary);
+  box-shadow: none;
+}
+
+/* 右栏：红色粗线分割 */
+html[data-theme="famicom"] .workspace-sidebar {
+  border-left: 3px solid var(--color-primary);
+}
+
+/* 输入框：像素风硬边框 */
+html[data-theme="famicom"] .mock-inputbar {
+  border: 2px solid var(--color-input-border);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* 代码块：8-bit 游戏对话框风格——红色硬边框，无圆角 */
+html[data-theme="famicom"] .md-code {
+  border: 2px solid var(--color-primary);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* 暗色模式代码块：荧光红边框 + 微弱发光 */
+html.dark[data-theme="famicom"] .md-code {
+  border-color: var(--color-primary);
+  box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.15);
+}

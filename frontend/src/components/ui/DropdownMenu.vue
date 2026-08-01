@@ -8,7 +8,7 @@
   <!-- 下拉菜单使用 Teleport 避免被父元素裁剪 -->
   <Teleport to="body">
     <Transition name="dropdown-fade">
-      <div v-if="visible" ref="menuRef" class="fixed z-50 bg-white dark:bg-(--color-surface) rounded-md shadow-lg border border-gray-200 dark:border-(--color-surface-border) py-1 min-w-30" :style="menuStyle" @click.stop>
+      <div v-if="visible" ref="menuRef" class="fixed z-50 bg-(--color-surface) rounded-md shadow-lg border border-(--color-surface-border) py-1 min-w-30" :style="menuStyle" @click.stop>
         <slot name="dropdown"></slot>
       </div>
     </Transition>

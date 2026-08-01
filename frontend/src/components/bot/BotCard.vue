@@ -1,6 +1,6 @@
 <template>
   <div
-    class="bot-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+    class="bot-card group relative bg-(--color-surface) border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
     <!-- 内容区域 -->
     <div class="relative z-10 flex flex-col h-full">
       <!-- 头部：平台图标 + 名称 + 开关 -->
