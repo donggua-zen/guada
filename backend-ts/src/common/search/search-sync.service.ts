@@ -233,6 +233,7 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
          INNER JOIN message m ON mc.message_id = m.id
          WHERE mc.updated_at > ?
            AND mc.content IS NOT NULL
+           AND m.role IN ('user', 'assistant')
          ORDER BY mc.updated_at ASC
          LIMIT ? OFFSET ?`,
         sinceUpdatedAt,
@@ -253,6 +254,7 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
        FROM message_content mc
        INNER JOIN message m ON mc.message_id = m.id
        WHERE mc.content IS NOT NULL
+         AND m.role IN ('user', 'assistant')
        ORDER BY mc.created_at ASC
        LIMIT ? OFFSET ?`,
       limit,
