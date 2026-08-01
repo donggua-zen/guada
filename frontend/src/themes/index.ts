@@ -53,10 +53,22 @@ const builtinThemes: ThemePresetInfo[] = [
     secondaryColor: "#1f6fff",
   },
   {
+    id: "famicom",
+    name: "红白机",
+    primaryColor: "#c8102e",
+    secondaryColor: "#f0b400",
+  },
+  {
     id: "e-ink",
     name: "墨水屏",
     primaryColor: "#3a3a3a",
     secondaryColor: "#8a8578",
+  },
+  {
+    id: "doodle",
+    name: "涂鸦本",
+    primaryColor: "#3a7bd5",
+    secondaryColor: "#e8854a",
   },
 ];
 

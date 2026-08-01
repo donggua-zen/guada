@@ -146,6 +146,7 @@ async function toggle() {
 
 .tree-node-content.is-selected {
     background-color: var(--color-sidebar-bg-active) !important;
+    color: var(--color-sidebar-text-active) !important;
 }
 
 .expand-icon {

@@ -22,7 +22,7 @@
       <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- 任务列表 -->
-        <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] overflow-hidden">
+        <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-(--color-surface) overflow-hidden">
           <ul v-if="tasks.length > 0">
             <li v-for="task in tasks" :key="task.id"
               class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">

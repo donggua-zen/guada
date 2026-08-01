@@ -1537,6 +1537,7 @@ onUnmounted(() => {
 
 .browser-tab.active {
     background: var(--color-sidebar-bg-active);
+    color: var(--color-sidebar-text-active);
 }
 
 .tab-favicon {
@@ -1568,7 +1569,7 @@ onUnmounted(() => {
 }
 
 .browser-tab.active .tab-title {
-    color: var(--color-text);
+    color: var(--color-sidebar-text-active);
     font-weight: 500;
 }
 
@@ -1663,6 +1664,7 @@ onUnmounted(() => {
 .seg-btn.active {
     color: var(--color-text);
     background: var(--color-sidebar-bg-active);
+    color: var(--color-sidebar-text-active);
 }
 
 .seg-btn:disabled {

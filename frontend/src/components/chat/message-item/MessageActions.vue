@@ -1,6 +1,6 @@
 <template>
-  <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center -translate-x-1"
-    :class="[isAssistant ? 'justify-start' : 'justify-end']">
+  <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
+    :class="[isAssistant ? 'justify-start -translate-x-1' : 'justify-end translate-x-1']">
 
     <div class="message-action-button" @click="$emit('copy')">
       <el-icon :size="16">
@@ -84,7 +84,7 @@ import {
   Delete16Regular,
   Edit16Regular,
 } from '@vicons/fluent';
-import {  ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
+import { ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
 
 const props = defineProps<{
   isAssistant: boolean;

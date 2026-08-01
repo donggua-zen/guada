@@ -4,7 +4,7 @@
     <div
       v-if="visible"
       ref="menuRef"
-      class="fixed z-[1000] bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#2e3035] py-1 min-w-40"
+      class="fixed z-[1000] bg-(--color-surface) dark:bg-[#232428] rounded-lg shadow-lg border border-(--color-surface-border) py-1 min-w-40"
       :style="{ left: adjustedX + 'px', top: adjustedY + 'px' }"
       @click.stop
       @contextmenu.prevent
