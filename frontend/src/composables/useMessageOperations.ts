@@ -136,7 +136,7 @@ export function useMessageOperations(
 
         const inputMsg = {
             content: message.contents[0].content,
-            files: message.files || [],
+            files: message.contents?.[0]?.files || [],
             knowledgeBaseIds: knowledgeBaseIds,
             isWaiting: false
         }

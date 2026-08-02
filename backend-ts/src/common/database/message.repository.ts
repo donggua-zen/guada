@@ -23,10 +23,10 @@ export class MessageRepository {
     return this.prisma.message.findMany({
       where: { sessionId },
       include: {
-        ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
+            ...(withFiles && { include: { files: true } }),
           },
         }),
       },
@@ -75,10 +75,10 @@ export class MessageRepository {
       ...(limit != null && { take: limit }),
       orderBy: { id: "desc" }, // 基于 ID 倒序（CUID 时间有序）
       include: {
-        ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
+            ...(withFiles && { include: { files: true } }),
           },
         }),
       },
@@ -120,10 +120,10 @@ export class MessageRepository {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
-        ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
+            ...(withFiles && { include: { files: true } }),
           },
         }),
         session: true,

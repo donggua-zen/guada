@@ -547,10 +547,33 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
       // Anthropic 的 role 只支持 user / assistant
       const content = msg.content || "";
-      result.push({
-        role: "user",
-        content: typeof content === "string" ? content : JSON.stringify(content),
-      } as Anthropic.Messages.MessageParam);
+      if (typeof content === "string") {
+        result.push({ role: "user", content });
+      } else if (Array.isArray(content)) {
+        const blocks: any[] = [];
+        for (const part of content) {
+          if (part.type === "text") {
+            blocks.push({ type: "text", text: part.text || "" });
+          } else if (part.type === "image_url" && part.image_url?.url) {
+            const match = part.image_url.url.match(
+              /^data:(.+?);base64,(.+)$/,
+            );
+            if (match) {
+              blocks.push({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: match[1],
+                  data: match[2],
+                },
+              });
+            }
+          }
+        }
+        result.push({ role: "user", content: blocks });
+      } else {
+        result.push({ role: "user", content: "" });
+      }
     }
 
     // 降级检查：确保每条 assistant 消息中的 tool_use 都有对应的 tool_result

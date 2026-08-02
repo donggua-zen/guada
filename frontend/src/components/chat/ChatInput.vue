@@ -363,9 +363,15 @@ const uploadFiles = computed({
 
     // 为每个图片文件确保有预览 URL（懒加载）
     files.forEach(file => {
-      if (file.fileType === 'image' && file.file && !previewUrls.value.has(file.id)) {
-        const previewUrl = URL.createObjectURL(file.file);
-        previewUrls.value.set(file.id, previewUrl);
+      if (file.fileType === 'image' && !previewUrls.value.has(file.id)) {
+        if (file.file) {
+          // 本地文件（粘贴/新选择）：用 blob URL 预览
+          const previewUrl = URL.createObjectURL(file.file);
+          previewUrls.value.set(file.id, previewUrl);
+        } else if (file.previewUrl || file.url) {
+          // 已上传文件（如编辑消息回填）：直接用后端返回的资源 URL
+          previewUrls.value.set(file.id, file.previewUrl || file.url);
+        }
       }
     });
 

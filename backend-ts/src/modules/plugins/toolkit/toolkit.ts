@@ -146,9 +146,17 @@ export class Toolkit implements ToolKitHandle {
       handler: async (args, ctx, signal) => {
         const parsed = zodSchema.parse(args);
         const result = await def.execute(parsed, ctx, signal);
-        return typeof result === 'object' && result !== null
-          ? JSON.stringify(result)
-          : String(result ?? '');
+        // Pass through ToolResultObject { content, images } as-is;
+        // ToolExecutor.executeTool handles the split.
+        // Legacy plain objects are stringified here for backward compat.
+        if (typeof result === 'object' && result !== null) {
+          const obj = result as Record<string, any>;
+          if (typeof obj['content'] === 'string') {
+            return result; // ToolResultObject — let ToolExecutor handle
+          }
+          return JSON.stringify(result);
+        }
+        return String(result ?? '');
       },
       dangerLevel: def.dangerLevel,
       toolSet: this.id,

@@ -54,6 +54,7 @@ export interface MessageContent {
   };
   _thinkingTimer?: number;
   isCurrent?: boolean;
+  files?: FileAttachment[];
 }
 
 /**

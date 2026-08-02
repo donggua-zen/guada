@@ -33,6 +33,6 @@ import * as multer from "multer";
   ],
   controllers: [FilesController],
   providers: [FileService, FileRepository, PrismaService, FileParserService, OcrService, SettingsService],
-  exports: [FileService], // 导出 FileService 供其他模块使用
+  exports: [FileService, FileRepository], // 导出供其他模块使用
 })
 export class FilesModule { }

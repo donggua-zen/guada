@@ -140,6 +140,12 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
     icon: EyeTracking16Filled,
     aggregate: { executing: "正在识别{n}张图片", completed: "已识别{n}张图片" },
   },
+  image_view: {
+    text: { executing: "正在查看图片", completed: "已查看图片" },
+    argsKey: "image_path",
+    icon: EyeTracking16Filled,
+    aggregate: { executing: "正在查看{n}张图片", completed: "已查看{n}张图片" },
+  },
 
   memory: {
     text: { executing: "正在编辑记忆", completed: "已编辑记忆" },

@@ -19,7 +19,9 @@
       v-show="!isPane1Collapsed && !isPane2Collapsed"
       class="lite-splitpanes__splitter"
       @mousedown="handleSplitterMouseDown"
-    />
+    >
+      <div class="lite-splitpanes__hit-area" />
+    </div>
 
     <!-- 第二个 Pane -->
     <div
@@ -361,21 +363,18 @@ onUnmounted(() => {
   background-color: var(--color-sidebar-border, #f5f5f5);
   transition: background-color 0.2s ease;
   position: relative;
-  z-index: 1;
+  z-index: 10;
 }
 
-/* 透明伪元素：视觉1px + 布局1px，但鼠标命中区4px */
-/* .lite-splitpanes__splitter::after {
-  content: '';
+/* 透明 4px 命中区，真实 DOM 元素确保跨 pane 边界的 hit-testing 可靠 */
+.lite-splitpanes__hit-area {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
-  margin-left: -2px;
-  width: 1px;
-  z-index: 999;
-  background-color: var(--color-sidebar-border, #f5f5f5);
-} */
+  transform: translateX(-50%);
+  width: 4px;
+}
 
 .lite-splitpanes__splitter:hover {
   background-color: var(--el-color-primary-light-8, #d9ecff);

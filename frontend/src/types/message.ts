@@ -47,6 +47,7 @@ export interface MessageContent {
     state: MessageState
     _thinkingTimer?: number
     isCurrent?: boolean
+    files?: FileAttachment[]
 }
 
 /**

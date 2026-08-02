@@ -377,7 +377,7 @@ export class PersistentSessionContext implements ISessionContext {
     if (this.isMessagesLoaded && message) {
       const record = await this.messageStore.transformContentStructure(
         message,
-        true,
+        this.modelConfig.config.inputCapabilities?.includes("image"),
       );
       const chatModelName =
         this.modelConfig.modelName || this.modelConfig.name || "gpt4";
