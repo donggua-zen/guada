@@ -100,6 +100,10 @@
   --size-text-sm: 14px;
   --shimmer-base: #c8bfa8;
   --shimmer-highlight: #c8102e;
+
+  /* 窗口控制按钮：hover 背景是主题红（--titlebar-hover-bg），
+     图标需变白才能看清 */
+  --window-controls-hover-color: #ffffff;
 }
 
 /* ---------- 暗色模式：深夜游戏厅 ---------- */
@@ -192,9 +196,52 @@ html.dark[data-theme="famicom"] {
   --size-text-sm: 14px;
   --shimmer-base: #3a3a42;
   --shimmer-highlight: #e6203a;
+
+  /* 窗口控制按钮：常态跟随主题文字色（比全局暗色默认更亮），
+     hover 进一步变白 */
+  --window-controls-color: var(--color-text);
+  --window-controls-hover-color: #ffffff;
 }
 
 /* ---------- 主题专属细节 ---------- */
+
+/* ============================================================
+   像素工具库
+
+   核心：border-image 九宫格像素框。viewBox 120x120，阶梯角
+   2 级 × 6 单位（像素风的「缺角方块」），slice 16 切出四角
+   （角不拉伸变形），边中段像素线拉伸；stroke 6 经 8px 边框带
+   渲染约 3px 像素线。比普通实线边框更有 FC 对话框味道。
+   ============================================================ */
+
+/* 像素字体：Press Start 2P（OFL 开源，本地 woff2 仅 12KB）。
+   unicode-range 只覆盖拉丁/数字/常用符号，中文自动回退系统黑体，
+   混排效果类似汉化版 FC 游戏 */
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('../fonts/press-start-2p.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
+}
+
+html[data-theme="famicom"] {
+  /* 深红框：用户气泡 */
+  --fc-frame-deepred: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%238f0a20' stroke-width='6'/></svg>");
+  /* 灰框：助手卡片 / 输入框 */
+  --fc-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23c8bfa8' stroke-width='6'/></svg>");
+  /* 红框：代码块 */
+  --fc-frame-red: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23c8102e' stroke-width='6'/></svg>");
+}
+html.dark[data-theme="famicom"] {
+  /* 金框：暗色用户气泡 */
+  --fc-frame-deepred: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23f5c020' stroke-width='6'/></svg>");
+  /* 暗灰框：暗色助手卡片 / 输入框 */
+  --fc-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%233a3a42' stroke-width='6'/></svg>");
+  /* 荧光红框：暗色代码块 */
+  --fc-frame-red: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23e6203a' stroke-width='6'/></svg>");
+}
+
 /* 像素网格背景纹理（亮色：4px 网格，极淡） */
 html[data-theme="famicom"] body::before {
   background-image:
@@ -213,26 +260,73 @@ html.dark[data-theme="famicom"] body::before {
   background-size: 100% 4px, 4px 4px, 4px 4px;
 }
 
-/* 用户气泡：红色 + 硬边像素框 + 偏移硬阴影 */
-html[data-theme="famicom"] .user-section .message-item__card {
-  border: 2px solid var(--color-bubble-user-border);
-  border-radius: 2px;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
-  font-weight: 600;
+/* 内容区也铺一层像素网格（body::before 常被不透明背景盖住） */
+html[data-theme="famicom"] .content-clear-wallpaper {
+  background-image:
+    linear-gradient(rgba(42, 37, 32, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42, 37, 32, 0.035) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+html.dark[data-theme="famicom"] .content-clear-wallpaper {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 4px),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 4px, 4px 4px, 4px 4px;
 }
 
-/* 助手消息：奶白卡片 + 硬边像素框 */
+/* ============================================================
+   用户气泡：红底 + 深红像素框 + FC 塑料按钮斜面（内高光/内暗影）
+   注意：border 简写会重置 border-image，长 hand 必须在其后
+   ============================================================ */
+html[data-theme="famicom"] .user-section .message-item__card {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.28),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.22),
+    3px 3px 0 rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+}
+html[data-theme="famicom"] .user-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 8px solid transparent;
+  border-image-source: var(--fc-frame-deepred);
+  border-image-slice: 16;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+
+/* 助手消息：奶白卡片 + 灰像素框 + 硬阴影 */
 html[data-theme="famicom"] .assistant-section .message-item__card {
-  border: 2px solid var(--color-bubble-assitant-border);
-  border-radius: 2px;
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 0;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.1);
   padding: 14px 16px;
 }
+html[data-theme="famicom"] .assistant-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 8px solid transparent;
+  border-image-source: var(--fc-frame-gray);
+  border-image-slice: 16;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
 
-/* 暗色模式：金色描边 + 彩色发光阴影 */
+/* 暗色模式：彩色发光阴影 */
 html.dark[data-theme="famicom"] .user-section .message-item__card {
-  border-color: var(--color-bubble-user-border);
-  box-shadow: 3px 3px 0 rgba(245, 192, 32, 0.15);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.22),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.28),
+    3px 3px 0 rgba(245, 192, 32, 0.15);
 }
 html.dark[data-theme="famicom"] .assistant-section .message-item__card {
   box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.12);
@@ -249,22 +343,194 @@ html[data-theme="famicom"] .workspace-sidebar {
   border-left: 3px solid var(--color-primary);
 }
 
-/* 输入框：像素风硬边框 */
-html[data-theme="famicom"] .mock-inputbar {
-  border: 2px solid var(--color-input-border);
-  border-radius: 2px;
+/* 标题栏：红色顶条下压一道深红粗线（FC 顶部分割条） */
+html[data-theme="famicom"] .custom-titlebar {
+  border-bottom: 3px solid var(--color-titlebar-border);
+}
+
+/* 会话激活项：FC 按钮斜面（内高光 + 内暗影），去圆角 */
+html[data-theme="famicom"] .session-item {
+  border-radius: 0;
+}
+html[data-theme="famicom"] .session-item-active {
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.28),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* ============================================================
+   输入框（真实类名 .input-area，旧主题的 .mock-inputbar 已失效）：
+   灰像素框，聚焦换红框（像选中菜单项）
+   ============================================================ */
+html[data-theme="famicom"] .input-area {
+  border: 2px solid transparent;
+  border-radius: 0;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.1);
 }
-
-/* 代码块：8-bit 游戏对话框风格——红色硬边框，无圆角 */
-html[data-theme="famicom"] .md-code {
-  border: 2px solid var(--color-primary);
-  border-radius: 0;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+html[data-theme="famicom"] .input-area::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 8px solid transparent;
+  border-image-source: var(--fc-frame-gray);
+  border-image-slice: 16;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+html[data-theme="famicom"] .input-area:focus-within::before {
+  border-image-source: var(--fc-frame-red);
 }
 
-/* 暗色模式代码块：荧光红边框 + 微弱发光 */
-html.dark[data-theme="famicom"] .md-code {
-  border-color: var(--color-primary);
+/* 发送按钮：方形像素按钮 + 按下位移（游戏按键手感） */
+html[data-theme="famicom"] .send-btn {
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.28),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.22),
+    3px 3px 0 rgba(0, 0, 0, 0.2);
+}
+html[data-theme="famicom"] .send-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.18),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.28),
+    1px 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* 输入区工具按钮：去圆角 */
+html[data-theme="famicom"] .tool-btn,
+html[data-theme="famicom"] .model-selector-btn {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Markdown 正文细节
+   ============================================================ */
+
+/* 标题：底部方块虚线（像素分隔线） */
+html[data-theme="famicom"] .markdown-text h1,
+html[data-theme="famicom"] .markdown-text h2 {
+  border-bottom: none;
+  padding-bottom: 6px;
+  background:
+    repeating-linear-gradient(90deg, var(--color-primary) 0 4px, transparent 4px 8px)
+    repeat-x left bottom / 8px 2px;
+}
+
+/* 链接：2px 实线下划线 */
+html[data-theme="famicom"] .markdown-text a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* 引用块：4px 红色实线左杠，无圆角 */
+html[data-theme="famicom"] .markdown-text blockquote {
+  border-left: 4px solid var(--color-primary);
+  border-radius: 0;
+}
+
+/* 分隔线：方块虚线 */
+html[data-theme="famicom"] .markdown-text hr {
+  height: 2px;
+  border: none;
+  background:
+    repeating-linear-gradient(90deg, var(--color-border) 0 4px, transparent 4px 8px)
+    repeat-x center / 8px 2px;
+}
+
+/* 行内代码：卡带金底 + 无圆角小框（:not(pre *) 排除代码块内部） */
+html[data-theme="famicom"] .markdown-text code:not(pre code) {
+  background: var(--color-secondary-100);
+  color: var(--color-text);
+  border: 2px solid var(--color-secondary-300);
+  border-radius: 0;
+  padding: 0 4px;
+}
+html.dark[data-theme="famicom"] .markdown-text code:not(pre code) {
+  background: var(--color-secondary-100);
+  color: var(--color-secondary-800);
+}
+
+/* 表格：2px 实线行分隔（像素网格感） */
+html[data-theme="famicom"] .markdown-text table th,
+html[data-theme="famicom"] .markdown-text table td {
+  border-bottom: 2px solid var(--color-surface-border);
+}
+
+/* 代码块（真实选择器 .markdown-text pre，旧主题的 .md-code 已失效）：
+   8-bit 游戏对话框——红像素框 + 硬阴影。
+   注意：pre 带 overflow:auto，伪元素必须 inset:0 画在盒内侧，
+   否则溢出部分会撑出滚动条 */
+html[data-theme="famicom"] .markdown-text pre {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+  padding: 12px 14px;
+}
+html[data-theme="famicom"] .markdown-text pre::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 8px solid transparent;
+  border-image-source: var(--fc-frame-red);
+  border-image-slice: 16;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+html.dark[data-theme="famicom"] .markdown-text pre {
   box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.15);
+}
+
+/* ============================================================
+   Element Plus 组件：零圆角 + 硬边框 + 按键手感
+   ============================================================ */
+html[data-theme="famicom"] .el-button {
+  border-radius: 0;
+  border-width: 2px;
+  font-weight: 600;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+}
+html[data-theme="famicom"] .el-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.15);
+}
+html[data-theme="famicom"] .el-dialog {
+  border-radius: 0;
+  border: 2px solid var(--color-border);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);
+}
+html[data-theme="famicom"] .el-tag {
+  border-radius: 0;
+  border-width: 2px;
+}
+html[data-theme="famicom"] .el-popper.is-light {
+  border-radius: 0;
+  border-width: 2px;
+  border-color: var(--color-border);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* ============================================================
+   像素字体点缀：只覆盖拉丁/数字（unicode-range 限制），
+   中文回退黑体，混排像汉化版 FC 游戏字幕
+   ============================================================ */
+html[data-theme="famicom"] .session-title,
+html[data-theme="famicom"] .group-header,
+html[data-theme="famicom"] .markdown-text h1,
+html[data-theme="famicom"] .markdown-text h2,
+html[data-theme="famicom"] .markdown-text h3,
+html[data-theme="famicom"] .el-button,
+html[data-theme="famicom"] .custom-titlebar {
+  font-family: 'Press Start 2P', 'PingFang SC', 'Microsoft YaHei', monospace;
+}
+/* 像素字体字形偏大，标题区缩小一号保持版式 */
+html[data-theme="famicom"] .session-title,
+html[data-theme="famicom"] .group-header,
+html[data-theme="famicom"] .el-button {
+  font-size: 0.85em;
 }
