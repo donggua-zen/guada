@@ -25,4 +25,12 @@ const isElectron = computed(() => {
 .drag-region {
   -webkit-app-region: drag;
 }
+
+/* 红色顶条上的窗口控制按钮用标题栏文字色（famicom 下为白），
+   hover 在深红高亮背景上同样保持白色。
+   CSS 变量沿 DOM 继承穿透子组件，无需 :deep 选择器 */
+.custom-titlebar {
+  --window-controls-color: var(--titlebar-text-color);
+  --window-controls-hover-color: var(--titlebar-text-color);
+}
 </style>

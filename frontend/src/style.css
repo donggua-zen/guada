@@ -258,6 +258,11 @@ html.dark {
   --titlebar-text-color: #222;
   --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
 
+  /* 窗口控制按钮（最小化/最大化/关闭）配色，主题可按需覆盖 */
+  --window-controls-color: var(--color-text);
+  --window-controls-hover-bg: var(--titlebar-hover-bg);
+  --window-controls-hover-color: var(--window-controls-color);
+
   /* 流式波纹动画配色 */
   --shimmer-base: #606266;
   --shimmer-highlight: #c0c4cc;
@@ -283,6 +288,11 @@ html.dark {
   /* #a8aab3 - 柔和的灰白色 */
   --titlebar-hover-bg: rgba(255, 255, 255, 0.06);
   /* 更柔和的悬停效果 */
+
+  /* 窗口控制按钮（最小化/最大化/关闭）暗色默认配色 */
+  --window-controls-color: #8b8d95;
+  --window-controls-hover-bg: var(--titlebar-hover-bg);
+  --window-controls-hover-color: var(--window-controls-color);
 
   /* 流式波纹动画配色（暗色模式） */
   --shimmer-base: #a8aab3;
@@ -426,6 +436,16 @@ html.acrylic-enabled .sidebar-transparent-bg {
   background-color: color-mix(
     in srgb,
     var(--color-sidebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
+    transparent
+  ) !important;
+}
+
+/* 标题栏背景使用独立变量（默认同侧栏色；主题可单独定制，
+   如 famicom 的红色顶条）。特异度高于 .sidebar-transparent-bg */
+.custom-titlebar.sidebar-transparent-bg {
+  background-color: color-mix(
+    in srgb,
+    var(--color-titlebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
     transparent
   ) !important;
 }
