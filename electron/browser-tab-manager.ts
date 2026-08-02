@@ -282,12 +282,10 @@ export class BrowserWebviewManager {
     this.setupContextMenu(webviewWC, windowId);
 
     // 监听 webview 销毁（前端刷新或关闭标签时 DOM 元素移除）
-    // 清除 WebContents 引用，防止持有已销毁对象
+    // 直接删除 entry，防止 getWindowList()/getCurrentTabId() 返回已销毁的 windowId
     webviewWC.once("destroyed", () => {
-      const wv = this.webviews.get(windowId);
-      if (wv) {
-        wv.webContents = undefined;
-        log.info(`Window ${windowId} webContents destroyed`);
+      if (this.webviews.delete(windowId)) {
+        log.info(`Window ${windowId} destroyed, entry removed`);
       }
     });
   }
@@ -528,7 +526,7 @@ export class BrowserWebviewManager {
   getWindowList(): WindowInfo[] {
     return Array.from(this.webviews.values())
       .filter(
-        ({ webContents }) => !webContents || !webContents.isDestroyed(),
+        ({ webContents }) => webContents && !webContents.isDestroyed(),
       )
       .map(({ info, webContents }) => {
         if (webContents && !webContents.isDestroyed()) {
