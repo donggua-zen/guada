@@ -13,6 +13,7 @@ import {
   ToolHandlerDef,
   ResolvedPluginInfo,
 } from "../plugins/types/plugin.types";
+import type { ToolResultObject, ImageContent } from "../plugins/api/plugin-api";
 import { safeTruncate } from "../../common/utils/string.utils";
 import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
@@ -200,14 +201,30 @@ export class ToolExecutor {
         validatedArgs = result.data;
       }
 
-      let content = await toolEntry.handler(
+      let result = await toolEntry.handler(
         validatedArgs,
         { session } as PluginContext,
         abortSignal,
       );
 
-      if (typeof content === "object" && content !== null) {
-        content = JSON.stringify(content);
+      let images: ImageContent[] | undefined;
+      let content: string;
+
+      // Distinguish ToolResultObject { content, images } from legacy object / string
+      if (typeof result === "string") {
+        content = result;
+      } else if (typeof result === "object" && result !== null) {
+        const obj = result as Record<string, any>;
+        if (typeof obj["content"] === "string") {
+          // ToolResultObject — structured return
+          images = (obj as ToolResultObject).images;
+          content = obj["content"];
+        } else {
+          // Legacy: plain object → JSON.stringify
+          content = JSON.stringify(result);
+        }
+      } else {
+        content = String(result ?? "");
       }
 
       if (content && fullToolName !== "read") {
@@ -218,7 +235,7 @@ export class ToolExecutor {
           session,
         );
       }
-      return { toolCallId, name: fullToolName, content, isError: false };
+      return { toolCallId, name: fullToolName, content, isError: false, images };
     } catch (error: any) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error executing tool ${fullToolName}: ${errorMsg}`);

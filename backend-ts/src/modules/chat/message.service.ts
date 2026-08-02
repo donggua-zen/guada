@@ -10,6 +10,8 @@ import { randomUUID } from "crypto";
 import { UrlService } from "../../common/services/url.service";
 import { FileService } from "../files/file.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { FileRepository } from "../../common/database/file.repository";
+import { createHash } from "crypto";
 import { MessageRecord, MessagePart } from "../llm-core/types/llm.types";
 import { MessageLoadParams } from "./interfaces";
 
@@ -24,6 +26,7 @@ export class MessageService {
     private urlService: UrlService,
     private fileService: FileService,
     private uploadPathService: UploadPathService,
+    private fileRepo: FileRepository,
   ) {}
 
   /**
@@ -84,25 +87,28 @@ export class MessageService {
 
     // 格式化返回数据
     const formattedMessages = messages.map((msg) => {
-      // 转换文件 URL 为绝对路径
-      const filesWithAbsoluteUrls =
-        msg.files?.map((file) => ({
-          ...file,
-          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toResourceAbsoluteUrl(
-            file.previewUrl || "",
-          ),
-        })) || [];
+      const visibleContents = (msg.contents || []).filter(
+        (content: any) =>
+          content.role !== "tool" && !content.metadata?.hidden,
+      );
+
+      // Convert file URLs to absolute paths within each content
+      const contentsWithUrls = visibleContents.map((content: any) => {
+        if (content.files?.length > 0) {
+          content.files = content.files.map((file: any) => ({
+            ...file,
+            url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+            previewUrl: this.urlService.toResourceAbsoluteUrl(
+              file.previewUrl || "",
+            ),
+          }));
+        }
+        return this.stripToolCallDetails(content);
+      });
 
       return {
         ...msg,
-        files: filesWithAbsoluteUrls,
-        contents: msg.contents
-          .filter(
-            (content) =>
-              content.role !== "tool" && !content.metadata?.hidden,
-          )
-          .map((content) => this.stripToolCallDetails(content)),
+        contents: contentsWithUrls,
         metadata: msg.metadata
           ? this.stripSystemPayload(msg.metadata as Record<string, any>)
           : undefined,
@@ -244,23 +250,17 @@ export class MessageService {
           throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
         }
 
-        // 1. 解绑旧消息关联的文件（将 messageId 设置为 null）
-        await tx.file.updateMany({
-          where: { messageId: replaceMessageId },
-          data: { messageId: null },
-        });
-
-        // 2. 删除旧消息的所有内容版本
+        // 1. 删除旧消息的所有内容版本（File.contentId onDelete: SetNull 自动解绑）
         await tx.message.deleteMany({
           where: { parentId: replaceMessageId },
         });
 
-        // 3. 删除旧消息本身
+        // 2. 删除旧消息本身
         await tx.message.delete({
           where: { id: replaceMessageId },
         });
       }
-      // 4. 创建全新的消息（而不是创建新版本）
+      // 3. 创建全新的消息（而不是创建新版本）
       const newMessage = await tx.message.create({
         data: {
           sessionId,
@@ -273,8 +273,8 @@ export class MessageService {
 
       messageId = newMessage.id;
 
-      // 1. 创建消息内容
-      await tx.messageContent.create({
+      // 4. 创建消息内容
+      const newContent = await tx.messageContent.create({
         data: {
           messageId,
           turnsId, // 使用相同的 turnsId
@@ -284,11 +284,11 @@ export class MessageService {
         },
       });
 
-      // 2. 更新文件关联（如果有文件）
+      // 5. 更新文件关联到 contentId（如果有文件）
       if (files && files.length > 0) {
         await tx.file.updateMany({
           where: { id: { in: files } },
-          data: { messageId },
+          data: { contentId: newContent.id },
         });
       }
 
@@ -302,15 +302,19 @@ export class MessageService {
     });
 
     if (completeMessage) {
-      // 转换文件 URL 为绝对路径
-      if (completeMessage.files && completeMessage.files.length > 0) {
-        completeMessage.files = completeMessage.files.map((file) => ({
-          ...file,
-          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toResourceAbsoluteUrl(
-            file.previewUrl || "",
-          ),
-        }));
+      // 转换 contents 中 files 的 URL 为绝对路径
+      if (completeMessage.contents) {
+        for (const content of completeMessage.contents) {
+          if (content.files && content.files.length > 0) {
+            content.files = content.files.map((file) => ({
+              ...file,
+              url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+              previewUrl: this.urlService.toResourceAbsoluteUrl(
+                file.previewUrl || "",
+              ),
+            }));
+          }
+        }
       }
     }
     return completeMessage;
@@ -398,15 +402,19 @@ export class MessageService {
     });
 
     if (updatedMessage) {
-      // 转换文件 URL 为绝对路径
-      if (updatedMessage.files && updatedMessage.files.length > 0) {
-        updatedMessage.files = updatedMessage.files.map((file) => ({
-          ...file,
-          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toResourceAbsoluteUrl(
-            file.previewUrl || "",
-          ),
-        }));
+      // 转换 contents 中 files 的 URL 为绝对路径
+      if (updatedMessage.contents) {
+        for (const content of updatedMessage.contents) {
+          if (content.files && content.files.length > 0) {
+            content.files = content.files.map((file: any) => ({
+              ...file,
+              url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+              previewUrl: this.urlService.toResourceAbsoluteUrl(
+                file.previewUrl || "",
+              ),
+            }));
+          }
+        }
       }
 
       // 格式化返回数据
@@ -577,15 +585,66 @@ export class MessageService {
           metadata.toolCallId = record.toolCallId;
         }
 
+        let dbContent = "";
+        let pendingImages: MessagePart[] = [];
+
+        if (typeof record.content === "string") {
+          dbContent = record.content;
+        } else if (Array.isArray(record.content)) {
+          // MessagePart[] — extract images → File records (after content), merge text → string
+          const textParts: string[] = [];
+          pendingImages = [];
+
+          for (const part of record.content) {
+            if (part.type === "text" && part.text) {
+              textParts.push(part.text);
+            } else if (part.type === "image_url" && part.image_url?.url) {
+              pendingImages.push(part);
+            }
+          }
+
+          dbContent = textParts.join("\n");
+        }
+
+        // Create MessageContent first (File records need contentId FK)
         await this.contentRepo.create({
           id: record.contentId,
           messageId: record.messageId || "",
           turnsId: "",
           role: record.role,
-          content: typeof record.content === "string" ? record.content : "",
+          content: dbContent,
           reasoningContent: record.reasoningContent,
           metadata,
         });
+
+        // Now create File records with valid contentId
+        if (pendingImages.length > 0) {
+          for (const img of pendingImages) {
+            const match = img.image_url!.url.match(
+              /^data:(.+?);base64,(.+)$/,
+            );
+            if (!match) continue;
+
+            const mimeType = match[1];
+            const base64Data = match[2];
+            const ext = mimeType.split("/")[1] || "png";
+            const fileId = randomUUID();
+
+            await this.fileRepo.create({
+              id: fileId,
+              fileName: `tool_image_${fileId}.${ext}`,
+              displayName: "tool_image",
+              fileSize: Buffer.byteLength(base64Data, "base64"),
+              fileType: "image",
+              fileExtension: ext,
+              content: base64Data,
+              url: null,
+              contentHash: createHash("md5").update(base64Data).digest("hex"),
+              contentId: record.contentId || null,
+              fileMetadata: { mimeType, source: "tool" },
+            });
+          }
+        }
       }
 
       return records;
@@ -654,6 +713,26 @@ export class MessageService {
           metadata: { ...metadata },
         };
 
+        // Hidden user message with images injected under an assistant Message
+        // (content.role is "user" but msg.role is "assistant")
+        // Files are associated at content level via File.contentId
+        if (content.role === "user" && metadata.hidden && content.files?.length > 0) {
+          const imageFiles = content.files.filter((f: any) => f.fileType === "image");
+          if (imageFiles.length > 0) {
+            const textParts: MessagePart[] = [
+              { type: "text", text: content.content || "" },
+            ];
+            for (const file of imageFiles) {
+              const imagePart = await this.transformImageFile(
+                file,
+                supportsImageInput,
+              );
+              if (imagePart) textParts.push(imagePart);
+            }
+            baseMsg.content = textParts;
+          }
+        }
+
         if (keepReasoningContent) {
           baseMsg.reasoningContent = content.reasoningContent;
         }
@@ -714,9 +793,9 @@ export class MessageService {
         metadata["referencedKbs"] = kbInfo;
       }
 
-      if (msg.files && Array.isArray(msg.files)) {
-        for (let index = 0; index < msg.files.length; index++) {
-          const file = msg.files[index];
+      if (activeContent.files && Array.isArray(activeContent.files)) {
+        for (let index = 0; index < activeContent.files.length; index++) {
+          const file = activeContent.files[index];
           if (file.fileType === "image") {
             const imagePart = await this.transformImageFile(
               file,
@@ -785,7 +864,17 @@ export class MessageService {
       return { type: "text", text: `[图片ID：${file.id}]` };
     }
 
-    if (!file.url) return null;
+    // Tool image: base64 stored in File.content (no physical file on disk)
+    if (file.content) {
+      const mimeType = file.fileMetadata?.mimeType || "image/png";
+      const dataUri = `data:${mimeType};base64,${file.content}`;
+      return { type: "image_url", image_url: { url: dataUri } };
+    }
+
+    // Expired tool image: content was cleared by cleanup, no url fallback
+    if (!file.url) {
+      return { type: "text", text: "[图片已过期]" };
+    }
 
     try {
       const physicalPath = this.uploadPathService.toPhysicalPath(file.url);

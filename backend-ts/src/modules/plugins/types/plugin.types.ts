@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ISessionContext } from "../../chat/session-context";
+import type { ToolResult } from "../api/plugin-api";
 
 // ==================== 插件元数据 ====================
 
@@ -111,7 +112,7 @@ export interface ToolHandlerDef {
     args: Record<string, any>,
     context?: PluginContext,
     abortSignal?: AbortSignal,
-  ) => Promise<string> | string;
+  ) => Promise<ToolResult> | ToolResult;
   /** @internal Zod 运行时校验 schema（inputSchema 注册时自动注入） */
   _zodSchema?: import("zod").ZodTypeAny;
   /** 危险等级标记 */

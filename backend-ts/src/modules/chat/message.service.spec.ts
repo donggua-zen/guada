@@ -9,6 +9,7 @@ describe("MessageService", () => {
   let urlService: any;
   let fileService: any;
   let uploadPathService: any;
+  let fileRepo: any;
   let prisma: any;
   let service: MessageService;
 
@@ -53,6 +54,10 @@ describe("MessageService", () => {
     uploadPathService = {
       toPhysicalPath: jest.fn(),
     };
+    fileRepo = {
+      create: jest.fn(),
+      clearExpiredToolImages: jest.fn(),
+    };
 
     service = new MessageService(
       messageRepo,
@@ -61,6 +66,7 @@ describe("MessageService", () => {
       urlService,
       fileService,
       uploadPathService,
+      fileRepo,
     );
   });
 

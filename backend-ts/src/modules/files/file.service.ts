@@ -81,9 +81,32 @@ export class FileService implements OnModuleInit {
       });
     }, 30 * 60 * 1000);
 
+    // 启动时清理过期的工具图片（base64 content 已过期）
+    await this.cleanupExpiredToolImages();
+
+    // 之后每 30 分钟清理一次
+    setInterval(() => {
+      this.cleanupExpiredToolImages().catch((error) => {
+        this.logger.error(`定时清理过期工具图片失败: ${error.message}`);
+      });
+    }, 30 * 60 * 1000);
+
     this.logger.log(
       `孤儿文件定时清理已启动，间隔 30 分钟`,
     );
+  }
+
+  /**
+   * 清理过期的工具图片：base64 存储在 File.content 中，超过 TTL 后清空 content 字段。
+   * File 记录本身不删除，transformContentStructure 检测到 content 为 null 时返回"图片已过期"。
+   */
+  private async cleanupExpiredToolImages(): Promise<void> {
+    const TOOL_IMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const cutoff = new Date(Date.now() - TOOL_IMAGE_TTL_MS);
+    const count = await this.fileRepo.clearExpiredToolImages(cutoff);
+    if (count > 0) {
+      this.logger.log(`已清理 ${count} 条过期工具图片的 base64 数据`);
+    }
   }
 
   /**
@@ -410,10 +433,13 @@ export class FileService implements OnModuleInit {
    * 复制文件
    */
   async copyFile(fileId: string, messageId: string, userId: string) {
-    // 从消息中获取目标会话 ID
+    // 从消息中获取目标会话 ID + 活跃 content
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
-      include: { session: { select: { userId: true } } },
+      include: {
+        session: { select: { userId: true } },
+        contents: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
     });
 
     if (!message || message.session.userId !== userId) {
@@ -430,10 +456,12 @@ export class FileService implements OnModuleInit {
       throw new HttpException("File does not belong to this session", HttpStatus.FORBIDDEN);
     }
 
+    const activeContentId = message.contents[0]?.id || null;
+
     // 创建新的文件记录
     const newFile = await this.fileRepo.create({
       sessionId: message.sessionId,
-      messageId,
+      contentId: activeContentId,
       fileName: originalFile.fileName,
       displayName: originalFile.displayName,
       fileSize: originalFile.fileSize,
@@ -530,9 +558,9 @@ export class FileService implements OnModuleInit {
    */
   async deleteFilesByMessageId(messageId: string): Promise<number> {
     try {
-      // 查找该消息关联的所有文件
+      // 查找该消息所有 content 关联的文件
       const files = await this.prisma.file.findMany({
-        where: { messageId },
+        where: { messageContent: { messageId } },
       });
 
       let deletedCount = 0;
@@ -563,10 +591,10 @@ export class FileService implements OnModuleInit {
 
       const cutoffTime = new Date(Date.now() - this.ORPHAN_FILE_RETENTION_MS);
 
-      // 查找所有未关联消息且修改时间超过保留时长的孤儿文件
+      // 查找所有未关联 content 且修改时间超过保留时长的孤儿文件
       const orphanFiles = await this.prisma.file.findMany({
         where: {
-          messageId: null,
+          contentId: null,
           updatedAt: { lt: cutoffTime },
         },
       });

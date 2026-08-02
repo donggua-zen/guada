@@ -87,6 +87,11 @@
   --color-input-bg: #ffffff;
   --color-input-border: #d1d5db;
 
+  /* 模态框：默认继承，主题可覆盖 */
+  --color-overlay-bg: var(--color-surface);
+  --color-dialog-bg: var(--color-bg);
+  --color-dialog-border: var(--color-border);
+
   --size-text-base: 15px;
   --size-text-sm: 14px;
 
@@ -200,6 +205,11 @@ html.dark {
   --color-input-bg: #2d2d2d;
   --color-input-border: #404040;
 
+  /* 模态框：默认继承，主题可覆盖 */
+  --color-overlay-bg: var(--color-surface);
+  --color-dialog-bg: var(--color-surface);
+  --color-dialog-border: var(--color-border);
+
   /* ====================
        消息气泡配色
        优化对比度，保护视力
@@ -239,6 +249,11 @@ html.dark {
   --el-color-primary-dark-2: var(--color-primary-950) !important;
   --el-color-primary-light-1: var(--color-primary-950) !important;
 
+  /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
+  --el-bg-color-overlay: var(--color-surface) !important;
+  --el-border-color-light: var(--color-surface-border) !important;
+  --el-fill-color-light: var(--color-sidebar-bg-hover) !important;
+
   /* 标题栏样式变量 */
   --titlebar-text-color: #222;
   --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
@@ -257,6 +272,11 @@ html.dark {
   --el-color-primary-light-3: var(--color-primary-800) !important;
   --el-color-primary-dark-2: var(--color-primary-950) !important;
   --el-color-primary-light-1: var(--color-primary-950) !important;
+
+  /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
+  --el-bg-color-overlay: var(--color-surface) !important;
+  --el-border-color-light: var(--color-surface-border) !important;
+  --el-fill-color-light: var(--color-sidebar-bg-hover) !important;
 
   /* 标题栏暗色模式样式变量 */
   --titlebar-text-color: var(--color-text);
@@ -535,14 +555,12 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   width: 100%;
   height: 100%;
 
-  /* 亮色模式：极淡的白色微覆盖 (0.15 透明度) */
-  background-color: rgba(255, 255, 255, 0.8) !important;
+  background-color: var(--color-overlay-bg) !important;
+  opacity: 0.8;
 }
 
 html.dark .el-overlay::before {
-  /* 暗色模式：深色微覆盖，使用深蓝灰色而非纯黑 */
-  background-color: rgba(10, 11, 14, 0.75) !important;
-  /* 75% 透明度的深色遮罩 */
+  opacity: 0.75;
 }
 
 /* 3. 确保弹窗容器居中 */
@@ -562,10 +580,9 @@ html.dark .el-overlay::before {
   margin: 0 auto !important;
   max-height: 85vh;
   border-radius: 16px !important;
-  background-color: var(--color-bg) !important;
+  background-color: var(--color-dialog-bg) !important;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
-  /* 加深阴影 */
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-dialog-border);
   display: flex;
   flex-direction: column;
   padding: 8px !important;
@@ -577,11 +594,9 @@ html.dark .el-overlay::before {
 }
 
 html.dark .el-dialog {
-  background-color: var(--color-surface) !important;
-  /* 使用表面色 */
-  border-color: var(--color-border);
+  background-color: var(--color-dialog-bg) !important;
+  border-color: var(--color-dialog-border);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
-  /* 柔和的阴影 */
 }
 
 /* 5. 紧凑内边距 */
@@ -605,16 +620,16 @@ html.dark .el-dialog {
    ========================================== */
 .el-message-box {
   border-radius: 16px !important;
-  background-color: var(--color-bg) !important;
-  border: 1px solid #ccc !important;
+  background-color: var(--color-dialog-bg) !important;
+  border: 1px solid var(--color-dialog-border) !important;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
   padding: 0 !important;
   /* 移除默认 padding，由内部元素控制 */
 }
 
 html.dark .el-message-box {
-  background-color: var(--color-surface) !important;
-  border-color: var(--color-border) !important;
+  background-color: var(--color-dialog-bg) !important;
+  border-color: var(--color-dialog-border) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 

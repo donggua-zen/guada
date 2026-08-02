@@ -38,4 +38,6 @@ export interface ToolCallResponse {
   isError?: boolean;
   /** 工具执行结果状态，由 agent-engine 在执行后设置 */
   outcome?: "success" | "error" | "rejected";
+  /** 工具返回的图片（base64），由 agent-engine 注入为隐藏 user 消息 */
+  images?: import("../../plugins/api/plugin-api").ImageContent[];
 }

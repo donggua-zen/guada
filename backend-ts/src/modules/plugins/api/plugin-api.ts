@@ -16,7 +16,17 @@ import { ICommandProvider } from "../../commands/interfaces/command-provider.int
 
 // ── PluginApi ──
 
-export type ToolResult = string | Record<string, any>;
+export interface ImageContent {
+  media_type: string;
+  data: string; // base64, no data: prefix
+}
+
+export interface ToolResultObject {
+  content: string;
+  images?: ImageContent[];
+}
+
+export type ToolResult = string | ToolResultObject | Record<string, any>;
 
 export interface ToolExecCtx extends PluginContext {}
 

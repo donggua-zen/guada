@@ -71,7 +71,6 @@ model Message {
   metadata         Json?            @map("meta_data")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
-  files            File[]
   session          Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   // parent           Message?         @relation("MessageThread", fields: [parentId], references: [id])
   // children         Message[]        @relation("MessageThread")
@@ -96,6 +95,7 @@ model MessageContent {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   message          Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  files            File[]
 
   @@index([messageId])
   // @@index([turnsId])
@@ -303,17 +303,17 @@ model File {
   contentHash   String   @map("content_hash")
   uploadUserId  String?  @map("upload_user_id")
   sessionId     String?  @map("session_id")
-  messageId     String?  @map("message_id")
+  contentId     String?  @map("content_id")
   isPublic      Boolean  @default(false) @map("is_public")
   fileMetadata  Json?    @map("file_metadata")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  message       Message? @relation(fields: [messageId], references: [id])
+  messageContent MessageContent? @relation(fields: [contentId], references: [id], onDelete: SetNull)
 
   @@index([contentHash])
   @@index([uploadUserId])
   @@index([sessionId])
-  @@index([messageId])
+  @@index([contentId])
   @@map("file")
 }
 

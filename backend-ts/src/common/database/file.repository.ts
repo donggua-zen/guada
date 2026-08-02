@@ -27,4 +27,21 @@ export class FileRepository {
   async updateMany(ids: string[], data: any) {
     return this.prisma.file.updateMany({ where: { id: { in: ids } }, data });
   }
+
+  /**
+   * Clear content (base64) for tool-generated images that have expired.
+   * Keeps the File record itself (for metadata/audit) but removes the bulky base64 data.
+   */
+  async clearExpiredToolImages(cutoff: Date): Promise<number> {
+    const result = await this.prisma.file.updateMany({
+      where: {
+        fileType: "image",
+        url: null,
+        content: { not: null },
+        createdAt: { lt: cutoff },
+      },
+      data: { content: null },
+    });
+    return result.count;
+  }
 }

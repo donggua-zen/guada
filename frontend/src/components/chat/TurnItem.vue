@@ -35,8 +35,8 @@
           </div>
         </div>
         <!-- 文件列表 -->
-        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(turn.user.files?.length ?? 0) > 0">
-          <FileItem v-for="file, index in turn.user.files" :key="file.id" :name="file.displayName" :type="file.fileType"
+        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(turn.user.contents?.[0]?.files?.length ?? 0) > 0">
+          <FileItem v-for="file, index in turn.user.contents?.[0]?.files" :key="file.id" :name="file.displayName" :type="file.fileType"
             :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
@@ -501,7 +501,7 @@ const formatTokenNumber = (num: number | null): string => {
 // 图片预览
 // ============================================
 const previewList = computed(() => {
-  const files = props.turn.user?.files || [];
+  const files = props.turn.user?.contents?.[0]?.files || [];
   return files.map((f: any) => f.url || f.previewUrl);
 });
 

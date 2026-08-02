@@ -205,11 +205,13 @@ export class GeminiAdapter implements IProtocolAdapter {
         parts = msg.content.map((item) => {
           if (item.type === "text") return { text: item.text };
           if (item.type === "image_url" && item.image_url) {
-            // 简单处理 base64 或 URL，实际生产环境可能需要更复杂的 MIME 类型识别
+            const url = item.image_url.url;
+            const match = url.match(/^data:(.+?);base64,/);
+            const mimeType = match ? match[1] : "image/jpeg";
             return {
               inlineData: {
-                data: item.image_url.url.split(",")[1],
-                mimeType: "image/jpeg",
+                data: url.split(",")[1],
+                mimeType,
               },
             };
           }

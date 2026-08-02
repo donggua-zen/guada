@@ -6,7 +6,7 @@ import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
 import { PromptCollector } from "../plugins/prompt-collector.service";
 import { PluginContext } from "../plugins/types/plugin.types";
-import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
+import { MessageRecord, MessagePart, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { partialParse } from "partial-json-parser";
@@ -515,6 +515,10 @@ export class AgentEngine {
             contentId,
           };
 
+          // Collect image parts across all tool results, then push a single
+          // hidden user message after all tool messages to avoid tool/user interleaving
+          const pendingImageParts: MessagePart[] = [];
+
           for (const res of execResult.toolResponses) {
             parts.push({
               role: "tool",
@@ -523,7 +527,31 @@ export class AgentEngine {
               toolCallId: res.toolCallId,
               messageId: responseMessageId,
             });
+
+            if (res.images && res.images.length > 0) {
+              pendingImageParts.push(
+                { type: "text", text: res.content || "" },
+                ...res.images.map((img) => ({
+                  type: "image_url" as const,
+                  image_url: {
+                    url: `data:${img.media_type};base64,${img.data}`,
+                  },
+                })),
+              );
+            }
           }
+
+          // Push a single hidden user message with all collected images
+          if (pendingImageParts.length > 0) {
+            parts.push({
+              role: "user",
+              content: pendingImageParts,
+              messageId: responseMessageId,
+              contentId: sessionContext.generateId(),
+              metadata: { hidden: true },
+            });
+          }
+
           needToContinue = true;
         }
       }

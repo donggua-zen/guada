@@ -12,7 +12,7 @@ import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
-import { PluginApi } from "../api/plugin-api";
+import { PluginApi, ImageContent } from "../api/plugin-api";
 import { z } from "zod";
 
 const DEFAULT_PROMPT =
@@ -31,6 +31,16 @@ const MIME_TYPES: Record<string, string> = {
   tiff: "image/tiff",
 };
 
+/** Check if the current session's model supports multimodal image input. */
+function supportsMultimodal(ctx: PluginContext | undefined): boolean {
+  if (!ctx?.session) return false;
+  const config = ctx.session.getModelConfig();
+  return (
+    config.config.inputCapabilities?.includes("image") ||
+    ctx.session.supportsFeature("vision")
+  );
+}
+
 @Injectable()
 export class ImageRecognitionPlugin extends PluginBase {
   private readonly logger = new Logger(ImageRecognitionPlugin.name);
@@ -39,7 +49,7 @@ export class ImageRecognitionPlugin extends PluginBase {
     id: "image_recognition",
     name: "图像识别",
     description: "图像内容识别工具",
-    version: "1.0.0",
+    version: "1.1.0",
     category: "core" as const,
   };
 
@@ -55,34 +65,37 @@ export class ImageRecognitionPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    // ── Toolkit 1: image_recognize (text-only models) ──
+    // Loads only when the current model does NOT support multimodal input.
+    // Calls a separate vision model to produce a text description.
     api.registerToolKit({
       id: "image_recognition",
       name: "Image Recognition",
-      loadMode: "lazy",
+      loadMode: "eager",
       activator:
         "Use this toolkit when you need to recognize image content from a user-provided image ID or image path and return a detailed description.",
+      handler: (ctx) => ({
+        loadMode: supportsMultimodal(ctx)
+          ? ("none" as const)
+          : ("eager" as const),
+      }),
       onLoad: (toolkit) => {
         toolkit.registerTool({
           name: "image_recognize",
           description:
-            'Recognize image content and return a detailed text description. Use source="id" for an uploaded image file ID, or source="path" for a file system path.',
+            "Recognize image content and return a detailed text description. Pass image_id for an uploaded file, or image_path for a file system path.",
           inputSchema: z.object({
-            source: z
-              .enum(["id", "path"])
-              .describe(
-                'The source type of the image: "id" for an uploaded file ID (use image_id), "path" for a file system path (use image_path)',
-              ),
             image_id: z
               .string()
               .optional()
               .describe(
-                "Uploaded image file ID, required when source='id', usually obtained from the message context",
+                "Uploaded image file ID, usually obtained from the message context",
               ),
             image_path: z
               .string()
               .optional()
               .describe(
-                "Path to the image file, required when source='path'. Can be an absolute path or a path relative to the working directory",
+                "Path to the image file. Can be an absolute path or a path relative to the working directory",
               ),
             prompt: z
               .string()
@@ -92,40 +105,78 @@ export class ImageRecognitionPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, abortSignal) => {
-            const { source, image_id, image_path, prompt } = args;
-            let physicalPath: string;
-
-            if (source === "id") {
-              if (!image_id)
-                throw new Error("image_id is required when source='id'");
-              const file = await this.fileRepo.findById(image_id);
-              if (!file || file.fileType !== "image")
-                throw new Error(
-                  `Invalid image ID or file type is not an image: ${image_id}`,
-                );
-              physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-            } else if (source === "path") {
-              if (!image_path)
-                throw new Error("image_path is required when source='path'");
-              physicalPath = this.workspaceService.resolveFilePath(
-                image_path,
-                ctx?.session.workspacePath,
-              );
-            } else {
-              throw new Error("source must be either 'id' or 'path'");
-            }
-
-            try {
-              await fs.access(physicalPath);
-            } catch {
-              throw new Error(`Image file not found: ${physicalPath}`);
-            }
-
-            return this.recognizeImage(physicalPath, prompt, abortSignal);
+            const { image_id, image_path, prompt } = args;
+            const physicalPath = await this.resolveImagePath(
+              image_id,
+              image_path,
+              ctx,
+            );
+            return this.recognizeImageViaVisionModel(
+              physicalPath,
+              prompt,
+              abortSignal,
+            );
           },
           display: {
             actionType: "recognize",
-            argsKey: "source",
+            argsKey: "image_id",
+            icon: "vision",
+          },
+        });
+      },
+    });
+
+    // ── Toolkit 2: image_view (multimodal models) ──
+    // Loads only when the current model supports multimodal input.
+    // Returns the image as base64 via the structured ToolResult protocol,
+    // letting the LLM see the image directly without a separate vision model call.
+    api.registerToolKit({
+      id: "image_view",
+      name: "Image View",
+      loadMode: "eager",
+      activator:
+        "Use this toolkit when you need to view or analyze an image from a image path. The image will be returned to you directly for visual analysis.",
+      handler: (ctx) => ({
+        loadMode: supportsMultimodal(ctx)
+          ? ("eager" as const)
+          : ("none" as const),
+      }),
+      onLoad: (toolkit) => {
+        toolkit.registerTool({
+          name: "image_view",
+          description:
+            'View an image file from the file system and return it for visual analysis.',
+          inputSchema: z.object({
+            image_path: z
+              .string()
+              .describe(
+                "Path to the image file. Can be an absolute path or a path relative to the working directory",
+              ),
+          }),
+          execute: async (args, ctx) => {
+            const { image_path } = args;
+            const physicalPath = this.workspaceService.resolveFilePath(
+              image_path,
+              ctx?.session.workspacePath,
+            );
+
+            let imageBuffer: Buffer = await fs.readFile(physicalPath);
+            imageBuffer = await this.ensureWithinPixelLimit(imageBuffer);
+            const base64Data = imageBuffer.toString("base64");
+            const ext = path
+              .extname(physicalPath)
+              .toLowerCase()
+              .replace(".", "");
+            const mimeType = MIME_TYPES[ext] ?? `image/${ext}`;
+
+            return {
+              content: "Image loaded successfully. It will be injected as a subsequent user message in the current conversation for your visual analysis.",
+              images: [{ media_type: mimeType, data: base64Data }],
+            };
+          },
+          display: {
+            actionType: "view",
+            argsKey: "image_path",
             icon: "vision",
           },
         });
@@ -133,13 +184,32 @@ export class ImageRecognitionPlugin extends PluginBase {
     });
   }
 
+  /** Resolve image source to a physical file path. */
+  private async resolveImagePath(
+    imageId: string | undefined,
+    imagePath: string | undefined,
+    ctx: PluginContext | undefined,
+  ): Promise<string> {
+    if (imageId) {
+      const file = await this.fileRepo.findById(imageId);
+      if (!file || file.fileType !== "image")
+        throw new Error(
+          `Invalid image ID or file type is not an image: ${imageId}`,
+        );
+      return this.uploadPathService.toPhysicalPath(file.url);
+    }
+    if (imagePath) {
+      return this.workspaceService.resolveFilePath(
+        imagePath,
+        ctx?.session.workspacePath,
+      );
+    }
+    throw new Error("Either image_id or image_path must be provided");
+  }
+
   /**
    * If the image's total pixel count (width × height) exceeds MAX_TOTAL_PIXELS,
    * scale it down proportionally so that the total pixel count stays within the limit.
-   *
-   * The scale factor is derived from:  scale = sqrt(MAX / (w * h))
-   * so that  newW * newH = (w * scale) * (h * scale) = scale² * w * h = MAX.
-   * Math.floor on both dimensions guarantees we never exceed the limit.
    */
   private async ensureWithinPixelLimit(imageBuffer: Buffer): Promise<Buffer> {
     const metadata = await sharp(imageBuffer).metadata();
@@ -164,13 +234,13 @@ export class ImageRecognitionPlugin extends PluginBase {
       .toBuffer();
   }
 
-  private async recognizeImage(
+  /** Call a separate vision model to recognize the image (text-only model path). */
+  private async recognizeImageViaVisionModel(
     physicalPath: string,
     prompt?: string,
     abortSignal?: AbortSignal,
   ): Promise<string> {
     try {
-      // 1. Read the visual model ID from settings
       const visualModelId = await this.settingsStorage.getSettingValue(
         "models",
         SK_MOD_VISUAL,
@@ -181,7 +251,6 @@ export class ImageRecognitionPlugin extends PluginBase {
         );
       }
 
-      // 2. Query the full model configuration (including provider) from the database
       const visualModelConfig = await this.prisma.model.findUnique({
         where: { id: visualModelId },
         include: { provider: true },
@@ -195,7 +264,6 @@ export class ImageRecognitionPlugin extends PluginBase {
       const model = visualModelConfig.modelName;
       const thinkingEffort = resolveThinkingEffort(visualModelConfig, "none");
 
-      // Read image, resize if total pixels exceed the limit, then convert to base64
       let imageBuffer: Buffer = await fs.readFile(physicalPath);
       imageBuffer = await this.ensureWithinPixelLimit(imageBuffer);
       const base64Image = imageBuffer.toString("base64");
