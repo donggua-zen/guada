@@ -1,0 +1,588 @@
+/* ============================================================
+   主题：小破球（wandering-earth）【仅暗色】
+   风格：流浪地球 · 航天指挥所 · 军用工业控制台
+   说明：与赛博朋克的霓虹美学相反——克制、实用、工业。
+        琥珀色 = 激活/选中（图中的页签与仪表弧），
+        绿色 = 状态确认（AIRDROP BEGINS 横幅），
+        角落括号 + 刻度尺 + 蓝图网格 + 方形面板构成语言。
+        亮色模式不定义任何变量与样式，完全回落到 style.css 的
+        基础默认样式（与 default 主题亮色一致）。
+        字体零第三方文件：Bahnschrift（Windows 自带 DIN 风窄体）
+        用于标题/标签，中文自动回退系统黑体。
+   ============================================================ */
+
+/* ---------- 暗色模式：联合政府指挥中心 ---------- */
+html.dark[data-theme="wandering-earth"] {
+  /* 主色：指挥台琥珀 */
+  --color-primary: #d99a4e;
+  --color-primary-hover: #e8b06a;
+  --color-primary-active: #b57a35;
+  --color-primary-disabled: #5a4a32;
+  --color-primary-text: #1a1208;
+  --color-primary-text-disabled: rgba(26, 18, 8, 0.5);
+
+  --color-primary-50:  #1c150c;
+  --color-primary-100: #2c2110;
+  --color-primary-200: #453218;
+  --color-primary-300: #6b4d24;
+  --color-primary-400: #b57a35;
+  --color-primary-500: #d99a4e;
+  --color-primary-600: #e8b06a;
+  --color-primary-700: #f0c488;
+  --color-primary-800: #f6d7a8;
+  --color-primary-900: #fbe8c8;
+  --color-primary-950: #fdf3e0;
+
+  /* 副色：状态绿（AIRDROP BEGINS 横幅绿） */
+  --color-secondary: #43b581;
+  --color-secondary-hover: #5ccda0;
+  --color-secondary-active: #359a6b;
+  --color-secondary-disabled: #1e4a38;
+  --color-secondary-text: #08120c;
+  --color-secondary-text-disabled: rgba(8, 18, 12, 0.5);
+  --color-secondary-50:  #0a1a12;
+  --color-secondary-100: #12281c;
+  --color-secondary-200: #1e4a38;
+  --color-secondary-300: #2b6b4e;
+  --color-secondary-400: #359a6b;
+  --color-secondary-500: #43b581;
+  --color-secondary-600: #5ccda0;
+  --color-secondary-700: #82dcb8;
+  --color-secondary-800: #aae8ce;
+  --color-secondary-900: #d2f3e4;
+  --color-secondary-950: #e8faf2;
+
+  /* 基础表面与文字：蓝黑指挥台 */
+  --color-text: #c9d4de;
+  --color-text-gray: #75828f;
+  --color-text-disabled: #455260;
+  --color-surface: #10151c;
+  --color-surface-border: #2b3542;
+  --color-bg: #0a0d11;
+  --color-border: #2b3542;
+
+  /* 侧边栏（左栏） */
+  --color-sidebar-bg: #0c1015;
+  --color-sidebar-bg-active: var(--color-primary);
+  --color-sidebar-bg-hover: rgba(217, 154, 78, 0.08);
+  --color-sidebar-text: #c9d4de;
+  --color-sidebar-text-hover: #e2eaf2;
+  --color-sidebar-text-active: #1a1208;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #0c1015;
+  --color-titlebar-border: #2b3542;
+  --titlebar-text-color: #c9d4de;
+  --titlebar-hover-bg: rgba(217, 154, 78, 0.15);
+
+  /* 会话列表 */
+  --color-conversation-bg: #0a0d11;
+  --color-conversation-text: #c9d4de;
+  --color-conversation-border: #2b3542;
+  --color-conversation-bg-active: var(--color-primary);
+  --color-conversation-text-active: #1a1208;
+  --color-conversation-bg-hover: rgba(217, 154, 78, 0.08);
+  --color-conversation-text-hover: #e2eaf2;
+
+  /* 消息气泡：用户 = 绿色状态横幅；助手 = 指挥台面板块 */
+  --color-bubble-user-bg: rgba(67, 181, 129, 0.10);
+  --color-bubble-user-text: #cfe8d8;
+  --color-bubble-user-border: rgba(67, 181, 129, 0.55);
+  --color-bubble-assitant-bg: #10151c;
+  --color-bubble-assitant-text: #c9d4de;
+  --color-bubble-assitant-border: #2b3542;
+  --color-bubble-assitant-text-strong: #d99a4e;
+
+  /* 输入框 */
+  --color-input-bg: #0d1218;
+  --color-input-border: #2b3542;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #2b3542;
+  --shimmer-highlight: #d99a4e;
+
+  /* 窗口控制按钮：指挥台灰 + 琥珀 hover */
+  --window-controls-color: #aeb9c4;
+  --window-controls-hover-bg: rgba(217, 154, 78, 0.18);
+  --window-controls-hover-color: #e8b06a;
+
+  /* 代码块配色变量（markdown.css 消费，带默认值，其他主题不受影响） */
+  --code-block-bg: #0d1218;
+  --code-block-border: transparent;
+  --code-block-header-bg: transparent;
+  --code-block-language-color: var(--color-primary);
+}
+
+/* ---------- 主题专属细节（全部仅暗色生效） ---------- */
+
+/* ============================================================
+   控制台工具库
+
+   核心：角落括号 = border-image 九宫格，SVG 只在四角画 L 标，
+   边中段留空（拉伸无内容）。slice 30 切出四角不变形。
+   严格方形、无圆角、无辉光——军用面板的克制感。
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] {
+  /* 角落括号：灰（助手面板 / 输入框 / 代码块） */
+  --we-brackets: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M5 32 V5 H32 M88 5 H115 V32 M115 88 V115 H88 M32 115 H5 V88' fill='none' stroke='%2355677a' stroke-width='5'/></svg>");
+  /* 角落括号：琥珀（输入框聚焦） */
+  --we-brackets-amber: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M5 32 V5 H32 M88 5 H115 V32 M115 88 V115 H88 M32 115 H5 V88' fill='none' stroke='%23d99a4e' stroke-width='5'/></svg>");
+  /* 角落括号：绿（用户气泡） */
+  --we-brackets-green: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M5 32 V5 H32 M88 5 H115 V32 M115 88 V115 H88 M32 115 H5 V88' fill='none' stroke='%2343b581' stroke-width='5'/></svg>");
+  /* 刻度尺（标题栏底边：短刻度 8px 一格 + 长刻度 40px 一格 + 基线） */
+  --we-ruler-ticks:
+    repeating-linear-gradient(90deg, rgba(117, 130, 143, 0.5) 0 1px, transparent 1px 40px),
+    repeating-linear-gradient(90deg, rgba(117, 130, 143, 0.35) 0 1px, transparent 1px 8px),
+    linear-gradient(#2b3542, #2b3542);
+  /* DIN 风窄体字体栈：系统自带，零下载 */
+  --we-condensed: 'Bahnschrift', 'DIN Alternate', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* 等宽数据字体 */
+  --we-mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+}
+
+/* ============================================================
+   背景纹理：蓝图细网格
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] body::before {
+  background-image:
+    linear-gradient(rgba(120, 140, 160, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 140, 160, 0.055) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-color: var(--color-bg);
+}
+/* 内容区补一层（body::before 常被不透明背景盖住） */
+html.dark[data-theme="wandering-earth"] .content-clear-wallpaper {
+  background-image:
+    linear-gradient(rgba(120, 140, 160, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 140, 160, 0.055) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ============================================================
+   用户气泡：绿色状态确认横幅（AIRDROP BEGINS 风格）——
+   细绿边 + 绿色淡染 + 四角绿色 L 标
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .user-section .message-item__card {
+  position: relative;
+  z-index: 0;
+  background: var(--color-bubble-user-bg);
+  border: 1px solid var(--color-bubble-user-border);
+  border-radius: 0;
+  padding: 7px 14px;
+}
+html.dark[data-theme="wandering-earth"] .user-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 10px solid transparent;
+  border-image-source: var(--we-brackets-green);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+
+/* 助手消息：指挥台面板块——细灰全边框 + 四角灰色 L 标 */
+html.dark[data-theme="wandering-earth"] .assistant-section .message-item__card {
+  position: relative;
+  z-index: 0;
+  background: var(--color-bubble-assitant-bg);
+  border: 1px solid var(--color-bubble-assitant-border);
+  border-radius: 0;
+  padding: 14px 18px;
+}
+html.dark[data-theme="wandering-earth"] .assistant-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 10px solid transparent;
+  border-image-source: var(--we-brackets);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+
+/* ============================================================
+   会话列表 / 导航菜单：激活 = 实心琥珀页签（深色字）
+   直接覆盖 Tailwind 原子类背景（特异度更高）
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .session-item,
+html.dark[data-theme="wandering-earth"] .nav-item {
+  border-radius: 0;
+}
+html.dark[data-theme="wandering-earth"] .session-item-active,
+html.dark[data-theme="wandering-earth"] .nav-item-active {
+  background: var(--color-primary);
+  color: var(--color-sidebar-text-active);
+}
+
+/* 左栏 / 右栏：细灰数据线 */
+html.dark[data-theme="wandering-earth"] .global-sidebar {
+  border-right: 1px solid var(--color-border);
+  box-shadow: none;
+}
+html.dark[data-theme="wandering-earth"] .workspace-sidebar {
+  border-left: 1px solid var(--color-border);
+}
+
+/* 标题栏：底部刻度尺（短刻度 + 长刻度 + 基线） */
+html.dark[data-theme="wandering-earth"] .custom-titlebar {
+  background-image: var(--we-ruler-ticks) !important;
+  background-size: 100% 7px, 100% 4px, 100% 1px !important;
+  background-position: bottom left, bottom left, bottom left !important;
+  background-repeat: no-repeat !important;
+}
+
+/* ============================================================
+   输入框：方形控制台，聚焦时角标变琥珀「锁定目标」
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .input-area {
+  border: 1px solid var(--color-input-border);
+  border-radius: 0;
+}
+html.dark[data-theme="wandering-earth"] .input-area::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 10px solid transparent;
+  border-image-source: var(--we-brackets);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+html.dark[data-theme="wandering-earth"] .input-area:focus-within {
+  border-color: var(--color-primary-300);
+}
+html.dark[data-theme="wandering-earth"] .input-area:focus-within::before {
+  border-image-source: var(--we-brackets-amber);
+}
+
+/* 发送按钮：方形指令键 */
+html.dark[data-theme="wandering-earth"] .send-btn {
+  border-radius: 0;
+}
+
+/* 输入区工具按钮：去圆角 */
+html.dark[data-theme="wandering-earth"] .tool-btn,
+html.dark[data-theme="wandering-earth"] .model-selector-btn {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Markdown 正文细节
+   ============================================================ */
+
+/* 标题：DIN 窄体 + 加宽字距 + 琥珀小方块弹头 + 虚线分隔 */
+html.dark[data-theme="wandering-earth"] .markdown-text h1,
+html.dark[data-theme="wandering-earth"] .markdown-text h2 {
+  font-family: var(--we-condensed);
+  letter-spacing: 0.08em;
+  color: var(--color-text);
+  border-bottom: 1px dashed var(--color-border);
+  padding-bottom: 6px;
+}
+html.dark[data-theme="wandering-earth"] .markdown-text h2::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  background: var(--color-primary);
+  vertical-align: baseline;
+}
+html.dark[data-theme="wandering-earth"] .markdown-text h3 {
+  font-family: var(--we-condensed);
+  letter-spacing: 0.05em;
+  color: var(--color-primary);
+}
+
+/* 链接：琥珀 + 点状下划线（技术引线风格） */
+html.dark[data-theme="wandering-earth"] .markdown-text a {
+  color: var(--color-primary);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+html.dark[data-theme="wandering-earth"] .markdown-text a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* 引用块：绿色左杠 + 淡染（状态注记） */
+html.dark[data-theme="wandering-earth"] .markdown-text blockquote {
+  border-left: 3px solid var(--color-secondary);
+  border-radius: 0;
+  background: rgba(67, 181, 129, 0.07);
+  padding: 6px 12px;
+}
+
+/* 分隔线：虚线刻度 */
+html.dark[data-theme="wandering-earth"] .markdown-text hr {
+  height: 1px;
+  border: none;
+  border-top: 1px dashed var(--color-border);
+}
+
+/* 行内代码：琥珀等宽 + 细边（:not(pre *) 排除代码块内部） */
+html.dark[data-theme="wandering-earth"] .markdown-text code:not(pre code) {
+  font-family: var(--we-mono);
+  background: rgba(217, 154, 78, 0.10);
+  color: var(--color-primary);
+  border: 1px solid rgba(217, 154, 78, 0.35);
+  border-radius: 0;
+  padding: 0 4px;
+}
+
+/* 表格：细灰实线 */
+html.dark[data-theme="wandering-earth"] .markdown-text table th,
+html.dark[data-theme="wandering-earth"] .markdown-text table td {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   代码块（真实结构 .custom-code-block > .code-header + pre.hljs）：
+   终端面板——细灰全边框 + 四角 L 标 + 琥珀语言页签
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .markdown-text .custom-code-block {
+  position: relative;
+  z-index: 0;
+  background: var(--code-block-bg);
+  border: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+html.dark[data-theme="wandering-earth"] .markdown-text .custom-code-block::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 10px solid transparent;
+  border-image-source: var(--we-brackets);
+  border-image-slice: 30;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  pointer-events: none;
+}
+/* 标题栏：底部数据线分隔 */
+html.dark[data-theme="wandering-earth"] .markdown-text .code-header {
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  padding: 6px 12px;
+}
+/* 语言名 = 实心琥珀页签（图3 顶部激活页签风格） */
+html.dark[data-theme="wandering-earth"] .markdown-text .code-language {
+  font-family: var(--we-mono);
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  padding: 2px 8px;
+  margin-right: auto;
+  text-shadow: none;
+}
+html.dark[data-theme="wandering-earth"] .markdown-text .copy-code-button:hover {
+  color: var(--color-primary-hover);
+}
+/* pre 融入面板 */
+html.dark[data-theme="wandering-earth"] .markdown-text .custom-code-block pre.hljs {
+  border: none;
+  border-radius: 0;
+}
+
+/* ============================================================
+   Element Plus 组件：方形 + 琥珀指令键
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .el-button {
+  border-radius: 0;
+  font-family: var(--we-condensed);
+  font-size: 0.9em;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+/* Dialog：授权管理面板风格——四边统一琥珀描边、顶部加粗，
+   标题牌整体位于顶边上方（不骑线）、左边缘与左边框对齐。
+   注意：style.css 对 .el-dialog 用了 border-radius/background/
+   box-shadow/padding 的 !important，此处必须以 !important 覆盖
+   （本选择器特异度更高，可胜出）。X 关闭键保留，配色融入。 */
+html.dark[data-theme="wandering-earth"] .el-dialog {
+  position: relative;
+  overflow: visible;
+  border: 1px solid var(--color-primary);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 0 !important;
+  background: var(--color-surface) !important;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55) !important;
+}
+/* header 压缩：标题牌与关闭键均已脱离文档流（绝对定位），
+   header 不再为标题保留高度，只留一条 6px 呼吸缝。
+   :has(.el-dialog__title) 限定——使用 #header 自定义插槽的弹窗
+   （角色编辑 / 更新日志等）不渲染 title span，不受此压缩影响 */
+html.dark[data-theme="wandering-earth"] .el-dialog__header:has(.el-dialog__title) {
+  padding: 0 16px !important;
+  height: 6px;
+  box-sizing: border-box;
+}
+/* 标题牌：实心琥珀 + 深色大写窄体字。
+   定位基准是 dialog 的 padding box：top 取 -(牌高20px + 顶边框3px)
+   使牌底边与顶边框外沿齐平；left:-1px 使牌左缘与左边框外沿对齐 */
+html.dark[data-theme="wandering-earth"] .el-dialog__title {
+  position: absolute;
+  top: -23px;
+  left: -1px;
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-family: var(--we-condensed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  padding: 1px 10px;
+}
+/* 无标题弹窗（未设 title 且无 #header 插槽，如会话搜索）：
+   空 title span 不渲染琥珀空牌 */
+html.dark[data-theme="wandering-earth"] .el-dialog__title:empty {
+  display: none;
+}
+/* 关闭键：与标题牌同一水平线，dock 在顶边上方右侧——
+   top:-23px 使底边与顶边框外沿齐平，right:-1px 与右边框外沿对齐，
+   无底边边框，像从顶边「长」出来的控制钮；hover 填充琥珀 */
+html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn {
+  /* !important 保险：压过 EP 默认 48px 盒与 style.css 的 margin，
+     防止层叠顺序差异导致按钮回落到弹窗内部 */
+  top: -23px !important;
+  right: -1px !important;
+  width: 24px !important;
+  height: 20px !important;
+  margin: 0 !important;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-bottom: none;
+  transition: background 0.15s ease;
+}
+html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn .el-dialog__close {
+  color: var(--color-primary);
+}
+html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn:hover {
+  background: var(--color-primary);
+}
+html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--color-primary-text);
+}
+/* 底部按钮区：虚线刻度分隔，呼应 hr 语言 */
+html.dark[data-theme="wandering-earth"] .el-dialog__footer {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 12px;
+}
+/* ============================================================
+   MessageBox（确认 / 输入框）：与 Dialog 同一套授权面板语言。
+   注意 EP 对 .el-message-box 默认 overflow:hidden（会裁掉
+   悬浮标题牌），必须显式改回 visible。
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .el-message-box {
+  position: relative;
+  overflow: visible;
+  border: 1px solid var(--color-primary);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 0 !important;
+  background: var(--color-surface) !important;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55) !important;
+}
+/* header 压缩：标题牌与关闭键均脱离文档流，仅留 6px 呼吸缝 */
+html.dark[data-theme="wandering-earth"] .el-message-box__header:has(.el-message-box__title) {
+  padding: 0 16px !important;
+  height: 6px;
+  box-sizing: border-box;
+}
+/* 标题牌：同 Dialog——实心琥珀牌 dock 在顶边上方左侧 */
+html.dark[data-theme="wandering-earth"] .el-message-box__title {
+  position: absolute;
+  top: -23px;
+  left: -1px;
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-family: var(--we-condensed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  padding: 1px 10px;
+}
+/* 无标题消息框：不渲染空琥珀牌 */
+html.dark[data-theme="wandering-earth"] .el-message-box__title:empty {
+  display: none;
+}
+/* 关闭键：同 Dialog——dock 在顶边上方右侧的小牌，与标题牌齐平 */
+html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn {
+  top: -23px !important;
+  right: -1px !important;
+  width: 24px !important;
+  height: 20px !important;
+  margin: 0 !important;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-bottom: none;
+  transition: background 0.15s ease;
+}
+html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn .el-message-box__close {
+  color: var(--color-primary);
+}
+html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn:hover {
+  background: var(--color-primary);
+}
+html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn:hover .el-message-box__close {
+  color: var(--color-primary-text);
+}
+html.dark[data-theme="wandering-earth"] .el-tag {
+  border-radius: 0;
+}
+html.dark[data-theme="wandering-earth"] .el-popper.is-light {
+  border-radius: 0;
+  border-color: var(--color-border);
+}
+
+/* ============================================================
+   滚动条：细轨道 + 琥珀滑块 hover（仅本主题生效）
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+html.dark[data-theme="wandering-earth"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html.dark[data-theme="wandering-earth"] ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 0;
+}
+html.dark[data-theme="wandering-earth"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-300);
+}
+
+/* ============================================================
+   短文本：DIN 窄体 + 加宽字距撑控制台感
+   （中文自动回退系统黑体，无需字体文件）
+   ============================================================ */
+html.dark[data-theme="wandering-earth"] .group-header {
+  font-family: var(--we-condensed);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-gray);
+}
+html.dark[data-theme="wandering-earth"] .session-title {
+  font-family: var(--we-condensed);
+  letter-spacing: 0.03em;
+}
