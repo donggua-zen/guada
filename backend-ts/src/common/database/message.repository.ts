@@ -26,7 +26,7 @@ export class MessageRepository {
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
-            ...(withFiles && { include: { files: true } }),
+            ...(withFiles && { include: { files: { orderBy: { createdAt: "asc" } } } }),
           },
         }),
       },
@@ -78,7 +78,7 @@ export class MessageRepository {
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
-            ...(withFiles && { include: { files: true } }),
+            ...(withFiles && { include: { files: { orderBy: { createdAt: "asc" } } } }),
           },
         }),
       },
@@ -123,7 +123,7 @@ export class MessageRepository {
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
-            ...(withFiles && { include: { files: true } }),
+            ...(withFiles && { include: { files: { orderBy: { createdAt: "asc" } } } }),
           },
         }),
         session: true,

@@ -70,6 +70,18 @@ const builtinThemes: ThemePresetInfo[] = [
     primaryColor: "#3a7bd5",
     secondaryColor: "#e8854a",
   },
+  {
+    id: "cyberpunk",
+    name: "赛博朋克（仅暗色）",
+    primaryColor: "#00e5ff",
+    secondaryColor: "#ff2a6d",
+  },
+  {
+    id: "wandering-earth",
+    name: "小破球（仅暗色）",
+    primaryColor: "#d99a4e",
+    secondaryColor: "#43b581",
+  },
 ];
 
 /** 可追加注册表（插件扩展点） */

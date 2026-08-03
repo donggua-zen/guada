@@ -5,9 +5,9 @@
     <!-- 导航菜单 -->
     <div class="px-2.5 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
-        class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
+        class="nav-item flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
-          ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
+          ? 'nav-item-active bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
           : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
         <span class="text-sm font-medium">{{ item.label }}</span>

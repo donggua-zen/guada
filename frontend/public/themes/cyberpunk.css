@@ -1,0 +1,490 @@
+/* ============================================================
+   主题：赛博朋克（cyberpunk）【仅暗色】
+   风格：霓虹夜之城 · HUD 切角面板 · 辉光 · 警示条纹 · CRT 扫描线
+   说明：本主题仅针对暗色模式设计——蓝紫黑底上青色霓虹做交互、
+        品红做强调、警示黄只留给 hazard 条纹。
+        亮色模式不定义任何变量与样式，完全回落到 style.css 的
+        基础默认样式（与 default 主题亮色一致）。
+        字体零第三方文件：Consolas/Cascadia 系统等宽 + 加宽字距
+        + uppercase 撑 HUD 感，中文自动回退系统黑体。
+   ============================================================ */
+
+/* ---------- 暗色模式：霓虹夜之城（本体） ---------- */
+html.dark[data-theme="cyberpunk"] {
+  /* 主色：霓虹青 */
+  --color-primary: #00e5ff;
+  --color-primary-hover: #5cf2ff;
+  --color-primary-active: #00b8cc;
+  --color-primary-disabled: #0e4a56;
+  --color-primary-text: #00222b;
+  --color-primary-text-disabled: rgba(0, 34, 43, 0.5);
+
+  --color-primary-50:  #03161c;
+  --color-primary-100: #062831;
+  --color-primary-200: #0a3d4a;
+  --color-primary-300: #0e5566;
+  --color-primary-400: #00b8cc;
+  --color-primary-500: #00e5ff;
+  --color-primary-600: #5cf2ff;
+  --color-primary-700: #8df6ff;
+  --color-primary-800: #bafaff;
+  --color-primary-900: #e0fdff;
+  --color-primary-950: #f0feff;
+
+  /* 副色：霓虹品红 */
+  --color-secondary: #ff2a6d;
+  --color-secondary-hover: #ff5c8f;
+  --color-secondary-active: #d81159;
+  --color-secondary-disabled: #5a1030;
+  --color-secondary-text: #ffffff;
+  --color-secondary-text-disabled: rgba(255, 255, 255, 0.5);
+  --color-secondary-50:  #2b0816;
+  --color-secondary-100: #4a0e24;
+  --color-secondary-200: #6e1534;
+  --color-secondary-300: #9e1d4b;
+  --color-secondary-400: #d81159;
+  --color-secondary-500: #ff2a6d;
+  --color-secondary-600: #ff5c8f;
+  --color-secondary-700: #ff8ab0;
+  --color-secondary-800: #ffb3cb;
+  --color-secondary-900: #ffd6e2;
+  --color-secondary-950: #ffeaf1;
+
+  /* 基础表面与文字：蓝紫黑 */
+  --color-text: #cfe6f2;
+  --color-text-gray: #6b8296;
+  --color-text-disabled: #3d4f61;
+  --color-surface: #101725;
+  --color-surface-border: #1e2c42;
+  --color-bg: #0a0e1a;
+  --color-border: #22344d;
+
+  /* 侧边栏（左栏）：比主背景更深 */
+  --color-sidebar-bg: #0b111d;
+  --color-sidebar-bg-active: rgba(0, 229, 255, 0.14);
+  --color-sidebar-bg-hover: rgba(0, 229, 255, 0.07);
+  --color-sidebar-text: #cfe6f2;
+  --color-sidebar-text-hover: #e8f6fc;
+  --color-sidebar-text-active: #00e5ff;
+
+  /* 标题栏 */
+  --color-titlebar-bg: #0b111d;
+  --color-titlebar-border: #22344d;
+  --titlebar-text-color: #cfe6f2;
+  --titlebar-hover-bg: rgba(0, 229, 255, 0.12);
+
+  /* 会话列表 */
+  --color-conversation-bg: #0a0e1a;
+  --color-conversation-text: #cfe6f2;
+  --color-conversation-border: #1e2c42;
+  --color-conversation-bg-active: rgba(0, 229, 255, 0.14);
+  --color-conversation-text-active: #00e5ff;
+  --color-conversation-bg-hover: rgba(0, 229, 255, 0.07);
+  --color-conversation-text-hover: #e8f6fc;
+
+  /* 消息气泡：用户 = 品红霓虹框 */
+  --color-bubble-user-bg: #22101f;
+  --color-bubble-user-text: #f5dce8;
+  --color-bubble-user-border: #ff2a6d;
+  --color-bubble-assitant-bg: #101725;
+  --color-bubble-assitant-text: #cfe6f2;
+  --color-bubble-assitant-border: #22344d;
+  --color-bubble-assitant-text-strong: #00e5ff;
+
+  /* 输入框 */
+  --color-input-bg: #0d1420;
+  --color-input-border: #22344d;
+
+  /* 排版与细节 */
+  --size-text-base: 15px;
+  --size-text-sm: 14px;
+  --shimmer-base: #1e2c42;
+  --shimmer-highlight: #00e5ff;
+
+  /* 窗口控制按钮：青色系 */
+  --window-controls-color: #9adfff;
+  --window-controls-hover-bg: rgba(0, 229, 255, 0.15);
+  --window-controls-hover-color: #00e5ff;
+
+  /* 代码块配色变量（markdown.css 消费，带默认值，其他主题不受影响） */
+  --code-block-bg: #0d1420;             /* 代码区底色 */
+  --code-block-border: transparent;     /* markdown.css 自带的描边关闭 */
+  --code-block-header-bg: transparent;  /* 标题栏融入面板 */
+  --code-block-language-color: var(--color-primary);
+}
+
+/* ---------- 主题专属细节（全部仅暗色生效） ---------- */
+
+/* ============================================================
+   HUD 工具库
+
+   核心：切角面板 = 元素背景作「描边层」+ ::before 内缩填充。
+   clip-path 会裁掉 box-shadow，所以辉光一律用
+   filter: drop-shadow（跟随切角轮廓，且对不透明填充的文字
+   区域不产生额外阴影）。z-index:0 让元素自成层叠上下文，
+   保证 ::before(z-index:-1) 不被页面背景盖住。
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] {
+  /* 标准 HUD 切角：右上 + 左下斜切 10px（不对称才有味道） */
+  --cp-chamfer: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  /* 小元素切角（按钮等） */
+  --cp-chamfer-sm: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  /* 迷你切角（会话项等小高度元素） */
+  --cp-chamfer-xs: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  /* 警示条纹（黄黑 hazard tape） */
+  --cp-hazard: repeating-linear-gradient(45deg, #fcee0a 0 8px, #0a0e1a 8px 16px);
+  /* 等宽字体栈：系统自带，零下载 */
+  --cp-mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+}
+
+/* ============================================================
+   背景纹理：CRT 扫描线 + 电路板走线
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><g fill='none' stroke='%2300e5ff' stroke-opacity='0.05' stroke-width='1'><path d='M10 10 H60 V50 H100'/><path d='M100 70 V100 H60'/><path d='M20 110 V80 H50'/><circle cx='10' cy='10' r='2.5'/><circle cx='100' cy='50' r='2.5'/><circle cx='60' cy='100' r='2.5'/><circle cx='50' cy='80' r='2.5'/></g></svg>");
+  background-size: auto, 120px 120px;
+  background-color: var(--color-bg);
+}
+/* 内容区补一层扫描线（body::before 常被不透明背景盖住） */
+html.dark[data-theme="cyberpunk"] .content-clear-wallpaper {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 3px);
+}
+
+/* ============================================================
+   用户气泡：品红霓虹切角面板
+   元素背景=品红描边层，::before 内缩 1px 填气泡底色（1px 细边）
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .user-section .message-item__card {
+  position: relative;
+  z-index: 0;
+  background: var(--color-bubble-user-border);
+  border: none;
+  border-radius: 0;
+  clip-path: var(--cp-chamfer);
+  padding: 7px 14px;
+  filter: drop-shadow(0 0 6px rgba(255, 42, 109, 0.45));
+}
+html.dark[data-theme="cyberpunk"] .user-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--color-bubble-user-bg);
+  clip-path: var(--cp-chamfer);
+  z-index: -1;
+}
+
+/* 助手消息：细青边切角面板（面积大，不收辉光）
+   左上角贴一段 hazard 警示条纹标签，呼应代码块装饰 */
+html.dark[data-theme="cyberpunk"] .assistant-section .message-item__card {
+  position: relative;
+  z-index: 0;
+  background: var(--color-bubble-assitant-border);
+  border: none;
+  border-radius: 0;
+  clip-path: var(--cp-chamfer);
+  padding: 14px 18px;
+}
+html.dark[data-theme="cyberpunk"] .assistant-section .message-item__card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--color-bubble-assitant-bg);
+  clip-path: var(--cp-chamfer);
+  z-index: -1;
+}
+html.dark[data-theme="cyberpunk"] .assistant-section .message-item__card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 6px;
+  background: var(--cp-hazard);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* ============================================================
+   会话列表：激活项参考用户气泡的切角 HUD 面板语言（青色版）——
+   元素背景=青色描边层，::before 内缩 1px 填「淡染 + 侧栏底色」，
+   即细边框 + 背景淡染，不用品红、不用重边框
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .session-item {
+  border-radius: 0;
+}
+html.dark[data-theme="cyberpunk"] .session-item-active {
+  position: relative;
+  z-index: 0;
+  background: rgba(0, 229, 255, 0.45);
+  clip-path: var(--cp-chamfer-xs);
+}
+html.dark[data-theme="cyberpunk"] .session-item-active::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background:
+    linear-gradient(rgba(0, 229, 255, 0.14), rgba(0, 229, 255, 0.14)),
+    var(--color-sidebar-bg);
+  clip-path: var(--cp-chamfer-xs);
+  z-index: -1;
+}
+
+/* 导航菜单激活项：与会话项同款切角 HUD 面板
+   （nav-item/nav-item-active 是 GlobalSidebar 提供的语义类，
+    选择器特异度高于其 Tailwind 原子类 bg-(--color-sidebar-bg-active)） */
+html.dark[data-theme="cyberpunk"] .nav-item {
+  border-radius: 0;
+}
+html.dark[data-theme="cyberpunk"] .nav-item-active {
+  position: relative;
+  z-index: 0;
+  background: rgba(0, 229, 255, 0.45);
+  clip-path: var(--cp-chamfer-xs);
+}
+html.dark[data-theme="cyberpunk"] .nav-item-active::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background:
+    linear-gradient(rgba(0, 229, 255, 0.14), rgba(0, 229, 255, 0.14)),
+    var(--color-sidebar-bg);
+  clip-path: var(--cp-chamfer-xs);
+  z-index: -1;
+}
+/* hover 时 RGB 色散故障（glitch），只对文字层，克制一点 */
+html.dark[data-theme="cyberpunk"] .session-item:hover .session-title {
+  text-shadow: -1px 0 rgba(255, 42, 109, 0.65), 1px 0 rgba(0, 229, 255, 0.65);
+}
+
+/* 左栏 / 右栏：霓虹数据线分割 */
+html.dark[data-theme="cyberpunk"] .global-sidebar {
+  border-right: 2px solid rgba(0, 229, 255, 0.30);
+  box-shadow: none;
+}
+html.dark[data-theme="cyberpunk"] .workspace-sidebar {
+  border-left: 2px solid rgba(0, 229, 255, 0.30);
+}
+
+/* 标题栏：底部压一条黄黑警示带 */
+html.dark[data-theme="cyberpunk"] .custom-titlebar {
+  background-image: var(--cp-hazard) !important;
+  background-size: 100% 3px !important;
+  background-position: bottom !important;
+  background-repeat: no-repeat !important;
+}
+
+/* ============================================================
+   输入框：切角面板，聚焦时青色辉光「上线」
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .input-area {
+  position: relative;
+  /* 不覆盖组件的 z-index:10（保留其在消息列表之上的层叠），
+     该 z-index 同时提供了 ::before 所需的层叠上下文 */
+  background: var(--color-input-border);
+  border: none;
+  border-radius: 0;
+  clip-path: var(--cp-chamfer);
+}
+html.dark[data-theme="cyberpunk"] .input-area::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--color-input-bg);
+  clip-path: var(--cp-chamfer);
+  z-index: -1;
+}
+html.dark[data-theme="cyberpunk"] .input-area:focus-within {
+  background: var(--color-primary);
+  filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.5));
+}
+
+/* 发送按钮：八边形芯片按键 */
+html.dark[data-theme="cyberpunk"] .send-btn {
+  border-radius: 0;
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+}
+html.dark[data-theme="cyberpunk"] .send-btn:not(:disabled) {
+  filter: drop-shadow(0 0 5px rgba(0, 229, 255, 0.55));
+}
+
+/* 输入区工具按钮：去圆角 */
+html.dark[data-theme="cyberpunk"] .tool-btn,
+html.dark[data-theme="cyberpunk"] .model-selector-btn {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Markdown 正文细节
+   ============================================================ */
+
+/* 标题：等宽 + 加宽字距 + 青色辉光 + 底部数据分割线 */
+html.dark[data-theme="cyberpunk"] .markdown-text h1,
+html.dark[data-theme="cyberpunk"] .markdown-text h2 {
+  font-family: var(--cp-mono);
+  letter-spacing: 0.06em;
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 6px;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+}
+html.dark[data-theme="cyberpunk"] .markdown-text h3 {
+  font-family: var(--cp-mono);
+  letter-spacing: 0.04em;
+}
+
+/* 链接：青色 + 下划线，hover 微辉光 */
+html.dark[data-theme="cyberpunk"] .markdown-text a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+html.dark[data-theme="cyberpunk"] .markdown-text a:hover {
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+/* 引用块：品红左杠 + 底色 */
+html.dark[data-theme="cyberpunk"] .markdown-text blockquote {
+  border-left: 3px solid var(--color-secondary);
+  border-radius: 0;
+  background: rgba(255, 42, 109, 0.06);
+  padding: 6px 12px;
+}
+
+/* 分隔线：青色渐隐数据线 */
+html.dark[data-theme="cyberpunk"] .markdown-text hr {
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+}
+
+/* 行内代码：品红芯片标签（:not(pre *) 排除代码块内部） */
+html.dark[data-theme="cyberpunk"] .markdown-text code:not(pre code) {
+  background: rgba(255, 42, 109, 0.12);
+  color: var(--color-secondary);
+  border: 1px solid rgba(255, 42, 109, 0.40);
+  border-radius: 0;
+  padding: 0 4px;
+}
+
+/* 表格：冷色实线 */
+html.dark[data-theme="cyberpunk"] .markdown-text table th,
+html.dark[data-theme="cyberpunk"] .markdown-text table td {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   代码块（真实结构 .custom-code-block > .code-header + pre.hljs）：
+   整个容器作切角终端面板，标题栏融入面板——
+   警示条纹标签 + 青色语言名 + 分隔数据线 + 代码区
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .markdown-text .custom-code-block {
+  position: relative;
+  z-index: 0;
+  background: var(--color-border);
+  clip-path: var(--cp-chamfer);
+  margin: 1em 0;
+}
+html.dark[data-theme="cyberpunk"] .markdown-text .custom-code-block::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--code-block-bg);
+  clip-path: var(--cp-chamfer);
+  z-index: -1;
+}
+/* 标题栏：透明底融入面板 + 底部数据线分隔 */
+html.dark[data-theme="cyberpunk"] .markdown-text .code-header {
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  padding: 8px 14px;
+}
+/* 语言名前的 hazard 标签 */
+html.dark[data-theme="cyberpunk"] .markdown-text .code-header::before {
+  content: "";
+  width: 42px;
+  height: 8px;
+  flex-shrink: 0;
+  background: var(--cp-hazard);
+  opacity: 0.85;
+}
+html.dark[data-theme="cyberpunk"] .markdown-text .code-language {
+  font-family: var(--cp-mono);
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  margin-left: 10px;
+  margin-right: auto;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.40);
+}
+html.dark[data-theme="cyberpunk"] .markdown-text .copy-code-button:hover {
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
+}
+/* pre 融入面板（markdown.css 的底色/描边已由变量置空） */
+html.dark[data-theme="cyberpunk"] .markdown-text .custom-code-block pre.hljs {
+  border: none;
+  border-radius: 0;
+}
+
+/* ============================================================
+   Element Plus 组件：切角 + 去圆角 + 辉光
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .el-button {
+  border-radius: 0;
+  clip-path: var(--cp-chamfer-sm);
+  font-family: var(--cp-mono);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+html.dark[data-theme="cyberpunk"] .el-button--primary:hover {
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.55));
+}
+html.dark[data-theme="cyberpunk"] .el-dialog {
+  border-radius: 0;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.18);
+}
+html.dark[data-theme="cyberpunk"] .el-tag {
+  border-radius: 0;
+}
+html.dark[data-theme="cyberpunk"] .el-popper.is-light {
+  border-radius: 0;
+  border-color: var(--color-border);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+}
+
+/* ============================================================
+   滚动条：细轨道 + 青色滑块（仅本主题生效）
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+html.dark[data-theme="cyberpunk"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html.dark[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 0;
+}
+html.dark[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-300);
+}
+
+/* ============================================================
+   分组标题 / 按钮等短文本：等宽字体 + 加宽字距撑 HUD 感
+   （中文自动回退系统黑体，无需字体文件）
+   ============================================================ */
+html.dark[data-theme="cyberpunk"] .group-header {
+  font-family: var(--cp-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+html.dark[data-theme="cyberpunk"] .session-title {
+  letter-spacing: 0.02em;
+}
+

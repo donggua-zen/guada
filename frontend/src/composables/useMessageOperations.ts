@@ -76,11 +76,12 @@ export function useMessageOperations(
         const uploadedFiles = files.filter(file => file.id && typeof file.id === 'string' && file.id.length > 10)
         const filesWithContent = files.filter(file => file.file && !uploadedFiles.includes(file))
 
-        // 只上传还未上传的文件
-        const uploadPromises = filesWithContent.map((file) =>
-            apiService.uploadFile(currentSessionId.value, file.file)
-        )
-        const uploadResults = await Promise.all(uploadPromises)
+        // 串行上传未上传的文件，确保 createdAt 顺序与用户选择顺序一致
+        const uploadResults = []
+        for (const file of filesWithContent) {
+            const result = await apiService.uploadFile(currentSessionId.value, file.file)
+            uploadResults.push(result)
+        }
 
         const updatedFiles = [...files]
 
