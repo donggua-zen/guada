@@ -15,7 +15,7 @@ let contentEl: HTMLSpanElement | null = null
 let arrowEl: HTMLDivElement | null = null
 let showTimer: ReturnType<typeof setTimeout> | null = null
 
-const SHOW_DELAY = 100
+const SHOW_DELAY = 200
 const GAP = 14
 const VIEWPORT_PAD = 4
 

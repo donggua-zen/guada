@@ -57,9 +57,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 10px;
-  background: var(--el-fill-color-light, rgba(200, 200, 200, 0.15));
-  border: 1px solid var(--el-border-color-lighter, rgba(200, 200, 200, 0.2));
+  border-radius: var(--size-dialog-rounded-radius);
   font-size: 13px;
   transition: all 0.2s;
 }

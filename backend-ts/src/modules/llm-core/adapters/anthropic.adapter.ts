@@ -10,6 +10,7 @@ import {
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import { retryOn429 } from "../utils/retry.util";
+import { insecureFetch } from "../utils/tls.util";
 
 /**
  * Anthropic 协议适配器
@@ -67,7 +68,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
       const baseUrl = (config.apiUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
       const url = `${baseUrl}/v1/models`;
 
-      const response = await fetch(url, {
+      const response = await insecureFetch(url, {
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
@@ -104,6 +105,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
     const client = new Anthropic({
       apiKey,
       baseURL: providerConfig.apiUrl || undefined,
+      fetch: insecureFetch,
     });
 
     // 从 messages 中提取 system prompt（Anthropic 使用顶层 system 字段）

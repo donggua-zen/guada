@@ -135,8 +135,13 @@ export class SessionMapperService {
   private async enrichBotSessionModel(session: any, defaultModelId?: string | null): Promise<void> {
     let modelId: string | null = null;
 
-    // 1. 优先使用传入的 defaultModelId（如果用户在 Bot 配置中明确选择了模型）
-    if (defaultModelId) {
+    // 0. 如果会话已有 modelId（用户通过 UI 选择的），优先使用
+    if (session.modelId) {
+      modelId = session.modelId;
+    }
+
+    // 1. 其次使用传入的 defaultModelId（如果用户在 Bot 配置中明确选择了模型）
+    if (!modelId && defaultModelId) {
       modelId = defaultModelId;
     }
 
@@ -154,12 +159,12 @@ export class SessionMapperService {
       );
     }
 
-    // 3. 如果无法解析模型ID，抛出错误
+    // 如果无法解析模型ID，抛出错误
     if (!modelId) {
       throw new Error('我还没有配置模型作为大脑，请先在设置中配置默认对话模型');
     }
 
-    // 4. 查询并验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
+    // 查询并验证模型是否存在
     const model = await this.prisma.model.findUnique({
       where: { id: modelId },
       include: {
@@ -171,7 +176,7 @@ export class SessionMapperService {
       throw new Error(`模型不存在：${modelId}，请检查 Bot 实例的模型配置`);
     }
 
-    // 5. 将 model 对象挂载到 session，模拟 include 的效果
+    // 将 model 对象挂载到 session，模拟 include 的效果
     session.model = model;
     session.modelId = model.id;
   }

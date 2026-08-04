@@ -355,6 +355,7 @@ export class BotOrchestrator {
         let unsubscribe: (() => void) | undefined;
 
         let startStreamError: any = null;
+
         this.chatRunner.startStream(
           {
             sessionId: session.id,
@@ -364,6 +365,7 @@ export class BotOrchestrator {
               knowledgeBaseIds: config.knowledgeBaseIds,
             },
             source: { type: "bot", platform: config.platform, botId },
+            preloadedSession: session,
           },
           {
             onEvent: (chunk) => {
