@@ -64,13 +64,13 @@
         <div class="flex items-center min-w-0">
           <template v-if="!item.isDirectory">
             <!-- 处理中或等待处理时显示进度百分比 -->
-            <el-tooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
+            <LTooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
               :content="item.currentStep" 
               placement="top">
               <el-tag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
                 {{ getStatusDisplayText(item) }}
               </el-tag>
-            </el-tooltip>
+            </LTooltip>
             <!-- 其他状态直接显示 -->
             <el-tag v-else size="small" :type="getStatusType(item.processingStatus)">
               {{ getStatusDisplayText(item) }}
@@ -180,6 +180,7 @@ import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'

@@ -92,29 +92,29 @@
               }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <el-tooltip v-if="!props.readonly" content="Token 上限" placement="top">
+          <LTooltip v-if="!props.readonly" content="Token 上限" placement="top">
             <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
               <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
-          </el-tooltip>
+          </LTooltip>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
           <!-- 发送/停止按钮（流式时：无输入=停止，有输入=入队） -->
-          <el-tooltip v-if="streaming && !inputContent.trim()" content="停止生成" placement="top">
+          <LTooltip v-if="streaming && !inputContent.trim()" content="停止生成" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
               <el-icon size="18">
                 <Stop24Filled />
               </el-icon>
             </button>
-          </el-tooltip>
-          <el-tooltip v-else :content="streaming ? '加入队列' : '发送'" placement="top">
+          </LTooltip>
+          <LTooltip v-else :content="streaming ? '加入队列' : '发送'" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
               :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
               <el-icon size="18">
                 <Send24Filled />
               </el-icon>
             </button>
-          </el-tooltip>
+          </LTooltip>
         </div>
       </div>
 
@@ -149,6 +149,7 @@ import FileItem from '../ui/FileItem.vue';
 import Avatar from '../ui/Avatar.vue';
 import ElSliderOptional from '../ui/ElSliderOptional.vue';
 import CustomPopover from '../ui/CustomPopover.vue';
+import LTooltip from '../ui/LTooltip.vue';
 import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';

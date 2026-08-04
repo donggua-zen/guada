@@ -91,7 +91,7 @@
                 @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
                 <template #right-actions-before>
                   <!-- 上下文使用率：圆形进度条 -->
-                  <el-tooltip :content="contextTooltip" placement="top">
+                  <LTooltip :content="contextTooltip" placement="top">
                     <button class="context-ring-btn" @click="memoPanelVisible = true">
                       <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
                         <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
@@ -100,7 +100,7 @@
                           stroke-linecap="round" transform="rotate(-90 18 18)" />
                       </svg>
                     </button>
-                  </el-tooltip>
+                  </LTooltip>
                 </template>
               </ChatInput>
             </div>
@@ -148,6 +148,7 @@ import { LoadingOutlined } from '@vicons/antd'
 import { Loading } from '@element-plus/icons-vue'
 import AgentSwitcherBar from './AgentSwitcherBar.vue';
 import AgentPanel from './AgentPanel.vue';
+import LTooltip from '../ui/LTooltip.vue';
 
 
 // 常量定义
@@ -547,12 +548,17 @@ async function loadMessages(
   sessionId: string,
   options: { isInitial?: boolean; beforeMessageId?: string } = {},
 ) {
-  const sessionState = sessionStore.getSessionState(sessionId);
-  if (sessionState.isStreaming) {
-    return;
+  const isInitial = options.isInitial ?? true;
+
+  // 初始加载会替换整个消息数组（setMessages），流式输出期间执行会丢失正在输出的消息
+  // 加载更多仅 prepend 到头部，与流式的 push/findIndex 互不干扰
+  if (isInitial) {
+    const sessionState = sessionStore.getSessionState(sessionId);
+    if (sessionState.isStreaming) {
+      return;
+    }
   }
 
-  const isInitial = options.isInitial ?? true;
   if (!isInitial) {
     isLoadingMore.value = true;
   }

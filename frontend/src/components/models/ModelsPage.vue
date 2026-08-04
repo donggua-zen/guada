@@ -56,12 +56,12 @@
                         <!-- 输入能力 -->
                         <div class="flex items-center gap-0.5">
                           <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
-                            <el-tooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                            <LTooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
                               <el-icon class="hover:text-primary transition-colors" :size="16">
                                 <TextT24Regular v-if="cap === 'text'" />
                                 <Image24Regular v-else-if="cap === 'image'" />
                               </el-icon>
-                            </el-tooltip>
+                            </LTooltip>
                           </template>
                         </div>
 
@@ -73,12 +73,12 @@
                         <!-- 输出能力 -->
                         <div class="flex items-center gap-0.5">
                           <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
-                            <el-tooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                            <LTooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
                               <el-icon class="hover:text-primary transition-colors" :size="16">
                                 <TextT24Regular v-if="cap === 'text'" />
                                 <Image24Regular v-else-if="cap === 'image'" />
                               </el-icon>
-                            </el-tooltip>
+                            </LTooltip>
                           </template>
                         </div>
 
@@ -86,13 +86,13 @@
                         <template v-if="(model.config?.features || []).length > 0">
                           <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                           <template v-for="feature in (model.config?.features || [])" :key="feature">
-                            <el-tooltip :content="getLableName(feature)" placement="top">
+                            <LTooltip :content="getLableName(feature)" placement="top">
                               <el-icon class="hover:text-primary transition-colors" :size="16">
                                 <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                                 <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                                 <ScienceOutlined v-else />
                               </el-icon>
-                            </el-tooltip>
+                            </LTooltip>
                           </template>
                         </template>
                       </div>
@@ -355,13 +355,13 @@
                       嵌入
                     </span>
                     <template v-for="feature in (model.config?.features || [])" :key="feature">
-                      <el-tooltip :content="getLableName(feature)" placement="top">
+                      <LTooltip :content="getLableName(feature)" placement="top">
                         <el-icon class="hover:text-primary transition-colors" :size="14">
                           <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                           <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                           <ScienceOutlined v-else />
                         </el-icon>
-                      </el-tooltip>
+                      </LTooltip>
                     </template>
                   </div>
                   <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
@@ -387,6 +387,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { ScrollContainer } from '../ui'
 import ModelsProviderList from '../setting/ModelsProviderList.vue'
 import Avatar from '../ui/Avatar.vue'
+import LTooltip from '../ui/LTooltip.vue'
 import {
   SettingsOutlined, RemoveCircleOutlineRound,
   SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined,

@@ -5,19 +5,19 @@
       <span class="text-xs font-normal text-(--titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->
-      <el-tooltip v-if="authStore.isAuthenticated" content="搜索会话" placement="bottom">
+      <LTooltip v-if="authStore.isAuthenticated" content="搜索会话" placement="bottom">
         <button class="titlebar-menu-btn" @click="showSearchDialog = true">
           <Search16Regular class="w-4 h-4" />
         </button>
-      </el-tooltip>
+      </LTooltip>
 
       <!-- Debug 下拉菜单（仅 Electron） -->
       <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
-        <el-tooltip content="调试工具" placement="bottom">
+        <LTooltip content="调试工具" placement="bottom">
           <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu">
             <Bug16Regular class="w-4 h-4" />
           </button>
-        </el-tooltip>
+        </LTooltip>
 
         <div v-if="showDebugMenu"
           class="absolute top-full left-0 mt-1 bg-(--color-sidebar-bg) border border-(--color-titlebar-border) rounded-md shadow-lg min-w-40 z-1000 overflow-hidden">
@@ -42,16 +42,16 @@
       </div>
 
       <!-- GitHub 仓库 -->
-      <el-tooltip content="GitHub 仓库" placement="bottom">
+      <LTooltip content="GitHub 仓库" placement="bottom">
         <button class="titlebar-menu-btn" @click="openInExternalBrowser('https://github.com/donggua-zen/guada')">
           <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
           </svg>
         </button>
-      </el-tooltip>
+      </LTooltip>
 
       <!-- 更新提示 -->
-      <el-tooltip v-if="updateAvailable" content="发现新版本，点击查看" placement="bottom">
+      <LTooltip v-if="updateAvailable" content="发现新版本，点击查看" placement="bottom">
         <div
           class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
           @click="handleUpdateClick">
@@ -62,7 +62,7 @@
           </svg>
           <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
         </div>
-      </el-tooltip>
+      </LTooltip>
     </div>
   </div>
 
@@ -81,6 +81,7 @@ import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useAuthStore } from '@/stores/auth'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 

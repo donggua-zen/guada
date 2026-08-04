@@ -8,11 +8,11 @@
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">上下文使用率</span>
-              <el-tooltip content="上下文为估算值，仅供参考，与实际值可能存在差异" placement="top">
+              <LTooltip content="上下文为估算值，仅供参考，与实际值可能存在差异" placement="top">
                 <el-icon class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors" :size="14">
                   <QuestionFilled />
                 </el-icon>
-              </el-tooltip>
+              </LTooltip>
             </div>
             <span class="text-base font-bold" :class="usageColorClass">
               {{ tokenStats.percentage }}%
@@ -658,6 +658,7 @@ import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
 import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
+import LTooltip from '@/components/ui/LTooltip.vue';
 
 const { confirm, toast } = usePopup();
 const sessionStore = useSessionStore();
