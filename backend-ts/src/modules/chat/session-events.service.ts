@@ -276,6 +276,7 @@ export class SessionEventsService implements OnModuleDestroy {
   onModuleDestroy() {
     for (const [userId, subscribers] of this.userSubscribers) {
       for (const [clientId, subscriber] of subscribers) {
+        subscriber.heartbeatSubscription?.unsubscribe();
         subscriber.subject.complete();
       }
       subscribers.clear();

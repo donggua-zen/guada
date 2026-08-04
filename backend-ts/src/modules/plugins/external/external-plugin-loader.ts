@@ -23,6 +23,7 @@ interface ExternalManifest {
 export class ExternalPluginLoader implements OnModuleInit {
   private readonly logger = new Logger(ExternalPluginLoader.name);
   private pluginPaths = new Map<string, { dir: string; source: "dev" | "user" }>();
+  private requireQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly pluginManager: PluginManager,
@@ -132,7 +133,7 @@ export class ExternalPluginLoader implements OnModuleInit {
 
     // 临时 patch 模块解析：外部插件无法找到 backend-ts 的 node_modules，
     // 添加 backend-ts/node_modules 作为 fallback 搜索路径
-    const pluginModule = this.requireWithFallback(entryPath);
+    const pluginModule = await this.requireWithFallback(entryPath);
 
     // 支持 default 导出或命名导出
     const PluginClass =
@@ -202,41 +203,48 @@ export class ExternalPluginLoader implements OnModuleInit {
    * 逐级向上搜索，找不到就报错。这里临时 patch Module._resolveFilename，
    * 将 backend-ts/node_modules 作为 fallback 搜索路径，require 完成后立即恢复。
    */
-  private requireWithFallback(entryPath: string): any {
+  private async requireWithFallback(entryPath: string): Promise<any> {
     const backendNodeModules = path.resolve(process.cwd(), "node_modules");
     const mod = Module as any;
-    const originalResolveFilename = mod._resolveFilename;
 
-    mod._resolveFilename = function (
-      request: string,
-      parent: NodeJS.Module | undefined,
-      isMain?: boolean,
-      options?: any,
-    ): string {
+    const doRequire = (): any => {
+      const originalResolveFilename = mod._resolveFilename;
+
+      mod._resolveFilename = function (
+        request: string,
+        parent: NodeJS.Module | undefined,
+        isMain?: boolean,
+        options?: any,
+      ): string {
+        try {
+          return originalResolveFilename.call(
+            this,
+            request,
+            parent,
+            isMain,
+            options,
+          );
+        } catch {
+          return originalResolveFilename.call(
+            this,
+            request,
+            { ...parent, paths: [...(parent?.paths || []), backendNodeModules] },
+            isMain,
+            options,
+          );
+        }
+      };
+
       try {
-        return originalResolveFilename.call(
-          this,
-          request,
-          parent,
-          isMain,
-          options,
-        );
-      } catch {
-        return originalResolveFilename.call(
-          this,
-          request,
-          { ...parent, paths: [...(parent?.paths || []), backendNodeModules] },
-          isMain,
-          options,
-        );
+        return require(entryPath);
+      } finally {
+        mod._resolveFilename = originalResolveFilename;
       }
     };
 
-    try {
-      return require(entryPath);
-    } finally {
-      mod._resolveFilename = originalResolveFilename;
-    }
+    const result = this.requireQueue.then(() => doRequire());
+    this.requireQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private validateManifest(m: ExternalManifest): void {

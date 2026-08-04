@@ -154,13 +154,12 @@
             <span v-else>工作中</span>
           </div>
 
-          <!-- Token 消耗 + 总耗时 -->
+          <!-- Token 消耗 -->
           <div v-if="tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
             <div class="flex items-center gap-3 text-xs text-gray-400">
               <el-icon size="13" class="text-gray-400">
                 <InsightsTwotone />
               </el-icon>
-              <span v-if="durationText" class="text-gray-500">{{ durationText }}</span>
               <span class="text-gray-500">Tokens:</span>
               <span class="token-item">
                 <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span
@@ -189,7 +188,8 @@
         <!-- 操作按钮（含版本切换） -->
         <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
           :allow-generate="false" :content-versions="siblingVersions" :current-version-index="currentVersionIndex"
-          :time-full="assistantTime.full" :time-friendly="assistantTime.firendly" @copy="emit('copy', activeAssistant)"
+          :time-full="assistantTime.full" :time-friendly="assistantTime.firendly" :duration-text="durationText"
+          @copy="emit('copy', activeAssistant)"
           @regenerate="emit('regenerate', activeAssistant)" @switch-version="switchContent"
           @edit="emit('edit', activeAssistant)" @delete="emit('delete', activeAssistant)" />
       </div>

@@ -531,6 +531,7 @@ export class BotOrchestrator {
       this.processingSessions.delete(key);
     });
     this.pendingReplies.delete(botId);
+    this.lastSendAt.delete(botId);
 
     this.logger.log(`Cleaned up message queues for bot: ${botId}`);
   }

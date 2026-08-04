@@ -97,6 +97,7 @@ export class ChatController {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
 
     // 定义回调函数，将流事件写入 HTTP 响应
     const callbacks = {
@@ -135,14 +136,14 @@ export class ChatController {
       );
 
       // 客户端断开时取消订阅
+      let closed = false;
       const handleClose = () => {
+        if (closed) return;
+        closed = true;
         unsubscribe();
-        if (!res.writableEnded) {
-          res.end();
-        }
+        if (!res.writableEnded) res.end();
       };
       req.on("close", handleClose);
-      res.on("close", handleClose);
     } catch (error: any) {
       if (error instanceof HttpException) {
         const response = error.getResponse() as any;

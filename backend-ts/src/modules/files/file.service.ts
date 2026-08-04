@@ -423,7 +423,7 @@ export class FileService implements OnModuleInit {
     );
 
     // 保存文件
-    fs.writeFileSync(pathResult.filePath, file.buffer);
+    await fs.promises.writeFile(pathResult.filePath, file.buffer);
 
     // 返回相对路径（不转换为 URL）
     return this.uploadPathService.getStoragePath("files", pathResult.relativePath);

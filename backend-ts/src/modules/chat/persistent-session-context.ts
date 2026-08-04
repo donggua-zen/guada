@@ -387,12 +387,13 @@ export class PersistentSessionContext implements ISessionContext {
         );
         if (index !== -1) {
           // 保留 index 之前的全部消息，删除 index 及之后的所有
+          // 先计算被删除消息的 token，再截断（截断后 slice 会得到空数组）
+          const removedTokens = await this.tokenizerService.countTokens(
+            chatModelName,
+            this.history.slice(index),
+          );
           this.history = this.history.slice(0, index);
-          this.tokenBreakdown.history -=
-            await this.tokenizerService.countTokens(
-              chatModelName,
-              this.history.slice(index + 1),
-            );
+          this.tokenBreakdown.history -= removedTokens;
         }
       }
       this.history.push(...record);
