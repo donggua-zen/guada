@@ -1,5 +1,6 @@
 <template>
-  <div class="turn-wrapper last:min-h-[calc(60vh)]" :class="{ 'turn-wrapper--last': isLast }" :data-message-id="turn.user?.id">
+  <div class="turn-wrapper last:min-h-[calc(60vh)]" :class="{ 'turn-wrapper--last': isLast }"
+    :data-message-id="turn.user?.id">
     <!-- ============================================ -->
     <!-- User 部分 -->
     <!-- ============================================ -->
@@ -35,9 +36,10 @@
           </div>
         </div>
         <!-- 文件列表 -->
-        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(turn.user.contents?.[0]?.files?.length ?? 0) > 0">
-          <FileItem v-for="file, index in turn.user.contents?.[0]?.files" :key="file.id" :name="file.displayName" :type="file.fileType"
-            :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
+        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto"
+          v-if="(turn.user.contents?.[0]?.files?.length ?? 0) > 0">
+          <FileItem v-for="file, index in turn.user.contents?.[0]?.files" :key="file.id" :name="file.displayName"
+            :type="file.fileType" :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
@@ -130,21 +132,32 @@
           </div>
 
           <!-- 继续执行按钮 -->
-          <div
-            v-if="assistantMetadata && !streamingState.isStreaming && assistantMetadata.finishReason === 'max_iterations_reached'"
-            class="max-iterations-notice mt-3">
-            <el-alert type="warning" :closable="false">
-              <template #title>
-                <span>已达到最大工具调用轮次限制</span>
-              </template>
-              <div v-if="isLast" class="flex items-center gap-3 mt-2">
-                <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
-                  继续执行
-                </el-button>
-              </div>
-            </el-alert>
-          </div>
-
+          <template v-if="assistantMetadata && !streamingState.isStreaming">
+            <div v-if="assistantMetadata.finishReason === 'max_iterations_reached'" class="max-iterations-notice mt-3">
+              <el-alert type="warning" :closable="false">
+                <template #title>
+                  <span>已达到最大工具调用轮次限制</span>
+                </template>
+                <div v-if="isLast" class="flex items-center gap-3 mt-2">
+                  <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
+                    继续执行
+                  </el-button>
+                </div>
+              </el-alert>
+            </div>
+            <div v-if="assistantMetadata.finishReason === 'rate_limited'" class="max-iterations-notice mt-3">
+              <el-alert type="warning" :closable="false">
+                <template #title>
+                  <span>{{ assistantMetadata.error }}</span>
+                </template>
+                <div v-if="isLast" class="flex items-center gap-3 mt-2">
+                  <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
+                    继续执行
+                  </el-button>
+                </div>
+              </el-alert>
+            </div>
+          </template>
           <!-- 流式期间：工作中状态 -->
           <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
             <el-icon class="is-loading" size="12">
@@ -179,19 +192,16 @@
         </div>
 
         <!-- 文件变更摘要 -->
-        <FileChangesBar
-          v-if="!streamingState.isStreaming && fileChanges.length > 0"
-          :changes="fileChanges"
-          @open-diff="openDiffDialog"
-        />
+        <FileChangesBar v-if="!streamingState.isStreaming && fileChanges.length > 0" :changes="fileChanges"
+          @open-diff="openDiffDialog" />
 
         <!-- 操作按钮（含版本切换） -->
         <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
           :allow-generate="false" :content-versions="siblingVersions" :current-version-index="currentVersionIndex"
           :time-full="assistantTime.full" :time-friendly="assistantTime.firendly" :duration-text="durationText"
-          @copy="emit('copy', activeAssistant)"
-          @regenerate="emit('regenerate', activeAssistant)" @switch-version="switchContent"
-          @edit="emit('edit', activeAssistant)" @delete="emit('delete', activeAssistant)" />
+          @copy="emit('copy', activeAssistant)" @regenerate="emit('regenerate', activeAssistant)"
+          @switch-version="switchContent" @edit="emit('edit', activeAssistant)"
+          @delete="emit('delete', activeAssistant)" />
       </div>
     </template>
 
@@ -200,10 +210,7 @@
       :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
 
     <!-- 文件变更 Diff 弹窗 -->
-    <FileDiffDialog
-      v-model="diffDialogVisible"
-      :entry="activeDiffEntry"
-    />
+    <FileDiffDialog v-model="diffDialogVisible" :entry="activeDiffEntry" />
   </div>
 </template>
 
@@ -698,6 +705,7 @@ const handleClick = (event: MouseEvent) => {
 .process-group {
   margin: 12px 0 12px 0;
 }
+
 .process-group:first-child {
   margin-top: 0;
 }

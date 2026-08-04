@@ -95,7 +95,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     baseTotalDurationMs = message.totalDurationMs || 0;
     durationTimer = setInterval(() => {
       if (streamStartTime !== null) {
-        message.totalDurationMs = baseTotalDurationMs + (Date.now() - streamStartTime);
+        message.totalDurationMs =
+          baseTotalDurationMs + (Date.now() - streamStartTime);
       }
     }, 100);
   }
@@ -106,7 +107,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       durationTimer = null;
     }
     if (message && streamStartTime !== null) {
-      message.totalDurationMs = baseTotalDurationMs + (Date.now() - streamStartTime);
+      message.totalDurationMs =
+        baseTotalDurationMs + (Date.now() - streamStartTime);
     }
     streamStartTime = null;
     baseTotalDurationMs = 0;
@@ -233,7 +235,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     if (!existingMessage) {
       // subscribe 模式下可能因缓冲区溢出丢失 create 事件，此处容错而非中断整个流
-      console.warn("[subscribe] Message not found, skipping:", response.messageId);
+      console.warn(
+        "[subscribe] Message not found, skipping:",
+        response.messageId,
+      );
       return null;
     }
 
@@ -243,7 +248,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     );
 
     if (existingContentIndex < 0) {
-      console.warn("[subscribe] Content not found, skipping:", response.contentId);
+      console.warn(
+        "[subscribe] Content not found, skipping:",
+        response.contentId,
+      );
       return null;
     }
 
@@ -413,7 +421,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     response: StreamResponse,
     message: Message | null,
     contentIndex: number | undefined,
-    assistantMessageId: string | null,
   ): void {
     if (!message || contentIndex === undefined) {
       return;
@@ -447,17 +454,9 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       metadata.usage = response.usage;
     }
 
-    // 保存 finishReason
-    if (response.finishReason) {
-      metadata.finishReason = response.finishReason;
-    }
-
-    // 处理错误情况（user_cancel 不是错误，不需要特殊处理）
-    if (response.finishReason === "error") {
-      console.error("Error in stream:", response.error);
-      metadata.error = response.error;
-      metadata.finishReason = response.finishReason;
-    }
+  
+    metadata.finishReason = response.finishReason;
+    metadata.error = response.error;
 
     content.metadata = metadata;
 
@@ -481,17 +480,14 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     error: Error,
     message: Message | null,
     contentIndex: number | undefined,
-    assistantMessageId: string | null,
   ): void {
     if (error.name !== "AbortError") {
       console.error("Error during streaming:", error);
       if (message && contentIndex !== undefined) {
         message.contents[contentIndex].content = error.message;
       }
-      if (!assistantMessageId) {
-        // 这里不直接调用 notify，由调用者处理
-        throw error;
-      }
+
+      throw error;
     }
   }
 
@@ -552,7 +548,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     let message: Message | null = null;
     let contentIndex = 0;
-    let assistantMessageIdResult: string | null = null;
     // 修复：添加标志位，确保一次流式会话只更新一次时间戳
     let hasUpdatedActiveTime = false;
 
@@ -582,12 +577,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         }
 
         if (response.type === "finish") {
-          handleStreamFinish(
-            response,
-            message,
-            contentIndex,
-            assistantMessageIdResult,
-          );
+          handleStreamFinish(response, message, contentIndex);
           responseContent = "";
           thinkingContent = "";
           continue;
@@ -606,7 +596,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           const result = handleNewMessage(response, streamingSessionId);
           message = result.message;
           contentIndex = result.contentIndex;
-          assistantMessageIdResult = response.messageId!;
 
           startDurationTimer(message);
 
@@ -628,7 +617,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           if (result) {
             message = result.message;
             contentIndex = result.contentIndex;
-            assistantMessageIdResult = response.messageId!;
 
             startDurationTimer(message);
 
@@ -708,12 +696,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         // 全局广播（SSE 用户级事件流），不经过消息流，因此此处无需处理。
       }
     } catch (error) {
-      handleStreamCatchError(
-        error as Error,
-        message,
-        contentIndex,
-        assistantMessageIdResult,
-      );
+      handleStreamCatchError(error as Error, message, contentIndex);
       // 如果是会话忙碌错误，不抛出异常，由调用者处理通知
       if ((error as Error).message.includes("SessionBusyError")) {
         return;
