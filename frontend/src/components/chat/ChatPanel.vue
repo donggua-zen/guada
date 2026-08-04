@@ -689,20 +689,15 @@ function stopSkeletonDisplay() {
   }
 
   const elapsed = Date.now() - skeletonShowTime
-  const remaining = SKELETON_MIN_DISPLAY - elapsed
+  const remaining = Math.max(SKELETON_MIN_DISPLAY - elapsed, 100)
   console.log('Skeleton remaining time:', remaining, 'ms')
-  if (remaining <= 0) {
-    // 已经显示了至少 500ms，立即隐藏
-    immediateScrollToBottom();
+  // 还未满 500ms，延迟剩余时间后再隐藏
+  skeletonMinDisplayTimer = setTimeout(() => {
     showSkeleton.value = false
-  } else {
-    // 还未满 500ms，延迟剩余时间后再隐藏
-    skeletonMinDisplayTimer = setTimeout(() => {
-      showSkeleton.value = false
-      immediateScrollToBottom();
-      skeletonMinDisplayTimer = null
-    }, remaining)
-  }
+    immediateScrollToBottom();
+    skeletonMinDisplayTimer = null
+  }, remaining)
+
 }
 
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
