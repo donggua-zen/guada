@@ -20,21 +20,19 @@
                   </div>
                   </LTooltip>
                   <!-- 更多操作下拉菜单 -->
-                  <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
+                  <DropdownMenu @command="handleMoreSelect">
                     <div class="header-icon-btn">
                       <MoreVertOutlined class="w-5 h-5" />
                     </div>
                     <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="clear">
-                          <span class="flex items-center gap-2">
-                            <DeleteTwotone class="w-4 h-4" />
-                            <span>清空记录</span>
-                          </span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
+                      <DropdownMenuItem command="clear">
+                        <span class="flex items-center gap-2">
+                          <DeleteTwotone class="w-4 h-4" />
+                          <span>清空记录</span>
+                        </span>
+                      </DropdownMenuItem>
                     </template>
-                  </el-dropdown>
+                  </DropdownMenu>
                 </template>
               </PageHeader>
 
@@ -99,7 +97,8 @@ interface AgentTab {
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
 import LTooltip from "@/components/ui/LTooltip.vue";
-import { ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
+import DropdownMenu from "@/components/ui/DropdownMenu.vue";
+import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
   MoreVertOutlined,
   DeleteTwotone,

@@ -18,7 +18,7 @@ export interface ThemePresetInfo {
 const builtinThemes: ThemePresetInfo[] = [
   {
     id: "default",
-    name: "默认（B站粉）",
+    name: "默认",
     primaryColor: "#fb7299",
     secondaryColor: "#5b8def",
   },

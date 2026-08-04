@@ -61,6 +61,15 @@
           <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
           <div class="chat-bottom-fade"></div>
           <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
+
+            <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
+            <Transition name="queue-drawer">
+              <div v-if="queueLength > 0"
+                class="queue-drawer bg-(--color-surface)/80 backdrop-blur-xl rounded-(--size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
+                <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
+              </div>
+            </Transition>
+
             <!-- 编辑模式提示条 -->
             <div v-if="editMode" class="max-w-full w-full flex px-4">
               <div
@@ -75,13 +84,6 @@
             <!-- 子代理面板（编辑模式时隐藏） -->
             <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
               @switch="emit('switch-agent', $event)" />
-
-            <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
-            <Transition name="queue-drawer">
-              <div v-if="queueLength > 0" class="queue-drawer">
-                <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
-              </div>
-            </Transition>
 
             <div class="w-full flex items-center relative">
 
@@ -1149,15 +1151,8 @@ function scrollToMessage(messageId: string) {
   contain: layout style paint;
 }
 
-/* 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 */
 .queue-drawer {
-  width: calc(100% - 48px);
-  margin: 0 auto 6px;
-  padding: 6px 10px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--color-bg, #fff) 60%, transparent);
-  backdrop-filter: blur(12px) saturate(1.2);
-  border: 1px solid var(--el-border-color-lighter, rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-surface-border);
 }
 
 /* 抽屉过渡动画 */

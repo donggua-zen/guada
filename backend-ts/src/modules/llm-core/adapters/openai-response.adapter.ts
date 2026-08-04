@@ -9,6 +9,13 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { retryOn429 } from "../utils/retry.util";
+import { insecureFetch } from "../utils/tls.util";
+import {
+  createStreamTimeoutController,
+  withStreamIdleTimeout,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+} from "../utils/stream-timeout.util";
 import {
   ProviderConfig,
   ConnectionTestResult,
@@ -80,6 +87,14 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     const formattedInput = this.formatInput(params.messages);
     const requestParams = this.buildRequestParam(params, formattedInput);
 
+    // 创建流式 idle 超时控制器
+    const streamTc = createStreamTimeoutController(
+      params.abortSignal,
+      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    );
+
+    const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
+
     let response: any = null;
 
     try {
@@ -87,17 +102,21 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       response = await retryOn429(
         () =>
           client.responses.create(requestParams, {
-            signal: params.abortSignal,
+            signal: streamTc.signal,
+            timeout: requestTimeout,
           }),
         {
           logger: this.logger,
           context: `${this.constructor.name}.chatCompletion`,
-          abortSignal: params.abortSignal,
+          abortSignal: streamTc.signal,
         },
       );
 
       if (params.stream) {
-        yield* this.handleStreamResponse(response);
+        yield* withStreamIdleTimeout(
+          this.handleStreamResponse(response),
+          streamTc,
+        );
       } else {
         yield this.handleNonStreamResponse(response);
       }
@@ -106,8 +125,9 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         `LLM Responses API error (${params.stream ? "stream" : "non-stream"}):`,
         error,
       );
-      this.handleError(error, params.stream);
+      this.handleError(error, params.stream, streamTc);
     } finally {
+      streamTc.clearIdleTimer();
       this.cleanup(response);
     }
   }
@@ -122,6 +142,8 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         providerConfig?.apiKey ||
         process.env.OPENAI_API_KEY ||
         "sk-placeholder",
+      fetch: insecureFetch,
+      timeout: DEFAULT_REQUEST_TIMEOUT_MS,
     });
   }
 
@@ -434,11 +456,22 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
   /**
    * 错误处理与转换
    */
-  private handleError(error: any, isStream: boolean) {
+  private handleError(
+    error: any,
+    isStream: boolean,
+    streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
+  ): never {
     this.logger.error(
       `LLM Responses API error (${isStream ? "stream" : "non-stream"}):`,
       error,
     );
+
+    // 流式 idle 超时优先判断
+    if (streamTc?.isIdleTimeout()) {
+      throw new Error(
+        `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+      );
+    }
 
     if (error.name === "APIError" || error.status) {
       this.logger.error(`API Error Details:`, {
@@ -455,10 +488,6 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
 
     if (error.name === "AbortError") {
       throw new Error("LLM request aborted");
-    }
-
-    if (error.message.includes("timeout")) {
-      throw new Error("LLM request timed out (60s)");
     }
 
     throw error;

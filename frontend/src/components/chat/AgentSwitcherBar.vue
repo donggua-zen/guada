@@ -1,9 +1,9 @@
 <template>
   <div
-    class="absolute bottom-full left-0 right-0 z-20 w-full flex flex-col rounded-tl-3xl rounded-tr-2xl  bg-[#f0f0f0] dark:bg-[#2a2a2a] overflow-hidden transition-all duration-300 shadow-lg"
+    class="absolute bottom-full left-3 right-3 z-20 w-[calc(100%-24px)] margin-auto flex flex-col rounded-tl-(--size-dialog-rounded-radius) rounded-tr-(--size-dialog-rounded-radius)  bg-(--color-surface) border border-(--color-surface-border) overflow-hidden transition-all duration-300 shadow-lg"
     :class="{ 'max-h-48': isExpanded, 'max-h-12': !isExpanded }">
     <!-- 头部折叠栏 -->
-    <div class="flex items-center px-5 py-2 cursor-pointer select-none" @click="toggleExpand">
+    <div class="flex items-center px-2 py-2 cursor-pointer select-none" @click="toggleExpand">
       <Avatar :src="character?.avatarUrl" type="assistant" :name="character?.title || '智能助手'"
         class="w-5 h-5 shrink-0 rounded overflow-hidden mr-2" />
       <span class="text-sm text-gray-700 dark:text-[#c5c7cc] shrink-0">
@@ -14,7 +14,7 @@
       </span>
     </div>
     <!-- 展开的角色列表 -->
-    <div class="px-1.5 mb-5 space-y-0.5" style="scrollbar-gutter: stable both-edges"
+    <div class="mb-5 space-y-0.5"
       :class="{ 'overflow-y-auto': isExpanded, 'overflow-y-hidden': !isExpanded }">
       <!-- 加载中 -->
       <div v-if="loading" class="flex items-center justify-center py-4">
@@ -25,7 +25,7 @@
       <!-- 角色列表 -->
       <template v-else>
         <div v-for="char in selectableCharacters" :key="char.id"
-          class="flex items-center gap-2 py-1 px-2 rounded-lg cursor-pointer transition-colors"
+          class="flex items-center gap-2 py-1 px-1 rounded-lg cursor-pointer transition-colors"
           :class="{
             'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-100 dark:hover:bg-[#25262a]': true,
           }"

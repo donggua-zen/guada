@@ -95,6 +95,8 @@ export class ChatRunnerService {
       resumeData?: any;
       source?: Record<string, any>;
       lastContentId?: string | null;
+      /** 预解析的会话对象（跳过 DB 重查，保留内存挂载的 model/character） */
+      preloadedSession?: any;
     },
     callbacks?: StreamCallbacks,
   ): Promise<() => void> {
@@ -106,6 +108,7 @@ export class ChatRunnerService {
       resumeData,
       source,
       lastContentId = null,
+      preloadedSession,
     } = params;
 
     // 提取前端传入的 clientId，用于广播事件的 source 字段
@@ -113,8 +116,8 @@ export class ChatRunnerService {
     if (userMessage) {
       userMessage.metadata = { ...userMessage?.metadata, ...source };
     }
-    // 获取会话
-    const session = await this.sessionService.getSessionById(sessionId, userId);
+    // 获取会话：优先使用预加载的会话（如 Bot 场景已 enrich），否则从 DB 查询
+    const session = preloadedSession ?? await this.sessionService.getSessionById(sessionId, userId);
     if (!session) {
       throw new HttpException(
         { error: "会话不存在", code: "SESSION_NOT_FOUND" },
