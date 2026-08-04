@@ -3,10 +3,12 @@ import * as path from "path";
 import * as fs from "fs";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { PluginManager } from "../plugins/plugin.manager";
-import { PromptCollector } from "../plugins/prompt-collector.service";
 import { PluginContext } from "../plugins/types/plugin.types";
-import { MessageRecord, MessagePart, LLMResponseChunk } from "../llm-core/types/llm.types";
+import {
+  MessageRecord,
+  MessagePart,
+  LLMResponseChunk,
+} from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { partialParse } from "partial-json-parser";
@@ -252,8 +254,17 @@ export class AgentEngine {
           modelName: sessionContext.getModelConfig().modelName,
         },
       };
-      const lastMessage = historyMessages[historyMessages.length - 1];
       if (isResumeMode) {
+        const lastMessage = historyMessages[historyMessages.length - 1];
+        if (
+          lastMessage.metadata?.finishReason === "rate_limited" &&
+          lastMessage.role === "assistant"
+        ) {
+          historyMessages.pop();
+          isResumeMode = false;
+          needToContinue = true;
+          continue;
+        }
         assistantResponse = lastMessage;
         contentId = lastMessage.contentId;
         responseMessageId = lastMessage.messageId;
@@ -601,7 +612,10 @@ export class AgentEngine {
 
     // 累加本次 ReAct 循环耗时到 Message.totalDurationMs
     const loopDuration = Date.now() - loopStartTime;
-    await sessionContext.incrementMessageDuration(responseMessageId, loopDuration);
+    await sessionContext.incrementMessageDuration(
+      responseMessageId,
+      loopDuration,
+    );
 
     await sessionContext.persist();
   }
