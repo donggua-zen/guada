@@ -624,27 +624,6 @@ export class FilePlugin extends PluginBase {
       ? [context.session.workspacePath]
       : [];
     this.workspaceService.validateWritePath(resolved, extra);
-
-    // memory_only 作用域：只允许操作 memory/ 和 memos/ 目录
-    if (context?.session?.getRunMode?.() === "memory") {
-      const allowedPrefixes =
-        context.session.sessionType === "sub_agent"
-          ? [
-              `.guada/subagents/${context.session.sessionId}/memory/`,
-              `.guada/subagents/${context.session.sessionId}/memos/`,
-            ]
-          : [`.guada/memory/`, `.guada/memos/`];
-
-      const normalizedPath = resolved.replace(/\\/g, "/");
-      const isAllowed = allowedPrefixes.some((prefix) =>
-        normalizedPath.includes(prefix),
-      );
-      if (!isAllowed) {
-        throw new Error(
-          `memory_only mode only allows memory/ and memos/ directories`,
-        );
-      }
-    }
   }
 
   private findEnclosingFunction(
