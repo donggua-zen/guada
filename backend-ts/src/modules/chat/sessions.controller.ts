@@ -317,7 +317,7 @@ export class SessionsController {
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
 
     // 确保文件在工作目录内
-    if (!resolvedPath.startsWith(workspaceDir)) {
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
       throw new Error("Access denied: File is outside workspace directory");
     }
 
@@ -385,7 +385,7 @@ export class SessionsController {
     const resolvedDirPath = this.workspaceService.resolveFilePath(dirPath, workspaceDir);
 
     // 确保目录在工作目录内
-    if (!resolvedDirPath.startsWith(workspaceDir)) {
+    if (!resolvedDirPath.startsWith(workspaceDir + path.sep) && resolvedDirPath !== workspaceDir) {
       throw new Error("Access denied: Directory is outside workspace directory");
     }
 
@@ -490,7 +490,7 @@ export class SessionsController {
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
 
     // 确保文件在工作目录内
-    if (!resolvedPath.startsWith(workspaceDir)) {
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
       throw new Error("Access denied: File is outside workspace directory");
     }
 
@@ -585,7 +585,7 @@ export class SessionsController {
 
     // 解析文件路径并安全检查
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
-    if (!resolvedPath.startsWith(workspaceDir)) {
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
       throw new HttpException("Access denied: File is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
@@ -638,7 +638,7 @@ export class SessionsController {
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
 
     // 确保文件在工作目录内
-    if (!resolvedPath.startsWith(workspaceDir)) {
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
       throw new HttpException("Access denied: Path is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
@@ -688,7 +688,7 @@ export class SessionsController {
     const resolvedPath = this.workspaceService.resolveFilePath(body.path, workspaceDir);
 
     // 确保文件在工作目录内
-    if (!resolvedPath.startsWith(workspaceDir)) {
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
       throw new HttpException("Access denied: Path is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
