@@ -88,7 +88,7 @@ export class GeminiAdapter implements IProtocolAdapter {
       tools,
     });
 
-    const chatHistory = this.formatMessages(params.messages);
+    const chatHistory = this.formatMessages(params.messages.slice(0, -1));
     const chat = model.startChat({ history: chatHistory });
 
     try {
