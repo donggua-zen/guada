@@ -206,6 +206,9 @@ export class AgentEngine {
     }
     let needToContinue = false;
 
+    // 记录 ReAct 循环开始时间，用于计算总耗时
+    const loopStartTime = Date.now();
+
     // 工具调用轮次计数器
     let iterationCount = 0;
     // 回合拦截器触发次数（防止无限循环）
@@ -595,6 +598,11 @@ export class AgentEngine {
         needToContinue = true;
       }
     } while (needToContinue);
+
+    // 累加本次 ReAct 循环耗时到 Message.totalDurationMs
+    const loopDuration = Date.now() - loopStartTime;
+    await sessionContext.incrementMessageDuration(responseMessageId, loopDuration);
+
     await sessionContext.persist();
   }
 

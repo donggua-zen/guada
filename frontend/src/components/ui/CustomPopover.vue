@@ -2,7 +2,7 @@
     <teleport to="body">
         <transition name="popover-fade">
             <div v-if="show" ref="popoverRef"
-                class="fixed rounded-xl border border-white/40 dark:border-white/10 shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-1 py-1 bg-(--color-surface)/70 backdrop-blur-xl backdrop-saturate-150"
+                class="fixed rounded-(--size-dialog-rounded-radius) border border-white/40 dark:border-white/10 shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-1 py-1 bg-(--color-surface)/70 backdrop-blur-xl backdrop-saturate-150"
                 :class="popperClass" :style="popoverStyle" @click.stop
                 @mouseenter="$emit('mouseenter', $event)" @mouseleave="$emit('mouseleave', $event)">
                 <!-- Header 槽位 -->

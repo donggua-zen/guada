@@ -27,8 +27,8 @@ interface MessageContentRow {
   session_id: string;
   role: string;
   content: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | Date;
+  updated_at: string | Date;
 }
 
 @Injectable()

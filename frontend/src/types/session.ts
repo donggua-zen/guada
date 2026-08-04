@@ -26,6 +26,18 @@ export interface InputMessageState {
 }
 
 /**
+ * 排队消息项（流式期间用户发送的消息进入队列）
+ */
+export interface QueuedMessage {
+    id: string              // 前端生成的唯一 ID
+    content: string         // 消息文本
+    files: any[]            // 已上传的文件对象列表
+    knowledgeBaseIds?: string[]
+    createdAt: number       // 创建时间戳
+    status: 'queued' | 'sending'  // 状态
+}
+
+/**
  * 会话状态（用于 Store）
  */
 export interface SessionState {
@@ -37,6 +49,7 @@ export interface SessionState {
     lastUpdated: number
     settings: SessionSettings
     title?: string
+    messageQueue: QueuedMessage[]  // 排队消息列表
 }
 
 /**

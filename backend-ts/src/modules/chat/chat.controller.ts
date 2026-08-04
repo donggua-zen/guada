@@ -9,6 +9,7 @@ import {
   Param,
   Logger,
   HttpException,
+  HttpStatus,
   Headers,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
@@ -280,5 +281,73 @@ export class ChatController {
       contentId: currentContent.id,
       decisionsCount: decisions.length,
     };
+  }
+
+  /**
+   * 发送消息（不返回 SSE 流）
+   *
+   * 用于非活动会话的队列消息：只创建用户消息并启动 Agent 循环，不返回 SSE。
+   * 前端通过全局 stream_started/stream_finished SSE 事件感知状态。
+   * 如果会话已有活跃流，返回 409 SESSION_BUSY。
+   */
+  @Post("send")
+  async sendMessage(
+    @Body()
+    body: {
+      sessionId: string;
+      content: string;
+      fileIds?: string[];
+      knowledgeBaseIds?: string[];
+      replaceMessageId?: string;
+    },
+    @CurrentUser() user: any,
+  ) {
+    const { sessionId, content, fileIds, knowledgeBaseIds, replaceMessageId } =
+      body;
+
+    const source: Record<string, any> = { clientId: null };
+
+    if (content) {
+      try {
+        const parsed = await this.tagParserPipeline.parse(content, {
+          sessionId,
+          userId: user.id,
+        });
+        if (parsed.content !== parsed.originalText) {
+          source.parseResult = { content: parsed.content };
+        }
+      } catch (error: any) {
+        this.logger.warn(
+          `标签解析失败，使用原始内容: ${error?.message || error}`,
+        );
+      }
+    }
+
+    try {
+      await this.chatRunner.startStream(
+        {
+          sessionId,
+          userId: user.id,
+          userMessage: {
+            content,
+            files: fileIds,
+            replaceMessageId,
+            knowledgeBaseIds,
+          },
+          regenerationMode: "overwrite",
+          source,
+        },
+        // 不传 callbacks → 后端启动流但不向此请求者推送 SSE
+      );
+      return { success: true, sessionId };
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        { error: error.message || "发送失败", code: "SEND_FAILED" },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

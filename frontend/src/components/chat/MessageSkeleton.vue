@@ -86,7 +86,7 @@ defineProps<{
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background-color: var(--color-surface);
+  background-color: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
   flex-shrink: 0;
 }
 
@@ -108,7 +108,7 @@ defineProps<{
 .skeleton-line {
   height: 16px;
   border-radius: 4px;
-  background-color: var(--color-surface);
+  background-color: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
   width: 100%;
 }
 
@@ -141,9 +141,5 @@ defineProps<{
   }
 }
 
-/* 暗色模式适配 */
-:global(html.dark) .skeleton-avatar,
-:global(html.dark) .skeleton-line {
-  background-color: var(--el-fill-color-dark);
-}
+
 </style>

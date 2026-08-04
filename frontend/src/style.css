@@ -51,13 +51,14 @@
   --color-surface: #fff;
   /*#fcfcfc*/
   --color-surface-border: #efefef;
+  --color-surface-hover: var(--color-sidebar-bg-hover);
   --color-bg: #fff;
   --color-border: #d1d5db;
 
   --color-bubble-user-bg: #ebf5ff;
   --color-bubble-user-text: #1f2937;
   --color-bubble-user-border: #ebf5ff;
-  --color-bubble-assitant-bg: none;
+  --color-bubble-assitant-bg: transparent;
   --color-bubble-assitant-text: #0d0d0d;
   --color-bubble-assitant-border: none;
   --color-bubble-assitant-text-strong: #17181a;
@@ -91,9 +92,11 @@
   --color-overlay-bg: var(--color-surface);
   --color-dialog-bg: var(--color-bg);
   --color-dialog-border: var(--color-border);
+  --size-dialog-rounded-radius: 12px;
 
   --size-text-base: 15px;
   --size-text-sm: 14px;
+  --size-rounded-radius: 22px;
 
   /* --color-gray-50: #f9fafb;
     --color-gray-100: #f3f4f6;
@@ -225,6 +228,9 @@ html.dark {
   --color-bubble-assitant-text: var(--color-text);
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: var(--color-text);
+
+  --size-dialog-rounded-radius: 12px;
+
   /* 
     --color-gray-50: #111827;
     --color-gray-100: #1f2937;
@@ -611,6 +617,8 @@ html.dark .el-overlay::before {
 .el-dialog__headerbtn {
   margin-top: 8px;
   margin-right: 8px;
+  width: 36px !important;
+  height: 36px !important;
 }
 
 html.dark .el-dialog {
@@ -621,14 +629,14 @@ html.dark .el-dialog {
 
 /* 5. 紧凑内边距 */
 .el-dialog__header {
-  padding: 12px 16px 8px !important;
+  padding: 8px 10px 8px !important;
 }
 
 .el-dialog__body {
   flex: 1 !important;
   padding: 8px 10px !important;
   overflow-y: auto;
-  scrollbar-gutter: stable both-edges !important;
+  /* scrollbar-gutter: stable both-edges !important; */
 }
 
 .el-dialog__footer {

@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
-import type { Session, SessionState, SessionSettings } from '@/types/session'
+import type { Session, SessionState, SessionSettings, QueuedMessage } from '@/types/session'
 
 /**
  * 未分组的默认分组ID（虚拟ID，不对应后端实体）
@@ -66,7 +66,8 @@ export const useSessionStore = defineStore('session', () => {
                 scrollPosition: 0,
                 lastUpdated: Date.now(),
                 settings: {
-                }
+                },
+                messageQueue: [],
             })
         }
         return sessions.value.get(sessionId)!
@@ -298,6 +299,56 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).isStreaming = isStreaming
     }
 
+    // === 消息队列操作 ===
+
+    const enqueueMessage = (sessionId: string, msg: Omit<QueuedMessage, 'id' | 'createdAt' | 'status'>): string => {
+        const state = getSessionState(sessionId)
+        const item: QueuedMessage = {
+            ...msg,
+            id: crypto.randomUUID(),
+            createdAt: Date.now(),
+            status: 'queued',
+        }
+        state.messageQueue.push(item)
+        return item.id
+    }
+
+    const dequeueMessage = (sessionId: string): QueuedMessage | null => {
+        const state = getSessionState(sessionId)
+        if (state.messageQueue.length === 0) return null
+        const item = state.messageQueue.shift()!
+        return item
+    }
+
+    const peekQueue = (sessionId: string): QueuedMessage | null => {
+        const queue = getSessionState(sessionId).messageQueue
+        return queue.length > 0 ? queue[0] : null
+    }
+
+    const getMessageQueue = (sessionId: string): QueuedMessage[] => {
+        return getSessionState(sessionId).messageQueue
+    }
+
+    const removeQueuedMessage = (sessionId: string, msgId: string): void => {
+        const state = getSessionState(sessionId)
+        const idx = state.messageQueue.findIndex(m => m.id === msgId)
+        if (idx !== -1) {
+            state.messageQueue.splice(idx, 1)
+        }
+    }
+
+    const updateQueuedMessage = (sessionId: string, msgId: string, updates: Partial<QueuedMessage>): void => {
+        const state = getSessionState(sessionId)
+        const idx = state.messageQueue.findIndex(m => m.id === msgId)
+        if (idx !== -1) {
+            state.messageQueue[idx] = { ...state.messageQueue[idx], ...updates }
+        }
+    }
+
+    const getQueueLength = (sessionId: string): number => {
+        return getSessionState(sessionId).messageQueue.length
+    }
+
     /**
      * 检查会话是否正在压缩历史
      * @param sessionId - 会话 ID
@@ -463,6 +514,7 @@ export const useSessionStore = defineStore('session', () => {
             }
             state.scrollPosition = 0
             state.lastUpdated = Date.now()
+            state.messageQueue = []
         }
         clearSidebarState(sessionId)
     }
@@ -486,6 +538,13 @@ export const useSessionStore = defineStore('session', () => {
         setSessionIsStreaming,
         sessionIsCompressing,
         setSessionIsCompressing,
+        enqueueMessage,
+        dequeueMessage,
+        peekQueue,
+        getMessageQueue,
+        removeQueuedMessage,
+        updateQueuedMessage,
+        getQueueLength,
         getInputMessage,
         setInputMessage,
         getSessionSetting,

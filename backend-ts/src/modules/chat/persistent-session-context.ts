@@ -373,7 +373,7 @@ export class PersistentSessionContext implements ISessionContext {
       enrichedMetadata,
       preGenAssistantId,
     );
-
+    
     if (this.isMessagesLoaded && message) {
       const record = await this.messageStore.transformContentStructure(
         message,
@@ -475,6 +475,10 @@ export class PersistentSessionContext implements ISessionContext {
   async persist(): Promise<void> {
     await this.messageStore.persistContent(this.pendingPersistRecords);
     this.pendingPersistRecords = [];
+  }
+
+  async incrementMessageDuration(messageId: string, ms: number): Promise<void> {
+    await this.messageStore.incrementMessageDuration(messageId, ms);
   }
 
   async addAssistantMessageVersion(

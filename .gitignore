@@ -43,3 +43,6 @@ backend-ts/src/nul
 .guada/**
 .codely-cli/**
 .codely/**
+.atomcode/**
+mem-log/**
+CODELY.md

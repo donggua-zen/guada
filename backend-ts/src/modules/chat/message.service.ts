@@ -88,8 +88,7 @@ export class MessageService {
     // 格式化返回数据
     const formattedMessages = messages.map((msg) => {
       const visibleContents = (msg.contents || []).filter(
-        (content: any) =>
-          content.role !== "tool" && !content.metadata?.hidden,
+        (content: any) => content.role !== "tool" && !content.metadata?.hidden,
       );
 
       // Convert file URLs to absolute paths within each content
@@ -530,12 +529,10 @@ export class MessageService {
     );
 
     const context: MessageRecord[] = [];
-    const lastMessage = rawMessages[0];
     // 反转消息列表以按时间正序处理，同时保留最后一条消息的标识用于特殊处理
     for (const msg of rawMessages.reverse()) {
       const transformed = await this.transformContentStructure(
         msg,
-        msg.id === lastMessage?.id,
         supportsImageInput,
         keepReasoningContent,
       );
@@ -620,9 +617,7 @@ export class MessageService {
         // Now create File records with valid contentId
         if (pendingImages.length > 0) {
           for (const img of pendingImages) {
-            const match = img.image_url!.url.match(
-              /^data:(.+?);base64,(.+)$/,
-            );
+            const match = img.image_url!.url.match(/^data:(.+?);base64,(.+)$/);
             if (!match) continue;
 
             const mimeType = match[1];
@@ -685,6 +680,13 @@ export class MessageService {
   }
 
   /**
+   * 原子累加消息总耗时到 Message.totalDurationMs
+   */
+  async incrementMessageDuration(messageId: string, ms: number): Promise<void> {
+    await this.messageRepo.incrementTotalDuration(messageId, ms);
+  }
+
+  /**
    * 转换消息内容结构
    *
    * 将数据库中的原始消息格式转换为 LLM 所需的 MessageRecord 格式。
@@ -694,7 +696,6 @@ export class MessageService {
    */
   public async transformContentStructure(
     msg: any,
-    isNewUserMessage: boolean,
     supportsImageInput: boolean = true,
     keepReasoningContent: boolean = false,
   ): Promise<MessageRecord[]> {
@@ -716,8 +717,14 @@ export class MessageService {
         // Hidden user message with images injected under an assistant Message
         // (content.role is "user" but msg.role is "assistant")
         // Files are associated at content level via File.contentId
-        if (content.role === "user" && metadata.hidden && content.files?.length > 0) {
-          const imageFiles = content.files.filter((f: any) => f.fileType === "image");
+        if (
+          content.role === "user" &&
+          metadata.hidden &&
+          content.files?.length > 0
+        ) {
+          const imageFiles = content.files.filter(
+            (f: any) => f.fileType === "image",
+          );
           if (imageFiles.length > 0) {
             const textParts: MessagePart[] = [
               { type: "text", text: content.content || "" },

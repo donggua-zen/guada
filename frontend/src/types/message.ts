@@ -63,6 +63,7 @@ export interface Message {
     createdAt?: ISODateString
     files?: FileAttachment[]
     index?: number
+    totalDurationMs?: number | null
 }
 
 /**

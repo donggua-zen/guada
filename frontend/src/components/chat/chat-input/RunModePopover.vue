@@ -4,7 +4,7 @@
     </template>
     <div class="popover-content space-y-0.5">
       <div v-for="opt in options" :key="opt.value"
-        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-xl"
+        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--size-dialog-rounded-radius)"
         @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
           <el-icon size="16" class="text-gray-500 dark:text-gray-400">

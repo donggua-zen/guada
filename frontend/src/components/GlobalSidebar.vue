@@ -449,22 +449,13 @@ const currentSessionId = computed(() => {
   return Array.isArray(sessionId) ? sessionId[0] : sessionId
 })
 
-// 窗口隐藏状态（最小化/隐藏到托盘时所有会话记为未读）
+// 窗口隐藏状态（用于侧边栏未读徽标显示逻辑，SSE 事件由 useSessionEvents composable 统一管理）
 const windowHidden = ref(false)
 
 onMounted(() => {
   document.addEventListener('visibilitychange', () => {
     windowHidden.value = document.hidden
-    // 窗口重新可见时清除当前会话的未读标记
-    if (!document.hidden && currentSessionId.value) {
-      sessionStore.setSidebarFlag(currentSessionId.value, 'unread', false)
-    }
   })
-})
-
-// 所有已加载的会话（用于空状态判断）
-const allSessions = computed(() => {
-  return Array.from(sessionStore.sessionsMap.values())
 })
 
 
@@ -921,143 +912,7 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
   }
 }, { immediate: true })
 
-/**
- * 初始化 SSE 会话事件监听
- * 用于多窗口同步会话列表和流式状态
- */
-function initSessionEventListeners() {
-  // 监听会话创建事件
-  apiService.onSessionEvent('session_created', (event) => {
-    // 忽略自身发起的事件
-    if (event.source === apiService.getClientId()) {
-      return
-    }
-    const { payload } = event
-    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
-      return
-    if (payload?.session) {
-      const session = payload.session
-      // 避免重复添加
-      if (!sessionStore.getSession(session.id)) {
-        sessionStore.setSession(session)
-      }
-    }
-  })
-
-  // 监听会话删除事件
-  apiService.onSessionEvent('session_deleted', (event) => {
-    // 忽略自身发起的事件
-    if (event.source === apiService.getClientId()) {
-      return
-    }
-    const { sessionId } = event
-
-    // 从统一数据源中移除
-    sessionStore.removeSession(sessionId)
-    sessionStore.clearSidebarState(sessionId)
-
-    // 如果删除的是当前会话，切换到其他会话
-    if (currentSessionId.value === sessionId) {
-      const remainingSessions = allSessions.value
-      if (remainingSessions.length > 0) {
-        router.replace({ name: 'Chat', params: { sessionId: remainingSessions[0].id } })
-      } else {
-        router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
-      }
-    }
-  })
-
-  // 监听会话更新事件
-  apiService.onSessionEvent('session_updated', (event) => {
-    // 忽略自身发起的事件
-    if (event.source === apiService.getClientId()) {
-      return
-    }
-    const { sessionId, payload } = event
-
-    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
-      return
-
-    // 直接更新统一数据源
-    if (payload?.session) {
-      const existing = sessionStore.getSession(sessionId)
-      if (existing) {
-        Object.assign(existing, payload.session)
-      } else {
-        sessionStore.setSession(payload.session)
-      }
-    }
-
-    // 更新最后活跃时间
-    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
-
-    // 非当前会话的更新标记为未读；窗口隐藏时所有会话都标记
-    if (sessionId !== currentSessionId.value || windowHidden.value) {
-      sessionStore.setSidebarFlag(sessionId, 'unread', true)
-    }
-  })
-
-  // 监听流开始事件（统一处理会话列表排序和会话补全）
-  apiService.onSessionEvent('stream_started', (event) => {
-    const { sessionId, payload } = event
-
-    if (payload?.session?.sessionType === 'sub_agent' || payload?.session?.sessionType === 'bot')
-      return
-    // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
-    sessionStore.setSidebarFlag(sessionId, 'working', true)
-
-    // 忽略自身发起的流（通过 source/clientId 判断）
-    if (event.source === apiService.getClientId()) {
-      console.log('[GlobalSidebar] 忽略自身发起的流事件')
-      return
-    }
-
-    // 直接更新统一数据源
-    if (payload?.session) {
-      const existing = sessionStore.getSession(sessionId)
-      if (existing) {
-        Object.assign(existing, payload.session)
-      } else {
-        sessionStore.setSession(payload.session)
-      }
-    }
-
-    // 更新最后活跃时间
-    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
-
-    // 非当前会话标记为未读；窗口隐藏时所有会话都标记
-    if (sessionId !== currentSessionId.value || windowHidden.value) {
-      sessionStore.setSidebarFlag(sessionId, 'unread', true)
-    }
-  })
-
-  // 监听流式结束事件
-  apiService.onSessionEvent('stream_finished', (event) => {
-    const { sessionId, payload } = event
-    // 注意，这里 payload 中没有 session 字段，只有 sessionType
-    if (payload?.sessionType === 'sub_agent' || payload?.sessionType === 'bot')
-      return
-    console.log('[GlobalSidebar] 会话流已结束:', sessionId)
-
-    // 标记会话为空闲
-    sessionStore.setSidebarFlag(sessionId, 'working', false)
-
-    // 如果不是当前会话，转为未读状态；窗口隐藏时所有会话都标记
-    if (sessionId !== currentSessionId.value || windowHidden.value) {
-      sessionStore.setSidebarFlag(sessionId, 'unread', true)
-    }
-  })
-}
-
-/**
- * 清理 SSE 事件监听
- */
-function cleanupSessionEventListeners() {
-  apiService.disconnectSessionEvents()
-}
-
 onMounted(() => {
-  initSessionEventListeners()
   // 每分钟更新一次最后活跃时间显示（无需SSE事件驱动，自动刷新相对时间）
   tickTimer = setInterval(() => {
     updateTick.value++
@@ -1067,7 +922,6 @@ onMounted(() => {
 
 // 组件卸载时清理
 onUnmounted(() => {
-  cleanupSessionEventListeners()
   if (tickTimer !== null) {
     clearInterval(tickTimer)
     tickTimer = null
