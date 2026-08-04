@@ -55,8 +55,8 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
   // 缓存数据存储
   private cache = new Map<string, CacheEntry>();
   
-  // 访问顺序列表（用于 LRU 淘汰）
-  private accessOrder: string[] = [];
+  // 访问顺序映射（用于 LRU 淘汰）
+  private accessOrder = new Map<string, true>();
   
   // 当前估算的总内存占用（字节）
   private totalEstimatedBytes = 0;
@@ -171,7 +171,8 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
 
     // 插入缓存
     this.cache.set(key, entry);
-    this.accessOrder.push(key);
+    this.accessOrder.delete(key);
+    this.accessOrder.set(key, true);
     this.totalEstimatedBytes += this.estimateSize(text.length);
 
     // 检查并执行淘汰
@@ -198,7 +199,7 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
    */
   clear(): void {
     this.cache.clear();
-    this.accessOrder = [];
+    this.accessOrder.clear();
     this.totalEstimatedBytes = 0;
     this.logger.log("Token cache cleared");
   }
@@ -208,8 +209,8 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
    * @param key 缓存 Key
    */
   private touch(key: string): void {
-    this.removeFromAccessOrder(key);
-    this.accessOrder.push(key);
+    this.accessOrder.delete(key);
+    this.accessOrder.set(key, true);
   }
 
   /**
@@ -230,10 +231,7 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
    * @param key 缓存 Key
    */
   private removeFromAccessOrder(key: string): void {
-    const idx = this.accessOrder.indexOf(key);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
-    }
+    this.accessOrder.delete(key);
   }
 
   /**
@@ -261,7 +259,7 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
       this.cache.size > this.options.maxEntries ||
       this.totalEstimatedBytes > this.options.maxMemoryBytes
     ) {
-      const oldest = this.accessOrder.shift();
+      const oldest = this.accessOrder.keys().next().value;
       if (!oldest) break;
       
       const entry = this.cache.get(oldest);
@@ -269,6 +267,7 @@ export class TokenCacheService implements OnModuleInit, OnModuleDestroy {
         this.totalEstimatedBytes -= this.estimateSize(entry.textLength);
       }
       this.cache.delete(oldest);
+      this.accessOrder.delete(oldest);
     }
   }
 
