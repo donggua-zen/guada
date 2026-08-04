@@ -14,7 +14,7 @@
       </span>
     </div>
     <!-- 展开的角色列表 -->
-    <div class="mb-5 space-y-0.5"
+    <div class="mb-5 space-y-0.5 px-1"
       :class="{ 'overflow-y-auto': isExpanded, 'overflow-y-hidden': !isExpanded }">
       <!-- 加载中 -->
       <div v-if="loading" class="flex items-center justify-center py-4">
@@ -25,9 +25,9 @@
       <!-- 角色列表 -->
       <template v-else>
         <div v-for="char in selectableCharacters" :key="char.id"
-          class="flex items-center gap-2 py-1 px-1 rounded-lg cursor-pointer transition-colors"
+          class="flex items-center gap-2 py-1 px-1 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-colors"
           :class="{
-            'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-100 dark:hover:bg-[#25262a]': true,
+            'text-gray-500 dark:text-[#8b8d95] hover:bg-(--color-surface-hover)': true,
           }"
           @click.stop="handleSelect(char)">
           <Avatar :src="char.avatarUrl" type="assistant" :name="char.title"

@@ -36,7 +36,7 @@
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">配色主题</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                为当前{{ isDark ? '深色' : '浅色' }}模式选择主色调，浅色/深色可分别设置
+               浅色/深色可分别设置, 当前：<span class="font-bold">{{ isDark ? '深色' : '浅色' }}</span>
               </span>
             </div>
             <div class="shrink-0 w-52">
