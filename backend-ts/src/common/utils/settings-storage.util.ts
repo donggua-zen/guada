@@ -15,6 +15,7 @@ import * as path from "path";
 export class SettingsStorage implements OnModuleInit {
   private readonly settingsDir: string;
   private cache: Record<string, any> = {};
+  private writeLocks = new Map<string, Promise<void>>();
 
   constructor(private readonly configService: ConfigService) {
     this.settingsDir =
@@ -93,9 +94,23 @@ export class SettingsStorage implements OnModuleInit {
     group: string,
     data: Record<string, any>,
   ): Promise<void> {
-    await this.loadGroup(group);
-    Object.assign(this.cache[group], data);
-    await this.saveGroup(group);
+    const pending = this.writeLocks.get(group);
+    if (pending) await pending;
+
+    const writePromise = (async () => {
+      await this.loadGroup(group);
+      Object.assign(this.cache[group], data);
+      await this.saveGroup(group);
+    })();
+
+    this.writeLocks.set(group, writePromise);
+    try {
+      await writePromise;
+    } finally {
+      if (this.writeLocks.get(group) === writePromise) {
+        this.writeLocks.delete(group);
+      }
+    }
   }
 
   /**

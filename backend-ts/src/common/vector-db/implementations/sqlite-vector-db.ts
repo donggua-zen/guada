@@ -8,7 +8,7 @@
  * - 混合搜索：语义与关键词加权融合。
  */
 
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Database from "better-sqlite3";
 import * as path from "path";
@@ -25,7 +25,7 @@ import {
 import sqliteVec from "sqlite-vec";
 
 @Injectable()
-export class SqliteVectorDB implements VectorDatabase {
+export class SqliteVectorDB implements VectorDatabase, OnModuleDestroy {
   private readonly logger = new Logger(SqliteVectorDB.name);
   private db: Database.Database | null = null;
   private jieba: Jieba | null = null;
@@ -488,6 +488,10 @@ export class SqliteVectorDB implements VectorDatabase {
       this.jieba = null;
       this.logger.log("SQLite 向量数据库连接已关闭");
     }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.close();
   }
 
   // ==================== 私有辅助方法 ====================

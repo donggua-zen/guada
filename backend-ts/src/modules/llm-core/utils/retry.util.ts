@@ -3,6 +3,8 @@ import { Logger } from "@nestjs/common";
 const DEFAULT_MAX_RETRIES = 6;
 const BASE_DELAY_MS = 2000;
 const MAX_DELAY_MS = 18000;
+/** Retry-After header 兜底上限，防止服务器返回超大值导致无限等待 */
+const MAX_RETRY_AFTER_MS = 60_000;
 
 /**
  * 限流异常 — 当 429 重试耗尽时抛出此异常，上层可按 instanceof 精确判断。
@@ -137,12 +139,15 @@ export async function retryOn429<T>(
     context: string;
     maxRetries?: number;
     abortSignal?: AbortSignal;
+    /** Called before each attempt (including the first). Use to reset idle timers. */
+    onBeforeAttempt?: () => void;
   },
 ): Promise<T> {
-  const { logger, context, maxRetries = DEFAULT_MAX_RETRIES, abortSignal } = options;
+  const { logger, context, maxRetries = DEFAULT_MAX_RETRIES, abortSignal, onBeforeAttempt } = options;
   let lastError: any;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    onBeforeAttempt?.();
     try {
       return await fn();
     } catch (error: any) {
@@ -159,10 +164,10 @@ export async function retryOn429<T>(
         break;
       }
 
-      // 优先使用 Retry-After header，否则指数退避
+      // 优先使用 Retry-After header（兜底 60s 上限），否则指数退避
       const headerDelay = getRetryAfterFromError(error);
       const computedDelay = computeDelay(attempt);
-      const delayMs = headerDelay ?? computedDelay;
+      const delayMs = Math.min(headerDelay ?? computedDelay, MAX_RETRY_AFTER_MS);
 
       logger.warn(
         `[${context}] 429 Too Many Requests (attempt ${attempt + 1}/${maxRetries}), ` +

@@ -571,6 +571,8 @@ export class ChatRunnerService {
         };
         this.eventEmitter.emit("stream.finished", streamFinishedEvent);
       } else {
+        this.streamManager.stopStream(sessionId, "error");
+
         const streamFinishedEvent: StreamFinishedEvent = {
           userId,
           sessionId,

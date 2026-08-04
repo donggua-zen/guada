@@ -1278,14 +1278,16 @@ Scan history. ONLY trigger an update if:
       );
       toolResponses.push(...results);
 
-      for (const at of approvedTools) {
+      for (let i = 0; i < approvedTools.length; i++) {
+        const at = approvedTools[i];
         const tc = assistantResponse.toolCalls?.find(
           (t: any) => t.id === at.id,
         );
         if (tc) {
           if (!tc.metadata) tc.metadata = {};
           // 从执行结果中取 isError，标记工具 outcome
-          const result = results[approvedTools.indexOf(at)];
+          // results[i] 与 approvedTools[i] 位置一一对应（executeBatch 保持顺序）
+          const result = results[i];
           tc.outcome = result?.isError ? "error" : "success";
           // 同步写入 toolResponse，供 yield 事件透传给前端
           if (result) result.outcome = tc.outcome;

@@ -111,6 +111,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
           },
           defaultCharacterId: bot.defaultCharacterId,  // 必填字段
           defaultModelId: bot.defaultModelId || undefined,
+          defaultThinkingEffort: bot.defaultThinkingEffort,
           knowledgeBaseIds,
         };
 
@@ -397,6 +398,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       },
       defaultCharacterId: botData.defaultCharacterId || undefined,
       defaultModelId: botData.defaultModelId || undefined,
+      defaultThinkingEffort: botData.defaultThinkingEffort,
       knowledgeBaseIds,
     };
 

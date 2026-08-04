@@ -1,8 +1,7 @@
-import { Module, OnModuleInit } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
 import { SessionGroupController } from "./session-group.controller";
@@ -59,13 +58,4 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   ],
   exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
-export class ChatModule implements OnModuleInit {
-  constructor(
-    private toolOrchestrator: ToolOrchestrator, // 从 ToolsModule 注入
-  ) { }
-
-  onModuleInit() {
-    // KnowledgeBaseToolProvider 已在 ToolsModule 中注册，无需再次添加
-    // 标签解析器通过 CommandProviderRegistry 自动关联，无需手动注册
-  }
-}
+export class ChatModule {}

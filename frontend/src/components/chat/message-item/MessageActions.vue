@@ -77,6 +77,10 @@
       <div class="flex text-gray-500 shrink-0 items-center justify-center ml-2">
         <AccessTimeTwotone class="w-3 h-3 mr-1" />
         <span class="text-xs" :title="props.timeFull">{{ props.timeFriendly }}</span>
+        <template v-if="props.durationText">
+          <span class="text-gray-300 dark:text-gray-600 mx-1">·</span>
+          <span class="text-xs">{{ props.durationText }}</span>
+        </template>
       </div>
     </template>
   </div>
@@ -107,6 +111,7 @@ const props = defineProps<{
   currentVersionIndex: number;
   timeFull: string;
   timeFriendly: string;
+  durationText?: string | null;
 }>();
 
 const emit = defineEmits<{

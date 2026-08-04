@@ -11,8 +11,8 @@
 /** Default idle timeout between stream chunks (2 minutes). */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
-/** Default hard request timeout (2 minutes). */
-export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+/** Default hard request timeout (10 minutes) — total deadline, includes streaming. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
 
 export interface StreamTimeoutController {
   /** Merged AbortSignal — pass to SDK's `create(..., { signal })`. */
