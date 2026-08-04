@@ -62,6 +62,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
       baseURL: config.apiUrl,
       apiKey: config.apiKey,
       timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      maxRetries: 0, // 禁用 SDK 内置重试，由 retryOn429 统一处理，避免 timeout × retries 累加
     };
 
     // 支持自定义请求头
@@ -210,6 +211,11 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
     let response: any = null;
 
+    // 在 create() 之前启动 idle 计时器，覆盖连接建立阶段
+    // 如果服务器接受 TCP 连接但迟迟不返回 HTTP 响应头，idle timer 会触发 abort
+    // onBeforeAttempt: 每次 429 重试前也重置，避免重试时间累加导致误超时
+    streamTc.resetIdleTimer();
+
     try {
       // 对 client.chat.completions.create 进行 429 指数退避重试
       response = await retryOn429(
@@ -222,6 +228,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
           logger: this.logger,
           context: `${this.constructor.name}.chatCompletion`,
           abortSignal: streamTc.signal,
+          onBeforeAttempt: () => streamTc.resetIdleTimer(),
         },
       );
 
