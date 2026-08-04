@@ -187,4 +187,41 @@ export class ChatStreamService {
       this.cancelLocalFetch(sessionId);
     }
   }
+
+  /**
+   * 发送消息（不接收 SSE 流）
+   *
+   * 用于非活动会话的队列消息发送：只创建用户消息并启动 Agent 循环。
+   * 前端通过全局 stream_started/stream_finished 事件感知状态。
+   */
+  async sendMessage(params: {
+    sessionId: string;
+    content: string;
+    fileIds?: string[];
+    knowledgeBaseIds?: string[];
+    replaceMessageId?: string;
+  }): Promise<{ success: boolean }> {
+    const accessToken = this.getAccessToken();
+    const response = await fetch(`${this.getBaseURL()}/chat/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "X-Client-Id": getClientId(),
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 409) {
+        throw new Error(
+          "SessionBusyError: " + (errorData.error || "Session is busy"),
+        );
+      }
+      throw new Error(errorData.error || `发送失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
 }

@@ -145,12 +145,22 @@
             </el-alert>
           </div>
 
-          <!-- Token 消耗 -->
+          <!-- 流式期间：工作中状态 -->
+          <div v-if="streamingState.isStreaming" class="mt-2 flex items-center gap-2 text-xs text-gray-400">
+            <el-icon class="is-loading" size="12">
+              <Loading />
+            </el-icon>
+            <span v-if="durationText">工作中 · {{ durationText }}</span>
+            <span v-else>工作中</span>
+          </div>
+
+          <!-- Token 消耗 + 总耗时 -->
           <div v-if="tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
             <div class="flex items-center gap-3 text-xs text-gray-400">
               <el-icon size="13" class="text-gray-400">
                 <InsightsTwotone />
               </el-icon>
+              <span v-if="durationText" class="text-gray-500">{{ durationText }}</span>
               <span class="text-gray-500">Tokens:</span>
               <span class="token-item">
                 <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span
@@ -169,6 +179,13 @@
           </div>
         </div>
 
+        <!-- 文件变更摘要 -->
+        <FileChangesBar
+          v-if="!streamingState.isStreaming && fileChanges.length > 0"
+          :changes="fileChanges"
+          @open-diff="openDiffDialog"
+        />
+
         <!-- 操作按钮（含版本切换） -->
         <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
           :allow-generate="false" :content-versions="siblingVersions" :current-version-index="currentVersionIndex"
@@ -181,6 +198,12 @@
     <!-- 图片预览 -->
     <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
       :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
+
+    <!-- 文件变更 Diff 弹窗 -->
+    <FileDiffDialog
+      v-model="diffDialogVisible"
+      :entry="activeDiffEntry"
+    />
   </div>
 </template>
 
@@ -189,6 +212,7 @@ import { computed, ref, watch, nextTick } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
+import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
@@ -198,6 +222,9 @@ import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
 import MessageActions from './message-item/MessageActions.vue';
+import FileChangesBar from './message-item/FileChangesBar.vue';
+import FileDiffDialog from './message-item/FileDiffDialog.vue';
+import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 
 const { toast } = usePopup();
 
@@ -301,6 +328,16 @@ const turnsCache = computed(() => {
 const displayGroups = computed<DisplayGroup[]>(() => {
   return groupContentsForDisplay(turnsCache.value);
 });
+
+// 文件变更记录
+const { fileChanges } = useFileChanges(turnsCache);
+const diffDialogVisible = ref(false);
+const activeDiffEntry = ref<FileChangeEntry | null>(null);
+
+const openDiffDialog = (entry: FileChangeEntry) => {
+  activeDiffEntry.value = entry;
+  diffDialogVisible.value = true;
+};
 
 // 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
 watch(turnsCache, () => {
@@ -471,6 +508,22 @@ const assistantTime = computed(() => {
     firendly: formatTime(cache[0]?.createdAt || '', 'friendly'),
     full: formatTime(cache[0]?.createdAt || '', 'full'),
   };
+});
+
+const totalDurationMs = computed(() => activeAssistant.value?.totalDurationMs ?? null);
+
+const formatDuration = (ms: number): string => {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  const rest = Math.floor(s % 60);
+  return `${m}m ${rest}s`;
+};
+
+const durationText = computed(() => {
+  const ms = totalDurationMs.value;
+  if (ms === null || ms === undefined) return null;
+  return formatDuration(ms);
 });
 
 const tokenUsage = computed(() => {

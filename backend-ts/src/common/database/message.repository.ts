@@ -36,8 +36,13 @@ export class MessageRepository {
 
   /**
    * 获取会话最近的消息（用于记忆管理）
-   * 使用基于 ID 的游标分页，确保精准性和高效性
+   * 使用基于 ID 的游标分页，确保精准性和高效性。
+   *
+   * 为避免 SQLite 参数限制（SQLITE_MAX_VARIABLE_NUMBER=999），嵌套关系
+   * （contents、files）通过分批查询加载，而非 Prisma 嵌套 include。
    */
+  private static readonly BATCH_SIZE = 100;
+
   async findRecentBySessionId(
     sessionId: string,
     limit?: number,
@@ -47,7 +52,6 @@ export class MessageRepository {
       withFiles?: boolean;
       withContents?: boolean;
       onlyCurrentContent?: boolean;
-      // 是否包含边界消息（beforeMessageId 那条），默认包含以兼容旧逻辑
       includeBoundary?: boolean;
     },
   ) {
@@ -59,47 +63,114 @@ export class MessageRepository {
     } = options || {};
     const where: any = { sessionId };
 
-    // 获取晚于afterMessageId的消息(不含)
     if (afterMessageId) {
       where.id = { gt: afterMessageId };
     }
 
     if (beforeMessageId) {
-      // 获取早于 beforeMessageId 的消息，默认包含边界以兼容旧逻辑
       const boundaryOp = includeBoundary ? 'lte' : 'lt';
       where.id = { ...where.id, [boundaryOp]: beforeMessageId } as any;
     }
 
-    const messages = await this.prisma.message.findMany({
-      where,
-      ...(limit != null && { take: limit }),
-      orderBy: { id: "desc" }, // 基于 ID 倒序（CUID 时间有序）
-      include: {
-        ...(withContents && {
-          contents: {
-            orderBy: { createdAt: "asc" },
-            ...(withFiles && { include: { files: { orderBy: { createdAt: "asc" } } } }),
-          },
-        }),
-      },
-    });
+    const BATCH = MessageRepository.BATCH_SIZE;
 
-    // 新模型：仅保留活跃版本的 assistant 消息
+    // Phase 1: 分批查 messages（无 include）
+    const allMessages: any[] = [];
+    let cursor: string | undefined = undefined;
+    let remaining = limit;
+
+    while (true) {
+      const take = remaining != null ? Math.min(BATCH, remaining) : BATCH;
+      const batch = await this.prisma.message.findMany({
+        where,
+        take,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { id: "desc" },
+      });
+      if (batch.length === 0) break;
+      allMessages.push(...batch);
+      if (remaining != null) remaining -= batch.length;
+      cursor = batch[batch.length - 1].id;
+      if (batch.length < take) break;
+    }
+
+    if (allMessages.length === 0) return [];
+
+    // Phase 2: onlyCurrentContent 过滤（确定活跃消息集合，后续只查这些消息的 contents）
+    let targetMessages = allMessages;
     if (onlyCurrentContent) {
-      // 收集所有用户消息的 currentVersionId
       const activeVersionIds = new Set<string>();
-      for (const msg of messages) {
+      for (const msg of allMessages) {
         if (msg.role === "user" && msg.currentVersionId) {
           activeVersionIds.add(msg.currentVersionId);
         }
       }
-      // 过滤：只保留用户消息和活跃版本的 assistant 消息
-      return messages.filter(
+      targetMessages = allMessages.filter(
         (msg) => msg.role === "user" || activeVersionIds.has(msg.id),
       );
     }
 
-    return messages;
+    // Phase 3: 分批查 contents（仅活跃消息）
+    if (withContents && targetMessages.length > 0) {
+      const contentsByMessageId = new Map<string, any[]>();
+      for (let i = 0; i < targetMessages.length; i += BATCH) {
+        const messageIds = targetMessages
+          .slice(i, i + BATCH)
+          .map((m) => m.id);
+        const contents = await this.prisma.messageContent.findMany({
+          where: { messageId: { in: messageIds } },
+          orderBy: { createdAt: "asc" },
+        });
+        for (const c of contents) {
+          if (!contentsByMessageId.has(c.messageId)) {
+            contentsByMessageId.set(c.messageId, []);
+          }
+          contentsByMessageId.get(c.messageId)!.push(c);
+        }
+      }
+
+      // Phase 4: 分批查 files（仅 user 消息的 contents）
+      if (withFiles) {
+        const userMessageIdSet = new Set(
+          targetMessages.filter((m) => m.role === "user").map((m) => m.id),
+        );
+        const userContentIds: string[] = [];
+        for (const [msgId, contents] of contentsByMessageId) {
+          if (userMessageIdSet.has(msgId)) {
+            for (const c of contents) userContentIds.push(c.id);
+          }
+        }
+
+        const filesByContentId = new Map<string, any[]>();
+        for (let i = 0; i < userContentIds.length; i += BATCH) {
+          const batchIds = userContentIds.slice(i, i + BATCH);
+          const files = await this.prisma.file.findMany({
+            where: { contentId: { in: batchIds } },
+            orderBy: { createdAt: "asc" },
+          });
+          for (const f of files) {
+            if (!f.contentId) continue;
+            if (!filesByContentId.has(f.contentId)) {
+              filesByContentId.set(f.contentId, []);
+            }
+            filesByContentId.get(f.contentId)!.push(f);
+          }
+        }
+
+        for (const [, contents] of contentsByMessageId) {
+          for (const c of contents) {
+            (c as any).files = filesByContentId.get(c.id) || [];
+          }
+        }
+      }
+
+      // 合并 contents 到 messages
+      for (const msg of targetMessages) {
+        (msg as any).contents = contentsByMessageId.get(msg.id) || [];
+      }
+    }
+
+    return targetMessages;
   }
 
   /**
@@ -157,6 +228,16 @@ export class MessageRepository {
       where: { id: messageId },
       data,
     });
+  }
+
+  /**
+   * 原子累加 totalDurationMs（Prisma increment 在 BetterSqlite3 adapter 下静默失败，改用 raw SQL）
+   */
+  async incrementTotalDuration(messageId: string, ms: number) {
+    await this.prisma.$executeRaw`
+      UPDATE message SET total_duration_ms = COALESCE(total_duration_ms, 0) + ${ms}
+      WHERE id = ${messageId}
+    `;
   }
 
   /**

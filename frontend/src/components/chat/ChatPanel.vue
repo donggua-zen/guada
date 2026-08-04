@@ -1,10 +1,6 @@
 <template>
   <!-- 消息+输入 区域容器 -->
   <div class="flex-1 overflow-hidden w-full relative">
-    <template v-if="!isLoading && currentSessionId && activeMessages.length === 0 && currentSession?.character">
-      <!-- 欢迎页 -->
-      <WelcomeScreen :session="currentSession" />
-    </template>
 
     <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
     <template v-if="showSkeleton">
@@ -20,7 +16,12 @@
         class="h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
         @scroll="handleScroll">
-        <div class="max-w-186 mx-auto pt-5 pb-36">
+        <template v-if="currentSessionId && activeMessages.length === 0 && currentSession?.character">
+          <!-- 欢迎页 -->
+          <WelcomeScreen :session="currentSession" class="flex-1" />
+        </template>
+
+        <div v-else class="max-w-186 w-full mx-auto pt-5 flex-1">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -53,12 +54,56 @@
           </div>
 
           <!-- 流式输出状态指示 -->
-          <div v-if="isStreaming && !sessionStore.sessionIsCompressing(currentSession?.id || '')"
-            class="flex items-center text-gray-500 pb-8 -mt-5">
-            <el-icon class="is-loading mr-2" size="14">
-              <Loading />
-            </el-icon>
-            <span class="text-xs">回答中</span>
+        </div>
+
+        <!-- 输入区域 - sticky 底部 -->
+        <div class="sticky bottom-0 left-0 right-0 z-30 pb-2">
+          <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
+          <div class="chat-bottom-fade"></div>
+          <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
+            <!-- 编辑模式提示条 -->
+            <div v-if="editMode" class="max-w-full w-full flex px-4">
+              <div
+                class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
+                <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
+                <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+                  取消编辑
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 子代理面板（编辑模式时隐藏） -->
+            <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+              @switch="emit('switch-agent', $event)" />
+
+            <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
+            <Transition name="queue-drawer">
+              <div v-if="queueLength > 0" class="queue-drawer">
+                <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
+              </div>
+            </Transition>
+
+            <div class="w-full flex items-center relative">
+
+              <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+                :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
+                :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+                @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
+                <template #right-actions-before>
+                  <!-- 上下文使用率：圆形进度条 -->
+                  <el-tooltip :content="contextTooltip" placement="top">
+                    <button class="context-ring-btn" @click="memoPanelVisible = true">
+                      <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
+                        <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
+                        <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5"
+                          :stroke="ringColor" :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset"
+                          stroke-linecap="round" transform="rotate(-90 18 18)" />
+                      </svg>
+                    </button>
+                  </el-tooltip>
+                </template>
+              </ChatInput>
+            </div>
           </div>
         </div>
       </ScrollContainer>
@@ -67,48 +112,6 @@
       <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
         @click="handleScrollToBottomClick" />
     </template>
-
-    <!-- 输入区域 - 浮动叠加 -->
-    <div class="absolute bottom-0 left-6 right-6 z-30 pb-2">
-      <div class="max-w-186 flex flex-col items-start mx-auto relative">
-        <!-- 编辑模式提示条 -->
-        <div v-if="editMode" class="max-w-full w-full flex px-4">
-          <div
-            class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
-            <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
-            <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-              取消编辑
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 子代理面板（编辑模式时隐藏） -->
-        <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
-          @switch="emit('switch-agent', $event)" />
-
-
-        <div class="w-full flex items-center relative">
-          <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-            :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''" :config="chatInputConfig"
-            :streaming="isStreaming" :readonly="readonly" mode="chat" @config-change="handleConfigChange"
-            @send="handleSendMessage" @abort="abortResponse">
-            <template #right-actions-before>
-              <!-- 上下文使用率：圆形进度条 -->
-              <el-tooltip :content="contextTooltip" placement="top">
-                <button class="context-ring-btn" @click="memoPanelVisible = true">
-                  <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
-                    <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
-                    <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
-                      :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset" stroke-linecap="round"
-                      transform="rotate(-90 18 18)" />
-                  </svg>
-                </button>
-              </el-tooltip>
-            </template>
-          </ChatInput>
-        </div>
-      </div>
-    </div>
   </div>
   <!-- 记忆管理弹窗 -->
   <el-dialog v-model="memoPanelVisible" title="记忆管理" width="560px" :close-on-click-modal="false" destroy-on-close
@@ -126,7 +129,7 @@ import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { getCurrentTurns } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
-import type { InputMessageState, Session } from '@/types/session';
+import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
 import type { Character } from '@/types/character';
 
 // 导入新创建的 composables
@@ -139,6 +142,7 @@ import TurnItem from "./TurnItem.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
+import QueuedMessages from './QueuedMessages.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import { Loading } from '@element-plus/icons-vue'
@@ -267,6 +271,12 @@ const isStreaming = computed(() => {
   const sessionId = currentSessionId.value;
   return sessionId ? sessionStore.sessionIsStreaming(sessionId) : false;
 });
+
+// 队列状态
+const messageQueue = computed(() => {
+  return currentSessionId.value ? sessionStore.getMessageQueue(currentSessionId.value) : [];
+});
+const queueLength = computed(() => messageQueue.value.length);
 
 // 滚动管理相关状态和方法
 const showScrollToBottomBtn = ref(false)
@@ -675,12 +685,13 @@ function stopSkeletonDisplay() {
   console.log('Skeleton remaining time:', remaining, 'ms')
   if (remaining <= 0) {
     // 已经显示了至少 500ms，立即隐藏
-
+    immediateScrollToBottom();
     showSkeleton.value = false
   } else {
     // 还未满 500ms，延迟剩余时间后再隐藏
     skeletonMinDisplayTimer = setTimeout(() => {
       showSkeleton.value = false
+      immediateScrollToBottom();
       skeletonMinDisplayTimer = null
     }, remaining)
   }
@@ -716,13 +727,8 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
     notify.error('加载会话失败', error.message);
   } finally {
     isLoading.value = false;
-    nextTick(() => {
-      immediateScrollToBottom();
-    });
     stopSkeletonDisplay();
-
   }
-
 }
 
 /**
@@ -888,10 +894,22 @@ function handleSelectCharacter(character: Character) {
  */
 async function handleSendMessage(payload?: InputMessageState) {
   const data = payload;
-  if (!data || (!data.content?.trim() && !data.files.length) || isStreaming.value) return;
+  if (!data || (!data.content?.trim() && !data.files.length)) return;
 
   try {
     const { content, files, knowledgeBaseIds } = data;
+
+    // 流式进行中：消息入队，等 stream_finished 后自动消费
+    if (currentSessionId.value && isStreaming.value) {
+      const sid = currentSessionId.value;
+      const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
+      sessionStore.enqueueMessage(sid, {
+        content: prepared.content,
+        files: prepared.updatedFiles.filter((f: any) => f.id),
+        knowledgeBaseIds: prepared.knowledgeBaseIds,
+      });
+      return;
+    }
 
     // 准备消息数据（上传文件等）
     const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
@@ -928,6 +946,30 @@ async function handleSendMessage(payload?: InputMessageState) {
     // 发送失败时由 SSE 事件驱动恢复检测
   }
 }
+
+/**
+ * 处理队列消息撤回
+ */
+function handleRemoveQueued(id: string) {
+  if (currentSessionId.value) {
+    sessionStore.removeQueuedMessage(currentSessionId.value, id);
+  }
+}
+
+/**
+ * 处理队列消息编辑
+ */
+function handleEditQueued(item: QueuedMessage) {
+  if (!currentSessionId.value) return;
+  inputMessage.value = {
+    content: item.content,
+    files: item.files,
+    knowledgeBaseIds: item.knowledgeBaseIds,
+    isWaiting: false,
+  };
+  sessionStore.removeQueuedMessage(currentSessionId.value, item.id);
+}
+
 /**
  * 进入编辑模式以重新生成消息
  */
@@ -1099,20 +1141,58 @@ function scrollToMessage(messageId: string) {
   will-change: transform;
   transform: translateZ(0);
   contain: layout style paint;
-  /* 底部渐变遮罩：仅作用于 content-box，滚动条在 padding 区域不受影响 */
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 40px), transparent calc(100% - 15px));
-  /* -webkit-mask-clip: content-box; */
-  -webkit-mask-origin: content-box;
-  mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 40px), transparent calc(100% - 15px));
-  /* mask-clip: content-box;
-  mask-clip: content-box; */
-  mask-origin: content-box;
+}
+
+/* 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 */
+.queue-drawer {
+  width: calc(100% - 48px);
+  margin: 0 auto 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg, #fff) 60%, transparent);
+  backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid var(--el-border-color-lighter, rgba(0, 0, 0, 0.06));
+}
+
+/* 抽屉过渡动画 */
+.queue-drawer-enter-active,
+.queue-drawer-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.queue-drawer-enter-from,
+.queue-drawer-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.queue-drawer-enter-to,
+.queue-drawer-leave-from {
+  opacity: 1;
+  max-height: 400px;
+}
+
+/* 底部渐变遮罩：底部25px完全隐藏，上方渐变过渡 */
+.chat-bottom-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--color-bg, #ffffff) 25px, transparent 48px);
 }
 
 
 /* 为消息列表容器添加更强的隔离 */
-:deep(.simplebar-content-wrapper) {
-  contain: layout style;
+:deep(.scroll-container > div) {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 确保消息项也使用隔离 */

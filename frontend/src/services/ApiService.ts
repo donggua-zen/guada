@@ -233,6 +233,16 @@ class ApiService {
     return this.chatStreamService.cancelResponse(sessionId);
   }
 
+  async sendMessage(params: {
+    sessionId: string;
+    content: string;
+    fileIds?: string[];
+    knowledgeBaseIds?: string[];
+    replaceMessageId?: string;
+  }): Promise<{ success: boolean }> {
+    return this.chatStreamService.sendMessage(params);
+  }
+
   async getStreamStatus(sessionId: string): Promise<{
     isRunning: boolean;
     subscriberCount: number;

@@ -113,6 +113,9 @@ html.dark[data-theme="wandering-earth"] {
   --code-block-border: transparent;
   --code-block-header-bg: transparent;
   --code-block-language-color: var(--color-primary);
+
+  /* 模态框 */
+  --size-dialog-rounded-radius: 0;
 }
 
 /* ---------- 主题专属细节（全部仅暗色生效） ---------- */
@@ -421,7 +424,7 @@ html.dark[data-theme="wandering-earth"] .el-dialog {
    （角色编辑 / 更新日志等）不渲染 title span，不受此压缩影响 */
 html.dark[data-theme="wandering-earth"] .el-dialog__header:has(.el-dialog__title) {
   padding: 0 16px !important;
-  height: 6px;
+  height: 0;
   box-sizing: border-box;
 }
 /* 标题牌：实心琥珀 + 深色大写窄体字。
@@ -463,7 +466,7 @@ html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn {
   justify-content: center;
   font-size: 13px;
   background: var(--color-surface);
-  border: 1px solid var(--color-primary);
+  /* border: 1px solid var(--color-primary); */
   border-bottom: none;
   transition: background 0.15s ease;
 }

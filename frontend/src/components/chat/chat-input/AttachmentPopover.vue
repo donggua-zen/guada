@@ -76,7 +76,7 @@ defineEmits<{
   align-items: center;
   gap: 10px;
   padding: 7px 8px;
-  border-radius: 6px;
+  border-radius: var(--size-dialog-rounded-radius);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -142,7 +142,7 @@ defineEmits<{
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--size-dialog-rounded-radius);
   cursor: pointer;
   transition: all 0.15s;
 }

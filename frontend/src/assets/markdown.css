@@ -75,13 +75,13 @@
 .markdown-text ol {
   list-style: none;
   counter-reset: item;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .markdown-text ul {
   list-style: none;
   padding-left: 0;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .markdown-text ol > li,

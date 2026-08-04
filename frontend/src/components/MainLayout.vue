@@ -22,12 +22,15 @@ import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { apiService } from '@/services/ApiService'
+import { useSessionEvents } from '@/composables/useSessionEvents'
 import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
 import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
 
 const layoutStore = useLayoutStore()
 const route = useRoute()
+
+const { init: initSessionEvents, cleanup: cleanupSessionEvents } = useSessionEvents()
 
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 
@@ -48,17 +51,19 @@ const handleSidebarUpdate = (val: boolean) => {
   }
 }
 
-// 启动 SSE 连接
+// 启动 SSE 连接 + 全局事件监听
 onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
   apiService.connectSessionEvents()
+  initSessionEvents()
   // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
   layoutStore.loadAppearanceSettings()
 })
 
-// 组件卸载时断开 SSE 连接，避免内存泄漏
+// 组件卸载时断开 SSE 连接，清理监听
 onUnmounted(() => {
   console.log('[MainLayout] 断开 SSE 连接')
+  cleanupSessionEvents()
   apiService.disconnectSessionEvents()
 })
 </script>

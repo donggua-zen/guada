@@ -71,13 +71,13 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="flex gap-2">
-              <el-button link type="primary" size="small" @click.stop="handleViewChat(row)">
+              <el-button link type="primary" size="small" @click.stop="handleViewChat(row as Session)">
                 查看对话
               </el-button>
-              <el-button link type="warning" size="small" @click.stop="handleClearMessages(row)">
+              <el-button link type="warning" size="small" @click.stop="handleClearMessages(row as Session)">
                 清空记录
               </el-button>
-              <el-button link type="danger" size="small" @click.stop="handleDeleteSession(row)">
+              <el-button link type="danger" size="small" @click.stop="handleDeleteSession(row as Session)">
                 删除
               </el-button>
             </div>

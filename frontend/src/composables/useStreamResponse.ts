@@ -84,6 +84,34 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   let contentBuffer: ContentBuffer | null = null;
   let currentBufferContentId: string | null = null;
 
+  // 总耗时计时器
+  let streamStartTime: number | null = null;
+  let baseTotalDurationMs: number = 0;
+  let durationTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startDurationTimer(message: Message) {
+    if (streamStartTime !== null) return;
+    streamStartTime = Date.now();
+    baseTotalDurationMs = message.totalDurationMs || 0;
+    durationTimer = setInterval(() => {
+      if (streamStartTime !== null) {
+        message.totalDurationMs = baseTotalDurationMs + (Date.now() - streamStartTime);
+      }
+    }, 100);
+  }
+
+  function stopDurationTimer(message: Message | null) {
+    if (durationTimer) {
+      clearInterval(durationTimer);
+      durationTimer = null;
+    }
+    if (message && streamStartTime !== null) {
+      message.totalDurationMs = baseTotalDurationMs + (Date.now() - streamStartTime);
+    }
+    streamStartTime = null;
+    baseTotalDurationMs = 0;
+  }
+
   // 全局防抖 flush 函数
   const debouncedFlush = useDebounceFn(
     (message: Message, contentIndex: number) => {
@@ -498,6 +526,9 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       }
     }
 
+    // 停止总耗时计时器（中止/异常时确保写入部分时长）
+    stopDurationTimer(message);
+
     sessionStore.setSessionIsStreaming(sessionId, false);
   }
 
@@ -577,6 +608,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           contentIndex = result.contentIndex;
           assistantMessageIdResult = response.messageId!;
 
+          startDurationTimer(message);
+
           // 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
           if (!hasUpdatedActiveTime) {
             sessionStore.updateSessionLastActiveTime(
@@ -596,6 +629,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
             message = result.message;
             contentIndex = result.contentIndex;
             assistantMessageIdResult = response.messageId!;
+
+            startDurationTimer(message);
 
             if (!hasUpdatedActiveTime) {
               sessionStore.updateSessionLastActiveTime(

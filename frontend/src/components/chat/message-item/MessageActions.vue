@@ -122,6 +122,6 @@ const handleCommand = (command: string) => {
 @reference "tailwindcss";
 
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
+  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--color-surface-hover) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 </style>

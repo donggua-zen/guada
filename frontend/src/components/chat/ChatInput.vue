@@ -2,14 +2,14 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border)"
+      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius)"
       :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
           :ext="file.fileExtension" :size="file.fileSize"
           :preview-url="file.fileType === 'image' ? previewUrls.get(file.id) : undefined" closable
-          :clickable="file.isPasted && file.originalContent && file.fileType === 'text'"
+          :clickable="!!(file.isPasted && file.originalContent && file.fileType === 'text')"
           :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" @close="removeFile(file.id)"
           @click="showFilePreview(file)">
         </FileItem>
@@ -89,7 +89,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-            }}</span>
+              }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <el-tooltip v-if="!props.readonly" content="Token 上限" placement="top">
@@ -99,19 +99,19 @@
           </el-tooltip>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
-          <!-- 发送/停止按钮 -->
-          <el-tooltip v-if="!streaming" content="发送" placement="top">
-            <button class="send-btn" @click="sendMessage"
-              :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
-              <el-icon size="20">
-                <Send24Filled />
+          <!-- 发送/停止按钮（流式时：无输入=停止，有输入=入队） -->
+          <el-tooltip v-if="streaming && !inputContent.trim()" content="停止生成" placement="top">
+            <button class="send-btn stop-btn" @click="abortResponse">
+              <el-icon size="18">
+                <Stop24Filled />
               </el-icon>
             </button>
           </el-tooltip>
-          <el-tooltip v-else content="停止生成" placement="top">
-            <button class="send-btn stop-btn" @click="abortResponse">
-              <el-icon size="20">
-                <Stop24Filled />
+          <el-tooltip v-else :content="streaming ? '加入队列' : '发送'" placement="top">
+            <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
+              :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
+              <el-icon size="18">
+                <Send24Filled />
               </el-icon>
             </button>
           </el-tooltip>
@@ -139,9 +139,9 @@
 
 
 <script setup lang="ts">
-// @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
-import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
+import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessageBox } from 'element-plus';
+import type { Model, ModelProvider } from '@/types/api';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -178,6 +178,36 @@ import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
 
+/** File object managed by ChatInput (created via createFileObject) */
+interface ChatFile {
+  id: number
+  fileName: string
+  fileSize: number
+  fileExtension: string
+  fileType: string
+  displayName: string
+  file: File
+  isPasted: boolean
+  originalContent?: string
+  uploadProgress: number
+  uploadStatus: 'queued' | 'uploading' | 'uploaded' | 'failed' | undefined
+  previewUrl?: string
+  url?: string
+}
+
+/** Chat session config passed from parent */
+interface ChatConfig {
+  modelId?: string | null
+  thinkingEffort?: string
+  workspacePath?: string | null
+  maxTokensLimit?: number | null
+  knowledgeBaseIds?: string[]
+  runMode?: string
+}
+
+/** File with optional _originalContent attached by paste handler */
+type FileWithContent = File & { _originalContent?: string }
+
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('lg') // md = 768px
 
@@ -185,14 +215,14 @@ const { confirm } = usePopup();
 
 // 响应式数据
 const isInputExpanded = ref(false);
-const messageInputRef = ref(null);
-const fileInputRef = ref(null);
-const imageInputRef = ref(null);
+const messageInputRef = ref<HTMLElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const imageInputRef = ref<HTMLInputElement | null>(null);
 let fileIdCounter = 0;
 const focused = ref(false);
 // 模型选择器相关
-const models = ref([]);
-const providers = ref([]);
+const models = ref<Model[]>([]);
+const providers = ref<ModelProvider[]>([]);
 // 弹窗触发按钮引用
 const modelButtonRef = ref<any>(null);
 // Token 上限 popover
@@ -216,8 +246,6 @@ const editorContent = ref('');
 // 命令选择弹窗 ref
 const commandPickerRef = ref<any>();
 
-// 抽屉面板状态（会话设置保持抽屉样式 - 已废弃，改用模态框）
-const settingsPanelVisible = ref(false)
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
 const modelButtonExpanded = ref(false)
@@ -226,7 +254,7 @@ const attachPopoverVisible = ref(false)
 const attachButtonRef = ref<any>(null)
 
 // 常量定义
-const FILE_TYPES = {
+const FILE_TYPES: Record<string, { extensions: string[]; type: string }> = {
   TEXT: {
     extensions: [
       '.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log',
@@ -251,7 +279,7 @@ const FILE_TYPES = {
   }
 };
 
-const MIME_TO_EXT = {
+const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/bmp': 'bmp',
   'image/svg+xml': 'svg', 'image/webp': 'webp', 'text/plain': 'txt', 'text/html': 'html',
   'text/css': 'css', 'application/javascript': 'js', 'application/json': 'json',
@@ -266,21 +294,21 @@ const showButtons = reactive({
 });
 
 // 图片预览 URL 字典（与 file 对象解耦）
-const previewUrls = ref(new Map());
+const previewUrls = ref(new Map<number, string>());
 
 const props = defineProps({
   value: { type: String, default: '' },
-  files: { type: Array, default: () => [] },
+  files: { type: Array as PropType<ChatFile[]>, default: () => [] },
   streaming: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
-  buttons: { type: Object, default: () => [] },
+  buttons: { type: Object as PropType<Record<string, boolean>>, default: () => ({}) },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
   characterId: { type: String, default: null },
   // 模式：create 为创建会话模式，chat 为对话模式
   mode: { type: String, default: 'chat' },
   config: {
-    type: Object,
+    type: Object as PropType<ChatConfig>,
     default: () => ({
       modelId: null,
       thinkingEffort: 'none',
@@ -297,12 +325,10 @@ const styleClass = computed(() => {
   if (isInputExpanded.value) {
     classes.push('expanded');
   }
-  // 始终应用默认样式 
-  classes.push('rounded-[22px]');
   if (focused.value) {
     classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
   } else {
-    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.11)] dark:shadow-none');
+    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
   }
   return classes.join(' ') + ' ' + props.class;
 });
@@ -352,7 +378,7 @@ watch(() => props.value, (val) => {
   if (editor.value && editor.value.getText() !== val) {
     // 将纯文本中的 \n 转换为 <br>，确保 setContent 作为 HTML 解析时保留换行
     const htmlContent = parseCommandTags(val).replace(/\n/g, '<br>');
-    editor.value.commands.setContent(htmlContent, false);
+    editor.value.commands.setContent(htmlContent, { emitUpdate: false });
   }
 });
 
@@ -370,7 +396,7 @@ const uploadFiles = computed({
           previewUrls.value.set(file.id, previewUrl);
         } else if (file.previewUrl || file.url) {
           // 已上传文件（如编辑消息回填）：直接用后端返回的资源 URL
-          previewUrls.value.set(file.id, file.previewUrl || file.url);
+          previewUrls.value.set(file.id, file.previewUrl || file.url || '');
         }
       }
     });
@@ -511,19 +537,9 @@ const handleMaxTokensChange = (val: number | null) => {
   emit('config-change', { maxTokensLimit: val });
 };
 
-//  新增：有效的已选择知识库数量（只统计实际存在的知识库）
-const selectedKnowledgeBasesCount = computed(() => {
-  return selectedKnowledgeBases.value.length;
-});
-
-//  新增：本地存储中的知识库ID总数（包含已删除的无效ID）
-const totalKnowledgeBasesCount = computed(() => {
-  return props.config?.knowledgeBaseIds?.length || 0;
-});
 
 
-
-const getFeatureLabel = (type) => {
+const getFeatureLabel = (type: string) => {
   switch (type) {
     case 'tools': return '工具调用';
     case 'thinking': return '混合思考';
@@ -540,33 +556,33 @@ const emit = defineEmits([
 ]);
 
 // 工具函数
-const getFileExtension = (fileName) => {
+const getFileExtension = (fileName: string) => {
   const lastDotIndex = fileName.lastIndexOf('.');
   return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1).toUpperCase() : 'FILE';
 };
 
-const getFileNameWithoutExtension = (fileName) => {
+const getFileNameWithoutExtension = (fileName: string) => {
   const lastDotIndex = fileName.lastIndexOf('.');
   return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
 };
 
-const getFileExtensionFromType = (mimeType) => {
+const getFileExtensionFromType = (mimeType: string) => {
   return MIME_TO_EXT[mimeType] || mimeType.split('/')[1] || 'file';
 };
 
-const isFileType = (file, fileType) => {
+const isFileType = (file: File, fileType: string) => {
   const fileName = file.name.toLowerCase();
   return FILE_TYPES[fileType].extensions.some(ext => fileName.endsWith(ext));
 };
 
-const getFileExtensionsFromType = (type) => {
+const getFileExtensionsFromType = (type: string) => {
   return FILE_TYPES[type].extensions;
 }
 
-const createFileObject = (file, fileType, isPasted = false) => {
+const createFileObject = (file: File, fileType: string, isPasted = false) => {
   const timestamp = Date.now();
   // 检测是否有通过粘贴附加的原始文本内容
-  const hasOriginalContent = file._originalContent;
+  const hasOriginalContent = (file as FileWithContent)._originalContent;
 
   return {
     id: fileIdCounter++,
@@ -582,7 +598,7 @@ const createFileObject = (file, fileType, isPasted = false) => {
     originalContent: hasOriginalContent || undefined,
     // 新增：上传进度状态
     uploadProgress: 0,
-    uploadStatus: null, // 'queued' | 'uploading' | 'uploaded' | 'failed'
+    uploadStatus: undefined, // 'queued' | 'uploading' | 'uploaded' | 'failed'
   };
 };
 
@@ -714,13 +730,6 @@ const handleFavoriteChanged = (modelId: string, isFavorite: boolean) => {
   }
 };
 
-// 重新加载模型列表
-const reloadModels = async () => {
-  models.value = [];
-  providers.value = [];
-  await loadModels();
-};
-
 // 附件弹窗切换
 const toggleAttachPopover = async () => {
   if (attachPopoverVisible.value) {
@@ -771,7 +780,7 @@ const loadModels = async () => {
     const response = await apiService.fetchModels();
     response.items.forEach(provider => {
       // 过滤只保留 mode_type 为 'text' 的模型
-      const textModels = provider.models.filter(model => model.modelType === "text");
+      const textModels = provider.models?.filter(model => model.modelType === "text") ?? [];
       models.value.push(...textModels);
       delete provider.models;
       // 只有当该供应商有符合条件的模型时才加入列表
@@ -779,7 +788,7 @@ const loadModels = async () => {
         providers.value.push(provider);
       }
     });
-    if (models.value.length > 0 && !props.modelId) {
+    if (models.value.length > 0 && !props.config?.modelId) {
       // 如果没有传入 modelId，默认选择第一个
       emit('update:modelId', models.value[0].id);
     }
@@ -804,12 +813,6 @@ const loadKnowledgeBases = async () => {
 
       // 如果本地存储中有无效的ID，自动清理它们
       if (validKbIds.length !== localKbIds.length) {
-        console.log(' 自动清理无效知识库ID', {
-          原数量: localKbIds.length,
-          有效数量: validKbIds.length,
-          清理数量: localKbIds.length - validKbIds.length
-        });
-
         // 通知父组件更新配置，清除无效的知识库ID
         emit('config-change', { knowledgeBaseIds: validKbIds });
       }
@@ -820,7 +823,7 @@ const loadKnowledgeBases = async () => {
 };
 
 // 文件处理函数
-const checkFileConflict = async (newFileType) => {
+const checkFileConflict = async (newFileType: string) => {
   const currentFileType = uploadFiles.value[0]?.fileType;
   const conflictType = newFileType === 'image' ? '文件' : '图片';
 
@@ -833,7 +836,7 @@ const checkFileConflict = async (newFileType) => {
   return true;
 };
 
-const processFiles = async (files, fileType) => {
+const processFiles = async (files: File[], fileType: string) => {
   if (files.length === 0) return;
 
   const normalizedFileType = fileType.toUpperCase();
@@ -848,17 +851,19 @@ const processFiles = async (files, fileType) => {
 };
 
 // 事件处理函数
-const handleFileSelect = (event) => {
-  processFiles(Array.from(event.target.files), 'TEXT');
-  event.target.value = '';
+const handleFileSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  processFiles(Array.from(target.files ?? []), 'TEXT');
+  target.value = '';
 };
 
-const handleImageSelect = (event) => {
-  processFiles(Array.from(event.target.files), 'IMAGE');
-  event.target.value = '';
+const handleImageSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  processFiles(Array.from(target.files ?? []), 'IMAGE');
+  target.value = '';
 };
 
-const handlePaste = async (event) => {
+const handlePaste = async (event: ClipboardEvent) => {
   // 只有输入框被聚焦时才处理粘贴事件
   if (!focused.value) return;
 
@@ -893,7 +898,7 @@ const handlePaste = async (event) => {
   if (pastedText && pastedText.length > MAX_TEXT_LENGTH) {
     // 超长文本 → 转为 .txt 文件
     const blob = new Blob([pastedText], { type: 'text/plain' });
-    const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' });
+    const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' }) as FileWithContent;
     // 在 File 对象上挂载原始文本，供 createFileObject 检测并存储
     file._originalContent = pastedText;
     filesToProcess.push(file);
@@ -937,7 +942,7 @@ const closeFilePreview = () => {
   previewFileName.value = '';
 };
 
-const removeFile = (fileId) => {
+const removeFile = (fileId: number) => {
   const index = uploadFiles.value.findIndex(file => file.id === fileId);
   if (index !== -1) {
     uploadFiles.value.splice(index, 1); // setter 会自动清理预览 URL
@@ -945,8 +950,8 @@ const removeFile = (fileId) => {
 };
 
 // UI 交互函数
-const triggerFileInput = () => fileInputRef.value.click();
-const triggerImageInput = () => imageInputRef.value.click();
+const triggerFileInput = () => fileInputRef.value?.click();
+const triggerImageInput = () => imageInputRef.value?.click();
 
 const sendMessage = async () => {
   const content = editor.value ? editor.value.getText() : inputContent.value;
@@ -1008,12 +1013,6 @@ async function showUploadWaitingDialog(uploadingCount: number): Promise<boolean>
   }
 }
 
-const handleKeydown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-};
 
 const adjustTextareaHeight = () => {
   const textarea = messageInputRef.value;
@@ -1030,15 +1029,6 @@ const abortResponse = () => {
   emit('abort')
 }
 
-const handleFocus = () => {
-  focused.value = true;
-  emit('focus');
-};
-
-const handleBlur = () => {
-  focused.value = false;
-  emit('blur');
-};
 
 // ==================== 命令选择弹窗（斜杠/艾特） ====================
 const openCommandPicker = async (query: string = '', trigger: 'slash' | 'mention' = 'slash') => {
@@ -1166,13 +1156,11 @@ const loadCommands = async (trigger: 'slash' | 'mention') => {
   }
 };
 
-// 全局点击关闭面板
-// 生命周期和监听器
 
 // 编辑器高度自适应
 watch(editorContent, () => {
   nextTick(() => {
-    const pmEl = document.querySelector('.message-editor .ProseMirror');
+    const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
     if (pmEl) {
       pmEl.style.minHeight = '58px';
       pmEl.style.maxHeight = '240px';
@@ -1191,16 +1179,12 @@ watch(() => props.config?.thinkingEffort, (newEffort) => {
 watch(() => props.buttons, (value) => {
   // 外部传入的按钮配置只影响非模型特性控制的按钮
   Object.keys(showButtons).forEach(key => {
-    if (key in value) {
-      showButtons[key] = value[key];
+    const k = key as keyof typeof showButtons;
+    if (value && k in value) {
+      showButtons[k] = value[k];
     }
   });
 }, { immediate: true });
-
-// textarea 高度调整已废弃，改用 Tiptap 编辑器
-// watch(inputContent, () => {
-//   nextTick(adjustTextareaHeight);
-// }, { immediate: true });
 
 onMounted(() => {
   adjustTextareaHeight();
@@ -1251,7 +1235,7 @@ onMounted(() => {
         editorContent.value = ed.getText();
         checkCommandTrigger();
         nextTick(() => {
-          const pmEl = document.querySelector('.message-editor .ProseMirror');
+          const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
           if (pmEl) {
             const height = Math.min(pmEl.scrollHeight, 240);
             pmEl.style.minHeight = '58px';
@@ -1540,8 +1524,8 @@ defineExpose({ insertText, insertBadge });
 /* 发送按钮 - 原生 button */
 .send-btn {
   cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background-color: var(--color-primary);
@@ -1578,6 +1562,15 @@ defineExpose({ insertText, insertBadge });
 
 .send-btn.stop-btn:active {
   background-color: #e64242;
+}
+
+.send-btn.queue-btn {
+  background-color: var(--color-primary);
+  position: relative;
+}
+
+.send-btn.queue-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
 }
 
 /* ========== 粘贴文本预览弹窗样式 ========== */

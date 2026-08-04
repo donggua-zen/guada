@@ -101,7 +101,10 @@ class StreamingSanitizer {
       }
     }
 
-    // 2. \r\n → \n
+    // 2. 行终止符归一化
+    // wmic 等 Windows 工具使用 \r\r\n（双CR+LF），需先归一化，否则残留的孤立 \r
+    // 会在后续进度条重建步骤中被误判为行首覆盖，导致整行内容被清空
+    cleaned = cleaned.replace(/\r\r\n/g, "\n");
     cleaned = cleaned.replace(/\r\n/g, "\n");
 
     // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容

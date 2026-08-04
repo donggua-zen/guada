@@ -57,7 +57,7 @@
         <div class="section-label">收藏模型</div>
         <div class="favorite-models-list space-y-0.5" style="max-height: 220px; overflow-y: auto;">
           <div v-for="model in favoriteModels" :key="model.id"
-            class="model-item-compact px-1.5 py-1 rounded-xl cursor-pointer transition-all flex items-center space-x-1.5"
+            class="model-item-compact px-1.5 py-1 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
             :class="{
               'model-item-active': currentModelId === model.id
             }" @click="handleSelect(model.id)">
@@ -96,7 +96,7 @@
         </div>
         <div class="provider-models space-y-1">
           <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
-            class="model-item-compact p-1.5 rounded-xl cursor-pointer transition-all flex items-center space-x-1.5"
+            class="model-item-compact p-1.5 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
             :class="{
               'model-item-active': currentModelId === model.id
             }" @click.stop="handleSelect(model.id)">

@@ -69,6 +69,7 @@ model Message {
   currentTurnsId   String?          @map("current_turns_id")
   currentVersionId String?          @map("current_version_id")
   metadata         Json?            @map("meta_data")
+  totalDurationMs  Int?             @map("total_duration_ms")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
   session          Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)

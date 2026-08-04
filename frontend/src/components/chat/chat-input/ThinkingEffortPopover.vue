@@ -10,7 +10,7 @@
     </template>
     <div class="popover-content space-y-0.5">
       <div v-for="effort in options" :key="effort"
-        class="te-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm" :class="{
+        class="te-item flex items-center justify-between px-2 py-1.5 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all text-sm" :class="{
           'te-item-active': currentValue === effort
         }" :data-effort="effort" @click="handleSelect(effort)">
         <span>{{ getLabel(effort) }}</span>

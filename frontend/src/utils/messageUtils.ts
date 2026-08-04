@@ -21,6 +21,7 @@ export interface Message {
   files?: FileAttachment[];
   index?: number;
   metadata?: Record<string, any>;
+  totalDurationMs?: number | null;
 }
 
 /**
