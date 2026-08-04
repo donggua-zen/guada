@@ -1638,16 +1638,16 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
     const workspaceDir = ctx?.session.workspacePath;
     if (!workspaceDir) throw new Error("缺少工作目录");
 
-    const root =
+    const guadaDir =
       ctx?.session.sessionType === "sub_agent"
         ? path.join(workspaceDir, ".guada", "subagents", ctx.session.sessionId)
-        : workspaceDir;
+        : path.join(workspaceDir, ".guada");
 
     if (target === "memo") {
       if (!memoTitle) throw new Error("memo_title required for memo target");
-      return path.join(root, ".guada", "memos", `${memoTitle}.md`);
+      return path.join(guadaDir, "memos", `${memoTitle}.md`);
     }
-    return path.join(root, ".guada", "memory", "factual.md");
+    return path.join(guadaDir, "memory", "factual.md");
   }
 
   // ── 缓存管理 ──
@@ -1797,13 +1797,13 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
         overLimit: false,
       };
 
-    const root =
+    const guadaDir =
       ctx?.session.sessionType === "sub_agent"
         ? path.join(workspaceDir, ".guada", "subagents", ctx.session.sessionId)
-        : workspaceDir;
+        : path.join(workspaceDir, ".guada");
 
     let used = 0;
-    const factualPath = path.join(root, ".guada", "memory", "factual.md");
+    const factualPath = path.join(guadaDir, "memory", "factual.md");
     try {
       const content = await fs.readFile(factualPath, "utf-8");
       used += content.length;
@@ -1811,7 +1811,7 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
       /* 文件不存在则忽略 */
     }
 
-    const memosDir = path.join(root, ".guada", "memos");
+    const memosDir = path.join(guadaDir, "memos");
     try {
       const files = await fs.readdir(memosDir);
       for (const file of files) {
