@@ -117,7 +117,9 @@ export class ChatRunnerService {
       userMessage.metadata = { ...userMessage?.metadata, ...source };
     }
     // 获取会话：优先使用预加载的会话（如 Bot 场景已 enrich），否则从 DB 查询
-    const session = preloadedSession ?? await this.sessionService.getSessionById(sessionId, userId);
+    const session =
+      preloadedSession ??
+      (await this.sessionService.getSessionById(sessionId, userId));
     if (!session) {
       throw new HttpException(
         { error: "会话不存在", code: "SESSION_NOT_FOUND" },
@@ -594,7 +596,9 @@ export class ChatRunnerService {
       if (
         lastFinishReason !== "max_iterations_reached" &&
         lastFinishReason !== "approval_required" &&
-        lastFinishReason !== "rate_limited"
+        lastFinishReason !== "rate_limited" &&
+        lastFinishReason !== "user_cancel" &&
+        lastFinishReason !== "error"
       ) {
         await this.processQueue(sessionId);
       }
