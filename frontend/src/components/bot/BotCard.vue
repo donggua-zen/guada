@@ -25,11 +25,11 @@
         <el-tag :type="getStatusType(bot.status, bot.runtimeStatus)" size="small">
           {{ getStatusText(bot.status, bot.runtimeStatus) }}
         </el-tag>
-        <el-tooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
+        <LTooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
           <span class="text-xs text-red-500 truncate flex-1 cursor-help">
             {{ bot.lastError }}
           </span>
-        </el-tooltip>
+        </LTooltip>
       </div>
 
       <!-- 底部操作按钮 -->
@@ -115,6 +115,7 @@ import { ElMessage } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 const props = defineProps<{
   bot: BotInstance

@@ -93,14 +93,14 @@
                                     </template>
                                     卸载
                                 </el-button>
-                                <el-tooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
+                                <LTooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
                                     <el-button link size="small" type="danger" disabled>
                                         <template #icon>
                                             <DeleteOutlined />
                                         </template>
                                         卸载
                                     </el-button>
-                                </el-tooltip>
+                                </LTooltip>
                             </div>
                         </div>
                     </div>
@@ -335,6 +335,7 @@ import { apiService } from '@/services/ApiService'
 import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import { useMarkdown } from '@/composables/useMarkdown'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 interface SkillManifest {
     name: string

@@ -1,9 +1,9 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
-        <el-tooltip content="点击可更换头像" placement="top">
+        <LTooltip content="点击可更换头像" placement="top">
             <Avatar class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity"
                 @click="triggerAvatarUpload" :src="previewUrl" :type="type" :name="name"></Avatar>
-        </el-tooltip>
+        </LTooltip>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
     <!-- 头像裁剪模态框 -->
@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import Avatar from './Avatar.vue'
+import LTooltip from './LTooltip.vue'
 // @ts-ignore - Element Plus 类型缺失
 import { ElButton, ElDialog } from 'element-plus'
 import { Cropper } from 'vue-advanced-cropper'

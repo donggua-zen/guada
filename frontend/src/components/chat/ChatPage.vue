@@ -13,12 +13,12 @@
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
                   <!-- 工作目录切换 -->
-                  <el-tooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
+                  <LTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
                     @click="layoutStore.toggleWorkspace()">
                     <PanelRightExpand20Filled class="w-5 h-5" />
                   </div>
-                  </el-tooltip>
+                  </LTooltip>
                   <!-- 更多操作下拉菜单 -->
                   <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
                     <div class="header-icon-btn">
@@ -98,6 +98,7 @@ interface AgentTab {
 
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
+import LTooltip from "@/components/ui/LTooltip.vue";
 import { ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
 import {
   MoreVertOutlined,

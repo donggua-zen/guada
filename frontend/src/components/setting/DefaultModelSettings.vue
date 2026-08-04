@@ -141,13 +141,13 @@
 
                                             <!-- 高级功能图标 -->
                                             <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                                <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                                <LTooltip :content="getFeatureLabel(feature)" placement="top">
                                                     <el-icon class="hover:text-primary transition-colors" :size="14">
                                                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                                                         <LightbulbFilament24Regular
                                                             v-else-if="feature === 'thinking'" />
                                                     </el-icon>
-                                                </el-tooltip>
+                                                </LTooltip>
                                             </template>
                                         </div>
                                     </div>
@@ -188,6 +188,7 @@ import { apiService } from '@/services/ApiService'
 
 import { usePopup } from '@/composables/usePopup'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 // Element Plus 组件导入
 import {

@@ -685,3 +685,65 @@ html.dark .el-message-box {
 .el-message-box__btns {
   padding: 8px 16px 12px !important;
 }
+
+/* ===== LTooltip — lightweight singleton tooltip ===== */
+.l-tooltip {
+  --l-tooltip-bg: #303133;
+  --l-tooltip-text: #fff;
+}
+.l-tooltip[data-effect="light"] {
+  --l-tooltip-bg: #fff;
+  --l-tooltip-text: #303133;
+}
+
+.l-tooltip__content {
+  display: block;
+  background: var(--l-tooltip-bg);
+  color: var(--l-tooltip-text);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 5px 11px;
+  border-radius: 4px;
+  max-width: 300px;
+  word-break: break-word;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.l-tooltip__arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+}
+
+.l-tooltip[data-placement="top"] .l-tooltip__arrow {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: var(--l-tooltip-bg);
+  border-bottom: 0;
+}
+
+.l-tooltip[data-placement="bottom"] .l-tooltip__arrow {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: var(--l-tooltip-bg);
+  border-top: 0;
+}
+
+.l-tooltip[data-placement="left"] .l-tooltip__arrow {
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: var(--l-tooltip-bg);
+  border-right: 0;
+}
+
+.l-tooltip[data-placement="right"] .l-tooltip__arrow {
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: var(--l-tooltip-bg);
+  border-left: 0;
+}

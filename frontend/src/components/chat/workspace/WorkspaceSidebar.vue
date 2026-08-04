@@ -5,18 +5,22 @@
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
-                <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }" title="工作区"
-                    @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
-                    <el-icon :size="20">
-                        <Folder16Regular />
-                    </el-icon>
-                </button>
-                <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId" title="预览区"
-                    @click="enterPreviewMode">
-                    <el-icon :size="20">
-                        <Window16Regular />
-                    </el-icon>
-                </button>
+                <LTooltip content="工作区" placement="bottom">
+                  <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }"
+                      @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
+                      <el-icon :size="20">
+                          <Folder16Regular />
+                      </el-icon>
+                  </button>
+                </LTooltip>
+                <LTooltip content="预览区" placement="bottom">
+                  <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId"
+                      @click="enterPreviewMode">
+                      <el-icon :size="20">
+                          <Window16Regular />
+                      </el-icon>
+                  </button>
+                </LTooltip>
             </div>
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
@@ -57,27 +61,27 @@
                 </div>
 
                 <!-- 新建标签按钮：进入预览模式并取消当前选中（显示空状态页） -->
-                <el-tooltip content="新建" placement="bottom">
+                <LTooltip content="新建" placement="bottom">
                     <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="deselectAllTabs">
                         <el-icon size="14">
                             <Plus />
                         </el-icon>
                     </button>
-                </el-tooltip>
+                </LTooltip>
             </div>
 
             <!-- 弹性占位（拖拽区域） -->
             <div class="flex-1"></div>
 
             <!-- 全屏按钮 -->
-            <el-tooltip :content="layoutStore.workspaceFullscreen ? '退出全屏' : '全屏'" placement="bottom">
+            <LTooltip :content="layoutStore.workspaceFullscreen ? '退出全屏' : '全屏'" placement="bottom">
                 <button class="sidebar-tool-btn no-drag" @click="layoutStore.toggleWorkspaceFullscreen()">
                     <el-icon :size="16">
                         <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
                         <ArrowMinimize16Regular v-else />
                     </el-icon>
                 </button>
-            </el-tooltip>
+            </LTooltip>
 
             <!-- 窗口控制按钮（仅 Electron） -->
             <WindowControls v-if="isElectron" class="no-drag" />
@@ -100,37 +104,37 @@
                     工作目录</h3>
                 <div class="flex items-center gap-0 shrink-0">
                     <!-- 更换工作目录按钮 -->
-                    <el-tooltip content="更换工作目录" placement="bottom">
+                    <LTooltip content="更换工作目录" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
                             <el-icon size="15">
                                 <Switch />
                             </el-icon>
                         </el-button>
-                    </el-tooltip>
+                    </LTooltip>
                     <!-- 打开文件夹按钮（仅 Electron 环境） -->
-                    <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
+                    <LTooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
                             <el-icon size="15">
                                 <WindowsExplorer />
                             </el-icon>
                         </el-button>
-                    </el-tooltip>
+                    </LTooltip>
                     <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
-                    <el-tooltip v-if="isElectron" content="以 VSCode 打开工作目录" placement="bottom">
+                    <LTooltip v-if="isElectron" content="以 VSCode 打开工作目录" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
                             <el-icon size="15">
                                 <VsCode />
                             </el-icon>
                         </el-button>
-                    </el-tooltip>
+                    </LTooltip>
                     <!-- 刷新按钮 -->
-                    <el-tooltip content="刷新" placement="bottom">
+                    <LTooltip content="刷新" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
                             <el-icon size="15">
                                 <Refresh />
                             </el-icon>
                         </el-button>
-                    </el-tooltip>
+                    </LTooltip>
                 </div>
             </div>
 
@@ -213,6 +217,7 @@ import { Folder16Regular, Window16Regular, ArrowMinimize16Regular, FullScreenMax
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
+import LTooltip from '@/components/ui/LTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';

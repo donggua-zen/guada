@@ -36,9 +36,9 @@
             
             <!-- 状态标签 -->
             <el-tag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
-                <el-tooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
+                <LTooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
                     <span>{{ getStatusText(node.processingStatus) }}</span>
-                </el-tooltip>
+                </LTooltip>
                 <span v-else>{{ getStatusText(node.processingStatus) }}</span>
             </el-tag>
         </div>
@@ -69,6 +69,7 @@
 import { ref } from 'vue'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
+import LTooltip from '@/components/ui/LTooltip.vue'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'

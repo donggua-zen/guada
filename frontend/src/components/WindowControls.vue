@@ -2,20 +2,20 @@
   <div v-if="isElectron" class="window-controls flex items-center h-full no-drag">
     <button
       class="flex items-center justify-center w-11 h-full border-none bg-transparent cursor-pointer transition-all duration-150 ease-in-out opacity-70 outline-none hover:opacity-100 focus:outline-none focus-visible:outline-none"
-      @click="minimizeWindow" title="最小化">
+      @click="minimizeWindow">
       <WindowMinimize class="w-3 h-3" />
     </button>
 
     <button
       class="flex items-center justify-center w-11 h-full border-none bg-transparent cursor-pointer transition-all duration-150 ease-in-out opacity-70 outline-none hover:opacity-100 focus:outline-none focus-visible:outline-none"
-      @click="maximizeWindow" :title="isMaximized ? '还原' : '最大化'">
+      @click="maximizeWindow">
       <WindowMaximize v-if="!isMaximized" class="w-3 h-3" />
       <WindowRestore v-else class="w-3 h-3" />
     </button>
 
     <button
       class="flex items-center justify-center w-11 h-full border-none bg-transparent cursor-pointer transition-all duration-150 ease-in-out opacity-70 outline-none hover:bg-[#e81123] hover:text-white hover:opacity-100 focus:outline-none focus-visible:outline-none close-button"
-      @click="closeWindow" title="关闭">
+      @click="closeWindow">
       <WindowClose class="w-3 h-3" />
     </button>
   </div>
@@ -73,9 +73,11 @@ onUnmounted(() => {
 .window-controls {
   color: var(--window-controls-color);
 }
+
 .window-controls button {
   color: currentColor;
 }
+
 .window-controls button:not(.close-button):hover {
   background-color: var(--window-controls-hover-bg);
   color: var(--window-controls-hover-color);

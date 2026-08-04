@@ -1,5 +1,5 @@
 <template>
-  <div class="turn-wrapper" :class="{ 'turn-wrapper--last': isLast }" :data-message-id="turn.user?.id">
+  <div class="turn-wrapper last:min-h-[calc(60vh)]" :class="{ 'turn-wrapper--last': isLast }" :data-message-id="turn.user?.id">
     <!-- ============================================ -->
     <!-- User 部分 -->
     <!-- ============================================ -->
@@ -146,7 +146,7 @@
           </div>
 
           <!-- 流式期间：工作中状态 -->
-          <div v-if="streamingState.isStreaming" class="mt-2 flex items-center gap-2 text-xs text-gray-400">
+          <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
             <el-icon class="is-loading" size="12">
               <Loading />
             </el-icon>
@@ -591,10 +591,6 @@ const handleClick = (event: MouseEvent) => {
 }
 
 
-.turn-wrapper:last-child {
-  min-height: 260px;
-}
-
 /* 消息卡片 */
 .message-item__card {
   font-size: var(--size-text-base);
@@ -700,7 +696,10 @@ const handleClick = (event: MouseEvent) => {
 
 /* 中间处理过程分组 */
 .process-group {
-  margin: 6px 0;
+  margin: 12px 0 12px 0;
+}
+.process-group:first-child {
+  margin-top: 0;
 }
 
 .process-group__header {
