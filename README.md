@@ -52,8 +52,8 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
   <img src="./images/demo_kb.gif" width="45%" alt="知识库使用">
 </p>
 <p align="center">
-  <img src="./images/image_005.png" width="45%" alt="知识库界面">
-  <img src="./images/image_006.png" width="45%" alt="浏览器自动化界面">
+  <img src="./images/themes_1.png" width="45%" alt="知识库界面">
+  <img src="./images/themes_2.png" width="45%" alt="浏览器自动化界面">
 </p>
 
 ---
