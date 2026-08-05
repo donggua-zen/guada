@@ -387,7 +387,7 @@ export class CompressionEngine implements ICompressionStrategy {
     lastCompactedContentId?: string;
     lastCompactedMsgId?: string;
     retainedTokens: number;
-  } | null> {
+  }> {
     // 1. 消息分组：将 user 消息分为一组，assistant 及其后续的 tool 消息合并为一组
     // 这样可以确保工具调用的完整性，避免 assistant 和 tool 被分割到不同区域
     const messageGroups: MessageRecord[][] = [];

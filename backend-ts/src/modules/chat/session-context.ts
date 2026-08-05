@@ -192,8 +192,8 @@ export interface ISessionContext {
   appendParts(records: MessageRecord[]): Promise<void>;
   /** 持久化待保存的消息 */
   persist(): Promise<void>;
-  /** 原子累加消息总耗时（毫秒）到 Message.totalDurationMs */
-  incrementMessageDuration(messageId: string, ms: number): Promise<void>;
+  /** 原子累加消息总耗时并保存结束信息到 Message.metadata */
+  finalizeMessage(messageId: string, durationMs: number, finishMeta: Record<string, any>): Promise<void>;
 
   /** 添加用户消息到历史并持久化 */
   addUserMessage(

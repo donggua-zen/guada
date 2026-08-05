@@ -140,14 +140,19 @@ export class McpClientService {
 
       // 添加连接超时保护
       const connectPromise = client.connect(transport);
+      let timeoutId: ReturnType<typeof setTimeout>;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
+        timeoutId = setTimeout(
           () => reject(new Error("Connection timeout after 10s")),
           10000,
         );
       });
 
-      await Promise.race([connectPromise, timeoutPromise]);
+      try {
+        await Promise.race([connectPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId!);
+      }
       this.logger.debug(
         `Connected to MCP server via ${specifiedType || "StreamableHTTP"}: ${config.command || config.url}`,
       );

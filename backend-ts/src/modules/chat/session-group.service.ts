@@ -37,7 +37,9 @@ export class SessionGroupService {
     if (!group || group.userId !== userId) {
       throw new HttpException("分组不存在", HttpStatus.NOT_FOUND);
     }
-    return this.sessionGroupRepo.update(groupId, { name: data.name });
+    const updateData: { name?: string } = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    return this.sessionGroupRepo.update(groupId, updateData);
   }
 
   /**

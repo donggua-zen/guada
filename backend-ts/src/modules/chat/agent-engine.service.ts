@@ -168,7 +168,7 @@ export class AgentEngine {
    * - 每轮迭代都会持久化助手回复和工具响应
    *
    * 安全机制：
-   * - 最大迭代次数限制（40 次），防止无限循环
+   * - 最大迭代次数限制（100 次），防止无限循环
    * - SessionStreamManager 确保同一会话不会同时启动多个流
    *
    * @param sessionContext 类型安全的会话上下文（包含对话状态）
@@ -196,9 +196,7 @@ export class AgentEngine {
     // 判断是否为断点模式
 
     let isResumeMode = regenerationMode === "resume";
-    let assistantResponse: MessageRecord | null = null;
     let responseMessageId: string;
-
     if (!isResumeMode) {
       // 创建新版本的助手消息
       responseMessageId = await sessionContext.addAssistantMessageVersion(
@@ -216,6 +214,9 @@ export class AgentEngine {
     // 回合拦截器触发次数（防止无限循环）
     let interceptorCount = 0;
     const MAX_INTERCEPTOR_ITERATIONS = 3;
+    let finalFinishReason = "stop";
+    let finalError: string | undefined;
+    let finalUsage: any;
     do {
       iterationCount++;
       needToContinue = false;
@@ -227,14 +228,16 @@ export class AgentEngine {
       if (await sessionContext.shouldCompress()) {
         // onBeforeCompaction 回调：仅在需要二级压缩（摘要/丢弃）时触发
         const onBeforeCompaction = async () => {
-          console.log("onBeforeCompaction", sessionContext.getMemoryConfig());
+          this.logger.debug(
+            `onBeforeCompaction ${JSON.stringify(sessionContext.getMemoryConfig())}`,
+          );
           if (
             sessionContext.getMemoryConfig().summaryMode ===
             SummaryMode.MEMORY_SYNC
           ) {
-            console.log("run memory save shadow turn");
+            this.logger.debug("run memory save shadow turn");
             await this.runMemorySaveShadowTurn(sessionContext, abortSignal);
-            console.log("memory save shadow turn done");
+            this.logger.debug("memory save shadow turn done");
           }
         };
         historyMessages = await sessionContext.compress(onBeforeCompaction);
@@ -244,12 +247,11 @@ export class AgentEngine {
       }
 
       // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
-      let contentId = sessionContext.generateId();
-      assistantResponse = {
+      const assistantResponse: MessageRecord = {
         role: "assistant",
         content: "",
         messageId: responseMessageId,
-        contentId: contentId,
+        contentId: sessionContext.generateId(),
         metadata: {
           modelName: sessionContext.getModelConfig().modelName,
         },
@@ -265,8 +267,7 @@ export class AgentEngine {
           needToContinue = true;
           continue;
         }
-        assistantResponse = lastMessage;
-        contentId = lastMessage.contentId;
+        Object.assign(assistantResponse, lastMessage);
         responseMessageId = lastMessage.messageId;
         if (lastMessage.role === "tool") {
           isResumeMode = false;
@@ -283,7 +284,7 @@ export class AgentEngine {
       yield {
         type: isResumeMode ? "update" : "create",
         messageId: responseMessageId,
-        contentId: contentId,
+        contentId: assistantResponse.contentId,
         modelName: sessionContext.getModelConfig().modelName,
         requestId: RequestContext.current()?.requestId,
         parentId: userMessageId,
@@ -330,7 +331,7 @@ export class AgentEngine {
               chunk,
               accumulated,
               undefined,
-              contentId,
+              assistantResponse.contentId,
             );
             if (yieldEvent) {
               if (yieldEvent.type === "finish") {
@@ -417,18 +418,17 @@ export class AgentEngine {
         }
 
         // 先将 assistantResponse 和合成工具响应放入 parts
-        parts.push(assistantResponse);
-
+        if (assistantResponse.metadata?.finishReason !== "rate_limited") {
+          parts.push(assistantResponse);
+        }
         // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
         if (streamAborted && assistantResponse.toolCalls) {
           for (const tc of assistantResponse.toolCalls) {
             parts.push({
               role: "tool",
               name: tc.name,
-              content: JSON.stringify({
-                success: false,
-                message: "request aborted by user",
-              }),
+              content:
+                "<system_reminder>Request aborted by user</system_reminder>",
               toolCallId: tc.id,
               messageId: responseMessageId,
             });
@@ -445,7 +445,7 @@ export class AgentEngine {
             ? assistantResponse.metadata?.error || "Stream aborted"
             : undefined,
           usage: assistantResponse.metadata?.usage,
-          contentId,
+          contentId: assistantResponse.contentId,
           contextStats: {
             usedTokens: sessionContext.getTokenCount(),
             effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
@@ -488,6 +488,8 @@ export class AgentEngine {
 
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await sessionContext.appendParts(parts);
+          finalFinishReason = "max_iterations_reached";
+          finalUsage = assistantResponse.metadata?.usage;
           break;
         }
 
@@ -512,60 +514,10 @@ export class AgentEngine {
                 sessionContext.getEffectiveContextWindow(),
             },
           };
-          await sessionContext.appendParts(parts);
-          break;
-        }
-
-        // 【执行】yield 工具结果 + 入库
-        if (execResult.toolResponses.length > 0) {
-          yield {
-            type: "tool_calls_response",
-            toolCallsResponse: execResult.toolResponses.map((tr: any) => ({
-              name: tr.name,
-              content: tr.content,
-              toolCallId: tr.toolCallId,
-              outcome: tr.outcome,
-            })),
-            contentId,
-          };
-
-          // Collect image parts across all tool results, then push a single
-          // hidden user message after all tool messages to avoid tool/user interleaving
-          const pendingImageParts: MessagePart[] = [];
-
-          for (const res of execResult.toolResponses) {
-            parts.push({
-              role: "tool",
-              name: res.name,
-              content: res.content,
-              toolCallId: res.toolCallId,
-              messageId: responseMessageId,
-            });
-
-            if (res.images && res.images.length > 0) {
-              pendingImageParts.push(
-                { type: "text", text: res.content || "" },
-                ...res.images.map((img) => ({
-                  type: "image_url" as const,
-                  image_url: {
-                    url: `data:${img.media_type};base64,${img.data}`,
-                  },
-                })),
-              );
-            }
-          }
-
-          // Push a single hidden user message with all collected images
-          if (pendingImageParts.length > 0) {
-            parts.push({
-              role: "user",
-              content: pendingImageParts,
-              messageId: responseMessageId,
-              contentId: sessionContext.generateId(),
-              metadata: { hidden: true },
-            });
-          }
-
+          needToContinue = false;
+        } else if (execResult.toolParts.length > 0) {
+          yield execResult.toolEvent!;
+          parts.push(...execResult.toolParts);
           needToContinue = true;
         }
       }
@@ -587,15 +539,12 @@ export class AgentEngine {
         sessionContext.sessionId,
       );
 
-      // 【回合拦截器】仅在正常结束时检查（排除 abort / error / rate_limited）
+      // 【回合拦截器】仅在正常结束时检查
       const finishReason = assistantResponse.metadata?.finishReason;
       const isNormalFinish =
         !needToContinue &&
         !abortSignal?.aborted &&
-        finishReason !== "user_cancel" &&
-        finishReason !== "error" &&
-        finishReason !== "timeout" &&
-        finishReason !== "rate_limited";
+        (finishReason === "stop" || !finishReason);
 
       if (
         isNormalFinish &&
@@ -608,13 +557,23 @@ export class AgentEngine {
         );
         needToContinue = true;
       }
+
+      finalFinishReason = assistantResponse.metadata?.finishReason || "stop";
+      finalError = assistantResponse.metadata?.error;
+      finalUsage = assistantResponse.metadata?.usage;
     } while (needToContinue);
 
-    // 累加本次 ReAct 循环耗时到 Message.totalDurationMs
+    // 保存结束信息到 Message 级别 metadata
     const loopDuration = Date.now() - loopStartTime;
-    await sessionContext.incrementMessageDuration(
+    const finishMeta: Record<string, any> = {
+      finishReason: finalFinishReason,
+      ...(finalError ? { error: finalError } : {}),
+      ...(finalUsage ? { usage: finalUsage } : {}),
+    };
+    await sessionContext.finalizeMessage(
       responseMessageId,
       loopDuration,
+      finishMeta,
     );
 
     await sessionContext.persist();
@@ -1234,7 +1193,7 @@ Scan history. ONLY trigger an update if:
   }
 
   /**
-   * 执行工具并构建入库数据（不 yield 事件，不入库）
+   * 执行工具并构建入库数据和事件（不 yield，不入库）
    *
    * 由 executeAgentLoop 调用，返回执行结果后由调用方负责 yield 和 persist。
    */
@@ -1243,11 +1202,12 @@ Scan history. ONLY trigger an update if:
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
   ): Promise<{
-    toolResponses: any[];
+    toolParts: MessageRecord[];
+    toolEvent?: EventChunk;
     approvalContext?: any;
   }> {
     const toolCalls = assistantResponse.toolCalls;
-    if (!toolCalls) return { toolResponses: [] };
+    if (!toolCalls) return { toolParts: [] };
     // 1. 分为三组
     const { pendingTools, approvedTools, rejectedTools } =
       this.classifyToolsByApproval(
@@ -1259,7 +1219,7 @@ Scan history. ONLY trigger an update if:
     // 2. 需要审批 → 返回 approvalContext
     if (pendingTools.length > 0) {
       return {
-        toolResponses: [],
+        toolParts: [],
         approvalContext: {
           type: "approval",
           status: "pending",
@@ -1299,11 +1259,8 @@ Scan history. ONLY trigger an update if:
         );
         if (tc) {
           if (!tc.metadata) tc.metadata = {};
-          // 从执行结果中取 isError，标记工具 outcome
-          // results[i] 与 approvedTools[i] 位置一一对应（executeBatch 保持顺序）
           const result = results[i];
           tc.outcome = result?.isError ? "error" : "success";
-          // 同步写入 toolResponse，供 yield 事件透传给前端
           if (result) result.outcome = tc.outcome;
         }
       }
@@ -1323,13 +1280,64 @@ Scan history. ONLY trigger an update if:
         isError: true,
         outcome: "rejected",
       });
-      // 标记被拒绝的工具
       const tc = assistantResponse.toolCalls?.find(
         (t: any) => t.id === rejected.id,
       );
       if (tc) tc.outcome = "rejected";
     }
 
-    return { toolResponses };
+    if (toolResponses.length === 0) {
+      return { toolParts: [] };
+    }
+
+    // 构建事件
+    const toolEvent: EventChunk = {
+      type: "tool_calls_response",
+      toolCallsResponse: toolResponses.map((tr: any) => ({
+        name: tr.name,
+        content: tr.content,
+        toolCallId: tr.toolCallId,
+        outcome: tr.outcome,
+      })),
+      contentId: assistantResponse.contentId,
+    };
+
+    // 构建 parts（tool 消息 + 图片消息）
+    const toolParts: MessageRecord[] = [];
+    const pendingImageParts: MessagePart[] = [];
+
+    for (const res of toolResponses) {
+      toolParts.push({
+        role: "tool",
+        name: res.name,
+        content: res.content,
+        toolCallId: res.toolCallId,
+        messageId: assistantResponse.messageId,
+      });
+
+      if (res.images && res.images.length > 0) {
+        pendingImageParts.push(
+          { type: "text", text: res.content || "" },
+          ...res.images.map((img) => ({
+            type: "image_url" as const,
+            image_url: {
+              url: `data:${img.media_type};base64,${img.data}`,
+            },
+          })),
+        );
+      }
+    }
+
+    if (pendingImageParts.length > 0) {
+      toolParts.push({
+        role: "user",
+        content: pendingImageParts,
+        messageId: assistantResponse.messageId,
+        contentId: sessionContext.generateId(),
+        metadata: { hidden: true },
+      });
+    }
+
+    return { toolParts, toolEvent };
   }
 }

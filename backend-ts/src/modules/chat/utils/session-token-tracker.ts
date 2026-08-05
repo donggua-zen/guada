@@ -47,6 +47,8 @@ function formatTokens(count: number): string {
 
 @Injectable()
 export class SessionTokenTracker {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   /**
    * 从文件读取当前记录，文件不存在则返回零值
    */
@@ -88,25 +90,29 @@ export class SessionTokenTracker {
     completionTokens: number,
     cachedTokens?: number,
   ): Promise<void> {
-    try {
-      const filePath = path.join(workspacePath, ".guada", "tokens.json");
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      const current = await this.readRecord(filePath);
-      current.promptTokens += promptTokens;
-      current.completionTokens += completionTokens;
-      current.totalTokens = current.promptTokens + current.completionTokens;
-      if (cachedTokens) {
-        current.cachedTokens += cachedTokens;
+    const filePath = path.join(workspacePath, ".guada", "tokens.json");
+    const doWrite = async () => {
+      try {
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        const current = await this.readRecord(filePath);
+        current.promptTokens += promptTokens;
+        current.completionTokens += completionTokens;
+        current.totalTokens = current.promptTokens + current.completionTokens;
+        if (cachedTokens) {
+          current.cachedTokens += cachedTokens;
+        }
+        current.promptTokensReadable = formatTokens(current.promptTokens);
+        current.completionTokensReadable = formatTokens(current.completionTokens);
+        current.totalTokensReadable = formatTokens(current.totalTokens);
+        current.cachedTokensReadable = formatTokens(current.cachedTokens);
+        current.updatedAt = new Date().toISOString();
+        await fs.writeFile(filePath, JSON.stringify(current, null, 2), "utf-8");
+      } catch {
+        // 写入失败不应影响主流程，静默忽略
       }
-      current.promptTokensReadable = formatTokens(current.promptTokens);
-      current.completionTokensReadable = formatTokens(current.completionTokens);
-      current.totalTokensReadable = formatTokens(current.totalTokens);
-      current.cachedTokensReadable = formatTokens(current.cachedTokens);
-      current.updatedAt = new Date().toISOString();
-      await fs.writeFile(filePath, JSON.stringify(current, null, 2), "utf-8");
-    } catch {
-      // 写入失败不应影响主流程，静默忽略
-    }
+    };
+    this.writeQueue = this.writeQueue.then(() => doWrite(), () => doWrite());
+    return this.writeQueue;
   }
 
   /**

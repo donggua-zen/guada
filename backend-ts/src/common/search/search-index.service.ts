@@ -11,6 +11,7 @@
 
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Jieba } from "@node-rs/jieba";
 import Database from "better-sqlite3";
 import * as path from "path";
 import * as fs from "fs";
@@ -28,6 +29,7 @@ export class SearchIndexService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SearchIndexService.name);
   private db: Database.Database | null = null;
   private readonly dbPath: string;
+  private jieba: Jieba | null = null;
 
   // 预编译 statements（在 init 后创建）
   private stmtUpsert!: Database.Statement;
@@ -65,11 +67,18 @@ export class SearchIndexService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy() {
     this.db?.close();
     this.db = null;
+    this.jieba = null;
   }
 
   private initialize() {
     this.db = new Database(this.dbPath);
     this.db.pragma("journal_mode = WAL");
+
+    try {
+      this.jieba = new Jieba();
+    } catch (error: any) {
+      this.logger.warn(`中文分词器初始化失败：${error.message}`);
+    }
 
     // 创建 FTS5 虚拟表
     this.db.exec(`
@@ -161,24 +170,26 @@ export class SearchIndexService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 构建 FTS5 查询表达式
-   * unicode61 分词器对中文做字级切分，所以将关键词的每个字用 OR 连接
+   * 使用 jieba 分词，对中文按词切分而非按字切分，大幅提升搜索精度
    */
   private buildFtsQuery(keyword: string): string {
     const trimmed = keyword.trim();
     if (!trimmed) return "";
 
-    // 去除 FTS5 特殊字符，避免语法错误
     const cleaned = trimmed.replace(/["*+\-:()]/g, " ").trim();
     if (!cleaned) return "";
 
-    // 按空格分词（英文单词）或按字拆分（中文）
-    const chars = Array.from(cleaned);
-    // 过滤空白和标点
-    const tokens = chars.filter((c) => c.trim() && /[\u4e00-\u9fa5a-zA-Z0-9]/.test(c));
+    let tokens: string[];
+    if (this.jieba && /[\u4e00-\u9fa5]/.test(cleaned)) {
+      tokens = this.jieba.cut(cleaned, true).filter(
+        (t) => t.trim() && /[\u4e00-\u9fa5a-zA-Z0-9]/.test(t),
+      );
+    } else {
+      tokens = cleaned.split(/\s+/).filter((t) => t.trim());
+    }
 
     if (tokens.length === 0) return "";
 
-    // 每个字/词用 OR 连接，用双引号包裹避免 FTS5 语法解析
     return tokens.map((t) => `"${t}"`).join(" OR ");
   }
 

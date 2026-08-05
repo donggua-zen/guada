@@ -399,10 +399,14 @@ export class FileWatcherService implements OnModuleDestroy {
 
     if (clientState.connections.size === 0) {
       sessionState.clients.delete(clientId);
+      this.deletePendingExpandedState(sessionId, clientId);
+      this.clientExpandedVersions.get(sessionId)?.delete(clientId);
     }
 
     if (sessionState.clients.size === 0) {
       this.sessions.delete(sessionId);
+      this.pendingExpandedPaths.delete(sessionId);
+      this.clientExpandedVersions.delete(sessionId);
     } else {
       this.refreshSessionTargets(sessionState);
     }

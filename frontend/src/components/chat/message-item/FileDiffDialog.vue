@@ -42,8 +42,6 @@
                   'diff-line--ctx': line.type === 'ctx',
                 }"
               >
-                <td class="diff-line__num">{{ line.oldNum ?? '' }}</td>
-                <td class="diff-line__num">{{ line.newNum ?? '' }}</td>
                 <td class="diff-line__sign">{{ line.sign }}</td>
                 <td class="diff-line__content" v-html="line.html"></td>
               </tr>
@@ -107,8 +105,6 @@ const language = computed(() => {
 
 interface DiffLine {
   type: "add" | "del" | "ctx";
-  oldNum: number | null;
-  newNum: number | null;
   sign: string;
   html: string;
 }
@@ -120,44 +116,22 @@ const diffLines = computed<DiffLine[]>(() => {
   const oldText = op.oldText || "";
   const newText = op.newText || "";
 
-  // 特殊情况：空内容
   if (!oldText && !newText) return [];
 
   const parts = computeDiffLines(oldText, newText);
   const result: DiffLine[] = [];
-  let oldLine = 1;
-  let newLine = 1;
 
   for (const part of parts) {
-    // 去掉末尾换行再 split，避免空行
     const text = part.value.endsWith("\n") ? part.value.slice(0, -1) : part.value;
     const lines = text.split("\n");
 
     for (const line of lines) {
       if (part.added) {
-        result.push({
-          type: "add",
-          oldNum: null,
-          newNum: newLine++,
-          sign: "+",
-          html: highlightLine(line),
-        });
+        result.push({ type: "add", sign: "+", html: highlightLine(line) });
       } else if (part.removed) {
-        result.push({
-          type: "del",
-          oldNum: oldLine++,
-          newNum: null,
-          sign: "−",
-          html: highlightLine(line),
-        });
+        result.push({ type: "del", sign: "−", html: highlightLine(line) });
       } else {
-        result.push({
-          type: "ctx",
-          oldNum: oldLine++,
-          newNum: newLine++,
-          sign: " ",
-          html: highlightLine(line),
-        });
+        result.push({ type: "ctx", sign: " ", html: highlightLine(line) });
       }
     }
   }
@@ -260,16 +234,6 @@ function highlightLine(line: string): string {
 .diff-table td {
   padding: 0;
   vertical-align: top;
-}
-
-.diff-line__num {
-  width: 42px;
-  min-width: 42px;
-  text-align: right;
-  padding: 0 8px;
-  color: var(--el-text-color-placeholder);
-  user-select: none;
-  border-right: 1px solid var(--el-border-color-lighter);
 }
 
 .diff-line__sign {

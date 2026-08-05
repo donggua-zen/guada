@@ -478,8 +478,12 @@ export class PersistentSessionContext implements ISessionContext {
     this.pendingPersistRecords = [];
   }
 
-  async incrementMessageDuration(messageId: string, ms: number): Promise<void> {
-    await this.messageStore.incrementMessageDuration(messageId, ms);
+  async finalizeMessage(
+    messageId: string,
+    durationMs: number,
+    finishMeta: Record<string, any>,
+  ): Promise<void> {
+    await this.messageStore.finalizeMessage(messageId, durationMs, finishMeta);
   }
 
   async addAssistantMessageVersion(

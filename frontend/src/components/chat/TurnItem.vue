@@ -479,10 +479,17 @@ const renderSkillBadges = (text: string): string => {
 // ============================================
 // Assistant 部分
 // ============================================
-const assistantMetadata = computed(() => {
+const assistantMetadata = computed<Record<string, any> | null>(() => {
   const cache = turnsCache.value;
-  if (cache.length === 0) return null;
-  return cache[cache.length - 1]?.metadata || null;
+  const contentMeta = cache.length > 0 ? (cache[cache.length - 1]?.metadata || {}) : {};
+  const messageMeta = activeAssistant.value?.metadata || {};
+  // finishReason/error 持久化在 Message 级别，流式时从 Content 级别读取
+  return {
+    ...contentMeta,
+    ...messageMeta,
+    finishReason: messageMeta.finishReason || contentMeta.finishReason,
+    error: messageMeta.error ?? contentMeta.error,
+  };
 });
 
 const streamingState = computed(() => ({
