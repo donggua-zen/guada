@@ -35,7 +35,9 @@ interface MessageContentRow {
 export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SearchSyncService.name);
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
+  private destroyed = false;
 
   constructor(
     private prisma: PrismaService,
@@ -47,7 +49,9 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
     this.syncTimer = setTimeout(() => {
       this.runSync();
       // 首次完成后切换为定时器
-      this.syncTimer = setInterval(() => this.runSync(), SYNC_INTERVAL_MS);
+      if (!this.destroyed) {
+        this.syncInterval = setInterval(() => this.runSync(), SYNC_INTERVAL_MS);
+      }
     }, INITIAL_DELAY_MS);
 
     this.logger.log(
@@ -56,10 +60,14 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    this.destroyed = true;
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
-      clearInterval(this.syncTimer as any);
       this.syncTimer = null;
+    }
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
     }
   }
 

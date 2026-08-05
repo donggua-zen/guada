@@ -1645,6 +1645,9 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
 
     if (target === "memo") {
       if (!memoTitle) throw new Error("memo_title required for memo target");
+      if (/[\/\\]|\.\./.test(memoTitle)) {
+        throw new Error("memo_title must not contain path separators or ..");
+      }
       return path.join(guadaDir, "memos", `${memoTitle}.md`);
     }
     return path.join(guadaDir, "memory", "factual.md");

@@ -593,13 +593,8 @@ export class ChatRunnerService {
       }
     } finally {
       // 队列消息等待暂停态（max_iterations / approval / rate_limited）由用户操作触发 resume 后处理，不自动消费
-      if (
-        lastFinishReason !== "max_iterations_reached" &&
-        lastFinishReason !== "approval_required" &&
-        lastFinishReason !== "rate_limited" &&
-        lastFinishReason !== "user_cancel" &&
-        lastFinishReason !== "error"
-      ) {
+      const NORMAL_FINISH = new Set(["stop", undefined]);
+      if (NORMAL_FINISH.has(lastFinishReason)) {
         await this.processQueue(sessionId);
       }
     }

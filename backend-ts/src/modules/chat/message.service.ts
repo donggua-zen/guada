@@ -680,10 +680,14 @@ export class MessageService {
   }
 
   /**
-   * 原子累加消息总耗时到 Message.totalDurationMs
+   * 原子累加消息总耗时并保存结束信息到 Message.metadata
    */
-  async incrementMessageDuration(messageId: string, ms: number): Promise<void> {
-    await this.messageRepo.incrementTotalDuration(messageId, ms);
+  async finalizeMessage(
+    messageId: string,
+    durationMs: number,
+    finishMeta: Record<string, any>,
+  ): Promise<void> {
+    await this.messageRepo.finalizeMessage(messageId, durationMs, finishMeta);
   }
 
   /**

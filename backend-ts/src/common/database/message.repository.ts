@@ -231,11 +231,23 @@ export class MessageRepository {
   }
 
   /**
-   * 原子累加 totalDurationMs（Prisma increment 在 BetterSqlite3 adapter 下静默失败，改用 raw SQL）
+   * 原子累加 totalDurationMs 并合并结束信息到 metadata（raw SQL，兼容 BetterSqlite3）
    */
-  async incrementTotalDuration(messageId: string, ms: number) {
+  async finalizeMessage(
+    messageId: string,
+    durationMs: number,
+    finishMeta: Record<string, any>,
+  ): Promise<void> {
+    const existing = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { metadata: true },
+    });
+    const currentMeta = (existing?.metadata as Record<string, any>) || {};
+    const mergedMeta = JSON.stringify({ ...currentMeta, ...finishMeta });
     await this.prisma.$executeRaw`
-      UPDATE message SET total_duration_ms = COALESCE(total_duration_ms, 0) + ${ms}
+      UPDATE message
+      SET total_duration_ms = COALESCE(total_duration_ms, 0) + ${durationMs},
+          meta_data = ${mergedMeta}::TEXT
       WHERE id = ${messageId}
     `;
   }

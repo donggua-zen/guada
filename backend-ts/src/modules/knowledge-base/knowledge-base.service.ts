@@ -97,8 +97,8 @@ export class KnowledgeBaseService {
 
     try {
       // 检测向量模型是否变更
-      const newModelId = data.embedding_model_id !== undefined
-        ? data.embedding_model_id
+      const newModelId = data.embeddingModelId !== undefined
+        ? data.embeddingModelId
         : null;
       const modelChanged = newModelId !== null && newModelId !== kb.embeddingModelId;
 
@@ -106,17 +106,17 @@ export class KnowledgeBaseService {
       if (data.name !== undefined) updateData.name = data.name;
       if (data.description !== undefined)
         updateData.description = data.description;
-      if (data.embedding_model_id !== undefined)
-        updateData.embeddingModelId = data.embedding_model_id;
-      if (data.chunk_max_size !== undefined)
-        updateData.chunkMaxSize = data.chunk_max_size;
-      if (data.chunk_overlap_size !== undefined)
-        updateData.chunkOverlapSize = data.chunk_overlap_size;
-      if (data.chunk_min_size !== undefined)
-        updateData.chunkMinSize = data.chunk_min_size;
-      if (data.is_public !== undefined) updateData.isPublic = data.is_public;
-      if (data.metadata_config !== undefined) {
-        updateData.metadataConfig = data.metadata_config || null;
+      if (data.embeddingModelId !== undefined)
+        updateData.embeddingModelId = data.embeddingModelId;
+      if (data.chunkMaxSize !== undefined)
+        updateData.chunkMaxSize = data.chunkMaxSize;
+      if (data.chunkOverlapSize !== undefined)
+        updateData.chunkOverlapSize = data.chunkOverlapSize;
+      if (data.chunkMinSize !== undefined)
+        updateData.chunkMinSize = data.chunkMinSize;
+      if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
+      if (data.metadataConfig !== undefined) {
+        updateData.metadataConfig = data.metadataConfig || null;
       }
 
       const updatedKb = await this.kbRepo.update(kbId, updateData);

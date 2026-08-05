@@ -3,7 +3,6 @@ import { ISessionContext } from "./session-context";
 import { PersistentSessionContext } from "./persistent-session-context";
 import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ICompressionStrategy } from "./interfaces";
@@ -27,7 +26,6 @@ export class SessionContextFactory {
   constructor(
     private modelRepository: ModelRepository,
     private settingsStorage: SettingsStorage,
-    private toolOrchestrator: ToolOrchestrator,
     private pluginManager: PluginManager,
     private promptCollector: PromptCollector,
     private workspaceService: WorkspaceService,
