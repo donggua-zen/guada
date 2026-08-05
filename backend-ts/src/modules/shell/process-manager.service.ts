@@ -4,155 +4,17 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { ChildProcess, exec } from "child_process";
-import * as iconv from "iconv-lite";
+import { ChildProcess, exec, spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
-import { Transform, PassThrough } from "node:stream";
+import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
 import { safeTruncate, safeTail } from "../../common/utils/string.utils";
-
-// ============================================================================
-// StreamingSanitizer — 流式 ANSI 清洗 + \r 进度条重建
-// 处理跨 chunk 边界的 ANSI 转义序列和 \r\n 换行
-// ============================================================================
-
-class StreamingSanitizer {
-  /** 不完整的 ANSI 转义序列（跨 chunk 边界时暂存） */
-  private partialEsc = "";
-
-  /**
-   * 输入一个 chunk，返回清洗后的文本。
-   * ANSI 转义序列跨 chunk 边界时暂存在 partialEsc 中，等下一个 chunk 补全。
-   */
-  feed(chunk: string): string {
-    let text = this.partialEsc + chunk;
-    this.partialEsc = "";
-
-    // 1. 逐字节擦除 ANSI 转义码
-    let cleaned = "";
-    let i = 0;
-    while (i < text.length) {
-      if (text.charCodeAt(i) !== 0x1b) {
-        cleaned += text[i];
-        i++;
-        continue;
-      }
-
-      // ESC found at position i
-      if (i + 1 >= text.length) {
-        // ESC at very end — save for next chunk
-        this.partialEsc = "\x1b";
-        break;
-      }
-
-      const next = text.charCodeAt(i + 1);
-      if (next === 0x5b) {
-        // CSI: ESC [
-        const escStart = i;
-        i += 2;
-        let found = false;
-        while (i < text.length) {
-          const c = text.charCodeAt(i);
-          if (c >= 0x40 && c <= 0x7e) {
-            i++;
-            found = true;
-            break;
-          }
-          i++;
-        }
-        if (!found) {
-          this.partialEsc = text.substring(escStart);
-          break;
-        }
-      } else if (next === 0x5d) {
-        // OSC: ESC ]
-        const escStart = i;
-        i += 2;
-        let found = false;
-        while (i < text.length) {
-          if (text.charCodeAt(i) === 0x07) {
-            i++;
-            found = true;
-            break;
-          }
-          if (
-            text[i] === "\x1b" &&
-            i + 1 < text.length &&
-            text[i + 1] === "\\"
-          ) {
-            i += 2;
-            found = true;
-            break;
-          }
-          i++;
-        }
-        if (!found) {
-          this.partialEsc = text.substring(escStart);
-          break;
-        }
-      } else {
-        // Two-byte escape: ESC + char
-        i += 2;
-      }
-    }
-
-    // 2. 行终止符归一化
-    // wmic 等 Windows 工具使用 \r\r\n（双CR+LF），需先归一化，否则残留的孤立 \r
-    // 会在后续进度条重建步骤中被误判为行首覆盖，导致整行内容被清空
-    cleaned = cleaned.replace(/\r\r\n/g, "\n");
-    cleaned = cleaned.replace(/\r\n/g, "\n");
-
-    // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容
-    const lines = cleaned.split("\n");
-    const processed = lines.map((line) => {
-      const lastR = line.lastIndexOf("\r");
-      return lastR >= 0 ? line.substring(lastR + 1) : line;
-    });
-    return processed.join("\n");
-  }
-
-  /** 进程结束时调用，丢弃不完整的 ANSI 转义序列 */
-  flush(): string {
-    this.partialEsc = "";
-    return "";
-  }
-}
-
-// ============================================================================
-// SanitizerTransform — 将 StreamingSanitizer 适配为 Transform 流
-// 接收 Buffer → 解码 → 清洗 → push string，同时触发副作用回调
-// ============================================================================
-
-class SanitizerTransform extends Transform {
-  private sanitizer = new StreamingSanitizer();
-
-  constructor(
-    private encoding: string,
-    private onCleaned?: (text: string) => void,
-  ) {
-    super();
-  }
-
-  _transform(chunk: Buffer, _enc: string, cb: () => void) {
-    const raw = decodeBuffer(chunk, this.encoding);
-    const cleaned = this.sanitizer.feed(raw);
-    if (cleaned) {
-      this.push(cleaned);
-      this.onCleaned?.(cleaned);
-    }
-    cb();
-  }
-
-  _flush(cb: () => void) {
-    this.sanitizer.flush();
-    cb();
-  }
-}
+import { SanitizerTransform } from "./stream-sanitizer";
 
 // ============================================================================
 // UTF-8 边界修剪工具
@@ -183,20 +45,6 @@ function trimUtf8Tail(buf: Buffer): string {
   let start = 0;
   while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++;
   return buf.toString("utf-8", start);
-}
-
-/** 解码 Buffer → string（按编码或平台默认） */
-function decodeBuffer(buffer: Buffer, encoding?: string): string {
-  if (!buffer || buffer.length === 0) return "";
-  try {
-    if (encoding) return iconv.decode(buffer, encoding);
-    return iconv.decode(
-      buffer,
-      process.platform === "win32" ? "gbk" : "utf-8",
-    );
-  } catch {
-    return buffer.toString("latin1");
-  }
 }
 
 // ============================================================================
@@ -244,18 +92,39 @@ export interface PollResult {
   exitCode: number | null;
   /** 自上次 poll 以来的新输出（已清洗+截断后的文本） */
   output: string;
-  /** 本次 poll 实际等待的秒数（0=未等待） */
-  waitSeconds: number;
+  /** 本次 poll 实际等待的毫秒数 */
+  waitMs: number;
+  /** 进程已运行时长（毫秒） */
+  uptimeMs: number;
   /** poll 因 stall 检测提前返回时为 true */
   stalled?: boolean;
+  /** 本次 poll 读取的输出是否发生了截断 */
+  truncated?: boolean;
 }
 
-export interface BackgroundResult {
-  processId: string;
-  status: "backgrounded";
-  /** 转入后台时的输出文本 */
-  output: string;
-}
+export type ExecuteResult =
+  | {
+      kind: "completed";
+      output: string;
+      exitCode: number | null;
+      processStatus: ProcessStatus;
+      uptimeMs: number;
+      waitMs: number;
+    }
+  | {
+      kind: "backgrounded";
+      processId: string;
+      output: string;
+      uptimeMs: number;
+      waitMs: number;
+    }
+  | {
+      kind: "stalled";
+      processId: string;
+      output: string;
+      uptimeMs: number;
+      waitMs: number;
+    };
 
 export interface ProcessListEntry {
   id: string;
@@ -265,6 +134,11 @@ export interface ProcessListEntry {
   isBackgrounded: boolean;
   startedAt: Date;
   finishedAt?: Date;
+}
+
+export interface SandboxOptions {
+  enabled: boolean;
+  readOnly: boolean;
 }
 
 // ============================================================================
@@ -299,6 +173,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly GC_INTERVAL_MS = 2 * 60 * 60 * 1000;
   /** 日志目录名 */
   private readonly LOG_DIR_NAME = "guada-logs";
+  /** sandbox 二进制路径缓存（避免每次执行都搜索） */
+  private sandboxBinPath: string | null | undefined;
 
   /** 交互提示符模式 — 用于判断进程是否在等待键盘输入 */
   private static readonly PROMPT_PATTERNS = [
@@ -382,18 +258,18 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 后台进程管理 ──
 
   /**
-   * 将已启动的进程转入后台管理。
-   * stdout/stderr 经流式清洗后写入临时文件，内存不缓存日志。
+   * 创建并管理进程（内部方法）。
+   * 内部 spawn 进程，stdout/stderr 经流式清洗后写入临时文件，内存不缓存日志。
    */
-  background(
-    childProcess: ChildProcess,
+  private createProcess(
     command: string,
     cwd: string,
     encoding: string,
     sessionId: string,
     userId: string,
-    options?: { notify?: boolean },
-  ): BackgroundResult {
+    options?: { sandbox?: SandboxOptions },
+  ): ProcessEntry {
+    const childProcess = this.spawnProcess(command, cwd, options?.sandbox);
     const processId = childProcess.pid?.toString() || this.generateId();
     const logFilePath = path.join(
       this.getLogDir(),
@@ -416,7 +292,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       readOffset: 0,
       writeStream,
       recentTail: "",
-      notify: options?.notify ?? true,
+      notify: true,
       lastOutputAt: new Date(),
       stallTimer: null,
       stallNotified: false,
@@ -476,11 +352,120 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       `进程已转入后台: ${processId}, 命令: ${command.substring(0, 80)}`,
     );
 
-    return {
-      processId,
-      status: "backgrounded",
-      output: "",
-    };
+    return entry;
+  }
+
+  /**
+   * 执行命令：前台模式阻塞等待结果，后台模式立即返回 processId。
+   *
+   * 前台模式（background=false，默认）：
+   * - 进程在 timeout 内结束且输出未截断 → 删除日志文件
+   * - 进程在 timeout 内结束但输出截断 → 保留日志文件，output 末尾追加路径提示
+   * - 进程超时仍在运行 → 转入后台，返回 processId
+   * - 进程 stall（等待键盘输入） → 返回 processId
+   *
+   * 后台模式（background=true）：跳过 poll，立即返回 processId。
+   */
+  async execute(
+    command: string,
+    cwd: string,
+    encoding: string,
+    sessionId: string,
+    userId: string,
+    options: {
+      timeout: number;
+      abortSignal?: AbortSignal;
+      sandbox?: SandboxOptions;
+      background?: boolean;
+    },
+  ): Promise<ExecuteResult> {
+    const entry = this.createProcess(
+      command,
+      cwd,
+      encoding,
+      sessionId,
+      userId,
+      { sandbox: options.sandbox },
+    );
+    const processId = entry.id;
+    const logFilePath = entry.logFilePath;
+
+    // 后台模式：跳过 poll，立即返回
+    if (options.background) {
+      return {
+        kind: "backgrounded",
+        processId,
+        output: "",
+        uptimeMs: Date.now() - entry.startedAt.getTime(),
+        waitMs: 0,
+      };
+    }
+
+    // Abort 处理
+    if (options.abortSignal?.aborted) {
+      this.kill(processId);
+      throw new Error("Request was aborted");
+    }
+    const onAbort = () => this.kill(processId);
+    options.abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    try {
+      const pollResult = await this.poll(
+        processId,
+        options.timeout,
+        sessionId,
+      );
+
+      if (!pollResult) {
+        return {
+          kind: "completed",
+          output: "",
+          exitCode: null,
+          processStatus: "error",
+          uptimeMs: 0,
+          waitMs: 0,
+        };
+      }
+
+      // 进程在 timeout 内结束
+      if (pollResult.status !== "running") {
+        if (!pollResult.truncated && logFilePath) {
+          await fs.unlink(logFilePath).catch(() => {});
+        } else if (pollResult.truncated && logFilePath) {
+          pollResult.output += `\n[Note: Output was truncated. The complete log is saved at: ${logFilePath}. You can read it using the run_command tool if needed.]`;
+        }
+        return {
+          kind: "completed",
+          output: pollResult.output,
+          exitCode: pollResult.exitCode,
+          processStatus: pollResult.status,
+          uptimeMs: pollResult.uptimeMs,
+          waitMs: pollResult.waitMs,
+        };
+      }
+
+      // Stall 检测
+      if (pollResult.stalled) {
+        return {
+          kind: "stalled",
+          processId,
+          output: pollResult.output,
+          uptimeMs: pollResult.uptimeMs,
+          waitMs: pollResult.waitMs,
+        };
+      }
+
+      // 超时，进程仍在运行 → 转入后台
+      return {
+        kind: "backgrounded",
+        processId,
+        output: pollResult.output,
+        uptimeMs: pollResult.uptimeMs,
+        waitMs: pollResult.waitMs,
+      };
+    } finally {
+      options.abortSignal?.removeEventListener("abort", onAbort);
+    }
   }
 
   /**
@@ -531,6 +516,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     processId: string,
     timeoutMs: number = 30_000,
     sessionId?: string,
+    abortSignal?: AbortSignal,
   ): Promise<PollResult | null> {
     // 0 = 立即返回（不等待），用于拦截器等内部非阻塞场景
     // Agent 调用时的最小值限制由插件入口处理
@@ -552,12 +538,20 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return this.buildPollResult(entry, 0);
     }
 
-
     // 进程还在跑，注册等待器（timeoutMs=0 时跳过等待）
     const waitStartedAt = Date.now();
-    if (timeoutMs > 0) {
-      await this.pollNotifier.wait(processId, timeoutMs);
+    // abort 唤醒 poll 等待（不杀进程，进程继续后台运行）
+    const onAbort = () => this.pollNotifier.notify(processId);
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    try {
+      if (timeoutMs > 0) {
+        await this.pollNotifier.wait(processId, timeoutMs);
+      }
+    } finally {
+      abortSignal?.removeEventListener("abort", onAbort);
     }
+
     const waitSeconds = Math.round((Date.now() - waitStartedAt) / 1000);
 
     // 等待期间进程可能已结束 → 检查 enqueue 是否在进行
@@ -645,10 +639,104 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * 检查沙盒二进制是否可用（供插件提前校验）
+   */
+  async isSandboxAvailable(): Promise<boolean> {
+    const bin = await this.resolveSandboxBin();
+    return bin !== null;
+  }
+
   // ── 内部方法 ──
 
   private generateId(): string {
     return `p${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * 解析 sandbox 二进制路径（跨平台）
+   *
+   * Windows: sandbox.exe  |  Linux: sandbox
+   *
+   * 开发环境：项目根目录下的 sandbox/{name}
+   * 生产环境：resources/sandbox/{name}（extraResources 打包）
+   *
+   * 结果缓存：找到后缓存路径，找不到缓存 null 避免重复 IO。
+   */
+  private async resolveSandboxBin(): Promise<string | null> {
+    if (this.sandboxBinPath !== undefined) return this.sandboxBinPath;
+
+    const isWindows = process.platform === "win32";
+    const binName = isWindows ? "sandbox.exe" : "sandbox";
+
+    const candidates: string[] = [];
+    const isElectron = process.env.ELECTRON_APP === "true";
+
+    if (isElectron && (process as any).resourcesPath) {
+      candidates.push(
+        path.join((process as any).resourcesPath, "sandbox", binName),
+      );
+    }
+
+    let dir = process.cwd();
+    for (let i = 0; i < 4; i++) {
+      candidates.push(path.join(dir, "sandbox", binName));
+      candidates.push(path.join(dir, "build", "bin", binName));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate, fsSync.constants.X_OK);
+        this.sandboxBinPath = candidate;
+        this.logger.log(`sandbox binary found at: ${candidate}`);
+        return candidate;
+      } catch {
+        // continue
+      }
+    }
+
+    this.logger.warn(
+      `sandbox binary (${binName}) not found, sandbox/plan mode will be unavailable`,
+    );
+    this.sandboxBinPath = null;
+    return null;
+  }
+
+  /**
+   * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
+   * 无 sandbox 时直接将命令字符串交给 OS shell（shell: true）。
+   * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
+   */
+  private spawnProcess(
+    command: string,
+    cwd: string,
+    sandbox?: SandboxOptions,
+  ): ChildProcess {
+    if (sandbox?.enabled) {
+      if (!this.sandboxBinPath) {
+        throw new Error(
+          `Sandbox mode is enabled, but the sandbox binary is currently unavailable.`,
+        );
+      }
+      const args = ["-c", command, "--workspace", cwd];
+      if (sandbox.readOnly) {
+        args.push("--read-only");
+      }
+      return spawn(this.sandboxBinPath, args, {
+        cwd,
+        env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      });
+    }
+
+    // 直接将完整命令字符串交给 OS shell 处理（shell: true）
+    return spawn(command, [], {
+      cwd,
+      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      shell: true,
+    });
   }
 
   /** 有输出时的处理：更新最后输出时间 + 重置 stall 状态 + 重启看门狗 */
@@ -672,7 +760,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     readOffset: number,
     fileSize: number,
     increment: number,
-  ): Promise<string> {
+  ): Promise<{ output: string; truncated: boolean }> {
     if (increment <= this.POLL_FULL_READ_THRESHOLD) {
       // 小增量 — 全读 + 行/字符截断
       const buf = Buffer.alloc(increment);
@@ -682,7 +770,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return this.truncateOutput(buf.toString("utf-8"));
     }
 
-    // 大增量 — head + tail seek
+    // 大增量 — head + tail seek（必然截断）
     const headLen = Math.floor(this.POLL_MAX_OUTPUT_BYTES * 0.4);
     const tailLen = this.POLL_MAX_OUTPUT_BYTES - headLen;
 
@@ -697,24 +785,29 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     const head = trimUtf8Head(headBuf);
     const tail = trimUtf8Tail(tailBuf);
 
-    return (
-      head +
-      `\n[...output truncated, ${increment} bytes total (offset ${readOffset} → ${fileSize}), showing ${headLen}-byte head and ${tailLen}-byte tail...]\n` +
-      tail +
-      ProcessManagerService.TRUNCATION_REMINDER
-    );
+    return {
+      output:
+        head +
+        `\n[...output truncated, ${increment} bytes total (offset ${readOffset} → ${fileSize}), showing ${headLen}-byte head and ${tailLen}-byte tail...]\n` +
+        tail +
+        ProcessManagerService.TRUNCATION_REMINDER,
+      truncated: true,
+    };
   }
 
   /**
    * 智能截断输出：字符优先（10K），再行数（80），40%+notice+60%
    */
-  private truncateOutput(cleanText: string): string {
+  private truncateOutput(cleanText: string): {
+    output: string;
+    truncated: boolean;
+  } {
     const lines = cleanText.split("\n");
     const charCount = cleanText.length;
     const lineCount = lines.length;
 
     if (charCount <= this.MAX_CHARS && lineCount <= this.MAX_LINES) {
-      return cleanText;
+      return { output: cleanText, truncated: false };
     }
 
     if (charCount > this.MAX_CHARS) {
@@ -723,7 +816,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       const head = safeTruncate(cleanText, headLen);
       const tail = safeTail(cleanText, tailLen);
       const notice = `\n[...output truncated, ${charCount} chars total, showing head and tail...]\n`;
-      return head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER;
+      return {
+        output: head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER,
+        truncated: true,
+      };
     }
 
     const headLines = Math.floor(this.MAX_LINES * 0.4);
@@ -731,34 +827,38 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     const head = lines.slice(0, headLines).join("\n");
     const tail = lines.slice(lines.length - tailLines).join("\n");
     const notice = `\n[...output truncated, ${lineCount} lines total, showing head and tail...]\n`;
-    return head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER;
+    return {
+      output: head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER,
+      truncated: true,
+    };
   }
 
   /** 读取自 readOffset 以来的增量输出（更新 readOffset） */
   private async readIncrementalOutput(
     entry: ProcessEntry,
-  ): Promise<string> {
+  ): Promise<{ output: string; truncated: boolean }> {
     let fileSize: number;
     try {
       const stat = await fs.stat(entry.logFilePath);
       fileSize = stat.size;
     } catch {
-      return "";
+      return { output: "", truncated: false };
     }
 
     const increment = fileSize - entry.readOffset;
-    let output = "";
-    if (increment > 0) {
-      output = await this.readAndTruncate(
-        entry.logFilePath,
-        entry.readOffset,
-        fileSize,
-        increment,
-      );
+    if (increment <= 0) {
+      return { output: "", truncated: false };
     }
 
+    const result = await this.readAndTruncate(
+      entry.logFilePath,
+      entry.readOffset,
+      fileSize,
+      increment,
+    );
+
     entry.readOffset = fileSize;
-    return output;
+    return result;
   }
 
   /** 构建 poll 结果（进程仍在运行时） */
@@ -766,7 +866,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     entry: ProcessEntry,
     waitSeconds = 0,
   ): Promise<PollResult> {
-    const output = await this.readIncrementalOutput(entry);
+    const { output, truncated } = await this.readIncrementalOutput(entry);
 
     // AI poll 接收了消息 → 从信箱撤回
     this.chatRunnerService.peekQueuedMessage(
@@ -779,12 +879,17 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       this.cleanupProcess(entry.id, entry.sessionId);
     }
 
+    const end = entry.finishedAt ?? new Date();
+    const uptimeMs = end.getTime() - entry.startedAt.getTime();
+
     return {
       processId: entry.id,
       status: entry.status,
       exitCode: entry.exitCode,
       output,
-      waitSeconds,
+      waitMs: waitSeconds * 1000,
+      uptimeMs,
+      truncated,
     };
   }
 
@@ -810,7 +915,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       status: payload.status,
       exitCode: payload.exitCode,
       output: payload.output || "",
-      waitSeconds: 0,
+      waitMs: 0,
+      uptimeMs: 0,
     };
   }
 
@@ -855,7 +961,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     await finished(entry.writeStream).catch(() => {});
 
     // 读取剩余增量
-    const output = await this.readIncrementalOutput(entry);
+    const { output } = await this.readIncrementalOutput(entry);
 
     if (!entry.notify) {
       this.cleanupProcess(entry.id, entry.sessionId);
@@ -951,7 +1057,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     if (!entry.notify) return;
 
-    const output = await this.readIncrementalOutput(entry);
+    const { output } = await this.readIncrementalOutput(entry);
 
     const content = `[交互提示] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 似乎在等待键盘输入`;
 

@@ -1,89 +1,40 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { spawn } from "child_process";
-import * as path from "path";
-import * as fsSync from "fs";
-import * as fs from "fs/promises";
-// path/fs still used by resolveSandboxBin()
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { z } from "zod";
-import { ProcessManagerService } from "./process-manager.service";
+import { ProcessManagerService, SandboxOptions } from "./process-manager.service";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
+
+/** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
+}
 
 @Injectable()
 export class ShellPlugin extends PluginBase {
   private readonly logger = new Logger(ShellPlugin.name);
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
-  /** sandbox 二进制路径缓存（避免每次执行都搜索） */
-  private sandboxBinPath: string | null | undefined;
 
   constructor(private readonly processManager: ProcessManagerService) {
     super();
-  }
-
-  /**
-   * 解析 sandbox 二进制路径（跨平台）
-   *
-   * Windows: sandbox.exe  |  Linux: sandbox
-   *
-   * 开发环境：项目根目录下的 sandbox/{name}
-   * 生产环境：resources/sandbox/{name}（extraResources 打包）
-   *
-   * 结果缓存：找到后缓存路径，找不到缓存 null 避免重复 IO。
-   */
-  private async resolveSandboxBin(): Promise<string | null> {
-    if (this.sandboxBinPath !== undefined) return this.sandboxBinPath;
-
-    const isWindows = process.platform === "win32";
-    const binName = isWindows ? "sandbox.exe" : "sandbox";
-
-    const candidates: string[] = [];
-    const isElectron = process.env.ELECTRON_APP === "true";
-
-    if (isElectron && (process as any).resourcesPath) {
-      // 生产环境：resources/sandbox/{binName}
-      candidates.push(
-        path.join((process as any).resourcesPath, "sandbox", binName),
-      );
-    }
-
-    // 开发环境或回退：从 cwd 向上查找 sandbox/{binName}
-    // backend-ts/dist → backend-ts → project root
-    let dir = process.cwd();
-    for (let i = 0; i < 4; i++) {
-      candidates.push(path.join(dir, "sandbox", binName));
-      candidates.push(path.join(dir, "build", "bin", binName));
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-
-    for (const candidate of candidates) {
-      try {
-        await fs.access(candidate, fsSync.constants.X_OK);
-        this.sandboxBinPath = candidate;
-        this.logger.log(`sandbox binary found at: ${candidate}`);
-        return candidate;
-      } catch {
-        // continue
-      }
-    }
-
-    this.logger.warn(
-      `sandbox binary (${binName}) not found, sandbox/plan mode will be unavailable`,
-    );
-    this.sandboxBinPath = null;
-    return null;
   }
 
   manifest = {
     id: "shell",
     name: "Shell 命令行",
     description: "执行系统命令和管理后台进程",
-    version: "1.2.0",
+    version: "1.3.0",
     category: "core" as const,
   };
 
@@ -128,136 +79,78 @@ export class ShellPlugin extends PluginBase {
           throw new Error("Command cannot be empty");
         const encoding = args.encoding as string | undefined;
         const background = args.background === true;
-        const isWindows = process.platform === "win32";
         const cwd = ctx?.session.workspacePath || process.cwd();
 
-        // 判断是否使用沙盒执行
-        // sandbox 模式：工作目录内可写，外部只读
-        // plan 模式：全盘只读（--read-only），工作目录也变为只读
+        // sandbox 映射：sandbox 模式工作区内可写；plan 模式全盘只读
         const runMode = ctx?.session.getRunMode?.();
-        let useSandbox = false;
-        let sandboxReadOnly = false;
-        let sandboxBin: string | null = null;
-        if (runMode === "sandbox" || runMode === "plan") {
-          sandboxBin = await this.resolveSandboxBin();
-          if (sandboxBin) {
-            useSandbox = true;
-            sandboxReadOnly = runMode === "plan";
-          } else {
+        const sandbox: SandboxOptions | undefined =
+          runMode === "sandbox" || runMode === "plan"
+            ? { enabled: true, readOnly: runMode === "plan" }
+            : undefined;
+
+        // sandbox 不可用时提前报错（execute/background 内部也会检查）
+        if (sandbox?.enabled) {
+          if (!(await this.processManager.isSandboxAvailable())) {
             throw new Error(
               `The user has enabled ${runMode} mode, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
             );
           }
         }
 
-        let spawnArgs: string[];
-        let spawnCmd: string;
-        let useShellSpawn = false;
-        if (useSandbox) {
-          spawnCmd = sandboxBin;
-          // sandbox 内部会根据平台选择 cmd.exe /c 或 sh -c
-          spawnArgs = ["-c", command, "--workspace", cwd];
-          if (sandboxReadOnly) {
-            spawnArgs.push("--read-only");
-          }
-        } else {
-          // 直接将完整命令字符串交给 OS shell 处理（shell: true）
-          // 避免 spawn("cmd", ["/c", command]) 时 Node.js 对内嵌引号做 \" 转义，
-          // 而 cmd.exe 不认 \" 导致引号错位、命令被原样回显
-          spawnCmd = command;
-          spawnArgs = [];
-          useShellSpawn = true;
-        }
-
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(
-          `Running command: ${command}, working directory: ${cwd}, background: ${background}${useSandbox ? ", sandbox: enabled" : ""}`,
+          `Running command: ${command}, working directory: ${cwd}, background: ${background}${sandbox?.enabled ? ", sandbox: enabled" : ""}`,
         );
 
-        // 统一启动进程并转入后台管理（所有 stdout/stderr 由 ProcessManager 接管）
-        const childProcess = spawn(spawnCmd, spawnArgs, {
-          cwd,
-          env: { ...process.env, PYTHONUNBUFFERED: "1" },
-          shell: useShellSpawn,
-        });
-        const result = this.processManager.background(
-          childProcess,
+        const sandboxNote = sandbox?.enabled
+          ? sandbox.readOnly
+            ? "Plan mode: sandbox read-only enabled, all writes blocked"
+            : "Sandbox mode enabled, read-only outside workspace"
+          : null;
+
+        const execResult = await this.processManager.execute(
           command,
           cwd,
           encoding,
           ctx?.session.sessionId || "",
           ctx?.session.userId || "",
-          { notify: ctx?.session.sessionType !== "sub_agent" },
+          {
+            timeout: this.BACKGROUND_THRESHOLD_MS,
+            abortSignal,
+            sandbox,
+            background,
+          },
         );
 
-        // 纯后台模式：立即返回
-        if (background) {
-          const parts: string[] = [];
-          if (useSandbox) {
+        const parts: string[] = [];
+        if (sandboxNote) parts.push(sandboxNote);
+
+        switch (execResult.kind) {
+          case "completed":
+            if (execResult.output) {
+              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
+            }
+            parts.push(`[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`);
+            break;
+          case "stalled":
+            if (execResult.output) {
+              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
+            }
             parts.push(
-              sandboxReadOnly
-                ? "Plan mode: sandbox read-only enabled, all writes blocked"
-                : "Sandbox mode enabled, read-only outside workspace",
+              `[⚠️ The command appears to be waiting for keyboard input. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool with action "write" to send input, or action "kill" to terminate.]`,
             );
-          }
-          if (result.output) {
-            parts.push(`Latest output:\n---\n${result.output}\n---`);
-          }
-          parts.push(
-            `[Process moved to background, processId: ${result.processId}. Use the process tool to manage.]`,
-          );
-          return parts.join("\n\n");
+            break;
+          case "backgrounded":
+            if (execResult.output) {
+              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
+            }
+            const bgMsg = background
+              ? `[Process moved to background, processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`
+              : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`;
+            parts.push(bgMsg);
+            break;
         }
-
-        // 前台模式：内部 poll 等待结果，支持 abortSignal
-        if (abortSignal?.aborted) {
-          this.processManager.kill(result.processId);
-          throw new Error("Request was aborted");
-        }
-        const onAbort = () => this.processManager.kill(result.processId);
-        abortSignal?.addEventListener("abort", onAbort, { once: true });
-
-        try {
-          const pollResult = await this.processManager.poll(
-            result.processId,
-            this.BACKGROUND_THRESHOLD_MS,
-            ctx?.session.sessionId,
-          )!;
-
-          const parts: string[] = [];
-          if (useSandbox) {
-            parts.push(
-              sandboxReadOnly
-                ? "Plan mode: sandbox read-only enabled, all writes blocked"
-                : "Sandbox mode enabled, read-only outside workspace",
-            );
-          }
-          if (pollResult.output) {
-            parts.push(`Latest output:\n---\n${pollResult.output}\n---`);
-          }
-
-          // 进程在 1 分钟内结束了 → 返回结果
-          if (pollResult.status !== "running") {
-            parts.push(`[exit code: ${pollResult.exitCode}]`);
-            return parts.join("\n\n");
-          }
-
-          // Stall 检测：命令似乎在等待键盘输入 → 提前返回
-          if (pollResult.stalled) {
-            parts.push(
-              `[⚠️ The command appears to be waiting for keyboard input. processId: ${result.processId}. Use the process tool with action "write" to send input, or action "kill" to terminate.]`,
-            );
-            return parts.join("\n\n");
-          }
-
-          // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
-          parts.push(
-            `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${result.processId}. Use the process tool to manage.]`,
-          );
-          return parts.join("\n\n");
-        } finally {
-          abortSignal?.removeEventListener("abort", onAbort);
-        }
+        return parts.join("\n\n");
       },
       display: { actionType: "shell", argsKey: "command", icon: "shell" },
       dangerLevel: "critical",
@@ -285,7 +178,7 @@ export class ShellPlugin extends PluginBase {
             "Additional parameters for each action, grouped into this object. ",
           ),
       }),
-      execute: async (args, ctx) => {
+      execute: async (args, ctx, abortSignal) => {
         const {
           action,
           processId,
@@ -317,6 +210,7 @@ export class ShellPlugin extends PluginBase {
               processId,
               timeoutMs,
               ctx?.session.sessionId,
+              abortSignal,
             );
             if (result === null) {
               throw new Error(`Process ${processId} does not exist`);
@@ -340,14 +234,14 @@ export class ShellPlugin extends PluginBase {
             if (result.status === "running") {
               if (result.stalled) {
                 parts.push(
-                  '[The command appears to be waiting for keyboard input. Use action "write" to send input, or action "kill" to terminate.]',
+                  `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}. The command appears to be waiting for keyboard input. Use action "write" to send input, or action "kill" to terminate.]`,
                 );
               } else {
-                parts.push("[status: running]");
+                parts.push(`[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`);
               }
             } else {
               parts.push(
-                `[status: ${result.status}, exit code: ${result.exitCode}]`,
+                `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
               );
             }
 
