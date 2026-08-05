@@ -183,7 +183,7 @@ export class PersistentSessionContext implements ISessionContext {
    *
    * 包含以下逻辑：
    * - 从 messageStore 加载原始消息，根据压缩检查点裁剪历史
-   * - 根据模型类型（DeepSeek-V4 / 其他）和 thinking 开关决定 reasoningContent 保留策略
+   * - 根据 thinking 开关决定 reasoningContent 保留策略
    * - 对 Kimi 模型做空 content 兼容处理
    * - 计算 system prompt 和初始消息的 Token 计数（用于后续增量更新）
    */
@@ -201,13 +201,12 @@ export class PersistentSessionContext implements ISessionContext {
     this.loadedCheckpoint = checkpoint;
 
     const modelName = modelConfig.modelName || modelConfig.name || "";
-    const isDeepSeekV4 = modelName.includes("deepseek-v4");
     const shouldLoadReasoning =
       this.thinkingEffortValue && this.thinkingEffortValue !== "none";
 
     if (shouldLoadReasoning) {
       this.logger.debug(
-        `Model ${modelName} with thinking enabled (effort: ${this.thinkingEffortValue}), will check for tool calls`,
+        `Model ${modelName} with thinking enabled (effort: ${this.thinkingEffortValue}), will fill reasoningContent`,
       );
     }
 
@@ -227,49 +226,15 @@ export class PersistentSessionContext implements ISessionContext {
 
     this.history = preprocessResult.messages;
 
-    // reasoning content 处理
+    // reasoning content 处理：思考模式 → 填充缺失值；非思考模式 → transformContentStructure 已不加载
     if (shouldLoadReasoning) {
-      if (isDeepSeekV4) {
-        const hasToolCalls = this.history.some(
-          (msg) => msg.toolCalls && msg.toolCalls.length > 0,
-        );
-        if (hasToolCalls) {
-          this.logger.debug(
-            `Found tool calls in history, keeping all reasoning content (DeepSeek-V4 mode)`,
-          );
-          this.history = this.history.map((msg) => ({
-            ...msg,
-            reasoningContent:
-              msg.role === "assistant"
-                ? (msg.reasoningContent ?? " ")
-                : undefined,
-          }));
-        } else {
-          this.logger.debug(
-            `No tool calls found in history, removing reasoning content`,
-          );
-          this.history = this.history.map((msg) => {
-            const { reasoningContent, ...rest } = msg as any;
-            return rest as MessageRecord;
-          });
+      this.history = this.history.map((msg) => {
+        if (msg.role === "assistant") {
+          return { ...msg, reasoningContent: msg.reasoningContent ?? " " };
         }
-      } else {
-        this.logger.debug(
-          `Non-V4 mode: keeping reasoning content after last user message`,
-        );
-        const lastUserIndex = this.history
-          .map((msg) => msg.role)
-          .lastIndexOf("user");
-        const startIndex = lastUserIndex >= 0 ? lastUserIndex : 0;
-        this.history = this.history.map((msg, index) => {
-          if (index >= startIndex && msg.role === "assistant") {
-            return { ...msg, reasoningContent: msg.reasoningContent ?? " " };
-          } else {
-            const { reasoningContent, ...rest } = msg as any;
-            return rest as MessageRecord;
-          }
-        });
-      }
+        const { reasoningContent, ...rest } = msg as any;
+        return rest as MessageRecord;
+      });
     }
 
     // KIMI 特殊处理
@@ -455,9 +420,15 @@ export class PersistentSessionContext implements ISessionContext {
    *
    * 采用增量 Token 计数策略，只计算新增消息的 Token 数并累加，
    * 避免每次追加都全量重算。
+   *
+   * 推理内容处理：与 loadMessages() 保持一致，确保 ReAct 循环中新增的
+   * assistant 消息也遵循相同的 reasoningContent 策略（DeepSeek-V4 要求一旦
+   * 存在工具调用，所有 assistant 消息必须携带 reasoning_content）。
    */
   async appendParts(records: MessageRecord[]): Promise<void> {
     if (!records || records.length === 0) return;
+
+    this.applyReasoningContentPolicy(records);
 
     this.history.push(...records);
     const chatModelName =
@@ -471,6 +442,29 @@ export class PersistentSessionContext implements ISessionContext {
     this.logger.debug(
       `Appended ${records.length} messages, added ${newTokens} tokens, history: ${this.tokenBreakdown.history}`,
     );
+  }
+
+  /**
+   * 对即将追加的 records 应用推理内容策略（与 loadMessages 一致）。
+   *
+   * 思考模式 → assistant 消息填充缺失的 reasoningContent 为 " "
+   * 非思考模式 → 移除所有 reasoningContent
+   */
+  private applyReasoningContentPolicy(records: MessageRecord[]): void {
+    const isThinking =
+      this.thinkingEffortValue && this.thinkingEffortValue !== "none";
+
+    for (const msg of records) {
+      if (isThinking) {
+        if (msg.role === "assistant" && msg.reasoningContent == null) {
+          msg.reasoningContent = " ";
+        }
+      } else {
+        if (msg.reasoningContent !== undefined) {
+          delete (msg as any).reasoningContent;
+        }
+      }
+    }
   }
 
   async persist(): Promise<void> {
