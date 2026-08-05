@@ -22,9 +22,13 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 export type LinkOpenMode = 'internal' | 'external' | 'ask'
 
 const STORAGE_KEY = 'linkOpenMode'
+const AUTO_SHOW_SIDEBAR_KEY = 'autoShowSidebar'
 const SETTINGS_GROUP = 'browser'
 
 let cachedMode: LinkOpenMode | null = null
+
+/** autoShowSidebar 缓存（默认 false：不自动展开侧边栏） */
+let cachedAutoShowSidebar: boolean | null = null
 
 /** 从 localStorage 同步读取（首次调用时初始化） */
 function getCachedMode(): LinkOpenMode {
@@ -59,8 +63,32 @@ export async function loadLinkOpenMode(): Promise<void> {
         if (mode && ['internal', 'external', 'ask'].includes(mode)) {
             setLinkOpenMode(mode)
         }
+        if (typeof response.autoShowSidebar === 'boolean') {
+            setAutoShowSidebar(response.autoShowSidebar)
+        }
     } catch {
         // 后端不可用时降级使用 localStorage 缓存
+    }
+}
+
+// ── AI 浏览器侧边栏自动展开管理 ──
+
+/** 同步读取 autoShowSidebar 缓存（首次调用时从 localStorage 初始化） */
+export function getAutoShowSidebar(): boolean {
+    if (cachedAutoShowSidebar === null) {
+        const stored = typeof localStorage !== 'undefined'
+            ? localStorage.getItem(AUTO_SHOW_SIDEBAR_KEY)
+            : null
+        cachedAutoShowSidebar = stored === 'true'
+    }
+    return cachedAutoShowSidebar
+}
+
+/** 更新 autoShowSidebar 缓存（供设置页面调用） */
+export function setAutoShowSidebar(val: boolean): void {
+    cachedAutoShowSidebar = val
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AUTO_SHOW_SIDEBAR_KEY, String(val))
     }
 }
 

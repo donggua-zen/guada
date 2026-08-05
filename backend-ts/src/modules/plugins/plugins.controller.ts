@@ -107,6 +107,9 @@ export class PluginsController {
     }
 
     const iconPath = path.resolve(pluginPath, icon);
+    if (!iconPath.startsWith(pluginPath + path.sep) && iconPath !== pluginPath) {
+      return res.status(403).send("Access denied");
+    }
     if (!fs.existsSync(iconPath)) {
       return res.status(404).send("Icon file not found");
     }
