@@ -10,11 +10,20 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Markdown 链接打开方式</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">设置点击聊天消息中的链接时的默认打开方式。内置浏览器在侧边栏预览区打开，不影响主窗口。</span>
             </div>
-            <el-radio-group v-model="linkOpenMode" @change="onLinkOpenModeChange">
-              <el-radio value="internal">内置浏览器</el-radio>
-              <el-radio value="external">外部浏览器</el-radio>
-              <el-radio value="ask">每次询问</el-radio>
-            </el-radio-group>
+            <el-select v-model="linkOpenMode" @change="onLinkOpenModeChange" style="width: 140px">
+              <el-option label="内置浏览器" value="internal" />
+              <el-option label="外部浏览器" value="external" />
+              <el-option label="每次询问" value="ask" />
+            </el-select>
+          </div>
+
+          <!-- AI 浏览器侧边栏自动展开 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">AI 使用浏览器时自动展开侧边栏</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">关闭后，AI 打开浏览器时不会自动切换到预览页面，浏览器窗口仍在后台正常运行。可在侧边栏手动查看。</span>
+            </div>
+            <el-switch v-model="autoShowSidebar" @change="onAutoShowSidebarChange" />
           </div>
         </div>
       </div>
@@ -53,20 +62,25 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
-import { setLinkOpenMode, type LinkOpenMode } from '@/utils/workspacePreview'
+import { setLinkOpenMode, setAutoShowSidebar, type LinkOpenMode } from '@/utils/workspacePreview'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const clearing = ref(false)
 const linkOpenMode = ref<LinkOpenMode>('ask')
+const autoShowSidebar = ref(false)
 
-// 加载链接打开方式设置
-async function loadLinkOpenMode(): Promise<void> {
+// 加载浏览器设置
+async function loadBrowserSettings(): Promise<void> {
   try {
     const response = await apiService.fetchGroupSettings('browser')
     const mode = response.linkOpenMode as LinkOpenMode | undefined
     if (mode && ['internal', 'external', 'ask'].includes(mode)) {
       linkOpenMode.value = mode
       setLinkOpenMode(mode)
+    }
+    if (typeof response.autoShowSidebar === 'boolean') {
+      autoShowSidebar.value = response.autoShowSidebar
+      setAutoShowSidebar(response.autoShowSidebar)
     }
   } catch {
     // 后端不可用时使用默认值
@@ -81,6 +95,18 @@ async function onLinkOpenModeChange(val: string | number | boolean | undefined):
     await apiService.updateGroupSettings('browser', { linkOpenMode: mode })
   } catch (error) {
     console.error('保存链接打开方式失败:', error)
+    ElMessage.error('保存设置失败')
+  }
+}
+
+// 保存侧边栏自动展开设置
+async function onAutoShowSidebarChange(val: string | number | boolean | undefined): Promise<void> {
+  const enabled = val as boolean
+  setAutoShowSidebar(enabled)
+  try {
+    await apiService.updateGroupSettings('browser', { autoShowSidebar: enabled })
+  } catch (error) {
+    console.error('保存侧边栏设置失败:', error)
     ElMessage.error('保存设置失败')
   }
 }
@@ -122,6 +148,6 @@ async function handleClearData(): Promise<void> {
 }
 
 onMounted(() => {
-  loadLinkOpenMode()
+  loadBrowserSettings()
 })
 </script>

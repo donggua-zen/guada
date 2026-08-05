@@ -20,6 +20,7 @@ import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance }
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
+import { getAutoShowSidebar } from '@/utils/workspacePreview'
 
 const store = useBrowserWebviewStore()
 
@@ -244,10 +245,11 @@ function handleCreateWebview(_event: any, data: {
     metadata: data.metadata,
   })
 
-  // 新建标签自动打开预览模式：属于当前会话的窗口创建即激活。
+  // 新建标签：属于当前会话的窗口，根据设置决定是否自动展开侧边栏。
   // 说明：这是 AI 路径唯一的确定性触发源（主进程创建 webview 后不会主动 setActive）。
   // 用户路径（previewUrl/createNewBrowserWindow）会再幂等执行一次 enterPreviewMode+selectTab，无害。
   if (data.metadata?.sessionId && data.metadata.sessionId === store.currentSessionId) {
+    if (!getAutoShowSidebar()) return
     const layoutStore = useLayoutStore()
     layoutStore.workspaceVisible = true
     nextTick(() => {

@@ -238,7 +238,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
       ) {
         const sig = (event.delta as any).signature || (event.delta as any).signature_delta || '';
         if (sig) {
-          pendingSignature = sig;
+          // TODO: 待验证 — Anthropic signature_delta 可能是分片到达，此处用 += 拼接
+          // 若实际是完整签名覆盖，则应改回 = sig
+          pendingSignature += sig;
         }
         continue;
       }
@@ -357,7 +359,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
         // 合并 message_start 缓存的 input_tokens + message_delta 的 output_tokens
         // Anthropic API input_tokens 不包含缓存部分，需手动加回
         const promptTokens = (inputTokensFromStart || usage?.input_tokens || 0)
-          + (usage?.cache_read_input_tokens || 0);
+          + (usage?.cache_read_input_tokens || 0)
+          + (usage?.cache_creation_input_tokens || 0);
         const completionTokens = usage?.output_tokens || 0;
         // Anthropic 缓存字段：cache_creation_input_tokens / cache_read_input_tokens
         const cachedTokens = usage?.cache_creation_input_tokens || usage?.cache_read_input_tokens
@@ -430,10 +433,15 @@ export class AnthropicAdapter implements IProtocolAdapter {
       redactedData,
       usage: message.usage
         ? {
-            promptTokens: message.usage.input_tokens + (message.usage.cache_read_input_tokens || 0),
+            promptTokens: message.usage.input_tokens
+              + (message.usage.cache_read_input_tokens || 0)
+              + (message.usage.cache_creation_input_tokens || 0),
             completionTokens: message.usage.output_tokens,
             totalTokens:
-              message.usage.input_tokens + (message.usage.cache_read_input_tokens || 0) + message.usage.output_tokens,
+              message.usage.input_tokens
+              + (message.usage.cache_read_input_tokens || 0)
+              + (message.usage.cache_creation_input_tokens || 0)
+              + message.usage.output_tokens,
             cachedTokens: message.usage.cache_creation_input_tokens || message.usage.cache_read_input_tokens
               ? { read: message.usage.cache_read_input_tokens, written: message.usage.cache_creation_input_tokens }
               : undefined,
