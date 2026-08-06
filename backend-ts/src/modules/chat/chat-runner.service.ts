@@ -558,7 +558,7 @@ export class ChatRunnerService {
       );
 
       for await (const chunk of iterator) {
-        if (chunk.finishReason) {
+        if (chunk.type === "turn_end") {
           lastFinishReason = chunk.finishReason;
         }
         this.streamManager.broadcast(sessionId, chunk as EventChunk);
