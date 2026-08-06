@@ -270,9 +270,13 @@ export class BotOrchestrator {
           // 重连中：仅最终消息入队，中间片段丢弃
           if (extra.finish === true) {
             this.enqueuePendingReply(botId, { ...baseReply, content });
-            this.logger.warn(`Adapter reconnecting, queued final reply for bot ${botId}`);
+            this.logger.warn(
+              `Adapter reconnecting, queued final reply for bot ${botId}`,
+            );
           } else {
-            this.logger.debug(`Adapter reconnecting, dropping intermediate stream fragment for bot ${botId}`);
+            this.logger.debug(
+              `Adapter reconnecting, dropping intermediate stream fragment for bot ${botId}`,
+            );
           }
           return;
         }
@@ -356,87 +360,104 @@ export class BotOrchestrator {
 
         let startStreamError: any = null;
 
-        this.chatRunner.startStream(
-          {
-            sessionId: session.id,
-            userId: session.userId,
-            userMessage: {
-              content: mergedContent,
-              knowledgeBaseIds: config.knowledgeBaseIds,
+        this.chatRunner
+          .startStream(
+            {
+              sessionId: session.id,
+              userId: session.userId,
+              userMessage: {
+                content: mergedContent,
+                knowledgeBaseIds: config.knowledgeBaseIds,
+              },
+              source: { type: "bot", platform: config.platform, botId },
+              preloadedSession: session,
             },
-            source: { type: "bot", platform: config.platform, botId },
-            preloadedSession: session,
-          },
-          {
-            onEvent: (chunk) => {
-              if (chunk.type === "text" && chunk.content) {
-                accumulatedContent += chunk.content;
-                if (capabilities.supportsStreaming) {
-                  void sendReply(accumulatedContent, {
-                    streamId,
-                    finish: false,
-                  }).catch((error: Error) => {
-                    this.logger.error(`Failed to send stream reply: ${error.message}`);
-                  });
-                }
-              } else if (chunk.type === "finish" && !capabilities.supportsStreaming) {
-                if (accumulatedContent.trim()) {
-                  hasSentAnyMessage = true;
-                  void sendReply(accumulatedContent, { finish: true })
-                    .catch((error: Error) => {
-                      this.logger.error(`Failed to send turn reply: ${error.message}`);
+            {
+              onEvent: (chunk) => {
+                if (chunk.type === "text" && chunk.content) {
+                  accumulatedContent += chunk.content;
+                  if (capabilities.supportsStreaming) {
+                    void sendReply(accumulatedContent, {
+                      streamId,
+                      finish: false,
+                    }).catch((error: Error) => {
+                      this.logger.error(
+                        `Failed to send stream reply: ${error.message}`,
+                      );
                     });
-                  accumulatedContent = "";
-                }
-              }
-            },
-            onComplete: () => {
-              const finishSend = (content: string) =>
-                sendReply(content, { streamId, finish: true })
-                  .then(() => {
-                    this.logger.log(
-                      `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
+                  }
+                } else if (
+                  (chunk.type === "finish" || chunk.type === "turn_end") &&
+                  !capabilities.supportsStreaming
+                ) {
+                  if (accumulatedContent.trim()) {
+                    hasSentAnyMessage = true;
+                    void sendReply(accumulatedContent, { finish: true }).catch(
+                      (error: Error) => {
+                        this.logger.error(
+                          `Failed to send turn reply: ${error.message}`,
+                        );
+                      },
                     );
-                  })
+                    accumulatedContent = "";
+                  }
+                }
+              },
+              onComplete: () => {
+                const finishSend = (content: string) =>
+                  sendReply(content, { streamId, finish: true })
+                    .then(() => {
+                      this.logger.log(
+                        `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
+                      );
+                    })
+                    .catch((error: Error) => {
+                      this.logger.error(
+                        `Failed to send final reply: ${error.message}`,
+                      );
+                    })
+                    .finally(() => {
+                      unsubscribe?.();
+                      done();
+                    });
+
+                if (capabilities.supportsStreaming) {
+                  void finishSend(
+                    accumulatedContent || "抱歉,我暂时无法回复。",
+                  );
+                } else if (accumulatedContent.trim()) {
+                  void finishSend(accumulatedContent);
+                } else if (!hasSentAnyMessage) {
+                  void finishSend("抱歉,我暂时无法回复。");
+                } else {
+                  unsubscribe?.();
+                  done();
+                }
+              },
+              onError: (err) => {
+                this.logger.error(`Stream error: ${err.message}`);
+                void sendReply(err.message || "抱歉,我暂时无法回复。", {
+                  finish: true,
+                })
                   .catch((error: Error) => {
-                    this.logger.error(`Failed to send final reply: ${error.message}`);
+                    this.logger.error(
+                      `Failed to send error reply: ${error.message}`,
+                    );
                   })
                   .finally(() => {
                     unsubscribe?.();
                     done();
                   });
-
-              if (capabilities.supportsStreaming) {
-                void finishSend(accumulatedContent || "抱歉,我暂时无法回复。");
-              } else if (accumulatedContent.trim()) {
-                void finishSend(accumulatedContent);
-              } else if (!hasSentAnyMessage) {
-                void finishSend("抱歉,我暂时无法回复。");
-              } else {
-                unsubscribe?.();
-                done();
-              }
+              },
             },
-            onError: (err) => {
-              this.logger.error(`Stream error: ${err.message}`);
-              void sendReply(err.message || "抱歉,我暂时无法回复。", {
-                finish: true,
-              })
-                .catch((error: Error) => {
-                  this.logger.error(`Failed to send error reply: ${error.message}`);
-                })
-                .finally(() => {
-                  unsubscribe?.();
-                  done();
-                });
-            },
-          },
-        ).then((unsub) => {
-          unsubscribe = unsub;
-        }).catch((error: any) => {
-          startStreamError = error;
-          done();
-        });
+          )
+          .then((unsub) => {
+            unsubscribe = unsub;
+          })
+          .catch((error: any) => {
+            startStreamError = error;
+            done();
+          });
 
         // 如果 startStream 同步抛出（如 SESSION_BUSY），done() 已在 catch 中调用
         if (startStreamError) {
@@ -477,7 +498,9 @@ export class BotOrchestrator {
     const queue = this.pendingReplies.get(botId) || [];
     if (queue.length >= this.MAX_PENDING_REPLIES) {
       queue.shift();
-      this.logger.warn(`Pending reply queue full for bot ${botId}, dropped oldest`);
+      this.logger.warn(
+        `Pending reply queue full for bot ${botId}, dropped oldest`,
+      );
     }
     queue.push(response);
     this.pendingReplies.set(botId, queue);
@@ -487,7 +510,10 @@ export class BotOrchestrator {
    * 发送重连期间积压的待发送回复
    * 由 BotInstanceManager 在适配器重连成功后调用
    */
-  async flushPendingReplies(botId: string, instance: BotInstanceView): Promise<void> {
+  async flushPendingReplies(
+    botId: string,
+    instance: BotInstanceView,
+  ): Promise<void> {
     const { adapter } = instance;
     const capabilities = adapter.getCapabilities();
     const interval = capabilities.sendIntervalMs ?? 0;
@@ -496,7 +522,9 @@ export class BotOrchestrator {
 
     const messages = [...queue];
     this.pendingReplies.delete(botId);
-    this.logger.log(`Flushing ${messages.length} pending replies for bot ${botId}`);
+    this.logger.log(
+      `Flushing ${messages.length} pending replies for bot ${botId}`,
+    );
 
     for (const msg of messages) {
       try {

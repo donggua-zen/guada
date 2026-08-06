@@ -302,7 +302,12 @@ export class CompressionEngine implements ICompressionStrategy {
         // 这样既减少了 Token 占用，又保留了工具结果的开头标识和结尾关键数据
         const pruneContext = () => {
           if (msg.contentId < lastProcessedContentId) {
-            return "[Old tool result content cleared]";
+            // 只有原本足够长（曾经被裁剪过）的内容才替换为占位符；
+            // 短内容直接跳过，避免"裁剪"后反而变长
+            if (content.length > PRUNING_TOOL_RESULT_MAX_LENGTH / 5) {
+              return "[Old tool result content cleared]";
+            }
+            return undefined;
           }
           if (content.length <= PRUNING_TOOL_RESULT_MAX_LENGTH) {
             return undefined;

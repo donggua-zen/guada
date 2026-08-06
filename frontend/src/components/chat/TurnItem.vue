@@ -122,7 +122,7 @@
 
           <!-- 错误提示 -->
           <el-alert v-if="assistantMetadata?.finishReason === 'error'" title="API 请求错误" type="error" :closable="false">
-            {{ assistantMetadata.error }}
+            {{ assistantMetadata.errorDetail }}
           </el-alert>
 
           <!-- 用户终止提示 -->
@@ -148,7 +148,7 @@
             <div v-if="assistantMetadata.finishReason === 'rate_limited'" class="max-iterations-notice mt-3">
               <el-alert type="warning" :closable="false">
                 <template #title>
-                  <span>{{ assistantMetadata.error }}</span>
+                  <span>{{ assistantMetadata.errorDetail }}</span>
                 </template>
                 <div v-if="isLast" class="flex items-center gap-3 mt-2">
                   <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
@@ -483,12 +483,11 @@ const assistantMetadata = computed<Record<string, any> | null>(() => {
   const cache = turnsCache.value;
   const contentMeta = cache.length > 0 ? (cache[cache.length - 1]?.metadata || {}) : {};
   const messageMeta = activeAssistant.value?.metadata || {};
-  // finishReason/error 持久化在 Message 级别，流式时从 Content 级别读取
+  // Message 级别：finishReason/errorDetail（turn_end 写入）
+  // Content 级别：usage/toolCalls 等每轮迭代信息
   return {
     ...contentMeta,
     ...messageMeta,
-    finishReason: messageMeta.finishReason || contentMeta.finishReason,
-    error: messageMeta.error ?? contentMeta.error,
   };
 });
 

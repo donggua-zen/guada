@@ -24,6 +24,7 @@ export interface EventChunk {
     | "tool_call"
     | "tool_calls_response"
     | "finish"
+    | "turn_end"
     | "user_message";
 
   // ===== 消息标识（create / update / text / think / tool_call / tool_calls_response / finish）=====

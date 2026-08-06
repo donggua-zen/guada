@@ -65,9 +65,7 @@ export class SubAgentPlugin extends PluginBase {
             ([k, v]) => !k.startsWith("__") && v === true,
           );
         return {
-          loadMode: hasEnabledAgent
-            ? ("eager" as const)
-            : ("none" as const),
+          loadMode: hasEnabledAgent ? ("eager" as const) : ("none" as const),
         };
       },
     });
@@ -116,7 +114,8 @@ The sub-agent has its own independent conversation context and tool capabilities
           abortSignal,
         );
         if (result.status === "running") {
-          return `[Sub-agent running. Session ID: ${result.subSessionId}. Use subagent_manager wait to get the result.]`;
+          const reason = result.error ? ` (${result.error})` : "";
+          return `[Sub-agent running. Session ID: ${result.subSessionId}${reason}. Use subagent_manager wait to get the result.]`;
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
@@ -127,7 +126,11 @@ The sub-agent has its own independent conversation context and tool capabilities
         parts.push(tag);
         return parts.join("\n");
       },
-      display: { actionType: "sub_agent_create", argsKey: "name", icon: "generic" },
+      display: {
+        actionType: "sub_agent_create",
+        argsKey: "name",
+        icon: "generic",
+      },
     });
 
     // ── manager：管理子代理（wait / list / close / send_message）──
@@ -234,7 +237,11 @@ The sub-agent has its own independent conversation context and tool capabilities
             throw new Error(`Unknown action: ${action}`);
         }
       },
-      display: { actionType: "sub_agent_manage", argsKey: "action", icon: "generic" },
+      display: {
+        actionType: "sub_agent_manage",
+        argsKey: "action",
+        icon: "generic",
+      },
     });
 
     // ── Prompt: 子代理使用指南 + 可用角色列表 ──

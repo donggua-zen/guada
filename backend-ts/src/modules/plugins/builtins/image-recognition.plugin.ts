@@ -1,7 +1,6 @@
 import { Logger, Injectable } from "@nestjs/common";
 import { promises as fs } from "fs";
 import * as path from "path";
-import sharp from "sharp";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { FileRepository } from "../../../common/database/file.repository";
@@ -14,12 +13,13 @@ import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
 import { PluginApi, ImageContent } from "../api/plugin-api";
 import { z } from "zod";
+import {
+  supportsMultimodal,
+  ensureWithinPixelLimit,
+} from "../utils/vision-utils";
 
 const DEFAULT_PROMPT =
   "Describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, and composition.";
-
-/** Maximum total pixel count (width × height) allowed for an image sent to the vision model. */
-const MAX_TOTAL_PIXELS = 1024 * 1024; // 1,048,576 pixels
 
 const MIME_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -30,16 +30,6 @@ const MIME_TYPES: Record<string, string> = {
   bmp: "image/bmp",
   tiff: "image/tiff",
 };
-
-/** Check if the current session's model supports multimodal image input. */
-function supportsMultimodal(ctx: PluginContext | undefined): boolean {
-  if (!ctx?.session) return false;
-  const config = ctx.session.getModelConfig();
-  return (
-    config.config.inputCapabilities?.includes("image") ||
-    ctx.session.supportsFeature("vision")
-  );
-}
 
 @Injectable()
 export class ImageRecognitionPlugin extends PluginBase {
@@ -161,7 +151,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             );
 
             let imageBuffer: Buffer = await fs.readFile(physicalPath);
-            imageBuffer = await this.ensureWithinPixelLimit(imageBuffer);
+            imageBuffer = await ensureWithinPixelLimit(imageBuffer);
             const base64Data = imageBuffer.toString("base64");
             const ext = path
               .extname(physicalPath)
@@ -207,33 +197,6 @@ export class ImageRecognitionPlugin extends PluginBase {
     throw new Error("Either image_id or image_path must be provided");
   }
 
-  /**
-   * If the image's total pixel count (width × height) exceeds MAX_TOTAL_PIXELS,
-   * scale it down proportionally so that the total pixel count stays within the limit.
-   */
-  private async ensureWithinPixelLimit(imageBuffer: Buffer): Promise<Buffer> {
-    const metadata = await sharp(imageBuffer).metadata();
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-    const totalPixels = width * height;
-
-    if (totalPixels === 0 || totalPixels <= MAX_TOTAL_PIXELS) {
-      return imageBuffer;
-    }
-
-    const scale = Math.sqrt(MAX_TOTAL_PIXELS / totalPixels);
-    const newWidth = Math.floor(width * scale);
-    const newHeight = Math.floor(height * scale);
-
-    this.logger.debug(
-      `Resizing image from ${width}x${height} (${totalPixels} px) to ${newWidth}x${newHeight} (${newWidth * newHeight} px)`,
-    );
-
-    return sharp(imageBuffer)
-      .resize(newWidth, newHeight, { fit: "inside", withoutEnlargement: true })
-      .toBuffer();
-  }
-
   /** Call a separate vision model to recognize the image (text-only model path). */
   private async recognizeImageViaVisionModel(
     physicalPath: string,
@@ -265,7 +228,7 @@ export class ImageRecognitionPlugin extends PluginBase {
       const thinkingEffort = resolveThinkingEffort(visualModelConfig, "none");
 
       let imageBuffer: Buffer = await fs.readFile(physicalPath);
-      imageBuffer = await this.ensureWithinPixelLimit(imageBuffer);
+      imageBuffer = await ensureWithinPixelLimit(imageBuffer);
       const base64Image = imageBuffer.toString("base64");
       const ext = path.extname(physicalPath).toLowerCase().replace(".", "");
       const mimeType = MIME_TYPES[ext] ?? `image/${ext}`;

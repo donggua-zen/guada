@@ -10,6 +10,10 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
 import { BridgeClient } from "../../bridge/bridge-client";
 import { safeTruncate } from "../../../common/utils/string.utils";
+import {
+  supportsMultimodal,
+  ensureWithinPixelLimit,
+} from "../utils/vision-utils";
 
 @Injectable()
 export class BrowserPlugin extends PluginBase {
@@ -211,7 +215,11 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatInteractResult(args, result);
           },
-          display: { actionType: "interact", argsKey: "action", icon: "browser" },
+          display: {
+            actionType: "interact",
+            argsKey: "action",
+            icon: "browser",
+          },
         });
 
         // ── 5. 执行 JavaScript ──
@@ -295,7 +303,11 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { actionType: "history", argsKey: "action", icon: "browser" },
+          display: {
+            actionType: "history",
+            argsKey: "action",
+            icon: "browser",
+          },
         });
 
         // ── 7. 控制台日志 ──
@@ -322,7 +334,7 @@ export class BrowserPlugin extends PluginBase {
         toolkit.registerTool({
           name: "browser_screenshot",
           description:
-            "Take a screenshot of the current tab and save it as a PNG file. Returns the saved file path and image dimensions. If no file path is provided, the screenshot is saved to the session workspace directory with an auto-generated filename.",
+            "Take a screenshot of the current tab and save it as a PNG file. For multimodal models, the image is also returned directly for visual analysis. For text-only models, only the saved file path and dimensions are returned.",
           inputSchema: z.object({
             file_path: z
               .string()
@@ -342,13 +354,33 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
             this.assertSuccess(result);
+
             const parts: string[] = [];
             if (result.saved_path) {
               parts.push(`Screenshot saved: ${result.saved_path}`);
             }
-            parts.push(
-              `Dimensions: ${result.width}x${result.height}`,
-            );
+            parts.push(`Dimensions: ${result.width}x${result.height}`);
+
+            // 多模态模型：直接返回图片数据，省去 AI 再调 image_view 的一轮循环
+            if (supportsMultimodal(ctx) && result.saved_path) {
+              let imageBuffer: Buffer = await fs.promises.readFile(
+                result.saved_path,
+              );
+              imageBuffer = await ensureWithinPixelLimit(imageBuffer);
+              parts.push(
+                "The screenshot will be injected as a subsequent user message for your visual analysis.",
+              );
+              return {
+                content: parts.join("\n"),
+                images: [
+                  {
+                    media_type: "image/png",
+                    data: imageBuffer.toString("base64"),
+                  },
+                ],
+              };
+            }
+
             return parts.join("\n");
           },
           display: { actionType: "screenshot", icon: "browser" },
@@ -365,7 +397,7 @@ export class BrowserPlugin extends PluginBase {
             "- Most tools operate on the **current tab** automatically",
             "- `browser_navigate(url, new_tab=true)` opens a new tab and sets it as current",
             "- `browser_navigate(url)` navigates in the current tab (auto-creates one if none exists)",
-            "- Use `browser_tabs(action=\"list\")` to see all tabs, `browser_tabs(action=\"select\", index=N)` to switch current tab",
+            '- Use `browser_tabs(action="list")` to see all tabs, `browser_tabs(action="select", index=N)` to switch current tab',
             "",
             "## Snapshot & Interaction",
             "- `browser_navigate` and `browser_history` auto-return a snapshot after the operation",
