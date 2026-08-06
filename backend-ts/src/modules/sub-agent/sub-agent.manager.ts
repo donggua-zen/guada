@@ -1,12 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { OnEvent } from "@nestjs/event-emitter";
-import * as path from "path";
-import * as fs from "fs/promises";
 import { SessionRepository } from "../../common/database/session.repository";
-import { MessageRepository } from "../../common/database/message.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ChatRunnerService } from "../chat/chat-runner.service";
-import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { ISessionContext } from "../chat/session-context";
 import { safeTruncate } from "../../common/utils/string.utils";
@@ -80,7 +75,6 @@ export class SubAgentManager implements OnModuleInit {
 
   constructor(
     private sessionRepo: SessionRepository,
-    private messageRepo: MessageRepository,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private characterRepo: CharacterRepository,
@@ -88,135 +82,6 @@ export class SubAgentManager implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log("SubAgentManager initialized");
-  }
-
-  /**
-   * 监听全局 stream.finished 事件，自动导出子 Agent 对话历史到文件
-   */
-  @OnEvent("stream.finished")
-  async handleStreamFinished(event: StreamFinishedEvent): Promise<void> {
-    const payload = event.payload;
-    // 只处理子 Agent 的流结束事件
-    if (payload.sessionType !== "sub_agent") {
-      return;
-    }
-    const subSessionId = event.sessionId;
-    const workspacePath = payload.workspacePath;
-    if (!subSessionId || !workspacePath) {
-      return;
-    }
-    try {
-      await this.exportSubAgentHistory(
-        subSessionId,
-        workspacePath,
-        event.userId,
-      );
-    } catch (err) {
-      this.logger.error(`导出子 Agent 历史记录失败: ${subSessionId}`, err);
-    }
-  }
-
-  /**
-   * 导出子 Agent 对话历史到文件
-   */
-  private async exportSubAgentHistory(
-    subSessionId: string,
-    workspacePath: string,
-    userId: string,
-  ): Promise<void> {
-    try {
-      const messages = await this.messageRepo.findRecentBySessionId(
-        subSessionId,
-        50,
-        undefined,
-        undefined,
-        { withContents: true },
-      );
-
-      if (messages.length === 0) {
-        return;
-      }
-
-      const markdown = this.formatMessagesAsMarkdown(
-        messages.reverse(),
-        subSessionId,
-      );
-      const filePath = path.join(
-        workspacePath,
-        ".guada",
-        "subagents",
-        `${subSessionId}.md`,
-      );
-
-      // 确保目录存在
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, markdown, "utf-8");
-
-      this.logger.log(`子 Agent 历史记录已导出: ${filePath}`);
-    } catch (error) {
-      this.logger.error(`导出子 Agent 历史记录失败: ${subSessionId}`, error);
-    }
-  }
-
-  /**
-   * 将消息格式化为 Markdown
-   *
-   * 消息结构包含 contents 数组（MessageContent[]），
-   * 提取 content（文本）和 metadata.toolCalls 中的 displayMessage（工具调用文案），
-   * 不保存 reasoningContent（思考内容），不保存 tool 角色的消息。
-   */
-  private formatMessagesAsMarkdown(
-    messages: any[],
-    subSessionId: string,
-  ): string {
-    const lines: string[] = [
-      "# Sub-Agent Conversation Log",
-      "",
-      `**Session ID**: ${subSessionId}`,
-      `**Message Count**: ${messages.length}`,
-      "",
-      "---",
-      "",
-    ];
-
-    for (const msg of messages) {
-      // 只保留 user 和 assistant 角色，跳过 tool 结果
-      if (msg.role !== "user" && msg.role !== "assistant") {
-        continue;
-      }
-
-      const role = msg.role === "user" ? "User" : "Assistant";
-      lines.push(`### ${role}`);
-      lines.push("");
-
-      // 处理 contents 数组（MessageContent[]）
-      const contents = msg.contents || [];
-      for (const content of contents) {
-        // 主文本内容
-        if (content.content) {
-          lines.push(content.content);
-        }
-
-        // 提取工具调用的 displayMessage（从 metadata.toolCalls 中）
-        const toolCalls = content.metadata?.toolCalls;
-        if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
-          lines.push("");
-          for (const tc of toolCalls) {
-            const display = tc.metadata?.displayMessage;
-            if (display && display.action) {
-              const args = display.args ? ` ${display.args}` : "";
-              lines.push(`tool:${display.action}${args}`);
-            } else {
-              // 极端情况：没有 displayMessage，使用工具名兜底
-              lines.push(`tool:call ${tc.name || "unknown"}`);
-            }
-          }
-        }
-      }
-      lines.push("---");
-    }
-
-    return lines.join("\n");
   }
 
   /**
@@ -394,7 +259,9 @@ export class SubAgentManager implements OnModuleInit {
 
     // 2. 检查子 Agent 是否正在运行
     if (this.isSubAgentRunning(params.sessionId)) {
-      throw new Error("Sub-agent is currently running. Please wait for it to complete before sending a message.");
+      throw new Error(
+        "Sub-agent is currently running. Please wait for it to complete before sending a message.",
+      );
     }
 
     this.logger.log(
@@ -415,7 +282,10 @@ export class SubAgentManager implements OnModuleInit {
   /**
    * 执行子 Agent 流式执行（前台/后台模式）
    *
-   * 供 spawn 和 sendMessage 复用的核心执行逻辑。
+   * 统一架构（参考 shell execute）：
+   * - 始终 fire-and-forget 启动 runSubAgentStream
+   * - 前台模式：Promise.race 等待结果（5min 超时），完成直接返回，超时转后台
+   * - 后台模式：不等待，pending 完成后入队通知
    */
   private async executeSubAgentStream(
     subSessionId: string,
@@ -425,41 +295,23 @@ export class SubAgentManager implements OnModuleInit {
     mode: "foreground" | "background",
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
-    // 加入运行中集合
     const state = this.getOrCreateState(parentSessionId);
     state.running.add(subSessionId);
 
-    if (mode === "foreground") {
-      // 前台模式：阻塞直到完成
-      const result = await this.runSubAgentStream(
-        subSessionId,
-        userId,
-        content,
-        parentSessionId,
-        abortSignal,
-      );
+    const pending = this.runSubAgentStream(
+      subSessionId,
+      userId,
+      content,
+      parentSessionId,
+      mode === "foreground" ? abortSignal : undefined,
+    );
 
-      // 前台模式：状态清理 + 广播 UI 事件，不投递消息队列（避免重复接收）
-      await this.notifyComplete(
-        subSessionId,
-        result,
-        userId,
-        parentSessionId,
-        false,
-      );
-
-      return result;
-    } else {
-      // 后台模式：不阻塞，流在后台执行
-      this.runSubAgentStream(subSessionId, userId, content, parentSessionId)
-        .then(async (result) => {
-          await this.notifyComplete(
-            subSessionId,
-            result,
-            userId,
-            parentSessionId,
-          );
-        })
+    // 后台完成后的统一处理（入队通知主 Agent）
+    const onSettled = () => {
+      pending
+        .then((result) =>
+          this.notifyComplete(subSessionId, result, userId, parentSessionId),
+        )
         .catch(async (error) => {
           const errorMsg =
             error instanceof Error ? error.message : String(error);
@@ -470,12 +322,83 @@ export class SubAgentManager implements OnModuleInit {
             parentSessionId,
           );
         });
+    };
 
+    if (mode === "background") {
+      onSettled();
+      return { subSessionId, status: "running", content: "" };
+    }
+
+    // 前台模式：等待结果，超时 5 分钟转后台
+    const FOREGROUND_TIMEOUT_MS = 5 * 60 * 1000;
+    let settled = false;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    const timeoutPromise = new Promise<"timeout">((resolve) => {
+      timeoutHandle = setTimeout(() => {
+        if (!settled) resolve("timeout");
+      }, FOREGROUND_TIMEOUT_MS);
+    });
+
+    try {
+      const raceResult = await Promise.race([
+        pending.then(
+          (r) => ({ kind: "completed" as const, result: r }),
+          (e) => ({
+            kind: "error" as const,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        ),
+        timeoutPromise.then(() => ({ kind: "timeout" as const })),
+      ]);
+
+      settled = true;
+
+      if (raceResult.kind === "completed") {
+        // 前台完成（含 abort 导致的 resolve）：直接返回结果
+        // abort 时 runSubAgentStream 的监听器已 cancelStream + resolve error result
+        state.running.delete(subSessionId);
+        if (
+          state.completed.length === 0 &&
+          state.completers.length === 0 &&
+          state.running.size === 0
+        ) {
+          this.states.delete(parentSessionId);
+        }
+        return raceResult.result;
+      }
+
+      if (raceResult.kind === "error") {
+        // startStream 本身失败（如会话不存在）
+        state.running.delete(subSessionId);
+        if (
+          state.completed.length === 0 &&
+          state.completers.length === 0 &&
+          state.running.size === 0
+        ) {
+          this.states.delete(parentSessionId);
+        }
+        return {
+          subSessionId,
+          status: "error",
+          content: "",
+          error: raceResult.error,
+          finishReason: "error",
+        };
+      }
+
+      // 超时：转后台，pending 完成后入队
+      onSettled();
       return {
         subSessionId,
         status: "running",
         content: "",
+        error:
+          "Sub-agent exceeded 5-minute foreground timeout and was moved to background.",
       };
+    } finally {
+      // 清理定时器
+      if (timeoutHandle) clearTimeout(timeoutHandle);
     }
   }
 
@@ -534,22 +457,17 @@ export class SubAgentManager implements OnModuleInit {
       if (state.completers.length === 0 && state.running.size === 0) {
         this.states.delete(parentSessionId);
       }
-      // 从队列中移除已获取的消息
-      for (const item of items) {
-        this.chatRunnerService.peekQueuedMessage(
-          parentSessionId,
-          (q) =>
-            q.source?.type === "sub_agent" &&
-            q.source?.systemPayload?.some(
-              (p: any) => p.subSessionId === item.subSessionId,
-            ),
-        );
-      }
+      // 队列中的消息通过 isValid 检测到 state.completed 已清空，processQueue 自动丢弃
       return items;
     }
 
+    // 无运行中的子 Agent 且无已完成结果 → 立即返回空数组
+    if (state && state.running.size === 0) {
+      return [];
+    }
+
     // 确保状态存在，用于注册 completer
-    const activeState = state;
+    const activeState = this.getOrCreateState(parentSessionId);
 
     // 等待任意一个子 Agent 完成（支持 abortSignal 中止）
     return new Promise((resolve, reject) => {
@@ -630,47 +548,24 @@ export class SubAgentManager implements OnModuleInit {
 
     // 清理 state 中该子 Agent 的残留（completed 中的条目、completers）
     // 此时 finalizeSubAgent 已被跳过，notifyComplete 推入的条目需手动清理
+    // 队列中的消息通过 isValid 检测到 state.completed 已清空，processQueue 自动丢弃
     const state = this.states.get(parentSessionId);
     if (state) {
       state.completed = state.completed.filter(
         (c) => c.subSessionId !== subSessionId,
       );
+      // 通知所有等待者，避免挂起
+      for (const completer of state.completers) {
+        completer.resolve();
+      }
       state.completers = [];
       if (state.completed.length === 0 && state.running.size === 0) {
         this.states.delete(parentSessionId);
       }
     }
 
-    // 清理信箱中该子 Agent 的残留消息（如果有）
-    this.chatRunnerService.peekQueuedMessage(
-      parentSessionId,
-      (q) =>
-        q.source?.type === "sub_agent" &&
-        (q.source?.systemPayload?.some(
-          (p: any) => p.subSessionId === subSessionId,
-        ) ||
-          q.source?.subSessionId === subSessionId),
-    );
-
     // 删除会话数据
     await this.sessionRepo.deleteById(subSessionId);
-
-    // 删除自动导出的历史记录文件
-    const historyFilePath = path.join(
-      workspacePath,
-      ".guada",
-      "subagents",
-      `${subSessionId}.md`,
-    );
-    try {
-      await fs.unlink(historyFilePath);
-      this.logger.log(`子 Agent 历史记录已删除: ${historyFilePath}`);
-    } catch (err) {
-      // 文件不存在时忽略错误
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        this.logger.error(`删除子 Agent 历史记录失败: ${historyFilePath}`, err);
-      }
-    }
 
     // 广播关闭事件
     this.eventBus.emit("subagent.closed", {
@@ -752,7 +647,6 @@ export class SubAgentManager implements OnModuleInit {
     result: SubAgentResult,
     userId: string,
     parentSessionId: string,
-    enqueueResult = true,
   ): Promise<void> {
     const state = this.states.get(parentSessionId);
     if (!state) return;
@@ -768,7 +662,6 @@ export class SubAgentManager implements OnModuleInit {
       name,
       {
         result,
-        enqueueResult,
       },
     );
   }
@@ -783,6 +676,7 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
   ): Promise<void> {
     const state = this.states.get(parentSessionId);
+    if (!state) return;
 
     const name = await this.getSubAgentName(subSessionId);
 
@@ -810,7 +704,6 @@ export class SubAgentManager implements OnModuleInit {
     options: {
       result?: SubAgentResult;
       errorMsg?: string;
-      enqueueResult?: boolean;
     },
   ): Promise<void> {
     // 如果子 Agent 不在运行中集合（已被 closeSubAgent 移除），说明是主动关闭，跳过所有后续处理
@@ -820,19 +713,15 @@ export class SubAgentManager implements OnModuleInit {
     state.running.delete(subSessionId);
 
     const isComplete = !!options.result;
+    const isError = !isComplete;
 
     // 有等待者时直接通传，不投递消息
-    if (state && state.completers.length > 0) {
+    if (state.completers.length > 0) {
       for (const completer of state.completers) {
-        if (isComplete) {
-          completer.resolve();
-        } else {
-          completer.reject(new Error(options.errorMsg));
-        }
+        completer.resolve();
       }
       state.completers = [];
 
-      // 清理空状态（completer.resolve 同步清空了 completed）
       if (state.completed.length === 0 && state.running.size === 0) {
         this.states.delete(parentSessionId);
       }
@@ -840,39 +729,60 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     // 无等待者 → 投递消息到信箱
-    if (isComplete && options.enqueueResult !== false) {
-      const content = isComplete
-        ? `${name} has completed its work.`
-        : `Sub-task "${name}" failed. Error: ${options.errorMsg}`;
+    const content = isComplete
+      ? `${name} has completed its work.`
+      : `Sub-task "${name}" failed. Error: ${options.errorMsg}`;
 
-      const source: any = { type: "sub_agent" };
-      if (isComplete) {
-        source.systemPayload = [
-          {
-            subSessionId,
-            subAgentName: name,
-            status: options.result!.status,
-            finishReason: options.result!.finishReason,
-            content:
-              safeTruncate(options.result!.content, 1000) +
-              (options.result!.content.length > 1000 ? "..." : ""),
-          },
-        ];
-      } else {
-        source.subSessionId = subSessionId;
-        source.subAgentName = name;
-        source.status = "error";
-        source.error = options.errorMsg;
-      }
-
-      await this.chatRunnerService
-        .enqueueMessage({ sessionId: parentSessionId, userId, content, source })
-        .catch((error) => {
-          this.logger.error(`投递子Agent结果失败: ${subSessionId}`, error);
-        });
+    const source: any = { type: "sub_agent" };
+    if (isComplete) {
+      source.systemPayload = [
+        {
+          subSessionId,
+          subAgentName: name,
+          status: options.result!.status,
+          finishReason: options.result!.finishReason,
+          content:
+            safeTruncate(options.result!.content, 1000) +
+            (options.result!.content.length > 1000 ? "..." : ""),
+        },
+      ];
+    } else {
+      source.subSessionId = subSessionId;
+      source.subAgentName = name;
+      source.status = "error";
+      source.error = options.errorMsg;
     }
 
-    // 清理空状态（有等待者时由 completer resolve 负责，无等待者时 completed 尚未消费，无需在此清理）
+    await this.chatRunnerService
+      .enqueueMessage({
+        sessionId: parentSessionId,
+        userId,
+        content,
+        source,
+        isValid: () => {
+          const s = this.states.get(parentSessionId);
+          return (
+            !!s && s.completed.some((c) => c.subSessionId === subSessionId)
+          );
+        },
+        onConsumed: () => {
+          const s = this.states.get(parentSessionId);
+          if (!s) return;
+          s.completed = s.completed.filter(
+            (c) => c.subSessionId !== subSessionId,
+          );
+          if (
+            s.completed.length === 0 &&
+            s.completers.length === 0 &&
+            s.running.size === 0
+          ) {
+            this.states.delete(parentSessionId);
+          }
+        },
+      })
+      .catch((error) => {
+        this.logger.error(`投递子Agent结果失败: ${subSessionId}`, error);
+      });
   }
 
   /**
@@ -934,8 +844,8 @@ export class SubAgentManager implements OnModuleInit {
           },
           {
             onEvent: (event) => {
-              // 只关注 finish 事件，它携带该轮迭代的完整累计内容
-              if (event.type === "finish") {
+              // turn_end 事件携带整个 ReAct 循环结束后的完整 content + 归一化原因
+              if (event.type === "turn_end") {
                 capturedResult = {
                   subSessionId,
                   status: event.error ? "error" : "completed",

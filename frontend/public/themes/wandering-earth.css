@@ -484,6 +484,120 @@ html.dark[data-theme="wandering-earth"] .el-dialog__footer {
   border-top: 1px dashed var(--color-border);
   padding-top: 12px;
 }
+
+/* ============================================================
+   弹窗动画：高科技面板启动——框架从中心放大展开（轻微回弹），
+   内容延迟 140ms 浮现，一道琥珀扫描线扫过面板（系统自检感）。
+
+   机制：Element Plus 弹窗动画 = @keyframes dialog-fade-in/out，
+   同名 keyframes 后定义者胜——本主题 CSS 加载在 element-plus
+   之后，激活期间覆盖默认 fade+位移；切换主题后自动恢复默认，
+   对其他主题零影响。动画仍挂在原元素（.el-overlay-dialog）上，
+   Vue transition 的 animationend 识别不受影响。
+   ============================================================ */
+@keyframes dialog-fade-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes dialog-fade-out {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.92); }
+}
+@keyframes we-content-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes we-scan {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(260%); }
+}
+
+/* 框架展开：0.28s + 缓出（回弹由 keyframes 的 1.02 提供） */
+html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-overlay-dialog {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+html.dark[data-theme="wandering-earth"] .dialog-fade-leave-active .el-overlay-dialog {
+  animation-duration: 0.16s;
+  animation-timing-function: ease-in;
+}
+
+/* 内容延迟浮现（backwards 填充：延迟期间保持初始不可见） */
+html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__header,
+html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__body,
+html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__footer {
+  animation: we-content-in 0.22s ease-out 0.14s backwards;
+}
+
+/* 琥珀扫描线：自上而下扫过面板一次，入场结束后随类名移除自动消失 */
+html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 40%;
+  background: linear-gradient(180deg, transparent, rgba(217, 154, 78, 0.14), transparent);
+  animation: we-scan 0.45s ease-out 0.05s backwards;
+  pointer-events: none;
+}
+
+/* 无障碍：减少动态时降级为极简过渡 */
+@media (prefers-reduced-motion: reduce) {
+  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-overlay-dialog,
+  html.dark[data-theme="wandering-earth"] .dialog-fade-leave-active .el-overlay-dialog {
+    animation-duration: 0.01s;
+  }
+  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__header,
+  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__body,
+  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__footer,
+  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog::after {
+    animation: none;
+  }
+}
+
+/* 输入框：方形终端输入 */
+html.dark[data-theme="wandering-earth"] .el-message-box .el-input__wrapper {
+  border-radius: 0;
+}
+/* 按钮区：虚线刻度分隔 */
+html.dark[data-theme="wandering-earth"] .el-message-box__btns {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 12px !important;
+}
+
+/* MessageBox 入场动画：与 Dialog 一致的「面板启动」。
+   msgbox-fade-in 同名覆盖（leave 时 element-plus 用 reverse
+   播放，自然得到缩小淡出） */
+@keyframes msgbox-fade-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-overlay-message-box {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+html.dark[data-theme="wandering-earth"] .fade-in-linear-leave-active .el-overlay-message-box {
+  animation-duration: 0.16s;
+}
+html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__header,
+html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__content,
+html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__btns {
+  animation: we-content-in 0.22s ease-out 0.14s backwards;
+}
+html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 40%;
+  background: linear-gradient(180deg, transparent, rgba(217, 154, 78, 0.14), transparent);
+  animation: we-scan 0.45s ease-out 0.05s backwards;
+  pointer-events: none;
+}
 /* ============================================================
    MessageBox（确认 / 输入框）：与 Dialog 同一套授权面板语言。
    注意 EP 对 .el-message-box 默认 overflow:hidden（会裁掉
@@ -492,8 +606,9 @@ html.dark[data-theme="wandering-earth"] .el-dialog__footer {
 html.dark[data-theme="wandering-earth"] .el-message-box {
   position: relative;
   overflow: visible;
-  border: 1px solid var(--color-primary);
-  border-top: 3px solid var(--color-primary);
+  /* style.css 的边框带 !important，这里必须同级对抗 */
+  border: 1px solid var(--color-primary) !important;
+  border-top: 3px solid var(--color-primary) !important;
   border-radius: 0 !important;
   background: var(--color-surface) !important;
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55) !important;
@@ -523,7 +638,8 @@ html.dark[data-theme="wandering-earth"] .el-message-box__title {
 html.dark[data-theme="wandering-earth"] .el-message-box__title:empty {
   display: none;
 }
-/* 关闭键：同 Dialog——dock 在顶边上方右侧的小牌，与标题牌齐平 */
+/* 关闭键：dock 在顶边上方右侧，与标题牌齐平——但无框无底，
+   只是一个漂浮的琥珀 X（带边框会和标题牌凑成"兔子耳朵"） */
 html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn {
   top: -23px !important;
   right: -1px !important;
@@ -535,19 +651,15 @@ html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-primary);
-  border-bottom: none;
-  transition: background 0.15s ease;
+  background: transparent;
+  border: none;
 }
 html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn .el-message-box__close {
   color: var(--color-primary);
-}
-html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn:hover {
-  background: var(--color-primary);
+  transition: color 0.15s ease;
 }
 html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn:hover .el-message-box__close {
-  color: var(--color-primary-text);
+  color: var(--color-primary-hover);
 }
 html.dark[data-theme="wandering-earth"] .el-tag {
   border-radius: 0;

@@ -1216,6 +1216,11 @@ onMounted(() => {
           }
           // Shift+Enter 换行，Enter 发送消息
           if (event.key === 'Enter' && !event.shiftKey) {
+            // 与发送按钮相同的禁用条件
+            if (props.readonly || !inputContent.value.trim() || !props.config?.modelId) {
+              event.preventDefault();
+              return true;
+            }
             event.preventDefault();
             sendMessage();
             return true;
@@ -1550,6 +1555,11 @@ defineExpose({ insertText, insertBadge });
 .send-btn:disabled {
   background-color: var(--color-text-disabled);
   cursor: not-allowed;
+  /* 禁用态可读性：主题色系的禁用底色只是"淡化的主题色"（如涂鸦本的
+     米色、蒸汽朋克的黄铜色），看不出"关"。降不透明度 + 去饱和，
+     任何主题下都能一眼区分 */
+  opacity: 0.45;
+  filter: saturate(0.4);
 }
 
 .send-btn.stop-btn {

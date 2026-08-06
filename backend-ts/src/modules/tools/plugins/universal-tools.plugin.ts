@@ -107,6 +107,10 @@ export class UniversalToolsPlugin extends PluginBase {
           session,
           signal,
         );
+        // 透传 images，让 ToolExecutor 注入为隐藏 user 消息（多模态图片返回）
+        if (result.images && result.images.length > 0) {
+          return { content: result.content, images: result.images };
+        }
         return result.content;
       },
       display: { actionType: "tool_use", argsKey: "tool_name", icon: "tool" },

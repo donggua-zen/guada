@@ -31,6 +31,10 @@ export interface QueueItem {
   source: Record<string, any>;
   createdAt: Date;
   callbacks?: StreamCallbacks;
+  /** 有效性检查：返回 false 时 processQueue 丢弃此消息 */
+  isValid?: () => boolean;
+  /** 消息被消费后回调（startStream 成功后调用） */
+  onConsumed?: () => void;
 }
 
 /**
@@ -274,8 +278,10 @@ export class ChatRunnerService {
     content: string;
     source: Record<string, any>;
     callbacks?: StreamCallbacks;
+    isValid?: () => boolean;
+    onConsumed?: () => void;
   }): Promise<void> {
-    const { sessionId, userId, content, source, callbacks } = params;
+    const { sessionId, userId, content, source, callbacks, isValid, onConsumed } = params;
 
     const queueItem: QueueItem = {
       id: `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -285,6 +291,8 @@ export class ChatRunnerService {
       source,
       createdAt: new Date(),
       callbacks,
+      isValid,
+      onConsumed,
     };
 
     const queueState = this.getOrCreateQueueState(sessionId);
@@ -329,6 +337,17 @@ export class ChatRunnerService {
         this.logger.warn(`会话 ${sessionId} 在队列处理期间被占用，暂停消费`);
         return;
       }
+
+      // 过滤掉已失效的消息（被 poll/drain 等其他路径消费过）
+      state.items = state.items.filter((item) => {
+        if (item.isValid && !item.isValid()) {
+          this.logger.debug(`丢弃已失效的队列消息: ${item.id}`);
+          return false;
+        }
+        return true;
+      });
+
+      if (state.items.length === 0) return;
 
       // 提取队首连续同来源的消息进行合并
       const firstSourceType = state.items[0].source.type;
@@ -477,6 +496,10 @@ export class ChatRunnerService {
         },
         callbacks,
       );
+      // 派发成功 → 通知调用方资源可释放
+      for (const item of items) {
+        item.onConsumed?.();
+      }
     } catch (error: any) {
       const code = error?.response?.code || error?.code;
 
@@ -491,6 +514,10 @@ export class ChatRunnerService {
       }
 
       this.logger.error(`执行队列消息失败: ${firstItem.id}`, error);
+      // 非忙碌错误也视为已消费，避免消息卡死
+      for (const item of items) {
+        item.onConsumed?.();
+      }
     }
   }
 

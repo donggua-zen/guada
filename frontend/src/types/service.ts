@@ -38,9 +38,10 @@ export type StreamEvent =
     | StreamCreateEvent
     | StreamThinkEvent
     | StreamToolCallEvent
-    | StreamToolCallsResponseEvent  // 新增
+    | StreamToolCallsResponseEvent
     | StreamTextEvent
     | StreamFinishEvent
+    | StreamTurnEndEvent
     | StreamCompressionStartEvent
     | StreamCompressionErrorEvent
     | StreamSubAgentStartEvent       // 新增
@@ -102,13 +103,32 @@ export interface StreamTextEvent {
 }
 
 /**
- * 完成事件
+ * 完成事件（每轮 LLM 调用结束）
  */
 export interface StreamFinishEvent {
     type: 'finish'
     usage?: TokenUsage
-    finishReason: string  // 驼峰式
+    finishReason: string
     error?: string
+}
+
+/**
+ * 轮次结束事件（整个 ReAct 循环结束）
+ * 携带归一化结束原因 + 最终 content
+ */
+export interface StreamTurnEndEvent {
+    type: 'turn_end'
+    content?: string
+    reasoningContent?: string
+    usage?: TokenUsage
+    finishReason: string
+    error?: string
+    messageId?: string
+    contentId?: string
+    contextStats?: {
+        usedTokens: number
+        effectiveContextWindow: number
+    }
 }
 
 /**

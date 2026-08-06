@@ -214,9 +214,14 @@ export class AgentEngine {
     // 回合拦截器触发次数（防止无限循环）
     let interceptorCount = 0;
     const MAX_INTERCEPTOR_ITERATIONS = 3;
-    let finalFinishReason = "stop";
     let finalError: string | undefined;
     let finalUsage: any;
+    let finalContent = "";
+    let finalReasoningContent: string | undefined;
+    let finalContentId: string | undefined;
+    // 业务层结束原因：完全独立于上游适配器的 finishReason
+    // 上游 finishReason 留在 MessageContent.metadata 供审计，不参与业务判断
+    let businessReason: string | undefined;
     do {
       iterationCount++;
       needToContinue = false;
@@ -330,7 +335,6 @@ export class AgentEngine {
             const yieldEvent = this.toEventChunk(
               chunk,
               accumulated,
-              undefined,
               assistantResponse.contentId,
             );
             if (yieldEvent) {
@@ -375,21 +379,34 @@ export class AgentEngine {
             `Stream error in agent loop:${streamError.message}`,
             streamError.stack,
           );
-          this.handleStreamError(
-            assistantResponse,
-            currentTurnThinkingInfo,
-            streamError,
-          );
+          // 记录思考结束（异常路径仍需正确追踪思考时长）
+          this.recordThinkingFinished(currentTurnThinkingInfo, "stream error");
+          // 业务层：异常终止（区分用户取消和真实错误）
+          if (
+            streamError.name === "AbortError" ||
+            streamError.message.toLowerCase().includes("abort")
+          ) {
+            businessReason = "user_cancel";
+          } else if (
+            streamError.message.includes("timed out") ||
+            streamError.message.includes("timeout")
+          ) {
+            businessReason = "timeout";
+            finalError = streamError.message;
+          } else if (streamError instanceof RateLimitError) {
+            businessReason = "rate_limited";
+            finalError = streamError.message;
+          } else {
+            businessReason = "error";
+            finalError = streamError.message;
+          }
         }
 
         // LLM SDK 收到 abort 信号后可能直接关闭流（不抛异常），需手动检测
         if (!streamAborted && abortSignal?.aborted) {
           streamAborted = true;
-          this.handleStreamError(
-            assistantResponse,
-            currentTurnThinkingInfo,
-            new Error("AbortError"),
-          );
+          this.recordThinkingFinished(currentTurnThinkingInfo, "abort signal");
+          businessReason = "user_cancel";
         }
 
         // 流结束后计算思考时长（仅一次，确保在所有 recordThinkingFinished 调用之后）
@@ -436,21 +453,6 @@ export class AgentEngine {
           await sessionContext.appendParts(parts);
           parts.length = 0;
         }
-
-        // 发送 finish 事件
-        yield {
-          type: "finish",
-          finishReason: assistantResponse.metadata?.finishReason || "error",
-          error: streamAborted
-            ? assistantResponse.metadata?.error || "Stream aborted"
-            : undefined,
-          usage: assistantResponse.metadata?.usage,
-          contentId: assistantResponse.contentId,
-          contextStats: {
-            usedTokens: sessionContext.getTokenCount(),
-            effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
-          },
-        };
       }
 
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
@@ -463,32 +465,9 @@ export class AgentEngine {
             `工具调用达到最大轮次限制 (${MAX_TOOL_ITERATIONS})，暂停执行等待用户确认`,
           );
 
-          // 保存断点标记到 metadata
-          if (!assistantResponse.metadata) {
-            assistantResponse.metadata = {};
-          }
-          assistantResponse.metadata.finishReason = "max_iterations_reached";
-
-          // 发送特殊 finish 事件，通知前端显示继续按钮
-          yield {
-            type: "finish",
-            finishReason: "max_iterations_reached",
-            message: `已达到最大工具调用轮次限制（${MAX_TOOL_ITERATIONS} 轮），是否继续执行？`,
-            progress: {
-              completedIterations: iterationCount,
-              maxIterations: MAX_TOOL_ITERATIONS,
-            },
-            usage: assistantResponse.metadata?.usage,
-            contextStats: {
-              usedTokens: sessionContext.getTokenCount(),
-              effectiveContextWindow:
-                sessionContext.getEffectiveContextWindow(),
-            },
-          };
-
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await sessionContext.appendParts(parts);
-          finalFinishReason = "max_iterations_reached";
+          businessReason = "max_iterations_reached";
           finalUsage = assistantResponse.metadata?.usage;
           break;
         }
@@ -504,16 +483,7 @@ export class AgentEngine {
         if (execResult.approvalContext) {
           assistantResponse.metadata.approvalContext =
             execResult.approvalContext;
-          yield {
-            type: "finish",
-            finishReason: "approval_required",
-            usage: assistantResponse.metadata?.usage,
-            contextStats: {
-              usedTokens: sessionContext.getTokenCount(),
-              effectiveContextWindow:
-                sessionContext.getEffectiveContextWindow(),
-            },
-          };
+          businessReason = "approval_required";
           needToContinue = false;
         } else if (execResult.toolParts.length > 0) {
           yield execResult.toolEvent!;
@@ -540,11 +510,9 @@ export class AgentEngine {
       );
 
       // 【回合拦截器】仅在正常结束时检查
-      const finishReason = assistantResponse.metadata?.finishReason;
+      // 正常结束 = 无业务原因（businessReason 未设置）+ 无 needToContinue + 无 abort
       const isNormalFinish =
-        !needToContinue &&
-        !abortSignal?.aborted &&
-        (finishReason === "stop" || !finishReason);
+        !needToContinue && !abortSignal?.aborted && !businessReason;
 
       if (
         isNormalFinish &&
@@ -558,16 +526,28 @@ export class AgentEngine {
         needToContinue = true;
       }
 
-      finalFinishReason = assistantResponse.metadata?.finishReason || "stop";
-      finalError = assistantResponse.metadata?.error;
       finalUsage = assistantResponse.metadata?.usage;
+      finalContent =
+        typeof assistantResponse.content === "string"
+          ? assistantResponse.content
+          : "";
+      finalReasoningContent =
+        typeof assistantResponse.reasoningContent === "string"
+          ? assistantResponse.reasoningContent
+          : undefined;
+      finalContentId = assistantResponse.contentId;
     } while (needToContinue);
+
+    // 业务层结束原因：完全独立于上游适配器
+    // businessReason 在各业务决策点设置（abort/审批/最大轮次/频率限制/异常）
+    // 未设置 → 模型正常结束 → "stop"
+    const finalFinishReason = businessReason || "stop";
 
     // 保存结束信息到 Message 级别 metadata
     const loopDuration = Date.now() - loopStartTime;
     const finishMeta: Record<string, any> = {
       finishReason: finalFinishReason,
-      ...(finalError ? { error: finalError } : {}),
+      ...(finalError ? { errorDetail: finalError } : {}),
       ...(finalUsage ? { usage: finalUsage } : {}),
     };
     await sessionContext.finalizeMessage(
@@ -577,6 +557,23 @@ export class AgentEngine {
     );
 
     await sessionContext.persist();
+
+    // 发送 turn_end 事件：整个 ReAct 循环结束后的收尾信号
+    // 携带归一化结束原因 + 最终 content，供下游（SubAgent/BotOrchestrator/前端）消费
+    yield {
+      type: "turn_end",
+      content: finalContent || undefined,
+      reasoningContent: finalReasoningContent,
+      finishReason: finalFinishReason,
+      error: finalError,
+      usage: finalUsage,
+      messageId: responseMessageId,
+      contentId: finalContentId,
+      contextStats: {
+        usedTokens: sessionContext.getTokenCount(),
+        effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
+      },
+    };
   }
 
   /**
@@ -713,7 +710,6 @@ export class AgentEngine {
   private toEventChunk(
     chunk: LLMResponseChunk,
     accumulated?: LLMResponseChunk,
-    runtime?: any,
     contentId?: string,
   ): EventChunk | null {
     // 优先使用显式 type，兼容旧数据无 type 时的字段推断
@@ -747,54 +743,6 @@ export class AgentEngine {
       usage: chunk.usage,
       contentId: contentId,
     } as EventChunk;
-  }
-
-  /**
-   * 处理流式错误
-   *
-   * 根据错误类型分类处理，设置相应的 finishReason 和 error 信息。
-   * 支持的错误类型：
-   * - 用户中止（AbortError）：客户端主动断开连接
-   * - 超时错误：LLM 请求超过设定时间
-   * - API 错误：模型服务商返回的错误或其他运行时异常
-   *
-   * @param currentChunk 当前正在构建的消息记录（会被原地修改）
-   * @param currentTurnThinkingInfo 当前轮次的思考时间信息对象
-   * @param streamError 捕获到的错误对象
-   */
-  private handleStreamError(
-    currentChunk: MessageRecord,
-    currentTurnThinkingInfo: ThinkingTimeInfo,
-    streamError: Error,
-  ): void {
-    if (!currentChunk.metadata) {
-      currentChunk.metadata = {};
-    }
-
-    if (
-      streamError.name === "AbortError" ||
-      streamError.message.toLowerCase().includes("abort")
-    ) {
-      // 用户主动中止（客户端断开连接），标记为 user_cancel 以便前端展示友好提示
-      currentChunk.metadata.finishReason = "user_cancel";
-      currentChunk.metadata.error = undefined;
-    } else if (
-      streamError.message.includes("timed out") ||
-      streamError.message.includes("timeout")
-    ) {
-      // 超时错误，标记为 timeout 并记录详细错误信息
-      currentChunk.metadata.finishReason = "timeout";
-      currentChunk.metadata.error = streamError.message;
-    } else if (streamError instanceof RateLimitError) {
-      // 429 限流错误（重试已耗尽），标记为 rate_limited 以便前端展示继续按钮
-      currentChunk.metadata.finishReason = "rate_limited";
-      currentChunk.metadata.error = streamError.message;
-    } else {
-      // 其他 API 错误或运行时错误，标记为 error 并记录完整错误消息
-      currentChunk.metadata.finishReason = "error";
-      currentChunk.metadata.error = streamError.message;
-    }
-    this.recordThinkingFinished(currentTurnThinkingInfo, "api error");
   }
 
   /**

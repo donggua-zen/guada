@@ -3,7 +3,10 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { z } from "zod";
-import { ProcessManagerService, SandboxOptions } from "./process-manager.service";
+import {
+  ProcessManagerService,
+  SandboxOptions,
+} from "./process-manager.service";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 
@@ -130,14 +133,8 @@ export class ShellPlugin extends PluginBase {
             if (execResult.output) {
               parts.push(`Latest output:\n---\n${execResult.output}\n---`);
             }
-            parts.push(`[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`);
-            break;
-          case "stalled":
-            if (execResult.output) {
-              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
-            }
             parts.push(
-              `[⚠️ The command appears to be waiting for keyboard input. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool with action "write" to send input, or action "kill" to terminate.]`,
+              `[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`,
             );
             break;
           case "backgrounded":
@@ -150,6 +147,13 @@ export class ShellPlugin extends PluginBase {
             parts.push(bgMsg);
             break;
         }
+
+        if (execResult.truncated && execResult.logFilePath) {
+          parts.push(
+            `[Note: Output was truncated. The complete log is saved at: ${execResult.logFilePath}. You can read it using the read tool if needed.]`,
+          );
+        }
+
         return parts.join("\n\n");
       },
       display: { actionType: "shell", argsKey: "command", icon: "shell" },
@@ -231,14 +235,16 @@ export class ShellPlugin extends PluginBase {
               parts.push(`Latest output:\n---\n${result.output}\n---`);
             }
 
+            if (result.truncated && result.logFilePath) {
+              parts.push(
+                `[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the read tool if needed.]`,
+              );
+            }
+
             if (result.status === "running") {
-              if (result.stalled) {
-                parts.push(
-                  `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}. The command appears to be waiting for keyboard input. Use action "write" to send input, or action "kill" to terminate.]`,
-                );
-              } else {
-                parts.push(`[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`);
-              }
+              parts.push(
+                `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
+              );
             } else {
               parts.push(
                 `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
@@ -308,38 +314,40 @@ export class ShellPlugin extends PluginBase {
         const session = ctx.session;
         const isSubAgent = session.sessionType === "sub_agent";
 
-        const processes = this.processManager.listBySession(session.sessionId);
-        if (processes.length === 0) return null;
+        // 1. 收割已完成进程的输出（不碰运行中进程的 offset）
+        const completed = await this.processManager.drainCompleted(
+          session.sessionId,
+        );
 
-        // 1. 对所有进程执行 poll(0) 收集未接收的输出
-        const pollOutputs: string[] = [];
-        const stillRunning: typeof processes = [];
-        for (const proc of processes) {
-          const result = await this.processManager.poll(
-            proc.id,
-            0,
-            session.sessionId,
-          );
-          if (!result) continue;
-          if (result.output) {
-            pollOutputs.push(
-              `[Process ${proc.id} (${proc.command}) new output]:\n${result.output}`,
-            );
-          }
-          // 仅子 Agent 检查 running 状态（主 Agent 允许后台运行，等待异步注入）
-          if (isSubAgent && result.status === "running") {
-            stillRunning.push(proc);
-          }
-        }
+        // 2. 子 Agent 检查是否有运行中的进程
+        const stillRunning = isSubAgent
+          ? this.processManager
+              .listBySession(session.sessionId)
+              .filter((p) => p.status === "running")
+          : [];
 
-        // 2. 无新输出且（子 Agent 无运行中进程）→ 不拦截
-        if (pollOutputs.length === 0 && stillRunning.length === 0) return null;
+        // 3. 无已完成输出且无运行中进程 → 不拦截
+        const hasOutput = completed.some((r) => r.output);
+        if (!hasOutput && stillRunning.length === 0) return null;
 
-        // 3. 组装消息
+        // 4. 组装消息
         const parts: string[] = [];
-        if (pollOutputs.length > 0) {
-          parts.push(pollOutputs.join("\n\n"));
+
+        for (const result of completed) {
+          if (!result.output) continue;
+          const exitInfo =
+            result.status === "completed"
+              ? ` exitcode:${result.exitCode}`
+              : "";
+          const truncNote =
+            result.truncated && result.logFilePath
+              ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the run_command tool if needed.]`
+              : "";
+          parts.push(
+            `[Process ${result.processId},status:${result.status}${exitInfo}]:\nnew Output:\n${result.output}${truncNote}`,
+          );
         }
+
         if (stillRunning.length > 0) {
           const list = stillRunning
             .map((p) => `- \`${p.id}\` (${p.command})`)
@@ -348,6 +356,8 @@ export class ShellPlugin extends PluginBase {
             `You have ${stillRunning.length} unfinished background processes:\n${list}\n\nYou must use the process tool to check their status (poll), wait for them to complete or terminate them (kill) before ending the current task.`,
           );
         }
+
+        if (parts.length === 0) return null;
 
         return `<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`;
       },

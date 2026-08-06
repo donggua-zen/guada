@@ -78,8 +78,14 @@ const updatePosition = () => {
   }
 };
 
+let lastScrollY = 0;
+let lastScrollX = 0;
+let elementScrollPositions = new WeakMap<Element, { top: number; left: number }>();
+
 const startScrollTracking = () => {
-  // 监听所有滚动事件，滚动时关闭菜单
+  lastScrollY = window.scrollY;
+  lastScrollX = window.scrollX;
+  elementScrollPositions = new WeakMap();
   window.addEventListener('scroll', handleScrollClose, true);
 };
 
@@ -87,8 +93,29 @@ const stopScrollTracking = () => {
   window.removeEventListener('scroll', handleScrollClose, true);
 };
 
-const handleScrollClose = () => {
-  closeDropdown();
+const handleScrollClose = (event: Event) => {
+  const target = event.target;
+
+  // Document/window scroll
+  if (target === document || target === window) {
+    if (window.scrollY !== lastScrollY || window.scrollX !== lastScrollX) {
+      closeDropdown();
+    }
+    return;
+  }
+
+  // Element scroll
+  if (target instanceof Element) {
+    const current = { top: target.scrollTop, left: target.scrollLeft };
+    const prev = elementScrollPositions.get(target);
+    if (!prev) {
+      elementScrollPositions.set(target, current);
+      return;
+    }
+    if (prev.top !== current.top || prev.left !== current.left) {
+      closeDropdown();
+    }
+  }
 };
 
 

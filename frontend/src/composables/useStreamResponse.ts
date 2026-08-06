@@ -454,9 +454,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       metadata.usage = response.usage;
     }
 
-  
-    metadata.finishReason = response.finishReason;
-    metadata.error = response.error;
+    // 上游 finishReason（end_turn/stop 等）留在 content 供审计
+    if (response.finishReason) {
+      metadata.finishReason = response.finishReason;
+    }
 
     content.metadata = metadata;
 
@@ -471,6 +472,38 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     // 更新状态
     content.state.isStreaming = false;
     content.state.isThinking = false;
+  }
+
+  /**
+   * 处理 turn_end 事件：整个 ReAct 循环结束
+   * 更新 Message 级别 metadata（finishReason/errorDetail/usage），不触碰 content
+   */
+  function handleTurnEnd(
+    response: StreamResponse,
+    message: Message | null,
+  ): void {
+    if (!message) return;
+
+    // 写入 Message 级别 metadata
+    const msgMeta = message.metadata || {};
+    if (response.finishReason) {
+      msgMeta.finishReason = response.finishReason;
+    }
+    if (response.error) {
+      msgMeta.errorDetail = response.error;
+    }
+    if (response.usage) {
+      msgMeta.usage = response.usage;
+    }
+    message.metadata = msgMeta;
+
+    // 停止总耗时计时器
+    stopDurationTimer(message);
+
+    // 更新会话流状态
+    if (response.contextStats) {
+      updateTokenStatsFromSSE(response.contextStats);
+    }
   }
 
   /**
@@ -578,6 +611,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         if (response.type === "finish") {
           handleStreamFinish(response, message, contentIndex);
+          responseContent = "";
+          thinkingContent = "";
+          continue;
+        }
+
+        if (response.type === "turn_end") {
+          handleTurnEnd(response, message);
           responseContent = "";
           thinkingContent = "";
           continue;

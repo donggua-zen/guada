@@ -70,15 +70,6 @@ interface ProcessEntry {
   readOffset: number;
   /** 日志写入流 */
   writeStream: fsSync.WriteStream;
-  /** 最近输出的尾部（用于 stall 检测模式匹配，仅保留 500 字符） */
-  recentTail: string;
-  /** 进程结束时是否投递系统消息到信箱（默认 true） */
-  notify: boolean;
-  lastOutputAt: Date;
-  /** Stall watchdog 定时器 */
-  stallTimer: ReturnType<typeof setTimeout> | null;
-  /** 是否已发送 stall 通知（防重复） */
-  stallNotified: boolean;
   /** 无 poll 等待者时，进程结束后的异步投递 promise（poll 检测到则 await 后从队列取） */
   exitPromise?: Promise<void>;
   /** 元数据 */
@@ -96,10 +87,10 @@ export interface PollResult {
   waitMs: number;
   /** 进程已运行时长（毫秒） */
   uptimeMs: number;
-  /** poll 因 stall 检测提前返回时为 true */
-  stalled?: boolean;
   /** 本次 poll 读取的输出是否发生了截断 */
   truncated?: boolean;
+  /** 日志文件路径（截断时可用于提示 AI 读取完整日志） */
+  logFilePath?: string;
 }
 
 export type ExecuteResult =
@@ -110,6 +101,8 @@ export type ExecuteResult =
       processStatus: ProcessStatus;
       uptimeMs: number;
       waitMs: number;
+      truncated?: boolean;
+      logFilePath?: string;
     }
   | {
       kind: "backgrounded";
@@ -117,13 +110,8 @@ export type ExecuteResult =
       output: string;
       uptimeMs: number;
       waitMs: number;
-    }
-  | {
-      kind: "stalled";
-      processId: string;
-      output: string;
-      uptimeMs: number;
-      waitMs: number;
+      truncated?: boolean;
+      logFilePath?: string;
     };
 
 export interface ProcessListEntry {
@@ -165,8 +153,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly MAX_CHARS = 10_000;
   /** 截断后最大行数 */
   private readonly MAX_LINES = 80;
-  /** Stall watchdog 超时（45秒无输出触发检测） */
-  private readonly STALL_TIMEOUT_MS = 45_000;
   /** GC 最大文件年龄（10天） */
   private readonly GC_MAX_AGE_DAYS = 10;
   /** GC 扫描间隔（2小时） */
@@ -175,20 +161,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly LOG_DIR_NAME = "guada-logs";
   /** sandbox 二进制路径缓存（避免每次执行都搜索） */
   private sandboxBinPath: string | null | undefined;
-
-  /** 交互提示符模式 — 用于判断进程是否在等待键盘输入 */
-  private static readonly PROMPT_PATTERNS = [
-    /\(y\/n\)/i,
-    /\[y\/n\]/i,
-    /\(yes\/no\)/i,
-    /\[yes\/no\]/i,
-    /Press (any key|Enter)/i,
-    /press any key to continue/i,
-    /Do you want to/i,
-    /Are you sure/i,
-    /Continue\?/i,
-    /Confirm\?/i,
-  ];
 
   /** 截断提示（追加到截断后的输出末尾） */
   private static readonly TRUNCATION_REMINDER =
@@ -291,11 +263,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       logFilePath,
       readOffset: 0,
       writeStream,
-      recentTail: "",
-      notify: true,
-      lastOutputAt: new Date(),
-      stallTimer: null,
-      stallNotified: false,
       startedAt: new Date(),
     };
 
@@ -305,10 +272,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     // stdout/stderr → PassThrough 合流 → SanitizerTransform → writeStream
     const merger = new PassThrough();
-    const sanitizerTransform = new SanitizerTransform(encoding, (cleaned) => {
-      entry.recentTail = (entry.recentTail + cleaned).slice(-500);
-      this.onOutput(entry);
-    });
+    const sanitizerTransform = new SanitizerTransform(encoding);
     merger.pipe(sanitizerTransform).pipe(writeStream);
 
     // 两个 stdio 流都结束时关闭 merger → 触发 Transform _flush → writeStream.end()
@@ -346,8 +310,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
     this.sessionProcesses.get(sessionId)!.set(processId, entry);
 
-    this.resetStallTimer(entry);
-
     this.logger.log(
       `进程已转入后台: ${processId}, 命令: ${command.substring(0, 80)}`,
     );
@@ -362,7 +324,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * - 进程在 timeout 内结束且输出未截断 → 删除日志文件
    * - 进程在 timeout 内结束但输出截断 → 保留日志文件，output 末尾追加路径提示
    * - 进程超时仍在运行 → 转入后台，返回 processId
-   * - 进程 stall（等待键盘输入） → 返回 processId
    *
    * 后台模式（background=true）：跳过 poll，立即返回 processId。
    */
@@ -431,8 +392,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (pollResult.status !== "running") {
         if (!pollResult.truncated && logFilePath) {
           await fs.unlink(logFilePath).catch(() => {});
-        } else if (pollResult.truncated && logFilePath) {
-          pollResult.output += `\n[Note: Output was truncated. The complete log is saved at: ${logFilePath}. You can read it using the run_command tool if needed.]`;
         }
         return {
           kind: "completed",
@@ -441,17 +400,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
           processStatus: pollResult.status,
           uptimeMs: pollResult.uptimeMs,
           waitMs: pollResult.waitMs,
-        };
-      }
-
-      // Stall 检测
-      if (pollResult.stalled) {
-        return {
-          kind: "stalled",
-          processId,
-          output: pollResult.output,
-          uptimeMs: pollResult.uptimeMs,
-          waitMs: pollResult.waitMs,
+          truncated: pollResult.truncated,
+          logFilePath: pollResult.truncated ? logFilePath : undefined,
         };
       }
 
@@ -462,6 +412,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         output: pollResult.output,
         uptimeMs: pollResult.uptimeMs,
         waitMs: pollResult.waitMs,
+        truncated: pollResult.truncated,
+        logFilePath: pollResult.truncated ? logFilePath : undefined,
       };
     } finally {
       options.abortSignal?.removeEventListener("abort", onAbort);
@@ -495,7 +447,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     entry.status = "killed";
     entry.finishedAt = new Date();
 
-    this.clearStallWatchdog(entry);
     this.pollNotifier.notify(entry.id);
 
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
@@ -518,18 +469,17 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     sessionId?: string,
     abortSignal?: AbortSignal,
   ): Promise<PollResult | null> {
-    // 0 = 立即返回（不等待），用于拦截器等内部非阻塞场景
-    // Agent 调用时的最小值限制由插件入口处理
-
     const entry = this.processes.get(processId);
     if (!entry) {
-      return this.pollFromQueue(processId, sessionId);
+      // entry 不存在 = 已被消费或从未创建
+      return null;
     }
 
-    // 进程已结束且 enqueue 路径在进行中 → 等它完成后从队列取
+    // 进程已结束且 enqueue 路径在进行中 → 等它完成
     if (entry.exitPromise) {
       await entry.exitPromise;
-      return this.pollFromQueue(processId, sessionId);
+      // enqueue 完成后 entry 可能已被 processQueue 消费删除
+      if (!this.processes.has(processId)) return null;
     }
 
     // 进程已结束 → 确保日志落盘后读取
@@ -557,7 +507,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     // 等待期间进程可能已结束 → 检查 enqueue 是否在进行
     if (entry.exitPromise) {
       await entry.exitPromise;
-      return this.pollFromQueue(processId, sessionId);
+      if (!this.processes.has(processId)) return null;
     }
 
     // 进程已结束但无 enqueue 在进行 → 确保日志落盘
@@ -565,11 +515,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       await finished(entry.writeStream).catch(() => {});
     }
 
-    const result = await this.buildPollResult(entry, waitSeconds);
-    if (entry.stallNotified) {
-      result.stalled = true;
-    }
-    return result;
+    return this.buildPollResult(entry, waitSeconds);
   }
 
   /**
@@ -591,6 +537,32 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return result;
+  }
+
+  /**
+  /**
+   * 收割已完成进程的输出（不碰运行中进程的 offset）。
+   * 用于拦截器等场景：只取已完成进程的剩余输出，运行中的不处理。
+   *
+   * entry 未被消费前一直在内存中，直接从 entry 读取即可。
+   * 消息留在队列中，entry 被删除后 isValid() 返回 false，processQueue 自动丢弃。
+   */
+  async drainCompleted(
+    sessionId: string,
+  ): Promise<PollResult[]> {
+    const results: PollResult[] = [];
+
+    for (const entry of this.processes.values()) {
+      if (entry.sessionId !== sessionId) continue;
+      if (entry.status === "running") continue;
+
+      // 已完成 → 确保日志落盘后读取
+      await finished(entry.writeStream).catch(() => {});
+      const result = await this.buildPollResult(entry, 0);
+      results.push(result);
+    }
+
+    return results;
   }
 
   /**
@@ -739,16 +711,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 有输出时的处理：更新最后输出时间 + 重置 stall 状态 + 重启看门狗 */
-  private onOutput(entry: ProcessEntry): void {
-    entry.lastOutputAt = new Date();
-    if (entry.stallNotified) {
-      entry.stallNotified = false;
-      this.removeStallNotification(entry);
-    }
-    this.resetStallTimer(entry);
-  }
-
   // ── 文件读取 & 截断 ──
 
   /**
@@ -868,13 +830,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   ): Promise<PollResult> {
     const { output, truncated } = await this.readIncrementalOutput(entry);
 
-    // AI poll 接收了消息 → 从信箱撤回
-    this.chatRunnerService.peekQueuedMessage(
-      entry.sessionId,
-      (item) => item.source?.processId === entry.id,
-    );
-
-    // 进程已结束 → 立即清理
+    // 进程已结束 → 立即清理（消息留在队列中，isValid 会返回 false 被 processQueue 丢弃）
     if (entry.status !== "running") {
       this.cleanupProcess(entry.id, entry.sessionId);
     }
@@ -890,35 +846,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       waitMs: waitSeconds * 1000,
       uptimeMs,
       truncated,
+      logFilePath: entry.logFilePath,
     };
   }
 
-  /** 从消息队列获取已清理进程的 poll 结果 */
-  private pollFromQueue(
-    processId: string,
-    sessionId?: string,
-  ): PollResult | null {
-    if (!sessionId) return null;
-
-    const removed = this.chatRunnerService.peekQueuedMessage(
-      sessionId,
-      (item) => item.source?.processId === processId,
-    );
-    if (removed.length === 0) return null;
-
-    const payload =
-      removed[removed.length - 1].source?.systemPayload?.[0];
-    if (!payload) return null;
-
-    return {
-      processId: payload.processId,
-      status: payload.status,
-      exitCode: payload.exitCode,
-      output: payload.output || "",
-      waitMs: 0,
-      uptimeMs: 0,
-    };
-  }
 
   // ── 进程结束处理 ──
 
@@ -934,7 +865,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     entry.exitCode = exitCode;
     entry.finishedAt = new Date();
 
-    this.clearStallWatchdog(entry);
     this.logger.log(`后台进程 ${entry.id} 已结束, 退出码: ${exitCode}`);
 
     if (this.pollNotifier.hasWaiters(entry.id)) {
@@ -961,12 +891,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     await finished(entry.writeStream).catch(() => {});
 
     // 读取剩余增量
-    const { output } = await this.readIncrementalOutput(entry);
-
-    if (!entry.notify) {
-      this.cleanupProcess(entry.id, entry.sessionId);
-      return;
-    }
+    const { output, truncated } = await this.readIncrementalOutput(entry);
 
     const content = `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
 
@@ -986,111 +911,14 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
             status: entry.status,
             exitCode: entry.exitCode,
             output,
+            truncated,
+            logFilePath: entry.logFilePath,
           },
         ],
       },
-    });
-
-    // 投递后立即清理（poll 会从消息队列获取）
-    this.cleanupProcess(entry.id, entry.sessionId);
-  }
-
-  // ── Stall Watchdog ──
-
-  /** 清理 stall watchdog（定时器 + 通知撤回） */
-  private clearStallWatchdog(entry: ProcessEntry): void {
-    if (entry.stallTimer) {
-      clearTimeout(entry.stallTimer);
-      entry.stallTimer = null;
-    }
-    entry.stallNotified = false;
-    this.removeStallNotification(entry);
-  }
-
-  /** 重置 stall watchdog 定时器（每次有新输出时调用） */
-  private resetStallTimer(entry: ProcessEntry): void {
-    if (entry.stallTimer) {
-      clearTimeout(entry.stallTimer);
-    }
-    entry.stallTimer = setTimeout(() => {
-      entry.stallTimer = null;
-      this.checkStall(entry);
-    }, this.STALL_TIMEOUT_MS);
-  }
-
-  /**
-   * Stall 检测：输出停止 45 秒 + 尾部匹配交互提示符
-   * - 前台（有 poll 等待者）→ notify 唤醒 poll 提前返回
-   * - 后台（无 poll 等待者）→ 入队 stall 通知（含当前未读输出）
-   */
-  private checkStall(entry: ProcessEntry): void {
-    if (entry.status !== "running") return;
-    if (entry.stallNotified) return;
-
-    const tail = entry.recentTail;
-    if (!tail.trim()) return;
-
-    const isPrompt = ProcessManagerService.PROMPT_PATTERNS.some((pattern) =>
-      pattern.test(tail),
-    );
-    if (!isPrompt) return;
-
-    entry.stallNotified = true;
-    this.logger.log(
-      `Stall detected: process ${entry.id} appears to be waiting for keyboard input`,
-    );
-
-    if (this.pollNotifier.hasWaiters(entry.id)) {
-      this.pollNotifier.notify(entry.id);
-    } else {
-      this.enqueueStallNotification(entry).catch((err) => {
-        this.logger.error(
-          `Error enqueuing stall notification: ${err.message}`,
-        );
-      });
-    }
-  }
-
-  /** 投递 stall 通知到会话队列（含当前未读输出） */
-  private async enqueueStallNotification(
-    entry: ProcessEntry,
-  ): Promise<void> {
-    if (!entry.notify) return;
-
-    const { output } = await this.readIncrementalOutput(entry);
-
-    const content = `[交互提示] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 似乎在等待键盘输入`;
-
-    this.chatRunnerService.enqueueMessage({
-      sessionId: entry.sessionId,
-      userId: entry.userId,
-      content,
-      source: {
-        type: "process_monitor",
-        processId: entry.id,
-        event: "stall_detected",
-        systemPayload: [
-          {
-            processId: entry.id,
-            command: entry.command,
-            status: "running",
-            stalled: true,
-            output,
-            message:
-              'The process appears to be waiting for keyboard input. Use the process tool with action "write" to send input, or action "kill" to terminate. If this is a false positive, simply ignore this message.',
-          },
-        ],
-      },
+      isValid: () => this.processes.has(entry.id),
+      onConsumed: () => this.cleanupProcess(entry.id, entry.sessionId),
     });
   }
 
-  /** 从会话队列中移除指定进程的 stall 通知（去重） */
-  private removeStallNotification(entry: ProcessEntry): void {
-    this.chatRunnerService.peekQueuedMessage(
-      entry.sessionId,
-      (item) =>
-        item.source?.processId === entry.id &&
-        item.source?.event === "stall_detected",
-    );
-  }
 }
