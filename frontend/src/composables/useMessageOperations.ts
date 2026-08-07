@@ -72,9 +72,10 @@ export function useMessageOperations(
             throw new Error('当前没有活动的会话')
         }
 
-        // 分离已上传的文件和未上传的文件
+        // 分离三类文件：已上传的、需上传的、Electron本地路径引用的
         const uploadedFiles = files.filter(file => file.id && typeof file.id === 'string' && file.id.length > 10)
-        const filesWithContent = files.filter(file => file.file && !uploadedFiles.includes(file))
+        const localPathFiles = files.filter(file => file.localPath && !file.file)
+        const filesWithContent = files.filter(file => file.file && !uploadedFiles.includes(file) && !localPathFiles.includes(file))
 
         // 串行上传未上传的文件，确保 createdAt 顺序与用户选择顺序一致
         const uploadResults = []
@@ -113,11 +114,18 @@ export function useMessageOperations(
             ...uploadResults.map((result) => result.id)
         ]
 
+        // Electron 本地路径文件：拼接路径到消息内容
+        let finalContent = text
+        if (localPathFiles.length > 0) {
+            const pathLines = localPathFiles.map(f => `\n\n[文件: ${f.fileName}]\n路径: ${f.localPath}`)
+            finalContent = text + pathLines.join('')
+        }
+
         // 清空输入框
         inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
 
         return {
-            content: text,
+            content: finalContent,
             fileIds,
             replaceMessageId,
             knowledgeBaseIds,
