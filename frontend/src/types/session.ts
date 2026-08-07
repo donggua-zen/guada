@@ -140,6 +140,21 @@ export interface SessionListResponse {
 }
 
 /**
+ * 侧边栏批量加载响应：一次请求返回所有分组 + 各分组前 N 条会话
+ */
+export interface SidebarGroupSessions {
+    groupId: string | null
+    items: Session[]
+    total: number
+    hasMore: boolean
+}
+
+export interface SidebarSessionsResponse {
+    groups: SessionGroup[]
+    groupSessions: SidebarGroupSessions[]
+}
+
+/**
  * 搜索结果项（扩展 Session，附带匹配信息）
  */
 export interface SearchSessionResult extends Session {

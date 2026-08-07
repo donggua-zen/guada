@@ -13,14 +13,15 @@
     </div>
     <!-- 已选角色 + 抽屉切换 -->
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
-      <AgentSwitcherBar :character="currentCharacter" @select="handleCharacterSelect" />
-      <div class="w-full relative z-30 -mt-4">
+      <div class="w-full relative z-30">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
           :character-id="currentSession.characterId || ''"
           @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
           @send="sendMessage" />
       </div>
-      <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
+      <ChatInputToolbar :config="chatInputConfig" :characters="characters"
+        :current-character-id="currentSession.characterId || null"
+        @config-change="handleConfigChange" @character-select="handleCharacterSelectById" />
     </div>
     <div>
       <!-- <div class="flex items-center justify-center mt-6">
@@ -42,10 +43,10 @@ import { useTitle } from "../../composables/useTitle";
 import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { useWorkspaceStore } from '@/stores/workspace';
+import { usePrefillInput } from '@/composables/usePrefillInput';
 // 组件导入
 import { ChatInput } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
-import AgentSwitcherBar from "./AgentSwitcherBar.vue";
 
 
 // UI 组件导入
@@ -367,6 +368,11 @@ const handleCharacterSelect = (character: any): void => {
   }
 };
 
+const handleCharacterSelectById = (characterId: string): void => {
+  const character = characters.value.find(c => c.id === characterId);
+  if (character) handleCharacterSelect(character);
+};
+
 // ========== ChatInput 配置管理 ==========
 
 /**
@@ -452,6 +458,7 @@ const handleConfigChange = (config: any): void => {
 // 前往角色管理页面
 
 const workspaceStore = useWorkspaceStore()
+const { consumePrefill } = usePrefillInput()
 
 onMounted(() => {
   title.value = "你今天想聊点什么";
@@ -468,6 +475,11 @@ onMounted(() => {
   }
   // 根据上次选择初始化工作目录
   initWorkspacePath()
+  // 消费跨页面预填文本（如定时任务页"在对话中创建"）
+  const prefill = consumePrefill()
+  if (prefill) {
+    inputMessage.value.content = prefill
+  }
 });
 
 async function initWorkspacePath() {
@@ -564,6 +576,13 @@ const sendMessage = async (): Promise<void> => {
 </script>
 
 <style scoped>
+/* 创建会话页：输入区域不透明，消除与工具栏负边距重叠时的半透明穿透 */
+:deep(.input-area) {
+  background: var(--color-input-bg) !important;
+  backdrop-filter: none !important;
+  backdrop-saturate: unset !important;
+}
+
 /* 打字机光标样式 */
 .typewriter-cursor {
   display: inline-block;

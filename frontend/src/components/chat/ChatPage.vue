@@ -37,11 +37,14 @@
               </PageHeader>
 
               <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
-              <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
-                :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
-                @switch-agent="switchTab"
-                @save-settings="handleSaveSessionSettings"
-                @select-character="handleSelectCharacter" />
+              <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器 -->
+              <Teleport :disabled="teleportDisabled" to="#floating-chat">
+                <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
+                  :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+                  @switch-agent="switchTab"
+                  @save-settings="handleSaveSessionSettings"
+                  @select-character="handleSelectCharacter" />
+              </Teleport>
 
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
@@ -68,7 +71,7 @@
 
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent, type Ref } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, type Ref } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -318,6 +321,17 @@ const layoutStore = useLayoutStore();
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
+
+// 全屏模式下 Teleport 延迟一帧启用，避免与 pane collapse 同帧触发 moveTeleport 竞态
+const teleportDisabled = ref(true);
+watch(() => layoutStore.workspaceFullscreen, async (fs) => {
+  if (fs) {
+    await nextTick();
+    teleportDisabled.value = false;
+  } else {
+    teleportDisabled.value = true;
+  }
+}, { immediate: true });
 
 // 登录信息
 const authStore = useAuthStore();

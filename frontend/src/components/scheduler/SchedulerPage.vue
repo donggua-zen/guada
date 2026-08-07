@@ -1,111 +1,203 @@
 <template>
-  <div class="h-full overflow-auto">
-    <PageHeader  title="定时任务">
-      <template #actions>
-        <el-space>
-          <el-button type="primary" @click="handleAddTask">
-            <template #icon>
-              <AddOutlined />
-            </template>
-            新建任务
-          </el-button>
-          <el-button @click="handleRefresh" :loading="loading">
-            <template #icon>
-              <RefreshOutlined />
-            </template>
-            刷新
-          </el-button>
-        </el-space>
-      </template>
-    </PageHeader>
-    <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
-      <div class="flex-1 flex flex-col overflow-hidden">
+  <div class="h-full flex flex-col">
+    <PageHeader />
+    <div class="flex-1 overflow-hidden">
+      <ScrollContainer class="h-full max-h-full">
+        <div class="md:mx-auto md:max-w-260 px-6 pt-4 pb-8">
+          <!-- 页头：标题 + 操作按钮 -->
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">自动化</h1>
+              <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">配置和管理定时执行任务，让 AI 按计划自动运行。</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <el-button @click="handleAddTask">
+                <template #icon><AddOutlined /></template>
+                手动新建
+              </el-button>
+              <el-button type="primary" @click="handleCreateInChat">
+                <template #icon><ChatBubbleOutlineOutlined /></template>
+                在对话中创建
+              </el-button>
+            </div>
+          </div>
 
-        <!-- 任务列表 -->
-        <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-(--color-surface) overflow-hidden">
-          <ul v-if="tasks.length > 0">
-            <li v-for="task in tasks" :key="task.id"
-              class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
-              <div class="flex-1 min-w-0 mr-4">
-                <div class="flex items-center gap-2 mb-1">
-                  <div class="font-semibold text-base truncate">{{ task.name }}</div>
-                  <el-tag v-if="task.enabled" type="success" size="small">已启用</el-tag>
-                  <el-tag v-else type="info" size="small">已禁用</el-tag>
-                  <el-tag v-if="isTaskLimited(task)" type="warning" size="small" effect="plain">
+          <!-- Tab 导航 -->
+          <el-tabs v-model="activeTab" class="scheduler-tabs">
+            <el-tab-pane label="已配置" name="tasks">
+              <template #label>
+                <div class="flex items-center gap-1.5">
+                  <span>已配置</span>
+                  <span v-if="tasks.length > 0" class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ tasks.length }}</span>
+                </div>
+              </template>
+            </el-tab-pane>
+            <el-tab-pane label="执行历史" name="history" />
+            <el-tab-pane label="任务模板" name="templates" />
+          </el-tabs>
+
+          <!-- 已配置：任务卡片网格 -->
+          <div v-if="activeTab === 'tasks'" class="mt-4">
+            <div v-if="tasks.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div v-for="task in tasks" :key="task.id"
+                class="group relative bg-(--color-surface) border border-gray-200 dark:border-[#232428] rounded-lg p-4 hover:border-(--color-primary) transition-all duration-200 cursor-pointer"
+                @click="handleEditTask(task)">
+                <!-- more 菜单（绝对定位，不占流） -->
+                <div class="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                  @click.stop>
+                  <DropdownMenu @command="(cmd: string) => handleTaskMenu(cmd, task)">
+                    <div class="session-action-trigger">
+                      <el-icon class="w-4 h-4 text-gray-500 dark:text-[#8b8d95]">
+                        <MoreHorizontal20Filled />
+                      </el-icon>
+                    </div>
+                    <template #dropdown>
+                      <DropdownMenuItem command="logs">
+                        <DescriptionOutlined class="w-4 h-4 mr-2" />
+                        查看日志
+                      </DropdownMenuItem>
+                      <DropdownMenuItem command="delete">
+                        <RemoveCircleOutlineRound class="w-4 h-4 mr-2 text-red-500" />
+                        删除任务
+                      </DropdownMenuItem>
+                    </template>
+                  </DropdownMenu>
+                </div>
+
+                <!-- 头部：名称 + 开关 -->
+                <div class="flex items-center justify-between gap-2">
+                  <div class="font-semibold text-base text-gray-900 dark:text-[#e8e9ed] truncate">{{ task.name }}</div>
+                  <el-switch v-model="task.enabled" :active-value="true" :inactive-value="false"
+                    @change="handleToggleTask(task)" @click.stop inline-prompt active-text="启用" inactive-text="禁用"
+                    size="small" class="shrink-0" />
+                </div>
+
+                <!-- 状态标签行 -->
+                <div v-if="isTaskLimited(task)" class="flex items-center gap-1.5 mt-2">
+                  <el-tag type="warning" size="small" effect="plain">
                     剩余 {{ getRemainingCount(task) }} 次
                   </el-tag>
                 </div>
-                <div class="text-sm text-gray-500 dark:text-[#8b8d95] truncate max-w-md">
+
+                <!-- 提示词 -->
+                <div class="text-sm text-gray-500 dark:text-[#8b8d95] mt-3 line-clamp-2 min-h-[2.5rem]">
                   {{ task.prompt }}
                 </div>
-                <div class="flex items-center gap-3 text-xs text-gray-400 dark:text-[#6b6d75] mt-1.5">
-                  <span class="flex items-center gap-1">
-                    <el-icon :size="12">
-                      <ScheduleOutlined />
-                    </el-icon>
-                    {{ formatCron(task.cronExpression) }}
-                  </span>
-                  <span class="flex items-center gap-1">
-                    <el-icon :size="12">
-                      <CalendarTodayOutlined />
-                    </el-icon>
-                    {{ formatTargetMode(task.targetMode) }}
-                  </span>
-                  <span v-if="task.executionCount !== undefined && task.maxExecutions" class="flex items-center gap-1">
-                    <el-icon :size="12">
-                      <ScheduleOutlined />
-                    </el-icon>
-                    已执行 {{ task.executionCount }} / {{ task.maxExecutions }} 次
-                  </span>
-                  <span v-else-if="task.executionCount !== undefined" class="flex items-center gap-1">
-                    <el-icon :size="12">
-                      <ScheduleOutlined />
-                    </el-icon>
-                    已执行 {{ task.executionCount }} 次
-                  </span>
+
+                <!-- 元数据 -->
+                <div class="flex flex-col gap-1.5 text-xs text-gray-400 dark:text-[#6b6d75] mt-3">
+                  <div class="flex items-center gap-3">
+                    <span class="flex items-center gap-1">
+                      <el-icon :size="13"><CalendarTodayOutlined /></el-icon>
+                      {{ formatTargetMode(task.targetMode) }}
+                    </span>
+                    <span v-if="task.executionCount !== undefined && task.maxExecutions">
+                      {{ task.executionCount }} / {{ task.maxExecutions }} 次
+                    </span>
+                    <span v-else-if="task.executionCount !== undefined">
+                      已执行 {{ task.executionCount }} 次
+                    </span>
+                  </div>
                   <span v-if="task.nextRunAt" class="flex items-center gap-1">
-                    <el-icon :size="12">
-                      <CalendarTodayOutlined />
-                    </el-icon>
+                    <el-icon :size="13"><CalendarTodayOutlined /></el-icon>
                     下次: {{ formatDateTime(task.nextRunAt) }}
                   </span>
                 </div>
-              </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <el-button link size="small" @click="handleViewLogs(task)">
-                  <template #icon>
-                    <DescriptionOutlined />
-                  </template>
-                  日志
-                </el-button>
-                <el-switch v-model="task.enabled" :active-value="true" :inactive-value="false"
-                  @change="handleToggleTask(task)" inline-prompt active-text="启用" inactive-text="禁用"
-                  size="small" />
-                <el-button link style="font-size: 18px; color: var(--el-text-color-secondary)"
-                  @click="handleEditTask(task)">
-                  <el-icon>
-                    <SettingsOutlined />
-                  </el-icon>
-                </el-button>
-                <el-button type="danger" link style="font-size: 18px" @click="handleDeleteTask(task)">
-                  <el-icon>
-                    <RemoveCircleOutlineRound />
-                  </el-icon>
-                </el-button>
-              </div>
-            </li>
-          </ul>
 
-          <!-- 空状态 -->
-          <div v-else class="py-12 text-center text-gray-400">
-            <el-icon size="48" class="mb-3 opacity-50">
-              <InboxOutlined />
-            </el-icon>
-            <div>暂无定时任务</div>
-            <div class="text-sm mt-2">点击"新建任务"开始创建</div>
+              </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-else class="flex flex-col items-center justify-center py-20 text-center">
+              <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mb-4">
+                <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
+                  <ScheduleOutlined />
+                </el-icon>
+              </div>
+              <p class="text-sm text-gray-500 dark:text-[#8b8d95]">尚未配置自动化任务。</p>
+              <el-button type="primary" class="mt-4" @click="handleCreateInChat">
+                从模板创建
+                <template #icon><ArrowForwardOutlined /></template>
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 执行历史 -->
+          <div v-else-if="activeTab === 'history'" class="mt-4">
+            <div class="flex items-center justify-between mb-4">
+              <div class="text-sm text-gray-500 dark:text-[#8b8d95]">共 {{ historyLogs.length }} 条记录</div>
+              <el-button size="small" @click="loadHistoryLogs" :loading="historyLoading">
+                <template #icon><RefreshOutlined /></template>
+                刷新
+              </el-button>
+            </div>
+            <!-- 时间线 -->
+            <div v-if="historyLogs.length > 0" class="relative">
+              <!-- 竖线 -->
+              <div class="absolute left-[5px] top-3 bottom-3 w-0.5 bg-gray-200 dark:bg-[#2e3035] rounded-full z-10"></div>
+              <div v-for="log in historyLogs" :key="log.id"
+                class="relative flex gap-3 pb-5 last:pb-0 cursor-pointer rounded-md hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors -mx-2 px-2 py-1.5"
+                @click="handleLogClick(log)">
+                <!-- 节点 -->
+                <div class="relative z-10 shrink-0 w-3 h-3 mt-1 flex items-center justify-center">
+                  <div v-if="log.status === 'completed'" class="w-3 h-3 rounded-full bg-green-500 flex items-center justify-center">
+                    <svg class="w-2 h-2 text-white" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div v-else-if="log.status === 'failed'" class="w-3 h-3 rounded-full bg-red-500 flex items-center justify-center">
+                    <svg class="w-2 h-2 text-white" viewBox="0 0 12 12" fill="none">
+                      <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div v-else class="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-[#4a4c52] bg-(--color-surface)"></div>
+                </div>
+                <!-- 内容 -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-gray-900 dark:text-[#e8e9ed] truncate">{{ getTaskName(log.taskId) }}</span>
+                    <span v-if="log.status === 'running'"
+                      class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">执行中</span>
+                    <span v-else-if="log.status === 'failed'"
+                      class="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">失败</span>
+                    <span v-else-if="log.status === 'pending'"
+                      class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] text-gray-500 dark:text-[#8b8d95]">等待中</span>
+                  </div>
+                  <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-1.5">
+                    {{ formatTime(log.startedAt) }}
+                  </div>
+                  <div v-if="log.error" class="text-xs text-red-500 mt-1.5 line-clamp-2">{{ log.error }}</div>
+                </div>
+              </div>
+              <!-- 加载更多 -->
+              <div v-if="historyHasMore" class="flex justify-center mt-2">
+                <el-button @click="loadMoreHistoryLogs" :loading="historyLoading" text>
+                  加载更多
+                </el-button>
+              </div>
+            </div>
+            <!-- 空状态 -->
+            <div v-else-if="!historyLoading" class="flex flex-col items-center justify-center py-20 text-center">
+              <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mb-4">
+                <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
+                  <HistoryOutlined />
+                </el-icon>
+              </div>
+              <p class="text-sm text-gray-500 dark:text-[#8b8d95]">暂无执行记录</p>
+            </div>
+          </div>
+
+          <!-- 任务模板（占位） -->
+          <div v-else-if="activeTab === 'templates'" class="mt-4 flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mb-4">
+              <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
+                <DashboardOutlined />
+              </el-icon>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-[#8b8d95]">任务模板功能开发中</p>
           </div>
         </div>
-      </div>
+      </ScrollContainer>
     </div>
   </div>
 
@@ -119,26 +211,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElButton, ElSpace, ElTag, ElSwitch, ElIcon } from 'element-plus'
+import { ref, onMounted, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElButton, ElTag, ElSwitch, ElIcon, ElTabs, ElTabPane } from 'element-plus'
 import {
   AddOutlined,
   RefreshOutlined,
-  SettingsOutlined,
   RemoveCircleOutlineRound,
-  InboxOutlined,
   ScheduleOutlined,
   CalendarTodayOutlined,
-  DescriptionOutlined
+  DescriptionOutlined,
+  ChatBubbleOutlineOutlined,
+  ArrowForwardOutlined,
+  HistoryOutlined,
+  DashboardOutlined
 } from '@vicons/material'
+import { MoreHorizontal20Filled } from '@vicons/fluent'
 import PageHeader from '@/components/PageHeader.vue'
+import DropdownMenu from '@/components/ui/DropdownMenu.vue'
+import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { usePrefillInput } from '../../composables/usePrefillInput'
 import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'
 import TaskEditDialog from './TaskEditDialog.vue'
 import TaskLogDrawer from './TaskLogDrawer.vue'
 
+const router = useRouter()
+const { setPrefill } = usePrefillInput()
 const { toast, confirm } = usePopup()
+
+const activeTab = ref<string>('tasks')
 
 // 任务列表
 const tasks = ref<ScheduledTask[]>([])
@@ -156,6 +259,71 @@ const logsLoading = ref(false)
 
 // Cron 预设
 const cronPresets = ref<{ label: string; value: string }[]>([])
+
+// 执行历史
+const historyLogs = ref<ScheduledTaskLog[]>([])
+const historyLoading = ref(false)
+const historyCursor = ref<string | null>(null)
+const historyHasMore = ref(false)
+const taskNameMap = computed(() => {
+  const map = new Map<string, string>()
+  tasks.value.forEach(t => map.set(t.id, t.name))
+  return map
+})
+
+function getTaskName(taskId: string): string {
+  return taskNameMap.value.get(taskId) || taskId
+}
+
+function formatTime(dateStr: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+async function loadHistoryLogs() {
+  historyLoading.value = true
+  historyCursor.value = null
+  historyHasMore.value = false
+  try {
+    const response = await apiService.fetchAllScheduledTaskLogs(undefined, 30)
+    historyLogs.value = response.items || []
+    historyCursor.value = response.nextCursor
+    historyHasMore.value = response.hasMore
+  } catch (err: any) {
+    console.error('加载执行历史失败:', err)
+    toast.error(err.message || '加载失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function loadMoreHistoryLogs() {
+  if (!historyCursor.value || historyLoading.value) return
+  historyLoading.value = true
+  try {
+    const response = await apiService.fetchAllScheduledTaskLogs(historyCursor.value, 30)
+    historyLogs.value.push(...(response.items || []))
+    historyCursor.value = response.nextCursor
+    historyHasMore.value = response.hasMore
+  } catch (err: any) {
+    console.error('加载更多失败:', err)
+    toast.error(err.message || '加载失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'history' && historyLogs.value.length === 0) {
+    loadHistoryLogs()
+  }
+})
 
 /**
  * 加载任务列表
@@ -199,7 +367,7 @@ async function loadTaskLogs(taskId?: string) {
     toast.error(err.message || '加载日志失败')
   } finally {
     logsLoading.value = false
-  } 
+  }
 }
 
 /**
@@ -219,12 +387,38 @@ function handleAddTask() {
 }
 
 /**
+ * 在对话中创建任务 — 跳转到新建会话页面并预填模板文本
+ */
+function handleCreateInChat() {
+  const template = '我想要创建一个自动化任务。\n任务内容是：\n执行时间是：'
+  setPrefill(template)
+  router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
+}
+
+/**
  * 编辑任务
  */
 function handleEditTask(task: ScheduledTask) {
   isEditMode.value = true
   currentTask.value = { ...task }
   showEditDialog.value = true
+}
+
+/**
+ * 卡片 more 菜单
+ */
+function handleTaskMenu(cmd: string, task: ScheduledTask) {
+  if (cmd === 'logs') handleViewLogs(task)
+  else if (cmd === 'delete') handleDeleteTask(task)
+}
+
+/**
+ * 点击历史记录跳转到对应会话
+ */
+function handleLogClick(log: ScheduledTaskLog) {
+  if (log.sessionId) {
+    router.replace({ name: 'Chat', params: { sessionId: log.sessionId } })
+  }
 }
 
 /**
@@ -340,3 +534,38 @@ onMounted(() => {
   loadCronPresets()
 })
 </script>
+
+<style scoped>
+.session-action-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.session-action-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .session-action-trigger:hover {
+  background-color: #383a40;
+}
+
+.scheduler-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
+.scheduler-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+}
+
+.scheduler-tabs :deep(.el-tabs__item) {
+  padding: 0 18px;
+  height: 44px;
+  line-height: 44px;
+  font-size: 14px;
+}
+</style>

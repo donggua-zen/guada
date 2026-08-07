@@ -47,7 +47,7 @@
 .markdown-text h2,
 .markdown-text h3,
 .markdown-text h4 {
-  font-size: 18px;
+  font-size: calc(var(--size-text-base) * 1.2);
   /* padding-bottom: 0.5em; */
 }
 

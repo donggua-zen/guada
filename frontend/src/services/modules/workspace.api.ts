@@ -1,7 +1,5 @@
 import type { ApiContext } from "./api-context";
 
-let expandedPathsVersion = Date.now() * 1000;
-
 export interface WorkspaceApi {
   getWorkspaceTree(sessionId: string): Promise<{ tree: any[] }>;
   getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: any[] }>;
@@ -17,7 +15,6 @@ export interface WorkspaceApi {
   getWorkspaceHtmlPreviewUrl(sessionId: string, filePath: string): string;
   deleteWorkspaceFile(sessionId: string, filePath: string): Promise<{ success: boolean; isDirectory?: boolean }>;
   renameWorkspaceFile(sessionId: string, filePath: string, newName: string): Promise<{ success: boolean; isDirectory?: boolean; newPath?: string }>;
-  updateWorkspaceExpandedPaths(sessionId: string, expandedPaths: string[], version?: number): Promise<void>;
 }
 
 export const workspaceApi: WorkspaceApi = {
@@ -66,19 +63,6 @@ export const workspaceApi: WorkspaceApi = {
     return await this._request(`/sessions/${sessionId}/workspace/rename`, {
       method: "POST",
       data: { path: filePath, newName },
-    });
-  },
-
-  async updateWorkspaceExpandedPaths(
-    this: ApiContext,
-    sessionId: string,
-    expandedPaths: string[],
-    version = ++expandedPathsVersion,
-  ) {
-    expandedPathsVersion = Math.max(expandedPathsVersion, version);
-    await this._request(`/sessions/${sessionId}/workspace/expanded-paths`, {
-      method: "POST",
-      data: { expandedPaths, version },
     });
   },
 };

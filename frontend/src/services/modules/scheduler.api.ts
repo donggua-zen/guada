@@ -11,6 +11,7 @@ export interface SchedulerApi {
   runScheduledTask(taskId: string): Promise<{ success: boolean; message: string }>;
   testScheduledTask(taskId: string): Promise<{ success: boolean; message: string }>;
   fetchScheduledTaskLogs(taskId: string): Promise<PaginatedResponse<any>>;
+  fetchAllScheduledTaskLogs(cursor?: string, limit?: number): Promise<{ items: any[]; hasMore: boolean; nextCursor: string | null }>;
   fetchCronPresets(): Promise<{ label: string; value: string }[]>;
 }
 
@@ -60,6 +61,14 @@ export const schedulerApi: SchedulerApi = {
 
   async fetchScheduledTaskLogs(this: ApiContext, taskId: string) {
     return await this._request(`/scheduler/tasks/${taskId}/logs`);
+  },
+
+  async fetchAllScheduledTaskLogs(this: ApiContext, cursor?: string, limit?: number) {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const query = params.toString();
+    return await this._request(`/scheduler/logs${query ? `?${query}` : ""}`);
   },
 
   async fetchCronPresets(this: ApiContext) {

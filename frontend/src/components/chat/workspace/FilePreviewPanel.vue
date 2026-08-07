@@ -45,7 +45,7 @@
             </div>
 
             <!-- 图片预览 -->
-            <img v-else-if="previewType === 'image' && !previewError" :src="imagePreviewUrl" @error="onImageError"
+            <img v-else-if="previewType === 'image' && imagePreviewUrl && !previewError" :src="imagePreviewUrl" @error="onImageError"
                 class="image-preview w-full h-full object-contain p-2" alt="图片预览" />
 
             <!-- 不支持的文件 -->
@@ -287,6 +287,7 @@ async function loadFilePreview(): Promise<void> {
     previewError.value = ''
     previewLoading.value = false
     fileContentHash.value = ''
+    imagePreviewUrl.value = ''
 
     const ext = tab.extension!
     if (isTextFile(ext)) {

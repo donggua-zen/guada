@@ -28,6 +28,12 @@ export const useLayoutStore = defineStore('layout', () => {
   // 工作目录全屏模式（非持久化，会话级运行时状态）
   const workspaceFullscreen = ref(false)
 
+  // 全屏模式下悬浮对话面板状态
+  const floatingChatCollapsed = ref(false)
+  const floatingChatHidden = ref(false)
+  // 相对位置 (0~1)：rx=0 左边, rx=1 右边；ry=0 顶部, ry=1 底部。默认右下角。
+  const floatingChatPosition = useStorage('floatingChatPosition', { rx: 1, ry: 1 })
+
   // 壁纸与透明度设置（持久化到 localStorage）
   const wallpaperUrl = useStorage<string | null>('wallpaperUrl', null)
   const sidebarOpacity = useStorage<number>('sidebarOpacity', 100)
@@ -82,6 +88,10 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const toggleWorkspaceFullscreen = (): void => {
     workspaceFullscreen.value = !workspaceFullscreen.value
+    // 进入全屏时重置隐藏状态
+    if (workspaceFullscreen.value) {
+      floatingChatHidden.value = false
+    }
   }
 
   /**
@@ -275,6 +285,9 @@ export const useLayoutStore = defineStore('layout', () => {
     workspacePreviewSplitSize,
     workspacePreviewMode,
     workspaceFullscreen,
+    floatingChatCollapsed,
+    floatingChatHidden,
+    floatingChatPosition,
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,

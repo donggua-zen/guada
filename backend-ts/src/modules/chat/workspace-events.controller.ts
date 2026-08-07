@@ -1,8 +1,6 @@
 import {
   Controller,
   Get,
-  Post,
-  Body,
   Param,
   Headers,
   Sse,
@@ -15,7 +13,7 @@ import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
-import { FileWatcherService, FileChangeEvent } from "../../common/services/file-watcher.service";
+import { WorkspaceWatcherService, FileChangeEvent } from "../../common/services/workspace-watcher.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 
 /**
@@ -27,7 +25,7 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 export class WorkspaceEventsController {
   constructor(
     private readonly sessionService: SessionService,
-    private readonly fileWatcherService: FileWatcherService,
+    private readonly workspaceWatcherService: WorkspaceWatcherService,
     private readonly workspaceService: WorkspaceService,
   ) {}
 
@@ -62,7 +60,7 @@ export class WorkspaceEventsController {
       }
 
       // 开始监听工作目录（初始只监听根目录）
-      const releaseWatching = this.fileWatcherService.startWatching(
+      const releaseWatching = this.workspaceWatcherService.startWatching(
         id,
         workspacePath,
         finalClientId,
@@ -70,7 +68,7 @@ export class WorkspaceEventsController {
       );
 
       // 注册文件变化监听器
-      const unsubscribe = this.fileWatcherService.onFileChange(
+      const unsubscribe = this.workspaceWatcherService.onFileChange(
         id,
         (event: FileChangeEvent) => {
           subscriber.next({ data: event } as MessageEvent);
@@ -104,38 +102,5 @@ export class WorkspaceEventsController {
         releaseWatching();
       };
     });
-  }
-
-  /**
-   * 更新工作目录树展开状态
-   * 前端展开/折叠目录时调用，用于动态调整监听范围
-   */
-  @Post("sessions/:id/workspace/expanded-paths")
-  async updateExpandedPaths(
-    @Param("id") id: string,
-    @Headers("x-client-id") clientId: string,
-    @Body() body: { expandedPaths: string[]; version?: number },
-    @CurrentUser() user: any,
-  ) {
-    // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
-    if (!session) {
-      throw new Error("Session not found or unauthorized");
-    }
-
-    const finalClientId = clientId || "default";
-
-    // 更新该客户端的监听范围
-    const expandedPaths = Array.isArray(body?.expandedPaths)
-      ? body.expandedPaths
-      : [];
-    this.fileWatcherService.updateExpandedPaths(
-      id,
-      finalClientId,
-      expandedPaths,
-      Number(body?.version) || 0,
-    );
-
-    return { success: true };
   }
 }

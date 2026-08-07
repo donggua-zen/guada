@@ -90,6 +90,20 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   }
 
   /**
+   * 直接设置分组列表（从侧边栏批量接口获取，无需额外请求）
+   */
+  const setGroups = (data: SessionGroup[]): void => {
+    groups.value = data || []
+    hasLoaded.value = true
+
+    const saved = loadExpandedState()
+    for (const group of data || []) {
+      expandedState.value.set(group.id, saved[group.id] ?? true)
+    }
+    expandedState.value.set(UNGROUPED_ID, saved[UNGROUPED_ID] ?? true)
+  }
+
+  /**
    * 切换分组展开/折叠状态
    */
   const toggleExpand = (groupId: string): void => {
@@ -199,6 +213,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
 
     // Actions
     loadGroups,
+    setGroups,
     toggleExpand,
     setExpand,
     createGroup,

@@ -8,6 +8,7 @@ import { SessionContextStateRepository } from "../../common/database/session-con
 import { LLMService } from "../llm-core/llm.service";
 import { MessageService } from "./message.service";
 import { AgentEngine } from "./agent-engine.service";
+import { SessionGroupService } from "./session-group.service";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -22,7 +23,7 @@ import {
   SK_MOD_TITLE_MODEL,
 } from "../../constants/settings.constants";
 import { SessionContextFactory } from "./session-context.factory";
-import { FileWatcherService } from "../../common/services/file-watcher.service";
+import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SummaryMode } from "./compression-engine";
 import { resolveThinkingEffort } from "../llm-core";
@@ -42,11 +43,12 @@ export class SessionService {
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
     private sessionContextFactory: SessionContextFactory,
-    private fileWatcherService: FileWatcherService,
+    private workspaceWatcherService: WorkspaceWatcherService,
     private streamManager: SessionStreamManager,
     private agentEngine: AgentEngine,
     private searchIndex: SearchIndexService,
     private prisma: PrismaService,
+    private sessionGroupService: SessionGroupService,
   ) {}
 
   /**
@@ -87,6 +89,37 @@ export class SessionService {
       //   : null,
     }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
+  }
+
+  /**
+   * 侧边栏批量获取：一次请求返回所有分组 + 各分组的前 N 条会话
+   * 替代前端 N+2 次串行 HTTP 请求
+   */
+  async getSidebarSessions(userId: string, limit: number = 10) {
+    const groups = await this.sessionGroupService.getGroupsByUser(userId);
+
+    // 所有分组 ID + null（未分组），并行查询
+    const groupIds: (string | null)[] = [...groups.map((g) => g.id), null];
+    const results = await Promise.all(
+      groupIds.map((gid) =>
+        this.sessionRepo.findByUserId(userId, 0, limit, gid, undefined, false),
+      ),
+    );
+
+    const groupSessions = groupIds.map((gid, i) => {
+      const { items, total } = results[i];
+      return {
+        groupId: gid,
+        items: items.map((item) => ({
+          ...item,
+          isStreaming: this.streamManager.hasActiveStream(item.id),
+        })),
+        total,
+        hasMore: items.length < total,
+      };
+    });
+
+    return { groups, groupSessions };
   }
 
   /**
@@ -391,41 +424,6 @@ export class SessionService {
   }
 
   /**
-   * 更新会话的工作目录路径
-   * 不允许设置为空，必须提供有效路径
-   */
-  async updateSessionWorkspacePath(
-    sessionId: string,
-    userId: string,
-    workspacePath: string,
-  ) {
-    // 验证会话权限
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new Error("Session not found or unauthorized");
-    }
-
-    // 不允许设置为空
-    if (!workspacePath || workspacePath.trim() === "") {
-      throw new Error("工作目录路径不能为空，如需恢复默认请删除会话后重新创建");
-    }
-
-    // 验证路径
-    await this.workspaceService.validateCustomWorkspacePath(workspacePath);
-
-    // 更新会话配置
-    await this.sessionRepo.update(sessionId, { workspacePath });
-    this.fileWatcherService.rebindWorkspace(sessionId, workspacePath);
-
-    // 级联更新所有子会话的工作目录
-    const children = await this.sessionRepo.findByParentId(sessionId);
-    for (const child of children) {
-      await this.sessionRepo.update(child.id, { workspacePath });
-      this.fileWatcherService.rebindWorkspace(child.id, workspacePath);
-    }
-  }
-
-  /**
    * 删除会话及其关联的消息
    * @param sessionId 会话 ID
    * @param userId 用户 ID
@@ -445,7 +443,7 @@ export class SessionService {
     await this.sessionRepo.deleteById(sessionId);
 
     // 数据库删除成功后再停止监听并关闭对应 SSE
-    this.fileWatcherService.stopWatchingSession(sessionId);
+    this.workspaceWatcherService.stopWatchingSession(sessionId);
 
     // 根据参数决定是否删除工作目录
     if (deleteWorkspace) {
