@@ -36,7 +36,7 @@
 
         <!-- 内容区 -->
         <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
-            <PageHeader hideSidebarToggle>
+            <PageHeader>
                 <template #title>
                     <span class="text-sm text-gray-400 dark:text-gray-500">系统设置</span>
                     <span class="text-sm text-gray-300 dark:text-gray-600 mx-1.5">·</span>
