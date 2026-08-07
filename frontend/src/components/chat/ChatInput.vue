@@ -2,8 +2,12 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius)"
-      :class="styleClass">
+      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
+      :class="[styleClass, { 'drag-over': isDragOver }]"
+      @dragover.prevent
+      @dragenter.prevent="handleDragEnter"
+      @dragleave.prevent="handleDragLeave"
+      @drop.prevent="handleDrop">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
@@ -194,6 +198,7 @@ interface ChatFile {
   uploadStatus: 'queued' | 'uploading' | 'uploaded' | 'failed' | undefined
   previewUrl?: string
   url?: string
+  localPath?: string
 }
 
 /** Chat session config passed from parent */
@@ -221,6 +226,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 let fileIdCounter = 0;
 const focused = ref(false);
+const isDragOver = ref(false);
 // 模型选择器相关
 const models = ref<Model[]>([]);
 const providers = ref<ModelProvider[]>([]);
@@ -588,6 +594,12 @@ const createFileObject = (file: File, fileType: string, isPasted = false) => {
   // 检测是否有通过粘贴附加的原始文本内容
   const hasOriginalContent = (file as FileWithContent)._originalContent;
 
+  // Electron 模式下非图片文件：只存本地路径，不上传
+  const isImageFile = FILE_TYPES[fileType].type === 'image';
+  const electronLocalPath = isElectron && !isImageFile
+    ? (file as File & { path?: string }).path
+    : undefined;
+
   return {
     id: fileIdCounter++,
     fileName: file.name || `pasted-${fileType.toLowerCase()}-${timestamp}.${getFileExtensionFromType(file.type)}`,
@@ -595,11 +607,13 @@ const createFileObject = (file: File, fileType: string, isPasted = false) => {
     fileExtension: isPasted ? getFileExtensionFromType(file.type) : getFileExtension(file.name),
     fileType: FILE_TYPES[fileType].type,
     displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
-    file: file,
+    file: electronLocalPath ? undefined as unknown as File : file,
     // 标记是否为粘贴自动转换的文件
     isPasted: !!hasOriginalContent || isPasted,
     // 粘贴转换的原始文本内容（仅粘贴转文件时有值）
     originalContent: hasOriginalContent || undefined,
+    // Electron 本地路径（非图片文件，不上传）
+    localPath: electronLocalPath,
     // 新增：上传进度状态
     uploadProgress: 0,
     uploadStatus: undefined, // 'queued' | 'uploading' | 'uploaded' | 'failed'
@@ -934,6 +948,43 @@ const handlePaste = async (event: ClipboardEvent) => {
   }
 };
 
+
+// ==================== 拖拽上传 ====================
+const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+
+let dragCounter = 0;
+
+const handleDragEnter = () => {
+  dragCounter++;
+  isDragOver.value = true;
+};
+
+const handleDragLeave = () => {
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    isDragOver.value = false;
+  }
+};
+
+const handleDrop = async (event: DragEvent) => {
+  dragCounter = 0;
+  isDragOver.value = false;
+
+  const droppedFiles = event.dataTransfer?.files;
+  if (!droppedFiles || droppedFiles.length === 0) return;
+
+  const files = Array.from(droppedFiles);
+  const imageFiles = files.filter(file => isFileType(file, 'IMAGE'));
+  const textFiles = files.filter(file => isFileType(file, 'TEXT'));
+
+  if (imageFiles.length > 0) {
+    await processFiles(imageFiles, 'IMAGE');
+  }
+  if (textFiles.length > 0) {
+    await processFiles(textFiles, 'TEXT');
+  }
+};
 
 // 内容预览相关（粘贴自动转换的文本文件预览）
 const previewDialogVisible = ref(false);
@@ -1383,6 +1434,12 @@ defineExpose({ insertText, insertBadge });
 .input-area {
   position: relative;
   z-index: 10;
+}
+
+/* 拖拽悬停高亮 */
+.input-area.drag-over {
+  border-color: var(--color-primary) !important;
+  background-color: color-mix(in srgb, var(--color-primary) 8%, var(--color-input-bg)) !important;
 }
 
 /* Tiptap 编辑器样式 - 模拟 textarea */
