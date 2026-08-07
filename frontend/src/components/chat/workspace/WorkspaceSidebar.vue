@@ -87,7 +87,7 @@
             <WindowControls v-if="isElectron" class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <div :class="treeContainerClass" :style="isPreviewMode ? treePanelStyle : {}" @mouseenter="showTreePanel"
+        <div :class="treeContainerClass" :style="isPreviewMode && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
             @mouseleave="hideTreePanel">
             <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
             <SessionBrowserWindowList v-if="isElectron && browserStore.sessionWebviews.length > 0"
@@ -103,14 +103,6 @@
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
                     工作目录</h3>
                 <div class="flex items-center gap-0 shrink-0">
-                    <!-- 更换工作目录按钮 -->
-                    <LTooltip content="更换工作目录" placement="bottom">
-                        <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
-                            <el-icon size="15">
-                                <Switch />
-                            </el-icon>
-                        </el-button>
-                    </LTooltip>
                     <!-- 打开文件夹按钮（仅 Electron 环境） -->
                     <LTooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
@@ -200,10 +192,6 @@
         </div>
     </div>
 
-    <!-- 更换工作目录弹窗 -->
-    <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible" :current-workspace-path="currentWorkspacePath"
-        :allow-empty="false" @confirm="handleWorkspaceChange" />
-
     <ContextMenu :visible="contextMenu.visible" :x="contextMenu.x" :y="contextMenu.y" :items="contextMenuItems"
         @close="closeContextMenu" />
 </template>
@@ -212,14 +200,13 @@
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
+import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
 import { Folder16Regular, Window16Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import LTooltip from '@/components/ui/LTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
-import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import SessionTodoList from './SessionTodoList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
@@ -242,7 +229,6 @@ const emit = defineEmits<{
 
 const treeData = ref<WorkspaceNode[]>([]);
 const isLoading = ref(false);
-const workspaceDialogVisible = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
 // 树节点高亮路径：从 activeTabKey 派生，与预览标签选中自动对齐
 const selectedNodePath = computed(() => {
@@ -397,9 +383,15 @@ function updateTreePanelPosition() {
     };
 }
 
+// Phase 1 hide: visibility:hidden without transform/opacity to avoid compositing layer flash
+const treePhase1Hide = ref(false);
+
 const treeContainerClass = computed(() => {
     if (!isPreviewMode.value) {
         return 'h-full flex flex-col flex-1 min-h-0';
+    }
+    if (treePhase1Hide.value) {
+        return 'tree-hidden-preview';
     }
     return [
         'tree-floating-panel',
@@ -440,6 +432,7 @@ watch(isPreviewMode, (preview) => {
     if (!preview) {
         isTreePanelVisible.value = false;
         treeTransitionReady.value = false;
+        treePhase1Hide.value = false;
         if (treeHideTimer) {
             clearTimeout(treeHideTimer);
             treeHideTimer = null;
@@ -449,8 +442,16 @@ watch(isPreviewMode, (preview) => {
             treeShowTimer = null;
         }
     } else {
-        nextTick(() => {
-            treeTransitionReady.value = true;
+        // Phase 1: 用 visibility:hidden + position:absolute 立即隐藏（无 transform/opacity，不创建合成层）
+        treePhase1Hide.value = true;
+        // Phase 2: 下一帧切换到 floating-panel class（此时已是 visibility:hidden，position 变化不可见）
+        requestAnimationFrame(() => {
+            treeTransitionReady.value = false;
+            treePhase1Hide.value = false;
+            // Phase 3: 再下一帧启用过渡（此时 floating-panel 已渲染，opacity:0 不会闪）
+            requestAnimationFrame(() => {
+                treeTransitionReady.value = true;
+            });
         });
     }
 });
@@ -668,45 +669,19 @@ async function handleTreeNodeToggle(node: WorkspaceNode, expanded: boolean) {
     }
 }
 
-// 展开/折叠状态同步到后端（用于文件变化事件监听）
-let collapseSyncTimer: ReturnType<typeof setTimeout> | null = null;
 const expandedPaths = ref<Set<string>>(new Set());
 
 function resetExpandedPaths() {
-    if (collapseSyncTimer) {
-        clearTimeout(collapseSyncTimer);
-        collapseSyncTimer = null;
-    }
     expandedPaths.value = new Set();
 }
 
 function handleTreeNodeExpandToggle(node: WorkspaceNode, expanded: boolean) {
     if (expanded) {
-        // 展开：取消待处理的删除，立即同步
         expandedPaths.value = new Set(expandedPaths.value).add(node.path);
-        if (collapseSyncTimer) clearTimeout(collapseSyncTimer);
-        syncExpandedPaths();
     } else {
-        // 折叠：消抖 10 秒，避免频繁开关浪费后端监听资源
         const next = new Set(expandedPaths.value);
         next.delete(node.path);
         expandedPaths.value = next;
-        if (collapseSyncTimer) clearTimeout(collapseSyncTimer);
-        collapseSyncTimer = setTimeout(() => syncExpandedPaths(), 10000);
-    }
-}
-
-async function syncExpandedPaths(sessionId = props.sessionId): Promise<boolean> {
-    if (!sessionId || sessionId !== props.sessionId) return false;
-    try {
-        await apiService.updateWorkspaceExpandedPaths(
-            sessionId,
-            Array.from(expandedPaths.value),
-        );
-        return true;
-    } catch (error) {
-        console.error('[WorkspaceSidebar] 同步展开状态失败:', error);
-        return false;
     }
 }
 
@@ -756,13 +731,9 @@ async function loadTree(force = false) {
 
         // 加载工作目录路径（用于顶部工具栏显示）
         if (!currentWorkspacePath.value) {
-            try {
-                const pathResp = await apiService.getWorkspacePath(sessionId);
-                if (generation === treeLoadGeneration) {
-                    currentWorkspacePath.value = pathResp.workspacePath || null;
-                }
-            } catch {
-                // 忽略路径获取失败
+            const path = await fetchWorkspacePath(sessionId);
+            if (generation === treeLoadGeneration && sessionId === props.sessionId) {
+                currentWorkspacePath.value = path;
             }
         }
     } catch (error: any) {
@@ -787,15 +758,6 @@ function refreshTree() {
 }
 
 /**
- * 检查路径是否在已展开的目录下
- * 如果父目录未展开，则该路径下的变化不需要更新展示
- * 由 updateNodeLocal 中的 !parentNode.children 守卫处理
- */
-function isPathInExpandedDir(_filePath: string): boolean {
-    return true;
-}
-
-/**
  * 处理文件系统变化事件
  * 直接本地更新节点，不再请求后端 API
  */
@@ -805,10 +767,7 @@ function handleFileChange(event: FileChangeEvent) {
         return;
     }
 
-    // 判断变化的文件是否在已展开的目录下
-    if (!event.path || !isPathInExpandedDir(event.path)) {
-        return;
-    }
+    if (!event.path) return;
 
     // 本地更新节点
     updateNodeLocal(event);
@@ -1285,70 +1244,39 @@ async function openWorkspaceInVSCode() {
     }
 }
 
-/**
- * 更换工作目录路径
- * 打开工作目录设置弹窗
- */
-async function changeWorkspacePath() {
-    if (!props.sessionId) return;
-
-    try {
-        // 获取当前工作目录路径
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        currentWorkspacePath.value = response.workspacePath || null;
-        workspaceDialogVisible.value = true;
-    } catch (error: any) {
-        console.error('Failed to get workspace path:', error);
-        // 获取失败也打开弹窗，路径为空
-        currentWorkspacePath.value = null;
-        workspaceDialogVisible.value = true;
-    }
-}
-
-/**
- * 处理工作目录变更确认
- */
-async function handleWorkspaceChange(workspacePath: string | null) {
-    const sessionId = props.sessionId;
-    if (!sessionId || !workspacePath) return;
-
-    const previousExpandedPaths = new Set(expandedPaths.value);
-    resetExpandedPaths();
-    if (!(await syncExpandedPaths(sessionId))) {
-        expandedPaths.value = previousExpandedPaths;
-        ElMessage.error('同步工作目录监听状态失败');
-        return;
-    }
-
-    try {
-        await apiService.updateSessionWorkspacePath(sessionId, workspacePath);
-        if (sessionId !== props.sessionId) return;
-
-        ElMessage.success('工作目录已更换');
-        watchedWorkspacePath = workspacePath;
-        treeData.value = [];
-        await loadTree(true);
-    } catch (error: any) {
-        if (sessionId === props.sessionId) {
-            expandedPaths.value = previousExpandedPaths;
-            void syncExpandedPaths(sessionId);
-        }
-        console.error('Failed to change workspace path:', error);
-        ElMessage.error(error.message || '更换工作目录失败');
-    }
-}
-
 let unsubscribeWatcher: (() => void) | null = null;
 let watchedWorkspacePath: string | null = null;
+
+// Deduplicate concurrent getWorkspacePath requests (loadTree and watcher connect race)
+let workspacePathPromise: Promise<string | null> | null = null;
+let workspacePathSessionId: string | null = null;
+
+async function fetchWorkspacePath(sessionId: string): Promise<string | null> {
+    if (workspacePathPromise && workspacePathSessionId === sessionId) {
+        return workspacePathPromise;
+    }
+    workspacePathSessionId = sessionId;
+    workspacePathPromise = apiService.getWorkspacePath(sessionId)
+        .then(resp => resp.workspacePath || null)
+        .catch(() => null)
+        .finally(() => {
+            workspacePathPromise = null;
+            workspacePathSessionId = null;
+        });
+    return workspacePathPromise;
+}
 
 async function handleWorkspaceWatcherConnected(sessionId: string) {
     if (sessionId !== props.sessionId) return;
 
     try {
-        const response = await apiService.getWorkspacePath(sessionId);
+        const nextWorkspacePath = await fetchWorkspacePath(sessionId);
         if (sessionId !== props.sessionId) return;
 
-        const nextWorkspacePath = response.workspacePath || null;
+        if (currentWorkspacePath.value === null) {
+            currentWorkspacePath.value = nextWorkspacePath;
+        }
+
         const workspaceChanged =
             watchedWorkspacePath !== null &&
             nextWorkspacePath !== watchedWorkspacePath;
@@ -1357,9 +1285,6 @@ async function handleWorkspaceWatcherConnected(sessionId: string) {
         if (workspaceChanged) {
             resetExpandedPaths();
             treeData.value = [];
-        }
-        await syncExpandedPaths(sessionId);
-        if (workspaceChanged) {
             await loadTree(true);
         }
     } catch (error) {
@@ -1607,6 +1532,18 @@ onUnmounted(() => {
 }
 
 /* ── 悬浮目录树面板（预览模式下） ── 视觉风格对齐 CustomPopover */
+
+/* Phase 1 hide: visibility:hidden without transform/opacity to avoid compositing layer flash */
+.tree-hidden-preview {
+    position: absolute;
+    top: 2.75rem;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .tree-floating-panel {
     position: fixed;
     z-index: 2000;

@@ -206,6 +206,69 @@ export class SchedulerService {
   }
 
   /**
+   * 获取当前用户所有任务的执行日志（游标分页）
+   *
+   * 游标格式：base64("startedAt_iso|log_id")，排序 startedAt DESC, id DESC
+   */
+  async getAllLogs(
+    userId: string,
+    cursor?: string,
+    limit: number = 30,
+  ): Promise<{ items: any[]; hasMore: boolean; nextCursor: string | null }> {
+    const tasks = await this.storage.getTasksByUserId(userId);
+    const taskIds = new Set(tasks.map((t) => t.id));
+    let allLogs = (await this.storage.getAllLogs()).filter((l) =>
+      taskIds.has(l.taskId),
+    );
+
+    // 二级排序：id DESC（getAllLogs 已按 startedAt DESC）
+    allLogs.sort((a, b) => {
+      const ta = new Date(a.startedAt).getTime();
+      const tb = new Date(b.startedAt).getTime();
+      if (tb !== ta) return tb - ta;
+      return b.id.localeCompare(a.id);
+    });
+
+    // 解析游标
+    let cursorTime: string | null = null;
+    let cursorId: string | null = null;
+    if (cursor) {
+      const decoded = Buffer.from(cursor, "base64").toString("utf-8");
+      const sep = decoded.lastIndexOf("|");
+      if (sep > 0) {
+        cursorTime = decoded.substring(0, sep);
+        cursorId = decoded.substring(sep + 1);
+      }
+    }
+
+    // 游标过滤
+    let filtered = allLogs;
+    if (cursorTime && cursorId) {
+      filtered = allLogs.filter((l) => {
+        if (l.startedAt !== cursorTime)
+          return new Date(l.startedAt) < new Date(cursorTime);
+        return l.id < cursorId;
+      });
+    }
+
+    const take = limit + 1;
+    const page = filtered.slice(0, take);
+    const hasMore = page.length > limit;
+    const items = hasMore ? page.slice(0, limit) : page;
+
+    let nextCursor: string | null = null;
+    if (hasMore && items.length > 0) {
+      const last = items[items.length - 1];
+      nextCursor = Buffer.from(
+        `${last.startedAt}|${last.id}`,
+        "utf-8",
+      ).toString("base64");
+    }
+
+    return { items, hasMore, nextCursor };
+  }
+
+  /**
    * 获取预设 cron 表达式
    */
   getCronPresets() {

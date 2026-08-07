@@ -519,6 +519,9 @@ const selectedKnowledgeBases = computed(() => {
   return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
 });
 
+// 已选知识库但列表为空时（刷新后），按需加载一次以恢复标签显示
+// watch 定义移至 loadKnowledgeBases 之后，避免 immediate 时 TDZ 引用
+
 // Token 上限标签
 const maxTokensLabel = computed(() => {
   const v = props.config?.maxTokensLimit;
@@ -822,6 +825,13 @@ const loadKnowledgeBases = async () => {
     console.error('获取知识库列表失败:', error);
   }
 };
+
+// 已选知识库但列表为空时（刷新后），按需加载一次以恢复标签显示
+watch(() => props.config?.knowledgeBaseIds, (kbIds) => {
+  if (kbIds && kbIds.length > 0 && knowledgeBases.value.length === 0) {
+    loadKnowledgeBases();
+  }
+}, { immediate: true });
 
 // 文件处理函数
 const checkFileConflict = async (newFileType: string) => {
@@ -1190,7 +1200,6 @@ watch(() => props.buttons, (value) => {
 onMounted(() => {
   adjustTextareaHeight();
   loadModels();
-  loadKnowledgeBases(); // 加载知识库列表
   initThinkingEffort(); // 初始化思考强度
 
   // 初始化 Tiptap 编辑器

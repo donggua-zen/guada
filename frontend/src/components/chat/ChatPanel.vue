@@ -21,7 +21,7 @@
           <WelcomeScreen :session="currentSession" class="flex-1" />
         </template>
 
-        <div v-else class="max-w-186 w-full mx-auto pt-5 flex-1">
+        <div v-else class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -57,7 +57,7 @@
         </div>
 
         <!-- 输入区域 - sticky 底部 -->
-        <div class="sticky bottom-0 left-0 right-0 z-30 pb-2">
+        <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2">
           <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
           <div class="chat-bottom-fade"></div>
           <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">

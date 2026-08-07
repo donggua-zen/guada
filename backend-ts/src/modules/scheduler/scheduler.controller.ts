@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -113,5 +114,18 @@ export class SchedulerController {
   async getTaskLogs(@Param("id") id: string, @CurrentUser() user: any) {
     const logs = await this.schedulerService.getTaskLogs(id, user.id);
     return { items: logs, total: logs.length };
+  }
+
+  /**
+   * 获取所有任务执行日志（游标分页）
+   */
+  @Get("logs")
+  async getAllLogs(
+    @CurrentUser() user: any,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 30;
+    return this.schedulerService.getAllLogs(user.id, cursor, parsedLimit);
   }
 }

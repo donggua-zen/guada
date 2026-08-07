@@ -95,6 +95,17 @@ export class SessionsController {
     );
   }
 
+  /**
+   * 侧边栏批量加载：一次请求返回所有分组 + 各分组前 N 条会话
+   */
+  @Get("sessions/sidebar")
+  async getSidebarSessions(
+    @Query("limit") limit: string = "10",
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.getSidebarSessions(user.id, Number(limit));
+  }
+
   @Put("sessions/:id/archive")
   async archiveSession(
     @Param("id") id: string,
@@ -164,16 +175,6 @@ export class SessionsController {
     });
 
     return session;
-  }
-
-  @Put("sessions/:id/workspace-path")
-  async updateWorkspacePath(
-    @Param("id") id: string,
-    @Body() body: { workspacePath: string },
-    @CurrentUser() user: any
-  ) {
-    await this.sessionService.updateSessionWorkspacePath(id, user.id, body.workspacePath);
-    return { success: true };
   }
 
   @Delete("sessions/:id")

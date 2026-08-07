@@ -90,7 +90,7 @@
                     <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
                       <div class="session-action-trigger">
                         <el-icon class="w-4 h-4">
-                          <MoreFilled />
+                          <MoreHorizontal20Filled />
                         </el-icon>
                       </div>
                       <template #dropdown>
@@ -291,7 +291,8 @@ import {
   Desktop16Regular,
   Settings16Filled,
 } from '@vicons/fluent'
-import { MoreFilled, Loading } from '@element-plus/icons-vue'
+import { MoreHorizontal20Filled } from '@vicons/fluent'
+import { Loading } from '@element-plus/icons-vue'
 import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
@@ -512,51 +513,30 @@ const groupHasMoreSessions = (groupId: string): boolean => {
   return sessionStore.groupHasMore(groupId)
 }
 
-// 初始化加载所有分组的前N个会话
+// 初始化加载所有分组的前N个会话（单次请求获取分组+各分组会话）
 const loadSessions = async () => {
   isInitializing.value = true
   try {
-    // 先加载分组列表
-    await sessionGroupStore.loadGroups()
-
     const pageSize = window.innerHeight > 1080 ? 15 : 10
+    const data = await apiService.fetchSidebarSessions(pageSize)
 
-    // 加载每个真实分组的会话
-    for (const group of sessionGroupStore.groups) {
-      const data = await apiService.fetchSessions(0, pageSize, group.id)
-      // 写入统一数据源
-      for (const session of data.items || []) {
+    // 设置分组列表
+    sessionGroupStore.setGroups(data.groups || [])
+
+    // 处理各分组的会话
+    for (const gs of data.groupSessions || []) {
+      const storeGroupId = gs.groupId === null ? UNGROUPED_ID : gs.groupId
+      for (const session of gs.items || []) {
         sessionStore.setSession(session)
       }
-      sessionStore.setLoadedCount(group.id, data.items?.length || 0)
-      sessionStore.setHasMore(group.id, data.hasMore ?? (data.items?.length || 0) < (data.total || 0))
-      if (!sessionGroupStore.expandedState.has(group.id)) {
-        sessionGroupStore.setExpand(group.id, true)
-      }
+      sessionStore.setLoadedCount(storeGroupId, gs.items?.length || 0)
+      sessionStore.setHasMore(storeGroupId, gs.hasMore)
 
       // 同步流式状态
-      for (const session of data.items || []) {
+      for (const session of gs.items || []) {
         if (session.isStreaming) {
           sessionStore.syncStreamingState(session.id, true)
         }
-      }
-    }
-
-    // 加载未分组的会话
-    const ungroupedData = await apiService.fetchSessions(0, pageSize, null)
-    for (const session of ungroupedData.items || []) {
-      sessionStore.setSession(session)
-    }
-    sessionStore.setLoadedCount(UNGROUPED_ID, ungroupedData.items?.length || 0)
-    sessionStore.setHasMore(UNGROUPED_ID, ungroupedData.hasMore ?? (ungroupedData.items?.length || 0) < (ungroupedData.total || 0))
-    if (!sessionGroupStore.expandedState.has(UNGROUPED_ID)) {
-      sessionGroupStore.setExpand(UNGROUPED_ID, true)
-    }
-
-    // 同步流式状态
-    for (const session of ungroupedData.items || []) {
-      if (session.isStreaming) {
-        sessionStore.syncStreamingState(session.id, true)
       }
     }
   } catch (error) {

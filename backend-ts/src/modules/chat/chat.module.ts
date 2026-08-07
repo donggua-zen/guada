@@ -21,7 +21,7 @@ import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
 import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
-import { FileWatcherService } from "../../common/services/file-watcher.service";
+import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -47,7 +47,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
     SessionStreamManager,
     UploadPathService,
-    FileWatcherService,
+    WorkspaceWatcherService,
     SessionEventsService,
     ChatRunnerService,
     SessionTokenTracker,

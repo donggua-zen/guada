@@ -33,6 +33,11 @@
       <slot name="pane2" />
     </div>
   </div>
+
+  <!-- 拖拽时全屏遮罩，阻止鼠标事件穿透到下层元素 -->
+  <Teleport to="body">
+    <div v-if="isResizing" class="lite-splitpanes-drag-overlay"></div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -405,11 +410,11 @@ onUnmounted(() => {
   background-color: var(--el-color-primary-light-8, #4a4d55);
 }
 
-/* 拖拽覆盖层：防止 iframe 截获鼠标事件 */
-.drag-overlay {
-  position: absolute;
+/* 拖拽时全屏遮罩，阻止下层元素收到 hover/mousemove 事件 */
+.lite-splitpanes-drag-overlay {
+  position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 99999;
   cursor: col-resize;
 }
 </style>

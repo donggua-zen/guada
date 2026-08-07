@@ -732,7 +732,11 @@ const visibleSkills = computed(() => {
 
 // 判断某个工具提供者是否启用（用于 Switch 显示）
 const isToolProviderEnabled = (pluginId) => {
-  // 全部禁用时 switch 不改变原值，仅展示原状态，由后端策略控制
+  // 优先读取角色稳定的工具偏好，避免主开关切换时后端重查导致开关跟随变化；
+  // 主开关只负责灰显，不改变单个工具开关的原有状态。
+  if (pluginId in characterToolSettings.value) {
+    return characterToolSettings.value[pluginId];
+  }
   const tool = localTools.value.find(t => t.pluginId === pluginId);
   return tool ? tool.enabled : false;
 };
@@ -920,6 +924,7 @@ async function loadAllData() {
       apiService.fetchSkills(),
       apiService.fetchCharacterGroups(),
       apiService.fetchCharacters(),
+      loadLocalTools(),
     ])
 
     // 模型

@@ -1,4 +1,7 @@
 <template>
+  <!-- 全屏模式下悬浮对话面板（必须在 SidebarLayout 之前确保 #floating-chat 先于 Teleport 挂载） -->
+  <FloatingChatPanel />
+
   <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
     :sidebarWidth="300" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
@@ -26,6 +29,7 @@ import { useSessionEvents } from '@/composables/useSessionEvents'
 import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
 import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
+import FloatingChatPanel from './chat/FloatingChatPanel.vue'
 
 const layoutStore = useLayoutStore()
 const route = useRoute()

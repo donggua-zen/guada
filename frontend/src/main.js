@@ -171,8 +171,11 @@ router.beforeEach(async (to, from, next) => {
     return next();
   }
 
-  // 后端就绪后若还在加载页，跳回原始目标
+  // 后端就绪后若还在加载页，跳回原始目标（preview 模式除外）
   if (to.path === "/empty") {
+    if (to.query.preview) {
+      return next();
+    }
     const target = to.query.redirect || "/";
     return next(target);
   }

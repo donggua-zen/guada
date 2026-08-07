@@ -70,7 +70,7 @@
 
         <!-- 添加/编辑服务器对话框 -->
         <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'"  style="max-width: 800px;width: 80%" align-center
-            destroy-on-close>
+            destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
             <el-tabs v-model="activeTab" class="mb-4">

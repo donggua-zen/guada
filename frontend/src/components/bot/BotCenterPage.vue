@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full">
+  <div class="h-full flex flex-col">
     <PageHeader title="机器人" />
     <div class="flex-1 flex flex-col md:max-w-260 md:mx-auto">
       <!-- Tab 头部 -->

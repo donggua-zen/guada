@@ -1,11 +1,12 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse } from "@/types/session";
 
 export interface SessionApi {
   createSession(data: any): Promise<Session>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
+  fetchSidebarSessions(limit?: number): Promise<SidebarSessionsResponse>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
   searchSessions(keyword: string, cursor?: string, limit?: number, includeArchived?: boolean): Promise<SearchSessionResponse>;
   archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: any }>;
@@ -285,7 +286,6 @@ export interface SessionApi {
     };
   }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
-  updateSessionWorkspacePath(sessionId: string, workspacePath: string): Promise<{ success: boolean }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
 }
 
@@ -316,6 +316,11 @@ export const sessionApi: SessionApi = {
     const queryString = params.toString();
     const url = queryString ? `/sessions?${queryString}` : "/sessions";
 
+    return await this._request(url);
+  },
+
+  async fetchSidebarSessions(this: ApiContext, limit?: number) {
+    const url = limit ? `/sessions/sidebar?limit=${limit}` : "/sessions/sidebar";
     return await this._request(url);
   },
 
@@ -431,13 +436,6 @@ export const sessionApi: SessionApi = {
 
   async getWorkspacePath(this: ApiContext, sessionId: string) {
     return await this._request(`/sessions/${sessionId}/workspace-path`);
-  },
-
-  async updateSessionWorkspacePath(this: ApiContext, sessionId: string, workspacePath: string) {
-    return await this._request(`/sessions/${sessionId}/workspace-path`, {
-      method: "PUT",
-      data: { workspacePath },
-    });
   },
 
   async getSessionTodo(this: ApiContext, sessionId: string) {

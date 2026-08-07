@@ -2,7 +2,6 @@
   <div class="flex flex-col h-full">
     <CustomTitlebar />
     <div class="backend-waiting-overlay">
-      <!-- 加载状态 -->
       <div v-if="!error" class="waiting-content">
         <div class="logo-container">
           <svg class="logo-spin" viewBox="0 0 100 100" width="80" height="80">
@@ -16,7 +15,6 @@
         <p class="loading-desc">首次启动需初始化数据库，请稍候…</p>
       </div>
 
-      <!-- 错误状态 -->
       <div v-else class="error-content">
         <div class="error-icon">⚠</div>
         <h2 class="error-title">启动失败</h2>
@@ -36,20 +34,24 @@ defineProps<{
 
 <style scoped>
 .backend-waiting-overlay {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
-  height: 100%;
 }
 
 .waiting-content,
 .error-content {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   max-width: 360px;
 }
 
 .logo-container {
+  display: flex;
+  justify-content: center;
   margin-bottom: 24px;
 }
 
