@@ -207,7 +207,7 @@ export class BrowserWebviewManager {
       return { action: "deny" };
     });
 
-    // 监听导航完成 — 注入反检测脚本和新标签页内容
+    // 监听导航完成 — 注入新标签页内容（反检测脚本已通过 CDP addScriptToEvaluateOnNewDocument 预注册）
     webviewWC.on("did-finish-load", () => {
       const w = this.webviews.get(windowId);
       if (w) {
@@ -219,20 +219,6 @@ export class BrowserWebviewManager {
       if (currentUrl === "about:newtab" || currentUrl === "about:blank") {
         this.injectNewTabPage(webviewWC);
         return;
-      }
-
-      // 失败导航也可能触发 did-finish-load，且 getURL() 仍返回原目标 URL。
-      // 只有当前主框架导航未失败时才向页面执行脚本。
-      if (
-        !mainFrameLoadFailed &&
-        currentUrl &&
-        !currentUrl.startsWith("chrome-error://") &&
-        !currentUrl.startsWith("about:")
-      ) {
-        try {
-          if (!webviewWC.isDestroyed())
-            this.injectAntiDetectionScript(webviewWC);
-        } catch {}
       }
     });
 
@@ -276,7 +262,8 @@ export class BrowserWebviewManager {
 
     log.info(`Window ${windowId} webview webContentsId: ${webviewWC.id}`);
 
-    // 仅在 did-finish-load 后注入反检测脚本，避免 attach/失败导航期间操作 guest renderer。
+    // 通过 CDP 注册反检测脚本，在每个新文档的页面脚本之前执行
+    this.setupAntiDetection(webviewWC, windowId);
 
     // 设置右键菜单
     this.setupContextMenu(webviewWC, windowId);
@@ -284,6 +271,12 @@ export class BrowserWebviewManager {
     // 监听 webview 销毁（前端刷新或关闭标签时 DOM 元素移除）
     // 直接删除 entry，防止 getWindowList()/getCurrentTabId() 返回已销毁的 windowId
     webviewWC.once("destroyed", () => {
+      // 清理 debugger（反检测脚本注册时 attach 的）
+      try {
+        if (webviewWC.debugger && !webviewWC.isDestroyed() && webviewWC.debugger.isAttached()) {
+          webviewWC.debugger.detach();
+        }
+      } catch {}
       if (this.webviews.delete(windowId)) {
         log.info(`Window ${windowId} destroyed, entry removed`);
       }
@@ -787,12 +780,42 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
   }
 
   /**
-   * 注入反检测脚本
+   * 生成随机但合理的浏览器指纹
    */
-  private injectAntiDetectionScript(webContents: WebContents): void {
-    if (webContents.isDestroyed()) return;
-    const antiDetectionScript = `
+  private generateFingerprint() {
+    const gpuOptions = [
+      { vendor: 'Intel Inc.', renderer: 'Intel Iris Xe Graphics' },
+      { vendor: 'Intel Inc.', renderer: 'Intel(R) UHD Graphics 630' },
+      { vendor: 'Intel Inc.', renderer: 'Intel(R) HD Graphics 620' },
+      { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1660/PCIe/SSE2' },
+      { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 3060/PCIe/SSE2' },
+      { vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+      { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+      { vendor: 'Google Inc. (AMD)', renderer: 'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    ];
+    const coreOptions = [4, 8, 12, 16];
+    const memoryOptions = [4, 8, 16];
+    const gpu = gpuOptions[Math.floor(Math.random() * gpuOptions.length)];
+    const cores = coreOptions[Math.floor(Math.random() * coreOptions.length)];
+    const memory = memoryOptions[Math.floor(Math.random() * memoryOptions.length)];
+    return {
+      gpuVendor: gpu.vendor,
+      gpuRenderer: gpu.renderer,
+      cores,
+      memory,
+      canvasNoise: Math.floor(Math.random() * 3) + 1, // 1-3 像素扰动
+      audioNoise: (Math.random() * 0.0001 + 0.00001).toFixed(6), // 极小音频噪声
+    };
+  }
+
+  /**
+   * 构建反检测脚本（带随机指纹 + Canvas/AudioContext 指纹保护）
+   */
+  private buildAntiDetectionScript(fp: ReturnType<BrowserWebviewManager['generateFingerprint']>): string {
+    return `
       (function() {
+        const FP = ${JSON.stringify(fp)};
+
         // 1. 移除 webdriver 标志
         Object.defineProperty(navigator, 'webdriver', {
           get: () => undefined,
@@ -835,13 +858,13 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           configurable: true,
         });
 
-        // 4. 伪装硬件信息
+        // 4. 伪装硬件信息（随机化）
         Object.defineProperty(navigator, 'hardwareConcurrency', {
-          get: () => 8,
+          get: () => FP.cores,
           configurable: true,
         });
         Object.defineProperty(navigator, 'deviceMemory', {
-          get: () => 8,
+          get: () => FP.memory,
           configurable: true,
         });
         Object.defineProperty(navigator, 'maxTouchPoints', {
@@ -938,12 +961,12 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           configurable: true,
         });
 
-        // 11. WebGL 指纹混淆
+        // 11. WebGL 指纹混淆（随机化 GPU 信息）
         const getParameterProxyHandler = {
           apply: function(target, thisArg, args) {
             const param = args[0];
-            if (param === 37445) return 'Intel Inc.';
-            if (param === 37446) return 'Intel Iris Xe Graphics';
+            if (param === 37445) return FP.gpuVendor;
+            if (param === 37446) return FP.gpuRenderer;
             return target.apply(thisArg, args);
           }
         };
@@ -951,14 +974,70 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         const originalGetContext = HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext = function(type, ...args) {
           const context = originalGetContext.call(this, type, ...args);
-          if (context && (type === 'webgl' || type === 'experimental-webgl')) {
+          if (context && (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2')) {
             const originalGetParameter = context.getParameter;
             context.getParameter = new Proxy(originalGetParameter, getParameterProxyHandler);
           }
           return context;
         };
 
-        // 12. 防止 iframe 中检测
+        // 12. Canvas 指纹防护 — 在 toDataURL / toBlob 输出中注入微不可见的像素噪声
+        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        HTMLCanvasElement.prototype.toDataURL = function(...args) {
+          try {
+            const ctx = originalGetContext.call(this, '2d');
+            if (ctx && this.width > 0 && this.height > 0) {
+              const imageData = ctx.getImageData(0, 0, this.width, this.height);
+              const d = imageData.data;
+              for (let i = 0; i < d.length; i += 4) {
+                d[i] = (d[i] + FP.canvasNoise) & 0xFF;
+              }
+              ctx.putImageData(imageData, 0, 0);
+            }
+          } catch (e) {}
+          return originalToDataURL.apply(this, args);
+        };
+
+        const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+        HTMLCanvasElement.prototype.toBlob = function(callback, ...args) {
+          try {
+            const ctx = originalGetContext.call(this, '2d');
+            if (ctx && this.width > 0 && this.height > 0) {
+              const imageData = ctx.getImageData(0, 0, this.width, this.height);
+              const d = imageData.data;
+              for (let i = 0; i < d.length; i += 4) {
+                d[i] = (d[i] + FP.canvasNoise) & 0xFF;
+              }
+              ctx.putImageData(imageData, 0, 0);
+            }
+          } catch (e) {}
+          return originalToBlob.call(this, callback, ...args);
+        };
+
+        // 13. AudioContext 指纹防护 — 在频率数据中注入微小噪声
+        const originalGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
+        AnalyserNode.prototype.getFloatFrequencyData = function(array) {
+          originalGetFloatFrequencyData.call(this, array);
+          const noise = parseFloat(FP.audioNoise);
+          for (let i = 0; i < array.length; i++) {
+            array[i] += noise * (i % 2 === 0 ? 1 : -1);
+          }
+        };
+
+        const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+        AudioBuffer.prototype.getChannelData = function(channel) {
+          const data = originalGetChannelData.call(this, channel);
+          // 仅对长度较短的数据添加噪声（避免影响实际音频播放）
+          if (data.length < 16384) {
+            const noise = parseFloat(FP.audioNoise);
+            for (let i = 0; i < data.length; i++) {
+              data[i] += noise * (Math.random() - 0.5);
+            }
+          }
+          return data;
+        };
+
+        // 14. 防止 iframe 中检测
         try {
           const iframe = document.createElement('iframe');
           iframe.srcdoc = '<html></html>';
@@ -971,13 +1050,58 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           document.body.removeChild(iframe);
         } catch (e) {}
 
-
       })();
     `;
+  }
 
-    webContents.executeJavaScript(antiDetectionScript, true).catch((err) => {
-      log.warn("Failed to inject anti-detection script:", err);
-    });
+  /**
+   * 通过 CDP 注册反检测脚本，在每个新文档的页面脚本之前执行。
+   * 比在 did-finish-load 后 executeJavaScript 更早，能防止风控脚本先行检测。
+   */
+  private setupAntiDetection(webviewWC: WebContents, windowId: string): void {
+    if (webviewWC.isDestroyed()) return;
+    const fp = this.generateFingerprint();
+    const script = this.buildAntiDetectionScript(fp);
+
+    try {
+      if (!webviewWC.debugger.isAttached()) {
+        webviewWC.debugger.attach("1.3");
+      }
+      webviewWC.debugger
+        .sendCommand("Page.enable")
+        .then(() =>
+          webviewWC.debugger.sendCommand(
+            "Page.addScriptToEvaluateOnNewDocument",
+            { source: script },
+          ),
+        )
+        .then(() => {
+          log.info(
+            `Anti-detection script registered via CDP for webview ${windowId} (cores=${fp.cores}, gpu=${fp.gpuRenderer})`,
+          );
+        })
+        .catch((err: Error) => {
+          log.warn(
+            `Failed to register anti-detection script via CDP for webview ${windowId}: ${err.message}`,
+          );
+          // 降级：在 did-finish-load 后注入
+          webviewWC.on("did-finish-load", () => {
+            if (!webviewWC.isDestroyed()) {
+              webviewWC.executeJavaScript(script, true).catch(() => {});
+            }
+          });
+        });
+    } catch (err: any) {
+      log.warn(
+        `Failed to attach debugger for anti-detection on webview ${windowId}: ${err.message}`,
+      );
+      // 降级：在 did-finish-load 后注入
+      webviewWC.on("did-finish-load", () => {
+        if (!webviewWC.isDestroyed()) {
+          webviewWC.executeJavaScript(script, true).catch(() => {});
+        }
+      });
+    }
   }
 
   /**

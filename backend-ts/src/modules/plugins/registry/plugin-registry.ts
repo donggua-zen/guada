@@ -5,6 +5,7 @@ import {
   TurnInterceptor,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
+import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
 
 interface PluginRegistration {
   manifest: PluginManifest;
@@ -19,6 +20,7 @@ interface PluginRegistration {
     handler: (context: any) => string | Promise<string>;
   }>;
   interceptors: TurnInterceptor[];
+  workspaceProviders: WorkspaceProviderFactory[];
   ctor?: new (...args: any[]) => PluginBase;
 }
 
@@ -27,7 +29,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [] });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [] });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -75,6 +77,29 @@ class PluginRegistryImpl {
   /** 获取插件的所有回合拦截器 */
   getInterceptors(pluginId: string): TurnInterceptor[] {
     return this.registrations.get(pluginId)?.interceptors || [];
+  }
+
+  /** 注册 WorkspaceProvider 工厂 */
+  registerWorkspaceProvider(pluginId: string, factory: WorkspaceProviderFactory) {
+    const reg = this.registrations.get(pluginId);
+    if (!reg) return;
+    if (!reg.workspaceProviders.find((f) => f.scheme === factory.scheme)) {
+      reg.workspaceProviders.push(factory);
+    }
+  }
+
+  /** 获取插件注册的所有 WorkspaceProvider 工厂 */
+  getWorkspaceProviders(pluginId: string): WorkspaceProviderFactory[] {
+    return this.registrations.get(pluginId)?.workspaceProviders || [];
+  }
+
+  /** 跨所有插件查找 scheme 对应的 WorkspaceProvider 工厂 */
+  findWorkspaceProviderFactory(scheme: string): WorkspaceProviderFactory | undefined {
+    for (const reg of this.registrations.values()) {
+      const found = reg.workspaceProviders.find((f) => f.scheme === scheme);
+      if (found) return found;
+    }
+    return undefined;
   }
 
   has(pluginId: string): boolean { return this.registrations.has(pluginId); }

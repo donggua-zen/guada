@@ -1223,29 +1223,61 @@ export class BrowserAutomationService {
     }
 
     const selectorLiteral = JSON.stringify(cssSelector);
-    const result = await this.withSnapshotLock(webContents, () =>
-      webContents.executeJavaScript(`
+
+    const result = await this.withSnapshotLock(webContents, async () => {
+      // 获取元素位置和视口尺寸
+      const rectInfo = await webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const element = document.querySelector(${selectorLiteral})
+          if (!element) {
+            resolve(null)
+            return
+          }
+          element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
+          const rect = element.getBoundingClientRect()
+          resolve({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+            vw: window.innerWidth,
+            vh: window.innerHeight,
+          })
+        })
+      `);
+
+      if (!rectInfo) {
+        return { success: false, clicked: false, error: 'Element not found' };
+      }
+
+      const targetX = Math.max(0, Math.min(rectInfo.x, rectInfo.vw));
+      const targetY = Math.max(0, Math.min(rectInfo.y, rectInfo.vh));
+
+      // 尝试 CDP 输入（isTrusted=true），失败则降级到 dispatchEvent
+      const cdpSuccess = await this.cdpClick(webContents, targetX, targetY, rectInfo.vw, rectInfo.vh);
+      if (cdpSuccess) {
+        return { success: true, clicked: true };
+      }
+
+      // 降级：dispatchEvent（isTrusted=false，但保证功能可用）
+      await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
           if (element) {
-            // 使用 MouseEvent 触发点击，以支持 Vue/React 等框架的事件绑定
             const rect = element.getBoundingClientRect()
-            const x = rect.left + rect.width / 2
-            const y = rect.top + rect.height / 2
             element.dispatchEvent(new MouseEvent('click', {
               bubbles: true,
               cancelable: true,
               view: window,
-              clientX: x,
-              clientY: y,
+              clientX: rect.left + rect.width / 2,
+              clientY: rect.top + rect.height / 2,
             }))
-            resolve({ success: true, clicked: true })
+            resolve(true)
           } else {
-            resolve({ success: false, clicked: false, error: 'Element not found' })
+            resolve(false)
           }
         })
-      `),
-    );
+      `);
+      return { success: true, clicked: true };
+    });
 
     return {
       windowId: wid,
@@ -1279,27 +1311,269 @@ export class BrowserAutomationService {
     }
 
     const selectorLiteral = JSON.stringify(cssSelector);
-    const valueLiteral = JSON.stringify(value);
-    const result = await this.withSnapshotLock(webContents, () =>
-      webContents.executeJavaScript(`
+
+    const result = await this.withSnapshotLock(webContents, async () => {
+      // 获取元素位置并 scrollIntoView
+      const rectInfo = await webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const element = document.querySelector(${selectorLiteral})
+          if (!element) { resolve(null); return }
+          element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
+          const rect = element.getBoundingClientRect()
+          resolve({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, vw: window.innerWidth, vh: window.innerHeight })
+        })
+      `);
+
+      if (!rectInfo) {
+        return { success: false, filled: false, error: 'Element not found' };
+      }
+
+      // 尝试 CDP 键盘输入，失败则降级
+      const cdpSuccess = await this.cdpTypeText(webContents, rectInfo.x, rectInfo.y, rectInfo.vw, rectInfo.vh, value);
+      if (cdpSuccess) {
+        return { success: true, filled: true };
+      }
+
+      // 降级：直接设值 + dispatchEvent
+      const valueLiteral = JSON.stringify(value);
+      await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
           if (element) {
             element.value = ${valueLiteral}
             element.dispatchEvent(new Event('input', { bubbles: true }))
             element.dispatchEvent(new Event('change', { bubbles: true }))
-            resolve({ success: true, filled: true })
+            resolve(true)
           } else {
-            resolve({ success: false, filled: false, error: 'Element not found' })
+            resolve(false)
           }
         })
-      `),
-    );
+      `);
+      return { success: true, filled: true };
+    });
 
     return {
       windowId: wid,
       ...result,
     };
+  }
+
+  /**
+   * 通过 CDP Input.dispatchMouseEvent 模拟鼠标点击（isTrusted=true）。
+   * 包含鼠标轨迹模拟：从随机起点经多步移动到目标，然后按下/释放。
+   * 返回 false 表示 CDP 不可用，调用方应降级。
+   */
+  private async cdpClick(
+    webContents: Electron.WebContents,
+    targetX: number,
+    targetY: number,
+    viewportW: number,
+    viewportH: number,
+  ): Promise<boolean> {
+    const debuggerApi = webContents.debugger;
+    let attachedByUs = false;
+
+    try {
+      if (!debuggerApi.isAttached()) {
+        debuggerApi.attach("1.3");
+        attachedByUs = true;
+      }
+
+      const send = (method: string, params: any) =>
+        debuggerApi.sendCommand(method, params);
+
+      // 起点：从视口边缘随机选择
+      const startSide = Math.floor(Math.random() * 4);
+      let startX: number, startY: number;
+      switch (startSide) {
+        case 0: startX = Math.random() * viewportW * 0.3; startY = Math.random() * viewportH; break;
+        case 1: startX = viewportW - Math.random() * viewportW * 0.3; startY = Math.random() * viewportH; break;
+        case 2: startX = Math.random() * viewportW; startY = Math.random() * viewportH * 0.3; break;
+        default: startX = Math.random() * viewportW; startY = viewportH - Math.random() * viewportH * 0.3; break;
+      }
+
+      // 生成贝塞尔轨迹（5-8 步）
+      const steps = 5 + Math.floor(Math.random() * 4);
+      const controlX = startX + (targetX - startX) * 0.5 + (Math.random() - 0.5) * 100;
+      const controlY = startY + (targetY - startY) * 0.5 + (Math.random() - 0.5) * 100;
+
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        // 二次贝塞尔曲线
+        const x = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * controlX + t * t * targetX;
+        const y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * controlY + t * t * targetY;
+        await send("Input.dispatchMouseEvent", {
+          type: "mouseMoved",
+          x: Math.round(x * 100) / 100,
+          y: Math.round(y * 100) / 100,
+        });
+        await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
+      }
+
+      // 短暂停留后点击
+      await new Promise((r) => setTimeout(r, 30 + Math.random() * 50));
+
+      await send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x: targetX,
+        y: targetY,
+        button: "left",
+        clickCount: 1,
+      });
+      await new Promise((r) => setTimeout(r, 30 + Math.random() * 40));
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: targetX,
+        y: targetY,
+        button: "left",
+        clickCount: 1,
+      });
+
+      return true;
+    } catch (err: any) {
+      log.warn(`CDP click failed, will fallback to dispatchEvent: ${err.message}`);
+      return false;
+    } finally {
+      if (attachedByUs && debuggerApi.isAttached()) {
+        try { debuggerApi.detach(); } catch {}
+      }
+    }
+  }
+
+  /**
+   * 通过 CDP Input.dispatchKeyEvent 模拟键盘输入（isTrusted=true）。
+   * 先点击聚焦元素，Ctrl+A 清空，然后逐字符输入。
+   * 返回 false 表示 CDP 不可用，调用方应降级。
+   */
+  private async cdpTypeText(
+    webContents: Electron.WebContents,
+    elementX: number,
+    elementY: number,
+    viewportW: number,
+    viewportH: number,
+    text: string,
+  ): Promise<boolean> {
+    const debuggerApi = webContents.debugger;
+    let attachedByUs = false;
+
+    try {
+      if (!debuggerApi.isAttached()) {
+        debuggerApi.attach("1.3");
+        attachedByUs = true;
+      }
+
+      const send = (method: string, params: any) =>
+        debuggerApi.sendCommand(method, params);
+
+      // 先点击元素以获取焦点
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: elementX,
+        y: elementY,
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      await send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x: elementX,
+        y: elementY,
+        button: "left",
+        clickCount: 1,
+      });
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: elementX,
+        y: elementY,
+        button: "left",
+        clickCount: 1,
+      });
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Ctrl+A 全选
+      await send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "a",
+        code: "KeyA",
+        modifiers: 2,
+      });
+      await send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "a",
+        code: "KeyA",
+        modifiers: 2,
+      });
+      await new Promise((r) => setTimeout(r, 30));
+
+      // Backspace 删除
+      await send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "Backspace",
+        code: "Backspace",
+      });
+      await send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "Backspace",
+        code: "Backspace",
+      });
+      await new Promise((r) => setTimeout(r, 30));
+
+      // 逐字符输入
+      for (const char of text) {
+        const isAscii = char.charCodeAt(0) < 128;
+        const keyInfo = isAscii
+          ? this.charToKeyCode(char)
+          : { key: "Unidentified", code: "Unidentified" };
+
+        await send("Input.dispatchKeyEvent", {
+          type: "keyDown",
+          key: keyInfo.key,
+          code: keyInfo.code,
+          text: char,
+        });
+        if (isAscii) {
+          await send("Input.dispatchKeyEvent", {
+            type: "keyUp",
+            key: keyInfo.key,
+            code: keyInfo.code,
+          });
+        } else {
+          // 非 ASCII 字符（中文等），发送 keyUp 不带 text
+          await send("Input.dispatchKeyEvent", {
+            type: "keyUp",
+            key: keyInfo.key,
+            code: keyInfo.code,
+          });
+        }
+        // 随机化打字间隔
+        await new Promise((r) => setTimeout(r, 30 + Math.random() * 50));
+      }
+
+      return true;
+    } catch (err: any) {
+      log.warn(`CDP typeText failed, will fallback to dispatchEvent: ${err.message}`);
+      return false;
+    } finally {
+      if (attachedByUs && debuggerApi.isAttached()) {
+        try { debuggerApi.detach(); } catch {}
+      }
+    }
+  }
+
+  /**
+   * 将 ASCII 字符映射为 CDP key/code
+   */
+  private charToKeyCode(char: string): { key: string; code: string } {
+    if (char === " ") return { key: " ", code: "Space" };
+    if (char === "\n") return { key: "Enter", code: "Enter" };
+    if (char === "\t") return { key: "Tab", code: "Tab" };
+    const upper = char.toUpperCase();
+    if (upper.length === 1 && upper >= "A" && upper <= "Z") {
+      return { key: upper, code: `Key${upper}` };
+    }
+    if (char >= "0" && char <= "9") {
+      return { key: char, code: `Digit${char}` };
+    }
+    // 标点符号等
+    return { key: char, code: "Unidentified" };
   }
 
   /**

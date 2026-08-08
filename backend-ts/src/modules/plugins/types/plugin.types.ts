@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ISessionContext } from "../../chat/session-context";
 import type { ToolResult } from "../api/plugin-api";
+import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
 
 // ==================== 插件元数据 ====================
 
@@ -291,6 +292,8 @@ export interface ResolvedPluginInfo {
   }>;
   /** 注册的回合拦截器 */
   interceptors: TurnInterceptor[];
+  /** 注册的 WorkspaceProvider 工厂 */
+  workspaceProviders: WorkspaceProviderFactory[];
   /** 插件来源 */
   source?: "builtin" | "dev" | "user";
   /** 插件目录路径（仅外部插件） */

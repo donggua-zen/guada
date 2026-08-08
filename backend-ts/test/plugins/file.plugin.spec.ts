@@ -4,6 +4,8 @@ import * as path from "path";
 import * as os from "os";
 import { FilePlugin } from "../../src/modules/plugins/builtins/file.plugin";
 import { WorkspaceService } from "../../src/common/services/workspace.service";
+import { WorkspaceProviderResolver } from "../../src/common/workspace/workspace-provider.resolver";
+import { LocalWorkspaceProvider } from "../../src/common/workspace/local-workspace-provider";
 import { PluginApi } from "../../src/modules/plugins/api/plugin-api";
 
 /** Captures registered tools/prompts from PluginApi so tests can invoke execute() */
@@ -43,10 +45,18 @@ describe("FilePlugin", () => {
       validateWritePath: () => {},
     };
 
+    // LocalWorkspaceProvider uses fs.* internally — identical behavior to direct fs calls
+    const localProvider = new LocalWorkspaceProvider();
+    const mockResolver = {
+      resolve: () => Promise.resolve(localProvider),
+      withProvider: (_path: string, fn: (p: any) => Promise<any>) => fn(localProvider),
+    } as Partial<WorkspaceProviderResolver>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FilePlugin,
         { provide: WorkspaceService, useValue: mockWorkspaceService },
+        { provide: WorkspaceProviderResolver, useValue: mockResolver },
       ],
     }).compile();
 
@@ -388,83 +398,8 @@ describe("FilePlugin", () => {
     });
   });
 
-  // ── grepInFile (private) ──
-
-  describe("grepInFile (private)", () => {
-    it("should search file and return relative path + count", async () => {
-      const fp = await writeFile("searchme.ts", "target line\ntarget again\nother\n");
-      const regex = /target/g;
-      const result = await (plugin as any).grepInFile(fp, regex, tmpDir, 50);
-      expect(result.count).toBe(2);
-      expect(result.lines[0]).toContain("searchme.ts:1:");
-      expect(result.lines[1]).toContain("searchme.ts:2:");
-    });
-
-    it("should respect remaining limit", async () => {
-      const fp = await writeFile("searchme.ts", "match\nmatch\nmatch\nmatch\n");
-      const regex = /match/g;
-      const result = await (plugin as any).grepInFile(fp, regex, tmpDir, 2);
-      expect(result.count).toBe(2);
-      expect(result.lines).toHaveLength(2);
-    });
-
-    it("should skip unreadable files gracefully", async () => {
-      const result = await (plugin as any).grepInFile(
-        path.join(tmpDir, "nonexistent.ts"),
-        /foo/g,
-        tmpDir,
-        50,
-      );
-      expect(result.count).toBe(0);
-      expect(result.lines).toHaveLength(0);
-    });
-
-    it("should not mutate the original regex lastIndex", async () => {
-      const fp = await writeFile("test.txt", "foo\nbar\nfoo\n");
-      const regex = /foo/g;
-      regex.lastIndex = 0;
-      await (plugin as any).grepInFile(fp, regex, tmpDir, 50);
-      // Original regex should not have been mutated by concurrent-safe clone
-      expect(regex.lastIndex).toBe(0);
-    });
-  });
-
-  // ── findEnclosingFunction (private) ──
-
-  describe("findEnclosingFunction (private)", () => {
-    const fn = (lines: string[], idx: number) =>
-      (plugin as any).findEnclosingFunction(lines, idx);
-
-    it("should detect JS/TS function", () => {
-      const lines = ["function foo() {", "  return 1;", "}"];
-      expect(fn(lines, 1)).toBe("foo");
-    });
-
-    it("should detect arrow function", () => {
-      const lines = ["const bar = () => {", "  return 2;", "};"];
-      expect(fn(lines, 1)).toBe("bar");
-    });
-
-    it("should detect Python def", () => {
-      const lines = ["def greet():", "    print('hi')"];
-      expect(fn(lines, 1)).toBe("greet");
-    });
-
-    it("should detect class", () => {
-      const lines = ["class MyClass {", "  method() {}", "}"];
-      expect(fn(lines, 1)).toBe("MyClass");
-    });
-
-    it("should detect Go func", () => {
-      const lines = ["func (r *Repo) Save() {", "  return", "}"];
-      expect(fn(lines, 1)).toBe("Save");
-    });
-
-    it("should return null when no enclosing function found", () => {
-      const lines = ["standalone line", "another line"];
-      expect(fn(lines, 1)).toBeNull();
-    });
-  });
+  // ── grepInFile / findEnclosingFunction 私有方法测试已移除 ──
+  // 这两个方法在 Phase 3 迁移中移至 LocalWorkspaceProvider，不再属于 FilePlugin
 
   // ── IGNORE_PATTERNS ──
 

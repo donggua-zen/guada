@@ -42,16 +42,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     recentWorkspaces.value = recentWorkspaces.value.filter((p) => p !== path)
   }
 
+  let baseDirPromise: Promise<string | null> | null = null
+
   async function ensureBaseDir(): Promise<string | null> {
     if (baseDir.value) return baseDir.value
-    try {
-      const response = await apiService.fetchWorkspaceBaseDir()
-      baseDir.value = response.workspaceBaseDir
-      return baseDir.value
-    } catch (e) {
-      console.error('Failed to fetch workspace base dir:', e)
-      return null
-    }
+    if (baseDirPromise) return baseDirPromise
+    baseDirPromise = (async () => {
+      try {
+        const response = await apiService.fetchWorkspaceBaseDir()
+        baseDir.value = response.workspaceBaseDir
+        return baseDir.value
+      } catch (e) {
+        console.error('Failed to fetch workspace base dir:', e)
+        return null
+      } finally {
+        baseDirPromise = null
+      }
+    })()
+    return baseDirPromise
   }
 
   function getPublicPath(): string | null {

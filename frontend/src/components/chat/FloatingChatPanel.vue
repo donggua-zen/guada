@@ -292,25 +292,25 @@ function handleResize() {
 onMounted(() => window.addEventListener('resize', handleResize))
 onUnmounted(() => window.removeEventListener('resize', handleResize))
 
-/** 全屏切换时滚动到底部（进入：Teleport 搬入浮动容器；退出：Teleport 搬回 pane1） */
+/** 全屏切换时滚动到底部 */
 watch(() => layoutStore.workspaceFullscreen, () => {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const scrollEl = containerRef.value?.querySelector('.scroll-container')
-      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
-    })
-  })
+  // 同帧立即尝试（进入全屏时 DOM 已在 containerRef 内）
+  scrollToBottom()
+  // 下一帧再试一次（退出全屏时 Teleport 刚搬回 pane1，需等 DOM 更新）
+  requestAnimationFrame(() => scrollToBottom())
 })
+
+function scrollToBottom() {
+  const scrollEl = containerRef.value?.querySelector('.scroll-container')
+    || document.querySelector('.chat-pane-content .scroll-container')
+  if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
+}
 
 /** 展开面板时滚动到底部 */
 watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   if (collapsed) return
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const scrollEl = containerRef.value?.querySelector('.scroll-container')
-      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
-    })
-  })
+  scrollToBottom()
+  requestAnimationFrame(() => scrollToBottom())
 })
 </script>
 

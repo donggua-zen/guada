@@ -413,13 +413,15 @@ export class AgentEngine {
         assistantResponse.metadata.thinkingDurationMs =
           this.calculateThinkingDuration(currentTurnThinkingInfo);
 
-        // 中止时修复不完整的 toolCalls
-        if (streamAborted && assistantResponse.toolCalls) {
+        // 校验并修复 toolCalls 参数 JSON
+        // streamAborted: 截断的 JSON + 标记 outcome=aborted
+        // 正常完成: 模型可能输出无效 JSON，不修复会导致下轮回传时 400
+        if (assistantResponse.toolCalls) {
           assistantResponse.toolCalls = assistantResponse.toolCalls.map(
             (tc: any) => ({
               ...tc,
               arguments: this.repairToolCallArguments(tc.arguments),
-              outcome: "aborted",
+              ...(streamAborted ? { outcome: "aborted" } : {}),
             }),
           );
         }

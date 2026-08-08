@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import * as fs from "fs";
 import * as path from "path";
-import * as parcelWatcher from "@parcel/watcher";
+import { WorkspaceProviderResolver } from "../workspace/workspace-provider.resolver";
+import type { FileChangeEvent as ProviderFileChangeEvent } from "../workspace/workspace-provider.interface";
 
 export interface FileChangeEvent {
   type: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
@@ -19,7 +19,7 @@ interface NormalizedPath {
 interface WatchEntry {
   pathKey: string;
   absolutePath: string;
-  subscription: parcelWatcher.AsyncSubscription | null;
+  subscription: (() => void) | null;
   /** 引用该目录的所有 sessionId，事件广播给这些会话 */
   sessionIds: Set<string>;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -53,9 +53,9 @@ interface SessionState {
   connections: Map<symbol, Connection>;
 }
 
-const IDLE_TTL_MS = 30_000;
-const MAX_IDLE_WATCHERS = 3;
-const COALESCE_MS = 60;
+const IDLE_TTL_MS = 180_000;
+const MAX_IDLE_WATCHERS = 15;
+const COALESCE_MS = 200;
 const DEGRADED_COALESCE_MS = 500;
 const EVENT_RATE_WINDOW_MS = 5_000;
 const EVENT_RATE_THRESHOLD = 5_000;
@@ -88,6 +88,10 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     Set<(event: FileChangeEvent) => void>
   >();
   private destroyed = false;
+
+  constructor(
+    private readonly providerResolver: WorkspaceProviderResolver,
+  ) {}
 
   /**
    * 注册一条会话监听连接，返回幂等释放函数。
@@ -219,7 +223,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
       if (entry.idleTimer) clearTimeout(entry.idleTimer);
       try {
-        await entry.subscription?.unsubscribe();
+        entry.subscription?.();
       } catch (error: unknown) {
         this.logger.warn(
           `Failed to unsubscribe watcher ${entry.absolutePath}: ${String(error)}`,
@@ -276,40 +280,32 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       ready: false,
     };
     this.watchers.set(pathKey, entry);
-    this.subscribeEntry(entry);
+    this.subscribeEntry(entry).catch(() => {});
   }
 
-  private subscribeEntry(entry: WatchEntry): void {
-    parcelWatcher
-      .subscribe(
-        entry.absolutePath,
-        (error, events) => {
-          if (error) {
-            this.logger.error(
-              `Watcher error for ${entry.absolutePath}: ${String(error.message || error)}`,
-            );
-            if (/ENOSPC/.test(error.message || "")) {
-              entry.degraded = true;
-            }
-            return;
-          }
-          this.handleParcelEvents(entry, events);
+  private async subscribeEntry(entry: WatchEntry): Promise<void> {
+    try {
+      const provider = await this.providerResolver.resolve(entry.absolutePath);
+      const cleanup = provider.watch(
+        [entry.absolutePath],
+        { recursive: true, ignore: IGNORE_GLOBS },
+        (event: ProviderFileChangeEvent) => {
+          // provider returns relative path; reconstruct absolute
+          const abs = path.join(entry.absolutePath, event.path);
+          this.handleProviderEvent(entry, event.type, abs);
         },
-        { ignore: IGNORE_GLOBS },
-      )
-      .then((subscription) => {
-        entry.subscription = subscription;
-        entry.ready = true;
-        entry.lastUsedAt = Date.now();
-        this.logger.debug(
-          `Started recursive watcher for ${entry.absolutePath}`,
-        );
-      })
-      .catch((error: unknown) => {
-        this.logger.error(
-          `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
-        );
-      });
+      );
+      entry.subscription = cleanup;
+      entry.ready = true;
+      entry.lastUsedAt = Date.now();
+      this.logger.debug(
+        `Started recursive watcher for ${entry.absolutePath}`,
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
+      );
+    }
   }
 
   private releaseWatcherRef(pathKey: string, sessionId: string): void {
@@ -333,13 +329,13 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
     this.watchers.delete(entry.pathKey);
     if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
-    entry.subscription
-      ?.unsubscribe()
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `Failed to dispose watcher ${entry.absolutePath}: ${String(error)}`,
-        );
-      });
+    try {
+      entry.subscription?.();
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Failed to dispose watcher ${entry.absolutePath}: ${String(error)}`,
+      );
+    }
     this.logger.debug(
       `Disposed idle watcher for ${entry.absolutePath} (TTL)`,
     );
@@ -367,21 +363,19 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
   /**
    * parcel 事件映射到 FileChangeEvent：
-   *  create → stat 判断 add/addDir
-   *  update → change
-   *  delete → unlink（前端对 unlink/unlinkDir 处理等价）
+  /**
+   * Provider 事件处理：FileChangeEvent 已包含 type（add/change/unlink/addDir/unlinkDir）。
    * 事件先入合并缓冲，延迟批量推送。
    */
-  private handleParcelEvents(
+  private handleProviderEvent(
     entry: WatchEntry,
-    events: parcelWatcher.Event[],
+    type: ProviderFileChangeEvent["type"],
+    absolutePath: string,
   ): void {
     if (!entry.ready) return;
 
     const now = Date.now();
-    for (const _ of events) {
-      entry.eventTimestamps.push(now);
-    }
+    entry.eventTimestamps.push(now);
     while (
       entry.eventTimestamps.length &&
       now - entry.eventTimestamps[0] > EVENT_RATE_WINDOW_MS
@@ -398,44 +392,14 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       );
     }
 
-    for (const ev of events) {
-      this.enqueueEvent(entry, ev);
-    }
-  }
-
-  private enqueueEvent(entry: WatchEntry, ev: parcelWatcher.Event): void {
-    const abs = this.normalizeAbsolutePath(ev.path);
-
-    let pending: PendingChangeEvent;
-    if (ev.type === "create") {
-      let isDir = false;
-      try {
-        isDir = fs.statSync(abs.value).isDirectory();
-      } catch {
-        // 秒建秒删，跳过
-        return;
-      }
-      pending = {
-        type: isDir ? "addDir" : "add",
-        path: abs.value,
-        timestamp: Date.now(),
-      };
-    } else if (ev.type === "update") {
-      pending = {
-        type: "change",
-        path: abs.value,
-        timestamp: Date.now(),
-      };
-    } else {
-      pending = {
-        type: "unlink",
-        path: abs.value,
-        timestamp: Date.now(),
-      };
-    }
+    const pending: PendingChangeEvent = {
+      type,
+      path: absolutePath,
+      timestamp: Date.now(),
+    };
 
     // 合并：同一路径在窗口内只保留最新事件
-    entry.pendingEvents.set(abs.value, pending);
+    entry.pendingEvents.set(absolutePath, pending);
 
     if (entry.pendingEvents.size >= MAX_EVENTS_PER_FLUSH) {
       this.flushEvents(entry);

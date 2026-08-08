@@ -367,9 +367,7 @@ export async function captureAccessibilitySnapshot(
   options: AXSnapshotOptions = {},
 ): Promise<{ tree: SimpleAXNode; stats: AXSnapshotStats }> {
   const debuggerApi = webContents.debugger;
-  if (debuggerApi.isAttached()) {
-    throw new Error("WebContents debugger is already attached");
-  }
+  const wasAlreadyAttached = debuggerApi.isAttached();
 
   const commandTimeoutMs = options.commandTimeoutMs ?? 15000;
   const deadline = Date.now() + commandTimeoutMs;
@@ -407,8 +405,10 @@ export async function captureAccessibilitySnapshot(
   debuggerApi.once("detach", onDetach);
 
   try {
-    debuggerApi.attach("1.3");
-    attachedByUs = true;
+    if (!wasAlreadyAttached) {
+      debuggerApi.attach("1.3");
+      attachedByUs = true;
+    }
     await sendCommand("Accessibility.enable");
     const result = await sendCommand<{ nodes?: RawAXNode[] }>(
       "Accessibility.getFullAXTree",
@@ -484,6 +484,9 @@ export async function captureAccessibilitySnapshot(
     if (attachedByUs && !detachedExternally) {
       await sendCommand("Accessibility.disable").catch(() => {});
       if (debuggerApi.isAttached()) debuggerApi.detach();
+    } else if (!attachedByUs) {
+      // Debugger was already attached by caller — only disable AX domain, don't detach.
+      await sendCommand("Accessibility.disable").catch(() => {});
     }
     debuggerApi.removeListener("detach", onDetach);
   }
