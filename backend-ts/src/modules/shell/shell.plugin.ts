@@ -9,6 +9,8 @@ import {
 } from "./process-manager.service";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
+import { WorkspaceProviderResolver } from "../../common/workspace/workspace-provider.resolver";
+import type { WorkspaceProvider } from "../../common/workspace/workspace-provider.interface";
 
 /** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
 function formatDuration(ms: number): string {
@@ -29,7 +31,10 @@ export class ShellPlugin extends PluginBase {
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
 
-  constructor(private readonly processManager: ProcessManagerService) {
+  constructor(
+    private readonly processManager: ProcessManagerService,
+    private readonly providerResolver: WorkspaceProviderResolver,
+  ) {
     super();
   }
 
@@ -37,9 +42,15 @@ export class ShellPlugin extends PluginBase {
     id: "shell",
     name: "Shell 命令行",
     description: "执行系统命令和管理后台进程",
-    version: "1.3.0",
+    version: "1.4.0",
     category: "core" as const,
   };
+
+  /** Resolve WorkspaceProvider from session's workspacePath */
+  private async getProvider(ctx?: PluginContext): Promise<WorkspaceProvider> {
+    const workspacePath = ctx?.session.workspacePath || process.cwd();
+    return this.providerResolver.resolve(workspacePath);
+  }
 
   async onLoad(api: PluginApi) {
     // ── execute 工具 ──
@@ -80,7 +91,6 @@ export class ShellPlugin extends PluginBase {
         const command: string = args.command;
         if (!command || typeof command !== "string")
           throw new Error("Command cannot be empty");
-        const encoding = args.encoding as string | undefined;
         const background = args.background === true;
         const cwd = ctx?.session.workspacePath || process.cwd();
 
@@ -111,19 +121,19 @@ export class ShellPlugin extends PluginBase {
             : "Sandbox mode enabled, read-only outside workspace"
           : null;
 
-        const execResult = await this.processManager.execute(
-          command,
-          cwd,
-          encoding,
-          ctx?.session.sessionId || "",
-          ctx?.session.userId || "",
-          {
-            timeout: this.BACKGROUND_THRESHOLD_MS,
-            abortSignal,
-            sandbox,
-            background,
-          },
-        );
+        const provider = await this.getProvider(ctx);
+        if (!provider.execute) {
+          throw new Error("This workspace provider does not support command execution");
+        }
+
+        const execResult = await provider.execute(command, cwd, {
+          timeout: this.BACKGROUND_THRESHOLD_MS,
+          abortSignal,
+          sandbox,
+          background,
+          sessionId: ctx?.session.sessionId,
+          userId: ctx?.session.userId,
+        });
 
         const parts: string[] = [];
         if (sandboxNote) parts.push(sandboxNote);
@@ -193,9 +203,14 @@ export class ShellPlugin extends PluginBase {
           params?: Record<string, any>;
         };
 
+        const provider = await this.getProvider(ctx);
+
         switch (action) {
           case "kill": {
-            const status = this.processManager.kill(processId);
+            if (!provider.kill) {
+              throw new Error("This workspace provider does not support process management");
+            }
+            const status = provider.kill(processId);
             if (status === null) {
               throw new Error(
                 `Process ${processId} does not exist or has already ended`,
@@ -205,15 +220,17 @@ export class ShellPlugin extends PluginBase {
           }
 
           case "poll": {
+            if (!provider.poll) {
+              throw new Error("This workspace provider does not support process management");
+            }
             let timeoutMs = (params.timeout || 0) * 1000;
             // Agent 调用不允许低于 30 秒
             if (timeoutMs < 30_000) {
               timeoutMs = 30_000;
             }
-            const result = await this.processManager.poll(
+            const result = await provider.poll(
               processId,
               timeoutMs,
-              ctx?.session.sessionId,
               abortSignal,
             );
             if (result === null) {
@@ -255,6 +272,9 @@ export class ShellPlugin extends PluginBase {
           }
 
           case "write": {
+            if (!provider.writeToStdin) {
+              throw new Error("This workspace provider does not support process management");
+            }
             const input = params.input;
             if (!input || typeof input !== "string") {
               throw new Error("params.input cannot be empty");
@@ -263,7 +283,7 @@ export class ShellPlugin extends PluginBase {
             const appendNewline = params.appendNewline !== false;
             const textToWrite = appendNewline ? input + "\n" : input;
 
-            this.processManager.writeToStdin(processId, textToWrite);
+            provider.writeToStdin(processId, textToWrite);
 
             return `Written ${textToWrite.length} characters to process ${processId}`;
           }
@@ -314,16 +334,16 @@ export class ShellPlugin extends PluginBase {
         const session = ctx.session;
         const isSubAgent = session.sessionType === "sub_agent";
 
+        const provider = await this.getProvider(ctx);
+
         // 1. 收割已完成进程的输出（不碰运行中进程的 offset）
-        const completed = await this.processManager.drainCompleted(
-          session.sessionId,
-        );
+        const completed = provider.drainCompleted
+          ? await provider.drainCompleted(session.sessionId)
+          : [];
 
         // 2. 子 Agent 检查是否有运行中的进程
-        const stillRunning = isSubAgent
-          ? this.processManager
-              .listBySession(session.sessionId)
-              .filter((p) => p.status === "running")
+        const stillRunning = isSubAgent && provider.listBySession
+          ? provider.listBySession(session.sessionId).filter((p) => p.status === "running")
           : [];
 
         // 3. 无已完成输出且无运行中进程 → 不拦截
@@ -368,13 +388,19 @@ export class ShellPlugin extends PluginBase {
    * 子 Agent 流结束时，自动杀死该会话下的所有后台进程
    */
   @OnEvent("stream.finished")
-  handleStreamFinished(event: StreamFinishedEvent): void {
+  async handleStreamFinished(event: StreamFinishedEvent): Promise<void> {
     if (event.payload.sessionType !== "sub_agent") return;
 
-    const processes = this.processManager.listBySession(event.sessionId);
+    const workspacePath = event.payload.workspacePath;
+    if (!workspacePath) return;
+
+    const provider = await this.providerResolver.resolve(workspacePath);
+    if (!provider.listBySession || !provider.kill) return;
+
+    const processes = provider.listBySession(event.sessionId);
     for (const proc of processes) {
       if (proc.status !== "running") continue;
-      this.processManager.kill(proc.id);
+      provider.kill(proc.id);
       this.logger.log(
         `Sub-agent stream ended, terminating background process: ${proc.id}`,
       );

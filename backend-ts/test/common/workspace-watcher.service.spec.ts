@@ -1,50 +1,60 @@
 import * as path from "path";
-import * as fs from "fs";
-import * as parcelWatcher from "@parcel/watcher";
 import { WorkspaceWatcherService } from "../../src/common/services/workspace-watcher.service";
+import type { FileChangeEvent as ProviderFileChangeEvent, WorkspaceProvider } from "../../src/common/workspace/workspace-provider.interface";
 
-jest.mock("@parcel/watcher", () => ({
-  subscribe: jest.fn(),
-}));
-
-jest.mock("fs", () => ({
-  ...jest.requireActual("fs"),
-  statSync: jest.fn(),
-}));
-
-const subscribeMock = parcelWatcher.subscribe as jest.MockedFunction<
-  typeof parcelWatcher.subscribe
->;
-const statSyncMock = fs.statSync as jest.MockedFunction<typeof fs.statSync>;
-
-interface MockSubscription {
-  unsubscribe: jest.Mock;
+interface MockProvider extends WorkspaceProvider {
+  watch: jest.Mock<() => void, [string[], unknown, (e: ProviderFileChangeEvent) => void]>;
 }
 
-type SubscribeHandler = NonNullable<Parameters<typeof parcelWatcher.subscribe>[1]>;
+function createMockProvider(): MockProvider {
+  const watchCallbacks: ((e: ProviderFileChangeEvent) => void)[] = [];
+  const cleanupFn = jest.fn();
 
-function captureCallback(): {
-  handlers: SubscribeHandler[];
-  subscription: MockSubscription;
-} {
-  const handlers: SubscribeHandler[] = [];
-  const subscription: MockSubscription = {
-    unsubscribe: jest.fn().mockResolvedValue(undefined),
+  const provider: MockProvider = {
+    scheme: "file",
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn().mockResolvedValue(undefined),
+    isConnected: jest.fn().mockReturnValue(true),
+    watch: jest.fn((_paths, _opts, cb) => {
+      watchCallbacks.push(cb);
+      return cleanupFn;
+    }),
+    readFile: jest.fn(),
+    readFileRange: jest.fn(),
+    writeFile: jest.fn(),
+    replaceInFile: jest.fn(),
+    stat: jest.fn(),
+    readdir: jest.fn(),
+    mkdir: jest.fn(),
+    unlink: jest.fn(),
+    rename: jest.fn(),
+    glob: jest.fn(),
+    grep: jest.fn(),
+    execute: jest.fn(),
+    poll: jest.fn(),
+    kill: jest.fn(),
+    writeToStdin: jest.fn(),
+    listBySession: jest.fn(),
+    drainCompleted: jest.fn(),
+  } as unknown as MockProvider;
+
+  return {
+    ...provider,
+    // expose callbacks for test access
+    __callbacks: watchCallbacks,
+    __cleanup: cleanupFn,
+  } as unknown as MockProvider & {
+    __callbacks: ((e: ProviderFileChangeEvent) => void)[];
+    __cleanup: jest.Mock;
   };
-  subscribeMock.mockImplementation((_dir, fn) => {
-    handlers.push(fn);
-    return Promise.resolve(
-      subscription as unknown as parcelWatcher.AsyncSubscription,
-    );
-  });
-  return { handlers, subscription };
 }
 
-function fireParcelEvents(
-  handler: SubscribeHandler,
-  events: parcelWatcher.Event[],
+function fireProviderEvent(
+  provider: MockProvider,
+  event: ProviderFileChangeEvent,
 ): void {
-  handler(null, events);
+  const cb = (provider as any).__callbacks as ((e: ProviderFileChangeEvent) => void)[];
+  cb.forEach((fn) => fn(event));
 }
 
 async function tick(times = 30): Promise<void> {
@@ -53,7 +63,6 @@ async function tick(times = 30): Promise<void> {
   }
 }
 
-/** 等待所有 watcher 就绪（订阅 Promise 已 resolve） */
 async function awaitReady(service: WorkspaceWatcherService): Promise<void> {
   for (let i = 0; i < 50; i++) {
     const entries = (service as any).watchers as Map<string, { ready: boolean }>;
@@ -68,18 +77,14 @@ async function awaitReady(service: WorkspaceWatcherService): Promise<void> {
 
 describe("WorkspaceWatcherService", () => {
   let service: WorkspaceWatcherService;
-
-  function mockStatWasDir(isDir: boolean): void {
-    statSyncMock.mockReturnValue({
-      isDirectory: () => isDir,
-    } as fs.Stats);
-  }
+  let mockProvider: ReturnType<typeof createMockProvider>;
 
   beforeEach(() => {
-    subscribeMock.mockReset();
-    statSyncMock.mockReset();
-    statSyncMock.mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    service = new WorkspaceWatcherService();
+    mockProvider = createMockProvider();
+    const mockResolver = {
+      resolve: jest.fn().mockResolvedValue(mockProvider),
+    } as any;
+    service = new WorkspaceWatcherService(mockResolver);
   });
 
   afterEach(async () => {
@@ -87,16 +92,16 @@ describe("WorkspaceWatcherService", () => {
   });
 
   it("相同工作目录被多个会话共享时只建立一份订阅", async () => {
-    const { handlers } = captureCallback();
-    service.startWatching("session-a", path.resolve("/workspace/proj"), "client-a");
-    service.startWatching("session-b", path.resolve("/workspace/proj"), "client-b");
+    const ws = path.resolve("/workspace/proj");
+    service.startWatching("session-a", ws, "client-a");
+    service.startWatching("session-b", ws, "client-b");
     await awaitReady(service);
 
-    expect(subscribeMock).toHaveBeenCalledTimes(1);
-    expect(subscribeMock).toHaveBeenCalledWith(
-      path.resolve("/workspace/proj"),
+    expect(mockProvider.watch).toHaveBeenCalledTimes(1);
+    expect(mockProvider.watch).toHaveBeenCalledWith(
+      [ws],
+      expect.objectContaining({ recursive: true }),
       expect.any(Function),
-      expect.objectContaining({ ignore: expect.any(Array) }),
     );
 
     const listenerA = jest.fn();
@@ -104,38 +109,40 @@ describe("WorkspaceWatcherService", () => {
     service.onFileChange("session-a", listenerA);
     service.onFileChange("session-b", listenerB);
 
-    fireParcelEvents(handlers[0], [
-      { type: "update", path: path.resolve("/workspace/proj/src/index.ts") },
-    ]);
+    fireProviderEvent(mockProvider, {
+      type: "change",
+      path: "src/index.ts",
+    });
     await tick();
 
-    const changeA = listenerA.mock.calls[0];
-    const changeB = listenerB.mock.calls[0];
-    expect(changeA?.[0]).toEqual(
-      expect.objectContaining({ type: "change", path: path.join("src", "index.ts"), sessionId: "session-a" }),
+    expect(listenerA.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        type: "change",
+        path: path.join("src", "index.ts"),
+        sessionId: "session-a",
+      }),
     );
-    expect(changeB?.[0]).toEqual(
-      expect.objectContaining({ type: "change", path: path.join("src", "index.ts"), sessionId: "session-b" }),
+    expect(listenerB.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        type: "change",
+        path: path.join("src", "index.ts"),
+        sessionId: "session-b",
+      }),
     );
   });
 
-  it("create 事件通过 stat 判断 add（文件）与 addDir（目录）", async () => {
-    const { handlers } = captureCallback();
-    service.startWatching("session", path.resolve("/workspace/proj"), "client");
+  it("add 和 addDir 事件直接透传（provider 已做 stat 判断）", async () => {
+    const ws = path.resolve("/workspace/proj");
+    service.startWatching("session", ws, "client");
     await awaitReady(service);
     const listener = jest.fn();
     service.onFileChange("session", listener);
 
-    fireParcelEvents(handlers[0], [
-      { type: "create", path: path.resolve("/workspace/proj/file.ts") },
-    ]);
-    await tick();
+    fireProviderEvent(mockProvider, { type: "add", path: "file.ts" });
+    await tick(10);
 
-    mockStatWasDir(true);
-    fireParcelEvents(handlers[0], [
-      { type: "create", path: path.resolve("/workspace/proj/subdir") },
-    ]);
-    await tick();
+    fireProviderEvent(mockProvider, { type: "addDir", path: "subdir" });
+    await tick(10);
 
     const addCall = listener.mock.calls.find((c) => c[0].type === "add");
     const addDirCall = listener.mock.calls.find((c) => c[0].type === "addDir");
@@ -147,17 +154,16 @@ describe("WorkspaceWatcherService", () => {
     );
   });
 
-  it("delete 事件映射为 unlink", async () => {
-    const { handlers } = captureCallback();
-    service.startWatching("session", path.resolve("/workspace/proj"), "client");
+  it("unlink 事件直接透传", async () => {
+    const ws = path.resolve("/workspace/proj");
+    service.startWatching("session", ws, "client");
     await awaitReady(service);
     const listener = jest.fn();
     service.onFileChange("session", listener);
 
-    fireParcelEvents(handlers[0], [
-      { type: "delete", path: path.resolve("/workspace/proj/old.ts") },
-    ]);
-    await tick();
+    fireProviderEvent(mockProvider, { type: "unlink", path: "old.ts" });
+    await tick(10);
+
     const delCall = listener.mock.calls.find((c) => c[0].type === "unlink");
     expect(delCall?.[0]).toEqual(
       expect.objectContaining({ type: "unlink", path: "old.ts" }),
@@ -165,16 +171,14 @@ describe("WorkspaceWatcherService", () => {
   });
 
   it("事件在合并窗口内被批量推送（同路径只保留最新）", async () => {
-    const { handlers } = captureCallback();
-    service.startWatching("session", path.resolve("/workspace/proj"), "client");
+    const ws = path.resolve("/workspace/proj");
+    service.startWatching("session", ws, "client");
     await awaitReady(service);
     const listener = jest.fn();
     service.onFileChange("session", listener);
 
     for (let i = 0; i < 5; i++) {
-      fireParcelEvents(handlers[0], [
-        { type: "update", path: path.resolve("/workspace/proj/a.ts") },
-      ]);
+      fireProviderEvent(mockProvider, { type: "change", path: "a.ts" });
     }
     await tick();
 
@@ -184,17 +188,16 @@ describe("WorkspaceWatcherService", () => {
   });
 
   it("stopWatchingSession 触发 force-close 并置为待释放（TTL）", async () => {
-    const { subscription } = captureCallback();
+    const ws = path.resolve("/workspace/proj");
     const forceClose = jest.fn();
-    service.startWatching("session", path.resolve("/workspace/proj"), "client", forceClose);
+    service.startWatching("session", ws, "client", forceClose);
     await awaitReady(service);
 
     service.stopWatchingSession("session");
     expect(forceClose).toHaveBeenCalledTimes(1);
 
-    // 处于惰性释放待定状态：watcher 仍存在但无会话引用，计时器未触发前不 dispose
     await tick(5);
-    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect((mockProvider as any).__cleanup).not.toHaveBeenCalled();
     const entries = (service as any).watchers as Map<
       string,
       { sessionIds: Set<string>; idleTimer: unknown }
@@ -205,10 +208,10 @@ describe("WorkspaceWatcherService", () => {
   });
 
   it("onModuleDestroy 立即取消所有订阅", async () => {
-    const { subscription } = captureCallback();
-    service.startWatching("session", path.resolve("/workspace/proj"), "client");
+    const ws = path.resolve("/workspace/proj");
+    service.startWatching("session", ws, "client");
     await awaitReady(service);
     await service.onModuleDestroy();
-    expect(subscription.unsubscribe).toHaveBeenCalled();
+    expect((mockProvider as any).__cleanup).toHaveBeenCalled();
   });
 });

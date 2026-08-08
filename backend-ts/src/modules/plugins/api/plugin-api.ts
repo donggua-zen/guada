@@ -13,6 +13,7 @@ import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
 import { z } from "zod";
 import { ICommandProvider } from "../../commands/interfaces/command-provider.interface";
+import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
 
 // ── PluginApi ──
 
@@ -114,6 +115,14 @@ export interface PluginApi {
    * 如果返回 null，表示不需要拦截，对话正常结束。
    */
   registerInterceptor(def: TurnInterceptor): void;
+
+  /**
+   * 注册 WorkspaceProvider 工厂
+   *
+   * 注册后，所有 workspacePath 以该 scheme 开头的会话
+   * 都会路由到此 provider 执行文件操作和进程执行。
+   */
+  registerWorkspaceProvider(factory: WorkspaceProviderFactory): void;
 }
 
 // ── PluginApi 实现 ──
@@ -131,6 +140,7 @@ export class PluginApiImpl implements PluginApi {
   }> = [];
   private _commandProviders: ICommandProvider[] = [];
   private _interceptors: TurnInterceptor[] = [];
+  private _workspaceProviders: WorkspaceProviderFactory[] = [];
 
   constructor(
     private pluginId: string,
@@ -292,6 +302,12 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  registerWorkspaceProvider(factory: WorkspaceProviderFactory): void {
+    if (!this._workspaceProviders.find((f) => f.scheme === factory.scheme)) {
+      this._workspaceProviders.push(factory);
+    }
+  }
+
   /** 注册到 PluginRegistry */
   flush(): void {
     // 注册 manifest
@@ -333,6 +349,11 @@ export class PluginApiImpl implements PluginApi {
     for (const interceptor of this._interceptors) {
       PluginRegistry.registerInterceptor(this.pluginId, interceptor);
     }
+
+    // 注册 workspace providers
+    for (const factory of this._workspaceProviders) {
+      PluginRegistry.registerWorkspaceProvider(this.pluginId, factory);
+    }
   }
 
   /** 获取 prompts 供 PluginManager 消费 */
@@ -352,5 +373,10 @@ export class PluginApiImpl implements PluginApi {
   /** 获取拦截器 供 PluginManager 消费 */
   getInterceptors(): TurnInterceptor[] {
     return this._interceptors;
+  }
+
+  /** 获取 WorkspaceProvider 工厂 供 PluginManager 消费 */
+  getWorkspaceProviders(): WorkspaceProviderFactory[] {
+    return this._workspaceProviders;
   }
 }

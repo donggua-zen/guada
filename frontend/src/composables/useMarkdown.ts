@@ -133,6 +133,7 @@ interface CustomRenderer extends Renderer {
   code(token: Tokens.Code): string;
   link(token: Tokens.Link): string;
   image(token: Tokens.Image): string;
+  html(token: Tokens.HTML | Tokens.Tag): string;
 }
 
 /**
@@ -140,6 +141,8 @@ interface CustomRenderer extends Renderer {
  */
 export interface MarkdownOptions {
   resolveImageUrl?: (src: string) => string;
+  /** When true, raw HTML tags in markdown are escaped (displayed as text) instead of being rendered. */
+  escapeHtml?: boolean;
 }
 
 /**
@@ -221,6 +224,15 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
 
       return `<img src="${resolvedUrl}" alt="${text}"${title} style="max-width: 100%;" />`;
     },
+    html(token: Tokens.HTML | Tokens.Tag): string {
+      if (options?.escapeHtml) {
+        return token.text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      return token.text;
+    },
   };
 
   // 配置 marked 选项
@@ -264,7 +276,7 @@ export interface UseMarkdownReturn {
  */
 export function useMarkdown(options?: MarkdownOptions): UseMarkdownReturn {
   if (!markedInstance) {
-    markedInstance = createMarkedInstance(options);
+    markedInstance = createMarkedInstance({ ...options, escapeHtml: true });
   }
   installLinkClickHandler();
 
