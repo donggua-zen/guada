@@ -1616,6 +1616,7 @@ defineExpose({ insertText, insertBadge });
 
 .send-btn:active:not(:disabled) {
   background-color: var(--color-primary-active);
+  transform: scale(0.92);
 }
 
 .send-btn:disabled {

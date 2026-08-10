@@ -4,6 +4,7 @@ import { ModelRepository } from "../../common/database/model.repository";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
 import { ProviderHub } from "../llm-core/provider-hub.service";
+import { findModelPreset, getAllPresets } from "../llm-core/model-preset-library";
 import type { ProviderConfig } from "../llm-core/types/provider.types";
 
 @Injectable()
@@ -274,11 +275,32 @@ export class ModelService {
 
   /**
    * 添加新模型
+   * 如果用户未提供 config 或仅有空默认值，尝试从预设库匹配填充
    */
   async addModel(data: any) {
     if (data.providerId && data.modelName) {
       data.id = `${data.providerId}:${data.modelName}`;
     }
+
+    // 如果 config 为空或缺少实质内容，尝试预设库匹配
+    const config = data.config;
+    const isEmptyConfig =
+      !config ||
+      (!config.inputCapabilities?.length &&
+        !config.outputCapabilities?.length &&
+        !config.features?.length &&
+        !config.contextWindow &&
+        !config.maxOutputTokens &&
+        !config.vectorDimensions);
+
+    if (isEmptyConfig && data.modelName) {
+      const preset = findModelPreset(data.modelName);
+      if (preset) {
+        data.config = preset.config;
+        data.modelType = data.modelType || preset.modeType;
+      }
+    }
+
     return this.modelRepo.createModel(data);
   }
 
@@ -376,11 +398,28 @@ export class ModelService {
       const supplierModel = supplierModels.find(
         (sm) => sm.modelName === m.id,
       );
+      if (supplierModel) {
+        return {
+          modelName: m.id,
+          modelType:
+            supplierModel.modeType || supplierModel.modelType || "text",
+          config: supplierModel.config,
+        };
+      }
+      // 预设库匹配（覆盖自定义供应商 / API 代理场景下的常见模型名）
+      const preset = findModelPreset(m.id, m.owned_by);
+      if (preset) {
+        return {
+          modelName: m.id,
+          modelType: preset.modeType,
+          config: preset.config,
+        };
+      }
+      // 降级：通用默认值
       return {
         modelName: m.id,
-        modelType:
-          supplierModel?.modeType || supplierModel?.modelType || "text",
-        config: supplierModel?.config || {
+        modelType: "text" as const,
+        config: {
           inputCapabilities: ["text"],
           outputCapabilities: ["text"],
           features: [],
@@ -390,6 +429,13 @@ export class ModelService {
     });
 
     return createPaginatedResponse(models, models.length);
+  }
+
+  /**
+   * 获取模型预设列表（供前端匹配使用）
+   */
+  getModelPresets() {
+    return getAllPresets();
   }
 
   /**

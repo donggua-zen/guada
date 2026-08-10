@@ -1,63 +1,45 @@
 <template>
   <div
-    class="bot-card group relative bg-(--color-surface) border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
-    <!-- 内容区域 -->
-    <div class="relative z-10 flex flex-col h-full">
-      <!-- 头部：平台图标 + 名称 + 开关 -->
-      <div class="flex items-start gap-3">
-        <div
-          class="w-11 h-11 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
-          <img :src="getPlatformAvatar(bot.platform)" :alt="getPlatformName(bot.platform)"
-            class="w-full h-full object-contain p-1" @error="handleImageError" />
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="bot.name">{{ bot.name }}
-          </div>
-          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">{{ getPlatformName(bot.platform) }}</div>
-        </div>
-        <!-- 启用开关 -->
-        <el-switch :model-value="bot.status === 'running'" :loading="isOperating" @update:model-value="handleToggle"
-          inline-prompt active-text="启动" inactive-text="禁用" size="large" class="shrink-0 ml-2" />
+    class="bot-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm">
+    <!-- Header: icon + name + platform tag -->
+    <div class="flex items-center gap-2.5 mb-3">
+      <div
+        class="w-8 h-8 rounded-[var(--size-surface-radius)] shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] overflow-hidden">
+        <img :src="getPlatformAvatar(bot.platform)" :alt="getPlatformName(bot.platform)"
+          class="w-full h-full object-contain p-1" @error="handleImageError" />
       </div>
+      <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);"
+        :title="bot.name">
+        {{ bot.name }}
+      </h3>
+      <el-tag size="small" effect="plain">{{ getPlatformName(bot.platform) }}</el-tag>
+    </div>
 
-      <!-- 状态信息 -->
-      <div class="flex items-center gap-2 mt-6">
-        <el-tag :type="getStatusType(bot.status, bot.runtimeStatus)" size="small">
-          {{ getStatusText(bot.status, bot.runtimeStatus) }}
-        </el-tag>
-        <LTooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
-          <span class="text-xs text-red-500 truncate flex-1 cursor-help">
-            {{ bot.lastError }}
-          </span>
-        </LTooltip>
-      </div>
+    <!-- Description: status info -->
+    <div class="flex items-center gap-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+      <el-tag :type="getStatusType(bot.status, bot.runtimeStatus)" size="small" effect="plain">
+        {{ getStatusText(bot.status, bot.runtimeStatus) }}
+      </el-tag>
+      <LTooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
+        <span class="text-xs text-red-500 truncate flex-1 cursor-help">
+          {{ bot.lastError }}
+        </span>
+      </LTooltip>
+    </div>
 
-      <!-- 底部操作按钮 -->
-      <div class="mt-4 flex gap-2">
-        <!-- 二维码按钮（仅微信个人号显示） -->
-        <el-button v-if="bot.platform === 'wechat-personal'" size="small" @click="handleShowQrCode">
-          <el-icon>
-            <FullScreen />
-          </el-icon>
-          <span>二维码</span>
-        </el-button>
-
-        <!-- 编辑按钮 -->
-        <el-button size="small" @click="$emit('edit', bot)">
-          <el-icon>
-            <Edit />
-          </el-icon>
-          <span>编辑</span>
-        </el-button>
-
-        <!-- 删除按钮 -->
-        <el-button size="small" type="danger" @click="$emit('delete', bot)">
-          <el-icon>
-            <Delete />
-          </el-icon>
-          <span>删除</span>
-        </el-button>
-      </div>
+    <!-- Footer: action buttons + switch -->
+    <div class="flex items-center justify-end gap-2 mt-3">
+      <el-button v-if="bot.platform === 'wechat-personal'" link size="small" @click="handleShowQrCode">
+        二维码
+      </el-button>
+      <el-button link size="small" @click="$emit('edit', bot)">
+        编辑
+      </el-button>
+      <el-button link size="small" type="danger" @click="$emit('delete', bot)">
+        删除
+      </el-button>
+      <el-switch :model-value="bot.status === 'running'" :loading="isOperating" @update:model-value="handleToggle"
+        size="small" inline-prompt active-text="启用" inactive-text="禁用" />
     </div>
   </div>
 
@@ -110,8 +92,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Edit, Delete, FullScreen, CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElIcon } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
@@ -231,14 +213,13 @@ const getPlatformAvatar = (platform: string) => {
     lark: '/images/bots/lark.png',
     wecom: '/images/bots/wecom-bot.png'
   }
-  const path = avatarMap[platform] || '/images/bots/qq.png' // 默认使用 QQ 头像
+  const path = avatarMap[platform] || '/images/bots/qq.png'
   return fixFrontendAssetUrl(path)
 }
 
 // 图片加载失败处理
 const handleImageError = (e: Event) => {
   const target = e.target as HTMLImageElement
-  // 加载失败时显示默认图标
   target.style.display = 'none'
   const parent = target.parentElement
   if (parent) {
@@ -249,12 +230,12 @@ const handleImageError = (e: Event) => {
 // 获取平台名称
 const getPlatformName = (platform: string) => {
   const nameMap: Record<string, string> = {
-    qq: 'QQ 机器人',
-    wechat: '微信机器人',
+    qq: 'QQ',
+    wechat: '微信',
     'wechat-personal': '微信个人号',
-    discord: 'Discord Bot',
-    lark: '飞书机器人',
-    wecom: '企业微信智能机器人'
+    discord: 'Discord',
+    lark: '飞书',
+    wecom: '企微'
   }
   return nameMap[platform] || platform
 }
@@ -276,32 +257,7 @@ const getStatusText = (status: string, runtimeStatus: string | null) => {
   if (runtimeStatus === 'CONNECTED') return '运行中'
   return status === 'running' ? '运行中' : '未知'
 }
-
-// 格式化时间
-const formatTime = (timeStr: string) => {
-  const date = new Date(timeStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  // 小于1分钟
-  if (diff < 60000) {
-    return '刚刚'
-  }
-  // 小于1小时
-  if (diff < 3600000) {
-    return `${Math.floor(diff / 60000)}分钟前`
-  }
-  // 小于24小时
-  if (diff < 86400000) {
-    return `${Math.floor(diff / 3600000)}小时前`
-  }
-  // 超过24小时，显示日期
-  return date.toLocaleDateString('zh-CN')
-}
 </script>
 
 <style scoped>
-.bot-card {
-  min-height: 140px;
-}
 </style>

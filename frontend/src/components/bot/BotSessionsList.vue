@@ -1,5 +1,13 @@
 <template>
   <div class="h-full flex flex-col">
+    <!-- 标题区 -->
+    <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+      <div class="min-w-0">
+        <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">对话数据</h1>
+        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">查看和管理机器人与用户的对话记录。</p>
+      </div>
+    </div>
+
     <!-- 机器人筛选标签 -->
     <div v-if="!loading" class="pb-4">
       <div class="flex flex-wrap gap-2">
@@ -36,7 +44,7 @@
     </div>
 
     <!-- 会话列表 -->
-    <div v-else class="flex-1 overflow-y-auto">
+    <div v-else class="flex-1">
       <el-table v-if="sessions.length > 0" :data="sessions" style="width: 100%" stripe @row-click="handleRowClick">
         <el-table-column prop="title" label="会话标题" min-width="200">
           <template #default="{ row }">

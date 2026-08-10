@@ -140,38 +140,10 @@ try {
 
 // Step 4: 复制 Prisma schema 并生成客户端
 console.log()
-console.log('Step 3: Setting up Prisma...')
-const prismaDir = path.join(optimizedPath, 'prisma')
-fs.mkdirSync(prismaDir, { recursive: true })
-
-const prismaSchemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
-if (fs.existsSync(prismaSchemaPath)) {
-  fs.copyFileSync(prismaSchemaPath, path.join(prismaDir, 'schema.prisma'))
-  console.log('✓ Copied prisma/schema.prisma')
-}
-
-const prismaConfigPath = path.join(backendPath, 'prisma.config.ts')
-if (fs.existsSync(prismaConfigPath)) {
-  fs.copyFileSync(prismaConfigPath, path.join(optimizedPath, 'prisma.config.ts'))
-  console.log('✓ Copied prisma.config.ts')
-} else {
-  console.warn('⚠️  prisma.config.ts not found, creating default config...')
-  const defaultConfig = `import "dotenv/config";
-import { defineConfig } from "prisma/config";
-
-export default defineConfig({
-  schema: "prisma/schema.prisma",
-  migrations: {
-    path: "prisma/migrations",
-  },
-  datasource: {
-    url: process.env["DATABASE_URL"],
-  },
-});
-`
-  fs.writeFileSync(path.join(optimizedPath, 'prisma.config.ts'), defaultConfig)
-  console.log('✓ Created default prisma.config.ts')
-}
+console.log('Step 3: Generating Prisma Client...')
+// Note: schema.prisma and prisma.config are NOT copied to production —
+// they're only needed at build time for `prisma generate`.
+// The generated client (.prisma) is copied below.
 
 // 从原项目复用已有 prisma CLI（devDependency），避免在生产目录临时安装
 console.log('Generating Prisma Client using existing CLI...')

@@ -21,8 +21,6 @@ import { CurrentUser } from "../auth/current-user.decorator";
 import { Public } from "../auth/public.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
-import { WorkspaceProviderResolver } from "../../common/workspace/workspace-provider.resolver";
-import type { WorkspaceProvider } from "../../common/workspace/workspace-provider.interface";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { UserRepository } from "../../common/database/user.repository";
 import { UpdateSessionDto } from "./dto/update-session.dto";
@@ -37,7 +35,6 @@ export class SessionsController {
   constructor(
     private readonly sessionService: SessionService,
     private readonly workspaceService: WorkspaceService,
-    private readonly providerResolver: WorkspaceProviderResolver,
     private readonly eventBus: EventBusService,
     private readonly jwtService: JwtService,
     private readonly userRepo: UserRepository,
@@ -292,8 +289,7 @@ export class SessionsController {
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-    const tree = await this.buildDirectoryTree(provider, workspacePath, '', 0, 0);
+    const tree = await this.buildDirectoryTree(workspacePath, '', 0, 0);
     return { tree };
   }
 
@@ -326,18 +322,16 @@ export class SessionsController {
       throw new Error("Access denied: File is outside workspace directory");
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
     // 读取文件内容
-    let stat;
-    try {
-      stat = await provider.stat(resolvedPath);
-    } catch {
+
+    if (!fs.existsSync(resolvedPath)) {
       throw new Error("File not found");
     }
 
+    const stat = fs.statSync(resolvedPath);
+
     // 如果是目录，返回错误
-    if (stat.isDirectory) {
+    if (stat.isDirectory()) {
       throw new Error("Cannot read directory as file");
     }
 
@@ -348,7 +342,7 @@ export class SessionsController {
     }
 
     // 读取文件内容
-    const content = (await provider.readFile(resolvedPath, { encoding: 'utf-8' })) as string;
+    const content = await fsPromises.readFile(resolvedPath, 'utf-8');
     const ext = path.extname(filePath).toLowerCase();
 
     // 设置预览 Cookie：让后续 html-preview 图片请求自动携带鉴权（URL 无需 token）
@@ -396,21 +390,18 @@ export class SessionsController {
       throw new Error("Access denied: Directory is outside workspace directory");
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
     // 检查目录是否存在
-    let stat;
-    try {
-      stat = await provider.stat(resolvedDirPath);
-    } catch {
+    if (!fs.existsSync(resolvedDirPath)) {
       throw new Error("Directory not found");
     }
-    if (!stat.isDirectory) {
+
+    const stat = fs.statSync(resolvedDirPath);
+    if (!stat.isDirectory()) {
       throw new Error("Path is not a directory");
     }
 
     // 获取子节点（只加载一层，递归深度为 0）
-    const children = await this.buildDirectoryTree(provider, resolvedDirPath, dirPath, 0, 0);
+    const children = await this.buildDirectoryTree(resolvedDirPath, dirPath, 0, 0);
     return { children };
   }
 
@@ -422,16 +413,16 @@ export class SessionsController {
    * @param maxDepth 最大深度（默认 3 层）
    */
   private async buildDirectoryTree(
-    provider: WorkspaceProvider,
     dirPath: string,
     relativePath: string = '',
     currentDepth: number = 0,
     maxDepth: number = 1
   ): Promise<any[]> {
     try {
-      const entries = await provider.readdir(dirPath);
+      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
       const tree: any[] = [];
 
+      // 只跳过 node_modules，保留隐藏目录（如 .guada）
       const filteredEntries = entries.filter(entry =>
         entry.name !== 'node_modules'
       );
@@ -444,13 +435,13 @@ export class SessionsController {
         const node: any = {
           name: entry.name,
           path: relPath,
-          isDirectory: entry.isDirectory,
+          isDirectory: entry.isDirectory(),
         };
 
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
           // 如果未达到最大深度，递归获取子目录
           if (currentDepth < maxDepth) {
-            node.children = await this.buildDirectoryTree(provider, fullPath, relPath, currentDepth + 1, maxDepth);
+            node.children = await this.buildDirectoryTree(fullPath, relPath, currentDepth + 1, maxDepth);
           } else {
             // 达到最大深度，标记为有子节点但不加载
             node.hasChildren = true;
@@ -504,15 +495,12 @@ export class SessionsController {
       throw new Error("Access denied: File is outside workspace directory");
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
-    let stat;
-    try {
-      stat = await provider.stat(resolvedPath);
-    } catch {
+    if (!fs.existsSync(resolvedPath)) {
       throw new Error("File not found");
     }
-    if (stat.isDirectory) {
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
       throw new Error("Cannot read directory as file");
     }
 
@@ -528,9 +516,9 @@ export class SessionsController {
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Length', stat.size);
 
-    // 读取文件内容并返回（provider.readFile 返回 Buffer）
-    const buffer = await provider.readFile(resolvedPath);
-    res.send(buffer);
+    // 流式返回文件内容
+    const stream = fs.createReadStream(resolvedPath);
+    stream.pipe(res);
   }
 
   /**
@@ -602,21 +590,18 @@ export class SessionsController {
       throw new HttpException("Access denied: File is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
-    let htmlStat;
-    try {
-      htmlStat = await provider.stat(resolvedPath);
-    } catch {
+    if (!fs.existsSync(resolvedPath)) {
       throw new HttpException("File not found", HttpStatus.NOT_FOUND);
     }
-    if (htmlStat.isDirectory) {
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
       throw new HttpException("Cannot read directory as file", HttpStatus.BAD_REQUEST);
     }
 
     // 检查文件大小（限制为 10MB）
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    if (htmlStat.size > MAX_FILE_SIZE) {
+    if (stat.size > MAX_FILE_SIZE) {
       throw new HttpException("File too large (max 10MB)", HttpStatus.PAYLOAD_TOO_LARGE);
     }
 
@@ -624,11 +609,11 @@ export class SessionsController {
     const ext = path.extname(filePath).toLowerCase();
     const mimeType = this.getMimeType(ext);
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Length', htmlStat.size);
+    res.setHeader('Content-Length', stat.size);
 
-    // 读取文件内容并返回
-    const buffer = await provider.readFile(resolvedPath);
-    res.send(buffer);
+    // 流式返回文件内容
+    const stream = fs.createReadStream(resolvedPath);
+    stream.pipe(res);
   }
 
   @Delete("sessions/:id/workspace/file")
@@ -658,12 +643,7 @@ export class SessionsController {
       throw new HttpException("Access denied: Path is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
-    let delStat;
-    try {
-      delStat = await provider.stat(resolvedPath);
-    } catch {
+    if (!fs.existsSync(resolvedPath)) {
       throw new HttpException("File or directory not found", HttpStatus.NOT_FOUND);
     }
 
@@ -673,8 +653,9 @@ export class SessionsController {
     }
 
     try {
-      await provider.unlink(resolvedPath, { recursive: true });
-      return { success: true, isDirectory: delStat.isDirectory };
+      const stat = fs.statSync(resolvedPath);
+      await fsPromises.rm(resolvedPath, { recursive: true, force: true });
+      return { success: true, isDirectory: stat.isDirectory() };
     } catch (error: any) {
       throw new HttpException("Failed to delete: " + error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -712,12 +693,7 @@ export class SessionsController {
       throw new HttpException("Access denied: Path is outside workspace directory", HttpStatus.FORBIDDEN);
     }
 
-    const provider = await this.providerResolver.resolve(session.workspacePath);
-
-    // 检查原文件是否存在
-    try {
-      await provider.stat(resolvedPath);
-    } catch {
+    if (!fs.existsSync(resolvedPath)) {
       throw new HttpException("File or directory not found", HttpStatus.NOT_FOUND);
     }
 
@@ -725,21 +701,16 @@ export class SessionsController {
     const parentDir = path.dirname(resolvedPath);
     const newPath = path.join(parentDir, body.newName);
 
-    // 检查目标是否已存在
-    try {
-      await provider.stat(newPath);
+    if (fs.existsSync(newPath)) {
       throw new HttpException("Target name already exists", HttpStatus.CONFLICT);
-    } catch (e: any) {
-      if (e instanceof HttpException) throw e;
-      // stat threw → target doesn't exist, proceed
     }
 
     try {
-      await provider.rename(resolvedPath, newPath);
-      const stat = await provider.stat(newPath);
+      await fsPromises.rename(resolvedPath, newPath);
+      const stat = fs.statSync(newPath);
       return {
         success: true,
-        isDirectory: stat.isDirectory,
+        isDirectory: stat.isDirectory(),
         newPath: path.relative(workspaceDir, newPath).replace(/\\/g, '/'),
       };
     } catch (error: any) {

@@ -1,21 +1,21 @@
 <template>
     <div class="h-full overflow-hidden flex flex-col">
-        <PageHeader  title="插件" />
-        <div class="h-full px-4 flex flex-col flex-1 overflow-auto">
-            <div class="flex-1 flex flex-col">
-                <div class="sticky top-0 z-10 bg-(--color-bg)">
-                    <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
-                        <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
-                            <template #label>
-                                <div class="flex items-center gap-2">
-                                    <component :is="item.icon" class="w-4.25 h-4.25"></component>
-                                    <span class="text-[15px]">{{ item.label }}</span>
-                                </div>
-                            </template>
-                        </el-tab-pane>
-                    </el-tabs>
-                </div>
-                <div class="flex-1 py-3">
+        <PageHeader title="插件" />
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <div class="shrink-0 px-4 w-full md:max-w-260 md:mx-auto">
+                <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
+                    <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
+                        <template #label>
+                            <div class="flex items-center gap-2">
+                                <component :is="item.icon" class="w-4.25 h-4.25"></component>
+                                <span class="text-[15px]">{{ item.label }}</span>
+                            </div>
+                        </template>
+                    </el-tab-pane>
+                </el-tabs>
+            </div>
+            <div class="flex-1 overflow-auto pb-4" style="scrollbar-gutter: stable both-edges;">
+                <div class="py-3 px-4 w-full md:max-w-260 md:mx-auto">
                     <template v-if="currentTabValue === 'mcp'">
                         <MCPServers />
                     </template>

@@ -125,6 +125,10 @@ export function getRetryAfterFromError(error: any): number | undefined {
 /**
  * 对返回 Promise 的异步函数进行 429 指数退避重试
  *
+ * @deprecated 重试逻辑已提升到 AgentEngine 层（executeWithRetry in retry-on-error.util.ts），
+ * 支持 timeout/rate_limited/network_error 统一重试 + 前端可见 retry SSE 事件。
+ * 此函数仅保留向后兼容，不应在新代码中使用。
+ *
  * @param fn 要重试的异步函数
  * @param options.logger Logger 实例
  * @param options.context 日志上下文描述

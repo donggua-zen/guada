@@ -25,7 +25,6 @@ import { WorkspaceWatcherService } from "../../common/services/workspace-watcher
 import { ChatRunnerService } from "./chat-runner.service";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { EventBusService } from "../../common/events/event-bus.service";
-import { MigrationService } from "./migration.service";
 
 import { CompressionEngine } from "./compression-engine";
 import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
@@ -54,7 +53,6 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
     // 标签解析器管道
     TagParserPipeline,
-    MigrationService,
   ],
   exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })

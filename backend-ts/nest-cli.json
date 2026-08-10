@@ -8,6 +8,10 @@
       {
         "include": "common/utils/tokenizers/**/*",
         "outDir": "dist"
+      },
+      {
+        "include": "common/database/migrations/**/*.sql",
+        "outDir": "dist"
       }
     ],
     "watchAssets": true

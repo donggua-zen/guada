@@ -17,6 +17,7 @@ import { GroqProvider } from './providers/groq/groq.provider';
 import { GoogleProvider } from './providers/google/google.provider';
 import { AnthropicProvider } from './providers/anthropic/anthropic.provider';
 import { XQApiProvider } from './providers/xqapi/xqapi.provider';
+import { MockProvider } from './providers/mock/mock.provider';
 
 /**
  * LLM 核心模块
@@ -43,6 +44,7 @@ import { XQApiProvider } from './providers/xqapi/xqapi.provider';
     GoogleProvider,
     AnthropicProvider,
     XQApiProvider,
+    MockProvider,
   ],
   exports: [ProviderHub, LLMService],
 })
@@ -65,6 +67,7 @@ export class LlmCoreModule implements OnModuleInit {
     private readonly googleProvider: GoogleProvider,
     private readonly anthropicProvider: AnthropicProvider,
     private readonly xqApiProvider: XQApiProvider,
+    private readonly mockProvider: MockProvider,
   ) { }
 
   onModuleInit() {
@@ -85,5 +88,6 @@ export class LlmCoreModule implements OnModuleInit {
     this.providerHub.register(this.googleProvider);
     this.providerHub.register(this.anthropicProvider);
     this.providerHub.register(this.xqApiProvider);
+    this.providerHub.register(this.mockProvider);
   }
 }

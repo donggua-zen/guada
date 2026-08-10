@@ -1,9 +1,8 @@
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-full overflow-hidden flex flex-col">
     <PageHeader title="机器人" />
-    <div class="flex-1 flex flex-col md:max-w-260 md:mx-auto">
-      <!-- Tab 头部 -->
-      <div class="border-gray-200 dark:border-gray-700 px-4 py-2">
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <div class="shrink-0 px-4 w-full md:max-w-260 md:mx-auto">
         <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="bot-center-tabs">
           <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
             <template #label>
@@ -15,17 +14,15 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-
-      <!-- Tab 内容区 -->
-      <div class="flex-1 overflow-hidden py-2 md:py-2">
-        <ScrollContainer class="h-full px-2 max-h-full">
+      <div class="flex-1 overflow-auto pb-4" style="scrollbar-gutter: stable both-edges;">
+        <div class="py-3 px-4 w-full md:max-w-260 md:mx-auto">
           <template v-if="currentTabValue === 'management'">
             <BotManagementPage />
           </template>
           <template v-else-if="currentTabValue === 'sessions'">
             <BotSessionsList />
           </template>
-        </ScrollContainer>
+        </div>
       </div>
     </div>
   </div>
@@ -36,7 +33,6 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { ElTabs, ElTabPane } from 'element-plus'
 import BotManagementPage from './BotManagementPage.vue'
 import BotSessionsList from './BotSessionsList.vue'
-import ScrollContainer from '../ui/ScrollContainer.vue'
 
 import {
   Bot24Regular,
@@ -49,7 +45,6 @@ import { useRouter, useRoute } from 'vue-router'
 const router = useRouter()
 const route = useRoute()
 
-// Bot 中心 Tab 菜单
 const sidebarItems = [
   {
     label: '机器人管理',
@@ -63,25 +58,20 @@ const sidebarItems = [
   },
 ]
 
-// Tab 数据（用于模板渲染）
 const tabItems = computed(() => sidebarItems)
 
-// 获取默认标签页
 const getDefaultTabPath = () => {
   return sidebarItems[0]?.path || 'management'
 }
 
 const currentTabValue = ref(getDefaultTabPath())
 
-// Tab 切换处理
 const handleTabChange = (tabName: string | number) => {
   const tabPath = typeof tabName === 'string' ? tabName : String(tabName)
   router.replace({ name: 'Bots', params: { tab: tabPath } })
 }
 
-// 监听路由参数变化
 watch(() => route.params.tab, (newPath) => {
-  // 确保 newPath 是字符串类型
   const tabPath = Array.isArray(newPath) ? newPath[0] : (newPath as string)
   if (tabPath && tabPath !== currentTabValue.value) {
     currentTabValue.value = tabPath
@@ -89,12 +79,10 @@ watch(() => route.params.tab, (newPath) => {
 })
 
 onMounted(() => {
-  // 如果没有路由参数，则跳转到默认标签页
   if (!route.params.tab) {
     const defaultTab = getDefaultTabPath()
     router.replace({ name: 'Bots', params: { tab: defaultTab } })
   } else {
-    // 确保 route.params.tab 是字符串类型
     const tabParam = Array.isArray(route.params.tab) ? route.params.tab[0] : (route.params.tab as string)
     currentTabValue.value = tabParam
   }

@@ -29,11 +29,11 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import type { CharacterGroup } from '@/types/character'
-import { useSessionStore } from '@/stores/session'
+import { useSelectedCharacter } from '@/composables/useSelectedCharacter'
 
 const { confirm, toast } = usePopup()
 const router = useRouter()
-const sessionStore = useSessionStore()
+const { setSelectedCharacter } = useSelectedCharacter()
 
 // ========== 助手列表逻辑 ==========
 const characters = ref<any[]>([])
@@ -143,19 +143,9 @@ const deleteCharacter = async (character: any): Promise<void> => {
   }
 }
 
-const startNewChat = async (character: any): Promise<void> => {
-  try {
-    const session = await apiService.createSession({
-      characterId: character.id,
-      title: character.title,
-    })
-    sessionStore.setSession(session)
-    router.replace({ name: 'Chat', params: { sessionId: session.id } })
-    toast.success('会话创建成功')
-  } catch (error: any) {
-    console.error('创建会话失败:', error)
-    toast.error('创建会话失败')
-  }
+const startNewChat = (character: any): void => {
+  setSelectedCharacter(character.id)
+  router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
 }
 
 const openDocs = (): void => {

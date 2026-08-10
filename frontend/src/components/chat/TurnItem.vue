@@ -1,5 +1,5 @@
 <template>
-  <div class="turn-wrapper last:min-h-[60%]" :class="{ 'turn-wrapper--last': isLast }"
+  <div class="turn-wrapper last:min-h-[60vh]" :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn }"
     :data-message-id="turn.user?.id">
     <!-- ============================================ -->
     <!-- User 部分 -->
@@ -125,6 +125,11 @@
             {{ assistantMetadata.errorDetail }}
           </el-alert>
 
+          <!-- 超时提示 -->
+          <el-alert v-if="assistantMetadata?.finishReason === 'timeout'" title="请求超时" type="warning" :closable="false">
+            {{ assistantMetadata.errorDetail || '服务器长时间未响应数据，请稍后重试' }}
+          </el-alert>
+
           <!-- 用户终止提示 -->
           <div v-if="assistantMetadata?.finishReason === 'user_cancel'"
             class="mt-2 text-sm text-gray-400 dark:text-gray-500">
@@ -158,13 +163,15 @@
               </el-alert>
             </div>
           </template>
-          <!-- 流式期间：工作中状态 -->
+          <!-- 流式期间：工作中 / 重试中状态 -->
           <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
-            <el-icon class="is-loading" size="12">
-              <Loading />
-            </el-icon>
-            <span v-if="durationText">工作中 · {{ durationText }}</span>
-            <span v-else>工作中</span>
+            <template v-if="assistantMetadata?.retryInfo">
+              <span class="text-amber-500 dark:text-amber-400">{{ assistantMetadata.retryInfo.message }}</span>
+            </template>
+            <template v-else>
+              <span v-if="durationText">工作中 · {{ durationText }}</span>
+              <span v-else>工作中</span>
+            </template>
           </div>
 
           <!-- Token 消耗 -->
@@ -215,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from "vue";
+import { computed, ref, watch, nextTick, inject } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
@@ -241,6 +248,7 @@ const props = defineProps<{
   allowGenerate: boolean;
   characterName?: string;
   characterAvatar?: string;
+  animateIn?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -259,6 +267,9 @@ const emit = defineEmits<{
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const expandedGroups = ref<Set<string>>(new Set());
+
+// 从 ChatPanel 注入锁定滚动方法，展开分组时调用
+const lockScrollAnchor = inject<() => void>('lockScrollAnchor', () => { });
 
 // 激活分组内容区 ref，用于自动滚动
 const activeBodyRef = ref<HTMLElement | null>(null);
@@ -279,8 +290,14 @@ const onActiveBodyScroll = (e: Event) => {
 
 const toggleGroup = (groupId: string) => {
   const set = expandedGroups.value;
-  if (set.has(groupId)) set.delete(groupId);
-  else set.add(groupId);
+  if (set.has(groupId)) {
+    set.delete(groupId);
+  } else {
+    set.add(groupId);
+    if (groupId !== 'last-active') {
+      lockScrollAnchor()
+    }
+  }
 };
 
 const isGroupExpanded = (groupId: string): boolean => {
@@ -601,6 +618,22 @@ const handleClick = (event: MouseEvent) => {
   margin-top: 20px;
   margin-bottom: 25px;
   contain: layout style;
+  transition: opacity 0.3s ease;
+}
+
+.turn-wrapper.animate-in {
+  animation: turn-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes turn-enter {
+  from {
+    opacity: 0;
+    transform: translateY(120px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 
@@ -618,11 +651,17 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .user-section .message-item__card {
+
   background-color: var(--color-bubble-user-bg);
+
   color: var(--color-bubble-user-text);
+
   padding: 5px 12px;
+
   border-radius: 16px;
+
   border: 1px solid var(--color-bubble-user-border);
+
 }
 
 .user-section .message-item__wrapper {

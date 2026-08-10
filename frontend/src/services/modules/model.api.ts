@@ -17,6 +17,7 @@ export interface ModelApi {
   deleteProvider(providerId: string): Promise<boolean>;
   updateProvider(providerId: string, data: any): Promise<any>;
   getProviderTemplates(): Promise<any[]>;
+  getModelPresets(): Promise<any[]>;
 }
 
 export const modelApi: ModelApi = {
@@ -82,5 +83,9 @@ export const modelApi: ModelApi = {
 
   async getProviderTemplates(this: ApiContext) {
     return await this._request("/providers/templates");
+  },
+
+  async getModelPresets(this: ApiContext) {
+    return await this._request("/models/presets");
   },
 };

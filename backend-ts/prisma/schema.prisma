@@ -1,3 +1,18 @@
+// ============================================================================
+// ⚠️  修改本文件后，务必编写数据库迁移脚本！
+//
+// 流程：
+//   1. 修改本文件（schema.prisma）
+//   2. cd backend-ts && npm run db:migrate:gen -- --name <迁移名称>
+//      → 自动生成增量迁移 SQL + TS 模板（给老用户升级）
+//      → 自动重新生成 baseline.sql（给全新安装）
+//   3. 在 src/common/database/migrations/index.ts 注册迁移
+//   4. 如默认数据有变，更新 migrations/seed-data.ts
+//   5. 重启应用，MigrationRunner 自动执行
+//
+// 详见 docs/DATABASE_MIGRATION.md
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }

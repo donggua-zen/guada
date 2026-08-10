@@ -17,6 +17,13 @@ import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { SummaryMode } from "./compression-engine";
 import { RateLimitError } from "../llm-core/utils/retry.util";
+import {
+  classifyError,
+  computeRetryDelayMs,
+  retrySleep,
+  buildRetryMessage,
+  type RetryableErrorType,
+} from "../llm-core/utils/retry-on-error.util";
 
 /**
  * 思考时间信息（简单数据容器）
@@ -315,60 +322,79 @@ export class AgentEngine {
             sessionContext.getThinkingEffort(),
             abortSignal,
           );
-          for await (const { chunk, accumulated } of streamResult) {
-            // 记录思考时间：第一次收到 reasoningContent 时标记思考开始
-            if (
-              accumulated.reasoningContent &&
-              !currentTurnThinkingInfo.thinkingStartedAt
-            ) {
-              currentTurnThinkingInfo.thinkingStartedAt = new Date();
-            }
-            // 记录思考时间：reasoningContent 结束后标记思考结束
-            if (
-              !chunk.reasoningContent &&
-              currentTurnThinkingInfo.thinkingStartedAt &&
-              !currentTurnThinkingInfo.thinkingFinishedAt
-            ) {
-              currentTurnThinkingInfo.thinkingFinishedAt = new Date();
+          for await (const result of streamResult) {
+            // 重试事件：直接转发给前端，不处理 chunk/accumulated
+            if ("type" in result && result.type === "retry") {
+              yield {
+                type: "retry",
+                retryReason: result.retryReason,
+                retryAttempt: result.attempt,
+                retryMaxAttempts: result.maxRetries,
+                retryDelayMs: result.delayMs,
+                message: result.message,
+              };
+              continue;
             }
 
-            const yieldEvent = this.toEventChunk(
-              chunk,
-              accumulated,
-              assistantResponse.contentId,
-            );
-            if (yieldEvent) {
-              if (yieldEvent.type === "finish") {
-                yieldEvent.contextStats = {
-                  usedTokens: sessionContext.getTokenCount(),
-                  effectiveContextWindow:
-                    sessionContext.getEffectiveContextWindow(),
-                };
+            // 正常的 { chunk, accumulated }
+            if (!("type" in result)) {
+              const { chunk, accumulated } = result;
+
+              // 记录思考时间：第一次收到 reasoningContent 时标记思考开始
+              if (
+                accumulated.reasoningContent &&
+                !currentTurnThinkingInfo.thinkingStartedAt
+              ) {
+                currentTurnThinkingInfo.thinkingStartedAt = new Date();
               }
-              yield yieldEvent;
-            }
+              // 记录思考时间：reasoningContent 结束后标记思考结束
+              if (
+                !chunk.reasoningContent &&
+                currentTurnThinkingInfo.thinkingStartedAt &&
+                !currentTurnThinkingInfo.thinkingFinishedAt
+              ) {
+                currentTurnThinkingInfo.thinkingFinishedAt = new Date();
+              }
 
-            // 直接写入 assistantResponse，无需中间变量
-            assistantResponse.content = accumulated.content || "";
-            if (accumulated.reasoningContent) {
-              assistantResponse.reasoningContent = accumulated.reasoningContent;
-            }
-            if (accumulated.toolCalls) {
-              assistantResponse.toolCalls = accumulated.toolCalls;
-            }
-            if (accumulated.usage) {
-              assistantResponse.metadata.usage = accumulated.usage;
-            }
-            if (accumulated.signature) {
-              assistantResponse.metadata.signature = accumulated.signature;
-            }
-            if (accumulated.redactedData) {
-              assistantResponse.metadata.redactedData =
-                accumulated.redactedData;
-            }
-            if (accumulated.finishReason) {
-              assistantResponse.metadata.finishReason =
-                accumulated.finishReason;
+              const yieldEvent = this.toEventChunk(
+                chunk,
+                accumulated,
+                assistantResponse.contentId,
+              );
+              if (yieldEvent) {
+                if (yieldEvent.type === "finish") {
+                  yieldEvent.contextStats = {
+                    usedTokens: sessionContext.getTokenCount(),
+                    effectiveContextWindow:
+                      sessionContext.getEffectiveContextWindow(),
+                  };
+                }
+                yield yieldEvent;
+              }
+
+              // 直接写入 assistantResponse，无需中间变量
+              assistantResponse.content = accumulated.content || "";
+              if (accumulated.reasoningContent) {
+                assistantResponse.reasoningContent =
+                  accumulated.reasoningContent;
+              }
+              if (accumulated.toolCalls) {
+                assistantResponse.toolCalls = accumulated.toolCalls;
+              }
+              if (accumulated.usage) {
+                assistantResponse.metadata.usage = accumulated.usage;
+              }
+              if (accumulated.signature) {
+                assistantResponse.metadata.signature = accumulated.signature;
+              }
+              if (accumulated.redactedData) {
+                assistantResponse.metadata.redactedData =
+                  accumulated.redactedData;
+              }
+              if (accumulated.finishReason) {
+                assistantResponse.metadata.finishReason =
+                  accumulated.finishReason;
+              }
             }
           }
         } catch (error) {
@@ -634,6 +660,9 @@ export class AgentEngine {
    * @param abortSignal 中断信号
    * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk }
    */
+  // LLM 重试最大次数
+  private readonly LLM_MAX_RETRIES = 5;
+
   private async *executeLLMStream(
     messages: MessageRecord[],
     modelConfig: ModelConfig,
@@ -641,62 +670,110 @@ export class AgentEngine {
     thinkingEffort: string | undefined,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<
-    { chunk: LLMResponseChunk; accumulated: LLMResponseChunk },
+    | { chunk: LLMResponseChunk; accumulated: LLMResponseChunk }
+    | {
+        type: "retry";
+        retryReason: RetryableErrorType;
+        attempt: number;
+        maxRetries: number;
+        delayMs: number;
+        message: string;
+      },
     any,
     unknown
   > {
-    // 累加器：使用 LLMResponseChunk 格式保存累积状态
-    const accumulated: LLMResponseChunk = {};
-
     this.logger.debug(
       `[LLM] ${modelConfig.modelName} temperature=${modelConfig.config.temperature} topP=${modelConfig.config.topP} frequencyPenalty=${modelConfig.config.frequencyPenalty}`,
     );
 
-    // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
-    const stream = this.llmService.completions({
-      model: modelConfig.modelName,
-      messages,
-      tools,
-      temperature: modelConfig.config.temperature,
-      topP: modelConfig.config.topP,
-      frequencyPenalty: modelConfig.config.frequencyPenalty,
-      maxTokens: modelConfig.config.maxOutputTokens,
-      providerConfig: modelConfig.provider,
-      stream: true,
-      thinkingEffort,
-      abortSignal,
-    }) as AsyncGenerator<LLMResponseChunk>;
-    // 使用限流包装器合并高频 chunk，降低前端渲染压力
-    const throttled = throttledStream(stream, this.THROTTLE_MS, abortSignal);
+    let attempt = 0;
+    const maxRetries = this.LLM_MAX_RETRIES;
 
-    // 遍历限流后的响应块
-    for await (const chunk of throttled) {
-      // 增量累加逻辑：将每个块的 content 追加到总内容中
-      if (chunk.content) {
-        accumulated.content = (accumulated.content || "") + chunk.content;
-      }
-      if (chunk.reasoningContent) {
-        accumulated.reasoningContent =
-          (accumulated.reasoningContent || "") + chunk.reasoningContent;
-      }
-      if (chunk.toolCalls) {
-        this.accumulateToolCalls(accumulated, chunk.toolCalls);
-      }
+    while (true) {
+      // 每次尝试使用全新的 accumulator（重试不保留之前的半截内容）
+      const accumulated: LLMResponseChunk = {};
 
-      // 累加 usage 统计和 finishReason，这些通常在最后一个块中返回
-      if (chunk.usage) {
-        accumulated.usage = chunk.usage;
-      }
-      if (chunk.finishReason) {
-        accumulated.finishReason = chunk.finishReason;
-      }
-      // 累加 Anthropic thinking signature（来自 signature_delta 事件）
-      if (chunk.signature) {
-        accumulated.signature = chunk.signature;
-      }
+      try {
+        const stream = this.llmService.completions({
+          model: modelConfig.modelName,
+          messages,
+          tools,
+          temperature: modelConfig.config.temperature,
+          topP: modelConfig.config.topP,
+          frequencyPenalty: modelConfig.config.frequencyPenalty,
+          maxTokens: modelConfig.config.maxOutputTokens,
+          providerConfig: modelConfig.provider,
+          stream: true,
+          thinkingEffort,
+          abortSignal,
+        }) as AsyncGenerator<LLMResponseChunk>;
 
-      // 返回原始 chunk 和累加后的 accumulated（由调用方决定如何 yield）
-      yield { chunk, accumulated: { ...accumulated } };
+        const throttled = throttledStream(
+          stream,
+          this.THROTTLE_MS,
+          abortSignal,
+        );
+
+        for await (const chunk of throttled) {
+          if (chunk.content) {
+            accumulated.content = (accumulated.content || "") + chunk.content;
+          }
+          if (chunk.reasoningContent) {
+            accumulated.reasoningContent =
+              (accumulated.reasoningContent || "") + chunk.reasoningContent;
+          }
+          if (chunk.toolCalls) {
+            this.accumulateToolCalls(accumulated, chunk.toolCalls);
+          }
+          if (chunk.usage) {
+            accumulated.usage = chunk.usage;
+          }
+          if (chunk.finishReason) {
+            accumulated.finishReason = chunk.finishReason;
+          }
+          if (chunk.signature) {
+            accumulated.signature = chunk.signature;
+          }
+
+          yield { chunk, accumulated: { ...accumulated } };
+        }
+
+        // 流正常结束，退出重试循环
+        return;
+      } catch (error: any) {
+        const errorType = classifyError(error);
+
+        if (!errorType || attempt >= maxRetries) {
+          // 不可重试或重试耗尽 → 直接抛出，由 executeAgentLoop 的 catch 处理
+          if (attempt > 0) {
+            this.logger.warn(
+              `[LLM] ${errorType ?? "non-retryable"} 重试耗尽 (${attempt}/${maxRetries})，放弃: ${error.message?.substring(0, 200)}`,
+            );
+          }
+          throw error;
+        }
+
+        attempt++;
+        const delayMs = computeRetryDelayMs(attempt - 1, error);
+        const message = buildRetryMessage(errorType, attempt, maxRetries);
+
+        this.logger.warn(
+          `[LLM] ${errorType} (attempt ${attempt}/${maxRetries}), 等待 ${Math.round(delayMs)}ms 后重试: ${error.message?.substring(0, 200)}`,
+        );
+
+        // yield retry 事件给前端
+        yield {
+          type: "retry",
+          retryReason: errorType,
+          attempt,
+          maxRetries,
+          delayMs,
+          message,
+        };
+
+        // 可取消的退避等待
+        await retrySleep(delayMs, abortSignal);
+      }
     }
   }
 
@@ -1076,8 +1153,10 @@ Scan history. ONLY trigger an update if:
           );
 
           let accumulated: LLMResponseChunk = {};
-          for await (const { accumulated: acc } of streamResult) {
-            accumulated = acc;
+          for await (const item of streamResult) {
+            if (!("type" in item)) {
+              accumulated = item.accumulated;
+            }
           }
 
           shadowMessages.push({

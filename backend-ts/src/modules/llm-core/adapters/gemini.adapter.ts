@@ -15,7 +15,11 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
-import { retryOn429 } from "../utils/retry.util";
+import {
+  createStreamTimeoutController,
+  withStreamIdleTimeout,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+} from "../utils/stream-timeout.util";
 
 export class GeminiAdapter implements IProtocolAdapter {
   readonly protocol = "gemini";
@@ -91,6 +95,13 @@ export class GeminiAdapter implements IProtocolAdapter {
     const chatHistory = this.formatMessages(params.messages.slice(0, -1));
     const chat = model.startChat({ history: chatHistory });
 
+    const streamTc = createStreamTimeoutController(
+      params.abortSignal,
+      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    );
+
+    streamTc.resetIdleTimer();
+
     try {
       // 获取最后一条用户消息作为当前输入
       const lastMessage = params.messages[params.messages.length - 1];
@@ -101,16 +112,24 @@ export class GeminiAdapter implements IProtocolAdapter {
           )
         : lastMessage?.content || "";
 
-      // 对 chat.sendMessageStream 进行 429 指数退避重试
-      const result = await retryOn429(
-        () => chat.sendMessageStream(contentToSend),
-        {
-          logger: this.logger,
-          context: `${this.constructor.name}.chatCompletion`,
-          abortSignal: params.abortSignal,
-        },
-      );
+      // 单次尝试，重试由 AgentEngine 统一处理
+      const result = await chat.sendMessageStream(contentToSend);
 
+      yield* withStreamIdleTimeout(this.handleGeminiStream(result as any), streamTc);
+    } catch (error) {
+      if (streamTc.isIdleTimeout()) {
+        throw new Error(
+          `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+        );
+      }
+      this.logger.error("Gemini API error:", error);
+      throw error;
+    } finally {
+      streamTc.clearIdleTimer();
+    }
+  }
+
+  private async *handleGeminiStream(result: any): AsyncGenerator<LLMResponseChunk> {
       for await (const chunk of result.stream) {
         const responseChunk: LLMResponseChunk = {
           type: "text",
@@ -165,10 +184,6 @@ export class GeminiAdapter implements IProtocolAdapter {
         finishReason: "stop",
         usage: geminiUsage,
       };
-    } catch (error) {
-      this.logger.error("Gemini API error:", error);
-      throw error;
-    }
   }
 
   private buildGenerationConfig(params: LLMCompletionParams) {

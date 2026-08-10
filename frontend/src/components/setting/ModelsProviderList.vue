@@ -1,121 +1,76 @@
 <template>
   <div class="providers-panel flex flex-col">
-    <!-- 头部：标题和新建按钮 -->
-    <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center">
-      <span>供应商列表</span>
-      <el-button @click="$emit('create-group')" size="default" type="primary">
-        <template #icon>
-          <PlusOutlined />
-        </template>
-        添加自定义
-      </el-button>
-    </div>
-
-    <div class="providers-content flex-1 pt-5">
-
-      <!-- 已添加的供应商 -->
-      <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">已添加的供应商</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <div v-for="provider in items" :key="provider.id"
-          class="provider-card group relative bg-(--color-surface) border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200">
-          <div class="flex items-start gap-3">
-            <Avatar
-              :src="getProviderIcon(provider)"
-              :name="provider.name"
-              type="assistant"
-              class="w-11 h-11 shrink-0"
-            />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-start justify-between">
-                <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="provider.name">{{ provider.name }}
-                </div>
-                <!-- 删除按钮 - 悬停显示 -->
-                <el-button link size="small" type="danger"
-                  class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
-                  @click.stop="$emit('item-delete', provider)">
-                  <el-icon :size="18">
-                    <DeleteOutlineOutlined />
-                  </el-icon>
-                </el-button>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ getProtocolLabel(provider.protocol) }}</div>
-            </div>
-          </div>
-          <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ provider.description || '暂无简介' }}
-          </div>
-
-          <!-- 悬停显示的渐变遮罩和按钮 -->
-          <div
-            class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent dark:from-[#232428] dark:via-[#232428]/90 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
-          </div>
-          <div
-            class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-            <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="$emit('item-click', provider)">
-              模型管理
-            </el-button>
-            <el-button size="small" class="flex-1 shadow-sm" @click.stop="$emit('item-edit', provider)">
-              供应商设置
-            </el-button>
-          </div>
+    <!-- 已添加的供应商 -->
+    <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">已添加的供应商</div>
+    <div class="grid gap-y-4 gap-x-3 mb-8" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+      <div v-for="provider in items" :key="provider.id"
+        class="provider-card group flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+        @click="$emit('item-click', provider)">
+        <!-- Header: avatar + name -->
+        <div class="flex items-center gap-2.5 mb-3">
+          <CardAvatar :src="getProviderIcon(provider)" :name="provider.name" />
+          <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);"
+            :title="provider.name">
+            {{ provider.name }}
+          </h3>
         </div>
-        <div v-if="items.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
-          暂无数据
+
+        <!-- Description -->
+        <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+          {{ provider.description || '暂无简介' }}
+        </div>
+
+        <!-- Footer: protocol + actions (hover visible) -->
+        <div class="flex items-center justify-between gap-2 mt-3">
+          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ getProtocolLabel(provider.protocol) }}</span>
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
+            <el-button link size="small" @click="$emit('item-edit', provider)">配置</el-button>
+            <el-button link size="small" type="danger" @click="$emit('item-delete', provider)">删除</el-button>
+          </div>
         </div>
       </div>
+      <div v-if="items.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
+        暂无数据
+      </div>
+    </div>
 
-      <!-- 可添加的模板 -->
-      <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">可添加的供应商</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="template in templates" :key="template.id"
-          class="provider-card template-card relative border border-gray-200 dark:border-[#232428] bg-(--color-surface) rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
-          <div class="flex items-start gap-3">
-            <Avatar
-              :src="getProviderIcon(template)"
-              :name="template.name"
-              type="assistant"
-              class="w-11 h-11 shrink-0"
-            />
-            <div class="flex-1 min-w-0">
-              <div class="font-medium text-base text-gray-700 dark:text-[#e8e9ed] truncate" :title="template.name">{{ template.name }}
-              </div>
-              <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ getProtocolLabel(template.protocol) }}</div>
-            </div>
-          </div>
-          <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ template.description ||
-            '点击添加到您的分组' }}
-          </div>
+    <!-- 可添加的供应商 -->
+    <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">可添加的供应商</div>
+    <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+      <div v-for="template in templates" :key="template.id"
+        class="provider-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+        @click="$emit('template-click', template)">
+        <!-- Header: avatar + name -->
+        <div class="flex items-center gap-2.5 mb-3">
+          <CardAvatar :src="getProviderIcon(template)" :name="template.name" />
+          <h3 class="font-semibold text-gray-700 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);"
+            :title="template.name">
+            {{ template.name }}
+          </h3>
+        </div>
 
-          <!-- 悬停显示的渐变遮罩和按钮 -->
-          <div
-            class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent dark:from-[#232428] dark:via-[#232428]/90 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
-          </div>
-          <div
-            class="absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-            <el-button type="primary" size="small" class="w-full shadow-sm"
-              @click.stop="$emit('template-click', template)">
-              添加此供应商
-            </el-button>
-          </div>
+        <!-- Description -->
+        <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+          {{ template.description || '点击添加到您的供应商列表' }}
         </div>
-        <div v-if="templates.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
-          暂无数据
+
+        <!-- Footer: protocol -->
+        <div class="flex items-center justify-between gap-2 mt-3">
+          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ getProtocolLabel(template.protocol) }}</span>
+          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">点击添加</span>
         </div>
+      </div>
+      <div v-if="templates.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
+        暂无数据
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlineOutlined
-} from '@vicons/material'
-import { ElButton, ElIcon } from 'element-plus'
-import ScrollContainer from '@/components/ui/ScrollContainer.vue'
-import Avatar from '@/components/ui/Avatar.vue'
+import { ElButton } from 'element-plus'
 import { fixFrontendAssetUrl } from '@/utils/url'
-
+import CardAvatar from '@/components/ui/CardAvatar.vue'
 
 defineProps({
   items: {
@@ -128,10 +83,9 @@ defineProps({
   }
 })
 
-defineEmits(['item-click', 'create-group', 'item-edit', 'item-delete', 'template-click'])
+defineEmits(['item-click', 'item-edit', 'item-delete', 'template-click'])
 
 const getProviderIcon = (item) => {
-  // 根据 provider ID 匹配本地图标文件
   const providerId = (item.provider || item.id || '').toLowerCase();
   if (providerId && providerId !== 'custom') {
     const ext = providerId === 'xqapi' ? 'png' : 'svg';
@@ -140,16 +94,7 @@ const getProviderIcon = (item) => {
   return null;
 }
 
-const getProviderTypeLabel = (provider) => {
-  // 直接使用 provider.name（后端已动态合并模板名称）
-  if (provider.provider && provider.provider !== 'custom') {
-    return provider.name || provider.protocol;
-  }
-  return '自定义';
-}
-
 const getProtocolLabel = (protocol) => {
-  // 根据 protocol 字段显示协议类型标签
   const protocolMap = {
     'openai': 'OpenAI',
     'openai-response': 'OpenAI-Response',
@@ -161,30 +106,4 @@ const getProtocolLabel = (protocol) => {
 </script>
 
 <style scoped>
-.provider-card {
-  min-height: 140px;
-}
-
-
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* 删除按钮悬停底纹效果 */
-.delete-btn {
-  border-radius: 4px;
-}
-
-.delete-btn:hover {
-  background-color: rgba(239, 68, 68, 0.1);
-  /* red-50 with transparency */
-}
-
-:deep(.provider-tabs .el-tabs__header) {
-  margin-bottom: 0;
-}
 </style>

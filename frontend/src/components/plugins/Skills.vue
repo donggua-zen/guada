@@ -1,9 +1,12 @@
 <template>
-    <div class="flex-1">
+    <div class="flex-1 skills-page">
         <!-- 头部区域 -->
-        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-            <span>Skills</span>
-            <el-space>
+        <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+            <div class="min-w-0">
+                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">Skills</h1>
+                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">系统自动发现的本地技能模块。手动添加或修改技能后点击"刷新"扫描目录变更。</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
                 <el-button @click="handleShowInstallDialog">
                     <template #icon>
                         <UploadOutlined />
@@ -25,91 +28,63 @@
                     </template>
                     使用说明
                 </el-button>
-            </el-space>
+            </div>
         </div>
 
         <!-- Skills 列表 -->
         <div class="space-y-4">
-            <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-                Skills 是系统自动发现的本地技能模块。手动添加或者修改技能后点击“刷新”按钮手动扫描目录变更。
-            </div>
-
             <!-- 技能卡片列表 -->
-            <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+            <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
                 <div v-for="skill in skills" :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)"
-                    :style="skill.enabled === false ? { opacity: 0.6 } : {}">
-                    <div class="p-5 pb-4">
-                        <div class="flex items-start justify-between gap-2 mb-2">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
-                                {{ skill.manifest.name || skill.id }}
-                            </h3>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <el-switch
-                                    :model-value="skill.enabled !== false"
-                                    :loading="updatingSkills.has(skill.id)"
-                                    @update:model-value="(val: string | number | boolean) => handleToggleSkill(skill.id, !!val)"
-                                    size="small"
-                                    :active-text="skill.enabled !== false ? '启用' : '禁用'"
-                                    inline-prompt
-                                />
-                                <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">
-                                    内置
-                                </el-tag>
-                                <el-tag v-else-if="skill.source === 'agents'" type="warning" size="small" effect="light">
-                                    共享
-                                </el-tag>
-                                <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain"
-                                    style="margin-top: 2px;">
-                                    v{{ skill.manifest.version }}
-                                </el-tag>
-                            </div>
-                        </div>
+                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                    :style="skill.enabled === false ? { opacity: 0.6 } : {}"
+                    @click="handleViewDocumentation(skill.id)">
+                    <div class="flex items-center gap-2.5 mb-3">
+                        <CardAvatar :name="skill.manifest.name || skill.id" :disabled="skill.enabled === false" />
+                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                            {{ skill.manifest.name || skill.id }}
+                        </h3>
+                        <el-tag v-if="skill.source === 'system'" size="small" type="success" effect="light">内置</el-tag>
+                        <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">共享</el-tag>
+                        <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
+                    </div>
 
-                        <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
-                            {{ skill.manifest.description || '暂无描述' }}
-                        </p>
+                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                        {{ skill.manifest.description || '暂无描述' }}
+                    </p>
 
-                        <div class="flex items-center justify-end">
-                            <div class="flex gap-2">
-                                <el-button link size="small" @click="handleViewDocumentation(skill.id)">
-                                    <template #icon>
-                                        <DescriptionOutlined />
-                                    </template>
-                                    SKILL.md
-                                </el-button>
-                                <el-button link size="small" @click="handleReloadSkill(skill.id)"
-                                    :loading="reloadingSkills.has(skill.id)">
-                                    <template #icon>
-                                        <RefreshRight />
-                                    </template>
-                                    重载
-                                </el-button>
-                                <el-button v-if="skill.source !== 'system' && skill.source !== 'agents'" link size="small" type="danger"
-                                    @click="handleUninstallSkill(skill.id)"
-                                    :loading="uninstallingSkills.has(skill.id)">
-                                    <template #icon>
-                                        <DeleteOutlined />
-                                    </template>
-                                    卸载
-                                </el-button>
-                                <LTooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
-                                    <el-button link size="small" type="danger" disabled>
-                                        <template #icon>
-                                            <DeleteOutlined />
-                                        </template>
-                                        卸载
-                                    </el-button>
-                                </LTooltip>
-                            </div>
-                        </div>
+                    <div class="flex items-center justify-end gap-2 mt-3">
+                        <el-button link size="small" @click.stop="handleReloadSkill(skill.id)"
+                            :loading="reloadingSkills.has(skill.id)">
+                            重载
+                        </el-button>
+                        <el-button v-if="skill.source !== 'system' && skill.source !== 'agents'" link size="small" type="danger"
+                            @click.stop="handleUninstallSkill(skill.id)"
+                            :loading="uninstallingSkills.has(skill.id)">
+                            卸载
+                        </el-button>
+                        <LTooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
+                            <el-button link size="small" type="danger" disabled>
+                                卸载
+                            </el-button>
+                        </LTooltip>
+                        <el-switch
+                            :model-value="skill.enabled !== false"
+                            :loading="updatingSkills.has(skill.id)"
+                            @update:model-value="(val: string | number | boolean) => handleToggleSkill(skill.id, !!val)"
+                            @click.stop
+                            size="small"
+                            inline-prompt
+                            active-text="启用"
+                            inactive-text="禁用"
+                        />
                     </div>
                 </div>
             </div>
 
             <!-- 空状态 -->
             <div v-if="!loading && skills.length === 0"
-                class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428]">
+                class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) overflow-hidden bg-(--color-surface)">
                 <div class="p-12 text-center">
                     <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
                         <InboxOutlined />
@@ -146,7 +121,7 @@
 
             <!-- 错误提示 -->
             <div v-if="marketError"
-                class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] p-6 text-center">
+                class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-6 text-center">
                 <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
                     <InboxOutlined />
                 </el-icon>
@@ -156,37 +131,36 @@
             </div>
 
             <!-- 推荐列表 -->
-            <div v-else-if="marketSkills.length > 0" class="grid gap-4"
-                style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+            <div v-else-if="marketSkills.length > 0" class="grid gap-3"
+                style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
                 <div v-for="skill in marketSkills" :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
-                    <div class="p-5 pb-4">
-                        <div class="flex items-start justify-between gap-2 mb-2">
-                            <div class="flex-1 min-w-0">
-                                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] truncate">
-                                    {{ skill.name }}
-                                </h3>
-                                <p class="text-xs text-gray-400 dark:text-[#6b6d73] mt-0.5 truncate">{{ skill.id }}</p>
-                            </div>
-                        </div>
+                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                    @click="handleShowMarketInstallDialog(skill)">
+                    <div class="flex items-center gap-2.5 mb-3">
+                        <CardAvatar :name="skill.name" />
+                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                            {{ skill.name }}
+                        </h3>
+                        <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">已安装</el-tag>
+                        <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">可更新</el-tag>
+                    </div>
 
-                        <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
-                            {{ skill.description || '暂无描述' }}
-                        </p>
+                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                        {{ skill.description || '暂无描述' }}
+                    </p>
 
-                        <div class="flex items-center justify-between">
-                            <div class="flex flex-wrap gap-1.5">
-                                <el-tag v-if="skill.labels && skill.labels.length > 0" v-for="label in skill.labels"
-                                    :key="label" size="small" effect="light">
-                                    {{ label }}
-                                </el-tag>
-                            </div>
-                            <el-button size="small"
-                                :type="skill.localStatus === 'updatable' ? 'warning' : undefined"
-                                @click="handleShowMarketInstallDialog(skill)">
-                                {{ installingFromMarket.has(skill.id) ? '安装中...' : getMarketButtonLabel(skill) }}
-                            </el-button>
+                    <div class="flex items-center justify-between gap-2 mt-3">
+                        <div class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+                            <el-tag v-if="skill.labels && skill.labels.length > 0" v-for="label in skill.labels"
+                                :key="label" size="small" effect="light">
+                                {{ label }}
+                            </el-tag>
                         </div>
+                        <el-button link size="small" shrink-0
+                            :type="skill.localStatus === 'updatable' ? 'warning' : 'primary'"
+                            @click.stop="handleShowMarketInstallDialog(skill)">
+                            {{ installingFromMarket.has(skill.id) ? '安装中...' : getMarketButtonLabel(skill) }}
+                        </el-button>
                     </div>
                 </div>
             </div>
@@ -293,9 +267,14 @@
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
                     {{ selectedMarketSkill.name }}
                 </h3>
-                <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
+                <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3">
                     {{ selectedMarketSkill.description || '暂无描述' }}
                 </p>
+                <div v-if="selectedMarketSkill.labels && selectedMarketSkill.labels.length > 0" class="flex flex-wrap gap-1.5 mb-4">
+                    <el-tag v-for="label in selectedMarketSkill.labels" :key="label" size="small" effect="light">
+                        {{ label }}
+                    </el-tag>
+                </div>
                 <div class="flex flex-col gap-3 market-install-actions">
                     <!-- 直接安装（ZIP） -->
                     <el-button v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary" size="large"
@@ -327,7 +306,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { ElMessage, ElSpace, ElButton, ElTag, ElIcon, ElDialog, ElUpload, ElMessageBox } from 'element-plus'
+import { ElMessage, ElButton, ElTag, ElIcon, ElDialog, ElUpload, ElMessageBox } from 'element-plus'
 import { RefreshOutlined, InboxOutlined, DescriptionOutlined, UploadOutlined, DeleteOutlined } from '@vicons/material'
 import { RefreshRight, Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
@@ -335,6 +314,7 @@ import { apiService } from '@/services/ApiService'
 import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import { useMarkdown } from '@/composables/useMarkdown'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import CardAvatar from '@/components/ui/CardAvatar.vue'
 import LTooltip from '@/components/ui/LTooltip.vue'
 
 interface SkillManifest {
@@ -367,6 +347,7 @@ const loadingDoc = ref(false)
 const docError = ref<string | null>(null)
 const documentation = ref('')
 const currentSkillName = ref('')
+const currentSkillId = ref('')
 
 // Markdown 解析
 const { parseMarkdown } = useMarkdown()
@@ -699,6 +680,7 @@ async function handleViewDocumentation(skillId: string) {
     // 获取 skill 名称用于标题
     const skill = skills.value.find(s => s.id === skillId)
     currentSkillName.value = skill?.manifest.name || skillId
+    currentSkillId.value = skillId
 
     try {
         const response = await apiService.fetchSkillDocumentation(skillId)
@@ -1081,5 +1063,17 @@ onMounted(async () => {
 
 .dark .skill-meta-table .meta-value {
     color: #e8e9ed;
+}
+
+/* All tags: flat gray style, no colored borders */
+.skills-page :deep(.el-tag) {
+    background-color: #f0f0f2;
+    border: none;
+    color: #6b6d75;
+    font-size: calc(var(--size-text-base) - 3px);
+}
+html.dark .skills-page :deep(.el-tag) {
+    background-color: #2a2a2e;
+    color: #8b8d95;
 }
 </style>

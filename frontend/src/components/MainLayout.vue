@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref } from 'vue'
+import { onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { apiService } from '@/services/ApiService'
@@ -38,21 +38,10 @@ const { init: initSessionEvents, cleanup: cleanupSessionEvents } = useSessionEve
 
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 
-// 设置页侧边栏的本地可见性状态（移动端可折叠）
-const settingsSidebarVisible = ref(true)
-
-const effectiveSidebarVisible = computed(() => {
-  // 设置路由时使用本地状态，为 Teleport 提供挂载位置
-  if (isSettingsRoute.value) return settingsSidebarVisible.value
-  return layoutStore.sidebarVisible
-})
+const effectiveSidebarVisible = computed(() => layoutStore.sidebarVisible)
 
 const handleSidebarUpdate = (val: boolean) => {
-  if (isSettingsRoute.value) {
-    settingsSidebarVisible.value = val
-  } else {
-    layoutStore.setSidebarVisible(val)
-  }
+  layoutStore.setSidebarVisible(val)
 }
 
 // 启动 SSE 连接 + 全局事件监听

@@ -1,5 +1,6 @@
 import { Module, Global } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
+import { MigrationRunner } from "./migration-runner.service";
 import { UserRepository } from "./user.repository";
 import { CharacterGroupRepository } from "./character-group.repository";
 import { CharacterRepository } from "./character.repository";
@@ -17,6 +18,7 @@ import { SessionRepository } from "./session.repository";
 
 const REPOSITORIES = [
   PrismaService,
+  MigrationRunner,
   UserRepository,
   CharacterGroupRepository,
   CharacterRepository,
