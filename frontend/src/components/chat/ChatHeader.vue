@@ -5,7 +5,7 @@
         <div class="flex items-center justify-start">
             <div v-if="sidebarVisible !== undefined"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
-                @click="$emit('toggle-sidebar')" :title="sidebarVisible ? '收起侧边栏' : '展开侧边栏'">
+                @click="$emit('toggle-sidebar')" :title="sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')">
                 <LeftBarIcon class="w-5 h-5" />
             </div>
         </div>
@@ -19,7 +19,7 @@
         <div class="flex items-center justify-end min-w-10 gap-2">
             <div v-if="sessionId"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                @click="$emit('toggle-workspace')" :title="workspaceVisible ? '关闭工作目录' : '打开工作目录'">
+                @click="$emit('toggle-workspace')" :title="workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')">
                 <el-icon class="w-5 h-5">
                     <FolderOpened />
                 </el-icon>
@@ -28,7 +28,7 @@
             <!-- 记忆管理按钮 -->
             <div v-if="showMemoButton"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                @click="$emit('toggle-memo')" title="记忆管理">
+                @click="$emit('toggle-memo')" :title="t('chat.panel.memoryManagement')">
                 <el-icon class="w-5 h-5">
                     <Reading />
                 </el-icon>
@@ -37,7 +37,7 @@
             <el-dropdown v-if="hasMoreOptions" trigger="hover" @command="handleSelect"
                 popper-class="chat-header-dropdown">
                 <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center"
-                    text title="更多操作">
+                    text :title="t('chat.header.moreActions')">
                     <MoreVertOutlined class="w-5 h-5" />
                 </div>
                 <template #dropdown>
@@ -45,19 +45,19 @@
                         <el-dropdown-item command="clear">
                             <span class="flex items-center gap-2">
                                 <DeleteTwotone class="w-4 h-4" />
-                                <span>清空记录</span>
+                                <span>{{ t('chat.header.clearRecords') }}</span>
                             </span>
                         </el-dropdown-item>
                         <el-dropdown-item command="export">
                             <span class="flex items-center gap-2">
                                 <FileDownloadOutlined class="w-4 h-4" />
-                                <span>导出记录</span>
+                                <span>{{ t('chat.header.exportRecords') }}</span>
                             </span>
                         </el-dropdown-item>
                         <el-dropdown-item command="import">
                             <span class="flex items-center gap-2">
                                 <FileUploadOutlined class="w-4 h-4" />
-                                <span>导入记录</span>
+                                <span>{{ t('chat.header.importRecords') }}</span>
                             </span>
                         </el-dropdown-item>
                     </el-dropdown-menu>
@@ -68,6 +68,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 import {
     FormatListBulletedSharp,
     MoreVertOutlined,

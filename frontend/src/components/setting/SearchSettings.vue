@@ -3,15 +3,14 @@
     <div class="space-y-8">
       <!-- 搜索设置分组 -->
       <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">搜索设置</h3>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.search.title') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
           <!-- 网络搜索插件开关 -->
           <div
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">网络搜索插件</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">启用后 AI 助手可以通过搜索获取实时信息。你也可以在「插件 →
-                本地工具」中管理此开关。</span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.webSearchPlugin') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.webSearchPluginDesc') }}</span>
             </div>
             <el-switch v-model="pluginEnabled" :loading="pluginLoading" @update:model-value="handlePluginToggle"
               size="large" />
@@ -21,14 +20,14 @@
           <div
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">搜索供应商</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">切换供应商不会丢失另一方的 API Key 配置</span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.provider') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.providerDesc') }}</span>
             </div>
             <el-select v-model="selectedProvider" @update:model-value="handleProviderChange" style="width: 220px;"
               class="shrink-0">
-              <el-option label="博查 (Bocha)" value="bocha" />
+              <el-option :label="t('settings.search.bocha')" value="bocha" />
               <el-option label="Tavily" value="tavily" />
-              <el-option label="秘塔搜索 (Metaso)" value="metaso" />
+              <el-option :label="t('settings.search.metaso')" value="metaso" />
             </el-select>
           </div>
 
@@ -36,9 +35,9 @@
           <div v-if="selectedProvider === 'metaso'"
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0 flex-1">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">秘塔 API Key</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">秘塔搜索 API 密钥。<span
-                  class="text-[#409eff] cursor-pointer hover:underline" @click="openMetasoUrl">前往获取</span></span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.metasoApiKey') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.metasoApiKeyDesc') }}<span
+                  class="text-[#409eff] cursor-pointer hover:underline" @click="openMetasoUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
             <el-input v-model="providerKeys.metaso" type="password" show-password placeholder="mk-..."
               style="width: 360px;" class="shrink-0" clearable />
@@ -48,9 +47,9 @@
           <div v-if="selectedProvider === 'bocha'"
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0 flex-1">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">博查 API Key</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">博查搜索 API 密钥。<span
-                  class="text-[#409eff] cursor-pointer hover:underline" @click="openBochaUrl">前往获取</span></span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.bochaApiKey') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.bochaApiKeyDesc') }}<span
+                  class="text-[#409eff] cursor-pointer hover:underline" @click="openBochaUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
             <el-input v-model="providerKeys.bocha" type="password" show-password placeholder="sk-..."
               style="width: 360px;" class="shrink-0" clearable />
@@ -61,8 +60,8 @@
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0 flex-1">
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Tavily API Key</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">Tavily Search API 密钥。<span
-                  class="text-[#409eff] cursor-pointer hover:underline" @click="openTavilyUrl">前往获取</span></span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.tavilyApiKeyDesc') }}<span
+                  class="text-[#409eff] cursor-pointer hover:underline" @click="openTavilyUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
             <el-input v-model="providerKeys.tavily" type="password" show-password placeholder="tvly-..."
               style="width: 360px;" class="shrink-0" clearable />
@@ -72,13 +71,13 @@
           <div class="px-4 py-3.5 bg-gray-50 dark:bg-[#1e1f23]">
             <div class="text-xs text-gray-500 dark:[#8b8d95] space-y-1">
               <template v-if="selectedProvider === 'bocha'">
-                <div>• 博查搜索专为 AI 设计的搜索引擎，国内直连，中文搜索质量优秀</div>
+                <div>{{ t('settings.search.bochaTip') }}</div>
               </template>
               <template v-else-if="selectedProvider === 'tavily'">
-                <div>• Tavily 适合英文内容搜索，免费额度 1000 次/月</div>
+                <div>{{ t('settings.search.tavilyTip') }}</div>
               </template>
               <template v-else>
-                <div>• 秘塔搜索适合中文内容搜索，需要购买积分或开通会员</div>
+                <div>{{ t('settings.search.metasoTip') }}</div>
               </template>
             </div>
           </div>
@@ -90,6 +89,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
@@ -97,6 +97,7 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import { ElMessage } from 'element-plus'
 
 const { notify } = usePopup()
+const { t } = useI18n()
 
 // 当前选中的供应商
 const selectedProvider = ref('bocha')
@@ -196,7 +197,7 @@ const handleSave = async () => {
     }))
   } catch (error: any) {
     console.error('保存搜索设置失败:', error)
-    notify.error('保存失败', error.message || '未知错误')
+    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
   }
 }
 
@@ -208,12 +209,12 @@ const handlePluginToggle = async (val: string | number | boolean) => {
     const res = await apiService.updateGlobalToolStatus('web-search', enabled)
     if (res?.success) {
       pluginEnabled.value = enabled
-      ElMessage.success(enabled ? '网络搜索插件已启用' : '网络搜索插件已禁用')
+      ElMessage.success(enabled ? t('settings.search.pluginEnabled') : t('settings.search.pluginDisabled'))
     }
   } catch (error: any) {
     pluginEnabled.value = !enabled
     console.error('切换插件状态失败:', error)
-    notify.error('插件状态切换失败', error.message || '未知错误')
+    notify.error(t('settings.search.pluginToggleFailed'), error.message || t('common.error.unknown'))
   } finally {
     pluginLoading.value = false
   }

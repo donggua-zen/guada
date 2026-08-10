@@ -24,7 +24,7 @@
                 <el-icon class="is-loading mr-2" size="16">
                   <LoadingOutlined />
                 </el-icon>
-                <span class="text-xs">加载历史消息...</span>
+                <span class="text-xs">{{ t('chat.panel.loadingHistory') }}</span>
               </div>
             </Transition>
 
@@ -32,7 +32,7 @@
             <Transition name="fade-slide">
               <div v-if="!isLoadingMore && !hasMoreMessages && activeMessages.length > MESSAGES_PAGE_SIZE"
                 class="w-full py-4 text-center text-gray-400 text-xs">
-                没有更多消息了
+                {{ t('chat.panel.noMoreMessages') }}
               </div>
             </Transition>
 
@@ -53,7 +53,7 @@
               <el-icon class="is-loading mb-2" size="24">
                 <LoadingOutlined />
               </el-icon>
-              <span class="text-sm">正在优化对话历史，请稍候...</span>
+              <span class="text-sm">{{ t('chat.panel.compressing') }}</span>
             </div>
 
             <!-- 流式输出状态指示 -->
@@ -78,9 +78,9 @@
           <div v-if="editMode" class="max-w-full w-full flex px-4">
             <div
               class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
-              <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
+              <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage') }}</span>
               <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-                取消编辑
+                {{ t('common.cancel') }}
               </el-button>
             </div>
           </div>
@@ -88,6 +88,13 @@
           <!-- 子代理面板（编辑模式时隐藏） -->
           <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
             @switch="emit('switch-agent', $event)" />
+
+          <!-- 附加连接胶囊（AgentPanel 下方，输入框上方） -->
+          <ConnectionChips
+            v-if="!editMode"
+            :connections="selectedConnections"
+            @remove="toggleConnection"
+          />
 
           <div class="w-full flex items-center relative">
 
@@ -119,14 +126,16 @@
       @click="handleScrollToBottomClick" />
   </div>
   <!-- 记忆管理弹窗 -->
-  <el-dialog v-model="memoPanelVisible" title="记忆管理" width="560px" :close-on-click-modal="false" destroy-on-close
+  <el-dialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px" :close-on-click-modal="false" destroy-on-close
     class="memo-panel-dialog" append-to-body>
     <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, defineAsyncComponent, provide } from "vue";
+import { ref, computed, watch, nextTick, onMounted, defineAsyncComponent, provide } from "vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n()
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -151,6 +160,8 @@ import QueuedMessages from './QueuedMessages.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
+import ConnectionChips from './ConnectionChips.vue';
+import type { ConnectionChip } from './ConnectionChips.vue';
 import LTooltip from '../ui/LTooltip.vue';
 
 
@@ -191,9 +202,9 @@ const ringColor = computed(() => {
 });
 
 const contextTooltip = computed(() => {
-  if (!sharedTokenStats.value) return '上下文使用率';
+  if (!sharedTokenStats.value) return t('chat.panel.contextUsage');
   const pct = ringPercent.value;
-  return `上下文使用率 ${pct}%`;
+  return t('chat.panel.contextUsagePercent', { pct });
 });
 
 // Props & Emits - 类型化
@@ -485,7 +496,49 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
   workspacePath: currentSession.value?.workspacePath || null,
   runMode: currentSession.value?.settings?.runMode || 'normal',
+  connectionIds: currentSession.value?.settings?.connectionIds || [],
 }));
+
+// ── 附加连接管理 ──
+const allConnections = ref<any[]>([]);
+const selectedConnectionIds = computed<string[]>(() => {
+  const ids = currentSession.value?.settings?.connectionIds;
+  if (ids && Array.isArray(ids) && ids.length > 0) {
+    console.log('[ConnectionChips] session.settings.connectionIds:', ids);
+  }
+  return ids || [];
+});
+const selectedConnections = computed<ConnectionChip[]>(() => {
+  return allConnections.value
+    .filter(c => selectedConnectionIds.value.includes(c.id))
+    .map(c => ({ id: c.id, name: c.name, scheme: c.scheme, config: c.config }));
+});
+
+async function loadConnections() {
+  try {
+    allConnections.value = await apiService.getWorkspaceConnections();
+  } catch (e) {
+    console.error('Failed to load connections:', e);
+  }
+}
+
+function toggleConnection(connId: string) {
+  if (!currentSession.value) return;
+  const ids = [...(currentSession.value.settings?.connectionIds || [])];
+  const idx = ids.indexOf(connId);
+  if (idx === -1) {
+    ids.push(connId);
+  } else {
+    ids.splice(idx, 1);
+  }
+  if (!currentSession.value.settings) currentSession.value.settings = {};
+  currentSession.value.settings.connectionIds = ids;
+  debouncedSaveSession();
+}
+
+onMounted(() => {
+  loadConnections();
+});
 
 /**
  * 处理 ChatInput 配置变更
@@ -526,6 +579,11 @@ const handleConfigChange = (config: any) => {
   // 处理运行模式
   if (typeof config.runMode !== 'undefined') {
     currentSession.value.settings.runMode = config.runMode;
+  }
+
+  // 处理附加连接
+  if (typeof config.connectionIds !== 'undefined') {
+    currentSession.value.settings.connectionIds = config.connectionIds;
   }
 
   debouncedSaveSession();
@@ -726,6 +784,10 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     lastScrollTop = 0;
     currentSessionId.value = newSessionId;
+    // Ensure connections are loaded (in case onMounted already passed)
+    if (allConnections.value.length === 0) {
+      await loadConnections();
+    }
     await loadSession(newSessionId);
     // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
     await checkActiveStreamOnLoad(newSessionId);
@@ -780,11 +842,11 @@ async function handleStreamResponse(
   } catch (error) {
     // 错误已在 composable 中处理，这里只负责显示通知
     if ((error as Error).message.includes('SessionBusyError')) {
-      notify.warning("会话忙碌", "当前会话正在回复中，请稍后再试")
+      notify.warning(t('chat.panel.sessionBusy'), t('chat.panel.sessionBusyDesc'))
       return
     }
     if (error.name !== 'AbortError') {
-      notify.error("请求错误", error.message)
+      notify.error(t('common.error.unknown'), error.message)
       console.error("请求错误:", error)
     }
   }
@@ -812,11 +874,11 @@ async function handleStreamResponseWithCreate(
     )
   } catch (error) {
     if ((error as Error).message.includes('SessionBusyError')) {
-      notify.warning("会话忙碌", "当前会话正在回复中，请稍后再试")
+      notify.warning(t('chat.panel.sessionBusy'), t('chat.panel.sessionBusyDesc'))
       return
     }
     if (error.name !== 'AbortError') {
-      notify.error("请求错误", error.message)
+      notify.error(t('common.error.unknown'), error.message)
     }
   }
 }
@@ -832,10 +894,10 @@ async function deleteMessage(message: any) {
   try {
     if (
       await confirm(
-        "删除消息",
+        t('chat.panel.deleteMessageTitle'),
         message.role === "user"
-          ? "确定要删除这条提问吗？对应的回答也会被删除。此操作不可撤销。"
-          : "确定要删除这条回答吗？此操作不可撤销。"
+          ? t('chat.panel.deleteUserMessageDesc')
+          : t('chat.panel.deleteAssistantMessageDesc')
       )
     ) {
       await apiService.deleteMessage(message.id);
@@ -848,10 +910,10 @@ async function deleteMessage(message: any) {
       if (currentSessionId.value) {
         sessionStore.deleteMessage(currentSessionId.value, message.id);
       }
-      toast.success("消息已删除");
+      toast.success(t('common.deleteSuccess'));
     }
   } catch (error) {
-    toast.error("删除失败");
+    toast.error(t('common.error.deleteFailed'));
     console.error("删除消息失败:", error);
   }
 }
@@ -862,22 +924,22 @@ async function editMessage(message: any) {
     const currentContent = turns[turns.length - 1]
 
     const result = await editText({
-      title: "编辑消息",
+      title: t('chat.panel.editMessageTitle'),
       defaultValue: currentContent.content || "",
-      confirmText: "保存",
-      cancelText: "取消"
+      confirmText: t('common.save'),
+      cancelText: t('common.cancel')
     }) as string | null;
 
     if (result != null && currentSessionId.value) {
       currentContent.content = result;
       await apiService.updateMessage(message.id, { content: result });
       sessionStore.updateMessage(currentSessionId.value, message.id, message);
-      toast.success("消息已更新");
+      toast.success(t('common.updateSuccess'));
     } else if (result === null || result === undefined) {
-      toast.info("已取消编辑");
+      toast.info(t('chat.panel.editCancelled'));
     }
   } catch (error) {
-    toast.error("更新失败");
+    toast.error(t('common.error.operationFailed'));
     console.error("更新消息失败:", error);
   }
 }
@@ -889,11 +951,11 @@ async function copyMessage(message: any) {
 
     if (currentContent.content) {
       await navigator.clipboard.writeText(currentContent.content);
-      toast.success("消息已复制");
+      toast.success(t('common.copySuccess'));
     }
   } catch (error) {
     console.error("复制消息失败:", error);
-    toast.error("复制失败");
+    toast.error(t('common.copyFailed'));
   }
 }
 
@@ -952,7 +1014,7 @@ async function handleSendMessage(payload?: InputMessageState) {
       );
     }
   } catch (error: any) {
-    notify.error("消息发送失败", error.message);
+    notify.error(t('chat.panel.sendMessageFailed'), error.message);
     // 发送失败时由 SSE 事件驱动恢复检测
   }
 }
@@ -998,7 +1060,7 @@ function regenerateResponse(message: any) {
   );
 
   if (existingVersions.length >= MAX_REGENERATE_VERSIONS) {
-    toast.error(`暂时最多支持${MAX_REGENERATE_VERSIONS}个回答版本`);
+    toast.error(t('chat.panel.maxVersionsExceeded'));
     return;
   }
 

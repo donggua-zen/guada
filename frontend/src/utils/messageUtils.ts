@@ -3,6 +3,7 @@
  */
 
 import { shallowReactive, type ShallowReactive } from "vue";
+import { t } from "@/locales";
 
 /**
  * 消息接口定义
@@ -331,7 +332,7 @@ export function groupContentsForDisplay(
 export function extractMessageTitle(message: Message): string {
   // 从内容中提取第一行或前50字符
   const content = message.contents?.[0]?.content || "";
-  if (!content) return "未命名消息";
+  if (!content) return t("chat.message.unnamed");
 
   // 去除 Markdown 标记和空白
   const cleanContent = content
@@ -341,5 +342,5 @@ export function extractMessageTitle(message: Message): string {
   // 限制长度
   return cleanContent.length > 50
     ? cleanContent.substring(0, 47) + "..."
-    : cleanContent || "未命名消息";
+    : cleanContent || t("chat.message.unnamed");
 }

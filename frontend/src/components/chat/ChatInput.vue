@@ -37,7 +37,7 @@
         <template v-if="props.readonly">
           <div class="readonly-placeholder"
             style="min-height: 58px; padding: 0 8px; font-size: var(--size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
-            子代理会话为只读模式
+            {{ t('chat.input.readonlyPlaceholder') }}
           </div>
         </template>
         <template v-else>
@@ -80,8 +80,10 @@
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
               :knowledge-bases="knowledgeBases" :selected-ids="props.config?.knowledgeBaseIds || []"
+              :connections="remoteConnections" :selected-connection-ids="props.config?.connectionIds || []"
               @select-image="triggerImageInput" @select-file="triggerFileInput"
-              @toggle-kb="toggleKnowledgeBaseSelection" />
+              @toggle-kb="toggleKnowledgeBaseSelection"
+              @toggle-connection="toggleConnectionSelection" />
           </template>
         </div>
         <div class="right-actions flex items-center gap-1">
@@ -96,7 +98,7 @@
               }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <LTooltip v-if="!props.readonly" content="Token 上限" placement="top">
+          <LTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
             <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
               <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
@@ -104,14 +106,14 @@
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
           <!-- 发送/停止按钮（流式时：无输入=停止，有输入=入队） -->
-          <LTooltip v-if="streaming && !inputContent.trim()" content="停止生成" placement="top">
+          <LTooltip v-if="streaming && !inputContent.trim()" :content="t('chat.input.stopGenerating')" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
               <el-icon size="18">
                 <Stop24Filled />
               </el-icon>
             </button>
           </LTooltip>
-          <LTooltip v-else :content="streaming ? '加入队列' : '发送'" placement="top">
+          <LTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
               :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
               <el-icon size="18">
@@ -130,11 +132,11 @@
         @select-thinking-effort="handleThinkingEffortChange" />
 
       <!-- 粘贴文本预览弹窗（利用 el-dialog 原生滚动） -->
-      <el-dialog v-model="previewDialogVisible" :title="'原始内容预览 - ' + previewFileName" width="640px"
+      <el-dialog v-model="previewDialogVisible" :title="t('chat.input.previewTitle', { name: previewFileName })" width="640px"
         :close-on-click-modal="false" destroy-on-close class="pasted-preview-dialog" @close="closeFilePreview">
         <pre class="pasted-preview-text">{{ previewContent }}</pre>
         <template #footer>
-          <el-button @click="closeFilePreview">关闭</el-button>
+          <el-button @click="closeFilePreview">{{ t('common.close') }}</el-button>
         </template>
       </el-dialog>
     </div>
@@ -144,6 +146,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessageBox } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api';
 import { Editor, EditorContent } from '@tiptap/vue-3';
@@ -209,6 +212,7 @@ interface ChatConfig {
   maxTokensLimit?: number | null
   knowledgeBaseIds?: string[]
   runMode?: string
+  connectionIds?: string[]
 }
 
 /** File with optional _originalContent attached by paste handler */
@@ -218,6 +222,7 @@ const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('lg') // md = 768px
 
 const { confirm } = usePopup();
+const { t } = useI18n()
 
 // 响应式数据
 const isInputExpanded = ref(false);
@@ -237,6 +242,8 @@ const settingsButtonRef = ref<HTMLElement | null>(null);
 const settingsPopoverVisible = ref(false);
 // 知识库选择器相关
 const knowledgeBases = ref<any[]>([]); // 知识库列表
+// 远程连接列表
+const remoteConnections = ref<any[]>([]);
 
 // Tiptap 编辑器相关
 const editor = ref<Editor>();
@@ -451,9 +458,9 @@ const runModePopoverVisible = ref(false);
 
 const currentRunMode = computed(() => props.config?.runMode || 'normal');
 const runModeLabel = computed(() => {
-  if (currentRunMode.value === 'plan') return '计划模式';
-  if (currentRunMode.value === 'sandbox') return '轻沙盒模式';
-  return '工作模式';
+  if (currentRunMode.value === 'plan') return t('chat.input.runModePlan');
+  if (currentRunMode.value === 'sandbox') return t('chat.input.runModeSandbox');
+  return t('chat.input.runModeNormal');
 });
 const runModeIcon = computed(() => {
   if (currentRunMode.value === 'plan') return ClipboardTask24Regular;
@@ -504,7 +511,7 @@ const handleThinkingEffortChange = (effort: string) => {
 
 const currentModelNameOnly = computed(() => {
   const model = currentModel.value;
-  return model ? model.modelName.split("/").pop() : "请选择模型";
+  return model ? model.modelName.split("/").pop() : t('chat.input.selectModel');
 });
 
 const currentThinkingLabel = computed(() => {
@@ -531,10 +538,10 @@ const selectedKnowledgeBases = computed(() => {
 // Token 上限标签
 const maxTokensLabel = computed(() => {
   const v = props.config?.maxTokensLimit;
-  if (!v) return '不限';
+  if (!v) return t('chat.input.unlimited');
   if (v >= 1000000 && v % 1000000 === 0) return `${v / 1000000}M`;
   if (v >= 1000 && v % 1000 === 0) return `${v / 1000}K`;
-  return '自定义';
+  return t('chat.input.custom');
 });
 
 // 切换 Token 上限 popover
@@ -551,8 +558,8 @@ const handleMaxTokensChange = (val: number | null) => {
 
 const getFeatureLabel = (type: string) => {
   switch (type) {
-    case 'tools': return '工具调用';
-    case 'thinking': return '混合思考';
+    case 'tools': return t('chat.input.featureTools');
+    case 'thinking': return t('chat.input.featureThinking');
     default: return type;
   }
 }
@@ -756,8 +763,9 @@ const toggleAttachPopover = async () => {
   }
   try {
     await loadKnowledgeBases();
+    await loadConnections();
   } catch (error) {
-    console.error('加载知识库列表失败:', error);
+    console.error('加载附件列表失败:', error);
   }
   attachPopoverVisible.value = true;
 };
@@ -778,6 +786,21 @@ const toggleKnowledgeBaseSelection = (kbId: string) => {
 
   // 立即触发配置变更事件
   emit('config-change', { knowledgeBaseIds: newKbIds });
+};
+
+// 切换远程连接选中状态 - 立即同步到父组件
+const toggleConnectionSelection = (connId: string) => {
+  const currentConnIds = props.config?.connectionIds || [];
+  const newConnIds = [...currentConnIds];
+  const index = newConnIds.indexOf(connId);
+
+  if (index === -1) {
+    newConnIds.push(connId);
+  } else {
+    newConnIds.splice(index, 1);
+  }
+
+  emit('config-change', { connectionIds: newConnIds });
 };
 
 
@@ -847,13 +870,22 @@ watch(() => props.config?.knowledgeBaseIds, (kbIds) => {
   }
 }, { immediate: true });
 
+// 加载远程连接列表
+const loadConnections = async () => {
+  try {
+    remoteConnections.value = await apiService.getWorkspaceConnections();
+  } catch (error) {
+    console.error('获取远程连接列表失败:', error);
+  }
+};
+
 // 文件处理函数
 const checkFileConflict = async (newFileType: string) => {
   const currentFileType = uploadFiles.value[0]?.fileType;
-  const conflictType = newFileType === 'image' ? '文件' : '图片';
+  const conflictType = newFileType === 'image' ? t('common.fileType.file') : t('common.fileType.image');
 
   if (currentFileType && currentFileType !== newFileType) {
-    const confirmed = await confirm(`覆盖${conflictType}`, `暂不支持同时上传图片和文件，是否要覆盖全部${conflictType}？`);
+    const confirmed = await confirm(t('chat.input.overwriteTitle', { type: conflictType }), t('chat.input.overwriteConfirmDesc', { type: conflictType }));
     if (!confirmed) return false;
 
     uploadFiles.value = []; // setter 会自动清理预览 URL
@@ -1059,11 +1091,11 @@ const sendMessage = async () => {
 async function showUploadWaitingDialog(uploadingCount: number): Promise<boolean> {
   try {
     await ElMessageBox.confirm(
-      `当前有 ${uploadingCount} 个文件正在上传中，您可以选择等待上传完成或直接发送消息（仅发送已完成的文件）。`,
-      '文件上传中',
+      t('chat.input.uploadingDesc', { count: uploadingCount }),
+      t('chat.input.uploadingTitle'),
       {
-        confirmButtonText: '继续等待',
-        cancelButtonText: '直接发送',
+        confirmButtonText: t('chat.input.continueWaiting'),
+        cancelButtonText: t('chat.input.sendDirectly'),
         type: 'warning',
         distinguishCancelAndClose: true,
         closeOnClickModal: false,
@@ -1260,7 +1292,7 @@ onMounted(() => {
         StarterKit,
         CommandNode,
         Placeholder.configure({
-          placeholder: '按 / 使用技能，@ 召唤agent，Shift+Enter 换行',
+          placeholder: t('chat.input.editorPlaceholder'),
         }),
       ],
       content: parseCommandTags(props.value || ''),

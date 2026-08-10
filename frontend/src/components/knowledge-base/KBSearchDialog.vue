@@ -1,22 +1,22 @@
 <!-- KnowledgeBasePage/KBSearchDialog.vue -->
 <template>
-    <el-dialog v-model="dialogVisible" title="知识库搜索" width="700px" :close-on-click-modal="false"
+    <el-dialog v-model="dialogVisible" :title="t('knowledge.search.title')" width="700px" :close-on-click-modal="false"
         class="kb-search-dialog">
         <!-- 搜索输入区域 -->
         <div class="search-input-section mb-4">
             <el-form :model="searchForm" label-width="80px">
-                <el-form-item label="知识库">
-                    <el-select v-model="searchForm.kbId" placeholder="选择知识库" class="w-full" @change="handleKBChange">
+                <el-form-item :label="t('knowledge.search.kbLabel')">
+                    <el-select v-model="searchForm.kbId" :placeholder="t('knowledge.search.kbPlaceholder')" class="w-full" @change="handleKBChange">
                         <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id" />
                     </el-select>
                 </el-form-item>
 
-                <el-form-item label="搜索内容">
-                    <el-input v-model="searchForm.query" type="textarea" :rows="3" placeholder="输入要搜索的内容..."
+                <el-form-item :label="t('knowledge.search.contentLabel')">
+                    <el-input v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
                         @keyup.enter.ctrl="handleSearch" />
                 </el-form-item>
 
-                <el-form-item label="结果数量">
+                <el-form-item :label="t('knowledge.search.resultCount')">
                     <el-slider v-model="searchForm.topK" :min="1" :max="20" :step="1" show-input />
                 </el-form-item>
             </el-form>
@@ -27,7 +27,7 @@
                     <el-icon class="mr-1">
                         <Search />
                     </el-icon>
-                    搜索
+                    {{ t('knowledge.search.searchBtn') }}
                 </el-button>
             </div>
         </div>
@@ -38,17 +38,17 @@
                 <el-icon class="animate-spin text-3xl text-gray-400">
                     <Loading />
                 </el-icon>
-                <p class="text-sm text-gray-500 mt-2">搜索中...</p>
+                <p class="text-sm text-gray-500 mt-2">{{ t('knowledge.search.searching') }}</p>
             </div>
 
             <div v-else class="results-list">
                 <div
                     class="results-header flex justify-between items-center mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        找到 {{ searchResults.length }} 条结果
+                        {{ t('knowledge.search.foundResults', { count: searchResults.length }) }}
                     </span>
                     <el-button size="small" link @click="clearResults">
-                        清空结果
+                        {{ t('knowledge.search.clearResults') }}
                     </el-button>
                 </div>
 
@@ -62,22 +62,22 @@
                                 <!-- 混合搜索模式：显示三个分数 -->
                                 <template v-if="hasHybridScores(result)">
                                     <el-tag size="small" type="primary" effect="plain">
-                                        <span class="text-xs">语义</span>
+                                        <span class="text-xs">{{ t('knowledge.search.semantic') }}</span>
                                         <span class="ml-1 font-medium">{{ (result.semanticScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                     <el-tag size="small" type="success" effect="plain">
-                                        <span class="text-xs">关键词</span>
+                                        <span class="text-xs">{{ t('knowledge.search.keyword') }}</span>
                                         <span class="ml-1 font-medium">{{ (result.keywordScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                     <el-tag size="small" type="warning">
-                                        <span class="text-xs">综合</span>
+                                        <span class="text-xs">{{ t('knowledge.search.comprehensive') }}</span>
                                         <span class="ml-1 font-bold">{{ (result.finalScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                 </template>
                                 <!-- 纯语义搜索模式：显示相似度 -->
                                 <template v-else>
                                     <el-tag size="small" type="success">
-                                        相似度: {{ ((result.similarity || 0) * 100).toFixed(1) }}%
+                                        {{ t('knowledge.search.similarity') }}: {{ ((result.similarity || 0) * 100).toFixed(1) }}%
                                     </el-tag>
                                 </template>
                             </div>
@@ -87,7 +87,7 @@
                         <!-- 来源文件 -->
                         <div v-if="result.fileName || result.metadata?.fileId" class="mb-2">
                             <el-tag size="small" type="info">
-                                {{ result.fileName || '未知文件' }}
+                                {{ result.fileName || t('knowledge.search.unknownFile') }}
                             </el-tag>
                         </div>
 
@@ -98,7 +98,7 @@
 
                         <!-- 元数据信息 -->
                         <div v-if="result.metadata" class="mt-2 text-xs text-gray-400">
-                            <span v-if="result.metadata.chunk_index">分块 #{{ result.metadata.chunk_index }}</span>
+                            <span v-if="result.metadata.chunk_index">{{ t('knowledge.search.chunk') }} #{{ result.metadata.chunk_index }}</span>
                         </div>
                     </div>
                 </div>
@@ -110,8 +110,8 @@
             <el-icon size="48" class="text-gray-300 mb-3">
                 <Search />
             </el-icon>
-            <p class="text-sm text-gray-500">未找到相关结果</p>
-            <p class="text-xs text-gray-400 mt-1">尝试调整搜索关键词或选择其他知识库</p>
+            <p class="text-sm text-gray-500">{{ t('knowledge.search.notFound') }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.notFoundHint') }}</p>
         </div>
 
         <!-- 初始状态 -->
@@ -119,13 +119,13 @@
             <el-icon size="48" class="text-gray-300 mb-3">
                 <Search />
             </el-icon>
-            <p class="text-sm text-gray-500">输入关键词开始搜索</p>
-            <p class="text-xs text-gray-400 mt-1">支持语义搜索和关键词匹配</p>
+            <p class="text-sm text-gray-500">{{ t('knowledge.search.initial') }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.initialHint') }}</p>
         </div>
 
         <template #footer>
             <div class="flex justify-end gap-2">
-                <el-button @click="dialogVisible = false">关闭</el-button>
+                <el-button @click="dialogVisible = false">{{ t('common.close') }}</el-button>
             </div>
         </template>
     </el-dialog>
@@ -133,10 +133,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Search, Loading, Document } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
+
+const { t } = useI18n()
 
 
 interface SearchResult {
@@ -202,7 +205,7 @@ function handleKBChange() {
  */
 async function handleSearch() {
     if (!canSearch.value) {
-        toast.warning('请选择知识库并输入搜索内容')
+        toast.warning(t('knowledge.search.selectKbWarning'))
         return
     }
 
@@ -222,13 +225,13 @@ async function handleSearch() {
         hasSearched.value = true
 
         if (searchResults.value.length === 0) {
-            toast.info('未找到相关结果')
+            toast.info(t('knowledge.search.notFound'))
         } else {
-            toast.success(`找到 ${searchResults.value.length} 条结果`)
+            toast.success(t('knowledge.search.foundResults', { count: searchResults.value.length }))
         }
     } catch (error: any) {
         console.error('搜索失败:', error)
-        toast.error(error.response?.data?.detail || '搜索失败')
+        toast.error(error.response?.data?.detail || t('knowledge.search.searchFailed'))
     } finally {
         isSearching.value = false
     }

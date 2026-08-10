@@ -1,6 +1,6 @@
 <template>
     <div class="h-full overflow-hidden flex flex-col">
-        <PageHeader title="插件" />
+        <PageHeader :title="t('plugins.page.title')" />
         <div class="flex-1 flex flex-col overflow-hidden">
             <div class="shrink-0 px-4 w-full md:max-w-260 md:mx-auto">
                 <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
@@ -33,6 +33,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElTabs, ElTabPane } from 'element-plus'
 import MCPServers from './MCPServers.vue'
 import LocalTools from './LocalTools.vue'
@@ -49,32 +50,33 @@ import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 // 插件设置 Tab 菜单
-const sidebarItems = [
+const sidebarItems = computed(() => [
     {
-        label: '本地工具',
+        label: t('plugins.page.tabLocalTools'),
         path: 'local-tools',
         icon: WrenchScrewdriver24Regular,
     },
     {
-        label: 'Skills',
+        label: t('plugins.page.tabSkills'),
         path: 'skills',
         icon: Code24Regular,
     },
     {
-        label: 'MCP 服务器',
+        label: t('plugins.page.tabMcp'),
         path: 'mcp',
         icon: Dumbbell16Regular,
     },
-]
+])
 
 // Tab 数据（用于模板渲染）
-const tabItems = computed(() => sidebarItems)
+const tabItems = computed(() => sidebarItems.value)
 
 // 获取默认标签页
 const getDefaultTabPath = () => {
-    return sidebarItems[0]?.path || 'mcp'
+    return sidebarItems.value[0]?.path || 'mcp'
 }
 
 const currentTabValue = ref(getDefaultTabPath())

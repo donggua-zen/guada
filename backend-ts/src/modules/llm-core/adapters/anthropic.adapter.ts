@@ -15,6 +15,13 @@ import {
   withStreamIdleTimeout,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
+import {
+  UpstreamRateLimitError,
+  UpstreamTimeoutError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "../utils/upstream-errors";
+import { getRetryAfterFromError } from "../utils/retry.util";
 
 /**
  * Anthropic 协议适配器
@@ -686,16 +693,33 @@ export class AnthropicAdapter implements IProtocolAdapter {
     isStream: boolean,
     streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
   ): never {
-    // 流式 idle 超时优先判断
+    // 流式 idle 超时
     if (streamTc?.isIdleTimeout()) {
-      throw new Error(
+      throw new UpstreamTimeoutError(
         `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+        error,
       );
     }
 
     this.logger.error(`Anthropic API error: ${error.message}`);
 
-    // SDK 已提供各种 Error 子类，直接抛出，由 AgentEngine 分类处理
+    const status = error.status;
+    const msg = `Anthropic API Error: ${status} - ${error.message}`;
+
+    // 429 → UpstreamRateLimitError（可重试）
+    if (status === 429) {
+      throw new UpstreamRateLimitError(msg, error, getRetryAfterFromError(error));
+    }
+    // 5xx → UpstreamNetworkError（可重试）
+    if (status >= 500 && status < 600) {
+      throw new UpstreamNetworkError(msg, error, status);
+    }
+    // 4xx → UpstreamRequestError（不可重试）
+    if (status >= 400 && status < 500) {
+      throw new UpstreamRequestError(msg, error, status);
+    }
+
+    // 其他错误原样抛出
     throw error;
   }
 }

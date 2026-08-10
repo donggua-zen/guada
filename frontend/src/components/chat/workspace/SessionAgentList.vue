@@ -3,10 +3,10 @@
     <!-- 头部 -->
     <div class="shrink-0 flex items-center justify-between px-2 py-3">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-        子任务
+        {{ t('chat.workspace.subTask') }}
       </h3>
       <span class="text-xs text-gray-400 dark:text-[#6b6d73] mr-2">
-        {{ allTabs.length }} 个
+        {{ allTabs.length }} {{ t('chat.workspace.count') }}
       </span>
     </div>
 
@@ -35,6 +35,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface AgentTab {
   id: string;

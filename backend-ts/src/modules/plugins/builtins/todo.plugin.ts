@@ -7,6 +7,7 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import { TodoUpdatedEvent } from "../../../common/events/stream.events";
+import langZh from "./todo.lang.zh.json";
 
 interface TodoItem {
   content: string;
@@ -57,6 +58,7 @@ export class TodoPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // ── todo 工具 ──
     api.registerTool({
       name: "todo",
@@ -111,7 +113,13 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       execute: async (args, ctx) => {
         return this.handleTodo(args, ctx);
       },
-      display: { actionType: "todo", argsKey: "action", icon: "generic" },
+      display: {
+        actionType: "todo",
+        text: { executing: "%todo.executing%", completed: "%todo.completed%" },
+        aggregate: { executing: "%todo.aggregate.executing%", completed: "%todo.aggregate.completed%" },
+        argsKey: "action",
+        icon: "generic",
+      },
     });
 
     // ── 待办状态 user 提示词（仅首次加载 + 压缩后重建时注入） ──

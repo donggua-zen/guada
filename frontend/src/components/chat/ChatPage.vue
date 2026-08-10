@@ -13,7 +13,7 @@
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
                   <!-- 工作目录切换 -->
-                  <LTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
+                  <LTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
                     @click="layoutStore.toggleWorkspace()">
                     <PanelRightExpand20Filled class="w-5 h-5" />
@@ -28,7 +28,7 @@
                       <DropdownMenuItem command="clear">
                         <span class="flex items-center gap-2">
                           <DeleteTwotone class="w-4 h-4" />
-                          <span>清空记录</span>
+                          <span>{{ t('chat.header.clearRecords') }}</span>
                         </span>
                       </DropdownMenuItem>
                     </template>
@@ -61,7 +61,7 @@
     </template>
     <template v-else>
       <!-- 新建对话头部 -->
-      <PageHeader title="新建对话" />
+      <PageHeader :title="t('chat.welcome.newSession')" />
       <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
     </template>
   </div>
@@ -72,6 +72,8 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, type Ref } from "vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n()
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -116,7 +118,7 @@ const WorkspaceSidebar = defineAsyncComponent(() => import("./workspace/Workspac
 
 // 子 Agent Tab 状态
 const agentTabs = ref<AgentTab[]>([
-  { id: 'main', name: '主会话', status: 'completed', loaded: true }
+  { id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true }
 ]);
 const activeTabId = ref('main');
 
@@ -144,7 +146,7 @@ const panelSession = computed(() => {
 function handleSubAgentCreate(event: any) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
-  const name = payload.name || '子任务';
+  const name = payload.name || t('chat.panel.subTask');
   const session = payload.session;
   if (!subSessionId) return;
 
@@ -360,10 +362,10 @@ const fetchSession = async (sessionId: string) => {
       // 保留 main Tab，重建子 Agent Tabs（状态以 isStreaming 为准）
       const mainTab = agentTabs.value.find(t => t.id === 'main');
       agentTabs.value = [
-        mainTab || { id: 'main', name: '主会话', status: 'completed', loaded: true },
+        mainTab || { id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true },
         ...subSessions.value.map((sub) => ({
           id: sub.id,
-          name: sub.title || '子任务',
+          name: sub.title || t('chat.panel.subTask'),
           status: (sub.isStreaming ? 'running' : 'completed') as 'running' | 'completed' | 'error',
           loaded: true,
         })),
@@ -371,7 +373,7 @@ const fetchSession = async (sessionId: string) => {
     }
   } catch (error) {
     console.error('获取会话详情失败:', error);
-    toast.error("获取会话详情失败");
+    toast.error(t('common.error.loadFailed'));
     goChatRoute(null);
   }
 };
@@ -446,7 +448,7 @@ const updateSelectedSession = async (sessionId: string) => {
   if (sessionId !== mainSession.value?.id) {
     // 切换会话时重置子代理状态到主线程
     activeTabId.value = 'main';
-    agentTabs.value = [{ id: 'main', name: '主会话', status: 'completed', loaded: true }];
+    agentTabs.value = [{ id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true }];
     subSessions.value = [];
     await fetchSession(sessionId);
   }
@@ -468,7 +470,7 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     await goChatRoute(response.id);
   } catch (error) {
     console.error('创建对话失败:', error);
-    toast.error("创建对话失败");
+    toast.error(t('common.createFailed'));
   }
 };
 /**
@@ -502,7 +504,7 @@ const handleSelectCharacter = async (character: Character) => {
     mainSession.value.characterId = character.id;
   } catch (error: any) {
     console.error('切换角色失败:', error);
-    toast.error('切换角色失败');
+    toast.error(t('common.error.operationFailed'));
   }
 };
 
@@ -528,11 +530,11 @@ async function handleMoreSelect(key: string) {
  */
 async function clearChat() {
   if (!mainSession.value) {
-    toast.error("当前没有活动的会话");
+    toast.error(t('chat.panel.noActiveSession'));
     return;
   }
 
-  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
+  if (await confirm(t('chat.panel.clearChatTitle'), t('chat.panel.clearChatDesc'))) {
     try {
       await apiService.clearSessionMessages(mainSession.value.id);
       sessionStore.clearSessionMessages(mainSession.value.id);
@@ -541,10 +543,10 @@ async function clearChat() {
       if (chatPanel && chatPanel.loadMessages) {
         chatPanel.loadMessages(mainSession.value.id);
       }
-      toast.success("聊天记录已清空");
+      toast.success(t('common.operationSuccess'));
     } catch (error) {
       console.error('清空聊天记录失败:', error);
-      toast.error("清空失败");
+      toast.error(t('common.error.operationFailed'));
     }
   }
 }
@@ -588,7 +590,7 @@ watch(
   () => mainSession,
   (session) => {
     if (session.value) {
-      title.value = `${session.value.title}-对话`;
+      title.value = `${session.value.title}-${t('chat.panel.mainSession')}`;
       updateSessionById(session.value.id, session.value);
     }
   },

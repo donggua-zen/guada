@@ -5,6 +5,7 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import path from "path";
+import langZh from "./skill.lang.zh.json";
 
 @Injectable()
 export class SkillPlugin extends PluginBase {
@@ -22,6 +23,7 @@ export class SkillPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // ── 注册斜杠命令提供者（含解析器） ──
     api.registerCommandProvider({
       id: "skill",
@@ -93,7 +95,12 @@ export class SkillPlugin extends PluginBase {
           path: result.path,
         };
       },
-      display: { actionType: "skill_read", argsKey: "name", icon: "book" },
+      display: {
+        actionType: "skill_read",
+        text: { executing: "%skill_learn.executing%", completed: "%skill_learn.completed%" },
+        argsKey: "name",
+        icon: "book",
+      },
       dangerLevel: "info",
     });
 

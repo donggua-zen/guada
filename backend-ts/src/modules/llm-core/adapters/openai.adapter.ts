@@ -17,6 +17,13 @@ import {
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
 import {
+  UpstreamRateLimitError,
+  UpstreamTimeoutError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "../utils/upstream-errors";
+import { getRetryAfterFromError } from "../utils/retry.util";
+import {
   createStreamTimeoutController,
   withStreamIdleTimeout,
   DEFAULT_REQUEST_TIMEOUT_MS,
@@ -408,23 +415,34 @@ export class OpenAIAdapter implements IProtocolAdapter {
       /* ignore serialization errors */
     }
 
-    // 流式 idle 超时优先判断（abort reason 包含 "idle timeout"）
+    // 流式 idle 超时
     if (streamTc?.isIdleTimeout()) {
-      throw new Error(
+      throw new UpstreamTimeoutError(
         `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+        error,
       );
     }
     if (error instanceof APIError) {
       const rawBody = (error as any).__rawBody;
-      // 如果 SDK 显示 "(no body)" 但实际有 body，替换消息
-      if (rawBody && error.message?.includes("(no body)")) {
-        throw new Error(
-          `LLM API Error: ${error.status} - body=${rawBody.substring(0, 500)}`,
-        );
+      const msg = rawBody && error.message?.includes("(no body)")
+        ? `LLM API Error: ${error.status} - body=${rawBody.substring(0, 500)}`
+        : `LLM API Error: ${error.status} - ${error.message}`;
+
+      // 429 → UpstreamRateLimitError（可重试）
+      if (error.status === 429) {
+        throw new UpstreamRateLimitError(msg, error, getRetryAfterFromError(error));
       }
-      throw new Error(`LLM API Error: ${error.status} - ${error.message}`);
+      // 5xx → UpstreamNetworkError（可重试）
+      if (error.status >= 500 && error.status < 600) {
+        throw new UpstreamNetworkError(msg, error, error.status);
+      }
+      // 4xx → UpstreamRequestError（不可重试）
+      if (error.status >= 400 && error.status < 500) {
+        throw new UpstreamRequestError(msg, error, error.status);
+      }
+      // 其他 APIError 原样抛出（status 保留供 classifyError 判断）
+      throw error;
     }
-    if (error.name === "AbortError") throw new Error("LLM request aborted");
     throw error;
   }
 

@@ -1,12 +1,12 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑机器人' : '创建机器人'" width="600px" :close-on-click-modal="false"
+  <el-dialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" width="600px" :close-on-click-modal="false"
     @close="handleClose" append-to-body>
     <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form"
       :validate-on-rule-change="false">
 
       <!-- 平台选择（仅创建时显示） -->
-      <el-form-item v-if="!isEdit" label="选择平台" prop="platform">
-        <el-select v-model="formData.platform" placeholder="请选择平台" style="width: 100%" @change="handlePlatformChange">
+      <el-form-item v-if="!isEdit" :label="t('bot.modal.platformLabel')" prop="platform">
+        <el-select v-model="formData.platform" :placeholder="t('bot.modal.platformPlaceholder')" style="width: 100%" @change="handlePlatformChange">
           <el-option v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
             :value="platform.platform">
             <span>{{ platform.displayName }}</span>
@@ -21,13 +21,13 @@
       </el-form-item>
 
       <!-- 机器人名称 -->
-      <el-form-item label="机器人名称" prop="name">
-        <el-input v-model="formData.name" placeholder="请输入机器人名称" maxlength="50" show-word-limit />
+      <el-form-item :label="t('bot.modal.nameLabel')" prop="name">
+        <el-input v-model="formData.name" :placeholder="t('bot.modal.namePlaceholder')" maxlength="50" show-word-limit />
       </el-form-item>
 
       <!-- 默认角色选择（必填） -->
-      <el-form-item label="默认角色" prop="defaultCharacterId">
-        <el-select v-model="formData.defaultCharacterId" placeholder="请选择默认角色" style="width: 100%" filterable>
+      <el-form-item :label="t('bot.modal.characterLabel')" prop="defaultCharacterId">
+        <el-select v-model="formData.defaultCharacterId" :placeholder="t('bot.modal.characterPlaceholder')" style="width: 100%" filterable>
           <el-option v-for="character in characters" :key="character.id" :label="character.title" :value="character.id">
             <div class="flex items-center gap-2">
               <img v-if="character.avatarUrl" :src="character.avatarUrl" class="w-6 h-6 rounded object-cover" />
@@ -36,13 +36,13 @@
           </el-option>
         </el-select>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-          机器人接收消息后使用该角色进行对话
+          {{ t('bot.modal.characterHint') }}
         </div>
       </el-form-item>
 
       <!-- 模型选择（可选，不选则继承自角色/全局设置） -->
-      <el-form-item label="模型选择">
-        <el-select v-model="formData.defaultModelId" placeholder="继承自角色/全局设置" style="width: 100%" filterable clearable>
+      <el-form-item :label="t('bot.modal.modelLabel')">
+        <el-select v-model="formData.defaultModelId" :placeholder="t('bot.modal.modelPlaceholder')" style="width: 100%" filterable clearable>
           <el-option v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
             <div class="flex items-center gap-2">
               <span>{{ model.modelName }}</span>
@@ -51,24 +51,24 @@
           </el-option>
         </el-select>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-          不选择则使用角色的默认模型，如果角色未设置则使用全局默认模型
+          {{ t('bot.modal.modelHint') }}
         </div>
       </el-form-item>
 
       <!-- 思考强度选择（仅当选中模型支持思考时显示） -->
-      <el-form-item v-if="thinkingEffortOptions.length > 0" label="思考强度">
-        <el-select v-model="formData.defaultThinkingEffort" placeholder="不设置" style="width: 100%">
+      <el-form-item v-if="thinkingEffortOptions.length > 0" :label="t('bot.modal.thinkingLabel')">
+        <el-select v-model="formData.defaultThinkingEffort" :placeholder="t('bot.modal.thinkingPlaceholder')" style="width: 100%">
           <el-option v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabel(effort)"
             :value="effort" />
         </el-select>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-          设置后对该机器人的所有会话生效
+          {{ t('bot.modal.thinkingHint') }}
         </div>
       </el-form-item>
 
       <!-- 引用知识库选择（多选） -->
-      <el-form-item label="引用知识库">
-        <el-select v-model="formData.knowledgeBaseIds" placeholder="请选择知识库（可多选）" style="width: 100%" multiple
+      <el-form-item :label="t('bot.modal.kbLabel')">
+        <el-select v-model="formData.knowledgeBaseIds" :placeholder="t('bot.modal.kbPlaceholder')" style="width: 100%" multiple
           filterable>
           <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id">
             <div class="flex items-center gap-2">
@@ -78,13 +78,13 @@
           </el-option>
         </el-select>
         <div class="text-xs text-gray-500 mt-1">
-          AI回复时会引用这些知识库的内容
+          {{ t('bot.modal.kbHint') }}
         </div>
       </el-form-item>
 
       <!-- 动态平台配置字段 -->
       <template v-if="selectedPlatform">
-        <el-divider content-position="left">平台配置</el-divider>
+        <el-divider content-position="left">{{ t('bot.modal.platformConfig') }}</el-divider>
 
         <el-form-item v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label"
           :prop="`platformConfig.${field.key}`">
@@ -123,22 +123,22 @@
         <el-collapse-item name="advanced">
           <template #title>
             <div class="flex items-center gap-2">
-              <span>高级配置</span>
-              <el-tag size="small" type="info">可选</el-tag>
+              <span>{{ t('bot.modal.advanced') }}</span>
+              <el-tag size="small" type="info">{{ t('bot.modal.advancedOptional') }}</el-tag>
             </div>
           </template>
 
           <!-- 重连配置 -->
-          <el-form-item label="启用重连">
+          <el-form-item :label="t('bot.modal.reconnectLabel')">
             <el-switch v-model="formData.reconnectConfig.enabled" />
           </el-form-item>
 
           <template v-if="formData.reconnectConfig.enabled">
-            <el-form-item label="最大重试次数">
+            <el-form-item :label="t('bot.modal.maxRetries')">
               <el-input-number v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
             </el-form-item>
 
-            <el-form-item label="重试间隔(ms)">
+            <el-form-item :label="t('bot.modal.retryInterval')">
               <el-input-number v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
                 style="width: 100%" />
             </el-form-item>
@@ -147,18 +147,18 @@
       </el-collapse>
 
       <!-- 自动启动（仅创建时） -->
-      <el-form-item v-if="!isEdit" label="自动启动">
+      <el-form-item v-if="!isEdit" :label="t('bot.modal.autoStartLabel')">
         <el-switch v-model="formData.autoStart" />
         <div class="text-xs text-gray-500 mt-1">
-          创建后立即启动机器人
+          {{ t('bot.modal.autoStartHint') }}
         </div>
       </el-form-item>
     </el-form>
 
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
+      <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">
-        {{ isEdit ? '保存' : '创建' }}
+        {{ isEdit ? t('bot.modal.save') : t('bot.modal.create') }}
       </el-button>
     </template>
   </el-dialog>
@@ -166,6 +166,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useBotStore } from '@/stores/bot'
@@ -188,6 +189,7 @@ const emit = defineEmits<{
 }>()
 
 const botStore = useBotStore()
+const { t } = useI18n()
 const knowledgeBaseStore = useKnowledgeBaseStore()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
@@ -246,9 +248,9 @@ const configDocUrl = computed(() => {
 // 配置教程按钮文案
 const configDocButtonText = computed(() => {
   if (formData.value.platform && selectedPlatform.value) {
-    return `查看${selectedPlatform.value.displayName}配置教程`
+    return t('bot.modal.configDocBtnWith', { name: selectedPlatform.value.displayName })
   }
-  return '查看配置教程'
+  return t('bot.modal.configDocBtn')
 })
 
 // 打开配置教程页面
@@ -277,11 +279,11 @@ const formData = ref({
 const formRules = computed<FormRules>(() => {
   const rules: FormRules = {
     name: [
-      { required: true, message: '请输入机器人名称', trigger: 'blur' },
-      { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+      { required: true, message: t('bot.modal.nameRequired'), trigger: 'blur' },
+      { min: 2, max: 50, message: t('bot.modal.nameLength'), trigger: 'blur' }
     ],
     defaultCharacterId: [
-      { required: true, message: '请选择默认角色', trigger: 'change' }
+      { required: true, message: t('bot.modal.characterRequired'), trigger: 'change' }
     ]
   }
 
@@ -290,7 +292,7 @@ const formRules = computed<FormRules>(() => {
     selectedPlatform.value.fields.forEach(field => {
       if (field.required) {
         rules[`platformConfig.${field.key}`] = [
-          { required: true, message: `请输入${field.label}`, trigger: 'blur' }
+          { required: true, message: t('bot.modal.fieldRequired', { label: field.label }), trigger: 'blur' }
         ]
       }
     })
@@ -298,7 +300,7 @@ const formRules = computed<FormRules>(() => {
 
   if (!isEdit.value) {
     rules.platform = [
-      { required: true, message: '请选择平台', trigger: 'change' }
+      { required: true, message: t('bot.modal.platformRequired'), trigger: 'change' }
     ]
   }
 
@@ -422,7 +424,7 @@ const loadCharacters = async () => {
     characters.value = response.items || []
   } catch (error) {
     console.error('获取角色列表失败:', error)
-    ElMessage.error('获取角色列表失败')
+    ElMessage.error(t('bot.modal.loadCharactersFailed'))
   }
 }
 
@@ -433,7 +435,7 @@ const loadKnowledgeBases = async () => {
     knowledgeBases.value = knowledgeBaseStore.knowledgeBases
   } catch (error) {
     console.error('获取知识库列表失败:', error)
-    ElMessage.error('获取知识库列表失败')
+    ElMessage.error(t('bot.modal.loadKbFailed'))
   }
 }
 
@@ -451,7 +453,7 @@ const loadModels = async () => {
     )
   } catch (error) {
     console.error('获取模型列表失败:', error)
-    ElMessage.error('获取模型列表失败')
+    ElMessage.error(t('bot.modal.loadModelsFailed'))
   }
 }
 

@@ -15,6 +15,7 @@ import { useStorage } from "@vueuse/core";
 import type { StreamEvent } from "@/types/service";
 import { getClientId } from "@/utils/clientId";
 import { NetworkError, AuthError, ApiError } from "@/utils/errors";
+import { t } from "@/locales";
 import { ChatStreamService } from "./modules/ChatStreamService";
 import {
   WorkspaceWatcherService,
@@ -112,7 +113,7 @@ class ApiService {
         ) {
           console.warn("后端服务连接失败，请稍后重试");
           throw new NetworkError(
-            "无法连接到后端服务，请确保应用已完全启动",
+            t("session.api.cannotConnect"),
           );
         }
 
@@ -133,14 +134,14 @@ class ApiService {
           return Promise.reject(authError);
         }
 
-        let errorMessage = "请求失败";
+        let errorMessage = t("session.api.requestFailed");
         if (error.response?.data) {
           const responseData = error.response.data;
           if (responseData.message) {
             errorMessage =
               typeof responseData.message === "string"
                 ? responseData.message
-                : responseData.message.error || "请求失败";
+                : responseData.message.error || t("session.api.requestFailed");
           } else if (responseData.error) {
             errorMessage = responseData.error;
           }

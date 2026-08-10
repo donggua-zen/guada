@@ -8,6 +8,8 @@
 export interface ThemePresetInfo {
   id: string;
   name: string;
+  /** i18n key for theme name (built-in themes only); external plugins use `name` directly */
+  nameKey?: string;
   /** 主色，用于下拉圆点预览 */
   primaryColor: string;
   /** 副色，用于下拉圆点预览 */
@@ -19,66 +21,77 @@ const builtinThemes: ThemePresetInfo[] = [
   {
     id: "default",
     name: "默认",
+    nameKey: "common.theme.default",
     primaryColor: "#fb7299",
     secondaryColor: "#5b8def",
   },
   {
     id: "brutalist",
     name: "粗野主义",
+    nameKey: "common.theme.brutalist",
     primaryColor: "#141414",
     secondaryColor: "#ffcf00",
   },
   {
     id: "blueprint",
     name: "工程蓝图",
+    nameKey: "common.theme.blueprint",
     primaryColor: "#2060b0",
     secondaryColor: "#0e8fa8",
   },
   {
     id: "steampunk",
     name: "蒸汽朋克",
+    nameKey: "common.theme.steampunk",
     primaryColor: "#a55e28",
     secondaryColor: "#3e7d6f",
   },
   {
     id: "y2k",
     name: "千禧铬彩",
+    nameKey: "common.theme.y2k",
     primaryColor: "#6673f0",
     secondaryColor: "#e854ae",
   },
   {
     id: "pop-comic",
     name: "波普漫画",
+    nameKey: "common.theme.popComic",
     primaryColor: "#ee2233",
     secondaryColor: "#1f6fff",
   },
   {
     id: "famicom",
     name: "红白机",
+    nameKey: "common.theme.famicom",
     primaryColor: "#c8102e",
     secondaryColor: "#f0b400",
   },
   {
     id: "e-ink",
     name: "墨水屏",
+    nameKey: "common.theme.eInk",
     primaryColor: "#3a3a3a",
     secondaryColor: "#8a8578",
   },
   {
     id: "doodle",
     name: "涂鸦本",
+    nameKey: "common.theme.doodle",
     primaryColor: "#3a7bd5",
     secondaryColor: "#e8854a",
   },
   {
     id: "cyberpunk",
     name: "赛博朋克（仅暗色）",
+    nameKey: "common.theme.cyberpunk",
     primaryColor: "#00e5ff",
     secondaryColor: "#ff2a6d",
   },
   {
     id: "wandering-earth",
     name: "小破球（仅暗色）",
+    nameKey: "common.theme.wanderingEarth",
     primaryColor: "#d99a4e",
     secondaryColor: "#43b581",
   },

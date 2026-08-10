@@ -1,17 +1,17 @@
 <template>
   <div class="h-full overflow-hidden flex flex-col">
-    <PageHeader title="模型管理" />
+    <PageHeader :title="t('settings.models.title')" />
     <div class="flex-1 flex flex-col overflow-hidden">
       <template v-if="!showDetail">
         <!-- 标题区（固定不滚动） -->
         <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
           <div class="min-w-0">
-            <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">模型供应商</h1>
-            <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">管理 AI 模型供应商和模型配置，支持多协议接入。</p>
+            <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
+            <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
           </div>
           <el-button type="primary" @click="handleCreateGroup">
             <template #icon><PlusOutlined /></template>
-            添加自定义
+            {{ t('settings.models.addCustom') }}
           </el-button>
         </div>
 
@@ -43,11 +43,11 @@
         <div class="dialog-content">
           <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
             label-position="left" hide-required-asterisk>
-            <el-form-item label="名字" prop="name">
-              <el-input v-model="currentProviderEdit.name" placeholder="输入分组名字" :disabled="!isNameEditable" />
+            <el-form-item :label="t('settings.models.name')" prop="name">
+              <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
             </el-form-item>
-            <el-form-item label="协议类型" prop="protocol">
-              <el-select v-model="currentProviderEdit.protocol" placeholder="请选择协议类型" style="width: 100%"
+            <el-form-item :label="t('settings.models.protocol')" prop="protocol">
+              <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
                 :disabled="!isProtocolEditable">
                 <el-option label="OpenAI" value="openai" />
                 <el-option label="OpenAI-Response" value="openai-response" />
@@ -55,15 +55,15 @@
                 <el-option label="Anthropic" value="anthropic" />
               </el-select>
             </el-form-item>
-            <el-form-item label="API地址" prop="apiUrl">
+            <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
               <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
             </el-form-item>
-            <el-form-item label="API KEY" prop="apiKey">
+            <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
               <div class="api-key-input-wrapper">
                 <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
                 <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
                   :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
-                  测试
+                  {{ t('settings.models.test') }}
                 </el-button>
               </div>
               <!-- API Key 获取链接（仅非自定义供应商显示） -->
@@ -72,27 +72,27 @@
                   <el-icon class="mr-1">
                     <LinkOutlined />
                   </el-icon>
-                  获取 API Key
+                  {{ t('settings.models.getApiKey') }}
                 </el-link>
               </div>
             </el-form-item>
             <!-- 自定义请求头（仅自定义供应商可编辑） -->
-            <el-form-item label="自定义请求头" prop="headers">
+            <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
               <el-input
                 v-model="currentProviderEdit.headers"
                 type="textarea"
                 :rows="4"
                 class="w-full"
-                placeholder="每行一个请求头，格式为: Key: Value"
+                :placeholder="t('settings.models.customHeadersPlaceholder')"
               />
-              <div class="text-xs text-gray-400 mt-1">用于 API Gateway 认证等场景，格式示例: Authorization: Bearer token</div>
+              <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
             </el-form-item>
           </el-form>
         </div>
         <template #footer>
           <span class="dialog-footer">
-            <el-button @click="showProviderModal = false">取消</el-button>
-            <el-button type="primary" @click="handleSaveProvider">确定</el-button>
+            <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
           </span>
         </template>
       </el-dialog>
@@ -102,6 +102,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ModelsProviderList from '../setting/ModelsProviderList.vue'
 import ModelsProviderDetail from './ModelsProviderDetail.vue'
 import {
@@ -125,6 +126,7 @@ import {
 } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 
+const { t } = useI18n()
 const { notify, confirm } = usePopup()
 const currentProviderId = ref<string | null>(null)
 
@@ -186,10 +188,10 @@ const isProtocolEditable = computed(() => {
 // 动态获取弹窗标题
 const getProviderModalTitle = computed(() => {
   if (isProviderEditMode.value) {
-    return '编辑供应商'
+    return t('settings.models.editProvider')
   }
   const isFromTemplate = currentProviderEdit.value.provider !== 'custom'
-  return isFromTemplate ? `添加 ${currentProviderEdit.value.name || '供应商'}` : '新建分组'
+  return isFromTemplate ? t('settings.models.addProvider', { name: currentProviderEdit.value.name || t('settings.models.provider') }) : t('settings.models.newGroup')
 })
 
 const isProviderEditMode = ref(false)
@@ -198,25 +200,25 @@ const showProviderModal = ref(false)
 const testingConnection = ref(false)
 
 // 供应商表单验证规则
-const providerRules = {
+const providerRules = computed(() => ({
   name: {
     required: true,
-    message: '请输入供应商名字',
+    message: t('settings.models.nameRequired'),
     trigger: ['blur', 'input']
   },
   protocol: {
     required: true,
-    message: '请选择协议类型',
+    message: t('settings.models.protocolRequired'),
     trigger: ['change', 'blur']
   },
   apiUrl: {
     required: true,
-    message: '请输入API地址',
+    message: t('settings.models.apiUrlRequired'),
     trigger: ['blur', 'input']
   },
   apiKey: {
     required: true,
-    message: '请输入API密钥',
+    message: t('settings.models.apiKeyRequired'),
     trigger: ['blur']
   },
   headers: {
@@ -230,7 +232,7 @@ const providerRules = {
     },
     trigger: ['blur', 'input']
   }
-}
+}))
 
 // 初始化数据函数
 const initData = async () => {
@@ -321,7 +323,7 @@ const handleSaveProvider = async () => {
         return
       }
       await apiService.updateProvider(currentProviderId.value, updateData)
-      notify.success('更新成功', '供应商信息已更新', { duration: 2000 })
+      notify.success(t('common.updateSuccess'), t('settings.models.providerUpdated'), { duration: 2000 })
 
       const provider = providers.value.find(p => p.id === currentProviderId.value)
       if (provider) {
@@ -358,9 +360,9 @@ const handleSaveProvider = async () => {
 
       const isFromTemplate = currentProviderEdit.value.provider !== 'custom'
       if (isFromTemplate) {
-        notify.success('添加成功', `已添加 ${currentProviderEdit.value.name}，您可以点击"获取模型列表"来同步模型`, { duration: 3000 })
+        notify.success(t('common.createSuccess'), t('settings.models.providerAdded', { name: currentProviderEdit.value.name }), { duration: 3000 })
       } else {
-        notify.success('创建成功', '分组创建成功', { duration: 2000 })
+        notify.success(t('common.createSuccess'), t('settings.models.groupCreated'), { duration: 2000 })
       }
 
       showProviderModal.value = false
@@ -373,11 +375,11 @@ const handleSaveProvider = async () => {
 // 测试供应商连通性
 const handleTestConnection = async () => {
   if (!currentProviderEdit.value.apiUrl) {
-    notify.error('配置错误', '请先填写 API 地址', { duration: 2000 })
+    notify.error(t('settings.models.configError'), t('settings.models.apiUrlFirst'), { duration: 2000 })
     return
   }
   if (!currentProviderEdit.value.apiKey) {
-    notify.error('配置错误', '请先填写 API Key', { duration: 2000 })
+    notify.error(t('settings.models.configError'), t('settings.models.apiKeyFirst'), { duration: 2000 })
     return
   }
 
@@ -391,13 +393,13 @@ const handleTestConnection = async () => {
     })
 
     if (result.success) {
-      notify.success('连接成功', result.message || 'API 连接测试成功', { duration: 3000 })
+      notify.success(t('settings.models.connectionSuccess'), result.message || t('settings.models.connectionTestSuccess'), { duration: 3000 })
     } else {
-      notify.error('连接失败', result.message || 'API 连接测试失败', { duration: 3000 })
+      notify.error(t('settings.models.connectionFailed'), result.message || t('settings.models.connectionTestFailed'), { duration: 3000 })
     }
   } catch (error) {
     console.error('测试连通性失败:', error)
-    notify.error('连接失败', '测试连通性时发生错误', { duration: 3000 })
+    notify.error(t('settings.models.connectionFailed'), t('settings.models.testConnectionError'), { duration: 3000 })
   } finally {
     testingConnection.value = false
   }
@@ -412,7 +414,7 @@ const handleOpenApiKeyUrl = () => {
   if (template?.apiKeyUrl) {
     openInExternalBrowser(template.apiKeyUrl)
   } else {
-    notify.warning('提示', '该供应商暂未配置 API Key 获取地址', { duration: 2000 })
+    notify.warning(t('settings.models.tip'), t('settings.models.noApiKeyUrl'), { duration: 2000 })
   }
 }
 
@@ -452,11 +454,11 @@ const validateHeadersText = (text: string): string[] => {
     
     const colonIndex = line.indexOf(':')
     if (colonIndex === -1) {
-      errors.push(`第 ${i + 1} 行格式错误，缺少冒号`)
+      errors.push(t('settings.models.headerFormatError', { line: i + 1 }))
     } else {
       const key = line.substring(0, colonIndex).trim()
       if (!key) {
-        errors.push(`第 ${i + 1} 行 Header 名称不能为空`)
+        errors.push(t('settings.models.headerNameEmpty', { line: i + 1 }))
       }
     }
   }
@@ -522,7 +524,7 @@ const handleTemplateClick = (template: any) => {
 
 // 添加从列表中删除供应商的方法
 const handleDeleteProviderFromList = async (provider: any) => {
-  const result = await confirm("删除供应商", `确定要删除供应商"${provider.name}"吗？这将同时删除该供应商下的所有模型，操作不可恢复。`)
+  const result = await confirm(t('settings.models.deleteProvider'), t('settings.models.deleteProviderConfirm', { name: provider.name }))
 
   if (!result) {
     return
@@ -538,9 +540,9 @@ const handleDeleteProviderFromList = async (provider: any) => {
       currentProviderId.value = ""
     }
 
-    notify.success('删除成功', `供应商"${provider.name}"已删除`, { duration: 2000 })
+    notify.success(t('common.deleteSuccess'), t('settings.models.providerDeleted', { name: provider.name }), { duration: 2000 })
   } catch (error) {
-    notify.error('删除失败', '删除供应商时发生错误', { duration: 2000 })
+    notify.error(t('common.deleteFailed'), t('settings.models.deleteProviderError'), { duration: 2000 })
   }
 }
 

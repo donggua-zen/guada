@@ -4,6 +4,7 @@ import {
   ToolKitHandle,
   ToolKitRegistration,
   ToolHandlerDef,
+  ToolDisplay,
   PluginContext,
 } from "../types/plugin.types";
 
@@ -106,7 +107,7 @@ export class Toolkit implements ToolKitHandle {
 
 
 
-    display?: { actionType?: string; argsKey?: string; icon?: string };
+    display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void {
     const zodSchema = def.inputSchema as any;
@@ -163,6 +164,8 @@ export class Toolkit implements ToolKitHandle {
       icon: def.display?.icon,
       actionType: def.display?.actionType,
       argsKey,
+      displayText: def.display?.text,
+      displayAggregate: def.display?.aggregate,
     };
 
     if (!this._tools.find((x) => x.name === entry.name)) {

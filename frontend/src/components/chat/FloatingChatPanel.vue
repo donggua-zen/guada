@@ -25,10 +25,10 @@
         <span class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ sessionTitle }}</span>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
-        <button class="floating-chat-btn" @click.stop="collapse" title="收起">
+        <button class="floating-chat-btn" @click.stop="collapse" :title="t('chat.floating.collapse')">
           <el-icon :size="14"><ArrowDown /></el-icon>
         </button>
-        <button class="floating-chat-btn" @click.stop="hide" title="隐藏">
+        <button class="floating-chat-btn" @click.stop="hide" :title="t('chat.floating.hide')">
           <el-icon :size="14"><Close /></el-icon>
         </button>
       </div>
@@ -45,11 +45,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { ArrowDown, Close, ChatDotRound } from '@element-plus/icons-vue'
 import { useLayoutStore } from '@/stores/layout'
 import { useSessionStore } from '@/stores/session'
 
+const { t } = useI18n()
 const route = useRoute()
 const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()
@@ -77,8 +79,8 @@ const panelFits = computed(() => {
 /** 当前会话标题 */
 const sessionTitle = computed(() => {
   const sid = sessionStore.activeSessionId
-  if (!sid || sid === 'new-session') return '对话'
-  return sessionStore.getSession(sid)?.title || '对话'
+  if (!sid || sid === 'new-session') return t('chat.floating.chat')
+  return sessionStore.getSession(sid)?.title || t('chat.floating.chat')
 })
 
 /** 仅在会话页面显示 */

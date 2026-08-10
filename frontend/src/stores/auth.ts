@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { apiService } from '@/services/ApiService'
+import { t } from '@/locales'
 import type { User, LoginRequest } from '@/types/api'
 
 /**
@@ -49,7 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
             const userData = result.user
 
             if (!accessToken) {
-                throw new Error('登录失败：未获取到 token')
+                throw new Error(t('common.auth.loginFailed'))
             }
 
             // 根据 rememberMe 决定存储位置，并清除另一位置的旧数据避免残留

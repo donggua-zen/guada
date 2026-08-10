@@ -9,6 +9,7 @@ import {
 } from "./process-manager.service";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
+import langZh from "./shell.lang.zh.json";
 
 /** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
 function formatDuration(ms: number): string {
@@ -42,6 +43,7 @@ export class ShellPlugin extends PluginBase {
   };
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // ── execute 工具 ──
     api.registerTool({
       name: "run_command",
@@ -156,7 +158,13 @@ export class ShellPlugin extends PluginBase {
 
         return parts.join("\n\n");
       },
-      display: { actionType: "shell", argsKey: "command", icon: "shell" },
+      display: {
+        actionType: "shell",
+        text: { executing: "%run_command.executing%", completed: "%run_command.completed%" },
+        aggregate: { executing: "%run_command.aggregate.executing%", completed: "%run_command.aggregate.completed%" },
+        argsKey: "command",
+        icon: "shell",
+      },
       dangerLevel: "critical",
     });
 
@@ -274,6 +282,8 @@ export class ShellPlugin extends PluginBase {
       },
       display: {
         actionType: "process",
+        text: { executing: "%process.executing%", completed: "%process.completed%" },
+        aggregate: { executing: "%process.aggregate.executing%", completed: "%process.aggregate.completed%" },
         argsKey: "action",
         icon: "run_command",
       },
@@ -290,12 +300,7 @@ export class ShellPlugin extends PluginBase {
         return `# Shell Tool Usage Instructions
           
 **Current System**: ${isWindows ? "Windows (PowerShell)" : process.platform === "darwin" ? "macOS" : "Linux"}
-${isWindows ? `
-## PowerShell Syntax
-- Use \`;\` instead of \`&&\` to chain commands
-- Use \`$env:VAR="value"\` instead of \`set VAR=value\`
-- Use \`$env:VAR\` instead of \`%VAR%\` to reference env vars
-` : ""}
+          
 ## Command Execution
 
 ## Background Task Best Practices

@@ -7,13 +7,13 @@
           <template #icon>
             <PlusOutlined />
           </template>
-          新建助手
+          {{ t('characters.list.create') }}
         </el-button>
         <el-button @click="triggerImport" class="flex items-center">
           <template #icon>
             <UploadOutlined />
           </template>
-          导入
+          {{ t('characters.list.import') }}
         </el-button>
         <input ref="fileInputRef" type="file" accept=".md,.markdown" multiple class="hidden" @change="handleFileSelect" />
       </div>
@@ -23,7 +23,7 @@
             <QuestionCircleOutlined />
           </el-icon>
         </template>
-        使用说明
+        {{ t('characters.list.docs') }}
       </el-button>
     </div>
 
@@ -33,7 +33,7 @@
         ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--color-text-primary) font-medium'
         : 'text-(--color-text-secondary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
         @click="$emit('selectGroup', null)">
-        全部
+        {{ t('characters.list.all') }}
       </div>
 
       <div v-for="group in groups" :key="group.id"
@@ -51,7 +51,7 @@
         <el-icon :size="14" class="mr-1">
           <PlusOutlined />
         </el-icon>
-        新建分组
+        {{ t('characters.list.newGroup') }}
       </div>
     </div>
 
@@ -88,12 +88,12 @@
                   </el-button>
                 </div>
                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">
-                  {{ character.isPublic ? '共享模板' : '我的模板' }}
+                  {{ character.isPublic ? t('characters.list.sharedTemplate') : t('characters.list.myTemplate') }}
                 </div>
               </div>
             </div>
             <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">
-              {{ character.description || '暂无描述' }}
+              {{ character.description || t('characters.list.noDescription') }}
             </div>
           </div>
 
@@ -101,10 +101,10 @@
           <div class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white dark:from-[#232428] via-white/90 dark:via-[#232428]/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg"></div>
           <div class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
             <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="$emit('startNewChat', character)">
-              使用此角色
+              {{ t('characters.list.useCharacter') }}
             </el-button>
             <el-button size="small" class="flex-1 shadow-sm" @click.stop="$emit('editCharacter', character)">
-              角色设置
+              {{ t('characters.list.characterSettings') }}
             </el-button>
           </div>
         </div>
@@ -115,8 +115,8 @@
           <el-icon size="48" class="text-gray-300 dark:text-[#5a5c63] mb-3">
             <People />
           </el-icon>
-          <p class="text-lg">暂无助手</p>
-          <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
+          <p class="text-lg">{{ t('characters.list.empty') }}</p>
+          <p class="text-sm mt-1">{{ t('characters.list.emptyHint') }}</p>
         </div>
       </div>
     </div>
@@ -125,6 +125,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElMessage } from 'element-plus'
 import { People } from '@vicons/ionicons5'
 import { PlusOutlined, DeleteOutlineOutlined, UploadOutlined } from '@vicons/material'
@@ -155,6 +156,8 @@ const emit = defineEmits<{
 
 const fileInputRef = ref<HTMLInputElement>()
 
+const { t } = useI18n()
+
 const triggerImport = () => {
   fileInputRef.value?.click()
 }
@@ -174,14 +177,14 @@ const handleFileSelect = async (event: Event) => {
     const okCount = results.filter(r => r.status === 'ok').length
     const failCount = results.filter(r => r.status !== 'ok').length
     if (okCount > 0) {
-      ElMessage.success(`成功导入 ${okCount} 个助手`)
+      ElMessage.success(t('characters.list.importSuccess', { count: okCount }))
     }
     if (failCount > 0) {
-      ElMessage.warning(`${failCount} 个文件导入失败`)
+      ElMessage.warning(t('characters.list.importPartial', { count: failCount }))
     }
     emit('imported')
   } catch (err: any) {
-    ElMessage.error(err.message || '导入失败')
+    ElMessage.error(err.message || t('characters.list.importFailed'))
   }
 
   // 重置 input 以便重复选择同一文件

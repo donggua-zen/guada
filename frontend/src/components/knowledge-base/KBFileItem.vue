@@ -25,9 +25,9 @@
                     </el-tag>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                    {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : 'UNKNOWN' }}
-                    <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 dark:bg-[#2a2c30] text-gray-600 dark:text-[#8b8d95] rounded text-xs">待上传</span>
-                    <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">上传中</span>
+                    {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : t('knowledge.file.unknown') }}
+                    <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 dark:bg-[#2a2c30] text-gray-600 dark:text-[#8b8d95] rounded text-xs">{{ t('knowledge.status.queued') }}</span>
+                    <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">{{ t('knowledge.status.uploading') }}</span>
                 </p>
                 <!-- 显示相对路径(如果有) -->
                 <p v-if="file.relativePath && !file.isDirectory" class="text-xs text-blue-600 dark:text-blue-400 mt-0.5 truncate">
@@ -44,14 +44,14 @@
                 :status="file.processingStatus === 'uploading' ? undefined : 'warning'"
             />
             <p class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-                {{ file.currentStep || '处理中...' }}
+                {{ file.currentStep || t('knowledge.file.processing') }}
             </p>
         </div>
 
         <!-- 排队状态提示 -->
         <div v-if="file.processingStatus === 'queued'" class="mt-2">
             <p class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                {{ file.currentStep || '等待上传...' }}
+                {{ file.currentStep || t('knowledge.file.waitUpload') }}
             </p>
         </div>
 
@@ -66,17 +66,17 @@
             class="mt-2 pt-2 border-t border-gray-100 dark:border-[#2e3035]">
             <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-[#8b8d95]">
                 <div class="flex gap-3">
-                    <span v-if="file.totalChunks">{{ file.totalChunks }} 分块</span>
+                    <span v-if="file.totalChunks">{{ file.totalChunks }} {{ t('knowledge.file.chunks') }}</span>
                 </div>
                 <!-- 操作按钮 -->
                 <div class="flex items-center gap-1 shrink-0" @click.stop>
                     <el-button size="small" link @click="handleRetry">
                         <RefreshRight class="w-3 h-3 mr-1" />
-                        重新处理
+                        {{ t('knowledge.file.retry') }}
                     </el-button>
                     <el-button size="small" type="danger" link @click="handleDelete">
                         <Delete class="w-3 h-3 mr-1" />
-                        删除
+                        {{ t('common.delete') }}
                     </el-button>
                 </div>
             </div>
@@ -86,6 +86,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RefreshRight, Delete } from '@element-plus/icons-vue'
 import { KBFile } from '@/stores/knowledgeBase'
 
@@ -106,6 +107,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
     view: [file: KBFile]
@@ -249,13 +252,13 @@ const statusType = computed(() => {
  */
 const statusText = computed(() => {
     const texts: Record<string, string> = {
-        'queued': '待上传',
-        'uploading': '上传中',
-        'uploaded': '上传完成', // 修改为"上传完成"
-        'pending': '等待处理',
-        'processing': '处理中',
-        'completed': '已完成',
-        'failed': '失败',
+        'queued': t('knowledge.status.queued'),
+        'uploading': t('knowledge.status.uploading'),
+        'uploaded': t('knowledge.status.uploaded'),
+        'pending': t('knowledge.status.pending'),
+        'processing': t('knowledge.status.processing'),
+        'completed': t('knowledge.status.completed'),
+        'failed': t('knowledge.status.failed'),
     }
     return texts[props.file.processingStatus] || props.file.processingStatus
 })

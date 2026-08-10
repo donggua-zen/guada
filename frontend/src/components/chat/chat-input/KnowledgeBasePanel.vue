@@ -3,7 +3,7 @@
     :anchor-el="anchorEl" popper-class="kb-popover compact-popover">
     <template #header>
       <div class="mb-3">
-        <el-input v-model="searchText" placeholder="搜索知识库..." clearable size="small">
+        <el-input v-model="searchText" :placeholder="t('chat.input.searchKnowledgeBase')" clearable size="small">
           <template #prefix>
             <el-icon>
               <Search12Regular />
@@ -19,7 +19,7 @@
             <el-icon size="32" class="mb-1">
               <Search12Regular />
             </el-icon>
-            <p class="text-xs">未找到匹配的知识库</p>
+            <p class="text-xs">{{ t('chat.input.noMatchKnowledgeBase') }}</p>
           </div>
           <div v-else class="space-y-1">
             <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
@@ -44,10 +44,13 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElInput, ElCheckbox, ElIcon } from 'element-plus'
 import { Search12Regular } from '@vicons/fluent'
 import ScrollContainer from '../../ui/ScrollContainer.vue'
 import CustomPopover from '../../ui/CustomPopover.vue'
+
+const { t } = useI18n()
 
 interface KnowledgeBase {
   id: string

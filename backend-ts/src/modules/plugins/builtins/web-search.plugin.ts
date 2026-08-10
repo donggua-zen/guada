@@ -7,6 +7,7 @@ import { MetasoProvider } from "./search-providers/metaso.provider";
 import { TavilyProvider } from "./search-providers/tavily.provider";
 import { SearchProvider } from "./search-providers/search-provider.interface";
 import { z } from "zod";
+import langZh from "./web-search.lang.zh.json";
 
 @Injectable()
 export class WebSearchPlugin extends PluginBase {
@@ -32,6 +33,7 @@ export class WebSearchPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     this.providers = [this.bochaProvider, this.tavilyProvider, this.metasoProvider];
 
     // 读取当前供应商，动态决定注册哪些参数
@@ -82,6 +84,8 @@ export class WebSearchPlugin extends PluginBase {
           },
           display: {
             actionType: "web_search",
+            text: { executing: "%web_search.executing%", completed: "%web_search.completed%" },
+            aggregate: { executing: "%web_search.aggregate.executing%", completed: "%web_search.aggregate.completed%" },
             argsKey: "q",
             icon: "search",
           },
@@ -102,6 +106,8 @@ export class WebSearchPlugin extends PluginBase {
             },
             display: {
               actionType: "web_parser",
+              text: { executing: "%web_parser.executing%", completed: "%web_parser.completed%" },
+              aggregate: { executing: "%web_parser.aggregate.executing%", completed: "%web_parser.aggregate.completed%" },
               argsKey: "url",
               icon: "browser",
             },

@@ -2,7 +2,7 @@
   <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
     :class="[isAssistant ? 'justify-start -translate-x-1' : 'justify-end translate-x-1']">
 
-    <LTooltip content="复制" placement="top">
+    <LTooltip :content="t('chat.messageActions.copy')" placement="top">
       <div class="message-action-button" @click="$emit('copy')">
         <el-icon :size="16">
           <Copy16Regular />
@@ -11,7 +11,7 @@
     </LTooltip>
 
     <template v-if="!isAssistant && allowGenerate">
-      <LTooltip content="重新生成" placement="top">
+      <LTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('generate')">
           <el-icon :size="16">
             <ArrowDownwardTwotone />
@@ -21,7 +21,7 @@
     </template>
 
     <template v-if="isAssistant && isLast">
-      <LTooltip content="重新生成" placement="top">
+      <LTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('regenerate')">
           <el-icon :size="16">
             <ArrowClockwise16Regular />
@@ -31,7 +31,7 @@
     </template>
 
     <template v-if="isLast && contentVersions.length > 1">
-      <LTooltip content="上一个版本" placement="top">
+      <LTooltip :content="t('chat.messageActions.prevVersion')" placement="top">
         <div class="message-action-button" @click="$emit('switchVersion', 'prev')" :disabled="!hasPrev">
           <el-icon :size="16">
             <ChevronLeft24Filled />
@@ -41,7 +41,7 @@
       <div class="text-gray-700 transition-colors duration-200 flex items-center py-1">
         {{ currentVersionIndex + 1 }} / {{ contentVersions.length }}
       </div>
-      <LTooltip content="下一个版本" placement="top">
+      <LTooltip :content="t('chat.messageActions.nextVersion')" placement="top">
         <div class="message-action-button" @click="$emit('switchVersion', 'next')" :disabled="!hasNext">
           <el-icon :size="16">
             <ChevronRight24Filled />
@@ -50,7 +50,7 @@
       </LTooltip>
     </template>
 
-    <LTooltip content="更多" placement="top">
+    <LTooltip :content="t('chat.messageActions.more')" placement="top">
       <DropdownMenu @command="handleCommand">
         <div class="message-action-button">
           <el-icon :size="16" class="pointer-events-none">
@@ -62,13 +62,13 @@
           <el-icon class="mr-2">
             <Edit16Regular />
           </el-icon>
-          编辑内容
+          {{ t('chat.messageActions.editContent') }}
         </DropdownMenuItem>
         <DropdownMenuItem command="delete">
           <el-icon class="mr-2">
             <Delete16Regular />
           </el-icon>
-          删除消息
+          {{ t('chat.messageActions.deleteMessage') }}
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
@@ -89,9 +89,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ElIcon } from 'element-plus';
+import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
 import LTooltip from '../../ui/LTooltip.vue';
+
+const { t } = useI18n();
 import {
   Copy16Regular,
   ArrowClockwise16Regular,

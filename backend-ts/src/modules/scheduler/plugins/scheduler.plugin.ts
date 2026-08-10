@@ -4,6 +4,7 @@ import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { SchedulerService } from "../scheduler.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import langZh from "./scheduler.lang.zh.json";
 
 @Injectable()
 export class SchedulerPlugin extends PluginBase {
@@ -21,6 +22,7 @@ export class SchedulerPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const schedKit = api.registerToolKit({
       id: "scheduler",
       name: "Scheduled Tasks",
@@ -115,7 +117,13 @@ export class SchedulerPlugin extends PluginBase {
           },
         });
       },
-      display: { actionType: "scheduler_create", argsKey: "name", icon: "time" },
+      display: {
+        actionType: "scheduler_create",
+        text: { executing: "%scheduler_create_task.executing%", completed: "%scheduler_create_task.completed%" },
+        aggregate: { executing: "%scheduler_create_task.aggregate.executing%", completed: "%scheduler_create_task.aggregate.completed%" },
+        argsKey: "name",
+        icon: "time",
+      },
     });
 
     schedKit.registerTool({
@@ -144,7 +152,12 @@ export class SchedulerPlugin extends PluginBase {
           })),
         });
       },
-      display: { actionType: "scheduler_list", icon: "time" },
+      display: {
+        actionType: "scheduler_list",
+        text: { executing: "%scheduler_list_tasks.executing%", completed: "%scheduler_list_tasks.completed%" },
+        aggregate: { executing: "%scheduler_list_tasks.aggregate.executing%", completed: "%scheduler_list_tasks.aggregate.completed%" },
+        icon: "time",
+      },
     });
 
     schedKit.registerTool({
@@ -160,7 +173,12 @@ export class SchedulerPlugin extends PluginBase {
         await this.schedulerService.deleteTask(args.task_id, userId);
         return JSON.stringify({ success: true, message: "任务已删除" });
       },
-      display: { actionType: "scheduler_delete", icon: "time" },
+      display: {
+        actionType: "scheduler_delete",
+        text: { executing: "%scheduler_delete_task.executing%", completed: "%scheduler_delete_task.completed%" },
+        aggregate: { executing: "%scheduler_delete_task.aggregate.executing%", completed: "%scheduler_delete_task.aggregate.completed%" },
+        icon: "time",
+      },
     });
 
     schedKit.registerTool({
@@ -187,7 +205,12 @@ export class SchedulerPlugin extends PluginBase {
           },
         });
       },
-      display: { actionType: "scheduler_toggle", icon: "time" },
+      display: {
+        actionType: "scheduler_toggle",
+        text: { executing: "%scheduler_toggle_task.executing%", completed: "%scheduler_toggle_task.completed%" },
+        aggregate: { executing: "%scheduler_toggle_task.aggregate.executing%", completed: "%scheduler_toggle_task.aggregate.completed%" },
+        icon: "time",
+      },
     });
 
     schedKit.registerPrompt({

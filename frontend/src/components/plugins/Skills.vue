@@ -3,30 +3,30 @@
         <!-- 头部区域 -->
         <div class="flex items-center justify-between gap-4 mb-8 mt-2">
             <div class="min-w-0">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">Skills</h1>
-                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">系统自动发现的本地技能模块。手动添加或修改技能后点击"刷新"扫描目录变更。</p>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.skills.title') }}</h1>
+                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.skills.subtitle') }}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <el-button @click="handleShowInstallDialog">
                     <template #icon>
                         <UploadOutlined />
                     </template>
-                    安装
+                    {{ t('plugins.skills.install') }}
                 </el-button>
                 <el-button v-if="loading" :loading="true" size="small">
-                    加载中...
+                    {{ t('common.loading') }}
                 </el-button>
                 <el-button @click="handleScan" :loading="scanning">
                     <template #icon>
                         <RefreshOutlined />
                     </template>
-                    扫描
+                    {{ t('plugins.skills.scan') }}
                 </el-button>
                 <el-button @click="handleOpenSkillsDocs">
                     <template #icon>
                         <Document />
                     </template>
-                    使用说明
+                    {{ t('plugins.skills.docs') }}
                 </el-button>
             </div>
         </div>
@@ -44,28 +44,28 @@
                         <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
                             {{ skill.manifest.name || skill.id }}
                         </h3>
-                        <el-tag v-if="skill.source === 'system'" size="small" type="success" effect="light">内置</el-tag>
-                        <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">共享</el-tag>
+                        <el-tag v-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
+                        <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</el-tag>
                         <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
                     </div>
 
                     <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
-                        {{ skill.manifest.description || '暂无描述' }}
+                    {{ skill.manifest.description || t('plugins.skills.noDescription') }}
                     </p>
 
                     <div class="flex items-center justify-end gap-2 mt-3">
                         <el-button link size="small" @click.stop="handleReloadSkill(skill.id)"
                             :loading="reloadingSkills.has(skill.id)">
-                            重载
+                            {{ t('plugins.skills.reload') }}
                         </el-button>
                         <el-button v-if="skill.source !== 'system' && skill.source !== 'agents'" link size="small" type="danger"
                             @click.stop="handleUninstallSkill(skill.id)"
                             :loading="uninstallingSkills.has(skill.id)">
-                            卸载
+                            {{ t('plugins.skills.uninstall') }}
                         </el-button>
-                        <LTooltip v-else-if="skill.source === 'agents'" content="共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录" placement="top">
+                        <LTooltip v-else-if="skill.source === 'agents'" :content="t('plugins.skills.sharedTooltip')" placement="top">
                             <el-button link size="small" type="danger" disabled>
-                                卸载
+                                {{ t('plugins.skills.uninstall') }}
                             </el-button>
                         </LTooltip>
                         <el-switch
@@ -75,8 +75,8 @@
                             @click.stop
                             size="small"
                             inline-prompt
-                            active-text="启用"
-                            inactive-text="禁用"
+                            :active-text="t('common.enable')"
+                            :inactive-text="t('common.disable')"
                         />
                     </div>
                 </div>
@@ -90,16 +90,16 @@
                         <InboxOutlined />
                     </el-icon>
                     <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
-                        暂无 Skills
+                        {{ t('plugins.skills.empty') }}
                     </div>
                     <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-4">
-                        点击"刷新"按钮扫描本地 Skills 目录
+                        {{ t('plugins.skills.emptyHint') }}
                     </div>
                     <el-button type="primary" @click="handleScan" :loading="scanning">
                         <template #icon>
                             <RefreshOutlined />
                         </template>
-                        立即扫描
+                        {{ t('plugins.skills.scanNow') }}
                     </el-button>
                 </div>
             </div>
@@ -108,14 +108,14 @@
         <!-- 技能市场推荐 -->
         <div class="mt-8">
             <div class="sessions-header py-1 text-lg font-semibold flex items-center gap-3 mb-4">
-                <span>技能推荐</span>
+                <span>{{ t('plugins.skills.marketTitle') }}</span>
                 <el-button link size="small" :loading="loadingMarket" @click="() => loadMarketSkills(true)">
                     <template #icon>
                         <el-icon :class="{ 'is-loading': loadingMarket }">
                             <ArrowClockwise16Regular />
                         </el-icon>
                     </template>
-                    {{ loadingMarket ? '加载中...' : '换一批' }}
+                    {{ loadingMarket ? t('common.loading') : t('plugins.skills.marketRefresh') }}
                 </el-button>
             </div>
 
@@ -141,12 +141,12 @@
                         <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
                             {{ skill.name }}
                         </h3>
-                        <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">已安装</el-tag>
-                        <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">可更新</el-tag>
+                        <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
+                        <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
                     </div>
 
                     <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
-                        {{ skill.description || '暂无描述' }}
+                    {{ skill.description || t('plugins.skills.noDescription') }}
                     </p>
 
                     <div class="flex items-center justify-between gap-2 mt-3">
@@ -159,7 +159,7 @@
                         <el-button link size="small" shrink-0
                             :type="skill.localStatus === 'updatable' ? 'warning' : 'primary'"
                             @click.stop="handleShowMarketInstallDialog(skill)">
-                            {{ installingFromMarket.has(skill.id) ? '安装中...' : getMarketButtonLabel(skill) }}
+                            {{ installingFromMarket.has(skill.id) ? t('plugins.skills.marketInstalling') : getMarketButtonLabel(skill) }}
                         </el-button>
                     </div>
                 </div>
@@ -167,7 +167,7 @@
 
             <!-- 底部提示 -->
             <div class="mt-6 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
-                访问<span class="text-blue-500 cursor-pointer hover:underline" @click="openInExternalBrowser('https://ai.dingd.cn/skills')">技能市场</span>获取更多推荐技能
+                访问<span class="text-blue-500 cursor-pointer hover:underline" @click="openInExternalBrowser('https://ai.dingd.cn/skills')">{{ t('plugins.skills.marketLink') }}</span>获取更多推荐技能
             </div>
         </div>
 
@@ -200,26 +200,26 @@
                 </div>
             </div>
             <template #footer>
-                <el-button @click="showDocDialog = false">关闭</el-button>
+                <el-button @click="showDocDialog = false">{{ t('common.close') }}</el-button>
             </template>
         </el-dialog>
 
         <!-- 安装 Skill 对话框 -->
-        <el-dialog v-model="showInstallDialog" title="安装 Skill" width="500px" align-center destroy-on-close>
+        <el-dialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
             <div class="py-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-                    请上传 ZIP 格式的 Skill 包。ZIP 文件应包含一个 Skill 目录，其中必须有 SKILL.md 文件。
+                    {{ t('plugins.skills.installDesc') }}
                 </div>
 
                 <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :on-change="handleFileChange"
                     :limit="1" accept=".zip">
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">
-                        拖拽文件到此处或 <em>点击上传</em>
+                        {{ t('plugins.skills.uploadText') }} <em>{{ t('plugins.skills.uploadClick') }}</em>
                     </div>
                     <template #tip>
                         <div class="el-upload__tip text-xs text-gray-500 mt-2">
-                            仅支持 .zip 格式文件
+                            {{ t('plugins.skills.uploadTip') }}
                         </div>
                     </template>
                 </el-upload>
@@ -239,36 +239,36 @@
                         </el-button>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
-                        大小: {{ formatFileSize(selectedFile.size) }}
+                        {{ t('plugins.skills.fileSize', { size: formatFileSize(selectedFile.size) }) }}
                     </div>
                 </div>
 
                 <div class="mt-4">
                     <el-checkbox v-model="forceOverwrite">
-                        <span class="text-sm">强制覆盖（如果技能已存在则替换）</span>
+                        <span class="text-sm">{{ t('plugins.skills.forceOverwrite') }}</span>
                     </el-checkbox>
                     <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1 ml-6">
-                        注意：此操作会删除旧版本的技能文件
+                        {{ t('plugins.skills.forceOverwriteHint') }}
                     </div>
                 </div>
             </div>
 
             <template #footer>
-                <el-button @click="showInstallDialog = false">取消</el-button>
+                <el-button @click="showInstallDialog = false">{{ t('common.cancel') }}</el-button>
                 <el-button type="primary" @click="handleInstallSkill" :loading="installing" :disabled="!selectedFile">
-                    安装
+                    {{ t('plugins.skills.installBtn') }}
                 </el-button>
             </template>
         </el-dialog>
 
         <!-- 市场技能安装对话框 -->
-        <el-dialog v-model="showMarketInstallDialog" title="安装技能" width="420px" align-center destroy-on-close>
+        <el-dialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
             <div v-if="selectedMarketSkill" class="py-2">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
                     {{ selectedMarketSkill.name }}
                 </h3>
                 <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3">
-                    {{ selectedMarketSkill.description || '暂无描述' }}
+                    {{ selectedMarketSkill.description || t('plugins.skills.noDescription') }}
                 </p>
                 <div v-if="selectedMarketSkill.labels && selectedMarketSkill.labels.length > 0" class="flex flex-wrap gap-1.5 mb-4">
                     <el-tag v-for="label in selectedMarketSkill.labels" :key="label" size="small" effect="light">
@@ -288,17 +288,17 @@
                     <!-- 访问仓库（Git） -->
                     <el-button v-if="getInstallUrl(selectedMarketSkill, 'git')" size="large"
                         @click="handleViewSourceCode(selectedMarketSkill)">
-                        访问仓库
+                        {{ t('plugins.skills.marketViewSource') }}
                     </el-button>
                     <!-- 查看详情 -->
                     <el-button v-if="selectedMarketSkill.detailUrl" size="large"
                         @click="handleOpenDetailUrl(selectedMarketSkill)">
-                        查看详情
+                        {{ t('plugins.skills.marketViewDetail') }}
                     </el-button>
                 </div>
             </div>
             <template #footer>
-                <el-button @click="showMarketInstallDialog = false">取消</el-button>
+                <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
             </template>
         </el-dialog>
     </div>
@@ -306,6 +306,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElButton, ElTag, ElIcon, ElDialog, ElUpload, ElMessageBox } from 'element-plus'
 import { RefreshOutlined, InboxOutlined, DescriptionOutlined, UploadOutlined, DeleteOutlined } from '@vicons/material'
 import { RefreshRight, Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
@@ -340,6 +341,7 @@ const loading = ref(false)
 const scanning = ref(false)
 const reloadingSkills = ref<Set<string>>(new Set())
 const skills = ref<Skill[]>([])
+const { t } = useI18n()
 
 // 文档查看相关状态
 const showDocDialog = ref(false)
@@ -507,7 +509,7 @@ function handleShowMarketInstallDialog(marketSkill: MarketSkillWithStatus) {
 async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     const zipUrl = getInstallUrl(marketSkill, 'zip')
     if (!zipUrl) {
-        ElMessage.warning('该技能暂无 ZIP 安装包')
+        ElMessage.warning(t('plugins.skills.marketNoZip'))
         return
     }
 
@@ -516,7 +518,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     try {
         const response = await apiService.installSkillFromUrl(zipUrl)
         if (response.success) {
-            ElMessage.success(response.message || '安装成功')
+            ElMessage.success(response.message || t('common.createSuccess'))
             showMarketInstallDialog.value = false
             selectedMarketSkill.value = null
             // 刷新本地技能列表
@@ -526,7 +528,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
         }
     } catch (err: any) {
         console.error('从市场安装技能失败:', err)
-        ElMessage.error(err.message || '安装失败')
+        ElMessage.error(err.message || t('plugins.skills.installFailed'))
     } finally {
         installingFromMarket.value.delete(marketSkill.id)
     }
@@ -538,7 +540,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
 function handleViewSourceCode(marketSkill: MarketSkillWithStatus) {
     const gitUrl = getInstallUrl(marketSkill, 'git')
     if (!gitUrl) {
-        ElMessage.warning('该技能暂无源码链接')
+        ElMessage.warning(t('plugins.skills.marketNoGit'))
         return
     }
     openInExternalBrowser(gitUrl)
@@ -570,11 +572,11 @@ function refreshMarketSkillStatus() {
 /**
  * 获取市场技能按钮文案
  */
-function getMarketButtonLabel(skill: MarketSkillWithStatus): string {
+    function getMarketButtonLabel(skill: MarketSkillWithStatus): string {
     switch (skill.localStatus) {
-        case 'updatable': return '升级'
-        case 'installed': return '重新安装'
-        default: return '安装'
+        case 'updatable': return t('plugins.skills.marketUpgradeBtn')
+        case 'installed': return t('plugins.skills.marketReinstallBtn')
+        default: return t('plugins.skills.marketInstallBtn')
     }
 }
 
@@ -591,7 +593,7 @@ async function loadSkills() {
         refreshMarketSkillStatus()
     } catch (err: any) {
         console.error('加载 Skills 失败:', err)
-        const errorMsg = err.message || '加载 Skills 失败'
+        const errorMsg = err.message || t('plugins.skills.loadFailed')
         ElMessage.error(errorMsg)
         skills.value = []
     } finally {
@@ -621,7 +623,7 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
         // 失败回滚
         skill.enabled = previousState
         console.error('切换技能状态失败:', err)
-        ElMessage.error(err.message || '切换技能状态失败')
+        ElMessage.error(err.message || t('plugins.skills.toggleFailed'))
     } finally {
         updatingSkills.value.delete(skillId)
     }
@@ -635,12 +637,12 @@ async function handleScan() {
 
     try {
         await apiService.scanSkills()
-        ElMessage.success('扫描完成')
+        ElMessage.success(t('plugins.skills.scanSuccess'))
         // 扫描后重新加载列表
         await loadSkills()
     } catch (err: any) {
         console.error('扫描 Skills 失败:', err)
-        const errorMsg = err.message || '扫描失败'
+        const errorMsg = err.message || t('plugins.skills.scanFailed')
         ElMessage.error(errorMsg)
     } finally {
         scanning.value = false
@@ -656,12 +658,12 @@ async function handleReloadSkill(skillId: string) {
     try {
         reloadingSkills.value.add(skillId)
         await apiService.reloadSkill(skillId)
-        ElMessage.success('重载成功')
+        ElMessage.success(t('plugins.skills.reloadSuccess'))
         // 重载后重新加载列表
         await loadSkills()
     } catch (err: any) {
         console.error('重载 Skill 失败:', err)
-        const errorMsg = err.message || '重载失败'
+        const errorMsg = err.message || t('plugins.skills.reloadFailed')
         ElMessage.error(errorMsg)
     } finally {
         reloadingSkills.value.delete(skillId)
@@ -684,10 +686,10 @@ async function handleViewDocumentation(skillId: string) {
 
     try {
         const response = await apiService.fetchSkillDocumentation(skillId)
-        documentation.value = response.content || '暂无文档内容'
+        documentation.value = response.content || t('plugins.skills.docNoContent')
     } catch (err: any) {
         console.error('获取 Skill 文档失败:', err)
-        const errorMsg: string = err.message || '获取文档失败'
+        const errorMsg: string = err.message || t('plugins.skills.docLoadFailed')
         docError.value = errorMsg
         ElMessage.error(errorMsg)
     } finally {
@@ -738,7 +740,7 @@ function formatFileSize(bytes: number): string {
  */
 async function handleInstallSkill() {
     if (!selectedFile.value) {
-        ElMessage.warning('请选择要安装的 ZIP 文件')
+        ElMessage.warning(t('plugins.skills.installSelectWarning'))
         return
     }
 
@@ -748,18 +750,18 @@ async function handleInstallSkill() {
         const response = await apiService.installSkill(selectedFile.value, forceOverwrite.value)
 
         if (response.success) {
-            ElMessage.success(response.message || '安装成功')
+            ElMessage.success(response.message || t('common.createSuccess'))
             showInstallDialog.value = false
             selectedFile.value = null
             forceOverwrite.value = false
             // 重新加载列表
             await loadSkills()
         } else {
-            ElMessage.error(response.message || '安装失败')
+            ElMessage.error(response.message || t('plugins.skills.installFailed'))
         }
     } catch (err: any) {
         console.error('安装 Skill 失败:', err)
-        ElMessage.error(err.message || '安装失败')
+        ElMessage.error(err.message || t('plugins.skills.installFailed'))
     } finally {
         installing.value = false
     }
@@ -773,11 +775,11 @@ async function handleUninstallSkill(skillId: string) {
         // 确认卸载
         await new Promise<void>((resolve, reject) => {
             ElMessageBox.confirm(
-                `确定要卸载 Skill "${skillId}" 吗？此操作将删除该 Skill 的所有文件。`,
-                '确认卸载',
+                t('plugins.skills.uninstallConfirm', { id: skillId }),
+                t('plugins.skills.uninstallTitle'),
                 {
-                    confirmButtonText: '确定',
-                    cancelButtonText: '取消',
+                    confirmButtonText: t('common.ok'),
+                    cancelButtonText: t('common.cancel'),
                     type: 'warning',
                 }
             ).then(() => resolve()).catch(() => reject())
@@ -788,16 +790,16 @@ async function handleUninstallSkill(skillId: string) {
         const response = await apiService.uninstallSkill(skillId)
 
         if (response.success) {
-            ElMessage.success(response.message || '卸载成功')
+            ElMessage.success(response.message || t('plugins.skills.uninstallSuccess'))
             // 重新加载列表
             await loadSkills()
         } else {
-            ElMessage.error(response.message || '卸载失败')
+            ElMessage.error(response.message || t('plugins.skills.uninstallFailed'))
         }
     } catch (err: any) {
         if (err !== 'cancel' && err !== 'close') {
             console.error('卸载 Skill 失败:', err)
-            ElMessage.error(err.message || '卸载失败')
+            ElMessage.error(err.message || t('plugins.skills.uninstallFailed'))
         }
     } finally {
         uninstallingSkills.value.delete(skillId)
@@ -842,7 +844,7 @@ async function loadMarketSkills(forceRefresh: boolean = false) {
         refreshMarketSkillStatus()
     } catch (err: any) {
         console.error('加载市场技能失败:', err)
-        marketError.value = err.message || '加载推荐技能失败'
+        marketError.value = err.message || t('plugins.skills.marketError')
     } finally {
         loadingMarket.value = false
     }
@@ -853,7 +855,7 @@ async function loadMarketSkills(forceRefresh: boolean = false) {
  */
 function handleOpenDetailUrl(marketSkill: MarketSkillWithStatus) {
     if (!marketSkill.detailUrl) {
-        ElMessage.warning('该技能暂无详情链接')
+        ElMessage.warning(t('plugins.skills.marketNoDetail'))
         return
     }
     openInExternalBrowser(marketSkill.detailUrl)

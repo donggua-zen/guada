@@ -11,6 +11,7 @@ import { VectorDbService } from "../../../common/vector-db/vector-db.service";
 import { EmbeddingService } from "../embedding.service";
 import { KbFileService } from "../kb-file.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import langZh from "./knowledge-base.lang.zh.json";
 
 @Injectable()
 export class KnowledgeBasePlugin extends PluginBase {
@@ -36,6 +37,7 @@ export class KnowledgeBasePlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const kbKit = api.registerToolKit({
       id: "knowledge_base",
       name: "Knowledge Base",
@@ -116,7 +118,13 @@ export class KnowledgeBasePlugin extends PluginBase {
         });
         return parts.join("\n\n");
       },
-      display: { actionType: "kb_search", argsKey: "query", icon: "search" },
+      display: {
+        actionType: "kb_search",
+        text: { executing: "%kb_search.executing%", completed: "%kb_search.completed%" },
+        aggregate: { executing: "%kb_search.aggregate.executing%", completed: "%kb_search.aggregate.completed%" },
+        argsKey: "query",
+        icon: "search",
+      },
     });
 
     kbKit.registerTool({
@@ -159,7 +167,11 @@ export class KnowledgeBasePlugin extends PluginBase {
         }
         return lines.join("\n");
       },
-      display: { actionType: "kb_list", icon: "search" },
+      display: {
+        actionType: "kb_list",
+        text: { executing: "%kb_list_files.executing%", completed: "%kb_list_files.completed%" },
+        icon: "search",
+      },
     });
 
     kbKit.registerTool({
@@ -198,7 +210,12 @@ export class KnowledgeBasePlugin extends PluginBase {
         });
         return parts.join("\n\n");
       },
-      display: { actionType: "kb_get_chunks", argsKey: "file_id", icon: "search" },
+      display: {
+        actionType: "kb_get_chunks",
+        text: { executing: "%kb_get_chunks.executing%", completed: "%kb_get_chunks.completed%" },
+        argsKey: "file_id",
+        icon: "search",
+      },
     });
 
     kbKit.registerTool({
@@ -240,6 +257,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       },
       display: {
         actionType: "kb_add_document",
+        text: { executing: "%kb_add_document.executing%", completed: "%kb_add_document.completed%" },
         argsKey: "source_file_path",
         icon: "edit",
       },

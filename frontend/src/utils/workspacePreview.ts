@@ -16,6 +16,7 @@ import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { t } from '@/locales'
 
 // ── 链接打开方式偏好管理 ──
 
@@ -109,10 +110,10 @@ async function showLinkChoiceDialog(url: string): Promise<void> {
     try {
         await ElMessageBox.confirm(
             url,
-            '选择链接打开方式',
+            t('session.workspace.selectLinkMode'),
             {
-                confirmButtonText: '内置浏览器',
-                cancelButtonText: '外部浏览器',
+                confirmButtonText: t('session.workspace.internalBrowser'),
+                cancelButtonText: t('session.workspace.externalBrowser'),
                 distinguishCancelAndClose: true,
                 type: 'info',
                 customClass: 'link-choice-dialog',

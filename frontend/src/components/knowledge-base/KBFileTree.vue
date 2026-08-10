@@ -6,7 +6,7 @@
       <div class="flex items-center gap-1 text-sm">
         <button @click="navigateToFolderByPath(null)"
           class="text-gray-500 dark:text-[#8b8d95] hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-          知识库
+          {{ t('knowledge.tree.root') }}
         </button>
 
         <!-- 路径分隔符和各级文件夹-->
@@ -28,18 +28,18 @@
       <el-icon class="animate-spin text-blue-500" size="32">
         <Loading />
       </el-icon>
-      <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">加载中..</p>
+      <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.tree.loading') }}</p>
     </div>
 
     <div v-else-if="currentItems.length > 0">
       <!-- 表头 -->
       <div
         class="grid grid-cols-[1fr_90px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-[#2e3035] text-xs font-medium text-gray-500 dark:text-[#8b8d95]">
-        <div>名称</div>
-        <div>状态</div>
-        <div>类型</div>
-        <div>大小</div>
-        <div>修改时间</div>
+        <div>{{ t('knowledge.tree.colName') }}</div>
+        <div>{{ t('knowledge.tree.colStatus') }}</div>
+        <div>{{ t('knowledge.tree.colType') }}</div>
+        <div>{{ t('knowledge.tree.colSize') }}</div>
+        <div>{{ t('knowledge.tree.colModified') }}</div>
       </div>
 
       <!-- 文件列表 -->
@@ -82,7 +82,7 @@
         <!-- 类型-->
         <div class="flex items-center">
           <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-            {{ item.isDirectory ? '文件夹' : (item.fileExtension?.toUpperCase() || '-') }}
+            {{ item.isDirectory ? t('knowledge.tree.folder') : (item.fileExtension?.toUpperCase() || '-') }}
           </span>
         </div>
 
@@ -105,7 +105,7 @@
 
     <!-- 空文件夹-->
     <div v-else class="text-center py-8 text-gray-500 dark:text-[#8b8d95]">
-      <p>{{ currentRelativePath ? '该文件夹为空' : '暂无文件' }}</p>
+      <p>{{ currentRelativePath ? t('knowledge.tree.folderEmpty') : t('knowledge.tree.empty') }}</p>
     </div>
 
     <!-- 加载更多指示器 -->
@@ -113,12 +113,12 @@
       <el-icon class="animate-spin text-blue-500" size="24">
         <Loading />
       </el-icon>
-      <p class="mt-2 text-sm text-gray-500">加载中...</p>
+      <p class="mt-2 text-sm text-gray-500">{{ t('knowledge.tree.loadingMore') }}</p>
     </div>
 
     <!-- 没有更多数据提示 -->
     <div v-else-if="!hasMore && currentItems.length > 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-sm">
-      <p>已加载全部文件</p>
+      <p>{{ t('knowledge.tree.allLoaded') }}</p>
     </div>
 
     <!-- 右键菜单 -->
@@ -131,16 +131,16 @@
     />
 
     <!-- 重命名对话框 -->
-    <el-dialog v-model="showRenameDialog" title="重命名" width="400px" :close-on-click-modal="false" append-to-body>
-      <el-input v-model="renameForm.newName" placeholder="输入新名称" @keyup.enter="confirmRename" />
+    <el-dialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" width="400px" :close-on-click-modal="false" append-to-body>
+      <el-input v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
       <template #footer>
-        <el-button @click="showRenameDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmRename" :loading="renameLoading">确定</el-button>
+        <el-button @click="showRenameDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmRename" :loading="renameLoading">{{ t('common.ok') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 移动对话框 -->
-    <el-dialog v-model="showMoveDialog" title="移动到" width="500px" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="showMoveDialog" :title="t('knowledge.tree.moveTitle')" width="500px" :close-on-click-modal="false" append-to-body>
       <div class="max-h-80 overflow-y-auto">
         <!-- 根目录选项 -->
         <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
@@ -148,7 +148,7 @@
           <el-icon>
             <Folder />
           </el-icon>
-          <span>根目录</span>
+          <span>{{ t('knowledge.tree.rootDir') }}</span>
         </div>
 
         <!-- 文件夹树 -->
@@ -165,8 +165,8 @@
         </el-tree>
       </div>
       <template #footer>
-        <el-button @click="showMoveDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmMove" :loading="moveLoading">确定</el-button>
+        <el-button @click="showMoveDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmMove" :loading="moveLoading">{{ t('common.ok') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -174,6 +174,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
@@ -195,6 +196,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   view: [file: KBFile]
@@ -250,25 +253,25 @@ const contextMenu = ref({
 const contextMenuItems = computed<ContextMenuItem[]>(() => {
   const items: ContextMenuItem[] = [
     {
-      label: '重命名',
+      label: t('knowledge.tree.rename'),
       icon: Edit,
       onClick: handleRenameFromMenu,
     },
     {
-      label: '移动到...',
+      label: t('knowledge.tree.moveTo'),
       icon: Position,
       onClick: handleMoveFromMenu,
     },
   ];
   if (contextMenu.value.item && !contextMenu.value.item.isDirectory) {
     items.push({
-      label: '重新处理',
+      label: t('knowledge.tree.retry'),
       icon: RefreshRight,
       onClick: handleRetryFromMenu,
     });
   }
   items.push({
-    label: '删除',
+    label: t('common.delete'),
     icon: Delete,
     onClick: handleDeleteFromMenu,
   });
@@ -612,7 +615,7 @@ async function insertUploadedFile(uploadedFile: KBFile) {
     ...uploadedFile,
     processingStatus: 'pending',  // 改为 pending
     progressPercentage: 0,
-    currentStep: '等待处理...'
+    currentStep: t('knowledge.tree.waitProcess')
   }
 
   // 情况1: 文件属于当前目录的一级子项
@@ -853,10 +856,10 @@ function getStatusDisplayText(item: KBFile): string {
  */
 function getStatusText(status: string): string {
   const texts: Record<string, string> = {
-    'pending': '等待处理',
-    'processing': '处理中',
-    'completed': '已完成',
-    'failed': '失败',
+    'pending': t('knowledge.status.pending'),
+    'processing': t('knowledge.status.processing'),
+    'completed': t('knowledge.status.completed'),
+    'failed': t('knowledge.status.failed'),
   }
   return texts[status] || status
 }
@@ -907,11 +910,11 @@ function handleRenameFromMenu() {
  */
 function validateFileName(name: string): { valid: boolean; message?: string } {
   if (!name || name.trim() === '') {
-    return { valid: false, message: '名称不能为空' }
+    return { valid: false, message: t('knowledge.tree.nameEmpty') }
   }
 
   if (name.length > 255) {
-    return { valid: false, message: '名称不能超过 255 个字符' }
+    return { valid: false, message: t('knowledge.tree.nameTooLong') }
   }
 
   // 不允许的字符：/ \ : * ? " < > | 以及控制字符
@@ -919,7 +922,7 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
   if (invalidChars.test(name)) {
     return {
       valid: false,
-      message: '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符'
+      message: t('knowledge.tree.nameInvalidChars')
     }
   }
 
@@ -930,13 +933,13 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
     'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
   ]
   if (reservedNames.includes(name.toUpperCase())) {
-    return { valid: false, message: `名称「${name}」是系统保留名称，不能使用` }
+    return { valid: false, message: t('knowledge.tree.nameReserved', { name }) }
   }
 
   // 不允许以空格或点号开头/结尾
   if (name.startsWith(' ') || name.endsWith(' ') ||
     name.startsWith('.') || name.endsWith('.')) {
-    return { valid: false, message: '名称不能以空格或点号开头或结尾' }
+    return { valid: false, message: t('knowledge.tree.nameStartEnd') }
   }
 
   return { valid: true }
@@ -970,14 +973,14 @@ async function confirmRename() {
       renamingFileId.value,
       renameForm.value.newName,
     )
-    ElMessage.success('重命名成功')
+    ElMessage.success(t('common.renameSuccess'))
     showRenameDialog.value = false
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error: any) {
     console.error('[DEBUG] 重命名失败:', error)
-    ElMessage.error(error.message || '重命名失败')
+    ElMessage.error(error.message || t('common.renameFailed'))
   } finally {
     renameLoading.value = false
   }
@@ -1083,14 +1086,14 @@ async function confirmMove() {
       movingFileId.value,
       selectedTargetFolderId.value,
     )
-    ElMessage.success('移动成功')
+    ElMessage.success(t('knowledge.tree.moveSuccess'))
     showMoveDialog.value = false
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error: any) {
     console.error('[DEBUG] 移动失败:', error)
-    ElMessage.error(error.message || '移动失败')
+    ElMessage.error(error.message || t('knowledge.tree.moveFailed'))
   } finally {
     moveLoading.value = false
   }

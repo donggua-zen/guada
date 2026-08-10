@@ -6,7 +6,7 @@
         <FolderOpen24Regular />
       </el-icon>
       <span class="text-xs font-medium">
-        工作目录：{{ displayWorkspacePath }}
+        {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}
       </span>
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
@@ -16,7 +16,7 @@
     <!-- 分组选择按钮 -->
     <el-button ref="groupButtonRef" class="workspace-btn mr-0.5" @click.stop="openGroupSelector" text>
       <span class="text-xs font-medium">
-        分组：{{ selectedGroupName }}
+        {{ t('chat.toolbar.group', { name: selectedGroupName }) }}
       </span>
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
@@ -58,11 +58,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
+
+const { t } = useI18n()
 
 const props = defineProps({
   config: { type: Object, default: () => ({}) },
@@ -95,8 +98,8 @@ const publicPath = computed(() => workspaceStore.getPublicPath())
 
 const displayWorkspacePath = computed(() => {
   const fullPath = props.config?.workspacePath
-  if (!fullPath) return '自动创建'
-  if (publicPath.value && fullPath === publicPath.value) return '公共目录'
+  if (!fullPath) return t('chat.toolbar.autoCreate')
+  if (publicPath.value && fullPath === publicPath.value) return t('chat.toolbar.publicDir')
   const normalized = fullPath.replace(/\\/g, '/')
   const segments = normalized.split('/').filter(Boolean)
   return segments[segments.length - 1] || fullPath
@@ -108,7 +111,7 @@ const groupSelectorOptions = computed(() => {
     value: g.id
   }))
   options.unshift({
-    label: '任务列表',
+    label: t('chat.toolbar.taskList'),
     value: UNGROUPED_ID
   })
   return options
@@ -117,10 +120,10 @@ const groupSelectorOptions = computed(() => {
 const selectedGroupName = computed(() => {
   const groupId = props.config?.groupId
   if (groupId === UNGROUPED_ID || groupId === undefined || groupId === null) {
-    return '任务列表'
+    return t('chat.toolbar.taskList')
   }
   const group = sessionGroupStore.sortedGroups.find(g => g.id === groupId)
-  return group?.name || '任务列表'
+  return group?.name || t('chat.toolbar.taskList')
 })
 
 const selectedGroupId = computed(() => {

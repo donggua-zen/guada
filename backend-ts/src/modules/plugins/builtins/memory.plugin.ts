@@ -8,6 +8,7 @@ import { PluginContext } from "../types/plugin.types";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeTruncate } from "../../../common/utils/string.utils";
+import langZh from "./memory.lang.zh.json";
 
 interface MemoryIndex {
   factual?: string;
@@ -53,6 +54,7 @@ export class MemoryPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // 长期记忆内容：插件级，每次对话都注入（AI 需要知道记住了什么）
     api.registerPrompt({
       frequency: "VOLATILE",
@@ -1442,7 +1444,13 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
 
         return this.handleMemoryEdit(args, ctx);
       },
-      display: { actionType: "memory", argsKey: "action", icon: "generic" },
+      display: {
+        actionType: "memory",
+        text: { executing: "%memory.executing%", completed: "%memory.completed%" },
+        aggregate: { executing: "%memory.aggregate.executing%", completed: "%memory.aggregate.completed%" },
+        argsKey: "action",
+        icon: "generic",
+      },
       dangerLevel: "safe",
     });
   }

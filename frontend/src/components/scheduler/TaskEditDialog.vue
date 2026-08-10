@@ -1,55 +1,55 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑任务' : '新建任务'" width="775px" align-center
+  <el-dialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')" width="775px" align-center
     destroy-on-close class="dialog-with-scroll" style="max-height: 70vh;">
     <div class="dialog-content">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="left" label-width="100px" size="default">
         <!-- 基本信息 -->
-        <el-form-item label="任务名称" prop="name">
-          <el-input v-model="form.name" placeholder="例如：每日早报" clearable />
+        <el-form-item :label="t('scheduler.edit.nameLabel')" prop="name">
+          <el-input v-model="form.name" :placeholder="t('scheduler.edit.namePlaceholder')" clearable />
         </el-form-item>
 
-        <el-form-item label="提示词" prop="prompt">
+        <el-form-item :label="t('scheduler.edit.promptLabel')" prop="prompt">
           <el-input v-model="form.prompt" type="textarea" :rows="3"
-            placeholder="输入发送给 AI 的提示词内容" />
+            :placeholder="t('scheduler.edit.promptPlaceholder')" />
         </el-form-item>
 
         <!-- 时间设置 -->
-        <el-form-item label="执行时间" required class="time-setting-item">
+        <el-form-item :label="t('scheduler.edit.timeLabel')" required class="time-setting-item">
           <div class="time-mode-wrapper">
             <el-radio-group v-model="timeMode" size="small" class="time-mode-tabs">
-              <el-radio-button value="period">周期</el-radio-button>
-              <el-radio-button value="interval">间隔</el-radio-button>
-              <el-radio-button value="once">一次性</el-radio-button>
-              <el-radio-button value="advanced">高级</el-radio-button>
+              <el-radio-button value="period">{{ t('scheduler.edit.modePeriod') }}</el-radio-button>
+              <el-radio-button value="interval">{{ t('scheduler.edit.modeInterval') }}</el-radio-button>
+              <el-radio-button value="once">{{ t('scheduler.edit.modeOnce') }}</el-radio-button>
+              <el-radio-button value="advanced">{{ t('scheduler.edit.modeAdvanced') }}</el-radio-button>
             </el-radio-group>
 
             <!-- 周期模式 -->
             <div v-if="timeMode === 'period'" class="period-panel">
               <el-radio-group v-model="periodType" size="small" class="period-sub-tabs">
-                <el-radio-button value="monthly">每月</el-radio-button>
-                <el-radio-button value="weekly">每周</el-radio-button>
-                <el-radio-button value="daily">每日</el-radio-button>
+                <el-radio-button value="monthly">{{ t('scheduler.edit.periodMonthly') }}</el-radio-button>
+                <el-radio-button value="weekly">{{ t('scheduler.edit.periodWeekly') }}</el-radio-button>
+                <el-radio-button value="daily">{{ t('scheduler.edit.periodDaily') }}</el-radio-button>
               </el-radio-group>
 
               <!-- 每月 -->
               <div v-if="periodType === 'monthly'" class="space-y-3">
                 <div>
-                  <div class="text-xs text-gray-500 mb-1.5">选择日期（可多选）</div>
+                  <div class="text-xs text-gray-500 mb-1.5">{{ t('scheduler.edit.selectDate') }}</div>
                   <el-checkbox-group v-model="periodConfig.monthly.days" size="small">
-                    <el-checkbox-button v-for="d in 31" :key="d" :value="d">{{ d }}日</el-checkbox-button>
+                    <el-checkbox-button v-for="d in 31" :key="d" :value="d">{{ d }}{{ t('scheduler.edit.dayUnit') }}</el-checkbox-button>
                   </el-checkbox-group>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="text-xs text-gray-500">时间</span>
+                  <span class="text-xs text-gray-500">{{ t('scheduler.edit.time') }}</span>
                   <el-time-picker v-model="periodConfig.monthly.time" format="HH:mm" value-format="HH:mm"
-                    placeholder="选择时间" style="width: 120px" />
+                    :placeholder="t('scheduler.edit.selectTimePlaceholder')" style="width: 120px" />
                 </div>
               </div>
 
               <!-- 每周 -->
               <div v-if="periodType === 'weekly'" class="space-y-3">
                 <div>
-                  <div class="text-xs text-gray-500 mb-1.5">选择星期（可多选）</div>
+                  <div class="text-xs text-gray-500 mb-1.5">{{ t('scheduler.edit.selectWeek') }}</div>
                   <el-checkbox-group v-model="periodConfig.weekly.days" size="small">
                     <el-checkbox-button v-for="(label, index) in weekDays" :key="index" :value="index">
                       {{ label }}
@@ -57,30 +57,30 @@
                   </el-checkbox-group>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="text-xs text-gray-500">时间</span>
+                  <span class="text-xs text-gray-500">{{ t('scheduler.edit.time') }}</span>
                   <el-time-picker v-model="periodConfig.weekly.time" format="HH:mm" value-format="HH:mm"
-                    placeholder="选择时间" style="width: 120px" />
+                    :placeholder="t('scheduler.edit.selectTimePlaceholder')" style="width: 120px" />
                 </div>
               </div>
 
               <!-- 每日 -->
               <div v-if="periodType === 'daily'" class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">时间</span>
+                <span class="text-xs text-gray-500">{{ t('scheduler.edit.time') }}</span>
                 <el-time-picker v-model="periodConfig.daily.time" format="HH:mm" value-format="HH:mm"
-                  placeholder="选择时间" style="width: 120px" />
+                  :placeholder="t('scheduler.edit.selectTimePlaceholder')" style="width: 120px" />
               </div>
             </div>
 
             <!-- 间隔模式 -->
             <div v-if="timeMode === 'interval'" class="interval-panel space-y-3">
               <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">每隔</span>
+                <span class="text-xs text-gray-500">{{ t('scheduler.edit.every') }}</span>
                 <el-input-number v-model="intervalConfig.hours" :min="1" :max="168" controls-position="right"
                   style="width: 100px" />
-                <span class="text-xs text-gray-500">小时执行一次</span>
+                <span class="text-xs text-gray-500">{{ t('scheduler.edit.hoursExec') }}</span>
               </div>
               <div>
-                <div class="text-xs text-gray-500 mb-1.5">生效星期（可多选）</div>
+                <div class="text-xs text-gray-500 mb-1.5">{{ t('scheduler.edit.effectiveWeek') }}</div>
                 <el-checkbox-group v-model="intervalConfig.days" size="small">
                   <el-checkbox-button v-for="(label, index) in weekDays" :key="index" :value="index">
                     {{ label }}
@@ -91,7 +91,7 @@
 
             <!-- 一次性模式 -->
             <div v-if="timeMode === 'once'" class="once-panel flex items-center gap-2">
-              <el-date-picker v-model="onceConfig.datetime" type="datetime" placeholder="选择执行时间"
+              <el-date-picker v-model="onceConfig.datetime" type="datetime" :placeholder="t('scheduler.edit.selectExecTime')"
                 format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width: 220px" />
             </div>
 
@@ -100,21 +100,21 @@
               <el-input v-model="form.cronExpression" placeholder="* * * * *" class="font-mono text-sm"
                 style="width: 200px" />
               <div class="text-xs text-gray-400 mt-1">
-                格式：分 时 日 月 周
+                {{ t('scheduler.edit.cronFormat') }}
               </div>
             </div>
           </div>
         </el-form-item>
 
         <!-- 执行目标 -->
-        <el-form-item label="执行目标" prop="targetMode">
+        <el-form-item :label="t('scheduler.edit.targetLabel')" prop="targetMode">
           <el-radio-group v-model="form.targetMode">
             <el-radio-button value="new_session">
               <span class="flex items-center gap-1">
                 <el-icon :size="14">
                   <AddCircleOutlineRound />
                 </el-icon>
-                新建会话
+                {{ t('scheduler.edit.newSession') }}
               </span>
             </el-radio-button>
             <el-radio-button value="existing_session">
@@ -122,20 +122,20 @@
                 <el-icon :size="14">
                   <LogInRound />
                 </el-icon>
-                已有会话
+                {{ t('scheduler.edit.existingSession') }}
               </span>
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <!-- 已有会话时需要选择会话ID -->
-        <el-form-item v-if="form.targetMode === 'existing_session'" label="目标会话" prop="targetSessionId">
-          <el-input v-model="form.targetSessionId" placeholder="输入会话 ID" clearable />
+        <el-form-item v-if="form.targetMode === 'existing_session'" :label="t('scheduler.edit.targetSessionLabel')" prop="targetSessionId">
+          <el-input v-model="form.targetSessionId" :placeholder="t('scheduler.edit.targetSessionPlaceholder')" clearable />
         </el-form-item>
 
         <!-- 新建会话时可选配置助手和模型 -->
-        <el-form-item v-if="form.targetMode === 'new_session'" label="助手" prop="characterId">
-          <el-select v-model="form.characterId" placeholder="请选择助手" style="width: 100%" filterable>
+        <el-form-item v-if="form.targetMode === 'new_session'" :label="t('scheduler.edit.characterLabel')" prop="characterId">
+          <el-select v-model="form.characterId" :placeholder="t('scheduler.edit.characterPlaceholder')" style="width: 100%" filterable>
             <el-option v-for="character in characters" :key="character.id" :label="character.title"
               :value="character.id">
               <div class="flex items-center gap-2">
@@ -146,8 +146,8 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item v-if="form.targetMode === 'new_session'" label="模型" prop="modelId">
-          <el-select v-model="form.modelId" placeholder="可选，指定模型" style="width: 100%" filterable clearable>
+        <el-form-item v-if="form.targetMode === 'new_session'" :label="t('scheduler.edit.modelLabel')" prop="modelId">
+          <el-select v-model="form.modelId" :placeholder="t('scheduler.edit.modelPlaceholder')" style="width: 100%" filterable clearable>
             <el-option v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
               <div class="flex items-center gap-2">
                 <span>{{ model.modelName }}</span>
@@ -158,30 +158,30 @@
         </el-form-item>
 
         <!-- 可选配置 -->
-        <el-divider content-position="left">高级配置</el-divider>
+        <el-divider content-position="left">{{ t('scheduler.edit.advanced') }}</el-divider>
 
-        <el-form-item label="最大执行次数">
+        <el-form-item :label="t('scheduler.edit.maxExecutions')">
           <el-input-number v-model="form.maxExecutions" :min="1" :max="9999" controls-position="right"
-            style="width: 160px" placeholder="无限" />
-          <span class="text-xs text-gray-400 ml-2">留空表示无限次执行</span>
+            style="width: 160px" :placeholder="t('scheduler.edit.unlimited')" />
+          <span class="text-xs text-gray-400 ml-2">{{ t('scheduler.edit.maxExecutionsHint') }}</span>
         </el-form-item>
 
-        <el-form-item label="重试次数">
+        <el-form-item :label="t('scheduler.edit.retryCount')">
           <el-input-number v-model="form.maxRetries" :min="0" :max="10" controls-position="right"
             style="width: 120px" />
         </el-form-item>
 
-        <el-form-item label="重试间隔">
+        <el-form-item :label="t('scheduler.edit.retryInterval')">
           <el-input-number v-model="form.retryInterval" :min="10" :max="3600" controls-position="right"
             style="width: 140px">
             <template #suffix>
-              <span class="text-gray-400 text-xs">秒</span>
+              <span class="text-gray-400 text-xs">{{ t('scheduler.edit.seconds') }}</span>
             </template>
           </el-input-number>
         </el-form-item>
 
-        <el-form-item label="启用状态">
-          <el-switch v-model="form.enabled" inline-prompt active-text="启用" inactive-text="禁用" />
+        <el-form-item :label="t('scheduler.edit.enabledLabel')">
+          <el-switch v-model="form.enabled" inline-prompt :active-text="t('scheduler.edit.enable')" :inactive-text="t('scheduler.edit.disable')" />
         </el-form-item>
       </el-form>
     </div>
@@ -189,10 +189,10 @@
     <template #footer>
       <div class="dialog-footer flex justify-end gap-2">
         <el-button v-if="isEdit" type="warning" plain @click="handleTest" :loading="testing">
-          测试触发
+          {{ t('scheduler.edit.testTrigger') }}
         </el-button>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">保存</el-button>
+        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitting">{{ t('scheduler.edit.save') }}</el-button>
       </div>
     </template>
   </el-dialog>
@@ -200,6 +200,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   ElDialog, ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton,
   ElSwitch, ElInputNumber, ElDivider, ElIcon, ElButton,
@@ -212,6 +213,7 @@ import type { Character } from '../../types/character'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
 
+const { t } = useI18n()
 type TimeMode = 'period' | 'interval' | 'once' | 'advanced'
 type PeriodType = 'monthly' | 'weekly' | 'daily'
 
@@ -254,7 +256,15 @@ const intervalConfig = ref({ hours: 1, days: [0, 1, 2, 3, 4, 5, 6] as number[] }
 // 一次性配置
 const onceConfig = ref({ datetime: '' })
 
-const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const weekDays = computed(() => [
+  t('common.time.sunday'),
+  t('common.time.monday'),
+  t('common.time.tuesday'),
+  t('common.time.wednesday'),
+  t('common.time.thursday'),
+  t('common.time.friday'),
+  t('common.time.saturday')
+])
 
 // 角色列表
 const characters = ref<Character[]>([])
@@ -407,22 +417,22 @@ function parseCron(cron: string) {
   timeMode.value = 'advanced'
 }
 
-const rules = {
+const rules = computed(() => ({
   name: [
-    { required: true, message: '请输入任务名称', trigger: 'blur' },
-    { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
+    { required: true, message: t('scheduler.edit.nameRequired'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('scheduler.edit.nameLength'), trigger: 'blur' }
   ],
   prompt: [
-    { required: true, message: '请输入提示词', trigger: 'blur' }
+    { required: true, message: t('scheduler.edit.promptRequired'), trigger: 'blur' }
   ],
   targetMode: [
-    { required: true, message: '请选择执行目标', trigger: 'change' }
+    { required: true, message: t('scheduler.edit.targetRequired'), trigger: 'change' }
   ],
   targetSessionId: [
     {
       validator: (_rule: any, value: string, callback: Function) => {
         if (form.value.targetMode === 'existing_session' && !value) {
-          callback(new Error('请选择目标会话'))
+          callback(new Error(t('scheduler.edit.targetSessionRequired')))
         } else {
           callback()
         }
@@ -434,7 +444,7 @@ const rules = {
     {
       validator: (_rule: any, value: string, callback: Function) => {
         if (form.value.targetMode === 'new_session' && !value) {
-          callback(new Error('请选择助手'))
+          callback(new Error(t('scheduler.edit.characterRequired')))
         } else {
           callback()
         }
@@ -442,7 +452,7 @@ const rules = {
       trigger: 'change'
     }
   ]
-}
+}))
 
 /**
  * 初始化表单数据
@@ -501,25 +511,25 @@ function initForm() {
 function validateTimeConfig(): string | null {
   if (timeMode.value === 'period') {
     if (periodType.value === 'monthly' && periodConfig.value.monthly.days.length === 0) {
-      return '每月模式请至少选择一天'
+      return t('scheduler.edit.monthlyAtLeastDay')
     }
     if (periodType.value === 'weekly' && periodConfig.value.weekly.days.length === 0) {
-      return '每周模式请至少选择一天'
+      return t('scheduler.edit.weeklyAtLeastDay')
     }
   }
 
   if (timeMode.value === 'interval' && intervalConfig.value.days.length === 0) {
-    return '间隔模式请至少选择一天'
+    return t('scheduler.edit.intervalAtLeastDay')
   }
 
   if (timeMode.value === 'once' && !onceConfig.value.datetime) {
-    return '请选择执行时间'
+    return t('scheduler.edit.selectTime')
   }
 
   if (timeMode.value === 'advanced') {
     const cronPattern = /^([0-9*,/-]+)\s+([0-9*,/-]+)\s+([0-9*,/-]+)\s+([0-9*,/-]+)\s+([0-9*,/-]+)$/
     if (!cronPattern.test(form.value.cronExpression.trim())) {
-      return 'Cron 表达式格式不正确'
+      return t('scheduler.edit.cronInvalid')
     }
   }
 
@@ -597,10 +607,10 @@ async function handleTest() {
   testing.value = true
   try {
     const result = await apiService.testScheduledTask(props.task.id)
-    ElMessage.success(result.message || '测试执行完成')
+    ElMessage.success(result.message || t('scheduler.edit.testSuccess'))
   } catch (err: any) {
     console.error('测试触发失败:', err)
-    ElMessage.error(err.message || '测试执行失败')
+    ElMessage.error(err.message || t('scheduler.edit.testFailed'))
   } finally {
     testing.value = false
   }

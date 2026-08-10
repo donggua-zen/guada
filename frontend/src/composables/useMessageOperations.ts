@@ -1,5 +1,6 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import { useSessionStore } from '@/stores/session'
+import { t } from '@/locales'
 import type { InputMessageState } from '@/types/session'
 
 export function useMessageOperations(
@@ -69,7 +70,7 @@ export function useMessageOperations(
         updatedFiles: any[];
     }> {
         if (!currentSessionId.value) {
-            throw new Error('当前没有活动的会话')
+            throw new Error(t('chat.message.noActiveSession'))
         }
 
         // 分离三类文件：已上传的、需上传的、Electron本地路径引用的

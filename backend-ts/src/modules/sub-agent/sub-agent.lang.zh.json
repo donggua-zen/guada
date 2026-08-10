@@ -1,0 +1,1 @@
+{"subagent_spawn.executing": "正在创建子代理", "subagent_spawn.completed": "已创建子代理", "subagent_spawn.aggregate.executing": "正在创建{n}个子代理", "subagent_spawn.aggregate.completed": "已创建{n}个子代理", "subagent_manager.executing": "正在管理子代理", "subagent_manager.completed": "已管理子代理", "subagent_manager.aggregate.executing": "正在管理{n}个子代理", "subagent_manager.aggregate.completed": "已管理{n}个子代理"}

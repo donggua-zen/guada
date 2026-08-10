@@ -45,6 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed, type Component } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // 导入所有图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -76,6 +77,7 @@ const emit = defineEmits<{
     click: []
 }>()
 const close_button_visible = ref(false)
+const { t } = useI18n()
 
 // 计算属性：是否正在上传
 const isUploading = computed(() => {
@@ -95,9 +97,9 @@ const progressPercentage = computed(() => {
 // 计算属性：进度文本
 const progressText = computed(() => {
     if (props.uploadStatus === 'queued') {
-        return '等待上传...'
+        return t('ui.fileItem.waitingUpload')
     }
-    return `上传中 ${progressPercentage.value}%`
+    return t('ui.fileItem.uploading', { progress: progressPercentage.value })
 })
 
 // 文件类型到图标的映射

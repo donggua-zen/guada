@@ -3,15 +3,15 @@
         <div class="space-y-8">
             <!-- 对话设置分组 -->
             <div>
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">对话</h3>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.chat') }}</h3>
                 <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <!-- 默认对话模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
                         <div class="flex flex-col gap-1 min-w-0">
-                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">默认对话模型</span>
-                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">用于日常对话生成的默认 AI 模型</span>
+                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.defaultChatModel') }}</span>
+                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.defaultChatModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
+                        <el-select v-model="settingsForm.defaultChatModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
                             @visible-change="(visible) => visible && openModelDialog('chat')" class="w-full max-w-md shrink-0">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
@@ -23,10 +23,10 @@
                     <!-- 标题总结模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
-                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">标题总结模型</span>
-                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">用于自动生成会话标题的 AI 模型</span>
+                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.titleSummaryModel') }}</span>
+                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.titleSummaryModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型" clearable
+                        <el-select v-model="settingsForm.defaultTitleSummaryModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
                             @visible-change="(visible) => visible && openModelDialog('title')" class="w-full max-w-md shrink-0">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
@@ -40,14 +40,14 @@
 
             <!-- 视觉辅助设置分组 -->
             <div>
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">视觉</h3>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.visual') }}</h3>
                 <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
-                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">视觉辅助模型</span>
-                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">用于图片识别等视觉任务的 AI 模型（需支持图像输入）</span>
+                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.visualAssistantModel') }}</span>
+                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.visualAssistantModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultVisualAssistantModelId" placeholder="请选择支持图像的模型"
+                        <el-select v-model="settingsForm.defaultVisualAssistantModelId" :placeholder="t('settings.defaultModel.selectVisualModel')"
                             clearable @visible-change="(visible) => visible && openModelDialog('visual')" class="w-full max-w-md shrink-0">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
@@ -61,14 +61,14 @@
 
             <!-- 历史压缩设置分组 -->
             <div>
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">压缩</h3>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.compression') }}</h3>
                 <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
-                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">历史压缩模型</span>
-                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">用于压缩对话历史以优化上下文长度的 AI 模型</span>
+                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.historyCompressionModel') }}</span>
+                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.historyCompressionModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型" clearable
+                        <el-select v-model="settingsForm.defaultHistoryCompressionModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
                             @visible-change="(visible) => visible && openModelDialog('compression')" class="w-full max-w-md shrink-0">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
@@ -82,10 +82,10 @@
         </div>
 
         <!-- 模型选择对话框 -->
-        <el-dialog v-model="modelDialogVisible" title="选择模型" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <el-dialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <div class="mb-4">
-                <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable>
+                <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
                     <template #prefix>
                         <el-icon>
                             <SearchFilled />
@@ -114,7 +114,7 @@
                                         <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
                                             <span
                                                 class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium text-[10px]">
-                                                {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                                {{ model.modelType === 'text' ? t('settings.defaultModel.chatType') : t('settings.defaultModel.embeddingType') }}
                                             </span>
 
                                             <!-- 输入/输出能力箭头组 -->
@@ -164,7 +164,7 @@
                     <el-icon size="48" class="mb-2">
                         <SearchFilled />
                     </el-icon>
-                    <p>未找到匹配的模型</p>
+                    <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
                 </div>
             </div>
         </el-dialog>
@@ -174,6 +174,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
+import { useI18n } from 'vue-i18n'
 import { OpenAI } from "@/components/icons";
 import {
     SearchFilled,
@@ -201,6 +202,7 @@ import {
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
+const { t } = useI18n()
 const { notify } = usePopup()
 
 // 表单引用（已移除 el-form，保留变量以便后续扩展）
@@ -234,23 +236,23 @@ const settingsForm = reactive({
 })
 
 // 表单验证规则
-const titleSummaryRules = {
+const titleSummaryRules = computed(() => ({
     defaultTitleSummaryPrompt: [
-        { max: 8000, message: '提示词长度不能超过 8000 个字符', trigger: ['input', 'blur'] }
+        { max: 8000, message: t('settings.defaultModel.promptLengthError'), trigger: ['input', 'blur'] }
     ]
-}
+}))
 
-const translationRules = {
+const translationRules = computed(() => ({
     defaultTranslationPrompt: [
-        { max: 8000, message: '提示词长度不能超过 8000 个字符', trigger: ['input', 'blur'] }
+        { max: 8000, message: t('settings.defaultModel.promptLengthError'), trigger: ['input', 'blur'] }
     ]
-}
+}))
 
-const historyCompressionRules = {
+const historyCompressionRules = computed(() => ({
     defaultHistoryCompressionPrompt: [
-        { max: 8000, message: '提示词长度不能超过 8000 个字符', trigger: ['input', 'blur'] }
+        { max: 8000, message: t('settings.defaultModel.promptLengthError'), trigger: ['input', 'blur'] }
     ]
-}
+}))
 
 // 计算各个模型的显示名称
 const getModelNameById = (modelId) => {
@@ -358,8 +360,8 @@ const clearModelSelection = (type) => {
 // 获取特性标签名称
 const getFeatureLabel = (type) => {
     switch (type) {
-        case 'tools': return '工具调用';
-        case 'thinking': return '混合思考';
+        case 'tools': return t('settings.defaultModel.toolCalling');
+        case 'thinking': return t('settings.defaultModel.mixedThinking');
         default: return type;
     }
 }
@@ -418,7 +420,7 @@ const loadModels = async () => {
 
     } catch (error) {
         console.error('获取模型列表失败:', error)
-        notify.error('获取模型列表失败', error)
+        notify.error(t('settings.defaultModel.loadModelsFailed'), error)
     }
 }
 
@@ -467,7 +469,7 @@ const loadGlobalSettings = async () => {
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
     } catch (error) {
         console.error('获取全局设置失败:', error)
-        notify.error('获取全局设置失败', error)
+        notify.error(t('settings.defaultModel.loadSettingsFailed'), error)
     }
 }
 
@@ -493,7 +495,7 @@ const handleSave = async () => {
                 .flat()
 
             console.error('表单验证失败:', errors)
-            notify.error('请检查表单填写是否正确')
+            notify.error(t('settings.defaultModel.formValidationError'))
             return
         }
 
@@ -514,10 +516,10 @@ const handleSave = async () => {
         // 保存成功后更新原始数据备份
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
-        notify.success('保存成功', '默认模型设置已更新')
+        notify.success(t('common.saveSuccess'), t('settings.defaultModel.updated'))
     } catch (error) {
         console.error('保存设置失败:', error)
-        notify.error('保存失败', error.message || '未知错误')
+        notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
     }
 }
 

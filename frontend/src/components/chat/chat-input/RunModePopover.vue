@@ -24,9 +24,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ElIcon } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { DrinkCoffee20Regular, ShieldLock20Regular, ClipboardTask20Regular, CheckmarkCircle20Filled } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
+
+const { t } = useI18n()
 
 defineProps<{
   visible: boolean
@@ -39,11 +43,11 @@ const emit = defineEmits<{
   'select': [mode: string]
 }>()
 
-const options = [
-  { value: 'normal', label: '工作模式', desc: '不对工具进行限制,正常读写工作目录，命令行除外', icon: DrinkCoffee20Regular },
-  { value: 'sandbox', label: '轻沙盒模式（测试）', desc: 'Shell命令工作目录内可写，外部只读', icon: ShieldLock20Regular },
-  { value: 'plan', label: '计划模式', desc: '仅允许只读工具和只读终端,适合做只读规划', icon: ClipboardTask20Regular },
-]
+const options = computed(() => [
+  { value: 'normal', label: t('chat.input.runModeNormal'), desc: t('chat.input.runModeNormalDesc'), icon: DrinkCoffee20Regular },
+  { value: 'sandbox', label: t('chat.input.runModeSandboxTest'), desc: t('chat.input.runModeSandboxDesc'), icon: ShieldLock20Regular },
+  { value: 'plan', label: t('chat.input.runModePlan'), desc: t('chat.input.runModePlanDesc'), icon: ClipboardTask20Regular },
+])
 
 function handleSelect(mode: string) {
   emit('select', mode)

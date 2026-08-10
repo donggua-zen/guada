@@ -14,6 +14,7 @@ import {
   supportsMultimodal,
   ensureWithinPixelLimit,
 } from "../utils/vision-utils";
+import langZh from "./browser.lang.zh.json";
 
 @Injectable()
 export class BrowserPlugin extends PluginBase {
@@ -46,6 +47,7 @@ export class BrowserPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     api.registerToolKit({
       id: "browser",
       name: "Browser Automation",
@@ -102,7 +104,13 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { actionType: "navigate", argsKey: "url", icon: "browser" },
+          display: {
+            actionType: "navigate",
+            text: { executing: "%browser_navigate.executing%", completed: "%browser_navigate.completed%" },
+            aggregate: { executing: "%browser_navigate.aggregate.executing%", completed: "%browser_navigate.aggregate.completed%" },
+            argsKey: "url",
+            icon: "browser",
+          },
         });
 
         // ── 2. 标签管理 ──
@@ -140,7 +148,13 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { actionType: "tabs", argsKey: "action", icon: "browser" },
+          display: {
+            actionType: "tabs",
+            text: { executing: "%browser_tabs.executing%", completed: "%browser_tabs.completed%" },
+            aggregate: { executing: "%browser_tabs.aggregate.executing%", completed: "%browser_tabs.aggregate.completed%" },
+            argsKey: "action",
+            icon: "browser",
+          },
         });
 
         // ── 3. 页面快照 ──
@@ -168,7 +182,13 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatSnapshot(result, args.type || "simple");
           },
-          display: { actionType: "snapshot", argsKey: "type", icon: "browser" },
+          display: {
+            actionType: "snapshot",
+            text: { executing: "%browser_snapshot.executing%", completed: "%browser_snapshot.completed%" },
+            aggregate: { executing: "%browser_snapshot.aggregate.executing%", completed: "%browser_snapshot.aggregate.completed%" },
+            argsKey: "type",
+            icon: "browser",
+          },
         });
 
         // ── 4. 交互操作 ──
@@ -217,6 +237,8 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "interact",
+            text: { executing: "%browser_interact.executing%", completed: "%browser_interact.completed%" },
+            aggregate: { executing: "%browser_interact.aggregate.executing%", completed: "%browser_interact.aggregate.completed%" },
             argsKey: "action",
             icon: "browser",
           },
@@ -263,6 +285,8 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "evaluate",
+            text: { executing: "%browser_evaluate.executing%", completed: "%browser_evaluate.completed%" },
+            aggregate: { executing: "%browser_evaluate.aggregate.executing%", completed: "%browser_evaluate.aggregate.completed%" },
             argsKey: "code",
             icon: "browser",
           },
@@ -305,6 +329,8 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "history",
+            text: { executing: "%browser_history.executing%", completed: "%browser_history.completed%" },
+            aggregate: { executing: "%browser_history.aggregate.executing%", completed: "%browser_history.aggregate.completed%" },
             argsKey: "action",
             icon: "browser",
           },
@@ -327,7 +353,12 @@ export class BrowserPlugin extends PluginBase {
             this.assertSuccess(result);
             return this.formatConsoleResult(result);
           },
-          display: { actionType: "console", icon: "browser" },
+          display: {
+            actionType: "console",
+            text: { executing: "%browser_console.executing%", completed: "%browser_console.completed%" },
+            aggregate: { executing: "%browser_console.aggregate.executing%", completed: "%browser_console.aggregate.completed%" },
+            icon: "browser",
+          },
         });
 
         // ── 8. 截图 ──
@@ -383,7 +414,12 @@ export class BrowserPlugin extends PluginBase {
 
             return parts.join("\n");
           },
-          display: { actionType: "screenshot", icon: "browser" },
+          display: {
+            actionType: "screenshot",
+            text: { executing: "%browser_screenshot.executing%", completed: "%browser_screenshot.completed%" },
+            aggregate: { executing: "%browser_screenshot.aggregate.executing%", completed: "%browser_screenshot.aggregate.completed%" },
+            icon: "browser",
+          },
         });
 
         // ── 使用说明 ──

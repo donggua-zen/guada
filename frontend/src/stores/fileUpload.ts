@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import type { AxiosError } from 'axios'
 import type { KBFile } from './knowledgeBase'
+import { t } from '@/locales'
 
 /**
  * 文件上传任务(仅负责上传阶段)
@@ -57,7 +58,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             ...task,
             status: 'queued', // 初始状态为排队中
             progress: 0,
-            currentStep: '等待上传...',
+            currentStep: t('chat.upload.waiting'),
             errorMessage: null
         }
 
@@ -179,7 +180,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             updateUploadStatus(task.id, {
                 status: 'uploading',
                 progress: 0,
-                currentStep: '准备上传...'
+                currentStep: t('chat.upload.preparing')
             })
             onProgressUpdate?.(task)
 
@@ -218,7 +219,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                             updateUploadStatus(task.id, {
                                 status: 'uploading',
                                 progress: percentCompleted,
-                                currentStep: `上传中... ${percentCompleted}%`
+                                currentStep: t('chat.upload.uploading', { pct: percentCompleted })
                             })
                             onProgressUpdate?.(task)
                         }
@@ -231,7 +232,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                     taskToUpdate.fileId = response.data.id
                     taskToUpdate.status = 'uploaded'
                     taskToUpdate.progress = 100
-                    taskToUpdate.currentStep = '上传完成,等待处理...'
+                    taskToUpdate.currentStep = t('chat.upload.completed')
                     taskToUpdate.serverFileRecord = response.data  // 保存后端返回的完整文件记录
                     onProgressUpdate?.(taskToUpdate)
                 }
@@ -243,7 +244,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 console.error('上传失败:', error)
                 updateUploadStatus(task.id, {
                     status: 'failed',
-                    errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || '上传失败'
+                    errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || t('common.uploadFailed')
                 })
                 onProgressUpdate?.(task)
                 setTimeout(() => processUploadQueue(), 100)
@@ -413,7 +414,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             updateUploadStatus(task.id, {
                 status: 'uploading',
                 progress: 0,
-                currentStep: '准备上传...'
+                currentStep: t('chat.upload.preparing')
             })
             onProgressUpdate?.(task)
 
@@ -450,7 +451,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                         updateUploadStatus(task.id, {
                             status: 'uploading',
                             progress: percentCompleted,
-                            currentStep: `上传中... ${percentCompleted}%`
+                            currentStep: t('chat.upload.uploading', { pct: percentCompleted })
                         })
                         onProgressUpdate?.(task)
                     }
@@ -463,7 +464,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 taskToUpdate.fileId = response.data.id
                 taskToUpdate.status = 'uploaded'
                 taskToUpdate.progress = 100
-                taskToUpdate.currentStep = '上传完成'
+                taskToUpdate.currentStep = t('chat.upload.completedShort')
                 taskToUpdate.processedAt = new Date().toISOString()
                 onProgressUpdate?.(taskToUpdate)
 
@@ -478,7 +479,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             console.error('会话文件上传失败:', error)
             updateUploadStatus(task.id, {
                 status: 'failed',
-                errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || '上传失败'
+                errorMessage: (error as AxiosError<{ detail?: string }>).response?.data?.detail || t('common.uploadFailed')
             })
             onProgressUpdate?.(task)
             throw error

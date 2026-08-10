@@ -1,6 +1,6 @@
 <template>
   <div class="h-full overflow-hidden flex flex-col">
-    <PageHeader title="机器人" />
+    <PageHeader :title="t('bot.center.title')" />
     <div class="flex-1 flex flex-col overflow-hidden">
       <div class="shrink-0 px-4 w-full md:max-w-260 md:mx-auto">
         <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="bot-center-tabs">
@@ -30,6 +30,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElTabs, ElTabPane } from 'element-plus'
 import BotManagementPage from './BotManagementPage.vue'
 import BotSessionsList from './BotSessionsList.vue'
@@ -44,24 +45,25 @@ import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
-const sidebarItems = [
+const sidebarItems = computed(() => [
   {
-    label: '机器人管理',
+    label: t('bot.center.tabManagement'),
     path: 'management',
     icon: Bot24Regular,
   },
   {
-    label: '对话数据',
+    label: t('bot.center.tabSessions'),
     path: 'sessions',
     icon: Database24Regular,
   },
-]
+])
 
-const tabItems = computed(() => sidebarItems)
+const tabItems = computed(() => sidebarItems.value)
 
 const getDefaultTabPath = () => {
-  return sidebarItems[0]?.path || 'management'
+  return sidebarItems.value[0]?.path || 'management'
 }
 
 const currentTabValue = ref(getDefaultTabPath())

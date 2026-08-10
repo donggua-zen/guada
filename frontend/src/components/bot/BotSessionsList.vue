@@ -3,8 +3,8 @@
     <!-- 标题区 -->
     <div class="flex items-center justify-between gap-4 mb-8 mt-2">
       <div class="min-w-0">
-        <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">对话数据</h1>
-        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">查看和管理机器人与用户的对话记录。</p>
+        <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('bot.sessions.title') }}</h1>
+        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('bot.sessions.subtitle') }}</p>
       </div>
     </div>
 
@@ -18,7 +18,7 @@
             ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)'
             : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
           @click="selectBot(null)">
-          全部会话
+          {{ t('bot.sessions.allSessions') }}
         </div>
 
         <!-- 机器人标签 -->
@@ -40,19 +40,19 @@
       <el-icon class="is-loading" :size="32">
         <Loading />
       </el-icon>
-      <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
+      <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">{{ t('bot.sessions.loading') }}</span>
     </div>
 
     <!-- 会话列表 -->
     <div v-else class="flex-1">
       <el-table v-if="sessions.length > 0" :data="sessions" style="width: 100%" stripe @row-click="handleRowClick">
-        <el-table-column prop="title" label="会话标题" min-width="200">
+        <el-table-column prop="title" :label="t('bot.sessions.colTitle')" min-width="200">
           <template #default="{ row }">
-            <span class="truncate">{{ row.title || '未命名会话' }}</span>
+            <span class="truncate">{{ row.title || t('bot.sessions.unnamedSession') }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="platform" label="平台" width="120">
+        <el-table-column prop="platform" :label="t('bot.sessions.colPlatform')" width="120">
           <template #default="{ row }">
             <el-tag size="small" type="info">
               {{ getPlatformName(row.platform) }}
@@ -60,15 +60,15 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="botId" label="关联 Bot" min-width="150">
+        <el-table-column prop="botId" :label="t('bot.sessions.colBot')" min-width="150">
           <template #default="{ row }">
             <span class="text-sm text-gray-600 dark:text-[#8b8d95]">
-              {{ getBotName(row.botId) || '未知 Bot' }}
+              {{ getBotName(row.botId) || t('bot.sessions.unknownBot') }}
             </span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="lastActiveAt" label="最后活跃" width="180">
+        <el-table-column prop="lastActiveAt" :label="t('bot.sessions.colLastActive')" width="180">
           <template #default="{ row }">
             <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
               {{ formatTime(row.lastActiveAt) }}
@@ -76,17 +76,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column :label="t('bot.sessions.colActions')" width="240" fixed="right">
           <template #default="{ row }">
             <div class="flex gap-2">
               <el-button link type="primary" size="small" @click.stop="handleViewChat(row as Session)">
-                查看对话
+                {{ t('bot.sessions.viewChat') }}
               </el-button>
               <el-button link type="warning" size="small" @click.stop="handleClearMessages(row as Session)">
-                清空记录
+                {{ t('bot.sessions.clearMessages') }}
               </el-button>
               <el-button link type="danger" size="small" @click.stop="handleDeleteSession(row as Session)">
-                删除
+                {{ t('bot.sessions.delete') }}
               </el-button>
             </div>
           </template>
@@ -98,8 +98,8 @@
         <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
           <ChatDotRound />
         </el-icon>
-        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无 Bot 会话</p>
-        <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">启动机器人后，与机器人的对话将显示在这里</p>
+        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('bot.sessions.empty') }}</p>
+        <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('bot.sessions.emptyHint') }}</p>
       </div>
 
       <!-- 分页 -->
@@ -117,6 +117,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
@@ -128,6 +129,7 @@ import { useRoute, useRouter } from 'vue-router'
 const botStore = useBotStore()
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const loading = ref(false)
 const sessions = ref<Session[]>([])
@@ -223,7 +225,7 @@ const loadSessions = async () => {
     total.value = response.total || 0
   } catch (error) {
     console.error('加载 Bot 会话失败:', error)
-    ElMessage.error('加载会话失败')
+    ElMessage.error(t('bot.sessions.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -231,15 +233,10 @@ const loadSessions = async () => {
 
 // 获取平台名称
 const getPlatformName = (platform?: string): string => {
-  if (!platform) return '未知'
-  const platformMap: Record<string, string> = {
-    qq: 'QQ',
-    wechat: '微信',
-    'wechat-personal': '微信个人号',
-    lark: '飞书',
-    wecom: '企业微信',
-  }
-  return platformMap[platform.toLowerCase()] || platform
+  if (!platform) return t('bot.platform.unknown')
+  const key = platform.toLowerCase()
+  const knownPlatforms = ['qq', 'wechat', 'wechat-personal', 'discord', 'lark', 'wecom']
+  return knownPlatforms.includes(key) ? t(`bot.platform.${key}`) : platform
 }
 
 // 获取 Bot 名称
@@ -258,15 +255,15 @@ const formatTime = (time?: string): string => {
 
   // 小于1分钟
   if (diff < 60 * 1000) {
-    return '刚刚'
+    return t('bot.sessions.justNow')
   }
   // 小于1小时
   if (diff < 60 * 60 * 1000) {
-    return `${Math.floor(diff / (60 * 1000))}分钟前`
+    return t('bot.sessions.minutesAgo', { n: Math.floor(diff / (60 * 1000)) })
   }
   // 小于24小时
   if (diff < 24 * 60 * 60 * 1000) {
-    return `${Math.floor(diff / (60 * 60 * 1000))}小时前`
+    return t('bot.sessions.hoursAgo', { n: Math.floor(diff / (60 * 60 * 1000)) })
   }
   // 大于24小时
   return date.toLocaleDateString('zh-CN', {
@@ -293,17 +290,17 @@ const handleViewChat = (session: Session) => {
 const handleClearMessages = async (session: Session) => {
   try {
     await ElMessageBox.confirm(
-      `确定要清空会话 "${session.title || '未命名会话'}" 的所有聊天记录吗？会话本身将保留，但所有消息将被永久删除，且不可恢复。`,
-      '清空确认',
+      t('bot.sessions.clearConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
+      t('bot.sessions.clearTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.ok'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
 
     await apiService.clearSessionMessages(session.id)
-    ElMessage.success('聊天记录已清空')
+    ElMessage.success(t('bot.sessions.clearSuccess'))
 
     // 如果对话框打开，关闭它
     if (dialogVisible.value && selectedSession.value?.id === session.id) {
@@ -313,7 +310,7 @@ const handleClearMessages = async (session: Session) => {
   } catch (error) {
     if (error !== 'cancel') {
       console.error('清空聊天记录失败:', error)
-      ElMessage.error('清空失败')
+      ElMessage.error(t('bot.sessions.clearFailed'))
     }
   }
 }
@@ -322,24 +319,24 @@ const handleClearMessages = async (session: Session) => {
 const handleDeleteSession = async (session: Session) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除会话 "${session.title || '未命名会话'}" 吗？此操作将删除该会话的所有消息记录，且不可恢复。`,
-      '删除确认',
+      t('bot.sessions.deleteConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
+      t('bot.sessions.deleteTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.ok'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
 
     await apiService.deleteSession(session.id)
-    ElMessage.success('会话已删除')
+    ElMessage.success(t('bot.sessions.deleteSuccess'))
 
     // 重新加载列表
     await loadSessions()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除会话失败:', error)
-      ElMessage.error('删除失败')
+      ElMessage.error(t('bot.sessions.deleteFailed'))
     }
   }
 }

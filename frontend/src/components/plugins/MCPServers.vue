@@ -2,21 +2,21 @@
     <div class="flex-1 overflow-hidden">
         <div class="flex items-center justify-between gap-4 mb-8 mt-2">
             <div class="min-w-0">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">MCP 服务器列表</h1>
-                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">配置和管理 Model Context Protocol 服务器。</p>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.mcp.title') }}</h1>
+                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.mcp.subtitle') }}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <el-button @click="handleImport">
                     <template #icon>
                         <UploadOutlined />
                     </template>
-                    导入配置
+                    {{ t('plugins.mcp.importConfig') }}
                 </el-button>
                 <el-button type="primary" @click="handleAddServer">
                     <template #icon>
                         <AddOutlined />
                     </template>
-                    添加服务器
+                    {{ t('plugins.mcp.addServer') }}
                 </el-button>
             </div>
         </div>
@@ -35,16 +35,16 @@
                 </div>
 
                 <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
-                    {{ server.description || '暂无描述' }}
+                    {{ server.description || t('plugins.mcp.noDescription') }}
                 </p>
 
                 <div class="flex items-center justify-end gap-2 mt-3">
                     <el-button link size="small" type="danger" @click.stop="handleDeleteServer(server)">
-                        删除
+                        {{ t('common.delete') }}
                     </el-button>
                     <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
                         @change="handleToggleServer(server)" @click.stop size="small" inline-prompt
-                        active-text="启用" inactive-text="禁用" />
+                        :active-text="t('plugins.mcp.enable')" :inactive-text="t('plugins.mcp.disable')" />
                 </div>
             </div>
         </div>
@@ -53,65 +53,65 @@
             <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
-            <div class="text-gray-500 dark:text-[#8b8d95]">暂无 MCP 服务器</div>
-            <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">点击"添加服务器"开始配置</div>
+            <div class="text-gray-500 dark:text-[#8b8d95]">{{ t('plugins.mcp.empty') }}</div>
+            <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">{{ t('plugins.mcp.emptyHint') }}</div>
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'"  style="max-width: 800px;width: 80%" align-center
+        <el-dialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')"  style="max-width: 800px;width: 80%" align-center
             destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
             <el-tabs v-model="activeTab" class="mb-4">
-                <el-tab-pane label="基本配置" name="config">
+                <el-tab-pane :label="t('plugins.mcp.tabConfig')" name="config">
                     <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
                         label-width="120px" size="large">
-                        <el-form-item label="服务器名称" prop="name">
-                            <el-input v-model="serverForm.name" placeholder="请输入服务器名称" />
+                        <el-form-item :label="t('plugins.mcp.nameLabel')" prop="name">
+                            <el-input v-model="serverForm.name" :placeholder="t('plugins.mcp.namePlaceholder')" />
                         </el-form-item>
 
                         <!-- HTTP 协议配置 (sse/streamableHttp) -->
                         <template v-if="serverForm.type !== 'stdio'">
-                            <el-form-item label="服务地址" prop="url">
+                            <el-form-item :label="t('plugins.mcp.urlLabel')" prop="url">
                                 <el-input v-model="serverForm.url" placeholder="https://example.com/mcp" />
                             </el-form-item>
 
-                            <el-form-item label="HTTP 请求头" prop="headers">
+                            <el-form-item :label="t('plugins.mcp.headersLabel')" prop="headers">
                                 <el-input v-model="serverForm.headers" type="textarea" :rows="5"
-                                    placeholder="请输入自定义 HTTP 请求头，一行一个，格式：Header-Name: value&#10;例如:&#10;Authorization: Bearer your_token&#10;X-API-Key: your_api_key" />
+                                    :placeholder="t('plugins.mcp.headersPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
-                                    每行一个请求头，格式为 "Header-Name: value"
+                                    {{ t('plugins.mcp.headersHint') }}
                                 </div>
                             </el-form-item>
                         </template>
 
                         <!-- Stdio 协议配置 -->
                         <template v-if="serverForm.type === 'stdio'">
-                            <el-form-item label="命令" prop="command">
-                                <el-input v-model="serverForm.command" placeholder="例如: npx, python, node" />
+                            <el-form-item :label="t('plugins.mcp.commandLabel')" prop="command">
+                                <el-input v-model="serverForm.command" :placeholder="t('plugins.mcp.commandPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
-                                    要执行的命令或可执行文件
+                                    {{ t('plugins.mcp.commandHint') }}
                                 </div>
                             </el-form-item>
 
-                            <el-form-item label="参数" prop="args">
+                            <el-form-item :label="t('plugins.mcp.argsLabel')" prop="args">
                                 <el-input v-model="serverForm.args" type="textarea" :rows="3"
-                                    placeholder="每行一个参数，例如:&#10;-m&#10;mcp_server&#10;--port&#10;3000" />
+                                    :placeholder="t('plugins.mcp.argsPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
-                                    每行一个参数
+                                    {{ t('plugins.mcp.argsHint') }}
                                 </div>
                             </el-form-item>
 
-                            <el-form-item label="环境变量" prop="env">
+                            <el-form-item :label="t('plugins.mcp.envLabel')" prop="env">
                                 <el-input v-model="serverForm.env" type="textarea" :rows="5"
-                                    placeholder="请输入环境变量，一行一个，格式：KEY=value&#10;例如:&#10;API_KEY=your_api_key&#10;NODE_ENV=production" />
+                                    :placeholder="t('plugins.mcp.envPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
-                                    每行一个环境变量，格式为 "KEY=value"
+                                    {{ t('plugins.mcp.envHint') }}
                                 </div>
                             </el-form-item>
 
-                            <el-form-item label="工作目录" prop="cwd">
-                                <el-input v-model="serverForm.cwd" placeholder="可选，例如: /path/to/working/dir" />
+                            <el-form-item :label="t('plugins.mcp.cwdLabel')" prop="cwd">
+                                <el-input v-model="serverForm.cwd" :placeholder="t('plugins.mcp.cwdPlaceholder')" />
                             </el-form-item>
                         </template>
 
@@ -123,37 +123,37 @@
                             </el-select>
                         </el-form-item>
 
-                        <el-form-item label="描述信息" prop="description">
+                        <el-form-item :label="t('plugins.mcp.descLabel')" prop="description">
                             <el-input v-model="serverForm.description" type="textarea" :rows="3"
-                                placeholder="可选，描述此服务器的用途" />
+                                :placeholder="t('plugins.mcp.descPlaceholder')" />
                         </el-form-item>
 
-                        <el-form-item label="启用状态">
-                            <el-switch v-model="serverForm.enabled" inline-prompt active-text="启动" inactive-text="禁用"
+                        <el-form-item :label="t('plugins.mcp.enabledLabel')">
+                            <el-switch v-model="serverForm.enabled" inline-prompt :active-text="t('plugins.mcp.enabledOn')" :inactive-text="t('plugins.mcp.enabledOff')"
                                 size="large" />
                         </el-form-item>
                     </el-form>
                 </el-tab-pane>
 
-                <el-tab-pane label="工具列表" name="tools">
+                <el-tab-pane :label="t('plugins.mcp.tabTools')" name="tools">
                     <div v-if="!isEditMode" class="py-12 text-center">
                         <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                             <InfoOutlined />
                         </el-icon>
-                        <div class="text-gray-500">新增后才能查看工具</div>
-                        <div class="text-sm text-gray-400 mt-2">请先填写基本信息并保存</div>
+                        <div class="text-gray-500">{{ t('plugins.mcp.toolsNewHint') }}</div>
+                        <div class="text-sm text-gray-400 mt-2">{{ t('plugins.mcp.toolsNewHintSub') }}</div>
                     </div>
 
                     <div v-else class="tools-panel">
                         <div class="flex items-center justify-between mb-3">
                             <div class="text-sm text-gray-600 dark:text-[#8b8d95]">
-                                已获取到 {{ toolsList.length }} 个工具
+                                {{ t('plugins.mcp.toolsCount', { count: toolsList.length }) }}
                             </div>
                             <el-button size="small" @click="handleRefreshTools" :loading="refreshingTools">
                                 <el-icon class="mr-1" :class="{ 'is-loading': refreshingTools }">
                                     <RefreshRight />
                                 </el-icon>
-                                刷新工具
+                                {{ t('plugins.mcp.refreshTools') }}
                             </el-button>
                         </div>
 
@@ -162,15 +162,15 @@
                                 class="tool-item p-3 mb-2 rounded border border-gray-200 dark:border-[#2e3035] bg-gray-50 dark:bg-[#2a2c30]/50">
                                 <div class="font-semibold text-sm mb-2">{{ tool.name }}</div>
                                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2 line-clamp-2">
-                                    {{ tool.description || '暂无描述' }}
+                                    {{ tool.description || t('plugins.mcp.noDescription') }}
                                 </div>
                                 <div v-if="tool.inputSchema" class="text-xs">
-                                    <div class="text-gray-400 mb-1">参数：</div>
+                                    <div class="text-gray-400 mb-1">{{ t('plugins.mcp.toolParams') }}</div>
                                     <div class="text-gray-600 dark:text-[#e8e9ed]">
                                         <span
                                             v-if="!tool.inputSchema.properties || Object.keys(tool.inputSchema.properties).length === 0"
                                             class="text-gray-400">
-                                            无参数
+                                            {{ t('plugins.mcp.noParams') }}
                                         </span>
                                         <div v-else class="space-y-1">
                                             <div v-for="(paramInfo, paramName) in tool.inputSchema.properties"
@@ -183,9 +183,9 @@
                                                 </span>
                                                 <el-tag
                                                     v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)"
-                                                    type="danger" size="small">必填</el-tag>
+                                                    type="danger" size="small">{{ t('plugins.mcp.paramRequired') }}</el-tag>
                                                 <el-tag v-else-if="paramInfo.default !== undefined" type="info"
-                                                    size="small">默认：{{ paramInfo.default }}</el-tag>
+                                                    size="small">{{ t('plugins.mcp.paramDefault', { value: paramInfo.default }) }}</el-tag>
                                             </div>
                                         </div>
                                     </div>
@@ -197,8 +197,8 @@
                             <el-icon size="36" class="mb-2 opacity-50">
                                 <InboxOutlined />
                             </el-icon>
-                            <div class="text-sm">暂无工具</div>
-                            <div class="text-xs mt-1">点击"刷新工具"尝试重新获取</div>
+                            <div class="text-sm">{{ t('plugins.mcp.toolsEmpty') }}</div>
+                            <div class="text-xs mt-1">{{ t('plugins.mcp.toolsEmptyHint') }}</div>
                         </div>
                     </div>
                 </el-tab-pane>
@@ -206,29 +206,29 @@
 
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="showModal = false">取消</el-button>
-                    <el-button type="primary" @click="handleSaveServer" :loading="saving">确定</el-button>
+                    <el-button @click="showModal = false">{{ t('common.cancel') }}</el-button>
+                    <el-button type="primary" @click="handleSaveServer" :loading="saving">{{ t('common.ok') }}</el-button>
                 </span>
             </template>
         </el-dialog>
 
         <!-- 导入配置对话框 -->
-        <el-dialog v-model="showImportModal" title="导入 MCP 服务器配置" align-center destroy-on-close
+        <el-dialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
             style="max-width: 500px;width: 80%">
 
             <div class="mb-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
-                    请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
+                    {{ t('plugins.mcp.importDesc') }}
                 </div>
                 <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
-                    <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code>
+                    <li>{{ t('plugins.mcp.importFormat1') }}<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code>
                     </li>
-                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
+                    <li>{{ t('plugins.mcp.importFormat2') }}<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
                     "..."}</code></li>
                 </ul>
             </div>
 
-            <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
+            <el-input v-model="importJsonText" type="textarea" :rows="15" :placeholder="t('plugins.mcp.importPlaceholder')" />
 {
   "mcpServers": {
     "WebSearch": {
@@ -246,8 +246,8 @@
 
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="showImportModal = false">取消</el-button>
-                    <el-button type="primary" @click="handleImportJson" :loading="importing">导入</el-button>
+                    <el-button @click="showImportModal = false">{{ t('common.cancel') }}</el-button>
+                    <el-button type="primary" @click="handleImportJson" :loading="importing">{{ t('plugins.mcp.importBtn') }}</el-button>
                 </span>
             </template>
         </el-dialog>
@@ -255,7 +255,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import {
@@ -272,6 +273,7 @@ import CardAvatar from '@/components/ui/CardAvatar.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
 const { toast } = usePopup()
+const { t } = useI18n()
 
 // 响应式数据
 const servers = ref([])
@@ -301,13 +303,13 @@ const serverForm = ref({
     enabled: true
 })
 
-const formRules = ref({
+const formRules = computed(() => ({
     name: [
-        { required: true, message: '请输入服务器名称', trigger: 'blur' },
-        { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+        { required: true, message: t('plugins.mcp.nameRequired'), trigger: 'blur' },
+        { min: 2, max: 50, message: t('plugins.mcp.nameLength'), trigger: 'blur' }
     ],
     url: [
-        { required: true, message: '请输入服务地址', trigger: 'blur' },
+        { required: true, message: t('plugins.mcp.urlRequired'), trigger: 'blur' },
         {
             validator: (rule, value, callback) => {
                 if (!value) {
@@ -318,7 +320,7 @@ const formRules = ref({
                 if (urlPattern.test(value)) {
                     callback()
                 } else {
-                    callback(new Error('请输入有效的 URL 地址'))
+                    callback(new Error(t('plugins.mcp.urlInvalid')))
                 }
             },
             trigger: 'blur'
@@ -328,7 +330,7 @@ const formRules = ref({
         {
             validator: (rule, value, callback) => {
                 if (serverForm.value.type === 'stdio' && !value) {
-                    callback(new Error('请输入命令'))
+                    callback(new Error(t('plugins.mcp.commandRequired')))
                 } else {
                     callback()
                 }
@@ -336,7 +338,7 @@ const formRules = ref({
             trigger: 'blur'
         }
     ]
-})
+}))
 
 // 加载 MCP 服务器列表
 const loadServers = async () => {
@@ -352,7 +354,7 @@ const loadServers = async () => {
         }
     } catch (error) {
         console.error('加载 MCP 服务器失败:', error)
-        toast.error(error.message || '加载失败')
+        toast.error(error.message || t('common.error.loadFailed'))
         servers.value = []
     }
 }
@@ -427,7 +429,7 @@ const handleEditServer = (server) => {
 // 删除服务器
 const handleDeleteServer = async (server) => {
     try {
-        const confirmed = await confirm('删除服务器', `确定要删除服务器 "${server.name}" 吗？`)
+        const confirmed = await confirm(t('plugins.mcp.deleteTitle'), t('plugins.mcp.deleteConfirm', { name: server.name }))
 
         // 如果用户取消，则不执行删除
         if (!confirmed) {
@@ -439,11 +441,11 @@ const handleDeleteServer = async (server) => {
 
         // 从列表中移除
         servers.value = servers.value.filter(s => s.id !== server.id)
-        toast.success('删除成功')
+        toast.success(t('common.deleteSuccess'))
     } catch (error) {
         if (error !== 'cancelled') {
             console.error('删除失败:', error)
-            toast.error(error.message || '删除失败')
+            toast.error(error.message || t('common.deleteFailed'))
         }
     }
 }
@@ -488,19 +490,19 @@ const handleSaveServer = async () => {
             if (index !== -1) {
                 servers.value[index] = response
             }
-            toast.success('更新成功')
+            toast.success(t('common.updateSuccess'))
         } else {
             // 添加新服务器
             const response = await apiService.createMcpServer(submitData)
             servers.value.unshift(response)
-            toast.success('添加成功')
+            toast.success(t('common.createSuccess'))
         }
 
         showModal.value = false
     } catch (error) {
         if (error !== 'cancelled') {
             console.error('保存失败:', error)
-            toast.error(error.message || '保存失败')
+            toast.error(error.message || t('common.saveFailed'))
         }
     } finally {
         saving.value = false
@@ -603,7 +605,7 @@ const handleImportJson = async () => {
         const jsonData = JSON.parse(importJsonText.value)
 
         if (!jsonData || typeof jsonData !== 'object') {
-            throw new Error('无效的 JSON 格式')
+            throw new Error(t('plugins.mcp.importInvalidJson'))
         }
 
         let serversToImport = []
@@ -619,11 +621,11 @@ const handleImportJson = async () => {
             // 单个服务器对象
             serversToImport = [jsonData]
         } else {
-            throw new Error('无法识别的 JSON 格式，请确保包含 mcpServers 字段或有效的服务器对象')
+            throw new Error(t('plugins.mcp.importUnrecognized'))
         }
 
         if (serversToImport.length === 0) {
-            toast.warning('未找到可导入的服务器配置')
+            toast.warning(t('plugins.mcp.importNoServers'))
             return
         }
 
@@ -640,7 +642,7 @@ const handleImportJson = async () => {
 
                 // 转换数据格式
                 const submitData = {
-                    name: serverData.name || serverData.key || '未命名服务器',
+                    name: serverData.name || serverData.key || t('plugins.mcp.unnamedServer'),
                     url: isStdio ? null : (serverData.baseUrl || serverData.url || ''),
                     description: serverData.description || `导入自配置文件：${serverData.key || 'unknown'}`,
                     headers: isStdio ? null : (serverData.headers || {}),
@@ -674,22 +676,22 @@ const handleImportJson = async () => {
 
         // 显示导入结果
         if (successCount > 0) {
-            toast.success(`成功导入 ${successCount} 个服务器`)
+            toast.success(t('plugins.mcp.importSuccess', { count: successCount }))
             // 重新加载列表
             await loadServers()
             showImportModal.value = false
         }
 
         if (failCount > 0) {
-            toast.error(`导入失败：${failCount} 个\n${errors.join('\n')}`)
+            toast.error(t('plugins.mcp.importFailedCount', { count: failCount }) + `\n${errors.join('\n')}`)
         }
 
     } catch (error) {
         console.error('导入失败:', error)
         if (error instanceof SyntaxError) {
-            toast.error('JSON 格式错误，请检查输入')
+            toast.error(t('plugins.mcp.importJsonError'))
         } else {
-            toast.error(error.message || '导入失败')
+            toast.error(error.message || t('common.importFailed'))
         }
     } finally {
         importing.value = false
@@ -699,7 +701,7 @@ const handleImportJson = async () => {
 // 刷新工具列表
 const handleRefreshTools = async () => {
     if (!serverForm.value.id) {
-        toast.warning('请先保存服务器')
+        toast.warning(t('plugins.mcp.refreshToolsWarning'))
         return
     }
 
@@ -716,7 +718,7 @@ const handleRefreshTools = async () => {
                 ...tool
             }))
 
-            toast.success(`成功刷新 ${toolsList.value.length} 个工具`)
+            toast.success(t('plugins.mcp.refreshToolsSuccess', { count: toolsList.value.length }))
 
             // 同时更新当前编辑的服务器数据
             const serverIndex = servers.value.findIndex(s => s.id === serverForm.value.id)
@@ -724,11 +726,11 @@ const handleRefreshTools = async () => {
                 servers.value[serverIndex].tools = response.tools
             }
         } else {
-            toast.warning('未获取到工具列表')
+            toast.warning(t('plugins.mcp.refreshToolsEmpty'))
         }
     } catch (error) {
         console.error('刷新工具失败:', error)
-        toast.error(error.message || '刷新工具失败')
+        toast.error(error.message || t('plugins.mcp.refreshToolsFailed'))
     } finally {
         refreshingTools.value = false
     }
@@ -745,10 +747,10 @@ const handleToggleServer = async (server) => {
             servers.value[index].enabled = response.enabled
         }
 
-        toast.success(server.enabled ? '已启用' : '已禁用')
+        toast.success(server.enabled ? t('common.enabled') : t('common.disabled'))
     } catch (error) {
         console.error('切换状态失败:', error)
-        toast.error(error.message || '切换失败')
+        toast.error(error.message || t('plugins.mcp.toggleFailed'))
 
         // 恢复原来的状态
         server.enabled = !server.enabled

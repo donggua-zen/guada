@@ -8,6 +8,7 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { z } from "zod";
+import langZh from "./file.lang.zh.json";
 
 @Injectable()
 export class FilePlugin extends PluginBase {
@@ -72,6 +73,7 @@ export class FilePlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     api.registerTool({
       name: "read",
       description:
@@ -210,7 +212,13 @@ export class FilePlugin extends PluginBase {
         }
         return result;
       },
-      display: { actionType: "read", argsKey: "file_path", icon: "read" },
+      display: {
+        actionType: "read",
+        text: { executing: "%read.executing%", completed: "%read.completed%" },
+        aggregate: { executing: "%read.aggregate.executing%", completed: "%read.aggregate.completed%" },
+        argsKey: "file_path",
+        icon: "read",
+      },
       dangerLevel: "safe",
     });
 
@@ -314,7 +322,13 @@ export class FilePlugin extends PluginBase {
 
         return output;
       },
-      display: { actionType: "search", argsKey: "pattern", icon: "search" },
+      display: {
+        actionType: "search",
+        text: { executing: "%glob.executing%", completed: "%glob.completed%" },
+        aggregate: { executing: "%glob.aggregate.executing%", completed: "%glob.aggregate.completed%" },
+        argsKey: "pattern",
+        icon: "search",
+      },
       dangerLevel: "safe",
     });
 
@@ -348,7 +362,13 @@ export class FilePlugin extends PluginBase {
           return `File written: ${resolvedPath} (${content.length} chars)`;
         });
       },
-      display: { actionType: "write", argsKey: "file_path", icon: "edit" },
+      display: {
+        actionType: "write",
+        text: { executing: "%write.executing%", completed: "%write.completed%" },
+        aggregate: { executing: "%write.aggregate.executing%", completed: "%write.aggregate.completed%" },
+        argsKey: "file_path",
+        icon: "edit",
+      },
       dangerLevel: "high",
     });
 
@@ -410,7 +430,13 @@ export class FilePlugin extends PluginBase {
           return `File ${resolvedPath} modified (1 replacement)`;
         });
       },
-      display: { actionType: "edit", argsKey: "file_path", icon: "edit" },
+      display: {
+        actionType: "edit",
+        text: { executing: "%edit.executing%", completed: "%edit.completed%" },
+        aggregate: { executing: "%edit.aggregate.executing%", completed: "%edit.aggregate.completed%" },
+        argsKey: "file_path",
+        icon: "edit",
+      },
       dangerLevel: "high",
     });
 
@@ -530,7 +556,13 @@ export class FilePlugin extends PluginBase {
 
         return outputLines.join("\n");
       },
-      display: { actionType: "grep", argsKey: "pattern", icon: "search" },
+      display: {
+        actionType: "grep",
+        text: { executing: "%grep.executing%", completed: "%grep.completed%" },
+        aggregate: { executing: "%grep.aggregate.executing%", completed: "%grep.aggregate.completed%" },
+        argsKey: "pattern",
+        icon: "search",
+      },
       dangerLevel: "safe",
     });
 

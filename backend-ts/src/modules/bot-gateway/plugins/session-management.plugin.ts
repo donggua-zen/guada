@@ -5,6 +5,7 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { appendResetMarker } from "../utils/external-id";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import langZh from "./session-management.lang.zh.json";
 
 @Injectable()
 export class SessionManagementPlugin extends PluginBase {
@@ -23,6 +24,7 @@ export class SessionManagementPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const sessionKit = api.registerToolKit({
       id: "session",
       name: "会话管理",
@@ -76,7 +78,11 @@ export class SessionManagementPlugin extends PluginBase {
           archivedExternalId: newExternalId,
         });
       },
-      display: { actionType: "clear_session", icon: "chat" },
+      display: {
+        actionType: "clear_session",
+        text: { executing: "%clear_session.executing%", completed: "%clear_session.completed%" },
+        icon: "chat",
+      },
     });
 
     sessionKit.registerPrompt({

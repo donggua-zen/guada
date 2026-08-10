@@ -121,19 +121,19 @@
           </template>
 
           <!-- 错误提示 -->
-          <el-alert v-if="assistantMetadata?.finishReason === 'error'" title="API 请求错误" type="error" :closable="false">
+          <el-alert v-if="assistantMetadata?.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error" :closable="false">
             {{ assistantMetadata.errorDetail }}
           </el-alert>
 
           <!-- 超时提示 -->
-          <el-alert v-if="assistantMetadata?.finishReason === 'timeout'" title="请求超时" type="warning" :closable="false">
-            {{ assistantMetadata.errorDetail || '服务器长时间未响应数据，请稍后重试' }}
+          <el-alert v-if="assistantMetadata?.finishReason === 'timeout'" :title="t('chat.turn.requestTimeout')" type="warning" :closable="false">
+            {{ assistantMetadata.errorDetail || t('chat.turn.serverNoResponse') }}
           </el-alert>
 
           <!-- 用户终止提示 -->
           <div v-if="assistantMetadata?.finishReason === 'user_cancel'"
             class="mt-2 text-sm text-gray-400 dark:text-gray-500">
-            已手动终止
+            {{ t('chat.turn.manuallyTerminated') }}
           </div>
 
           <!-- 继续执行按钮 -->
@@ -141,11 +141,11 @@
             <div v-if="assistantMetadata.finishReason === 'max_iterations_reached'" class="max-iterations-notice mt-3">
               <el-alert type="warning" :closable="false">
                 <template #title>
-                  <span>已达到最大工具调用轮次限制</span>
+                  <span>{{ t('chat.turn.maxIterationsReached') }}</span>
                 </template>
                 <div v-if="isLast" class="flex items-center gap-3 mt-2">
                   <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
-                    继续执行
+                    {{ t('chat.turn.continueExecution') }}
                   </el-button>
                 </div>
               </el-alert>
@@ -157,7 +157,7 @@
                 </template>
                 <div v-if="isLast" class="flex items-center gap-3 mt-2">
                   <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
-                    继续执行
+                    {{ t('chat.turn.continueExecution') }}
                   </el-button>
                 </div>
               </el-alert>
@@ -169,8 +169,8 @@
               <span class="text-amber-500 dark:text-amber-400">{{ assistantMetadata.retryInfo.message }}</span>
             </template>
             <template v-else>
-              <span v-if="durationText">工作中 · {{ durationText }}</span>
-              <span v-else>工作中</span>
+              <span v-if="durationText">{{ t('chat.turn.workingWithDuration', { duration: durationText }) }}</span>
+              <span v-else>{{ t('chat.turn.working') }}</span>
             </template>
           </div>
 
@@ -224,13 +224,14 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, inject } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
+import { useI18n } from "vue-i18n";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
 import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
-import { getToolConfig, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
+import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -241,6 +242,7 @@ import FileDiffDialog from './message-item/FileDiffDialog.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 
 const { toast } = usePopup();
+const { t } = useI18n();
 
 const props = defineProps<{
   turn: { user: Message; assistants: Message[] };
@@ -398,9 +400,9 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
     if (active) {
       const currentItemSteps = countSteps(items);
       const completedSteps = steps - currentItemSteps;
-      return { icon: Wrench24Filled, action: `正在执行${currentItemSteps}个步骤` + (completedSteps ? `,已完成${completedSteps}个步骤` : ``), args: '' };
+      return { icon: Wrench24Filled, action: completedSteps ? t('chat.turn.executingStepsWithCompleted', { n: currentItemSteps, m: completedSteps }) : t('chat.turn.executingSteps', { n: currentItemSteps }), args: '' };
     }
-    return { icon: Wrench24Filled, action: `已执行${steps}个步骤`, args: '' };
+    return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: steps }), args: '' };
   }
   const toolItems = items.filter(i => i.type === 'tool');
   const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
@@ -413,9 +415,9 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
       const lines = (thinkItem?.reasoningContent || '').split('\n').map(l => l.trim()).filter(Boolean);
       const lastLine = lines[lines.length - 1] || '';
       const preview = lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
-      return { icon: BrainCircuit20Regular, action: '正在思考...', args: preview };
+      return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingActive'), args: preview };
     }
-    return { icon: BrainCircuit20Regular, action: '已深度思考', args: '' };
+    return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingDone'), args: '' };
   }
 
   // 判断是否所有工具同类型
@@ -426,17 +428,17 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
     const config = getToolConfig(refTool);
     const agg = config.aggregate || DEFAULT_CONFIG.aggregate!;
     const text = active ? agg.executing : agg.completed;
-    return { icon: config.icon || DEFAULT_CONFIG.icon!, action: text.replace('{n}', String(allToolCalls.length)), args: '' };
+    return { icon: getToolIcon(refTool), action: text.replace('{n}', String(allToolCalls.length)), args: '' };
   }
 
   if (allSameType && allToolCalls.length === 1) {
     const config = getToolConfig(refTool);
     const args = getArgsText(refTool);
-    return { icon: config.icon || DEFAULT_CONFIG.icon!, action: active ? config.text.executing : config.text.completed, args: args || '' };
+    return { icon: getToolIcon(refTool), action: active ? config.text.executing : config.text.completed, args: args || '' };
   }
 
   // 混合工具 — 通用图标
-  return { icon: Wrench24Filled, action: active ? `正在执行${countSteps(items)}个步骤` : `已执行${steps}个步骤`, args: '' };
+  return { icon: Wrench24Filled, action: active ? t('chat.turn.executingSteps', { n: countSteps(items) }) : t('chat.turn.executedSteps', { n: steps }), args: '' };
 };
 // ============================================
 const userContent = computed(() => {
@@ -463,9 +465,9 @@ const systemMessageLabel = computed(() => {
   const type = meta?.type || '';
   const name = meta?.subAgentName || '';
   switch (type) {
-    case 'scheduler': return '来自定时任务的系统消息';
-    case 'sub_agent': return '来自子代理的系统消息';
-    default: return '系统消息';
+    case 'scheduler': return t('chat.turn.systemMessageScheduler');
+    case 'sub_agent': return t('chat.turn.systemMessageSubAgent');
+    default: return t('chat.turn.systemMessage');
   }
 });
 
@@ -602,10 +604,10 @@ const handleClick = (event: MouseEvent) => {
     const codeElement = codeBlock?.querySelector('code');
     if (codeElement) {
       navigator.clipboard.writeText(codeElement.textContent).then(() => {
-        toast.success("代码已复制到剪贴板");
+        toast.success(t('chat.turn.codeCopied'));
       }).catch(err => {
         console.error('复制失败:', err);
-        toast.error("复制失败");
+        toast.error(t('common.copyFailed'));
       });
     }
   }

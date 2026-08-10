@@ -9,6 +9,7 @@
 
 import type { StreamEvent } from "@/types/service";
 import { getClientId } from "@/utils/clientId";
+import { t } from "@/locales";
 
 /**
  * 流式对话参数
@@ -119,7 +120,7 @@ export class ChatStreamService {
           "SessionBusyError: " + (errorData.error || "Session is busy"),
         );
       }
-      throw new Error(errorData.error || `获取响应失败：${response.status}`);
+      throw new Error(errorData.error || t("session.api.responseFailed", { status: response.status }));
     }
 
     const reader = response.body!.getReader();
@@ -219,7 +220,7 @@ export class ChatStreamService {
           "SessionBusyError: " + (errorData.error || "Session is busy"),
         );
       }
-      throw new Error(errorData.error || `发送失败: ${response.status}`);
+      throw new Error(errorData.error || t("session.api.sendFailed", { status: response.status }));
     }
 
     return response.json();

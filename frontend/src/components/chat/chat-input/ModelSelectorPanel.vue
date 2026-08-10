@@ -28,7 +28,7 @@
             </div>
           </template>
           <template v-else>
-            <span class="text-sm flex-1 py-3 text-gray-400">选择模型，鼠标悬停此处以选择模式</span>
+            <span class="text-sm flex-1 py-3 text-gray-400">{{ t('chat.input.selectModelHint') }}</span>
           </template>
           <el-icon size="14" class="text-gray-400 shrink-0">
             <ChevronRight24Regular />
@@ -42,7 +42,7 @@
         <div ref="thinkingRef" class="cascade-trigger" @mouseenter="openCascade('thinking', thinkingRef)"
           @mouseleave="scheduleCloseCascade">
 
-          <span class="text-sm flex-1">推理强度</span>
+          <span class="text-sm flex-1">{{ t('chat.input.reasoningEffort') }}</span>
           <span class="text-xs text-gray-400">
             {{ thinkingEffortLabel }}</span>
           <el-icon size="14" class="text-gray-400">
@@ -54,7 +54,7 @@
       <!-- 收藏模型 -->
       <template v-if="favoriteModels.length > 0">
         <div class="section-divider"></div>
-        <div class="section-label">收藏模型</div>
+        <div class="section-label">{{ t('chat.input.favoriteModels') }}</div>
         <div class="favorite-models-list space-y-0.5" style="max-height: 220px; overflow-y: auto;">
           <div v-for="model in favoriteModels" :key="model.id"
             class="model-item-compact px-1.5 py-1 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
@@ -146,6 +146,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElIcon } from 'element-plus'
 import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
@@ -190,6 +191,8 @@ const emit = defineEmits<{
   'favorite-changed': [modelId: string, isFavorite: boolean]
   'select-thinking-effort': [effort: string]
 }>()
+
+const { t } = useI18n()
 
 const favoriteIds = ref<Set<string>>(new Set())
 const currentModelRef = ref<HTMLElement | null>(null)

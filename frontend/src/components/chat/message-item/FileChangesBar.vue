@@ -3,7 +3,7 @@
     <!-- 折叠态：摘要行 -->
     <div class="fcb__header" @click="expanded = !expanded">
       <span class="fcb__summary">
-        本轮修改了 {{ changes.length }} 个文件
+        {{ t('chat.fileChanges.summary', { count: changes.length }) }}
       </span>
       <span class="fcb__stats">
         <span class="fcb__added">+{{ totalAdded }}</span>
@@ -28,7 +28,7 @@
           </span>
           <button
             class="fcb__diff-btn"
-            title="查看 Diff"
+            :title="t('chat.fileChanges.viewDiff')"
             @click.stop="$emit('openDiff', entry)"
           >
             <DiffIcon class="fcb__diff-icon" />
@@ -42,12 +42,15 @@
 
 <script setup lang="ts">
 import { ref, computed, h } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   ChevronDown12Regular,
   ChevronRight12Regular,
 } from "@vicons/fluent";
 import { previewFile } from "@/utils/workspacePreview";
 import type { FileChangeEntry } from "@/composables/useFileChanges";
+
+const { t } = useI18n();
 
 // Inline diff icon (simple SVG, no extra dep)
 const DiffIcon = () =>

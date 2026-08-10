@@ -5,6 +5,7 @@ import { SubAgentManager } from "./sub-agent.manager";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { CharacterRepository } from "../../common/database/character.repository";
+import langZh from "./sub-agent.lang.zh.json";
 
 @Injectable()
 export class SubAgentPlugin extends PluginBase {
@@ -45,6 +46,7 @@ export class SubAgentPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const subKit = api.registerToolKit({
       id: "subagent",
       name: "Sub-Agent",
@@ -128,6 +130,8 @@ The sub-agent has its own independent conversation context and tool capabilities
       },
       display: {
         actionType: "sub_agent_create",
+        text: { executing: "%subagent_spawn.executing%", completed: "%subagent_spawn.completed%" },
+        aggregate: { executing: "%subagent_spawn.aggregate.executing%", completed: "%subagent_spawn.aggregate.completed%" },
         argsKey: "name",
         icon: "generic",
       },
@@ -239,6 +243,8 @@ The sub-agent has its own independent conversation context and tool capabilities
       },
       display: {
         actionType: "sub_agent_manage",
+        text: { executing: "%subagent_manager.executing%", completed: "%subagent_manager.completed%" },
+        aggregate: { executing: "%subagent_manager.aggregate.executing%", completed: "%subagent_manager.aggregate.completed%" },
         argsKey: "action",
         icon: "generic",
       },

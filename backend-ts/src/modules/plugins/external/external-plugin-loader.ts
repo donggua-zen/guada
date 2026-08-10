@@ -6,6 +6,7 @@ import Module from "module";
 import { PluginManager } from "../plugin.manager";
 import { PluginBase } from "../base-plugin";
 import { PluginManifest } from "../types/plugin.types";
+import { NlsService } from "../i18n/nls.service";
 
 interface ExternalManifest {
   id: string;
@@ -28,6 +29,7 @@ export class ExternalPluginLoader implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly configService: ConfigService,
+    private readonly nlsService: NlsService,
   ) {}
 
   async onModuleInit() {
@@ -158,6 +160,24 @@ export class ExternalPluginLoader implements OnModuleInit {
       pluginPath: pluginDir,
     };
     instance.manifest = mergedManifest;
+
+    // 8.5. 加载外部插件语言包 (lang/zh.json)
+    const langFile = path.join(pluginDir, "lang", "zh.json");
+    if (fs.existsSync(langFile)) {
+      try {
+        const messages = JSON.parse(
+          await fs.promises.readFile(langFile, "utf-8"),
+        );
+        this.nlsService.registerBundle(manifest.id, "zh", messages);
+        this.logger.debug(
+          `Loaded NLS bundle for external plugin: ${manifest.id}`,
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to load NLS bundle for ${manifest.id}: ${err.message}`,
+        );
+      }
+    }
 
     // 9. 注册到 PluginManager
     await this.pluginManager.registerPlugin(instance);

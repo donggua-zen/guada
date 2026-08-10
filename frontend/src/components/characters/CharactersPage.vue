@@ -1,6 +1,6 @@
 <template>
   <div class="h-full w-full flex flex-col min-h-0">
-    <PageHeader title="助手" />
+    <PageHeader :title="t('characters.page.title')" />
     <div class="flex flex-1 overflow-scroll w-full">
       <div class="flex-1 flex flex-col w-full md:max-w-260 md:mx-auto">
         <div class="flex-1 px-4 py-2 md:py-2">
@@ -19,6 +19,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElButton, ElMessageBox } from 'element-plus'
 
@@ -32,6 +33,7 @@ import type { CharacterGroup } from '@/types/character'
 import { useSelectedCharacter } from '@/composables/useSelectedCharacter'
 
 const { confirm, toast } = usePopup()
+const { t } = useI18n()
 const router = useRouter()
 const { setSelectedCharacter } = useSelectedCharacter()
 
@@ -58,7 +60,7 @@ const loadCharacters = async (groupId?: string): Promise<void> => {
     characters.value = data.items
   } catch (error: any) {
     console.error('获取助手列表失败:', error)
-    toast.error('获取助手列表失败')
+    toast.error(t('characters.page.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -71,16 +73,16 @@ const selectGroup = (groupId: string | null): void => {
 
 const handleRenameGroup = async (group: CharacterGroup): Promise<void> => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入新的分组名称', '重命名分组', {
+    const { value } = await ElMessageBox.prompt(t('characters.page.renameGroupPlaceholder'), t('characters.page.renameGroupTitle'), {
       inputValue: group.name,
       inputPattern: /\S+/,
-      inputErrorMessage: '分组名称不能为空',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
+      inputErrorMessage: t('characters.page.groupNameEmpty'),
+      confirmButtonText: t('common.ok'),
+      cancelButtonText: t('common.cancel')
     })
     await apiService.updateCharacterGroup(group.id, { name: value })
     await loadGroups()
-    toast.success('重命名成功')
+    toast.success(t('characters.page.renameSuccess'))
   } catch (e) {
     // 取消操作
   }
@@ -88,7 +90,7 @@ const handleRenameGroup = async (group: CharacterGroup): Promise<void> => {
 
 const handleDeleteGroup = async (group: CharacterGroup): Promise<void> => {
   try {
-    const result = await confirm('确认删除', `确定要删除分组「${group.name}」吗？该分组下的助手将变为未分组状态。`)
+    const result = await confirm(t('characters.page.deleteGroupTitle'), t('characters.page.deleteGroupConfirm', { name: group.name }))
     if (result) {
       await apiService.deleteCharacterGroup(group.id)
       if (currentGroupId.value === group.id) {
@@ -96,25 +98,25 @@ const handleDeleteGroup = async (group: CharacterGroup): Promise<void> => {
       }
       await loadGroups()
       await loadCharacters(currentGroupId.value || undefined)
-      toast.success('分组删除成功')
+      toast.success(t('characters.page.groupDeleteSuccess'))
     }
   } catch (error: any) {
     console.error('删除分组失败:', error)
-    toast.error(error.message || '删除失败')
+    toast.error(error.message || t('characters.page.groupDeleteFailed'))
   }
 }
 
 const showCreateGroupDialog = async (): Promise<void> => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入分组名称', '新建分组', {
+    const { value } = await ElMessageBox.prompt(t('characters.page.createGroupPlaceholder'), t('characters.page.createGroupTitle'), {
       inputPattern: /\S+/,
-      inputErrorMessage: '分组名称不能为空',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
+      inputErrorMessage: t('characters.page.groupNameEmpty'),
+      confirmButtonText: t('common.ok'),
+      cancelButtonText: t('common.cancel')
     })
     await apiService.createCharacterGroup({ name: value })
     await loadGroups()
-    toast.success('分组创建成功')
+    toast.success(t('characters.page.groupCreateSuccess'))
   } catch (e) {
     // 取消操作
   }
@@ -132,13 +134,13 @@ const editCharacter = (character: any): void => {
 
 const deleteCharacter = async (character: any): Promise<void> => {
   try {
-    const result = await confirm('确认删除', `确定要删除助手「${character.title}」吗？此操作不可撤销。`)
+    const result = await confirm(t('characters.page.deleteCharacterTitle'), t('characters.page.deleteCharacterConfirm', { name: character.title }))
     if (!result) return
     await apiService.deleteCharacter(character.id)
     await loadCharacters(currentGroupId.value || undefined)
-    toast.success('助手删除成功')
+    toast.success(t('characters.page.characterDeleteSuccess'))
   } catch (error: any) {
-    toast.error('删除失败')
+    toast.error(t('characters.page.deleteFailed'))
     console.error('删除助手失败:', error)
   }
 }

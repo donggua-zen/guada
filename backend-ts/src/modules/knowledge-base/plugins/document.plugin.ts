@@ -8,6 +8,7 @@ import { FileParserService } from "../file-parser.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import { safeTruncate } from "../../../common/utils/string.utils";
+import langZh from "./document.lang.zh.json";
 
 @Injectable()
 export class DocumentPlugin extends PluginBase {
@@ -29,6 +30,7 @@ export class DocumentPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     api.registerTool({
       name: "doc_parse",
       description:
@@ -71,7 +73,13 @@ export class DocumentPlugin extends PluginBase {
           is_truncated: totalChars > max_chars,
         });
       },
-      display: { actionType: "doc_parse", argsKey: "file_path", icon: "read" },
+      display: {
+        actionType: "doc_parse",
+        text: { executing: "%doc_parse.executing%", completed: "%doc_parse.completed%" },
+        aggregate: { executing: "%doc_parse.aggregate.executing%", completed: "%doc_parse.aggregate.completed%" },
+        argsKey: "file_path",
+        icon: "read",
+      },
     });
 
     api.registerTool({
@@ -129,7 +137,12 @@ export class DocumentPlugin extends PluginBase {
           results,
         });
       },
-      display: { actionType: "doc_batch_parse", icon: "read" },
+      display: {
+        actionType: "doc_batch_parse",
+        text: { executing: "%doc_batch_parse.executing%", completed: "%doc_batch_parse.completed%" },
+        aggregate: { executing: "%doc_batch_parse.aggregate.executing%", completed: "%doc_batch_parse.aggregate.completed%" },
+        icon: "read",
+      },
     });
 
     api.registerPrompt({

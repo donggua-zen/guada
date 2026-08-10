@@ -30,21 +30,21 @@
     <!-- Footer: action buttons + switch -->
     <div class="flex items-center justify-end gap-2 mt-3">
       <el-button v-if="bot.platform === 'wechat-personal'" link size="small" @click="handleShowQrCode">
-        二维码
+        {{ t('bot.card.qrCode') }}
       </el-button>
       <el-button link size="small" @click="$emit('edit', bot)">
-        编辑
+        {{ t('bot.card.edit') }}
       </el-button>
       <el-button link size="small" type="danger" @click="$emit('delete', bot)">
-        删除
+        {{ t('bot.card.delete') }}
       </el-button>
       <el-switch :model-value="bot.status === 'running'" :loading="isOperating" @update:model-value="handleToggle"
-        size="small" inline-prompt active-text="启用" inactive-text="禁用" />
+        size="small" inline-prompt :active-text="t('bot.card.enable')" :inactive-text="t('bot.card.disable')" />
     </div>
   </div>
 
   <!-- 二维码弹窗 -->
-  <el-dialog v-model="qrDialogVisible" title="微信扫码登录" width="360px" align-center>
+  <el-dialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="qrLoading" class="py-8">
         <el-icon class="is-loading" :size="32">
@@ -61,7 +61,7 @@
           <el-icon>
             <SwitchButton />
           </el-icon>
-          <span class="ml-1">退出登录</span>
+          <span class="ml-1">{{ t('bot.card.logout') }}</span>
         </el-button>
       </div>
       <!-- 二维码生成中 -->
@@ -75,16 +75,16 @@
       <div v-else-if="qrStatus === 'qr_ready'" class="w-full flex flex-col items-center">
         <img :src="qrImageUrl" alt="微信登录二维码" class="w-64 h-64" />
         <p class="text-xs text-gray-400 mt-3 text-center">
-          请使用微信扫描上方二维码完成登录
+          {{ t('bot.card.qrReadyHint') }}
         </p>
         <el-button size="small" class="mt-3" @click="handleRefreshQrCode">
           <el-icon><Refresh /></el-icon>
-          <span class="ml-1">刷新二维码</span>
+          <span class="ml-1">{{ t('bot.card.refreshQr') }}</span>
         </el-button>
       </div>
       <!-- 不可用 -->
       <div v-else class="text-sm text-gray-400 py-8">
-        {{ qrMessage || '暂无二维码，请启动机器人后重试' }}
+        {{ qrMessage || t('bot.card.qrUnavailable') }}
       </div>
     </div>
   </el-dialog>
@@ -92,6 +92,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElIcon } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
@@ -109,6 +110,8 @@ const emit = defineEmits<{
   start: [id: string]
   stop: [id: string]
 }>()
+
+const { t } = useI18n()
 
 // 判断是否正在操作中
 const isOperating = computed(() => {
@@ -149,7 +152,7 @@ const fetchQrStatus = async () => {
       qrMessage.value = result.message || ''
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '获取二维码失败')
+    ElMessage.error(error.response?.data?.message || t('bot.card.getQrFailed'))
   }
 }
 
@@ -198,7 +201,7 @@ const handleLogout = async () => {
       ElMessage.warning(result.message)
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '退出登录失败')
+    ElMessage.error(error.response?.data?.message || t('bot.card.logoutFailed'))
   }
 }
 
@@ -229,15 +232,8 @@ const handleImageError = (e: Event) => {
 
 // 获取平台名称
 const getPlatformName = (platform: string) => {
-  const nameMap: Record<string, string> = {
-    qq: 'QQ',
-    wechat: '微信',
-    'wechat-personal': '微信个人号',
-    discord: 'Discord',
-    lark: '飞书',
-    wecom: '企微'
-  }
-  return nameMap[platform] || platform
+  const knownPlatforms = ['qq', 'wechat', 'wechat-personal', 'discord', 'lark', 'wecom']
+  return knownPlatforms.includes(platform) ? t(`bot.platform.${platform}`) : platform
 }
 
 // 获取状态类型
@@ -251,11 +247,11 @@ const getStatusType = (status: string, runtimeStatus: string | null): 'primary' 
 
 // 获取状态文本
 const getStatusText = (status: string, runtimeStatus: string | null) => {
-  if (status === 'stopped') return '已停止'
-  if (runtimeStatus === 'ERROR') return '错误'
-  if (runtimeStatus === 'CONNECTING') return '连接中'
-  if (runtimeStatus === 'CONNECTED') return '运行中'
-  return status === 'running' ? '运行中' : '未知'
+  if (status === 'stopped') return t('bot.status.stopped')
+  if (runtimeStatus === 'ERROR') return t('bot.status.error')
+  if (runtimeStatus === 'CONNECTING') return t('bot.status.connecting')
+  if (runtimeStatus === 'CONNECTED') return t('bot.status.running')
+  return status === 'running' ? t('bot.status.running') : t('bot.status.unknown')
 }
 </script>
 

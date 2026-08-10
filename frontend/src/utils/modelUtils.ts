@@ -5,6 +5,7 @@
 
 import { computed } from "vue";
 import { fixFrontendAssetUrl } from "./url";
+import { t } from "@/locales";
 
 // 已知提供商的标识符映射（用于匹配头像文件）
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -204,17 +205,7 @@ export function isThinkingSupported(model: any, providers: any[]): boolean {
  * 获取思考强度的显示标签
  */
 export function getThinkingEffortLabel(effort: string): string {
-  const labels: Record<string, string> = {
-    none: "不思考",
-    on: "思考模式",
-    low: "低强度",
-    medium: "中等强度",
-    high: "高强度",
-    max: "极致",
-    xhigh: "极致",
-    minimal: "最小",
-    minimum: "最小",
-  };
-
-  return labels[effort] || effort;
+  const key = `common.thinkingEffort.${effort}`;
+  const label = t(key);
+  return label !== key ? label : effort;
 }

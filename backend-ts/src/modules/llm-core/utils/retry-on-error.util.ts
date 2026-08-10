@@ -9,7 +9,13 @@
  */
 
 import { Logger } from "@nestjs/common";
-import { RateLimitError, isRateLimitError, getRetryAfterFromError } from "./retry.util";
+import {
+  UpstreamTimeoutError,
+  UpstreamRateLimitError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "./upstream-errors";
+import { getRetryAfterFromError } from "./retry.util";
 
 // ==================== Types ====================
 
@@ -93,30 +99,31 @@ export function classifyError(
 ): RetryableErrorType | null {
   if (!error) return null;
 
-  // User abort — never retry
-  if (error.name === "AbortError" || error.message?.toLowerCase().includes("abort")) {
-    // But idle timeout also triggers abort — check that first
-    if (isIdleTimeout?.()) {
-      return "timeout";
-    }
-    return null;
+  // 1. Upstream typed exceptions — thrown by adapters
+  if (error instanceof UpstreamTimeoutError) {
+    return "timeout";
   }
-
-  // Rate limit (429)
-  if (error instanceof RateLimitError || isRateLimitError(error)) {
+  if (error instanceof UpstreamRateLimitError) {
     return "rate_limited";
   }
+  if (error instanceof UpstreamNetworkError) {
+    return "network_error";
+  }
+  if (error instanceof UpstreamRequestError) {
+    return null; // Non-retryable client error
+  }
 
-  // Timeout
-  if (
-    error.message?.includes("timeout") ||
-    error.message?.includes("timed out") ||
-    error.message?.includes("idle timeout")
-  ) {
+  // 2. Idle timeout (when adapter didn't wrap it — safety net)
+  if (isIdleTimeout?.()) {
     return "timeout";
   }
 
-  // Network errors
+  // 3. User abort — never retry
+  if (error.name === "AbortError") {
+    return null;
+  }
+
+  // 4. Network errors — by error.code
   const code = error.code;
   if (
     code === "ECONNRESET" ||
@@ -124,20 +131,18 @@ export function classifyError(
     code === "ETIMEDOUT" ||
     code === "ENOTFOUND" ||
     code === "EAI_AGAIN" ||
-    code === "EPIPE" ||
-    error.message?.includes("fetch failed") ||
-    error.message?.includes("network")
+    code === "EPIPE"
   ) {
     return "network_error";
   }
 
-  // HTTP status codes — retry only on 429 (already handled above) and 5xx
+  // 5. HTTP status codes — 429 已在 step 2 处理，这里处理 5xx 和 4xx
   const status = error.status ?? error.statusCode;
   if (status && NON_RETRYABLE_STATUS.has(status)) {
     return null; // 4xx client errors — not retryable
   }
   if (status && status >= 500 && status < 600) {
-    return "network_error"; // 5xx server errors — retryable as network error
+    return "network_error"; // 5xx server errors — retryable
   }
 
   return null;

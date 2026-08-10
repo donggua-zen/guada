@@ -3,17 +3,17 @@
     <div class="space-y-8">
       <!-- OCR 设置分组 -->
       <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">OCR 服务</h3>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.ocr.title') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
           <!-- OCR 提供商 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">OCR 提供商</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">选择用于识别扫描件 PDF 的 OCR 服务，<span class="text-[#409eff] cursor-pointer hover:underline" @click="openOcrDocs">查看使用说明</span></span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.provider') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.providerDesc') }}<span class="text-[#409eff] cursor-pointer hover:underline" @click="openOcrDocs">{{ t('settings.ocr.viewDocs') }}</span></span>
             </div>
-            <el-select v-model="settingsForm.provider" placeholder="请选择 OCR 提供商" style="width: 200px;" class="shrink-0">
-              <el-option label="不启用 OCR" value="none" />
-              <el-option label="UMI-OCR（本地）" value="umi" />
+            <el-select v-model="settingsForm.provider" :placeholder="t('settings.ocr.selectProvider')" style="width: 200px;" class="shrink-0">
+              <el-option :label="t('settings.ocr.disabled')" value="none" />
+              <el-option :label="t('settings.ocr.umiLocal')" value="umi" />
             </el-select>
           </div>
 
@@ -21,16 +21,16 @@
           <template v-if="settingsForm.provider === 'umi'">
             <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
               <div class="flex flex-col gap-1 min-w-0">
-                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">服务地址</span>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">UMI-OCR 服务的主机地址</span>
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.serviceHost') }}</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.serviceHostDesc') }}</span>
               </div>
               <el-input v-model="settingsForm.umiHost" placeholder="127.0.0.1" style="width: 200px;" class="shrink-0" />
             </div>
 
             <div class="px-4 py-3.5 flex items-center justify-between gap-4">
               <div class="flex flex-col gap-1 min-w-0">
-                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">服务端口</span>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">UMI-OCR 服务的端口号</span>
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.servicePort') }}</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.servicePortDesc') }}</span>
               </div>
               <el-input-number v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" class="shrink-0" />
             </div>
@@ -41,17 +41,17 @@
             <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
               <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">API Key</span>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">百度智能云应用的 API Key</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.baiduApiKeyDesc') }}</span>
               </div>
-              <el-input v-model="settingsForm.baiduApiKey" placeholder="请输入 API Key" style="width: 320px;" class="shrink-0" />
+              <el-input v-model="settingsForm.baiduApiKey" :placeholder="t('settings.ocr.enterApiKey')" style="width: 320px;" class="shrink-0" />
             </div>
 
             <div class="px-4 py-3.5 flex items-center justify-between gap-4">
               <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Secret Key</span>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">百度智能云应用的 Secret Key</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.baiduSecretKeyDesc') }}</span>
               </div>
-              <el-input v-model="settingsForm.baiduSecretKey" placeholder="请输入 Secret Key" type="password" show-password style="width: 320px;" class="shrink-0" />
+              <el-input v-model="settingsForm.baiduSecretKey" :placeholder="t('settings.ocr.enterSecretKey')" type="password" show-password style="width: 320px;" class="shrink-0" />
             </div>
           </template>
 
@@ -59,12 +59,12 @@
           <div class="px-4 py-3.5 bg-gray-50 dark:bg-[#1e1f23] border-t border-gray-100 dark:border-[#2e3035]">
             <div class="text-xs text-gray-500 dark:text-[#8b8d95] space-y-1">
               <template v-if="settingsForm.provider === 'none'">
-                <div>• 不启用 OCR 时，扫描件 PDF 将无法被识别和索引</div>
+                <div>{{ t('settings.ocr.disabledTip') }}</div>
               </template>
               <template v-else>
-                <div>• 请确保 UMI-OCR 服务已启动（Umi-OCR.exe --server）</div>
-                <div>• 默认监听地址：http://127.0.0.1:1224</div>
-                <div>• 支持 PDF 和图片的 OCR 识别</div>
+                <div>{{ t('settings.ocr.umiTip1') }}</div>
+                <div>{{ t('settings.ocr.umiTip2') }}</div>
+                <div>{{ t('settings.ocr.umiTip3') }}</div>
               </template>
             </div>
           </div>
@@ -80,7 +80,9 @@ import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const { notify } = usePopup()
 
 // 表单引用
@@ -167,10 +169,10 @@ const handleSave = async () => {
     // 保存成功后更新原始数据备份
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
-    notify.success('保存成功', 'OCR 设置已更新')
+    notify.success(t('common.saveSuccess'), t('settings.ocr.updated'))
   } catch (error: any) {
     console.error('保存 OCR 设置失败:', error)
-    notify.error('保存失败', error.message || '未知错误')
+    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
   }
 }
 

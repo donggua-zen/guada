@@ -7,14 +7,14 @@
                 <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
                 <div v-if="canTogglePreview"
                     class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
-                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }" title="预览"
+                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }" :title="t('chat.workspace.preview')"
                         @click="renderMode = 'rendered'">
                         <el-icon :size="16">
                             <Eye20Regular v-if="renderMode !== 'rendered'" />
                             <Eye20Filled v-else />
                         </el-icon>
                     </button>
-                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'source' }" title="源码"
+                    <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'source' }" :title="t('chat.workspace.source')"
                         @click="renderMode = 'source'">
                         <el-icon :size="16">
                             <Code20Regular v-if="renderMode !== 'source'" />
@@ -28,7 +28,7 @@
                 </span>
                 <div class="flex items-center gap-1 shrink-0">
                     <!-- 手动刷新预览按钮 -->
-                    <button class="preview-close-btn" title="刷新预览" @click="handleManualRefresh">
+                    <button class="preview-close-btn" :title="t('chat.workspace.refreshPreview')" @click="handleManualRefresh">
                         <el-icon :size="14">
                             <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
                         </el-icon>
@@ -46,15 +46,15 @@
 
             <!-- 图片预览 -->
             <img v-else-if="previewType === 'image' && imagePreviewUrl && !previewError" :src="imagePreviewUrl" @error="onImageError"
-                class="image-preview w-full h-full object-contain p-2" alt="图片预览" />
+                class="image-preview w-full h-full object-contain p-2" :alt="t('chat.workspace.imageAlt')" />
 
             <!-- 不支持的文件 -->
             <div v-else-if="previewType === 'unsupported' && !previewError"
                 class="w-full h-full flex items-center justify-center">
                 <div class="text-center">
-                    <p class="text-gray-400 dark:text-gray-500 text-sm">此文件暂不支持预览</p>
+                    <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.unsupportedPreview') }}</p>
                     <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                        在资源管理器中打开
+                        {{ t('chat.workspace.openInExplorer') }}
                     </el-button>
                 </div>
             </div>
@@ -64,9 +64,9 @@
                 <!-- 文件不存在 -->
                 <div v-if="fileNotFound" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
-                        <p class="text-gray-400 dark:text-gray-500 text-sm">文件已不存在</p>
+                        <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.fileNotFound') }}</p>
                         <el-button @click="emit('close')" size="small" class="mt-3">
-                            关闭标签
+                            {{ t('chat.workspace.closeTab') }}
                         </el-button>
                     </div>
                 </div>
@@ -76,7 +76,7 @@
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
                         <el-button v-if="isElectron && previewType === 'unsupported'"
                             @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                            在资源管理器中打开
+                            {{ t('chat.workspace.openInExplorer') }}
                         </el-button>
                     </div>
                 </div>
@@ -110,6 +110,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { apiService } from '@/services/ApiService'
 import { LoadingOutlined } from '@vicons/antd'
 import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular } from '@vicons/fluent'
@@ -154,6 +155,7 @@ const emit = defineEmits<{
 }>()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+const { t } = useI18n()
 
 // ── 预览状态 ──
 
@@ -316,7 +318,7 @@ async function loadFilePreview(): Promise<void> {
             await loadImageLocal()
         } else {
             if (tab.size && tab.size > 20 * 1024 * 1024) {
-                previewError.value = '文件过大暂不支持预览'
+                previewError.value = t('chat.workspace.fileTooLarge')
             } else {
                 imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, tab.path!)
             }
@@ -360,9 +362,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
         if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
             fileNotFound.value = true
         } else if (msg.includes('File too large') || msg.includes('too large')) {
-            previewError.value = '文件过大暂不支持预览'
+            previewError.value = t('chat.workspace.fileTooLarge')
         } else {
-            previewError.value = '加载文件失败'
+            previewError.value = t('chat.workspace.loadFileFailed')
         }
         console.error('Failed to load file:', error)
     } finally {
@@ -375,7 +377,7 @@ async function loadImageLocal(): Promise<void> {
         const resp = await apiService.getWorkspacePath(props.sessionId!)
         const absWorkspacePath = resp.workspacePath
         if (!absWorkspacePath) {
-            previewError.value = '无法获取工作目录路径'
+            previewError.value = t('chat.workspace.workspacePathError')
             return
         }
         const relativePath = props.tab.path!.replace(/\\/g, '/')
@@ -385,7 +387,7 @@ async function loadImageLocal(): Promise<void> {
         const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`
         imagePreviewUrl.value = fileUrl
     } catch (error: any) {
-        previewError.value = '加载图片失败'
+        previewError.value = t('chat.workspace.loadImageFailed')
         console.error('[FilePreviewPanel] Failed to load image locally:', error)
     }
 }
@@ -395,7 +397,7 @@ async function loadHtmlPreviewLocal(): Promise<void> {
         const resp = await apiService.getWorkspacePath(props.sessionId!)
         const absWorkspacePath = resp.workspacePath
         if (!absWorkspacePath) {
-            previewError.value = '无法获取工作目录路径'
+            previewError.value = t('chat.workspace.workspacePathError')
             return
         }
         const relativePath = props.tab.path!.replace(/\\/g, '/')
@@ -405,7 +407,7 @@ async function loadHtmlPreviewLocal(): Promise<void> {
         const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`
         htmlPreviewUrl.value = fileUrl
     } catch (error: any) {
-        previewError.value = '加载 HTML 失败'
+        previewError.value = t('chat.workspace.loadHtmlFailed')
         console.error('[FilePreviewPanel] Failed to load HTML locally:', error)
     }
 }
@@ -422,7 +424,7 @@ function onImageError(event: Event | string): void {
         ? (event.target as HTMLImageElement).getAttribute('src')
         : imagePreviewUrl.value
     console.error('[FilePreviewPanel] Image load failed, URL:', src)
-    previewError.value = isElectron ? '图片加载失败' : '文件过大暂不支持预览'
+    previewError.value = isElectron ? t('chat.workspace.imageLoadFailed') : t('chat.workspace.fileTooLarge')
 }
 
 async function handleOpenInExplorerForCurrent(): Promise<void> {
@@ -431,7 +433,7 @@ async function handleOpenInExplorerForCurrent(): Promise<void> {
         const resp = await apiService.getWorkspacePath(props.sessionId)
         const wsPath = resp.workspacePath
         if (!wsPath) {
-            ElMessage.error('无法获取工作目录路径')
+            ElMessage.error(t('chat.workspace.workspacePathError'))
             return
         }
         const relativePath = selectedFile.value.path.replace(/\\/g, '/')
@@ -444,7 +446,7 @@ async function handleOpenInExplorerForCurrent(): Promise<void> {
         await window.electronAPI!.openFolder(fullPath)
     } catch (error: any) {
         console.error('[FilePreviewPanel] Open in explorer failed:', error)
-        ElMessage.error('打开失败')
+        ElMessage.error(t('chat.workspace.openFailed'))
     }
 }
 
@@ -582,7 +584,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
 
     if (hasSelection) {
         items.push({
-            label: '添加选区到会话',
+            label: t('chat.workspace.addSelectionToSession'),
             icon: DocumentCopy,
             onClick: () => {
                 const snip = buildSnipData(selectedText, startLine, endLine)
@@ -590,7 +592,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
             },
         })
         items.push({
-            label: '添加文件到会话',
+            label: t('chat.workspace.addFileToSession'),
             icon: Plus,
             divider: true,
             onClick: () => {
@@ -599,7 +601,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
         })
     } else {
         items.push({
-            label: '添加文件到会话',
+            label: t('chat.workspace.addFileToSession'),
             icon: Plus,
             onClick: () => {
                 if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)

@@ -5,9 +5,9 @@
       <div class="agent-panel-header" @click="isExpanded = !isExpanded">
         <span class="flex-1 text-xs text-gray-500 dark:text-[#8b8d95] truncate">
           <template v-if="!isExpanded">
-            子代理：{{ subAgentCount }} 个<span v-if="runningCount > 0">，当前 {{ runningCount }} 个正在工作</span>
+            {{ t('chat.agent.subAgentCount', { count: subAgentCount }) }}<span v-if="runningCount > 0">{{ t('chat.agent.subAgentRunning', { count: runningCount }) }}</span>
           </template>
-          <template v-else>子代理</template>
+          <template v-else>{{ t('chat.agent.subAgent') }}</template>
         </span>
         <svg class="shrink-0 text-gray-400 dark:text-[#6b6d73] transition-transform duration-200"
           :class="{ 'rotate-180': isExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -38,6 +38,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface AgentTab {
   id: string;

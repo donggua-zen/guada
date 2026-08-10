@@ -26,6 +26,7 @@ import { useRoute } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { apiService } from '@/services/ApiService'
 import { useSessionEvents } from '@/composables/useSessionEvents'
+import { setPluginToolDisplays } from '@/utils/toolDisplay'
 import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
 import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
@@ -51,6 +52,13 @@ onMounted(() => {
   initSessionEvents()
   // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
   layoutStore.loadAppearanceSettings()
+
+  // 加载工具展示文案注册表
+  apiService.fetchToolDisplays().then((displays) => {
+    setPluginToolDisplays(displays)
+  }).catch((e) => {
+    console.warn('加载工具文案失败，使用默认文案', e)
+  })
 })
 
 // 组件卸载时断开 SSE 连接，清理监听

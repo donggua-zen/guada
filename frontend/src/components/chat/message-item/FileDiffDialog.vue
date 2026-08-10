@@ -56,9 +56,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { ElDialog } from "element-plus";
+import { useI18n } from "vue-i18n";
 import { diffLines as computeDiffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";
 import type { FileChangeEntry, FileChangeOperation } from "@/composables/useFileChanges";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   modelValue: boolean;
@@ -86,8 +89,8 @@ watch(
 );
 
 const dialogTitle = computed(() => {
-  if (!props.entry) return "文件变更";
-  return `文件变更: ${props.entry.fileName}`;
+  if (!props.entry) return t('chat.fileChanges.dialogTitle');
+  return t('chat.fileChanges.dialogTitleWithName', { name: props.entry.fileName });
 });
 
 const currentOp = computed<FileChangeOperation | null>(() => {

@@ -7,7 +7,7 @@
       <el-icon size="15" class="shrink-0">
         <BrainCircuit20Regular />
       </el-icon>
-      <span class="text-gray-600 dark:text-gray-400 ml-1.5">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
+      <span class="text-gray-600 dark:text-gray-400 ml-1.5">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
       <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
         {{ formattedDuration }}
       </span>
@@ -27,9 +27,12 @@
 <script setup lang="ts">
 import { computed, ref, watch, inject } from 'vue';
 import { ElIcon } from 'element-plus';
+import { useI18n } from 'vue-i18n';
 import { BrainCircuit20Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration } from '../../../utils/messageUtils';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   reasoningContent: string;

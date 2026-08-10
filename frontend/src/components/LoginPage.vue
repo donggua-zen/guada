@@ -7,12 +7,12 @@
         <div class="flex items-center justify-center gap-3 mb-3"> 
           <h1 class="text-4xl font-semibold text-text m-0">GuaDa</h1>
         </div>
-        <p class="text-sm text-text-gray m-0">欢迎回来，请登录您的账户</p>
+        <p class="text-sm text-text-gray m-0">{{ t('ui.login.welcome') }}</p>
       </div>
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="flex flex-col gap-5" @keyup.enter="handleLogin">
         <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="用户名" size="large" clearable>
+          <el-input v-model="form.username" :placeholder="t('ui.login.username')" size="large" clearable>
             <template #prefix>
               <el-icon class="text-gray-400">
                 <UserIcon />
@@ -22,7 +22,7 @@
         </el-form-item>
 
         <el-form-item prop="password">
-          <el-input v-model="form.password" type="password" show-password placeholder="密码" size="large">
+          <el-input v-model="form.password" type="password" show-password :placeholder="t('ui.login.password')" size="large">
             <template #prefix>
               <el-icon class="text-gray-400">
                 <LockIcon />
@@ -32,11 +32,11 @@
         </el-form-item>
 
         <div class="flex justify-between items-center">
-          <el-checkbox v-model="rememberMe">记住我</el-checkbox>
+          <el-checkbox v-model="rememberMe">{{ t('ui.login.rememberMe') }}</el-checkbox>
         </div>
 
         <el-button type="primary" size="large" :loading="loading" @click="handleLogin" class="mt-2 h-11 text-base font-medium rounded-xl">
-          {{ loading ? '登录中...' : '登 录' }}
+          {{ loading ? t('ui.login.logging') : t('ui.login.submit') }}
         </el-button>
       </el-form>
     </div>
@@ -47,6 +47,7 @@
 <!-- @ts-ignore - Element Plus 组件类型缺失 -->
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     PersonOutlined as UserIcon,
     LockOutlined as LockIcon,
@@ -73,6 +74,7 @@ import {
 const authStore = useAuthStore()
 // 消息提示
 const { toast } = usePopup()
+const { t } = useI18n()
 
 const router = useRouter()
 
@@ -103,12 +105,12 @@ const rules = reactive({
     trigger: ['input', 'blur'],
     validator: (rule: any, value: string, callback: any) => {
       if (!value) {
-        callback(new Error('请输入用户名'))
+        callback(new Error(t('ui.login.requireUsername')))
         return
       }
       const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
       if (!usernameRegex.test(value)) {
-        callback(new Error('用户名只能包含字母、数字和下划线，长度为3-20位'))
+        callback(new Error(t('ui.login.usernameFormat')))
         return
       }
       callback()
@@ -117,7 +119,7 @@ const rules = reactive({
   password: {
     required: true,
     trigger: ['input', 'blur'],
-    message: '请输入密码'
+    message: t('ui.login.requirePassword')
   }
 })
 
@@ -144,19 +146,19 @@ const handleLogin = async (): Promise<void> => {
         console.error('登录失败:', error)
         
         // 根据错误类型显示友好的提示信息
-        let errorMessage = '登录失败，请稍后重试'
+        let errorMessage = t('ui.login.failed')
         
         // 网络错误
         if (error.isNetworkError || error.message?.includes('无法连接到后端服务')) {
-          errorMessage = '无法连接到服务器，请检查网络连接或稍后重试'
+          errorMessage = t('ui.login.cannotConnect')
         }
         // 用户名或密码错误（401）
         else if (error.statusCode === 401 || error.message?.includes('用户名或密码错误')) {
-          errorMessage = '用户名或密码错误，请检查后重试'
+          errorMessage = t('ui.login.invalidCredentials')
         }
         // 必填字段缺失（400）
         else if (error.statusCode === 400 || error.message?.includes('不能为空')) {
-          errorMessage = '请输入用户名和密码'
+          errorMessage = t('ui.login.requireBoth')
         }
         // 其他已知错误
         else if (error.message) {
@@ -168,7 +170,7 @@ const handleLogin = async (): Promise<void> => {
         loading.value = false
       }
     } else {
-      toast.error('请检查输入信息')
+      toast.error(t('ui.login.checkInput'))
     }
   })
 }
