@@ -9,8 +9,12 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
-import { retryOn429 } from "../utils/retry.util";
 import { insecureFetch } from "../utils/tls.util";
+import {
+  createStreamTimeoutController,
+  withStreamIdleTimeout,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+} from "../utils/stream-timeout.util";
 
 /**
  * Anthropic 协议适配器
@@ -106,6 +110,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
       apiKey,
       baseURL: providerConfig.apiUrl || undefined,
       fetch: insecureFetch,
+      maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     });
 
     // 从 messages 中提取 system prompt（Anthropic 使用顶层 system 字段）
@@ -139,39 +144,37 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 注意：不传 thinking 参数 = 模型默认行为（Claude 4+ 默认启用思考）
     // 不传 output_config = 默认 effort
 
+    // 创建流式 idle 超时控制器
+    const streamTc = createStreamTimeoutController(
+      params.abortSignal,
+      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    );
+
+    streamTc.resetIdleTimer();
+
     try {
       if (params.stream) {
-        // 对 client.messages.create 进行 429 指数退避重试
-        const stream = await retryOn429(
-          () =>
-            client.messages.create({
-              ...requestParams,
-              stream: true,
-            }) as Promise<AsyncIterable<Anthropic.MessageStreamEvent>>,
-          {
-            logger: this.logger,
-            context: `${this.constructor.name}.chatCompletion`,
-            abortSignal: params.abortSignal,
-          },
+        // 单次尝试，重试由 AgentEngine 统一处理
+        const stream = await client.messages.create({
+          ...requestParams,
+          stream: true,
+        });
+
+        yield* withStreamIdleTimeout(
+          this.handleStreamResponse(stream as any),
+          streamTc,
         );
-        yield* this.handleStreamResponse(stream);
       } else {
-        const message = await retryOn429(
-          () =>
-            client.messages.create({
-              ...requestParams,
-              stream: false,
-            }) as Promise<Anthropic.Messages.Message>,
-          {
-            logger: this.logger,
-            context: `${this.constructor.name}.chatCompletion`,
-            abortSignal: params.abortSignal,
-          },
-        );
+        const message = await client.messages.create({
+          ...requestParams,
+          stream: false,
+        }) as Anthropic.Messages.Message;
         yield this.handleNonStreamResponse(message);
       }
     } catch (error) {
-      this.handleError(error, !!params.stream);
+      this.handleError(error, !!params.stream, streamTc);
+    } finally {
+      streamTc.clearIdleTimer();
     }
   }
 
@@ -678,10 +681,21 @@ export class AnthropicAdapter implements IProtocolAdapter {
   /**
    * 错误处理
    */
-  private handleError(error: any, isStream: boolean): never {
+  private handleError(
+    error: any,
+    isStream: boolean,
+    streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
+  ): never {
+    // 流式 idle 超时优先判断
+    if (streamTc?.isIdleTimeout()) {
+      throw new Error(
+        `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+      );
+    }
+
     this.logger.error(`Anthropic API error: ${error.message}`);
 
-    // SDK 已提供各种 Error 子类，直接抛出
+    // SDK 已提供各种 Error 子类，直接抛出，由 AgentEngine 分类处理
     throw error;
   }
 }

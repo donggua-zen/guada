@@ -31,6 +31,7 @@ backend-ts/static/knowledge-base/**
 backend-ts/static/previews/**
 backend-ts/.config/**
 onebots-temp/
+plugins/remote-ssh/
 .lingma/
 .vscode/
 log.txt

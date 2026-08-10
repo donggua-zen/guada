@@ -74,35 +74,15 @@
           </div>
         </div>
       </template>
-
-      <!-- 远端目录 -->
-      <div
-        class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--color-sidebar-bg-hover)"
-        @click="remoteDialogVisible = true"
-      >
-        <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
-          <Cloud24Regular />
-        </el-icon>
-        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap">远端目录...</span>
-        </div>
-      </div>
     </div>
   </CustomPopover>
-
-  <RemoteConnectionDialog
-    v-model:visible="remoteDialogVisible"
-    :selected-workspace-path="currentWorkspacePath"
-    @select="handleRemoteSelect"
-  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud24Regular } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
-import RemoteConnectionDialog from './RemoteConnectionDialog.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const props = defineProps<{
@@ -129,12 +109,6 @@ const filteredRecentList = computed(() => {
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 
 const publicPath = computed(() => props.publicPath || null)
-
-const remoteDialogVisible = ref(false)
-
-function handleRemoteSelect(workspacePath: string) {
-  emit('select', workspacePath)
-}
 
 function getFolderName(path: string): string {
   const normalized = path.replace(/\\/g, '/')

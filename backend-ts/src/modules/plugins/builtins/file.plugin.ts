@@ -1,10 +1,10 @@
 import { Logger, Injectable } from "@nestjs/common";
+import * as fs from "fs/promises";
 import * as path from "path";
+import fg from "fast-glob";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
-import { WorkspaceProviderResolver } from "../../../common/workspace/workspace-provider.resolver";
-import type { WorkspaceProvider } from "../../../common/workspace/workspace-provider.interface";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { z } from "zod";
@@ -56,11 +56,6 @@ export class FilePlugin extends PluginBase {
   // 行数统计的文件大小上限（超过只显示大小）
   private static readonly MAX_LINE_COUNT_SIZE = 512 * 1024;
 
-  /** read 工具单次全量读取的文件大小上限（50MB）。
-   *  超过此上限的 read 调用会收到提示而非全量 Read，
-   *  避免内存暴涨与网络 provider 下的整文件传输。 */
-  static readonly MAX_READ_FILE_SIZE = 50 * 1024 * 1024;
-
   // Per-file write lock: serializes concurrent edit/write to the same file
   private readonly fileLocks = new Map<string, Promise<void>>();
 
@@ -72,17 +67,8 @@ export class FilePlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(
-    private workspaceService: WorkspaceService,
-    private providerResolver: WorkspaceProviderResolver,
-  ) {
+  constructor(private workspaceService: WorkspaceService) {
     super();
-  }
-
-  /** Resolve WorkspaceProvider from session's workspacePath */
-  private async getProvider(ctx?: PluginContext): Promise<WorkspaceProvider> {
-    const workspacePath = ctx?.session.workspacePath || process.cwd();
-    return this.providerResolver.resolve(workspacePath);
   }
 
   async onLoad(api: PluginApi) {
@@ -133,19 +119,9 @@ export class FilePlugin extends PluginBase {
           `读取文件: ${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
         );
 
-        const provider = await this.getProvider(ctx);
-
-        // 超大文件保护
-        const stat = await provider.stat(resolvedPath);
-        if (stat.size > FilePlugin.MAX_READ_FILE_SIZE) {
-          return `File is too large (${this.formatSize(stat.size)}) to read in full. ` +
-            `This tool has a hard limit of ${FilePlugin.MAX_READ_FILE_SIZE / 1024 / 1024}MB per read to avoid excessive memory/bandwidth use. ` +
-            `Use the grep tool to locate specific content, or read smaller sections via the workspace file preview.`;
-        }
-
-        const raw = (await provider.readFile(resolvedPath, {
-          encoding: (encoding || "utf-8"),
-        })) as string;
+        const raw = await fs.readFile(resolvedPath, {
+          encoding: (encoding || "utf-8") as BufferEncoding,
+        });
 
         const totalChars = raw.length;
         const lines = raw.split("\n");
@@ -153,10 +129,12 @@ export class FilePlugin extends PluginBase {
         const MAX_BYTES = 20 * 1024;
 
         if (unit === "char") {
+          // 按字符读取
           const charLimit = limit ?? 20000;
           const content = safeSubstring(raw, offset, offset + charLimit);
           const truncated = offset + charLimit < totalChars;
 
+          // 计算起始行号
           const startLineNumber = safeTruncate(raw, offset).split("\n").length;
           const contentLines = content.split("\n");
           const endLineNumber = startLineNumber + contentLines.length - 1;
@@ -179,9 +157,10 @@ export class FilePlugin extends PluginBase {
           offset < 0 ? Math.max(0, totalLines + offset) : offset;
         const startLine = Math.min(effectiveOffset, totalLines);
 
+        // 计算起始行的原始字符位置
         let nextCharOffset = 0;
         for (let i = 0; i < startLine; i++) {
-          nextCharOffset += lines[i].length + 1;
+          nextCharOffset += lines[i].length + 1; // +1 换行符
         }
 
         let endLine = startLine;
@@ -210,6 +189,7 @@ export class FilePlugin extends PluginBase {
 
         const hasMoreLines = endLine < totalLines;
 
+        // 拼接行号
         const padWidth = String(Math.max(endLine, 1)).length;
         const formattedLines: string[] = [];
         for (let i = startLine; i < endLine; i++) {
@@ -267,7 +247,6 @@ export class FilePlugin extends PluginBase {
         const { pattern, directory, limit = 100, depth } = args;
         if (!pattern) throw new Error("pattern 不能为空");
 
-        const provider = await this.getProvider(ctx);
         const basePath = directory
           ? this.resolvePath(directory, ctx)
           : ctx?.session.workspacePath || process.cwd();
@@ -275,30 +254,47 @@ export class FilePlugin extends PluginBase {
         // fast-glob deep 语义：1=当前目录, 2=一级, ... N=N-1级
         const deep = depth !== undefined ? depth + 1 : undefined;
 
-        // Request limit+1 to detect hasMore without interface change
-        const rawFiles = await provider.glob(pattern, {
+        const stream = fg.stream(pattern, {
           cwd: basePath,
-          ignore: FilePlugin.IGNORE_PATTERNS,
-          limit: limit + 1,
           deep,
+          onlyFiles: true,
+          dot: false,
+          absolute: false,
+          stats: true,
+          ignore: FilePlugin.IGNORE_PATTERNS,
         });
-        const hasMore = rawFiles.length > limit;
-        const files = hasMore ? rawFiles.slice(0, limit) : rawFiles;
 
-        // 分批并行统计行数，单文件失败降级为仅大小
+        const files: { path: string; size: number; lines: number | null }[] =
+          [];
+        let hasMore = false;
+
+        for await (const entry of stream) {
+          if (files.length >= limit) {
+            hasMore = true;
+            break;
+          }
+          let relPath: string;
+          let size = 0;
+          if (typeof entry === "string") {
+            relPath = entry;
+          } else {
+            const e = entry as unknown as {
+              path: string;
+              stats?: { size: number };
+            };
+            relPath = e.path;
+            size = e.stats?.size ?? 0;
+          }
+          files.push({ path: relPath, size, lines: null });
+        }
+
+        // 分批并行统计行数（复用 grep 的批次大小），单文件失败降级为仅大小
         const BATCH_SIZE = 20;
-        const filesWithLines: { path: string; size: number; lines: number | null }[] =
-          files.map((f) => ({ ...f, lines: null }));
-
-        for (let i = 0; i < filesWithLines.length; i += BATCH_SIZE) {
-          const batch = filesWithLines.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < files.length; i += BATCH_SIZE) {
+          const batch = files.slice(i, i + BATCH_SIZE);
           const results = await Promise.allSettled(
             batch.map((f) =>
-              this.countLinesIfTextable(
-                provider,
-                path.join(basePath, f.path),
-                f.size,
-              ),
+              this.countLinesIfTextable(path.join(basePath, f.path), f.size),
             ),
           );
           results.forEach((r, idx) => {
@@ -306,8 +302,8 @@ export class FilePlugin extends PluginBase {
           });
         }
 
-        let output = `${filesWithLines.length} files found:`;
-        for (const f of filesWithLines) {
+        let output = `${files.length} files found:`;
+        for (const f of files) {
           output += `\n${f.path} (${this.formatSize(f.size)}`;
           if (f.lines !== null) output += `, ${f.lines} lines`;
           output += ")";
@@ -344,9 +340,11 @@ export class FilePlugin extends PluginBase {
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`写入文件: ${file_path}`);
-        const provider = await this.getProvider(ctx);
         return this.withFileLock(resolvedPath, async () => {
-          await provider.writeFile(resolvedPath, content, { encoding });
+          await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+          await fs.writeFile(resolvedPath, content, {
+            encoding: encoding as BufferEncoding,
+          });
           return `File written: ${resolvedPath} (${content.length} chars)`;
         });
       },
@@ -383,26 +381,69 @@ export class FilePlugin extends PluginBase {
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`编辑文件: ${file_path}`);
-        const provider = await this.getProvider(ctx);
         return this.withFileLock(resolvedPath, async () => {
+          const content = await fs.readFile(resolvedPath, {
+            encoding: encoding as BufferEncoding,
+          });
           if (old_text === new_text) {
             return `File ${resolvedPath} unchanged`;
           }
-          const result = await provider.replaceInFile(
-            resolvedPath,
-            old_text,
-            new_text,
-            { encoding },
-          );
-          if (!result.matched) {
+
+          // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
+          const normContent = content.replace(/\r\n/g, "\n");
+          const normOld = old_text.replace(/\r\n/g, "\n");
+          const idx = normContent.indexOf(normOld);
+          if (idx === -1) {
             throw new Error(`No match text found: ${old_text}`);
           }
-          return `File ${resolvedPath} modified (${result.count} replacement)`;
+
+          // 替换后统一恢复原文件的行尾风格
+          const hasCRLF = content.includes("\r\n");
+          const normResult = normContent.replace(normOld, new_text);
+          const modified = hasCRLF
+            ? normResult.replace(/\n/g, "\r\n")
+            : normResult;
+
+          await fs.writeFile(resolvedPath, modified, {
+            encoding: encoding as BufferEncoding,
+          });
+          return `File ${resolvedPath} modified (1 replacement)`;
         });
       },
       display: { actionType: "edit", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
     });
+
+    // api.registerTool({
+    //   name: "delete",
+    //   description:
+    //     "Delete a file or directory (recursively deletes all contents). This operation cannot be undone — use with caution!",
+    //   inputSchema: z.object({
+    //     path: z
+    //       .string()
+    //       .describe(
+    //         "Path to the file or directory to delete, can be an absolute path or a relative path relative to the working directory",
+    //       ),
+    //   }),
+    //   execute: async (args, ctx) => {
+    //     const { path: targetPath } = args;
+    //     if (!targetPath) throw new Error("path is required");
+    //     const resolvedPath = this.resolvePath(targetPath, ctx);
+    //     this.validateWritePath(targetPath, ctx);
+    //     this.logger.log(`删除文件/目录: ${targetPath} -> ${resolvedPath}`);
+    //     const stats = await fs.stat(resolvedPath);
+    //     if (stats.isFile()) {
+    //       await fs.unlink(resolvedPath);
+    //       return `File deleted: ${resolvedPath}`;
+    //     } else if (stats.isDirectory()) {
+    //       await fs.rm(resolvedPath, { recursive: true, force: true });
+    //       return `Directory deleted: ${resolvedPath}`;
+    //     }
+    //     throw new Error(`${resolvedPath} is not a valid file or directory`);
+    //   },
+    //   display: { actionType: "delete", argsKey: "path", icon: "edit" },
+    //   dangerLevel: "critical",
+    // });
 
     api.registerTool({
       name: "grep",
@@ -432,24 +473,62 @@ export class FilePlugin extends PluginBase {
         } = args;
         if (!pattern) throw new Error("pattern is required");
 
-        const provider = await this.getProvider(ctx);
         const basePath = targetPath
           ? this.resolvePath(targetPath, ctx)
           : ctx?.session.workspacePath || process.cwd();
-        const stat = await provider.stat(basePath);
+        const stat = await fs.stat(basePath);
+
+        // 相对路径的基准目录（搜索结果返回相对路径，节省 tokens）
+        const relativeRoot = stat.isFile() ? path.dirname(basePath) : basePath;
+
+        const files: string[] = [];
+        if (stat.isFile()) {
+          files.push(basePath);
+        } else if (stat.isDirectory()) {
+          const entries = await fg("**/*", {
+            cwd: basePath,
+            onlyFiles: true,
+            dot: false,
+            ignore: FilePlugin.IGNORE_PATTERNS,
+          });
+          files.push(...entries.map((e) => path.join(basePath, e)));
+        }
 
         // smart-case：全小写自动不区分，含大写区分
-        const result = await provider.grep(pattern, {
-          path: basePath,
-          maxResults: max_results,
-          ignore: FilePlugin.IGNORE_PATTERNS,
-        });
+        const flags = pattern === pattern.toLowerCase() ? "gi" : "g";
+        let regex: RegExp;
+        try {
+          regex = new RegExp(pattern, flags);
+        } catch {
+          throw new Error(`Invalid regex pattern: ${pattern}`);
+        }
 
-        if (result.length === 0) {
+        const outputLines: string[] = [];
+        let total = 0;
+        const BATCH_SIZE = 20;
+
+        for (let i = 0; i < files.length && total < max_results; i += BATCH_SIZE) {
+          const batch = files.slice(i, Math.min(i + BATCH_SIZE, files.length));
+          const results = await Promise.allSettled(
+            batch.map((fp) =>
+              this.grepInFile(fp, regex, relativeRoot, max_results - total),
+            ),
+          );
+
+          for (const result of results) {
+            if (result.status === "fulfilled" && result.value) {
+              outputLines.push(...result.value.lines);
+              total += result.value.count;
+              if (total >= max_results) break;
+            }
+          }
+        }
+
+        if (outputLines.length === 0) {
           return "No matches found.";
         }
 
-        return result.join("\n");
+        return outputLines.join("\n");
       },
       display: { actionType: "grep", argsKey: "pattern", icon: "search" },
       dangerLevel: "safe",
@@ -482,14 +561,19 @@ export class FilePlugin extends PluginBase {
     const key = path.resolve(filePath).replace(/\\/g, "/");
     const prev = this.fileLocks.get(key) || Promise.resolve();
     const exec = prev.then(() => fn());
+    // Store a never-rejecting version so one failure doesn't break the chain
     const stored = exec.then(() => {}, () => {});
     this.fileLocks.set(key, stored);
+    // Clean up map entry once settled (no-op if a newer lock already replaced it)
     stored.then(() => {
       if (this.fileLocks.get(key) === stored) this.fileLocks.delete(key);
     });
     return exec;
   }
 
+  /**
+   * 将字节数格式化为可读单位（B/KB/MB/GB，1024 进制，1 位小数）
+   */
   private formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     const units = ["KB", "MB", "GB", "TB"];
@@ -503,10 +587,12 @@ export class FilePlugin extends PluginBase {
   }
 
   /**
-   * 统计文件行数。通过 provider 读取（远程场景下不下载全文到本地）。
+   * 统计文件行数。仅当：大小 <= 512KB、非已知二进制扩展名，
+   * 且未知扩展名时首块不含 NUL 字节（视为文本）才统计；
+   * 其余情况（二进制/超限/读取失败）返回 null，只显示大小。
+   * 按 0x0A 字节计数：UTF-8/GBK 等多字节编码的字符内不会出现该字节，无需解码。
    */
   private async countLinesIfTextable(
-    provider: WorkspaceProvider,
     filePath: string,
     size: number,
   ): Promise<number | null> {
@@ -514,9 +600,9 @@ export class FilePlugin extends PluginBase {
     const ext = path.extname(filePath).slice(1).toLowerCase();
     if (FilePlugin.BINARY_EXTENSIONS.has(ext)) return null;
     try {
-      const raw = (await provider.readFile(filePath)) as Buffer;
+      const raw = await fs.readFile(filePath);
       if (!FilePlugin.TEXT_EXTENSIONS.has(ext) && raw.includes(0)) {
-        return null;
+        return null; // 未知后缀且含 NUL 字节 → 按二进制处理
       }
       if (raw.length === 0) return 0;
       return raw.toString("latin1").split("\n").length;
@@ -538,5 +624,70 @@ export class FilePlugin extends PluginBase {
       ? [context.session.workspacePath]
       : [];
     this.workspaceService.validateWritePath(resolved, extra);
+  }
+
+  private findEnclosingFunction(
+    lines: string[],
+    lineIndex: number,
+  ): string | null {
+    const patterns: RegExp[] = [
+      /\bfunction\s+(\w+)\s*\(/, // JS/TS: function foo()
+      /\bclass\s+(\w+)\b/, // class Foo
+      /\bdef\s+(\w+)\s*\(/, // Python: def foo()
+      /\bfn\s+(\w+)\s*\(/, // Rust: fn foo()
+      /\bfunc\s+(?:\([^)]*\)\s+)?(\w+)\s*\(/, // Go: func foo() or func (r *T) foo()
+      /\b(?:impl|struct|enum|trait|interface)\s+(\w+)\b/, // Rust/TS: impl Foo, struct Foo
+      /\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(?[^=]*=>/, // JS/TS arrow
+    ];
+
+    for (let i = lineIndex; i >= 0; i--) {
+      const line = lines[i];
+      for (const pattern of patterns) {
+        const m = line.match(pattern);
+        if (m) return m[1];
+      }
+    }
+    return null;
+  }
+
+  private async grepInFile(
+    filePath: string,
+    regex: RegExp,
+    relativeRoot: string,
+    remaining: number,
+  ): Promise<{ lines: string[]; count: number }> {
+    const lines: string[] = [];
+    let count = 0;
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      const fileLines = content.replace(/\r\n/g, "\n").split("\n");
+      const relPath = path.relative(relativeRoot, filePath);
+
+      // 并发调用时 clone regex 避免 lastIndex 竞态
+      const localRegex = new RegExp(regex.source, regex.flags);
+
+      for (let i = 0; i < fileLines.length && count < remaining; i++) {
+        localRegex.lastIndex = 0;
+        const m = localRegex.exec(fileLines[i]);
+        if (m) {
+          const matchIdx = m.index;
+          const matchLen = m[0].length;
+          const ctxLen = 50;
+          const cStart = Math.max(0, matchIdx - ctxLen);
+          const cEnd = Math.min(
+            fileLines[i].length,
+            matchIdx + matchLen + ctxLen,
+          );
+          const snippet = safeSubstring(fileLines[i], cStart, cEnd).trim();
+          const funcName = this.findEnclosingFunction(fileLines, i);
+          const funcSuffix = funcName ? `    ← in ${funcName}()` : "";
+          lines.push(`${relPath}:${i + 1}: ${snippet}${funcSuffix}`);
+          count++;
+        }
+      }
+    } catch {
+      // skip unreadable files
+    }
+    return { lines, count };
   }
 }

@@ -47,13 +47,8 @@ RUN groupadd -g 1001 nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Copy Prisma schema first (needed for postinstall script)
-COPY prisma ./prisma/
-
-# Copy Prisma config files
-COPY prisma.config.js ./prisma.config.js
-
-# Install production dependencies only and clean up unnecessary files
+# Install production dependencies only
+# postinstall "prisma generate || echo 'skipped'" handles missing CLI gracefully
 RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev && \
     npm cache clean --force && \
     # Remove unnecessary files from node_modules to reduce size
@@ -84,8 +79,8 @@ RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy Prisma config files from builder
-COPY --from=builder /app/prisma.config.js ./prisma.config.js
+# Copy generated Prisma Client from builder (prisma CLI not installed in prod)
+COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 
 # Create necessary directories
 RUN mkdir -p data/uploads data/compression-states logs static && \

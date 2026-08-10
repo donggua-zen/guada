@@ -117,12 +117,17 @@ export interface PluginApi {
   registerInterceptor(def: TurnInterceptor): void;
 
   /**
-   * 注册 WorkspaceProvider 工厂
-   *
-   * 注册后，所有 workspacePath 以该 scheme 开头的会话
-   * 都会路由到此 provider 执行文件操作和进程执行。
+   * 注册 WorkspaceProvider 工厂（旧接口，保留兼容）
    */
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void;
+
+  /**
+   * 注册连接类型（附加连接方案）
+   *
+   * 插件声明支持的连接类型（如 ssh、docker），前端设置页据此渲染表单。
+   * configSchema 定义连接配置表单字段。
+   */
+  registerConnectionType(factory: WorkspaceProviderFactory): void;
 }
 
 // ── PluginApi 实现 ──
@@ -303,6 +308,14 @@ export class PluginApiImpl implements PluginApi {
   }
 
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void {
+    if (!this._workspaceProviders.find((f) => f.scheme === factory.scheme)) {
+      this._workspaceProviders.push(factory);
+    }
+  }
+
+  registerConnectionType(factory: WorkspaceProviderFactory): void {
+    // Same as registerWorkspaceProvider — connection types are stored in the same registry
+    // and surfaced via GET /workspace/providers for the settings page
     if (!this._workspaceProviders.find((f) => f.scheme === factory.scheme)) {
       this._workspaceProviders.push(factory);
     }

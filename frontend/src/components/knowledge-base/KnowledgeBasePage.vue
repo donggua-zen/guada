@@ -2,125 +2,68 @@
   <div class="h-full w-full flex flex-col min-h-0">
     <PageHeader title="知识库" />
     <!-- 视图模式：卡片列表 -->
-    <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
-      <div class="flex flex-col p-4 max-w-260 mx-auto w-full">
+    <div v-if="viewMode === 'list'" class="flex-1 flex flex-col overflow-hidden">
+      <!-- 标题区（固定不滚动） -->
+      <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
+            <div class="min-w-0">
+              <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">知识库</h1>
+              <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">管理文档知识库，支持文件上传、分块索引和语义搜索。</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable size="small" style="width: 160px;">
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-button @click="handleOpenDocs">
+                <template #icon><Document /></template>
+                使用说明
+              </el-button>
+              <el-button type="primary" @click="handleOpenCreate">
+                <template #icon><Plus /></template>
+                新建知识库
+              </el-button>
+            </div>
+          </div>
 
-        <!-- 搜索框 -->
-        <div class="pb-4">
-          <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable class="w-full">
-            <template #prefix>
-              <el-icon>
-                <Search />
-              </el-icon>
-            </template>
-          </el-input>
-        </div>
-
-        <!-- 新建按钮和使用说明 -->
-        <div class="flex justify-between items-center pb-4">
-          <el-button type="primary" @click="handleOpenCreate" class="flex items-center">
-            <template #icon>
-              <Plus />
-            </template>
-            新建知识库
-          </el-button>
-          <el-button @click="handleOpenDocs">
-            <template #icon>
-              <Document />
-            </template>
-            使用说明
-          </el-button>
-        </div>
-      </div>
-      <div class="flex-1 w-full overflow-y-auto">
-        <!-- 知识库卡片网格列表 -->
-        <div class="flex-1 overflow-y-auto max-w-260 px-3 mx-auto">
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
-            <!-- 知识库卡片 -->
+      <!-- 内容区（独立滚动） -->
+      <div class="flex-1 overflow-auto pb-4" style="scrollbar-gutter: stable both-edges;">
+        <div class="py-3 px-4 w-full md:max-w-260 md:mx-auto">
+          <!-- 知识库卡片网格 -->
+          <div v-if="filteredKnowledgeBases.length > 0" class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
-              class="kb-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 overflow-hidden"
+              class="kb-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
               @click="handleSelectKB(kb)">
-              <!-- 毛玻璃背景层 -->
-              <div class="absolute inset-0 z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                :style="{
-                  background: 'linear-gradient(135deg, rgba(251, 114, 153, 0.05) 0%, rgba(251, 114, 153, 0.02) 100%)'
-                }">
+              <!-- Header: icon + name + tag -->
+              <div class="flex items-center gap-2.5 mb-3">
+                <CardAvatar :name="kb.name" />
+                <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                  {{ kb.name }}
+                </h3>
+                <el-tag size="small" effect="plain">{{ kb.isPublic ? '公开' : '私有' }}</el-tag>
               </div>
 
-              <!-- 内容区域 -->
-              <div class="relative z-10 flex flex-col h-full">
-                <div class="flex items-start gap-3">
-                  <div
-                    class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
-                    <el-icon size="24">
-                      <MenuBookOutlined />
-                    </el-icon>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-start justify-between">
-                      <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="kb.name">
-                        {{
-                          kb.name }}</div>
-                      <!-- 操作按钮 - 悬停显示 -->
-                      <div
-                        class="kb-actions flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <el-dropdown trigger="click" @command="(command: string) => handleDropdownCommand(command, kb)">
-                          <template #dropdown>
-                            <el-dropdown-menu>
-                              <el-dropdown-item command="edit">
-                                <Edit class="w-4 h-4 mr-2 inline-block" />
-                                编辑
-                              </el-dropdown-item>
-                              <el-dropdown-item command="delete">
-                                <Delete class="w-4 h-4 mr-2 inline-block" />
-                                删除
-                              </el-dropdown-item>
-                            </el-dropdown-menu>
-                          </template>
-                          <div @click.stop class="p-1 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30]">
-                            <el-icon class="w-4 h-4">
-                              <MoreFilled />
-                            </el-icon>
-                          </div>
-                        </el-dropdown>
-                      </div>
-                    </div>
-                    <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">
-                      {{ kb.isPublic ? '公开' : '私有' }}
-                    </div>
-                  </div>
-                </div>
-                <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">
-                  {{
-                    kb.description
-                    ||
-                    '暂无描述' }}
-                </div>
+              <!-- Description -->
+              <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                {{ kb.description || '暂无描述' }}
               </div>
 
-              <!-- 悬停显示的渐变遮罩和按钮 -->
-              <div
-                class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent dark:from-[#232428] dark:via-[#232428]/90 dark:to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
-              </div>
-              <div
-                class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
-                <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="handleSelectKB(kb)">
-                  进入知识库
-                </el-button>
+              <!-- Footer: edit/delete + enter button -->
+              <div class="flex items-center justify-end gap-2 mt-3">
+                <el-button link size="small" @click.stop="handleEdit(kb)">编辑</el-button>
+                <el-button link size="small" type="danger" @click.stop="handleDelete(kb)">删除</el-button>
+                <el-button link size="small" type="primary" @click.stop="handleSelectKB(kb)">进入</el-button>
               </div>
             </div>
+          </div>
 
-            <!-- 空状态 -->
-            <div v-if="!store.loading && filteredKnowledgeBases.length === 0" class="col-span-full text-center py-12">
-              <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
-                <MenuBookOutlined />
-              </el-icon>
-              <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' :
-                '暂无知识库' }}</p>
-              <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' :
-                '点击上方按钮创建第一个知识库'
-              }}</p>
-            </div>
+          <!-- 空状态 -->
+          <div v-else-if="!store.loading" class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+            <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
+              <MenuBookOutlined />
+            </el-icon>
+            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
+            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
           </div>
         </div>
       </div>
@@ -269,14 +212,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
-import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search, CircleCheck, Document } from '@element-plus/icons-vue'
+import { Plus, Search, Document } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
-import ScrollContainer from '@/components/ui/ScrollContainer.vue'
-import { FileChunksViewer, KBFileItem, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
+import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
 import { useStorage, useDebounceFn } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
 import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
@@ -284,6 +226,7 @@ import { MenuBookOutlined } from '@vicons/material'
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import CardAvatar from '@/components/ui/CardAvatar.vue'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -1044,13 +987,6 @@ watch(
 </script>
 
 <style scoped>
-/* 空状态样式 */
-.empty-state-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* Tab 样式优化 */
 .kb-tabs :deep(.el-tabs__header) {
   margin-bottom: 0;
@@ -1065,15 +1001,5 @@ watch(
   height: 44px;
   line-height: 44px;
   font-size: 14px;
-}
-
-/* 知识库卡片样式 */
-.kb-card {
-  min-height: 140px;
-}
-
-.kb-actions {
-  margin-left: auto;
-  transition: opacity 0.2s ease;
 }
 </style>

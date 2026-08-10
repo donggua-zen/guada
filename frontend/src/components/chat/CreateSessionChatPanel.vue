@@ -13,15 +13,37 @@
     </div>
     <!-- 已选角色 + 抽屉切换 -->
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
+      <!-- 角色选择行 -->
+      <div class="flex items-center justify-center gap-1.5 mb-6 text-sm text-(--color-text-gray) ml-4">
+        <span>使用</span>
+        <span v-if="currentCharacter"
+          class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
+          @click="goToCharacters">
+          <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.title"
+            class="w-4 h-4 shrink-0 rounded overflow-hidden" />
+          <span class="text-sm font-medium text-(--color-text)">{{ currentCharacter.title }}</span>
+          <el-icon size="12" class="shrink-0 text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
+            <ChevronRight24Regular />
+          </el-icon>
+        </span>
+        <button v-else
+          class="character-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
+          @click="goToCharacters">
+          <el-icon size="14" class="text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
+            <PersonAdd24Regular />
+          </el-icon>
+          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">选择角色</span>
+        </button>
+        <span>开始新会话</span>
+      </div>
       <div class="w-full relative z-30">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
           :character-id="currentSession.characterId || ''"
           @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
           @send="sendMessage" />
       </div>
-      <ChatInputToolbar :config="chatInputConfig" :characters="characters"
-        :current-character-id="currentSession.characterId || null"
-        @config-change="handleConfigChange" @character-select="handleCharacterSelectById" />
+      <ChatInputToolbar :config="chatInputConfig"
+        @config-change="handleConfigChange" />
     </div>
     <div>
       <!-- <div class="flex items-center justify-center mt-6">
@@ -44,9 +66,11 @@ import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrefillInput } from '@/composables/usePrefillInput';
+import { useSelectedCharacter } from '@/composables/useSelectedCharacter';
 // 组件导入
-import { ChatInput } from "../ui";
+import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
+import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 
 // UI 组件导入
@@ -373,6 +397,11 @@ const handleCharacterSelectById = (characterId: string): void => {
   if (character) handleCharacterSelect(character);
 };
 
+// 前往助手页面切换角色
+const goToCharacters = (): void => {
+  router.push({ name: 'Characters' });
+};
+
 // ========== ChatInput 配置管理 ==========
 
 /**
@@ -459,11 +488,21 @@ const handleConfigChange = (config: any): void => {
 
 const workspaceStore = useWorkspaceStore()
 const { consumePrefill } = usePrefillInput()
+const { consumeSelectedCharacter } = useSelectedCharacter()
 
 onMounted(() => {
-  title.value = "你今天想聊点什么";
+  title.value = "你今天想聊些什么";
   // 先加载模型列表，再加载角色列表
-  Promise.all([loadModels(), loadCharacters()]).catch(error => {
+  Promise.all([loadModels(), loadCharacters()]).then(() => {
+    // 角色列表加载完成后，检查是否有跨页面传递的预选角色
+    const preSelectedId = consumeSelectedCharacter();
+    if (preSelectedId) {
+      const character = characters.value.find(c => c.id === preSelectedId);
+      if (character) {
+        handleCharacterSelect(character);
+      }
+    }
+  }).catch(error => {
     console.error('初始化数据失败:', error);
   });
   // 启动打字机效果

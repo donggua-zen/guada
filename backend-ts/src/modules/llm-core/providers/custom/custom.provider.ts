@@ -3,6 +3,7 @@ import { IModelProvider, ProviderMetadata, ModelDefinition, ModelFilterOptions }
 import { OpenAIAdapter } from '../../adapters/openai.adapter';
 import { OpenAIResponseAdapter } from '../../adapters/openai-response.adapter';
 import { IProtocolAdapter } from '../../adapters/base.adapter';
+import { findModelPreset } from '../../model-preset-library';
 
 /**
  * 自定义供应商实现
@@ -70,11 +71,22 @@ export class CustomProvider implements IModelProvider {
 
   /**
    * 获取指定模型的思考强度选项
-   * 自定义供应商不提供默认配置，由调用方决定
+   * 优先从预设库匹配，未匹配时返回通用选项
    */
   getModelThinkingEfforts(modelName: string): string[] {
-    // 自定义供应商：根据协议在调用方过滤 'none'
-    // （Anthropic adaptive thinking 不支持 off，由 getModelsAndProviders 处理）
+    // Embedding 模型不支持思考
+    const lowerName = modelName.toLowerCase();
+    if (lowerName.includes('embedding') || lowerName.includes('embed')) {
+      return [];
+    }
+
+    // 预设库匹配
+    const preset = findModelPreset(modelName);
+    if (preset?.thinkingEfforts) {
+      return preset.thinkingEfforts;
+    }
+
+    // 降级：返回通用选项
     return ['none', 'low', 'medium', 'high', 'xhigh'];
   }
 }

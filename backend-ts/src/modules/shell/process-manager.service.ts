@@ -679,7 +679,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
-   * 无 sandbox 时直接将命令字符串交给 OS shell（shell: true）。
+   * 无 sandbox 时将命令字符串交给 OS shell。
+   * Windows 使用 PowerShell（支持多行命令），Linux/macOS 使用默认 shell。
    * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
    */
   private spawnProcess(
@@ -703,11 +704,11 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // 直接将完整命令字符串交给 OS shell 处理（shell: true）
+    const isWindows = process.platform === "win32";
     return spawn(command, [], {
       cwd,
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
-      shell: true,
+      shell: isWindows ? "powershell.exe" : true,
     });
   }
 

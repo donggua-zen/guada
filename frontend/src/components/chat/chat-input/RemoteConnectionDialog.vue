@@ -156,6 +156,22 @@ function startNew() {
   testResult.value = null
 }
 
+// When scheme changes, apply default values from configSchema to editConfig
+watch(editScheme, (newScheme) => {
+  if (!newScheme) return
+  const provider = providers.value.find(p => p.scheme === newScheme)
+  if (!provider) return
+  const defaults: Record<string, any> = {}
+  for (const field of provider.configSchema) {
+    if (field.default !== undefined && editConfig.value[field.key] === undefined) {
+      defaults[field.key] = field.default
+    }
+  }
+  if (Object.keys(defaults).length > 0) {
+    editConfig.value = { ...defaults, ...editConfig.value }
+  }
+})
+
 function editConnection(conn: SavedConnection) {
   editing.value = true
   editConnId.value = conn.id

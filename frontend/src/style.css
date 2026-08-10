@@ -52,8 +52,10 @@
   /*#fcfcfc*/
   --color-surface-border: #efefef;
   --color-surface-hover: var(--color-sidebar-bg-hover);
+  --size-surface-radius: 12px;
   --color-bg: #fff;
   --color-border: #d1d5db;
+
 
   --color-bubble-user-bg: #ebf5ff;
   --color-bubble-user-text: #1f2937;
@@ -510,6 +512,11 @@ html.acrylic-enabled .sidebar-transparent-bg {
 }
 
 /* 动画效果 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -519,6 +526,18 @@ html.acrylic-enabled .sidebar-transparent-bg {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -746,4 +765,14 @@ html.dark .el-message-box {
   transform: translateY(-50%);
   border-right-color: var(--l-tooltip-bg);
   border-left: 0;
+}
+
+/* Auto-colored avatar: set --avatar-hue via inline style */
+.avatar-auto {
+  background: hsl(var(--avatar-hue, 0), 55%, 90%);
+  color: hsl(var(--avatar-hue, 0), 50%, 40%);
+}
+html.dark .avatar-auto {
+  background: hsl(var(--avatar-hue, 0), 30%, 22%);
+  color: hsl(var(--avatar-hue, 0), 45%, 68%);
 }

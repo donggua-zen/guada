@@ -1,8 +1,11 @@
 <template>
     <div class="flex-1 overflow-hidden">
-        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-            <span>MCP 服务器列表</span>
-            <el-space>
+        <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+            <div class="min-w-0">
+                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">MCP 服务器列表</h1>
+                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">配置和管理 Model Context Protocol 服务器。</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
                 <el-button @click="handleImport">
                     <template #icon>
                         <UploadOutlined />
@@ -15,52 +18,38 @@
                     </template>
                     添加服务器
                 </el-button>
-            </el-space>
+            </div>
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div v-if="servers.length > 0" class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+        <div v-if="servers.length > 0" class="grid gap-y-4 gap-x-3"
+            style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div v-for="server in servers" :key="server.id"
-                class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
-                <div class="p-5 pb-4">
-                    <div class="flex items-start justify-between gap-2 mb-2">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
-                            {{ server.name }}
-                        </h3>
-                        <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用"
-                            size="large" class="-mt-2" />
-                    </div>
+                class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                @click="handleEditServer(server)">
+                <div class="flex items-center gap-2.5 mb-3">
+                    <CardAvatar :name="server.name" :disabled="!server.enabled" />
+                    <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                        {{ server.name }}
+                    </h3>
+                </div>
 
-                    <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
-                        {{ server.description || '暂无描述' }}
-                    </p>
+                <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                    {{ server.description || '暂无描述' }}
+                </p>
 
-                    <div class="flex items-center justify-between">
-                        <el-tag size="small" type="info" effect="plain">
-                            {{ server.tools ? Object.keys(server.tools).length : 0 }} 个工具
-                        </el-tag>
-                        <div class="flex items-center gap-2">
-                            <el-button link size="small" @click="handleEditServer(server)">
-                                <template #icon>
-                                    <SettingsOutlined />
-                                </template>
-                                配置
-                            </el-button>
-                            <el-button link size="small" type="danger" @click="handleDeleteServer(server)">
-                                <template #icon>
-                                    <RemoveCircleOutlineRound />
-                                </template>
-                                删除
-                            </el-button>
-                        </div>
-                    </div>
+                <div class="flex items-center justify-end gap-2 mt-3">
+                    <el-button link size="small" type="danger" @click.stop="handleDeleteServer(server)">
+                        删除
+                    </el-button>
+                    <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
+                        @change="handleToggleServer(server)" @click.stop size="small" inline-prompt
+                        active-text="启用" inactive-text="禁用" />
                 </div>
             </div>
         </div>
         <div v-else
-            class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] p-12 text-center">
+            class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
             <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
@@ -267,7 +256,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane, ElSpace } from 'element-plus'
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import {
     AddOutlined,
@@ -279,6 +268,7 @@ import {
 } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import CardAvatar from '@/components/ui/CardAvatar.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
 const { toast } = usePopup()

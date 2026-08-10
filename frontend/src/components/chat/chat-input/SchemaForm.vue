@@ -13,7 +13,7 @@
           :type="field.type === 'password' ? 'password' : 'text'"
           :model-value="modelValue[field.key] ?? field.default ?? ''"
           :placeholder="field.placeholder"
-          show-password
+          :show-password="field.type === 'password'"
           @update:model-value="updateField(field.key, $event)"
         />
 

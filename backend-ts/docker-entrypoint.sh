@@ -23,19 +23,11 @@ if [ ! -f /app/dist/main.js ]; then
   exit 1
 fi
 
-DB_FILE="/app/data/ai_chat.db"
-
-# Sync database schema using db push (creates tables if not exists)
-echo "Syncing database schema..."
-DATABASE_URL="$DATABASE_URL" npx prisma db push --config=prisma.config.js --accept-data-loss || echo "Warning: Schema sync failed, continuing anyway"
-
-# Run seed script to initialize default data
-echo "Running database seed..."
-if [ -f /app/dist/scripts/seed.js ]; then
-  node /app/dist/scripts/seed.js --force || echo "Warning: Seed failed, continuing anyway"
-else
-  echo "Warning: Compiled seed script not found, skipping seed"
-fi
+# Database migrations are handled automatically by MigrationRunner on NestJS startup.
+# No need for prisma db push or manual seed — MigrationRunner handles:
+# - First run: baseline schema + seed data
+# - Upgrades: incremental migrations
+# - Legacy 0.5.2: bootstrap detection + mark baseline as applied
 
 echo "Starting NestJS application..."
 exec node dist/main.js

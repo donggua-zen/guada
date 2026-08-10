@@ -22,6 +22,12 @@ export class ModelsController {
     return this.modelService.getModelsAndProviders();
   }
 
+  @Public()
+  @Get("models/presets")
+  async getModelPresets() {
+    return this.modelService.getModelPresets();
+  }
+
   @Get("providers")
   async getProviders() {
     return this.modelService.getModelsAndProviders();

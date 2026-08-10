@@ -1,7 +1,10 @@
 <template>
   <div class="flex-1 overflow-hidden">
-    <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-      <span>本地工具</span>
+    <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+      <div class="min-w-0">
+        <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">本地工具</h1>
+        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。</p>
+      </div>
       <el-button 
         v-if="loading" 
         :loading="true" 
@@ -12,93 +15,99 @@
     </div>
 
     <div class="space-y-4">
-      <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-        全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。
-      </div>
-
-      <!-- 工具卡片列表 -->
-      <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+      <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
         <div
           v-for="tool in globalTools"
           :key="tool.pluginId"
-          class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)"
+          class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+          @click="showDetail(tool)"
         >
-          <div class="p-5 pb-4">
-            <div class="flex items-start justify-between gap-2 mb-2">
-              <div class="flex items-center gap-3 flex-1 min-w-0">
-                <img
-                  v-if="tool.icon"
-                  :src="`/api/v1/plugins/${tool.pluginId}/icon`"
-                  class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                  @error="($event.target as HTMLImageElement).style.display = 'none'"
-                />
-                <div v-else class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-[#333] flex items-center justify-center flex-shrink-0 text-lg font-bold text-gray-500 dark:text-[#8b8d95]">
-                  {{ tool.displayName?.charAt(0) || '?' }}
-                </div>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] truncate">
-                  {{ tool.displayName }}
-                </h3>
-              </div>
-              <el-switch
-                :model-value="tool.enabled"
-                :loading="updatingTools.has(tool.pluginId)"
-                @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
-                inline-prompt
-                active-text="启动"
-                inactive-text="禁用"
-                size="large"
-                class="-mt-2"
-              />
-            </div>
-            
-            <div class="flex items-center gap-2 mb-3">
-              <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
-              <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
-              <el-button
-                v-if="tool.source === 'dev' || tool.source === 'user'"
-                link
-                size="small"
-                type="danger"
-                @click="handleUninstall(tool.pluginId)"
-              >
-                卸载
-              </el-button>
-            </div>
-            
-            <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
-              {{ tool.description }}
-            </p>
-            
-            <div class="text-sm text-gray-500 dark:text-[#6b6d75]">
-              <el-tag size="small" type="info" effect="plain" class="cursor-pointer"
-                @click="toggleToolList(tool.pluginId)">
-                {{ tool.tools?.length || 0 }} 个工具
-              </el-tag>
-            </div>
+          <!-- Header: icon + name + source tag -->
+          <div class="flex items-center gap-2.5 mb-3">
+            <CardAvatar :src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null" :name="tool.displayName" :disabled="!tool.enabled" />
+            <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+              {{ tool.displayName }}
+            </h3>
+            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
+            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
+          </div>
 
-            <!-- 工具列表（可展开查看，只读） -->
-            <el-collapse-transition>
-              <div v-if="expandedTools.has(tool.pluginId)" class="mt-3 pt-3 border-t border-gray-100 dark:border-[#333]">
-                <div v-for="sub in tool.tools || []" :key="sub.name"
-                  class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 dark:hover:bg-[#2a2a2e]">
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm text-gray-700 dark:text-[#d0d1d5] truncate">{{ sub.name }}</div>
-                    <div v-if="sub.description" class="text-xs text-gray-400 truncate">{{ sub.description }}</div>
-                  </div>
-                </div>
-              </div>
-            </el-collapse-transition>
+          <!-- Description (max 2 lines) -->
+          <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+            {{ tool.description }}
+          </p>
+
+          <!-- Footer: uninstall + switch -->
+          <div class="flex items-center justify-end gap-2 mt-3">
+            <el-button
+              v-if="tool.source === 'dev' || tool.source === 'user'"
+              link
+              size="small"
+              type="danger"
+              @click.stop="handleUninstall(tool.pluginId)"
+            >
+              卸载
+            </el-button>
+            <el-switch
+              :model-value="tool.enabled"
+              :loading="updatingTools.has(tool.pluginId)"
+              @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
+              @click.stop
+              size="small"
+              inline-prompt
+              active-text="启用"
+              inactive-text="禁用"
+            />
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Detail Dialog -->
+    <el-dialog v-model="detailVisible" width="560px" align-center destroy-on-close>
+      <template #header>
+        <div class="flex items-center gap-3">
+          <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
+          <div class="flex items-center gap-2">
+            <span class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ currentTool?.displayName }}</span>
+            <el-tag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
+            <el-tag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
+          </div>
+        </div>
+      </template>
+
+      <div v-if="currentTool" class="space-y-4">
+        <div>
+          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-1">描述</div>
+          <p class="text-sm text-gray-700 dark:text-[#d0d1d5] leading-relaxed">{{ currentTool.description }}</p>
+        </div>
+
+        <div v-if="currentTool.tools && currentTool.tools.length > 0">
+          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2">工具列表 ({{ currentTool.tools.length }})</div>
+          <div class="space-y-1.5">
+            <div v-for="sub in currentTool.tools" :key="sub.name"
+              class="flex items-start gap-2 py-1.5 px-3 rounded-[var(--size-surface-radius)] bg-gray-50 dark:bg-[#2a2a2e]">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-gray-700 dark:text-[#d0d1d5] font-medium">{{ sub.name }}</div>
+                <div v-if="sub.description" class="text-xs text-gray-400 mt-0.5">{{ sub.description }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, ElCollapseTransition } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import CardAvatar from '@/components/ui/CardAvatar.vue'
 
 interface ToolMetadata {
   pluginId: string
@@ -117,16 +126,14 @@ const error = ref<string | null>(null)
 const updatingTools = ref<Set<string>>(new Set())
 
 const globalTools = ref<ToolMetadata[]>([])
-const expandedTools = ref<Set<string>>(new Set())
 
-function toggleToolList(pluginId: string) {
-  const next = new Set(expandedTools.value)
-  if (next.has(pluginId)) {
-    next.delete(pluginId)
-  } else {
-    next.add(pluginId)
-  }
-  expandedTools.value = next
+// Detail dialog
+const detailVisible = ref(false)
+const currentTool = ref<ToolMetadata | null>(null)
+
+function showDetail(tool: ToolMetadata) {
+  currentTool.value = tool
+  detailVisible.value = true
 }
 
 async function loadGlobalTools() {

@@ -79,6 +79,9 @@
                         <template v-else-if="currentTabValue === 'security'">
                             <UserSecurity />
                         </template>
+                        <template v-else-if="currentTabValue === 'connections'">
+                            <ConnectionSettings />
+                        </template>
                     </ScrollContainer>
                 </div>
             </div>
@@ -99,6 +102,7 @@ import SessionGroupManage from './SessionGroupManage.vue'
 import ArchivedSessions from './ArchivedSessions.vue'
 import UserProfile from './UserProfile.vue'
 import UserSecurity from './UserSecurity.vue'
+import ConnectionSettings from './ConnectionSettings.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
 import {
@@ -111,6 +115,7 @@ import {
     Globe24Regular,
     Folder20Regular,
     Archive20Regular,
+    Cloud24Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -134,6 +139,7 @@ const groupMap: Record<string, string> = {
     about: '系统',
     'session-groups': '数据管理',
     'session-archived': '数据管理',
+    connections: '系统',
     profile: '账户',
     security: '账户',
 }
@@ -180,6 +186,12 @@ const sidebarItems = [
         label: '关于',
         path: 'about',
         icon: Info24Regular,
+        roles: ['primary'],
+    },
+    {
+        label: '远程连接',
+        path: 'connections',
+        icon: Cloud24Regular,
         roles: ['primary'],
     },
     {

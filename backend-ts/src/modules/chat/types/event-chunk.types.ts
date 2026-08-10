@@ -25,7 +25,8 @@ export interface EventChunk {
     | "tool_calls_response"
     | "finish"
     | "turn_end"
-    | "user_message";
+    | "user_message"
+    | "retry";
 
   // ===== 消息标识（create / update / text / think / tool_call / tool_calls_response / finish）=====
   messageId?: string;
@@ -73,4 +74,14 @@ export interface EventChunk {
 
   // ===== 用户消息（user_message）=====
   userMessage?: any;
+
+  // ===== 重试提示（retry）=====
+  /** 重试原因分类：timeout / rate_limited / network_error */
+  retryReason?: "timeout" | "rate_limited" | "network_error";
+  /** 当前重试次数（1-based） */
+  retryAttempt?: number;
+  /** 最大重试次数 */
+  retryMaxAttempts?: number;
+  /** 等待毫秒数 */
+  retryDelayMs?: number;
 }

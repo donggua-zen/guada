@@ -64,6 +64,11 @@ interface StreamResponse {
     usedTokens: number;
     effectiveContextWindow: number;
   };
+  retryReason?: "timeout" | "rate_limited" | "network_error";
+  retryAttempt?: number;
+  retryMaxAttempts?: number;
+  retryDelayMs?: number;
+  message?: string;
 }
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
@@ -276,6 +281,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     message: Message,
     contentIndex: number,
   ): void {
+    // 重试成功后收到新内容，清除重试提示
+    if (content.metadata?.retryInfo) {
+      delete content.metadata.retryInfo;
+    }
     // 首次收到 think 事件，记录开始时间并启动计时器
     if (!content.state.isThinking) {
       content.state.isThinking = true;
@@ -402,6 +411,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     message: Message,
     contentIndex: number,
   ): void {
+    // 重试成功后收到新内容，清除重试提示
+    if (content.metadata?.retryInfo) {
+      delete content.metadata.retryInfo;
+    }
     // 流式期间：写入缓冲区，通过防抖 flush 更新
     if (!contentBuffer || currentBufferContentId !== content.id) {
       contentBuffer = {
@@ -607,6 +620,30 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
             ...content.metadata,
             usage: response.usage,
           };
+        }
+
+        if (response.type === "retry") {
+          if (message && contentIndex !== undefined) {
+            const content = message.contents[contentIndex];
+            if (content) {
+              content.metadata = {
+                ...content.metadata,
+                retryInfo: {
+                  reason: response.retryReason,
+                  attempt: response.retryAttempt,
+                  maxRetries: response.retryMaxAttempts,
+                  message: response.message,
+                },
+              };
+              // 重置 thinking 状态（重试 = 重新开始）
+              content.state.isThinking = false;
+              if (content._thinkingTimer) {
+                clearInterval(content._thinkingTimer);
+                content._thinkingTimer = null;
+              }
+            }
+          }
+          continue;
         }
 
         if (response.type === "finish") {

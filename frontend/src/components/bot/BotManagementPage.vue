@@ -1,24 +1,30 @@
 <template>
-  <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+  <div class="h-full flex flex-col">
     <div class="flex flex-col h-full">
-      <!-- 头部 -->
-      <div class="flex justify-between items-center pb-4">
-        <el-button type="primary" @click="showCreateDialog" class="flex items-center">
-          <template #icon>
-            <Plus />
-          </template>
-          新建机器人
-        </el-button>
-        <el-button @click="handleOpenDocs">
-          <template #icon>
-            <Document />
-          </template>
-          使用说明
-        </el-button>
+      <!-- 标题区 -->
+      <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+        <div class="min-w-0">
+          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">机器人管理</h1>
+          <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">配置和管理聊天平台机器人，支持 QQ、微信、Discord 等多平台接入。</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <el-button type="primary" @click="showCreateDialog">
+            <template #icon>
+              <Plus />
+            </template>
+            新建机器人
+          </el-button>
+          <el-button @click="handleOpenDocs">
+            <template #icon>
+              <Document />
+            </template>
+            使用说明
+          </el-button>
+        </div>
       </div>
 
       <!-- 机器人列表 -->
-      <div class="flex-1 overflow-y-auto pt-4">
+      <div class="flex-1">
         <!-- 加载状态 -->
         <div v-if="botStore.loading" class="flex justify-center items-center py-12">
           <el-icon class="is-loading" :size="32">
@@ -28,13 +34,13 @@
         </div>
 
         <!-- 机器人卡片网格 -->
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+        <div v-else class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
           <BotCard v-for="bot in botStore.botInstances" :key="bot.id" :bot="bot" @edit="handleEdit"
             @delete="handleDelete" @start="handleStart" @stop="handleStop" />
 
           <!-- 空状态 -->
           <div v-if="!botStore.loading && botStore.botInstances.length === 0"
-            class="col-span-full text-center py-12">
+            class="col-span-full text-center py-12 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface)">
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <Cpu />
             </el-icon>
@@ -52,7 +58,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Plus, Loading, Cpu, Document } from '@element-plus/icons-vue'
 import { useBotStore } from '@/stores/bot'
 import { openInExternalBrowser } from '@/utils/browserUtils'
@@ -150,5 +156,4 @@ const handleSaved = () => {
 </script>
 
 <style scoped>
-/* 样式由 Tailwind 处理 */
 </style>

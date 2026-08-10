@@ -4,7 +4,7 @@
     <template v-if="sessionStore.activeSessionId !== 'new-session'">
       <!-- 可拖拽分割区域 -->
       <div class="flex-1 overflow-hidden">
-        <LiteSplitpanes style="height: 100%;" :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
+        <LiteSplitpanes :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
           :min-size="layoutStore.workspaceFullscreen ? 0 : 30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"

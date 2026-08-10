@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { BrainCircuit20Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
@@ -44,7 +44,13 @@ const emit = defineEmits<{
 
 const isExpanded = ref(props.isThinking);
 
+// 从 ChatPanel 注入锁定滚动方法，展开思考内容时调用
+const lockScrollAnchor = inject<() => void>('lockScrollAnchor', () => {});
+
 const handleToggle = () => {
+  if (!isExpanded.value) {
+    lockScrollAnchor();
+  }
   isExpanded.value = !isExpanded.value;
 };
 

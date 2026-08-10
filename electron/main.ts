@@ -33,6 +33,8 @@ let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let bridgeServer: BridgeServer | null = null;
 let automationService: BrowserAutomationService | null = null;
+let stderrBuffer: string[] = []; // 后端 stderr 缓冲，用于崩溃诊断
+const MAX_STDERR_LINES = 200;
 let tray: Tray | null = null; // 系统托盘图标
 let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
 /** 当前聚合的托盘统计信息 */
@@ -266,241 +268,12 @@ function getBackendPath(): string {
   }
 }
 
-// 计算 Schema 版本的哈希值（基于 schema.prisma 文件内容）
-function getSchemaVersion(backendPath: string): string {
-  const crypto = require("crypto");
-  const schemaPath = path.join(backendPath, "prisma", "schema.prisma");
-  if (!fs.existsSync(schemaPath)) return "unknown";
-
-  const content = fs.readFileSync(schemaPath, "utf-8");
-  return crypto
-    .createHash("md5")
-    .update(content)
-    .digest("hex")
-    .substring(0, 12);
-}
-
-// 初始化数据库文件
-async function initializeDatabase(
-  dataHome: string,
-  backendPath: string,
-): Promise<void> {
+// 确保 data 目录存在（数据库迁移由后端 MigrationRunner 负责）
+function ensureDataDir(dataHome: string): void {
   const paths = computeDataPaths(dataHome);
-  const dbPath = paths.dbPath;
-  const vectorDbPath = paths.vectorDbPath;
-  const versionFilePath = paths.versionFile;
-  // 确保 data 目录存在
-  const dataDir = path.dirname(dbPath);
+  const dataDir = path.dirname(paths.dbPath);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
-  }
-  const { execSync } = require("child_process");
-
-  // 设置环境变量
-  const env = {
-    ...process.env,
-    DATABASE_URL: `file:${dbPath}`,
-    VECTOR_DB_PATH: vectorDbPath,
-    NODE_ENV: process.env.NODE_ENV || "production",
-  };
-
-  const currentSchemaVersion = getSchemaVersion(backendPath);
-  let storedVersion: any = null;
-  try {
-    if (fs.existsSync(versionFilePath)) {
-      storedVersion = JSON.parse(fs.readFileSync(versionFilePath, "utf-8"));
-    }
-  } catch (e) {
-    console.warn("⚠️  读取版本标记文件失败，将重新同步");
-  }
-
-  // 智能跳过同步：如果版本一致且数据库存在，则跳过初始化
-  if (
-    storedVersion &&
-    storedVersion.schemaVersion === currentSchemaVersion &&
-    fs.existsSync(dbPath) &&
-    fs.statSync(dbPath).size > 0
-  ) {
-    console.log(`数据库版本已同步 (${currentSchemaVersion})，跳过初始化`);
-    return;
-  }
-
-  console.log("检测到数据库需要同步或初始化...");
-  try {
-    // 1. 首次运行：从模板拷贝数据库文件
-    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0;
-    if (isFirstRun) {
-      let templatePath: string | null = null;
-
-      if (isDev) {
-        // 开发环境：直接指向项目根目录下的 data 文件夹
-        const devPath = path.join(
-          __dirname,
-          "..",
-          "..",
-          "data",
-          "seed_template.db",
-        );
-        if (fs.existsSync(devPath)) templatePath = devPath;
-      } else {
-        // 生产环境：指向打包后的 resources 目录
-        const prodPath = path.join(
-          process.resourcesPath,
-          "data",
-          "seed_template.db",
-        );
-        if (fs.existsSync(prodPath)) templatePath = prodPath;
-      }
-
-      if (templatePath) {
-        console.log(`发现种子模板: ${templatePath}`);
-        fs.copyFileSync(templatePath, dbPath);
-        console.log("已从模板初始化数据库");
-      } else {
-        console.warn("⚠️  未找到种子模板，将执行动态同步");
-      }
-    }
-
-    // 2. 备份逻辑优化：仅在非首次运行且结构变更时备份
-    if (!isFirstRun) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const backupPath = `${dbPath}.bak.${timestamp}`;
-
-      // WAL 模式下先 checkpoint，确保 .db-wal 中的数据合并回主文件
-      // 开发模式：系统 Node.js 编译的原生模块与 Electron 主进程 ABI 不匹配，
-      // 改用子进程（系统 Node.js）执行，避免直接加载失败。
-      // 生产模式：node_modules 已为 Electron 重建，可直接加载。
-      try {
-        if (isDev) {
-          // 开发模式：通过 execSync 启动系统 Node.js 子进程来做 checkpoint
-          const { execSync } = require("child_process");
-          const modulesDir = path.join(backendPath, "node_modules", "better-sqlite3");
-          const script = [
-            `const Database = require(${JSON.stringify(modulesDir)});`,
-            `const db = new Database(${JSON.stringify(dbPath)});`,
-            `db.pragma('wal_checkpoint(TRUNCATE)');`,
-            `db.close();`,
-          ].join("");
-          execSync(`"node" -e ${JSON.stringify(script)}`, {
-            cwd: backendPath,
-            env: {
-              ...process.env,
-              NODE_PATH: path.join(backendPath, "node_modules"),
-            },
-            stdio: "pipe",
-            timeout: 10000,
-          });
-        } else {
-          // 生产模式：直接加载（模块已为 Electron 重建）
-          const Database = require(
-            path.join(backendPath, "node_modules", "better-sqlite3"),
-          );
-          const db = new Database(dbPath);
-          db.pragma("wal_checkpoint(TRUNCATE)");
-          db.close();
-        }
-        console.log("WAL checkpoint 完成，数据已合并");
-      } catch (e) {
-        console.warn("⚠️  WAL checkpoint 失败，仍以当前状态备份:", e);
-      }
-
-      fs.copyFileSync(dbPath, backupPath);
-      console.log(`数据库结构变更，已备份至: ${backupPath}`);
-
-      // 清理旧备份（保留最多 3 个）
-      const backups = fs
-        .readdirSync(path.dirname(dbPath))
-        .filter((f) => f.startsWith(path.basename(dbPath) + ".bak."))
-        .sort()
-        .reverse();
-      if (backups.length > 3) {
-        for (let i = 3; i < backups.length; i++) {
-          fs.unlinkSync(path.join(path.dirname(dbPath), backups[i]));
-        }
-      }
-    }
-
-    // 3. 使用 db push 同步结构（使用 Electron 内置的 Node.js 运行时）
-    const prismaCli = path.join(
-      backendPath,
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
-
-    // 使用 process.execPath（Electron 内置的 Node.js），不依赖系统的 node 命令
-    const nodeExecutable = process.execPath;
-
-    // 设置 ELECTRON_RUN_AS_NODE，让 Electron 以纯 Node.js 模式运行
-    const execEnv = { ...env, ELECTRON_RUN_AS_NODE: "1" };
-
-    execSync(
-      `"${nodeExecutable}" "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`,
-      {
-        cwd: backendPath,
-        env: execEnv,
-        stdio: "pipe",
-        encoding: "utf-8",
-      },
-    );
-    console.log("数据库表结构同步成功");
-
-    // 4. 更新版本标记
-    fs.writeFileSync(
-      versionFilePath,
-      JSON.stringify(
-        {
-          schemaVersion: currentSchemaVersion,
-          seedCompleted: true,
-          updatedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      ),
-    );
-    console.log("数据库版本标记已更新");
-  } catch (error: any) {
-    console.error("数据库同步失败:", error.message);
-    const dataHome = detectDataPath();
-    handleDatabaseError(error, dbPath, dataHome);
-    throw error; // 抛出错误以便主进程捕获并提示用户
-  }
-}
-
-// 处理数据库错误并弹出模态框
-async function handleDatabaseError(
-  error: any,
-  dbPath: string,
-  dataHome: string,
-) {
-  if (!mainWindow) return;
-
-  const options: Electron.MessageBoxOptions = {
-    type: "error",
-    title: "数据库同步失败",
-    message: "应用启动时无法同步数据库结构",
-    detail: `错误信息: ${error.message}\n\n您可以尝试点击“重试”或手动打开日志目录排查问题。`,
-    buttons: ["重试", "打开日志目录", "退出"],
-    defaultId: 0,
-    cancelId: 2,
-  };
-
-  try {
-    const response = await dialog.showMessageBox(mainWindow, options);
-    if (response.response === 0) {
-      // 重试：重新调用初始化
-      console.log("用户选择重试数据库初始化...");
-      await initializeDatabase(dataHome, getBackendPath());
-    } else if (response.response === 1) {
-      shell.openPath(dataHome);
-      app.quit();
-    } else {
-      app.quit();
-    }
-  } catch (e) {
-    console.error("显示错误对话框失败:", e);
-    app.quit();
   }
 }
 
@@ -661,6 +434,7 @@ async function startBackend(): Promise<void> {
   }
 
   isBackendStarting = true;
+  stderrBuffer = []; // 清空上次的 stderr 缓冲
 
   return new Promise(async (resolve, reject) => {
     const backendPath = getBackendPath();
@@ -686,7 +460,7 @@ async function startBackend(): Promise<void> {
       const paths = computeDataPaths(dataHome);
       console.log(`数据目录: ${dataHome}`);
 
-      await initializeDatabase(dataHome, backendPath);
+      ensureDataDir(dataHome);
 
       const staticDir = path.join(backendPath, "static");
 
@@ -707,6 +481,7 @@ async function startBackend(): Promise<void> {
           ...process.env,
           NODE_ENV: "development",
           PORT: "3000",
+          NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
           DATABASE_URL: `file:${paths.dbPath}`,
           VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
@@ -751,7 +526,7 @@ async function startBackend(): Promise<void> {
       console.log(`数据目录: ${dataHome}`);
 
       // 初始化数据库
-      await initializeDatabase(dataHome, backendPath);
+      ensureDataDir(dataHome);
 
       const staticDir = path.join(backendPath, "static");
 
@@ -772,6 +547,7 @@ async function startBackend(): Promise<void> {
           NODE_ENV: "production",
           ELECTRON_RUN_AS_NODE: "1", // 关键：以纯 Node 模式运行
           NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
+          NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
           DATABASE_URL: `file:${paths.dbPath}`,
@@ -833,6 +609,10 @@ async function startBackend(): Promise<void> {
       const errorMessage = data.toString().trim();
       if (errorMessage) {
         console.error(`[Backend Error] ${errorMessage}`);
+        stderrBuffer.push(errorMessage);
+        if (stderrBuffer.length > MAX_STDERR_LINES) {
+          stderrBuffer.shift();
+        }
       }
     });
 
@@ -847,8 +627,58 @@ async function startBackend(): Promise<void> {
     backendProcess.on("exit", (code) => {
       log.info(`后端进程退出，退出码: ${code}`);
       isBackendStarting = false; // 重置标志
+      isBackendReady = false;
+      backendProcess = null;
+
       if (code !== 0 && code !== null && !isBackendStopping) {
         log.error(`后端进程异常退出，退出码: ${code}`);
+
+        // 保存崩溃日志（stderr 最后 200 行）
+        try {
+          const crashLogsDir = computeDataPaths(detectDataPath()).logsDir;
+          const crashLogPath = path.join(crashLogsDir, "backend-crash.log");
+          const crashInfo = {
+            timestamp: new Date().toISOString(),
+            exitCode: code,
+            signal: code === 134 ? "SIGABRT (原生模块崩溃或内存不足)" : undefined,
+            stderr: stderrBuffer.join("\n") || "(无 stderr 输出)",
+          };
+          fs.writeFileSync(crashLogPath, JSON.stringify(crashInfo, null, 2), "utf-8");
+          log.info(`崩溃日志已保存: ${crashLogPath}`);
+        } catch (e) {
+          log.error("保存崩溃日志失败:", e);
+        }
+
+        // 显示重启对话框
+        const exitCodeDesc = code === 134 ? "\n\n退出码 134 = SIGABRT，通常由原生模块崩溃或内存不足引起。" : "";
+        const msgOptions = {
+          type: "error" as const,
+          title: "后端异常退出",
+          message: `后端服务异常退出（退出码: ${code}）`,
+          detail: `可能由于内存不足或原生模块异常导致。${exitCodeDesc}\n\n是否重新启动后端服务？`,
+          buttons: ["重启后端", "不重启"],
+          defaultId: 0,
+          cancelId: 1,
+        };
+
+        (mainWindow && !mainWindow.isDestroyed()
+          ? dialog.showMessageBox(mainWindow, msgOptions)
+          : dialog.showMessageBox(msgOptions)
+        ).then((result) => {
+          if (result.response === 0) {
+            log.info("用户选择重启后端");
+            stderrBuffer = [];
+            backendReadyPromise = startBackend()
+              .then(() => {
+                isBackendReady = true;
+                log.info("后端重启成功");
+              })
+              .catch((err) => {
+                log.error("后端重启失败:", err);
+                isBackendReady = true;
+              });
+          }
+        });
       }
     });
 

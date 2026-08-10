@@ -15,7 +15,6 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
-import { retryOn429 } from "../utils/retry.util";
 import { insecureFetch } from "../utils/tls.util";
 import {
   createStreamTimeoutController,
@@ -62,7 +61,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
       baseURL: config.apiUrl,
       apiKey: config.apiKey,
       timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-      maxRetries: 0, // 禁用 SDK 内置重试，由 retryOn429 统一处理，避免 timeout × retries 累加
+      maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     };
 
     // 支持自定义请求头
@@ -200,37 +199,24 @@ export class OpenAIAdapter implements IProtocolAdapter {
     });
 
     // 创建流式 idle 超时控制器
-    // SDK 自带的 timeout 是硬截止（覆盖整个请求），idle timeout 是软截止（仅当无数据时触发）
     const streamTc = createStreamTimeoutController(
       params.abortSignal,
       DEFAULT_STREAM_IDLE_TIMEOUT_MS,
     );
 
-    // 请求超时：优先使用调用方传入的 timeout，否则使用 SDK 构造器中设置的默认值
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     let response: any = null;
 
     // 在 create() 之前启动 idle 计时器，覆盖连接建立阶段
-    // 如果服务器接受 TCP 连接但迟迟不返回 HTTP 响应头，idle timer 会触发 abort
-    // onBeforeAttempt: 每次 429 重试前也重置，避免重试时间累加导致误超时
     streamTc.resetIdleTimer();
 
     try {
-      // 对 client.chat.completions.create 进行 429 指数退避重试
-      response = await retryOn429(
-        () =>
-          client.chat.completions.create(requestParams, {
-            signal: streamTc.signal,
-            timeout: requestTimeout,
-          }),
-        {
-          logger: this.logger,
-          context: `${this.constructor.name}.chatCompletion`,
-          abortSignal: streamTc.signal,
-          onBeforeAttempt: () => streamTc.resetIdleTimer(),
-        },
-      );
+      // 单次尝试，重试由 AgentEngine 统一处理
+      response = await client.chat.completions.create(requestParams, {
+        signal: streamTc.signal,
+        timeout: requestTimeout,
+      });
 
       if (params.stream) {
         yield* withStreamIdleTimeout(
