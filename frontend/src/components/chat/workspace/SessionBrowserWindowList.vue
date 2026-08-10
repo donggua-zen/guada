@@ -3,7 +3,7 @@
     <!-- 头部 -->
     <div class="shrink-0 flex items-center justify-between px-2">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-        浏览器窗口
+        {{ t('chat.workspace.browserWindow') }}
       </h3>
       <el-button text class="window-add-btn" @click.stop="emit('create')" :disabled="!sessionId">
         <el-icon size="16">
@@ -14,7 +14,7 @@
 
     <!-- 窗口列表 -->
     <div v-if="store.sessionWebviews.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
-      暂无浏览器窗口
+      {{ t('chat.workspace.noBrowserWindow') }}
     </div>
     <div v-else class="overflow-y-auto py-2 px-1 space-y-0.5" style="max-height: 160px;">
       <div v-for="win in store.sessionWebviews" :key="win.windowId"
@@ -34,8 +34,8 @@
         </span>
 
         <!-- 窗口标题 -->
-        <span class="text-xs text-gray-600 dark:text-[#8b8d95] truncate flex-1" :title="win.title || '未命名窗口'">
-          {{ truncateTitle(win.title || '未命名窗口') }}
+        <span class="text-xs text-gray-600 dark:text-[#8b8d95] truncate flex-1" :title="win.title || t('chat.workspace.unnamedWindow')">
+          {{ truncateTitle(win.title || t('chat.workspace.unnamedWindow')) }}
         </span>
 
         <!-- 关闭按钮 -->
@@ -51,8 +51,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, watch } from 'vue'
 import { Close, Plus } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
 import { useTabStore } from '@/stores/tab'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   sessionId: string | null

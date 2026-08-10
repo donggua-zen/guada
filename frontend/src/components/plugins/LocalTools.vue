@@ -2,15 +2,15 @@
   <div class="flex-1 overflow-hidden">
     <div class="flex items-center justify-between gap-4 mb-8 mt-2">
       <div class="min-w-0">
-        <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">本地工具</h1>
-        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。</p>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.localTools.title') }}</h1>
+        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.localTools.subtitle') }}</p>
       </div>
       <el-button 
         v-if="loading" 
         :loading="true" 
         size="small"
       >
-        加载中...
+        {{ t('common.loading') }}
       </el-button>
     </div>
 
@@ -28,8 +28,8 @@
             <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
               {{ tool.displayName }}
             </h3>
-            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
-            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
+            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
+            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
           </div>
 
           <!-- Description (max 2 lines) -->
@@ -46,7 +46,7 @@
               type="danger"
               @click.stop="handleUninstall(tool.pluginId)"
             >
-              卸载
+              {{ t('plugins.localTools.uninstall') }}
             </el-button>
             <el-switch
               :model-value="tool.enabled"
@@ -55,8 +55,8 @@
               @click.stop
               size="small"
               inline-prompt
-              active-text="启用"
-              inactive-text="禁用"
+              :active-text="t('plugins.localTools.enable')"
+              :inactive-text="t('plugins.localTools.disable')"
             />
           </div>
         </div>
@@ -70,20 +70,20 @@
           <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
           <div class="flex items-center gap-2">
             <span class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ currentTool?.displayName }}</span>
-            <el-tag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">DEV</el-tag>
-            <el-tag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">外部</el-tag>
+            <el-tag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
+            <el-tag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
           </div>
         </div>
       </template>
 
       <div v-if="currentTool" class="space-y-4">
         <div>
-          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-1">描述</div>
+          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-1">{{ t('plugins.localTools.descLabel') }}</div>
           <p class="text-sm text-gray-700 dark:text-[#d0d1d5] leading-relaxed">{{ currentTool.description }}</p>
         </div>
 
         <div v-if="currentTool.tools && currentTool.tools.length > 0">
-          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2">工具列表 ({{ currentTool.tools.length }})</div>
+          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2">{{ t('plugins.localTools.toolsLabel', { count: currentTool.tools.length }) }}</div>
           <div class="space-y-1.5">
             <div v-for="sub in currentTool.tools" :key="sub.name"
               class="flex items-start gap-2 py-1.5 px-3 rounded-[var(--size-surface-radius)] bg-gray-50 dark:bg-[#2a2a2e]">
@@ -97,7 +97,7 @@
       </div>
 
       <template #footer>
-        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -105,9 +105,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
+
+const { t } = useI18n()
 
 interface ToolMetadata {
   pluginId: string
@@ -145,7 +148,7 @@ async function loadGlobalTools() {
     globalTools.value = response.plugins
   } catch (err: any) {
     console.error('加载全局工具失败:', err)
-    const errorMsg = err.message || '加载全局工具失败'
+    const errorMsg = err.message || t('plugins.localTools.loadFailed')
     error.value = errorMsg
     ElMessage.error(errorMsg)
   } finally {
@@ -164,7 +167,7 @@ async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
     }
   } catch (err: any) {
     console.error('更新全局工具状态失败:', err)
-    ElMessage.error(err.message || '更新全局工具状态失败')
+    ElMessage.error(err.message || t('plugins.localTools.updateFailed'))
   }
 }
 
@@ -180,7 +183,7 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
   } catch (err: any) {
     console.error('更新工具状态失败:', err)
     tool.enabled = previousState
-    ElMessage.error(err.message || '更新工具状态失败')
+    ElMessage.error(err.message || t('plugins.localTools.toggleFailed'))
   } finally {
     updatingTools.value.delete(pluginId)
   }
@@ -188,19 +191,19 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
 
 async function handleUninstall(pluginId: string) {
   try {
-    await ElMessageBox.confirm('确定要卸载此插件吗？插件文件将被删除。', '卸载插件', {
-      confirmButtonText: '卸载',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('plugins.localTools.uninstallConfirm'), t('plugins.localTools.uninstallTitle'), {
+      confirmButtonText: t('plugins.localTools.uninstallBtn'),
+      cancelButtonText: t('common.cancel'),
       type: 'warning',
     })
     const response = await apiService._request(`/plugins/${pluginId}`, { method: 'DELETE' })
     if (response.success) {
-      ElMessage.success('插件已卸载')
+      ElMessage.success(t('plugins.localTools.uninstallSuccess'))
       await loadGlobalTools()
     }
   } catch (err: any) {
     if (err !== 'cancel' && err?.message !== 'cancel') {
-      ElMessage.error(err.message || '卸载插件失败')
+      ElMessage.error(err.message || t('plugins.localTools.uninstallFailed'))
     }
   }
 }

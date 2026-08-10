@@ -16,6 +16,8 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "types": ["node", "jest"]
   },

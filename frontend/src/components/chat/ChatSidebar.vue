@@ -4,15 +4,15 @@
       class="flex flex-col w-full rounded-lt-lg bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
       <!-- 会话头部 -->
       <div class="sessions-header px-4 h-13 flex justify-between items-center">
-        <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
+        <span class="font-semibold text-base text-(--color-text)">{{ t('chat.sidebar.chatSessions') }}</span>
         <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
-          新建会话
+          {{ t('chat.sidebar.newSession') }}
         </el-button>
       </div>
 
       <!-- 搜索框 -->
       <div class="search-box px-3.5 pt-3 pb-1">
-        <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" placeholder="搜索会话" clearable
+        <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" :placeholder="t('chat.sidebar.searchPlaceholder')" clearable
           @input="handleSearchInput" class="search-input">
         </el-input>
       </div>
@@ -20,7 +20,7 @@
       <!-- 会话列表区域 -->
       <div class="flex-1 overflow-hidden py-2">
         <ScrollContainer class="h-full max-h-full" @scroll="handleScroll">
-          <div class="px-3 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
+          <div class="px-3 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">{{ t('chat.sidebar.sessionHistory') }}</div>
           <template v-if="!filteredSessions || filteredSessions.length === 0">
             <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
               <div class="empty-state-icon mb-3 text-gray-300">
@@ -29,10 +29,10 @@
                 </el-icon>
               </div>
               <div class="empty-state-title text-sm font-medium mb-1">
-                {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
+                {{ searchKeyword ? t('chat.sidebar.noMatchSession') : t('chat.sidebar.noSession') }}
               </div>
               <div class="empty-state-description text-xs text-gray-400">
-                {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
+                {{ searchKeyword ? t('chat.sidebar.noMatchSessionDesc') : t('chat.sidebar.noSessionDesc') }}
               </div>
             </div>
           </template>
@@ -62,11 +62,11 @@
                   <template #dropdown>
                     <DropdownMenuItem command="rename">
                       <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                      重命名
+                      {{ t('common.rename') }}
                     </DropdownMenuItem>
                     <DropdownMenuItem command="delete">
                       <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                      删除
+                      {{ t('common.delete') }}
                     </DropdownMenuItem>
                   </template>
                 </DropdownMenu>
@@ -79,15 +79,15 @@
                 <el-icon class="animate-spin" size="16">
                   <Loading />
                 </el-icon>
-                <span>加载中...</span>
+                <span>{{ t('common.loading') }}</span>
               </div>
               <div v-else-if="hasMoreSessions"
                 class="text-sm text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
                 @click="loadMoreSessions">
-                点击加载更多 (剩余 {{ totalSessionsCount - filteredSessions.length }} 个)
+                {{ t('chat.sidebar.loadMore', { n: totalSessionsCount - filteredSessions.length }) }}
               </div>
               <div v-else-if="totalSessionsCount > 0" class="text-sm text-gray-400">
-                已加载全部 {{ totalSessionsCount }} 个会话
+                {{ t('chat.sidebar.allLoaded', { n: totalSessionsCount }) }}
               </div>
             </div>
           </template>
@@ -100,6 +100,8 @@
 <!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { useRouter } from 'vue-router'
 // @ts-ignore - UI 组件类型缺失
 import { ScrollContainer, Avatar } from '../ui'

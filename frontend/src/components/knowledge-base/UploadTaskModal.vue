@@ -1,6 +1,6 @@
 <!-- components/KnowledgeBasePage/UploadTaskModal.vue -->
 <template>
-  <el-dialog v-model="visible" title="上传任务" width="600px" :close-on-click-modal="false" @close="handleClose">
+  <el-dialog v-model="visible" :title="t('knowledge.uploadTask.title')" width="600px" :close-on-click-modal="false" @close="handleClose">
     <!-- 上传任务列表 -->
     <div v-if="uploadTasks.length > 0" class="space-y-3 max-h-[400px] overflow-y-auto">
       <div v-for="task in uploadTasks" :key="task.id"
@@ -40,10 +40,10 @@
         <!-- 操作按钮 -->
         <div v-if="task.processingStatus === 'failed'" class="mt-2 flex justify-end gap-2">
           <el-button size="small" @click="$emit('retry', task)">
-            重试
+            {{ t('common.retry') }}
           </el-button>
           <el-button size="small" type="danger" @click="$emit('delete', task)">
-            删除
+            {{ t('common.delete') }}
           </el-button>
         </div>
       </div>
@@ -54,13 +54,13 @@
       <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
         <Upload />
       </el-icon>
-      <p class="text-sm text-gray-500 dark:text-[#8b8d95]">暂无上传任务</p>
+      <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.uploadTask.empty') }}</p>
     </div>
 
     <!-- 底部操作 -->
     <template #footer>
       <div class="flex justify-end">
-        <el-button size="small" @click="handleClose">关闭</el-button>
+        <el-button size="small" @click="handleClose">{{ t('common.close') }}</el-button>
       </div>
     </template>
   </el-dialog>
@@ -68,6 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Document, Upload } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
 
@@ -77,6 +78,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
@@ -110,10 +113,10 @@ function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warnin
 
 function getStatusText(status: string): string {
   const texts: Record<string, string> = {
-    'queued': '排队中',
-    'uploading': '上传中',
-    'uploaded': '已上传',
-    'failed': '失败',
+    'queued': t('knowledge.status.queuedShort'),
+    'uploading': t('knowledge.status.uploading'),
+    'uploaded': t('knowledge.status.uploadedShort'),
+    'failed': t('knowledge.status.failed'),
   }
   return texts[status] || status
 }

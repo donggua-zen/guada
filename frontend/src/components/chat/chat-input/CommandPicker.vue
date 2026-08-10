@@ -31,19 +31,22 @@
       </div>
     </div>
     <div v-if="filteredCommands.length === 0" class="command-picker-empty">
-      未找到匹配的{{ trigger === 'slash' ? '命令' : '成员' }}
+      {{ trigger === 'slash' ? t('chat.input.noMatchCommand') : t('chat.input.noMatchMember') }}
     </div>
     <div class="command-picker-footer">
-      <span><kbd>↑</kbd> <kbd>↓</kbd> 选择</span>
-      <span><kbd>Enter</kbd> 确认</span>
-      <span><kbd>Esc</kbd> 关闭</span>
+      <span><kbd>↑</kbd> <kbd>↓</kbd> {{ t('common.select') }}</span>
+      <span><kbd>Enter</kbd> {{ t('common.confirm') }}</span>
+      <span><kbd>Esc</kbd> {{ t('common.close') }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Apps20Regular } from '@vicons/fluent';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   visible: boolean;

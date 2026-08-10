@@ -7,8 +7,8 @@
             <div
                 class="hidden md:flex md:w-1/2 bg-gradient-to-br from-indigo-500 to-purple-600 items-center justify-center p-8">
                 <div class="text-center text-white">
-                    <h1 class="text-3xl font-bold mb-4">设置安全密码</h1>
-                    <p class="text-indigo-100 mb-6">为了保护您的账户安全，请设置一个强密码</p>
+                    <h1 class="text-3xl font-bold mb-4">{{ t('ui.password.securityTitle') }}</h1>
+                    <p class="text-indigo-100 mb-6">{{ t('ui.password.securityDesc') }}</p>
                     <div class="space-y-4 text-left">
                         <div class="flex items-center">
                             <div class="flex-shrink-0 leading-none">
@@ -18,7 +18,7 @@
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-indigo-100 text-sm">使用至少8位字符的密码</p>
+                            <p class="ml-3 text-indigo-100 text-sm">{{ t('ui.password.tip1') }}</p>
                         </div>
 
                         <div class="flex items-center">
@@ -29,7 +29,7 @@
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-indigo-100 text-sm">混合使用大小写字母、数字和符号</p>
+                            <p class="ml-3 text-indigo-100 text-sm">{{ t('ui.password.tip2') }}</p>
                         </div>
 
                         <div class="flex items-center">
@@ -40,7 +40,7 @@
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-indigo-100 text-sm">避免使用常见的密码组合</p>
+                            <p class="ml-3 text-indigo-100 text-sm">{{ t('ui.password.tip3') }}</p>
                         </div>
 
                         <div class="flex items-center">
@@ -51,7 +51,7 @@
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-indigo-100 text-sm">定期更换密码以保障账户安全</p>
+                            <p class="ml-3 text-indigo-100 text-sm">{{ t('ui.password.tip4') }}</p>
                         </div>
                     </div>
                 </div>
@@ -61,16 +61,16 @@
             <!-- 右侧表单区域 -->
             <div class="w-full md:w-1/2 p-8 flex flex-col justify-center">
                 <div class="text-center mb-8">
-                    <h2 class="text-3xl font-bold text-gray-800 mb-2">设置密码</h2>
-                    <p class="text-gray-500" v-if="canReset">这是您首次登录系统，请设置一个安全密码</p>
-                    <p class="text-gray-500" v-else>您当前没有权限重置密码</p>
+                    <h2 class="text-3xl font-bold text-gray-800 mb-2">{{ t('ui.password.title') }}</h2>
+                    <p class="text-gray-500" v-if="canReset">{{ t('ui.password.firstLoginDesc') }}</p>
+                    <p class="text-gray-500" v-else>{{ t('ui.password.noPermission') }}</p>
                 </div>
 
                 <!-- 用户名表单 -->
                 <div v-if="canReset">
                     <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="mt-4">
                         <el-form-item prop="username" class="mb-4">
-                            <el-input v-model="form.username" placeholder="请输入用户名" size="large">
+                            <el-input v-model="form.username" :placeholder="t('ui.password.inputUsername')" size="large">
                                 <template #prefix>
                                     <el-icon class="text-gray-400">
                                         <UserIcon />
@@ -79,8 +79,8 @@
                             </el-input>
                         </el-form-item>
 
-                        <el-form-item label="密码" prop="password" class="mb-4">
-                            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码"
+                        <el-form-item :label="t('ui.password.password')" prop="password" class="mb-4">
+                            <el-input v-model="form.password" type="password" show-password :placeholder="t('ui.password.inputPassword')"
                                 size="large">
                                 <template #prefix>
                                     <el-icon class="text-gray-400">
@@ -90,8 +90,8 @@
                             </el-input>
                         </el-form-item>
 
-                        <el-form-item label="确认密码" prop="confirmPassword" class="mb-6">
-                            <el-input v-model="form.confirmPassword" type="password" show-password placeholder="请再次输入密码"
+                        <el-form-item :label="t('ui.password.confirmPassword')" prop="confirmPassword" class="mb-6">
+                            <el-input v-model="form.confirmPassword" type="password" show-password :placeholder="t('ui.password.inputPasswordAgain')"
                                 size="large">
                                 <template #prefix>
                                     <el-icon class="text-gray-400">
@@ -115,15 +115,15 @@
                                 </svg>
                             </div>
                             <div class="ml-4">
-                                <h3 class="text-lg font-medium text-red-800">权限说明</h3>
+                                <h3 class="text-lg font-medium text-red-800">{{ t('ui.password.permissionTitle') }}</h3>
                                 <div class="mt-3 text-sm text-red-700">
-                                    <p class="mb-2">您当前没有权限重置密码，请按以下步骤操作：</p>
+                                    <p class="mb-2">{{ t('ui.password.permissionDesc') }}</p>
                                     <ol class="list-decimal pl-5 space-y-1">
-                                        <li>子账户重置请联系系统管理员</li>
-                                        <li>主账户如需重置，请删除后端目录下的 <code
+                                        <li>{{ t('ui.password.step1') }}</li>
+                                        <li>{{ t('ui.password.step2') }} <code
                                                 class="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">password_is_set.txt</code>
                                             文件</li>
-                                        <li>刷新本页面重新设置密码</li>
+                                        <li>{{ t('ui.password.step3') }}</li>
                                     </ol>
                                 </div>
                             </div>
@@ -137,7 +137,7 @@
                     <template #icon>
                         <LoginIcon />
                     </template>
-                    {{ loading ? '设置中...' : '立即设置' }}
+                    {{ loading ? t('ui.password.setting') : t('ui.password.setupNow') }}
                 </el-button>
 
                 <!-- 移动端安全提醒 -->
@@ -153,7 +153,7 @@
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm text-blue-700">
-                                    <strong>安全提示：</strong>请勿使用常用密码，建议使用包含大小写字母、数字和特殊字符的组合。
+                                    <strong>{{ t('ui.password.securityTip') }}</strong>
                                 </p>
                             </div>
                         </div>
@@ -170,7 +170,7 @@
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm text-yellow-700">
-                                    <strong>重置说明：</strong>如需再次设置密码，请删除后端目录下的 <code
+                                    <strong>{{ t('ui.password.resetTip') }}</strong>
                                         class="bg-gray-100 px-1 rounded">password_is_set.txt</code> 文件并刷新本页面。
                                 </p>
                             </div>
@@ -190,7 +190,7 @@
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm text-red-700">
-                                    您当前没有权限重置密码，请联系管理员或刷新页面重试。
+                                    {{ t('ui.password.noPermissionContact') }}
                                 </p>
                             </div>
                         </div>
@@ -205,6 +205,7 @@
 <!-- @ts-ignore - Element Plus 组件类型缺失 -->
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     PersonOutlined as UserIcon,
     LockOutlined as LockIcon,
@@ -232,6 +233,7 @@ import {
 
 // 消息提示
 const { toast, confirmSuccess } = usePopup()
+const { t } = useI18n()
 
 const router = useRouter()
 
@@ -275,12 +277,12 @@ const rules = reactive({
         trigger: ['input', 'blur'],
         validator: (rule: any, value: string, callback: any) => {
             if (!value) {
-                callback(new Error('请输入用户名'))
+                callback(new Error(t('ui.password.inputUsername')))
                 return
             }
             const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
             if (!usernameRegex.test(value)) {
-                callback(new Error('用户名只能包含字母、数字和下划线，长度为3-20位'))
+                callback(new Error(t('ui.login.usernameFormat')))
                 return
             }
             callback()
@@ -289,18 +291,18 @@ const rules = reactive({
     password: {
         required: true,
         trigger: ['input', 'blur'],
-        message: '请输入密码'
+        message: t('ui.password.inputPassword')
     },
     confirmPassword: {
         required: true,
         trigger: ['input', 'blur'],
         validator: (rule: any, value: string, callback: any) => {
             if (!value) {
-                callback(new Error('请再次输入密码'))
+                callback(new Error(t('ui.password.inputPasswordAgain')))
                 return
             }
             if (value !== form.password) {
-                callback(new Error('两次输入的密码不一致'))
+                callback(new Error(t('ui.password.passwordMismatch')))
                 return
             }
             callback()
@@ -324,7 +326,7 @@ const handleLogin = async (): Promise<void> => {
                 }
                 
                 await apiService.resetPrimayPassword(resetData);
-                await confirmSuccess('设置成功', '密码设置成功，点击确认跳转到首页');
+                await confirmSuccess(t('ui.password.setupSuccessTitle'), t('ui.password.setupSuccessDesc'));
                 router.replace('/')
 
             } catch (error: any) {
@@ -334,7 +336,7 @@ const handleLogin = async (): Promise<void> => {
                 loading.value = false
             }
         } else {
-            toast.error('请检查输入信息')
+            toast.error(t('ui.login.checkInput'))
         }
     })
 }

@@ -4,9 +4,9 @@
         <!-- 头部 -->
         <div class="px-4 pt-2.5 pb-2.5 ">
             <div class="flex justify-between items-center">
-                <span class="font-semibold text-base text-(--color-text)">知识库</span>
+                <span class="font-semibold text-base text-(--color-text)">{{ t('knowledge.sidebar.title') }}</span>
                 <el-button type="primary" @click="handleCreate" :icon="Plus">
-                    新建
+                    {{ t('knowledge.sidebar.create') }}
                 </el-button>
             </div>
         </div>
@@ -15,7 +15,7 @@
         <div class="search-box px-3.5 py-3">
             <el-input 
                 v-model="searchKeyword"
-                placeholder="搜索知识库" 
+                :placeholder="t('knowledge.sidebar.searchPlaceholder')" 
                 clearable 
                 class="search-input" 
             />
@@ -32,10 +32,10 @@
                             </el-icon>
                         </div>
                         <div class="empty-state-title text-sm font-medium mb-1">
-                            {{ searchKeyword ? '未找到匹配的知识库' : '没有知识库' }}
+                            {{ searchKeyword ? t('knowledge.sidebar.notFound') : t('knowledge.sidebar.empty') }}
                         </div>
                         <div class="empty-state-description text-xs text-gray-400">
-                            {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的知识库' }}
+                            {{ searchKeyword ? t('knowledge.sidebar.notFoundHint') : t('knowledge.sidebar.emptyHint') }}
                         </div>
                     </div>
                 </template>
@@ -61,11 +61,11 @@
                                     <el-dropdown-menu>
                                         <el-dropdown-item command="edit">
                                             <Edit class="w-4 h-4 mr-2 inline-block" />
-                                            编辑
+                                            {{ t('knowledge.sidebar.edit') }}
                                         </el-dropdown-item>
                                         <el-dropdown-item command="delete">
                                             <Delete class="w-4 h-4 mr-2 inline-block" />
-                                            删除
+                                            {{ t('knowledge.sidebar.delete') }}
                                         </el-dropdown-item>
                                     </el-dropdown-menu>
                                 </template>
@@ -85,6 +85,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Plus, Edit, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
@@ -97,6 +98,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
     select: [kb: KnowledgeBase]

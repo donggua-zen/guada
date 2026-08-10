@@ -1,4 +1,4 @@
-import { type Component } from "vue";
+import { ref, type Component } from "vue";
 import {
   Wrench24Filled,
   Edit32Filled,
@@ -13,6 +13,7 @@ import {
   WindowConsole20Filled,
 } from "@vicons/fluent";
 import Terminal from "@/components/icons/Terminal.vue";
+import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 
 export interface ToolCall {
@@ -34,283 +35,71 @@ export interface ToolDisplayConfig {
   /** 聚合展示文案，{n} 为数量占位符 */
   aggregate?: { executing: string; completed: string };
   argsKey?: string;
-  icon?: Component;
+  /** 图标标识（TOOL_ICON_MAP 的 key） */
+  icon?: string;
   inlineContent?: InlineContentConfig;
 }
 
+/**
+ * 图标标识 → Vue 组件映射
+ *
+ * 插件通过 display.icon 声明字符串标识，前端在此映射为实际图标组件。
+ * 纯前端渲染资源，不随语言包变化。
+ */
+export const TOOL_ICON_MAP: Record<string, Component> = {
+  file: CalendarAgenda20Regular,
+  read: CalendarAgenda20Regular,
+  search: Search16Filled,
+  edit: Edit32Filled,
+  browser: WindowWrench16Regular,
+  code: Code24Regular,
+  window: Window16Regular,
+  eye: EyeTracking16Filled,
+  todo: TaskListSquareLtr20Regular,
+  book: BookSearch24Regular,
+  terminal: WindowConsole20Filled,
+  console: WindowConsole20Filled,
+  wrench: Wrench24Filled,
+  time: Wrench24Filled,
+  generic: Wrench24Filled,
+  tool: Wrench24Filled,
+};
+
 export const DEFAULT_CONFIG: ToolDisplayConfig = {
-  text: { executing: "正在调用工具", completed: "已调用工具" },
-  aggregate: { executing: "正在执行{n}个步骤", completed: "已执行{n}个步骤" },
-  icon: Wrench24Filled,
+  text: { executing: "", completed: "" },
+  aggregate: { executing: "", completed: "" },
+  icon: "wrench",
 };
 
-export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayConfig> = {
-  read: {
-    text: { executing: "正在读取文件", completed: "已读取文件" },
-    aggregate: { executing: "正在读取{n}个文件", completed: "已读取{n}个文件" },
-    argsKey: "file_path",
-    icon: CalendarAgenda20Regular,
-  },
-  glob: {
-    text: { executing: "正在搜索文件", completed: "已搜索文件" },
-    aggregate: { executing: "正在执行{n}次搜索", completed: "已执行{n}次搜索" },
-    argsKey: "pattern",
-    icon: Search16Filled,
-  },
-  write: {
-    text: { executing: "正在写入文件", completed: "已写入文件" },
-    aggregate: { executing: "正在写入{n}个文件", completed: "已写入{n}个文件" },
-    argsKey: "file_path",
-    icon: Edit32Filled,
-    inlineContent: { key: "content", mode: "code" },
-  },
-  edit: {
-    text: { executing: "正在替换文本", completed: "已替换文本" },
-    aggregate: { executing: "正在编辑{n}个文件", completed: "已编辑{n}个文件" },
-    argsKey: "file_path",
-    icon: Edit32Filled,
-  },
-  delete: {
-    text: { executing: "正在删除文件", completed: "已删除文件" },
-    aggregate: { executing: "正在删除{n}个文件", completed: "已删除{n}个文件" },
-    argsKey: "path",
-    icon: Edit32Filled,
-  },
-  grep: {
-    text: { executing: "正在搜索内容", completed: "已搜索内容" },
-    aggregate: { executing: "正在执行{n}次搜索", completed: "已执行{n}次搜索" },
-    argsKey: "pattern",
-    icon: Search16Filled,
-  },
-
-  browser_navigate: {
-    text: { executing: "正在访问网页", completed: "已访问网页" },
-    argsKey: "url",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在访问{n}个网页", completed: "已访问{n}个网页" },
-  },
-  browser_tabs: {
-    text: { executing: "正在管理标签", completed: "已管理标签" },
-    argsKey: "action",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在管理{n}个标签", completed: "已管理{n}个标签" },
-  },
-  browser_snapshot: {
-    text: { executing: "正在获取快照", completed: "已获取快照" },
-    argsKey: "type",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在获取{n}个快照", completed: "已获取{n}个快照" },
-  },
-  browser_interact: {
-    text: { executing: "正在执行交互", completed: "已执行交互" },
-    argsKey: "action",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在执行{n}个交互", completed: "已执行次{n}交互" },
-  },
-  browser_evaluate: {
-    text: { executing: "正在执行脚本", completed: "已执行脚本" },
-    argsKey: "code",
-    icon: Code24Regular,
-    aggregate: { executing: "正在执行{n}条脚本", completed: "已执行{n}条脚本" },
-  },
-  browser_history: {
-    text: { executing: "正在导航", completed: "已导航" },
-    argsKey: "action",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在打开{n}个网页", completed: "已打开{n}个网页" },
-  },
-  browser_console: {
-    text: { executing: "正在查看控制台日志", completed: "已查看控制台日志" },
-    icon: WindowWrench16Regular,
-    aggregate: {
-      executing: "正在查看控制台日志",
-      completed: "已查看控制台日志",
+/** 获取带 i18n 翻译的默认工具展示配置 */
+function getDefaultConfig(): ToolDisplayConfig {
+  return {
+    text: {
+      executing: t("common.tool.calling"),
+      completed: t("common.tool.called"),
     },
-  },
-  browser_screenshot: {
-    text: { executing: "正在截图", completed: "已截图" },
-    argsKey: "file_path",
-    icon: Window16Regular,
-    aggregate: { executing: "正在截图{n}个网页", completed: "已截图{n}个网页" },
-  },
-
-  image_recognize: {
-    text: { executing: "正在识别图片", completed: "已识别图片" },
-    argsKey: "image_path",
-    icon: EyeTracking16Filled,
-    aggregate: { executing: "正在识别{n}张图片", completed: "已识别{n}张图片" },
-  },
-  image_view: {
-    text: { executing: "正在查看图片", completed: "已查看图片" },
-    argsKey: "image_path",
-    icon: EyeTracking16Filled,
-    aggregate: { executing: "正在查看{n}张图片", completed: "已查看{n}张图片" },
-  },
-
-  memory: {
-    text: { executing: "正在编辑记忆", completed: "已编辑记忆" },
-    argsKey: "action",
-    icon: Wrench24Filled,
-    aggregate: { executing: "正在编辑{n}次记忆", completed: "已编辑{n}次记忆" },
-  },
-  todo: {
-    text: { executing: "正在管理待办", completed: "已管理待办" },
-    argsKey: "action",
-    icon: TaskListSquareLtr20Regular,
-    aggregate: { executing: "正在管理{n}个待办", completed: "已管理{n}个待办" },
-  },
-
-  get_current_time: {
-    text: { executing: "正在获取时间", completed: "已获取时间" },
-    icon: Wrench24Filled,
-    aggregate: { executing: "正在获取时间", completed: "已获取时间" },
-  },
-
-  web_search: {
-    text: { executing: "正在搜索网络", completed: "已搜索网络" },
-    argsKey: "q",
-    icon: Search16Filled,
-    aggregate: { executing: "正在搜索{n}次", completed: "已搜索{n}次" },
-  },
-  web_parser: {
-    text: { executing: "正在读取网页", completed: "已读取网页" },
-    argsKey: "url",
-    icon: WindowWrench16Regular,
-    aggregate: { executing: "正在读取{n}个网页", completed: "已读取{n}个网页" },
-  },
-
-  run_command: {
-    text: { executing: "正在执行命令", completed: "已执行命令" },
-    aggregate: { executing: "正在执行{n}条命令", completed: "已执行{n}条命令" },
-    argsKey: "command",
-    icon: WindowConsole20Filled,
-  },
-  process: {
-    text: { executing: "正在管理进程", completed: "已管理进程" },
-    argsKey: "action",
-    icon: WindowConsole20Filled,
-    aggregate: { executing: "正在管理进程", completed: "已管理进程" },
-  },
-
-  doc_parse: {
-    text: { executing: "正在解析文档", completed: "已解析文档" },
-    argsKey: "file_path",
-    icon: CalendarAgenda20Regular,
-    aggregate: { executing: "正在解析{n}个文档", completed: "已解析{n}个文档" },
-  },
-  doc_batch_parse: {
-    text: { executing: "正在批量解析文档", completed: "已批量解析文档" },
-    icon: CalendarAgenda20Regular,
     aggregate: {
-      executing: "正在批量解析{n}批次文档",
-      completed: "已批量解析{n}批次文档",
+      executing: t("common.tool.executingSteps"),
+      completed: t("common.tool.executedSteps"),
     },
-  },
+    icon: "wrench",
+  };
+}
 
-  clear_session: {
-    text: { executing: "正在清空会话", completed: "已清空会话" },
-    icon: Wrench24Filled,
-    aggregate: { executing: "正在清空会话", completed: "已清空会话" },
-  },
+/**
+ * 插件工具展示文案注册表
+ *
+ * 由后端 queryPlugins 返回，启动时加载。
+ * key = 工具名, value = 后端已解析的最终文案（%key% 已替换为当前 locale 字符串）。
+ */
+const pluginToolDisplays = ref<Record<string, ToolDisplayConfig>>({});
 
-  kb_search: {
-    text: { executing: "正在搜索知识库", completed: "已搜索知识库" },
-    argsKey: "query",
-    icon: BookSearch24Regular,
-    aggregate: {
-      executing: "正在搜索{n}次知识库",
-      completed: "已搜索{n}次知识库",
-    },
-  },
-  kb_list_files: {
-    text: { executing: "正在列出文件", completed: "已列出文件" },
-    icon: BookSearch24Regular,
-  },
-  kb_get_chunks: {
-    text: { executing: "正在获取分块", completed: "已获取分块" },
-    argsKey: "file_id",
-    icon: BookSearch24Regular,
-  },
-  kb_add_document: {
-    text: { executing: "正在添加文档", completed: "已添加文档" },
-    icon: BookSearch24Regular,
-  },
-
-  scheduler_create_task: {
-    text: { executing: "正在创建定时任务", completed: "已创建定时任务" },
-    argsKey: "name",
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在创建{n}个定时任务",
-      completed: "已创建{n}个定时任务",
-    },
-  },
-  scheduler_list_tasks: {
-    text: { executing: "正在获取任务列表", completed: "已获取任务列表" },
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在获取{n}个定时任务",
-      completed: "已获取{n}个定时任务",
-    },
-  },
-  scheduler_delete_task: {
-    text: { executing: "正在删除定时任务", completed: "已删除定时任务" },
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在删除{n}个定时任务",
-      completed: "已删除{n}个定时任务",
-    },
-  },
-  scheduler_toggle_task: {
-    text: { executing: "正在切换任务状态", completed: "已切换任务状态" },
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在切换{n}个定时任务状态",
-      completed: "已切换{n}个定时任务状态",
-    },
-  },
-
-  skill_lean: {
-    text: { executing: "正在读取技能", completed: "已读取技能" },
-    argsKey: "name",
-    icon: CalendarAgenda20Regular,
-  },
-
-  subagent_spawn: {
-    text: { executing: "正在创建子代理", completed: "已创建子代理" },
-    argsKey: "name",
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在创建{n}个子代理",
-      completed: "已创建{n}个子代理",
-    },
-  },
-  subagent_manager: {
-    text: { executing: "正在管理子代理", completed: "已管理子代理" },
-    argsKey: "action",
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在管理{n}个子代理",
-      completed: "已管理{n}个子代理",
-    },
-  },
-
-  tool_learn: {
-    text: { executing: "正在加载工具包", completed: "已加载工具包" },
-    argsKey: "name",
-    icon: Wrench24Filled,
-    aggregate: {
-      executing: "正在加载{n}个工具包",
-      completed: "已加载{n}个工具包",
-    },
-  },
-  tool_use: {
-    text: { executing: "正在调用工具", completed: "已调用工具" },
-    argsKey: "tool_name",
-    icon: Wrench24Filled,
-    aggregate: { executing: "正在调用{n}个工具", completed: "已调用{n}个工具" },
-  },
-};
+/** 设置插件工具展示文案注册表 */
+export function setPluginToolDisplays(
+  displays: Record<string, ToolDisplayConfig>,
+) {
+  pluginToolDisplays.value = displays;
+}
 
 export function resolveToolName(tool: ToolCall): string {
   if (tool.name === "tool_use") {
@@ -327,11 +116,15 @@ export function resolveToolName(tool: ToolCall): string {
 
 export function getToolConfig(tool: ToolCall): ToolDisplayConfig {
   const name = resolveToolName(tool);
-  return TOOL_DISPLAY_MAP[name] || DEFAULT_CONFIG;
+  return pluginToolDisplays.value[name] || getDefaultConfig();
 }
 
 export function getToolIcon(tool: ToolCall): Component {
-  return getToolConfig(tool).icon || DEFAULT_CONFIG.icon!;
+  const config = getToolConfig(tool);
+  if (config.icon) {
+    return TOOL_ICON_MAP[config.icon] || TOOL_ICON_MAP[DEFAULT_CONFIG.icon!];
+  }
+  return TOOL_ICON_MAP[DEFAULT_CONFIG.icon!];
 }
 
 export function formatArgSummary(value: any): string {
@@ -368,7 +161,7 @@ export function getArgsText(tool: ToolCall): string | undefined {
   if (!parsedParams || typeof parsedParams !== "object") return undefined;
 
   const config = getToolConfig(tool);
-  const isKnownTool = resolveToolName(tool) in TOOL_DISPLAY_MAP;
+  const isKnownTool = resolveToolName(tool) in pluginToolDisplays.value;
 
   if (config.argsKey && parsedParams[config.argsKey]) {
     return formatArgSummary(parsedParams[config.argsKey]);

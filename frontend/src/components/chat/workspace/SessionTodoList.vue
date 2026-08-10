@@ -3,7 +3,7 @@
     <!-- 头部 -->
     <div class="shrink-0 flex items-center justify-between px-2">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-        待办事项
+        {{ t('chat.workspace.todoList') }}
       </h3>
       <span class="text-xs text-gray-400 dark:text-[#6b6d73]">
         {{ doneCount }}/{{ todoItems.length }}
@@ -41,7 +41,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Check, Loading } from '@element-plus/icons-vue';
+import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
+
+const { t } = useI18n();
 
 interface TodoItem {
   content: string;

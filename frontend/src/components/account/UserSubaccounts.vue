@@ -18,11 +18,11 @@
             <el-dropdown-menu>
               <el-dropdown-item command="edit">
                 <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                编辑
+                {{ t('ui.account.edit') }}
               </el-dropdown-item>
               <el-dropdown-item command="delete">
                 <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                删除
+                {{ t('ui.account.delete') }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -39,7 +39,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
         </div>
-        <span class="text-gray-500 font-medium">添加账户</span>
+        <span class="text-gray-500 font-medium">{{ t('ui.account.addAccount') }}</span>
       </div>
     </div>
   </div>
@@ -47,24 +47,24 @@
   <!-- 子账户编辑/新增模态框 -->
   <el-dialog v-model="showAccountModal" :title="modalTitle" width="500px">
     <el-form ref="accountFormRef" :model="accountForm" :rules="accountFormRules" label-position="top">
-      <el-form-item label="昵称" prop="nickname">
-        <el-input v-model="accountForm.nickname" placeholder="请输入昵称" />
+      <el-form-item :label="t('ui.account.nickname')" prop="nickname">
+        <el-input v-model="accountForm.nickname" :placeholder="t('ui.account.inputNickname')" />
       </el-form-item>
-      <el-form-item label="用户名" prop="username">
-        <el-input v-model="accountForm.username" placeholder="请输入用户名" />
+      <el-form-item :label="t('ui.account.username')" prop="username">
+        <el-input v-model="accountForm.username" :placeholder="t('ui.account.inputUsername')" />
       </el-form-item>
-      <el-form-item label="密码" prop="password">
-        <el-input v-model="accountForm.password" type="password" show-password placeholder="请输入密码" />
+      <el-form-item :label="t('ui.account.password')" prop="password">
+        <el-input v-model="accountForm.password" type="password" show-password :placeholder="t('ui.account.inputPassword')" />
       </el-form-item>
-      <el-form-item v-if="isAddingAccount" label="确认密码" prop="confirmPassword">
+      <el-form-item v-if="isAddingAccount" :label="t('ui.account.confirmPassword')" prop="confirmPassword">
         <el-input v-model="accountForm.confirmPassword" type="password" show-password
-          placeholder="请再次输入密码" />
+          :placeholder="t('ui.account.inputPasswordAgain')" />
       </el-form-item>
     </el-form>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="showAccountModal = false">取消</el-button>
-        <el-button type="primary" @click="saveAccount">保存</el-button>
+        <el-button @click="showAccountModal = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="saveAccount">{{ t('common.save') }}</el-button>
       </div>
     </template>
   </el-dialog>
@@ -72,6 +72,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
@@ -90,6 +91,7 @@ import {
 } from 'element-plus'
 
 const { toast } = usePopup()
+const { t } = useI18n()
 
 // 子账户数据
 const subAccounts = ref([])
@@ -110,13 +112,13 @@ const accountForm = ref({
 const accountFormRules = computed(() => {
   const rules = {
     nickname: [
-      { required: true, message: '请输入昵称', trigger: 'blur' }
+      { required: true, message: t('ui.account.requireNickname'), trigger: 'blur' }
     ],
     username: [
-      { required: true, message: '请输入用户名', trigger: 'blur' },
+      { required: true, message: t('ui.account.requireUsername'), trigger: 'blur' },
       {
         validator: (rule, value) => {
-          return /^[a-zA-Z0-9_]{3,20}$/.test(value) || '用户名只能包含字母、数字和下划线，长度为3-20位'
+          return /^[a-zA-Z0-9_]{3,20}$/.test(value) || t('ui.account.usernameFormat')
         },
         trigger: 'blur'
       }
@@ -126,21 +128,21 @@ const accountFormRules = computed(() => {
   // 新增账户时需要确认密码
   if (isAddingAccount.value) {
     rules.password = [
-      { required: true, message: '请输入密码', trigger: 'blur' },
-      { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+      { required: true, message: t('ui.account.requirePassword'), trigger: 'blur' },
+      { min: 6, message: t('ui.account.passwordTooShort'), trigger: 'blur' }
     ]
     rules.confirmPassword = [
-      { required: true, message: '请确认密码', trigger: 'blur' },
+      { required: true, message: t('ui.account.requireConfirmPassword'), trigger: 'blur' },
       {
         validator: (rule, value) => {
-          return value === accountForm.value.password || '两次输入的密码不一致'
+          return value === accountForm.value.password || t('ui.account.passwordMismatch')
         },
         trigger: 'blur'
       }
     ]
   } else {
     rules.password = [
-      { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+      { min: 6, message: t('ui.account.passwordTooShort'), trigger: 'blur' }
     ]
   }
 
@@ -148,22 +150,22 @@ const accountFormRules = computed(() => {
 })
 
 const modalTitle = computed(() => {
-  return isAddingAccount.value ? '新增子账户' : '编辑子账户'
+  return isAddingAccount.value ? t('ui.account.addSubaccount') : t('ui.account.editSubaccount')
 })
 
 // 下拉菜单选项
-const dropdownOptions = [
+const dropdownOptions = computed(() => [
   {
-    label: '编辑',
+    label: t('ui.account.edit'),
     key: 'edit',
     icon: () => h(NIcon, null, { default: () => h(EditOutlined) })
   },
   {
-    label: '删除',
+    label: t('ui.account.delete'),
     key: 'delete',
     icon: () => h(NIcon, null, { default: () => h(DeleteOutlineOutlined) })
   }
-]
+])
 
 // 添加处理添加账户的方法
 const handleAddAccount = () => {
@@ -195,10 +197,10 @@ const handleDropdownSelect = (key, account) => {
       break
     case 'delete':
       apiService.deleteSubaccount(account.id).then(() => {
-        toast.success('账户删除成功')
+        toast.success(t('ui.account.deleteSuccess'))
         subAccounts.value = subAccounts.value.filter(acc => acc.id !== account.id)
       }).catch(() => {
-        toast.error('账户删除失败')
+        toast.error(t('ui.account.deleteFailed'))
       })
       break
   }
@@ -219,7 +221,7 @@ const saveAccount = () => {
           const response = await apiService.createSubaccount(newAccount);
 
           subAccounts.value.push(response)
-          toast.success('账户添加成功')
+          toast.success(t('ui.account.addSuccess'))
         } else {
           // 编辑账户逻辑
           const index = subAccounts.value.findIndex(acc => acc.id === editingAccount.value.id)
@@ -235,7 +237,7 @@ const saveAccount = () => {
               data.password = accountForm.value.password
             }
             await apiService.updateSubaccount(editingAccount.value.id, data)
-            toast.success('账户编辑成功')
+            toast.success(t('ui.account.editSuccess'))
           }
         }
       } catch (error) {
@@ -252,7 +254,7 @@ const loadSubAccounts = async () => {
     const response = await apiService.fetchSubaccounts();
     subAccounts.value = response.items
   } catch (error) {
-    toast.error('加载子账户失败')
+    toast.error(t('ui.account.loadFailed'))
   }
 }
 

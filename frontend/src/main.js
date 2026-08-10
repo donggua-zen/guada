@@ -24,6 +24,7 @@ import {
   backendError,
   isElectron,
 } from "@/composables/useBackendStatus";
+import { i18n } from "./locales";
 
 // 页面刷新标志：首次导航时强制服务端验证 token，后续路由切换不再重复验证
 let isInitialPageLoad = true;
@@ -63,50 +64,50 @@ const routes = [
       {
         path: "chat/:sessionId?",
         name: "Chat",
-        meta: { title: "对话", requiresAuth: true },
+        meta: { titleKey: "common.route.chat", requiresAuth: true },
         component: () => import("./components/chat/ChatPage.vue"),
       },
       {
         path: "characters/:tab?",
         name: "Characters",
-        meta: { title: "助手", requiresAuth: true },
+        meta: { titleKey: "common.route.characters", requiresAuth: true },
         component: () => import("./components/characters/CharactersPage.vue"),
       },
       {
         path: "bots/:tab?",
         name: "Bots",
-        meta: { title: "Bots", requiresAuth: true },
+        meta: { titleKey: "common.route.bots", requiresAuth: true },
         component: () => import("./components/bot/BotCenterPage.vue"),
       },
       {
         path: "setting/:tab?",
         name: "SystemSettings",
-        meta: { title: "系统设置", requiresAuth: true },
+        meta: { titleKey: "common.route.settings", requiresAuth: true },
         component: () => import("./components/setting/SystemSettings.vue"),
       },
       {
         path: "plugins/:tab?",
         name: "Plugins",
-        meta: { title: "插件", requiresAuth: true },
+        meta: { titleKey: "common.route.plugins", requiresAuth: true },
         component: () => import("./components/plugins/PluginsPage.vue"),
       },
       {
         path: "knowledge-base/:id?",
         name: "KnowledgeBase",
-        meta: { title: "知识库", requiresAuth: true },
+        meta: { titleKey: "common.route.knowledgeBase", requiresAuth: true },
         component: () =>
           import("./components/knowledge-base/KnowledgeBasePage.vue"),
       },
       {
         path: "scheduler",
         name: "Scheduler",
-        meta: { title: "定时任务", requiresAuth: true },
+        meta: { titleKey: "common.route.scheduler", requiresAuth: true },
         component: () => import("./components/scheduler/SchedulerPage.vue"),
       },
       {
         path: "models",
         name: "Models",
-        meta: { title: "模型管理", requiresAuth: true },
+        meta: { titleKey: "common.route.models", requiresAuth: true },
         component: () => import("./components/models/ModelsPage.vue"),
       },
     ],
@@ -114,13 +115,13 @@ const routes = [
   {
     path: "/login",
     name: "Login",
-    meta: { title: "登录" },
+    meta: { titleKey: "common.route.login" },
     component: () => import("./components/LoginPage.vue"),
   },
   {
     path: "/password",
     name: "Password",
-    meta: { title: "密码设置" },
+    meta: { titleKey: "common.route.password" },
     component: () => import("./components/PasswordPage.vue"),
   },
   {
@@ -247,6 +248,7 @@ const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
+app.use(i18n);
 
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router);

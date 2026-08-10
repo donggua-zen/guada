@@ -18,8 +18,8 @@
           </svg>
         </div>
         <div>
-          <h3 class="text-base font-semibold text-(--color-text-primary)">发现新版本</h3>
-          <p class="text-xs text-(--color-text-secondary)">当前版本 {{ updateInfo?.clientVersion }} → 新版本 {{ updateInfo?.version }}</p>
+          <h3 class="text-base font-semibold text-(--color-text-primary)">{{ t('ui.update.foundNew') }}</h3>
+          <p class="text-xs text-(--color-text-secondary)">{{ t('ui.update.versionInfo', { current: updateInfo?.clientVersion, latest: updateInfo?.version }) }}</p>
         </div>
       </div>
     </template>
@@ -33,13 +33,13 @@
           <path d="M672 352H352c-17.664 0-32 14.336-32 32v256c0 17.664 14.336 32 32 32h320c17.664 0 32-14.336 32-32V384c0-17.664-14.336-32-32-32z m-32 256H384V416h256v192z" fill="currentColor"/>
           <path d="M480 480h64v64h-64z" fill="currentColor"/>
         </svg>
-        <span>发布日期：{{ updateInfo?.publishDate || '未知' }}</span>
+        <span>{{ t('ui.update.publishDate', { date: updateInfo?.publishDate || t('ui.update.unknownDate') }) }}</span>
       </div>
 
       <!-- 更新描述 -->
       <div>
-        <h4 class="text-sm font-medium text-(--color-text-primary) mb-2">更新内容</h4>
-        <p class="text-sm text-(--color-text-secondary) leading-relaxed whitespace-pre-wrap">{{ updateInfo?.description || '暂无更新说明' }}</p>
+        <h4 class="text-sm font-medium text-(--color-text-primary) mb-2">{{ t('ui.update.content') }}</h4>
+        <p class="text-sm text-(--color-text-secondary) leading-relaxed whitespace-pre-wrap">{{ updateInfo?.description || t('ui.update.noDescription') }}</p>
       </div>
 
       <!-- 强制更新提示 -->
@@ -49,21 +49,21 @@
           <path d="M512 256c-17.664 0-32 14.336-32 32v288c0 17.664 14.336 32 32 32s32-14.336 32-32V288c0-17.664-14.336-32-32-32z" fill="currentColor"/>
           <path d="M480 608a32 32 0 1 0 64 0 32 32 0 1 0-64 0z" fill="currentColor"/>
         </svg>
-        <span>此版本为强制更新，建议尽快升级以获得最佳体验</span>
+        <span>{{ t('ui.update.mandatoryTip') }}</span>
       </div>
     </div>
 
     <template #footer>
       <div class="flex items-center justify-between w-full">
         <el-checkbox v-model="dontRemind" size="small" class="text-xs">
-          不再弹窗提醒
+          {{ t('ui.update.dontRemind') }}
         </el-checkbox>
         <div class="flex items-center gap-3">
           <el-button @click="handleViewChangelog">
-            查看更新日志
+            {{ t('ui.update.viewChangelog') }}
           </el-button>
           <el-button type="primary" @click="handleDownload">
-            下载更新包
+            {{ t('ui.update.download') }}
           </el-button>
         </div>
       </div>
@@ -73,6 +73,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElDialog, ElButton, ElCheckbox } from 'element-plus'
 
 const props = defineProps<{
@@ -82,6 +83,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits(['update:visible', 'dont-remind', 'cancel-skip'])
+
+const { t } = useI18n()
 
 const dontRemind = ref(props.isSkipped ?? false)
 

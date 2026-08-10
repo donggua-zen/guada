@@ -14,14 +14,14 @@
           <Loading />
         </el-icon>
         <span class="queue-label">
-          {{ item.status === 'sending' ? '发送中' : '排队中' }}
+          {{ item.status === 'sending' ? t('chat.queue.sending') : t('chat.queue.queued') }}
         </span>
       </div>
       <div class="queue-actions" v-if="item.status === 'queued'">
-        <button class="queue-action-btn" @click="emit('edit', item)" title="编辑">
+        <button class="queue-action-btn" @click="emit('edit', item)" :title="t('chat.queue.edit')">
           <el-icon size="14"><Edit24Regular /></el-icon>
         </button>
-        <button class="queue-action-btn" @click="emit('remove', item.id)" title="撤回">
+        <button class="queue-action-btn" @click="emit('remove', item.id)" :title="t('chat.queue.withdraw')">
           <el-icon size="14"><Dismiss24Regular /></el-icon>
         </button>
       </div>
@@ -32,7 +32,10 @@
 <script setup lang="ts">
 import { Loading } from '@element-plus/icons-vue'
 import { Edit24Regular, Dismiss24Regular, Attach24Regular } from '@vicons/fluent'
+import { useI18n } from 'vue-i18n'
 import type { QueuedMessage } from '@/types/session'
+
+const { t } = useI18n()
 
 defineProps<{
   queue: QueuedMessage[]

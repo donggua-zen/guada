@@ -7,6 +7,7 @@ import { PluginApi } from "../../plugins/api/plugin-api";
 import type { PluginContext } from "../../plugins/types/plugin.types";
 import { BotInstanceManager } from "../services/bot-instance-manager.service";
 import { BotStatus } from "../interfaces/bot-platform.interface";
+import langZh from "./bot-file-sender.lang.zh.json";
 
 const MAX_SEND_RETRIES = 3;
 const RETRY_INTERVAL_MS = 2000;
@@ -31,6 +32,7 @@ export class BotFileSenderPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const fileKit = api.registerToolKit({
       id: "bot_file",
       name: "文件发送",
@@ -174,7 +176,11 @@ export class BotFileSenderPlugin extends PluginBase {
 
         return sendTask;
       },
-      display: { actionType: "send_file", icon: "file" },
+      display: {
+        actionType: "send_file",
+        text: { executing: "%send_file.executing%", completed: "%send_file.completed%" },
+        icon: "file",
+      },
       dangerLevel: "normal" as const,
     });
   }

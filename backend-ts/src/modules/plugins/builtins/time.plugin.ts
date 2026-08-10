@@ -3,6 +3,7 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import { z } from "zod";
+import langZh from "./time.lang.zh.json";
 
 @Injectable()
 export class TimePlugin extends PluginBase {
@@ -15,6 +16,7 @@ export class TimePlugin extends PluginBase {
   };
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     const timeKit = api.registerToolKit({
       id: "time",
       name: "Time Tools",
@@ -45,7 +47,12 @@ export class TimePlugin extends PluginBase {
           throw new Error(`获取时间信息失败：${error.message}`);
         }
       },
-      display: { actionType: "time", icon: "time" },
+      display: {
+        actionType: "time",
+        text: { executing: "%get_current_time.executing%", completed: "%get_current_time.completed%" },
+        aggregate: { executing: "%get_current_time.aggregate.executing%", completed: "%get_current_time.aggregate.completed%" },
+        icon: "time",
+      },
     });
 
     api.registerPrompt({

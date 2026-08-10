@@ -21,6 +21,7 @@ import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebvie
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { getAutoShowSidebar } from '@/utils/workspacePreview'
+import { t } from '@/locales'
 
 const store = useBrowserWebviewStore()
 
@@ -238,7 +239,7 @@ function handleCreateWebview(_event: any, data: {
   store.addWebview({
     windowId: data.windowId,
     url: data.url,
-    title: data.url || '新窗口',
+    title: data.url || t('common.newWindow'),
     partition: data.partition,
     preloadUrl: data.preloadUrl,
     isVisible: false,

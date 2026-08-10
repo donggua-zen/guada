@@ -1,0 +1,1 @@
+{"run_command.executing": "正在执行命令", "run_command.completed": "已执行命令", "run_command.aggregate.executing": "正在执行{n}条命令", "run_command.aggregate.completed": "已执行{n}条命令", "process.executing": "正在管理进程", "process.completed": "已管理进程", "process.aggregate.executing": "正在管理进程", "process.aggregate.completed": "已管理进程"}

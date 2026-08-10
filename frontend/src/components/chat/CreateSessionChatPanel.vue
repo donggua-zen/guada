@@ -15,7 +15,7 @@
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
       <!-- 角色选择行 -->
       <div class="flex items-center justify-center gap-1.5 mb-6 text-sm text-(--color-text-gray) ml-4">
-        <span>使用</span>
+        <span>{{ t('chat.welcome.use') }}</span>
         <span v-if="currentCharacter"
           class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
           @click="goToCharacters">
@@ -32,10 +32,16 @@
           <el-icon size="14" class="text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
             <PersonAdd24Regular />
           </el-icon>
-          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">选择角色</span>
+          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">{{ t('chat.welcome.selectCharacter') }}</span>
         </button>
-        <span>开始新会话</span>
+        <span>{{ t('chat.welcome.startNewSession') }}</span>
       </div>
+      <!-- 附加连接胶囊 -->
+      <ConnectionChips
+        v-if="selectedConnections.length > 0"
+        :connections="selectedConnections"
+        @remove="toggleConnection"
+      />
       <div class="w-full relative z-30">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
           :character-id="currentSession.characterId || ''"
@@ -58,6 +64,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n()
 import { useStorage } from "@vueuse/core"
 import { apiService } from '@/services/ApiService';
 import { usePopup } from "../../composables/usePopup";
@@ -70,6 +78,7 @@ import { useSelectedCharacter } from '@/composables/useSelectedCharacter';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
+import ConnectionChips from "./ConnectionChips.vue";
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 
@@ -117,7 +126,7 @@ const inputMessage = ref({
 });
 
 // 打字机效果相关状态
-const fullText = 'Hi，想聊些什么？';
+const fullText = t('chat.welcome.greeting');
 const displayedText = ref('');
 const isTypingComplete = ref(false);
 let typeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -161,7 +170,7 @@ const currentSession = ref<any>({
   characterId: null,  // 必须绑定角色
   model_id: null,
   avatar_url: null,
-  title: "新建对话",
+  title: t('chat.welcome.newSession'),
   workspacePath: null,  // 工作目录路径，默认为 null 使用系统默认目录
   settings: {
     referencedKbs: userSelectedKnowledgeBaseIds.value,
@@ -292,7 +301,7 @@ const loadModels = async (): Promise<void> => {
     });
   } catch (error) {
     console.error('获取模型列表失败:', error);
-    notify.error('获取模型列表失败', error);
+    notify.error(t('common.error.loadFailed'), error);
   }
 };
 
@@ -353,7 +362,7 @@ const loadCharacters = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('获取角色列表失败:', error);
-    notify.error('获取角色列表失败', error);
+    notify.error(t('common.error.loadFailed'), error);
     // 即使出错也要恢复标志
     isInitializing.value = false;
   }
@@ -429,6 +438,9 @@ const chatInputConfig = computed(() => ({
 
   // 分组 ID
   groupId: currentSession.value?.groupId || null,
+
+  // 附加连接 IDs
+  connectionIds: currentSession.value?.settings?.connectionIds || [],
 }));
 
 /**
@@ -482,7 +494,48 @@ const handleConfigChange = (config: any): void => {
     currentSession.value.groupId = config.groupId;
     console.log('保存 groupId 到会话:', config.groupId);
   }
+
+  // 处理附加连接
+  if (typeof config.connectionIds !== 'undefined') {
+    if (!currentSession.value.settings) currentSession.value.settings = {};
+    currentSession.value.settings.connectionIds = config.connectionIds;
+    console.log('保存 connectionIds 到会话:', config.connectionIds);
+  }
 };
+
+// ── 附加连接管理 ──
+const allConnections = ref<any[]>([]);
+const selectedConnections = computed(() => {
+  const ids = currentSession.value?.settings?.connectionIds || [];
+  return allConnections.value
+    .filter(c => ids.includes(c.id))
+    .map(c => ({ id: c.id, name: c.name, scheme: c.scheme, config: c.config }));
+});
+
+async function loadConnections() {
+  try {
+    allConnections.value = await apiService.getWorkspaceConnections();
+  } catch (e) {
+    console.error('Failed to load connections:', e);
+  }
+}
+
+function toggleConnection(connId: string) {
+  if (!currentSession.value) return;
+  if (!currentSession.value.settings) currentSession.value.settings = {};
+  const ids = [...(currentSession.value.settings.connectionIds || [])];
+  const idx = ids.indexOf(connId);
+  if (idx === -1) {
+    ids.push(connId);
+  } else {
+    ids.splice(idx, 1);
+  }
+  currentSession.value.settings.connectionIds = ids;
+}
+
+onMounted(() => {
+  loadConnections();
+});
 
 // 前往角色管理页面
 
@@ -491,7 +544,7 @@ const { consumePrefill } = usePrefillInput()
 const { consumeSelectedCharacter } = useSelectedCharacter()
 
 onMounted(() => {
-  title.value = "你今天想聊些什么";
+  title.value = t('chat.welcome.pageTitle');
   // 先加载模型列表，再加载角色列表
   Promise.all([loadModels(), loadCharacters()]).then(() => {
     // 角色列表加载完成后，检查是否有跨页面传递的预选角色
@@ -586,12 +639,12 @@ const autoTitle = (): string => {
   if (inputMessage.value.content && inputMessage.value.content.length > 0) {
     return inputMessage.value.content.substring(0, 20);
   }
-  return "新建对话"
+  return t('chat.welcome.newSession')
 }
 
 const sendMessage = async (): Promise<void> => {
   if (!currentSession.value.characterId) {
-    notify.error("创建失败", '请先选择一个角色模板');
+    notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoCharacter'));
     return;
   }
   // 修复：传递完整的 payload，包含 knowledgeBaseIds

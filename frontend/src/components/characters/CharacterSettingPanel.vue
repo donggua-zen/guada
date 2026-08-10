@@ -1,5 +1,5 @@
 <template>
-  <div class="character-setting-panel-root h-full" v-loading="pageLoading" element-loading-text="正在加载角色设置...">
+  <div class="character-setting-panel-root h-full" v-loading="pageLoading" :element-loading-text="t('characters.setting.loading')">
     <div class="flex h-full overflow-hidden">
       <!-- 侧边栏 -->
       <div class="w-40 shrink-0 overflow-y-auto py-3">
@@ -32,8 +32,8 @@
                 <el-form-item prop="avatarUrl" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色头像 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">点击头像可以更换新的头像，支持上传图片文件</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('characters.setting.avatarOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.avatarHint') }}</span>
                     </div>
                     <AvatarPreview :src="characterForm.avatarUrl" type="assistant" class="w-10"
                       :name="characterForm.title" @avatar-changed="handleAvatarChanged" />
@@ -43,11 +43,11 @@
                 <el-form-item prop="title" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色标题</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">助手的显示名称，在对话列表中展示</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.titleLabel') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.titleHint') }}</span>
                     </div>
                     <div class="w-1/2 flex justify-end">
-                      <el-input v-model="characterForm.title" placeholder="请输入角色标题" class="w-full" />
+                      <el-input v-model="characterForm.title" :placeholder="t('characters.setting.titlePlaceholder')" class="w-full" />
                     </div>
                   </div>
                 </el-form-item>
@@ -55,11 +55,11 @@
                 <el-form-item prop="description" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色描述 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">简要描述助手的用途、特点或背景信息</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.descLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.descOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.descHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-input v-model="characterForm.description" type="textarea" placeholder="请输入角色描述"
+                      <el-input v-model="characterForm.description" type="textarea" :placeholder="t('characters.setting.descPlaceholder')"
                         :autosize="{ minRows: 3, maxRows: 5 }" class="w-full" />
                     </div>
                   </div>
@@ -68,12 +68,12 @@
                 <el-form-item prop="groupId" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">分组设置 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">将助手归类到不同分组，便于管理和查找</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.groupLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.groupOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.groupHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.groupId" placeholder="请选择分组" clearable class="w-full">
-                        <el-option label="未分组" value="" />
+                      <el-select v-model="characterForm.groupId" :placeholder="t('characters.setting.groupPlaceholder')" clearable class="w-full">
+                        <el-option :label="t('characters.setting.groupUngrouped')" value="" />
                         <el-option v-for="group in characterGroups" :key="group.id" :label="group.name"
                           :value="group.id ?? ''" />
                       </el-select>
@@ -87,11 +87,11 @@
                 <el-form-item prop="modelId" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">模型选择 <span class="text-xs text-gray-400">(可选)</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">为此助手指定专用的 AI 模型，留空则使用默认模型。修改模型配置不会同步修改已经创建的会话。</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.modelLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.modelOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.modelHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型" clearable
+                      <el-select v-model="characterForm.modelId" :options="modelOptions" :placeholder="t('characters.setting.modelPlaceholder')" clearable
                         class="w-full" />
                     </div>
                   </div>
@@ -104,8 +104,8 @@
                 <el-form-item prop="compressionTriggerRatio" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">触发阈值</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">当已用 Token 达到最大窗口的此比例时触发压缩</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.triggerThreshold') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.triggerHint') }}</span>
                     </div>
                     <div class="w-1/2">
                       <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05"
@@ -117,8 +117,8 @@
                 <el-form-item prop="compressionTargetRatio" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">保留目标</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">压缩后保留至最大窗口的此比例</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.targetRatio') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.targetHint') }}</span>
                     </div>
                     <div class="w-1/2">
                       <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05"
@@ -130,27 +130,27 @@
                 <el-form-item prop="summaryMode" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">摘要模式</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">选择摘要生成方式：关闭、快速或记忆同步</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.summaryMode') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.summaryHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.summaryMode" placeholder="请选择摘要模式" class="w-full">
-                        <el-option label="关闭摘要" value="disabled">
+                      <el-select v-model="characterForm.summaryMode" :placeholder="t('characters.setting.summaryPlaceholder')" class="w-full">
+                        <el-option :label="t('characters.setting.summaryDisabled')" value="disabled">
                           <span class="flex items-center gap-2">
                             <el-icon><CloseOutlined /></el-icon>
-                            <span>关闭摘要 - 仅裁剪工具结果，不生成语义摘要</span>
+                            <span>{{ t('characters.setting.summaryDisabledDesc') }}</span>
                           </span>
                         </el-option>
-                        <el-option label="快速摘要" value="fast">
+                        <el-option :label="t('characters.setting.summaryFast')" value="fast">
                           <span class="flex items-center gap-2">
                             <el-icon><ThunderboltOutlined /></el-icon>
-                            <span>快速摘要 - 单次调用生成，速度快</span>
+                            <span>{{ t('characters.setting.summaryFastDesc') }}</span>
                           </span>
                         </el-option>
-                        <el-option label="记忆同步" value="memory_sync">
+                        <el-option :label="t('characters.setting.summaryMemorySync')" value="memory_sync">
                           <span class="flex items-center gap-2">
                             <el-icon><FolderOutlined /></el-icon>
-                            <span>记忆同步 - 将历史对话压缩为结构化记忆，保持长期一致性</span>
+                            <span>{{ t('characters.setting.summaryMemorySyncDesc') }}</span>
                           </span>
                         </el-option>
                       </el-select>
@@ -159,10 +159,10 @@
                 </el-form-item>
               </div>
 
-              <el-alert title="提示" type="info" :closable="false" show-icon style="margin-top: 16px;">
-                <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
-                <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
-                <p class="text-sm">• 记忆同步：开启后将历史对话压缩为结构化记忆，保持长期一致性；关闭后仅裁剪工具结果</p>
+              <el-alert :title="t('characters.setting.tipTitle')" type="info" :closable="false" show-icon style="margin-top: 16px;">
+                <p class="text-sm">{{ t('characters.setting.tip1') }}</p>
+                <p class="text-sm">{{ t('characters.setting.tip2') }}</p>
+                <p class="text-sm">{{ t('characters.setting.tip3') }}</p>
               </el-alert>
             </el-form>
           </div>
@@ -176,14 +176,14 @@
                 label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
                 <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
                   <div class="flex items-center w-full justify-between">
-                    <span>系统系提示(角色设定)</span>
+                    <span>{{ t('characters.setting.systemPromptLabel') }}</span>
                   </div>
                 </el-form-item>
 
                 <!-- 详细设定 -->
                 <el-form-item prop="systemPrompt" :show-label="false"
                   class="flex-1 min-h-40 prompt-form-item no-border-item">
-                  <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定" resize="none" />
+                  <el-input v-model="characterForm.systemPrompt" type="textarea" :placeholder="t('characters.setting.systemPromptPlaceholder')" resize="none" />
                 </el-form-item>
 
               </el-form>
@@ -200,11 +200,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">功能开关</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allDisabled" @update:model-value="(v) => handleAllDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allDisabled }]">
-                      <span class="text-sm text-gray-500">新增插件</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.newPluginLabel') }}</span>
                       <SegmentedToggle v-model="allowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
@@ -214,8 +214,8 @@
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无可用的本地工具</div>
-                  <div class="text-sm mt-2">请先到"插件 > 本地工具"中启用工具</div>
+                  <div>{{ t('characters.setting.noLocalTools') }}</div>
+                  <div class="text-sm mt-2">{{ t('characters.setting.noLocalToolsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
@@ -227,7 +227,7 @@
                       <div class="flex items-center gap-2 shrink-0">
                         <el-switch :model-value="isToolProviderEnabled(tool.pluginId)"
                           @update:model-value="(val) => handleLocalToolToggle(tool.pluginId, val)"
-                          :disabled="allDisabled" inline-prompt active-text="启动" inactive-text="禁用" size="small" />
+                          :disabled="allDisabled" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" size="small" />
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 line-clamp-2">{{ tool.description }}</p>
@@ -247,11 +247,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">功能开关</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allMcpDisabled" @update:model-value="(v) => handleAllMcpDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allMcpDisabled }]">
-                      <span class="text-sm text-gray-500">新增MCP</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.newMcpLabel') }}</span>
                       <SegmentedToggle v-model="mcpAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
@@ -261,7 +261,7 @@
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无已启动的 MCP 服务器</div>
+                  <div>{{ t('characters.setting.noMcpServers') }}</div>
                 </div>
 
                 <div v-else>
@@ -273,10 +273,10 @@
                         <div class="font-medium text-base mb-1 text-gray-800 dark:text-gray-200">
                           {{ server.name }}
                           <el-tag v-if="server.enabled" type="success" size="small" class="ml-2">
-                            运行中
+                            {{ t('characters.setting.mcpRunning') }}
                           </el-tag>
                           <el-tag v-else type="info" size="small" class="ml-2">
-                            未运行
+                            {{ t('characters.setting.mcpNotRunning') }}
                           </el-tag>
                         </div>
                         <div v-if="server.description" class="text-sm text-gray-600 line-clamp-2">
@@ -284,7 +284,7 @@
                         </div>
                         <div v-if="server.tools && Object.keys(server.tools).length > 0"
                           class="text-sm text-gray-500 mt-2">
-                          可用工具：{{ Object.keys(server.tools).length }} 个
+                          {{ t('characters.setting.availableTools', { count: Object.keys(server.tools).length }) }}
                         </div>
                       </div>
 
@@ -309,11 +309,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">功能开关</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allSkillsDisabled" @update:model-value="(v) => handleAllSkillsDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allSkillsDisabled }]">
-                      <span class="text-sm text-gray-500">新增技能</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.newSkillLabel') }}</span>
                       <SegmentedToggle v-model="skillsAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
@@ -323,15 +323,15 @@
                   <el-icon class="is-loading" size="24">
                     <LoadingOutlined />
                   </el-icon>
-                  <div class="text-sm text-gray-500 mt-2">加载中...</div>
+                  <div class="text-sm text-gray-500 mt-2">{{ t('characters.setting.loadingSkills') }}</div>
                 </div>
 
                 <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无可用的 Skills</div>
-                  <div class="text-sm mt-2">请先到"插件 > Skills"中安装技能</div>
+                  <div>{{ t('characters.setting.noSkills') }}</div>
+                  <div class="text-sm mt-2">{{ t('characters.setting.noSkillsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
@@ -344,13 +344,13 @@
                         <el-switch :model-value="getSkillEffectiveEnabled(skill)"
                           :loading="updatingSkills.has(skill.id)"
                           @update:model-value="(val) => handleSkillToggle(skill.id, val)" :disabled="allSkillsDisabled"
-                          size="small" inline-prompt active-text="启用" inactive-text="禁用" />
-                        <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">内置</el-tag>
+                          size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
+                        <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('characters.setting.sourceBuiltin') }}</el-tag>
                         <el-tag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{
                           skill.manifest.version }}</el-tag>
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || '暂无描述'
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || t('characters.setting.noDescription')
                       }}</p>
                   </div>
                 </div>
@@ -368,7 +368,7 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">功能开关</span>
+                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
                     </div>
                   </div>
@@ -378,15 +378,15 @@
                   <el-icon class="is-loading" size="24">
                     <LoadingOutlined />
                   </el-icon>
-                  <div class="text-sm text-gray-500 mt-2">加载中...</div>
+                  <div class="text-sm text-gray-500 mt-2">{{ t('characters.setting.loadingAgents') }}</div>
                 </div>
 
                 <div v-else-if="presetCharacters.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无可用的子代理</div>
-                  <div class="text-sm mt-2">请先创建其他助手</div>
+                  <div>{{ t('characters.setting.noAgents') }}</div>
+                  <div class="text-sm mt-2">{{ t('characters.setting.noAgentsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
@@ -398,10 +398,10 @@
                       <div class="flex items-center gap-1.5 shrink-0">
                         <el-switch :model-value="getAgentEffectiveEnabled(char)"
                           @update:model-value="(val) => handleAgentToggle(char.id, val)" :disabled="allAgentsDisabled"
-                          size="small" inline-prompt active-text="启用" inactive-text="禁用" />
+                          size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || '暂无描述' }}</p>
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || t('characters.setting.noDescription') }}</p>
                   </div>
                 </div>
               </el-form>
@@ -416,6 +416,7 @@
 <script setup lang="ts">
 // @ts-nocheck - CharacterSettingPanel 组件复杂度高，临时使用@ts-nocheck
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   ElForm,
   ElFormItem,
@@ -456,12 +457,13 @@ import SegmentedToggle from '../ui/SegmentedToggle.vue'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 
 const { toast, notify } = usePopup()
+const { t } = useI18n()
 
 // 工具栏目"全部禁用/自定义"分段按钮选项
-const autoEnableOptions = [
-  { label: '自动启用', value: false },
-  { label: '保持禁用', value: true }
-]
+const autoEnableOptions = computed(() => [
+  { label: t('characters.setting.autoEnable'), value: false },
+  { label: t('characters.setting.keepDisabled'), value: true }
+])
 
 // Slider 百分比格式化函数
 const formatSliderTooltip = (val: number): string => {
@@ -540,24 +542,24 @@ function deepEqual(a: any, b: any): boolean {
 }
 
 // 侧边栏分组
-const sidebarGroups = [
+const sidebarGroups = computed(() => [
   {
-    label: '基础配置',
+    label: t('characters.setting.groupBasic'),
     items: [
-      { label: '基础', path: 'basic', icon: UserOutlined },
-      { label: '提示词', path: 'prompt', icon: MessageOutlined },
+      { label: t('characters.setting.navBasic'), path: 'basic', icon: UserOutlined },
+      { label: t('characters.setting.navPrompt'), path: 'prompt', icon: MessageOutlined },
     ]
   },
   {
-    label: '工具与能力',
+    label: t('characters.setting.groupTools'),
     items: [
-      { label: '本地工具', path: 'local_tools', icon: ToolOutlined },
-      { label: 'MCP 工具', path: 'mcp_tools', icon: ApiOutlined },
-      { label: 'Skills', path: 'skills', icon: Code24Regular },
-      { label: '子代理', path: 'agent_presets', icon: Bot24Regular },
+      { label: t('characters.setting.navLocalTools'), path: 'local_tools', icon: ToolOutlined },
+      { label: t('characters.setting.navMcpTools'), path: 'mcp_tools', icon: ApiOutlined },
+      { label: t('characters.setting.navSkills'), path: 'skills', icon: Code24Regular },
+      { label: t('characters.setting.navSubAgents'), path: 'agent_presets', icon: Bot24Regular },
     ]
   }
-]
+])
 
 // 表单数据
 const characterForm = reactive({
@@ -582,12 +584,12 @@ const characterForm = reactive({
 })
 
 // 验证规则
-const basicRules = {
+const basicRules = computed(() => ({
   title: [
-    { required: true, message: '请输入角色标题', trigger: ['input', 'blur'] },
-    { min: 2, max: 20, message: '标题长度在2-20个字符之间', trigger: ['input', 'blur'] }
+    { required: true, message: t('characters.setting.titleRequired'), trigger: ['input', 'blur'] },
+    { min: 2, max: 20, message: t('characters.setting.titleLength'), trigger: ['input', 'blur'] }
   ]
-}
+}))
 
 const promptRules = {}
 
@@ -600,12 +602,12 @@ const promptRules = {}
 //     { label: 'Llama 2', value: 'llama-2' }
 // ]
 
-const memoryOptions = [
-  { label: '滑动窗口', value: 'sliding_window' },
-  { label: '摘要增强', value: 'summary_augmented_sliding_window' },
-  { label: '滑动窗口+记忆检索', value: 'sliding_window_with_rag' },
-  { label: '无记忆', value: 'memoryless' }
-];
+const memoryOptions = computed(() => [
+  { label: t('characters.setting.memorySlidingWindow'), value: 'sliding_window' },
+  { label: t('characters.setting.memorySummaryAugmented'), value: 'summary_augmented_sliding_window' },
+  { label: t('characters.setting.memorySlidingWindowWithRag'), value: 'sliding_window_with_rag' },
+  { label: t('characters.setting.memoryless'), value: 'memoryless' }
+]);
 
 // 模型选择选项（按供应商分组）
 const modelOptions = computed(() => {
@@ -615,7 +617,7 @@ const modelOptions = computed(() => {
 
   // 添加"使用默认模型"选项
   options.push({
-    label: '使用默认模型',
+    label: t('characters.setting.modelUseDefault'),
     value: '',
     key: 'default'
   })
@@ -683,11 +685,11 @@ const allSkillsDisabled = ref(false);
 // Skills 白名单模式（新技能默认不开启）
 const skillsAllowlistMode = ref(false);
 // 通用子代理（虚拟角色，不出现在角色列表中）
-const GENERIC_AGENT = {
+const GENERIC_AGENT = computed(() => ({
   id: 'generic',
-  title: '通用子代理',
-  description: '适用于通用任务的子代理，无需特定角色设定，权限继承父角色设置',
-};
+  title: t('characters.setting.genericAgentTitle'),
+  description: t('characters.setting.genericAgentDesc'),
+}));
 // 是否全部禁用子代理
 const allAgentsDisabled = ref(false);
 // 助手偏好 { characterId: true/false }
@@ -904,7 +906,7 @@ const loadPresetCharacters = async () => {
     const allChars = response.items || [];
     // 排除当前正在编辑的角色，并在列表开头插入虚拟通用子代理
     presetCharacters.value = [
-      GENERIC_AGENT,
+      GENERIC_AGENT.value,
       ...allChars.filter(c => c.id !== characterForm.id),
     ];
   } catch (err) {
@@ -957,7 +959,7 @@ async function loadAllData() {
     // 子代理列表（排除当前角色 + 通用虚拟子代理）
     const allChars = charsResp.items || []
     presetCharacters.value = [
-      GENERIC_AGENT,
+      GENERIC_AGENT.value,
       ...allChars.filter((c: any) => c.id !== characterForm.id),
     ]
 
@@ -1059,7 +1061,7 @@ async function loadLocalTools() {
     }
   } catch (error) {
     console.error('加载本地工具失败:', error);
-    toast.error('加载本地工具失败');
+    toast.error(t('characters.setting.loadLocalToolsFailed'));
   }
 }
 
@@ -1096,7 +1098,7 @@ const loadModels = async () => {
 
   } catch (error) {
     console.error('获取模型列表失败:', error)
-    notify.error('获取模型列表失败', error)
+    notify.error(t('characters.setting.loadModelsFailed'), error)
   }
 }
 

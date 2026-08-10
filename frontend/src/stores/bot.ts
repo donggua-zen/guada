@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import { ElMessage } from 'element-plus'
+import { t } from '@/locales'
 
 export const useBotStore = defineStore('bot', () => {
   // State
@@ -21,7 +22,7 @@ export const useBotStore = defineStore('bot', () => {
     try {
       platforms.value = await apiService.fetchBotPlatforms()
     } catch (error) {
-      ElMessage.error('加载平台列表失败')
+      ElMessage.error(t('session.bot.loadPlatformsFailed'))
       throw error
     }
   }
@@ -31,7 +32,7 @@ export const useBotStore = defineStore('bot', () => {
     try {
       botInstances.value = await apiService.fetchBotInstances()
     } catch (error) {
-      ElMessage.error('加载机器人列表失败')
+      ElMessage.error(t('session.bot.loadBotsFailed'))
       throw error
     } finally {
       loading.value = false
@@ -42,10 +43,10 @@ export const useBotStore = defineStore('bot', () => {
     try {
       const newBot = await apiService.createBotInstance(data)
       botInstances.value.unshift(newBot)
-      ElMessage.success('机器人创建成功')
+      ElMessage.success(t('session.bot.createSuccess'))
       return newBot
     } catch (error) {
-      ElMessage.error('创建机器人失败')
+      ElMessage.error(t('session.bot.createFailed'))
       throw error
     }
   }
@@ -57,10 +58,10 @@ export const useBotStore = defineStore('bot', () => {
       if (index !== -1) {
         botInstances.value[index] = updatedBot
       }
-      ElMessage.success('机器人更新成功')
+      ElMessage.success(t('session.bot.updateSuccess'))
       return updatedBot
     } catch (error) {
-      ElMessage.error('更新机器人失败')
+      ElMessage.error(t('session.bot.updateFailed'))
       throw error
     }
   }
@@ -69,9 +70,9 @@ export const useBotStore = defineStore('bot', () => {
     try {
       await apiService.deleteBotInstance(id)
       botInstances.value = botInstances.value.filter(bot => bot.id !== id)
-      ElMessage.success('机器人删除成功')
+      ElMessage.success(t('session.bot.deleteSuccess'))
     } catch (error) {
-      ElMessage.error('删除机器人失败')
+      ElMessage.error(t('session.bot.deleteFailed'))
       throw error
     }
   }
@@ -84,9 +85,9 @@ export const useBotStore = defineStore('bot', () => {
         bot.status = 'running'
         bot.runtimeStatus = 'CONNECTING'
       }
-      ElMessage.success('机器人启动中...')
+      ElMessage.success(t('session.bot.starting'))
     } catch (error) {
-      ElMessage.error('启动机器人失败')
+      ElMessage.error(t('session.bot.startFailed'))
       throw error
     }
   }
@@ -99,9 +100,9 @@ export const useBotStore = defineStore('bot', () => {
         bot.status = 'stopped'
         bot.runtimeStatus = 'DISCONNECTED'
       }
-      ElMessage.success('机器人已停止')
+      ElMessage.success(t('session.bot.stopped'))
     } catch (error) {
-      ElMessage.error('停止机器人失败')
+      ElMessage.error(t('session.bot.stopFailed'))
       throw error
     }
   }
@@ -114,9 +115,9 @@ export const useBotStore = defineStore('bot', () => {
         bot.status = 'running'
         bot.runtimeStatus = 'CONNECTING'
       }
-      ElMessage.success('机器人重启中...')
+      ElMessage.success(t('session.bot.restarting'))
     } catch (error) {
-      ElMessage.error('重启机器人失败')
+      ElMessage.error(t('session.bot.restartFailed'))
       throw error
     }
   }

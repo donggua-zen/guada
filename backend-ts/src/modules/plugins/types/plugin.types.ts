@@ -101,6 +101,19 @@ export interface ToolParamSchema {
   properties?: Record<string, ToolParamSchema>;
 }
 
+export interface ToolDisplay {
+  /** 执行中/已完成文案 */
+  text?: { executing: string; completed: string };
+  /** 聚合文案（{n} 为数量占位符） */
+  aggregate?: { executing: string; completed: string };
+  /** 从 args 中提取摘要的字段名 */
+  argsKey?: string;
+  /** 前端图标标识 */
+  icon?: string;
+  /** @deprecated 动作类型枚举（前端不再消费，保留兼容） */
+  actionType?: string;
+}
+
 export interface ToolHandlerDef {
   name: string;
   description: string;
@@ -124,10 +137,14 @@ export interface ToolHandlerDef {
   toolSet?: string;
   /** 前端图标标识（如 "browser"、"code"、"edit"） */
   icon?: string;
-  /** 动作类型枚举（前端用于映射展示文案） */
+  /** @deprecated 动作类型枚举（前端不再消费，保留兼容） */
   actionType?: string;
   /** 从 args 中提取摘要的字段名（默认自动取第一个字符串参数） */
   argsKey?: string;
+  /** 执行中/已完成展示文案 */
+  displayText?: { executing: string; completed: string };
+  /** 聚合展示文案（{n} 为数量占位符） */
+  displayAggregate?: { executing: string; completed: string };
 }
 
 // ==================== 工具集定义（旧版，已废弃） ====================
@@ -194,7 +211,7 @@ export interface ToolKitHandle {
       ctx?: PluginContext,
       signal?: AbortSignal,
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
-    display?: { actionType?: string; argsKey?: string; icon?: string };
+    display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void;
   registerRawTool(def: ToolHandlerDef): void;

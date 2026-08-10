@@ -1,0 +1,1 @@
+{"web_search.executing": "正在搜索网络", "web_search.completed": "已搜索网络", "web_search.aggregate.executing": "正在搜索{n}次", "web_search.aggregate.completed": "已搜索{n}次", "web_parser.executing": "正在读取网页", "web_parser.completed": "已读取网页", "web_parser.aggregate.executing": "正在读取{n}个网页", "web_parser.aggregate.completed": "已读取{n}个网页"}

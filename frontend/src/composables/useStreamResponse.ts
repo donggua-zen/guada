@@ -6,6 +6,7 @@
 import { reactive, shallowReactive } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { usePopup } from "@/composables/usePopup";
+import { t } from "@/locales";
 import { updateTokenStatsFromSSE } from "@/composables/useSessionTokenStats";
 
 // 类型定义
@@ -352,18 +353,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
       if (!existingToolCall) {
         // 如果是新的工具调用，添加到列表
-        // 直接从 toolCall.metadata.displayMessage 获取展示消息
-        const displayMessage = toolCall.metadata?.displayMessage || null;
-
         content.metadata.toolCalls.push({
           id: toolCall.id,
           index: toolCall.index,
           type: toolCall.type,
           name: toolCall.name,
           arguments: toolCall.arguments || "",
-          metadata: {
-            displayMessage: displayMessage,
-          },
+          metadata: {},
         });
       } else {
         // 如果已存在，累加参数字符串
@@ -758,14 +754,14 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         // 处理压缩开始事件
         if (response.type === "compression_start") {
           sessionStore.setSessionIsCompressing(streamingSessionId, true);
-          toast.info(response.content || "正在优化对话历史...");
+          toast.info(response.content || t("chat.stream.compressing"));
           continue;
         }
 
         // 处理压缩错误事件
         if (response.type === "compression_error") {
           sessionStore.setSessionIsCompressing(streamingSessionId, false);
-          toast.error(response.content || "自动压缩失败");
+          toast.error(response.content || t("common.error.operationFailed"));
           continue;
         }
 

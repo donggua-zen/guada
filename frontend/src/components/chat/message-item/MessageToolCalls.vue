@@ -39,7 +39,7 @@
 
   <!-- 单个工具详情对话框 -->
   <ElDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
-    :title="`工具调用详情 #${selectedToolIndex + 1}`" width="700px" :close-on-click-modal="true" destroy-on-close
+    :title="t('chat.toolCalls.detailTitle', { index: selectedToolIndex + 1 })" width="700px" :close-on-click-modal="true" destroy-on-close
     :append-to-body="true" class="tool-dialog" @closed="keepElement = false">
     <div class="tool-dialog-content">
       <!-- 加载状态 -->
@@ -47,7 +47,7 @@
         <el-icon size="24" class="animate-spin text-blue-500 mr-2">
           <Loading />
         </el-icon>
-        <span class="text-gray-500">加载工具详情中...</span>
+        <span class="text-gray-500">{{ t('chat.toolCalls.loadingDetails') }}</span>
       </div>
       <div v-else-if="selectedTool" class="tool-call-detail">
         <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
@@ -74,13 +74,13 @@
             <el-icon size="14" class="mr-1">
               <SettingsOutlined />
             </el-icon>
-            调用参数
+            {{ t('chat.toolCalls.callParams') }}
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
             <div v-if="isSimpleParams(getToolArgs(selectedTool))" class="params-table">
               <div class="param-header py-2 border-b border-gray-200 dark:border-gray-700">
-                <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">参数</span>
-                <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">值</span>
+                <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.toolCalls.paramKey') }}</span>
+                <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">{{ t('chat.toolCalls.paramValue') }}</span>
               </div>
               <div v-for="(value, key) in parseParams(getToolArgs(selectedTool))" :key="key"
                 class="param-row py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
@@ -104,15 +104,15 @@
             <el-icon v-else size="14" class="mr-1 text-green-500">
               <CheckCircleOutlined />
             </el-icon>
-            <span v-if="selectedTool?.outcome === 'error' || selectedTool?.outcome === 'rejected'">执行失败</span>
-            <span v-else>执行结果</span>
+            <span v-if="selectedTool?.outcome === 'error' || selectedTool?.outcome === 'rejected'">{{ t('chat.toolCalls.resultFailed') }}</span>
+            <span v-else>{{ t('chat.toolCalls.resultSuccess') }}</span>
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
             <!-- JSON 解码成功且为简单对象 → 表格展示 -->
             <div v-if="isSimpleResult(currentToolResponses[selectedToolIndex])" class="params-table">
               <div class="param-header py-2 border-b border-gray-200 dark:border-gray-700">
-                <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">字段</span>
-                <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">值</span>
+                <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.toolCalls.fieldKey') }}</span>
+                <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">{{ t('chat.toolCalls.paramValue') }}</span>
               </div>
               <div v-for="(value, key) in parseResult(currentToolResponses[selectedToolIndex])" :key="key"
                 class="param-row py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
@@ -141,6 +141,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElIcon, ElDialog, ElButton } from 'element-plus';
+import { useI18n } from 'vue-i18n';
 import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
 import { ErrorCircle16Regular } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
@@ -162,6 +163,7 @@ const props = defineProps<{
 }>();
 
 const { toast } = usePopup();
+const { t } = useI18n();
 
 // ── 执行状态 ──
 
@@ -185,7 +187,7 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
   const config = getToolConfig(tool);
   const executing = isToolExecuting(tool, toolIndex);
   if (tool.outcome === 'aborted') {
-    return `${config.text.completed}（已终止）`;
+    return `${config.text.completed}（${t('chat.toolCalls.aborted')}）`;
   }
   return executing ? config.text.executing : config.text.completed;
 };
@@ -240,7 +242,7 @@ async function loadToolDetails() {
     loadedToolResponses.value = result.toolCallsResponse || [];
   } catch (error: any) {
     console.error('加载工具调用详情失败:', error);
-    toast.error('加载工具详情失败');
+    toast.error(t('chat.toolCalls.loadDetailsFailed'));
   } finally {
     isLoadingDetails.value = false;
   }
@@ -325,7 +327,7 @@ const extractResultContent = (response: any): any => {
 };
 
 const formatToolResponse = (response: any): string => {
-  if (!response) return '无响应';
+  if (!response) return t('chat.toolCalls.noResponse');
   const content = extractResultContent(response);
   if (content) {
     if (typeof content === 'string') return content;

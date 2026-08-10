@@ -47,9 +47,10 @@ RUN groupadd -g 1001 nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-# postinstall "prisma generate || echo 'skipped'" handles missing CLI gracefully
-RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev && \
+# Install production dependencies only (skip scripts — native modules copied from builder)
+# postinstall "prisma generate || echo 'skipped'" would also be skipped, which is fine
+# (prisma CLI is a devDependency; generated client is COPY'd from builder below)
+RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev --ignore-scripts && \
     npm cache clean --force && \
     # Remove unnecessary files from node_modules to reduce size
     find node_modules -type f \( \
@@ -81,6 +82,12 @@ COPY --from=builder /app/dist ./dist
 
 # Copy generated Prisma Client from builder (prisma CLI not installed in prod)
 COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
+
+# Copy native modules from builder (better-sqlite3, sharp, etc. — already compiled in builder)
+COPY --from=builder /app/node_modules/better-sqlite3 /app/node_modules/better-sqlite3
+COPY --from=builder /app/node_modules/sharp /app/node_modules/sharp
+COPY --from=builder /app/node_modules/@parcel /app/node_modules/@parcel
+COPY --from=builder /app/node_modules/sqlite-vec /app/node_modules/sqlite-vec
 
 # Create necessary directories
 RUN mkdir -p data/uploads data/compression-states logs static && \

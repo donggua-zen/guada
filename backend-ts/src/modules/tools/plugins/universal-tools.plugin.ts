@@ -11,6 +11,7 @@ import {
   ResolvedPluginInfo,
 } from "../../plugins/types/plugin.types";
 import { ToolOrchestrator } from "../tool-orchestrator.service";
+import langZh from "./universal-tools.lang.zh.json";
 
 @Injectable()
 export class UniversalToolsPlugin extends PluginBase {
@@ -48,6 +49,7 @@ export class UniversalToolsPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // 注册懒加载工具包
     const lazyKit = api.registerToolKit({
       id: "lazy_tools",
@@ -77,7 +79,13 @@ export class UniversalToolsPlugin extends PluginBase {
       execute: async (args: { name: string }, ctx?: ToolExecCtx) => {
         return this.handleToolLearn(args.name, ctx!);
       },
-      display: { actionType: "tool_load_kit", argsKey: "name", icon: "tool" },
+      display: {
+        actionType: "tool_load_kit",
+        text: { executing: "%tool_learn.executing%", completed: "%tool_learn.completed%" },
+        aggregate: { executing: "%tool_learn.aggregate.executing%", completed: "%tool_learn.aggregate.completed%" },
+        argsKey: "name",
+        icon: "tool",
+      },
     });
 
     // tool_use
@@ -113,7 +121,13 @@ export class UniversalToolsPlugin extends PluginBase {
         }
         return result.content;
       },
-      display: { actionType: "tool_use", argsKey: "tool_name", icon: "tool" },
+      display: {
+        actionType: "tool_use",
+        text: { executing: "%tool_use.executing%", completed: "%tool_use.completed%" },
+        aggregate: { executing: "%tool_use.aggregate.executing%", completed: "%tool_use.aggregate.completed%" },
+        argsKey: "tool_name",
+        icon: "tool",
+      },
     });
 
     // 工具包记忆提示词：注入到 user 消息（压缩后自动恢复 AI 正在使用的工具包定义）

@@ -16,6 +16,11 @@ import {
   withStreamIdleTimeout,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
+import {
+  UpstreamRateLimitError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "../utils/upstream-errors";
 
 /**
  * Mock 适配器 — 用于测试超时、429、网络错误等异常场景
@@ -211,38 +216,33 @@ export class MockAdapter implements IProtocolAdapter {
   }
 
   /**
-   * 创建 429 限流错误（带 Retry-After header）
+   * 创建 429 限流错误
    */
-  private createRateLimitError(_attempt: number): Error {
-    const error: any = new Error("429 Too Many Requests");
-    error.status = 429;
-    error.statusCode = 429;
-    error.name = "APIError";
-    error.headers = {
-      "retry-after": "2",
-      "retry-after-ms": "2000",
-    };
-    return error;
+  private createRateLimitError(_attempt: number): UpstreamRateLimitError {
+    return new UpstreamRateLimitError(
+      "429 Too Many Requests (mock rate limit)",
+      undefined,
+      2000, // retryAfterMs
+    );
   }
 
   /**
    * 创建网络错误
    */
-  private createNetworkError(): Error {
-    const error: any = new Error("fetch failed: connect ECONNREFUSED 127.0.0.1:443");
-    error.code = "ECONNREFUSED";
-    error.name = "Error";
-    return error;
+  private createNetworkError(): UpstreamNetworkError {
+    return new UpstreamNetworkError(
+      "fetch failed: connect ECONNREFUSED 127.0.0.1:443",
+    );
   }
 
   /**
    * 创建 500 服务器内部错误
    */
-  private createServerError(): Error {
-    const error: any = new Error("Internal Server Error");
-    error.status = 500;
-    error.statusCode = 500;
-    error.name = "APIError";
-    return error;
+  private createServerError(): UpstreamNetworkError {
+    return new UpstreamNetworkError(
+      "Internal Server Error (mock 500)",
+      undefined,
+      500,
+    );
   }
 }

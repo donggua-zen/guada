@@ -5,7 +5,7 @@
         <el-icon size="16" class="text-gray-600 dark:text-gray-400">
           <LightbulbFilament24Regular />
         </el-icon>
-        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">思考强度</span>
+        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.input.thinkingEffortTitle') }}</span>
       </div>
     </template>
     <div class="popover-content space-y-0.5">
@@ -22,9 +22,12 @@
 
 <script setup lang="ts">
 import { ElIcon } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { LightbulbFilament24Regular } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import { getThinkingEffortLabel } from '@/utils/modelUtils'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean

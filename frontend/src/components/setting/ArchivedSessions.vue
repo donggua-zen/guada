@@ -2,17 +2,17 @@
     <div class="flex flex-col gap-3">
         <!-- 搜索 + 筛选栏 -->
         <div class="flex items-center gap-2">
-            <el-input v-model="searchKeyword" placeholder="搜索归档会话..." clearable size="small"
+            <el-input v-model="searchKeyword" :placeholder="t('settings.archived.searchPlaceholder')" clearable size="small"
                 class="flex-1 min-w-40" @keyup.enter="handleSearch" @clear="handleSearch">
                 <template #prefix>
                     <Search16Regular class="w-4 h-4 text-gray-400" />
                 </template>
             </el-input>
-            <el-select v-model="filterGroupId" placeholder="全部分组" size="small" clearable
+            <el-select v-model="filterGroupId" :placeholder="t('settings.archived.allGroups')" size="small" clearable
                 style="width: 128px; flex-shrink: 0" @change="handleSearch">
-                <el-option label="全部分组" :value="''" />
+                <el-option :label="t('settings.archived.allGroups')" :value="''" />
                 <el-option v-for="g in sessionGroupStore.sortedGroups" :key="g.id" :label="g.name" :value="g.id" />
-                <el-option label="任务列表（未分组）" :value="UNGROUPED_ID" />
+                <el-option :label="t('settings.archived.ungrouped')" :value="UNGROUPED_ID" />
             </el-select>
             <el-button size="small" :loading="isLoading" @click="loadArchivedSessions" circle>
                 <el-icon class="w-4 h-4">
@@ -24,12 +24,12 @@
         <!-- 批量操作栏 -->
         <div v-if="archivedSessions.length > 0" class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-3">
-                <el-checkbox v-model="selectAll" @change="handleSelectAll">全选</el-checkbox>
-                <span class="text-xs text-gray-400" v-if="selectedIds.size > 0">已选 {{ selectedIds.size }} 项</span>
+                <el-checkbox v-model="selectAll" @change="handleSelectAll">{{ t('common.selectAll') }}</el-checkbox>
+                <span class="text-xs text-gray-400" v-if="selectedIds.size > 0">{{ t('settings.archived.selectedCount', { n: selectedIds.size }) }}</span>
             </div>
             <el-button type="primary" size="small" :disabled="selectedIds.size === 0" :loading="batchLoading"
                 @click="handleBatchUnarchive">
-                批量取消归档
+                {{ t('settings.archived.batchUnarchive') }}
             </el-button>
         </div>
 
@@ -38,7 +38,7 @@
             <el-icon class="animate-spin text-2xl mr-2">
                 <Loading />
             </el-icon>
-            <span class="text-sm">加载中...</span>
+            <span class="text-sm">{{ t('common.loading') }}</span>
         </div>
 
         <!-- 归档会话列表（扁平） -->
@@ -52,7 +52,7 @@
                     <span class="flex-1 truncate text-sm text-(--color-text)">{{ session.title }}</span>
                     <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                        title="取消归档" @click="handleUnarchive(session)">
+                        :title="t('settings.archived.unarchive')" @click="handleUnarchive(session)">
                         <el-icon class="w-3.5 h-3.5 text-blue-500">
                             <ArrowUndo20Regular />
                         </el-icon>
@@ -70,13 +70,14 @@
         <!-- 空状态 -->
         <div v-else class="flex flex-col items-center justify-center py-12 text-gray-400">
             <Archive20Regular class="w-10 h-10 mb-3 opacity-30" />
-            <span class="text-sm">{{ hasSearched ? '未找到匹配的归档会话' : '暂无已归档的会话' }}</span>
+            <span class="text-sm">{{ hasSearched ? t('settings.archived.noMatchFound') : t('settings.archived.noArchived') }}</span>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Archive20Regular, ArrowUndo20Regular, ArrowClockwise20Regular, Search16Regular } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
 import { useDebounceFn } from '@vueuse/core'
@@ -86,6 +87,8 @@ import { useSessionStore } from '@/stores/session'
 import { UNGROUPED_ID } from '@/stores/session'
 import { usePopup } from '@/composables/usePopup'
 import type { Session } from '@/types/session'
+
+const { t } = useI18n()
 
 const sessionGroupStore = useSessionGroupStore()
 const sessionStore = useSessionStore()
@@ -117,7 +120,7 @@ const loadArchivedSessions = async () => {
         hasSearched.value = !!(searchKeyword.value.trim() || filterGroupId.value)
     } catch (error) {
         console.error('加载归档会话失败:', error)
-        toast.error('加载归档会话失败')
+        toast.error(t('settings.archived.loadFailed'))
     } finally {
         isLoading.value = false
     }
@@ -173,21 +176,21 @@ const handleUnarchive = async (session: Session) => {
                 currentPage.value--
             }
             await loadArchivedSessions()
-            toast.success('已取消归档')
+            toast.success(t('settings.archived.unarchived'))
         }
     } catch (error) {
         console.error('取消归档失败:', error)
-        toast.error('取消归档失败')
+        toast.error(t('settings.archived.unarchiveFailed'))
     }
 }
 
 const handleBatchUnarchive = async () => {
     if (selectedIds.value.size === 0) return
 
-    const confirmed = await confirm('批量取消归档', `确定要将选中的 ${selectedIds.value.size} 个会话取消归档吗？`, {
+    const confirmed = await confirm(t('settings.archived.batchUnarchiveTitle'), t('settings.archived.batchUnarchiveConfirm', { n: selectedIds.value.size }), {
         type: 'info',
-        confirmText: '确定',
-        cancelText: '取消'
+        confirmText: t('common.confirm'),
+        cancelText: t('common.cancel')
     })
     if (!confirmed) return
 
@@ -212,13 +215,13 @@ const handleBatchUnarchive = async () => {
         await loadArchivedSessions()
 
         if (result.skipped.length > 0) {
-            toast.warning(`已取消归档，其中 ${result.skipped.length} 个会话因正在流式输出被跳过`)
+            toast.warning(t('settings.archived.batchUnarchivedWithSkipped', { n: result.skipped.length }))
         } else {
-            toast.success('批量取消归档成功')
+            toast.success(t('settings.archived.batchUnarchiveSuccess'))
         }
     } catch (error) {
         console.error('批量取消归档失败:', error)
-        toast.error('批量取消归档失败')
+        toast.error(t('settings.archived.batchUnarchiveFailed'))
     } finally {
         batchLoading.value = false
     }
@@ -228,7 +231,7 @@ function formatLastActive(dateStr: string | null | undefined): string {
     if (!dateStr) return ''
     const diff = Date.now() - new Date(dateStr).getTime()
     const minutes = Math.floor(diff / 60000)
-    if (minutes < 1) return '刚刚'
+    if (minutes < 1) return t('settings.archived.justNow')
     if (minutes < 60) return `${minutes}min`
     const hours = Math.floor(minutes / 60)
     if (hours < 24) return `${hours}h`
@@ -236,7 +239,7 @@ function formatLastActive(dateStr: string | null | undefined): string {
     if (days < 30) return `${days}d`
     const months = Math.floor(days / 30)
     if (months < 12) return `${months}m`
-    return '更早'
+    return t('settings.archived.earlier')
 }
 
 onMounted(() => {

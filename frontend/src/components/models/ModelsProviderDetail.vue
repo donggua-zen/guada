@@ -6,13 +6,13 @@
         <el-button link @click="$emit('back')"
           class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium shrink-0">
           <el-icon :size="20"><ArrowBackIosFilled /></el-icon>
-          <span>返回</span>
+          <span>{{ t('settings.providerDetail.back') }}</span>
         </el-button>
         <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed] truncate">{{ provider?.name }}</h1>
       </div>
       <el-button @click="handleAddModel">
         <template #icon><PlusOutlined /></template>
-        添加模型
+        {{ t('settings.providerDetail.addModel') }}
       </el-button>
     </div>
 
@@ -24,12 +24,12 @@
           <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
             <Box16Regular />
           </el-icon>
-          <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无模型</p>
-          <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">点击下方按钮添加模型</p>
+          <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('settings.providerDetail.noModels') }}</p>
+          <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('settings.providerDetail.noModelsDesc') }}</p>
           <div class="flex justify-center gap-3 mt-6">
             <el-button type="primary" @click="handleAddModel">
               <template #icon><PlusOutlined /></template>
-              添加模型
+              {{ t('settings.providerDetail.addModel') }}
             </el-button>
           </div>
         </div>
@@ -47,13 +47,13 @@
                     getModelDisplayName(model.modelName) }}</div>
                   <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
                     <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium">
-                      {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                      {{ model.modelType === 'text' ? t('settings.providerDetail.chatType') : t('settings.providerDetail.embeddingType') }}
                     </span>
                     <div v-if="model.modelType === 'text'"
                       class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
-                          <LTooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                          <LTooltip :content="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" />
@@ -66,7 +66,7 @@
                       </el-icon>
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
-                          <LTooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                          <LTooltip :content="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" />
@@ -91,7 +91,7 @@
                 </div>
               </div>
               <div class="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity shrink-0">
-                <el-switch v-model="model.isActive" active-text="启用" inactive-text="禁用"
+                <el-switch v-model="model.isActive" :active-text="t('common.enabled')" :inactive-text="t('common.disabled')"
                   @change="handleToggleModelActive(model)" inline-prompt size="small" />
                 <el-button link style="font-size: 18px; color: var(--el-text-color-secondary)"
                   @click="handleEditClick(model)">
@@ -108,43 +108,43 @@
     </div>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="600px" align-center
+    <el-dialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
           label-width="120px" size="default">
 
           <div class="form-section">
-            <el-form-item label="模型名称" prop="modelName">
+            <el-form-item :label="t('settings.providerDetail.modelName')" prop="modelName">
               <div class="api-key-input-wrapper">
-                <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable
+                <el-input v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
                   :disabled="isEditMode" />
                 <el-button v-if="!isEditMode" type="primary" @click="handleFetchModels"
                   :loading="fetchingModels">
                   <template #icon>
                     <CloudDownloadOutlined />
                   </template>
-                  从供应商获取
+                  {{ t('settings.providerDetail.fetchFromProvider') }}
                 </el-button>
               </div>
               <!-- 预设检测提示 -->
               <div v-if="!isEditMode && matchedPreset" class="preset-hint" @click="applyPreset(matchedPreset)">
                 <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
-                检测到预设配置「{{ matchedPreset.label }}」，点击自动填充
+                {{ t('settings.providerDetail.presetDetected', { label: matchedPreset.label }) }}
               </div>
             </el-form-item>
 
-            <el-form-item label="模型类型" prop="modelType">
+            <el-form-item :label="t('settings.providerDetail.modelType')" prop="modelType">
               <el-radio-group v-model="editModelForm.modelType">
                 <el-radio-button value="text">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <TextT24Regular />
-                    </el-icon> 对话 (Chat)</span>
+                    </el-icon> {{ t('settings.providerDetail.chatModel') }}</span>
                 </el-radio-button>
                 <el-radio-button value="embedding">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <Group24Regular />
-                    </el-icon> 嵌入 (Embedding)</span>
+                    </el-icon> {{ t('settings.providerDetail.embeddingModel') }}</span>
                 </el-radio-button>
               </el-radio-group>
             </el-form-item>
@@ -152,83 +152,83 @@
 
           <!-- 对话模型配置 -->
           <div v-if="editModelForm.modelType === 'text'" class="transition-all">
-            <el-form-item label="输入能力" prop="config.inputCapabilities" class="mb-3">
+            <el-form-item :label="t('settings.providerDetail.inputCapabilities')" prop="config.inputCapabilities" class="mb-3">
               <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
                 <el-checkbox-button value="text" disabled>
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <TextT24Regular />
-                    </el-icon> 文本</span>
+                    </el-icon> {{ t('settings.providerDetail.text') }}</span>
                 </el-checkbox-button>
                 <el-checkbox-button value="image">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <Image24Regular />
-                    </el-icon> 图像</span>
+                    </el-icon> {{ t('settings.providerDetail.image') }}</span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
 
-            <el-form-item label="输出能力" prop="config.outputCapabilities" class="mb-3">
+            <el-form-item :label="t('settings.providerDetail.outputCapabilities')" prop="config.outputCapabilities" class="mb-3">
               <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
                 <el-checkbox-button value="text" disabled>
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <TextT24Regular />
-                    </el-icon> 文本</span>
+                    </el-icon> {{ t('settings.providerDetail.text') }}</span>
                 </el-checkbox-button>
                 <el-checkbox-button value="image">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <Image24Regular />
-                    </el-icon> 图像</span>
+                    </el-icon> {{ t('settings.providerDetail.image') }}</span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
 
-            <el-form-item label="高级功能" prop="config.features" class="mb-4">
+            <el-form-item :label="t('settings.providerDetail.advancedFeatures')" prop="config.features" class="mb-4">
               <el-checkbox-group v-model="editModelForm.config.features">
                 <el-checkbox-button value="tools">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <WrenchScrewdriver24Regular />
-                    </el-icon> 工具调用</span>
+                    </el-icon> {{ t('settings.providerDetail.toolCalling') }}</span>
                 </el-checkbox-button>
                 <el-checkbox-button value="thinking">
                   <span class="flex items-center"><el-icon class="mr-1 align-middle">
                       <LightbulbFilament24Regular />
-                    </el-icon> 混合思考</span>
+                    </el-icon> {{ t('settings.providerDetail.mixedThinking') }}</span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
 
-            <el-form-item label="上下文窗口" prop="config.contextWindow">
+            <el-form-item :label="t('settings.providerDetail.contextWindow')" prop="config.contextWindow">
               <el-input-number v-model="editModelForm.config.contextWindow" placeholder="128000"
                 controls-position="right" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
               </el-input-number>
             </el-form-item>
 
-            <el-form-item label="最大输出长度" prop="config.maxOutputTokens">
+            <el-form-item :label="t('settings.providerDetail.maxOutputTokens')" prop="config.maxOutputTokens">
               <el-input-number v-model="editModelForm.config.maxOutputTokens" placeholder="4096"
                 controls-position="right" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
               </el-input-number>
             </el-form-item>
 
-            <el-divider content-position="left" class="!my-4 text-xs text-gray-400">模型默认参数（除非你明确知道自己在干什么，否则请留空，由 API 自行决定）</el-divider>
+            <el-divider content-position="left" class="!my-4 text-xs text-gray-400">{{ t('settings.providerDetail.defaultParamsDesc') }}</el-divider>
 
-            <el-form-item label="温度" prop="config.temperature">
+            <el-form-item :label="t('settings.providerDetail.temperature')" prop="config.temperature">
               <el-input-number v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
-                placeholder="模型默认" controls-position="right" style="width: 240px;" />
+                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
             </el-form-item>
 
             <el-form-item label="Top P" prop="config.topP">
               <el-input-number v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
-                placeholder="模型默认" controls-position="right" style="width: 240px;" />
+                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
             </el-form-item>
 
-            <el-form-item label="频率惩罚" prop="config.frequencyPenalty">
+            <el-form-item :label="t('settings.providerDetail.frequencyPenalty')" prop="config.frequencyPenalty">
               <el-input-number v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
-                placeholder="模型默认" controls-position="right" style="width: 240px;" />
+                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
             </el-form-item>
 
-            <el-form-item label="自定义参数 (JSON)" prop="config.customParameters">
+            <el-form-item :label="t('settings.providerDetail.customParameters')" prop="config.customParameters">
               <el-input v-model="customParamsStr" type="textarea" :rows="3"
                 placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
             </el-form-item>
@@ -236,28 +236,28 @@
 
           <!-- 嵌入模型配置 -->
           <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
-            <el-form-item label="向量维度 (Dimensions)" prop="config.vectorDimensions">
-              <el-input-number v-model="editModelForm.config.vectorDimensions" placeholder="例如：768, 1536, 3072"
+            <el-form-item :label="t('settings.providerDetail.vectorDimensions')" prop="config.vectorDimensions">
+              <el-input-number v-model="editModelForm.config.vectorDimensions" :placeholder="t('settings.providerDetail.vectorDimensionsPlaceholder')"
                 style="width: 240px;" controls-position="right" />
-              <div class="text-xs text-gray-400 mt-1">该模型生成的向量特征数量</div>
+              <div class="text-xs text-gray-400 mt-1">{{ t('settings.providerDetail.vectorDimensionsDesc') }}</div>
             </el-form-item>
           </div>
         </el-form>
       </div>
       <template #footer>
         <div class="dialog-footer flex justify-end gap-3">
-          <el-button @click="showEditModal = false">取消</el-button>
-          <el-button type="primary" @click="handleSaveModel" :loading="saving">保存更改</el-button>
+          <el-button @click="showEditModal = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="handleSaveModel" :loading="saving">{{ t('settings.providerDetail.saveChanges') }}</el-button>
         </div>
       </template>
     </el-dialog>
 
     <!-- 获取模型列表的模态框 -->
-    <el-dialog v-model="showFetchModal" title="从供应商获取模型" width="600px" align-center
+    <el-dialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
       class="model-fetch-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
-          <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
+          <el-input v-model="searchModelName" :placeholder="t('settings.providerDetail.searchModelName')" clearable @input="handleSearchModel">
             <template #prefix>
               <el-icon>
                 <SearchOutlined />
@@ -281,7 +281,7 @@
                   <span class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}</span>
                   <span v-if="model.modelType !== 'text'"
                     class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium text-xs">
-                    嵌入
+                    {{ t('settings.providerDetail.embeddingBadge') }}
                   </span>
                   <template v-for="feature in (model.config?.features || [])" :key="feature">
                     <LTooltip :content="getLableName(feature)" placement="top">
@@ -294,14 +294,14 @@
                   </template>
                 </div>
                 <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
-                  选择
+                  {{ t('settings.providerDetail.select') }}
                 </el-button>
               </li>
             </ul>
           </div>
 
           <div v-if="filteredFetchedModels.length === 0" class="text-center py-12 text-gray-400 text-sm">
-            暂无匹配的模型数据
+            {{ t('settings.providerDetail.noMatchFound') }}
           </div>
         </div>
       </div>
@@ -311,6 +311,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { ElMessageBox } from 'element-plus'
 import Avatar from '../ui/Avatar.vue'
@@ -340,6 +341,7 @@ const emit = defineEmits<{
   changed: []
 }>()
 
+const { t } = useI18n()
 const { notify, confirm } = usePopup()
 
 // ========== 编辑/新增模型信息 ==========
@@ -414,33 +416,33 @@ const applyPreset = (preset: any) => {
   }
 }
 
-const editModelRules = {
-  modelName: { required: true, message: '请输入模型名字', trigger: 'blur' },
-  modelType: { required: true, message: '请选择模型类型', trigger: 'change' },
+const editModelRules = computed(() => ({
+  modelName: { required: true, message: t('settings.providerDetail.modelNameRequired'), trigger: 'blur' },
+  modelType: { required: true, message: t('settings.providerDetail.modelTypeRequired'), trigger: 'change' },
   'config.contextWindow': {
     required: false,
     type: 'number' as const,
     validator: (rule: any, value: any) => !value || value > 0,
-    message: '请输入有效的上下文窗口长度',
+    message: t('settings.providerDetail.contextWindowInvalid'),
     trigger: 'blur' as const
   },
   'config.maxOutputTokens': {
     required: false,
     type: 'number' as const,
     validator: (rule: any, value: any) => !value || value > 0,
-    message: '请输入有效的最大输出长度',
+    message: t('settings.providerDetail.maxOutputTokensInvalid'),
     trigger: 'blur' as const
   }
-}
+}))
 
 const getLableName = (type: string) => {
   switch (type) {
     case 'visual':
-      return '视觉'
+      return t('settings.providerDetail.visual')
     case 'tools':
-      return '工具调用'
+      return t('settings.providerDetail.toolCalling')
     case 'thinking':
-      return '混合思考'
+      return t('settings.providerDetail.mixedThinking')
     default:
       return type
   }
@@ -531,13 +533,13 @@ const handleSaveModel = async () => {
       if (currentEditModelId.value) {
         await apiService.updateModel(currentEditModelId.value, editModelForm.value)
       }
-      notify.success('保存成功', '模型信息已更新')
+      notify.success(t('common.saveSuccess'), t('settings.providerDetail.modelUpdated'))
     } else {
       await apiService.createModel({
         ...editModelForm.value,
         providerId: props.provider.id
       })
-      notify.success('添加成功', '模型已添加')
+      notify.success(t('common.createSuccess'), t('settings.providerDetail.modelAdded'))
     }
 
     showEditModal.value = false
@@ -550,10 +552,10 @@ const handleSaveModel = async () => {
 
 // 删除模型
 const handleDeleteClick = async (model: any) => {
-  const result = await confirm('删除模型', '确定要删除该模型吗？删除后将无法恢复。')
+  const result = await confirm(t('settings.providerDetail.deleteModel'), t('settings.providerDetail.deleteModelConfirm'))
   if (!result) return
   await apiService.deleteModel(model.id)
-  notify.success('删除成功', '模型已删除')
+  notify.success(t('common.deleteSuccess'), t('settings.providerDetail.modelDeleted'))
   emit('changed')
 }
 
@@ -562,12 +564,12 @@ const handleToggleModelActive = async (model: any) => {
   try {
     const result = await apiService.toggleModelActive(model.id)
     model.isActive = result.isActive
-    const statusText = result.isActive ? '启用' : '禁用'
-    notify.success('操作成功', `模型已${statusText}`, { duration: 2000 })
+    const statusText = result.isActive ? t('settings.providerDetail.modelEnabled') : t('settings.providerDetail.modelDisabled')
+    notify.success(t('common.operationSuccess'), statusText, { duration: 2000 })
     emit('changed')
   } catch (error) {
     console.error('切换模型状态失败:', error)
-    notify.error('操作失败', '切换模型状态时发生错误', { duration: 2000 })
+    notify.error(t('common.operationFailed'), t('settings.providerDetail.toggleModelError'), { duration: 2000 })
     model.isActive = !model.isActive
   }
 }
@@ -594,7 +596,7 @@ const filteredFetchedModels = computed(() => {
 
 const handleFetchModels = async () => {
   if (!props.provider.apiUrl || !props.provider.apiKey) {
-    notify.error('配置错误', '请先配置API地址和API KEY', { duration: 2000 })
+    notify.error(t('settings.providerDetail.configError'), t('settings.providerDetail.configApiError'), { duration: 2000 })
     return
   }
 
@@ -622,10 +624,10 @@ const handleFetchModels = async () => {
       }
     })
     fetchedModels.value = enrichedModels
-    notify.success('获取成功', `已获取到 ${enrichedModels.length} 个模型`, { duration: 2000 })
+    notify.success(t('common.operationSuccess'), t('settings.providerDetail.fetchSuccess', { n: enrichedModels.length }), { duration: 2000 })
   } catch (error) {
     fetchedModels.value = []
-    notify.error('获取失败', '获取模型列表时发生错误', { duration: 2000 })
+    notify.error(t('common.operationFailed'), t('settings.providerDetail.fetchFailed'), { duration: 2000 })
     console.error('获取模型列表失败:', error)
   } finally {
     fetchingModels.value = false

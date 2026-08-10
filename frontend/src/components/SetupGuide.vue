@@ -1,68 +1,68 @@
 <template>
   <div v-if="visible" class="setup-guide-container" :style="{ top: guidePosition.y + 'px', left: guidePosition.x + 'px' }" @mousedown="startDrag">
     <div class="guide-header" @mousedown="startDrag">
-      <span class="guide-title">✨ 欢迎开启 GuaDa 之旅</span>
+      <span class="guide-title">{{ t('ui.setupGuide.title') }}</span>
       <el-icon class="close-btn cursor-pointer" @click="closeGuide"><Close /></el-icon>
     </div>
     
     <div class="guide-content">
       <!-- Step 1: 默认账户提示 -->
       <div v-if="currentStep === 1" class="step-panel">
-        <h3>👋 第一步：记下您的专属通行证</h3>
-        <p class="desc">为了让您快速体验，我们为您准备了初始账户：</p>
+        <h3>{{ t('ui.setupGuide.step1Title') }}</h3>
+        <p class="desc">{{ t('ui.setupGuide.step1Desc') }}</p>
         <div class="account-info">
           <div class="info-item">
-            <span class="label">账户：</span>
+            <span class="label">{{ t('ui.setupGuide.account') }}</span>
             <span class="value">GuaDa</span>
           </div>
           <div class="info-item">
-            <span class="label">密码：</span>
+            <span class="label">{{ t('ui.setupGuide.password') }}</span>
             <span class="value">GuaDa</span>
           </div>
         </div>
         <el-alert type="warning" :closable="false" show-icon>
-          小贴士：为了账户安全，建议您稍后修改密码哦～
+          {{ t('ui.setupGuide.tip') }}
         </el-alert>
       </div>
 
       <!-- Step 2: 修改密码引导 -->
       <div v-if="currentStep === 2" class="step-panel">
-        <h3>🔒 第二步：给账户加把锁</h3>
-        <p class="desc">修改一个只有您知道的密码，让账户更安全。</p>
+        <h3>{{ t('ui.setupGuide.step2Title') }}</h3>
+        <p class="desc">{{ t('ui.setupGuide.step2Desc') }}</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToSecuritySettings">去设置新密码</el-button>
+          <el-button type="primary" @click="goToSecuritySettings">{{ t('ui.setupGuide.step2Action') }}</el-button>
         </div>
       </div>
 
       <!-- Step 3: 添加模型供应商 -->
       <div v-if="currentStep === 3" class="step-panel">
-        <h3>🚀 第三步：连接 AI 大脑</h3>
-        <p class="desc">添加一个模型供应商并配置 API Key，即可开始对话。</p>
+        <h3>{{ t('ui.setupGuide.step3Title') }}</h3>
+        <p class="desc">{{ t('ui.setupGuide.step3Desc') }}</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToProviderSettings">去添加供应商</el-button>
+          <el-button type="primary" @click="goToProviderSettings">{{ t('ui.setupGuide.step3Action') }}</el-button>
         </div>
       </div>
 
       <!-- Step 4: 设置默认模型 -->
       <div v-if="currentStep === 4" class="step-panel">
-        <h3>🎯 第四步：选择您的首选模型</h3>
-        <p class="desc">在设置中指定一个默认模型，让对话更顺手。</p>
+        <h3>{{ t('ui.setupGuide.step4Title') }}</h3>
+        <p class="desc">{{ t('ui.setupGuide.step4Desc') }}</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToDefaultModelSettings">去设置默认模型</el-button>
+          <el-button type="primary" @click="goToDefaultModelSettings">{{ t('ui.setupGuide.step4Action') }}</el-button>
         </div>
       </div>
     </div>
 
     <div class="guide-footer no-drag">
-      <el-button size="small" @click="skipStep">跳过</el-button>
+      <el-button size="small" @click="skipStep">{{ t('ui.setupGuide.skip') }}</el-button>
       <el-button size="small" type="primary" @click="nextStep" :disabled="!canProceed">
-        {{ currentStep === 4 ? '完成' : '下一步' }}
+        {{ currentStep === 4 ? t('ui.setupGuide.finish') : t('ui.setupGuide.next') }}
       </el-button>
     </div>
   </div>
 
   <!-- 全局悬浮引导入口 -->
-  <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" title="查看设置向导">
+  <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" :title="t('ui.setupGuide.viewGuide')">
     <el-icon><QuestionFilled /></el-icon>
   </div>
 </template>
@@ -71,9 +71,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { Close, QuestionFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 const visible = ref(false)
@@ -180,7 +182,7 @@ const finishGuide = () => {
   localStorage.removeItem('setupGuideStep')
   hasCompleted.value = true
   visible.value = false
-  ElMessage.success('恭喜！您已完成初始设置。')
+  ElMessage.success(t('ui.setupGuide.completed'))
   
   // 完成后跳转到对话页面
   router.replace('/chat/new-session')

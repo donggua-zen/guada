@@ -17,6 +17,7 @@ import {
   supportsMultimodal,
   ensureWithinPixelLimit,
 } from "../utils/vision-utils";
+import langZh from "./image-recognition.lang.zh.json";
 
 const DEFAULT_PROMPT =
   "Describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, and composition.";
@@ -55,6 +56,7 @@ export class ImageRecognitionPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
     // ── Toolkit 1: image_recognize (text-only models) ──
     // Loads only when the current model does NOT support multimodal input.
     // Calls a separate vision model to produce a text description.
@@ -109,6 +111,8 @@ export class ImageRecognitionPlugin extends PluginBase {
           },
           display: {
             actionType: "recognize",
+            text: { executing: "%image_recognize.executing%", completed: "%image_recognize.completed%" },
+            aggregate: { executing: "%image_recognize.aggregate.executing%", completed: "%image_recognize.aggregate.completed%" },
             argsKey: "image_id",
             icon: "vision",
           },
@@ -166,6 +170,8 @@ export class ImageRecognitionPlugin extends PluginBase {
           },
           display: {
             actionType: "view",
+            text: { executing: "%image_view.executing%", completed: "%image_view.completed%" },
+            aggregate: { executing: "%image_view.aggregate.executing%", completed: "%image_view.aggregate.completed%" },
             argsKey: "image_path",
             icon: "vision",
           },

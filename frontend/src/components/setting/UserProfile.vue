@@ -3,17 +3,17 @@
     <el-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-position="left" label-width="80px"
       size="large">
       <!-- 头像设置 -->
-      <el-form-item label="头像设置" :show-label="false">
+      <el-form-item :label="t('settings.userProfile.avatarSettings')" :show-label="false">
         <AvatarPreview :src="userForm.avatarUrl" :type="'user'" @avatar-changed="handleAvaterChanged" />
       </el-form-item>
-      <el-form-item label="昵称" prop="nickname">
-        <el-input v-model="userForm.nickname" placeholder="昵称" />
+      <el-form-item :label="t('settings.userProfile.nickname')" prop="nickname">
+        <el-input v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')" />
       </el-form-item>
-      <el-form-item label="用户名" prop="username">
-        <el-input v-model="userForm.username" placeholder="用户名" disabled />
+      <el-form-item :label="t('settings.userProfile.username')" prop="username">
+        <el-input v-model="userForm.username" :placeholder="t('settings.userProfile.username')" disabled />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</el-button>
+        <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</el-button>
       </el-form-item>
     </el-form>
   </div>
@@ -21,6 +21,7 @@
 
 <script setup>
 import { ref, computed, onMounted, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { AvatarPreview } from '../ui'
 import { useAuthStore } from '../../stores/auth'
 import { usePopup } from '../../composables/usePopup'
@@ -34,6 +35,7 @@ import {
   ElButton
 } from 'element-plus'
 
+const { t } = useI18n()
 const { toast } = usePopup()
 const authStore = useAuthStore()
 
@@ -47,22 +49,22 @@ const userForm = ref({
   avatarUrl: '',
 })
 
-const basicRules = ref({
+const basicRules = computed(() => ({
   nickname: [
     {
       required: true,
-      message: '请输入昵称',
+      message: t('settings.userProfile.nicknameRequired'),
       trigger: 'blur',
     },
   ],
   username: [
     {
       required: true,
-      message: '请输入用户名',
+      message: t('settings.userProfile.usernameRequired'),
       trigger: 'blur',
     },
   ],
-})
+}))
 
 const isFormChanged = computed(() => {
   return (
@@ -94,11 +96,11 @@ const handleSaveUserInfo = async () => {
       router.replace({ name: 'Login' });
       return
     }
-    toast.success('用户信息保存成功')
+    toast.success(t('settings.userProfile.saveSuccess'))
     // 更新原始表单数据
     originalUserForm.value = { ...userForm.value }
   } catch (error) {
-    toast.error('用户信息保存失败')
+    toast.error(t('settings.userProfile.saveFailed'))
   }
 }
 

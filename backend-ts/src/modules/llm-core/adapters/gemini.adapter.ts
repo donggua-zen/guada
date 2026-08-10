@@ -20,6 +20,13 @@ import {
   withStreamIdleTimeout,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
+import {
+  UpstreamRateLimitError,
+  UpstreamTimeoutError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "../utils/upstream-errors";
+import { getRetryAfterFromError } from "../utils/retry.util";
 
 export class GeminiAdapter implements IProtocolAdapter {
   readonly protocol = "gemini";
@@ -116,14 +123,29 @@ export class GeminiAdapter implements IProtocolAdapter {
       const result = await chat.sendMessageStream(contentToSend);
 
       yield* withStreamIdleTimeout(this.handleGeminiStream(result as any), streamTc);
-    } catch (error) {
+    } catch (err: any) {
       if (streamTc.isIdleTimeout()) {
-        throw new Error(
+        throw new UpstreamTimeoutError(
           `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+          err,
         );
       }
-      this.logger.error("Gemini API error:", error);
-      throw error;
+      const status = err?.status;
+      const msg = `Gemini API Error: ${status} - ${err?.message}`;
+      // 429 → UpstreamRateLimitError（可重试）
+      if (status === 429) {
+        throw new UpstreamRateLimitError(msg, err, getRetryAfterFromError(err));
+      }
+      // 5xx → UpstreamNetworkError（可重试）
+      if (status >= 500 && status < 600) {
+        throw new UpstreamNetworkError(msg, err, status);
+      }
+      // 4xx → UpstreamRequestError（不可重试）
+      if (status >= 400 && status < 500) {
+        throw new UpstreamRequestError(msg, err, status);
+      }
+      this.logger.error("Gemini API error:", err);
+      throw err;
     } finally {
       streamTc.clearIdleTimer();
     }

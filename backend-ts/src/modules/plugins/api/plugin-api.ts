@@ -14,6 +14,8 @@ import { Toolkit } from "../toolkit/toolkit";
 import { z } from "zod";
 import { ICommandProvider } from "../../commands/interfaces/command-provider.interface";
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
+import type { ToolDisplay } from "../types/plugin.types";
+import { NlsService } from "../i18n/nls.service";
 
 // ── PluginApi ──
 
@@ -45,11 +47,7 @@ export interface PluginApi {
       ctx?: ToolExecCtx,
       signal?: AbortSignal,
     ) => ToolResult | Promise<ToolResult>;
-      display?: {
-        actionType?: string;
-        argsKey?: string;
-        icon?: string;
-      };
+      display?: ToolDisplay;
       dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
     }): void;
 
@@ -67,11 +65,7 @@ export interface PluginApi {
         ctx?: ToolExecCtx,
         signal?: AbortSignal,
       ) => ToolResult | Promise<ToolResult>;
-      display?: {
-        actionType?: string;
-        argsKey?: string;
-        icon?: string;
-      };
+      display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void;
 
@@ -128,6 +122,17 @@ export interface PluginApi {
    * configSchema 定义连接配置表单字段。
    */
   registerConnectionType(factory: WorkspaceProviderFactory): void;
+
+  /**
+   * 注册语言包（NLS）
+   *
+   * 每个插件注册自己的 key→string 字典，插件间隔离。
+   * display 字段中的 "%key%" 引用会在返回前端前就地解析。
+   *
+   * @param locale 语言代码（如 "zh"、"en"）
+   * @param messages 扁平 key→string 字典
+   */
+  registerNls(locale: string, messages: Record<string, string>): void;
 }
 
 // ── PluginApi 实现 ──
@@ -150,6 +155,7 @@ export class PluginApiImpl implements PluginApi {
   constructor(
     private pluginId: string,
     private pluginName: string,
+    private nlsService?: NlsService,
   ) {}
 
   registerToolSet(def: {
@@ -210,6 +216,8 @@ export class PluginApiImpl implements PluginApi {
         icon: def.display?.icon,
         actionType: def.display?.actionType,
         argsKey,
+        displayText: def.display?.text,
+        displayAggregate: def.display?.aggregate,
       };
 
       if (!this._toolDefs.find((x) => x.name === entry.name)) {
@@ -254,6 +262,8 @@ export class PluginApiImpl implements PluginApi {
       icon: def.display?.icon,
       actionType: def.display?.actionType,
       argsKey,
+      displayText: def.display?.text,
+      displayAggregate: def.display?.aggregate,
     };
 
     if (!this._toolDefs.find((x) => x.name === entry.name)) {
@@ -319,6 +329,10 @@ export class PluginApiImpl implements PluginApi {
     if (!this._workspaceProviders.find((f) => f.scheme === factory.scheme)) {
       this._workspaceProviders.push(factory);
     }
+  }
+
+  registerNls(locale: string, messages: Record<string, string>): void {
+    this.nlsService?.registerBundle(this.pluginId, locale, messages);
   }
 
   /** 注册到 PluginRegistry */

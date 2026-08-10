@@ -15,7 +15,7 @@
         <el-icon class="is-loading" :size="32">
           <Loading />
         </el-icon>
-        <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
+        <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">{{ t('bot.sessionDialog.loading') }}</span>
       </div>
 
       <!-- 消息列表 -->
@@ -39,7 +39,7 @@
         <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
           <ChatDotRound />
         </el-icon>
-        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无消息</p>
+        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('bot.sessionDialog.empty') }}</p>
       </div>
     </div>
   </el-dialog>
@@ -47,6 +47,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
@@ -63,13 +64,15 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
+const { t } = useI18n()
+
 const dialogVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
 
 const sessionTitle = computed(() => {
-  return props.session?.title || '会话详情'
+  return props.session?.title || t('bot.sessionDialog.title')
 })
 
 const loading = ref(false)
@@ -114,7 +117,7 @@ const loadMessages = async () => {
     messages.value = response.items || []
   } catch (error) {
     console.error('加载消息失败:', error)
-    ElMessage.error('加载消息失败')
+    ElMessage.error(t('bot.sessionDialog.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -125,12 +128,12 @@ const handleDeleteMessage = async (message: Message) => {
   try {
     await ElMessageBox.confirm(
       message.role === 'user'
-        ? '确定要删除这条提问吗?对应的回答也会被删除。此操作不可撤销。'
-        : '确定要删除这条回答吗?此操作不可撤销。',
-      '删除消息',
+        ? t('bot.sessionDialog.deleteUserMsg')
+        : t('bot.sessionDialog.deleteAssistantMsg'),
+      t('bot.sessionDialog.deleteTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.ok'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
@@ -148,18 +151,18 @@ const handleDeleteMessage = async (message: Message) => {
     // 从列表中移除
     messages.value = messages.value.filter(msg => msg.id !== message.id)
     
-    ElMessage.success('消息已删除')
+    ElMessage.success(t('bot.sessionDialog.deleteSuccess'))
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除消息失败:', error)
-      ElMessage.error('删除失败')
+      ElMessage.error(t('bot.sessionDialog.deleteFailed'))
     }
   }
 }
 
 // 编辑消息
 const handleEditMessage = async (message: Message) => {
-  ElMessage.info('编辑功能待实现')
+  ElMessage.info(t('bot.sessionDialog.editNotImplemented'))
   // TODO: 实现编辑功能
 }
 

@@ -11,6 +11,7 @@ export interface SettingsApi {
   queryPlugins(config?: any): Promise<any>;
   updateGlobalToolStatus(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
   reloadPlugin(pluginId: string): Promise<{ success: boolean }>;
+  fetchToolDisplays(lang?: string): Promise<Record<string, any>>;
 }
 
 export const settingsApi: SettingsApi = {
@@ -58,6 +59,12 @@ export const settingsApi: SettingsApi = {
   async reloadPlugin(this: ApiContext, pluginId: string) {
     return await this._request(`/plugins/reload/${pluginId}`, {
       method: "POST",
+    });
+  },
+
+  async fetchToolDisplays(this: ApiContext, lang?: string) {
+    return await this._request("/plugins/tool-displays", {
+      params: lang ? { lang } : undefined,
     });
   },
 };

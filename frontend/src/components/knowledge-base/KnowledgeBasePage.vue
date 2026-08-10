@@ -1,27 +1,27 @@
 <template>
   <div class="h-full w-full flex flex-col min-h-0">
-    <PageHeader title="知识库" />
+    <PageHeader :title="t('knowledge.page.title')" />
     <!-- 视图模式：卡片列表 -->
     <div v-if="viewMode === 'list'" class="flex-1 flex flex-col overflow-hidden">
       <!-- 标题区（固定不滚动） -->
       <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
             <div class="min-w-0">
-              <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">知识库</h1>
-              <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">管理文档知识库，支持文件上传、分块索引和语义搜索。</p>
+              <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('knowledge.page.title') }}</h1>
+              <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('knowledge.page.subtitle') }}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable size="small" style="width: 160px;">
+              <el-input v-model="searchKeyword" :placeholder="t('knowledge.page.searchPlaceholder')" clearable size="small" style="width: 160px;">
                 <template #prefix>
                   <el-icon><Search /></el-icon>
                 </template>
               </el-input>
               <el-button @click="handleOpenDocs">
                 <template #icon><Document /></template>
-                使用说明
+                {{ t('knowledge.page.docs') }}
               </el-button>
               <el-button type="primary" @click="handleOpenCreate">
                 <template #icon><Plus /></template>
-                新建知识库
+                {{ t('knowledge.page.createKb') }}
               </el-button>
             </div>
           </div>
@@ -40,19 +40,19 @@
                 <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
                   {{ kb.name }}
                 </h3>
-                <el-tag size="small" effect="plain">{{ kb.isPublic ? '公开' : '私有' }}</el-tag>
+                <el-tag size="small" effect="plain">{{ kb.isPublic ? t('knowledge.page.tagPublic') : t('knowledge.page.tagPrivate') }}</el-tag>
               </div>
 
               <!-- Description -->
               <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
-                {{ kb.description || '暂无描述' }}
+                {{ kb.description || t('knowledge.page.noDescription') }}
               </div>
 
               <!-- Footer: edit/delete + enter button -->
               <div class="flex items-center justify-end gap-2 mt-3">
-                <el-button link size="small" @click.stop="handleEdit(kb)">编辑</el-button>
-                <el-button link size="small" type="danger" @click.stop="handleDelete(kb)">删除</el-button>
-                <el-button link size="small" type="primary" @click.stop="handleSelectKB(kb)">进入</el-button>
+                <el-button link size="small" @click.stop="handleEdit(kb)">{{ t('common.edit') }}</el-button>
+                <el-button link size="small" type="danger" @click.stop="handleDelete(kb)">{{ t('common.delete') }}</el-button>
+                <el-button link size="small" type="primary" @click.stop="handleSelectKB(kb)">{{ t('knowledge.page.enter') }}</el-button>
               </div>
             </div>
           </div>
@@ -62,8 +62,8 @@
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <MenuBookOutlined />
             </el-icon>
-            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
-            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
+            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? t('knowledge.page.notFound') : t('knowledge.page.empty') }}</p>
+            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? t('knowledge.page.notFoundHint') : t('knowledge.page.emptyHint') }}</p>
           </div>
         </div>
       </div>
@@ -79,7 +79,7 @@
             <el-icon :size="22">
               <ArrowLeft24Filled />
             </el-icon>
-            <span class="text-base">返回知识库列表</span>
+            <span class="text-base">{{ t('knowledge.page.backToList') }}</span>
           </el-button>
           <el-divider direction="vertical" />
           <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
@@ -93,7 +93,7 @@
                   <el-icon :size="17">
                     <BookOpen24Regular />
                   </el-icon>
-                  <span class="text-[15px]">文件列表</span>
+                  <span class="text-[15px]">{{ t('knowledge.page.tabFiles') }}</span>
                 </div>
               </template>
             </el-tab-pane>
@@ -103,7 +103,7 @@
                   <el-icon :size="17">
                     <Search24Regular />
                   </el-icon>
-                  <span class="text-[15px]">搜索</span>
+                  <span class="text-[15px]">{{ t('knowledge.page.tabSearch') }}</span>
                 </div>
               </template>
             </el-tab-pane>
@@ -142,19 +142,19 @@
   </div>
 
   <!-- 创建/编辑知识库对话框 -->
-  <el-dialog v-model="showKbDialog" :title="dialogMode === 'create' ? '创建知识库' : '编辑知识库'" width="600px" :close-on-click-modal="false" append-to-body>
+  <el-dialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
     <el-form :model="dialogForm" label-width="140px" size="large">
-      <el-form-item label="知识库名称" required>
-        <el-input v-model="dialogForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
+      <el-form-item :label="t('knowledge.page.kbName')" required>
+        <el-input v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
       </el-form-item>
 
-      <el-form-item label="描述">
-        <el-input v-model="dialogForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点"
+      <el-form-item :label="t('common.description')">
+        <el-input v-model="dialogForm.description" type="textarea" :rows="3" :placeholder="t('knowledge.page.descriptionPlaceholder')"
           maxlength="2000" show-word-limit />
       </el-form-item>
 
-      <el-form-item label="向量模型" required>
-        <el-select v-model="dialogForm.embeddingModelId" placeholder="请选择向量模型" class="w-full">
+      <el-form-item :label="t('knowledge.page.embeddingModel')" required>
+        <el-select v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')" class="w-full">
           <template v-for="provider in embeddingProviders" :key="provider.id">
             <el-option :label="provider.name" :value="''" disabled />
             <el-option v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
@@ -167,36 +167,36 @@
       <!-- 分块大小配置 -->
       <el-form-item>
         <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMaxSize') }}</span>
         </template>
         <el-input-number v-model="dialogForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkOverlapSize') }}</span>
         </template>
         <el-input-number v-model="dialogForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMinSize') }}</span>
         </template>
         <el-input-number v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
-      <el-form-item label="可见性">
+      <el-form-item :label="t('knowledge.page.visibility')">
         <el-switch v-model="dialogForm.isPublic" />
-        <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
+        <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">{{ t('knowledge.page.visibilityHint') }}</span>
       </el-form-item>
     </el-form>
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <el-button @click="showKbDialog = false">取消</el-button>
+        <el-button @click="showKbDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="handleKbSave" :loading="store.loading">
-          {{ dialogMode === 'create' ? '创建' : '保存' }}
+          {{ dialogMode === 'create' ? t('common.create') : t('common.save') }}
         </el-button>
       </div>
     </template>
@@ -212,6 +212,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Plus, Search, Document } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -230,6 +231,7 @@ import CardAvatar from '@/components/ui/CardAvatar.vue'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
+const { t } = useI18n()
 const store = useKnowledgeBaseStore()
 const uploadStore = useFileUploadStore()
 const route = useRoute()
@@ -344,7 +346,7 @@ async function handleSelectKB(kb: KnowledgeBase) {
     // toast.success(`已选择：${kb.name}`)
   } catch (error) {
     console.error('加载文件列表失败:', error)
-    toast.error('加载文件列表失败')
+    toast.error(t('knowledge.page.loadFileListFailed'))
   }
 }
 
@@ -390,12 +392,12 @@ function handleOpenCreate() {
 async function handleKbSave() {
   // 验证必填字段
   if (!dialogForm.name.trim()) {
-    toast.warning('请输入知识库名称')
+    toast.warning(t('knowledge.page.inputNameWarning'))
     return
   }
 
   if (dialogMode.value === 'create' && !dialogForm.embeddingModelId) {
-    toast.warning('请选择向量模型')
+    toast.warning(t('knowledge.page.selectModelWarning'))
     return
   }
 
@@ -412,7 +414,7 @@ async function handleKbSave() {
         isPublic: dialogForm.isPublic
       })
 
-      toast.success('创建成功')
+      toast.success(t('common.createSuccess'))
       showKbDialog.value = false
 
       // 刷新列表
@@ -431,9 +433,9 @@ async function handleKbSave() {
 
       if (modelChanged) {
         const confirmed = await confirm(
-          '切换向量模型',
-          '切换模型需要重新处理全部文档，可能导致较高的成本。确定要继续吗？',
-          { type: 'warning', confirmText: '确定切换', cancelText: '取消' }
+          t('knowledge.page.switchModelTitle'),
+          t('knowledge.page.switchModelDesc'),
+          { type: 'warning', confirmText: t('knowledge.page.switchModelConfirm'), cancelText: t('common.cancel') }
         )
         if (!confirmed) return
       }
@@ -448,7 +450,7 @@ async function handleKbSave() {
         isPublic: dialogForm.isPublic
       })
 
-      toast.success('保存成功')
+      toast.success(t('common.saveSuccess'))
       showKbDialog.value = false
 
       // 刷新列表
@@ -456,7 +458,7 @@ async function handleKbSave() {
     }
   } catch (error: any) {
     console.error('操作失败:', error)
-    toast.error(error.response?.data?.detail || '操作失败')
+    toast.error(error.response?.data?.detail || t('common.operationFailed'))
   }
 }
 
@@ -485,8 +487,8 @@ function handleEdit(kb: KnowledgeBase) {
 async function handleDelete(kb: KnowledgeBase) {
   try {
     const confirmed = await confirm(
-      '警告',
-      `确定要删除知识库"${kb.name}"吗？此操作不可恢复。`,
+      t('knowledge.page.deleteKbTitle'),
+      t('knowledge.page.deleteKbConfirm', { name: kb.name }),
       { type: 'warning' }
     )
 
@@ -498,14 +500,14 @@ async function handleDelete(kb: KnowledgeBase) {
 
     // 执行删除
     await store.deleteKnowledgeBase(kb.id)
-    toast.success('删除成功')
+    toast.success(t('common.deleteSuccess'))
 
     // 删除后处理：自动选中下一个知识库
     handleAfterDelete(deletedKbId, currentIndex)
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      toast.error(error.response?.data?.detail || '删除失败')
+      toast.error(error.response?.data?.detail || t('common.deleteFailed'))
     }
   }
 }
@@ -606,8 +608,8 @@ function handleScroll(event: Event) {
 async function handleRetryFile(file: KBFile) {
   try {
     const confirmed = await confirm(
-      '警告',
-      `确定要重新处理文件“${file.displayName}”吗？这将重新启动后台处理任务。`,
+      t('knowledge.page.retryFileTitle'),
+      t('knowledge.page.retryFileConfirm', { name: file.displayName }),
       { type: 'warning' }
     )
 
@@ -618,14 +620,14 @@ async function handleRetryFile(file: KBFile) {
     // 调用后端 API 重新处理文件
     await apiService.retryKBFile(store.activeKnowledgeBaseId, file.id)
 
-    toast.success('已开始重新处理文件')
+    toast.success(t('knowledge.page.retryStarted'))
 
     // 关键修复：通过 KBFileTree 更新文件状态
     if (fileTreeRef.value && fileTreeRef.value.updateFileStatus) {
       fileTreeRef.value.updateFileStatus(file.id, {
         processingStatus: 'pending',
         progressPercentage: 0,
-        currentStep: '等待重新处理...',
+        currentStep: t('knowledge.page.waitRetry'),
         errorMessage: null
       })
       console.log(`[DEBUG] 文件状态已更新为 pending: ${file.displayName}`)
@@ -640,7 +642,7 @@ async function handleRetryFile(file: KBFile) {
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('重新处理失败:', error)
-      toast.error(error.response?.data?.detail || error.message || '重新处理失败')
+      toast.error(error.response?.data?.detail || error.message || t('knowledge.page.retryFailed'))
     }
   }
 }
@@ -666,8 +668,8 @@ function handleViewFile(file: KBFile) {
 async function handleDeleteFile(file: KBFile) {
   try {
     const confirmed = await confirm(
-      '警告',
-      `确定要删除文件“${file.displayName}”吗？此操作不可恢复。`,
+      t('knowledge.page.deleteKbTitle'),
+      t('knowledge.page.deleteKbConfirm', { name: currentKB.value?.name || '' }),
       { type: 'warning' }
     )
 
@@ -676,7 +678,7 @@ async function handleDeleteFile(file: KBFile) {
     if (!store.activeKnowledgeBaseId) return
 
     await store.deleteFile(store.activeKnowledgeBaseId, file.id)
-    toast.success('删除成功')
+    toast.success(t('common.deleteSuccess'))
 
     // 关键优化:通知 KBFileTree 从本地列表中移除文件,避免重建 DOM 树
     if (fileTreeRef.value && fileTreeRef.value.removeFileLocally) {

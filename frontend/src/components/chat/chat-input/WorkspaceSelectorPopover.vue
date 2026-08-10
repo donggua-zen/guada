@@ -4,7 +4,7 @@
     <div class="flex flex-col gap-0.5">
       <!-- 最近选择 -->
       <template v-if="recentList.length > 0">
-        <div class="text-[11px] font-medium text-[#999] dark:text-[#6b7280] px-2 py-1 select-none">最近选择</div>
+        <div class="text-[11px] font-medium text-[#999] dark:text-[#6b7280] px-2 py-1 select-none">{{ t('chat.input.recent') }}</div>
         <div v-for="path in filteredRecentList" :key="path"
           class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
           :class="path === currentWorkspacePath
@@ -36,7 +36,7 @@
           <PeopleCommunity16Regular />
         </el-icon>
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0">使用公共目录</span>
+          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0">{{ t('chat.input.usePublicDir') }}</span>
           <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ publicPath }}</span>
         </div>
         <el-icon v-if="publicPath === currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
@@ -54,8 +54,8 @@
           <FolderAdd24Regular />
         </el-icon>
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">自动创建</span>
-          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">创建随机名称的工作目录</span>
+          <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ t('chat.input.autoCreate') }}</span>
+          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ t('chat.input.autoCreateDesc') }}</span>
         </div>
         <el-icon v-if="!currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
           <Checkmark16Filled />
@@ -70,7 +70,7 @@
             <Desktop16Regular />
           </el-icon>
           <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-            <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap">选择本地文件夹</span>
+            <span class="text-sm font-medium text-(--color-text) dark:text-[#e5e7eb] whitespace-nowrap">{{ t('chat.input.selectLocalFolder') }}</span>
           </div>
         </div>
       </template>
@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElIcon, ElMessage } from 'element-plus'
 import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
@@ -97,6 +98,7 @@ const emit = defineEmits<{
   'select': [workspacePath: string | null]
 }>()
 
+const { t } = useI18n()
 const workspaceStore = useWorkspaceStore()
 const recentList = computed(() => workspaceStore.recentList)
 
@@ -130,7 +132,7 @@ async function handleOpenFolder() {
     }
   } catch (error) {
     console.error('选择文件夹失败:', error)
-    ElMessage.error('选择文件夹失败')
+    ElMessage.error(t('chat.input.selectFolderFailed'))
   } finally {
     emit('update:visible', false)
   }

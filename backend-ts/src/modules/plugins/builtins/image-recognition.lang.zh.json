@@ -1,0 +1,1 @@
+{"image_recognize.executing": "正在识别图片", "image_recognize.completed": "已识别图片", "image_recognize.aggregate.executing": "正在识别{n}张图片", "image_recognize.aggregate.completed": "已识别{n}张图片", "image_view.executing": "正在查看图片", "image_view.completed": "已查看图片", "image_view.aggregate.executing": "正在查看{n}张图片", "image_view.aggregate.completed": "已查看{n}张图片"}

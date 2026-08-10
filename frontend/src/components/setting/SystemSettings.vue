@@ -9,7 +9,7 @@
                     <div @click="goBack"
                         class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover) transition-all duration-200">
                         <ArrowBackIosNewTwotone class="w-4 h-4" />
-                        <span>返回应用</span>
+                        <span>{{ t('settings.system.backToApp') }}</span>
                     </div>
                 </div>
                 <!-- 分组列表 -->
@@ -38,7 +38,7 @@
         <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
             <PageHeader>
                 <template #title>
-                    <span class="text-sm text-gray-400 dark:text-gray-500">系统设置</span>
+                    <span class="text-sm text-gray-400 dark:text-gray-500">{{ t('settings.system.title') }}</span>
                     <span class="text-sm text-gray-300 dark:text-gray-600 mx-1.5">·</span>
                     <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">{{ currentTabLabel }}</span>
                 </template>
@@ -123,117 +123,125 @@ import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } f
 import { useAuthStore } from '../../stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
 // 设置项分组映射
-const groupMap: Record<string, string> = {
-    general: '常规',
-    'default-models': '常规',
-    ocr: '常规',
-    appearance: '个性化',
-    search: '个性化',
-    browser: '系统',
-    about: '系统',
-    'session-groups': '数据管理',
-    'session-archived': '数据管理',
-    connections: '系统',
-    profile: '账户',
-    security: '账户',
-}
+const groupMap = computed<Record<string, string>>(() => ({
+    general: t('settings.system.groups.general'),
+    'default-models': t('settings.system.groups.general'),
+    ocr: t('settings.system.groups.general'),
+    appearance: t('settings.system.groups.personalization'),
+    search: t('settings.system.groups.personalization'),
+    browser: t('settings.system.groups.system'),
+    about: t('settings.system.groups.system'),
+    'session-groups': t('settings.system.groups.dataManagement'),
+    'session-archived': t('settings.system.groups.dataManagement'),
+    connections: t('settings.system.groups.system'),
+    profile: t('settings.system.groups.account'),
+    security: t('settings.system.groups.account'),
+}))
 
 // 设置项菜单
-const sidebarItems = [
+const sidebarItems = computed(() => [
     {
-        label: '通用设置',
+        label: t('settings.system.tabs.general'),
         path: 'general',
         icon: Settings16Regular,
         roles: ['primary'],
     },
     {
-        label: '默认模型',
+        label: t('settings.system.tabs.defaultModels'),
         path: 'default-models',
         icon: Grid16Regular,
         roles: ['primary'],
     },
     {
-        label: 'OCR 设置',
+        label: t('settings.system.tabs.ocr'),
         path: 'ocr',
         icon: ScanText24Regular,
         roles: ['primary'],
     },
     {
-        label: '外观',
+        label: t('settings.system.tabs.appearance'),
         path: 'appearance',
         icon: Image24Regular,
         roles: ['primary'],
     },
     {
-        label: '搜索设置',
+        label: t('settings.system.tabs.search'),
         path: 'search',
         icon: Search16Regular,
         roles: ['primary'],
     },
     {
-        label: '浏览器',
+        label: t('settings.system.tabs.browser'),
         path: 'browser',
         icon: Globe24Regular,
         roles: ['primary'],
     },
     {
-        label: '关于',
+        label: t('settings.system.tabs.about'),
         path: 'about',
         icon: Info24Regular,
         roles: ['primary'],
     },
     {
-        label: '远程连接',
+        label: t('settings.system.tabs.connections'),
         path: 'connections',
         icon: Cloud24Regular,
         roles: ['primary'],
     },
     {
-        label: '分组管理',
+        label: t('settings.system.tabs.sessionGroups'),
         path: 'session-groups',
         icon: Folder20Regular,
         roles: ['primary'],
     },
     {
-        label: '归档管理',
+        label: t('settings.system.tabs.sessionArchived'),
         path: 'session-archived',
         icon: Archive20Regular,
         roles: ['primary'],
     },
     {
-        label: '账户概览',
+        label: t('settings.system.tabs.profile'),
         path: 'profile',
         icon: PersonOutlineOutlined,
         roles: ['primary', 'subaccount'],
     },
     {
-        label: '安全设置',
+        label: t('settings.system.tabs.security'),
         path: 'security',
         icon: VerifiedUserOutlined,
         roles: ['primary', 'subaccount'],
     },
-]
+])
 
 // 根据用户角色过滤菜单项
 const filteredSidebarItems = computed(() => {
     const userRole = authStore.user?.role || 'primary'
-    return sidebarItems.filter(item => !item.roles || item.roles.includes(userRole))
+    return sidebarItems.value.filter(item => !item.roles || item.roles.includes(userRole))
 })
 
 // 按分组组织侧边栏项
 const groupedSidebarItems = computed(() => {
     const items = filteredSidebarItems.value
-    const groupOrder = ['常规', '个性化', '系统', '数据管理', '账户']
+    const groupOrder = [
+        t('settings.system.groups.general'),
+        t('settings.system.groups.personalization'),
+        t('settings.system.groups.system'),
+        t('settings.system.groups.dataManagement'),
+        t('settings.system.groups.account'),
+    ]
     const groups: Record<string, typeof items> = {}
     for (const g of groupOrder) groups[g] = []
     for (const item of items) {
-        const g = groupMap[item.path] || '常规'
+        const g = groupMap.value[item.path] || t('settings.system.groups.general')
         if (!groups[g]) groups[g] = []
         groups[g].push(item)
     }
@@ -262,7 +270,7 @@ const portalReady = ref(false)
 // 当前标签标题
 const currentTabLabel = computed(() => {
     const item = filteredSidebarItems.value.find(i => i.path === currentTabValue.value)
-    return item?.label || '设置'
+    return item?.label || t('settings.system.settings')
 })
 
 // 点击侧边栏项

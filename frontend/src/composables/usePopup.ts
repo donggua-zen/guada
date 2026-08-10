@@ -7,6 +7,7 @@ import {
     ElButton,
     type ElMessageBoxOptions
 } from 'element-plus'
+import { t } from '@/locales'
 
 /**
  * 确认对话框配置选项
@@ -100,8 +101,8 @@ export function usePopup(): UsePopupReturn {
     const confirm = (title: string, content: string, options: ConfirmOptions = {}): Promise<boolean> => {
         const {
             type = 'warning',
-            confirmText = '确认',
-            cancelText = '取消'
+            confirmText = t('common.confirm'),
+            cancelText = t('common.cancel')
         } = options
 
         return new Promise((resolve) => {
@@ -142,9 +143,9 @@ export function usePopup(): UsePopupReturn {
     const prompt = (title: string, options: PromptOptions = {}): Promise<string | null> => {
         const {
             defaultValue = '',
-            placeholder = '请输入内容',
-            confirmText = '确认',
-            cancelText = '取消',
+            placeholder = t('session.popup.inputPlaceholder'),
+            confirmText = t('common.confirm'),
+            cancelText = t('common.cancel'),
             required = true,
             validation
         } = options
@@ -161,7 +162,7 @@ export function usePopup(): UsePopupReturn {
                 const inputValue = value.trim()
 
                 if (required && !inputValue) {
-                    ElMessage.error('内容不能为空')
+                    ElMessage.error(t('session.popup.contentRequired'))
                     return resolve(null)
                 }
 
@@ -181,11 +182,11 @@ export function usePopup(): UsePopupReturn {
      */
     const editText = (options: EditTextOptions = {}): Promise<string | null> => {
         const {
-            title = '编辑内容',
+            title = t('session.popup.editTitle'),
             defaultValue = '',
-            placeholder = '请输入内容',
-            confirmText = '保存',
-            cancelText = '取消',
+            placeholder = t('session.popup.inputPlaceholder'),
+            confirmText = t('common.save'),
+            cancelText = t('common.cancel'),
             required = true,
             rows = 6
         } = options
@@ -234,7 +235,7 @@ export function usePopup(): UsePopupReturn {
                         const value = textarea ? textarea.value.trim() : ''
 
                         if (required && !value) {
-                            ElMessage.error('内容不能为空')
+                            ElMessage.error(t('session.popup.contentRequired'))
                             return
                         }
 
@@ -259,8 +260,8 @@ export function usePopup(): UsePopupReturn {
             ElMessageBox({
                 title: options.title,
                 message: options.content,
-                confirmButtonText: options.confirmText || '确认',
-                cancelButtonText: options.cancelText || '取消',
+                confirmButtonText: options.confirmText || t('common.confirm'),
+                cancelButtonText: options.cancelText || t('common.cancel'),
                 showCancelButton: true,
                 distinguishCancelAndClose: true,
             }).then(() => {
@@ -366,10 +367,10 @@ export function usePopup(): UsePopupReturn {
      */
     const loading: LoadingApi = {
         start: (text?: string): any => {
-            return toast.loading(text || '处理中...')
+            return toast.loading(text || t('session.popup.processing'))
         },
 
-        wrap: async <T>(promiseFn: Promise<T>, loadingText: string = '处理中...'): Promise<T> => {
+        wrap: async <T>(promiseFn: Promise<T>, loadingText: string = t('session.popup.processing')): Promise<T> => {
             const hide = loading.start(loadingText)
             try {
                 const result = await promiseFn

@@ -37,7 +37,7 @@
             </div>
             <div class="flex items-center gap-1">
               <!-- 新建会话按钮（始终显示） -->
-              <LTooltip :content="`在「${group.name}」中新建会话`" placement="bottom">
+              <LTooltip :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
                 <div @click.stop="openNewSession(group.id)">
                   <div
                     class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
@@ -53,7 +53,7 @@
             <!-- 分组内无会话时显示空状态 -->
             <template v-if="getGroupSessions(group.id).length === 0 && !isLoadingGroup(group.id)">
               <div class="text-center text-gray-500 py-6 text-xs">
-                暂无任务
+                {{ t('ui.sidebar.noTasks') }}
               </div>
             </template>
             <template v-else>
@@ -96,19 +96,19 @@
                       <template #dropdown>
                         <DropdownMenuItem command="rename">
                           <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
-                          重命名
+                          {{ t('ui.sidebar.rename') }}
                         </DropdownMenuItem>
                         <DropdownMenuItem command="move">
                           <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
-                          移动到分组
+                          {{ t('ui.sidebar.moveToGroup') }}
                         </DropdownMenuItem>
                         <DropdownMenuItem command="archive">
                           <Archive20Regular class="w-4 h-4 mr-2 inline-block" />
-                          归档
+                          {{ t('ui.sidebar.archive') }}
                         </DropdownMenuItem>
                         <DropdownMenuItem command="delete">
                           <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
-                          删除
+                          {{ t('ui.sidebar.delete') }}
                         </DropdownMenuItem>
                       </template>
                     </DropdownMenu>
@@ -124,11 +124,11 @@
                   <el-icon class="animate-spin" size="14">
                     <Loading />
                   </el-icon>
-                  <span>加载中...</span>
+                  <span>{{ t('ui.sidebar.loadingMore') }}</span>
                 </div>
                 <div v-else class="text-xs text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
                   @click="loadMoreForGroup(group.id)">
-                  点击加载更多
+                  {{ t('ui.sidebar.loadMore') }}
                 </div>
               </div>
             </template>
@@ -146,18 +146,18 @@
           <Avatar class="w-7 h-7 shrink-0" type="user" :round="true" :src="authStore.user?.avatarUrl"
             :name="authStore.user?.nickname || authStore.user?.username" />
           <span class="text-sm font-medium text-(--color-text) truncate min-w-0">
-            {{ authStore.user?.nickname || authStore.user?.username || '用户' }}
+            {{ authStore.user?.nickname || authStore.user?.username || t('ui.sidebar.defaultUserName') }}
           </span>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="profile">
               <PersonOutlined class="w-4 h-4 mr-2" />
-              个人信息
+              {{ t('ui.sidebar.profile') }}
             </el-dropdown-item>
             <!-- 颜色主题：内联三态切换 -->
             <div class="px-5 py-2 flex items-center gap-2">
-              <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">颜色主题</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
               <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-gray-100 dark:bg-[#1a1b1e]">
                 <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
                   class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
@@ -171,18 +171,18 @@
             </div>
             <el-dropdown-item command="settings">
               <Settings16Filled class="w-4 h-4 mr-2" />
-              设置中心
+              {{ t('ui.sidebar.settingsCenter') }}
             </el-dropdown-item>
             <el-dropdown-item command="logout" divided>
               <LogOutOutlined class="w-4 h-4 mr-2" />
-              退出登录
+              {{ t('ui.sidebar.logout') }}
             </el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
 
       <!-- 设置 -->
-      <LTooltip content="设置" placement="bottom">
+      <LTooltip :content="t('ui.sidebar.settings')" placement="bottom">
         <div @click="handleNavClick('setting')"
           class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
           :class="currentActiveTab === 'setting'
@@ -195,35 +195,35 @@
   </div>
 
   <!-- 删除会话确认对话框 -->
-  <el-dialog v-model="deleteDialogVisible" title="删除会话" width="500px" :close-on-click-modal="false">
+  <el-dialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
     <div class="space-y-4">
       <p class="text-gray-700 dark:text-gray-300">
-        确定要删除会话 <strong>"{{ deleteSessionData?.title }}"</strong> 吗？
+        {{ t('ui.sidebar.deleteSessionConfirm', { title: deleteSessionData?.title }) }}
       </p>
       <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
         <p class="text-sm text-red-600 dark:text-red-400">
-          <strong>注意：</strong>此操作不可撤销，会话中的所有消息将被永久删除。
+          {{ t('ui.sidebar.deleteWarning') }}
         </p>
       </div>
       <el-checkbox v-model="deleteWorkspaceChecked" class="w-full">
         <div class="flex flex-col gap-1" style="white-space: normal; word-wrap: break-word; overflow-wrap: break-word;">
-          <span class="font-medium">同时删除默认工作目录</span>
+          <span class="font-medium">{{ t('ui.sidebar.deleteWorkspace') }}</span>
           <span class="text-xs text-gray-500 dark:text-gray-400" style="line-height: 1.5;">
-            仅删除系统自动创建的默认工作目录（data/workspace/{sessionId}），自定义工作目录不会被删除。请务必备份重要数据！
+            {{ t('ui.sidebar.deleteWorkspaceDesc') }}
           </span>
         </div>
       </el-checkbox>
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="deleteDialogVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmDeleteSession">确定删除</el-button>
+        <el-button @click="deleteDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="danger" @click="confirmDeleteSession">{{ t('ui.sidebar.confirmDelete') }}</el-button>
       </div>
     </template>
   </el-dialog>
 
   <!-- 移动会话到分组弹窗 -->
-  <el-dialog v-model="moveGroupDialogVisible" title="请选择目标分组" width="360px" :close-on-click-modal="false">
+  <el-dialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
     <div class="space-y-1 py-2">
       <div v-for="(g) in moveGroupOptions" :key="g.value"
         class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
@@ -237,8 +237,8 @@
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="moveGroupDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmMoveSession">确定</el-button>
+        <el-button @click="moveGroupDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmMoveSession">{{ t('common.ok') }}</el-button>
       </div>
     </template>
   </el-dialog>
@@ -250,6 +250,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, markRaw } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
@@ -304,11 +305,13 @@ const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
 const { themeMode, setTheme } = useTheme()
 
-const themeOptions = [
-  { label: '浅色', value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
-  { label: '深色', value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
-  { label: '系统', value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
-]
+const { t } = useI18n()
+
+const themeOptions = computed(() => [
+  { label: t('ui.sidebar.themeLight'), value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
+  { label: t('ui.sidebar.themeDark'), value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
+  { label: t('ui.sidebar.themeSystem'), value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
+])
 const { toast, prompt, confirm } = usePopup()
 
 // 删除会话确认对话框状态
@@ -339,12 +342,12 @@ const groupContextMenuItems = computed<ContextMenuItem[]>(() => {
   if (!group || group.id === UNGROUPED_ID) return []
   return [
     {
-      label: '重命名',
+      label: t('ui.sidebar.rename'),
       icon: markRaw(Edit16Regular),
       onClick: () => handleRenameGroup(group),
     },
     {
-      label: '删除',
+      label: t('ui.sidebar.delete'),
       icon: markRaw(Delete20Regular),
       onClick: () => handleDeleteGroup(group),
     },
@@ -388,43 +391,43 @@ const openNewSession = (groupId: string) => {
 }
 
 // 导航项配置
-const navItems = [
+const navItems = computed(() => [
   {
     key: 'chat',
-    label: '新建任务',
+    label: t('ui.sidebar.navNewTask'),
     icon: AddSquare20Regular
   },
   {
     key: 'characters',
-    label: '助手',
+    label: t('ui.sidebar.navCharacters'),
     icon: ContactCard20Regular
   },
   {
     key: 'bots',
-    label: '机器人',
+    label: t('ui.sidebar.navBots'),
     icon: Bot20Regular
   },
   {
     key: 'knowledge-base',
-    label: '知识库',
+    label: t('ui.sidebar.navKnowledgeBase'),
     icon: BookSearch20Regular
   },
   {
     key: 'plugins',
-    label: '插件市场',
+    label: t('ui.sidebar.navPlugins'),
     icon: Apps20Regular
   },
   {
     key: 'scheduler',
-    label: '定时任务',
+    label: t('ui.sidebar.navScheduler'),
     icon: ClockAlarm20Regular
   },
   {
     key: 'models',
-    label: '模型管理',
+    label: t('ui.sidebar.navModels'),
     icon: Cloud20Regular
   }
-]
+])
 
 // 当前激活的 tab（根据路由）
 const currentActiveTab = computed(() => {
@@ -474,7 +477,7 @@ const displayGroups = computed(() => {
   // 始终在最后添加未分组
   groups.push({
     id: UNGROUPED_ID,
-    name: '任务列表',
+    name: t('ui.sidebar.taskList'),
     userId: '',
     sortOrder: groups.length,
     createdAt: '',
@@ -598,7 +601,7 @@ const formatLastActive = (dateStr: string | null | undefined): string => {
   if (days < 30) return `${days}d`
   const months = Math.floor(days / 30)
   if (months < 12) return `${months}m`
-  return '更早'
+  return t('ui.sidebar.earlier')
 }
 
 // 侧边栏状态辅助方法
@@ -655,10 +658,10 @@ const handleDropdownSelect = (command: string, session: any) => {
  * 归档会话
  */
 const handleArchiveSession = async (session: any) => {
-  const confirmed = await confirm('归档会话', `确定要归档 "${session.title}" 吗？归档后将不在列表中显示。`, {
+  const confirmed = await confirm(t('ui.sidebar.archiveTitle'), t('ui.sidebar.archiveConfirm', { title: session.title }), {
     type: 'info',
-    confirmText: '归档',
-    cancelText: '取消'
+    confirmText: t('ui.sidebar.archive'),
+    cancelText: t('common.cancel')
   })
   if (!confirmed) return
 
@@ -672,11 +675,11 @@ const handleArchiveSession = async (session: any) => {
       if (currentSessionId.value === session.id) {
         router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
       }
-      toast.success('会话已归档')
+      toast.success(t('ui.sidebar.archived'))
     }
   } catch (error: any) {
     console.error('归档失败:', error)
-    toast.error(error?.response?.data?.message || '归档失败')
+    toast.error(error?.response?.data?.message || t('ui.sidebar.archiveFailed'))
   }
 }
 
@@ -689,7 +692,7 @@ const handleMoveSession = (session: any) => {
     label: g.name,
     value: g.id
   }))
-  groupOptions.push({ label: '任务列表（未分组）', value: UNGROUPED_ID })
+  groupOptions.push({ label: t('ui.sidebar.ungrouped'), value: UNGROUPED_ID })
 
   moveGroupOptions.value = groupOptions
   moveTargetSession.value = session
@@ -714,12 +717,12 @@ const confirmMoveSession = async () => {
     // 更新统一数据源中的分组ID
     sessionStore.moveSession(session.id, groupIdToSet)
 
-    toast.success('会话已移动')
+    toast.success(t('ui.sidebar.moved'))
     moveGroupDialogVisible.value = false
     moveTargetSession.value = null
   } catch (error) {
     console.error('移动会话失败:', error)
-    toast.error('移动会话失败')
+    toast.error(t('ui.sidebar.moveFailed'))
   }
 }
 
@@ -728,20 +731,20 @@ const confirmMoveSession = async () => {
  */
 const handleRenameGroup = async (group: any) => {
   try {
-    const result = await prompt('重命名分组', {
-      placeholder: '请输入分组名称',
+    const result = await prompt(t('ui.sidebar.renameGroupTitle'), {
+      placeholder: t('ui.sidebar.inputGroupName'),
       defaultValue: group.name
     })
 
     if (result && result !== group.name) {
       const success = await sessionGroupStore.updateGroup(group.id, result)
       if (success) {
-        toast.success('分组重命名成功')
+        toast.success(t('ui.sidebar.groupRenamed'))
       }
     }
   } catch (error) {
     console.error('重命名分组失败:', error)
-    toast.error('重命名分组失败')
+    toast.error(t('ui.sidebar.renameGroupFailed'))
   }
 }
 
@@ -750,10 +753,10 @@ const handleRenameGroup = async (group: any) => {
  */
 const handleDeleteGroup = async (group: any) => {
   try {
-    const confirmed = await confirm('删除分组', `确定要删除分组 "${group.name}" 吗？该分组下的会话将自动归入未分组。`, {
+    const confirmed = await confirm(t('ui.sidebar.deleteGroupTitle'), t('ui.sidebar.deleteGroupConfirm', { name: group.name }), {
       type: 'warning',
-      confirmText: '删除',
-      cancelText: '取消'
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel')
     })
 
     if (confirmed) {
@@ -766,12 +769,12 @@ const handleDeleteGroup = async (group: any) => {
       // 删除分组
       const success = await sessionGroupStore.deleteGroup(group.id)
       if (success) {
-        toast.success('分组已删除')
+        toast.success(t('ui.sidebar.groupDeleted'))
       }
     }
   } catch (error) {
     console.error('删除分组失败:', error)
-    toast.error('删除分组失败')
+    toast.error(t('ui.sidebar.deleteGroupFailed'))
   }
 }
 
@@ -781,8 +784,8 @@ const handleDeleteGroup = async (group: any) => {
  */
 const handleRenameSession = async (session: any) => {
   try {
-    const result = await prompt('重命名对话', {
-      placeholder: '请输入对话名称',
+    const result = await prompt(t('ui.sidebar.renameSessionTitle'), {
+      placeholder: t('ui.sidebar.inputSessionName'),
       defaultValue: session.title
     })
 
@@ -800,11 +803,11 @@ const handleRenameSession = async (session: any) => {
       // 更新统一数据源中的标题
       sessionStore.updateSessionTitle(session.id, newTitle)
 
-      toast.success('对话重命名成功')
+      toast.success(t('ui.sidebar.sessionRenamed'))
     }
   } catch (error) {
     console.error('重命名对话失败:', error)
-    toast.error('对话重命名失败')
+    toast.error(t('ui.sidebar.renameSessionFailed'))
   }
 }
 
@@ -830,12 +833,12 @@ const confirmDeleteSession = async () => {
     // 如果勾选了删除工作目录，进行二次确认
     if (deleteWorkspaceChecked.value) {
       const secondConfirm = await ElMessageBox({
-        title: '重要警告',
-        message: '您选择了同时删除默认工作目录，这将永久删除该会话的所有文件数据，且不可恢复！',
+        title: t('ui.sidebar.importantWarning'),
+        message: t('ui.sidebar.workspaceDeleteWarning'),
         type: 'error',
         showCancelButton: true,
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
+        confirmButtonText: t('ui.sidebar.confirmDelete'),
+        cancelButtonText: t('common.cancel'),
         distinguishCancelAndClose: true,
         customClass: 'workspace-delete-warning'
       }).then(() => true).catch(() => false)
@@ -855,14 +858,14 @@ const confirmDeleteSession = async () => {
     }
     sessionStore.removeSession(session.id)
     sessionStore.clearSidebarState(session.id)
-    toast.success('对话删除成功')
+    toast.success(t('ui.sidebar.sessionDeleted'))
 
     // 关闭对话框
     deleteDialogVisible.value = false
     deleteSessionData.value = null
   } catch (error) {
     console.error('删除对话失败:', error)
-    toast.error('删除对话失败')
+    toast.error(t('ui.sidebar.deleteSessionFailed'))
   }
 }
 
@@ -873,10 +876,10 @@ const handleUserMenuCommand = (command: string) => {
   } else if (command === 'settings') {
     router.replace({ name: 'SystemSettings' })
   } else if (command === 'logout') {
-    confirm('提示', '确定要退出登录吗？', {
+    confirm(t('ui.sidebar.logoutTitle'), t('ui.sidebar.logoutConfirm'), {
       type: 'warning',
-      confirmText: '确定',
-      cancelText: '取消'
+      confirmText: t('common.ok'),
+      cancelText: t('common.cancel')
     }).then((confirmed) => {
       if (confirmed) {
         authStore.logout()

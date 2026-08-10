@@ -7,7 +7,7 @@
                 <el-icon class="text-(--color-primary)">
                     <ScienceOutlined />
                 </el-icon>
-                <span class="text-sm">{{ selectedModelName || '请选择嵌入模型' }}</span>
+                <span class="text-sm">{{ selectedModelName || t('ui.embeddingModel.selectPlaceholder') }}</span>
             </div>
             <el-icon class="text-xs opacity-60">
                 <ArrowDropDownTwotone />
@@ -15,11 +15,11 @@
         </el-button>
 
         <!-- 模型选择对话框 -->
-        <el-dialog v-model="dialogVisible" title="选择嵌入模型" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <el-dialog v-model="dialogVisible" :title="t('ui.embeddingModel.dialogTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <!-- 搜索框 -->
             <div class="mb-4">
-                <el-input v-model="searchText" placeholder="搜索模型..." clearable>
+                <el-input v-model="searchText" :placeholder="t('ui.embeddingModel.searchPlaceholder')" clearable>
                     <template #prefix>
                         <el-icon>
                             <SearchFilled />
@@ -66,15 +66,15 @@
                     <el-icon size="48" class="mb-2">
                         <SearchFilled />
                     </el-icon>
-                    <p>未找到匹配的嵌入模型</p>
-                    <p class="text-xs mt-1">请确保后端已配置 Embedding 模型提供商</p>
+                    <p>{{ t('ui.embeddingModel.notFound') }}</p>
+                    <p class="text-xs mt-1">{{ t('ui.embeddingModel.ensureConfigured') }}</p>
                 </div>
             </div>
 
             <template #footer>
                 <div class="flex justify-end gap-3">
-                    <el-button @click="dialogVisible = false">取消</el-button>
-                    <el-button type="primary" @click="confirmSelection">确定</el-button>
+                    <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
+                    <el-button type="primary" @click="confirmSelection">{{ t('common.ok') }}</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -83,6 +83,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ScienceOutlined, SearchFilled, CheckCircleFilled, ArrowDropDownTwotone } from '@vicons/material'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
@@ -115,6 +116,7 @@ const emit = defineEmits<{
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md')
+const { t } = useI18n()
 
 // 响应式数据
 const dialogVisible = ref(false)
@@ -149,7 +151,7 @@ const loadModels = async () => {
         }
     } catch (error: any) {
         console.error('获取模型列表失败:', error)
-        ElMessage.error('加载模型列表失败')
+        ElMessage.error(t('ui.embeddingModel.loadFailed'))
     }
 }
 
@@ -197,7 +199,7 @@ const selectModel = (modelId: string) => {
 // 确认选择
 const confirmSelection = () => {
     if (!tempSelectedModelId.value) {
-        ElMessage.warning('请选择一个模型')
+        ElMessage.warning(t('ui.embeddingModel.selectRequired'))
         return
     }
 
@@ -205,7 +207,7 @@ const confirmSelection = () => {
     if (selectedModel) {
         // 直接返回模型的 ID，而不是 model_name
         emit('update:modelId', selectedModel.id)
-        ElMessage.success(`已选择：${selectedModel.modelName}`)
+        ElMessage.success(t('ui.embeddingModel.selected', { name: selectedModel.modelName }))
     }
 
     dialogVisible.value = false

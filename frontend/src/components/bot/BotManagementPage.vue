@@ -4,21 +4,21 @@
       <!-- 标题区 -->
       <div class="flex items-center justify-between gap-4 mb-8 mt-2">
         <div class="min-w-0">
-          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">机器人管理</h1>
-          <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">配置和管理聊天平台机器人，支持 QQ、微信、Discord 等多平台接入。</p>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('bot.management.title') }}</h1>
+          <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('bot.management.subtitle') }}</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <el-button type="primary" @click="showCreateDialog">
             <template #icon>
               <Plus />
             </template>
-            新建机器人
+            {{ t('bot.management.create') }}
           </el-button>
           <el-button @click="handleOpenDocs">
             <template #icon>
               <Document />
             </template>
-            使用说明
+            {{ t('bot.management.docs') }}
           </el-button>
         </div>
       </div>
@@ -30,7 +30,7 @@
           <el-icon class="is-loading" :size="32">
             <Loading />
           </el-icon>
-          <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
+          <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">{{ t('common.loading') }}</span>
         </div>
 
         <!-- 机器人卡片网格 -->
@@ -44,8 +44,8 @@
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <Cpu />
             </el-icon>
-            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无机器人</p>
-            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">点击上方按钮创建第一个机器人</p>
+            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('bot.management.empty') }}</p>
+            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('bot.management.emptyHint') }}</p>
           </div>
         </div>
       </div>
@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Plus, Loading, Cpu, Document } from '@element-plus/icons-vue'
 import { useBotStore } from '@/stores/bot'
@@ -67,6 +68,7 @@ import BotModal from './BotModal.vue'
 import type { BotInstance } from '@/types/bot'
 
 const botStore = useBotStore()
+const { t } = useI18n()
 const dialogVisible = ref(false)
 const currentBot = ref<BotInstance | null>(null)
 
@@ -106,11 +108,11 @@ const handleEdit = (bot: BotInstance) => {
 const handleDelete = async (bot: BotInstance) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除机器人 "${bot.name}" 吗？此操作不可恢复。`,
-      '删除确认',
+      t('bot.management.deleteConfirm', { name: bot.name }),
+      t('bot.management.deleteTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.ok'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )

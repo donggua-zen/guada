@@ -1,18 +1,18 @@
 ﻿<!-- KnowledgeBasePage/FileChunksViewer.vue -->
 <template>
-    <el-dialog v-model="showModal" :title="`文件分块内容 - ${selectedFile?.displayName}`" width="800px"
+    <el-dialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" width="800px"
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
                 <Loading />
             </el-icon>
-            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">正在加载分块内容...</p>
+            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.loading') }}</p>
         </div>
         <div v-else-if="chunks.length === 0" class="no-chunks-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
                 <Document />
             </el-icon>
-            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">暂无分块内容</p>
+            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.empty') }}</p>
         </div>
         <div v-else class="chunks-container">
             <div v-for="(chunk, index) in chunks" :key="chunk.id"
@@ -22,7 +22,7 @@
                         #{{ (currentPage - 1) * pageSize + index + 1 }}
                     </span>
                     <span class="chunk-meta text-xs text-gray-400 dark:text-[#6b6d75]">
-                        索引: {{ chunk.chunkIndex }}, Token数: {{ chunk.tokenCount }}
+                        {{ t('knowledge.chunks.index') }}: {{ chunk.chunkIndex }}, {{ t('knowledge.chunks.tokenCount') }}: {{ chunk.tokenCount }}
                     </span>
                 </div>
                 <div class="chunk-content text-sm text-gray-800 dark:text-[#e8e9ed] whitespace-pre-wrap font-mono">
@@ -35,8 +35,7 @@
         <template #footer v-if="chunks.length > 0">
             <div class="flex justify-between items-center">
                 <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
-                    共 {{ totalChunks }} 个分块，当前显示 {{ Math.min(totalChunks, (currentPage - 1) * pageSize + 1) }} - {{
-                        Math.min(totalChunks, currentPage * pageSize) }}
+                    {{ t('knowledge.chunks.pagination', { total: totalChunks, start: Math.min(totalChunks, (currentPage - 1) * pageSize + 1), end: Math.min(totalChunks, currentPage * pageSize) }) }}
                 </div>
                 <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="totalChunks"
                     layout="prev, pager, next" :hide-on-single-page="totalChunks <= pageSize"
@@ -48,6 +47,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Loading, Document } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -65,6 +65,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useKnowledgeBaseStore()
+const { t } = useI18n()
 const { toast } = usePopup()
 
 // 状态
@@ -95,13 +96,13 @@ watch(showModal, (newValue) => {
  */
 async function loadChunks() {
     if (!props.selectedFile || !store.activeKnowledgeBaseId) {
-        toast.error('未选择文件或知识库')
+        toast.error(t('knowledge.chunks.noFileSelected'))
         return
     }
 
     // 已完成或处理失败的文件均可查看分块内容
     if (props.selectedFile.processingStatus !== 'completed' && props.selectedFile.processingStatus !== 'failed') {
-        toast.warning('文件尚未处理完成，无法查看分块内容')
+        toast.warning(t('knowledge.chunks.fileNotReady'))
         return
     }
 
@@ -123,7 +124,7 @@ async function loadChunks() {
         totalChunks.value = props.selectedFile.totalChunks || 0
     } catch (error: any) {
         console.error('获取文件分块失败:', error)
-        toast.error(error.response?.data?.detail || '获取文件分块失败')
+        toast.error(error.response?.data?.detail || t('knowledge.chunks.loadFailed'))
         chunks.value = []
         totalChunks.value = 0
     } finally {

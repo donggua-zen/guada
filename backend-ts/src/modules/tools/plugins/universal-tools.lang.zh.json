@@ -1,0 +1,1 @@
+{"tool_learn.executing": "正在加载工具包", "tool_learn.completed": "已加载工具包", "tool_learn.aggregate.executing": "正在加载{n}个工具包", "tool_learn.aggregate.completed": "已加载{n}个工具包", "tool_use.executing": "正在调用工具", "tool_use.completed": "已调用工具", "tool_use.aggregate.executing": "正在调用{n}个工具", "tool_use.aggregate.completed": "已调用{n}个工具"}

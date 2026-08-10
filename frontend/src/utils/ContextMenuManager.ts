@@ -12,6 +12,7 @@
  */
 
 import { openInExternalBrowser } from "./browserUtils";
+import { t } from "@/locales";
 
 export interface MenuItem {
   label: string;
@@ -343,7 +344,7 @@ class ContextMenuManager {
 
     if (selectedText && !target.isContentEditable) {
       items.push({
-        label: "复制",
+        label: t("session.contextMenu.copy"),
         action: () => {
           this.writeClipboardText(selectedText);
         },
@@ -375,7 +376,7 @@ class ContextMenuManager {
       // 复制（仅当有选中内容时）
       if (hasSelection) {
         items.push({
-          label: "复制",
+          label: t("session.contextMenu.copy"),
           action: () => {
             this.writeClipboardText(selectedText);
           },
@@ -384,7 +385,7 @@ class ContextMenuManager {
 
       // 粘贴
       items.push({
-        label: "粘贴",
+        label: t("session.contextMenu.paste"),
         action: async () => {
           const text = await this.readClipboardText();
           if (!text) return;
@@ -412,7 +413,7 @@ class ContextMenuManager {
       // 剪切（仅当有选中内容时）
       if (hasSelection) {
         items.push({
-          label: "剪切",
+          label: t("session.contextMenu.cut"),
           action: () => {
             this.writeClipboardText(selectedText);
             if (isContentEditable) {
@@ -434,7 +435,7 @@ class ContextMenuManager {
 
       // 全选
       items.push({
-        label: "全选",
+        label: t("session.contextMenu.selectAll"),
         action: () => {
           if (isContentEditable) {
             this.selectAllContentEditable(target);
@@ -449,11 +450,11 @@ class ContextMenuManager {
     const link = target.closest("a");
     if (link && link.href) {
       items.push({
-        label: "在新窗口打开",
+        label: t("session.contextMenu.openInNewWindow"),
         action: () => openInExternalBrowser(link.href),
       });
       items.push({
-        label: "复制链接地址",
+        label: t("session.contextMenu.copyLink"),
         action: () => this.writeClipboardText(link.href),
       });
     }
@@ -462,7 +463,7 @@ class ContextMenuManager {
     const img = target.closest("img");
     if (img && img.src) {
       items.push({
-        label: "保存图片",
+        label: t("session.contextMenu.saveImage"),
         action: () => {
           const a = document.createElement("a");
           a.href = img.src;
@@ -475,7 +476,7 @@ class ContextMenuManager {
     // 场景5：默认选项
     if (items.length === 0) {
       items.push({
-        label: "刷新",
+        label: t("session.contextMenu.refresh"),
         action: () => location.reload(),
       });
     }

@@ -15,6 +15,7 @@ import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
 import { BochaProvider } from "./builtins/search-providers/bocha.provider";
 import { PromptCollector } from "./prompt-collector.service";
+import { NlsService } from "./i18n/nls.service";
 
 @Global()
 @Module({
@@ -23,6 +24,7 @@ import { PromptCollector } from "./prompt-collector.service";
   providers: [
     PluginManager,
     PromptCollector,
+    NlsService,
     // ExternalPluginLoader 放在内建插件之后，确保 onModuleInit 顺序
     ExternalPluginLoader,
     FilePlugin,
@@ -36,7 +38,7 @@ import { PromptCollector } from "./prompt-collector.service";
     TavilyProvider,
     BochaProvider,
   ],
-  exports: [PluginManager, PromptCollector, ExternalPluginLoader],
+  exports: [PluginManager, PromptCollector, ExternalPluginLoader, NlsService],
 })
 export class PluginsModule implements OnModuleInit {
   constructor(

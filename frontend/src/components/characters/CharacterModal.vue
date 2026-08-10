@@ -3,7 +3,7 @@
         :style="{ height: '70vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
-                <span class="dialog-title">{{ currentCharacter?.id ? '编辑角色' : '新建角色' }}</span>
+                <span class="dialog-title">{{ currentCharacter?.id ? t('characters.modal.editTitle') : t('characters.modal.createTitle') }}</span>
             </div>
         </template>
 
@@ -12,20 +12,22 @@
         </div>
 
         <template #footer>
-            <el-button @click="handleClose">取消</el-button>
-            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">应用全部设置</el-button>
+            <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('characters.modal.applyAll') }}</el-button>
         </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElDialog, ElButton } from 'element-plus'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 
 const { toast } = usePopup()
+const { t } = useI18n()
 
 // Props
 const props = defineProps<{
@@ -113,12 +115,12 @@ const handleSave = async (): Promise<void> => {
             currentCharacter.value = character;
         }
 
-        toast.success("角色更新成功");
+        toast.success(t('characters.modal.saveSuccess'));
         emit('saved', currentCharacter.value);
         visible.value = false;
     } catch (error) {
         console.error("角色保存失败:", error);
-        toast.error("角色保存失败");
+        toast.error(t('characters.modal.saveFailed'));
     } finally {
         saving.value = false;
     }

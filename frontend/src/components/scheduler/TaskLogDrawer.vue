@@ -4,13 +4,13 @@
       <!-- 头部操作 -->
       <div class="flex justify-between items-center mb-4">
         <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
-          共 {{ logs.length }} 条记录
+          {{ t('scheduler.log.count', { count: logs.length }) }}
         </div>
         <el-button size="small" @click="handleRefresh" :loading="loading">
           <template #icon>
             <RefreshOutlined />
           </template>
-          刷新
+          {{ t('scheduler.log.refresh') }}
         </el-button>
       </div>
 
@@ -29,7 +29,7 @@
             </div>
 
             <div v-if="log.sessionId" class="text-xs text-gray-500 mb-1">
-              会话: {{ log.sessionId }}
+              {{ t('scheduler.log.session') }}: {{ log.sessionId }}
             </div>
 
             <div v-if="log.error" class="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mt-2">
@@ -37,7 +37,7 @@
             </div>
 
             <div v-if="log.finishedAt" class="text-xs text-gray-400 mt-2">
-              完成: {{ formatDateTime(log.finishedAt) }}
+              {{ t('scheduler.log.finishedAt') }}: {{ formatDateTime(log.finishedAt) }}
             </div>
           </div>
         </div>
@@ -47,8 +47,8 @@
           <el-icon size="48" class="mb-3 opacity-50">
             <InboxOutlined />
           </el-icon>
-          <div>暂无执行记录</div>
-          <div class="text-sm mt-2">任务执行后日志将显示在这里</div>
+          <div>{{ t('scheduler.log.empty') }}</div>
+          <div class="text-sm mt-2">{{ t('scheduler.log.emptyHint') }}</div>
         </div>
       </div>
     </div>
@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElDrawer, ElTag, ElButton, ElIcon } from 'element-plus'
 import { RefreshOutlined, InboxOutlined } from '@vicons/material'
 import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'
@@ -74,13 +75,15 @@ const emit = defineEmits<{
   'refresh': []
 }>()
 
+const { t } = useI18n()
+
 const drawerVisible = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
 })
 
 const drawerTitle = computed(() => {
-  return props.task ? `执行日志 - ${props.task.name}` : '执行日志'
+  return props.task ? t('scheduler.log.titleWithTask', { name: props.task.name }) : t('scheduler.log.title')
 })
 
 /**
@@ -106,13 +109,13 @@ function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warnin
 function getStatusLabel(status: string): string {
   switch (status) {
     case 'completed':
-      return '已完成'
+      return t('scheduler.log.statusCompleted')
     case 'running':
-      return '执行中'
+      return t('scheduler.log.statusRunning')
     case 'failed':
-      return '失败'
+      return t('scheduler.log.statusFailed')
     case 'pending':
-      return '等待中'
+      return t('scheduler.log.statusPending')
     default:
       return status
   }

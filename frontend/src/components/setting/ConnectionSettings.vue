@@ -2,10 +2,10 @@
   <div class="flex flex-col gap-4">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-bold">远程连接</h2>
-        <p class="text-sm text-gray-400 mt-0.5">管理 SSH 等远程连接，在会话中绑定后 AI 可操作远端服务器</p>
+        <h2 class="text-lg font-bold">{{ t('settings.connection.title') }}</h2>
+        <p class="text-sm text-gray-400 mt-0.5">{{ t('settings.connection.desc') }}</p>
       </div>
-      <el-button type="primary" @click="startNew" :icon="Add24Regular">新建连接</el-button>
+      <el-button type="primary" @click="startNew" :icon="Add24Regular">{{ t('settings.connection.newConnection') }}</el-button>
     </div>
 
     <!-- 连接列表 -->
@@ -24,8 +24,8 @@
             </div>
           </div>
           <div class="flex gap-1">
-            <el-button text size="small" @click="editConn(conn)">编辑</el-button>
-            <el-button text size="small" type="danger" @click="deleteConn(conn.id)">删除</el-button>
+            <el-button text size="small" @click="editConn(conn)">{{ t('common.edit') }}</el-button>
+            <el-button text size="small" type="danger" @click="deleteConn(conn.id)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
         <div class="text-xs text-gray-400 truncate">
@@ -38,21 +38,21 @@
     </div>
     <div v-else class="text-center py-12 text-gray-400">
       <Cloud24Regular class="w-12 h-12 mx-auto mb-3 opacity-30" />
-      <p class="text-sm">暂无远程连接</p>
-      <p class="text-xs mt-1">点击右上角"新建连接"创建</p>
+      <p class="text-sm">{{ t('settings.connection.noConnections') }}</p>
+      <p class="text-xs mt-1">{{ t('settings.connection.noConnectionsDesc') }}</p>
     </div>
 
     <!-- 编辑/新建弹窗 -->
-    <el-dialog v-model="editing" :title="editConnId ? '编辑连接' : '新建连接'" width="480px" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="editing" :title="editConnId ? t('settings.connection.editConnection') : t('settings.connection.newConnection')" width="480px" :close-on-click-modal="false" append-to-body>
       <!-- 连接名称 -->
       <div class="flex flex-col gap-0.5 mb-3">
-        <label class="text-xs font-medium">连接名称 <span class="text-red-500">*</span></label>
+        <label class="text-xs font-medium">{{ t('settings.connection.connectionName') }} <span class="text-red-500">*</span></label>
         <el-input v-model="editName" placeholder="my-server" />
       </div>
       <!-- 类型 -->
       <div v-if="!editConnId" class="flex flex-col gap-0.5 mb-3">
-        <label class="text-xs font-medium">类型</label>
-        <el-select v-model="editScheme" placeholder="选择连接类型" class="w-full">
+        <label class="text-xs font-medium">{{ t('common.type') }}</label>
+        <el-select v-model="editScheme" :placeholder="t('settings.connection.selectType')" class="w-full">
           <el-option v-for="p in providers.filter(p => p.scheme !== 'local')" :key="p.scheme" :label="p.label" :value="p.scheme" />
         </el-select>
       </div>
@@ -60,14 +60,14 @@
       <SchemaForm v-if="currentSchema.length > 0" :fields="currentSchema" v-model="editConfig" />
       <!-- 测试结果 -->
       <div v-if="testResult" class="mt-3 text-sm" :class="testResult.success ? 'text-green-500' : 'text-red-500'">
-        {{ testResult.success ? '✓ 连接成功' : `✗ ${testResult.error}` }}
+        {{ testResult.success ? t('settings.connection.connectionSuccess') : `✗ ${testResult.error}` }}
       </div>
       <!-- 按钮 -->
       <div class="flex justify-between mt-4">
-        <el-button @click="testConn" :loading="testing" :disabled="!editScheme">测试连接</el-button>
+        <el-button @click="testConn" :loading="testing" :disabled="!editScheme">{{ t('settings.connection.testConnection') }}</el-button>
         <div class="flex gap-2">
-          <el-button @click="editing = false">取消</el-button>
-          <el-button type="primary" @click="saveConn" :loading="saving">保存</el-button>
+          <el-button @click="editing = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="saveConn" :loading="saving">{{ t('common.save') }}</el-button>
         </div>
       </div>
     </el-dialog>
@@ -77,10 +77,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { Add24Regular, Cloud24Regular } from '@vicons/fluent'
 import SchemaForm from '../chat/chat-input/SchemaForm.vue'
 import { apiService } from '@/services/ApiService'
 import type { ProviderInfo, SavedConnection, ConfigField } from '@/services/modules/workspace-connections.api'
+
+const { t } = useI18n()
 
 const providers = ref<ProviderInfo[]>([])
 const connections = ref<SavedConnection[]>([])
@@ -169,7 +172,7 @@ async function testConn() {
 
 async function saveConn() {
   if (!editName.value.trim()) {
-    ElMessage.warning('请填写连接名称')
+    ElMessage.warning(t('settings.connection.nameRequired'))
     return
   }
   saving.value = true
@@ -188,9 +191,9 @@ async function saveConn() {
     }
     await loadData()
     editing.value = false
-    ElMessage.success('保存成功')
+    ElMessage.success(t('common.saveSuccess'))
   } catch (e: any) {
-    ElMessage.error('保存失败: ' + (e.message || String(e)))
+    ElMessage.error(t('common.saveFailed') + ': ' + (e.message || String(e)))
   } finally {
     saving.value = false
   }
@@ -200,9 +203,9 @@ async function deleteConn(id: string) {
   try {
     await apiService.deleteWorkspaceConnection(id)
     connections.value = connections.value.filter(c => c.id !== id)
-    ElMessage.success('已删除')
+    ElMessage.success(t('common.deleteSuccess'))
   } catch (e: any) {
-    ElMessage.error('删除失败: ' + (e.message || String(e)))
+    ElMessage.error(t('common.deleteFailed') + ': ' + (e.message || String(e)))
   }
 }
 </script>

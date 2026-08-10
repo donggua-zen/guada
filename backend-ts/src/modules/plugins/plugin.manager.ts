@@ -17,6 +17,7 @@ import { SG_PLUGINS } from "../../constants/settings.constants";
 import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
+import { NlsService } from "./i18n/nls.service";
 
 // ── 新 registerTools API 类型 ──
 
@@ -79,6 +80,7 @@ export class PluginManager {
     private readonly settingsStorage: SettingsStorage,
     private readonly promptCollector: PromptCollector,
     private readonly commandRegistry: CommandProviderRegistry,
+    private readonly nlsService: NlsService,
   ) {}
 
   // ── 生命周期 ──
@@ -120,7 +122,7 @@ export class PluginManager {
     }
 
     // 创建 api 并调用 onLoad
-    const api = new PluginApiImpl(id, plugin.manifest.name);
+    const api = new PluginApiImpl(id, plugin.manifest.name, this.nlsService);
     if (plugin.onLoad) {
       await plugin.onLoad(api).catch((err) => {
         this.logger.error(`Plugin ${id} onLoad failed: ${err.message}`);

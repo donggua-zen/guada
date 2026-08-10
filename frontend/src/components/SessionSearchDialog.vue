@@ -4,10 +4,10 @@
     <!-- 搜索输入 -->
     <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <Search16Regular class="w-4 h-4 text-gray-400 shrink-0" />
-      <input ref="inputRef" v-model="keyword" type="text" placeholder="搜索会话标题或内容..."
+      <input ref="inputRef" v-model="keyword" type="text" :placeholder="t('session.search.placeholder')"
         class="flex-1 bg-transparent outline-none text-sm text-(--color-text) placeholder-gray-400"
         @keyup.enter="doSearch" @keyup.esc="dialogVisible = false" />
-      <span v-if="isSearching" class="text-xs text-gray-400">搜索中...</span>
+      <span v-if="isSearching" class="text-xs text-gray-400">{{ t('session.search.searching') }}</span>
     </div>
 
     <!-- 搜索结果 -->
@@ -17,7 +17,7 @@
         <el-icon class="animate-spin text-2xl mb-2">
           <Loading />
         </el-icon>
-        <span class="text-xs">搜索中...</span>
+        <span class="text-xs">{{ t('session.search.searching') }}</span>
       </div>
 
       <!-- 结果列表 -->
@@ -36,7 +36,7 @@
               <span class="flex-1 truncate text-sm text-(--color-text)" v-html="highlightText(session.title, keyword)">
               </span>
               <span v-if="session.matchType === 'content'"
-                class="text-xs text-blue-400 shrink-0 px-1 rounded bg-blue-50 dark:bg-blue-900/30">内容</span>
+                class="text-xs text-blue-400 shrink-0 px-1 rounded bg-blue-50 dark:bg-blue-900/30">{{ t('session.search.contentMatch') }}</span>
               <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
             </div>
             <!-- 内容匹配片段 -->
@@ -49,23 +49,23 @@
         <!-- 加载更多 -->
         <div v-if="isLoadingMore" class="flex items-center justify-center py-3 text-gray-400">
           <el-icon class="animate-spin text-sm mr-1"><Loading /></el-icon>
-          <span class="text-xs">加载中...</span>
+          <span class="text-xs">{{ t('session.search.loadingMore') }}</span>
         </div>
         <div v-else-if="hasMore" class="flex items-center justify-center py-3 text-gray-400">
-          <button class="text-xs hover:text-(--color-text) transition-colors" @click="loadMore">加载更多</button>
+          <button class="text-xs hover:text-(--color-text) transition-colors" @click="loadMore">{{ t('session.search.loadMore') }}</button>
         </div>
       </template>
 
       <!-- 空状态 -->
       <div v-else-if="hasSearched" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <Search16Regular class="w-8 h-8 mb-2 opacity-40" />
-        <span class="text-xs">未找到匹配的会话</span>
+        <span class="text-xs">{{ t('session.search.noResults') }}</span>
       </div>
 
       <!-- 初始状态 -->
       <div v-else class="flex flex-col items-center justify-center py-10 text-gray-400">
         <Search16Regular class="w-8 h-8 mb-2 opacity-30" />
-        <span class="text-xs">输入关键词搜索会话</span>
+        <span class="text-xs">{{ t('session.search.initial') }}</span>
       </div>
     </div>
   </el-dialog>
@@ -73,6 +73,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Search16Regular } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
@@ -85,6 +86,7 @@ import type { SearchSessionResult } from '@/types/session'
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
+const { t } = useI18n()
 const router = useRouter()
 const sessionGroupStore = useSessionGroupStore()
 
@@ -108,7 +110,7 @@ const groupedResults = computed(() => {
   const groups = [...sessionGroupStore.sortedGroups]
   groups.push({
     id: UNGROUPED_ID,
-    name: '任务列表',
+    name: t('session.search.ungrouped'),
     userId: '',
     sortOrder: groups.length,
     createdAt: '',
@@ -245,15 +247,15 @@ function formatLastActive(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
   const diff = Date.now() - new Date(dateStr).getTime()
   const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes}min`
+  if (minutes < 1) return t('session.search.timeNow')
+  if (minutes < 60) return t('session.search.timeMin', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
+  if (hours < 24) return t('session.search.timeHour', { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d`
+  if (days < 30) return t('session.search.timeDay', { n: days })
   const months = Math.floor(days / 30)
-  if (months < 12) return `${months}m`
-  return '更早'
+  if (months < 12) return t('session.search.timeMonth', { n: months })
+  return t('session.search.timeEarlier')
 }
 </script>
 

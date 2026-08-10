@@ -18,6 +18,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { PluginManager } from "./plugin.manager";
 import { ExternalPluginLoader } from "./external/external-plugin-loader";
+import { NlsService } from "./i18n/nls.service";
 
 @Controller("plugins")
 export class PluginsController {
@@ -26,6 +27,7 @@ export class PluginsController {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly externalLoader: ExternalPluginLoader,
+    private readonly nlsService: NlsService,
   ) {}
 
   /**
@@ -54,6 +56,12 @@ export class PluginsController {
             name: t.name,
             description: t.description,
             parameters: t.parameters as any,
+            display: this.nlsService.resolveDisplay(r.plugin.id, {
+              text: t.displayText,
+              aggregate: t.displayAggregate,
+              argsKey: t.argsKey,
+              icon: t.icon,
+            }),
           })),
           toolkits: r.enabledToolKits.map((k) => ({
             id: k.id,
@@ -63,6 +71,31 @@ export class PluginsController {
           })),
         })),
     };
+  }
+
+  /**
+   * 获取工具展示文案注册表（扁平 name→display）
+   *
+   * 前端启动时调用，返回所有插件的工具展示文案（已按当前 locale 解析 %key% 引用）。
+   */
+  @Public()
+  @Get("tool-displays")
+  async getToolDisplays() {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const result: Record<string, any> = {};
+
+    for (const r of resolved) {
+      for (const t of r.allTools) {
+        result[t.name] = this.nlsService.resolveDisplay(r.plugin.id, {
+          text: t.displayText,
+          aggregate: t.displayAggregate,
+          argsKey: t.argsKey,
+          icon: t.icon,
+        });
+      }
+    }
+
+    return result;
   }
 
   /**

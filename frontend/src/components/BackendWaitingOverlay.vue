@@ -11,13 +11,13 @@
               class="logo-text">⚡</text>
           </svg>
         </div>
-        <h2 class="loading-title">正在启动后端服务</h2>
-        <p class="loading-desc">首次启动需初始化数据库，请稍候…</p>
+        <h2 class="loading-title">{{ t('ui.backend.starting') }}</h2>
+        <p class="loading-desc">{{ t('ui.backend.startingDesc') }}</p>
       </div>
 
       <div v-else class="error-content">
         <div class="error-icon">⚠</div>
-        <h2 class="error-title">启动失败</h2>
+        <h2 class="error-title">{{ t('ui.backend.startFailed') }}</h2>
         <p class="error-text">{{ error }}</p>
       </div>
     </div>
@@ -25,7 +25,10 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import CustomTitlebar from './CustomTitlebar.vue'
+
+const { t } = useI18n()
 
 defineProps<{
   error: string | null;

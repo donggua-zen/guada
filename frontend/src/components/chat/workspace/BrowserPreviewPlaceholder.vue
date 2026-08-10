@@ -6,7 +6,7 @@
       <div class="nav-btn-group">
         <button
           class="nav-btn"
-          title="后退"
+          :title="t('chat.workspace.back')"
           :disabled="!store.canGoBack"
           @click="goBack"
         >
@@ -16,7 +16,7 @@
         </button>
         <button
           class="nav-btn"
-          title="前进"
+          :title="t('chat.workspace.forward')"
           :disabled="!store.canGoForward"
           @click="goForward"
         >
@@ -26,7 +26,7 @@
         </button>
         <button
           class="nav-btn"
-          :title="store.isLoading ? '停止' : '刷新'"
+          :title="store.isLoading ? t('chat.workspace.stop') : t('chat.workspace.refresh')"
           @click="store.isLoading ? stopLoading() : refresh()"
         >
           <!-- 刷新图标 / 停止图标 -->
@@ -52,7 +52,7 @@
           v-model="addressInput"
           class="address-input"
           type="text"
-          placeholder="输入网址或搜索"
+          :placeholder="t('chat.workspace.inputUrlPlaceholder')"
           autocomplete="none"
           spellcheck="false"
           @focus="addressFocused = true"
@@ -63,7 +63,7 @@
       </div>
 
       <!-- 静音切换按钮 -->
-      <button class="nav-btn" :title="store.isMuted ? '取消静音' : '静音'" @click="store.toggleMuted()">
+      <button class="nav-btn" :title="store.isMuted ? t('chat.workspace.unmute') : t('chat.workspace.mute')" @click="store.toggleMuted()">
         <!-- 静音状态：喇叭带斜线 -->
         <svg v-if="store.isMuted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -85,8 +85,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
 
+const { t } = useI18n()
 const store = useBrowserWebviewStore()
 
 const placeholderRef = ref<HTMLElement>()

@@ -49,7 +49,7 @@
                 <el-option
                   v-for="theme in themePresetList"
                   :key="theme.id"
-                  :label="theme.name"
+                  :label="themeName(theme)"
                   :value="theme.id"
                 >
                   <div class="flex items-center gap-2">
@@ -61,7 +61,7 @@
                       class="inline-block w-3 h-3 rounded-full shrink-0"
                       :style="{ backgroundColor: theme.secondaryColor }"
                     />
-                    <span>{{ theme.name }}</span>
+                    <span>{{ themeName(theme) }}</span>
                   </div>
                 </el-option>
                 <template #prefix>
@@ -296,6 +296,14 @@ import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import { themePresets, type ThemePresetInfo } from '@/themes'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
+// 主题名称：内置主题用 i18n key，外部插件用 name 字段
+function themeName(theme: ThemePresetInfo): string {
+  return theme.nameKey ? t(theme.nameKey) : theme.name
+}
 
 const layoutStore = useLayoutStore()
 const { themeMode, setTheme, isDark, activeThemePreset, setActiveThemePreset,
@@ -319,11 +327,11 @@ const handleThemePresetChange = (val: string) => {
   handleSave()
 }
 
-const themeOptions = [
-  { label: '浅色', value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
-  { label: '深色', value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
-  { label: '系统', value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
-]
+const themeOptions = computed(() => [
+  { label: t('settings.appearance.light'), value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
+  { label: t('settings.appearance.dark'), value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
+  { label: t('settings.appearance.system'), value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
+])
 
 // 表单数据
 const settingsForm = reactive({

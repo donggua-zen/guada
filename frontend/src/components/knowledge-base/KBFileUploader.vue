@@ -6,7 +6,7 @@
             <!-- 新建文件夹按钮 -->
             <el-button class="upload-btn" @click="showCreateFolderDialog = true">
                 <FolderAdd16Regular class="btn-icon" />
-                新建文件夹
+                {{ t('knowledge.upload.newFolder') }}
             </el-button>
 
             <!-- 上传文件按钮 -->
@@ -14,7 +14,7 @@
                 class="hidden" />
             <el-button class="upload-btn" @click="triggerFileInput">
                 <DocumentAdd16Regular class="btn-icon" />
-                上传文件
+                {{ t('knowledge.upload.uploadFile') }}
             </el-button>
 
             <!-- 上传文件夹按钮 -->
@@ -22,35 +22,35 @@
                 class="hidden" />
             <el-button class="upload-btn" @click="triggerFolderInput">
                 <FolderAdd16Regular class="btn-icon" />
-                上传文件夹
+                {{ t('knowledge.upload.uploadFolder') }}
             </el-button>
 
             <!-- 上传任务按钮(仅在有任务时显示) -->
             <el-button v-if="uploadTasks.length > 0" @click="emit('show-upload-task')" class="upload-btn">
                 <Upload class="btn-icon" />
-                上传任务
+                {{ t('knowledge.upload.uploadTask') }}
                 <el-badge :value="uploadTasks.length" type="warning" class="ml-1" />
             </el-button>
         </div>
 
         <!-- 新建文件夹对话框 -->
-        <el-dialog v-model="showCreateFolderDialog" title="新建文件夹" width="400px" :close-on-click-modal="false" append-to-body>
+        <el-dialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" width="400px" :close-on-click-modal="false" append-to-body>
             <el-input
                 v-model="newFolderName"
-                placeholder="输入文件夹名称"
+                :placeholder="t('knowledge.upload.folderNamePlaceholder')"
                 @keyup.enter="confirmCreateFolder"
             />
             <template #footer>
-                <el-button @click="showCreateFolderDialog = false">取消</el-button>
-                <el-button type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">确定</el-button>
+                <el-button @click="showCreateFolderDialog = false">{{ t('common.cancel') }}</el-button>
+                <el-button type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">{{ t('common.ok') }}</el-button>
             </template>
         </el-dialog>
 
         <!-- 冲突处理对话框 -->
-        <el-dialog v-model="showConflictDialog" title="文件冲突" width="600px" :close-on-click-modal="false">
+        <el-dialog v-model="showConflictDialog" :title="t('knowledge.upload.conflictTitle')" width="600px" :close-on-click-modal="false">
             <div class="space-y-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400">
-                    以下文件/目录已存在，请选择处理方式：
+                    {{ t('knowledge.upload.conflictDesc') }}
                 </p>
 
                 <div class="max-h-80 overflow-y-auto space-y-2">
@@ -65,10 +65,10 @@
                                 {{ conflict.originalName }}
                             </div>
                             <div class="text-xs text-gray-500 dark:text-gray-400">
-                                {{ conflict.type === 'directory' ? '目录' : '文件' }}已存在
+                                {{ conflict.type === 'directory' ? t('knowledge.upload.conflictDir') : t('knowledge.upload.conflictFile') }}{{ t('knowledge.upload.conflictExists') }}
                             </div>
                             <div v-if="conflictMode === 'keep-both'" class="text-xs text-green-600 dark:text-green-400 mt-1">
-                                将重命名为: {{ conflict.suggestedName }}
+                                {{ t('knowledge.upload.conflictRenameTo', { name: conflict.suggestedName }) }}
                             </div>
                         </div>
                     </div>
@@ -78,14 +78,14 @@
                     <el-radio-group v-model="conflictMode" class="flex flex-col gap-3">
                         <el-radio value="overwrite" size="large">
                             <div class="flex flex-col">
-                                <span class="font-medium">覆盖已有文件</span>
-                                <span class="text-xs text-gray-500">新文件将替换旧文件</span>
+                                <span class="font-medium">{{ t('knowledge.upload.conflictOverwrite') }}</span>
+                                <span class="text-xs text-gray-500">{{ t('knowledge.upload.conflictOverwriteDesc') }}</span>
                             </div>
                         </el-radio>
                         <el-radio value="keep-both" size="large">
                             <div class="flex flex-col">
-                                <span class="font-medium">都保留（自动重命名）</span>
-                                <span class="text-xs text-gray-500">在名称后添加时间戳以区分</span>
+                                <span class="font-medium">{{ t('knowledge.upload.conflictKeepBoth') }}</span>
+                                <span class="text-xs text-gray-500">{{ t('knowledge.upload.conflictKeepBothDesc') }}</span>
                             </div>
                         </el-radio>
                     </el-radio-group>
@@ -94,8 +94,8 @@
 
             <template #footer>
                 <div class="flex justify-end gap-3">
-                    <el-button @click="showConflictDialog = false">取消</el-button>
-                    <el-button type="primary" @click="handleConflictConfirm">确定</el-button>
+                    <el-button @click="showConflictDialog = false">{{ t('common.cancel') }}</el-button>
+                    <el-button type="primary" @click="handleConflictConfirm">{{ t('common.ok') }}</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -104,6 +104,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Upload, Folder, Document } from '@element-plus/icons-vue'
 import { DocumentAdd16Regular, FolderAdd16Regular } from '@vicons/fluent'
 import { ElMessage } from 'element-plus'
@@ -135,6 +136,8 @@ const emit = defineEmits<{
     (e: 'show-upload-task'): void  // 新增: 触发显示上传任务弹窗
     (e: 'folder-created'): void  // 新增: 文件夹创建成功事件
 }>()
+
+const { t } = useI18n()
 
 const uploadStore = useFileUploadStore()
 const kbStore = useKnowledgeBaseStore()
@@ -396,7 +399,7 @@ async function handleFileSelect(event: Event) {
     const filteredCount = input.files.length - filesWithPath.length
 
     if (filesWithPath.length === 0) {
-        ElMessage.warning('未找到支持的文件格式')
+        ElMessage.warning(t('knowledge.upload.unsupportedFormat'))
         input.value = ''
         return
     }
@@ -461,7 +464,7 @@ async function handleFolderSelect(event: Event) {
     const filteredCount = input.files.length - filesWithPath.length
 
     if (filesWithPath.length === 0) {
-        ElMessage.warning('未找到支持的文件格式')
+        ElMessage.warning(t('knowledge.upload.unsupportedFormat'))
         input.value = ''
         return
     }
@@ -523,7 +526,7 @@ async function executeUpload(
             // 验证文件大小
             const maxSize = 1024 * 1024 * 1024 // 1GB
             if (file.size > maxSize) {
-                ElMessage.warning(`${relativePath} 文件大小超过限制 (1GB)，已跳过`)
+                ElMessage.warning(t('knowledge.upload.fileTooLarge', { path: relativePath }))
                 failCount++
                 continue
             }
@@ -548,7 +551,7 @@ async function executeUpload(
             )
         } catch (error: any) {
             console.error(`${relativePath} 上传失败:`, error)
-            ElMessage.error(`${relativePath} 上传失败：${error.response?.data?.detail || '未知错误'}`)
+            ElMessage.error(t('knowledge.upload.uploadFailed', { path: relativePath }))
             failCount++
         }
     }
@@ -589,7 +592,7 @@ async function handleConflictConfirm() {
  */
 async function confirmCreateFolder() {
     if (!newFolderName.value || !newFolderName.value.trim()) {
-        ElMessage.warning('文件夹名称不能为空')
+        ElMessage.warning(t('knowledge.upload.folderNameEmpty'))
         return
     }
 
@@ -610,14 +613,14 @@ async function confirmCreateFolder() {
             null, // TODO: 需要根据 currentFolderPath 获取 parentFolderId
         )
         
-        ElMessage.success('文件夹创建成功')
+        ElMessage.success(t('knowledge.upload.folderCreateSuccess'))
         showCreateFolderDialog.value = false
         newFolderName.value = ''
         
         // 通知父组件刷新
         emit('folder-created')
     } catch (error: any) {
-        ElMessage.error(error.message || '创建文件夹失败')
+        ElMessage.error(error.message || t('knowledge.upload.folderCreateFailed'))
     } finally {
         createFolderLoading.value = false
     }
@@ -628,11 +631,11 @@ async function confirmCreateFolder() {
  */
 function validateFileName(name: string): { valid: boolean; message?: string } {
     if (!name || name.trim() === '') {
-        return { valid: false, message: '名称不能为空' }
+        return { valid: false, message: t('knowledge.upload.nameEmpty') }
     }
 
     if (name.length > 255) {
-        return { valid: false, message: '名称不能超过 255 个字符' }
+        return { valid: false, message: t('knowledge.upload.nameTooLong') }
     }
 
     // 不允许的字符：/ \ : * ? " < > | 以及控制字符
@@ -640,7 +643,7 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
     if (invalidChars.test(name)) {
         return { 
             valid: false, 
-            message: '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符' 
+            message: t('knowledge.upload.nameInvalidChars')
         }
     }
 
@@ -651,13 +654,13 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
         'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
     ]
     if (reservedNames.includes(name.toUpperCase())) {
-        return { valid: false, message: `名称「${name}」是系统保留名称，不能使用` }
+        return { valid: false, message: t('knowledge.upload.nameReserved', { name }) }
     }
 
     // 不允许以空格或点号开头/结尾
     if (name.startsWith(' ') || name.endsWith(' ') || 
         name.startsWith('.') || name.endsWith('.')) {
-        return { valid: false, message: '名称不能以空格或点号开头或结尾' }
+        return { valid: false, message: t('knowledge.upload.nameStartEnd') }
     }
 
     return { valid: true }

@@ -60,13 +60,14 @@
         <!-- 空文件夹提示 -->
         <div v-if="node.isDirectory && isExpanded && node.children.length === 0" 
              class="ml-7 py-1 text-xs text-gray-400 dark:text-[#6b6d75] italic">
-            (空文件夹)
+            {{ t('knowledge.treeNode.emptyFolder') }}
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
 import LTooltip from '@/components/ui/LTooltip.vue'
@@ -85,6 +86,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
     view: [file: KBFile]
@@ -164,10 +167,10 @@ function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warnin
  */
 function getStatusText(status: string): string {
     const texts: Record<string, string> = {
-        'pending': '等待处理',
-        'processing': '处理中',
-        'completed': '已完成',
-        'failed': '失败',
+        'pending': t('knowledge.status.pending'),
+        'processing': t('knowledge.status.processing'),
+        'completed': t('knowledge.status.completed'),
+        'failed': t('knowledge.status.failed'),
     }
     return texts[status] || status
 }

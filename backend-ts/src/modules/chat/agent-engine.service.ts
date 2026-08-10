@@ -16,7 +16,7 @@ import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { SummaryMode } from "./compression-engine";
-import { RateLimitError } from "../llm-core/utils/retry.util";
+import { UpstreamRateLimitError, UpstreamTimeoutError, UpstreamRequestError } from "../llm-core/utils/upstream-errors";
 import {
   classifyError,
   computeRetryDelayMs,
@@ -413,13 +413,10 @@ export class AgentEngine {
             streamError.message.toLowerCase().includes("abort")
           ) {
             businessReason = "user_cancel";
-          } else if (
-            streamError.message.includes("timed out") ||
-            streamError.message.includes("timeout")
-          ) {
+          } else if (streamError instanceof UpstreamTimeoutError) {
             businessReason = "timeout";
             finalError = streamError.message;
-          } else if (streamError instanceof RateLimitError) {
+          } else if (streamError instanceof UpstreamRateLimitError) {
             businessReason = "rate_limited";
             finalError = streamError.message;
           } else {
@@ -738,18 +735,75 @@ export class AgentEngine {
           yield { chunk, accumulated: { ...accumulated } };
         }
 
+        // 流"干净地提前结束"检测：for-await 正常退出但缺少 finishReason
+        // 某些不稳定平台可能输出一半就断开，不发送 finish chunk
+        if (!accumulated.finishReason) {
+          const hasPartialContent =
+            !!accumulated.content ||
+            !!accumulated.reasoningContent ||
+            !!accumulated.toolCalls?.length;
+
+          if (hasPartialContent) {
+            // 有内容但无 finish — 不重试（避免连续 assistant 消息），抛出明确错误
+            this.logger.warn(
+              `[LLM] Stream ended prematurely without finishReason (partial content present), not retrying`,
+            );
+            throw new Error("LLM stream ended prematurely without finish signal");
+          }
+
+          // 无内容且无 finish — 视为网络错误，可重试
+          if (attempt < maxRetries) {
+            attempt++;
+            const delayMs = computeRetryDelayMs(attempt - 1, { code: "ECONNRESET" });
+            const message = buildRetryMessage("network_error", attempt, maxRetries);
+
+            this.logger.warn(
+              `[LLM] Stream ended without finishReason or content (attempt ${attempt}/${maxRetries}), retrying`,
+            );
+
+            yield {
+              type: "retry",
+              retryReason: "network_error" as any,
+              attempt,
+              maxRetries,
+              delayMs,
+              message,
+            };
+
+            await retrySleep(delayMs, abortSignal);
+            continue;
+          }
+
+          // 重试耗尽
+          throw new Error("LLM stream ended prematurely without finish signal (retries exhausted)");
+        }
+
         // 流正常结束，退出重试循环
         return;
       } catch (error: any) {
         const errorType = classifyError(error);
 
+        // 不可重试 或 重试耗尽 → 直接抛出
         if (!errorType || attempt >= maxRetries) {
-          // 不可重试或重试耗尽 → 直接抛出，由 executeAgentLoop 的 catch 处理
           if (attempt > 0) {
             this.logger.warn(
               `[LLM] ${errorType ?? "non-retryable"} 重试耗尽 (${attempt}/${maxRetries})，放弃: ${error.message?.substring(0, 200)}`,
             );
           }
+          throw error;
+        }
+
+        // 已产生部分内容则不重试 — 重试会导致消息历史中出现连续 assistant 消息，
+        // 部分平台（如 Anthropic）不允许连续 assistant 消息
+        const hasPartialContent =
+          !!accumulated.content ||
+          !!accumulated.reasoningContent ||
+          !!accumulated.toolCalls?.length;
+
+        if (hasPartialContent) {
+          this.logger.warn(
+            `[LLM] ${errorType} 错误但已有部分内容输出，不重试以避免连续 assistant 消息: ${error.message?.substring(0, 200)}`,
+          );
           throw error;
         }
 

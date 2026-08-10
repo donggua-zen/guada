@@ -5,7 +5,7 @@
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
-                <LTooltip content="工作区" placement="bottom">
+                <LTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
                   <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }"
                       @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
                       <el-icon :size="20">
@@ -13,7 +13,7 @@
                       </el-icon>
                   </button>
                 </LTooltip>
-                <LTooltip content="预览区" placement="bottom">
+                <LTooltip :content="t('chat.workspace.previewArea')" placement="bottom">
                   <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId"
                       @click="enterPreviewMode">
                       <el-icon :size="20">
@@ -30,7 +30,7 @@
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                 <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
                     :class="{ active: activeTabKey === tab.key }"
-                    :title="tab.type === 'file' ? tab.name : (tab.title || '未命名窗口')" draggable="true"
+                    :title="tab.type === 'file' ? tab.name : (tab.title || t('chat.workspace.unnamedWindow'))" draggable="true"
                     @click="onTabClick(tab)" @dblclick="onTabDblClick(tab)"
                     @dragstart="onTabDragStart(index, $event)"
                     @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
@@ -50,7 +50,7 @@
                         </span>
                     </template>
                     <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{
-                        truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || '新窗口'))
+                        truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || t('chat.workspace.newWindow')))
                         }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
@@ -61,7 +61,7 @@
                 </div>
 
                 <!-- 新建标签按钮：进入预览模式并取消当前选中（显示空状态页） -->
-                <LTooltip content="新建" placement="bottom">
+                <LTooltip :content="t('chat.workspace.newTab')" placement="bottom">
                     <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="deselectAllTabs">
                         <el-icon size="14">
                             <Plus />
@@ -74,7 +74,7 @@
             <div class="flex-1"></div>
 
             <!-- 全屏按钮 -->
-            <LTooltip :content="layoutStore.workspaceFullscreen ? '退出全屏' : '全屏'" placement="bottom">
+            <LTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
                 <button class="sidebar-tool-btn no-drag" @click="layoutStore.toggleWorkspaceFullscreen()">
                     <el-icon :size="16">
                         <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
@@ -101,10 +101,10 @@
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-                    工作目录</h3>
+                    {{ t('chat.workspace.workingDir') }}</h3>
                 <div class="flex items-center gap-0 shrink-0">
                     <!-- 打开文件夹按钮（仅 Electron 环境） -->
-                    <LTooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
+                    <LTooltip v-if="isElectron" :content="t('chat.workspace.openInFileManager')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
                             <el-icon size="15">
                                 <WindowsExplorer />
@@ -112,7 +112,7 @@
                         </el-button>
                     </LTooltip>
                     <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
-                    <LTooltip v-if="isElectron" content="以 VSCode 打开工作目录" placement="bottom">
+                    <LTooltip v-if="isElectron" :content="t('chat.workspace.openInVSCode')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
                             <el-icon size="15">
                                 <VsCode />
@@ -120,7 +120,7 @@
                         </el-button>
                     </LTooltip>
                     <!-- 刷新按钮 -->
-                    <LTooltip content="刷新" placement="bottom">
+                    <LTooltip :content="t('chat.workspace.refresh')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
                             <el-icon size="15">
                                 <Refresh />
@@ -133,7 +133,7 @@
             <!-- 目录树内容 -->
             <div class="flex-1 overflow-auto min-w-0">
                 <div v-if="!treeData.length" class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
-                    暂无文件
+                    {{ t('chat.workspace.noFiles') }}
                 </div>
 
                 <WorkspaceTree v-else :nodes="treeData" :selected-path="selectedNodePath" :loading-paths="loadingPaths"
@@ -168,7 +168,7 @@
                     <path d="M3 9h18" />
                     <path d="M9 21V9" />
                 </svg>
-                <p class="text-gray-400 dark:text-[#6b6d73] text-sm mb-4">暂无预览文件</p>
+                <p class="text-gray-400 dark:text-[#6b6d73] text-sm mb-4">{{ t('chat.workspace.noPreviewFile') }}</p>
                 <div class="flex items-center gap-2 justify-center">
                     <button v-if="isElectron" class="empty-state-btn" :disabled="!props.sessionId"
                         @click="createNewBrowserWindow">
@@ -178,14 +178,14 @@
                             <path
                                 d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
-                        <span>新建浏览器</span>
+                        <span>{{ t('chat.workspace.newBrowser') }}</span>
                     </button>
                     <button class="empty-state-btn" @click="showFileTree">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                         </svg>
-                        <span>选择文件</span>
+                        <span>{{ t('chat.workspace.selectFile') }}</span>
                     </button>
                 </div>
             </div>
@@ -199,6 +199,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
 import { Folder16Regular, Window16Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
@@ -221,6 +222,8 @@ import WindowControls from '@/components/WindowControls.vue';
 const props = defineProps<{
     sessionId: string | null;
 }>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
     'insert-to-input': [path: string];
@@ -258,17 +261,17 @@ const contextMenu = ref({
 const contextMenuItems = computed<ContextMenuItem[]>(() => {
     const items: ContextMenuItem[] = [
         {
-            label: '复制文件名',
+            label: t('chat.workspace.copyFileName'),
             icon: CopyDocument,
             onClick: handleCopyFileName,
         },
         {
-            label: '复制路径',
+            label: t('chat.workspace.copyPath'),
             icon: CopyDocument,
             onClick: handleCopyFilePath,
         },
         {
-            label: '添加到会话',
+            label: t('chat.workspace.addToSession'),
             icon: Plus,
             divider: true,
             onClick: handleInsertToInput,
@@ -276,25 +279,25 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     ];
     if (isElectron) {
         items.push({
-            label: '在资源管理器中打开',
+            label: t('chat.workspace.openInExplorerShort'),
             icon: WindowsExplorer,
             onClick: handleOpenInExplorer,
         });
         // 文件/目录支持以 VSCode 打开
         items.push({
-            label: '以 VSCode 打开',
+            label: t('chat.workspace.openInVSCodeShort'),
             icon: VsCode,
             onClick: handleOpenInVSCode,
         });
     }
     items.push({
-        label: '重命名',
+        label: t('chat.workspace.rename'),
         icon: Edit,
         divider: true,
         onClick: handleRename,
     });
     items.push({
-        label: '删除',
+        label: t('chat.workspace.delete'),
         icon: Delete,
         onClick: handleDelete,
     });
@@ -609,7 +612,7 @@ async function createNewBrowserWindow(): Promise<void> {
             createdBy: props.sessionId,
         });
         if (!result.success) {
-            ElMessage.warning(result.error || '创建窗口失败');
+            ElMessage.warning(result.error || t('chat.workspace.createWindowFailed'));
         } else if (result.window?.windowId) {
             tabStore.enterPreviewMode()
             tabStore.selectTab(`browser:${result.window.windowId}`)
@@ -929,11 +932,11 @@ async function writeToClipboard(text: string): Promise<void> {
             await navigator.clipboard.writeText(text);
         } catch (error) {
             console.error('[Workspace] Web Clipboard API 写入失败:', error);
-            ElMessage.error('复制失败');
+            ElMessage.error(t('chat.workspace.copyFailed'));
         }
     } else {
         console.error('[Workspace] 所有剪贴板 API 都不可用');
-        ElMessage.error('复制失败');
+        ElMessage.error(t('chat.workspace.copyFailed'));
     }
 }
 
@@ -945,7 +948,7 @@ async function handleCopyFileName() {
     if (!node) return;
 
     await writeToClipboard(node.name);
-    ElMessage.success('文件名已复制');
+    ElMessage.success(t('chat.workspace.fileNameCopied'));
     closeContextMenu();
 }
 
@@ -961,7 +964,7 @@ async function handleCopyFilePath() {
         const response = await apiService.getWorkspacePath(props.sessionId);
         const workspacePath = response.workspacePath;
         if (!workspacePath) {
-            ElMessage.error('无法获取工作目录路径');
+            ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -972,10 +975,10 @@ async function handleCopyFilePath() {
         const fullPath = workspacePath + separator + relativePath;
 
         await writeToClipboard(fullPath);
-        ElMessage.success('路径已复制');
+        ElMessage.success(t('chat.workspace.pathCopied'));
     } catch (error: any) {
         console.error('Failed to get workspace path for copy:', error);
-        ElMessage.error('复制路径失败');
+        ElMessage.error(t('common.copyFailed'));
     }
     closeContextMenu();
 }
@@ -992,7 +995,7 @@ async function handleOpenInExplorer() {
         const response = await apiService.getWorkspacePath(props.sessionId);
         const workspacePath = response.workspacePath;
         if (!workspacePath) {
-            ElMessage.error('无法获取工作目录路径');
+            ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -1011,7 +1014,7 @@ async function handleOpenInExplorer() {
         }
     } catch (error: any) {
         console.error('Failed to open in explorer:', error);
-        ElMessage.error('打开失败');
+        ElMessage.error(t('chat.workspace.openFailed'));
     }
     closeContextMenu();
 }
@@ -1037,7 +1040,7 @@ async function handleOpenInVSCode() {
         const response = await apiService.getWorkspacePath(props.sessionId);
         const workspacePath = response.workspacePath;
         if (!workspacePath) {
-            ElMessage.error('无法获取工作目录路径');
+            ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -1047,10 +1050,10 @@ async function handleOpenInVSCode() {
         const fullPath = workspacePath + separator + relativePath;
 
         await window.electronAPI!.openWithEditor(fullPath, 'vscode');
-        ElMessage.success('已通过 VSCode 打开');
+        ElMessage.success(t('chat.workspace.openedInVSCode'));
     } catch (error: any) {
         console.error('Failed to open in VSCode:', error);
-        ElMessage.error('打开失败，请确认已安装 VSCode 且 code 命令可用');
+        ElMessage.error(t('chat.workspace.openVSCodeFailed'));
     }
     closeContextMenu();
 }
@@ -1067,16 +1070,16 @@ async function handleRename() {
 
     try {
         const { value: newName } = await ElMessageBox.prompt(
-            '请输入新名称',
-            '重命名',
+            t('chat.workspace.renameTitle'),
+            t('chat.workspace.rename'),
             {
                 inputValue: node.name,
-                inputPlaceholder: '请输入新文件名',
-                confirmButtonText: '确定',
-                cancelButtonText: '取消',
+                inputPlaceholder: t('chat.workspace.renameInputPlaceholder'),
+                confirmButtonText: t('common.ok'),
+                cancelButtonText: t('common.cancel'),
                 inputValidator: (val: string) => {
-                    if (!val || !val.trim()) return '名称不能为空';
-                    if (val.includes('/') || val.includes('\\')) return '名称不能包含路径分隔符';
+                    if (!val || !val.trim()) return t('chat.workspace.nameRequired');
+                    if (val.includes('/') || val.includes('\\')) return t('chat.workspace.nameNoSeparator');
                     return true;
                 },
             },
@@ -1094,7 +1097,7 @@ async function handleRename() {
         );
 
         if (result.success) {
-            ElMessage.success('重命名成功');
+            ElMessage.success(t('chat.workspace.renameSuccess'));
             // 本地更新节点名称，避免重新加载整棵树
             const oldPath = node.path;
             node.name = newName.trim();
@@ -1125,7 +1128,7 @@ async function handleRename() {
             return;
         }
         console.error('[WorkspaceSidebar] Rename failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || '重命名失败');
+        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.renameFailed'));
     }
     closeContextMenu();
 }
@@ -1141,15 +1144,16 @@ async function handleDelete() {
     }
 
     const displayName = node.name;
-    const typeLabel = node.isDirectory ? '目录' : '文件';
 
     try {
         await ElMessageBox.confirm(
-            `确定要删除${typeLabel}「${displayName}」吗？${node.isDirectory ? '该目录下的所有内容将被永久删除。' : ''}`,
-            '删除确认',
+            node.isDirectory
+                ? t('chat.workspace.deleteConfirmDir', { name: displayName })
+                : t('chat.workspace.deleteConfirmFile', { name: displayName }),
+            t('chat.workspace.deleteConfirmTitle'),
             {
-                confirmButtonText: '确定删除',
-                cancelButtonText: '取消',
+                confirmButtonText: t('chat.workspace.confirmDelete'),
+                cancelButtonText: t('common.cancel'),
                 type: 'warning',
                 distinguishCancelAndClose: true,
             },
@@ -1161,7 +1165,7 @@ async function handleDelete() {
         );
 
         if (result.success) {
-            ElMessage.success('删除成功');
+            ElMessage.success(t('common.deleteSuccess'));
             // 如果删除的是已打开的文件标签，关闭对应标签
             const deleteTabKey = `file:${node.path}`;
             const deleteTab = tabStore.tabs.find(t => t.key === deleteTabKey);
@@ -1176,7 +1180,7 @@ async function handleDelete() {
             return;
         }
         console.error('[WorkspaceSidebar] Delete failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || '删除失败');
+        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.deleteFailed'));
     }
     closeContextMenu();
 }
@@ -1240,7 +1244,7 @@ async function openWorkspaceInVSCode() {
         }
     } catch (error: any) {
         console.error('Failed to open workspace in VSCode:', error);
-        ElMessage.error('打开失败，请确认已安装 VSCode 且 code 命令可用');
+        ElMessage.error(t('chat.workspace.openVSCodeFailed'));
     }
 }
 

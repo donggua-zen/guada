@@ -1,0 +1,383 @@
+export default {
+  // ── 输入区 ──
+  input: {
+    // ChatInput.vue
+    readonlyPlaceholder: '子代理会话为只读模式',
+    tokenLimit: 'Token 上限',
+    stopGenerating: '停止生成',
+    enqueue: '加入队列',
+    send: '发送',
+    selectModel: '请选择模型',
+    unlimited: '不限',
+    custom: '自定义',
+    featureTools: '工具调用',
+    featureThinking: '混合思考',
+    editorPlaceholder: "按 / 使用技能，{'@'} 召唤agent，Shift+Enter 换行",
+    previewTitle: '原始内容预览 - {name}',
+    overwriteTitle: '覆盖{type}',
+    overwriteConfirmDesc: '暂不支持同时上传图片和文件，是否要覆盖全部{type}？',
+    uploadingTitle: '文件上传中',
+    uploadingDesc: '当前有 {count} 个文件正在上传中，您可以选择等待上传完成或直接发送消息（仅发送已完成的文件）。',
+    continueWaiting: '继续等待',
+    sendDirectly: '直接发送',
+    runModeNormal: '工作模式',
+    runModeSandbox: '轻沙盒模式',
+    runModePlan: '计划模式',
+
+    // AttachmentPopover.vue
+    uploadImage: '上传图片',
+    uploadFile: '上传文件',
+    knowledgeBase: '知识库',
+    noKnowledgeBase: '暂无知识库',
+    remoteConnection: '远程连接',
+    noConnection: '暂无连接，请在设置中添加',
+
+    // CommandPicker.vue
+    noMatchCommand: '未找到匹配的命令',
+    noMatchMember: '未找到匹配的成员',
+
+    // KnowledgeBasePanel.vue
+    searchKnowledgeBase: '搜索知识库...',
+    noMatchKnowledgeBase: '未找到匹配的知识库',
+
+    // ModelSelectorPanel.vue
+    selectModelHint: '选择模型，鼠标悬停此处以选择模式',
+    reasoningEffort: '推理强度',
+    favoriteModels: '收藏模型',
+
+    // RemoteConnectionDialog.vue
+    remoteDir: '远端目录',
+    noRemoteConnection: '暂无远端连接',
+    newConnection: '+ 新建连接',
+    connectionName: '连接名称',
+    selectConnectionType: '选择连接类型',
+    connectionSuccess: '✓ 连接成功',
+    testConnection: '测试连接',
+    fillConnectionName: '请填写连接名称',
+
+    // RunModePopover.vue
+    runModeSandboxTest: '轻沙盒模式（测试）',
+    runModeNormalDesc: '不对工具进行限制,正常读写工作目录，命令行除外',
+    runModeSandboxDesc: 'Shell命令工作目录内可写，外部只读',
+    runModePlanDesc: '仅允许只读工具和只读终端,适合做只读规划',
+
+    // ThinkingEffortPopover.vue
+    thinkingEffortTitle: '思考强度',
+
+    // WorkspaceSelectorPopover.vue
+    recent: '最近选择',
+    usePublicDir: '使用公共目录',
+    autoCreate: '自动创建',
+    autoCreateDesc: '创建随机名称的工作目录',
+    selectLocalFolder: '选择本地文件夹',
+    selectFolderFailed: '选择文件夹失败',
+  },
+
+  // ── 工具栏 ──
+  toolbar: {
+    // ChatInputToolbar.vue
+    workspace: '工作目录：{path}',
+    group: '分组：{name}',
+    autoCreate: '自动创建',
+    publicDir: '公共目录',
+    taskList: '任务列表',
+  },
+
+  // ── 上传 ──
+  upload: {
+    waiting: '等待上传...',
+    preparing: '准备上传...',
+    uploading: '上传中... {pct}%',
+    completed: '上传完成,等待处理...',
+    completedShort: '上传完成',
+  },
+
+  // ── 流式响应 ──
+  stream: {
+    retrying: '重试中...',
+    error: '发生错误',
+    cancelled: '已取消',
+    rateLimited: '请求过于频繁，正在重试...',
+    timeout: '请求超时，正在重试...',
+    compressing: '正在优化对话历史...',
+  },
+
+  // ── 消息工具 ──
+  message: {
+    unnamed: '未命名消息',
+    noActiveSession: '当前没有活动的会话',
+    deleteConfirm: '确定要删除这条消息吗？',
+    deleteWithReply: '确定要删除这条消息吗？关联的回复也会被删除。此操作不可撤销。',
+  },
+
+  // ── 面板 ──
+  panel: {
+    loadingHistory: '加载历史消息...',
+    noMoreMessages: '没有更多消息了',
+    compressing: '正在优化对话历史，请稍候...',
+    editingMessage: '正在编辑消息',
+    memoryManagement: '记忆管理',
+    contextUsage: '上下文使用率',
+    contextUsagePercent: '上下文使用率 {pct}%',
+    editCancelled: '已取消编辑',
+    sessionBusy: '会话忙碌',
+    sessionBusyDesc: '当前会话正在回复中，请稍后再试',
+    sendMessageFailed: '消息发送失败',
+    maxVersionsExceeded: '已达到最大回答版本数',
+    mainSession: '主会话',
+    subTask: '子任务',
+    noActiveSession: '当前没有活动的会话',
+    clearChatTitle: '清空聊天记录',
+    clearChatDesc: '确定要删除所有聊天记录吗？此操作不可撤销。',
+    deleteMessageTitle: '删除消息',
+    deleteUserMessageDesc: '确定要删除这条提问吗？对应的回答也会被删除。此操作不可撤销。',
+    deleteAssistantMessageDesc: '确定要删除这条回答吗？此操作不可撤销。',
+    editMessageTitle: '编辑消息',
+  },
+
+  // ── 头部 ──
+  header: {
+    closeWorkspace: '关闭工作目录',
+    openWorkspace: '打开工作目录',
+    moreActions: '更多操作',
+    clearRecords: '清空记录',
+    exportRecords: '导出记录',
+    importRecords: '导入记录',
+  },
+
+  // ── 侧边栏 ──
+  sidebar: {
+    chatSessions: '聊天对话',
+    newSession: '新建会话',
+    searchPlaceholder: '搜索会话',
+    sessionHistory: '对话记录',
+    noMatchSession: '未找到匹配的会话',
+    noSession: '没有会话',
+    noMatchSessionDesc: '尝试调整搜索关键词',
+    noSessionDesc: '点击上方按钮创建新的会话',
+    loadMore: '点击加载更多 (剩余 {n} 个)',
+    allLoaded: '已加载全部 {n} 个会话',
+  },
+
+  // ── 浮动面板 ──
+  floating: {
+    collapse: '收起',
+    hide: '隐藏',
+    chat: '对话',
+  },
+
+  // ── 大纲 ──
+  outline: {},
+
+  // ── 欢迎页 ──
+  welcome: {
+    use: '使用',
+    selectCharacter: '选择角色',
+    startNewSession: '开始新会话',
+    greeting: 'Hi，想聊些什么？',
+    pageTitle: '你今天想聊些什么',
+    newSession: '新建对话',
+    createFailedNoCharacter: '请先选择一个角色模板',
+  },
+
+  // ── 消息项 ──
+  turn: {
+    systemMessageScheduler: '来自定时任务的系统消息',
+    systemMessageSubAgent: '来自子代理的系统消息',
+    systemMessage: '系统消息',
+    apiError: 'API 请求错误',
+    requestTimeout: '请求超时',
+    serverNoResponse: '服务器长时间未响应数据，请稍后重试',
+    manuallyTerminated: '已手动终止',
+    maxIterationsReached: '已达到最大工具调用轮次限制',
+    continueExecution: '继续执行',
+    working: '工作中',
+    workingWithDuration: '工作中 · {duration}',
+    codeCopied: '代码已复制到剪贴板',
+    thinkingActive: '正在思考...',
+    thinkingDone: '已深度思考',
+    executingSteps: '正在执行{n}个步骤',
+    executingStepsWithCompleted: '正在执行{n}个步骤,已完成{m}个步骤',
+    executedSteps: '已执行{n}个步骤',
+  },
+
+  // ── 消息操作 ──
+  messageActions: {
+    copy: '复制',
+    regenerate: '重新生成',
+    prevVersion: '上一个版本',
+    nextVersion: '下一个版本',
+    more: '更多',
+    editContent: '编辑内容',
+    deleteMessage: '删除消息',
+  },
+
+  // ── 工具调用 ──
+  toolCalls: {
+    detailTitle: '工具调用详情 #{index}',
+    loadingDetails: '加载工具详情中...',
+    callParams: '调用参数',
+    paramKey: '参数',
+    paramValue: '值',
+    resultFailed: '执行失败',
+    resultSuccess: '执行结果',
+    fieldKey: '字段',
+    aborted: '已终止',
+    noResponse: '无响应',
+    loadDetailsFailed: '加载工具详情失败',
+  },
+
+  // ── 文件变更 ──
+  fileChanges: {
+    summary: '本轮修改了 {count} 个文件',
+    viewDiff: '查看 Diff',
+    diff: 'Diff',
+    dialogTitle: '文件变更',
+    dialogTitleWithName: '文件变更: {name}',
+  },
+
+  // ── 工作区 ──
+  workspace: {
+    back: '后退',
+    forward: '前进',
+    stop: '停止',
+    refresh: '刷新',
+    inputUrlPlaceholder: '输入网址或搜索',
+    unmute: '取消静音',
+    mute: '静音',
+    preview: '预览',
+    source: '源码',
+    refreshPreview: '刷新预览',
+    imageAlt: '图片预览',
+    unsupportedPreview: '此文件暂不支持预览',
+    openInExplorer: '在资源管理器中打开',
+    fileNotFound: '文件已不存在',
+    closeTab: '关闭标签',
+    fileTooLarge: '文件过大暂不支持预览',
+    loadFileFailed: '加载文件失败',
+    loadImageFailed: '加载图片失败',
+    loadHtmlFailed: '加载 HTML 失败',
+    imageLoadFailed: '图片加载失败',
+    workspacePathError: '无法获取工作目录路径',
+    openFailed: '打开失败',
+    addSelectionToSession: '添加选区到会话',
+    addFileToSession: '添加文件到会话',
+    subTask: '子任务',
+    count: '个',
+    browserWindow: '浏览器窗口',
+    noBrowserWindow: '暂无浏览器窗口',
+    unnamedWindow: '未命名窗口',
+    todoList: '待办事项',
+    workspaceArea: '工作区',
+    previewArea: '预览区',
+    newWindow: '新窗口',
+    newTab: '新建',
+    exitFullscreen: '退出全屏',
+    fullscreen: '全屏',
+    workingDir: '工作目录',
+    openInFileManager: '在文件管理器中打开',
+    openInVSCode: '以 VSCode 打开工作目录',
+    noFiles: '暂无文件',
+    noPreviewFile: '暂无预览文件',
+    newBrowser: '新建浏览器',
+    selectFile: '选择文件',
+    copyFileName: '复制文件名',
+    copyPath: '复制路径',
+    addToSession: '添加到会话',
+    openInExplorerShort: '在资源管理器中打开',
+    openInVSCodeShort: '以 VSCode 打开',
+    fileNameCopied: '文件名已复制',
+    pathCopied: '路径已复制',
+    copyFailed: '复制失败',
+    openedInVSCode: '已通过 VSCode 打开',
+    openVSCodeFailed: '打开失败，请确认已安装 VSCode 且 code 命令可用',
+    rename: '重命名',
+    delete: '删除',
+    renameTitle: '重命名',
+    renameInputPlaceholder: '请输入新文件名',
+    nameRequired: '名称不能为空',
+    nameNoSeparator: '名称不能包含路径分隔符',
+    renameSuccess: '重命名成功',
+    renameFailed: '重命名失败',
+    deleteConfirmTitle: '删除确认',
+    deleteConfirmDir: '确定要删除目录「{name}」吗？该目录下的所有内容将被永久删除。',
+    deleteConfirmFile: '确定要删除文件「{name}」吗？',
+    confirmDelete: '确定删除',
+    deleteSuccess: '删除成功',
+    deleteFailed: '删除失败',
+    createWindowFailed: '创建窗口失败',
+  },
+
+  // ── 备忘录 ──
+  memo: {
+    contextUsage: '上下文使用率',
+    contextUsageTooltip: '上下文为估算值，仅供参考，与实际值可能存在差异',
+    messages: '{count}条消息',
+    details: '详情',
+    compressing: '压缩中...',
+    compress: '压缩',
+    loading: '加载中...',
+    latestCompressStatus: '最新压缩状态',
+    compressedTimes: '已压缩 {count} 次',
+    token: 'Token',
+    message: '消息',
+    prunedOnly: '仅裁剪',
+    summaryCompress: '摘要压缩',
+    items: '条',
+    noSummaryContent: '无摘要内容',
+    history: '历史',
+    edit: '编辑',
+    delete: '删除',
+    noCompressRecords: '暂无压缩记录',
+    editSummaryTitle: '编辑摘要',
+    summaryPlaceholder: '请输入摘要内容',
+    save: '保存',
+    cancel: '取消',
+    compressHistoryTitle: '压缩历史记录',
+    compressTime: '第 {n} 次压缩',
+    summaryContentLabel: '摘要内容：',
+    compressStatsLabel: '压缩统计：',
+    tokenCount: 'Token 数量：',
+    messageCount: '消息数量：',
+    compressRate: '压缩率：',
+    prunedCount: '裁剪数量：',
+    close: '关闭',
+    systemPrompt: '系统提示词',
+    summary: '摘要',
+    userPrompt: '用户提示',
+    historyLabel: '历史',
+    toolDefs: '工具定义',
+    loadSummaryFailed: '加载摘要失败',
+    summaryUpdateSuccess: '摘要更新成功',
+    summaryUpdateFailed: '更新摘要失败',
+    deleteConfirmTitle: '确认删除',
+    deleteConfirmDesc: '确定要删除这条记忆摘要吗？此操作不可撤销。',
+    summaryDeleteSuccess: '摘要删除成功',
+    summaryDeleteFailed: '删除摘要失败',
+    streamingWarning: '当前会话正在流式输出，请等待结束后再压缩',
+    compressConfirmTitle: '确认压缩',
+    compressConfirmDesc: '确定要压缩当前会话的历史记录吗？此操作将根据会话和角色的配置自动执行压缩。',
+    compressSuccess: '压缩成功！压缩比例: {ratio}',
+    compressNotExecuted: '压缩未执行',
+    compressFailed: '压缩失败',
+  },
+
+  // ── Agent ──
+  agent: {
+    subAgent: '子代理',
+    subAgentCount: '子代理：{count} 个',
+    subAgentRunning: '，当前 {count} 个正在工作',
+    smartAssistant: '智能助手',
+    defaultDescription: '一个友好、专业的 AI 助手，可以帮你解答各种问题。',
+    noDescription: '暂无描述',
+    noOtherRoles: '暂无其他角色',
+  },
+
+  // ── 队列 ──
+  queue: {
+    sending: '发送中',
+    queued: '排队中',
+    edit: '编辑',
+    withdraw: '撤回',
+  },
+}

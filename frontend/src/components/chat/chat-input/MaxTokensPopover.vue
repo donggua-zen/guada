@@ -2,14 +2,14 @@
   <CustomPopover :show="visible" @update:show="handleVisibleChange" :width="220" :anchor-el="anchorEl">
     <template #header>
       <div class="flex items-center gap-2 px-1 pb-2 pt-1">
-        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">Token 上限</span>
+        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.input.tokenLimit') }}</span>
         <span class="text-xs text-gray-400 dark:text-gray-500">{{ currentLabel }}</span>
       </div>
     </template>
     <div class="px-3 pb-3 pt-1">
       <el-slider v-model="localValue" :min="0" :max="8" :step="1" :show-tooltip="false" @input="onInput" @change="onChange" />
       <div class="flex justify-between mt-2 px-1">
-        <span class="text-xs text-gray-400 dark:text-gray-500">不限</span>
+        <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('chat.input.unlimited') }}</span>
         <span class="text-xs text-gray-400 dark:text-gray-500">1M</span>
       </div>
     </div>
@@ -18,8 +18,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElSlider } from 'element-plus'
 import CustomPopover from '../../ui/CustomPopover.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -48,7 +51,7 @@ watch(() => props.visible, (v) => {
 
 const currentLabel = computed(() => {
   const v = localValue.value
-  if (v === 0) return '不限'
+  if (v === 0) return t('chat.input.unlimited')
   const tokens = v * STEP
   if (tokens >= 1000000 && tokens % 1000000 === 0) return `${tokens / 1000000}M`
   return `${tokens / 1000}K`

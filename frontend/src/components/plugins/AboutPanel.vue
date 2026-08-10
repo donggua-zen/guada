@@ -5,7 +5,7 @@
             <div class="space-y-2">
                 <img :src="logoPath" alt="GuaDa Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
                 <h2 class="text-2xl font-bold text-(--color-text-primary)">GuaDa</h2>
-                <p class="text-sm text-(--color-text-secondary)">当前版本: {{ appVersion }}</p>
+                <p class="text-sm text-(--color-text-secondary)">{{ t('plugins.about.version', { version: appVersion }) }}</p>
             </div>
 
             <!-- 更新状态区域 -->
@@ -13,43 +13,43 @@
                 <div class="flex flex-col items-center space-y-4">
                     <div v-if="updateStatus === 'checking'" class="flex items-center space-x-2 text-blue-500">
                         <el-icon class="is-loading"><Loading /></el-icon>
-                        <span>正在检查更新...</span>
+                        <span>{{ t('plugins.about.checking') }}</span>
                     </div>
                     
                     <div v-else-if="updateStatus === 'not-available'" class="text-green-500 flex items-center space-x-2">
                         <el-icon><CircleCheck /></el-icon>
-                        <span>已是最新版本</span>
+                        <span>{{ t('plugins.about.upToDate') }}</span>
                     </div>
 
                     <div v-else-if="updateStatus === 'available'" class="space-y-3 w-full">
-                        <div class="text-orange-500 font-medium">发现新版本: {{ updateInfo?.version }}</div>
-                        <p class="text-xs text-(--color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || '暂无更新说明' }}</p>
+                        <div class="text-orange-500 font-medium">{{ t('plugins.about.newVersion', { version: updateInfo?.version }) }}</div>
+                        <p class="text-xs text-(--color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || t('plugins.about.noUpdateDesc') }}</p>
                         <div class="flex gap-2">
                             <el-button type="primary" @click="handleDownload" class="flex-1">
-                                下载更新包
+                                {{ t('plugins.about.downloadUpdate') }}
                             </el-button>
                             <el-button @click="handleViewChangelog" class="flex-1">
-                                查看更新日志
+                                {{ t('plugins.about.viewChangelog') }}
                             </el-button>
                         </div>
                     </div>
 
                     <div v-else-if="updateStatus === 'error'" class="text-red-500 text-sm">
-                        检查更新失败: {{ errorMessage }}
+                        {{ t('plugins.about.checkFailed', { error: errorMessage }) }}
                     </div>
 
                     <el-button v-if="updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error'" 
                                @click="checkForUpdates" 
                                :disabled="isChecking" 
                                class="w-full">
-                        检查更新
+                        {{ t('plugins.about.checkUpdate') }}
                     </el-button>
                 </div>
             </div>
 
             <!-- 仓库地址 -->
             <div class="w-full bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
-                <h3 class="text-sm font-medium text-(--color-text-primary) mb-4">项目仓库</h3>
+                <h3 class="text-sm font-medium text-(--color-text-primary) mb-4">{{ t('plugins.about.repository') }}</h3>
                 <div class="flex flex-col space-y-3">
                     <div v-for="repo in repositories" :key="repo.url"
                         class="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-(--color-bg) transition-colors"
@@ -68,18 +68,20 @@
         </div>
     </div>
     <div v-else class="p-8 text-center text-(--color-text-secondary)">
-        此功能仅在桌面客户端中可用
+        {{ t('plugins.about.desktopOnly') }}
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElButton, ElIcon } from 'element-plus'
 import { Loading, CircleCheck, Link } from '@element-plus/icons-vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+const { t } = useI18n()
 const appVersion = ref('')
 const updateStatus = ref<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle')
 const updateInfo = ref<any>(null)
@@ -113,7 +115,7 @@ const checkForUpdates = async () => {
         }
     } catch (e: any) {
         updateStatus.value = 'error'
-        errorMessage.value = e.message || '未知错误'
+        errorMessage.value = e.message || t('plugins.about.unknownError')
     } finally {
         isChecking.value = false
     }

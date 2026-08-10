@@ -16,6 +16,13 @@ import {
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
 import {
+  UpstreamRateLimitError,
+  UpstreamTimeoutError,
+  UpstreamNetworkError,
+  UpstreamRequestError,
+} from "../utils/upstream-errors";
+import { getRetryAfterFromError } from "../utils/retry.util";
+import {
   ProviderConfig,
   ConnectionTestResult,
   RemoteModel,
@@ -461,30 +468,31 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       error,
     );
 
-    // 流式 idle 超时优先判断
+    // 流式 idle 超时
     if (streamTc?.isIdleTimeout()) {
-      throw new Error(
+      throw new UpstreamTimeoutError(
         `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
+        error,
       );
     }
 
-    if (error.name === "APIError" || error.status) {
-      this.logger.error(`API Error Details:`, {
-        status: error.status,
-        message: error.message,
-        code: error.code,
-        param: error.param,
-        type: error.type,
-      });
-      throw new Error(
-        `LLM Responses API Error: ${error.status} - ${error.message}`,
-      );
+    const status = error.status;
+    const msg = `LLM Responses API Error: ${status} - ${error.message}`;
+
+    // 429 → UpstreamRateLimitError（可重试）
+    if (status === 429) {
+      throw new UpstreamRateLimitError(msg, error, getRetryAfterFromError(error));
+    }
+    // 5xx → UpstreamNetworkError（可重试）
+    if (status >= 500 && status < 600) {
+      throw new UpstreamNetworkError(msg, error, status);
+    }
+    // 4xx → UpstreamRequestError（不可重试）
+    if (status >= 400 && status < 500) {
+      throw new UpstreamRequestError(msg, error, status);
     }
 
-    if (error.name === "AbortError") {
-      throw new Error("LLM request aborted");
-    }
-
+    // 其他错误原样抛出
     throw error;
   }
 
