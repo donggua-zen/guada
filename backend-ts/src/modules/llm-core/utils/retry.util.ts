@@ -186,3 +186,101 @@ export async function retryOn429<T>(
     lastError,
   );
 }
+
+/**
+ * 通用指数退避重试工具
+ *
+ * 与 retryOn429 的区别：允许调用方通过 shouldRetry 自定义"哪些错误值得重试"，
+ * 适用于网络抖动、5xx、限流等多种可恢复场景（如 Embedding 向量化请求）。
+ *
+ * 设计要点：
+ * - 指数退避 + jitter，避免重试风暴（thundering herd）
+ * - 可取消：提供 abortSignal 时，退避等待期间可立即中止
+ * - 重试耗尽后抛出最后一次错误（保留原始错误信息，便于排查）
+ *
+ * @param fn 要重试的异步函数
+ * @param options.logger Logger 实例
+ * @param options.context 日志上下文描述（用于日志前缀）
+ * @param options.maxRetries 最大重试次数（默认 3）
+ * @param options.baseDelayMs 指数退避基准延迟（默认 1000ms）
+ * @param options.maxDelayMs 退避延迟上限（默认 10000ms）
+ * @param options.abortSignal 可选的 AbortSignal，用于在退避等待期间取消重试
+ * @param options.shouldRetry 判断错误是否可重试（默认仅 429）
+ * @param options.onBeforeAttempt 每次尝试前回调（含首次），用于重置空闲计时器等
+ * @returns fn 的返回结果；重试耗尽时抛出最后一次错误
+ */
+export async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options: {
+    logger: Logger;
+    context: string;
+    maxRetries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    abortSignal?: AbortSignal;
+    shouldRetry?: (error: any, attempt: number) => boolean;
+    onBeforeAttempt?: () => void;
+  },
+): Promise<T> {
+  const {
+    logger,
+    context,
+    maxRetries = 3,
+    baseDelayMs = 1000,
+    maxDelayMs = 10000,
+    abortSignal,
+    shouldRetry = (error) => isRateLimitError(error),
+    onBeforeAttempt,
+  } = options;
+
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    onBeforeAttempt?.();
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+
+      if (!shouldRetry(error, attempt)) {
+        return Promise.reject(error); // 不可重试错误，立即抛出
+      }
+
+      if (attempt >= maxRetries) {
+        logger.warn(
+          `[${context}] 重试已达上限 (${maxRetries}次)，放弃重试: ${error?.message || error}`,
+        );
+        break;
+      }
+
+      // 优先使用 Retry-After header（兜底 MAX_RETRY_AFTER_MS 上限），否则指数退避
+      const headerDelay = getRetryAfterFromError(error);
+      const computedDelay = computeDelayWithBase(attempt, baseDelayMs, maxDelayMs);
+      const delayMs = Math.min(headerDelay ?? computedDelay, MAX_RETRY_AFTER_MS);
+
+      logger.warn(
+        `[${context}] 请求失败 (attempt ${attempt + 1}/${maxRetries}): ${error?.message || error}, ` +
+        `等待 ${Math.round(delayMs)}ms 后重试` +
+        (headerDelay ? ` (来自 Retry-After header)` : ` (指数退避)`),
+      );
+
+      // 可取消的 sleep：abortSignal 触发 → reject 抛出
+      await sleep(delayMs, abortSignal);
+    }
+  }
+
+  // 所有重试耗尽，抛出最后一次错误
+  return Promise.reject(lastError);
+}
+
+/** 基于自定义基准延迟的指数退避计算（带 jitter） */
+function computeDelayWithBase(
+  attempt: number,
+  baseDelayMs: number,
+  maxDelayMs: number,
+): number {
+  const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+  // ±20% jitter
+  const jitter = delay * 0.2 * (Math.random() * 2 - 1);
+  return Math.round(delay + jitter);
+}
