@@ -651,26 +651,27 @@ export class KbFileService implements OnModuleInit {
 
       await updateProgress(95, "正在保存分块到数据库...");
 
-      // 保存分块到数据库
-      for (let idx = 0; idx < chunksData.length; idx++) {
-        const chunkData = chunksData[idx];
-        await this.chunkRepo.create({
+      // 保存分块到数据库（批量写入，减少 I/O 次数）
+      // 构造插入数据，将可能为空的字段转为 null 以符合 Prisma 要求
+      const chunkInsertData = chunksData.map((chunkData, idx) => ({
+        fileId: fileId,
+        knowledgeBaseId: knowledgeBaseId,
+        content: chunkData.content,
+        chunkIndex: idx,
+        vectorId: `chunk_${idx}_${fileId}`,
+        embeddingDimensions: allEmbeddings[idx]?.length ?? null,
+        tokenCount: chunkData.metadata.tokenCount,
+        metadata: {
           fileId: fileId,
           knowledgeBaseId: knowledgeBaseId,
-          content: chunkData.content,
-          chunkIndex: idx,
-          vectorId: `chunk_${idx}_${fileId}`,
-          embeddingDimensions: allEmbeddings[idx]?.length || 0,
-          tokenCount: chunkData.metadata.tokenCount,
-          metadata: {
-            fileId: fileId,
-            knowledgeBaseId: knowledgeBaseId,
-            fileName: displayName,
-            overlapLength: chunkData.metadata.overlapLength,
-            strategy: chunkData.metadata.strategy,
-          },
-        });
-      }
+          fileName: displayName,
+          overlapLength: chunkData.metadata.overlapLength,
+          strategy: chunkData.metadata.strategy,
+        },
+      }));
+
+      const insertedCount = await this.chunkRepo.createMany(chunkInsertData);
+      this.logger.log(`批量写入 ${insertedCount} 个分块到数据库`);
 
       // 标记为完成
       const totalTokens = chunksData.reduce(
