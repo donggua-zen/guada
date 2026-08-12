@@ -727,27 +727,7 @@ onUnmounted(() => {
 </style>
 
 <style>
-/* 记忆管理弹窗样式（非scoped，用于覆盖el-dialog默认样式） */
-.memo-panel-dialog .el-dialog__body {
-  padding: 20px 16px;
-  /* 更宽松的内边距 */
-  max-height: 65vh;
-  /* 稍微减小最大高度 */
-  overflow-y: auto;
-}
-
-/* 优化弹窗标题栏 */
-.memo-panel-dialog .el-dialog__header {
-  padding: 12px 16px;
-  /* 减小标题栏内边距 */
-  margin: 0;
-}
-
-/* 优化弹窗底部 */
-.memo-panel-dialog .el-dialog__footer {
-  padding: 8px 16px;
-  /* 如果有footer，也减小内边距 */
-}
+/* LDialog scoped styles handle dialog body/header/footer — no global overrides needed */
 
 /* 工作目录删除警告弹窗样式 */
 .workspace-delete-warning {

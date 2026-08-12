@@ -499,7 +499,7 @@ html[data-theme="famicom"] .el-button:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.15);
 }
-html[data-theme="famicom"] .el-dialog {
+html[data-theme="famicom"] .l-dialog {
   border-radius: 0;
   border: 2px solid var(--color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);

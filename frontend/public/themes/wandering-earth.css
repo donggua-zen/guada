@@ -405,11 +405,8 @@ html.dark[data-theme="wandering-earth"] .el-button {
   font-weight: 600;
 }
 /* Dialog：授权管理面板风格——四边统一琥珀描边、顶部加粗，
-   标题牌整体位于顶边上方（不骑线）、左边缘与左边框对齐。
-   注意：style.css 对 .el-dialog 用了 border-radius/background/
-   box-shadow/padding 的 !important，此处必须以 !important 覆盖
-   （本选择器特异度更高，可胜出）。X 关闭键保留，配色融入。 */
-html.dark[data-theme="wandering-earth"] .el-dialog {
+   标题牌整体位于顶边上方（不骑线）、左边缘与左边框对齐。 */
+html.dark[data-theme="wandering-earth"] .l-dialog {
   position: relative;
   overflow: visible;
   border: 1px solid var(--color-primary);
@@ -420,9 +417,9 @@ html.dark[data-theme="wandering-earth"] .el-dialog {
 }
 /* header 压缩：标题牌与关闭键均已脱离文档流（绝对定位），
    header 不再为标题保留高度，只留一条 6px 呼吸缝。
-   :has(.el-dialog__title) 限定——使用 #header 自定义插槽的弹窗
+   :has(.l-dialog__title) 限定——使用 #header 自定义插槽的弹窗
    （角色编辑 / 更新日志等）不渲染 title span，不受此压缩影响 */
-html.dark[data-theme="wandering-earth"] .el-dialog__header:has(.el-dialog__title) {
+html.dark[data-theme="wandering-earth"] .l-dialog__header:has(.l-dialog__title) {
   padding: 0 16px !important;
   height: 0;
   box-sizing: border-box;
@@ -430,7 +427,7 @@ html.dark[data-theme="wandering-earth"] .el-dialog__header:has(.el-dialog__title
 /* 标题牌：实心琥珀 + 深色大写窄体字。
    定位基准是 dialog 的 padding box：top 取 -(牌高20px + 顶边框3px)
    使牌底边与顶边框外沿齐平；left:-1px 使牌左缘与左边框外沿对齐 */
-html.dark[data-theme="wandering-earth"] .el-dialog__title {
+html.dark[data-theme="wandering-earth"] .l-dialog__title {
   position: absolute;
   top: -23px;
   left: -1px;
@@ -446,15 +443,14 @@ html.dark[data-theme="wandering-earth"] .el-dialog__title {
 }
 /* 无标题弹窗（未设 title 且无 #header 插槽，如会话搜索）：
    空 title span 不渲染琥珀空牌 */
-html.dark[data-theme="wandering-earth"] .el-dialog__title:empty {
+html.dark[data-theme="wandering-earth"] .l-dialog__title:empty {
   display: none;
 }
 /* 关闭键：与标题牌同一水平线，dock 在顶边上方右侧——
    top:-23px 使底边与顶边框外沿齐平，right:-1px 与右边框外沿对齐，
    无底边边框，像从顶边「长」出来的控制钮；hover 填充琥珀 */
-html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn {
-  /* !important 保险：压过 EP 默认 48px 盒与 style.css 的 margin，
-     防止层叠顺序差异导致按钮回落到弹窗内部 */
+html.dark[data-theme="wandering-earth"] .l-dialog__close-btn {
+  position: absolute;
   top: -23px !important;
   right: -1px !important;
   width: 24px !important;
@@ -466,41 +462,31 @@ html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn {
   justify-content: center;
   font-size: 13px;
   background: var(--color-surface);
-  /* border: 1px solid var(--color-primary); */
   border-bottom: none;
   transition: background 0.15s ease;
 }
-html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn .el-dialog__close {
+html.dark[data-theme="wandering-earth"] .l-dialog__close-btn {
   color: var(--color-primary);
 }
-html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn:hover {
+html.dark[data-theme="wandering-earth"] .l-dialog__close-btn:hover {
   background: var(--color-primary);
-}
-html.dark[data-theme="wandering-earth"] .el-dialog__headerbtn:hover .el-dialog__close {
   color: var(--color-primary-text);
 }
 /* 底部按钮区：虚线刻度分隔，呼应 hr 语言 */
-html.dark[data-theme="wandering-earth"] .el-dialog__footer {
+html.dark[data-theme="wandering-earth"] .l-dialog__footer {
   border-top: 1px dashed var(--color-border);
   padding-top: 12px;
 }
-
 /* ============================================================
    弹窗动画：高科技面板启动——框架从中心放大展开（轻微回弹），
    内容延迟 140ms 浮现，一道琥珀扫描线扫过面板（系统自检感）。
-
-   机制：Element Plus 弹窗动画 = @keyframes dialog-fade-in/out，
-   同名 keyframes 后定义者胜——本主题 CSS 加载在 element-plus
-   之后，激活期间覆盖默认 fade+位移；切换主题后自动恢复默认，
-   对其他主题零影响。动画仍挂在原元素（.el-overlay-dialog）上，
-   Vue transition 的 animationend 识别不受影响。
    ============================================================ */
-@keyframes dialog-fade-in {
+@keyframes we-dialog-scale-in {
   0%   { opacity: 0; transform: scale(0.85); }
   60%  { opacity: 1; transform: scale(1.02); }
   100% { opacity: 1; transform: scale(1); }
 }
-@keyframes dialog-fade-out {
+@keyframes we-dialog-scale-out {
   0%   { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.92); }
 }
@@ -514,24 +500,22 @@ html.dark[data-theme="wandering-earth"] .el-dialog__footer {
 }
 
 /* 框架展开：0.28s + 缓出（回弹由 keyframes 的 1.02 提供） */
-html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-overlay-dialog {
-  animation-duration: 0.28s;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog {
+  animation: we-dialog-scale-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-html.dark[data-theme="wandering-earth"] .dialog-fade-leave-active .el-overlay-dialog {
-  animation-duration: 0.16s;
-  animation-timing-function: ease-in;
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-leave-active .l-dialog {
+  animation: we-dialog-scale-out 0.16s ease-in;
 }
 
 /* 内容延迟浮现（backwards 填充：延迟期间保持初始不可见） */
-html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__header,
-html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__body,
-html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__footer {
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__header,
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__body,
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__footer {
   animation: we-content-in 0.22s ease-out 0.14s backwards;
 }
 
 /* 琥珀扫描线：自上而下扫过面板一次，入场结束后随类名移除自动消失 */
-html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog::after {
+html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog::after {
   content: "";
   position: absolute;
   left: 0;
@@ -545,14 +529,14 @@ html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog::af
 
 /* 无障碍：减少动态时降级为极简过渡 */
 @media (prefers-reduced-motion: reduce) {
-  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-overlay-dialog,
-  html.dark[data-theme="wandering-earth"] .dialog-fade-leave-active .el-overlay-dialog {
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog,
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-leave-active .l-dialog {
     animation-duration: 0.01s;
   }
-  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__header,
-  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__body,
-  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog__footer,
-  html.dark[data-theme="wandering-earth"] .dialog-fade-enter-active .el-dialog::after {
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__header,
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__body,
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog__footer,
+  html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog::after {
     animation: none;
   }
 }

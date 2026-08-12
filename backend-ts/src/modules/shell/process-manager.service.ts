@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { ChildProcess, exec, spawn } from "child_process";
+import { ChildProcess, exec, execSync, spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -197,7 +197,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /**
    * 启动时检测可用的 shell。
    * Windows：优先查找 Git Bash，找不到则回退 cmd.exe。
-   * Unix：使用默认 sh（bash 不可用时自动回退）。
+   * Unix：使用默认 sh。
+   *
+   * Git Bash 查找顺序：
+   * 1. 环境变量 GIT_BASH（用户手动指定）
+   * 2. `where bash`（搜索 PATH，最通用）
+   * 3. 注册表 GitForWindows\InstallPath
+   * 4. 常见安装路径（C:\Program Files\Git 等）
    */
   private detectShell(): void {
     if (process.platform !== "win32") {
@@ -206,33 +212,75 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const bashCandidates = [
-      process.env.GIT_BASH,
-      path.join(
-        process.env["ProgramFiles"] || "C:\\Program Files",
-        "Git",
-        "bin",
-        "bash.exe",
-      ),
-      path.join(
-        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
-        "Git",
-        "bin",
-        "bash.exe",
-      ),
-      "C:\\Program Files\\Git\\bin\\bash.exe",
-      "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-    ].filter((c): c is string => !!c);
+    // 1. 环境变量
+    if (process.env.GIT_BASH && fsSync.existsSync(process.env.GIT_BASH)) {
+      this.shellInfo = { kind: "bash", path: process.env.GIT_BASH };
+      this.logger.log(`Shell detected: bash (GIT_BASH env) at ${process.env.GIT_BASH}`);
+      return;
+    }
 
-    const found = bashCandidates.find((c) => fsSync.existsSync(c));
+    // 2. where bash — 搜索 PATH，排除 WSL 的 System32\bash.exe
+    const pathBash = this.findInPath("bash.exe");
+    if (pathBash && !pathBash.toLowerCase().includes("\\system32\\")) {
+      this.shellInfo = { kind: "bash", path: pathBash };
+      this.logger.log(`Shell detected: bash (PATH) at ${pathBash}`);
+      return;
+    }
+
+    // 3. 注册表 GitForWindows
+    const regPath = this.readGitRegistryPath();
+    if (regPath) {
+      const bashPath = path.join(regPath, "bin", "bash.exe");
+      if (fsSync.existsSync(bashPath)) {
+        this.shellInfo = { kind: "bash", path: bashPath };
+        this.logger.log(`Shell detected: bash (registry) at ${bashPath}`);
+        return;
+      }
+    }
+
+    // 4. 常见安装路径（兜底）
+    const fallbacks = [
+      path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Git", "bin", "bash.exe"),
+      path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+    ];
+    const found = fallbacks.find((c) => fsSync.existsSync(c));
     if (found) {
       this.shellInfo = { kind: "bash", path: found };
-      this.logger.log(`Shell detected: Git Bash at ${found}`);
+      this.logger.log(`Shell detected: bash (fallback) at ${found}`);
       return;
     }
 
     this.shellInfo = { kind: "cmd", path: "" };
-    this.logger.log("Shell detected: cmd.exe (Git Bash not found)");
+    this.logger.log("Shell detected: cmd.exe (bash not found)");
+  }
+
+  /** 使用 `where <exe>` 搜索 PATH，返回第一个存在的路径 */
+  private findInPath(exe: string): string | null {
+    try {
+      const result = execSync(`where ${exe}`, {
+        encoding: "utf-8",
+        timeout: 5000,
+        windowsHide: true,
+      });
+      const lines = result.trim().split(/\r?\n/);
+      return lines.length > 0 && lines[0] ? lines[0] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 读取注册表 GitForWindows 的 InstallPath */
+  private readGitRegistryPath(): string | null {
+    try {
+      const result = execSync(
+        'reg query "HKLM\\SOFTWARE\\GitForWindows" /v InstallPath 2>nul || reg query "HKCU\\SOFTWARE\\GitForWindows" /v InstallPath 2>nul',
+        { encoding: "utf-8", timeout: 5000, windowsHide: true },
+      );
+      const match = result.match(/InstallPath\s+REG_(?:SZ|EXPAND_SZ)\s+(.+)/);
+      return match ? match[1].trim() : null;
+    } catch {
+      return null;
+    }
   }
 
   /** 返回检测到的 shell 的人类可读描述（供插件提示 AI） */

@@ -1,5 +1,5 @@
 <template>
-  <div class="-mt-4 pt-5 pb-2 px-2 w-full flex justify-start gap-1 bg-(--color-sidebar-bg) rounded-b-(--size-dialog-rounded-radius)">
+  <div class="-mb-4 pb-5 pt-2 px-2 w-full flex justify-start gap-1 bg-(--color-secondary-surface) rounded-t-(--size-rounded-radius)">
     <!-- 工作目录按钮 -->
     <el-button ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
       <el-icon size="18">

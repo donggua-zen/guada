@@ -64,7 +64,7 @@
     </div>
 
     <!-- Detail Dialog -->
-    <el-dialog v-model="detailVisible" width="560px" align-center destroy-on-close>
+    <LDialog v-model="detailVisible" width="560px" align-center destroy-on-close>
       <template #header>
         <div class="flex items-center gap-3">
           <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
@@ -99,7 +99,7 @@
       <template #footer>
         <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
       </template>
-    </el-dialog>
+    </LDialog>
   </div>
 </template>
 
@@ -109,6 +109,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const { t } = useI18n()
 

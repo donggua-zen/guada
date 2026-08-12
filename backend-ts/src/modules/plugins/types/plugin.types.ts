@@ -284,6 +284,35 @@ export interface TurnInterceptor {
 
 // ==================== 插件决议信息 ====================
 
+// ── 附件类型（AttachmentType）──
+
+export interface AttachmentItem {
+  id: string;
+  name: string;
+  description?: string;
+  meta?: Record<string, any>;
+}
+
+export interface AttachmentTypeRegistration {
+  id: string;
+  label: string;
+  icon: string;
+  list(): Promise<AttachmentItem[]>;
+  describe?(items: AttachmentItem[]): string;
+}
+
+// ── UI 页面注册（UiPage）──
+
+export interface UiPageRegistration {
+  id: string;
+  area: "settings";
+  group: string;
+  tab: string;
+  icon: string;
+  component: string;
+  order?: number;
+}
+
 /**
  * 插件决议后的信息（统一由 PluginManager.resolvePlugins 返回）
  * 各消费方（ToolExecutor、PromptCollector 等）通过此类型消费插件运行时状态。
@@ -311,6 +340,10 @@ export interface ResolvedPluginInfo {
   interceptors: TurnInterceptor[];
   /** 注册的 WorkspaceProvider 工厂 */
   workspaceProviders: WorkspaceProviderFactory[];
+  /** 注册的附件类型 */
+  attachmentTypes: AttachmentTypeRegistration[];
+  /** 注册的 UI 页面 */
+  uiPages: UiPageRegistration[];
   /** 插件来源 */
   source?: "builtin" | "dev" | "user";
   /** 插件目录路径（仅外部插件） */

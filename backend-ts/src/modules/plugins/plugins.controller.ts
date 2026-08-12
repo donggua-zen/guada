@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Res,
   UseGuards,
   Logger,
@@ -19,6 +20,7 @@ import { Public } from "../auth/public.decorator";
 import { PluginManager } from "./plugin.manager";
 import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { NlsService } from "./i18n/nls.service";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 @Controller("plugins")
 export class PluginsController {
@@ -28,6 +30,7 @@ export class PluginsController {
     private readonly pluginManager: PluginManager,
     private readonly externalLoader: ExternalPluginLoader,
     private readonly nlsService: NlsService,
+    private readonly settingsStorage: SettingsStorage,
   ) {}
 
   /**
@@ -193,5 +196,177 @@ export class PluginsController {
     }
     await this.externalLoader.uninstallPlugin(pluginId);
     return { success: true, pluginId };
+  }
+
+  // ── Plugin Data API: 插件数据自治 ──
+
+  /**
+   * 获取插件的全部数据
+   */
+  @UseGuards(AuthGuard)
+  @Get(":pluginId/data")
+  async getPluginData(@Param("pluginId") pluginId: string) {
+    return this.settingsStorage.getSettings(`plugin:${pluginId}`);
+  }
+
+  /**
+   * 写入插件数据的单个 key
+   */
+  @UseGuards(AuthGuard)
+  @Put(":pluginId/data/:key")
+  async setPluginData(
+    @Param("pluginId") pluginId: string,
+    @Param("key") key: string,
+    @Body() body: { value: any },
+  ) {
+    await this.settingsStorage.updateSettings(`plugin:${pluginId}`, {
+      [key]: body.value,
+    });
+    return { success: true };
+  }
+
+  /**
+   * 删除插件数据的单个 key
+   */
+  @UseGuards(AuthGuard)
+  @Delete(":pluginId/data/:key")
+  async deletePluginData(
+    @Param("pluginId") pluginId: string,
+    @Param("key") key: string,
+  ) {
+    await this.settingsStorage.deleteSettingValue(`plugin:${pluginId}`, key);
+    return { success: true };
+  }
+
+  // ── Attachment Types API ──
+
+  /**
+   * 获取所有注册的附件类型
+   */
+  @Public()
+  @Get("attachment-types")
+  async getAttachmentTypes() {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const result: Array<{ id: string; label: string; icon: string; pluginId: string }> = [];
+    for (const r of resolved) {
+      if (!r.enabled) continue;
+      for (const att of r.attachmentTypes) {
+        result.push({
+          id: att.id,
+          label: att.label,
+          icon: att.icon,
+          pluginId: r.plugin.id,
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * 获取插件可用的附件项列表
+   */
+  @Public()
+  @Get(":pluginId/attachments")
+  async getPluginAttachments(@Param("pluginId") pluginId: string) {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const r = resolved.find((x) => x.plugin.id === pluginId);
+    if (!r || !r.enabled) return [];
+    const result: any[] = [];
+    for (const att of r.attachmentTypes) {
+      try {
+        const items = await att.list();
+        result.push({ typeId: att.id, items });
+      } catch (err: any) {
+        this.logger.error(`Failed to list attachments for ${att.id}: ${err.message}`);
+        result.push({ typeId: att.id, items: [] });
+      }
+    }
+    return result;
+  }
+
+  // ── UI Pages API ──
+
+  /**
+   * 获取所有注册的 UI 页面
+   */
+  @Public()
+  @Get("ui-pages")
+  async getUiPages(@Query("area") area?: string) {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const result: Array<{
+      id: string;
+      area: string;
+      group: string;
+      tab: string;
+      icon: string;
+      component: string;
+      pluginId: string;
+      order: number;
+    }> = [];
+    for (const r of resolved) {
+      if (!r.enabled) continue;
+      for (const page of r.uiPages) {
+        if (area && page.area !== area) continue;
+        result.push({
+          id: page.id,
+          area: page.area,
+          group: page.group,
+          tab: page.tab,
+          icon: page.icon,
+          component: page.component,
+          pluginId: r.plugin.id,
+          order: page.order || 100,
+        });
+      }
+    }
+    return result.sort((a, b) => a.order - b.order);
+  }
+
+  /**
+   * 获取插件前端组件源码
+   */
+  @Public()
+  @Get(":pluginId/ui/:component")
+  async getPluginUiComponent(
+    @Param("pluginId") pluginId: string,
+    @Param("component") component: string,
+    @Res() res: Response,
+  ) {
+    // 安全校验：component 只能是文件名，不能包含路径分隔符
+    if (component.includes("/") || component.includes("\\") || component.includes("..")) {
+      return res.status(403).send("Invalid component path");
+    }
+
+    const pluginPath = this.externalLoader.getPluginPath(pluginId);
+    if (!pluginPath) {
+      return res.status(404).send("Plugin directory not found");
+    }
+
+    const frontendDir = path.join(pluginPath, "frontend");
+    // Try .vue first (dev mode), then .js (precompiled)
+    const vuePath = path.join(frontendDir, component.endsWith(".vue") ? component : component + ".vue");
+    const jsPath = path.join(frontendDir, "dist", component.endsWith(".js") ? component : component + ".js");
+
+    let filePath: string | null = null;
+    let contentType = "text/plain";
+
+    if (fs.existsSync(vuePath)) {
+      filePath = vuePath;
+      contentType = "text/plain";
+    } else if (fs.existsSync(jsPath)) {
+      filePath = jsPath;
+      contentType = "application/javascript";
+    }
+
+    if (!filePath) {
+      return res.status(404).send("Component not found");
+    }
+
+    // 路径遍历防护
+    if (!filePath.startsWith(frontendDir + path.sep) && filePath !== frontendDir && !filePath.startsWith(path.join(frontendDir, "dist") + path.sep)) {
+      return res.status(403).send("Access denied");
+    }
+
+    return res.type(contentType).sendFile(filePath);
   }
 }

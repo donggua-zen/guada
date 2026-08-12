@@ -44,7 +44,7 @@
   </div>
 
   <!-- 二维码弹窗 -->
-  <el-dialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
+  <LDialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="qrLoading" class="py-8">
         <el-icon class="is-loading" :size="32">
@@ -87,7 +87,7 @@
         {{ qrMessage || t('bot.card.qrUnavailable') }}
       </div>
     </div>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -99,6 +99,7 @@ import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
 import LTooltip from '@/components/ui/LTooltip.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const props = defineProps<{
   bot: BotInstance

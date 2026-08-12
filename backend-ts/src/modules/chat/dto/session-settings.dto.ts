@@ -56,7 +56,5 @@ export class SessionSettingsDto {
   maxTokensLimit?: number; // 会话级别 Token 上限，独立于角色 memory 配置
 
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  connectionIds?: string[]; // 绑定的远程连接 ID 列表
+  attachments?: Record<string, string[]>; // 会话绑定的附件，key=附件类型ID，value=附件项ID列表
 }

@@ -1,6 +1,6 @@
 <!-- KnowledgeBasePage/KBSearchDialog.vue -->
 <template>
-    <el-dialog v-model="dialogVisible" :title="t('knowledge.search.title')" width="700px" :close-on-click-modal="false"
+    <LDialog v-model="dialogVisible" :title="t('knowledge.search.title')" width="700px" :close-on-click-modal="false"
         class="kb-search-dialog">
         <!-- 搜索输入区域 -->
         <div class="search-input-section mb-4">
@@ -128,7 +128,7 @@
                 <el-button @click="dialogVisible = false">{{ t('common.close') }}</el-button>
             </div>
         </template>
-    </el-dialog>
+    </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -138,6 +138,7 @@ import { Search, Loading, Document } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const { t } = useI18n()
 
@@ -324,9 +325,5 @@ watch(dialogVisible, (visible) => {
 </script>
 
 <style scoped>
-.kb-search-dialog :deep(.el-dialog__body) {
-    padding: 20px;
-}
-
-
+/* LDialog scoped styles handle dialog body — no :deep overrides needed */
 </style>

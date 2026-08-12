@@ -58,7 +58,7 @@
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <el-dialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')"  style="max-width: 800px;width: 80%" align-center
+        <LDialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')" width="80%" align-center
             destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
@@ -210,11 +210,11 @@
                     <el-button type="primary" @click="handleSaveServer" :loading="saving">{{ t('common.ok') }}</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </LDialog>
 
         <!-- 导入配置对话框 -->
-        <el-dialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
-            style="max-width: 500px;width: 80%">
+        <LDialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
+            width="80%">
 
             <div class="mb-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
@@ -250,14 +250,14 @@
                     <el-button type="primary" @click="handleImportJson" :loading="importing">{{ t('plugins.mcp.importBtn') }}</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </LDialog>
     </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
+import { ElButton, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import {
     AddOutlined,
@@ -271,6 +271,7 @@ import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()

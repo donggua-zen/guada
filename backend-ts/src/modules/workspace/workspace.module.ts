@@ -1,12 +1,3 @@
-import { Module } from "@nestjs/common";
-import { WorkspaceConnectionsController } from "./workspace-connections.controller";
-import { WorkspaceConnectionsService } from "./workspace-connections.service";
-import { AuthModule } from "../auth/auth.module";
-
-@Module({
-  imports: [AuthModule],
-  controllers: [WorkspaceConnectionsController],
-  providers: [WorkspaceConnectionsService],
-  exports: [WorkspaceConnectionsService],
-})
-export class WorkspaceConnectionsModule {}
+// This module has been removed — connection management is now handled by plugins
+// via PluginDataApi. The workspace.module.ts file is kept for potential future use.
+export {};

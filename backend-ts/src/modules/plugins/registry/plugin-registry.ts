@@ -3,6 +3,8 @@ import {
   ToolHandlerDef,
   ToolKitRegistration,
   TurnInterceptor,
+  AttachmentTypeRegistration,
+  UiPageRegistration,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
@@ -21,6 +23,8 @@ interface PluginRegistration {
   }>;
   interceptors: TurnInterceptor[];
   workspaceProviders: WorkspaceProviderFactory[];
+  attachmentTypes: AttachmentTypeRegistration[];
+  uiPages: UiPageRegistration[];
   ctor?: new (...args: any[]) => PluginBase;
 }
 
@@ -29,7 +33,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [] });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [], attachmentTypes: [], uiPages: [] });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -100,6 +104,56 @@ class PluginRegistryImpl {
       if (found) return found;
     }
     return undefined;
+  }
+
+  /** 注册附件类型 */
+  registerAttachmentType(pluginId: string, reg: AttachmentTypeRegistration) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (!pReg.attachmentTypes.find((x) => x.id === reg.id)) {
+      pReg.attachmentTypes.push(reg);
+    }
+  }
+
+  /** 获取插件的附件类型 */
+  getAttachmentTypes(pluginId: string): AttachmentTypeRegistration[] {
+    return this.registrations.get(pluginId)?.attachmentTypes || [];
+  }
+
+  /** 获取所有插件的附件类型 */
+  getAllAttachmentTypes(): Array<{ pluginId: string; reg: AttachmentTypeRegistration }> {
+    const result: Array<{ pluginId: string; reg: AttachmentTypeRegistration }> = [];
+    for (const [pluginId, reg] of this.registrations) {
+      for (const att of reg.attachmentTypes) {
+        result.push({ pluginId, reg: att });
+      }
+    }
+    return result;
+  }
+
+  /** 注册 UI 页面 */
+  registerUiPage(pluginId: string, reg: UiPageRegistration) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (!pReg.uiPages.find((x) => x.id === reg.id)) {
+      pReg.uiPages.push(reg);
+    }
+  }
+
+  /** 获取插件的 UI 页面 */
+  getUiPages(pluginId: string): UiPageRegistration[] {
+    return this.registrations.get(pluginId)?.uiPages || [];
+  }
+
+  /** 获取所有插件的 UI 页面 */
+  getAllUiPages(): Array<{ pluginId: string; reg: UiPageRegistration }> {
+    const result: Array<{ pluginId: string; reg: UiPageRegistration }> = [];
+    for (const [pluginId, reg] of this.registrations) {
+      for (const page of reg.uiPages) {
+        result.push({ pluginId, reg: page });
+      }
+    }
+    return result;
   }
 
   has(pluginId: string): boolean { return this.registrations.has(pluginId); }

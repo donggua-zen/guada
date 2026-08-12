@@ -520,7 +520,7 @@ html[data-theme="doodle"] .user-menu-dropdown .bg-white {
   background-color: var(--color-surface);
   box-shadow: 1px 1px 0 rgba(58, 51, 40, 0.15);
 }
-html[data-theme="doodle"] .el-dialog {
+html[data-theme="doodle"] .l-dialog {
   border-radius: 18px 24px 16px 22px / 22px 16px 24px 18px;
 }
 html[data-theme="doodle"] .el-tag {

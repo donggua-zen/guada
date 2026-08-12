@@ -34,7 +34,7 @@
         </div>
 
         <!-- 新建文件夹对话框 -->
-        <el-dialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" width="400px" :close-on-click-modal="false" append-to-body>
+        <LDialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" width="400px" :close-on-click-modal="false" append-to-body>
             <el-input
                 v-model="newFolderName"
                 :placeholder="t('knowledge.upload.folderNamePlaceholder')"
@@ -44,10 +44,10 @@
                 <el-button @click="showCreateFolderDialog = false">{{ t('common.cancel') }}</el-button>
                 <el-button type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">{{ t('common.ok') }}</el-button>
             </template>
-        </el-dialog>
+        </LDialog>
 
         <!-- 冲突处理对话框 -->
-        <el-dialog v-model="showConflictDialog" :title="t('knowledge.upload.conflictTitle')" width="600px" :close-on-click-modal="false">
+        <LDialog v-model="showConflictDialog" :title="t('knowledge.upload.conflictTitle')" width="600px" :close-on-click-modal="false">
             <div class="space-y-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400">
                     {{ t('knowledge.upload.conflictDesc') }}
@@ -98,7 +98,7 @@
                     <el-button type="primary" @click="handleConflictConfirm">{{ t('common.ok') }}</el-button>
                 </div>
             </template>
-        </el-dialog>
+        </LDialog>
     </div>
 </template>
 
@@ -112,6 +112,7 @@ import { useFileUploadStore } from '@/stores/fileUpload'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
 import type { KBFile } from '@/stores/knowledgeBase'
+import LDialog from '@/components/ui/LDialog.vue'
 
 /**
  * 上传冲突信息

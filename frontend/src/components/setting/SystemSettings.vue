@@ -241,7 +241,7 @@ const groupedSidebarItems = computed(() => {
     const groups: Record<string, typeof items> = {}
     for (const g of groupOrder) groups[g] = []
     for (const item of items) {
-        const g = groupMap.value[item.path] || t('settings.system.groups.general')
+        const g = groupMap.value[item.path] || t('settings.system.groups.system')
         if (!groups[g]) groups[g] = []
         groups[g].push(item)
     }

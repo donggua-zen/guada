@@ -195,7 +195,7 @@
   </div>
 
   <!-- 删除会话确认对话框 -->
-  <el-dialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
+  <LDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
     <div class="space-y-4">
       <p class="text-gray-700 dark:text-gray-300">
         {{ t('ui.sidebar.deleteSessionConfirm', { title: deleteSessionData?.title }) }}
@@ -220,10 +220,10 @@
         <el-button type="danger" @click="confirmDeleteSession">{{ t('ui.sidebar.confirmDelete') }}</el-button>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 
   <!-- 移动会话到分组弹窗 -->
-  <el-dialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
+  <LDialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
     <div class="space-y-1 py-2">
       <div v-for="(g) in moveGroupOptions" :key="g.value"
         class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
@@ -241,7 +241,7 @@
         <el-button type="primary" @click="confirmMoveSession">{{ t('common.ok') }}</el-button>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 
   <!-- 分组右键菜单 -->
   <ContextMenu :visible="groupContextMenu.visible" :x="groupContextMenu.x" :y="groupContextMenu.y"
@@ -263,6 +263,7 @@ import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import LTooltip from './ui/LTooltip.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { SessionGroup } from '@/types/session'
 import { ElMessageBox } from 'element-plus'

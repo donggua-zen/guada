@@ -15,7 +15,6 @@ import { SettingsModule } from "./modules/settings/settings.module";
 import { UsersModule } from "./modules/users/users.module";
 import { ToolsModule } from "./modules/tools/tools.module";
 import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
-import { WorkspaceConnectionsModule } from "./modules/workspace/workspace.module";
 import { VectorDbModule } from "./common/vector-db";
 import { SearchModule } from "./common/search/search.module";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
@@ -58,7 +57,6 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     UsersModule,
     ToolsModule,
     KnowledgeBaseModule,
-    WorkspaceConnectionsModule, // 远程工作目录连接管理
     BotGatewayModule, // 机器人网关模块
     SchedulerModule,  // 定时任务模块
     SubAgentModule,   // 子 Agent 模块

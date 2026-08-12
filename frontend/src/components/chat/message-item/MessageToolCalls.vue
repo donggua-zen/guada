@@ -38,7 +38,7 @@
 
 
   <!-- 单个工具详情对话框 -->
-  <ElDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
+  <LDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
     :title="t('chat.toolCalls.detailTitle', { index: selectedToolIndex + 1 })" width="700px" :close-on-click-modal="true" destroy-on-close
     :append-to-body="true" class="tool-dialog" @closed="keepElement = false">
     <div class="tool-dialog-content">
@@ -135,12 +135,12 @@
         <el-button @click="closeDialog">关闭</el-button>
       </span>
     </template>
-  </ElDialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ElIcon, ElDialog, ElButton } from 'element-plus';
+import { ElIcon, ElButton } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
 import { ErrorCircle16Regular } from '@vicons/fluent';
@@ -149,6 +149,7 @@ import { Loading } from '@/components/icons';
 import { parse as partialParse } from 'partial-json';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
+import LDialog from '@/components/ui/LDialog.vue';
 import {
   type ToolCall,
   resolveToolName, getToolConfig, getToolIcon,

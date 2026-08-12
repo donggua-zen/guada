@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="t('session.group.title')" width="420px" :close-on-click-modal="false"
+  <LDialog v-model="dialogVisible" :title="t('session.group.title')" width="420px" :close-on-click-modal="false"
     destroy-on-close>
     <div class="flex flex-col gap-3">
       <!-- 新建分组 -->
@@ -73,7 +73,7 @@
         </ul>
       </div>
     </div>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -84,6 +84,7 @@ import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { usePopup } from '@/composables/usePopup'
 import { ReOrderDotsHorizontal20Regular, Edit16Regular, Delete20Regular } from '@vicons/fluent'
 import type { SessionGroup } from '@/types/session'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const props = defineProps<{
   modelValue: boolean
