@@ -1780,7 +1780,12 @@ function setupIpcHandlers() {
   ipcMain.handle("browser:remove-cookie", async (event, { url, name }) => {
     try {
       const sender = event.sender;
-      await sender.session.cookies.remove(url, name);
+      // 补全 URL scheme：Electron cookies.remove 要求完整 URL
+      let cookieUrl = url;
+      if (cookieUrl && !/^[a-z]+:\/\//i.test(cookieUrl)) {
+        cookieUrl = "http://" + cookieUrl;
+      }
+      await sender.session.cookies.remove(cookieUrl, name);
       log.info(`[BrowserCookie] 删除 cookie: ${name}`);
       return { success: true };
     } catch (error: any) {

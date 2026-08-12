@@ -10,14 +10,10 @@ import {
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
 import {
-  createStreamTimeoutController,
-  withStreamIdleTimeout,
   DEFAULT_REQUEST_TIMEOUT_MS,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
 import {
   UpstreamRateLimitError,
-  UpstreamTimeoutError,
   UpstreamNetworkError,
   UpstreamRequestError,
 } from "../utils/upstream-errors";
@@ -93,31 +89,19 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     const formattedInput = this.formatInput(params.messages);
     const requestParams = this.buildRequestParam(params, formattedInput);
 
-    // 创建流式 idle 超时控制器
-    const streamTc = createStreamTimeoutController(
-      params.abortSignal,
-      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    );
-
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     let response: any = null;
 
-    // 在 create() 之前启动 idle 计时器，覆盖连接建立阶段
-    streamTc.resetIdleTimer();
-
     try {
       // 单次尝试，重试由 AgentEngine 统一处理
       response = await client.responses.create(requestParams, {
-        signal: streamTc.signal,
+        signal: params.abortSignal,
         timeout: requestTimeout,
       });
 
       if (params.stream) {
-        yield* withStreamIdleTimeout(
-          this.handleStreamResponse(response),
-          streamTc,
-        );
+        yield* this.handleStreamResponse(response);
       } else {
         yield this.handleNonStreamResponse(response);
       }
@@ -126,9 +110,8 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         `LLM Responses API error (${params.stream ? "stream" : "non-stream"}):`,
         error,
       );
-      this.handleError(error, params.stream, streamTc);
+      this.handleError(error, params.stream);
     } finally {
-      streamTc.clearIdleTimer();
       this.cleanup(response);
     }
   }
@@ -461,20 +444,11 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
   private handleError(
     error: any,
     isStream: boolean,
-    streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
   ): never {
     this.logger.error(
       `LLM Responses API error (${isStream ? "stream" : "non-stream"}):`,
       error,
     );
-
-    // 流式 idle 超时
-    if (streamTc?.isIdleTimeout()) {
-      throw new UpstreamTimeoutError(
-        `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
-        error,
-      );
-    }
 
     const status = error.status;
     const msg = `LLM Responses API Error: ${status} - ${error.message}`;

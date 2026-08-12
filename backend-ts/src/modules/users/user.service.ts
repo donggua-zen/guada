@@ -46,7 +46,18 @@ export class UserService {
   }
 
   async updateProfile(userId: string, data: any) {
+    if (data.username) {
+      const existing = await this.userRepo.findByUsername(data.username);
+      if (existing && existing.id !== userId) {
+        throw new Error("用户名已存在");
+      }
+    }
     return this.userRepo.update(userId, data);
+  }
+
+  async checkUsernameAvailable(username: string, excludeUserId: string) {
+    const existing = await this.userRepo.findByUsername(username);
+    return { available: !existing || existing.id === excludeUserId };
   }
 
   async changePassword(

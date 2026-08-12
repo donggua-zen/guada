@@ -121,12 +121,13 @@ contextBridge.exposeInMainWorld('_browserBridge', {
   /**
    * 删除 Cookie
    *
-   * @param url cookie 关联的 URL
-   * @param name cookie 名称
+   * @param filter cookie 过滤条件
+   *   - url: cookie 关联的 URL（必需）
+   *   - name: cookie 名称（必需）
    * @returns Promise<{ success: boolean; error?: string }>
    */
-  removeCookie: (url: string, name: string) =>
-    ipcRenderer.invoke('browser:remove-cookie', { url, name }),
+  removeCookie: (filter: { url: string; name: string }) =>
+    ipcRenderer.invoke('browser:remove-cookie', filter),
 
 
 })

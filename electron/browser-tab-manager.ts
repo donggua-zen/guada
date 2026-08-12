@@ -54,6 +54,10 @@ export class BrowserWebviewManager {
     string,
     { resolve: (wc: WebContents) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
   >();
+  // dialog 待处理状态：windowId → 弹窗信息
+  private pendingDialogs = new Map<string, { type: string; message: string; defaultValue: string }>();
+  // dialog resolver：用于 Promise.race 检测弹窗
+  private dialogResolvers = new Map<string, (v: any) => void>();
 
   constructor(_maxWindows?: number) {
     // 参数已忽略，不再限制窗口数量
@@ -621,6 +625,34 @@ export class BrowserWebviewManager {
     if (wv) wv.consoleLogs.length = 0;
   }
 
+  /** 注册 dialog 检测 resolver（Promise.race 用），返回当前是否已有待处理弹窗 */
+  setDialogResolver(windowId: string, resolve: (v: any) => void): boolean {
+    // 如果已有待处理弹窗，立即 resolve
+    if (this.pendingDialogs.has(windowId)) {
+      const dlg = this.pendingDialogs.get(windowId)!;
+      resolve({ type: dlg.type, message: dlg.message, __dialog: true });
+      this.pendingDialogs.delete(windowId);
+      return true;
+    }
+    this.dialogResolvers.set(windowId, resolve);
+    return false;
+  }
+
+  /** 清除 dialog resolver */
+  clearDialogResolver(windowId: string): void {
+    this.dialogResolvers.delete(windowId);
+  }
+
+  /** 当前窗口是否有待处理弹窗 */
+  hasPendingDialog(windowId: string): boolean {
+    return this.pendingDialogs.has(windowId);
+  }
+
+  /** 清除待处理弹窗状态 */
+  clearPendingDialog(windowId: string): void {
+    this.pendingDialogs.delete(windowId);
+  }
+
   async closeAllWindows(): Promise<void> {
     const windowIds = Array.from(this.webviews.keys());
     for (const windowId of windowIds) {
@@ -1069,12 +1101,33 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       }
       webviewWC.debugger
         .sendCommand("Page.enable")
-        .then(() =>
-          webviewWC.debugger.sendCommand(
+        .then(() => {
+          // 监听 javascriptDialogOpening 事件（alert/confirm/prompt）
+          webviewWC.debugger.on("message", (_event: any, method: string, params: any) => {
+            if (method === "Page.javascriptDialogOpening") {
+              const wv = this.webviews.get(windowId);
+              if (!wv) return;
+              const line = `[dialog] ${params.type}: ${params.message}`;
+              wv.consoleLogs.push(line);
+              if (wv.consoleLogs.length > 200) wv.consoleLogs.shift();
+              this.pendingDialogs.set(windowId, {
+                type: params.type,
+                message: params.message,
+                defaultValue: params.defaultPrompt || "",
+              });
+              const resolver = this.dialogResolvers.get(windowId);
+              if (resolver) {
+                this.dialogResolvers.delete(windowId);
+                resolver({ type: params.type, message: params.message, __dialog: true });
+              }
+              log.info(`Dialog detected on window ${windowId}: ${params.type} - ${params.message}`);
+            }
+          });
+          return webviewWC.debugger.sendCommand(
             "Page.addScriptToEvaluateOnNewDocument",
             { source: script },
-          ),
-        )
+          );
+        })
         .then(() => {
           log.info(
             `Anti-detection script registered via CDP for webview ${windowId} (cores=${fp.cores}, gpu=${fp.gpuRenderer})`,

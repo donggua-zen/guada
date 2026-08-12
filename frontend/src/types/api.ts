@@ -163,6 +163,7 @@ export interface ApiResponses {
     login: { accessToken: string; user: User }
     getProfile: User
     updateProfile: User
+    checkUsername: { available: boolean }
 
     // MCP 服务器相关
     fetchMcpServers: PaginatedResponse<McpServer>

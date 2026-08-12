@@ -15,6 +15,7 @@ export interface AuthApi {
   autoLogin(): Promise<{ accessToken: string; user: User }>;
   getProfile(): Promise<User>;
   updateProfile(data: any): Promise<User>;
+  checkUsername(username: string): Promise<{ available: boolean }>;
   changePassword(oldPassword: string, newPassword: string): Promise<any>;
   checkResetPassword(): Promise<ResetPasswordCheckResponse>;
   resetPrimayPassword(data: ResetPasswordRequest): Promise<any>;
@@ -53,6 +54,12 @@ export const authApi: AuthApi = {
 
   async updateProfile(this: ApiContext, data: any) {
     return await this._request("/user/profile", { method: "PUT", data });
+  },
+
+  async checkUsername(this: ApiContext, username: string) {
+    return await this._request("/user/check-username", {
+      params: { username },
+    });
   },
 
   async changePassword(this: ApiContext, oldPassword: string, newPassword: string) {

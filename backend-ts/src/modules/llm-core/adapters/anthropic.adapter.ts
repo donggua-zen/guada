@@ -10,14 +10,9 @@ import {
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import { insecureFetch } from "../utils/tls.util";
-import {
-  createStreamTimeoutController,
-  withStreamIdleTimeout,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-} from "../utils/stream-timeout.util";
+
 import {
   UpstreamRateLimitError,
-  UpstreamTimeoutError,
   UpstreamNetworkError,
   UpstreamRequestError,
 } from "../utils/upstream-errors";
@@ -151,37 +146,24 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 注意：不传 thinking 参数 = 模型默认行为（Claude 4+ 默认启用思考）
     // 不传 output_config = 默认 effort
 
-    // 创建流式 idle 超时控制器
-    const streamTc = createStreamTimeoutController(
-      params.abortSignal,
-      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    );
-
-    streamTc.resetIdleTimer();
-
     try {
       if (params.stream) {
         // 单次尝试，重试由 AgentEngine 统一处理
         const stream = await client.messages.create({
           ...requestParams,
           stream: true,
-        });
+        }, { signal: params.abortSignal });
 
-        yield* withStreamIdleTimeout(
-          this.handleStreamResponse(stream as any),
-          streamTc,
-        );
+        yield* this.handleStreamResponse(stream as any);
       } else {
         const message = await client.messages.create({
           ...requestParams,
           stream: false,
-        }) as Anthropic.Messages.Message;
+        }, { signal: params.abortSignal }) as Anthropic.Messages.Message;
         yield this.handleNonStreamResponse(message);
       }
     } catch (error) {
-      this.handleError(error, !!params.stream, streamTc);
-    } finally {
-      streamTc.clearIdleTimer();
+      this.handleError(error, !!params.stream);
     }
   }
 
@@ -691,16 +673,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
   private handleError(
     error: any,
     isStream: boolean,
-    streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
   ): never {
-    // 流式 idle 超时
-    if (streamTc?.isIdleTimeout()) {
-      throw new UpstreamTimeoutError(
-        `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
-        error,
-      );
-    }
-
     this.logger.error(`Anthropic API error: ${error.message}`);
 
     const status = error.status;

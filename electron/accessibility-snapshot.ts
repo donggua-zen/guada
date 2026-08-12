@@ -445,7 +445,7 @@ export async function captureAccessibilitySnapshot(
           {
             objectId,
             functionDeclaration:
-              "function(ref) { if (!(this instanceof Element) || window !== window.top || this.getRootNode() !== document) return false; this.setAttribute('data-ai-ref', ref); return true; }",
+              "function(ref) { if (!(this instanceof Element) || window !== window.top) return false; this.setAttribute('data-ai-ref', ref); return true; }",
             arguments: [{ value: target.ref }],
             returnByValue: true,
           },

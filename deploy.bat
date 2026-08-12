@@ -56,8 +56,7 @@ docker-compose ps
 echo.
 echo Access URLs:
 echo   - Frontend: http://localhost:8787
-echo   - Backend API: http://localhost:3000/api/v1
-echo   - With Proxy: http://localhost:8080
+echo   - Backend API: http://localhost:8787/api/v1
 echo.
 echo View Logs:
 echo   docker-compose logs -f backend

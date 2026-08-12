@@ -1,7 +1,7 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <div ref="scrollElement" class="scroll-container" :class="{ 'is-scrolling': isScrolling, 'is-hover': isHover }"
-        @scroll="handleScroll" @mouseenter="isHover = true" @mouseleave="isHover = false">
+    <div ref="scrollElement" class="scroll-container"
+        @scroll="handleScroll">
         <div ref="contentElement">
             <slot></slot>
         </div>
@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 
 // 常量定义
@@ -33,23 +33,22 @@ const emit = defineEmits<{
 
 // 响应式数据 - 类型化
 const isAtBottom = ref(true);
-const isScrolling = ref(false);
-const isHover = ref(false);
 const resizeObserver = ref<ResizeObserver | null>(null);
 const lastScrollHeight = ref(0);
 const contentElement = ref<HTMLElement | null>(null);
 const scrollElement = ref<HTMLElement | null>(null);
 
-// 使用防抖处理滚动状态，停止滚动后延迟隐藏滚动条
+// 滚动条显隐通过 DOM classList 直接操作，不走 Vue 响应式
+// 避免会话切换时 mouseenter/scroll 触发 re-render 导致 VNode 不一致
 const stopScrolling = useDebounceFn(() => {
-    isScrolling.value = false;
+    scrollElement.value?.classList.remove('is-scrolling');
 }, 1500);
 
 
 
 function handleScroll(event: Event): void {
-    // 滚动时显示滚动条
-    isScrolling.value = true;
+    // 滚动时显示滚动条（DOM 直接操作，不触发 Vue re-render）
+    scrollElement.value?.classList.add('is-scrolling');
     stopScrolling();
     emit("scroll", event);
 }
@@ -156,26 +155,26 @@ defineExpose({
 
 /* 滚动中或悬停时：显示滚动条 */
 .scroll-container.is-scrolling::-webkit-scrollbar-thumb,
-.scroll-container.is-hover::-webkit-scrollbar-thumb {
+.scroll-container:hover::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.10);
     transition-delay: 0s;
 }
 
 /* 滚动中或悬停时的 hover 状态 */
 .scroll-container.is-scrolling::-webkit-scrollbar-thumb:hover,
-.scroll-container.is-hover::-webkit-scrollbar-thumb:hover {
+.scroll-container:hover::-webkit-scrollbar-thumb:hover {
     background-color: rgba(0, 0, 0, 0.25);
     cursor: pointer;
 }
 
 /* 暗色模式下的滚动条样式 */
 html.dark .scroll-container.is-scrolling::-webkit-scrollbar-thumb,
-html.dark .scroll-container.is-hover::-webkit-scrollbar-thumb {
+html.dark .scroll-container:hover::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
 html.dark .scroll-container.is-scrolling::-webkit-scrollbar-thumb:hover,
-html.dark .scroll-container.is-hover::-webkit-scrollbar-thumb:hover {
+html.dark .scroll-container:hover::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.25);
 }
 </style>

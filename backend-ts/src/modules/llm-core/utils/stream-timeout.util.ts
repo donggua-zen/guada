@@ -8,6 +8,8 @@
  * if no chunk is received within N seconds.
  */
 
+import { UpstreamTimeoutError } from "./upstream-errors";
+
 /** Default idle timeout between stream chunks (2 minutes). */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
@@ -88,7 +90,7 @@ export function createStreamTimeoutController(
  * Starts the idle timer before the first `next()`, resets it on each yielded
  * value, and clears it when the stream ends. If no value arrives within the
  * idle period the underlying abort signal fires, causing `stream.next()` to
- * throw — we catch that and rethrow with a descriptive message.
+ * throw — we catch that and rethrow as `UpstreamTimeoutError`.
  */
 export async function* withStreamIdleTimeout<T>(
   stream: AsyncGenerator<T>,
@@ -104,8 +106,9 @@ export async function* withStreamIdleTimeout<T>(
     }
   } catch (error: any) {
     if (tc.isIdleTimeout()) {
-      throw new Error(
+      throw new UpstreamTimeoutError(
         `Stream idle timeout: no data received for ${tc.idleTimeoutMs / 1000}s`,
+        error,
       );
     }
     throw error;

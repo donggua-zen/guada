@@ -10,7 +10,7 @@
         <el-input v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')" />
       </el-form-item>
       <el-form-item :label="t('settings.userProfile.username')" prop="username">
-        <el-input v-model="userForm.username" :placeholder="t('settings.userProfile.username')" disabled />
+        <el-input v-model="userForm.username" :placeholder="t('settings.userProfile.username')" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</el-button>
@@ -63,12 +63,28 @@ const basicRules = computed(() => ({
       message: t('settings.userProfile.usernameRequired'),
       trigger: 'blur',
     },
+    {
+      validator: (rule, value) => {
+        return /^[a-zA-Z0-9_]{3,20}$/.test(value) || t('settings.userProfile.usernameFormat')
+      },
+      trigger: 'blur',
+    },
+    {
+      asyncValidator: async (rule, value) => {
+        if (!value || value === originalUserForm.value.username) return true
+        const { available } = await apiService.checkUsername(value)
+        if (!available) throw new Error(t('settings.userProfile.usernameTaken'))
+        return true
+      },
+      trigger: 'blur',
+    },
   ],
 }))
 
 const isFormChanged = computed(() => {
   return (
     userForm.value.nickname !== originalUserForm.value.nickname ||
+    userForm.value.username !== originalUserForm.value.username ||
     avater_file.value !== null
   )
 })
@@ -80,9 +96,18 @@ const handleAvaterChanged = (file) => {
 
 const handleSaveUserInfo = async () => {
   try {
-    await apiService.updateProfile({
-      nickname: userForm.value.nickname,
-    })
+    await basicFormRef.value?.validate()
+
+    const updateData = {}
+    if (userForm.value.nickname !== originalUserForm.value.nickname) {
+      updateData.nickname = userForm.value.nickname
+    }
+    if (userForm.value.username !== originalUserForm.value.username) {
+      updateData.username = userForm.value.username
+    }
+    if (Object.keys(updateData).length > 0) {
+      await apiService.updateProfile(updateData)
+    }
 
     if (avater_file.value) {
       const formData = new FormData()
@@ -100,7 +125,7 @@ const handleSaveUserInfo = async () => {
     // 更新原始表单数据
     originalUserForm.value = { ...userForm.value }
   } catch (error) {
-    toast.error(t('settings.userProfile.saveFailed'))
+    toast.error(error.message || t('settings.userProfile.saveFailed'))
   }
 }
 

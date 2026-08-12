@@ -1,6 +1,7 @@
 import { Module, Global, OnModuleInit } from '@nestjs/common';
 import { ProviderHub } from './provider-hub.service';
 import { LLMService } from './llm.service';
+import { SettingsModule } from '../settings/settings.module';
 import { CustomProvider } from './providers/custom/custom.provider';
 import { SiliconFlowProvider } from './providers/siliconflow/siliconflow.provider';
 import { VolcEngineProvider } from './providers/volcengine/volcengine.provider';
@@ -25,6 +26,7 @@ import { MockProvider } from './providers/mock/mock.provider';
  */
 @Global()
 @Module({
+  imports: [SettingsModule],
   providers: [
     ProviderHub,
     LLMService,

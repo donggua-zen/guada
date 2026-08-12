@@ -18,16 +18,12 @@ import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
 import {
   UpstreamRateLimitError,
-  UpstreamTimeoutError,
   UpstreamNetworkError,
   UpstreamRequestError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 import {
-  createStreamTimeoutController,
-  withStreamIdleTimeout,
   DEFAULT_REQUEST_TIMEOUT_MS,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
 
 /**
@@ -60,8 +56,8 @@ export class OpenAIAdapter implements IProtocolAdapter {
    * 创建 OpenAI API 客户端（可被子类覆盖）
    *
    * 设置默认请求超时为 10 分钟（与 OpenAI SDK 默认值一致）。
-   * 注意：SDK 的 timeout 是整个请求的硬截止时间（包括流式传输），
-   * 流式 idle 超时在 chatCompletion() 中通过 createStreamTimeoutController 处理。
+   * 注意：SDK 的 timeout 是整个请求的硬截止时间（包括流式传输）。
+   * 流式 idle 超时由 LLMService 统一处理。
    */
   protected createClient(config: ProviderConfig): OpenAI {
     const clientOptions: any = {
@@ -205,38 +201,25 @@ export class OpenAIAdapter implements IProtocolAdapter {
       thinkingEffort: params.thinkingEffort,
     });
 
-    // 创建流式 idle 超时控制器
-    const streamTc = createStreamTimeoutController(
-      params.abortSignal,
-      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    );
-
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     let response: any = null;
 
-    // 在 create() 之前启动 idle 计时器，覆盖连接建立阶段
-    streamTc.resetIdleTimer();
-
     try {
       // 单次尝试，重试由 AgentEngine 统一处理
       response = await client.chat.completions.create(requestParams, {
-        signal: streamTc.signal,
+        signal: params.abortSignal,
         timeout: requestTimeout,
       });
 
       if (params.stream) {
-        yield* withStreamIdleTimeout(
-          this.handleStreamResponse(response),
-          streamTc,
-        );
+        yield* this.handleStreamResponse(response);
       } else {
         yield this.handleNonStreamResponse(response);
       }
     } catch (error) {
-      this.handleError(error, params.stream, streamTc);
+      this.handleError(error, params.stream);
     } finally {
-      streamTc.clearIdleTimer();
       this.cleanup(response);
     }
   }
@@ -385,7 +368,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
   private handleError(
     error: any,
     isStream: boolean,
-    streamTc?: { isIdleTimeout: () => boolean; idleTimeoutMs: number },
   ) {
     // 提取并记录详细的错误信息，避免 NestJS Logger 序列化特殊对象时丢失内容
     const errorDetail = this.extractErrorDetail(error);
@@ -415,13 +397,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
       /* ignore serialization errors */
     }
 
-    // 流式 idle 超时
-    if (streamTc?.isIdleTimeout()) {
-      throw new UpstreamTimeoutError(
-        `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
-        error,
-      );
-    }
     if (error instanceof APIError) {
       const rawBody = (error as any).__rawBody;
       const msg = rawBody && error.message?.includes("(no body)")

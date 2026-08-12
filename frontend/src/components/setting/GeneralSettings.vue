@@ -58,6 +58,47 @@
           </div>
         </div>
       </div>
+
+      <!-- Agent 设置分组 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.agent') }}</h3>
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
+          <!-- 最大工具调用轮次 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.maxToolIterations') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.maxToolIterationsDesc') }}</span>
+            </div>
+            <div class="shrink-0">
+              <el-input-number v-model="settingsForm.maxToolIterations" :min="1" :max="500" :step="1" size="default" controls-position="right" />
+            </div>
+          </div>
+          <!-- 请求超时 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.llmRequestTimeout') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.llmRequestTimeoutDesc') }}</span>
+            </div>
+            <div class="shrink-0">
+              <el-input-number v-model="settingsForm.llmRequestTimeoutMs" :min="10" :max="3600" :step="10" size="default" controls-position="right">
+                <template #suffix>{{ t('settings.general.secondsUnit') }}</template>
+              </el-input-number>
+            </div>
+          </div>
+          <!-- 空闲超时 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.llmIdleTimeout') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.llmIdleTimeoutDesc') }}</span>
+            </div>
+            <div class="shrink-0">
+              <el-input-number v-model="settingsForm.llmIdleTimeoutMs" :min="5" :max="600" :step="5" size="default" controls-position="right">
+                <template #suffix>{{ t('settings.general.secondsUnit') }}</template>
+              </el-input-number>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -86,6 +127,9 @@ function handleLanguageChange(val: string) {
 const settingsForm = reactive({
   autoLoginEnabled: false,
   workspaceBaseDir: '',
+  maxToolIterations: 100,
+  llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
+  llmIdleTimeoutMs: 120,     // 秒
 })
 
 // 原始设置备份，用于对比是否有改动
@@ -104,7 +148,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ autoLoginEnabled: settingsForm.autoLoginEnabled, workspaceBaseDir: settingsForm.workspaceBaseDir }), () => {
+watch(() => ({ autoLoginEnabled: settingsForm.autoLoginEnabled, workspaceBaseDir: settingsForm.workspaceBaseDir, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -116,6 +160,9 @@ const loadSettings = async () => {
     // 填充表单
     settingsForm.autoLoginEnabled = response.autoLoginEnabled === true || response.autoLoginEnabled === 'true'
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
+    settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
+    settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
+    settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
   } catch (error: any) {
@@ -159,6 +206,9 @@ const handleSave = async () => {
     const dataToSave = {
       autoLoginEnabled: settingsForm.autoLoginEnabled,
       workspaceBaseDir: path || null,
+      maxToolIterations: settingsForm.maxToolIterations,
+      llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
+      llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
     }
 
     // 使用分组设置接口更新 system 分组

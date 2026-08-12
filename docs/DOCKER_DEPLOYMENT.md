@@ -31,13 +31,11 @@ cp backend-ts/.env.example backend-ts/.env
 
 # 编辑 .env 文件，修改 JWT_SECRET
 nano backend-ts/.env
-# 或
-code backend-ts/.env
 ```
 
 **必须修改的配置**：
 ```bash
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-2026
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 ```
 
 > ⚠️ **重要**：生产环境务必使用强随机字符串作为 JWT_SECRET
@@ -64,6 +62,8 @@ deploy.bat
 
 > **注意**：默认配置下，后端端口不对外暴露，只能通过前端 Nginx 访问。如需直接访问后端（用于调试），请参考下面的「如何开启后端端口」章节。
 
+> **Windows 用户**：如 `localhost` 无法访问，请使用 `http://127.0.0.1:8787`（IPv6 解析问题）。
+
 ---
 
 ## 三、架构说明
@@ -75,17 +75,18 @@ deploy.bat
 │           Docker Compose                 │
 ├─────────────────────────────────────────┤
 │                                         │
-│  ┌──────────────────────────────┐       │
-│  │   Frontend (Nginx)           │       │
-│  │  - 静态文件服务               │       │
-│  │  - API 反向代理               │       │
-│  │  Port: 80                    │       │
-│  └──────────┬───────────────────┘       │
+│  ┌──────────────────────┐              │
+│  │   Frontend (Nginx)   │              │
+│  │  - 静态文件服务       │              │
+│  │  - API 反向代理       │              │
+│  │  Port: 80            │              │
+│  └──────────┬───────────┘              │
 │             │ 代理请求                   │
 │             ↓                           │
 │  ┌──────────────────────┐              │
 │  │   Backend (NestJS)   │              │
 │  │  Port: 3000          │              │
+│  │  - 数据库迁移自动执行  │              │
 │  └──────────┬───────────┘              │
 │             │                          │
 │    ┌────────▼────────┐                │
@@ -102,10 +103,8 @@ deploy.bat
 
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
-| backend | Node.js 20 Slim (Debian) | 3000 | NestJS 后端服务 |
+| backend | Node.js 20 Slim (Debian) | 3000 | NestJS 后端服务，启动时自动执行数据库迁移 |
 | frontend | Nginx Alpine | 80 | Vue 前端 + Nginx 反向代理 |
-
-> **注意**：前端 Nginx 同时承担静态文件服务和 API 反向代理的双重角色，无需额外的 Nginx 容器。
 
 ### 数据持久化
 
@@ -118,13 +117,54 @@ deploy.bat
 
 ---
 
-## 四、配置说明
+## 四、数据库迁移
+
+### 自动迁移机制
+
+数据库迁移在 **NestJS 后端启动时自动执行**，无需手动操作。迁移运行器 (`MigrationRunner`) 基于 `better-sqlite3` 直接执行 DDL，不依赖 Prisma CLI。
+
+**启动时行为**：
+
+| 场景 | 检测条件 | 行为 |
+|------|---------|------|
+| 全新安装 | 无业务表 | 执行 baseline SQL 创建全部表结构 + 导入默认数据 |
+| 版本升级 | `_app_migrations` 表有记录 | 仅执行新增的 pending 迁移 |
+| 首次升级旧版 | 有业务表但无迁移记录 | 标记当前迁移为已应用，仅执行后续迁移 |
+
+### 备份策略
+
+- 执行迁移前自动 WAL checkpoint + 备份数据库
+- 保留最近 3 份备份，自动清理更旧的
+- 备份文件位于 `/app/data/` 目录，命名格式：`ai_chat.db.bak.<timestamp>`
+
+### 迁移日志
+
+```bash
+# 查看迁移日志
+docker-compose logs backend | grep MigrationRunner
+
+# 预期输出（首次部署）：
+# [MigrationRunner] 检测到全新安装，执行基线迁移...
+# [MigrationRunner] 全新安装完成，已标记 1 个迁移为已应用
+```
+
+### 查看已应用的迁移
+
+```bash
+# 容器内查询迁移记录
+docker-compose exec backend sqlite3 /app/data/ai_chat.db \
+  "SELECT * FROM _app_migrations ORDER BY id;"
+```
+
+> ⚠️ **注意**：生产容器中**不包含 Prisma CLI**（已移至 devDependencies 以减小镜像体积）。不要在容器内执行 `npx prisma db push` 或 `npx prisma migrate` 等命令——这些命令在容器中不可用且不需要。
+
+---
+
+## 五、配置说明
 
 ### 1. 如何开启后端端口（可选）
 
 默认配置下，后端端口不对外暴露，只能通过前端 Nginx 反向代理访问。这是**最安全**的配置方式。
-
-如果你需要直接访问后端 API（例如用于调试、监控或第三方集成），可以按需开启后端端口。
 
 #### 方法 1：仅本地访问（推荐用于调试）
 
@@ -133,8 +173,6 @@ deploy.bat
 ```yaml
 services:
   backend:
-    # ... 其他配置
-    
     # 取消注释下面两行
     ports:
       - "127.0.0.1:3000:3000"
@@ -146,58 +184,9 @@ services:
 docker-compose up -d backend
 ```
 
-访问地址：`http://localhost:3000/api/v1`
+#### 方法 2：完全不暴露（默认，最安全）
 
-**特点**：
-- ✅ 只有本机可以访问
-- ✅ 外部网络无法访问
-- ✅ 适合开发调试
-
-#### 方法 2：公开访问（谨慎使用）
-
-编辑 `docker-compose.yml`：
-
-```yaml
-services:
-  backend:
-    # ... 其他配置
-    
-    # 取消注释并修改为
-    ports:
-      - "3000:3000"
-```
-
-然后重启服务：
-
-```bash
-docker-compose up -d backend
-```
-
-访问地址：`http://your-server-ip:3000/api/v1`
-
-**特点**：
-- ⚠️ 任何网络都可以访问
-- ⚠️ 需要确保防火墙和 JWT 安全配置正确
-- ⚠️ 仅在有特殊需求时使用
-
-#### 方法 3：完全不暴露（默认，最安全）
-
-保持 `docker-compose.yml` 中的 ports 配置为注释状态：
-
-```yaml
-services:
-  backend:
-    # ... 其他配置
-    
-    # ports:
-    #   - "127.0.0.1:3000:3000"
-```
-
-**特点**：
-- ✅ 最高安全性
-- ✅ 零端口冲突风险
-- ✅ 所有流量通过 Nginx 统一管理
-- ℹ️ 前端仍然可以通过 Docker 内部网络访问后端
+保持 `docker-compose.yml` 中的 ports 配置为注释状态。所有流量通过 Nginx 统一管理。
 
 ---
 
@@ -210,7 +199,7 @@ services:
 JWT_SECRET=your-strong-secret-key
 
 # 后端配置
-BACKEND_PORT=3000
+PORT=3000
 NODE_ENV=production
 
 # 数据库路径（容器内路径）
@@ -222,54 +211,18 @@ VECTOR_DB_PATH=/app/data/vector_db.sqlite
 BASE_URL=
 ```
 
-### 3. docker-compose.yml 配置
-
-主要配置项说明：
-
-```yaml
-services:
-  backend:
-    environment:
-      - JWT_SECRET=${JWT_SECRET}  # 从 .env 文件读取
-      - PORT=3000
-      - DATABASE_URL=file:/app/data/ai_chat.db
-      # ... 其他配置
-    
-    volumes:
-      - backend-data:/app/data    # 数据持久化
-      - backend-uploads:/app/data/uploads
-      - backend-logs:/app/logs
-    
-    deploy:
-      resources:
-        limits:
-          cpus: '2'               # CPU 限制
-          memory: 2G              # 内存限制
-
-  frontend:
-    build:
-      args:
-        - VITE_API_BASE_URL=/api/v1  # API 地址
-```
-
-### 4. 自定义配置
-
-#### 修改端口映射
+### 3. 自定义端口
 
 编辑 `docker-compose.yml`：
 
 ```yaml
 services:
-  backend:
-    ports:
-      - "3001:3000"  # 宿主机 3001 -> 容器 3000
-  
   frontend:
     ports:
       - "8081:80"    # 宿主机 8081 -> 容器 80
 ```
 
-#### 调整资源限制
+### 4. 调整资源限制
 
 ```yaml
 deploy:
@@ -284,7 +237,7 @@ deploy:
 
 ---
 
-## 五、常用命令
+## 六、常用命令
 
 ### 启动与停止
 
@@ -299,7 +252,7 @@ docker-compose down
 docker-compose restart backend
 docker-compose restart frontend
 
-# 停止并删除数据卷（⚠️ 谨慎使用！）
+# 停止并删除数据卷（⚠️ 谨慎使用！会删除所有数据）
 docker-compose down -v
 ```
 
@@ -312,17 +265,7 @@ docker-compose ps
 # 查看资源使用
 docker stats
 
-# 查看容器详细信息
-docker inspect guada-backend
-```
-
-### 查看日志
-
-```bash
-# 查看所有服务日志
-docker-compose logs -f
-
-# 查看特定服务日志
+# 查看日志
 docker-compose logs -f backend
 docker-compose logs -f frontend
 
@@ -336,11 +279,8 @@ docker-compose logs --tail=100 backend
 # 进入后端容器
 docker-compose exec backend sh
 
-# 进入前端容器
-docker-compose exec frontend sh
-
-# 在容器内执行命令
-docker-compose exec backend ls -lh /app/data
+# 检查数据库文件
+docker-compose exec backend ls -lh /app/data/
 ```
 
 ### 构建与更新
@@ -354,25 +294,25 @@ git pull
 docker-compose build --no-cache
 docker-compose up -d
 
-# 清理未使用的镜像
+# 清理旧镜像
 docker image prune -f
 ```
 
 ---
 
-## 六、数据库管理
+## 七、数据库管理
 
 ### 备份数据库
 
 ```bash
-# 方法 1: 直接复制数据库文件
-docker-compose exec backend cp /app/data/ai_chat.db /tmp/backup.db
-docker cp guada-backend:/tmp/backup.db ./backup-$(date +%Y%m%d_%H%M%S).db
+# 方法 1: 使用 docker cp
+docker cp guada-backend:/app/data/ai_chat.db ./backup-$(date +%Y%m%d).db
 
-# 方法 2: 使用 docker cp
-docker cp guada-backend:/app/data/ai_chat.db ./backup.db
+# 方法 2: 使用容器内临时文件
+docker-compose exec -T backend cp /app/data/ai_chat.db /tmp/backup.db
+docker cp guada-backend:/tmp/backup.db ./backup.db
 
-# 备份向量数据库
+# 同时备份向量数据库
 docker cp guada-backend:/app/data/vector_db.sqlite ./vector_backup.sqlite
 ```
 
@@ -384,7 +324,9 @@ docker-compose down
 
 # 恢复数据库文件
 docker cp ./backup.db guada-backend:/app/data/ai_chat.db
-docker cp ./vector_backup.sqlite guada-backend:/app/data/vector_db.sqlite
+
+# 删除 WAL/SHM 文件（避免冲突）
+docker-compose run --rm --entrypoint sh backend -c "rm -f /app/data/ai_chat.db-wal /app/data/ai_chat.db-shm"
 
 # 重新启动服务
 docker-compose up -d
@@ -424,7 +366,7 @@ crontab -e
 
 ---
 
-## 七、HTTPS 配置（可选）
+## 八、HTTPS 配置（可选）
 
 ### 1. 准备 SSL 证书
 
@@ -486,10 +428,6 @@ sudo apt-get install certbot
 # 获取证书
 sudo certbot certonly --standalone -d yourdomain.com
 
-# 证书位置
-# /etc/letsencrypt/live/yourdomain.com/fullchain.pem
-# /etc/letsencrypt/live/yourdomain.com/privkey.pem
-
 # 复制到项目目录
 sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem nginx/ssl/cert.pem
 sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem nginx/ssl/key.pem
@@ -500,11 +438,9 @@ docker-compose restart frontend
 
 ---
 
-## 八、性能优化
+## 九、性能优化
 
 ### 1. 调整资源限制
-
-根据服务器配置调整 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -512,8 +448,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'      # 根据 CPU 核心数调整
-          memory: 4G     # 根据可用内存调整
+          cpus: '4'
+          memory: 4G
 ```
 
 ### 2. 启用日志轮转
@@ -528,23 +464,11 @@ services:
         max-file: "3"
 ```
 
-### 3. 优化 Nginx 缓存
-
-前端 `nginx.conf` 已配置静态资源缓存：
-
-```nginx
-location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-    expires 30d;
-    add_header Cache-Control "public, immutable";
-}
-```
-
-### 4. 数据库优化
+### 3. 数据库维护
 
 定期清理日志和临时文件：
 
 ```bash
-# 进入容器清理
 docker-compose exec backend sh
 rm -rf /app/logs/*.log.*
 find /app/data/temp-attachments -type f -mtime +7 -delete
@@ -552,7 +476,7 @@ find /app/data/temp-attachments -type f -mtime +7 -delete
 
 ---
 
-## 九、故障排查
+## 十、故障排查
 
 ### 1. 容器无法启动
 
@@ -570,30 +494,38 @@ docker-compose exec backend sh
 docker-compose exec backend ls -lh /app/data/
 ```
 
-### 2. 数据库问题
+### 2. 数据库迁移失败
 
 ```bash
-# 检查数据库文件是否存在
-docker-compose exec backend ls -lh /app/data/*.db
+# 查看迁移运行器日志
+docker-compose logs backend | grep -i migration
 
-# 重新初始化数据库
-docker-compose exec backend npx prisma db push --accept-data-loss
-docker-compose exec backend npm run db:seed:force
+# 检查迁移追踪表
+docker-compose exec backend sqlite3 /app/data/ai_chat.db \
+  "SELECT * FROM _app_migrations ORDER BY id;"
 
-# 查看 Prisma 状态
-docker-compose exec backend npx prisma status
+# 检查是否有备份文件
+docker-compose exec backend ls -lh /app/data/ai_chat.db.bak.*
+
+# 手动恢复备份（如迁移导致问题）
+docker-compose down
+docker cp ./backup.db guada-backend:/app/data/ai_chat.db
+# 删除 WAL/SHM
+docker-compose run --rm --entrypoint sh backend -c "rm -f /app/data/ai_chat.db-wal /app/data/ai_chat.db-shm"
+docker-compose up -d
 ```
+
+> ⚠️ **不要在容器内执行 prisma 命令**。生产容器不含 Prisma CLI。数据库迁移由 MigrationRunner 在 NestJS 启动时自动处理。
 
 ### 3. 端口冲突
 
 ```bash
 # 查看端口占用
-netstat -tuln | grep 3000
-netstat -tuln | grep 80
+netstat -tuln | grep 8787
 
 # 修改 docker-compose.yml 中的端口映射
 ports:
-  - "3001:3000"  # 改为其他端口
+  - "8788:80"  # 改为其他端口
 ```
 
 ### 4. 内存不足
@@ -602,12 +534,6 @@ ports:
 # 查看资源使用
 docker stats
 
-# 增加 swap 空间（Linux）
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-
 # 调整容器内存限制
 deploy:
   resources:
@@ -615,23 +541,7 @@ deploy:
       memory: 1G  # 降低内存限制
 ```
 
-### 5. 网络连接问题
-
-```bash
-# 检查网络
-docker network ls
-docker network inspect guada-network
-
-# 测试容器间通信
-docker-compose exec backend ping frontend
-docker-compose exec frontend wget -qO- http://backend:3000/api/v1/health
-
-# 重建网络
-docker-compose down
-docker-compose up -d
-```
-
-### 6. SSE 流式传输中断
+### 5. SSE 流式传输中断
 
 确保 Nginx 配置正确：
 
@@ -641,64 +551,6 @@ location /api/v1/ {
     proxy_cache_bypass $http_upgrade;
     proxy_read_timeout 3600s;
 }
-```
-
----
-
-## 十、监控与维护
-
-### 1. 健康检查
-
-```bash
-# 检查服务健康状态
-curl http://localhost:3000/api/v1/health  # 如开启了后端端口
-curl http://localhost:8787/  # 前端默认端口
-
-# 查看健康检查日志
-docker inspect guada-backend | jq '.[].State.Health'
-```
-
-### 2. 日志分析
-
-```bash
-# 查看错误日志
-docker-compose logs backend | grep ERROR
-
-# 查看警告日志
-docker-compose logs backend | grep WARN
-
-# 导出日志
-docker-compose logs backend > backend.log
-```
-
-### 3. 磁盘空间管理
-
-```bash
-# 查看 Docker 磁盘使用
-docker system df
-
-# 清理未使用的资源
-docker system prune -a
-
-# 清理卷
-docker volume prune
-```
-
-### 4. 版本更新
-
-```bash
-# 拉取最新代码
-git pull
-
-# 重新构建
-docker-compose build --no-cache
-
-# 滚动更新（零停机）
-docker-compose up -d --no-deps backend
-docker-compose up -d --no-deps frontend
-
-# 清理旧镜像
-docker image prune -f
 ```
 
 ---
@@ -730,29 +582,15 @@ Dockerfile 已配置非 root 用户运行：
 
 ```dockerfile
 USER nestjs  # backend
-USER nginx-user  # frontend
 ```
 
-### 4. 定期更新镜像
-
-```bash
-# 更新基础镜像
-docker-compose pull
-docker-compose up -d
-```
-
-### 5. 防火墙配置
+### 4. 防火墙配置
 
 ```bash
 # Ubuntu (UFW)
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw enable
-
-# CentOS (firewalld)
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --permanent --add-service=https
-sudo firewall-cmd --reload
 ```
 
 ---
@@ -763,38 +601,29 @@ sudo firewall-cmd --reload
 
 在 Windows + Docker Desktop 环境下，`http://localhost:8787` 可能因 IPv6 解析问题无法访问。
 
-**解决方案**：
-
-1. **直接使用 IPv4 地址访问**：
-   ```
-   http://127.0.0.1:8787
-   ```
-
-2. **原因说明**：
-   - `localhost` 在 Windows 上可能优先解析到 `::1`（IPv6）
-   - Docker Desktop on Windows 的 IPv6 端口转发存在限制
-   - `127.0.0.1` 强制使用 IPv4，可以正常访问
-
-3. **Linux / macOS 用户**：
-   - 通常 `localhost` 可以正常访问
-   - 如遇问题，同样可使用 `127.0.0.1`
+**解决方案**：使用 `http://127.0.0.1:8787`
 
 ### Q2: 如何重置数据库？
 
 ```bash
+# 停止并删除数据卷
 docker-compose down -v
+
+# 重新启动，MigrationRunner 会自动执行全新安装
 docker-compose up -d
 ```
 
 ### Q3: 如何查看数据库内容？
 
 ```bash
-# 安装 sqlite3
-docker-compose exec backend apt-get update && apt-get install -y sqlite3
-
-# 查询数据库
+# 查看表结构
 docker-compose exec backend sqlite3 /app/data/ai_chat.db ".tables"
-docker-compose exec backend sqlite3 /app/data/ai_chat.db "SELECT * FROM user;"
+
+# 查询用户表
+docker-compose exec backend sqlite3 /app/data/ai_chat.db "SELECT id, username FROM user;"
+
+# 查看迁移记录
+docker-compose exec backend sqlite3 /app/data/ai_chat.db "SELECT * FROM _app_migrations;"
 ```
 
 ### Q4: 如何修改前端 API 地址？
@@ -815,21 +644,15 @@ docker-compose build frontend
 docker-compose up -d frontend
 ```
 
-### Q5: 容器启动很慢怎么办？
+### Q5: 升级版本后需要手动迁移数据库吗？
 
-1. 检查资源限制是否过低
-2. 查看日志确认是否有错误
-3. 尝试增加内存限制
-4. 检查磁盘 I/O 性能
+**不需要**。后端启动时 MigrationRunner 会自动检测并执行 pending 迁移。只需正常更新代码、重新构建并启动即可：
 
-### Q6: 如何实现高可用？
-
-目前设计为单实例部署，如需高可用：
-
-1. 使用 Kubernetes 替代 Docker Compose
-2. 将 SQLite 迁移到 PostgreSQL
-3. 使用负载均衡器
-4. 配置多副本
+```bash
+git pull
+docker-compose build --no-cache
+docker-compose up -d
+```
 
 ---
 
@@ -845,6 +668,7 @@ Frontend Nginx (80/443)
     └─→ /static/* → Backend (backend:3000)
          ↓
     NestJS Backend
+         ├─ MigrationRunner (启动时自动迁移)
          ├─ SQLite Database (/app/data/ai_chat.db)
          ├─ Vector Database (/app/data/vector_db.sqlite)
          ├─ File Storage (/app/data/uploads)

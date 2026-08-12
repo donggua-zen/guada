@@ -15,14 +15,9 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
-import {
-  createStreamTimeoutController,
-  withStreamIdleTimeout,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-} from "../utils/stream-timeout.util";
+
 import {
   UpstreamRateLimitError,
-  UpstreamTimeoutError,
   UpstreamNetworkError,
   UpstreamRequestError,
 } from "../utils/upstream-errors";
@@ -102,13 +97,6 @@ export class GeminiAdapter implements IProtocolAdapter {
     const chatHistory = this.formatMessages(params.messages.slice(0, -1));
     const chat = model.startChat({ history: chatHistory });
 
-    const streamTc = createStreamTimeoutController(
-      params.abortSignal,
-      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    );
-
-    streamTc.resetIdleTimer();
-
     try {
       // 获取最后一条用户消息作为当前输入
       const lastMessage = params.messages[params.messages.length - 1];
@@ -122,14 +110,8 @@ export class GeminiAdapter implements IProtocolAdapter {
       // 单次尝试，重试由 AgentEngine 统一处理
       const result = await chat.sendMessageStream(contentToSend);
 
-      yield* withStreamIdleTimeout(this.handleGeminiStream(result as any), streamTc);
+      yield* this.handleGeminiStream(result as any);
     } catch (err: any) {
-      if (streamTc.isIdleTimeout()) {
-        throw new UpstreamTimeoutError(
-          `LLM stream idle timeout: no data received for ${streamTc.idleTimeoutMs / 1000}s`,
-          err,
-        );
-      }
       const status = err?.status;
       const msg = `Gemini API Error: ${status} - ${err?.message}`;
       // 429 → UpstreamRateLimitError（可重试）
@@ -146,8 +128,6 @@ export class GeminiAdapter implements IProtocolAdapter {
       }
       this.logger.error("Gemini API error:", err);
       throw err;
-    } finally {
-      streamTc.clearIdleTimer();
     }
   }
 

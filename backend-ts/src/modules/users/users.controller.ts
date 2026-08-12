@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseInterceptors,
   UploadedFile,
   UseGuards,
@@ -24,6 +25,14 @@ export class UsersController {
   async getProfile(@CurrentUser() user: any) {
     // 直接传递完整的用户对象，避免重复查询数据库
     return this.userService.getProfile(user.id, user);
+  }
+
+  @Get("user/check-username")
+  async checkUsername(
+    @Query("username") username: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.userService.checkUsernameAvailable(username, user.id);
   }
 
   @Put("user/profile")
