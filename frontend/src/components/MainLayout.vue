@@ -21,10 +21,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { apiService } from '@/services/ApiService'
+import { getLocale } from '@/locales'
 import { useSessionEvents } from '@/composables/useSessionEvents'
 import { setPluginToolDisplays } from '@/utils/toolDisplay'
 import SidebarLayout from './ui/SidebarLayout.vue'
@@ -45,6 +46,15 @@ const handleSidebarUpdate = (val: boolean) => {
   layoutStore.setSidebarVisible(val)
 }
 
+// 加载工具展示文案注册表（按当前语言解析 %key% 引用）
+function loadToolDisplays() {
+  apiService.fetchToolDisplays(getLocale()).then((displays) => {
+    setPluginToolDisplays(displays)
+  }).catch((e) => {
+    console.warn('加载工具文案失败，使用默认文案', e)
+  })
+}
+
 // 启动 SSE 连接 + 全局事件监听
 onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
@@ -53,12 +63,12 @@ onMounted(() => {
   // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
   layoutStore.loadAppearanceSettings()
 
-  // 加载工具展示文案注册表
-  apiService.fetchToolDisplays().then((displays) => {
-    setPluginToolDisplays(displays)
-  }).catch((e) => {
-    console.warn('加载工具文案失败，使用默认文案', e)
-  })
+  loadToolDisplays()
+})
+
+// 语言切换时重新拉取工具展示文案（后端按 lang 解析 %key% 引用）
+watch(getLocale, () => {
+  loadToolDisplays()
 })
 
 // 组件卸载时断开 SSE 连接，清理监听
