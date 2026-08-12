@@ -1,0 +1,7 @@
+{
+  "botFileSender.name": "File Sender",
+  "botFileSender.description": "Send files, images, and videos to users in bot sessions",
+  "botFileSender.toolkitName": "File Sender",
+  "send_file.executing": "Sending file",
+  "send_file.completed": "Sent file"
+}

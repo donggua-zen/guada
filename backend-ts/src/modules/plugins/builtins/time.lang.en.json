@@ -1,0 +1,9 @@
+{
+  "time.name": "Time Tools",
+  "time.description": "Get current detailed time information, including date, day of week, time, timezone, etc.",
+  "time.toolkitName": "Time Tools",
+  "get_current_time.executing": "Getting current time",
+  "get_current_time.completed": "Got current time",
+  "get_current_time.aggregate.executing": "Getting current time",
+  "get_current_time.aggregate.completed": "Got current time"
+}

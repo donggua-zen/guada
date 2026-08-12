@@ -8,6 +8,7 @@ import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import { TodoUpdatedEvent } from "../../../common/events/stream.events";
 import langZh from "./todo.lang.zh.json";
+import langEn from "./todo.lang.en.json";
 
 interface TodoItem {
   content: string;
@@ -36,8 +37,8 @@ export class TodoPlugin extends PluginBase {
 
   manifest = {
     id: "todo",
-    name: "Todo",
-    description: "Task breakdown and todo management tool",
+    name: "%todo.name%",
+    description: "%todo.description%",
     version: "3.0.0",
     category: "core" as const,
   };
@@ -59,6 +60,7 @@ export class TodoPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // ── todo 工具 ──
     api.registerTool({
       name: "todo",

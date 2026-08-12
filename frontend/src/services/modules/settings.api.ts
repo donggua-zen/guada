@@ -8,7 +8,7 @@ export interface SettingsApi {
   updateGroupSettings(group: string, data: any): Promise<any>;
   fetchWorkspaceBaseDir(): Promise<{ workspaceBaseDir: string | null }>;
   updateWorkspaceBaseDir(workspaceBaseDir: string | null): Promise<{ success: boolean }>;
-  queryPlugins(config?: any): Promise<any>;
+  queryPlugins(config?: any, lang?: string): Promise<any>;
   updateGlobalToolStatus(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
   reloadPlugin(pluginId: string): Promise<{ success: boolean }>;
   fetchToolDisplays(lang?: string): Promise<Record<string, any>>;
@@ -42,10 +42,10 @@ export const settingsApi: SettingsApi = {
     });
   },
 
-  async queryPlugins(this: ApiContext, config?: any) {
+  async queryPlugins(this: ApiContext, config?: any, lang?: string) {
     return await this._request("/plugins/query", {
       method: "POST",
-      data: { config },
+      data: { config, ...(lang ? { lang } : {}) },
     });
   },
 

@@ -12,6 +12,7 @@ import {
 } from "../../plugins/types/plugin.types";
 import { ToolOrchestrator } from "../tool-orchestrator.service";
 import langZh from "./universal-tools.lang.zh.json";
+import langEn from "./universal-tools.lang.en.json";
 
 @Injectable()
 export class UniversalToolsPlugin extends PluginBase {
@@ -22,8 +23,8 @@ export class UniversalToolsPlugin extends PluginBase {
 
   manifest = {
     id: "universal_tools",
-    name: "通用工具",
-    description: "tool_learn / tool_use 系统级通用工具",
+    name: "%universalTools.name%",
+    description: "%universalTools.description%",
     version: "1.0.0",
     category: "system" as const,
     essential: true,
@@ -50,10 +51,11 @@ export class UniversalToolsPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // 注册懒加载工具包
     const lazyKit = api.registerToolKit({
       id: "lazy_tools",
-      name: "Lazy-Load Toolkit Management",
+      name: "%universalTools.toolkitName%",
       loadMode: "eager",
       activator:
         "Use tool_learn to learn toolkit usage, use tool_use to invoke specific tools",

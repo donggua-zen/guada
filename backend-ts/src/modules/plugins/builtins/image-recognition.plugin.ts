@@ -18,6 +18,7 @@ import {
   ensureWithinPixelLimit,
 } from "../utils/vision-utils";
 import langZh from "./image-recognition.lang.zh.json";
+import langEn from "./image-recognition.lang.en.json";
 
 const DEFAULT_PROMPT =
   "Describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, and composition.";
@@ -38,8 +39,8 @@ export class ImageRecognitionPlugin extends PluginBase {
 
   manifest = {
     id: "image_recognition",
-    name: "图像识别",
-    description: "图像内容识别工具",
+    name: "%imageRecognition.name%",
+    description: "%imageRecognition.description%",
     version: "1.1.0",
     category: "core" as const,
   };
@@ -57,12 +58,13 @@ export class ImageRecognitionPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // ── Toolkit 1: image_recognize (text-only models) ──
     // Loads only when the current model does NOT support multimodal input.
     // Calls a separate vision model to produce a text description.
     api.registerToolKit({
       id: "image_recognition",
-      name: "Image Recognition",
+      name: "%imageRecognition.toolkitName%",
       loadMode: "eager",
       activator:
         "Use this toolkit when you need to recognize image content from a user-provided image ID or image path and return a detailed description.",
@@ -126,7 +128,7 @@ export class ImageRecognitionPlugin extends PluginBase {
     // letting the LLM see the image directly without a separate vision model call.
     api.registerToolKit({
       id: "image_view",
-      name: "Image View",
+      name: "%imageRecognition.imageViewName%",
       loadMode: "eager",
       activator:
         "Use this toolkit when you need to view or analyze an image from a image path. The image will be returned to you directly for visual analysis.",

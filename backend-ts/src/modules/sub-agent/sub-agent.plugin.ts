@@ -6,14 +6,15 @@ import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { CharacterRepository } from "../../common/database/character.repository";
 import langZh from "./sub-agent.lang.zh.json";
+import langEn from "./sub-agent.lang.en.json";
 
 @Injectable()
 export class SubAgentPlugin extends PluginBase {
   private readonly logger = new Logger(SubAgentPlugin.name);
   manifest = {
     id: "sub_agent",
-    name: "子代理",
-    description: "创建和管理子代理执行独立任务",
+    name: "%subAgent.name%",
+    description: "%subAgent.description%",
     version: "1.0.0",
     category: "system" as const,
   };
@@ -47,9 +48,10 @@ export class SubAgentPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const subKit = api.registerToolKit({
       id: "subagent",
-      name: "Sub-Agent",
+      name: "%subAgent.toolkitName%",
       loadMode: "eager",
       activator:
         "Call this toolkit when you need to create a sub-agent to execute an independent task",

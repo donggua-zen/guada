@@ -1,1 +1,12 @@
-{"doc_parse.executing": "正在解析文档", "doc_parse.completed": "已解析文档", "doc_parse.aggregate.executing": "正在解析{n}个文档", "doc_parse.aggregate.completed": "已解析{n}个文档", "doc_batch_parse.executing": "正在批量解析文档", "doc_batch_parse.completed": "已批量解析文档", "doc_batch_parse.aggregate.executing": "正在批量解析{n}批次文档", "doc_batch_parse.aggregate.completed": "已批量解析{n}批次文档"}
+{
+  "document.name": "文档解析工具",
+  "document.description": "PDF 和 Word 文档文本提取工具",
+  "doc_parse.executing": "正在解析文档",
+  "doc_parse.completed": "已解析文档",
+  "doc_parse.aggregate.executing": "正在解析{n}个文档",
+  "doc_parse.aggregate.completed": "已解析{n}个文档",
+  "doc_batch_parse.executing": "正在批量解析文档",
+  "doc_batch_parse.completed": "已批量解析文档",
+  "doc_batch_parse.aggregate.executing": "正在批量解析{n}批次文档",
+  "doc_batch_parse.aggregate.completed": "已批量解析{n}批次文档"
+}

@@ -417,6 +417,7 @@
 // @ts-nocheck - CharacterSettingPanel 组件复杂度高，临时使用@ts-nocheck
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getLocale } from '@/locales'
 import {
   ElForm,
   ElFormItem,
@@ -1035,7 +1036,7 @@ async function loadLocalTools() {
         }
       }
 
-      const response = await apiService.queryPlugins(queryConfig);
+      const response = await apiService.queryPlugins(queryConfig, getLocale());
 
       // API 返回 plugins[]，每个元素含 enabled 有效状态
       const plugins = response.plugins || [];
@@ -1053,7 +1054,7 @@ async function loadLocalTools() {
       // 全部禁用时，不传 __default 和具体条目，只传 strategy
       const response = await apiService.queryPlugins({
         __strategy: 'deny_nonsystem',
-      });
+      }, getLocale());
 
       const plugins = response.plugins || [];
       localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));

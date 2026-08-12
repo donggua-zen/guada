@@ -9,6 +9,7 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import { safeTruncate } from "../../../common/utils/string.utils";
 import langZh from "./document.lang.zh.json";
+import langEn from "./document.lang.en.json";
 
 @Injectable()
 export class DocumentPlugin extends PluginBase {
@@ -16,8 +17,8 @@ export class DocumentPlugin extends PluginBase {
 
   manifest = {
     id: "document",
-    name: "文档解析工具",
-    description: "PDF 和 Word 文档文本提取工具",
+    name: "%document.name%",
+    description: "%document.description%",
     version: "1.0.0",
     category: "extended" as const,
   };
@@ -31,6 +32,7 @@ export class DocumentPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     api.registerTool({
       name: "doc_parse",
       description:

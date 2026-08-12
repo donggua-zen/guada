@@ -29,7 +29,7 @@
     uploadFile: 'Upload File',
     knowledgeBase: 'Knowledge Base',
     noKnowledgeBase: 'No knowledge base available',
-    remoteConnection: 'Remote Connection',
+    remoteConnection: 'Remote Workspace',
     noConnection: 'No connections available, please add one in settings',
 
     // CommandPicker.vue

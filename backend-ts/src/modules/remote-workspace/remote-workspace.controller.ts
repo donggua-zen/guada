@@ -49,6 +49,11 @@ export class RemoteWorkspaceController {
     return this.service.testConnection(body.config);
   }
 
+  @Post("connections/deploy")
+  async deployConnection(@Body() body: { config: any }) {
+    return this.service.deployConnection(body.config);
+  }
+
   @Post("connections/browse")
   async browsePath(
     @Body() body: { config: any; path: string },

@@ -6,14 +6,15 @@ import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import path from "path";
 import langZh from "./skill.lang.zh.json";
+import langEn from "./skill.lang.en.json";
 
 @Injectable()
 export class SkillPlugin extends PluginBase {
   private readonly logger = new Logger(SkillPlugin.name);
   manifest = {
     id: "skill",
-    name: "Skills 技能",
-    description: "技能系统的管理工具",
+    name: "%skill.name%",
+    description: "%skill.description%",
     version: "1.0.0",
     category: "system" as const,
   };
@@ -24,6 +25,7 @@ export class SkillPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // ── 注册斜杠命令提供者（含解析器） ──
     api.registerCommandProvider({
       id: "skill",
@@ -60,7 +62,7 @@ export class SkillPlugin extends PluginBase {
 
     const skillKit = api.registerToolKit({
       id: "skill",
-      name: "Skill Instructions",
+      name: "%skill.toolkitName%",
       loadMode: "eager",
       activator:
         "Call this toolkit to get the full instructions for a skill when you need to use one",

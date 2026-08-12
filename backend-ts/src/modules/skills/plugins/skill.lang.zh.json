@@ -1,1 +1,7 @@
-{"skill_learn.executing": "正在读取技能", "skill_learn.completed": "已读取技能"}
+{
+  "skill.name": "Skills 技能",
+  "skill.description": "技能系统的管理工具",
+  "skill.toolkitName": "技能指令",
+  "skill_learn.executing": "正在读取技能",
+  "skill_learn.completed": "已读取技能"
+}

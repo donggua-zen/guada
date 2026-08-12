@@ -1,0 +1,14 @@
+{
+  "imageRecognition.name": "Image Recognition",
+  "imageRecognition.description": "Image content recognition tools",
+  "imageRecognition.toolkitName": "Image Recognition",
+  "imageRecognition.imageViewName": "Image View",
+  "image_recognize.executing": "Recognizing image",
+  "image_recognize.completed": "Recognized image",
+  "image_recognize.aggregate.executing": "Recognizing {n} images",
+  "image_recognize.aggregate.completed": "Recognized {n} images",
+  "image_view.executing": "Viewing image",
+  "image_view.completed": "Viewed image",
+  "image_view.aggregate.executing": "Viewing {n} images",
+  "image_view.aggregate.completed": "Viewed {n} images"
+}

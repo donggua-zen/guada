@@ -5,14 +5,15 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { SchedulerService } from "../scheduler.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./scheduler.lang.zh.json";
+import langEn from "./scheduler.lang.en.json";
 
 @Injectable()
 export class SchedulerPlugin extends PluginBase {
   private readonly logger = new Logger(SchedulerPlugin.name);
   manifest = {
     id: "scheduler",
-    name: "定时任务工具",
-    description: "创建和管理定时任务",
+    name: "%scheduler.name%",
+    description: "%scheduler.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -23,9 +24,10 @@ export class SchedulerPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const schedKit = api.registerToolKit({
       id: "scheduler",
-      name: "Scheduled Tasks",
+      name: "%scheduler.toolkitName%",
       loadMode: "lazy",
       activator:
         "Scheduled task management tool for creating, viewing, and deleting scheduled tasks. Use this tool when you need to automatically execute a task at a specified time.",

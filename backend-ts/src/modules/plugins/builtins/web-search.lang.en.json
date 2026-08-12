@@ -1,0 +1,13 @@
+{
+  "webSearch.name": "Web Search",
+  "webSearch.description": "Web search and page content extraction tools with multi-provider support",
+  "webSearch.toolkitName": "Web Search",
+  "web_search.executing": "Searching the web",
+  "web_search.completed": "Searched the web",
+  "web_search.aggregate.executing": "Searching {n} times",
+  "web_search.aggregate.completed": "Searched {n} times",
+  "web_parser.executing": "Reading web page",
+  "web_parser.completed": "Read web page",
+  "web_parser.aggregate.executing": "Reading {n} web pages",
+  "web_parser.aggregate.completed": "Read {n} web pages"
+}

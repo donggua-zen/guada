@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { verifyAndDeployAgent, type DeployResult } from "./agent-deploy";
 
 export interface RemoteConnection {
   id: string;
@@ -144,6 +145,33 @@ export class RemoteWorkspaceService {
     } catch (err: any) {
       return { success: false, error: err.message || String(err) };
     }
+  }
+
+  /**
+   * Deploy/verify agent on the remote host.
+   * Returns deployment logs; success=false means deployment failed (connection cannot be saved).
+   */
+  async deployConnection(
+    config: RemoteConnection["config"],
+  ): Promise<DeployResult> {
+    const params = new URLSearchParams();
+    if (config.authMethod === "password" && config.password) {
+      params.set("password", config.password);
+    }
+    if (config.authMethod === "privateKey" && config.privateKey) {
+      params.set("privateKey", config.privateKey);
+    }
+    const query = params.toString();
+
+    return verifyAndDeployAgent({
+      scheme: "ssh",
+      host: config.host,
+      port: config.port || 22,
+      username: config.username || "root",
+      password: config.password,
+      path: config.path || "/",
+      query: query ? Object.fromEntries(params) : undefined,
+    });
   }
 
   /**

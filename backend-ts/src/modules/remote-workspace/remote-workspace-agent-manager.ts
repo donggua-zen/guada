@@ -106,7 +106,12 @@ export class RemoteAgentManager {
       query: query ? Object.fromEntries(params) : undefined,
     });
 
-    const ws = new WebSocket(connInfo.wsUrl);
+    // 使用 agent 访问令牌进行 WebSocket 握手鉴权(dev 模式 token 为空则不携带)
+    const ws = new WebSocket(connInfo.wsUrl, {
+      headers: connInfo.token
+        ? { Authorization: `Bearer ${connInfo.token}` }
+        : undefined,
+    });
     await new Promise<void>((resolve, reject) => {
       ws.once("open", () => resolve());
       ws.once("error", (err) => reject(err));

@@ -1,1 +1,9 @@
-{"get_current_time.executing": "正在获取时间", "get_current_time.completed": "已获取时间", "get_current_time.aggregate.executing": "正在获取时间", "get_current_time.aggregate.completed": "已获取时间"}
+{
+  "time.name": "时间工具",
+  "time.description": "获取当前详细时间信息，包括日期、星期、时间、时区等",
+  "time.toolkitName": "时间工具",
+  "get_current_time.executing": "正在获取时间",
+  "get_current_time.completed": "已获取时间",
+  "get_current_time.aggregate.executing": "正在获取时间",
+  "get_current_time.aggregate.completed": "已获取时间"
+}

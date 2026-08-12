@@ -1,1 +1,7 @@
-{"clear_session.executing": "正在清空会话", "clear_session.completed": "已清空会话"}
+{
+  "sessionManagement.name": "会话管理",
+  "sessionManagement.description": "管理机器人会话，清空对话历史",
+  "sessionManagement.toolkitName": "会话管理",
+  "clear_session.executing": "正在清空会话",
+  "clear_session.completed": "已清空会话"
+}

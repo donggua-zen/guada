@@ -8,6 +8,7 @@ import { TavilyProvider } from "./search-providers/tavily.provider";
 import { SearchProvider } from "./search-providers/search-provider.interface";
 import { z } from "zod";
 import langZh from "./web-search.lang.zh.json";
+import langEn from "./web-search.lang.en.json";
 
 @Injectable()
 export class WebSearchPlugin extends PluginBase {
@@ -15,8 +16,8 @@ export class WebSearchPlugin extends PluginBase {
 
   manifest = {
     id: "web-search",
-    name: "网络搜索",
-    description: "网络搜索与网页内容提取工具，支持多供应商",
+    name: "%webSearch.name%",
+    description: "%webSearch.description%",
     version: "1.0.0",
     category: "extended" as const,
   };
@@ -34,6 +35,7 @@ export class WebSearchPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     this.providers = [this.bochaProvider, this.tavilyProvider, this.metasoProvider];
 
     // 读取当前供应商，动态决定注册哪些参数
@@ -46,7 +48,7 @@ export class WebSearchPlugin extends PluginBase {
 
     api.registerToolKit({
       id: "web_search",
-      name: "Web Search",
+      name: "%webSearch.toolkitName%",
       loadMode: "eager",
       activator:
         "Use this toolkit when the user asks to search the internet, look up information, find current news, or when you need to retrieve the content of a specific URL.",

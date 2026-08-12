@@ -1,1 +1,14 @@
-{"image_recognize.executing": "正在识别图片", "image_recognize.completed": "已识别图片", "image_recognize.aggregate.executing": "正在识别{n}张图片", "image_recognize.aggregate.completed": "已识别{n}张图片", "image_view.executing": "正在查看图片", "image_view.completed": "已查看图片", "image_view.aggregate.executing": "正在查看{n}张图片", "image_view.aggregate.completed": "已查看{n}张图片"}
+{
+  "imageRecognition.name": "图像识别",
+  "imageRecognition.description": "图像内容识别工具",
+  "imageRecognition.toolkitName": "图像识别",
+  "imageRecognition.imageViewName": "图片查看",
+  "image_recognize.executing": "正在识别图片",
+  "image_recognize.completed": "已识别图片",
+  "image_recognize.aggregate.executing": "正在识别{n}张图片",
+  "image_recognize.aggregate.completed": "已识别{n}张图片",
+  "image_view.executing": "正在查看图片",
+  "image_view.completed": "已查看图片",
+  "image_view.aggregate.executing": "正在查看{n}张图片",
+  "image_view.aggregate.completed": "已查看{n}张图片"
+}
