@@ -47,10 +47,10 @@ RUN groupadd -g 1001 nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only (skip scripts — native modules copied from builder)
-# postinstall "prisma generate || echo 'skipped'" would also be skipped, which is fine
-# (prisma CLI is a devDependency; generated client is COPY'd from builder below)
-RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev --ignore-scripts && \
+# Install production dependencies only
+# --legacy-peer-deps: prevents auto-installing prisma CLI (peer dep of @prisma/client)
+# --ignore-scripts: skip postinstall (prisma generate) — generated client is COPY'd from builder
+RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev --legacy-peer-deps --ignore-scripts && \
     npm cache clean --force && \
     # Remove unnecessary files from node_modules to reduce size
     find node_modules -type f \( \

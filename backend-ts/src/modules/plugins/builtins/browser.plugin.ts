@@ -106,8 +106,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "navigate",
-            text: { executing: "%browser_navigate.executing%", completed: "%browser_navigate.completed%" },
-            aggregate: { executing: "%browser_navigate.aggregate.executing%", completed: "%browser_navigate.aggregate.completed%" },
+            text: {
+              executing: "%browser_navigate.executing%",
+              completed: "%browser_navigate.completed%",
+            },
+            aggregate: {
+              executing: "%browser_navigate.aggregate.executing%",
+              completed: "%browser_navigate.aggregate.completed%",
+            },
             argsKey: "url",
             icon: "browser",
           },
@@ -150,8 +156,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "tabs",
-            text: { executing: "%browser_tabs.executing%", completed: "%browser_tabs.completed%" },
-            aggregate: { executing: "%browser_tabs.aggregate.executing%", completed: "%browser_tabs.aggregate.completed%" },
+            text: {
+              executing: "%browser_tabs.executing%",
+              completed: "%browser_tabs.completed%",
+            },
+            aggregate: {
+              executing: "%browser_tabs.aggregate.executing%",
+              completed: "%browser_tabs.aggregate.completed%",
+            },
             argsKey: "action",
             icon: "browser",
           },
@@ -184,8 +196,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "snapshot",
-            text: { executing: "%browser_snapshot.executing%", completed: "%browser_snapshot.completed%" },
-            aggregate: { executing: "%browser_snapshot.aggregate.executing%", completed: "%browser_snapshot.aggregate.completed%" },
+            text: {
+              executing: "%browser_snapshot.executing%",
+              completed: "%browser_snapshot.completed%",
+            },
+            aggregate: {
+              executing: "%browser_snapshot.aggregate.executing%",
+              completed: "%browser_snapshot.aggregate.completed%",
+            },
             argsKey: "type",
             icon: "browser",
           },
@@ -195,21 +213,40 @@ export class BrowserPlugin extends PluginBase {
         toolkit.registerTool({
           name: "browser_interact",
           description:
-            "Interact with the page: click an element or fill text into an input field. Use action='click' to click, action='input' to fill text.",
+            "Interact with the page: click an element, fill text into an input field, or respond to a dialog (alert/confirm/prompt). Use action='click' to click, action='input' to fill text, action='dialog' to respond to a pending dialog. Set full_simulation=true for anti-bot sites that check isTrusted (slower, uses real CDP input events).",
           inputSchema: z
             .object({
               action: z
-                .enum(["click", "input"])
-                .describe("Interaction type: 'click' or 'input'"),
+                .enum(["click", "input", "dialog"])
+                .describe("Interaction type: 'click', 'input', or 'dialog'"),
               selector: z
                 .string()
+                .optional()
                 .describe(
-                  "Element ref ID (e.g. 'e0') from page snapshot, or CSS selector",
+                  "Element ref ID (e.g. 'e0') from page snapshot, or CSS selector (required for click/input)",
                 ),
               value: z
                 .string()
                 .optional()
                 .describe("Text to fill in (required when action='input')"),
+              accept: z
+                .boolean()
+                .optional()
+                .describe(
+                  "For action='dialog': true=accept (OK/Yes), false=dismiss (Cancel)",
+                ),
+              prompt_text: z
+                .string()
+                .optional()
+                .describe(
+                  "For action='dialog' with prompt: response text to submit",
+                ),
+              full_simulation: z
+                .boolean()
+                .optional()
+                .describe(
+                  "If true, use CDP input simulation (isTrusted=true, ~800ms per action). If false (default), use fast JS DOM simulation. Set true only when a site rejects synthetic events (anti-bot protection).",
+                ),
             })
             .superRefine((args, ctx) => {
               if (args.action === "input" && args.value === undefined) {
@@ -219,8 +256,39 @@ export class BrowserPlugin extends PluginBase {
                   message: "value is required when action is input",
                 });
               }
+              if (
+                (args.action === "click" || args.action === "input") &&
+                !args.selector
+              ) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: ["selector"],
+                  message: "selector is required for click and input actions",
+                });
+              }
+              if (args.action === "dialog" && args.accept === undefined) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: ["accept"],
+                  message: "accept is required when action is dialog",
+                });
+              }
             }),
           execute: async (args, ctx, signal) => {
+            if (args.action === "dialog") {
+              const result = await this.sendRequest(
+                "browser_interact",
+                {
+                  action: "dialog",
+                  accept: args.accept,
+                  prompt_text: args.prompt_text,
+                  created_by: ctx?.session.sessionId,
+                },
+                signal,
+              );
+              this.assertSuccess(result);
+              return `Dialog ${args.accept ? "accepted" : "dismissed"}.`;
+            }
             const method =
               args.action === "click" ? "browser_click" : "browser_input";
             const result = await this.sendRequest(
@@ -228,6 +296,7 @@ export class BrowserPlugin extends PluginBase {
               {
                 selector: args.selector,
                 value: args.value,
+                full_simulation: args.full_simulation || false,
                 created_by: ctx?.session.sessionId,
               },
               signal,
@@ -237,8 +306,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "interact",
-            text: { executing: "%browser_interact.executing%", completed: "%browser_interact.completed%" },
-            aggregate: { executing: "%browser_interact.aggregate.executing%", completed: "%browser_interact.aggregate.completed%" },
+            text: {
+              executing: "%browser_interact.executing%",
+              completed: "%browser_interact.completed%",
+            },
+            aggregate: {
+              executing: "%browser_interact.aggregate.executing%",
+              completed: "%browser_interact.aggregate.completed%",
+            },
             argsKey: "action",
             icon: "browser",
           },
@@ -248,7 +323,7 @@ export class BrowserPlugin extends PluginBase {
         toolkit.registerTool({
           name: "browser_evaluate",
           description:
-            "Execute JavaScript code in the current tab and return the result. Pass code directly as a string, or use file_path for a JS file (relative to the session working directory; use either, not both). Within the page, window._browserBridge.saveLocalFile() / .readLocalFile() / .getCookies() / .setCookie() / .removeCookie() operate on local files in the session directory. await is naturally available.",
+            "Execute JavaScript code in the current tab and return the result. Pass code directly as a string, or use file_path for a JS file (relative to the session working directory; use either, not both). Within the page, window._browserBridge.saveLocalFile() / .readLocalFile() / .getCookies() / .setCookie() / .removeCookie() operate on local files in the session directory. For async operations, wrap code in an async IIFE: `(async () => { return await fetch('/api').then(r => r.json()) })()`. Execution times out after 30 seconds.",
           inputSchema: z.object({
             code: z
               .string()
@@ -285,8 +360,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "evaluate",
-            text: { executing: "%browser_evaluate.executing%", completed: "%browser_evaluate.completed%" },
-            aggregate: { executing: "%browser_evaluate.aggregate.executing%", completed: "%browser_evaluate.aggregate.completed%" },
+            text: {
+              executing: "%browser_evaluate.executing%",
+              completed: "%browser_evaluate.completed%",
+            },
+            aggregate: {
+              executing: "%browser_evaluate.aggregate.executing%",
+              completed: "%browser_evaluate.aggregate.completed%",
+            },
             argsKey: "code",
             icon: "browser",
           },
@@ -329,8 +410,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "history",
-            text: { executing: "%browser_history.executing%", completed: "%browser_history.completed%" },
-            aggregate: { executing: "%browser_history.aggregate.executing%", completed: "%browser_history.aggregate.completed%" },
+            text: {
+              executing: "%browser_history.executing%",
+              completed: "%browser_history.completed%",
+            },
+            aggregate: {
+              executing: "%browser_history.aggregate.executing%",
+              completed: "%browser_history.aggregate.completed%",
+            },
             argsKey: "action",
             icon: "browser",
           },
@@ -355,8 +442,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "console",
-            text: { executing: "%browser_console.executing%", completed: "%browser_console.completed%" },
-            aggregate: { executing: "%browser_console.aggregate.executing%", completed: "%browser_console.aggregate.completed%" },
+            text: {
+              executing: "%browser_console.executing%",
+              completed: "%browser_console.completed%",
+            },
+            aggregate: {
+              executing: "%browser_console.aggregate.executing%",
+              completed: "%browser_console.aggregate.completed%",
+            },
             icon: "browser",
           },
         });
@@ -373,6 +466,12 @@ export class BrowserPlugin extends PluginBase {
               .describe(
                 "File path to save the screenshot. Can be absolute or relative to the session working directory. If omitted, saves to session workspace as screenshot-<timestamp>.png",
               ),
+            full_page: z
+              .boolean()
+              .optional()
+              .describe(
+                "If true, capture the full scrollable page (CDP captureBeyondViewport) instead of just the viewport. Default false.",
+              ),
           }),
           execute: async (args, ctx, signal) => {
             const result = await this.sendRequest(
@@ -381,6 +480,7 @@ export class BrowserPlugin extends PluginBase {
                 created_by: ctx?.session.sessionId,
                 file_path: args.file_path,
                 session_path: ctx?.session.workspacePath,
+                full_page: args.full_page || false,
               },
               signal,
             );
@@ -416,8 +516,14 @@ export class BrowserPlugin extends PluginBase {
           },
           display: {
             actionType: "screenshot",
-            text: { executing: "%browser_screenshot.executing%", completed: "%browser_screenshot.completed%" },
-            aggregate: { executing: "%browser_screenshot.aggregate.executing%", completed: "%browser_screenshot.aggregate.completed%" },
+            text: {
+              executing: "%browser_screenshot.executing%",
+              completed: "%browser_screenshot.completed%",
+            },
+            aggregate: {
+              executing: "%browser_screenshot.aggregate.executing%",
+              completed: "%browser_screenshot.aggregate.completed%",
+            },
             icon: "browser",
           },
         });
@@ -442,9 +548,10 @@ export class BrowserPlugin extends PluginBase {
             "- Use a struct snapshot only when accessibility semantics omit an element you need",
             "- Use `browser_screenshot(file_path?)` to capture a visual screenshot of the current page",
             "",
-            "## Session Isolation",
-            "- All tabs are **incognito** — no data persists after closing",
-            "- Tabs are **session-isolated** — each agent only sees its own tabs",
+            "## Session & Data",
+            "- Browser data (cookies, localStorage) is **persistent** across sessions",
+            "- Tabs are **session-scoped** — each agent only sees its own tabs",
+            '- Use `browser_tabs(action="close_all")` to close all tabs for the current session',
           ].join("\n"),
         });
       },
@@ -468,9 +575,9 @@ export class BrowserPlugin extends PluginBase {
   private async sendRequest(
     method: string,
     params: any,
-    _abortSignal?: AbortSignal,
+    abortSignal?: AbortSignal,
   ): Promise<any> {
-    return this.bridgeClient.request(method, params);
+    return this.bridgeClient.request(method, params, abortSignal);
   }
 
   // ── 纯文本格式化 ──
@@ -628,7 +735,13 @@ export class BrowserPlugin extends PluginBase {
    */
   private formatInteractResult(args: any, result: any): string {
     if (args.action === "click") {
+      if (result?.clicked === false) {
+        throw new Error(result?.error || `Failed to click: ${args.selector}`);
+      }
       return `Clicked: ${args.selector}`;
+    }
+    if (result?.filled === false) {
+      throw new Error(result?.error || `Failed to fill: ${args.selector}`);
     }
     return `Filled: ${args.selector} = ${args.value}`;
   }

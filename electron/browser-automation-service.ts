@@ -314,15 +314,27 @@ export class BrowserAutomationService {
     }
 
     try {
+      // 拒绝 javascript: 协议（安全风险，且会导致 waitForPageLoad 挂起）
+      if (/^javascript:/i.test(url)) {
+        throw new Error("Navigation to javascript: URLs is not allowed");
+      }
+
       // loadURL 在页面重定向/JS 跳转时会 reject (ERR_ABORTED -3)，
-      // 但页面实际上可能已成功加载，因此忽略 loadURL 的 reject，
-      // 统一由 waitForPageLoad 判断最终加载状态。
-      await webContents.loadURL(url).catch(() => {});
+      // 但页面实际上可能已成功加载。仅吞 ERR_ABORTED，其他错误上抛。
+      await webContents.loadURL(url).catch((err: any) => {
+        const code = err?.code ?? err?.errno;
+        const isAborted = code === -3 || String(err?.message || "").includes("ERR_ABORTED");
+        if (!isAborted) throw err;
+      });
       await this.waitForPageLoad(webContents);
+      const currentUrl = webContents.getURL();
+      if (currentUrl.startsWith("chrome-error://")) {
+        throw new Error(`Navigation failed: page loaded chrome-error for ${url}`);
+      }
       return {
         success: true,
         tab_id: wid,
-        url: webContents.getURL(),
+        url: currentUrl,
         title: webContents.getTitle(),
       };
     } catch (error: any) {
@@ -337,6 +349,7 @@ export class BrowserAutomationService {
     createdBy: string,
     filePath?: string,
     sessionPath?: string,
+    fullPage: boolean = false,
   ): Promise<any> {
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
@@ -361,25 +374,33 @@ export class BrowserAutomationService {
     await new Promise((r) => setTimeout(r, 300));
 
     try {
-      // 优先使用 capturePage()，失败则回退到 CDP
       let buffer: Buffer;
       let imgWidth: number;
       let imgHeight: number;
-      try {
-        const image = await this.withTimeout(
-          webContents.capturePage(),
-          10000,
-          "capturePage timeout",
-        );
-        buffer = image.toPNG();
-        const size = image.getSize();
-        imgWidth = size.width;
-        imgHeight = size.height;
-      } catch (e: any) {
-        log.warn(`capturePage failed (${e.message}), falling back to CDP`);
-        buffer = await this.cdpCaptureScreenshot(webContents);
+
+      if (fullPage) {
+        // fullPage: 使用 CDP captureBeyondViewport 截整页
+        buffer = await this.cdpCaptureScreenshot(webContents, { captureBeyondViewport: true });
         imgWidth = buffer.readUInt32BE(16);
         imgHeight = buffer.readUInt32BE(20);
+      } else {
+        // 默认: capturePage() 截视口，失败回退 CDP
+        try {
+          const image = await this.withTimeout(
+            webContents.capturePage(),
+            10000,
+            "capturePage timeout",
+          );
+          buffer = image.toPNG();
+          const size = image.getSize();
+          imgWidth = size.width;
+          imgHeight = size.height;
+        } catch (e: any) {
+          log.warn(`capturePage failed (${e.message}), falling back to CDP`);
+          buffer = await this.cdpCaptureScreenshot(webContents);
+          imgWidth = buffer.readUInt32BE(16);
+          imgHeight = buffer.readUInt32BE(20);
+        }
       }
 
       let savedPath: string | undefined;
@@ -435,11 +456,35 @@ export class BrowserAutomationService {
   }
 
   /**
+   * 执行 JS 并与弹窗检测竞争：
+   * 如果 JS 执行期间触发了 alert/confirm/prompt，
+   * 弹窗 resolver 先 resolve，返回 { __dialog: true, type, message }。
+   * 否则正常返回 JS 执行结果。
+   */
+  private async raceWithDialog(
+    webContents: Electron.WebContents,
+    wid: string,
+    code: string,
+  ): Promise<any> {
+    let dialogResolve!: (v: any) => void;
+    const dialogPromise = new Promise<any>((resolve) => { dialogResolve = resolve; });
+    this.windowManager!.setDialogResolver(wid, dialogResolve);
+
+    const result = await Promise.race([
+      webContents.executeJavaScript(code, true),
+      dialogPromise,
+    ]);
+    this.windowManager!.clearDialogResolver(wid);
+    return result;
+  }
+
+  /**
    * 通过 CDP Page.captureScreenshot 截图。
    * 与 capturePage() 不同，CDP 截图在 webview visibility:hidden 时也能工作。
    */
   private async cdpCaptureScreenshot(
     webContents: Electron.WebContents,
+    opts?: { captureBeyondViewport?: boolean },
   ): Promise<Buffer> {
     const debuggerApi = webContents.debugger;
     let attachedByUs = false;
@@ -450,6 +495,7 @@ export class BrowserAutomationService {
       }
       const result = await debuggerApi.sendCommand("Page.captureScreenshot", {
         format: "png",
+        captureBeyondViewport: opts?.captureBeyondViewport || false,
       });
       if (!result?.data) {
         throw new Error("CDP captureScreenshot returned no image data");
@@ -488,7 +534,33 @@ export class BrowserAutomationService {
     }
 
     try {
-      const result = await webContents.executeJavaScript(code, true);
+      let dialogResolve!: (v: any) => void;
+      const dialogPromise = new Promise((resolve) => { dialogResolve = resolve; });
+      const alreadyPending = this.windowManager.setDialogResolver(wid, dialogResolve);
+
+      const result = await Promise.race([
+        this.withTimeout(
+          webContents.executeJavaScript(code, true),
+          30000,
+          "JavaScript execution timeout (30s)",
+        ),
+        dialogPromise,
+      ]);
+      this.windowManager.clearDialogResolver(wid);
+
+      if (result && (result as any).__dialog) {
+        const dlg = result as { type: string; message: string };
+        const hint = dlg.type === 'prompt'
+          ? `, prompt_text='...')`
+          : `')`;
+        return {
+          success: true,
+          windowId: wid,
+          dialog: dlg,
+          error: `A ${dlg.type} dialog appeared: "${dlg.message}". Use browser_interact(action='dialog', accept=true/false${hint} to respond.`,
+        } as any;
+      }
+
       return {
         success: true,
         windowId: wid,
@@ -496,6 +568,14 @@ export class BrowserAutomationService {
       };
     } catch (error: any) {
       log.error(`JavaScript execution failed in tab ${wid}:`, error.message);
+      if (error.message?.includes("timeout")) {
+        return {
+          success: false,
+          windowId: wid,
+          error: `Execution exceeded 30s and timed out. The script may still be running and cannot be cancelled. To force stop, reload the window (browser_history action='reload').`,
+          timedOut: true,
+        };
+      }
       return {
         success: false,
         windowId: wid,
@@ -747,7 +827,8 @@ export class BrowserAutomationService {
             }
 
             // 不需要的标签（遍历时跳过，不修改真实 DOM）
-            var unwantedTags = ['script', 'style', 'link', 'noscript', 'meta', 'iframe'];
+            // iframe 保留：struct 快照需要包含 iframe 元素信息
+            var unwantedTags = ['script', 'style', 'link', 'noscript', 'meta'];
 
             // 过滤子节点：跳过无用标签和空容器
             function getFilteredChildren(element) {
@@ -1206,14 +1287,14 @@ export class BrowserAutomationService {
     };
   }
 
-  async click(selector: string, windowId: string, createdBy?: string): Promise<any> {
+  async click(selector: string, windowId: string, createdBy?: string, fullSimulation: boolean = false): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
     }
 
-    log.info(`Clicking element: ${selector} (tab: ${wid})`);
+    log.info(`Clicking element: ${selector} (tab: ${wid}, fullSimulation: ${fullSimulation})`);
 
     const cssSelector = this.resolveSelector(selector);
 
@@ -1224,8 +1305,27 @@ export class BrowserAutomationService {
 
     const selectorLiteral = JSON.stringify(cssSelector);
 
+    if (!fullSimulation) {
+      // JS 模拟路径：不依赖渲染状态，直接 DOM 操作
+      const jsResult = await this.withSnapshotLock(webContents, () =>
+        this.raceWithDialog(webContents, wid, `
+          new Promise((resolve) => {
+            const element = document.querySelector(${selectorLiteral})
+            if (!element) { resolve({ clicked: false, error: 'Element not found' }); return }
+            element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
+            element.click()
+            resolve({ clicked: true })
+          })
+        `),
+      );
+      if (jsResult && (jsResult as any).__dialog) {
+        return { windowId: wid, ...jsResult as any };
+      }
+      return { windowId: wid, ...jsResult };
+    }
+
+    // CDP 全仿真路径：需要合成器帧
     const result = await this.withSnapshotLock(webContents, async () => {
-      // 获取元素位置和视口尺寸
       const rectInfo = await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
@@ -1251,13 +1351,20 @@ export class BrowserAutomationService {
       const targetX = Math.max(0, Math.min(rectInfo.x, rectInfo.vw));
       const targetY = Math.max(0, Math.min(rectInfo.y, rectInfo.vh));
 
-      // 尝试 CDP 输入（isTrusted=true），失败则降级到 dispatchEvent
+      // 临时设为可渲染，使 CDP 坐标映射有效
+      this.windowManager!.setWebviewRenderable(wid, true);
+      await new Promise((r) => setTimeout(r, 300));
+
       const cdpSuccess = await this.cdpClick(webContents, targetX, targetY, rectInfo.vw, rectInfo.vh);
+
+      // 恢复隐藏状态
+      this.windowManager!.setWebviewRenderable(wid, false);
+
       if (cdpSuccess) {
         return { success: true, clicked: true };
       }
 
-      // 降级：dispatchEvent（isTrusted=false，但保证功能可用）
+      // CDP 失败，降级到 dispatchEvent
       await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
@@ -1290,6 +1397,7 @@ export class BrowserAutomationService {
     value: string,
     windowId: string,
     createdBy?: string,
+    fullSimulation: boolean = false,
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
@@ -1301,7 +1409,7 @@ export class BrowserAutomationService {
       throw new Error("value is required when action is input");
     }
 
-    log.info(`Filling form field: ${selector} (tab: ${wid})`);
+    log.info(`Filling form field: ${selector} (tab: ${wid}, fullSimulation: ${fullSimulation})`);
 
     const cssSelector = this.resolveSelector(selector);
 
@@ -1312,8 +1420,54 @@ export class BrowserAutomationService {
 
     const selectorLiteral = JSON.stringify(cssSelector);
 
+    if (!fullSimulation) {
+      // JS 模拟路径：使用 native value setter 兼容 React/Vue 受控组件
+      // contenteditable 元素使用 execCommand 模拟键入
+      const valueLiteral = JSON.stringify(value);
+      const jsResult = await this.withSnapshotLock(webContents, () =>
+        this.raceWithDialog(webContents, wid, `
+          new Promise((resolve) => {
+            const element = document.querySelector(${selectorLiteral})
+            if (!element) { resolve({ filled: false, error: 'Element not found' }); return }
+            element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
+            element.focus()
+
+            if (element.isContentEditable) {
+              // contenteditable: 全选后插入文本
+              var range = document.createRange()
+              range.selectNodeContents(element)
+              var sel = window.getSelection()
+              sel.removeAllRanges()
+              sel.addRange(range)
+              document.execCommand('insertText', false, ${valueLiteral})
+              resolve({ filled: true })
+              return
+            }
+
+            // input/textarea/select: native value setter
+            var proto = element.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype
+              : element.tagName === 'SELECT' ? HTMLSelectElement.prototype
+              : HTMLInputElement.prototype
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value')
+            if (setter && setter.set) {
+              setter.set.call(element, ${valueLiteral})
+            } else {
+              element.value = ${valueLiteral}
+            }
+            element.dispatchEvent(new Event('input', { bubbles: true }))
+            element.dispatchEvent(new Event('change', { bubbles: true }))
+            resolve({ filled: true })
+          })
+        `),
+      );
+      if (jsResult && (jsResult as any).__dialog) {
+        return { windowId: wid, ...jsResult as any };
+      }
+      return { windowId: wid, ...jsResult };
+    }
+
+    // CDP 全仿真路径：需要合成器帧
     const result = await this.withSnapshotLock(webContents, async () => {
-      // 获取元素位置并 scrollIntoView
       const rectInfo = await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
@@ -1328,21 +1482,46 @@ export class BrowserAutomationService {
         return { success: false, filled: false, error: 'Element not found' };
       }
 
-      // 尝试 CDP 键盘输入，失败则降级
+      // 临时设为可渲染
+      this.windowManager!.setWebviewRenderable(wid, true);
+      await new Promise((r) => setTimeout(r, 300));
+
       const cdpSuccess = await this.cdpTypeText(webContents, rectInfo.x, rectInfo.y, rectInfo.vw, rectInfo.vh, value);
+
+      // 恢复隐藏状态
+      this.windowManager!.setWebviewRenderable(wid, false);
+
       if (cdpSuccess) {
         return { success: true, filled: true };
       }
 
-      // 降级：直接设值 + dispatchEvent
+      // 降级：native setter + dispatchEvent（支持 contenteditable）
       const valueLiteral = JSON.stringify(value);
       await webContents.executeJavaScript(`
         new Promise((resolve) => {
           const element = document.querySelector(${selectorLiteral})
           if (element) {
-            element.value = ${valueLiteral}
-            element.dispatchEvent(new Event('input', { bubbles: true }))
-            element.dispatchEvent(new Event('change', { bubbles: true }))
+            if (element.isContentEditable) {
+              element.focus()
+              var range = document.createRange()
+              range.selectNodeContents(element)
+              var sel = window.getSelection()
+              sel.removeAllRanges()
+              sel.addRange(range)
+              document.execCommand('insertText', false, ${valueLiteral})
+            } else {
+              var proto = element.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype
+                : element.tagName === 'SELECT' ? HTMLSelectElement.prototype
+                : HTMLInputElement.prototype
+              var setter = Object.getOwnPropertyDescriptor(proto, 'value')
+              if (setter && setter.set) {
+                setter.set.call(element, ${valueLiteral})
+              } else {
+                element.value = ${valueLiteral}
+              }
+              element.dispatchEvent(new Event('input', { bubbles: true }))
+              element.dispatchEvent(new Event('change', { bubbles: true }))
+            }
             resolve(true)
           } else {
             resolve(false)
@@ -1873,6 +2052,50 @@ export class BrowserAutomationService {
   }
 
   /**
+   * 处理待处理弹窗（alert/confirm/prompt）
+   * 不走 withSnapshotLock：JS 事件循环阻塞时 withSnapshotLock 会死锁，
+   * 但 CDP Page.handleJavaScriptDialog 走独立消息管道，在 JS 阻塞时仍可执行。
+   */
+  async handleDialog(
+    accept: boolean,
+    promptText: string | undefined,
+    windowId: string,
+    createdBy?: string,
+  ): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+    const webContents = this.windowManager.getWebContents(wid);
+    if (!webContents) {
+      throw new Error(`Tab ${wid} not found`);
+    }
+
+    const debuggerApi = webContents.debugger;
+    let attachedByUs = false;
+    try {
+      if (!debuggerApi.isAttached()) {
+        debuggerApi.attach("1.3");
+        attachedByUs = true;
+      }
+      await debuggerApi.sendCommand("Page.handleJavaScriptDialog", {
+        accept,
+        promptText: promptText || "",
+      });
+      this.windowManager.clearPendingDialog(wid);
+      log.info(`Dialog handled on tab ${wid}: accept=${accept}`);
+      return { success: true, windowId: wid, dialogHandled: true };
+    } catch (err: any) {
+      log.error(`Failed to handle dialog on tab ${wid}:`, err.message);
+      return { success: false, windowId: wid, error: err.message };
+    } finally {
+      if (attachedByUs && debuggerApi.isAttached()) {
+        try { debuggerApi.detach(); } catch {}
+      }
+    }
+  }
+
+  /**
    * 等待页面加载完成
    */
   private async waitForPageLoad(
@@ -1918,8 +2141,7 @@ export class BrowserAutomationService {
       const currentUrl = webContents.getURL();
       if (
         !webContents.isLoading() &&
-        currentUrl !== "" &&
-        currentUrl !== "about:blank"
+        currentUrl !== ""
       ) {
         succeed();
         return;
@@ -1997,6 +2219,7 @@ export class BrowserAutomationService {
             params.selector,
             "",
             params.created_by,
+            params.full_simulation || false,
           );
 
         case "browser_input":
@@ -2005,14 +2228,24 @@ export class BrowserAutomationService {
             params.value,
             "",
             params.created_by,
+            params.full_simulation || false,
           );
 
         case "browser_interact":
+          if (params.action === "dialog") {
+            return await this.handleDialog(
+              !!params.accept,
+              params.prompt_text,
+              "",
+              params.created_by,
+            );
+          }
           if (params.action === "click") {
             return await this.click(
               params.selector,
               "",
               params.created_by,
+              params.full_simulation || false,
             );
           } else {
             return await this.fillForm(
@@ -2020,6 +2253,7 @@ export class BrowserAutomationService {
               params.value,
               "",
               params.created_by,
+              params.full_simulation || false,
             );
           }
 
@@ -2033,6 +2267,7 @@ export class BrowserAutomationService {
             params.created_by,
             params.file_path,
             params.session_path,
+            params.full_page || false,
           );
 
         case "browser_history":

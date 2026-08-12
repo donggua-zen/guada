@@ -53,6 +53,10 @@ export class WorkspaceConnectionsService {
     config: Record<string, any>,
   ): Promise<SavedConnection> {
     const connections = await this.getConnections();
+    // Check name uniqueness
+    if (connections.some((c) => c.name === name)) {
+      throw new Error(`Connection name '${name}' already exists`);
+    }
     const id = `conn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const workspacePath = this.buildWorkspacePath(scheme, config);
     const conn: SavedConnection = { id, name, scheme, config, workspacePath };
@@ -68,6 +72,12 @@ export class WorkspaceConnectionsService {
     const connections = await this.getConnections();
     const idx = connections.findIndex((c) => c.id === id);
     if (idx === -1) return null;
+    // Check name uniqueness if renaming
+    if (updates.name && updates.name !== connections[idx].name) {
+      if (connections.some((c) => c.id !== id && c.name === updates.name)) {
+        throw new Error(`Connection name '${updates.name}' already exists`);
+      }
+    }
     if (updates.name) connections[idx].name = updates.name;
     if (updates.config) {
       connections[idx].config = updates.config;

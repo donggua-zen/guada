@@ -22,6 +22,14 @@ export default {
     pathMustBeAbsolute: '工作目录基路径必须是绝对路径',
     loadFailed: '获取通用设置失败',
     updated: '通用设置已更新',
+    agent: 'Agent 设置',
+    maxToolIterations: '最大工具调用轮次',
+    maxToolIterationsDesc: 'AI 在单次对话中连续调用工具的最大轮次。达到上限后将暂停并等待用户确认。默认 100。',
+    llmRequestTimeout: '请求超时',
+    llmRequestTimeoutDesc: 'LLM 请求的总体硬截止时间（含流式传输）。超时后请求将被中止。默认 600 秒。',
+    llmIdleTimeout: '空闲超时',
+    llmIdleTimeoutDesc: '流式传输中两个数据块之间的最大间隔时间。超过此时间无数据则判定为卡死并中止。默认 120 秒。',
+    secondsUnit: '秒',
   },
 
   browser: {
@@ -202,6 +210,8 @@ export default {
     saveInfo: '保存信息',
     nicknameRequired: '请输入昵称',
     usernameRequired: '请输入用户名',
+    usernameFormat: '用户名只能包含字母、数字、下划线，长度3-20位',
+    usernameTaken: '该用户名已被占用',
     saveSuccess: '用户信息保存成功',
     saveFailed: '用户信息保存失败',
   },

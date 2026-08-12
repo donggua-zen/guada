@@ -133,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, defineAsyncComponent, provide } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide } from "vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { apiService } from "../../services/ApiService";
@@ -283,6 +283,9 @@ let skeletonTimer: ReturnType<typeof setTimeout> | null = null
 let skeletonMinDisplayTimer: ReturnType<typeof setTimeout> | null = null
 let skeletonShowTime: number = 0 // 记录骨架屏开始显示的时间戳
 const SKELETON_MIN_DISPLAY = 500 // 骨架屏最少显示毫秒数
+
+// 会话切换并发守卫：每次 handleSessionChange 递增，await 后检查是否已被新调用取代
+let sessionChangeToken = 0
 
 
 
@@ -540,6 +543,10 @@ onMounted(() => {
   loadConnections();
 });
 
+onUnmounted(() => {
+  clearSkeletonTimers();
+});
+
 /**
  * 处理 ChatInput 配置变更
  * 与 chatInputConfig 计算属性中的字段一一对应
@@ -779,6 +786,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
     currentSessionId.value = null;
     return;
   }
+  const token = ++sessionChangeToken;
   isLoading.value = true;
   startSkeletonDelay();
   try {
@@ -787,12 +795,16 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
     // Ensure connections are loaded (in case onMounted already passed)
     if (allConnections.value.length === 0) {
       await loadConnections();
+      if (token !== sessionChangeToken) return;
     }
     await loadSession(newSessionId);
+    if (token !== sessionChangeToken) return;
     // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
     await checkActiveStreamOnLoad(newSessionId);
+    if (token !== sessionChangeToken) return;
 
     nextTick(() => {
+      if (token !== sessionChangeToken) return;
       if (!currentSession.value)
         return;
       if (inputMessage.value?.isWaiting) {
@@ -801,9 +813,11 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
       }
     });
   } catch (error) {
+    if (token !== sessionChangeToken) return;
     console.error('加载会话失败:', error);
     notify.error('加载会话失败', error.message);
   } finally {
+    if (token !== sessionChangeToken) return;
     isLoading.value = false;
     stopSkeletonDisplay();
   }

@@ -45,9 +45,11 @@ export class ShellPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     // ── execute 工具 ──
+    const isWindows = process.platform === "win32";
     api.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
+- **Current System**: ${isWindows ? "Windows (PowerShell)" : process.platform === "darwin" ? "macOS" : "Linux"}
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - processId is typically the shell process ID, not the command's own process ID`,
@@ -295,11 +297,10 @@ export class ShellPlugin extends PluginBase {
       frequency: "STATIC",
       description: "Shell tool usage instructions and safety reminders",
       content: (ctx: PluginContext) => {
-        const isWindows = process.platform === "win32";
         const isNotSubAgent = ctx?.session?.sessionType !== "sub_agent";
         return `# Shell Tool Usage Instructions
           
-**Current System**: ${isWindows ? "Windows (PowerShell)" : process.platform === "darwin" ? "macOS" : "Linux"}
+
           
 ## Command Execution
 

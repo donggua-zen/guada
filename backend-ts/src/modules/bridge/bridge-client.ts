@@ -175,23 +175,42 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   /**
    * 发送请求并等待响应
    */
-  async request(method: string, params: any): Promise<any> {
+  async request(method: string, params: any, abortSignal?: AbortSignal): Promise<any> {
     if (!this.connected || !this.socket) {
       throw new Error("Bridge not connected");
     }
 
     const id = String(++this.requestCounter);
-    const timeout = setTimeout(() => {
-      this.pending.delete(id);
-      reject(new Error(`Bridge request timeout: ${method}`));
-    }, 120000);
 
     // 超时内 reject 需要引用
     let reject!: (r: any) => void;
     const promise = new Promise<any>((resolve, rj) => {
       reject = rj;
-      this.pending.set(id, { resolve, reject: rj, timeout });
+      this.pending.set(id, { resolve, reject: rj, timeout: null as any });
     });
+
+    // 超时定时器
+    const timeout = setTimeout(() => {
+      this.pending.delete(id);
+      reject(new Error(`Bridge request timeout: ${method}`));
+    }, 120000);
+    // 更新 pending 中的 timeout 引用
+    this.pending.get(id)!.timeout = timeout;
+
+    // abort 支持
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        clearTimeout(timeout);
+        this.pending.delete(id);
+        throw new Error(`Aborted: ${method}`);
+      }
+      abortSignal.addEventListener("abort", () => {
+        clearTimeout(timeout);
+        if (this.pending.delete(id)) {
+          reject(new Error(`Aborted: ${method}`));
+        }
+      }, { once: true });
+    }
 
     this.send({ type: "request", id, method, params });
     return promise;

@@ -72,16 +72,12 @@ docker-compose logs -f        # 查看日志
 docker cp guada-backend:/app/data/ai_chat.db ./backup.db
 
 # 恢复数据库
+docker-compose down
 docker cp ./backup.db guada-backend:/app/data/ai_chat.db
-docker-compose restart backend
+docker-compose up -d
 ```
 
-### 进入容器
-
-```bash
-docker-compose exec backend sh   # 进入后端容器
-docker-compose exec frontend sh  # 进入前端容器
-```
+> 💡 数据库迁移在容器启动时自动执行，无需手动操作。详见 [数据库迁移章节](docs/DOCKER_DEPLOYMENT.md#四数据库迁移)。
 
 ### 更新部署
 
@@ -102,12 +98,23 @@ docker-compose logs backend     # 查看详细日志
 docker-compose ps               # 检查服务状态
 ```
 
+### 数据库迁移问题
+
+```bash
+# 查看迁移日志
+docker-compose logs backend | grep -i migration
+
+# 查看已应用的迁移
+docker-compose exec backend sqlite3 /app/data/ai_chat.db \
+  "SELECT * FROM _app_migrations ORDER BY id;"
+```
+
 ### 端口冲突
 
 ```bash
 # 修改 docker-compose.yml 中的端口
 ports:
-  - "3001:3000"  # 改为其他端口
+  - "8788:80"  # 改为其他端口
 ```
 
 ### 重置所有数据
@@ -121,6 +128,6 @@ docker-compose up -d            # 重新初始化
 
 ## 更多信息
 
-详细文档请查看：[Docker 部署完整指南](DOCKER_DEPLOYMENT.md)
+详细文档请查看：[Docker 部署完整指南](docs/DOCKER_DEPLOYMENT.md)
 
 技术支持 QQ 群：1047993501

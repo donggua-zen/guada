@@ -62,7 +62,8 @@ export class SkillPlugin extends PluginBase {
       id: "skill",
       name: "Skill Instructions",
       loadMode: "eager",
-      activator: "Call this toolkit to get the full instructions for a skill when you need to use one",
+      activator:
+        "Call this toolkit to get the full instructions for a skill when you need to use one",
       handler: async (ctx: PluginContext) => {
         const skills = this.orchestrator.listSkills(
           true,
@@ -73,9 +74,9 @@ export class SkillPlugin extends PluginBase {
       },
     });
 
-    // ── skill_lean：获取技能完整指令 ──
+    // ── skill_learn ──
     skillKit.registerTool({
-      name: "skill_lean",
+      name: "skill_learn",
       description:
         "通过技能名称获取技能的完整指令内容和路径。技能内容已去除 YAML 元数据头，可直接使用",
       inputSchema: z.object({
@@ -84,9 +85,9 @@ export class SkillPlugin extends PluginBase {
           .describe("技能名称（SKILL.md frontmatter 中定义的 name 字段）"),
       }),
       execute: async (args) => {
-        const result = await this.orchestrator.skillLean(args.name);
+        const result = await this.orchestrator.skillLearn(args.name);
         if (!result) {
-          return { success: false, message: `技能 "${args.name}" 不存在` };
+          throw new Error(`skill "${args.name}" not found`);
         }
         return {
           success: true,
@@ -97,7 +98,10 @@ export class SkillPlugin extends PluginBase {
       },
       display: {
         actionType: "skill_read",
-        text: { executing: "%skill_learn.executing%", completed: "%skill_learn.completed%" },
+        text: {
+          executing: "%skill_learn.executing%",
+          completed: "%skill_learn.completed%",
+        },
         argsKey: "name",
         icon: "book",
       },

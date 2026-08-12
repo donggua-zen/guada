@@ -43,6 +43,10 @@ interface EffectiveSettings {
   plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
   agents?: Record<string, boolean>; // 角色级 Agent 偏好 { agentId: true/false }
+  connectionIds?: string[];
+  runMode?: string;
+  referencedKbs?: string[];
+  modelName?: string | null;
 }
 
 /**
@@ -744,6 +748,18 @@ export class PersistentSessionContext implements ISessionContext {
 
     // thinkingEffort
     merged.thinkingEffort = sessionSettings.thinkingEffort;
+
+    // connectionIds：会话绑定的远程连接
+    merged.connectionIds = sessionSettings.connectionIds ?? [];
+
+    // runMode
+    merged.runMode = sessionSettings.runMode ?? "normal";
+
+    // referencedKbs
+    merged.referencedKbs = sessionSettings.referencedKbs ?? [];
+
+    // modelName
+    merged.modelName = sessionSettings.modelName ?? null;
 
     return merged;
   }

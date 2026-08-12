@@ -11,6 +11,9 @@ export const SG_PLUGINS = 'plugins_config';
  */
 export const SK_SYS_AUTO_LOGIN = 'autoLoginEnabled';
 export const SK_SYS_WORKSPACE_BASE_DIR = 'workspaceBaseDir';
+export const SK_SYS_MAX_TOOL_ITERATIONS = 'maxToolIterations';
+export const SK_SYS_LLM_REQUEST_TIMEOUT_MS = 'llmRequestTimeoutMs';
+export const SK_SYS_LLM_IDLE_TIMEOUT_MS = 'llmIdleTimeoutMs';
 
 /**
  * 模型偏好设置键名 (SK_MOD = Setting Key Model)

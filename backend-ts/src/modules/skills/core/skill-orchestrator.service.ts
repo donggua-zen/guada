@@ -116,7 +116,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    * 通过名称获取技能内容（纯正文，不含 YAML 头）和路径
    * 供 skill_lean 工具调用
    */
-  async skillLean(
+  async skillLearn(
     name: string,
   ): Promise<{ name: string; content: string; path: string } | null> {
     const skill = this.registry.get(name.toLowerCase());

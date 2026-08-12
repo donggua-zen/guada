@@ -3,6 +3,8 @@ import * as path from "path";
 import * as fs from "fs";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { SettingsService } from "../settings/settings.service";
+import { SG_SYSTEM, SK_SYS_MAX_TOOL_ITERATIONS } from "../../constants/settings.constants";
 import { PluginContext } from "../plugins/types/plugin.types";
 import {
   MessageRecord,
@@ -65,7 +67,31 @@ export class AgentEngine {
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
     private tokenTracker: SessionTokenTracker,
+    private settingsService: SettingsService,
   ) {}
+
+  /**
+   * 从系统设置读取最大工具调用轮次
+   * 值非法或未配置时回退到默认值 100
+   */
+  private async getMaxToolIterations(): Promise<number> {
+    const DEFAULT_MAX_TOOL_ITERATIONS = 100;
+    try {
+      const raw = await this.settingsService.getSettingValue(
+        SG_SYSTEM,
+        SK_SYS_MAX_TOOL_ITERATIONS,
+        DEFAULT_MAX_TOOL_ITERATIONS,
+      );
+      const val = Number(raw);
+      if (Number.isInteger(val) && val >= 1) return val;
+      this.logger.warn(
+        `Invalid maxToolIterations setting (${raw}), falling back to ${DEFAULT_MAX_TOOL_ITERATIONS}`,
+      );
+      return DEFAULT_MAX_TOOL_ITERATIONS;
+    } catch {
+      return DEFAULT_MAX_TOOL_ITERATIONS;
+    }
+  }
 
   /**
    * 执行会话补全请求（主入口）
@@ -215,6 +241,9 @@ export class AgentEngine {
 
     // 记录 ReAct 循环开始时间，用于计算总耗时
     const loopStartTime = Date.now();
+
+    // 从系统设置读取最大工具调用轮次，默认 100
+    const maxToolIterations = await this.getMaxToolIterations();
 
     // 工具调用轮次计数器
     let iterationCount = 0;
@@ -484,10 +513,9 @@ export class AgentEngine {
       // 中止时不执行工具（已在 catch 中注入合成响应）
       if (assistantResponse.toolCalls && tools && !abortSignal?.aborted) {
         // 【工具轮次限制】检查是否达到最大工具调用轮次
-        const MAX_TOOL_ITERATIONS = 100;
-        if (iterationCount >= MAX_TOOL_ITERATIONS) {
+        if (iterationCount >= maxToolIterations) {
           this.logger.warn(
-            `工具调用达到最大轮次限制 (${MAX_TOOL_ITERATIONS})，暂停执行等待用户确认`,
+            `工具调用达到最大轮次限制 (${maxToolIterations})，暂停执行等待用户确认`,
           );
 
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
@@ -691,7 +719,7 @@ export class AgentEngine {
       const accumulated: LLMResponseChunk = {};
 
       try {
-        const stream = this.llmService.completions({
+        const stream = (await this.llmService.completions({
           model: modelConfig.modelName,
           messages,
           tools,
@@ -703,7 +731,7 @@ export class AgentEngine {
           stream: true,
           thinkingEffort,
           abortSignal,
-        }) as AsyncGenerator<LLMResponseChunk>;
+        }) as AsyncGenerator<LLMResponseChunk>);
 
         const throttled = throttledStream(
           stream,

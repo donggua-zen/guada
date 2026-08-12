@@ -16,6 +16,7 @@ import { CharactersModule } from "../characters/characters.module";
 import { FilesModule } from "../files/files.module";
 import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
+import { SettingsModule } from "../settings/settings.module";
 
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
@@ -33,7 +34,7 @@ import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
+  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule, SettingsModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     AgentEngine,

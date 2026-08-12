@@ -22,6 +22,14 @@
     pathMustBeAbsolute: 'Working directory base path must be an absolute path',
     loadFailed: 'Failed to load general settings',
     updated: 'General settings updated',
+    agent: 'Agent Settings',
+    maxToolIterations: 'Max Tool Iterations',
+    maxToolIterationsDesc: 'Maximum number of consecutive tool-call rounds in a single conversation. When the limit is reached, execution pauses and waits for user confirmation. Default 100.',
+    llmRequestTimeout: 'Request Timeout',
+    llmRequestTimeoutDesc: 'Hard deadline for the entire LLM request lifecycle (including streaming). The request is aborted when exceeded. Default 600 seconds.',
+    llmIdleTimeout: 'Idle Timeout',
+    llmIdleTimeoutDesc: 'Maximum interval between stream chunks with no data. If exceeded, the stream is considered stuck and aborted. Default 120 seconds.',
+    secondsUnit: 's',
   },
 
   browser: {
@@ -202,6 +210,8 @@
     saveInfo: 'Save Info',
     nicknameRequired: 'Please enter a nickname',
     usernameRequired: 'Please enter a username',
+    usernameFormat: 'Username can only contain letters, numbers, and underscores (3-20 chars)',
+    usernameTaken: 'This username is already taken',
     saveSuccess: 'User info saved successfully',
     saveFailed: 'Failed to save user info',
   },

@@ -11,11 +11,7 @@ import {
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
-import {
-  createStreamTimeoutController,
-  withStreamIdleTimeout,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-} from "../utils/stream-timeout.util";
+
 import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
@@ -57,26 +53,16 @@ export class MockAdapter implements IProtocolAdapter {
 
     this.logger.log(`Mock adapter called: model=${model}, behavior=${behavior.type}`);
 
-    // 与真实 adapter 一致：创建 idle timeout controller
-    const streamTc = createStreamTimeoutController(
-      params.abortSignal,
-      DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    );
-    streamTc.resetIdleTimer();
-
     try {
       switch (behavior.type) {
         case "normal":
-          yield* withStreamIdleTimeout(
-            this.simulateNormalStream(behavior.slow),
-            streamTc,
-          );
+          yield* this.simulateNormalStream(behavior.slow);
           break;
 
         case "timeout":
           // 模拟服务器接受连接但永不响应
-          // idle timeout 会在 createStreamTimeoutController 中触发 abort
-          await this.hangForever(streamTc.signal);
+          // 超时由 LLMService 统一处理，通过 abortSignal 触发
+          await this.hangForever(params.abortSignal);
           break;
 
         case "429": {
@@ -93,10 +79,7 @@ export class MockAdapter implements IProtocolAdapter {
           // 达到失败次数后，正常输出并重置计数器
           this.logger.log(`Mock 429: attempt ${current + 1} — recovering with normal response`);
           this.attemptCounters.delete(model);
-          yield* withStreamIdleTimeout(
-            this.simulateNormalStream(false),
-            streamTc,
-          );
+          yield* this.simulateNormalStream(false);
           break;
         }
 
@@ -107,13 +90,10 @@ export class MockAdapter implements IProtocolAdapter {
           throw this.createServerError();
 
         default:
-          yield* withStreamIdleTimeout(
-            this.simulateNormalStream(false),
-            streamTc,
-          );
+          yield* this.simulateNormalStream(false);
       }
     } finally {
-      streamTc.clearIdleTimer();
+      // cleanup handled by LLMService
     }
   }
 
@@ -201,7 +181,7 @@ export class MockAdapter implements IProtocolAdapter {
 
   /**
    * 模拟服务器挂起 — 永不返回数据
-   * idle timeout 会在 stream-timeout.util.ts 中触发 abort
+   * 超时由 LLMService 统一处理，通过 abortSignal 触发 abort
    */
   private async hangForever(abortSignal?: AbortSignal): Promise<void> {
     return new Promise((_, reject) => {
