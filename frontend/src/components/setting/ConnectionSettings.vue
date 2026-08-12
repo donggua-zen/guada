@@ -142,8 +142,34 @@
             </div>
           </div>
 
-          <!-- Step 2: 选择远端目录 -->
-          <div v-if="currentStep === 2" class="flex flex-col flex-1 min-h-0 gap-3">
+          <!-- Step 2: 部署验证 -->
+          <div v-if="currentStep === 2" class="flex flex-col flex-1 gap-3 min-h-0">
+            <div class="flex items-center gap-3">
+              <div v-if="deploying" class="w-8 h-8 border-3 border-gray-200 border-t-gray-600 dark:border-t-gray-300 rounded-full animate-spin shrink-0"></div>
+              <div v-else-if="deployResult?.success" class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                <span class="text-lg text-green-600 dark:text-green-400">✓</span>
+              </div>
+              <div v-else-if="deployResult" class="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                <span class="text-lg text-red-500">✗</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.deployTitle') }}</h3>
+                <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.deployDesc') }}</p>
+                <p v-if="deploying" class="text-sm text-gray-500 mt-1">{{ t('settings.connection.deploying') }}</p>
+                <p v-else-if="deployResult?.success && deployResult?.installed" class="text-sm text-green-600 dark:text-green-400 font-medium mt-1">{{ t('settings.connection.deployInstalled') }}</p>
+                <p v-else-if="deployResult?.success" class="text-sm text-green-600 dark:text-green-400 font-medium mt-1">{{ t('settings.connection.deploySuccess') }}</p>
+                <p v-else-if="deployResult" class="text-sm text-red-500 font-medium mt-1">{{ t('settings.connection.deployFailed') }}</p>
+              </div>
+            </div>
+
+            <div v-if="deployLog || deploying" class="flex-1 min-h-0 bg-gray-900 dark:bg-black rounded-lg p-3 overflow-auto font-mono text-xs leading-relaxed">
+              <pre class="text-gray-300 whitespace-pre-wrap">{{ deployLog || 'Deploying...' }}</pre>
+              <span v-if="deploying" class="inline-block w-2 h-4 bg-green-400 animate-pulse align-middle"></span>
+            </div>
+          </div>
+
+          <!-- Step 3: 选择远端目录 -->
+          <div v-if="currentStep === 3" class="flex flex-col flex-1 min-h-0 gap-3">
             <div>
               <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.browseTitle') }}</h3>
               <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.browseDesc') }}</p>
@@ -191,10 +217,16 @@
               <el-button v-if="currentStep === 1 && !testing" @click="testConn" :disabled="!editConfig.host">
                 {{ t('settings.connection.retest') }}
               </el-button>
-              <el-button v-if="currentStep === 1 && testResult?.success" type="primary" @click="goToBrowse">
+              <el-button v-if="currentStep === 1 && testResult?.success" type="primary" @click="goToDeploy">
                 {{ t('settings.connection.next') }}
               </el-button>
-              <el-button v-if="currentStep === 2" type="primary" @click="saveConn" :loading="saving">
+              <el-button v-if="currentStep === 2 && !deploying" @click="deployConn" :disabled="!testResult?.success">
+                {{ t('settings.connection.deployRetry') }}
+              </el-button>
+              <el-button v-if="currentStep === 2 && deployResult?.success" type="primary" @click="goToBrowse">
+                {{ t('settings.connection.next') }}
+              </el-button>
+              <el-button v-if="currentStep === 3" type="primary" @click="saveConn" :loading="saving">
                 {{ t('settings.connection.save') }}
               </el-button>
             </div>
@@ -247,10 +279,14 @@ const saving = ref(false)
 const testing = ref(false)
 const testResult = ref<{ success: boolean; error?: string; log?: string } | null>(null)
 const testLog = ref('')
+const deploying = ref(false)
+const deployResult = ref<{ success: boolean; installed: boolean; version: string; log: string[] } | null>(null)
+const deployLog = ref('')
 
 const stepLabels = computed(() => [
   t('settings.connection.stepConfig'),
   t('settings.connection.stepTest'),
+  t('settings.connection.stepDeploy'),
   t('settings.connection.stepBrowse'),
 ])
 const currentStep = ref(0)
@@ -281,6 +317,8 @@ function startNew() {
   editConfig.value = { host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKey: '', path: '' }
   testResult.value = null
   testLog.value = ''
+  deployResult.value = null
+  deployLog.value = ''
   currentStep.value = 0
 }
 
@@ -291,6 +329,8 @@ function editConn(conn: Connection) {
   editConfig.value = { ...conn.config }
   testResult.value = null
   testLog.value = ''
+  deployResult.value = null
+  deployLog.value = ''
   currentStep.value = 0
 }
 
@@ -315,8 +355,29 @@ async function testConn() {
   }
 }
 
-async function goToBrowse() {
+async function goToDeploy() {
   currentStep.value = 2
+  await deployConn()
+}
+
+async function deployConn() {
+  deploying.value = true
+  deployResult.value = null
+  deployLog.value = ''
+  try {
+    const result = await apiService.deployConnection(editConfig.value)
+    deployResult.value = result
+    deployLog.value = result.log?.join('\n') || ''
+  } catch (e: any) {
+    deployResult.value = { success: false, installed: false, version: '', log: [e.message || String(e)] }
+    deployLog.value = e.message || String(e)
+  } finally {
+    deploying.value = false
+  }
+}
+
+async function goToBrowse() {
+  currentStep.value = 3
   browserPath.value = editConfig.value.path || `/home/${editConfig.value.username}`
   await navigateBrowser()
 }

@@ -1,0 +1,21 @@
+{
+  "scheduler.name": "Scheduled Tasks",
+  "scheduler.description": "Create and manage scheduled tasks",
+  "scheduler.toolkitName": "Scheduled Tasks",
+  "scheduler_create_task.executing": "Creating scheduled task",
+  "scheduler_create_task.completed": "Created scheduled task",
+  "scheduler_create_task.aggregate.executing": "Creating {n} scheduled tasks",
+  "scheduler_create_task.aggregate.completed": "Created {n} scheduled tasks",
+  "scheduler_list_tasks.executing": "Fetching task list",
+  "scheduler_list_tasks.completed": "Fetched task list",
+  "scheduler_list_tasks.aggregate.executing": "Fetching {n} scheduled tasks",
+  "scheduler_list_tasks.aggregate.completed": "Fetched {n} scheduled tasks",
+  "scheduler_delete_task.executing": "Deleting scheduled task",
+  "scheduler_delete_task.completed": "Deleted scheduled task",
+  "scheduler_delete_task.aggregate.executing": "Deleting {n} scheduled tasks",
+  "scheduler_delete_task.aggregate.completed": "Deleted {n} scheduled tasks",
+  "scheduler_toggle_task.executing": "Toggling task state",
+  "scheduler_toggle_task.completed": "Toggled task state",
+  "scheduler_toggle_task.aggregate.executing": "Toggling state of {n} scheduled tasks",
+  "scheduler_toggle_task.aggregate.completed": "Toggled state of {n} scheduled tasks"
+}

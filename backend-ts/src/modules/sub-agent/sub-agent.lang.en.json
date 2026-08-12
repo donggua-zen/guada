@@ -1,0 +1,13 @@
+{
+  "subAgent.name": "Sub-Agent",
+  "subAgent.description": "Create and manage sub-agents to execute independent tasks",
+  "subAgent.toolkitName": "Sub-Agent",
+  "subagent_spawn.executing": "Creating sub-agent",
+  "subagent_spawn.completed": "Created sub-agent",
+  "subagent_spawn.aggregate.executing": "Creating {n} sub-agents",
+  "subagent_spawn.aggregate.completed": "Created {n} sub-agents",
+  "subagent_manager.executing": "Managing sub-agents",
+  "subagent_manager.completed": "Managed sub-agents",
+  "subagent_manager.aggregate.executing": "Managing {n} sub-agents",
+  "subagent_manager.aggregate.completed": "Managed {n} sub-agents"
+}

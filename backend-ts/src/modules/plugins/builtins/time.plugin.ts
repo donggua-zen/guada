@@ -4,22 +4,24 @@ import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import { z } from "zod";
 import langZh from "./time.lang.zh.json";
+import langEn from "./time.lang.en.json";
 
 @Injectable()
 export class TimePlugin extends PluginBase {
   manifest = {
     id: "time",
-    name: "时间工具",
-    description: "获取当前详细时间信息，包括日期、星期、时间、时区等",
+    name: "%time.name%",
+    description: "%time.description%",
     version: "1.0.0",
     category: "core" as const,
   };
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const timeKit = api.registerToolKit({
       id: "time",
-      name: "Time Tools",
+      name: "%time.toolkitName%",
       activator: "Get current detailed time information, including date, day of week, time, timezone, etc.",
     });
     timeKit.registerTool({

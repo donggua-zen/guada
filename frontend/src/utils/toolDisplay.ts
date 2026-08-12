@@ -116,7 +116,21 @@ export function resolveToolName(tool: ToolCall): string {
 
 export function getToolConfig(tool: ToolCall): ToolDisplayConfig {
   const name = resolveToolName(tool);
-  return pluginToolDisplays.value[name] || getDefaultConfig();
+  const custom = pluginToolDisplays.value[name];
+  if (!custom) return getDefaultConfig();
+  // 防御性合并:插件注册的配置可能缺少 text/aggregate 等字段,补齐默认值避免渲染崩溃
+  const defaults = getDefaultConfig();
+  return {
+    ...custom,
+    text: {
+      executing: custom.text?.executing ?? defaults.text.executing,
+      completed: custom.text?.completed ?? defaults.text.completed,
+    },
+    aggregate: {
+      executing: custom.aggregate?.executing ?? defaults.aggregate!.executing,
+      completed: custom.aggregate?.completed ?? defaults.aggregate!.completed,
+    },
+  };
 }
 
 export function getToolIcon(tool: ToolCall): Component {

@@ -1,0 +1,15 @@
+{
+  "knowledgeBase.name": "Knowledge Base",
+  "knowledgeBase.description": "Knowledge base retrieval and management toolkit",
+  "knowledgeBase.toolkitName": "Knowledge Base",
+  "kb_search.executing": "Searching knowledge base",
+  "kb_search.completed": "Searched knowledge base",
+  "kb_search.aggregate.executing": "Searching knowledge base {n} times",
+  "kb_search.aggregate.completed": "Searched knowledge base {n} times",
+  "kb_list_files.executing": "Listing files",
+  "kb_list_files.completed": "Listed files",
+  "kb_get_chunks.executing": "Fetching chunks",
+  "kb_get_chunks.completed": "Fetched chunks",
+  "kb_add_document.executing": "Adding document",
+  "kb_add_document.completed": "Added document"
+}

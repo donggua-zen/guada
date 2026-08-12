@@ -9,6 +9,7 @@ import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { z } from "zod";
 import langZh from "./file.lang.zh.json";
+import langEn from "./file.lang.en.json";
 
 @Injectable()
 export class FilePlugin extends PluginBase {
@@ -62,8 +63,8 @@ export class FilePlugin extends PluginBase {
 
   manifest = {
     id: "file",
-    name: "文件工具",
-    description: "读写、编辑、搜索、删除文件和目录",
+    name: "%file.name%",
+    description: "%file.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -74,6 +75,7 @@ export class FilePlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     api.registerTool({
       name: "read",
       description:

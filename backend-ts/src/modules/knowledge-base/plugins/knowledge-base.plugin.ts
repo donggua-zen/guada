@@ -12,14 +12,15 @@ import { EmbeddingService } from "../embedding.service";
 import { KbFileService } from "../kb-file.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./knowledge-base.lang.zh.json";
+import langEn from "./knowledge-base.lang.en.json";
 
 @Injectable()
 export class KnowledgeBasePlugin extends PluginBase {
   private readonly logger = new Logger(KnowledgeBasePlugin.name);
   manifest = {
     id: "knowledge_base",
-    name: "知识库",
-    description: "知识库检索与管理工具集",
+    name: "%knowledgeBase.name%",
+    description: "%knowledgeBase.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -38,9 +39,10 @@ export class KnowledgeBasePlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const kbKit = api.registerToolKit({
       id: "knowledge_base",
-      name: "Knowledge Base",
+      name: "%knowledgeBase.toolkitName%",
       loadMode: "lazy",
       activator: "Use this toolkit to search knowledge base content when the user asks questions related to the knowledge base",
       handler: (ctx) => ({

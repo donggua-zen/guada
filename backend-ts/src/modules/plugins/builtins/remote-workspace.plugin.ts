@@ -11,6 +11,8 @@ import type { PluginApi } from "../api/plugin-api";
 import type { PluginContext } from "../types/plugin.types";
 import { RemoteWorkspaceService } from "../../remote-workspace/remote-workspace.service";
 import { RemoteAgentManager } from "../../remote-workspace/remote-workspace-agent-manager";
+import langZh from "./remote-workspace.lang.zh.json";
+import langEn from "./remote-workspace.lang.en.json";
 
 @Injectable()
 export class RemoteWorkspacePlugin extends PluginBase {
@@ -18,9 +20,9 @@ export class RemoteWorkspacePlugin extends PluginBase {
 
   manifest = {
     id: "remote-workspace",
-    name: "远端工作目录",
+    name: "%remoteWorkspace.name%",
     version: "0.3.0",
-    description: "通过 SSH 连接远端服务器，提供远端文件操作和命令执行工具",
+    description: "%remoteWorkspace.description%",
     category: "extended" as const,
   };
 
@@ -30,10 +32,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    // 工具展示文案语言包(display.text/aggregate 的 %key% 引用在此解析)
+    api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
+
     // Register attachment type so AttachmentPopover can list connections
     api.registerAttachmentType({
       id: "ssh-connection",
-      label: "远端工作目录",
+      label: "%remoteWorkspace.name%",
       icon: "cloud",
       list: async () => {
         const connections = await this.workspaceService.getConnections();
@@ -76,7 +82,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
 
     api.registerToolKit({
       id: "ssh-tools",
-      name: "SSH 远程工具",
+      name: "%remoteWorkspace.toolkitName%",
       loadMode: "eager",
       activator:
         "Use these tools when the user asks to operate on remote servers via SSH connections.",
@@ -126,7 +132,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
               args.limit || 200,
             );
           },
-          display: { argsKey: "file_path", icon: "read" },
+          display: {
+            argsKey: "file_path",
+            icon: "read",
+            text: {
+              executing: "%ssh_read.executing%",
+              completed: "%ssh_read.completed%",
+            },
+          },
           dangerLevel: "safe",
         });
 
@@ -155,7 +168,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
             await agent.writeFile(args.file_path, args.content);
             return `File written: ${args.file_path} (${args.content.length} chars)`;
           },
-          display: { argsKey: "file_path", icon: "edit" },
+          display: {
+            argsKey: "file_path",
+            icon: "edit",
+            text: {
+              executing: "%ssh_write.executing%",
+              completed: "%ssh_write.completed%",
+            },
+          },
           dangerLevel: "high",
         });
 
@@ -191,7 +211,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
               throw new Error(`No match found: ${args.old_text}`);
             return `File ${args.file_path} modified (${result.count} replacement)`;
           },
-          display: { argsKey: "file_path", icon: "edit" },
+          display: {
+            argsKey: "file_path",
+            icon: "edit",
+            text: {
+              executing: "%ssh_edit.executing%",
+              completed: "%ssh_edit.completed%",
+            },
+          },
           dangerLevel: "high",
         });
 
@@ -226,7 +253,18 @@ export class RemoteWorkspacePlugin extends PluginBase {
             );
             return agent.glob(args.pattern, args.directory, args.limit || 100);
           },
-          display: { argsKey: "pattern", icon: "search" },
+          display: {
+            argsKey: "pattern",
+            icon: "search",
+            text: {
+              executing: "%ssh_glob.executing%",
+              completed: "%ssh_glob.completed%",
+            },
+            aggregate: {
+              executing: "%ssh_glob.aggregate.executing%",
+              completed: "%ssh_glob.aggregate.completed%",
+            },
+          },
           dangerLevel: "safe",
         });
 
@@ -262,7 +300,18 @@ export class RemoteWorkspacePlugin extends PluginBase {
             );
             return agent.grep(args.pattern, args.path, args.max_results || 50);
           },
-          display: { argsKey: "pattern", icon: "search" },
+          display: {
+            argsKey: "pattern",
+            icon: "search",
+            text: {
+              executing: "%ssh_grep.executing%",
+              completed: "%ssh_grep.completed%",
+            },
+            aggregate: {
+              executing: "%ssh_grep.aggregate.executing%",
+              completed: "%ssh_grep.aggregate.completed%",
+            },
+          },
           dangerLevel: "safe",
         });
 
@@ -287,7 +336,18 @@ export class RemoteWorkspacePlugin extends PluginBase {
             );
             return agent.execute(args.command);
           },
-          display: { argsKey: "command", icon: "shell" },
+          display: {
+            argsKey: "command",
+            icon: "terminal",
+            text: {
+              executing: "%ssh_bash.executing%",
+              completed: "%ssh_bash.completed%",
+            },
+            aggregate: {
+              executing: "%ssh_bash.aggregate.executing%",
+              completed: "%ssh_bash.aggregate.completed%",
+            },
+          },
           dangerLevel: "critical",
         });
 
@@ -319,7 +379,18 @@ export class RemoteWorkspacePlugin extends PluginBase {
               return agent.download(args.remote_path, args.local_path);
             }
           },
-          display: { argsKey: "action", icon: "edit" },
+          display: {
+            argsKey: "action",
+            icon: "edit",
+            text: {
+              executing: "%ssh_transfer.executing%",
+              completed: "%ssh_transfer.completed%",
+            },
+            aggregate: {
+              executing: "%ssh_transfer.aggregate.executing%",
+              completed: "%ssh_transfer.aggregate.completed%",
+            },
+          },
           dangerLevel: "high",
         });
       },

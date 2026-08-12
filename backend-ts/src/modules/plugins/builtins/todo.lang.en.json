@@ -1,0 +1,8 @@
+{
+  "todo.name": "Todo",
+  "todo.description": "Task breakdown and todo management tool",
+  "todo.executing": "Managing todos",
+  "todo.completed": "Managed todos",
+  "todo.aggregate.executing": "Managing {n} todos",
+  "todo.aggregate.completed": "Managed {n} todos"
+}

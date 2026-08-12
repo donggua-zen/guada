@@ -1,0 +1,7 @@
+{
+  "sessionManagement.name": "Session Management",
+  "sessionManagement.description": "Manage bot sessions and clear conversation history",
+  "sessionManagement.toolkitName": "Session Management",
+  "clear_session.executing": "Clearing session",
+  "clear_session.completed": "Cleared session"
+}

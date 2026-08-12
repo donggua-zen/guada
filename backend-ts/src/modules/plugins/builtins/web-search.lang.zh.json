@@ -1,1 +1,13 @@
-{"web_search.executing": "正在搜索网络", "web_search.completed": "已搜索网络", "web_search.aggregate.executing": "正在搜索{n}次", "web_search.aggregate.completed": "已搜索{n}次", "web_parser.executing": "正在读取网页", "web_parser.completed": "已读取网页", "web_parser.aggregate.executing": "正在读取{n}个网页", "web_parser.aggregate.completed": "已读取{n}个网页"}
+{
+  "webSearch.name": "网络搜索",
+  "webSearch.description": "网络搜索与网页内容提取工具，支持多供应商",
+  "webSearch.toolkitName": "网络搜索",
+  "web_search.executing": "正在搜索网络",
+  "web_search.completed": "已搜索网络",
+  "web_search.aggregate.executing": "正在搜索{n}次",
+  "web_search.aggregate.completed": "已搜索{n}次",
+  "web_parser.executing": "正在读取网页",
+  "web_parser.completed": "已读取网页",
+  "web_parser.aggregate.executing": "正在读取{n}个网页",
+  "web_parser.aggregate.completed": "已读取{n}个网页"
+}

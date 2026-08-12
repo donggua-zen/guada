@@ -44,7 +44,8 @@ export class NlsService {
    * 降级策略：
    * - 匹配 %key% → 查找语言包
    *   - 命中 → 返回 locale 值
-   *   - 未命中 → 返回 key 内部文本（去掉 %% 后的值）
+   *   - locale 包未命中 → 回退 zh 包
+   *   - 仍未命中 → 返回 key 内部文本（去掉 %% 后的值）
    * - 不匹配 %key% → 原样返回（字面量）
    *
    * @param pluginId 插件 ID（作用域隔离）
@@ -56,8 +57,10 @@ export class NlsService {
     if (!m) return str; // 字面量，原样返回
 
     const key = m[1];
-    const bundle = this.bundles.get(pluginId)?.get(locale);
-    return bundle?.[key] ?? key; // 命中→值，未命中→key 降级
+    const bundles = this.bundles.get(pluginId);
+    // 命中→值；locale 包未命中→回退 zh 包→key 降级
+    const value = bundles?.get(locale)?.[key] ?? bundles?.get("zh")?.[key];
+    return value ?? key;
   }
 
   /**

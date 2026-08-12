@@ -20,12 +20,20 @@ export interface DirEntry {
   size: number;
 }
 
+export interface DeployResult {
+  success: boolean;
+  installed: boolean;
+  version: string;
+  log: string[];
+}
+
 export interface RemoteWorkspaceApi {
   getConnections(): Promise<RemoteConnection[]>;
   createConnection(name: string, config: RemoteConnection["config"]): Promise<RemoteConnection>;
   updateConnection(id: string, data: { name?: string; config?: RemoteConnection["config"] }): Promise<RemoteConnection>;
   deleteConnection(id: string): Promise<{ success: boolean }>;
   testConnection(config: RemoteConnection["config"]): Promise<{ success: boolean; error?: string; log?: string }>;
+  deployConnection(config: RemoteConnection["config"]): Promise<DeployResult>;
   browsePath(config: RemoteConnection["config"], path: string): Promise<DirEntry[]>;
 }
 
@@ -56,6 +64,13 @@ export const remoteWorkspaceApi: RemoteWorkspaceApi = {
 
   async testConnection(this: ApiContext, config: RemoteConnection["config"]) {
     return await this._request("/remote-workspace/connections/test", {
+      method: "POST",
+      data: { config },
+    });
+  },
+
+  async deployConnection(this: ApiContext, config: RemoteConnection["config"]) {
+    return await this._request("/remote-workspace/connections/deploy", {
       method: "POST",
       data: { config },
     });

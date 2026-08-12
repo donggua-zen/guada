@@ -1,0 +1,9 @@
+{
+  "memory.name": "Memory Management",
+  "memory.description": "Memory index management and cache sync tools",
+  "memory.toolkitName": "Memory Management",
+  "memory.executing": "Editing memory",
+  "memory.completed": "Edited memory",
+  "memory.aggregate.executing": "Editing {n} memories",
+  "memory.aggregate.completed": "Edited {n} memories"
+}

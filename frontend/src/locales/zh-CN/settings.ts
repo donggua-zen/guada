@@ -100,7 +100,7 @@ export default {
   },
 
   connection: {
-    title: '远端工作目录',
+    title: 'Remote Workspace',
     desc: '管理 SSH 远程服务器连接',
     newConnection: '新建连接',
     editConnection: '编辑连接',
@@ -114,6 +114,7 @@ export default {
     // 向导步骤
     stepConfig: '填写配置',
     stepTest: '测试连接',
+    stepDeploy: '部署验证',
     stepBrowse: '选择目录',
     fillConfig: '填写连接配置',
     fillConfigDesc: '输入 SSH 服务器信息',
@@ -124,8 +125,16 @@ export default {
     next: '下一步',
     prev: '上一步',
     save: '保存连接',
+    // 部署验证
+    deployTitle: '部署 Agent',
+    deployDesc: '检测远端是否已安装 Agent 且版本匹配,不匹配则自动上传部署。部署不成功不允许保存连接。',
+    deploying: '正在部署 Agent...',
+    deployInstalled: 'Agent 已安装且版本匹配,无需部署',
+    deploySuccess: 'Agent 部署成功',
+    deployFailed: 'Agent 部署失败',
+    deployRetry: '重新部署',
     // 目录浏览
-    browseTitle: '选择远端工作目录',
+    browseTitle: '选择 Remote Workspace 目录',
     browseDesc: '浏览服务器目录，选择项目根目录',
     browseFolders: '浏览文件夹',
     goUp: '返回上级目录',
@@ -189,7 +198,7 @@ export default {
       search: '搜索设置',
       browser: '浏览器',
       about: '关于',
-      connections: '远程连接',
+      connections: 'Remote Workspace',
       sessionGroups: '分组管理',
       sessionArchived: '归档管理',
       profile: '账户概览',

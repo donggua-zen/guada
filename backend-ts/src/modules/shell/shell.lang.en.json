@@ -1,0 +1,12 @@
+{
+  "shell.name": "Shell",
+  "shell.description": "Execute system commands and manage background processes",
+  "run_command.executing": "Executing command",
+  "run_command.completed": "Executed command",
+  "run_command.aggregate.executing": "Executing {n} commands",
+  "run_command.aggregate.completed": "Executed {n} commands",
+  "process.executing": "Managing processes",
+  "process.completed": "Managed processes",
+  "process.aggregate.executing": "Managing processes",
+  "process.aggregate.completed": "Managed processes"
+}

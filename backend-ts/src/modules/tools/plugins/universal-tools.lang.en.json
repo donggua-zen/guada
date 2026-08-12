@@ -1,0 +1,13 @@
+{
+  "universalTools.name": "Universal Tools",
+  "universalTools.description": "System-level universal tools: tool_learn / tool_use",
+  "universalTools.toolkitName": "Lazy-Load Toolkit Management",
+  "tool_learn.executing": "Loading toolkit",
+  "tool_learn.completed": "Loaded toolkit",
+  "tool_learn.aggregate.executing": "Loading {n} toolkits",
+  "tool_learn.aggregate.completed": "Loaded {n} toolkits",
+  "tool_use.executing": "Invoking tool",
+  "tool_use.completed": "Invoked tool",
+  "tool_use.aggregate.executing": "Invoking {n} tools",
+  "tool_use.aggregate.completed": "Invoked {n} tools"
+}

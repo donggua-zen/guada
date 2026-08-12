@@ -6,6 +6,7 @@ import { PrismaService } from "../../../common/database/prisma.service";
 import { appendResetMarker } from "../utils/external-id";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./session-management.lang.zh.json";
+import langEn from "./session-management.lang.en.json";
 
 @Injectable()
 export class SessionManagementPlugin extends PluginBase {
@@ -13,8 +14,8 @@ export class SessionManagementPlugin extends PluginBase {
 
   manifest = {
     id: "session_management",
-    name: "会话管理",
-    description: "管理机器人会话，清空对话历史",
+    name: "%sessionManagement.name%",
+    description: "%sessionManagement.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -25,9 +26,10 @@ export class SessionManagementPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const sessionKit = api.registerToolKit({
       id: "session",
-      name: "会话管理",
+      name: "%sessionManagement.toolkitName%",
       loadMode: "none",
       handler: (ctx: PluginContext) => ({
         loadMode:

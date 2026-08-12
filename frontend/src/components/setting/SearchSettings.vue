@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getLocale } from '@/locales'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
@@ -168,7 +169,7 @@ const loadSettings = async () => {
 
   // 加载插件状态
   try {
-    const pluginsRes = await apiService.queryPlugins()
+    const pluginsRes = await apiService.queryPlugins(undefined, getLocale())
     const plugin = pluginsRes.plugins?.find((p: any) => p.pluginId === 'web-search')
     if (plugin) {
       pluginEnabled.value = plugin.enabled

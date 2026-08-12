@@ -1,1 +1,13 @@
-{"tool_learn.executing": "正在加载工具包", "tool_learn.completed": "已加载工具包", "tool_learn.aggregate.executing": "正在加载{n}个工具包", "tool_learn.aggregate.completed": "已加载{n}个工具包", "tool_use.executing": "正在调用工具", "tool_use.completed": "已调用工具", "tool_use.aggregate.executing": "正在调用{n}个工具", "tool_use.aggregate.completed": "已调用{n}个工具"}
+{
+  "universalTools.name": "通用工具",
+  "universalTools.description": "tool_learn / tool_use 系统级通用工具",
+  "universalTools.toolkitName": "懒加载工具包管理",
+  "tool_learn.executing": "正在加载工具包",
+  "tool_learn.completed": "已加载工具包",
+  "tool_learn.aggregate.executing": "正在加载{n}个工具包",
+  "tool_learn.aggregate.completed": "已加载{n}个工具包",
+  "tool_use.executing": "正在调用工具",
+  "tool_use.completed": "已调用工具",
+  "tool_use.aggregate.executing": "正在调用{n}个工具",
+  "tool_use.aggregate.completed": "已调用{n}个工具"
+}

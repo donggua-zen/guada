@@ -108,6 +108,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import { getLocale } from '@/locales'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import LDialog from '@/components/ui/LDialog.vue'
 
@@ -145,7 +146,7 @@ async function loadGlobalTools() {
   error.value = null
   
   try {
-    const response = await apiService.queryPlugins()
+    const response = await apiService.queryPlugins(undefined, getLocale())
     globalTools.value = response.plugins
   } catch (err: any) {
     console.error('加载全局工具失败:', err)

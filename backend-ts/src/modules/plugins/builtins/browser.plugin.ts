@@ -15,6 +15,7 @@ import {
   ensureWithinPixelLimit,
 } from "../utils/vision-utils";
 import langZh from "./browser.lang.zh.json";
+import langEn from "./browser.lang.en.json";
 
 @Injectable()
 export class BrowserPlugin extends PluginBase {
@@ -22,8 +23,8 @@ export class BrowserPlugin extends PluginBase {
 
   manifest = {
     id: "browser",
-    name: "浏览器控制",
-    description: "通过 Electron 内置 Chromium 进行浏览器自动化操作",
+    name: "%browser.name%",
+    description: "%browser.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -48,9 +49,10 @@ export class BrowserPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     api.registerToolKit({
       id: "browser",
-      name: "Browser Automation",
+      name: "%browser.toolkitName%",
       loadMode: "lazy",
       activator:
         "Use this toolkit for navigating to URLs, reading page content, interacting with elements (clicks, form inputs), extracting page snapshots, executing JavaScript in page context, viewing console logs, taking screenshots, and managing browser tabs. Essential for web browsing, front-end debugging, and any task that requires interacting with or inspecting live web pages.",

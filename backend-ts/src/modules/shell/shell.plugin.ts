@@ -10,6 +10,7 @@ import {
 import { PluginContext } from "../plugins/types/plugin.types";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import langZh from "./shell.lang.zh.json";
+import langEn from "./shell.lang.en.json";
 
 /** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
 function formatDuration(ms: number): string {
@@ -36,14 +37,15 @@ export class ShellPlugin extends PluginBase {
 
   manifest = {
     id: "shell",
-    name: "Shell 命令行",
-    description: "执行系统命令和管理后台进程",
+    name: "%shell.name%",
+    description: "%shell.description%",
     version: "1.3.0",
     category: "core" as const,
   };
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // ── execute 工具 ──
     const shellKind = this.processManager.getShellKind();
     const isCmd = shellKind === "cmd";

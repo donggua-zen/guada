@@ -9,6 +9,7 @@ import { EventBusService } from "../../../common/events/event-bus.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeTruncate } from "../../../common/utils/string.utils";
 import langZh from "./memory.lang.zh.json";
+import langEn from "./memory.lang.en.json";
 
 interface MemoryIndex {
   factual?: string;
@@ -33,8 +34,8 @@ export class MemoryPlugin extends PluginBase {
 
   manifest = {
     id: "memory",
-    name: "记忆管理",
-    description: "记忆索引管理与缓存同步工具",
+    name: "%memory.name%",
+    description: "%memory.description%",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -55,6 +56,7 @@ export class MemoryPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     // 长期记忆内容：插件级，每次对话都注入（AI 需要知道记住了什么）
     api.registerPrompt({
       frequency: "VOLATILE",
@@ -110,7 +112,7 @@ export class MemoryPlugin extends PluginBase {
     // 记忆管理指南：工具包级，懒加载，需要时才看说明
     const memoryKit = api.registerToolKit({
       id: "memory",
-      name: "Memory Management",
+      name: "%memory.toolkitName%",
       loadMode: "eager",
       activator: "Read this guide when the user asks to remember something",
       handler: async (ctx) => {

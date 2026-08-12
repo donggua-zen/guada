@@ -85,16 +85,16 @@
             </div>
           </div>
 
-          <!-- 子代理面板（编辑模式时隐藏） -->
-          <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
-            @switch="emit('switch-agent', $event)" />
-
-          <!-- 附加内容胶囊（AgentPanel 下方，输入框上方） -->
+          <!-- 附加内容胶囊（输入框上方，AgentPanel 上方） -->
           <AttachmentChips
             v-if="!editMode"
             :chips="attachmentChips"
             @remove="removeAttachment"
           />
+
+          <!-- 子代理面板（编辑模式时隐藏） -->
+          <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+            @switch="emit('switch-agent', $event)" />
 
           <div class="w-full flex items-center relative">
 

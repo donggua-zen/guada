@@ -34,13 +34,21 @@ export class PluginsController {
   ) {}
 
   /**
+   * 前端语言（zh-CN/en-US）→ NLS 语言代码（zh/en）
+   */
+  private toNlsLocale(lang?: string): string {
+    return lang === "en-US" || lang === "en" ? "en" : "zh";
+  }
+
+  /**
    * 查询插件列表（全局/角色通用）
-   * Body: { config?: any } — 角色级插件配置，不传则返回全局状态
+   * Body: { config?: any, lang?: string } — 角色级插件配置，不传则返回全局状态
    */
   @Public()
   @Post("query")
-  async queryPlugins(@Body() body: { config?: any }) {
+  async queryPlugins(@Body() body: { config?: any; lang?: string }) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, body?.config, true);
+    const nlsLocale = this.toNlsLocale(body?.lang);
 
     return {
       plugins: resolved
@@ -49,8 +57,8 @@ export class PluginsController {
           pluginId: r.plugin.id,
           effective: r.effective,
           name: r.plugin.id,
-          displayName: r.plugin.name,
-          description: r.plugin.description,
+          displayName: this.nlsService.resolveString(r.plugin.id, r.plugin.name, nlsLocale),
+          description: this.nlsService.resolveString(r.plugin.id, r.plugin.description, nlsLocale),
           category: r.plugin.category,
           enabled: r.enabled,
           icon: r.plugin.icon,
@@ -59,16 +67,20 @@ export class PluginsController {
             name: t.name,
             description: t.description,
             parameters: t.parameters as any,
-            display: this.nlsService.resolveDisplay(r.plugin.id, {
-              text: t.displayText,
-              aggregate: t.displayAggregate,
-              argsKey: t.argsKey,
-              icon: t.icon,
-            }),
+            display: this.nlsService.resolveDisplay(
+              r.plugin.id,
+              {
+                text: t.displayText,
+                aggregate: t.displayAggregate,
+                argsKey: t.argsKey,
+                icon: t.icon,
+              },
+              nlsLocale,
+            ),
           })),
           toolkits: r.enabledToolKits.map((k) => ({
             id: k.id,
-            name: k.name,
+            name: this.nlsService.resolveString(r.plugin.id, k.name, nlsLocale),
             loadMode: k.loadMode,
             enabled: k.enabled,
           })),
@@ -83,18 +95,23 @@ export class PluginsController {
    */
   @Public()
   @Get("tool-displays")
-  async getToolDisplays() {
+  async getToolDisplays(@Query("lang") lang?: string) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const nlsLocale = this.toNlsLocale(lang);
     const result: Record<string, any> = {};
 
     for (const r of resolved) {
       for (const t of r.allTools) {
-        result[t.name] = this.nlsService.resolveDisplay(r.plugin.id, {
-          text: t.displayText,
-          aggregate: t.displayAggregate,
-          argsKey: t.argsKey,
-          icon: t.icon,
-        });
+        result[t.name] = this.nlsService.resolveDisplay(
+          r.plugin.id,
+          {
+            text: t.displayText,
+            aggregate: t.displayAggregate,
+            argsKey: t.argsKey,
+            icon: t.icon,
+          },
+          nlsLocale,
+        );
       }
     }
 
@@ -245,15 +262,16 @@ export class PluginsController {
    */
   @Public()
   @Get("attachment-types")
-  async getAttachmentTypes() {
+  async getAttachmentTypes(@Query("lang") lang?: string) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const nlsLocale = this.toNlsLocale(lang);
     const result: Array<{ id: string; label: string; icon: string; pluginId: string }> = [];
     for (const r of resolved) {
       if (!r.enabled) continue;
       for (const att of r.attachmentTypes) {
         result.push({
           id: att.id,
-          label: att.label,
+          label: this.nlsService.resolveString(r.plugin.id, att.label, nlsLocale),
           icon: att.icon,
           pluginId: r.plugin.id,
         });
@@ -291,8 +309,9 @@ export class PluginsController {
    */
   @Public()
   @Get("ui-pages")
-  async getUiPages(@Query("area") area?: string) {
+  async getUiPages(@Query("area") area?: string, @Query("lang") lang?: string) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const nlsLocale = this.toNlsLocale(lang);
     const result: Array<{
       id: string;
       area: string;
@@ -310,8 +329,8 @@ export class PluginsController {
         result.push({
           id: page.id,
           area: page.area,
-          group: page.group,
-          tab: page.tab,
+          group: this.nlsService.resolveString(r.plugin.id, page.group, nlsLocale),
+          tab: this.nlsService.resolveString(r.plugin.id, page.tab, nlsLocale),
           icon: page.icon,
           component: page.component,
           pluginId: r.plugin.id,

@@ -1,0 +1,12 @@
+{
+  "document.name": "Document Parser",
+  "document.description": "Text extraction tools for PDF and Word documents",
+  "doc_parse.executing": "Parsing document",
+  "doc_parse.completed": "Parsed document",
+  "doc_parse.aggregate.executing": "Parsing {n} documents",
+  "doc_parse.aggregate.completed": "Parsed {n} documents",
+  "doc_batch_parse.executing": "Parsing documents in batch",
+  "doc_batch_parse.completed": "Parsed documents in batch",
+  "doc_batch_parse.aggregate.executing": "Parsing {n} batches of documents",
+  "doc_batch_parse.aggregate.completed": "Parsed {n} batches of documents"
+}
