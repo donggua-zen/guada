@@ -174,6 +174,8 @@ export class SanitizerTransform extends Transform {
   private idleTimer: NodeJS.Timeout | null = null;
   /** 空闲冲刷延迟（毫秒）。curl 进度条更新间隔约 1s，500ms 足以区分进度条与交互提示 */
   private readonly IDLE_FLUSH_MS = 500;
+  /** 自动检测出的编码（首次遇到非 ASCII 字节后锁定） */
+  private detectedEncoding: string | null = null;
 
   constructor(
     private encoding: string,
@@ -197,8 +199,50 @@ export class SanitizerTransform extends Transform {
     }, this.IDLE_FLUSH_MS);
   }
 
+  /**
+   * 解析当前 chunk 应使用的编码。
+   * - 用户显式指定 encoding → 直接使用
+   * - 非 Windows → UTF-8
+   * - Windows 未指定 → 自动检测：先尝试 UTF-8，若产生 U+FFFD 替换字符则回退 GBK
+   *   检测在首个含非 ASCII 字节的 chunk 上进行，之后锁定（sticky）
+   *   若替换字符仅出现在末尾 1-3 位，可能是 chunk 边界截断了多字节序列，推迟判定
+   */
+  private resolveEncoding(chunk: Buffer): string {
+    if (this.encoding) return this.encoding;
+    if (process.platform !== "win32") return "utf-8";
+    if (this.detectedEncoding) return this.detectedEncoding;
+
+    // 纯 ASCII chunk 无需判定（ASCII 在 UTF-8/GBK 下一致）
+    let hasNonAscii = false;
+    for (let i = 0; i < chunk.length; i++) {
+      if (chunk[i] >= 0x80) {
+        hasNonAscii = true;
+        break;
+      }
+    }
+    if (!hasNonAscii) return "utf-8";
+
+    // 尝试 UTF-8 解码，检查是否产生替换字符
+    const utf8Text = iconv.decode(chunk, "utf-8");
+    const fffdIdx = utf8Text.indexOf("\uFFFD");
+    if (fffdIdx === -1) {
+      this.detectedEncoding = "utf-8";
+      return "utf-8";
+    }
+
+    // 替换字符仅在末尾 1-3 位 → 可能是 chunk 边界截断了多字节序列，暂不判定
+    const lastFffd = utf8Text.lastIndexOf("\uFFFD");
+    if (fffdIdx === lastFffd && fffdIdx >= utf8Text.length - 3) {
+      return "utf-8";
+    }
+
+    this.detectedEncoding = "gbk";
+    return "gbk";
+  }
+
   _transform(chunk: Buffer, _enc: string, cb: () => void) {
-    const raw = decodeBuffer(chunk, this.encoding);
+    const encoding = this.resolveEncoding(chunk);
+    const raw = decodeBuffer(chunk, encoding);
     const cleaned = this.sanitizer.feed(raw);
     if (cleaned) {
       this.push(cleaned);

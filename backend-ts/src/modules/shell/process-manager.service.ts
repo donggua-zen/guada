@@ -168,11 +168,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   private gcTimer: NodeJS.Timeout | null = null;
 
+  /** 检测出的 shell：Windows 优先 Git Bash，否则 cmd.exe；Unix 为 sh/bash */
+  private shellInfo = { kind: "sh" as "bash" | "cmd" | "sh", path: "" as string };
+
   constructor(private readonly chatRunnerService: ChatRunnerService) {}
 
   // ── 生命周期 ──
 
   onModuleInit() {
+    this.detectShell();
     this.ensureLogDir();
     this.cleanupOldLogs();
     this.gcTimer = setInterval(
@@ -186,6 +190,66 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       clearInterval(this.gcTimer);
       this.gcTimer = null;
     }
+  }
+
+  // ── Shell 检测 ──
+
+  /**
+   * 启动时检测可用的 shell。
+   * Windows：优先查找 Git Bash，找不到则回退 cmd.exe。
+   * Unix：使用默认 sh（bash 不可用时自动回退）。
+   */
+  private detectShell(): void {
+    if (process.platform !== "win32") {
+      this.shellInfo = { kind: "sh", path: "" };
+      this.logger.log("Shell detected: sh (Unix default)");
+      return;
+    }
+
+    const bashCandidates = [
+      process.env.GIT_BASH,
+      path.join(
+        process.env["ProgramFiles"] || "C:\\Program Files",
+        "Git",
+        "bin",
+        "bash.exe",
+      ),
+      path.join(
+        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+        "Git",
+        "bin",
+        "bash.exe",
+      ),
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+    ].filter((c): c is string => !!c);
+
+    const found = bashCandidates.find((c) => fsSync.existsSync(c));
+    if (found) {
+      this.shellInfo = { kind: "bash", path: found };
+      this.logger.log(`Shell detected: Git Bash at ${found}`);
+      return;
+    }
+
+    this.shellInfo = { kind: "cmd", path: "" };
+    this.logger.log("Shell detected: cmd.exe (Git Bash not found)");
+  }
+
+  /** 返回检测到的 shell 的人类可读描述（供插件提示 AI） */
+  getShellInfo(): string {
+    switch (this.shellInfo.kind) {
+      case "bash":
+        return `Git Bash (${this.shellInfo.path})`;
+      case "cmd":
+        return "cmd.exe";
+      default:
+        return "sh (Unix default)";
+    }
+  }
+
+  /** 当前 shell 的 kind：bash | cmd | sh */
+  getShellKind(): "bash" | "cmd" | "sh" {
+    return this.shellInfo.kind;
   }
 
   // ── 日志目录 & GC ──
@@ -679,8 +743,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
-   * 无 sandbox 时将命令字符串交给 OS shell。
-   * Windows 使用 PowerShell（支持多行命令），Linux/macOS 使用默认 shell。
+   * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先，否则 cmd.exe），
+   * Unix 使用默认 shell。
    * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
    */
   private spawnProcess(
@@ -704,11 +768,18 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const isWindows = process.platform === "win32";
+    // Windows 优先使用 Git Bash（支持多行命令），否则 cmd.exe；Unix 使用默认 shell
+    if (this.shellInfo.kind === "bash" && this.shellInfo.path) {
+      return spawn(this.shellInfo.path, ["-c", command], {
+        cwd,
+        env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      });
+    }
+
     return spawn(command, [], {
       cwd,
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
-      shell: isWindows ? "powershell.exe" : true,
+      shell: true,
     });
   }
 
