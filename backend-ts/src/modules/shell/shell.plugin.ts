@@ -45,14 +45,20 @@ export class ShellPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     // ── execute 工具 ──
-    const isWindows = process.platform === "win32";
+    const shellKind = this.processManager.getShellKind();
+    const isCmd = shellKind === "cmd";
+    const shellDesc = this.processManager.getShellInfo();
+    const cmdWarning = isCmd
+      ? `\n- WARNING: cmd.exe only executes the first line of a multi-line command and silently drops the rest. For multi-line or long commands, write them to a script file (.bat) first, then execute the script`
+      : "";
     api.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
-- **Current System**: ${isWindows ? "Windows (PowerShell)" : process.platform === "darwin" ? "macOS" : "Linux"}
+- **Current Shell**: ${shellDesc}
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
-- processId is typically the shell process ID, not the command's own process ID`,
+- Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
+- processId is typically the shell process ID, not the command's own process ID${cmdWarning}`,
       inputSchema: z.object({
         command: z
           .string()
@@ -299,10 +305,6 @@ export class ShellPlugin extends PluginBase {
       content: (ctx: PluginContext) => {
         const isNotSubAgent = ctx?.session?.sessionType !== "sub_agent";
         return `# Shell Tool Usage Instructions
-          
-
-          
-## Command Execution
 
 ## Background Task Best Practices
 - Prefer foreground execution first to check initial output and verify normal startup
