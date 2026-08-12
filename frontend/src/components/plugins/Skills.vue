@@ -172,8 +172,8 @@
         </div>
 
         <!-- 查看文档对话框 -->
-        <el-dialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
-            :style="{ maxWidth: '90vw' }" align-center destroy-on-close>
+        <LDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
+            align-center destroy-on-close>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
                 <el-icon class="is-loading" size="32">
@@ -202,16 +202,16 @@
             <template #footer>
                 <el-button @click="showDocDialog = false">{{ t('common.close') }}</el-button>
             </template>
-        </el-dialog>
+        </LDialog>
 
         <!-- 安装 Skill 对话框 -->
-        <el-dialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
+        <LDialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
             <div class="py-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
                     {{ t('plugins.skills.installDesc') }}
                 </div>
 
-                <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :on-change="handleFileChange"
+                <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :show-file-list="false" :on-change="handleFileChange"
                     :limit="1" accept=".zip">
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">
@@ -259,10 +259,10 @@
                     {{ t('plugins.skills.installBtn') }}
                 </el-button>
             </template>
-        </el-dialog>
+        </LDialog>
 
         <!-- 市场技能安装对话框 -->
-        <el-dialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
+        <LDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
             <div v-if="selectedMarketSkill" class="py-2">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
                     {{ selectedMarketSkill.name }}
@@ -300,14 +300,14 @@
             <template #footer>
                 <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
             </template>
-        </el-dialog>
+        </LDialog>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElButton, ElTag, ElIcon, ElDialog, ElUpload, ElMessageBox } from 'element-plus'
+import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
 import { RefreshOutlined, InboxOutlined, DescriptionOutlined, UploadOutlined, DeleteOutlined } from '@vicons/material'
 import { RefreshRight, Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
@@ -317,6 +317,7 @@ import { useMarkdown } from '@/composables/useMarkdown'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import LTooltip from '@/components/ui/LTooltip.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 
 interface SkillManifest {
     name: string

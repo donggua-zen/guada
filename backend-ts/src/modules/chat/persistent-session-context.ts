@@ -42,8 +42,8 @@ interface EffectiveSettings {
   maxTokensLimit?: number | null;
   plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
-  agents?: Record<string, boolean>; // 角色级 Agent 偏好 { agentId: true/false }
-  connectionIds?: string[];
+  agents?: Record<string, boolean>; // 角色 Agent 偏好 { agentId: true/false }
+  attachments?: Record<string, string[]>;
   runMode?: string;
   referencedKbs?: string[];
   modelName?: string | null;
@@ -749,14 +749,14 @@ export class PersistentSessionContext implements ISessionContext {
     // thinkingEffort
     merged.thinkingEffort = sessionSettings.thinkingEffort;
 
-    // connectionIds：会话绑定的远程连接
-    merged.connectionIds = sessionSettings.connectionIds ?? [];
+    // attachments：会话绑定的附件（远程连接等，插件通过 registerAttachmentType 注册）
+    merged.attachments = sessionSettings.attachments ?? {};
+
+    // referencedKbs：知识库（内置功能，未来可迁移为 attachments['knowledge-base']）
+    merged.referencedKbs = sessionSettings.referencedKbs ?? [];
 
     // runMode
     merged.runMode = sessionSettings.runMode ?? "normal";
-
-    // referencedKbs
-    merged.referencedKbs = sessionSettings.referencedKbs ?? [];
 
     // modelName
     merged.modelName = sessionSettings.modelName ?? null;

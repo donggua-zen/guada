@@ -42,7 +42,8 @@ import { skillsApi, type SkillsApi } from "./modules/skills.api";
 import { knowledgeBaseApi, type KnowledgeBaseApi } from "./modules/knowledge-base.api";
 import { botApi, type BotApi } from "./modules/bot.api";
 import { schedulerApi, type SchedulerApi } from "./modules/scheduler.api";
-import { workspaceConnectionApi, type WorkspaceConnectionApi } from "./modules/workspace-connections.api";
+import { pluginApi, type PluginApi } from "./modules/plugin.api";
+import { remoteWorkspaceApi, type RemoteWorkspaceApi } from "./modules/remote-workspace.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
@@ -64,7 +65,8 @@ interface ApiService
     KnowledgeBaseApi,
     BotApi,
     SchedulerApi,
-    WorkspaceConnectionApi {}
+    PluginApi,
+    RemoteWorkspaceApi {}
 
 class ApiService {
   baseURL: string;
@@ -319,7 +321,8 @@ Object.assign(
   knowledgeBaseApi,
   botApi,
   schedulerApi,
-  workspaceConnectionApi,
+  pluginApi,
+  remoteWorkspaceApi,
 );
 
 /**

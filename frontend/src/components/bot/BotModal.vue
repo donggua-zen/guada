@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" width="600px" :close-on-click-modal="false"
+  <LDialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" width="600px" :close-on-click-modal="false"
     @close="handleClose" append-to-body>
     <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form"
       :validate-on-rule-change="false">
@@ -161,7 +161,7 @@
         {{ isEdit ? t('bot.modal.save') : t('bot.modal.create') }}
       </el-button>
     </template>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -169,6 +169,7 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import LDialog from '@/components/ui/LDialog.vue'
 import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'

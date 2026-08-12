@@ -132,6 +132,31 @@ export class SettingsStorage implements OnModuleInit {
   }
 
   /**
+   * 删除指定分组内的一个设置项
+   * @param group 分组名称
+   * @param key 设置项键名
+   */
+  async deleteSettingValue(group: string, key: string): Promise<void> {
+    const pending = this.writeLocks.get(group);
+    if (pending) await pending;
+
+    const writePromise = (async () => {
+      await this.loadGroup(group);
+      delete this.cache[group][key];
+      await this.saveGroup(group);
+    })();
+
+    this.writeLocks.set(group, writePromise);
+    try {
+      await writePromise;
+    } finally {
+      if (this.writeLocks.get(group) === writePromise) {
+        this.writeLocks.delete(group);
+      }
+    }
+  }
+
+  /**
    * 清除指定分组的缓存（用于测试或强制重新加载）
    * @param group 分组名称
    */

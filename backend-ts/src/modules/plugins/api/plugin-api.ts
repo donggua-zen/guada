@@ -8,6 +8,8 @@ import {
   ToolKitHandle,
   ToolKitRegistration,
   TurnInterceptor,
+  AttachmentTypeRegistration,
+  UiPageRegistration,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
@@ -16,6 +18,7 @@ import { ICommandProvider } from "../../commands/interfaces/command-provider.int
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
 import type { ToolDisplay } from "../types/plugin.types";
 import { NlsService } from "../i18n/nls.service";
+import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 
 // ── PluginApi ──
 
@@ -124,6 +127,23 @@ export interface PluginApi {
   registerConnectionType(factory: WorkspaceProviderFactory): void;
 
   /**
+   * 注册附件类型
+   *
+   * 插件声明一种可绑定到会话的附件类型（如 SSH 连接、知识库等）。
+   * 前端 AttachmentPopover 据此动态渲染选择列表。
+   * describe() 返回的文本会注入到 AI prompt 中。
+   */
+  registerAttachmentType(reg: import("../types/plugin.types").AttachmentTypeRegistration): void;
+
+  /**
+   * 注册 UI 页面
+   *
+   * 插件声明一个自定义页面，渲染到指定区域（如设置页）。
+   * 前端通过 PluginSlot 加载插件 frontend/ 目录下的组件。
+   */
+  registerUiPage(reg: import("../types/plugin.types").UiPageRegistration): void;
+
+  /**
    * 注册语言包（NLS）
    *
    * 每个插件注册自己的 key→string 字典，插件间隔离。
@@ -133,6 +153,17 @@ export interface PluginApi {
    * @param messages 扁平 key→string 字典
    */
   registerNls(locale: string, messages: Record<string, string>): void;
+
+  // ── PluginDataApi: 插件数据自治 ──
+
+  /** 读取插件所有数据 */
+  getData(): Promise<Record<string, any>>;
+  /** 读取单个 key */
+  getValue<T>(key: string, defaultValue?: T): Promise<T>;
+  /** 写入单个 key */
+  setValue(key: string, value: any): Promise<void>;
+  /** 删除单个 key */
+  deleteValue(key: string): Promise<void>;
 }
 
 // ── PluginApi 实现 ──
@@ -156,6 +187,7 @@ export class PluginApiImpl implements PluginApi {
     private pluginId: string,
     private pluginName: string,
     private nlsService?: NlsService,
+    private settingsStorage?: SettingsStorage,
   ) {}
 
   registerToolSet(def: {
@@ -331,8 +363,65 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  private _attachmentTypes: AttachmentTypeRegistration[] = [];
+  private _uiPages: UiPageRegistration[] = [];
+
+  registerAttachmentType(reg: AttachmentTypeRegistration): void {
+    if (!this._attachmentTypes.find((x) => x.id === reg.id)) {
+      this._attachmentTypes.push(reg);
+    }
+  }
+
+  registerUiPage(reg: UiPageRegistration): void {
+    if (!this._uiPages.find((x) => x.id === reg.id)) {
+      this._uiPages.push(reg);
+    }
+  }
+
+  /** 获取附件类型（供 PluginManager 消费） */
+  getAttachmentTypes(): AttachmentTypeRegistration[] {
+    return this._attachmentTypes;
+  }
+
+  /** 获取 UI 页面（供 PluginManager 消费） */
+  getUiPages(): UiPageRegistration[] {
+    return this._uiPages;
+  }
+
   registerNls(locale: string, messages: Record<string, string>): void {
     this.nlsService?.registerBundle(this.pluginId, locale, messages);
+  }
+
+  // ── PluginDataApi 实现 ──
+
+  private get dataGroup(): string {
+    return `plugin:${this.pluginId}`;
+  }
+
+  async getData(): Promise<Record<string, any>> {
+    if (!this.settingsStorage) return {};
+    return this.settingsStorage.getSettings(this.dataGroup);
+  }
+
+  async getValue<T>(key: string, defaultValue?: T): Promise<T> {
+    if (!this.settingsStorage) return defaultValue as T;
+    return this.settingsStorage.getSettingValue(
+      this.dataGroup,
+      key,
+      defaultValue,
+    );
+  }
+
+  async setValue(key: string, value: any): Promise<void> {
+    if (!this.settingsStorage) return;
+    await this.settingsStorage.updateSettings(this.dataGroup, {
+      [key]: value,
+    });
+  }
+
+  async deleteValue(key: string): Promise<void> {
+    if (!this.settingsStorage) return;
+    await this.settingsStorage.deleteSettingValue(this.dataGroup, key);
   }
 
   /** 注册到 PluginRegistry */
@@ -380,6 +469,16 @@ export class PluginApiImpl implements PluginApi {
     // 注册 workspace providers
     for (const factory of this._workspaceProviders) {
       PluginRegistry.registerWorkspaceProvider(this.pluginId, factory);
+    }
+
+    // 注册 attachment types
+    for (const att of this._attachmentTypes) {
+      PluginRegistry.registerAttachmentType(this.pluginId, att);
+    }
+
+    // 注册 ui pages
+    for (const page of this._uiPages) {
+      PluginRegistry.registerUiPage(this.pluginId, page);
     }
   }
 

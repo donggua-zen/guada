@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <LDialog
     :model-value="visible"
     @update:model-value="onVisibleChange"
     width="480px"
@@ -68,13 +68,14 @@
         </div>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElDialog, ElButton, ElCheckbox } from 'element-plus'
+import { ElButton, ElCheckbox } from 'element-plus'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -131,18 +132,5 @@ const handleViewChangelog = () => {
 </script>
 
 <style scoped>
-.update-dialog :deep(.el-dialog__header) {
-  margin-right: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.update-dialog :deep(.el-dialog__body) {
-  padding: 16px 20px;
-}
-
-.update-dialog :deep(.el-dialog__footer) {
-  padding: 12px 20px;
-  border-top: 1px solid var(--color-border);
-}
+/* LDialog scoped styles handle dialog body/header/footer — no :deep overrides needed */
 </style>

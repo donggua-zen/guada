@@ -89,11 +89,11 @@
           <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
             @switch="emit('switch-agent', $event)" />
 
-          <!-- 附加连接胶囊（AgentPanel 下方，输入框上方） -->
-          <ConnectionChips
+          <!-- 附加内容胶囊（AgentPanel 下方，输入框上方） -->
+          <AttachmentChips
             v-if="!editMode"
-            :connections="selectedConnections"
-            @remove="toggleConnection"
+            :chips="attachmentChips"
+            @remove="removeAttachment"
           />
 
           <div class="w-full flex items-center relative">
@@ -126,10 +126,10 @@
       @click="handleScrollToBottomClick" />
   </div>
   <!-- 记忆管理弹窗 -->
-  <el-dialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px" :close-on-click-modal="false" destroy-on-close
+  <LDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px" :close-on-click-modal="false" destroy-on-close
     class="memo-panel-dialog" append-to-body>
     <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -160,9 +160,10 @@ import QueuedMessages from './QueuedMessages.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
-import ConnectionChips from './ConnectionChips.vue';
-import type { ConnectionChip } from './ConnectionChips.vue';
+import AttachmentChips from './AttachmentChips.vue';
+import type { AttachmentChip } from './AttachmentChips.vue';
 import LTooltip from '../ui/LTooltip.vue';
+import LDialog from '@/components/ui/LDialog.vue'
 
 
 // 常量定义
@@ -499,48 +500,80 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
   workspacePath: currentSession.value?.workspacePath || null,
   runMode: currentSession.value?.settings?.runMode || 'normal',
-  connectionIds: currentSession.value?.settings?.connectionIds || [],
+  attachments: currentSession.value?.settings?.attachments || {},
 }));
 
-// ── 附加连接管理 ──
-const allConnections = ref<any[]>([]);
-const selectedConnectionIds = computed<string[]>(() => {
-  const ids = currentSession.value?.settings?.connectionIds;
-  if (ids && Array.isArray(ids) && ids.length > 0) {
-    console.log('[ConnectionChips] session.settings.connectionIds:', ids);
+// ── 动态附件管理 ──
+const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
+
+const attachmentChips = computed<AttachmentChip[]>(() => {
+  const attachments = currentSession.value?.settings?.attachments || {};
+  const chips: AttachmentChip[] = [];
+  for (const [typeId, itemIds] of Object.entries(attachments) as [string, string[]][]) {
+    const typeInfo = attachmentTypes.value.find(t => t.id === typeId);
+    if (!typeInfo) continue;
+    for (const itemId of itemIds) {
+      const item = typeInfo._items?.find(i => i.id === itemId);
+      if (item) {
+        chips.push({ typeId, id: itemId, name: item.name, subtitle: item.description });
+      }
+    }
   }
-  return ids || [];
-});
-const selectedConnections = computed<ConnectionChip[]>(() => {
-  return allConnections.value
-    .filter(c => selectedConnectionIds.value.includes(c.id))
-    .map(c => ({ id: c.id, name: c.name, scheme: c.scheme, config: c.config }));
+  return chips;
 });
 
-async function loadConnections() {
+async function loadAttachmentTypes() {
   try {
-    allConnections.value = await apiService.getWorkspaceConnections();
-  } catch (e) {
-    console.error('Failed to load connections:', e);
+    const types = await apiService.getAttachmentTypes();
+    const results: typeof attachmentTypes.value = [];
+    for (const t of types) {
+      let items: Array<{ id: string; name: string; description?: string }> = [];
+      try {
+        const lists = await apiService.getPluginAttachments(t.pluginId);
+        const found = lists.find(l => l.typeId === t.id);
+        items = found?.items || [];
+      } catch {}
+      results.push({ ...t, _items: items });
+    }
+    attachmentTypes.value = results;
+  } catch {
+    attachmentTypes.value = [];
   }
 }
 
-function toggleConnection(connId: string) {
+function removeAttachment(typeId: string, itemId: string) {
   if (!currentSession.value) return;
-  const ids = [...(currentSession.value.settings?.connectionIds || [])];
-  const idx = ids.indexOf(connId);
-  if (idx === -1) {
-    ids.push(connId);
-  } else {
-    ids.splice(idx, 1);
-  }
   if (!currentSession.value.settings) currentSession.value.settings = {};
-  currentSession.value.settings.connectionIds = ids;
+  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
+  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
+  const idx = ids.indexOf(itemId);
+  if (idx !== -1) ids.splice(idx, 1);
+  if (ids.length === 0) {
+    delete currentSession.value.settings.attachments[typeId];
+  } else {
+    currentSession.value.settings.attachments[typeId] = ids;
+  }
+  debouncedSaveSession();
+}
+
+function toggleAttachment(typeId: string, itemId: string) {
+  if (!currentSession.value) return;
+  if (!currentSession.value.settings) currentSession.value.settings = {};
+  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
+  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
+  const idx = ids.indexOf(itemId);
+  if (idx === -1) ids.push(itemId);
+  else ids.splice(idx, 1);
+  if (ids.length === 0) {
+    delete currentSession.value.settings.attachments[typeId];
+  } else {
+    currentSession.value.settings.attachments[typeId] = ids;
+  }
   debouncedSaveSession();
 }
 
 onMounted(() => {
-  loadConnections();
+  loadAttachmentTypes();
 });
 
 onUnmounted(() => {
@@ -589,8 +622,8 @@ const handleConfigChange = (config: any) => {
   }
 
   // 处理附加连接
-  if (typeof config.connectionIds !== 'undefined') {
-    currentSession.value.settings.connectionIds = config.connectionIds;
+  if (typeof config.attachments !== 'undefined') {
+    currentSession.value.settings.attachments = config.attachments;
   }
 
   debouncedSaveSession();
@@ -792,9 +825,9 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     lastScrollTop = 0;
     currentSessionId.value = newSessionId;
-    // Ensure connections are loaded (in case onMounted already passed)
-    if (allConnections.value.length === 0) {
-      await loadConnections();
+    // Ensure attachment types are loaded (in case onMounted already passed)
+    if (attachmentTypes.value.length === 0) {
+      await loadAttachmentTypes();
       if (token !== sessionChangeToken) return;
     }
     await loadSession(newSessionId);

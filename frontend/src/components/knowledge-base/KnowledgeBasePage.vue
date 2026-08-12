@@ -142,7 +142,7 @@
   </div>
 
   <!-- 创建/编辑知识库对话框 -->
-  <el-dialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
+  <LDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
     <el-form :model="dialogForm" label-width="140px" size="large">
       <el-form-item :label="t('knowledge.page.kbName')" required>
         <el-input v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
@@ -200,7 +200,7 @@
         </el-button>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 
   <!-- 文件分块查看弹窗 -->
   <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile" />
@@ -228,6 +228,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
+import LDialog from '@/components/ui/LDialog.vue'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()

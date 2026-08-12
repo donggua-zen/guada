@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')" width="775px" align-center
+  <LDialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')" width="775px" align-center
     destroy-on-close class="dialog-with-scroll" style="max-height: 70vh;">
     <div class="dialog-content">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="left" label-width="100px" size="default">
@@ -195,23 +195,19 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">{{ t('scheduler.edit.save') }}</el-button>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  ElDialog, ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton,
-  ElSwitch, ElInputNumber, ElDivider, ElIcon, ElButton,
-  ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker,
-  ElMessage, ElSelect, ElOption
-} from 'element-plus'
+import { ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton, ElSwitch, ElInputNumber, ElDivider, ElIcon, ElButton, ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker, ElMessage, ElSelect, ElOption } from 'element-plus'
 import { AddCircleOutlineRound, LogInRound } from '@vicons/material'
 import type { ScheduledTask } from '../../types/scheduler'
 import type { Character } from '../../types/character'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const { t } = useI18n()
 type TimeMode = 'period' | 'interval' | 'once' | 'advanced'

@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ConfigField } from '@/services/modules/workspace-connections.api'
+import type { ConfigField } from '@/services/modules/plugin.api'
 
 const props = defineProps<{
   fields: ConfigField[]

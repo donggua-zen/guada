@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="visible" :close-on-click-modal="false" width="900px"
+    <LDialog v-model="visible" :close-on-click-modal="false" width="900px"
         :style="{ height: '70vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
@@ -15,16 +15,17 @@
             <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
             <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('characters.modal.applyAll') }}</el-button>
         </template>
-    </el-dialog>
+    </LDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElDialog, ElButton } from 'element-plus'
+import { ElButton } from 'element-plus'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()
@@ -149,18 +150,5 @@ const handleSave = async (): Promise<void> => {
 </style>
 
 <style>
-/* 非 scoped 样式，直接作用于 el-dialog__body */
-.character-setting-dialog .el-dialog__body {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1;
-    min-height: 0;
-    padding: 0 !important;
-    overflow: hidden;
-}
-
-.character-setting-dialog .el-dialog {
-    display: flex;
-    flex-direction: column;
-}
+/* LDialog scoped styles handle dialog body/header — no global overrides needed */
 </style>

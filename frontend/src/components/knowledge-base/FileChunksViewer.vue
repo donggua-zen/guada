@@ -1,6 +1,6 @@
 ﻿<!-- KnowledgeBasePage/FileChunksViewer.vue -->
 <template>
-    <el-dialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" width="800px"
+    <LDialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" width="800px"
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
@@ -42,7 +42,7 @@
                     @current-change="handlePageChange" />
             </div>
         </template>
-    </el-dialog>
+    </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -53,6 +53,7 @@ import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
+import LDialog from '@/components/ui/LDialog.vue'
 
 interface Props {
     modelValue: boolean

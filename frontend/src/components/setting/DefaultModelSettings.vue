@@ -82,7 +82,7 @@
         </div>
 
         <!-- 模型选择对话框 -->
-        <el-dialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <LDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <div class="mb-4">
                 <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
@@ -167,7 +167,7 @@
                     <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
                 </div>
             </div>
-        </el-dialog>
+        </LDialog>
     </div>
 </template>
 
@@ -198,6 +198,7 @@ import {
     ElTag,
     ElIcon
 } from 'element-plus'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px

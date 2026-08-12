@@ -2,7 +2,7 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
+      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
       :class="[styleClass, { 'drag-over': isDragOver }]"
       @dragover.prevent
       @dragenter.prevent="handleDragEnter"
@@ -79,11 +79,11 @@
               </el-icon>
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
-              :knowledge-bases="knowledgeBases" :selected-ids="props.config?.knowledgeBaseIds || []"
-              :connections="remoteConnections" :selected-connection-ids="props.config?.connectionIds || []"
+              :knowledge-bases="knowledgeBases" :selected-kb-ids="props.config?.knowledgeBaseIds || []"
+              :selected-attachments="props.config?.attachments || {}"
               @select-image="triggerImageInput" @select-file="triggerFileInput"
               @toggle-kb="toggleKnowledgeBaseSelection"
-              @toggle-connection="toggleConnectionSelection" />
+              @toggle-attachment="toggleAttachmentSelection" />
           </template>
         </div>
         <div class="right-actions flex items-center gap-1">
@@ -212,7 +212,7 @@ interface ChatConfig {
   maxTokensLimit?: number | null
   knowledgeBaseIds?: string[]
   runMode?: string
-  connectionIds?: string[]
+  attachments?: Record<string, string[]>
 }
 
 /** File with optional _originalContent attached by paste handler */
@@ -242,8 +242,6 @@ const settingsButtonRef = ref<HTMLElement | null>(null);
 const settingsPopoverVisible = ref(false);
 // 知识库选择器相关
 const knowledgeBases = ref<any[]>([]); // 知识库列表
-// 远程连接列表
-const remoteConnections = ref<any[]>([]);
 
 // Tiptap 编辑器相关
 const editor = ref<Editor>();
@@ -763,7 +761,6 @@ const toggleAttachPopover = async () => {
   }
   try {
     await loadKnowledgeBases();
-    await loadConnections();
   } catch (error) {
     console.error('加载附件列表失败:', error);
   }
@@ -788,19 +785,25 @@ const toggleKnowledgeBaseSelection = (kbId: string) => {
   emit('config-change', { knowledgeBaseIds: newKbIds });
 };
 
-// 切换远程连接选中状态 - 立即同步到父组件
-const toggleConnectionSelection = (connId: string) => {
-  const currentConnIds = props.config?.connectionIds || [];
-  const newConnIds = [...currentConnIds];
-  const index = newConnIds.indexOf(connId);
+// 切换附件选中状态 - 立即同步到父组件
+const toggleAttachmentSelection = (typeId: string, itemId: string) => {
+  const currentAttachments = { ...(props.config?.attachments || {}) };
+  const ids = [...(currentAttachments[typeId] || [])];
+  const index = ids.indexOf(itemId);
 
   if (index === -1) {
-    newConnIds.push(connId);
+    ids.push(itemId);
   } else {
-    newConnIds.splice(index, 1);
+    ids.splice(index, 1);
   }
 
-  emit('config-change', { connectionIds: newConnIds });
+  if (ids.length === 0) {
+    delete currentAttachments[typeId];
+  } else {
+    currentAttachments[typeId] = ids;
+  }
+
+  emit('config-change', { attachments: currentAttachments });
 };
 
 
@@ -869,15 +872,6 @@ watch(() => props.config?.knowledgeBaseIds, (kbIds) => {
     loadKnowledgeBases();
   }
 }, { immediate: true });
-
-// 加载远程连接列表
-const loadConnections = async () => {
-  try {
-    remoteConnections.value = await apiService.getWorkspaceConnections();
-  } catch (error) {
-    console.error('获取远程连接列表失败:', error);
-  }
-};
 
 // 文件处理函数
 const checkFileConflict = async (newFileType: string) => {

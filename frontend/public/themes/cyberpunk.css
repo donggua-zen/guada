@@ -443,7 +443,7 @@ html.dark[data-theme="cyberpunk"] .el-button {
 html.dark[data-theme="cyberpunk"] .el-button--primary:hover {
   filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.55));
 }
-html.dark[data-theme="cyberpunk"] .el-dialog {
+html.dark[data-theme="cyberpunk"] .l-dialog {
   border-radius: 0;
   border: 1px solid var(--color-border);
   box-shadow: 0 0 28px rgba(0, 229, 255, 0.18);

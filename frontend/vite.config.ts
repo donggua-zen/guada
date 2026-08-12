@@ -24,35 +24,21 @@ export default defineConfig({
     }),
     tailwindcss(),
     visualizer({
-      open: false,           // 构建完成后自动打开报告
-      gzipSize: true,       // 显示 gzip 压缩后的大小
-      brotliSize: true,     // 显示 Brotli 压缩后的大小
-      filename: 'stats.html' // 报告文件名
+      open: false,
+      gzipSize: true,
+      brotliSize: true,
+      filename: 'stats.html'
     }) as PluginOption,
     clean({ cleanOnceBeforeBuildPatterns: ['**/*', '!some-important-file.txt'] }) as PluginOption,
-
     AutoImport({
       resolvers: [ElementPlusResolver()],
-      dts: 'src/types/auto-imports.d.ts',  // 生成类型声明
+      dts: 'src/types/auto-imports.d.ts',
     }),
     Components({
       resolvers: [ElementPlusResolver()],
-      dts: 'src/types/components.d.ts',  // 生成组件类型声明
+      dts: 'src/types/components.d.ts',
     }),
   ],
-  // optimizeDeps: {
-  //   force: false, // 不要强制预构建
-  //   // 明确需要预构建的包
-  //   include: [
-  //     'vue',
-  //     'vue-router',
-  //     'pinia',
-  //     'axios',
-  //     'dayjs',
-  //     'lodash-es',
-  //     'naive-ui',
-  //   ]
-  // },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -60,13 +46,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // 代理 API 请求
       '/api/v1': {
-        target: 'http://localhost:3000', // 后端地址（run.py 启动的端口）
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        // rewrite: (path) => path.replace(/^\/api/, '')
       },
-      // 代理静态资源请求
       '/static': {
         target: 'http://localhost:3000',
         changeOrigin: true

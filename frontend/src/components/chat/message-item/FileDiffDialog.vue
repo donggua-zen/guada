@@ -1,13 +1,11 @@
 <template>
-  <el-dialog
+  <LDialog
     v-model="visible"
     :title="dialogTitle"
     width="46.5rem"
-    top="8vh"
     :close-on-click-modal="true"
     append-to-body
     destroy-on-close
-    style=" max-height: 60vh;"
   >
     <div class="diff-dialog__body">
       <!-- 上下文按钮区 -->
@@ -50,12 +48,12 @@
         </div>
       </div>
     </div>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { ElDialog } from "element-plus";
+import LDialog from "@/components/ui/LDialog.vue";
 import { useI18n } from "vue-i18n";
 import { diffLines as computeDiffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";

@@ -1,6 +1,6 @@
 <!-- components/KnowledgeBasePage/UploadTaskModal.vue -->
 <template>
-  <el-dialog v-model="visible" :title="t('knowledge.uploadTask.title')" width="600px" :close-on-click-modal="false" @close="handleClose">
+  <LDialog v-model="visible" :title="t('knowledge.uploadTask.title')" width="600px" :close-on-click-modal="false" @close="handleClose">
     <!-- 上传任务列表 -->
     <div v-if="uploadTasks.length > 0" class="space-y-3 max-h-[400px] overflow-y-auto">
       <div v-for="task in uploadTasks" :key="task.id"
@@ -63,7 +63,7 @@
         <el-button size="small" @click="handleClose">{{ t('common.close') }}</el-button>
       </div>
     </template>
-  </el-dialog>
+  </LDialog>
 </template>
 
 <script setup lang="ts">
@@ -71,6 +71,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Document, Upload } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
+import LDialog from '@/components/ui/LDialog.vue'
 
 interface Props {
   modelValue: boolean

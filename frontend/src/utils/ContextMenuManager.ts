@@ -473,8 +473,8 @@ class ContextMenuManager {
       });
     }
 
-    // 场景5：默认选项
-    if (items.length === 0) {
+    // 场景5：默认选项（仅开发模式下提供刷新入口，生产环境无可选项时不弹菜单）
+    if (items.length === 0 && import.meta.env.DEV) {
       items.push({
         label: t("session.contextMenu.refresh"),
         action: () => location.reload(),

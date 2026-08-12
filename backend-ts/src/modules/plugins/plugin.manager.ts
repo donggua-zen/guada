@@ -122,7 +122,7 @@ export class PluginManager {
     }
 
     // 创建 api 并调用 onLoad
-    const api = new PluginApiImpl(id, plugin.manifest.name, this.nlsService);
+    const api = new PluginApiImpl(id, plugin.manifest.name, this.nlsService, this.settingsStorage);
     if (plugin.onLoad) {
       await plugin.onLoad(api).catch((err) => {
         this.logger.error(`Plugin ${id} onLoad failed: ${err.message}`);
@@ -754,6 +754,8 @@ export class PluginManager {
         enabledToolKits: [],
         interceptors: [],
         workspaceProviders: PluginRegistry.getWorkspaceProviders(pluginId),
+        attachmentTypes: PluginRegistry.getAttachmentTypes(pluginId),
+        uiPages: PluginRegistry.getUiPages(pluginId),
         source: manifest.source,
         pluginPath: manifest.pluginPath,
       };
@@ -811,6 +813,8 @@ export class PluginManager {
       enabledToolKits,
       interceptors: PluginRegistry.getInterceptors(pluginId),
       workspaceProviders: PluginRegistry.getWorkspaceProviders(pluginId),
+      attachmentTypes: PluginRegistry.getAttachmentTypes(pluginId),
+      uiPages: PluginRegistry.getUiPages(pluginId),
       source: manifest.source,
       pluginPath: manifest.pluginPath,
     };

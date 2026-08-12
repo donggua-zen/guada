@@ -14,7 +14,7 @@
     <!-- 已选角色 + 抽屉切换 -->
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
       <!-- 角色选择行 -->
-      <div class="flex items-center justify-center gap-1.5 mb-6 text-sm text-(--color-text-gray) ml-4">
+      <div class="flex items-center justify-center gap-1.5 mb-4 text-sm text-(--color-text-gray) ml-4">
         <span>{{ t('chat.welcome.use') }}</span>
         <span v-if="currentCharacter"
           class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
@@ -22,7 +22,8 @@
           <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.title"
             class="w-4 h-4 shrink-0 rounded overflow-hidden" />
           <span class="text-sm font-medium text-(--color-text)">{{ currentCharacter.title }}</span>
-          <el-icon size="12" class="shrink-0 text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
+          <el-icon size="12"
+            class="shrink-0 text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
             <ChevronRight24Regular />
           </el-icon>
         </span>
@@ -32,24 +33,20 @@
           <el-icon size="14" class="text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
             <PersonAdd24Regular />
           </el-icon>
-          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">{{ t('chat.welcome.selectCharacter') }}</span>
+          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">{{
+            t('chat.welcome.selectCharacter') }}</span>
         </button>
         <span>{{ t('chat.welcome.startNewSession') }}</span>
       </div>
-      <!-- 附加连接胶囊 -->
-      <ConnectionChips
-        v-if="selectedConnections.length > 0"
-        :connections="selectedConnections"
-        @remove="toggleConnection"
-      />
+      <!-- 附加内容胶囊 -->
+      <AttachmentChips v-if="attachmentChips.length > 0" :chips="attachmentChips" @remove="removeAttachment" />
+      <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
       <div class="w-full relative z-30">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
-          :character-id="currentSession.characterId || ''"
-          @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
-          @send="sendMessage" />
+          :character-id="currentSession.characterId || ''" @config-change="handleConfigChange"
+          :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage" />
       </div>
-      <ChatInputToolbar :config="chatInputConfig"
-        @config-change="handleConfigChange" />
+
     </div>
     <div>
       <!-- <div class="flex items-center justify-center mt-6">
@@ -78,7 +75,8 @@ import { useSelectedCharacter } from '@/composables/useSelectedCharacter';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
-import ConnectionChips from "./ConnectionChips.vue";
+import AttachmentChips from "./AttachmentChips.vue";
+import type { AttachmentChip } from "./AttachmentChips.vue";
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 
@@ -439,8 +437,8 @@ const chatInputConfig = computed(() => ({
   // 分组 ID
   groupId: currentSession.value?.groupId || null,
 
-  // 附加连接 IDs
-  connectionIds: currentSession.value?.settings?.connectionIds || [],
+  // 附件
+  attachments: currentSession.value?.settings?.attachments || {},
 }));
 
 /**
@@ -495,46 +493,67 @@ const handleConfigChange = (config: any): void => {
     console.log('保存 groupId 到会话:', config.groupId);
   }
 
-  // 处理附加连接
-  if (typeof config.connectionIds !== 'undefined') {
+  // 处理附件
+  if (typeof config.attachments !== 'undefined') {
     if (!currentSession.value.settings) currentSession.value.settings = {};
-    currentSession.value.settings.connectionIds = config.connectionIds;
-    console.log('保存 connectionIds 到会话:', config.connectionIds);
+    currentSession.value.settings.attachments = config.attachments;
   }
 };
 
-// ── 附加连接管理 ──
-const allConnections = ref<any[]>([]);
-const selectedConnections = computed(() => {
-  const ids = currentSession.value?.settings?.connectionIds || [];
-  return allConnections.value
-    .filter(c => ids.includes(c.id))
-    .map(c => ({ id: c.id, name: c.name, scheme: c.scheme, config: c.config }));
+// ── 动态附件管理 ──
+const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
+
+const attachmentChips = computed<AttachmentChip[]>(() => {
+  const attachments = currentSession.value?.settings?.attachments || {};
+  const chips: AttachmentChip[] = [];
+  for (const [typeId, itemIds] of Object.entries(attachments) as [string, string[]][]) {
+    const typeInfo = attachmentTypes.value.find(t => t.id === typeId);
+    if (!typeInfo) continue;
+    for (const itemId of itemIds) {
+      const item = typeInfo._items?.find(i => i.id === itemId);
+      if (item) {
+        chips.push({ typeId, id: itemId, name: item.name, subtitle: item.description });
+      }
+    }
+  }
+  return chips;
 });
 
-async function loadConnections() {
+async function loadAttachmentTypes() {
   try {
-    allConnections.value = await apiService.getWorkspaceConnections();
-  } catch (e) {
-    console.error('Failed to load connections:', e);
+    const types = await apiService.getAttachmentTypes();
+    const results: typeof attachmentTypes.value = [];
+    for (const t of types) {
+      let items: Array<{ id: string; name: string; description?: string }> = [];
+      try {
+        const lists = await apiService.getPluginAttachments(t.pluginId);
+        const found = lists.find(l => l.typeId === t.id);
+        items = found?.items || [];
+      } catch { }
+      results.push({ ...t, _items: items });
+    }
+    attachmentTypes.value = results;
+  } catch {
+    attachmentTypes.value = [];
   }
 }
 
-function toggleConnection(connId: string) {
+function removeAttachment(typeId: string, itemId: string) {
   if (!currentSession.value) return;
   if (!currentSession.value.settings) currentSession.value.settings = {};
-  const ids = [...(currentSession.value.settings.connectionIds || [])];
-  const idx = ids.indexOf(connId);
-  if (idx === -1) {
-    ids.push(connId);
+  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
+  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
+  const idx = ids.indexOf(itemId);
+  if (idx !== -1) ids.splice(idx, 1);
+  if (ids.length === 0) {
+    delete currentSession.value.settings.attachments[typeId];
   } else {
-    ids.splice(idx, 1);
+    currentSession.value.settings.attachments[typeId] = ids;
   }
-  currentSession.value.settings.connectionIds = ids;
 }
 
 onMounted(() => {
-  loadConnections();
+  loadAttachmentTypes();
 });
 
 // 前往角色管理页面
@@ -694,9 +713,12 @@ const sendMessage = async (): Promise<void> => {
 }
 
 @keyframes blink {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0;
   }

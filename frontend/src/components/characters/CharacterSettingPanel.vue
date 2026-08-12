@@ -431,8 +431,7 @@ import {
   ElAlert,
   ElTag,
   ElCheckboxGroup,
-  ElSwitch,
-  ElDialog
+  ElSwitch
 } from 'element-plus'
 import {
   InfoCircleOutlined,
@@ -1405,15 +1404,7 @@ defineExpose({
   word-break: break-word !important;
 }
 
-/* 工具配置对话框样式优化 */
-:deep(.tool-config-dialog .el-dialog__body) {
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-:deep(.tool-config-dialog .el-dialog__header) {
-  padding-right: 40px;
-}
+/* 工具配置对话框样式已迁移到 LDialog scoped styles */
 
 .mcp-server-item {
   transition: all 0.2s;

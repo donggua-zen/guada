@@ -15,7 +15,7 @@
         </el-button>
 
         <!-- 模型选择对话框 -->
-        <el-dialog v-model="dialogVisible" :title="t('ui.embeddingModel.dialogTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <LDialog v-model="dialogVisible" :title="t('ui.embeddingModel.dialogTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <!-- 搜索框 -->
             <div class="mb-4">
@@ -77,7 +77,7 @@
                     <el-button type="primary" @click="confirmSelection">{{ t('common.ok') }}</el-button>
                 </div>
             </template>
-        </el-dialog>
+        </LDialog>
     </div>
 </template>
 
@@ -88,6 +88,7 @@ import { ElMessage } from 'element-plus'
 import { ScienceOutlined, SearchFilled, CheckCircleFilled, ArrowDropDownTwotone } from '@vicons/material'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
+import LDialog from '@/components/ui/LDialog.vue'
 
 
 interface Model {

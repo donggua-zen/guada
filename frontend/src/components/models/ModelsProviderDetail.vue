@@ -108,7 +108,7 @@
     </div>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <el-dialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
+    <LDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
@@ -250,10 +250,10 @@
           <el-button type="primary" @click="handleSaveModel" :loading="saving">{{ t('settings.providerDetail.saveChanges') }}</el-button>
         </div>
       </template>
-    </el-dialog>
+    </LDialog>
 
     <!-- 获取模型列表的模态框 -->
-    <el-dialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
+    <LDialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
       class="model-fetch-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
@@ -305,7 +305,7 @@
           </div>
         </div>
       </div>
-    </el-dialog>
+    </LDialog>
   </div>
 </template>
 
@@ -329,6 +329,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils'
+import LDialog from '@/components/ui/LDialog.vue'
 
 const props = defineProps<{
   provider: any

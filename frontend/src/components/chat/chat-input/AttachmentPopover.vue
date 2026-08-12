@@ -18,7 +18,7 @@
         <span class="att-item-name">{{ t('chat.input.uploadFile') }}</span>
       </div>
 
-      <!-- 知识库 -->
+      <!-- 知识库（内置，未来可迁移为 registerAttachmentType） -->
       <div class="att-divider"></div>
       <div class="att-section-header">{{ t('chat.input.knowledgeBase') }}</div>
       <div class="att-kb-list">
@@ -27,7 +27,7 @@
         </div>
         <div v-for="kb in knowledgeBases" :key="kb.id"
           class="att-kb-item" @click="$emit('toggle-kb', kb.id)">
-          <el-checkbox :model-value="selectedIds.includes(kb.id)" @click.stop size="small" />
+          <el-checkbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
           <div class="flex-1 min-w-0">
             <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
             <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
@@ -35,31 +35,36 @@
         </div>
       </div>
 
-      <!-- 远程连接 -->
-      <div class="att-divider"></div>
-      <div class="att-section-header">{{ t('chat.input.remoteConnection') }}</div>
-      <div class="att-kb-list">
-        <div v-if="connections.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
-          {{ t('chat.input.noConnection') }}
-        </div>
-        <div v-for="conn in connections" :key="conn.id"
-          class="att-kb-item" @click="$emit('toggle-connection', conn.id)">
-          <el-checkbox :model-value="selectedConnectionIds.includes(conn.id)" @click.stop size="small" />
-          <div class="flex-1 min-w-0">
-            <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ conn.name }}</div>
-            <div class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ conn.config.username }}@{{ conn.config.host }}</div>
+      <!-- 动态附件类型（插件通过 registerAttachmentType 注册） -->
+      <template v-for="attType in attachmentTypes" :key="attType.id">
+        <div class="att-divider"></div>
+        <div class="att-section-header">{{ attType.label }}</div>
+        <div class="att-kb-list">
+          <div v-if="!attType._items || attType._items.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
+            {{ t('common.empty') }}
+          </div>
+          <div v-for="item in (attType._items || [])" :key="item.id"
+            class="att-kb-item" @click="toggleAttachment(attType.id, item.id)">
+            <el-checkbox :model-value="isAttachmentSelected(attType.id, item.id)" @click.stop size="small" />
+            <div class="flex-1 min-w-0">
+              <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ item.name }}</div>
+              <div v-if="item.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ item.description }}</div>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
   </CustomPopover>
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { ElIcon, ElCheckbox } from 'element-plus';
 import { useI18n } from 'vue-i18n'
 import { Image24Regular, Attach24Regular } from '@vicons/fluent';
 import CustomPopover from '../../ui/CustomPopover.vue';
+import { apiService } from '@/services/ApiService';
+import type { AttachmentTypeInfo, AttachmentItem } from '@/services/modules/plugin.api';
 
 const { t } = useI18n()
 
@@ -69,29 +74,73 @@ interface KnowledgeBase {
   description?: string;
 }
 
-interface SavedConnection {
-  id: string;
-  name: string;
-  scheme: string;
-  config: Record<string, any>;
+interface DynamicAttachmentType extends AttachmentTypeInfo {
+  _items?: AttachmentItem[];
 }
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   anchorEl: HTMLElement | null;
   knowledgeBases: KnowledgeBase[];
-  selectedIds: string[];
-  connections: SavedConnection[];
-  selectedConnectionIds: string[];
+  selectedKbIds: string[];
+  selectedAttachments: Record<string, string[]>;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:visible': [value: boolean];
   'select-image': [];
   'select-file': [];
   'toggle-kb': [kbId: string];
-  'toggle-connection': [connId: string];
+  'toggle-attachment': [typeId: string, itemId: string];
 }>();
+
+const attachmentTypes = ref<DynamicAttachmentType[]>([])
+
+async function loadAttachmentTypes() {
+  try {
+    const types = await apiService.getAttachmentTypes()
+    // Load items for each type
+    const pluginGroups = new Map<string, string[]>()
+    for (const t of types) {
+      let arr = pluginGroups.get(t.pluginId)
+      if (!arr) {
+        arr = []
+        pluginGroups.set(t.pluginId, arr)
+      }
+      arr.push(t.id)
+    }
+
+    const results: DynamicAttachmentType[] = []
+    for (const [pluginId] of pluginGroups) {
+      try {
+        const lists = await apiService.getPluginAttachments(pluginId)
+        for (const t of types.filter(t => t.pluginId === pluginId)) {
+          const found = lists.find(l => l.typeId === t.id)
+          results.push({ ...t, _items: found?.items || [] })
+        }
+      } catch {
+        for (const t of types.filter(t => t.pluginId === pluginId)) {
+          results.push({ ...t, _items: [] })
+        }
+      }
+    }
+    attachmentTypes.value = results
+  } catch {
+    attachmentTypes.value = []
+  }
+}
+
+watch(() => props.visible, (v) => {
+  if (v) loadAttachmentTypes()
+}, { immediate: true })
+
+function isAttachmentSelected(typeId: string, itemId: string): boolean {
+  return (props.selectedAttachments[typeId] || []).includes(itemId)
+}
+
+function toggleAttachment(typeId: string, itemId: string) {
+  emit('toggle-attachment', typeId, itemId)
+}
 </script>
 
 <style scoped>

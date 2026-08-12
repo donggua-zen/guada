@@ -172,7 +172,7 @@
     </div>
 
     <!-- 编辑摘要对话框 -->
-    <el-dialog v-model="editDialogVisible" :title="t('chat.memo.editSummaryTitle')" width="600px" append-to-body>
+    <LDialog v-model="editDialogVisible" :title="t('chat.memo.editSummaryTitle')" width="600px" append-to-body>
       <el-input v-model="editingSummary.content" type="textarea" :rows="10"
         :placeholder="t('chat.memo.summaryPlaceholder')" />
       <template #footer>
@@ -181,11 +181,11 @@
           <el-button type="primary" @click="saveEdit">{{ t('chat.memo.save') }}</el-button>
         </span>
       </template>
-    </el-dialog>
+    </LDialog>
 
     <!-- 压缩历史记录对话框 -->
-    <el-dialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
-      max-height="600px" append-to-body>
+    <LDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
+      append-to-body>
       <template v-if="summaries.length > 0">
         <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
           <div class="rounded-lg border border-gray-200 dark:border-[#2a2c30] bg-white dark:bg-[#232428] p-4">
@@ -284,7 +284,7 @@
           <el-button @click="historyDialogVisible = false">{{ t('chat.memo.close') }}</el-button>
         </span>
       </template>
-    </el-dialog>
+    </LDialog>
   </div>
 </template>
 
@@ -293,6 +293,7 @@ import { ref, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSessionTokenStats } from '@/composables/useSessionTokenStats';
 import { useDebounceFn } from '@vueuse/core';
+import LDialog from '@/components/ui/LDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
