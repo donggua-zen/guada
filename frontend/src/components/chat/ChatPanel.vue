@@ -41,9 +41,8 @@
               :character-name="currentSession?.character?.title"
               :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
               :allow-generate="!isStreaming && index === lastUserMessageIndex"
-              :animate-in="animateIds.includes(turn.user.id)"
-              @delete="deleteMessage"
-              @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+              :animate-in="animateIds.includes(turn.user.id)" @delete="deleteMessage" @edit="editMessage"
+              @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
               @continue="continueResponse" @switch="switchContent" />
             <!-- <div class="min-h-60"></div> -->
 
@@ -63,7 +62,7 @@
       <!-- 输入区域 - sticky 底部 -->
       <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2">
         <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
-        <div class="chat-bottom-fade"></div>
+        <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto left-0 right-0 bottom-0"></div>
         <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
 
           <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
@@ -78,7 +77,8 @@
           <div v-if="editMode" class="max-w-full w-full flex px-4">
             <div
               class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
-              <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage') }}</span>
+              <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
+                }}</span>
               <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
                 {{ t('common.cancel') }}
               </el-button>
@@ -94,6 +94,7 @@
             <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
               :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
               :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+              :backdrop="hasWallpaper"
               @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
               <template #right-actions-before>
                 <!-- 上下文使用率：圆形进度条 -->
@@ -119,8 +120,8 @@
       @click="handleScrollToBottomClick" />
   </div>
   <!-- 记忆管理弹窗 -->
-  <LDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px" :close-on-click-modal="false" destroy-on-close
-    class="memo-panel-dialog" append-to-body>
+  <LDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px"
+    :close-on-click-modal="false" destroy-on-close class="memo-panel-dialog" append-to-body>
     <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
   </LDialog>
 </template>
@@ -134,6 +135,7 @@ import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
+import { useLayoutStore } from "@/stores/layout"
 import { getCurrentTurns } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
@@ -164,6 +166,10 @@ const MAX_REGENERATE_VERSIONS = 5
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+const layoutStore = useLayoutStore();
+
+// 有壁纸时隐藏底部渐变遮罩（壁纸已有视觉层次，不透明遮罩会像补丁）
+const hasWallpaper = computed(() => !!layoutStore.wallpaperUrl);
 
 // 新发送消息动画追踪：只有通过 handleSendMessage 发送的消息才播放入场动画
 const animateIds = ref<string[]>([]);
@@ -1208,12 +1214,9 @@ function scrollToMessage(messageId: string) {
 /* 底部渐变遮罩：底部25px完全隐藏，上方渐变过渡 */
 .chat-bottom-fade {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
   height: 48px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--color-bg, #ffffff) 25px, transparent 48px);
+  background: linear-gradient(to top, var(--color-bg) 25px, transparent 48px);
 }
 
 /* 加载指示器淡入淡出 */

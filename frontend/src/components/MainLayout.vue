@@ -3,7 +3,7 @@
   <FloatingChatPanel />
 
   <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
-    :sidebarWidth="300" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
+    :sidebarWidth="285" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
       <GlobalSidebar v-if="!isSettingsRoute" />
       <div v-else id="settings-sidebar-portal" class="h-full"></div>
@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
@@ -35,10 +35,13 @@ import FloatingChatPanel from './chat/FloatingChatPanel.vue'
 
 const layoutStore = useLayoutStore()
 const route = useRoute()
+const router = useRouter()
 
 const { init: initSessionEvents, cleanup: cleanupSessionEvents } = useSessionEvents()
 
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
+
+const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
 const effectiveSidebarVisible = computed(() => layoutStore.sidebarVisible)
 
@@ -55,6 +58,16 @@ function loadToolDisplays() {
   })
 }
 
+// 全局快捷键：新建会话。Electron 用 Ctrl/Cmd+N；Web 下 Ctrl+N 是浏览器保留快捷键无法拦截，改用 Ctrl+Alt+N
+const handleGlobalShortcut = (e: KeyboardEvent) => {
+  if (e.isComposing || e.shiftKey || e.code !== 'KeyN') return
+  if (!e.ctrlKey && !e.metaKey) return
+  const matched = isElectron ? !e.altKey : e.altKey
+  if (!matched) return
+  e.preventDefault()
+  router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+}
+
 // 启动 SSE 连接 + 全局事件监听
 onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
@@ -64,6 +77,8 @@ onMounted(() => {
   layoutStore.loadAppearanceSettings()
 
   loadToolDisplays()
+
+  window.addEventListener('keydown', handleGlobalShortcut)
 })
 
 // 语言切换时重新拉取工具展示文案（后端按 lang 解析 %key% 引用）
@@ -76,6 +91,7 @@ onUnmounted(() => {
   console.log('[MainLayout] 断开 SSE 连接')
   cleanupSessionEvents()
   apiService.disconnectSessionEvents()
+  window.removeEventListener('keydown', handleGlobalShortcut)
 })
 </script>
 

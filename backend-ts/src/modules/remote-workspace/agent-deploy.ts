@@ -136,6 +136,9 @@ export async function deployAgent(
       // Download binary to local cache (if not cached, and download URL configured)
       const localBinary = await ensureLocalBinary(osName, goArch, downloadUrl, latestVersionUrl);
 
+      // 先清理远端旧 agent 进程:运行中的二进制被占用时,fastPut 覆盖会失败(ETXTBSY → code 4)
+      await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
+
       // Upload via SFTP
       await uploadFile(sshClient, localBinary, remoteBinary);
       await execCommand(sshClient, `chmod +x ${remoteBinary}`);
@@ -181,77 +184,114 @@ export interface DeployResult {
  * 部署验证 — 检测远端是否已安装 agent 且版本匹配;
  * 不匹配则从本地缓存获取二进制并上传部署,启动后验证可运行。
  * 不建立 WebSocket 长连接,用于"保存连接前必须部署成功"的校验。
+ * onLog 可选回调:各阶段实时推送日志行(前端轮询/流式展示用)。
  */
 export async function verifyAndDeployAgent(
   uri: ParsedWorkspaceUri,
   downloadUrl?: string,
   latestVersionUrl?: string,
+  onLog?: (line: string) => void,
 ): Promise<DeployResult> {
   const log: string[] = [];
+  const push = (line: string) => {
+    log.push(line);
+    onLog?.(line);
+  };
 
   // dev 模式:跳过部署验证
   if (uri.query?.devMode === "1") {
-    return { success: true, installed: true, version: "", log: ["dev 模式,跳过部署验证"] };
+    return { success: true, installed: true, version: "", log: ["dev mode, skipping deployment"] };
   }
 
   const sshConfig = buildSshConfig(uri);
   let sshClient: Client | null = null;
   try {
+    push("Connecting to remote server via SSH...");
     sshClient = await sshConnect(sshConfig);
     const remoteHome = (await execCommand(sshClient, "echo $HOME")).trim();
     const remoteDir = `${remoteHome}/${REMOTE_DIR}`;
     const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
-    log.push(`远端目录就绪: ${remoteDir}`);
+    push(`Remote directory ready: ${remoteDir}`);
 
     // 确保访问令牌文件已写入远端(agent 鉴权)
     const token = getOrCreateToken();
     await writeRemoteToken(sshClient, remoteDir, token);
+    push("Access token written to remote");
 
     // 检测是否已安装 + 版本
+    push("Checking remote agent version...");
     const versionCheck = await execCommand(
       sshClient,
       `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
     );
     const remoteVersion = versionCheck.trim();
+    push(remoteVersion === "NOT_FOUND" ? "Agent not installed on remote" : `Remote agent version: ${remoteVersion}`);
 
     // 期望版本:配置了 latest 接口时取最新版本号,与远端严格比较;
     // 一致则复用,不一致(或未安装)则重新下载推送。
-    const expectedVersion = latestVersionUrl
-      ? (await fetchLatestVersion(latestVersionUrl)).version
-      : "";
+    let expectedVersion = "";
+    if (latestVersionUrl) {
+      push("Checking for latest version...");
+      expectedVersion = (await fetchLatestVersion(latestVersionUrl)).version;
+      push(`Latest version: v${expectedVersion}`);
+    }
     const needDeploy = expectedVersion
       ? remoteVersion !== expectedVersion
       : remoteVersion === "NOT_FOUND";
 
     if (!needDeploy) {
-      log.push(`agent 已安装且版本一致 (v${remoteVersion})`);
+      push(`Agent already installed with matching version (v${remoteVersion})`);
       return { success: true, installed: true, version: remoteVersion, log };
     }
 
-    log.push(
+    push(
       remoteVersion === "NOT_FOUND"
-        ? "远端未安装 agent,开始部署"
-        : `远端版本 ${remoteVersion} 与期望 ${expectedVersion} 不一致,开始重新部署`,
+        ? "Agent not installed, starting deployment"
+        : `Remote version ${remoteVersion} differs from expected ${expectedVersion}, redeploying`,
     );
 
     // 检测远端 OS + 架构
+    push("Detecting remote platform...");
     const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
     const archRaw = (await execCommand(sshClient, "uname -m")).trim();
     const osName = osRaw === "darwin" ? "darwin" : "linux";
     const goArch = (archRaw === "aarch64" || archRaw === "arm64") ? "arm64" : "amd64";
-    log.push(`远端平台: ${osName}/${goArch}`);
+    push(`Remote platform: ${osName}/${goArch}`);
 
     // 获取本地二进制(本地缓存优先;配置下载地址/latest 接口时自动获取最新版)
-    const localBinary = await ensureLocalBinary(osName, goArch, downloadUrl, latestVersionUrl);
-    log.push(`使用本地二进制: ${localBinary}`);
+    push("Acquiring deployment resource (local cache / download)...");
+    const localBinary = await ensureLocalBinary(
+      osName,
+      goArch,
+      downloadUrl,
+      latestVersionUrl,
+      // 下载进度回调:格式化输出,避免用户觉得卡住
+      (downloaded, total) => {
+        if (total > 0) {
+          const pct = Math.min(100, Math.round((downloaded / total) * 100));
+          const mb = (downloaded / 1048576).toFixed(1);
+          const totalMb = (total / 1048576).toFixed(1);
+          push(`Downloading deployment resource: ${mb}MB / ${totalMb}MB (${pct}%)`);
+        } else {
+          push(`Downloading deployment resource: ${(downloaded / 1048576).toFixed(1)}MB`);
+        }
+      },
+    );
+    push(`Using local binary: ${localBinary}`);
+
+    // 先清理远端旧 agent 进程(避免运行中的二进制被占用,fastPut 覆盖失败)
+    push("Stopping old agent processes on remote...");
+    await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
 
     // 上传 + 授权
+    push("Uploading deployment resource...");
     await uploadFile(sshClient, localBinary, remoteBinary);
     await execCommand(sshClient, `chmod +x ${remoteBinary}`);
-    log.push("二进制上传完成");
+    push("Binary uploaded");
 
     // 启动验证(固定端口启动,保证后续连接可发现)
+    push("Starting agent...");
     const remotePort = await ensureAgentRunning(
       sshClient,
       remoteBinary,
@@ -261,12 +301,12 @@ export async function verifyAndDeployAgent(
       uri.query?.perm,
       expectedVersion,
     );
-    log.push(`Agent 启动成功,监听端口 ${remotePort}`);
-    log.push("部署验证通过");
+    push(`Agent started successfully, listening on port ${remotePort}`);
+    push("Deployment verified");
 
     return { success: true, installed: false, version: expectedVersion, log };
   } catch (err: any) {
-    log.push(`部署失败: ${err?.message || err}`);
+    push(`Deployment failed: ${err?.message || err}`);
     return { success: false, installed: false, version: "", log };
   } finally {
     if (sshClient) sshClient.end();
@@ -340,6 +380,7 @@ async function ensureLocalBinary(
   goArch: string,
   downloadUrl?: string,
   latestVersionUrl?: string,
+  onProgress?: (downloaded: number, total: number) => void,
 ): Promise<string> {
   // 方式1:配置了 latest 接口 → 自动升级检测
   if (latestVersionUrl) {
@@ -356,7 +397,7 @@ async function ensureLocalBinary(
         .replace("{arch}", goArch)
         .replace("{version}", latest.version);
       fs.mkdirSync(localCacheDir(), { recursive: true });
-      await downloadFile(url, cached);
+      await downloadFile(url, cached, onProgress);
       return cached;
     }
     throw new Error(
@@ -374,7 +415,7 @@ async function ensureLocalBinary(
   if (downloadUrl) {
     const url = downloadUrl.replace("{os}", osName).replace("{arch}", goArch);
     fs.mkdirSync(localCacheDir(), { recursive: true });
-    await downloadFile(url, cached);
+    await downloadFile(url, cached, onProgress);
     return cached;
   }
 
@@ -386,8 +427,12 @@ async function ensureLocalBinary(
   );
 }
 
-/** Download a file via HTTPS with redirect support */
-function downloadFile(url: string, dest: string): Promise<void> {
+/** Download a file via HTTPS with redirect support; onProgress 提供下载进度(已下载/总字节) */
+function downloadFile(
+  url: string,
+  dest: string,
+  onProgress?: (downloaded: number, total: number) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     const req = https.get(url, (res) => {
@@ -395,7 +440,7 @@ function downloadFile(url: string, dest: string): Promise<void> {
       if (res.statusCode === 301 || res.statusCode === 302) {
         file.close();
         fs.unlinkSync(dest);
-        downloadFile(res.headers.location!, dest).then(resolve, reject);
+        downloadFile(res.headers.location!, dest, onProgress).then(resolve, reject);
         return;
       }
       if (res.statusCode !== 200) {
@@ -404,6 +449,12 @@ function downloadFile(url: string, dest: string): Promise<void> {
         reject(new Error(`Download failed: HTTP ${res.statusCode} from ${url}`));
         return;
       }
+      const total = parseInt(res.headers["content-length"] || "0", 10);
+      let downloaded = 0;
+      res.on("data", (chunk: Buffer) => {
+        downloaded += chunk.length;
+        onProgress?.(downloaded, total);
+      });
       res.pipe(file);
       file.on("finish", () => {
         file.close();
@@ -470,7 +521,8 @@ function execCommand(
     client.exec(command, (err, stream) => {
       if (err) {
         clearTimeout(timer);
-        reject(err);
+        // ssh2 exec 失败时 message 可能为通用 "Failure",补全命令上下文
+        reject(new Error(`SSH 执行失败: ${err.message || err} [command: ${command}]`));
         return;
       }
 
@@ -518,7 +570,7 @@ function startAgentBackground(
       (err, stream) => {
         if (err) {
           clearTimeout(timer);
-          reject(err);
+          reject(new Error(`Agent 启动命令执行失败: ${err.message || err}`));
           return;
         }
 
@@ -550,14 +602,31 @@ function uploadFile(
   remotePath: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    // 上传前校验本地文件存在(给出明确错误而非 ssh2 的通用 Failure)
+    if (!fs.existsSync(localPath)) {
+      reject(
+        new Error(
+          `SFTP 上传失败: 本地文件不存在 ${localPath}(请检查 agent 二进制是否已放入缓存目录)`,
+        ),
+      );
+      return;
+    }
     client.sftp((err, sftp) => {
       if (err) {
-        reject(err);
+        reject(new Error(`SFTP 会话建立失败: ${err.message || err}`));
         return;
       }
       sftp.fastPut(localPath, remotePath, (err) => {
         if (err) {
-          reject(err);
+          // ssh2 的 fastPut 失败时 message 常为通用的 "Failure",需补全上下文
+          const errCode = (err as NodeJS.ErrnoException)?.code;
+          reject(
+            new Error(
+              `SFTP 上传失败(本地: ${localPath} → 远端: ${remotePath}): ${err.message || err}` +
+                `${errCode ? ` [code: ${errCode}]` : ""} — ` +
+                `请检查远端磁盘空间/目录权限,以及远端目录是否可写`,
+            ),
+          );
         } else {
           resolve();
         }

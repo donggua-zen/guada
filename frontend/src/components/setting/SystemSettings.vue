@@ -3,7 +3,7 @@
         <Teleport v-if="portalReady" to="#settings-sidebar-portal">
             <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
             <div
-                class="h-full sidebar-transparent-bg global-sidebar flex flex-col overflow-hidden shadow-[inset_-4px_0_12px_rgba(0,0,0,0.03)] dark:shadow-[inset_-4px_0_12px_rgba(0,0,0,0.3)]">
+                class="h-full sidebar-transparent-bg global-sidebar flex flex-col overflow-hidden">
                 <!-- 返回应用 -->
                 <div class="px-3 pt-3 pb-2">
                     <div @click="goBack"

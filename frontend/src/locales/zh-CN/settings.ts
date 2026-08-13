@@ -129,7 +129,7 @@ export default {
     privateKeyPathDesc: 'Electron 下可点击"浏览"选择私钥文件;Web 端请手动输入私钥文件绝对路径。仅保存路径,不保存私钥内容。',
     // 部署验证
     deployTitle: '部署 Agent',
-    deployDesc: '检测远端是否已安装 Agent 且版本匹配,不匹配则自动上传部署。部署不成功不允许保存连接。',
+    deployDesc: '此步骤会在服务器上安装并启动远程代理(Agent),它是后续文件操作与命令执行的基础。Agent 会自动保持最新版本,安装成功后即可继续下一步。',
     deploying: '正在部署 Agent...',
     deployInstalled: 'Agent 已安装且版本匹配,无需部署',
     deploySuccess: 'Agent 部署成功',
