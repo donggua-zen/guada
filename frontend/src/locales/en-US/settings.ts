@@ -132,6 +132,12 @@
     deploySuccess: 'Agent deployed successfully',
     deployFailed: 'Agent deployment failed',
     deployRetry: 'Retry Deploy',
+    // Permission mode
+    permTitle: 'Agent Permission Mode',
+    permWorkspace: 'Workspace writable (default)',
+    permReadonly: 'Read-only',
+    permUnrestricted: 'Unrestricted',
+    permDesc: 'Read-write inside workspace, read-only outside. Read-only mode denies all writes.',
     browseTitle: 'Select Remote Working Directory',
     browseDesc: 'Browse server directories and select project root',
     browseFolders: 'Browse Folders',

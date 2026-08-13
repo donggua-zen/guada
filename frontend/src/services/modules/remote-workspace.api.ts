@@ -11,6 +11,8 @@ export interface RemoteConnection {
     password?: string;
     privateKey?: string;
     path: string;
+    /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
+    perm?: string;
   };
 }
 

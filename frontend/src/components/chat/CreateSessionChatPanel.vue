@@ -38,8 +38,7 @@
         </button>
         <span>{{ t('chat.welcome.startNewSession') }}</span>
       </div>
-      <!-- 附加内容胶囊 -->
-      <AttachmentChips v-if="attachmentChips.length > 0" :chips="attachmentChips" @remove="removeAttachment" />
+      <!-- 附加内容胶囊已并入 ChatInput 内部(与知识库标签同排),此处不再外置 -->
       <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
       <div class="w-full relative z-30">
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
@@ -75,8 +74,6 @@ import { useSelectedCharacter } from '@/composables/useSelectedCharacter';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
-import AttachmentChips from "./AttachmentChips.vue";
-import type { AttachmentChip } from "./AttachmentChips.vue";
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 
@@ -499,62 +496,6 @@ const handleConfigChange = (config: any): void => {
     currentSession.value.settings.attachments = config.attachments;
   }
 };
-
-// ── 动态附件管理 ──
-const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
-
-const attachmentChips = computed<AttachmentChip[]>(() => {
-  const attachments = currentSession.value?.settings?.attachments || {};
-  const chips: AttachmentChip[] = [];
-  for (const [typeId, itemIds] of Object.entries(attachments) as [string, string[]][]) {
-    const typeInfo = attachmentTypes.value.find(t => t.id === typeId);
-    if (!typeInfo) continue;
-    for (const itemId of itemIds) {
-      const item = typeInfo._items?.find(i => i.id === itemId);
-      if (item) {
-        chips.push({ typeId, id: itemId, name: item.name, subtitle: item.description });
-      }
-    }
-  }
-  return chips;
-});
-
-async function loadAttachmentTypes() {
-  try {
-    const types = await apiService.getAttachmentTypes();
-    const results: typeof attachmentTypes.value = [];
-    for (const t of types) {
-      let items: Array<{ id: string; name: string; description?: string }> = [];
-      try {
-        const lists = await apiService.getPluginAttachments(t.pluginId);
-        const found = lists.find(l => l.typeId === t.id);
-        items = found?.items || [];
-      } catch { }
-      results.push({ ...t, _items: items });
-    }
-    attachmentTypes.value = results;
-  } catch {
-    attachmentTypes.value = [];
-  }
-}
-
-function removeAttachment(typeId: string, itemId: string) {
-  if (!currentSession.value) return;
-  if (!currentSession.value.settings) currentSession.value.settings = {};
-  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
-  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
-  const idx = ids.indexOf(itemId);
-  if (idx !== -1) ids.splice(idx, 1);
-  if (ids.length === 0) {
-    delete currentSession.value.settings.attachments[typeId];
-  } else {
-    currentSession.value.settings.attachments[typeId] = ids;
-  }
-}
-
-onMounted(() => {
-  loadAttachmentTypes();
-});
 
 // 前往角色管理页面
 

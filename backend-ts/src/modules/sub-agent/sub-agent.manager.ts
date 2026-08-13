@@ -135,6 +135,8 @@ export class SubAgentManager implements OnModuleInit {
     settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
     // 运行模式：从父会话继承，防止子代理权限逃逸（如 sandbox → normal）
     settings.runMode = parentContext.getRunMode();
+    // 附加连接配置：从父会话继承（如 ssh-connection 远程连接），使子代理可复用主代理绑定的连接
+    settings.attachments = parentContext.getSettings("attachments") ?? {};
 
     if (params.characterId && params.characterId !== "generic") {
       // ── 数据库角色模式 ──

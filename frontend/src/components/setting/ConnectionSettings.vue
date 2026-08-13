@@ -117,6 +117,21 @@
               <el-input v-model="editConfig.privateKey" type="textarea" :rows="4"
                 placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..." />
             </div>
+
+            <!-- 权限模式 -->
+            <div>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                {{ t('settings.connection.permTitle') }}
+              </label>
+              <el-select v-model="editConfig.perm" style="width: 100%;">
+                <el-option :label="t('settings.connection.permWorkspace')" value="workspace" />
+                <el-option :label="t('settings.connection.permReadonly')" value="readonly" />
+                <el-option :label="t('settings.connection.permUnrestricted')" value="unrestricted" />
+              </el-select>
+              <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                {{ t('settings.connection.permDesc') }}
+              </div>
+            </div>
           </div>
 
           <!-- Step 1: 测试连接 -->
@@ -254,6 +269,7 @@ interface ConnectionConfig {
   password?: string
   privateKey?: string
   path: string
+  perm?: string
 }
 
 interface Connection {
@@ -273,7 +289,7 @@ const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
 const editConfig = ref<ConnectionConfig>({
-  host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKey: '', path: ''
+  host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKey: '', path: '', perm: 'workspace'
 })
 const saving = ref(false)
 const testing = ref(false)
