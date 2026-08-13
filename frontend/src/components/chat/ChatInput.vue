@@ -1294,7 +1294,7 @@ watch(editorContent, () => {
   nextTick(() => {
     const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
     if (pmEl) {
-      pmEl.style.minHeight = '58px';
+      pmEl.style.minHeight = '52px';
       pmEl.style.maxHeight = '240px';
       isInputExpanded.value = pmEl.scrollHeight > 60;
     }
