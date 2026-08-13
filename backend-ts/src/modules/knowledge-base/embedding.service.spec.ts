@@ -234,7 +234,8 @@ describe("isRetryableEmbeddingError", () => {
   });
 
   it("APIConnectionError → 可重试", () => {
-    const err = new OpenAI.APIConnectionError("connection lost");
+    // openai v6+ APIConnectionError 构造函数签名：{ message?, cause? }
+    const err = new OpenAI.APIConnectionError({ message: "connection lost" });
     expect(isRetryableEmbeddingError(err)).toBe(true);
   });
 
