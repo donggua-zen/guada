@@ -269,13 +269,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import LDialog from '@/components/ui/LDialog.vue'
 import { apiService } from '@/services/ApiService'
 
 const { t } = useI18n()
+
+// 部署轮询取消标志:组件卸载/窗口关闭时置 true,终止不必要的轮询
+let deployPollingCancelled = false
+function cancelDeployPolling() {
+  deployPollingCancelled = true
+}
+onUnmounted(() => cancelDeployPolling())
+// 窗口关闭/刷新时也终止轮询
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', cancelDeployPolling)
+}
 
 interface ConnectionConfig {
   host: string
@@ -417,10 +428,19 @@ async function deployConn() {
   deploying.value = true
   deployResult.value = null
   deployLog.value = ''
+  deployPollingCancelled = false
   try {
-    const result = await apiService.deployConnection(editConfig.value)
-    deployResult.value = result
-    deployLog.value = result.log?.join('\n') || ''
+    // 启动后台部署任务,返回 jobId;轮询日志实现实时进度反馈
+    const { jobId } = await apiService.deployConnection(editConfig.value)
+    while (!deployPollingCancelled) {
+      const state = await apiService.getDeployLog(jobId)
+      deployLog.value = state.log?.join('\n') || ''
+      if (state.done) {
+        deployResult.value = state.result || { success: false, installed: false, version: '', log: state.log || [] }
+        break
+      }
+      await new Promise((r) => setTimeout(r, 500))
+    }
   } catch (e: any) {
     deployResult.value = { success: false, installed: false, version: '', log: [e.message || String(e)] }
     deployLog.value = e.message || String(e)

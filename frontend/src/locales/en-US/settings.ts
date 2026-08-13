@@ -128,7 +128,7 @@
     privateKeyPathDesc: 'Click "Browse" to pick the private key file (Electron), or type the absolute path manually (Web). Only the path is saved, never the key content.',
     // Deploy verification
     deployTitle: 'Deploy Agent',
-    deployDesc: 'Check whether the remote agent is installed and version-matched; upload and deploy automatically if not. Saving is not allowed until deployment succeeds.',
+    deployDesc: 'This step installs and starts the remote agent on your server. It powers all file operations and command execution in the next steps. The agent is kept up-to-date automatically; once installed, you can continue.',
     deploying: 'Deploying Agent...',
     deployInstalled: 'Agent already installed with matching version',
     deploySuccess: 'Agent deployed successfully',

@@ -3,7 +3,6 @@ import * as fs from "fs";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { verifyAndDeployAgent, type DeployResult } from "./agent-deploy";
 import { encryptSecret, decryptSecret } from "./secret-crypto.util";
-
 export interface RemoteConnection {
   id: string;
   name: string;
@@ -196,12 +195,24 @@ export class RemoteWorkspaceService {
   }
 
   /**
-   * Deploy/verify agent on the remote host.
-   * Returns deployment logs; success=false means deployment failed (connection cannot be saved).
+   * 部署任务状态(内存中保存,供前端轮询日志)
+   */
+  private readonly deployJobs = new Map<
+    string,
+    { log: string[]; done: boolean; result?: DeployResult }
+  >();
+
+  /**
+   * Deploy/verify agent on the remote host — 后台执行,立即返回 jobId,
+   * 前端通过 getDeployLog 轮询实时日志,避免部署期间无反馈。
    */
   async deployConnection(
     config: RemoteConnection["config"],
-  ): Promise<DeployResult> {
+  ): Promise<{ jobId: string }> {
+    const jobId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job: { log: string[]; done: boolean; result?: DeployResult } = { log: [], done: false };
+    this.deployJobs.set(jobId, job);
+
     const params = new URLSearchParams();
     if (config.authMethod === "password" && config.password) {
       params.set("password", config.password);
@@ -210,22 +221,43 @@ export class RemoteWorkspaceService {
       params.set("privateKeyPath", config.privateKeyPath);
     }
     const query = params.toString();
-    const downloadUrl = await this.getAgentDownloadUrl();
-    const latestVersionUrl = await this.getAgentLatestVersionUrl();
 
-    return verifyAndDeployAgent(
-      {
-        scheme: "ssh",
-        host: config.host,
-        port: config.port || 22,
-        username: config.username || "root",
-        password: config.password,
-        path: config.path || "/",
-        query: query ? Object.fromEntries(params) : undefined,
-      },
-      downloadUrl,
-      latestVersionUrl,
-    );
+    // 异步执行,不阻塞响应
+    void (async () => {
+      try {
+        const downloadUrl = await this.getAgentDownloadUrl();
+        const latestVersionUrl = await this.getAgentLatestVersionUrl();
+        const result = await verifyAndDeployAgent(
+          {
+            scheme: "ssh",
+            host: config.host,
+            port: config.port || 22,
+            username: config.username || "root",
+            password: config.password,
+            path: config.path || "/",
+            query: query ? Object.fromEntries(params) : undefined,
+          },
+          downloadUrl,
+          latestVersionUrl,
+          (line) => job.log.push(line),
+        );
+        job.result = result;
+        job.done = true;
+      } catch (err: any) {
+        job.log.push(`Deployment failed: ${err?.message || err}`);
+        job.result = { success: false, installed: false, version: "", log: job.log };
+        job.done = true;
+      }
+    })();
+
+    return { jobId };
+  }
+
+  /** 查询部署任务日志(前端轮询) */
+  async getDeployLog(
+    jobId: string,
+  ): Promise<{ log: string[]; done: boolean; result?: DeployResult } | null> {
+    return this.deployJobs.get(jobId) || null;
   }
 
   /**

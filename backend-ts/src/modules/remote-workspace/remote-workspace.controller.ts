@@ -54,6 +54,13 @@ export class RemoteWorkspaceController {
     return this.service.deployConnection(body.config);
   }
 
+  @Get("connections/deploy-log/:jobId")
+  async getDeployLog(@Param("jobId") jobId: string) {
+    const job = await this.service.getDeployLog(jobId);
+    if (!job) return { error: "Job not found" };
+    return job;
+  }
+
   @Post("connections/browse")
   async browsePath(
     @Body() body: { config: any; path: string },

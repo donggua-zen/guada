@@ -30,13 +30,24 @@ export interface DeployResult {
   log: string[];
 }
 
+export interface DeployJob {
+  jobId: string;
+}
+
+export interface DeployLogState {
+  log: string[];
+  done: boolean;
+  result?: DeployResult;
+}
+
 export interface RemoteWorkspaceApi {
   getConnections(): Promise<RemoteConnection[]>;
   createConnection(name: string, config: RemoteConnection["config"]): Promise<RemoteConnection>;
   updateConnection(id: string, data: { name?: string; config?: RemoteConnection["config"] }): Promise<RemoteConnection>;
   deleteConnection(id: string): Promise<{ success: boolean }>;
   testConnection(config: RemoteConnection["config"]): Promise<{ success: boolean; error?: string; log?: string }>;
-  deployConnection(config: RemoteConnection["config"]): Promise<DeployResult>;
+  deployConnection(config: RemoteConnection["config"]): Promise<DeployJob>;
+  getDeployLog(jobId: string): Promise<DeployLogState>;
   browsePath(config: RemoteConnection["config"], path: string): Promise<DirEntry[]>;
 }
 
@@ -77,6 +88,10 @@ export const remoteWorkspaceApi: RemoteWorkspaceApi = {
       method: "POST",
       data: { config },
     });
+  },
+
+  async getDeployLog(this: ApiContext, jobId: string) {
+    return await this._request(`/remote-workspace/connections/deploy-log/${jobId}`);
   },
 
   async browsePath(this: ApiContext, config: RemoteConnection["config"], path: string) {

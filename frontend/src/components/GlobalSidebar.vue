@@ -1,5 +1,5 @@
 <template>
-  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden shadow-[inset_-4px_0_12px_rgba(0,0,0,0.03)] dark:shadow-[inset_-4px_0_12px_rgba(0,0,0,0.3)]">
+  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden ">
     <!-- 标题栏左侧面板 -->
     <TitlebarLeftPanel />
     <!-- 导航菜单 -->
@@ -10,7 +10,11 @@
           ? 'nav-item-active bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
           : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
-        <span class="text-sm font-medium">{{ item.label }}</span>
+        <span class="text-sm font-medium flex-1 truncate">{{ item.label }}</span>
+        <span v-if="item.shortcut"
+          class="text-[10px] leading-none font-mono text-gray-400 dark:text-gray-500 select-none">
+          {{ item.shortcut }}
+        </span>
       </div>
     </div>
 
@@ -22,7 +26,7 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between pl-2.5 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
+            class="group-header flex items-center justify-between pl-1 pr-1 py-1 ml-2 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
@@ -58,7 +62,7 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item flex items-center gap-2 py-1.5 pr-2 pl-2 mx-2  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item flex items-center gap-2 py-1.5 pr-1 pl-2 ml-2 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId
@@ -73,12 +77,12 @@
                 </div>
 
                 <div class="session-info flex-1 min-w-0 flex items-center">
-                  <div class="session-title truncate text-sm font-medium w-full">
+                  <div class="session-title text-sm font-medium w-full">
                     {{ session.title }}
                   </div>
                 </div>
-                <div class="session-actions shrink-0 relative min-w-6 h-full flex items-center">
-                  <!-- 最后活跃时间（非当前会话时显示，hover 时隐藏） -->
+                <div class="session-actions shrink-0 relative min-w-5 h-full flex items-center">
+                  <!-- 最后活跃时间（非当前会话时显示，hover 时隐藏，右对齐悬浮） -->
                   <span v-if="session.id !== currentSessionId"
                     class="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 group-hover:hidden whitespace-nowrap">
                     {{ formatLastActive(session.lastActiveAt || session.updatedAt) }}
@@ -396,7 +400,8 @@ const navItems = computed(() => [
   {
     key: 'chat',
     label: t('ui.sidebar.navNewTask'),
-    icon: AddSquare20Regular
+    icon: AddSquare20Regular,
+    shortcut: isElectron ? 'Ctrl N' : 'Ctrl Alt N'
   },
   {
     key: 'characters',
@@ -916,6 +921,22 @@ onUnmounted(() => {
 
 <style scoped>
 /* 会话项样式 */
+.session-title {
+  overflow: hidden;
+  white-space: nowrap;
+  /* 渐变遮罩自然淡出：fade 宽约半字符，紧贴右侧时间文本/按钮；mask 作用于自身 alpha，不依赖背景色，兼容壁纸/毛玻璃背景 */
+  -webkit-mask-image: linear-gradient(to right,
+    black 0%,
+    black calc(100% - 6px),
+    rgba(0, 0, 0, 0.65) calc(100% - 3px),
+    transparent 100%);
+  mask-image: linear-gradient(to right,
+    black 0%,
+    black calc(100% - 6px),
+    rgba(0, 0, 0, 0.65) calc(100% - 3px),
+    transparent 100%);
+}
+
 .session-item-inactive {
   color: var(--color-text);
 }

@@ -2,11 +2,9 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--color-input-bg)/80 backdrop-blur-xl backdrop-saturate-150 border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
-      :class="[styleClass, { 'drag-over': isDragOver }]"
-      @dragover.prevent
-      @dragenter.prevent="handleDragEnter"
-      @dragleave.prevent="handleDragLeave"
+      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--color-input-bg) border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
+      :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--color-input-bg)': !backdrop }, { 'bg-(--color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
+      @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"
       @drop.prevent="handleDrop">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -90,9 +88,8 @@
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
               :knowledge-bases="knowledgeBases" :selected-kb-ids="props.config?.knowledgeBaseIds || []"
-              :selected-attachments="props.config?.attachments || {}"
-              @select-image="triggerImageInput" @select-file="triggerFileInput"
-              @toggle-kb="toggleKnowledgeBaseSelection"
+              :selected-attachments="props.config?.attachments || {}" @select-image="triggerImageInput"
+              @select-file="triggerFileInput" @toggle-kb="toggleKnowledgeBaseSelection"
               @toggle-attachment="toggleAttachmentSelection" />
           </template>
         </div>
@@ -105,7 +102,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-              }}</span>
+            }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <LTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
@@ -142,8 +139,9 @@
         @select-thinking-effort="handleThinkingEffortChange" />
 
       <!-- 粘贴文本预览弹窗（利用 el-dialog 原生滚动） -->
-      <el-dialog v-model="previewDialogVisible" :title="t('chat.input.previewTitle', { name: previewFileName })" width="640px"
-        :close-on-click-modal="false" destroy-on-close class="pasted-preview-dialog" @close="closeFilePreview">
+      <el-dialog v-model="previewDialogVisible" :title="t('chat.input.previewTitle', { name: previewFileName })"
+        width="640px" :close-on-click-modal="false" destroy-on-close class="pasted-preview-dialog"
+        @close="closeFilePreview">
         <pre class="pasted-preview-text">{{ previewContent }}</pre>
         <template #footer>
           <el-button @click="closeFilePreview">{{ t('common.close') }}</el-button>
@@ -331,6 +329,7 @@ const props = defineProps({
   characterId: { type: String, default: null },
   // 模式：create 为创建会话模式，chat 为对话模式
   mode: { type: String, default: 'chat' },
+  backdrop: { type: Boolean, default: false },
   config: {
     type: Object as PropType<ChatConfig>,
     default: () => ({
@@ -349,10 +348,12 @@ const styleClass = computed(() => {
   if (isInputExpanded.value) {
     classes.push('expanded');
   }
-  if (focused.value) {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
-  } else {
-    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
+  if (props.mode === 'create') {
+    if (focused.value) {
+      classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
+    } else {
+      classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
+    }
   }
   return classes.join(' ') + ' ' + props.class;
 });
@@ -909,7 +910,7 @@ const loadAttachmentTypes = async () => {
         const lists = await apiService.getPluginAttachments(t.pluginId);
         const found = lists.find(l => l.typeId === t.id);
         items = found?.items || [];
-      } catch {}
+      } catch { }
       results.push({ ...t, _items: items });
     }
     attachmentTypes.value = results;
@@ -1530,13 +1531,14 @@ defineExpose({ insertText, insertBadge });
 /* Tiptap 编辑器样式 - 模拟 textarea */
 :deep(.message-editor .ProseMirror) {
   width: 100%;
-  min-height: 58px;
+  min-height: 52px;
   max-height: 240px;
   border: none;
   resize: none;
   outline: none;
   font-size: var(--size-text-base, 14px);
-  line-height: 1.8;
+  line-height: calc(var(--size-text-base) * 1.6);
+  ;
   padding: 0 8px;
   background: transparent;
   overflow-y: auto;

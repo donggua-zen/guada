@@ -54,18 +54,18 @@
   --color-surface-border: #efefef;
   --color-surface-hover: var(--color-sidebar-bg-hover);
   --size-surface-radius: 12px;
-  --color-bg: #fff;
-  --color-border: #d1d5db;
+  --color-bg: #f8f8f8;
+  --color-border: #e0e0e0;
 
-  --color-bubble-user-bg: #ebf5ff;
+  --color-bubble-user-bg: #f0f0f0;
   --color-bubble-user-text: #1f2937;
-  --color-bubble-user-border: #ebf5ff;
+  --color-bubble-user-border: #e1e1e1;
   --color-bubble-assitant-bg: transparent;
   --color-bubble-assitant-text: #0d0d0d;
   --color-bubble-assitant-border: none;
   --color-bubble-assitant-text-strong: #17181a;
 
-  --color-sidebar-bg: #f5f5f5;
+  --color-sidebar-bg: #ececee;
   --color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
   /* --color-sidebar-text-active: var(--color-primary); */
   --color-sidebar-text-active: var(--color-text);
@@ -88,7 +88,7 @@
 
   /* 输入框背景 */
   --color-input-bg: #ffffff;
-  --color-input-border: #d1d5db;
+  --color-input-border: #e1e1e1;
 
   /* 模态框：默认继承，主题可覆盖 */
   --color-overlay-bg: var(--color-surface);
@@ -167,7 +167,6 @@ html.dark {
   --color-surface-border: oklch(28% 0.02 250);
   --color-secondary-surface: #222;
   /* #2e3035 左右 */
-
   /* 文本颜色 - 确保在深色背景下的可读性 */
   --color-text: #d3d3d3;
   /* 主文本，柔和亮色 */
