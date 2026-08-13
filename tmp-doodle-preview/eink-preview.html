@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html data-theme="e-ink">
+<head>
+<meta charset="utf-8">
+<title>墨水屏适配验证</title>
+<link rel="stylesheet" href="../frontend/public/themes/e-ink.css">
+<style>
+  body { margin: 0; padding: 24px; font-family: "Georgia", "Microsoft YaHei", serif; background: var(--color-bg); color: var(--color-text); }
+  /* 模拟 markdown.css 变量化后的代码块默认值 */
+  .custom-code-block { margin-bottom: 1em; }
+  .custom-code-block pre.hljs { margin: 0; border-radius: 0 0 8px 8px; background: var(--code-block-bg, #fff); max-height: 800px; overflow: auto; padding: 0.5em 1em; font-family: Consolas, monospace; font-size: 14px; line-height: 1.6; }
+  .dark .custom-code-block pre.hljs { background: var(--code-block-bg, #2f3232); color: var(--color-text); border: 1px solid var(--code-block-border, #2f3232); }
+  .code-header { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: var(--code-block-header-bg, #f4f4f4); color: #222; font-size: 0.8em; border-radius: 8px 8px 0 0; }
+  .dark .code-header { background: var(--code-block-header-bg, var(--color-sidebar-bg-active)); color: var(--color-text); border: 1px solid var(--code-block-border, #2f3232); }
+  .code-language { font-weight: 600; text-transform: uppercase; color: var(--code-block-language-color, #666); }
+  .dark .code-language { color: var(--code-block-language-color, #888); }
+  .copy-code-button { color: var(--code-block-language-color, #666); background: none; border: none; cursor: pointer; }
+  .dark .copy-code-button { color: var(--code-block-language-color, #888); }
+  /* 输入框与弹窗 */
+  .input-area { background: var(--color-input-bg); border: 1px solid var(--color-input-border); padding: 14px 12px; min-height: 50px; margin: 16px 0; }
+  .placeholder { color: var(--color-text-disabled); font-size: 14px; }
+  .el-dialog { width: 420px; margin: 24px 0; border-radius: 16px; background: var(--color-dialog-bg); border: 1px solid var(--color-dialog-border); box-shadow: 0 8px 32px rgba(0,0,0,0.2); padding: 16px; }
+  .el-dialog__title { font-weight: 600; font-size: 16px; }
+  .el-dialog__body { font-size: 14px; margin-top: 8px; color: var(--color-text-gray); }
+  .label { font-size: 12px; color: var(--color-text-gray); margin: 18px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="label">代码块</div>
+<div class="custom-code-block">
+  <div class="code-header"><span class="code-language">python</span><button class="copy-code-button">⧉</button></div>
+  <pre class="hljs"><code>def refresh(self):
+    self._last_refresh = time.time()
+    return self.fetch()</code></pre>
+</div>
+
+<div class="label">输入框</div>
+<div class="input-area"><span class="placeholder">输入消息，Enter 发送…</span></div>
+
+<div class="label">弹窗（--color-dialog-bg）</div>
+<div class="el-dialog">
+  <span class="el-dialog__title">记忆管理</span>
+  <div class="el-dialog__body">上下文使用率 29%，已压缩 0 次。</div>
+</div>
+
+<button onclick="document.documentElement.classList.toggle('dark')" style="margin-top:10px; cursor:pointer;">切换暗色</button>
+<script>if (new URLSearchParams(location.search).get('dark')) document.documentElement.classList.add('dark');</script>
+</body>
+</html>

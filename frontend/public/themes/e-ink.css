@@ -94,6 +94,12 @@
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #1a1a1a;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #f5f1e8;
+  --code-block-bg: #e6e1d3;
+  --code-block-header-bg: #ede9de;
+  --code-block-border: #d0cabb;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;
@@ -187,6 +193,12 @@ html.dark[data-theme="e-ink"] {
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #e2ddd0;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #232321;
+  --code-block-bg: #141412;
+  --code-block-header-bg: #232321;
+  --code-block-border: #3a3a36;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;
@@ -229,16 +241,29 @@ html[data-theme="e-ink"] .workspace-sidebar {
   border-left: 1px solid var(--color-border);
 }
 
-/* 输入框：细线框，圆角收敛 */
-html[data-theme="e-ink"] .mock-inputbar {
+/* 输入框：细线框，圆角收敛（真实类名 .input-area，旧 .mock-inputbar 已失效） */
+html[data-theme="e-ink"] .input-area {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   box-shadow: none;
 }
 
-/* 代码块：细线框 */
-html[data-theme="e-ink"] .md-code {
+/* 代码块：纸面卡片 + 细线框（真实结构 .custom-code-block，旧 .md-code 已失效） */
+html[data-theme="e-ink"] .markdown-text .custom-code-block {
   border: 1px solid var(--color-border);
-  border-radius: 2px;
-  box-shadow: none;
+  border-radius: 4px;
+  overflow: hidden;
+}
+/* 标题栏：去外框，只留底部细分隔线 */
+html[data-theme="e-ink"] .markdown-text .code-header,
+html.dark[data-theme="e-ink"] .markdown-text .code-header {
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+}
+/* pre 去自带边框圆角，由容器统一管理 */
+html[data-theme="e-ink"] .markdown-text .custom-code-block pre.hljs,
+html.dark[data-theme="e-ink"] .markdown-text .custom-code-block pre.hljs {
+  border: none;
+  border-radius: 0;
 }

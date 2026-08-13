@@ -1,7 +1,9 @@
 <!-- ScrollContainer.vue -->
 <template>
     <div ref="scrollElement" class="scroll-container"
-        @scroll="handleScroll">
+        @scroll="handleScroll"
+        @mouseenter="handleMouseEnter"
+        @mouseleave="handleMouseLeave">
         <div ref="contentElement">
             <slot></slot>
         </div>
@@ -43,6 +45,28 @@ const scrollElement = ref<HTMLElement | null>(null);
 const stopScrolling = useDebounceFn(() => {
     scrollElement.value?.classList.remove('is-scrolling');
 }, 1500);
+
+// 鼠标进入容器：显示滚动条
+function handleMouseEnter(): void {
+    scrollElement.value?.classList.add('is-hovering');
+}
+
+// 鼠标离开容器：立即隐藏滚动条，不等待防抖，避免滚动条残留
+function handleMouseLeave(): void {
+    scrollElement.value?.classList.remove('is-scrolling');
+    scrollElement.value?.classList.remove('is-hovering');
+}
+
+// 指针离开浏览器窗口时强制清理状态。
+// Chromium 中指针从滚动条区域离开窗口时 :hover 伪类可能残留，
+// 因此显隐完全由 class 控制，窗口离开时统一移除。
+function handleWindowMouseOut(event: MouseEvent): void {
+    if (!event.relatedTarget) {
+        const el = scrollElement.value;
+        el?.classList.remove('is-scrolling');
+        el?.classList.remove('is-hovering');
+    }
+}
 
 
 
@@ -106,12 +130,15 @@ function initScrollObservers() {
 // 生命周期
 onMounted(() => {
     initScrollObservers();
+    // 监听指针离开窗口，强制清理滚动条显隐状态
+    document.addEventListener('mouseout', handleWindowMouseOut);
 });
 
 onUnmounted(() => {
     if (resizeObserver.value) {
         resizeObserver.value.disconnect();
     }
+    document.removeEventListener('mouseout', handleWindowMouseOut);
 });
 
 // 暴露给父组件的方法
@@ -142,39 +169,39 @@ defineExpose({
     margin: 2px 0;
 }
 
-/* 默认状态：滚动条透明（隐藏） */
+/* 默认状态：滚动条透明（隐藏），隐藏无延迟，保证 hover 结束立即隐藏 */
 .scroll-container::-webkit-scrollbar-thumb {
     min-height: 80px;
     background-color: transparent;
     border-radius: 8px;
     background-clip: content-box;
     transition: background-color 0.2s linear;
-    transition-delay: 0.6s;
+    transition-delay: 0s;
     border: 1px solid transparent;
 }
 
-/* 滚动中或悬停时：显示滚动条 */
+/* 滚动中或悬停时：显示滚动条（显隐完全由 class 控制，避免 :hover 残留） */
 .scroll-container.is-scrolling::-webkit-scrollbar-thumb,
-.scroll-container:hover::-webkit-scrollbar-thumb {
+.scroll-container.is-hovering::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.10);
     transition-delay: 0s;
 }
 
 /* 滚动中或悬停时的 hover 状态 */
 .scroll-container.is-scrolling::-webkit-scrollbar-thumb:hover,
-.scroll-container:hover::-webkit-scrollbar-thumb:hover {
+.scroll-container.is-hovering::-webkit-scrollbar-thumb:hover {
     background-color: rgba(0, 0, 0, 0.25);
     cursor: pointer;
 }
 
 /* 暗色模式下的滚动条样式 */
 html.dark .scroll-container.is-scrolling::-webkit-scrollbar-thumb,
-html.dark .scroll-container:hover::-webkit-scrollbar-thumb {
+html.dark .scroll-container.is-hovering::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
 html.dark .scroll-container.is-scrolling::-webkit-scrollbar-thumb:hover,
-html.dark .scroll-container:hover::-webkit-scrollbar-thumb:hover {
+html.dark .scroll-container.is-hovering::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.25);
 }
 </style>

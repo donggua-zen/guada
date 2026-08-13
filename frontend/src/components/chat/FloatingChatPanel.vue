@@ -469,4 +469,9 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
 .floating-chat-mode :deep(.max-w-186) {
   max-width: 100% !important;
 }
+
+/* 浮动模式下最后一个 turn 不需要 min-height 撑开 */
+.floating-chat-mode :deep(.turn-wrapper--last) {
+  min-height: 0 !important;
+}
 </style>

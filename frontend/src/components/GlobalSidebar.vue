@@ -3,7 +3,7 @@
     <!-- 标题栏左侧面板 -->
     <TitlebarLeftPanel />
     <!-- 导航菜单 -->
-    <div class="px-2.5 py-2 space-y-0.5">
+    <div class="px-2 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
         class="nav-item flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
@@ -26,7 +26,7 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between pl-1 pr-1 py-1 ml-2 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
+            class="group-header flex items-center justify-between pl-1 pr-1 py-1 ml-1 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
@@ -62,7 +62,7 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item flex items-center gap-2 py-1.5 pr-1 pl-2 ml-2 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item flex items-center gap-2 py-1.5 pr-1 pl-2 ml-1 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId

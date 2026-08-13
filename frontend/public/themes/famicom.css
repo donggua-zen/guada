@@ -95,6 +95,10 @@
   --color-input-bg: #faf6ed;
   --color-input-border: #8a7e6a;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #faf6ed;
+  --code-block-bg: #f0ebde;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;
@@ -190,6 +194,10 @@ html.dark[data-theme="famicom"] {
   /* 输入框 */
   --color-input-bg: #1e1e24;
   --color-input-border: #3a3a42;
+
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #1e1e24;
+  --code-block-bg: #141418;
 
   /* 排版与细节 */
   --size-text-base: 15px;

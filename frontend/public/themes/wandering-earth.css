@@ -97,6 +97,9 @@ html.dark[data-theme="wandering-earth"] {
   --color-input-bg: #0d1218;
   --color-input-border: #2b3542;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #10151c;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;

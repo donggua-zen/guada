@@ -87,6 +87,11 @@
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #2060b0;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #ffffff;
+  --code-block-bg: #f0f6fc;
+  --color-input-bg: #ffffff;
+
   /* 排版与细节 */
   --size-text-base: 14.5px;
   --size-text-sm: 13.5px;
@@ -175,6 +180,11 @@ html.dark[data-theme="blueprint"] {
   --color-bubble-assitant-text: #d9e9fa;
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #6fb7ff;
+
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #0d3560;
+  --code-block-bg: #0a2b4d;
+  --color-input-bg: #0a2b4d;
 
   /* 排版与细节 */
   --size-text-base: 14.5px;

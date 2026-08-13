@@ -102,7 +102,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-            }}</span>
+              }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <LTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
@@ -155,41 +155,25 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessageBox } from 'element-plus';
+import { ElIcon, ElButton, ElDialog, ElTag, ElMessageBox } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import FileItem from '../ui/FileItem.vue';
-import Avatar from '../ui/Avatar.vue';
-import ElSliderOptional from '../ui/ElSliderOptional.vue';
-import CustomPopover from '../ui/CustomPopover.vue';
 import LTooltip from '../ui/LTooltip.vue';
-import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
 import RunModePopover from './chat-input/RunModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
-import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
-import { OpenAI } from "@/components/icons";
+import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import {
-  SearchFilled,
-  CheckCircleFilled,
-  ArrowRightTwotone,
-  CloseOutlined
-} from "@vicons/material";
-import { Thinking2 } from "@/components/icons";
-import {
-  TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, BookSearch24Regular, Cloud24Regular,
-  Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
+
+  Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
+  DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
 } from '@vicons/fluent'
-import {
-  ThunderboltOutlined,
-  SyncOutlined
-} from '@vicons/antd'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
@@ -348,13 +332,13 @@ const styleClass = computed(() => {
   if (isInputExpanded.value) {
     classes.push('expanded');
   }
-  if (props.mode === 'create') {
-    if (focused.value) {
-      classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
-    } else {
-      classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
-    }
+  // if (props.mode === 'create') {
+  if (focused.value) {
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
+  } else {
+    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
   }
+  // }
   return classes.join(' ') + ' ' + props.class;
 });
 

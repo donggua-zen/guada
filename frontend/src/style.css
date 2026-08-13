@@ -54,8 +54,9 @@
   --color-surface-border: #efefef;
   --color-surface-hover: var(--color-sidebar-bg-hover);
   --size-surface-radius: 12px;
-  --color-bg: #f8f8f8;
+  --color-bg: #fff;
   --color-border: #e0e0e0;
+  --code-block-bg: #f8f8f8;
 
   --color-bubble-user-bg: #f0f0f0;
   --color-bubble-user-text: #1f2937;
@@ -65,7 +66,7 @@
   --color-bubble-assitant-border: none;
   --color-bubble-assitant-text-strong: #17181a;
 
-  --color-sidebar-bg: #ececee;
+  --color-sidebar-bg: #f9f9f9;
   --color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
   /* --color-sidebar-text-active: var(--color-primary); */
   --color-sidebar-text-active: var(--color-text);
@@ -92,7 +93,7 @@
 
   /* 模态框：默认继承，主题可覆盖 */
   --color-overlay-bg: var(--color-surface);
-  --color-dialog-bg: var(--color-bg);
+  --color-dialog-bg: #fff;
   --color-dialog-border: var(--color-border);
   --size-dialog-rounded-radius: 12px;
 
