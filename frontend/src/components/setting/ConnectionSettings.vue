@@ -277,13 +277,20 @@ import { apiService } from '@/services/ApiService'
 
 const { t } = useI18n()
 
-// 部署轮询取消标志:组件卸载/窗口关闭时置 true,终止不必要的轮询
+// 部署轮询取消:组件卸载/窗口关闭时置 true 终止轮询,并通知后端中止部署任务
 let deployPollingCancelled = false
+let activeDeployJobId: string | null = null
 function cancelDeployPolling() {
   deployPollingCancelled = true
+  // 窗口/组件已关闭,后端无需继续部署 — 通知取消,释放 SSH/下载资源
+  const jobId = activeDeployJobId
+  activeDeployJobId = null
+  if (jobId) {
+    apiService.cancelDeploy(jobId).catch(() => {})
+  }
 }
 onUnmounted(() => cancelDeployPolling())
-// 窗口关闭/刷新时也终止轮询
+// 窗口关闭/刷新时也终止轮询并通知后端取消
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', cancelDeployPolling)
 }
@@ -432,10 +439,12 @@ async function deployConn() {
   try {
     // 启动后台部署任务,返回 jobId;轮询日志实现实时进度反馈
     const { jobId } = await apiService.deployConnection(editConfig.value)
+    activeDeployJobId = jobId
     while (!deployPollingCancelled) {
       const state = await apiService.getDeployLog(jobId)
       deployLog.value = state.log?.join('\n') || ''
       if (state.done) {
+        activeDeployJobId = null
         deployResult.value = state.result || { success: false, installed: false, version: '', log: state.log || [] }
         break
       }

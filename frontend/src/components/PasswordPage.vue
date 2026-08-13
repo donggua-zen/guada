@@ -171,7 +171,7 @@
                             <div class="ml-3">
                                 <p class="text-sm text-yellow-700">
                                     <strong>{{ t('ui.password.resetTip') }}</strong>
-                                        class="bg-gray-100 px-1 rounded">password_is_set.txt</code> 文件并刷新本页面。
+                                        <code class="bg-gray-100 px-1 rounded">password_is_set.txt</code> 文件并刷新本页面。
                                 </p>
                             </div>
                         </div>
