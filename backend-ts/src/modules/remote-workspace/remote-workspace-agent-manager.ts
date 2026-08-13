@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { Client as SshClient } from "ssh2";
+import { Logger } from "@nestjs/common";
 import { deployAgent } from "./agent-deploy";
 import { RpcClient } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
@@ -18,12 +19,65 @@ interface CachedAgent {
   ws: WebSocket;
   sshClient: SshClient | null;
   busy: boolean;
+  /** 最近一次被使用的时间戳(ms),用于空闲回收判断 */
+  lastActive: number;
 }
 
 export class RemoteAgentManager {
   private cache = new Map<string, CachedAgent>();
 
-  constructor(private readonly service: RemoteWorkspaceService) {}
+  /** 空闲回收阈值:连接超过该时长未被使用则主动关闭(默认 2 小时) */
+  private static readonly IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+  /** 空闲扫描间隔(1 分钟) */
+  private static readonly SCAN_INTERVAL_MS = 60 * 1000;
+  private scanTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(private readonly service: RemoteWorkspaceService) {
+    // 启动空闲回收定时器:周期扫描缓存,关闭并清理长期未使用的连接
+    this.scanTimer = setInterval(() => {
+      this.reapIdleConnections();
+    }, RemoteAgentManager.SCAN_INTERVAL_MS);
+    this.scanTimer.unref?.();
+  }
+
+  /** 扫描并回收空闲超时的连接(关闭 ws/ssh 并从缓存移除) */
+  private reapIdleConnections(): void {
+    const now = Date.now();
+    for (const [name, cached] of this.cache) {
+      if (now - cached.lastActive >= RemoteAgentManager.IDLE_TIMEOUT_MS) {
+        this.logger.log(
+          `Recycling idle agent connection '${name}' (idle > 2h)`,
+        );
+        try {
+          cached.ws.close();
+        } catch {}
+        try {
+          cached.sshClient?.end();
+        } catch {}
+        this.cache.delete(name);
+      }
+    }
+  }
+
+  /** 停止空闲扫描并关闭所有缓存连接(模块销毁时调用) */
+  dispose(): void {
+    if (this.scanTimer) {
+      clearInterval(this.scanTimer);
+      this.scanTimer = null;
+    }
+    for (const [name, cached] of this.cache) {
+      try {
+        cached.ws.close();
+      } catch {}
+      try {
+        cached.sshClient?.end();
+      } catch {}
+    }
+    this.cache.clear();
+    this.logger.log("RemoteAgentManager disposed: all cached connections closed");
+  }
+
+  private readonly logger = new Logger(RemoteAgentManager.name);
 
   /**
    * Get or create an agent connection by connection name.
@@ -75,6 +129,7 @@ export class RemoteAgentManager {
     // Check cache
     const cached = this.cache.get(conn.name);
     if (cached && !cached.busy) {
+      cached.lastActive = Date.now();
       return new RemoteAgent(cached.rpc, conn.config);
     }
 
@@ -85,6 +140,7 @@ export class RemoteAgentManager {
       ws: connInfo.ws,
       sshClient: connInfo.sshClient,
       busy: false,
+      lastActive: Date.now(),
     };
     this.cache.set(conn.name, cached2);
     return new RemoteAgent(cached2.rpc, conn.config);

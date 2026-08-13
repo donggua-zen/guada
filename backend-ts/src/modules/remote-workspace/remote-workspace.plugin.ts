@@ -32,6 +32,11 @@ export class RemoteWorkspacePlugin extends PluginBase {
     this.manager = new RemoteAgentManager(workspaceService);
   }
 
+  /** 模块销毁时调用:停止空闲扫描并关闭所有缓存连接 */
+  dispose(): void {
+    this.manager.dispose();
+  }
+
   async onLoad(api: PluginApi) {
     // 工具展示文案语言包(display.text/aggregate 的 %key% 引用在此解析)
     api.registerNls("zh", langZh);
