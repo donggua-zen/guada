@@ -95,6 +95,9 @@ html.dark[data-theme="cyberpunk"] {
   --color-input-bg: #0d1420;
   --color-input-border: #22344d;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #101725;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;

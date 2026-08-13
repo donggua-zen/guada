@@ -87,6 +87,11 @@
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #4f5ce0;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #ffffff;
+  --code-block-bg: #e9edf6;
+  --color-input-bg: #ffffff;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;
@@ -175,6 +180,11 @@ html.dark[data-theme="y2k"] {
   --color-bubble-assitant-text: #e4e7f7;
   --color-bubble-assitant-border: transparent;
   --color-bubble-assitant-text-strong: #a6b0ff;
+
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #1a1d30;
+  --code-block-bg: #101221;
+  --color-input-bg: #141628;
 
   /* 排版与细节 */
   --size-text-base: 15px;

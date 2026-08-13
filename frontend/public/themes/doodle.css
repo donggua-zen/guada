@@ -92,6 +92,10 @@
   --color-input-bg: #fbf7ed;
   --color-input-border: #c9b896;
 
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #fbf7ed;
+  --code-block-bg: #f3ecdc;
+
   /* 排版与细节 */
   --size-text-base: 15px;
   --size-text-sm: 14px;
@@ -184,6 +188,10 @@ html.dark[data-theme="doodle"] {
   /* 输入框 */
   --color-input-bg: #2a2620;
   --color-input-border: #48403a;
+
+  /* 弹窗 / 代码块 */
+  --color-dialog-bg: #2a2620;
+  --code-block-bg: #221f19;
 
   /* 排版与细节 */
   --size-text-base: 15px;
