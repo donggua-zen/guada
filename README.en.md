@@ -175,12 +175,26 @@ ai_chat/
 
 **Got questions? Want to discuss tech? Download pre-built clients? Come here:**
 
-| Channel | Link |
-|:----|:----|
-|  **QQ Group** | **1047993501** |
-|  **WeChat Official Account** | **冬瓜编程实验室** (Winter Melon Programming Lab) |
-|  **Issue Tracker** | [Gitee Issues](https://gitee.com/zhendongdong/guada_ai/issues) |
-| ⭐ **Support the Project** | [Give a Star](https://gitee.com/zhendongdong/guada_ai) (Your encouragement is the fuel for continuous updates ❤️) |
+<table align="center">
+  <tr>
+    <td align="center" width="33%">
+      <img src="./images/qq_qrcode.png" width="180" height="180" alt="QQ Group QR"/><br>
+      <b>🐧 QQ Group: 1047993501</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="WeChat Group QR"/><br>
+      <b>💬 WeChat Group</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="./images/wx_public_qrcode.jpeg" width="180" height="180" alt="WeChat Account QR"/><br>
+      <b>📱 WeChat Official Account: 冬瓜编程实验室</b>
+    </td>
+  </tr>
+</table>
+
+<p align="center" style="margin-top: 30px;">
+  <a href="https://gitee.com/zhendongdong/guada_ai"><b>⭐ Give a Star to Support the Project</b></a> (Your encouragement is the fuel for continuous updates ❤️)
+</p>
 
 ---
 

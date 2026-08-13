@@ -199,20 +199,22 @@ ai_chat/
 
 **遇到问题？想交流技术？下载预编译客户端？来这里：**
 
-<div align="center">
-  <span style="display:inline-block; margin: 0 20px;">
-    <img src="./images/qq_qrcode.png" width="180" height="180" alt="QQ群二维码"/><br>
-    <b>🐧 QQ 群：1047993501</b>
-  </span>
-  <span style="display:inline-block; margin: 0 20px;">
-    <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="微信群二维码"/><br>
-    <b>💬 微信群</b>
-  </span>
-  <span style="display:inline-block; margin: 0 20px;">
-    <img src="./images/wx_public_qrcode.jpeg" width="180" height="180" alt="公众号二维码"/><br>
-    <b>📱 公众号：冬瓜编程实验室</b>
-  </span>
-</div>
+<table align="center">
+  <tr>
+    <td align="center" width="33%">
+      <img src="./images/qq_qrcode.png" width="180" height="180" alt="QQ群二维码"/><br>
+      <b>🐧 QQ 群：1047993501</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="微信群二维码"/><br>
+      <b>💬 微信群</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="./images/wx_public_qrcode.jpeg" width="180" height="180" alt="公众号二维码"/><br>
+      <b>📱 公众号：冬瓜编程实验室</b>
+    </td>
+  </tr>
+</table>
 
 <p align="center" style="margin-top: 30px;">
   <a href="https://gitee.com/zhendongdong/guada_ai"><b>⭐ 点个 Star 支持项目</b></a>（你的鼓励是持续更新的动力 ❤️）
