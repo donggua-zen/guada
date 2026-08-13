@@ -100,7 +100,7 @@ export default {
   },
 
   connection: {
-    title: 'Remote Workspace',
+    title: '远程工作区',
     desc: '管理 SSH 远程服务器连接',
     newConnection: '新建连接',
     editConnection: '编辑连接',
@@ -125,6 +125,8 @@ export default {
     next: '下一步',
     prev: '上一步',
     save: '保存连接',
+    browse: '浏览',
+    privateKeyPathDesc: 'Electron 下可点击"浏览"选择私钥文件;Web 端请手动输入私钥文件绝对路径。仅保存路径,不保存私钥内容。',
     // 部署验证
     deployTitle: '部署 Agent',
     deployDesc: '检测远端是否已安装 Agent 且版本匹配,不匹配则自动上传部署。部署不成功不允许保存连接。',
@@ -135,12 +137,12 @@ export default {
     deployRetry: '重新部署',
     // 权限模式
     permTitle: 'Agent 权限模式',
-    permWorkspace: '工作目录可写(默认)',
+    permWorkspace: '工作区可写',
     permReadonly: '只读',
     permUnrestricted: '不限制',
     permDesc: '工作目录内可读写,目录外只读;只读模式拒绝所有写操作。',
     // 目录浏览
-    browseTitle: '选择 Remote Workspace 目录',
+    browseTitle: '选择远程工作区目录',
     browseDesc: '浏览服务器目录，选择项目根目录',
     browseFolders: '浏览文件夹',
     goUp: '返回上级目录',
@@ -204,11 +206,20 @@ export default {
       search: '搜索设置',
       browser: '浏览器',
       about: '关于',
-      connections: 'Remote Workspace',
+      connections: '远程工作区',
       sessionGroups: '分组管理',
       sessionArchived: '归档管理',
       profile: '账户概览',
       security: '安全设置',
+      community: '反馈/社区',
+    },
+    community: {
+      feedback: '问题反馈',
+      joinCommunity: '加入社区',
+      communityDesc: '遇到问题？想交流技术？下载预编译客户端？来这里：',
+      officialAccountName: '冬瓜编程实验室',
+      giteeIssues: 'Gitee Issues',
+      starPrompt: '⭐ 如果 GuaDa 对你有帮助，欢迎在 Gitee 上点个 Star，你的支持是持续更新的动力 ❤️',
     },
   },
 

@@ -22,43 +22,12 @@ import * as https from "https";
 import * as crypto from "crypto";
 import type { ParsedWorkspaceUri } from "../../common/workspace/workspace-provider.interface";
 
-/**
- * 主程序支持的最低 agent 版本(接口兼容下限)。
- * 注意:这不是"固定版本" — 远端版本 ≥ MIN 即可复用,低于 MIN 才会重新部署。
- * 未来 agent 发布新版本(修复 bug / 新增能力)时,只需更新下载地址即可自动升级,
- * 无需修改此常量、无需升级主程序。
- */
-export const MIN_AGENT_VERSION = "0.4.0";
 const REMOTE_DIR = ".guada-agent";
 const REMOTE_BINARY_NAME = "guada-agent";
 
 // 下载地址模板(任务#3 会改为从配置读取;{os}/{arch}/{version} 会被替换)
 // 调试阶段不使用网络下载,二进制通过本地文件夹复制放入缓存目录。
 // const AGENT_DOWNLOAD_URL = `https://.../guada-agent-{os}-{arch}`;
-
-/**
- * 语义化版本比较:a > b 返回正数,a == b 返回 0,a < b 返回负数。
- * 支持 "1.2.3" / "1.2" / "1.2.3-beta.1" 等格式(数字段比较,忽略预发布后缀)。
- */
-function compareVersions(a: string, b: string): number {
-  const parse = (v: string): number[] =>
-    (v.match(/\d+/g) || []).map((n) => parseInt(n, 10));
-  const pa = parse(a);
-  const pb = parse(b);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const x = pa[i] ?? 0;
-    const y = pb[i] ?? 0;
-    if (x !== y) return x - y;
-  }
-  return 0;
-}
-
-/** 远端 agent 版本是否达到最低要求 */
-export function isVersionSupported(remoteVersion: string): boolean {
-  if (!remoteVersion || remoteVersion === "NOT_FOUND") return false;
-  return compareVersions(remoteVersion, MIN_AGENT_VERSION) >= 0;
-}
 
 // 本地缓存目录: ~/.guada/agent/
 function localCacheDir(): string {
@@ -147,8 +116,16 @@ export async function deployAgent(
     );
     const remoteVersion = versionCheck.trim();
 
-    // 版本低于最低要求(或未安装)时才重新部署;版本 ≥ MIN 直接复用,不限制远端更新到更新版本
-    if (!isVersionSupported(remoteVersion)) {
+    // 期望版本:配置了 latest 接口时取最新版本号,与远端严格比较;
+    // 不一致(或未安装)即重新下载推送;未配置 latest 时按 NOT_FOUND 判断。
+    const expectedVersion = latestVersionUrl
+      ? (await fetchLatestVersion(latestVersionUrl)).version
+      : "";
+    const needDeploy = expectedVersion
+      ? remoteVersion !== expectedVersion
+      : remoteVersion === "NOT_FOUND";
+
+    if (needDeploy) {
       // Step 3: detect remote OS + arch
       const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
       const archRaw = (await execCommand(sshClient, "uname -m")).trim();
@@ -169,9 +146,10 @@ export async function deployAgent(
       sshClient,
       remoteBinary,
       `${remoteDir}/.token`,
-      !isVersionSupported(remoteVersion),
+      needDeploy,
       uri.path,
       uri.query?.perm,
+      expectedVersion,
     );
 
     // Step 5: port forward
@@ -236,15 +214,25 @@ export async function verifyAndDeployAgent(
       `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
     );
     const remoteVersion = versionCheck.trim();
-    if (isVersionSupported(remoteVersion)) {
-      log.push(`agent 已安装且版本达到要求 (v${remoteVersion}, 最低要求 v${MIN_AGENT_VERSION})`);
+
+    // 期望版本:配置了 latest 接口时取最新版本号,与远端严格比较;
+    // 一致则复用,不一致(或未安装)则重新下载推送。
+    const expectedVersion = latestVersionUrl
+      ? (await fetchLatestVersion(latestVersionUrl)).version
+      : "";
+    const needDeploy = expectedVersion
+      ? remoteVersion !== expectedVersion
+      : remoteVersion === "NOT_FOUND";
+
+    if (!needDeploy) {
+      log.push(`agent 已安装且版本一致 (v${remoteVersion})`);
       return { success: true, installed: true, version: remoteVersion, log };
     }
 
     log.push(
       remoteVersion === "NOT_FOUND"
         ? "远端未安装 agent,开始部署"
-        : `远端版本 ${remoteVersion} 低于最低要求 ${MIN_AGENT_VERSION},开始重新部署`,
+        : `远端版本 ${remoteVersion} 与期望 ${expectedVersion} 不一致,开始重新部署`,
     );
 
     // 检测远端 OS + 架构
@@ -268,14 +256,15 @@ export async function verifyAndDeployAgent(
       sshClient,
       remoteBinary,
       `${remoteDir}/.token`,
-      !isVersionSupported(remoteVersion),
+      needDeploy,
       uri.path,
       uri.query?.perm,
+      expectedVersion,
     );
     log.push(`Agent 启动成功,监听端口 ${remotePort}`);
     log.push("部署验证通过");
 
-    return { success: true, installed: false, version: MIN_AGENT_VERSION, log };
+    return { success: true, installed: false, version: expectedVersion, log };
   } catch (err: any) {
     log.push(`部署失败: ${err?.message || err}`);
     return { success: false, installed: false, version: "", log };
@@ -519,10 +508,10 @@ function startAgentBackground(
       reject(new Error("Agent start timeout (10s)"));
     }, 10000);
 
-    // 权限参数:默认 workspace 模式;root 缺失时降级为 unrestricted,避免启动失败
-    const permArg = perm && perm !== "unrestricted" ? ` --perm ${perm}` : "";
-    const rootArg =
-      permArg && rootDir ? ` --root '${rootDir}'` : "";
+    // 权限参数:工作目录(--root)无论权限模式都必须传递,
+    // 它是命令行/文件编辑的相对路径基准;权限模式默认为 workspace。
+    const permArg = perm && perm !== "workspace" ? ` --perm ${perm}` : "";
+    const rootArg = rootDir ? ` --root '${rootDir}'` : "";
 
     client.exec(
       `nohup ${remoteBinary} --port ${port} --token-file ${remoteTokenFile}${permArg}${rootArg} 2>&1 &`,
@@ -612,15 +601,22 @@ function setupPortForward(client: Client, remotePort: number): Promise<number> {
 /** agent 固定监听端口池(避免随机端口导致后续连接无法发现) */
 const AGENT_PORTS = [19876, 19877, 19878, 19879, 19880];
 
-/** 检查远端端口上的 agent 是否健康且版本达到最低要求 */
-async function checkAgentHealth(client: Client, port: number): Promise<boolean> {
+/** 检查远端端口上的 agent 是否健康且版本与期望一致(期望为空时仅检查健康) */
+async function checkAgentHealth(
+  client: Client,
+  port: number,
+  expectedVersion?: string,
+): Promise<boolean> {
   const result = await execCommand(
     client,
     `curl -s --connect-timeout 1 http://127.0.0.1:${port}/health 2>/dev/null || true`,
   );
   if (!result.includes('"status":"ok"')) return false;
-  const match = result.match(/"version":"([^"]+)"/);
-  return match ? isVersionSupported(match[1]) : false;
+  // 有期望版本时要求严格一致,否则视为不可复用(需重启推送新版)
+  if (expectedVersion) {
+    return result.includes(`"version":"${expectedVersion}"`);
+  }
+  return true;
 }
 
 /** 挑选一个未被占用的固定端口 */
@@ -647,11 +643,12 @@ async function ensureAgentRunning(
   restart: boolean,
   rootDir?: string,
   perm?: string,
+  expectedVersion?: string,
 ): Promise<number> {
-  // 1) 复用已运行的健康 agent(避免频繁重启)
+  // 1) 复用已运行的健康 agent(版本与期望一致才复用,避免频繁重启)
   if (!restart) {
     for (const port of AGENT_PORTS) {
-      if (await checkAgentHealth(client, port)) {
+      if (await checkAgentHealth(client, port, expectedVersion)) {
         return port;
       }
     }

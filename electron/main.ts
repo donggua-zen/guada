@@ -1509,6 +1509,23 @@ function setupIpcHandlers() {
     return result.filePaths[0];
   });
 
+  // 选择文件对话框(私钥路径选择)
+  ipcMain.handle("select-file", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      title: "选择私钥文件",
+      filters: [
+        { name: "Private Key", extensions: ["pem", "key", "ppk", "id_rsa", "id_ed25519", "*"] },
+      ],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    return result.filePaths[0];
+  });
+
   // 剪贴板操作（通过 IPC）
   ipcMain.handle("clipboard-write-text", (_, text: string) => {
     try {

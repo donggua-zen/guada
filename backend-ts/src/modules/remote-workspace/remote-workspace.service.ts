@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
+import * as fs from "fs";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { verifyAndDeployAgent, type DeployResult } from "./agent-deploy";
+import { encryptSecret, decryptSecret } from "./secret-crypto.util";
 
 export interface RemoteConnection {
   id: string;
@@ -11,7 +13,8 @@ export interface RemoteConnection {
     username: string;
     authMethod: "password" | "privateKey";
     password?: string;
-    privateKey?: string;
+    /** 私钥文件绝对路径(不再存储私钥内容明文) */
+    privateKeyPath?: string;
     path: string;
     /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
     perm?: string;
@@ -37,7 +40,14 @@ export class RemoteWorkspaceService {
       SETTINGS_KEY,
       [],
     );
-    return Array.isArray(data) ? data : [];
+    const conns = Array.isArray(data) ? data : [];
+    // 解密密码(磁盘上只存密文,内存/返回时解密)
+    return conns.map((c: RemoteConnection) => ({
+      ...c,
+      config: c.config?.password
+        ? { ...c.config, password: decryptSecret(c.config.password) }
+        : c.config,
+    }));
   }
 
   async createConnection(
@@ -143,8 +153,8 @@ export class RemoteWorkspaceService {
         if (config.authMethod === "password" && config.password) {
           sshConfig.password = config.password;
         }
-        if (config.authMethod === "privateKey" && config.privateKey) {
-          sshConfig.privateKey = config.privateKey;
+        if (config.authMethod === "privateKey" && config.privateKeyPath) {
+          sshConfig.privateKey = fs.readFileSync(config.privateKeyPath, "utf-8");
         }
         client.connect(sshConfig);
       });
@@ -196,8 +206,8 @@ export class RemoteWorkspaceService {
     if (config.authMethod === "password" && config.password) {
       params.set("password", config.password);
     }
-    if (config.authMethod === "privateKey" && config.privateKey) {
-      params.set("privateKey", config.privateKey);
+    if (config.authMethod === "privateKey" && config.privateKeyPath) {
+      params.set("privateKeyPath", config.privateKeyPath);
     }
     const query = params.toString();
     const downloadUrl = await this.getAgentDownloadUrl();
@@ -285,16 +295,23 @@ export class RemoteWorkspaceService {
       if (config.authMethod === "password" && config.password) {
         sshConfig.password = config.password;
       }
-      if (config.authMethod === "privateKey" && config.privateKey) {
-        sshConfig.privateKey = config.privateKey;
+      if (config.authMethod === "privateKey" && config.privateKeyPath) {
+        sshConfig.privateKey = fs.readFileSync(config.privateKeyPath, "utf-8");
       }
       client.connect(sshConfig);
     });
   }
 
   private async save(connections: RemoteConnection[]): Promise<void> {
+    // 保存前加密密码(encryptSecret 对已是密文的值幂等:仅加密明文/旧数据)
+    const encrypted = connections.map((c) => ({
+      ...c,
+      config: c.config?.password
+        ? { ...c.config, password: encryptSecret(c.config.password) }
+        : c.config,
+    }));
     await this.settingsStorage.updateSettings(SETTINGS_GROUP, {
-      [SETTINGS_KEY]: connections,
+      [SETTINGS_KEY]: encrypted,
     });
   }
 }

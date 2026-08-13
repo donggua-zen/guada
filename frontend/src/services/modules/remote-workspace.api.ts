@@ -9,7 +9,8 @@ export interface RemoteConnection {
     username: string;
     authMethod: "password" | "privateKey";
     password?: string;
-    privateKey?: string;
+    /** 私钥文件绝对路径(不再存储私钥内容明文) */
+    privateKeyPath?: string;
     path: string;
     /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
     perm?: string;
