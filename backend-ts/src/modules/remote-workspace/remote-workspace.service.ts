@@ -13,11 +13,17 @@ export interface RemoteConnection {
     password?: string;
     privateKey?: string;
     path: string;
+    /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
+    perm?: string;
   };
 }
 
 const SETTINGS_GROUP = "remote-workspace";
 const SETTINGS_KEY = "connections";
+/** agent 二进制下载地址模板(含 {os}/{arch}/{version} 占位符);未配置时走本地缓存/手动复制 */
+const SETTINGS_KEY_AGENT_DOWNLOAD_URL = "agentDownloadUrl";
+/** agent 最新版本接口(返回 {"version":"x.y.z"});配置后部署时自动检查并下载最新版 */
+const SETTINGS_KEY_AGENT_LATEST_URL = "agentLatestVersionUrl";
 
 @Injectable()
 export class RemoteWorkspaceService {
@@ -148,6 +154,38 @@ export class RemoteWorkspaceService {
   }
 
   /**
+   * 读取 agent 二进制下载地址模板(settings 可配置)。
+   * 模板支持 {os}/{arch}/{version} 占位符,例如:
+   *   https://example.com/releases/guada-agent-{os}-{arch}-v{version}
+   * 未配置时返回空字符串,部署走本地缓存(调试阶段手动复制二进制)。
+   */
+  async getAgentDownloadUrl(): Promise<string> {
+    const url = await this.settingsStorage.getSettingValue(
+      SETTINGS_GROUP,
+      SETTINGS_KEY_AGENT_DOWNLOAD_URL,
+      "",
+    );
+    return typeof url === "string" ? url : "";
+  }
+
+  /**
+   * 读取 agent 最新版本接口地址(settings 可配置)。
+   * 该接口返回 {"version":"x.y.z"};部署时自动检查本地缓存是否落后,
+   * 落后则用接口返回的下载地址模板拉取最新版 — 无需升级主程序即可更新 agent。
+   * 未配置时使用官方默认地址 https://ai.dingd.cn/plugins/remote-agent/latest.json。
+   */
+  async getAgentLatestVersionUrl(): Promise<string> {
+    const DEFAULT_AGENT_LATEST_URL =
+      "https://ai.dingd.cn/plugins/remote-agent/latest.json";
+    const url = await this.settingsStorage.getSettingValue(
+      SETTINGS_GROUP,
+      SETTINGS_KEY_AGENT_LATEST_URL,
+      "",
+    );
+    return typeof url === "string" && url ? url : DEFAULT_AGENT_LATEST_URL;
+  }
+
+  /**
    * Deploy/verify agent on the remote host.
    * Returns deployment logs; success=false means deployment failed (connection cannot be saved).
    */
@@ -162,16 +200,22 @@ export class RemoteWorkspaceService {
       params.set("privateKey", config.privateKey);
     }
     const query = params.toString();
+    const downloadUrl = await this.getAgentDownloadUrl();
+    const latestVersionUrl = await this.getAgentLatestVersionUrl();
 
-    return verifyAndDeployAgent({
-      scheme: "ssh",
-      host: config.host,
-      port: config.port || 22,
-      username: config.username || "root",
-      password: config.password,
-      path: config.path || "/",
-      query: query ? Object.fromEntries(params) : undefined,
-    });
+    return verifyAndDeployAgent(
+      {
+        scheme: "ssh",
+        host: config.host,
+        port: config.port || 22,
+        username: config.username || "root",
+        password: config.password,
+        path: config.path || "/",
+        query: query ? Object.fromEntries(params) : undefined,
+      },
+      downloadUrl,
+      latestVersionUrl,
+    );
   }
 
   /**

@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { Client as SshClient } from "ssh2";
-import { deployAgent } from "./agent-deploy";
+import { deployAgent, MIN_AGENT_VERSION, isVersionSupported } from "./agent-deploy";
 import { RpcClient } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 
@@ -58,8 +58,17 @@ export class RemoteAgentManager {
 
     // Verify this connection is bound to the session
     if (!connectionIds.includes(conn.id)) {
+      // 用户已取消勾选该连接:关闭并清理缓存,防止任何残留路径继续访问
+      const stale = this.cache.get(conn.name);
+      if (stale) {
+        this.cache.delete(conn.name);
+        try {
+          stale.ws.close();
+        } catch {}
+      }
       throw new Error(
-        `Connection '${connectionName}' is not bound to this session. Bound connections may differ.`,
+        `Connection '${connectionName}' is not bound to this session. ` +
+          `Please re-select it in the connection picker if you want to use it.`,
       );
     }
 
@@ -94,17 +103,28 @@ export class RemoteAgentManager {
     if (config.authMethod === "privateKey" && config.privateKey) {
       params.set("privateKey", config.privateKey);
     }
+    if (config.perm && config.perm !== "workspace") {
+      params.set("perm", config.perm);
+    }
     const query = params.toString();
 
-    const connInfo = await deployAgent({
-      scheme: "ssh",
-      host: config.host,
-      port: config.port || 22,
-      username: config.username || "root",
-      password: config.password,
-      path: config.path || "/",
-      query: query ? Object.fromEntries(params) : undefined,
-    });
+    // 从 settings 读取 agent 下载地址模板与最新版本接口(未配置时为空,走本地缓存)
+    const downloadUrl = await this.service.getAgentDownloadUrl();
+    const latestVersionUrl = await this.service.getAgentLatestVersionUrl();
+
+    const connInfo = await deployAgent(
+      {
+        scheme: "ssh",
+        host: config.host,
+        port: config.port || 22,
+        username: config.username || "root",
+        password: config.password,
+        path: config.path || "/",
+        query: query ? Object.fromEntries(params) : undefined,
+      },
+      downloadUrl,
+      latestVersionUrl,
+    );
 
     // 使用 agent 访问令牌进行 WebSocket 握手鉴权(dev 模式 token 为空则不携带)
     const ws = new WebSocket(connInfo.wsUrl, {
@@ -120,10 +140,18 @@ export class RemoteAgentManager {
     const rpc = new RpcClient(ws);
     rpc.setConnected();
 
-    // Verify connection
+    // Verify connection + version compatibility
     try {
-      const result = await rpc.call<{ pong: string }>("ping");
+      const result = await rpc.call<{ pong: string; version?: string }>("ping");
       if (!result.pong) throw new Error("Agent ping failed");
+      // 版本兼容校验:低于主程序最低要求才报错;高于/等于 MIN 的更新版本一律兼容
+      if (result.version && !isVersionSupported(result.version)) {
+        throw new Error(
+          `Agent version too old: remote agent is v${result.version}, ` +
+            `but this app requires at least v${MIN_AGENT_VERSION}. ` +
+            `Please upgrade the app to the latest version.`,
+        );
+      }
     } catch (err) {
       ws.close();
       throw new Error(`Agent handshake failed: ${err}`);
@@ -195,23 +223,6 @@ export class RemoteAgent {
     });
   }
 
-  async glob(pattern: string, directory?: string, limit = 100): Promise<string> {
-    const cwd = directory
-      ? directory.startsWith("/")
-        ? directory
-        : path.posix.join(this.basePath, directory)
-      : this.basePath;
-    const files = await this.rpc.call<{ path: string; size: number }[]>(
-      "glob",
-      { pattern, cwd, limit },
-    );
-    let output = `${files.length} files found:`;
-    for (const f of files) {
-      output += `\n${f.path} (${f.size} bytes)`;
-    }
-    return output;
-  }
-
   async grep(pattern: string, searchPath?: string, maxResults = 50): Promise<string> {
     const absPath = searchPath
       ? searchPath.startsWith("/")
@@ -244,7 +255,7 @@ export class RemoteAgent {
     const parts: string[] = [];
     if (result.output) parts.push(`Partial output:\n---\n${result.output}\n---`);
     parts.push(
-      `[Command timed out after 60s but is still running on the remote server. Use ssh_bash to run 'ps -ef' or 'tail -f' to check progress.]`,
+      `[Command timed out after 60s but is still running on the remote server. Use remote_bash to run 'ps -ef' or 'tail -f' to check progress.]`,
     );
     return parts.join("\n\n");
   }

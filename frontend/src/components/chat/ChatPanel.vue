@@ -85,13 +85,6 @@
             </div>
           </div>
 
-          <!-- 附加内容胶囊（输入框上方，AgentPanel 上方） -->
-          <AttachmentChips
-            v-if="!editMode"
-            :chips="attachmentChips"
-            @remove="removeAttachment"
-          />
-
           <!-- 子代理面板（编辑模式时隐藏） -->
           <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
             @switch="emit('switch-agent', $event)" />
@@ -160,8 +153,6 @@ import QueuedMessages from './QueuedMessages.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
-import AttachmentChips from './AttachmentChips.vue';
-import type { AttachmentChip } from './AttachmentChips.vue';
 import LTooltip from '../ui/LTooltip.vue';
 import LDialog from '@/components/ui/LDialog.vue'
 
@@ -503,77 +494,8 @@ const chatInputConfig = computed(() => ({
   attachments: currentSession.value?.settings?.attachments || {},
 }));
 
-// ── 动态附件管理 ──
-const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
-
-const attachmentChips = computed<AttachmentChip[]>(() => {
-  const attachments = currentSession.value?.settings?.attachments || {};
-  const chips: AttachmentChip[] = [];
-  for (const [typeId, itemIds] of Object.entries(attachments) as [string, string[]][]) {
-    const typeInfo = attachmentTypes.value.find(t => t.id === typeId);
-    if (!typeInfo) continue;
-    for (const itemId of itemIds) {
-      const item = typeInfo._items?.find(i => i.id === itemId);
-      if (item) {
-        chips.push({ typeId, id: itemId, name: item.name, subtitle: item.description });
-      }
-    }
-  }
-  return chips;
-});
-
-async function loadAttachmentTypes() {
-  try {
-    const types = await apiService.getAttachmentTypes();
-    const results: typeof attachmentTypes.value = [];
-    for (const t of types) {
-      let items: Array<{ id: string; name: string; description?: string }> = [];
-      try {
-        const lists = await apiService.getPluginAttachments(t.pluginId);
-        const found = lists.find(l => l.typeId === t.id);
-        items = found?.items || [];
-      } catch {}
-      results.push({ ...t, _items: items });
-    }
-    attachmentTypes.value = results;
-  } catch {
-    attachmentTypes.value = [];
-  }
-}
-
-function removeAttachment(typeId: string, itemId: string) {
-  if (!currentSession.value) return;
-  if (!currentSession.value.settings) currentSession.value.settings = {};
-  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
-  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
-  const idx = ids.indexOf(itemId);
-  if (idx !== -1) ids.splice(idx, 1);
-  if (ids.length === 0) {
-    delete currentSession.value.settings.attachments[typeId];
-  } else {
-    currentSession.value.settings.attachments[typeId] = ids;
-  }
-  debouncedSaveSession();
-}
-
-function toggleAttachment(typeId: string, itemId: string) {
-  if (!currentSession.value) return;
-  if (!currentSession.value.settings) currentSession.value.settings = {};
-  if (!currentSession.value.settings.attachments) currentSession.value.settings.attachments = {};
-  const ids = [...(currentSession.value.settings.attachments[typeId] || [])];
-  const idx = ids.indexOf(itemId);
-  if (idx === -1) ids.push(itemId);
-  else ids.splice(idx, 1);
-  if (ids.length === 0) {
-    delete currentSession.value.settings.attachments[typeId];
-  } else {
-    currentSession.value.settings.attachments[typeId] = ids;
-  }
-  debouncedSaveSession();
-}
-
 onMounted(() => {
-  loadAttachmentTypes();
+  // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
 });
 
 onUnmounted(() => {
@@ -825,11 +747,6 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     lastScrollTop = 0;
     currentSessionId.value = newSessionId;
-    // Ensure attachment types are loaded (in case onMounted already passed)
-    if (attachmentTypes.value.length === 0) {
-      await loadAttachmentTypes();
-      if (token !== sessionChangeToken) return;
-    }
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
     // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）

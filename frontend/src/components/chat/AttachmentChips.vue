@@ -1,5 +1,5 @@
 <template>
-  <div v-if="chips.length > 0" class="w-full flex items-center gap-1.5 mb-1 flex-wrap px-4">
+  <div v-if="chips.length > 0" class="w-full flex items-center gap-1.5 mb-1 flex-wrap px-5">
     <div
       v-for="chip in chips"
       :key="`${chip.typeId}-${chip.id}`"
@@ -40,7 +40,7 @@ defineEmits<{
 
 <style scoped>
 .attachment-chip {
-  background: rgba(229, 231, 235, 0.8);
+  background: var(--color-secondary-surface);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border: 1px solid rgba(0, 0, 0, 0.06);

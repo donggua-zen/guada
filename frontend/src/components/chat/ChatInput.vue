@@ -19,15 +19,25 @@
         </FileItem>
       </div>
 
-      <!-- 已选知识库标签显示区域 -->
-      <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5" v-if="selectedKnowledgeBases.length > 0">
-        <el-tag v-for="kb in selectedKnowledgeBases" :key="kb.id" closable type="info"
+      <!-- 已选知识库 + 附加连接标签显示区域（同一排） -->
+      <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5"
+        v-if="selectedKnowledgeBases.length > 0 || selectedAttachmentTags.length > 0">
+        <el-tag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`" closable type="info"
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
             <el-icon size="14">
               <BookSearch24Regular />
             </el-icon>
             {{ kb.name }}
+          </span>
+        </el-tag>
+        <el-tag v-for="tag in selectedAttachmentTags" :key="`att-${tag.typeId}-${tag.id}`" closable type="info"
+          @close="removeAttachmentTag(tag.typeId, tag.id)" class="text-xs">
+          <span class="flex items-center gap-1">
+            <el-icon size="14">
+              <Cloud24Regular />
+            </el-icon>
+            {{ tag.name }}
           </span>
         </el-tag>
       </div>
@@ -175,7 +185,7 @@ import {
 import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, BookSearch24Regular,
+  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, BookSearch24Regular, Cloud24Regular,
   Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
 } from '@vicons/fluent'
 import {
@@ -242,6 +252,8 @@ const settingsButtonRef = ref<HTMLElement | null>(null);
 const settingsPopoverVisible = ref(false);
 // 知识库选择器相关
 const knowledgeBases = ref<any[]>([]); // 知识库列表
+// 附加连接(插件注册的附件类型)相关
+const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
 
 // Tiptap 编辑器相关
 const editor = ref<Editor>();
@@ -529,6 +541,26 @@ const selectedKnowledgeBases = computed(() => {
   const kbIds = props.config?.knowledgeBaseIds || [];
   return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
 });
+
+// 当前选中的附加连接标签（根据 ID 从附件类型列表中解析名称）
+const selectedAttachmentTags = computed(() => {
+  const attachments = props.config?.attachments || {};
+  const tags: Array<{ typeId: string; id: string; name: string }> = [];
+  for (const [typeId, itemIds] of Object.entries(attachments) as [string, string[]][]) {
+    const typeInfo = attachmentTypes.value.find(t => t.id === typeId);
+    if (!typeInfo) continue;
+    for (const itemId of itemIds) {
+      const item = typeInfo._items?.find(i => i.id === itemId);
+      if (item) tags.push({ typeId, id: itemId, name: item.name });
+    }
+  }
+  return tags;
+});
+
+// 移除单个附加连接标签
+const removeAttachmentTag = (typeId: string, itemId: string) => {
+  toggleAttachmentSelection(typeId, itemId);
+};
 
 // 已选知识库但列表为空时（刷新后），按需加载一次以恢复标签显示
 // watch 定义移至 loadKnowledgeBases 之后，避免 immediate 时 TDZ 引用
@@ -866,10 +898,37 @@ const loadKnowledgeBases = async () => {
   }
 };
 
+// 加载附件类型（插件 registerAttachmentType 注册，含可选项列表）
+const loadAttachmentTypes = async () => {
+  try {
+    const types = await apiService.getAttachmentTypes();
+    const results: typeof attachmentTypes.value = [];
+    for (const t of types) {
+      let items: Array<{ id: string; name: string; description?: string }> = [];
+      try {
+        const lists = await apiService.getPluginAttachments(t.pluginId);
+        const found = lists.find(l => l.typeId === t.id);
+        items = found?.items || [];
+      } catch {}
+      results.push({ ...t, _items: items });
+    }
+    attachmentTypes.value = results;
+  } catch {
+    attachmentTypes.value = [];
+  }
+};
+
 // 已选知识库但列表为空时（刷新后），按需加载一次以恢复标签显示
 watch(() => props.config?.knowledgeBaseIds, (kbIds) => {
   if (kbIds && kbIds.length > 0 && knowledgeBases.value.length === 0) {
     loadKnowledgeBases();
+  }
+}, { immediate: true });
+
+// 已选附加连接但类型列表为空时（刷新后），按需加载一次以恢复标签显示
+watch(() => props.config?.attachments, (attachments) => {
+  if (attachments && Object.keys(attachments).length > 0 && attachmentTypes.value.length === 0) {
+    loadAttachmentTypes();
   }
 }, { immediate: true });
 

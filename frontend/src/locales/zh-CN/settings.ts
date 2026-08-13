@@ -133,6 +133,12 @@ export default {
     deploySuccess: 'Agent 部署成功',
     deployFailed: 'Agent 部署失败',
     deployRetry: '重新部署',
+    // 权限模式
+    permTitle: 'Agent 权限模式',
+    permWorkspace: '工作目录可写(默认)',
+    permReadonly: '只读',
+    permUnrestricted: '不限制',
+    permDesc: '工作目录内可读写,目录外只读;只读模式拒绝所有写操作。',
     // 目录浏览
     browseTitle: '选择 Remote Workspace 目录',
     browseDesc: '浏览服务器目录，选择项目根目录',

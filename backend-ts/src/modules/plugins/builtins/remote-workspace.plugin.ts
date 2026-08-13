@@ -94,9 +94,9 @@ export class RemoteWorkspacePlugin extends PluginBase {
           : { loadMode: "none" as const };
       },
       onLoad: (tk) => {
-        // ssh_read
+        // remote_read
         tk.registerTool({
-          name: "ssh_read",
+          name: "remote_read",
           description:
             "Read a file from a remote SSH server. Supports line pagination. Line numbers are prepended.",
           inputSchema: z.object({
@@ -136,16 +136,16 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "file_path",
             icon: "read",
             text: {
-              executing: "%ssh_read.executing%",
-              completed: "%ssh_read.completed%",
+              executing: "%remote_read.executing%",
+              completed: "%remote_read.completed%",
             },
           },
           dangerLevel: "safe",
         });
 
-        // ssh_write
+        // remote_write
         tk.registerTool({
-          name: "ssh_write",
+          name: "remote_write",
           description:
             "Write content to a file on a remote SSH server. Creates directories if needed.",
           inputSchema: z.object({
@@ -172,16 +172,16 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "file_path",
             icon: "edit",
             text: {
-              executing: "%ssh_write.executing%",
-              completed: "%ssh_write.completed%",
+              executing: "%remote_write.executing%",
+              completed: "%remote_write.completed%",
             },
           },
           dangerLevel: "high",
         });
 
-        // ssh_edit
+        // remote_edit
         tk.registerTool({
-          name: "ssh_edit",
+          name: "remote_edit",
           description:
             "Find and replace text in a remote file. old_text must exactly match a contiguous segment.",
           inputSchema: z.object({
@@ -215,62 +215,16 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "file_path",
             icon: "edit",
             text: {
-              executing: "%ssh_edit.executing%",
-              completed: "%ssh_edit.completed%",
+              executing: "%remote_edit.executing%",
+              completed: "%remote_edit.completed%",
             },
           },
           dangerLevel: "high",
         });
 
-        // ssh_glob
+        // remote_grep
         tk.registerTool({
-          name: "ssh_glob",
-          description:
-            "Search for files on a remote server using glob patterns.",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            pattern: z.string().describe("Glob pattern, e.g. **/*.go, *.json"),
-            directory: z
-              .string()
-              .optional()
-              .describe("Base directory (defaults to connection's base path)"),
-            limit: z
-              .number()
-              .int()
-              .positive()
-              .optional()
-              .describe("Max results (default 100)"),
-          }),
-          execute: async (args: any, ctx: PluginContext) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              attachments,
-            );
-            return agent.glob(args.pattern, args.directory, args.limit || 100);
-          },
-          display: {
-            argsKey: "pattern",
-            icon: "search",
-            text: {
-              executing: "%ssh_glob.executing%",
-              completed: "%ssh_glob.completed%",
-            },
-            aggregate: {
-              executing: "%ssh_glob.aggregate.executing%",
-              completed: "%ssh_glob.aggregate.completed%",
-            },
-          },
-          dangerLevel: "safe",
-        });
-
-        // ssh_grep
-        tk.registerTool({
-          name: "ssh_grep",
+          name: "remote_grep",
           description:
             "Search file contents on a remote server. Case-insensitive when pattern is all lowercase.",
           inputSchema: z.object({
@@ -304,20 +258,20 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "pattern",
             icon: "search",
             text: {
-              executing: "%ssh_grep.executing%",
-              completed: "%ssh_grep.completed%",
+              executing: "%remote_grep.executing%",
+              completed: "%remote_grep.completed%",
             },
             aggregate: {
-              executing: "%ssh_grep.aggregate.executing%",
-              completed: "%ssh_grep.aggregate.completed%",
+              executing: "%remote_grep.aggregate.executing%",
+              completed: "%remote_grep.aggregate.completed%",
             },
           },
           dangerLevel: "safe",
         });
 
-        // ssh_bash
+        // remote_bash
         tk.registerTool({
-          name: "ssh_bash",
+          name: "remote_bash",
           description:
             "Execute a shell command on a remote SSH server. Waits for completion (max 60s).",
           inputSchema: z.object({
@@ -340,20 +294,20 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "command",
             icon: "terminal",
             text: {
-              executing: "%ssh_bash.executing%",
-              completed: "%ssh_bash.completed%",
+              executing: "%remote_bash.executing%",
+              completed: "%remote_bash.completed%",
             },
             aggregate: {
-              executing: "%ssh_bash.aggregate.executing%",
-              completed: "%ssh_bash.aggregate.completed%",
+              executing: "%remote_bash.aggregate.executing%",
+              completed: "%remote_bash.aggregate.completed%",
             },
           },
           dangerLevel: "critical",
         });
 
-        // ssh_transfer
+        // remote_transfer
         tk.registerTool({
-          name: "ssh_transfer",
+          name: "remote_transfer",
           description: `Transfer files between local and remote SSH server.
 - Upload: {"action":"upload","connection":"xxx","local_path":"...","remote_path":"..."}
 - Download: {"action":"download","connection":"xxx","remote_path":"...","local_path":"..."}`,
@@ -383,12 +337,12 @@ export class RemoteWorkspacePlugin extends PluginBase {
             argsKey: "action",
             icon: "edit",
             text: {
-              executing: "%ssh_transfer.executing%",
-              completed: "%ssh_transfer.completed%",
+              executing: "%remote_transfer.executing%",
+              completed: "%remote_transfer.completed%",
             },
             aggregate: {
-              executing: "%ssh_transfer.aggregate.executing%",
-              completed: "%ssh_transfer.aggregate.completed%",
+              executing: "%remote_transfer.aggregate.executing%",
+              completed: "%remote_transfer.aggregate.completed%",
             },
           },
           dangerLevel: "high",
