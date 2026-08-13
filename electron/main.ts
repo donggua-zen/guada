@@ -1205,8 +1205,9 @@ function setupIpcHandlers() {
   });
 
   // 同步查询后端就绪状态（用于刷新场景，在 Vue 挂载前阻塞式确定初始值）
+  // 附带端口：刷新场景下前端无需再走异步 IPC 获取端口，避免竞态
   ipcMain.on("get-backend-status-sync", (event) => {
-    event.returnValue = { ready: isBackendReady };
+    event.returnValue = { ready: isBackendReady, port: backendPort };
   });
 
   ipcMain.handle("show-notification", (_, { title, body }) => {

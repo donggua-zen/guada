@@ -11,7 +11,6 @@ import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
 import { WebSearchPlugin } from "./builtins/web-search.plugin";
-import { RemoteWorkspacePlugin } from "./builtins/remote-workspace.plugin";
 import { RemoteWorkspaceModule } from "../remote-workspace/remote-workspace.module";
 import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
@@ -36,7 +35,6 @@ import { NlsService } from "./i18n/nls.service";
     BrowserPlugin,
     TodoPlugin,
     WebSearchPlugin,
-    RemoteWorkspacePlugin,
     MetasoProvider,
     TavilyProvider,
     BochaProvider,
@@ -62,8 +60,6 @@ export class PluginsModule implements OnModuleInit {
     if (process.env.ELECTRON_APP === "true") {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));
     }
-
-    await this.pluginManager.registerPlugin(this.moduleRef.get(RemoteWorkspacePlugin));
 
     // ExternalPluginLoader.onModuleInit 会自动扫描并加载外部插件
     // NestJS 保证 module 的 onModuleInit 在 providers 之前执行
