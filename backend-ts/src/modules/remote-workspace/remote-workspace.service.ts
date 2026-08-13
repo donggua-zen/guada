@@ -195,11 +195,11 @@ export class RemoteWorkspaceService {
   }
 
   /**
-   * 部署任务状态(内存中保存,供前端轮询日志)
+   * 部署任务状态(内存中保存,供前端轮询日志 + 取消)
    */
   private readonly deployJobs = new Map<
     string,
-    { log: string[]; done: boolean; result?: DeployResult }
+    { log: string[]; done: boolean; result?: DeployResult; controller?: AbortController }
   >();
 
   /**
@@ -210,7 +210,10 @@ export class RemoteWorkspaceService {
     config: RemoteConnection["config"],
   ): Promise<{ jobId: string }> {
     const jobId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const job: { log: string[]; done: boolean; result?: DeployResult } = { log: [], done: false };
+    const job: { log: string[]; done: boolean; result?: DeployResult; controller?: AbortController } =
+      { log: [], done: false };
+    const controller = new AbortController();
+    job.controller = controller;
     this.deployJobs.set(jobId, job);
 
     const params = new URLSearchParams();
@@ -240,6 +243,7 @@ export class RemoteWorkspaceService {
           downloadUrl,
           latestVersionUrl,
           (line) => job.log.push(line),
+          controller.signal,
         );
         job.result = result;
         job.done = true;
@@ -257,7 +261,20 @@ export class RemoteWorkspaceService {
   async getDeployLog(
     jobId: string,
   ): Promise<{ log: string[]; done: boolean; result?: DeployResult } | null> {
-    return this.deployJobs.get(jobId) || null;
+    const job = this.deployJobs.get(jobId);
+    if (!job) return null;
+    return { log: job.log, done: job.done, result: job.result };
+  }
+
+  /** 取消部署任务(窗口关闭/组件卸载时调用,立即中止下载/上传/SSH) */
+  async cancelDeploy(jobId: string): Promise<{ cancelled: boolean }> {
+    const job = this.deployJobs.get(jobId);
+    if (!job || job.done) return { cancelled: false };
+    job.controller?.abort();
+    job.log.push("Deployment cancelled by client");
+    job.result = { success: false, installed: false, version: "", log: job.log };
+    job.done = true;
+    return { cancelled: true };
   }
 
   /**

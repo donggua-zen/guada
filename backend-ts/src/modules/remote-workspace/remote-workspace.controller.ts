@@ -61,6 +61,11 @@ export class RemoteWorkspaceController {
     return job;
   }
 
+  @Post("connections/deploy-cancel/:jobId")
+  async cancelDeploy(@Param("jobId") jobId: string) {
+    return this.service.cancelDeploy(jobId);
+  }
+
   @Post("connections/browse")
   async browsePath(
     @Body() body: { config: any; path: string },

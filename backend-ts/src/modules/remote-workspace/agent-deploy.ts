@@ -185,17 +185,27 @@ export interface DeployResult {
  * 不匹配则从本地缓存获取二进制并上传部署,启动后验证可运行。
  * 不建立 WebSocket 长连接,用于"保存连接前必须部署成功"的校验。
  * onLog 可选回调:各阶段实时推送日志行(前端轮询/流式展示用)。
+ * signal 可选:调用方可在窗口关闭/组件卸载时中止部署(下载/上传/连接立即中断)。
  */
 export async function verifyAndDeployAgent(
   uri: ParsedWorkspaceUri,
   downloadUrl?: string,
   latestVersionUrl?: string,
   onLog?: (line: string) => void,
+  signal?: AbortSignal,
 ): Promise<DeployResult> {
   const log: string[] = [];
   const push = (line: string) => {
     log.push(line);
     onLog?.(line);
+  };
+  // 中止检查:已取消则抛出明确错误
+  const throwIfAborted = (): void => {
+    if (signal?.aborted) {
+      const err = new Error("Deployment cancelled");
+      (err as any).cancelled = true;
+      throw err;
+    }
   };
 
   // dev 模式:跳过部署验证
@@ -205,26 +215,39 @@ export async function verifyAndDeployAgent(
 
   const sshConfig = buildSshConfig(uri);
   let sshClient: Client | null = null;
+  // 中止时立即断开 SSH,使进行中的 exec/upload 快速失败
+  const onAbort = () => {
+    try {
+      sshClient?.end();
+    } catch {}
+  };
+  signal?.addEventListener("abort", onAbort);
   try {
+    throwIfAborted();
     push("Connecting to remote server via SSH...");
     sshClient = await sshConnect(sshConfig);
+    throwIfAborted();
     const remoteHome = (await execCommand(sshClient, "echo $HOME")).trim();
+    throwIfAborted();
     const remoteDir = `${remoteHome}/${REMOTE_DIR}`;
     const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
     push(`Remote directory ready: ${remoteDir}`);
 
     // 确保访问令牌文件已写入远端(agent 鉴权)
+    throwIfAborted();
     const token = getOrCreateToken();
     await writeRemoteToken(sshClient, remoteDir, token);
     push("Access token written to remote");
 
     // 检测是否已安装 + 版本
+    throwIfAborted();
     push("Checking remote agent version...");
     const versionCheck = await execCommand(
       sshClient,
       `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
     );
+    throwIfAborted();
     const remoteVersion = versionCheck.trim();
     push(remoteVersion === "NOT_FOUND" ? "Agent not installed on remote" : `Remote agent version: ${remoteVersion}`);
 
@@ -232,6 +255,7 @@ export async function verifyAndDeployAgent(
     // 一致则复用,不一致(或未安装)则重新下载推送。
     let expectedVersion = "";
     if (latestVersionUrl) {
+      throwIfAborted();
       push("Checking for latest version...");
       expectedVersion = (await fetchLatestVersion(latestVersionUrl)).version;
       push(`Latest version: v${expectedVersion}`);
@@ -252,6 +276,7 @@ export async function verifyAndDeployAgent(
     );
 
     // 检测远端 OS + 架构
+    throwIfAborted();
     push("Detecting remote platform...");
     const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
     const archRaw = (await execCommand(sshClient, "uname -m")).trim();
@@ -260,6 +285,7 @@ export async function verifyAndDeployAgent(
     push(`Remote platform: ${osName}/${goArch}`);
 
     // 获取本地二进制(本地缓存优先;配置下载地址/latest 接口时自动获取最新版)
+    throwIfAborted();
     push("Acquiring deployment resource (local cache / download)...");
     const localBinary = await ensureLocalBinary(
       osName,
@@ -277,20 +303,26 @@ export async function verifyAndDeployAgent(
           push(`Downloading deployment resource: ${(downloaded / 1048576).toFixed(1)}MB`);
         }
       },
+      signal,
     );
+    throwIfAborted();
     push(`Using local binary: ${localBinary}`);
 
     // 先清理远端旧 agent 进程(避免运行中的二进制被占用,fastPut 覆盖失败)
+    throwIfAborted();
     push("Stopping old agent processes on remote...");
     await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
 
     // 上传 + 授权
+    throwIfAborted();
     push("Uploading deployment resource...");
     await uploadFile(sshClient, localBinary, remoteBinary);
+    throwIfAborted();
     await execCommand(sshClient, `chmod +x ${remoteBinary}`);
     push("Binary uploaded");
 
     // 启动验证(固定端口启动,保证后续连接可发现)
+    throwIfAborted();
     push("Starting agent...");
     const remotePort = await ensureAgentRunning(
       sshClient,
@@ -306,10 +338,15 @@ export async function verifyAndDeployAgent(
 
     return { success: true, installed: false, version: expectedVersion, log };
   } catch (err: any) {
-    push(`Deployment failed: ${err?.message || err}`);
+    if (err?.cancelled) {
+      push("Deployment cancelled");
+    } else {
+      push(`Deployment failed: ${err?.message || err}`);
+    }
     return { success: false, installed: false, version: "", log };
   } finally {
     if (sshClient) sshClient.end();
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -381,6 +418,7 @@ async function ensureLocalBinary(
   downloadUrl?: string,
   latestVersionUrl?: string,
   onProgress?: (downloaded: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   // 方式1:配置了 latest 接口 → 自动升级检测
   if (latestVersionUrl) {
@@ -397,7 +435,7 @@ async function ensureLocalBinary(
         .replace("{arch}", goArch)
         .replace("{version}", latest.version);
       fs.mkdirSync(localCacheDir(), { recursive: true });
-      await downloadFile(url, cached, onProgress);
+      await downloadFile(url, cached, onProgress, signal);
       return cached;
     }
     throw new Error(
@@ -415,7 +453,7 @@ async function ensureLocalBinary(
   if (downloadUrl) {
     const url = downloadUrl.replace("{os}", osName).replace("{arch}", goArch);
     fs.mkdirSync(localCacheDir(), { recursive: true });
-    await downloadFile(url, cached, onProgress);
+    await downloadFile(url, cached, onProgress, signal);
     return cached;
   }
 
@@ -427,25 +465,46 @@ async function ensureLocalBinary(
   );
 }
 
-/** Download a file via HTTPS with redirect support; onProgress 提供下载进度(已下载/总字节) */
+/** Download a file via HTTPS with redirect support; onProgress 提供下载进度(已下载/总字节); signal 可中止 */
 function downloadFile(
   url: string,
   dest: string,
   onProgress?: (downloaded: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      try {
+        req.destroy(new Error("Download aborted"));
+      } catch {}
+    };
+    signal?.addEventListener("abort", onAbort);
+
     const file = fs.createWriteStream(dest);
     const req = https.get(url, (res) => {
       // Follow redirects (GitHub releases return 302)
       if (res.statusCode === 301 || res.statusCode === 302) {
         file.close();
         fs.unlinkSync(dest);
-        downloadFile(res.headers.location!, dest, onProgress).then(resolve, reject);
+        downloadFile(res.headers.location!, dest, onProgress, signal).then(
+          (r) => {
+            cleanup();
+            resolve(r);
+          },
+          (e) => {
+            cleanup();
+            reject(e);
+          },
+        );
         return;
       }
       if (res.statusCode !== 200) {
         file.close();
         fs.unlinkSync(dest);
+        cleanup();
         reject(new Error(`Download failed: HTTP ${res.statusCode} from ${url}`));
         return;
       }
@@ -458,12 +517,18 @@ function downloadFile(
       res.pipe(file);
       file.on("finish", () => {
         file.close();
+        cleanup();
         resolve();
+      });
+      file.on("error", (err) => {
+        cleanup();
+        reject(err);
       });
     });
     req.on("error", (err) => {
       file.close();
       if (fs.existsSync(dest)) fs.unlinkSync(dest);
+      cleanup();
       reject(err);
     });
     req.setTimeout(60000, () => {

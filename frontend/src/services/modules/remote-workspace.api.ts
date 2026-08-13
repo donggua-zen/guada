@@ -48,6 +48,7 @@ export interface RemoteWorkspaceApi {
   testConnection(config: RemoteConnection["config"]): Promise<{ success: boolean; error?: string; log?: string }>;
   deployConnection(config: RemoteConnection["config"]): Promise<DeployJob>;
   getDeployLog(jobId: string): Promise<DeployLogState>;
+  cancelDeploy(jobId: string): Promise<{ cancelled: boolean }>;
   browsePath(config: RemoteConnection["config"], path: string): Promise<DirEntry[]>;
 }
 
@@ -92,6 +93,12 @@ export const remoteWorkspaceApi: RemoteWorkspaceApi = {
 
   async getDeployLog(this: ApiContext, jobId: string) {
     return await this._request(`/remote-workspace/connections/deploy-log/${jobId}`);
+  },
+
+  async cancelDeploy(this: ApiContext, jobId: string) {
+    return await this._request(`/remote-workspace/connections/deploy-cancel/${jobId}`, {
+      method: "POST",
+    });
   },
 
   async browsePath(this: ApiContext, config: RemoteConnection["config"], path: string) {
