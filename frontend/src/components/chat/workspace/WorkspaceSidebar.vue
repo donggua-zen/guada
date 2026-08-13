@@ -25,7 +25,7 @@
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
             <div ref="tabBarRef" v-if="isPreviewMode && tabs.length > 0"
-                class="flex items-center gap-0.5 shrink-0 overflow-x-auto no-drag browser-tabs-scroll"
+                class="flex items-center gap-0.5 min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
                 @wheel="onTabBarWheel">
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                 <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
