@@ -1,12 +1,26 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { RemoteWorkspaceController } from "./remote-workspace.controller";
 import { RemoteWorkspaceService } from "./remote-workspace.service";
+import { RemoteWorkspacePlugin } from "./remote-workspace.plugin";
 import { AuthModule } from "../auth/auth.module";
+import { PluginManager } from "../plugins";
 
 @Module({
   imports: [AuthModule],
   controllers: [RemoteWorkspaceController],
-  providers: [RemoteWorkspaceService],
+  providers: [RemoteWorkspaceService, RemoteWorkspacePlugin],
   exports: [RemoteWorkspaceService],
 })
-export class RemoteWorkspaceModule {}
+export class RemoteWorkspaceModule implements OnModuleInit {
+  private readonly logger = new Logger(RemoteWorkspaceModule.name);
+
+  constructor(
+    private readonly pluginManager: PluginManager,
+    private readonly remoteWorkspacePlugin: RemoteWorkspacePlugin,
+  ) {}
+
+  async onModuleInit() {
+    await this.pluginManager.registerPlugin(this.remoteWorkspacePlugin);
+    this.logger.log("RemoteWorkspacePlugin 已注册");
+  }
+}

@@ -33,8 +33,14 @@ let isInitialPageLoad = true;
 if (isElectron && window.electronAPI?.getBackendStatusSync) {
   const status = window.electronAPI.getBackendStatusSync();
   backendReady.value = status.ready;
+  // 刷新场景：后端已在运行，同步 IPC 已携带真实端口。
+  // 立即设置 baseURL，确保首屏请求（checkAuth / loadAppearanceSettings）
+  // 不会抢在异步获取端口前打到默认的 localhost:3000
+  if (status.ready && status.port) {
+    apiService.initBackendUrl(status.port);
+  }
 }
-// 刷新场景：后端已在运行，直接获取端口
+// 刷新场景兜底：后端已就绪但端口未知时，再走异步获取
 if (isElectron && backendReady.value) {
   apiService.initBackendUrl();
 }

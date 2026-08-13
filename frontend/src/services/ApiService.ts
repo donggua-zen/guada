@@ -75,6 +75,8 @@ class ApiService {
   chatStreamService: ChatStreamService;
   workspaceWatcherService: WorkspaceWatcherService;
   sessionEventsService: SessionEventsService;
+  /** Electron 环境下后端地址是否已初始化（幂等标记） */
+  private backendUrlInitialized = false;
 
   constructor(baseURL?: string) {
     // Electron 环境使用动态获取的后端地址，Web 环境使用相对路径
@@ -178,11 +180,21 @@ class ApiService {
 
   /**
    * 初始化后端地址（针对 Electron 环境）
+   * @param knownPort 已同步获取到的后端端口；传入时直接同步设置 baseURL，避免异步 IPC 竞态
    */
-  async initBackendUrl(): Promise<void> {
+  async initBackendUrl(knownPort?: number | null): Promise<void> {
     const isElectron =
       typeof window !== "undefined" && window.electronAPI !== undefined;
     if (isElectron && !this.baseURL.includes("localhost:3000")) {
+      return;
+    }
+
+    // 刷新场景：端口已通过同步 IPC 拿到，直接设置，无需再走异步 getAppInfo()
+    if (knownPort) {
+      this.baseURL = `http://localhost:${knownPort}/api/v1`;
+      this.axiosInstance.defaults.baseURL = this.baseURL;
+      this.backendUrlInitialized = true;
+      console.log(`🔗 API 服务已连接到后端端口: ${knownPort}`);
       return;
     }
 
@@ -191,11 +203,24 @@ class ApiService {
       if (info.backendPort) {
         this.baseURL = `http://localhost:${info.backendPort}/api/v1`;
         this.axiosInstance.defaults.baseURL = this.baseURL;
+        this.backendUrlInitialized = true;
         console.log(`🔗 API 服务已连接到后端端口: ${info.backendPort}`);
       }
     } catch (error) {
       console.error("❌ 获取后端端口失败:", error);
     }
+  }
+
+  /**
+   * 确保后端地址已初始化（幂等）。
+   * Electron 环境下任何请求发出前等待端口确定，避免抢在默认 localhost:3000 上
+   */
+  async ensureBackendUrlReady(): Promise<void> {
+    if (this.backendUrlInitialized) return;
+    const isElectron =
+      typeof window !== "undefined" && window.electronAPI !== undefined;
+    if (!isElectron) return;
+    await this.initBackendUrl();
   }
 
   /**
@@ -205,6 +230,8 @@ class ApiService {
     endpoint: string,
     options?: AxiosRequestConfig,
   ): Promise<T> {
+    // Electron 环境下确保后端地址已初始化，避免请求抢在端口就绪前发出
+    await this.ensureBackendUrlReady();
     try {
       const response = await this.axiosInstance({
         url: endpoint,

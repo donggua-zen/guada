@@ -6,11 +6,11 @@
  */
 import { Injectable } from "@nestjs/common";
 import { z } from "zod";
-import { PluginBase } from "../base-plugin";
-import type { PluginApi } from "../api/plugin-api";
-import type { PluginContext } from "../types/plugin.types";
-import { RemoteWorkspaceService } from "../../remote-workspace/remote-workspace.service";
-import { RemoteAgentManager } from "../../remote-workspace/remote-workspace-agent-manager";
+import { PluginBase } from "../plugins/base-plugin";
+import type { PluginApi } from "../plugins/api/plugin-api";
+import type { PluginContext } from "../plugins/types/plugin.types";
+import { RemoteWorkspaceService } from "./remote-workspace.service";
+import { RemoteAgentManager } from "./remote-workspace-agent-manager";
 import langZh from "./remote-workspace.lang.zh.json";
 import langEn from "./remote-workspace.lang.en.json";
 
@@ -23,7 +23,8 @@ export class RemoteWorkspacePlugin extends PluginBase {
     name: "%remoteWorkspace.name%",
     version: "0.3.0",
     description: "%remoteWorkspace.description%",
-    category: "extended" as const,
+    category: "system" as const,
+    essential: true,
   };
 
   constructor(private readonly workspaceService: RemoteWorkspaceService) {

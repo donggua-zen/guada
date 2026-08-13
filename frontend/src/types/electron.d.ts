@@ -17,8 +17,8 @@ export interface ElectronAPI {
     }
   }>
   getBackendPort: () => Promise<number | null>
-  /** 同步查询后端就绪状态（阻塞，用于 Vue 挂载前确定初始值） */
-  getBackendStatusSync: () => { ready: boolean }
+  /** 同步查询后端就绪状态（阻塞，用于 Vue 挂载前确定初始值）；port 为后端实际监听端口（未就绪时为 null） */
+  getBackendStatusSync: () => { ready: boolean; port: number | null }
   showNotification: (title: string, body: string) => Promise<void>
   minimizeWindow: () => void
   maximizeWindow: () => void
