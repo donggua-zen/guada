@@ -66,6 +66,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 选择文件夹（返回选中的路径）
   selectFolder: () => ipcRenderer.invoke('select-folder'),
+
+  // 选择文件（返回选中的路径，用于私钥选择）
+  selectFile: () => ipcRenderer.invoke('select-file'),
   
   // 剪贴板操作（通过 IPC，更可靠）
   clipboardIPC: {

@@ -29,7 +29,7 @@ export default {
     uploadFile: '上传文件',
     knowledgeBase: '知识库',
     noKnowledgeBase: '暂无知识库',
-    remoteConnection: 'Remote Workspace',
+    remoteConnection: '远程工作区',
     noConnection: '暂无连接，请在设置中添加',
 
     // CommandPicker.vue

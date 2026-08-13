@@ -46,7 +46,7 @@
     <!-- 新建/编辑弹窗：分步向导 -->
     <LDialog v-model="editing" width="640px"
       :close-on-click-modal="false" append-to-body class="conn-dialog">
-      <div class="flex" style="height: 400px;">
+      <div class="flex" style="height: 480px;">
         <!-- 左侧步骤导航 -->
         <div class="shrink-0 pr-5 pt-4 flex flex-col gap-5">
           <div v-for="(step, i) in stepLabels" :key="i"
@@ -113,21 +113,37 @@
               <el-input v-model="editConfig.password" type="password" show-password />
             </div>
             <div v-if="editConfig.authMethod === 'privateKey'">
-              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') === '连接名称' ? '私钥内容' : 'Private Key' }}</label>
-              <el-input v-model="editConfig.privateKey" type="textarea" :rows="4"
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..." />
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') === '连接名称' ? '私钥路径' : 'Private Key Path' }}</label>
+              <div class="flex gap-2">
+                <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
+                  :placeholder="isElectron ? '选择或输入私钥文件路径' : '请输入私钥文件绝对路径'" />
+                <el-button v-if="isElectron" @click="selectPrivateKeyFile">
+                  {{ t('settings.connection.browse') }}
+                </el-button>
+              </div>
+              <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                {{ t('settings.connection.privateKeyPathDesc') }}
+              </div>
             </div>
 
-            <!-- 权限模式 -->
+            <!-- 权限模式:横向切换按钮 -->
             <div>
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
                 {{ t('settings.connection.permTitle') }}
               </label>
-              <el-select v-model="editConfig.perm" style="width: 100%;">
-                <el-option :label="t('settings.connection.permWorkspace')" value="workspace" />
-                <el-option :label="t('settings.connection.permReadonly')" value="readonly" />
-                <el-option :label="t('settings.connection.permUnrestricted')" value="unrestricted" />
-              </el-select>
+              <div class="flex w-fit rounded-lg overflow-hidden border border-(--color-border) dark:border-gray-700">
+                <button
+                  v-for="opt in permOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="px-4 py-1.5 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
+                  :class="editConfig.perm === opt.value
+                    ? 'bg-(--color-primary) text-white border-(--color-primary)'
+                    : 'text-(--color-text-gray) hover:bg-(--color-primary-100) hover:text-(--color-primary)'"
+                  @click="editConfig.perm = opt.value">
+                  {{ opt.label }}
+                </button>
+              </div>
               <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                 {{ t('settings.connection.permDesc') }}
               </div>
@@ -267,7 +283,7 @@ interface ConnectionConfig {
   username: string
   authMethod: 'password' | 'privateKey'
   password?: string
-  privateKey?: string
+  privateKeyPath?: string
   path: string
   perm?: string
 }
@@ -289,8 +305,28 @@ const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
 const editConfig = ref<ConnectionConfig>({
-  host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKey: '', path: '', perm: 'workspace'
+  host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKeyPath: '', path: '', perm: 'workspace'
 })
+// Electron 环境判断(有文件选择能力)
+const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+
+// Electron 下打开文件选择框选择私钥路径;Web 下手写路径
+async function selectPrivateKeyFile() {
+  try {
+    const selected = await window.electronAPI?.selectFile?.()
+    if (selected) {
+      editConfig.value.privateKeyPath = selected
+    }
+  } catch (error) {
+    console.error('选择私钥文件失败:', error)
+  }
+}
+// 权限模式横向切换选项
+const permOptions = computed(() => [
+  { value: 'workspace', label: t('settings.connection.permWorkspace') },
+  { value: 'readonly', label: t('settings.connection.permReadonly') },
+  { value: 'unrestricted', label: t('settings.connection.permUnrestricted') },
+])
 const saving = ref(false)
 const testing = ref(false)
 const testResult = ref<{ success: boolean; error?: string; log?: string } | null>(null)
@@ -330,7 +366,7 @@ function startNew() {
   editing.value = true
   editConnId.value = null
   editName.value = ''
-  editConfig.value = { host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKey: '', path: '' }
+  editConfig.value = { host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKeyPath: '', path: '', perm: 'workspace' }
   testResult.value = null
   testLog.value = ''
   deployResult.value = null
@@ -342,7 +378,8 @@ function editConn(conn: Connection) {
   editing.value = true
   editConnId.value = conn.id
   editName.value = conn.name
-  editConfig.value = { ...conn.config }
+  // 从未选择过权限的旧连接:默认 workspace(按钮高亮体现)
+  editConfig.value = { ...conn.config, perm: conn.config.perm || 'workspace' }
   testResult.value = null
   testLog.value = ''
   deployResult.value = null

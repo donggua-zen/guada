@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { Client as SshClient } from "ssh2";
-import { deployAgent, MIN_AGENT_VERSION, isVersionSupported } from "./agent-deploy";
+import { deployAgent } from "./agent-deploy";
 import { RpcClient } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 
@@ -100,8 +100,8 @@ export class RemoteAgentManager {
     if (config.authMethod === "password" && config.password) {
       params.set("password", config.password);
     }
-    if (config.authMethod === "privateKey" && config.privateKey) {
-      params.set("privateKey", config.privateKey);
+    if (config.authMethod === "privateKey" && config.privateKeyPath) {
+      params.set("privateKeyPath", config.privateKeyPath);
     }
     if (config.perm && config.perm !== "workspace") {
       params.set("perm", config.perm);
@@ -140,18 +140,10 @@ export class RemoteAgentManager {
     const rpc = new RpcClient(ws);
     rpc.setConnected();
 
-    // Verify connection + version compatibility
+    // Verify connection(版本一致性由部署链路保证:不一致会自动重新下载推送)
     try {
-      const result = await rpc.call<{ pong: string; version?: string }>("ping");
+      const result = await rpc.call<{ pong: string }>("ping");
       if (!result.pong) throw new Error("Agent ping failed");
-      // 版本兼容校验:低于主程序最低要求才报错;高于/等于 MIN 的更新版本一律兼容
-      if (result.version && !isVersionSupported(result.version)) {
-        throw new Error(
-          `Agent version too old: remote agent is v${result.version}, ` +
-            `but this app requires at least v${MIN_AGENT_VERSION}. ` +
-            `Please upgrade the app to the latest version.`,
-        );
-      }
     } catch (err) {
       ws.close();
       throw new Error(`Agent handshake failed: ${err}`);

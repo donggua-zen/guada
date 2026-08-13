@@ -67,6 +67,9 @@
                         <template v-else-if="currentTabValue === 'about'">
                             <AboutPanel />
                         </template>
+                        <template v-else-if="currentTabValue === 'community'">
+                            <CommunityPanel />
+                        </template>
                         <template v-else-if="currentTabValue === 'session-groups'">
                             <SessionGroupManage />
                         </template>
@@ -103,6 +106,7 @@ import ArchivedSessions from './ArchivedSessions.vue'
 import UserProfile from './UserProfile.vue'
 import UserSecurity from './UserSecurity.vue'
 import ConnectionSettings from './ConnectionSettings.vue'
+import CommunityPanel from './CommunityPanel.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
 import {
@@ -116,6 +120,7 @@ import {
     Folder20Regular,
     Archive20Regular,
     Cloud24Regular,
+    Chat24Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -135,13 +140,14 @@ const groupMap = computed<Record<string, string>>(() => ({
     general: t('settings.system.groups.general'),
     'default-models': t('settings.system.groups.general'),
     ocr: t('settings.system.groups.general'),
+    browser: t('settings.system.groups.general'),
+    connections: t('settings.system.groups.general'),
     appearance: t('settings.system.groups.personalization'),
     search: t('settings.system.groups.personalization'),
-    browser: t('settings.system.groups.system'),
     about: t('settings.system.groups.system'),
+    community: t('settings.system.groups.system'),
     'session-groups': t('settings.system.groups.dataManagement'),
     'session-archived': t('settings.system.groups.dataManagement'),
-    connections: t('settings.system.groups.system'),
     profile: t('settings.system.groups.account'),
     security: t('settings.system.groups.account'),
 }))
@@ -191,6 +197,12 @@ const sidebarItems = computed(() => [
         roles: ['primary'],
     },
     {
+        label: t('settings.system.tabs.community'),
+        path: 'community',
+        icon: Chat24Regular,
+        roles: ['primary'],
+    },
+    {
         label: t('settings.system.tabs.connections'),
         path: 'connections',
         icon: Cloud24Regular,
@@ -234,9 +246,9 @@ const groupedSidebarItems = computed(() => {
     const groupOrder = [
         t('settings.system.groups.general'),
         t('settings.system.groups.personalization'),
-        t('settings.system.groups.system'),
         t('settings.system.groups.dataManagement'),
         t('settings.system.groups.account'),
+        t('settings.system.groups.system'),
     ]
     const groups: Record<string, typeof items> = {}
     for (const g of groupOrder) groups[g] = []

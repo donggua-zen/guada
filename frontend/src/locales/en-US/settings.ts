@@ -124,6 +124,8 @@
     next: 'Next',
     prev: 'Previous',
     save: 'Save Connection',
+    browse: 'Browse',
+    privateKeyPathDesc: 'Click "Browse" to pick the private key file (Electron), or type the absolute path manually (Web). Only the path is saved, never the key content.',
     // Deploy verification
     deployTitle: 'Deploy Agent',
     deployDesc: 'Check whether the remote agent is installed and version-matched; upload and deploy automatically if not. Saving is not allowed until deployment succeeds.',
@@ -134,7 +136,7 @@
     deployRetry: 'Retry Deploy',
     // Permission mode
     permTitle: 'Agent Permission Mode',
-    permWorkspace: 'Workspace writable (default)',
+    permWorkspace: 'Workspace writable',
     permReadonly: 'Read-only',
     permUnrestricted: 'Unrestricted',
     permDesc: 'Read-write inside workspace, read-only outside. Read-only mode denies all writes.',
@@ -207,6 +209,15 @@
       sessionArchived: 'Archive Management',
       profile: 'Account Overview',
       security: 'Security Settings',
+      community: 'Feedback / Community',
+    },
+    community: {
+      feedback: 'Feedback',
+      joinCommunity: 'Join Community',
+      communityDesc: 'Having issues? Want to discuss tech? Download prebuilt packages? Join us here:',
+      officialAccountName: 'DongGua Programming Lab',
+      giteeIssues: 'Gitee Issues',
+      starPrompt: '⭐ If GuaDa helps you, please give it a Star on Gitee — your support keeps us going ❤️',
     },
   },
 

@@ -31,6 +31,7 @@ export interface ElectronAPI {
   showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
   openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
   selectFolder: () => Promise<string | null>
+  selectFile: () => Promise<string | null>
 
   // 原生剪贴板操作（同步，无需用户授权）
   clipboard: {
