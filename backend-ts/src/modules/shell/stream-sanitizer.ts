@@ -68,6 +68,14 @@ export class StreamingSanitizer {
         while (i < text.length) {
           const c = text.charCodeAt(i);
           if (c >= 0x40 && c <= 0x7e) {
+            // Line-control CSI sequences → emit \r so step 3 collapse handles them.
+            // clack/ora and similar spinner libs redraw via \x1b[2K (erase line) and
+            // \x1b[0G/\x1b[1G (cursor to column 0) instead of \r; stripping them
+            // silently causes every spinner frame to concatenate on one line.
+            const seq = text.substring(escStart, i + 1);
+            if (seq === "\x1b[2K" || seq === "\x1b[0G" || seq === "\x1b[1G") {
+              cleaned += "\r";
+            }
             i++;
             found = true;
             break;

@@ -130,6 +130,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             return agent.readFile(
@@ -169,6 +170,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             await agent.writeFile(args.file_path, args.content);
@@ -206,6 +208,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             const result = await agent.replaceInFile(
@@ -256,6 +259,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             return agent.grep(args.pattern, args.path, args.max_results || 50);
@@ -292,6 +296,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             return agent.execute(args.command);
@@ -331,6 +336,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
+              ctx.session.sessionId,
               attachments,
             );
             if (args.action === "upload") {

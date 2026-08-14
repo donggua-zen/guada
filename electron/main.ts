@@ -96,6 +96,18 @@ log.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}";
 // 将 console 输出重定向到日志文件（可选，生产环境建议启用）
 // Object.assign(console, log.functions)
 
+// ── 开发实例数据隔离 ──
+// GUADA_DEV_DATA=1    ：dev 模式（热重载）使用独立数据 ~/.guada-dev，与正式数据解耦，可与 prod-debug 并行
+// GUADA_PROD_DEBUG=1  ：生产调试模式（无热重载、静态前端）直接使用正式数据 ~/.guada
+const GUADA_DEV_DATA = process.env.GUADA_DEV_DATA === "1";
+const GUADA_PROD_DEBUG = process.env.GUADA_PROD_DEBUG === "1";
+if (GUADA_DEV_DATA) {
+  app.setPath("userData", path.join(app.getPath("appData"), "guada-dev"));
+} else if (GUADA_PROD_DEBUG) {
+  app.setPath("userData", path.join(app.getPath("appData"), "guada-prod-debug"));
+}
+// 锁键基于 userData —— 上述 setPath 必须在 requestSingleInstanceLock() 之前
+
 crashReporter.start({
   uploadToServer: false,
   compress: false,
@@ -171,8 +183,10 @@ const isDev = !app.isPackaged;
 
 // 旧数据目录（Electron 默认 userData）
 const DEFAULT_USER_DATA = app.getPath("userData");
-// 新数据目录（用户主目录下的 .guada）
-const GUADA_HOME = path.join(os.homedir(), ".guada");
+// 新数据目录（用户主目录下的 .guada；dev 模式隔离到 .guada-dev，与正式数据解耦）
+const GUADA_HOME = GUADA_DEV_DATA
+  ? path.join(os.homedir(), ".guada-dev")
+  : path.join(os.homedir(), ".guada");
 // 迁移标记文件
 const MIGRATED_FLAG = path.join(GUADA_HOME, ".migrated");
 // 跳过迁移标记
@@ -440,20 +454,26 @@ async function startBackend(): Promise<void> {
     const backendPath = getBackendPath();
 
     if (isDev) {
-      // 开发模式：固定端口
-      backendPort = 3000;
-      console.log("开发模式：使用固定端口 3000");
-      // 开发模式：使用 spawn 启动 ts-node-dev
+      // 开发模式：端口可通过 PORT 环境变量配置（默认 3000，prod-debug 用 3001 错开）
+      backendPort = parseInt(process.env.PORT || "3000", 10);
+      // 生产调试模式禁用热重载（改代码不触发后端重启，用于自举开发）
+      const noWatch = GUADA_PROD_DEBUG;
+      console.log(
+        `开发模式：使用端口 ${backendPort}${noWatch ? "（生产调试，无热重载）" : "（热重载）"}`,
+      );
+      // 开发模式：使用 spawn 启动后端
       const { spawn } = await import("child_process");
       const nodePath = process.platform === "win32" ? "npx.cmd" : "npx";
-      const scriptPath = "ts-node-dev";
-      const args = [
-        "--respawn",
-        "--transpile-only",
-        path.join(backendPath, "src", "main.ts"),
-      ];
+      const scriptPath = path.join(backendPath, "src", "main.ts");
+      const args = noWatch
+        ? ["ts-node", "--transpile-only", scriptPath]
+        : ["ts-node-dev", "--respawn", "--transpile-only", scriptPath];
 
-      console.log("开发模式：使用 ts-node-dev 启动后端（支持热重载）");
+      console.log(
+        noWatch
+          ? "生产调试模式：使用 ts-node 启动后端（无热重载）"
+          : "开发模式：使用 ts-node-dev 启动后端（支持热重载）",
+      );
 
       // 检测数据目录
       const dataHome = detectDataPath();
@@ -480,7 +500,7 @@ async function startBackend(): Promise<void> {
         env: {
           ...process.env,
           NODE_ENV: "development",
-          PORT: "3000",
+          PORT: String(backendPort),
           NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
           DATABASE_URL: `file:${paths.dbPath}`,
           VECTOR_DB_PATH: paths.vectorDbPath,
@@ -500,6 +520,7 @@ async function startBackend(): Promise<void> {
         },
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
+        windowsHide: true,
       };
 
       backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions);
@@ -566,6 +587,7 @@ async function startBackend(): Promise<void> {
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
         },
         stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
       };
 
       backendProcess = spawn(nodePath, [scriptPath], spawnOptions);
@@ -1159,7 +1181,7 @@ function setupIpcHandlers() {
       if (backendProcess && !backendProcess.killed) {
         const { exec } = require("child_process");
         await new Promise<void>((resolve, reject) => {
-          exec(`taskkill /pid ${backendProcess!.pid} /T /F`, (error: any) => {
+          exec(`taskkill /pid ${backendProcess!.pid} /T /F`, { windowsHide: true }, (error: any) => {
             if (error) {
               console.error("停止后端失败:", error.message);
               reject(error);
@@ -1483,7 +1505,7 @@ function setupIpcHandlers() {
             return { success: false, error: `Unknown editor: ${editor}` };
         }
         await new Promise<void>((resolve, reject) => {
-          exec(cmd, (error) => {
+          exec(cmd, { windowsHide: true }, (error) => {
             if (error) reject(error);
             else resolve();
           });
@@ -1965,6 +1987,20 @@ function setupIpcHandlers() {
       }
     },
   );
+
+  // 弹窗自动关闭通知（preload 中劫持 alert/confirm/prompt 后发送）
+  ipcMain.on(
+    "browser:dialog-auto-dismissed",
+    (event, data: { type: string; message: string }) => {
+      const senderId = (event.sender as any).id;
+      const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
+      if (!windowId) return;
+      windowManager!.appendDialogLog(windowId, data.type, data.message);
+      log.info(
+        `[Dialog] Auto-dismissed on window ${windowId}: ${data.type} - ${data.message}`,
+      );
+    },
+  );
 }
 
 // 后端启动 Promise（供 IPC 和 Browser Bridge 等待）
@@ -2043,6 +2079,7 @@ app.on("window-all-closed", () => {
       const { exec } = require("child_process");
       exec(
         `taskkill /pid ${backendProcess.pid} /T /F`,
+        { windowsHide: true },
         (error: any, stdout: string, stderr: string) => {
           if (error) {
             console.error("Failed to kill backend process:", error.message);
@@ -2128,6 +2165,7 @@ app.on("before-quit", async (event) => {
         try {
           execSync(`taskkill /pid ${backendProcess.pid} /T /F`, {
             stdio: "ignore",
+            windowsHide: true,
           });
         } catch (error) {
           console.error("Failed to kill backend process:", error);

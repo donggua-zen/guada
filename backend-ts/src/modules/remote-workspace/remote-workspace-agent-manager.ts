@@ -80,14 +80,17 @@ export class RemoteAgentManager {
   private readonly logger = new Logger(RemoteAgentManager.name);
 
   /**
-   * Get or create an agent connection by connection name.
+   * Get or create an agent connection for the given session + connection name.
+   * 会话级隔离:每个 sessionId+连接名 独立缓存/独立进程,互不复用。
    * Only connections bound to the given session (via attachments['ssh-connection'])
    * are considered available. Connection is identified by name only (not ID).
    */
   async getAgent(
     connectionName: string,
+    sessionId: string,
     sessionAttachments?: Record<string, string[]>,
   ): Promise<RemoteAgent> {
+    const cacheKey = `${sessionId}::${connectionName}`;
     // Find connection config from session attachments
     const connectionIds: string[] = sessionAttachments?.["ssh-connection"] || [];
     if (connectionIds.length === 0) {
@@ -112,10 +115,10 @@ export class RemoteAgentManager {
 
     // Verify this connection is bound to the session
     if (!connectionIds.includes(conn.id)) {
-      // 用户已取消勾选该连接:关闭并清理缓存,防止任何残留路径继续访问
-      const stale = this.cache.get(conn.name);
+      // 用户已取消勾选该连接:关闭并清理该会话的缓存,防止任何残留路径继续访问
+      const stale = this.cache.get(cacheKey);
       if (stale) {
-        this.cache.delete(conn.name);
+        this.cache.delete(cacheKey);
         try {
           stale.ws.close();
         } catch {}
@@ -127,7 +130,7 @@ export class RemoteAgentManager {
     }
 
     // Check cache
-    const cached = this.cache.get(conn.name);
+    const cached = this.cache.get(cacheKey);
     if (cached && !cached.busy) {
       cached.lastActive = Date.now();
       return new RemoteAgent(cached.rpc, conn.config);
@@ -142,7 +145,7 @@ export class RemoteAgentManager {
       busy: false,
       lastActive: Date.now(),
     };
-    this.cache.set(conn.name, cached2);
+    this.cache.set(cacheKey, cached2);
     return new RemoteAgent(cached2.rpc, conn.config);
   }
 

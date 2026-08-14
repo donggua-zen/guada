@@ -14,6 +14,7 @@
  */
 
 import { Client, type ConnectConfig } from "ssh2";
+import WebSocket from "ws";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -21,6 +22,7 @@ import * as net from "net";
 import * as https from "https";
 import * as crypto from "crypto";
 import type { ParsedWorkspaceUri } from "../../common/workspace/workspace-provider.interface";
+import { RpcClient } from "./rpc";
 
 const REMOTE_DIR = ".guada-agent";
 const REMOTE_BINARY_NAME = "guada-agent";
@@ -144,15 +146,13 @@ export async function deployAgent(
       await execCommand(sshClient, `chmod +x ${remoteBinary}`);
     }
 
-    // Step 4: ensure agent is running on a known fixed port
+    // Step 4: start agent process (session-scoped, random port)
     const remotePort = await ensureAgentRunning(
       sshClient,
       remoteBinary,
       `${remoteDir}/.token`,
-      needDeploy,
       uri.path,
       uri.query?.perm,
-      expectedVersion,
     );
 
     // Step 5: port forward
@@ -321,19 +321,40 @@ export async function verifyAndDeployAgent(
     await execCommand(sshClient, `chmod +x ${remoteBinary}`);
     push("Binary uploaded");
 
-    // 启动验证(固定端口启动,保证后续连接可发现)
+    // 启动验证(随机端口启动,会话级独立进程)
     throwIfAborted();
     push("Starting agent...");
     const remotePort = await ensureAgentRunning(
       sshClient,
       remoteBinary,
       `${remoteDir}/.token`,
-      needDeploy,
       uri.path,
       uri.query?.perm,
-      expectedVersion,
     );
     push(`Agent started successfully, listening on port ${remotePort}`);
+
+    // 握手验证:建立临时 WS 连接 ping 确认可联通,随后断开。
+    // agent 为"断开即退出"模式,验证完成后连接关闭 → agent 自动退出,不留残留进程。
+    push("Verifying agent handshake...");
+    try {
+      const localPort = await setupPortForward(sshClient, remotePort);
+      const verifyWs = new WebSocket(`ws://127.0.0.1:${localPort}/ws`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      await new Promise<void>((resolve, reject) => {
+        verifyWs.once("open", () => resolve());
+        verifyWs.once("error", (err) => reject(err));
+      });
+      const verifyRpc = new RpcClient(verifyWs);
+      verifyRpc.setConnected();
+      const ping = await verifyRpc.call<{ pong: string }>("ping");
+      if (!ping.pong) throw new Error("Agent ping failed");
+      verifyWs.close();
+      push("Agent handshake verified");
+    } catch (err: any) {
+      throw new Error(`Agent handshake failed: ${err?.message || err}`);
+    }
+
     push("Deployment verified");
 
     return { success: true, installed: false, version: expectedVersion, log };
@@ -732,72 +753,27 @@ function setupPortForward(client: Client, remotePort: number): Promise<number> {
   });
 }
 
-/** agent 固定监听端口池(避免随机端口导致后续连接无法发现) */
-const AGENT_PORTS = [19876, 19877, 19878, 19879, 19880];
-
-/** 检查远端端口上的 agent 是否健康且版本与期望一致(期望为空时仅检查健康) */
-async function checkAgentHealth(
-  client: Client,
-  port: number,
-  expectedVersion?: string,
-): Promise<boolean> {
-  const result = await execCommand(
-    client,
-    `curl -s --connect-timeout 1 http://127.0.0.1:${port}/health 2>/dev/null || true`,
-  );
-  if (!result.includes('"status":"ok"')) return false;
-  // 有期望版本时要求严格一致,否则视为不可复用(需重启推送新版)
-  if (expectedVersion) {
-    return result.includes(`"version":"${expectedVersion}"`);
-  }
-  return true;
-}
-
-/** 挑选一个未被占用的固定端口 */
-async function pickFreeAgentPort(client: Client): Promise<number> {
-  for (const port of AGENT_PORTS) {
-    const result = await execCommand(
-      client,
-      `ss -tln 2>/dev/null | grep -qE "[:.]${port} " && echo BUSY || echo FREE`,
-    );
-    if (result.trim() !== "BUSY") return port;
-  }
-  return AGENT_PORTS[0];
-}
-
 /**
- * 确保远端 agent 正在运行,返回其监听端口。
- * - 已有健康且版本匹配的 agent → 直接复用;
- * - restart=true(版本不匹配/重新部署后)或没有健康 agent → 清理残留进程,固定端口重启。
+ * 启动远端 agent 进程,返回其监听端口。
+ * 架构为"会话级独立进程"(无复用):每次调用都启动一个新 agent 进程(--port 0 随机端口),
+ * 连接断开后 agent 自行退出,下次使用重新拉起 — 无需端口池/健康探测/复用。
  */
 async function ensureAgentRunning(
   client: Client,
   remoteBinary: string,
   remoteTokenFile: string,
-  restart: boolean,
   rootDir?: string,
   perm?: string,
-  expectedVersion?: string,
 ): Promise<number> {
-  // 1) 复用已运行的健康 agent(版本与期望一致才复用,避免频繁重启)
-  if (!restart) {
-    for (const port of AGENT_PORTS) {
-      if (await checkAgentHealth(client, port, expectedVersion)) {
-        return port;
-      }
-    }
-  }
-
-  // 2) 清理残留进程(可能以 --port 0 随机端口启动的旧版本,无法被发现)
+  // 清理本连接的残留进程(避免前一次异常退出遗留的同二进制进程占用)
   await execCommand(client, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
 
-  // 3) 挑空闲固定端口并启动
-  const port = await pickFreeAgentPort(client);
+  // 随机端口启动(--port 0),从输出解析实际监听端口
   const startOutput = await startAgentBackground(
     client,
     remoteBinary,
     remoteTokenFile,
-    port,
+    0,
     rootDir,
     perm,
   );
@@ -806,10 +782,5 @@ async function ensureAgentRunning(
     throw new Error(`Agent failed to start. Output: ${startOutput}`);
   }
   const actualPort = parseInt(portMatch[1], 10);
-  if (actualPort !== port) {
-    throw new Error(
-      `Agent started on unexpected port ${actualPort}, expected ${port}`,
-    );
-  }
   return actualPort;
 }
