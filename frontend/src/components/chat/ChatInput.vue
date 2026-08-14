@@ -619,7 +619,7 @@ const createFileObject = (file: File, fileType: string, isPasted = false) => {
   // Electron 模式下非图片文件：只存本地路径，不上传
   const isImageFile = FILE_TYPES[fileType].type === 'image';
   const electronLocalPath = isElectron && !isImageFile
-    ? (file as File & { path?: string }).path
+    ? window.electronAPI?.getPathForFile(file)
     : undefined;
 
   return {

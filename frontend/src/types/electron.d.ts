@@ -79,6 +79,9 @@ export interface ElectronAPI {
   // Debug 菜单
   showDebugMenu: () => Promise<void>
 
+  /** 获取 Electron 文件的本地路径（替代 Electron 33+ 已移除的 File.path） */
+  getPathForFile: (file: File) => string
+
   // 右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
   onTabMenuAction: (callback: (event: any, data: any) => void) => void

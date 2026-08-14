@@ -545,7 +545,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (isWindows) {
       const pid = entry.childProcess.pid;
       if (pid) {
-        exec(`taskkill /F /T /PID ${pid}`, (err) => {
+        exec(`taskkill /F /T /PID ${pid}`, { windowsHide: true }, (err) => {
           if (err) this.logger.warn(`taskkill 失败: ${err.message}`);
         });
       }
@@ -813,6 +813,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return spawn(this.sandboxBinPath, args, {
         cwd,
         env: { ...process.env, PYTHONUNBUFFERED: "1" },
+        windowsHide: true,
       });
     }
 
@@ -821,6 +822,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return spawn(this.shellInfo.path, ["-c", command], {
         cwd,
         env: { ...process.env, PYTHONUNBUFFERED: "1" },
+        windowsHide: true,
       });
     }
 
@@ -828,6 +830,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       cwd,
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
       shell: true,
+      windowsHide: true,
     });
   }
 

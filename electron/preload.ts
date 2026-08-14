@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, clipboard } from 'electron'
+import { contextBridge, ipcRenderer, clipboard, webUtils } from 'electron'
 
 // 暴露安全的 API 到渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 显示调试菜单
   showDebugMenu: () => ipcRenderer.invoke('show-debug-menu'),
   
+  // 获取 Electron 文件的本地路径（替代 Electron 33+ 已移除的 File.path）
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
+
   // 显示标签页右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => 
     ipcRenderer.invoke('show-tab-context-menu', params),

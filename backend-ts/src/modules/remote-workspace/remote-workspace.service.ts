@@ -181,11 +181,11 @@ export class RemoteWorkspaceService {
    * 读取 agent 最新版本接口地址(settings 可配置)。
    * 该接口返回 {"version":"x.y.z"};部署时自动检查本地缓存是否落后,
    * 落后则用接口返回的下载地址模板拉取最新版 — 无需升级主程序即可更新 agent。
-   * 未配置时使用官方默认地址 https://ai.dingd.cn/plugins/remote-agent/latest.json。
+   * 未配置时使用官方默认地址 https://ai.dingd.cn/plugins/latest.json。
    */
   async getAgentLatestVersionUrl(): Promise<string> {
     const DEFAULT_AGENT_LATEST_URL =
-      "https://ai.dingd.cn/plugins/remote-agent/latest.json";
+      "https://ai.dingd.cn/plugins/latest.json";
     const url = await this.settingsStorage.getSettingValue(
       SETTINGS_GROUP,
       SETTINGS_KEY_AGENT_LATEST_URL,
