@@ -292,17 +292,26 @@ export async function verifyAndDeployAgent(
       goArch,
       downloadUrl,
       latestVersionUrl,
-      // 下载进度回调:格式化输出,避免用户觉得卡住
-      (downloaded, total) => {
-        if (total > 0) {
-          const pct = Math.min(100, Math.round((downloaded / total) * 100));
-          const mb = (downloaded / 1048576).toFixed(1);
-          const totalMb = (total / 1048576).toFixed(1);
-          push(`Downloading deployment resource: ${mb}MB / ${totalMb}MB (${pct}%)`);
-        } else {
-          push(`Downloading deployment resource: ${(downloaded / 1048576).toFixed(1)}MB`);
-        }
-      },
+      // 下载进度回调:节流输出(每 ≥5% 或 ≥2MB 才一行),避免频繁日志刷屏
+      (() => {
+        let lastPct = -1;
+        let lastLoggedBytes = 0;
+        return (downloaded: number, total: number) => {
+          if (total > 0) {
+            const pct = Math.min(100, Math.round((downloaded / total) * 100));
+            // 节流:进度前进 ≥5% 或字节数前进 ≥2MB 才输出
+            if (pct >= lastPct + 5 && downloaded - lastLoggedBytes >= 2 * 1048576) {
+              lastPct = pct;
+              lastLoggedBytes = downloaded;
+              const mb = (downloaded / 1048576).toFixed(1);
+              const totalMb = (total / 1048576).toFixed(1);
+              push(`Downloading deployment resource: ${mb}MB / ${totalMb}MB (${pct}%)`);
+            }
+          } else {
+            push(`Downloading deployment resource: ${(downloaded / 1048576).toFixed(1)}MB`);
+          }
+        };
+      })(),
       signal,
     );
     throwIfAborted();
