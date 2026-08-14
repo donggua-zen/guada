@@ -454,20 +454,22 @@ async function startBackend(): Promise<void> {
     const backendPath = getBackendPath();
 
     if (isDev) {
-      // 开发模式：端口可通过 PORT 环境变量配置（默认 3000，prod-debug 用 3001 错开）
+      // 开发模式：端口可通过 PORT 环境变量配置（0 = 系统自动分配，默认 3000）
       backendPort = parseInt(process.env.PORT || "3000", 10);
       // 生产调试模式禁用热重载（改代码不触发后端重启，用于自举开发）
       const noWatch = GUADA_PROD_DEBUG;
+      const portDesc = backendPort === 0 ? "自动分配（随机）" : String(backendPort);
       console.log(
-        `开发模式：使用端口 ${backendPort}${noWatch ? "（生产调试，无热重载）" : "（热重载）"}`,
+        `开发模式：使用端口 ${portDesc}${noWatch ? "（生产调试，无热重载）" : "（热重载）"}`,
       );
       // 开发模式：使用 spawn 启动后端
       const { spawn } = await import("child_process");
       const nodePath = process.platform === "win32" ? "npx.cmd" : "npx";
-      const scriptPath = path.join(backendPath, "src", "main.ts");
+      const launcher = noWatch ? "ts-node" : "ts-node-dev";
+      const entryScript = path.join(backendPath, "src", "main.ts");
       const args = noWatch
-        ? ["ts-node", "--transpile-only", scriptPath]
-        : ["ts-node-dev", "--respawn", "--transpile-only", scriptPath];
+        ? [launcher, "--transpile-only", entryScript]
+        : [launcher, "--respawn", "--transpile-only", entryScript];
 
       console.log(
         noWatch
@@ -501,6 +503,7 @@ async function startBackend(): Promise<void> {
           ...process.env,
           NODE_ENV: "development",
           PORT: String(backendPort),
+          BASE_URL: "__auto__", // 与生产一致：动态设置 BASE_URL，后端返回的资源 URL 指向实际端口
           NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
           DATABASE_URL: `file:${paths.dbPath}`,
           VECTOR_DB_PATH: paths.vectorDbPath,
@@ -523,7 +526,7 @@ async function startBackend(): Promise<void> {
         windowsHide: true,
       };
 
-      backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions);
+      backendProcess = spawn(nodePath, args, spawnOptions);
     } else {
       // 生产模式：使用 0 让系统自动分配端口，通过 IPC 获取
       backendPort = 0;

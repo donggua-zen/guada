@@ -193,7 +193,7 @@
               </div>
             </div>
 
-            <div v-if="deployLog || deploying" class="flex-1 min-h-0 bg-gray-900 dark:bg-black rounded-lg p-3 overflow-auto font-mono text-xs leading-relaxed">
+            <div ref="deployLogBox" v-if="deployLog || deploying" class="flex-1 min-h-0 bg-gray-900 dark:bg-black rounded-lg p-3 overflow-auto font-mono text-xs leading-relaxed log-scroll">
               <pre class="text-gray-300 whitespace-pre-wrap">{{ deployLog || 'Deploying...' }}</pre>
               <span v-if="deploying" class="inline-block w-2 h-4 bg-green-400 animate-pulse align-middle"></span>
             </div>
@@ -269,7 +269,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import LDialog from '@/components/ui/LDialog.vue'
@@ -527,5 +527,25 @@ async function deleteConn(id: string) {
 }
 .border-3 {
   border-width: 3px;
+}
+/* 部署日志区域:滚动条始终可见,便于查看历史进度 */
+.log-scroll {
+  scrollbar-width: thin;           /* Firefox */
+  scrollbar-color: #4b5563 #111827;
+}
+.log-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.log-scroll::-webkit-scrollbar-track {
+  background: #111827;
+  border-radius: 4px;
+}
+.log-scroll::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+.log-scroll::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
 }
 </style>
