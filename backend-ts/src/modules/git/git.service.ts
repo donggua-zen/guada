@@ -34,9 +34,19 @@ export interface GitDiffResult {
   diff?: string;
   /** type=new-file 时有效：未跟踪文件的完整内容 */
   content?: string;
+  /**
+   * 完整旧侧内容（staged diff = HEAD 版本；unstaged diff = 暂存区版本，git diff 的旧侧）。
+   * 该侧不存在（新增文件）时为 ""；超体积上限时省略（undefined）→ 前端降级逐段高亮。
+   */
+  oldContent?: string;
+  /** 完整新侧内容（staged = 暂存区版本；unstaged = 工作区版本；已删除时为 ""）。同上报体积限 */
+  newContent?: string;
   /** 该文件为二进制（图片/压缩包/媒体等），不支持文本预览 */
   binary?: boolean;
 }
+
+/** 附带全文内容的体积上限（每侧）：超出则省略，前端降级为 hunk 级高亮 + gap 后端展开 */
+const MAX_FULL_CONTENT_BYTES = 512 * 1024;
 
 /** 常见二进制扩展名：命中即不预览（避免读取/展示乱码） */
 const BINARY_EXTENSIONS = new Set<string>([
@@ -175,12 +185,14 @@ export class GitService {
 
     if (cached) {
       const diff = await git.diff(["--cached", "--", filePath]);
-      return {
-        type: "diff",
-        path: filePath,
-        diff,
-        binary: isBinaryPath(filePath) || isBinaryDiff(diff),
-      };
+      const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
+      if (binary) return { type: "diff", path: filePath, diff, binary };
+      // staged diff = HEAD vs 暂存区：附带两侧全文（前端全文高亮 + gap 本地展开）
+      const [oldContent, newContent] = await Promise.all([
+        this.showCapped(git, `HEAD:${filePath}`),
+        this.showCapped(git, `:${filePath}`),
+      ]);
+      return { type: "diff", path: filePath, diff, oldContent, newContent };
     }
 
     // 未跟踪文件（untracked）：git diff 不显示，读取内容展示为全新增
@@ -195,23 +207,65 @@ export class GitService {
         // 先读 Buffer 嗅探二进制：utf-8 直读会把二进制内容解码成乱码替换符
         const buf = await fsp.readFile(absPath);
         const binary = isBinaryPath(filePath) || hasNulByte(buf);
+        const content = binary ? undefined : buf.toString("utf-8");
         return {
           type: "new-file",
           path: filePath,
-          content: binary ? undefined : buf.toString("utf-8"),
+          content,
+          // 全文模式字段：旧侧不存在（空串），新侧 = 工作区全文（超限省略 → 前端降级）
+          oldContent: binary ? undefined : "",
+          newContent:
+            binary || buf.length > MAX_FULL_CONTENT_BYTES ? undefined : content,
           binary,
         };
       }
     }
 
-    // 已跟踪文件（含工作区删除）：git diff 正常输出
+    // 已跟踪文件（含工作区删除）：git diff（无参数）= 暂存区 vs 工作区，
+    // 旧侧是**暂存区**版本（:path，部分暂存时 ≠ HEAD；不在暂存区时回退 HEAD）
     const diff = await git.diff(["--", filePath]);
-    return {
-      type: "diff",
-      path: filePath,
-      diff,
-      binary: isBinaryPath(filePath) || isBinaryDiff(diff),
-    };
+    const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
+    if (binary) return { type: "diff", path: filePath, diff, binary };
+    const [oldContent, newContent] = await Promise.all([
+      this.showCapped(git, `:${filePath}`, `HEAD:${filePath}`),
+      this.readWorkingTreeCapped(absPath),
+    ]);
+    return { type: "diff", path: filePath, diff, oldContent, newContent };
+  }
+
+  /**
+   * git show 读取某版本全文，依次尝试多个 spec（文件在该版本不存在时尝试下一个）。
+   * 全部失败（新增/删除文件缺失的一侧）→ ""；内容超体积上限 → undefined（前端降级）。
+   */
+  private async showCapped(
+    git: SimpleGit,
+    ...specs: string[]
+  ): Promise<string | undefined> {
+    for (const spec of specs) {
+      try {
+        const content = await git.show([spec]);
+        return Buffer.byteLength(content, "utf-8") > MAX_FULL_CONTENT_BYTES
+          ? undefined
+          : content;
+      } catch {
+        // 文件在该版本不存在，尝试下一个 spec
+      }
+    }
+    return "";
+  }
+
+  /** 读工作区文件全文：文件已删除 → ""；超限 → undefined（前端降级） */
+  private async readWorkingTreeCapped(
+    absPath: string,
+  ): Promise<string | undefined> {
+    try {
+      const buf = await fsp.readFile(absPath);
+      return buf.length > MAX_FULL_CONTENT_BYTES
+        ? undefined
+        : buf.toString("utf-8");
+    } catch {
+      return ""; // 工作区删除
+    }
   }
 
   /**
