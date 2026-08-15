@@ -36,7 +36,7 @@
                 </template>
               </PageHeader>
 
-              <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
+              <!-- 主体：会话面板（主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换） -->
               <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器 -->
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
                 <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
@@ -49,6 +49,14 @@
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
+
+              <!-- 工作区概览（悬浮窗：不占布局，位于聊天右上、滚动条内侧；可折叠为小按钮） -->
+              <OverviewPanel v-if="overviewVisible && mainSession" :session-id="mainSession.id"
+                class="overview-float" @collapse="overviewVisible = false" />
+              <button v-else-if="mainSession" class="overview-restore-bar"
+                :title="t('chat.workspace.openOverview')" @click="overviewVisible = true">
+                <el-icon :size="14"><PanelLeftExpand16Filled /></el-icon>
+              </button>
             </div>
           </template>
 
@@ -58,6 +66,8 @@
           </template>
         </LiteSplitpanes>
       </div>
+      <!-- 全局提交/推送弹窗（GitChangesPanel 顶部按钮与概览面板共用入口） -->
+      <GitCommitDialog v-if="mainSession" />
     </template>
     <template v-else>
       <!-- 新建对话头部 -->
@@ -110,7 +120,14 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled } from "@vicons/fluent";
+import { PanelRightExpand20Filled, PanelLeftExpand16Filled } from "@vicons/fluent";
+import { useStorage } from '@vueuse/core';
+
+const OverviewPanel = defineAsyncComponent(() => import("./workspace/OverviewPanel.vue"));
+const GitCommitDialog = defineAsyncComponent(() => import("./workspace/GitCommitDialog.vue"));
+
+/** 工作区概览列显隐（持久化；折叠为窄条后点按钮恢复） */
+const overviewVisible = useStorage('workspaceOverviewVisible', true);
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
@@ -666,6 +683,39 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 工作区概览（悬浮窗）：绝对定位于聊天右上、滚动条内侧（right 偏移避开滚动条），
+   不占布局空间；顶部避开 PageHeader（44px）；高度自适应内容（不设 bottom） */
+.overview-float {
+  position: absolute;
+  top: 44px;
+  right: 8px;
+  width: 280px;
+  z-index: 20;
+}
+
+/* 概览折叠后的恢复小按钮（同样悬浮于右上、滚动条内侧） */
+.overview-restore-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  width: 28px;
+  height: 56px;
+  z-index: 20;
+  border: 1px solid var(--color-surface-border);
+  border-radius: 8px;
+  background: var(--color-dialog-bg, var(--color-surface));
+  color: var(--color-text-gray);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.overview-restore-bar:hover {
+  background: var(--color-sidebar-bg-hover);
+  color: var(--color-text);
+}
+
 .slide-right-enter-active,
 .slide-right-leave-active {
   transition: all 0.3s ease;

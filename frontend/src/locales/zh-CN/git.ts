@@ -1,5 +1,6 @@
 export default {
   title: 'Git 变更',
+  overviewTitle: '工作区概览',
   notGitRepo: '当前工作目录不是 Git 仓库',
   noChanges: '没有变更',
   loading: '加载中...',

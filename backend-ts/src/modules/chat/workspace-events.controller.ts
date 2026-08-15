@@ -1,8 +1,10 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   Headers,
+  Body,
   Sse,
   UseGuards,
   MessageEvent,
@@ -13,7 +15,12 @@ import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
-import { WorkspaceWatcherService, FileChangeEvent } from "../../common/services/workspace-watcher.service";
+import {
+  WorkspaceWatcherService,
+  FileChangeEvent,
+  WatchScope,
+  normalizeWatchScope,
+} from "../../common/services/workspace-watcher.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 
 /**
@@ -28,6 +35,37 @@ export class WorkspaceEventsController {
     private readonly workspaceWatcherService: WorkspaceWatcherService,
     private readonly workspaceService: WorkspaceService,
   ) {}
+
+  /**
+   * 设置 watcher 订阅范围（连接级，按 x-client-id 关联）：
+   * body: { scope: 'file' | 'git', enabled?: boolean }
+   * - 同一 clientId 多次调用取并集；enabled=false 移除该范围；
+   * - SSE 断开时该 clientId 的全部订阅自动清除（连接级引用计数）。
+   */
+  @Post("sessions/:id/workspace/watch")
+  async setWatchScope(
+    @Param("id") id: string,
+    @Headers("x-client-id") clientId: string,
+    @Body() body: { scope?: string; enabled?: boolean },
+    @CurrentUser() user: any,
+  ) {
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+    const scope = normalizeWatchScope(body.scope);
+    if (!scope) {
+      throw new Error("Invalid watch scope (expect 'file' or 'git')");
+    }
+    const finalClientId = clientId || "default";
+    this.workspaceWatcherService.setWatchScope(
+      id,
+      finalClientId,
+      scope as WatchScope,
+      body.enabled !== false,
+    );
+    return { success: true };
+  }
 
   /**
    * 订阅工作目录实时事件

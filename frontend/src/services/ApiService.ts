@@ -298,6 +298,15 @@ class ApiService {
     return this.workspaceWatcherService.onChange(callback);
   }
 
+  /** 设置 watcher 订阅范围（连接级；SSE 断开时后端自动清除本页订阅） */
+  setWorkspaceWatchScope(
+    sessionId: string,
+    scope: "file" | "git",
+    enabled: boolean,
+  ): Promise<void> {
+    return this.workspaceWatcherService.setWatchScope(sessionId, scope, enabled);
+  }
+
   getWorkspaceWatcherSessionId(): string | null {
     return this.workspaceWatcherService.getSessionId();
   }
