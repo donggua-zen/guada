@@ -267,9 +267,14 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
   font-size: 11px;
 }
 
-/* 二进制文件提示行（图片等不支持文本预览） */
+/* 二进制文件提示行（图片等不支持文本预览）：占满整个 diff 区域，垂直水平居中
+   （父容器 .git-diff-split 在 pane 内 flex:1 撑满剩余高度 → height:100% 生效） */
 .git-diff-line.git-diff-binary {
-  padding: 6px 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
 }
 .git-diff-line.git-diff-binary .git-diff-content {
   font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
@@ -280,6 +285,8 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
   gap: 6px;
   cursor: default;
   user-select: none;
+  /* 覆盖基础 .git-diff-content 的 flex:1 撑满 → 内容自适应宽度，由行容器居中 */
+  flex: 0 1 auto;
 }
 
 /* 「N 行未修改」折叠条（替代 @@ hunk 头）：占满整行，不缩进行号列 */

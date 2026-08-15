@@ -55,6 +55,7 @@ export const TOOL_ICON_MAP: Record<string, Component> = {
   code: Code24Regular,
   window: Window16Regular,
   eye: EyeTracking16Filled,
+  vision: EyeTracking16Filled,
   todo: TaskListSquareLtr20Regular,
   book: BookSearch24Regular,
   terminal: WindowConsole20Filled,

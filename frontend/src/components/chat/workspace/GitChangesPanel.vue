@@ -64,10 +64,9 @@
         @resized="onTreeSplitResized"
       >
         <template #pane1>
-          <!-- 左侧 diff 预览（split 视图下列为独立视口，pane 不滚动、header 固定；
-               unified 视图 pane 原生滚动，scroll 事件驱动行虚拟化切片） -->
-          <div ref="diffPaneRef" class="git-diff-pane" :class="{ 'git-diff-pane--split': diffView === 'split' }"
-            @scroll.passive="onUniScroll">
+          <!-- 左侧 diff 预览：两种视图都走「header 固定 + 自绘竖向滚动条 + 行虚拟化」
+               （pane 不滚动；横向原生滚动在各自列容器内） —— 滚动逻辑完全共用一套 -->
+          <div class="git-diff-pane git-diff-pane--split">
         <template v-if="selectedRow">
           <div class="git-diff-header">
             <span class="git-status" :class="`git-status--${statusClass(selectedRow)}`">{{ selectedRow.statusChar }}</span>
@@ -167,19 +166,43 @@
               <div v-if="vScroll.dragging" class="git-diff-vscroll-mask"></div>
             </Teleport>
           </div>
-          <!-- 统一视图：单列（行号 + 内容）。与 split 共用数据管线（displaySplitLines
-               派生 displayUnifiedLines：pair 拆成 del/add 两行）与行渲染（GitDiffRow），
-               gap 折叠条同样可点击展开；原生滚动 + 行虚拟化（table 高度 JS 撑开，
-               可视行绝对定位），展开大量未修改行也不会 DOM 爆炸 -->
-          <GitDiffRow v-else-if="isBinarySplit" :line="binaryLine" side="uni" :top="0" />
-          <div v-else ref="uniTableRef" class="git-diff-table" :style="{ height: uniMetrics.total + 'px' }">
-            <!-- 宽度锚层（同 split 列）：撑宽 table → 行背景铺满整行（横向滚动右侧不丢背景） -->
-            <div class="git-diff-split-col-size" aria-hidden="true">
-              <span v-for="(line, si) in displayUnifiedLines" :key="si" class="git-diff-size-line"
-                v-html="sizeLineHtml(line, 'uni')"></span>
+          <!-- 统一视图：单列（行号 + 内容）。数据管线（displaySplitLines → displayUnifiedLines）
+               与行渲染（GitDiffRow）与 split 共用；滚动结构与 split 列同构 ——
+               横向原生滚动、纵向 translateY + 自绘滚动条、行虚拟化全部复用同一套机制，
+               不再维护独立的原生滚动状态 -->
+          <div v-else class="git-diff-split">
+            <!-- binary 文件：整份只有一行提示，全宽显示（无需滚动） -->
+            <GitDiffRow v-if="isBinarySplit" :line="binaryLine" side="uni" :top="0" />
+            <!-- 单列容器可聚焦：方向键/翻页/Home/End 滚动（与 split 一致） -->
+            <div v-else class="git-diff-split-cols" tabindex="0"
+              :class="{ focused: vScroll.focused }"
+              @focus="vScroll.focused = true" @blur="vScroll.focused = false"
+              @keydown="onVScrollKeydown">
+              <div ref="uniColRef" class="git-diff-split-col git-diff-split-col--uni"
+                @wheel.prevent="onColWheel" @scroll.passive="onColScroll($event, 'uni')">
+                <div ref="uniColInnerRef" class="git-diff-split-col-inner"
+                  :style="{ height: uniMetrics.total + 'px' }">
+                  <!-- 宽度锚层（同 split 列）：撑宽列 → 行背景铺满整行（横向滚动右侧不丢背景） -->
+                  <div class="git-diff-split-col-size" aria-hidden="true">
+                    <span v-for="(line, si) in displayUnifiedLines" :key="si" class="git-diff-size-line"
+                      v-html="sizeLineHtml(line, 'uni')"></span>
+                  </div>
+                  <GitDiffRow v-for="item in uniSlice" :key="item.idx"
+                    :line="item.line" side="uni" :top="uniMetrics.tops[item.idx]" @toggle="toggleGap" />
+                </div>
+              </div>
+              <!-- 统一竖向滚动条（与 split 共用同一套拖拽/点轨道/键盘逻辑） -->
+              <div ref="vScrollTrackRef" class="git-diff-vscroll" v-show="vScroll.visible"
+                tabindex="0" :class="{ focused: vScroll.focused }"
+                @mousedown.prevent="onVScrollTrackDown"
+                @focus="vScroll.focused = true" @blur="vScroll.focused = false"
+                @keydown="onVScrollKeydown">
+                <div ref="vScrollThumbRef" class="git-diff-vscroll-thumb"
+                  :class="{ dragging: vScroll.dragging }"
+                  :style="{ top: vScroll.thumbTop + 'px', height: vScroll.thumbHeight + 'px' }"
+                  @mousedown.stop="onThumbDown"></div>
+              </div>
             </div>
-            <GitDiffRow v-for="item in uniSlice" :key="item.idx"
-              :line="item.line" side="uni" :top="uniMetrics.tops[item.idx]" @toggle="toggleGap" />
           </div>
         </template>
         <div v-else class="git-diff-empty">
@@ -259,7 +282,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, reactive, onMounted, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
@@ -269,6 +292,7 @@ import { LiteSplitpanes } from "../../ui";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
 import type { GitStatus, GitFileChange, GitBranch, GitDiff } from "@/services/modules/git.api";
+import type { FileChangeEvent } from "@/services/modules/WorkspaceWatcherService";
 import type { DiffLine, SplitDiffLine, DisplaySplitLine } from "./git-diff-types";
 import { useHighlight } from "@/composables/useHighlight";
 
@@ -510,12 +534,16 @@ function rowKey(row: GitRow): string {
   return `${row.group}:${row.file.path}`;
 }
 
-/** 按路径构建分组内的目录树（目录在前、按名称排序；叶子为文件行） */
+/** 按路径构建分组内的目录树（目录在前、按名称排序；叶子为文件行）。
+    防御：跳过目录级条目（path 尾斜杠，如未跟踪目录/嵌入式仓库 `?? dir/`），
+    空路径段不建节点 —— 保证不会出现 name="" 的假文件行 */
 function buildTree(rows: GitRow[]): GitTreeNode[] {
   const roots: GitTreeNode[] = [];
   const map = new Map<string, GitTreeNode>();
   for (const r of rows) {
-    const parts = r.file.path.split("/");
+    if (r.file.path.endsWith("/")) continue;
+    const parts = r.file.path.split("/").filter(Boolean);
+    if (!parts.length) continue;
     let cur = "";
     let parent = roots;
     for (let i = 0; i < parts.length; i++) {
@@ -812,48 +840,18 @@ const splitSlice = computed<{ line: DisplaySplitLine; idx: number }[]>(() => {
 });
 
 /**
- * unified 视图滚动：pane 原生滚动（overflow:auto，header sticky 吸顶），
- * scroll 事件（rAF 节流）→ uniScroll/uniViewH → 可视行切片。
- * 纵向位置 = pane.scrollTop - table 在 pane 内的偏移（header 高度）。
+ * unified 视图滚动与 split 完全共用同一套机制（自绘滚动条 + translateY + 行虚拟化）：
+ * - uniColRef 是唯一内容列（横向原生滚动、纵向 overflow:hidden）；
+ * - 纵向 offset/transform/滑块全部复用 vScroll / setColumnsOffset / updateVScroll；
+ * - 显隐切换（面板 v-show display:none）时 offset 与 transform 一起保留 → 位置不丢，
+ *   无独立的 uniScroll/uniViewH/观察器需要维护。
  */
-const diffPaneRef = ref<HTMLElement | null>(null);
-const uniTableRef = ref<HTMLElement | null>(null);
-const uniScroll = ref(0);
-const uniViewH = ref(0);
-let uniRafId: number | null = null;
-let uniResizeObserver: ResizeObserver | null = null;
+const uniColRef = ref<HTMLElement | null>(null);
+const uniColInnerRef = ref<HTMLElement | null>(null);
 
-function updateUniScroll(): void {
-  const pane = diffPaneRef.value;
-  if (!pane) return;
-  uniViewH.value = pane.clientHeight;
-  const tableTop = uniTableRef.value?.offsetTop ?? 0;
-  uniScroll.value = Math.max(0, pane.scrollTop - tableTop);
-}
-
-function onUniScroll(): void {
-  if (diffView.value !== "unified" || uniRafId !== null) return;
-  uniRafId = requestAnimationFrame(() => {
-    uniRafId = null;
-    updateUniScroll();
-  });
-}
-
-watch(diffPaneRef, (el) => {
-  uniResizeObserver?.disconnect();
-  uniResizeObserver = null;
-  if (!el) return;
-  uniResizeObserver = new ResizeObserver(() => updateUniScroll());
-  uniResizeObserver.observe(el);
-  void nextTick(updateUniScroll);
-}, { flush: "post" });
-
-/** unified 内容/视图变化后刷新切片（加载完成、gap 展开、视图切换） */
-watch(displayUnifiedLines, () => void nextTick(updateUniScroll), { flush: "post" });
-
-/** unified 可视行范围与切片 */
+/** unified 可视行范围（与 split 共用 vScroll.offset / viewH） */
 const uniSliceRange = computed<[number, number]>(() =>
-  computeSlice(uniMetrics.value.tops, uniScroll.value, uniViewH.value),
+  computeSlice(uniMetrics.value.tops, vScroll.offset, viewH.value),
 );
 const uniSlice = computed<{ line: DisplaySplitLine; idx: number }[]>(() => {
   const [s, e] = uniSliceRange.value;
@@ -870,13 +868,23 @@ function clampOffset(o: number): number {
 function updateVScroll(): void {
   const thumb = vScrollThumbRef.value;
   if (!thumb) return;
+  // 按当前视图取行度量：split=displaySplitLines，unified=displayUnifiedLines（pair 已拆行）
+  const metrics = diffView.value === "split" ? rowMetrics.value : uniMetrics.value;
   const vh = viewH.value;
-  const total = rowMetrics.value.total;
+  const total = metrics.total;
   const max = total - vh;
   vScroll.maxOffset = Math.max(0, max);
-  if (max <= 0 || vh <= 0) {
+  if (vh <= 0) {
+    // 面板隐藏（祖先 display:none，列无布局）：仅隐藏滚动条，offset/transform 原样保留
+    // —— 恢复显示时滚动位置不丢；若此处把 offset 归零而 transform 未同步，会失步 → 空白
+    vScroll.visible = false;
+    return;
+  }
+  if (max <= 0) {
+    // 内容不足一屏：归零 offset 并同步 transform（避免 offset/transform 失步）
     vScroll.visible = false;
     vScroll.offset = 0;
+    applyColumnsTransform();
     return;
   }
   const thumbH = Math.max(24, (vh / total) * vh);
@@ -885,22 +893,28 @@ function updateVScroll(): void {
   vScroll.thumbTop = Math.round((vScroll.offset / max) * (vh - thumbH));
 }
 
+/** 把 vScroll.offset 应用为所有已挂载内容列的 translateY（split 两列 + unified 单列） */
+function applyColumnsTransform(): void {
+  const t = `translateY(${-vScroll.offset}px)`;
+  if (oldColInnerRef.value) oldColInnerRef.value.style.transform = t;
+  if (newColInnerRef.value) newColInnerRef.value.style.transform = t;
+  if (uniColInnerRef.value) uniColInnerRef.value.style.transform = t;
+}
+
 /**
- * 统一设置两列纵向位置（拖滑块/点轨道/滚轮的唯一入口，保证永远同步）：
- * 直接 translateY 平移两列内容（不用 scrollTop），offset 是单一状态。
+ * 统一设置各列纵向位置（拖滑块/点轨道/滚轮的唯一入口，保证永远同步）：
+ * 直接 translateY 平移内容（不用 scrollTop），offset 是单一状态。
  * offset 必须圆整为整数像素：浮点 offset → translateY 亚像素平移 →
  * 非整数 DPI 缩放下行边界出现 1px 缝隙（概率性横线）。 */
 function setColumnsOffset(offset: number): void {
   vScroll.offset = Math.round(clampOffset(offset));
-  const t = `translateY(${-vScroll.offset}px)`;
-  if (oldColInnerRef.value) oldColInnerRef.value.style.transform = t;
-  if (newColInnerRef.value) newColInnerRef.value.style.transform = t;
+  applyColumnsTransform();
   updateVScroll();
 }
 
 /** 列内滚轮：deltaY 累加 offset（阻止默认滚动，translate 是唯一纵向通道）；
-    deltaX（Shift+滚轮/触控板横滚）手动同步两列 scrollLeft —— 默认行为已被 prevent，
-    不处理的话横向滚轮会被吞掉 */
+    deltaX（Shift+滚轮/触控板横滚）手动同步各列 scrollLeft —— 默认行为已被 prevent，
+    不处理的话横向滚轮会被吞掉（split 两列同步、unified 单列直接滚） */
 function onColWheel(e: WheelEvent): void {
   e.preventDefault();
   if (e.deltaX) {
@@ -908,6 +922,7 @@ function onColWheel(e: WheelEvent): void {
     if (e.deltaMode === 1) dx *= 16;
     if (oldColRef.value) oldColRef.value.scrollLeft += dx;
     if (newColRef.value) newColRef.value.scrollLeft += dx;
+    if (uniColRef.value) uniColRef.value.scrollLeft += dx;
   }
   let dy = e.deltaY;
   if (e.deltaMode === 1) dy *= 16; // 行单位 → 像素
@@ -915,14 +930,15 @@ function onColWheel(e: WheelEvent): void {
 }
 
 /**
- * 横向滚动同步：两列共享同一 scrollLeft（对齐 VS Code split diff）。
+ * 横向滚动同步：split 两列共享同一 scrollLeft（对齐 VS Code split diff）；
+ * unified 单列（side="uni"）无同步对象，直接返回。
  * 一列原生横滚（拖滚动条/键盘）→ scroll 事件回写另一列；hSyncing 标志防回环
  * （赋值会触发对方 scroll 事件，rAF 后复位）。纯 scrollLeft 赋值，不涉及重绘。
  */
 let hSyncing = false;
 
-function onColScroll(e: Event, side: "old" | "new"): void {
-  if (hSyncing) return;
+function onColScroll(e: Event, side: "old" | "new" | "uni"): void {
+  if (side === "uni" || hSyncing) return;
   const from = e.currentTarget as HTMLElement;
   const to = side === "old" ? newColRef.value : oldColRef.value;
   if (!to || to.scrollLeft === from.scrollLeft) return;
@@ -965,13 +981,11 @@ function onThumbMove(e: MouseEvent): void {
     if (maxTop <= 0) return;
     const top = Math.max(0, Math.min(dragStartThumbTop + (ev.clientY - dragStartY), maxTop));
     const ratio = top / maxTop;
-    // 直接改滑块位置 + 两列 transform，不调 updateVScroll（避免拖拽中 layout reflow）
+    // 直接改滑块位置 + 各列 transform，不调 updateVScroll（避免拖拽中 layout reflow）
     vScroll.thumbTop = top;
     const off = Math.round(ratio * vScroll.maxOffset); // 整数像素，避免亚像素横线
     vScroll.offset = off;
-    const t = `translateY(${-off}px)`;
-    if (oldColInnerRef.value) oldColInnerRef.value.style.transform = t;
-    if (newColInnerRef.value) newColInnerRef.value.style.transform = t;
+    applyColumnsTransform();
   });
 }
 
@@ -1031,55 +1045,66 @@ function onVScrollKeydown(e: KeyboardEvent): void {
   setColumnsOffset(vScroll.offset + dy);
 }
 
-/** 内容/尺寸变化后刷新滚动条（选中切换、加载完成、窗口缩放） */
+/** 内容/尺寸变化后刷新滚动条（列挂载/视图切换/加载完成/窗口缩放） */
 let vScrollResizeObserver: ResizeObserver | null = null;
 watch(
-  [oldColRef, newColRef, splitLines],
+  [oldColRef, newColRef, uniColRef, diffView, splitLines],
   () => {
     vScrollResizeObserver?.disconnect();
-    const a = oldColRef.value;
-    const b = newColRef.value;
-    if (a && b) {
+    // 观察当前视图的内容列（split 取左列即可，两列等高；unified 取单列）
+    const el = diffView.value === "split" ? oldColRef.value : uniColRef.value;
+    if (el) {
       vScrollResizeObserver = new ResizeObserver(() => {
-        viewH.value = a.clientHeight;
+        viewH.value = el.clientHeight;
         updateVScroll();
       });
-      vScrollResizeObserver.observe(a);
-      vScrollResizeObserver.observe(b);
+      vScrollResizeObserver.observe(el);
     }
-    void nextTick(updateVScroll);
+    void nextTick(() => {
+      // 列挂载/视图切换后必须把 offset 应用为 transform —— 否则 offset 与 transform
+      // 失步（切到 split 时 offset 有残留而 transform 为初始 0）→ 渲染行全部在视口外 → 空白
+      applyColumnsTransform();
+      updateVScroll();
+    });
   },
   { flush: "post" },
 );
 
-/** 切换选中文件：偏移复位到顶部（split offset + unified 原生 scrollTop）、清空 gap 展开状态 */
+/** 内容行数变化（gap 展开/收起、加载完成）后刷新滚动条上限与滑块 */
+watch([rowMetrics, uniMetrics], () => updateVScroll(), { flush: "post" });
+
+/** 切换选中文件：偏移复位到顶部、清空 gap 展开状态 */
 watch(
   () => selectedKey.value,
   () => {
     vScroll.offset = 0;
-    uniScroll.value = 0;
-    if (diffPaneRef.value) diffPaneRef.value.scrollTop = 0;
+    applyColumnsTransform();
     gapExpanded.value = new Set();
     gapRows.value = {};
   },
 );
 
-/** 切换 diff 视图：unified 原生滚动位置复位（split 的 vScroll.offset 两视图独立） */
+/** 切换 diff 视图：两种视图共用同一套滚动状态，切换即复位到顶部（布局不同，保留位置无意义）。
+    必须同步 transform，否则 offset=0 而 transform 残留旧值 → 空白 */
 watch(diffView, () => {
-  uniScroll.value = 0;
-  if (diffPaneRef.value) diffPaneRef.value.scrollTop = 0;
-  void nextTick(updateUniScroll);
+  vScroll.offset = 0;
+  applyColumnsTransform();
+  void nextTick(updateVScroll);
+});
+
+/** 外部 git 变化自动刷新订阅（事件按 sessionId 过滤，仅监听自己的会话） */
+let unsubscribeWorkspaceGit: (() => void) | null = null;
+onMounted(() => {
+  unsubscribeWorkspaceGit = apiService.onWorkspaceChange(onWorkspaceGitEvent);
 });
 
 onUnmounted(() => {
+  unsubscribeWorkspaceGit?.();
+  unsubscribeWorkspaceGit = null;
+  if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+  gitRefreshTimer = null;
   vScrollResizeObserver?.disconnect();
   vScrollResizeObserver = null;
-  uniResizeObserver?.disconnect();
-  uniResizeObserver = null;
-  if (uniRafId !== null) {
-    cancelAnimationFrame(uniRafId);
-    uniRafId = null;
-  }
   document.removeEventListener("mousemove", onThumbMove);
   document.removeEventListener("mouseup", onThumbUp);
   bodyResizeObserver?.disconnect();
@@ -1501,6 +1526,32 @@ async function loadGapRows(idx: number): Promise<void> {
   }
 }
 
+/**
+ * 外部 git 操作自动刷新（对齐 VS Code：监听 .git 目录 + 防抖 → 重跑 status）：
+ * 后端 .git watcher 变化时经 workspace SSE 推送 type:"git"，这里再防抖后 refresh。
+ * 面板自身的 commit/stage 等操作也会写 .git 触发事件，OWN_GIT_WRITE_SUPPRESS_MS 内抑制，
+ * 避免刚操作完立刻被事件再刷一次。
+ */
+let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastOwnGitWrite = 0;
+const OWN_GIT_WRITE_SUPPRESS_MS = 1000;
+
+/** 面板自身执行的 git 写操作（commit/stage/unstage/checkout）入口标记 */
+function markOwnGitWrite(): void {
+  lastOwnGitWrite = Date.now();
+}
+
+function onWorkspaceGitEvent(event: FileChangeEvent): void {
+  if (event.type !== "git") return;
+  if (event.sessionId && event.sessionId !== props.sessionId) return;
+  if (Date.now() - lastOwnGitWrite < OWN_GIT_WRITE_SUPPRESS_MS) return;
+  if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+  gitRefreshTimer = setTimeout(() => {
+    gitRefreshTimer = null;
+    void refresh();
+  }, 200);
+}
+
 async function refresh(): Promise<void> {
   if (!props.sessionId || refreshing.value) return;
   refreshing.value = true;
@@ -1545,6 +1596,7 @@ async function refresh(): Promise<void> {
 
 async function stageFile(row: GitRow): Promise<void> {
   if (!props.sessionId) return;
+  markOwnGitWrite();
   try {
     await apiService.gitStage(props.sessionId, [row.file.path]);
     await refresh();
@@ -1555,6 +1607,7 @@ async function stageFile(row: GitRow): Promise<void> {
 
 async function unstageFile(row: GitRow): Promise<void> {
   if (!props.sessionId) return;
+  markOwnGitWrite();
   try {
     await apiService.gitUnstage(props.sessionId, [row.file.path]);
     await refresh();
@@ -1565,6 +1618,7 @@ async function unstageFile(row: GitRow): Promise<void> {
 
 async function handleStageAll(): Promise<void> {
   if (!props.sessionId) return;
+  markOwnGitWrite();
   try {
     await apiService.gitStage(props.sessionId);
     await refresh();
@@ -1576,6 +1630,7 @@ async function handleStageAll(): Promise<void> {
 async function onBranchChange(branch: string): Promise<void> {
   const prev = status.value?.branch || selectedBranch.value;
   if (!props.sessionId || !branch) return;
+  markOwnGitWrite();
   try {
     await apiService.gitCheckout(props.sessionId, branch);
     ElMessage.success(t("git.checkoutSuccess", { branch }));
@@ -1590,6 +1645,7 @@ async function onBranchChange(branch: string): Promise<void> {
 async function handleCommit(): Promise<void> {
   const message = commitMessage.value.trim();
   if (!message || !props.sessionId || committing.value) return;
+  markOwnGitWrite();
   committing.value = true;
   try {
     const st = status.value;
@@ -2014,7 +2070,8 @@ defineExpose({ refresh });
   position: relative;
 }
 
-/* 拆分视图：pane 不再滚动（两列各自滚动），header 固定在上方，split 区域填满剩余空间 */
+/* 两种视图统一：pane 自身不滚动（纵向由自绘滚动条 JS 驱动，横向在列容器内原生滚动），
+   header 固定在上方，内容区（.git-diff-split）填满剩余空间 */
 .git-diff-pane--split {
   overflow: hidden;
   display: flex;
@@ -2034,7 +2091,9 @@ defineExpose({ refresh });
   user-select: none;
 }
 
-/* 文件头：随左侧滚动吸顶（背景用面板背景色 --color-bg，不透明吸顶不透内容；无底部边框线） */
+/* 文件头：纵向吸顶 + 横向钉左缘（背景用面板背景色 --color-bg，不透明吸顶不透内容；无底部边框线）。
+   sticky 的 top 只对纵向滚动生效；必须再给 left:0 才会在横向滚动时固定 ——
+   否则 unified 视图横滚（内容比视口宽）时标题栏会跟着内容滑走 */
 .git-diff-header {
   display: flex;
   align-items: center;
@@ -2043,6 +2102,7 @@ defineExpose({ refresh });
   padding: 10px 12px;
   position: sticky;
   top: 0;
+  left: 0;
   z-index: 3;
   background: var(--color-bg);
 }
@@ -2111,9 +2171,8 @@ html.dark .git-stat-del { color: #f85149; }
   color: var(--el-text-color-placeholder);
 }
 
-/* 字体与行高 unified/split 共享（拆出行号大小不一致的根源：
-   table 与 split 都必须 12px/20px，否则 split 列继承 pane 大字号） */
-.git-diff-table,
+/* 字体与行高两种视图共用（拆出行号大小不一致的根源：统一 12px/20px，
+   否则列继承 pane 大字号） */
 .git-diff-split {
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
   font-size: 12px;
@@ -2124,16 +2183,7 @@ html.dark .git-stat-del { color: #f85149; }
   line-height: 20px;
 }
 
-.git-diff-table {
-  /* 宽度跟随内容：短行时 = 容器宽（min-width:100% 保证背景铺满，无滚动条），
-     超长行时 = 内容宽（由宽度锚层撑开，出现横向滚动条，行号 sticky 固定）；
-     position:relative = 虚拟化行（GitDiffRow .git-diff-vrow 绝对定位）的包含块，
-     高度由 JS 设为 uniMetrics.total */
-  position: relative;
-  width: max-content;
-  min-width: 100%;
-}
-
 /* 行样式（.git-diff-line / 行号 / 内容 / add·del·placeholder 着色 / gap / hunk / binary /
-   虚拟化定位）统一由 GitDiffRow.vue 的 scoped 样式持有（unified 与 split 两列共用） */
+   虚拟化定位 .git-diff-vrow）统一由 GitDiffRow.vue 的 scoped 样式持有
+   （unified 单列与 split 两列共用）；unified 内容列复用 .git-diff-split-col 布局 */
 </style>
