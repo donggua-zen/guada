@@ -27,6 +27,10 @@ export interface GitDiff {
   path: string;
   diff?: string;
   content?: string;
+  /** 完整旧侧内容（staged=HEAD 版本；unstaged=暂存区版本）。超体积上限时省略 → 前端降级高亮 */
+  oldContent?: string;
+  /** 完整新侧内容（staged=暂存区版本；unstaged=工作区版本；已删除为 ""） */
+  newContent?: string;
   /** 该文件为二进制（图片/压缩包/媒体等），不支持文本预览 */
   binary?: boolean;
 }

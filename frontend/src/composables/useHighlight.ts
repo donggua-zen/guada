@@ -279,6 +279,51 @@ export function useHighlight() {
   };
 
   /**
+   * 高亮整段代码并按行拆分（保留跨行 token 上下文：块注释/模板字符串/多行字符串）。
+   * 逐行调用 highlight 会丢失跨行状态（如 `/* ... *\/` 块注释中间的行无高亮），
+   * 这里对整段代码一次高亮，再按 \n 拆回行：
+   * hljs 输出的 <span> 可能跨行，拆行时维护标签栈，
+   * 行尾关闭未闭合 span、下一行行首重开，保证每行都是合法 HTML 片段。
+   * @returns 与 code.split("\n") 一一对应的高亮 HTML 行数组（空行为 ""）
+   */
+  const highlightCodeLines = (code: string, language: string): string[] => {
+    let html: string;
+    try {
+      const lang = hljs.getLanguage(language) ? language : "plaintext";
+      html = hljs.highlight(code, { language: lang }).value;
+    } catch (error) {
+      console.warn(`Failed to highlight code as ${language}:`, error);
+      return code.split("\n").map((l) => escapeHtml(l));
+    }
+    // 按「标签 / 文本」切分（hljs 输出只含 <span> 标签，文本中的 < > 已转义为 &lt; &gt;）
+    const tokens = html.split(/(<[^>]+>)/);
+    const lines: string[] = [];
+    const stack: string[] = [];
+    let cur = "";
+    const endLine = () => {
+      for (let i = stack.length - 1; i >= 0; i--) cur += "</span>";
+      lines.push(cur);
+      cur = stack.join(""); // 下一行重开未闭合标签
+    };
+    for (const tk of tokens) {
+      if (!tk) continue;
+      if (tk.charCodeAt(0) === 60 /* '<' */) {
+        if (tk.startsWith("</")) stack.pop();
+        else stack.push(tk);
+        cur += tk;
+      } else {
+        const parts = tk.split("\n");
+        for (let j = 0; j < parts.length; j++) {
+          cur += parts[j];
+          if (j < parts.length - 1) endLine();
+        }
+      }
+    }
+    lines.push(cur);
+    return lines;
+  };
+
+  /**
    * 转义 HTML 特殊字符
    */
   const escapeHtml = (text: string): string => {
@@ -295,6 +340,7 @@ export function useHighlight() {
   return {
     hljs,
     highlightCode,
+    highlightCodeLines,
     getLanguageFromExtension,
     isTextFile,
     isImageFile,

@@ -64,8 +64,10 @@
         @resized="onTreeSplitResized"
       >
         <template #pane1>
-          <!-- 左侧 diff 预览（split 视图下列为独立视口，pane 不滚动、header 固定） -->
-          <div class="git-diff-pane" :class="{ 'git-diff-pane--split': diffView === 'split' }">
+          <!-- 左侧 diff 预览（split 视图下列为独立视口，pane 不滚动、header 固定；
+               unified 视图 pane 原生滚动，scroll 事件驱动行虚拟化切片） -->
+          <div ref="diffPaneRef" class="git-diff-pane" :class="{ 'git-diff-pane--split': diffView === 'split' }"
+            @scroll.passive="onUniScroll">
         <template v-if="selectedRow">
           <div class="git-diff-header">
             <span class="git-status" :class="`git-status--${statusClass(selectedRow)}`">{{ selectedRow.statusChar }}</span>
@@ -98,13 +100,12 @@
             {{ t('git.loading') }}
           </div>
           <!-- 拆分视图：左右两列（旧文件 | 新文件）各为整体滚动容器（整列只有一个横向滚动条，
-               内容超长只在所在列内滚动，不互相顶开）；行号都钉各自列左缘（VS Code 风格）。
+               内容超长只在所在列内滚动，不互相顶开；横向 scrollLeft 两列同步）；
+               行号都钉各自列左缘（VS Code 风格）。
                ctx 行两列相同、add 只新列、del 只旧列；gap 行左右各显示一个跳过行数提示条 -->
           <div v-else-if="diffView === 'split'" class="git-diff-split">
             <!-- binary 文件：整份只有一行提示，全宽显示（无需双列） -->
-            <div v-if="isBinarySplit" class="git-diff-line git-diff-binary">
-              <span class="git-diff-content" v-html="splitLines[0].html"></span>
-            </div>
+            <GitDiffRow v-if="isBinarySplit" :line="binaryLine" side="uni" :top="0" />
             <!-- 两列容器可聚焦：点击 diff 区域即聚焦，方向键/翻页/Home/End 滚动（对齐原生） -->
             <div v-else class="git-diff-split-cols" tabindex="0"
               :class="{ focused: vScroll.focused }"
@@ -112,78 +113,38 @@
               @keydown="onVScrollKeydown">
               <!-- 旧文件列（横向原生滚动；纵向由 inner translateY + 统一滚动条控制；
                    行虚拟化：只渲染可视行，按固定行高绝对定位） -->
-              <div ref="oldColRef" class="git-diff-split-col git-diff-split-col--old" @wheel.prevent="onColWheel">
+              <div ref="oldColRef" class="git-diff-split-col git-diff-split-col--old"
+                @wheel.prevent="onColWheel" @scroll.passive="onColScroll($event, 'old')">
                 <div ref="oldColInnerRef" class="git-diff-split-col-inner"
                   :style="{ height: rowMetrics.total + 'px' }">
-                <template v-for="item in splitSlice" :key="item.idx">
-                  <!-- 未修改行折叠条：可点击展开（对齐 GitHub/VS Code） -->
-                  <div v-if="item.line.type === 'gap'" class="git-diff-line git-diff-gap git-diff-split-row git-diff-gap-click"
-                    :class="{ expanded: isGapExpanded(item.line.srcIdx) }"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }"
-                    :title="t('git.expandUnmodified')" @click="toggleGap(item.line)">
-                    <div class="git-diff-gap-inner">
-                      <el-icon :size="11" class="git-diff-gap-icon"><ArrowUp /></el-icon>
-                      <span>{{ t('git.unmodifiedLines', { count: item.line.gap }) }}</span>
-                    </div>
+                  <!-- 宽度锚层：正常流渲染所有行内容宽度（max-content），撑宽 inner →
+                       行宽 = inner 宽 = max(内容宽, 100%) → 行背景铺满整行（横向滚动右侧不丢背景）。
+                       测量本列（old 侧）自身内容；锚层行的 padding 补齐行号+内容 padding 的
+                       68px 水平 chrome（见 .git-diff-size-line），否则最宽实际行会超出 inner
+                       → 滚动区右端多出一段短行背景盖不到的区域 -->
+                  <div class="git-diff-split-col-size" aria-hidden="true">
+                    <span v-for="(line, si) in displaySplitLines" :key="si" class="git-diff-size-line"
+                      v-html="sizeLineHtml(line, 'old')"></span>
                   </div>
-                  <!-- 展开后的收起条 -->
-                  <div v-else-if="item.line.type === 'gap-close'" class="git-diff-line git-diff-gap git-diff-split-row git-diff-gap-click"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }"
-                    :title="t('git.collapseUnmodified')" @click="toggleGap(item.line)">
-                    <div class="git-diff-gap-inner">
-                      <el-icon :size="11" class="git-diff-gap-icon"><ArrowUp /></el-icon>
-                      <span>{{ t('git.unmodifiedLines', { count: item.line.gap }) }} · {{ t('git.collapse') }}</span>
-                    </div>
-                  </div>
-                  <div v-else-if="item.line.type === 'hunk'" class="git-diff-line git-diff-hunk git-diff-split-row"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }">
-                    <span class="git-diff-content" v-html="item.line.html"></span>
-                  </div>
-                  <div v-else class="git-diff-split-line git-diff-split-row" :class="splitOldClass(item.line.type)"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }">
-                    <span class="git-diff-line-num">{{ item.line.oldLine ?? '' }}</span>
-                    <!-- 空内容必须 &nbsp; 兜底：空 span 无行盒 → 行高塌缩为 0（左右列高度错位） -->
-                    <span class="git-diff-content" v-html="item.line.oldHtml || '&nbsp;'"></span>
-                  </div>
-                </template>
+                  <!-- 行渲染统一由 GitDiffRow 承担（unified/split 两列共用；
+                       gap 折叠条可点击展开，三视图行为一致） -->
+                  <GitDiffRow v-for="item in splitSlice" :key="item.idx"
+                    :line="item.line" side="old" :top="rowMetrics.tops[item.idx]" @toggle="toggleGap" />
                 </div>
               </div>
               <div class="git-diff-split-col-divider"></div>
               <!-- 新文件列（横向原生滚动；纵向由 translateY + JS 统一控制；行虚拟化） -->
-              <div ref="newColRef" class="git-diff-split-col git-diff-split-col--new" @wheel.prevent="onColWheel">
+              <div ref="newColRef" class="git-diff-split-col git-diff-split-col--new"
+                @wheel.prevent="onColWheel" @scroll.passive="onColScroll($event, 'new')">
                 <div ref="newColInnerRef" class="git-diff-split-col-inner"
                   :style="{ height: rowMetrics.total + 'px' }">
-                <template v-for="item in splitSlice" :key="item.idx">
-                  <!-- 未修改行折叠条：可点击展开（对齐 GitHub/VS Code） -->
-                  <div v-if="item.line.type === 'gap'" class="git-diff-line git-diff-gap git-diff-split-row git-diff-gap-click"
-                    :class="{ expanded: isGapExpanded(item.line.srcIdx) }"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }"
-                    :title="t('git.expandUnmodified')" @click="toggleGap(item.line)">
-                    <div class="git-diff-gap-inner">
-                      <el-icon :size="11" class="git-diff-gap-icon"><ArrowUp /></el-icon>
-                      <span>{{ t('git.unmodifiedLines', { count: item.line.newGap ?? item.line.gap }) }}</span>
-                    </div>
+                  <!-- 宽度锚层（同左列，测量本列 new 侧内容）：撑宽 inner → 行背景铺满整行 -->
+                  <div class="git-diff-split-col-size" aria-hidden="true">
+                    <span v-for="(line, si) in displaySplitLines" :key="si" class="git-diff-size-line"
+                      v-html="sizeLineHtml(line, 'new')"></span>
                   </div>
-                  <!-- 展开后的收起条 -->
-                  <div v-else-if="item.line.type === 'gap-close'" class="git-diff-line git-diff-gap git-diff-split-row git-diff-gap-click"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }"
-                    :title="t('git.collapseUnmodified')" @click="toggleGap(item.line)">
-                    <div class="git-diff-gap-inner">
-                      <el-icon :size="11" class="git-diff-gap-icon"><ArrowUp /></el-icon>
-                      <span>{{ t('git.unmodifiedLines', { count: item.line.newGap ?? item.line.gap }) }} · {{ t('git.collapse') }}</span>
-                    </div>
-                  </div>
-                  <div v-else-if="item.line.type === 'hunk'" class="git-diff-line git-diff-hunk git-diff-split-row"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }">
-                    <span class="git-diff-content" v-html="item.line.html"></span>
-                  </div>
-                  <div v-else class="git-diff-split-line git-diff-split-row" :class="splitNewClass(item.line.type)"
-                    :style="{ top: rowMetrics.tops[item.idx] + 'px' }">
-                    <span class="git-diff-line-num">{{ item.line.newLine ?? '' }}</span>
-                    <!-- 空内容必须 &nbsp; 兜底（同上） -->
-                    <span class="git-diff-content" v-html="item.line.newHtml || '&nbsp;'"></span>
-                  </div>
-                </template>
+                  <GitDiffRow v-for="item in splitSlice" :key="item.idx"
+                    :line="item.line" side="new" :top="rowMetrics.tops[item.idx]" @toggle="toggleGap" />
                 </div>
               </div>
               <!-- 统一竖向滚动条：两列原生竖条隐藏，纵向由 JS 统一控制（永远同步）。
@@ -206,20 +167,19 @@
               <div v-if="vScroll.dragging" class="git-diff-vscroll-mask"></div>
             </Teleport>
           </div>
-          <!-- 统一视图：单列（行号 + 内容），unified 原始行（add/del 分行显示） -->
-          <div v-else class="git-diff-table">
-            <template v-for="(line, li) in selectedLines" :key="li">
-              <div v-if="line.type === 'gap'" class="git-diff-line git-diff-gap">
-                <div class="git-diff-gap-inner">
-                  <el-icon :size="11" class="git-diff-gap-icon"><ArrowUp /></el-icon>
-                  <span>{{ t('git.unmodifiedLines', { count: line.gap }) }}</span>
-                </div>
-              </div>
-              <div v-else class="git-diff-line" :class="diffLineClass(line.type)">
-                <span class="git-diff-line-num">{{ line.newLine ?? line.oldLine ?? '' }}</span>
-                <span class="git-diff-content" v-html="line.html"></span>
-              </div>
-            </template>
+          <!-- 统一视图：单列（行号 + 内容）。与 split 共用数据管线（displaySplitLines
+               派生 displayUnifiedLines：pair 拆成 del/add 两行）与行渲染（GitDiffRow），
+               gap 折叠条同样可点击展开；原生滚动 + 行虚拟化（table 高度 JS 撑开，
+               可视行绝对定位），展开大量未修改行也不会 DOM 爆炸 -->
+          <GitDiffRow v-else-if="isBinarySplit" :line="binaryLine" side="uni" :top="0" />
+          <div v-else ref="uniTableRef" class="git-diff-table" :style="{ height: uniMetrics.total + 'px' }">
+            <!-- 宽度锚层（同 split 列）：撑宽 table → 行背景铺满整行（横向滚动右侧不丢背景） -->
+            <div class="git-diff-split-col-size" aria-hidden="true">
+              <span v-for="(line, si) in displayUnifiedLines" :key="si" class="git-diff-size-line"
+                v-html="sizeLineHtml(line, 'uni')"></span>
+            </div>
+            <GitDiffRow v-for="item in uniSlice" :key="item.idx"
+              :line="item.line" side="uni" :top="uniMetrics.tops[item.idx]" @toggle="toggleGap" />
           </div>
         </template>
         <div v-else class="git-diff-empty">
@@ -303,15 +263,17 @@ import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, Plus, Remove, ArrowUp, ArrowRight, Close } from "@element-plus/icons-vue";
+import { Refresh, Plus, Remove, ArrowRight, Close } from "@element-plus/icons-vue";
 import { Branch20Regular, Search20Regular } from "@vicons/fluent";
 import { LiteSplitpanes } from "../../ui";
+import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
 import type { GitStatus, GitFileChange, GitBranch, GitDiff } from "@/services/modules/git.api";
+import type { DiffLine, SplitDiffLine, DisplaySplitLine } from "./git-diff-types";
 import { useHighlight } from "@/composables/useHighlight";
 
 const { t } = useI18n();
-const { highlightCode, getLanguageFromExtension, escapeHtml } = useHighlight();
+const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighlight();
 
 const props = defineProps<{
   sessionId: string | null;
@@ -331,54 +293,11 @@ interface GitGroup {
   treeRows: GitTreeRow[];
 }
 
-interface DiffLine {
-  /** gap = hunk 之间的未修改行折叠条；binary = 二进制文件不支持预览 */
-  type: "add" | "del" | "ctx" | "hunk" | "gap" | "binary";
-  sign: string;
-  html: string;
-  /** gap 行：未修改的行数 */
-  gap?: number;
-  /** gap 行：新文件侧未修改的行数（split 视图右列条用） */
-  newGap?: number;
-  /** 旧文件行号（del/ctx 行），add 行与 hunk 行为空 */
-  oldLine?: number;
-  /** 新文件行号（add/ctx 行），del 行与 hunk 行为空 */
-  newLine?: number;
-}
+/* DiffLine / SplitDiffLine / DisplaySplitLine 已抽到 ./git-diff-types.ts（与 GitDiffRow 共用） */
 
 interface DiffStats {
   add: number;
   del: number;
-}
-
-/**
- * 拆分视图（两列：旧文件 | 新文件）的扁平行。
- * 核心：del 行与 add 行**配对**成一行（type="pair"，左=旧右=新，VS Code 风格），
- * 保证左右两列行数一一对应；配不完的多余 del/add 单独成行（del-only/add-only）。
- * gap = hunk 间未修改行折叠条（可点击展开）；gap-close = 展开后的收起条。
- */
-interface SplitDiffLine {
-  type: "pair" | "del" | "add" | "ctx" | "gap" | "gap-close" | "binary" | "hunk";
-  /** 旧文件行号（pair/del/ctx 行；gap 行 = 区间起点） */
-  oldLine?: number;
-  /** 新文件行号（pair/add/ctx 行；gap 行 = 新文件区间起点） */
-  newLine?: number;
-  /** 旧列内容（pair/del/ctx 行；add-only 行为空） */
-  oldHtml: string;
-  /** 新列内容（pair/add/ctx 行；del-only 行为空） */
-  newHtml: string;
-  /** gap/binary/hunk 跨两列占满行的内容 */
-  html?: string;
-  gap?: number;
-  /** gap 行：新文件侧跳过的行数（split 视图右列条） */
-  newGap?: number;
-  /** 该行在解析层 splitLines 中的原始索引（gap/gap-close 展开状态 key，display 层设置） */
-  srcIdx?: number;
-}
-
-/** display 层行：带解析层原始索引（gap 展开/收起用） */
-interface DisplaySplitLine extends SplitDiffLine {
-  srcIdx: number;
 }
 
 /** diff 视图模式：unified（单列）| split（左右两列） */
@@ -405,6 +324,18 @@ interface GitTreeNode {
 /** 单文件 diff 行数上限，防止大文件拖垮渲染 */
 const MAX_DIFF_LINES = 800;
 
+/**
+ * 全文模式：后端随 diff 附带两侧完整内容时，diff 只作对齐信息（行号/类型/gap 区间），
+ * 行内容按行号从全文高亮数组取（全文一次高亮，跨行 token 上下文完整），
+ * gap 展开也直接本地取行，无需再请求后端。
+ */
+interface FullHighlight {
+  /** 旧侧全文逐行高亮（索引 = 旧行号 - 1） */
+  oldHtml: string[];
+  /** 新侧全文逐行高亮（索引 = 新行号 - 1） */
+  newHtml: string[];
+}
+
 const status = ref<GitStatus | null>(null);
 const branches = ref<GitBranch[]>([]);
 const selectedBranch = ref("");
@@ -423,6 +354,9 @@ const diffView = useStorage<DiffViewMode>('guada-git-diff-view', 'unified');
 const collapsedDirs = ref<Set<string>>(new Set());
 /** diff 请求序号：选中切换/清空时自增，过期响应（在途旧请求）直接丢弃 */
 let diffLoadSeq = 0;
+
+/** 当前选中文件的全文高亮（全文模式；降级模式为 null）。随 loadDiff 覆盖，不缓存 */
+const fullHighlight = ref<FullHighlight | null>(null);
 
 /**
  * 目录宽度（右侧固定像素，LiteSplitpanes 拖拽调整，持久化到 localStorage）。
@@ -687,24 +621,25 @@ function unifiedToSplit(lines: DiffLine[]): SplitDiffLine[] {
       }
       const dels = seg.filter((s) => s.type === "del");
       const adds = seg.filter((s) => s.type === "add");
+      // 全文模式下每列取本侧的全文高亮（oldHtml/newHtml）；降级模式无此字段，回退 html
       const pairs = Math.min(dels.length, adds.length);
       for (let k = 0; k < pairs; k++) {
         out.push({
           type: "pair",
           oldLine: dels[k].oldLine,
-          oldHtml: dels[k].html,
+          oldHtml: dels[k].oldHtml ?? dels[k].html,
           newLine: adds[k].newLine,
-          newHtml: adds[k].html,
+          newHtml: adds[k].newHtml ?? adds[k].html,
         });
       }
       for (let k = pairs; k < dels.length; k++) {
-        out.push({ type: "del", oldLine: dels[k].oldLine, oldHtml: dels[k].html, newHtml: "" });
+        out.push({ type: "del", oldLine: dels[k].oldLine, oldHtml: dels[k].oldHtml ?? dels[k].html, newHtml: "" });
       }
       for (let k = pairs; k < adds.length; k++) {
-        out.push({ type: "add", newLine: adds[k].newLine, newHtml: adds[k].html, oldHtml: "" });
+        out.push({ type: "add", newLine: adds[k].newLine, newHtml: adds[k].newHtml ?? adds[k].html, oldHtml: "" });
       }
     } else if (l.type === "ctx") {
-      out.push({ type: "ctx", oldLine: l.oldLine, newLine: l.newLine, oldHtml: l.html, newHtml: l.html });
+      out.push({ type: "ctx", oldLine: l.oldLine, newLine: l.newLine, oldHtml: l.oldHtml ?? l.html, newHtml: l.newHtml ?? l.html });
       i++;
     } else if (l.type === "gap") {
       out.push({ type: "gap", oldHtml: "", newHtml: "", gap: l.gap, newGap: l.newGap, oldLine: l.oldLine, newLine: l.newLine });
@@ -720,21 +655,16 @@ function unifiedToSplit(lines: DiffLine[]): SplitDiffLine[] {
   return out;
 }
 
-/** 左列行类：pair/del 行旧列着红色 */
-function splitOldClass(type: SplitDiffLine["type"]): string {
-  return type === "pair" || type === "del" ? "git-diff-split--del" : "";
-}
+/* 行号/内容/着色的「行类型 × 视图侧」推导已收敛到 GitDiffRow 组件（三处渲染统一） */
 
-/** 右列行类：pair/add 行新列着绿色 */
-function splitNewClass(type: SplitDiffLine["type"]): string {
-  return type === "pair" || type === "add" ? "git-diff-split--add" : "";
-}
-
-/** binary 文件特判：整份 diff 只有一行提示，直接全宽显示（无需双列） */
+/** binary 文件特判：整份 diff 只有一行提示，直接全宽显示（无需双列/虚拟化） */
 const isBinarySplit = computed<boolean>(() => {
   const ls = splitLines.value;
   return ls.length === 1 && ls[0].type === "binary";
 });
+
+/** binary 提示行（display 层形状，GitDiffRow 用；srcIdx 无实际意义） */
+const binaryLine = computed<DisplaySplitLine>(() => ({ ...splitLines.value[0], srcIdx: 0 }));
 
 /**
  * 拆分视图滚动：左右两列隐藏原生竖向滚动条，右侧绘制统一竖向滚动条，
@@ -765,10 +695,6 @@ const gapExpanded = ref<Set<number>>(new Set());
 /** 展开后加载的 ctx 行（key = splitLines 解析层索引） */
 const gapRows = ref<Record<number, SplitDiffLine[]>>({});
 
-function isGapExpanded(srcIdx: number): boolean {
-  return gapExpanded.value.has(srcIdx);
-}
-
 /** display 层：解析层 splitLines + 展开的 gap 内容（gap-close 收起条 + ctx 行），每行带 srcIdx */
 const displaySplitLines = computed<DisplaySplitLine[]>(() => {
   const out: DisplaySplitLine[] = [];
@@ -794,18 +720,48 @@ const displaySplitLines = computed<DisplaySplitLine[]>(() => {
 });
 
 /**
+ * unified 视图行：displaySplitLines 派生 —— pair 行拆成 del + add 两行
+ * （连续变更段内全部 del 在前、全部 add 在后，对齐 GitHub/VS Code unified 顺序），
+ * 其余行原样透传。gap 展开状态/全文高亮/行渲染由此与 split 视图天然共享。
+ */
+const displayUnifiedLines = computed<DisplaySplitLine[]>(() => {
+  const src = displaySplitLines.value;
+  const out: DisplaySplitLine[] = [];
+  let i = 0;
+  while (i < src.length) {
+    const t = src[i].type;
+    if (t === "pair" || t === "del" || t === "add") {
+      // 连续变更段（pair/del/add）：先 del 侧行块，再 add 侧行块
+      const run: DisplaySplitLine[] = [];
+      while (i < src.length) {
+        const rt = src[i].type;
+        if (rt !== "pair" && rt !== "del" && rt !== "add") break;
+        run.push(src[i]);
+        i++;
+      }
+      for (const r of run) if (r.type !== "add") out.push({ ...r, type: "del" });
+      for (const r of run) if (r.type !== "del") out.push({ ...r, type: "add" });
+    } else {
+      out.push(src[i]);
+      i++;
+    }
+  }
+  return out;
+});
+
+/**
  * 行虚拟化（对齐 VS Code 性能）：只渲染可视区 ± buffer 的行，DOM 恒为可视行数。
  * 行高固定：普通行 20px（line-height），gap/gap-close 行 30px（.git-diff-gap padding 3+3 +
- * .git-diff-gap-inner padding 2+2 + line 20）——由本项目 CSS 决定，改 CSS 需同步。
+ * .git-diff-gap-inner padding 2+2 + line 20）——由 GitDiffRow 的 CSS 决定，改 CSS 需同步。
+ * unified / split 两视图共用同一套 metrics/slice 逻辑。
  */
 const ROW_H = 20;
 const GAP_ROW_H = 30;
 /** 可视区外上下各多渲染的行数（快速拖拽不闪空） */
-const SPLIT_BUFFER_ROWS = 15;
+const DIFF_BUFFER_ROWS = 15;
 
-/** 每行累计 top 与总高度（基于 display 层；gap 展开/收起自动重算） */
-const rowMetrics = computed<{ tops: number[]; total: number }>(() => {
-  const lines = displaySplitLines.value;
+/** 每行累计 top 与总高度（gap 展开/收起自动重算） */
+function computeRowMetrics(lines: DisplaySplitLine[]): { tops: number[]; total: number } {
   const tops: number[] = [];
   let total = 0;
   for (const l of lines) {
@@ -813,10 +769,12 @@ const rowMetrics = computed<{ tops: number[]; total: number }>(() => {
     total += l.type === "gap" || l.type === "gap-close" ? GAP_ROW_H : ROW_H;
   }
   return { tops, total };
-});
+}
 
-/** 列视口高度（ResizeObserver 更新，避免每帧读 clientHeight 触发 layout） */
-const viewH = ref(0);
+/** split 视图行度量（基于 display 层） */
+const rowMetrics = computed(() => computeRowMetrics(displaySplitLines.value));
+/** unified 视图行度量（pair 已拆行，行数更多） */
+const uniMetrics = computed(() => computeRowMetrics(displayUnifiedLines.value));
 
 /** 首个 tops[i] >= target 的索引 */
 function lowerBound(tops: number[], target: number): number {
@@ -830,21 +788,76 @@ function lowerBound(tops: number[], target: number): number {
   return lo;
 }
 
-/** 可视行范围 [start, end) */
-const sliceRange = computed<[number, number]>(() => {
-  const tops = rowMetrics.value.tops;
+/** 可视行范围 [start, end)（offset/viewH 由调用方给：split=JS offset，unified=原生 scrollTop） */
+function computeSlice(tops: number[], offset: number, viewH: number): [number, number] {
   if (!tops.length) return [0, 0];
-  const off = vScroll.offset;
-  const vh = viewH.value || 300;
-  const start = lowerBound(tops, off - SPLIT_BUFFER_ROWS * ROW_H);
-  const end = Math.min(lowerBound(tops, off + vh + SPLIT_BUFFER_ROWS * ROW_H) + 1, tops.length);
+  const vh = viewH || 300;
+  const start = lowerBound(tops, offset - DIFF_BUFFER_ROWS * ROW_H);
+  const end = Math.min(lowerBound(tops, offset + vh + DIFF_BUFFER_ROWS * ROW_H) + 1, tops.length);
   return [start, end];
-});
+}
 
-/** 可视行（带绝对行号索引，两列共用同一份，天然对齐） */
+/** 列视口高度（ResizeObserver 更新，避免每帧读 clientHeight 触发 layout） */
+const viewH = ref(0);
+
+/** split 可视行范围 */
+const sliceRange = computed<[number, number]>(() =>
+  computeSlice(rowMetrics.value.tops, vScroll.offset, viewH.value),
+);
+
+/** split 可视行（带绝对行号索引，两列共用同一份，天然对齐） */
 const splitSlice = computed<{ line: DisplaySplitLine; idx: number }[]>(() => {
   const [s, e] = sliceRange.value;
   return displaySplitLines.value.slice(s, e).map((line, i) => ({ line, idx: s + i }));
+});
+
+/**
+ * unified 视图滚动：pane 原生滚动（overflow:auto，header sticky 吸顶），
+ * scroll 事件（rAF 节流）→ uniScroll/uniViewH → 可视行切片。
+ * 纵向位置 = pane.scrollTop - table 在 pane 内的偏移（header 高度）。
+ */
+const diffPaneRef = ref<HTMLElement | null>(null);
+const uniTableRef = ref<HTMLElement | null>(null);
+const uniScroll = ref(0);
+const uniViewH = ref(0);
+let uniRafId: number | null = null;
+let uniResizeObserver: ResizeObserver | null = null;
+
+function updateUniScroll(): void {
+  const pane = diffPaneRef.value;
+  if (!pane) return;
+  uniViewH.value = pane.clientHeight;
+  const tableTop = uniTableRef.value?.offsetTop ?? 0;
+  uniScroll.value = Math.max(0, pane.scrollTop - tableTop);
+}
+
+function onUniScroll(): void {
+  if (diffView.value !== "unified" || uniRafId !== null) return;
+  uniRafId = requestAnimationFrame(() => {
+    uniRafId = null;
+    updateUniScroll();
+  });
+}
+
+watch(diffPaneRef, (el) => {
+  uniResizeObserver?.disconnect();
+  uniResizeObserver = null;
+  if (!el) return;
+  uniResizeObserver = new ResizeObserver(() => updateUniScroll());
+  uniResizeObserver.observe(el);
+  void nextTick(updateUniScroll);
+}, { flush: "post" });
+
+/** unified 内容/视图变化后刷新切片（加载完成、gap 展开、视图切换） */
+watch(displayUnifiedLines, () => void nextTick(updateUniScroll), { flush: "post" });
+
+/** unified 可视行范围与切片 */
+const uniSliceRange = computed<[number, number]>(() =>
+  computeSlice(uniMetrics.value.tops, uniScroll.value, uniViewH.value),
+);
+const uniSlice = computed<{ line: DisplaySplitLine; idx: number }[]>(() => {
+  const [s, e] = uniSliceRange.value;
+  return displayUnifiedLines.value.slice(s, e).map((line, i) => ({ line, idx: s + i }));
 });
 
 function clampOffset(o: number): number {
@@ -885,12 +898,39 @@ function setColumnsOffset(offset: number): void {
   updateVScroll();
 }
 
-/** 列内滚轮：deltaY 累加 offset（阻止默认滚动，translate 是唯一纵向通道） */
+/** 列内滚轮：deltaY 累加 offset（阻止默认滚动，translate 是唯一纵向通道）；
+    deltaX（Shift+滚轮/触控板横滚）手动同步两列 scrollLeft —— 默认行为已被 prevent，
+    不处理的话横向滚轮会被吞掉 */
 function onColWheel(e: WheelEvent): void {
   e.preventDefault();
+  if (e.deltaX) {
+    let dx = e.deltaX;
+    if (e.deltaMode === 1) dx *= 16;
+    if (oldColRef.value) oldColRef.value.scrollLeft += dx;
+    if (newColRef.value) newColRef.value.scrollLeft += dx;
+  }
   let dy = e.deltaY;
   if (e.deltaMode === 1) dy *= 16; // 行单位 → 像素
   setColumnsOffset(vScroll.offset + dy);
+}
+
+/**
+ * 横向滚动同步：两列共享同一 scrollLeft（对齐 VS Code split diff）。
+ * 一列原生横滚（拖滚动条/键盘）→ scroll 事件回写另一列；hSyncing 标志防回环
+ * （赋值会触发对方 scroll 事件，rAF 后复位）。纯 scrollLeft 赋值，不涉及重绘。
+ */
+let hSyncing = false;
+
+function onColScroll(e: Event, side: "old" | "new"): void {
+  if (hSyncing) return;
+  const from = e.currentTarget as HTMLElement;
+  const to = side === "old" ? newColRef.value : oldColRef.value;
+  if (!to || to.scrollLeft === from.scrollLeft) return;
+  hSyncing = true;
+  to.scrollLeft = from.scrollLeft;
+  requestAnimationFrame(() => {
+    hSyncing = false;
+  });
 }
 
 /** 滑块拖拽（rAF 节流：拖拽中只改 transform + 滑块位置，不读 layout，避免卡顿） */
@@ -1012,35 +1052,39 @@ watch(
   { flush: "post" },
 );
 
-/** 切换选中文件：偏移复位到顶部、清空 gap 展开状态 */
+/** 切换选中文件：偏移复位到顶部（split offset + unified 原生 scrollTop）、清空 gap 展开状态 */
 watch(
   () => selectedKey.value,
   () => {
     vScroll.offset = 0;
+    uniScroll.value = 0;
+    if (diffPaneRef.value) diffPaneRef.value.scrollTop = 0;
     gapExpanded.value = new Set();
     gapRows.value = {};
   },
 );
 
+/** 切换 diff 视图：unified 原生滚动位置复位（split 的 vScroll.offset 两视图独立） */
+watch(diffView, () => {
+  uniScroll.value = 0;
+  if (diffPaneRef.value) diffPaneRef.value.scrollTop = 0;
+  void nextTick(updateUniScroll);
+});
+
 onUnmounted(() => {
   vScrollResizeObserver?.disconnect();
   vScrollResizeObserver = null;
+  uniResizeObserver?.disconnect();
+  uniResizeObserver = null;
+  if (uniRafId !== null) {
+    cancelAnimationFrame(uniRafId);
+    uniRafId = null;
+  }
   document.removeEventListener("mousemove", onThumbMove);
   document.removeEventListener("mouseup", onThumbUp);
   bodyResizeObserver?.disconnect();
   bodyResizeObserver = null;
 });
-
-function diffLineClass(type: DiffLine["type"]): string {
-  return {
-    add: "git-diff-add",
-    del: "git-diff-del",
-    hunk: "git-diff-hunk",
-    ctx: "git-diff-ctx",
-    gap: "git-diff-gap",
-    binary: "git-diff-binary",
-  }[type];
-}
 
 function statusClass(row: GitRow): string {
   const c = row.statusChar;
@@ -1057,19 +1101,70 @@ function getLanguage(filePath: string): string {
   return getLanguageFromExtension(filePath.slice(dotIdx)) || "plaintext";
 }
 
-function highlightLine(line: string, lang: string): string {
-  if (!line) return "&nbsp;";
-  try {
-    const highlighted = highlightCode(line, lang);
-    const match = highlighted.match(/<div class="line-content">(.*?)<\/div>/s);
-    if (match) return match[1];
-    return escapeHtml(line);
-  } catch {
-    return escapeHtml(line);
+/**
+ * 整段高亮（而非逐行）：块注释/模板字符串/多行字符串等跨行 token 需要上下文，
+ * 逐行高亮会丢失 → 部分代码块无高亮。
+ * 做法：连续代码行段（同一 hunk 内的 add/del/ctx）按「旧侧（del+ctx）/
+ * 新侧（add+ctx）」各拼成一段完整文本整体高亮，highlightCodeLines 内部
+ * 处理跨行 span 的关闭/重开后按行拆回，写回每行 html。
+ * 无 text 字段的行（截断提示/异常兜底行）不参与，html 保持原值。
+ */
+function highlightParsedLines(lines: DiffLine[], lang: string): void {
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    const isCode = l.type === "add" || l.type === "del" || l.type === "ctx";
+    if (!isCode || l.text === undefined) {
+      i++;
+      continue;
+    }
+    const seg: DiffLine[] = [];
+    let j = i;
+    while (j < lines.length) {
+      const s = lines[j];
+      const sCode = s.type === "add" || s.type === "del" || s.type === "ctx";
+      if (!sCode || s.text === undefined) break;
+      seg.push(s);
+      j++;
+    }
+    // 旧侧文本 = del + ctx（旧文件连续）；新侧文本 = add + ctx（新文件连续）
+    const oldSide = seg.filter((s) => s.type !== "add");
+    const newSide = seg.filter((s) => s.type !== "del");
+    const oldHtml = highlightCodeLines(oldSide.map((s) => s.text ?? "").join("\n"), lang);
+    const newHtml = highlightCodeLines(newSide.map((s) => s.text ?? "").join("\n"), lang);
+    oldSide.forEach((s, k) => { s.html = oldHtml[k] || "&nbsp;"; });
+    // ctx 行两侧内容相同，新侧结果覆盖即可（同 hunk 内两侧高亮一致）
+    newSide.forEach((s, k) => { s.html = newHtml[k] || "&nbsp;"; });
+    i = j;
   }
 }
 
-function parseUnifiedDiff(text: string, lang: string): DiffLine[] {
+/**
+ * 宽度锚层行内容：代码行取本侧（old/new/uni）自身内容（uni 按行类型取，同 GitDiffRow）；
+ * gap/gap-close 条渲染其真实文案（锚层 padding 已覆盖图标等 chrome 宽度）。
+ * 各容器各自测量 —— 用对侧内容撑宽会让本容器滚动区超出本容器任何实际行。
+ */
+function sizeLineHtml(line: DisplaySplitLine, side: "old" | "new" | "uni"): string {
+  if (line.type === "gap" || line.type === "gap-close") {
+    const count = side === "new" ? (line.newGap ?? line.gap ?? 0) : (line.gap ?? 0);
+    const base = t("git.unmodifiedLines", { count });
+    return escapeHtml(line.type === "gap-close" ? `${base} · ${t("git.collapse")}` : base);
+  }
+  const content =
+    side === "old"
+      ? line.oldHtml
+      : side === "new"
+        ? line.newHtml
+        : line.type === "del"
+          ? line.oldHtml
+          : line.type === "add"
+            ? line.newHtml
+            : line.newHtml || line.oldHtml;
+  return line.html || content || "&nbsp;";
+}
+
+/** 仅解析（不高亮）：代码行原文存 text，高亮由 renderDiff 末尾整段进行（跨行 token 上下文） */
+function parseUnifiedDiff(text: string): DiffLine[] {
   const rawLines = text.split("\n");
   const result: DiffLine[] = [];
 
@@ -1125,7 +1220,8 @@ function parseUnifiedDiff(text: string, lang: string): DiffLine[] {
       result.push({
         type: "add",
         sign: "+",
-        html: highlightLine(raw.slice(1), lang),
+        html: "",
+        text: raw.slice(1),
         newLine: newLineNum,
       });
       if (newLineNum !== undefined) {
@@ -1136,7 +1232,8 @@ function parseUnifiedDiff(text: string, lang: string): DiffLine[] {
       result.push({
         type: "del",
         sign: "-",
-        html: highlightLine(raw.slice(1), lang),
+        html: "",
+        text: raw.slice(1),
         oldLine: oldLineNum,
       });
       if (oldLineNum !== undefined) nextOldLine = ++oldLineNum;
@@ -1144,7 +1241,8 @@ function parseUnifiedDiff(text: string, lang: string): DiffLine[] {
       result.push({
         type: "ctx",
         sign: " ",
-        html: highlightLine(raw.slice(1), lang),
+        html: "",
+        text: raw.slice(1),
         oldLine: oldLineNum,
         newLine: newLineNum,
       });
@@ -1157,18 +1255,93 @@ function parseUnifiedDiff(text: string, lang: string): DiffLine[] {
   return result;
 }
 
-function renderDiff(res: GitDiff, filePath: string): DiffLine[] {
+/** 文件内容 → 行数组：去掉末尾换行产生的空尾巴（"a\n" → ["a"]；"" → []） */
+function splitFileLines(content: string): string[] {
+  const arr = content.split("\n");
+  if (arr.length && arr[arr.length - 1] === "") arr.pop();
+  return arr;
+}
+
+/**
+ * 全文模式：按行号从全文高亮数组取每行内容
+ * （del→旧侧，add→新侧，ctx→两侧各自取 —— split 视图两列各得本侧精确高亮）。
+ * 无 text 字段的兜底行（截断提示等）跳过，保持原 html。
+ */
+function resolveFullHtml(lines: DiffLine[], full: FullHighlight): void {
+  const pick = (arr: string[], line?: number): string =>
+    (line !== undefined && arr[line - 1]) || "&nbsp;";
+  for (const l of lines) {
+    if (l.type === "add") {
+      l.newHtml = pick(full.newHtml, l.newLine);
+      l.html = l.newHtml;
+    } else if (l.type === "del") {
+      l.oldHtml = pick(full.oldHtml, l.oldLine);
+      l.html = l.oldHtml;
+    } else if (l.type === "ctx" && l.text !== undefined) {
+      l.oldHtml = pick(full.oldHtml, l.oldLine);
+      l.newHtml = pick(full.newHtml, l.newLine);
+      l.html = l.newHtml;
+    }
+  }
+}
+
+/**
+ * diff 响应 → 渲染行。返回全文高亮（全文模式）或 null（降级模式），
+ * 由调用方（loadDiff）在确认响应未过期后统一写入 fullHighlight ——
+ * 避免在途旧响应覆盖新文件的全文高亮。
+ */
+function renderDiff(
+  res: GitDiff,
+  filePath: string,
+): { lines: DiffLine[]; full: FullHighlight | null } {
   const lang = getLanguage(filePath);
 
   // 二进制文件（图片等）：不渲染内容，只显示提示行
   if (res.binary) {
-    return [
-      { type: "binary", sign: "", html: escapeHtml(t("git.binaryNotPreview")) },
-    ];
+    return {
+      lines: [
+        { type: "binary", sign: "", html: escapeHtml(t("git.binaryNotPreview")) },
+      ],
+      full: null,
+    };
   }
 
+  // 全文模式：后端附带两侧完整内容 → diff 只作对齐信息（行号/类型/gap 区间），
+  // 行内容按行号从全文取；全文一次高亮（跨行 token 上下文完整），
+  // gap 展开也无需再请求后端（loadGapRows 本地生成）。
+  if (res.oldContent !== undefined && res.newContent !== undefined) {
+    const oldLines = splitFileLines(res.oldContent);
+    const newLines = splitFileLines(res.newContent);
+    const full: FullHighlight = {
+      oldHtml: highlightCodeLines(oldLines.join("\n"), lang),
+      newHtml: highlightCodeLines(newLines.join("\n"), lang),
+    };
+    let result: DiffLine[];
+    if (res.type === "new-file") {
+      // 未跟踪文件：全新增，无旧行号，新行号从 1 递增
+      result = newLines.slice(0, MAX_DIFF_LINES).map((_, i) => ({
+        type: "add" as const,
+        sign: "+",
+        html: "",
+        newLine: i + 1,
+      }));
+      if (newLines.length > MAX_DIFF_LINES) {
+        result.push({
+          type: "ctx",
+          sign: " ",
+          html: escapeHtml(t("git.diffTooLarge", { count: MAX_DIFF_LINES })),
+        });
+      }
+    } else {
+      result = parseUnifiedDiff(res.diff || "");
+    }
+    resolveFullHtml(result, full);
+    return { lines: result, full };
+  }
+
+  // 降级模式（任一侧全文超体积上限未附带）：hunk 内整段高亮；gap 展开仍走后端拉取
   if (res.type === "new-file") {
-    const lines = (res.content || "").split("\n");
+    const lines = splitFileLines(res.content || "");
     const result: DiffLine[] = [];
     for (let i = 0; i < lines.length; i++) {
       if (result.length >= MAX_DIFF_LINES) {
@@ -1180,12 +1353,16 @@ function renderDiff(res: GitDiff, filePath: string): DiffLine[] {
         break;
       }
       // 未跟踪文件：全新增，无旧行号，新行号从 1 递增
-      result.push({ type: "add", sign: "+", html: highlightLine(lines[i], lang), newLine: i + 1 });
+      result.push({ type: "add", sign: "+", html: "", text: lines[i], newLine: i + 1 });
     }
-    return result;
+    // 整段高亮：new-file 段即完整新文件，跨行 token 上下文完整
+    highlightParsedLines(result, lang);
+    return { lines: result, full: null };
   }
 
-  return parseUnifiedDiff(res.diff || "", lang);
+  const result = parseUnifiedDiff(res.diff || "");
+  highlightParsedLines(result, lang);
+  return { lines: result, full: null };
 }
 
 /** 点击文件：选中并加载 diff（同文件重复点击忽略；切换选中即丢弃旧内容重新拉取） */
@@ -1203,6 +1380,7 @@ function clearSelection(): void {
   selectedKey.value = null;
   loadingKey.value = null;
   diffLines.value = {};
+  fullHighlight.value = null;
   diffLoadSeq++;
 }
 
@@ -1211,17 +1389,20 @@ async function loadDiff(row: GitRow): Promise<void> {
   const key = rowKey(row);
   const seq = ++diffLoadSeq;
   loadingKey.value = key;
+  fullHighlight.value = null; // 旧文件全文高亮即刻失效，新值由下方当前响应写入
   try {
     const res = await apiService.getGitDiff(props.sessionId, row.file.path, row.group === "staged");
-    const lines = renderDiff(res, row.file.path);
-    // 加载期间选中被切换/清空时丢弃过期响应
+    const { lines, full } = renderDiff(res, row.file.path);
+    // 加载期间选中被切换/清空时丢弃过期响应（含其全文高亮，不写入）
     if (seq === diffLoadSeq && selectedKey.value === key) {
       diffLines.value = { [key]: lines };
+      fullHighlight.value = full;
     }
   } catch {
     if (seq === diffLoadSeq && selectedKey.value === key) {
       ElMessage.error(t("git.loadFailed"));
       diffLines.value = { [key]: [] };
+      fullHighlight.value = null;
     }
   } finally {
     if (seq === diffLoadSeq) loadingKey.value = null;
@@ -1253,11 +1434,36 @@ async function toggleGap(line: DisplaySplitLine): Promise<void> {
   await loadGapRows(idx);
 }
 
-/** 从后端读取 gap 区间的旧文件行（未修改行 = 旧文件/HEAD 或 index 版本的行），转为 ctx 行 */
+/**
+ * 生成 gap 区间的 ctx 行：
+ * - 全文模式：行内容已在本地（fullHighlight），按行号直接取，无需请求后端；
+ * - 降级模式（超大文件无全文）：从后端读取旧侧行区间再整段高亮。
+ */
 async function loadGapRows(idx: number): Promise<void> {
-  if (!props.sessionId || gapRows.value[idx]) return;
+  if (gapRows.value[idx]) return;
   const src = splitLines.value[idx];
   if (!src || src.type !== "gap" || src.oldLine === undefined || !src.gap) return;
+
+  const full = fullHighlight.value;
+  if (full) {
+    const newStart = src.newLine ?? src.oldLine;
+    const lines: SplitDiffLine[] = [];
+    for (let i = 0; i < src.gap; i++) {
+      // gap = 两侧完全相同的未修改行，取旧侧高亮即可（两列共用）
+      const html = full.oldHtml[src.oldLine + i - 1] || "&nbsp;";
+      lines.push({
+        type: "ctx",
+        oldLine: src.oldLine + i,
+        newLine: newStart + i,
+        oldHtml: html,
+        newHtml: html,
+      });
+    }
+    gapRows.value = { ...gapRows.value, [idx]: lines };
+    return;
+  }
+
+  if (!props.sessionId) return;
   const row = selectedRow.value;
   if (!row) return;
   // 展开一次最多 200 行（后端同样 cap）
@@ -1272,8 +1478,11 @@ async function loadGapRows(idx: number): Promise<void> {
     );
     const lang = getLanguage(row.file.path);
     const newStart = src.newLine ?? src.oldLine;
-    const lines: SplitDiffLine[] = res.content.split("\n").map((text, i) => {
-      const html = highlightLine(text, lang);
+    // gap 区间是连续文本：整段一次高亮再拆行（跨行 token 上下文，与 diff 行一致）
+    const texts = res.content.split("\n");
+    const htmls = highlightCodeLines(texts.join("\n"), lang);
+    const lines: SplitDiffLine[] = texts.map((text, i) => {
+      const html = htmls[i] || "&nbsp;";
       return {
         type: "ctx",
         oldLine: src.oldLine! + i,
@@ -1501,19 +1710,44 @@ defineExpose({ refresh });
 }
 
 /* 内容平移层（spacer）：height 由 JS 设为总内容高，translateY(-offset) 由 JS 统一控制
-   （两列同一 offset，永远同步）；min-width:100% 保证内容短时背景铺满 */
+   （两列同一 offset，永远同步）。
+   宽度跟随内容：width:max-content + min-width:100% —— 短行时 = 容器宽（背景铺满可视区），
+   长行时 = 内容宽（由下方宽度锚层 .git-diff-split-col-size 撑宽）→ 行背景铺满整行、可横向滚动 */
 .git-diff-split-col-inner {
   position: relative;
+  width: max-content;
   min-width: 100%;
   will-change: transform;
 }
 
-/* 虚拟化行：绝对定位在 rowMetrics.tops[idx]，高度固定（普通 20px / gap 30px） */
-.git-diff-split-row {
-  position: absolute;
-  left: 0;
-  right: 0;
+/* 宽度锚层：正常流渲染所有行内容宽度（max-content），撑宽 inner →
+   行（absolute left:0 right:0）宽 = inner 宽 = max(内容宽, 100%)，行背景铺满整行内容。
+   虚拟化下只有可视行有 DOM，宽度锚层是唯一携带"所有行内容宽"的正常流元素；
+   字体继承 .git-diff-split（12px/20px），宽度测量与实际内容一致 */
+.git-diff-split-col-size {
+  position: relative;
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  width: max-content;
+  pointer-events: none;
 }
+
+.git-diff-size-line {
+  display: block;
+  width: max-content;
+  white-space: pre;
+  /* 锚层行宽必须 = 实际行宽：实际行 = 行号 48px + 内容左 padding 8px + 文本 + 右 padding 12px，
+     锚层只有文本，用 padding 补齐这 68px 水平 chrome。
+     缺了它：最宽实际行（absolute，会撑大列滚动区）比 inner 宽 68px →
+     滚动区右端多出一段"只有最宽行才有背景"的区域（短行 min-width:100% 只到 inner 宽）。
+     gap/hunk 行的真实 chrome（≤48px）比 68px 小，过测无害（欠测才会露底） */
+  padding-left: 56px;
+  padding-right: 12px;
+}
+
+/* 行样式（.git-diff-line / 行号 / 内容 / add·del·placeholder 着色 / gap / hunk / binary /
+   虚拟化定位 .git-diff-vrow）统一由 GitDiffRow.vue 持有（unified 与 split 两列共用） */
 
 .git-diff-split-col-divider {
   flex-shrink: 0;
@@ -1555,70 +1789,6 @@ defineExpose({ refresh });
   inset: 0;
   z-index: 99999;
   cursor: grabbing;
-}
-
-/* 单行：行号 + 内容 */
-.git-diff-split-line {
-  display: flex;
-  align-items: stretch;
-}
-
-/* 行号两列都钉各自左缘（VS Code 风格）：左列行号贴容器左、右列行号贴中间分隔线，
-   列内横向滚动时行号固定遮挡滑过的内容（基础样式已含 sticky left:0 + 背景色右边） */
-
-/* add 行：整行淡绿底 + 新列行号左缘绿色实线竖条 */
-.git-diff-split-line.git-diff-split--add {
-  --diff-bg: color-mix(in srgb, #2da44e 8%, var(--color-bg));
-  background: var(--diff-bg);
-}
-.git-diff-split-col--new .git-diff-split-line.git-diff-split--add .git-diff-line-num {
-  background: var(--diff-bg);
-  box-shadow: inset 3px 0 0 #2da44e;
-  color: #1a7f37;
-}
-.git-diff-split-col--old .git-diff-split-line.git-diff-split--add .git-diff-line-num {
-  background: var(--diff-bg);
-}
-
-/* del 行：整行淡红底 + 旧列行号左缘红色虚线状指示条（同 unified 公式） */
-.git-diff-split-line.git-diff-split--del {
-  --diff-bg: color-mix(in srgb, #cf222e 6%, var(--color-bg));
-  background: var(--diff-bg);
-}
-.git-diff-split-col--old .git-diff-split-line.git-diff-split--del .git-diff-line-num {
-  background: var(--diff-bg);
-  color: #cf222e;
-}
-.git-diff-split-col--old .git-diff-split-line.git-diff-split--del .git-diff-line-num::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background-image: linear-gradient(0deg, rgba(207, 34, 46, 0.55) 50%, var(--diff-bg) 50%);
-  background-repeat: repeat;
-  background-size: 100% var(--stripe-size);
-}
-.git-diff-split-col--new .git-diff-split-line.git-diff-split--del .git-diff-line-num {
-  background: var(--diff-bg);
-}
-
-html.dark .git-diff-split-line.git-diff-split--add {
-  --diff-bg: color-mix(in srgb, #3fb950 12%, var(--color-bg));
-}
-html.dark .git-diff-split-line.git-diff-split--del {
-  --diff-bg: color-mix(in srgb, #f85149 10%, var(--color-bg));
-}
-html.dark .git-diff-split-col--new .git-diff-split-line.git-diff-split--add .git-diff-line-num {
-  box-shadow: inset 3px 0 0 #3fb950;
-  color: #3fb950;
-}
-html.dark .git-diff-split-col--old .git-diff-split-line.git-diff-split--del .git-diff-line-num {
-  color: #f85149;
-}
-html.dark .git-diff-split-col--old .git-diff-split-line.git-diff-split--del .git-diff-line-num::before {
-  background-image: linear-gradient(0deg, rgba(248, 81, 73, 0.6) 50%, var(--diff-bg) 50%);
 }
 
 /* ── 拆分视图 ── */
@@ -1956,172 +2126,14 @@ html.dark .git-stat-del { color: #f85149; }
 
 .git-diff-table {
   /* 宽度跟随内容：短行时 = 容器宽（min-width:100% 保证背景铺满，无滚动条），
-     超长行时 = 内容宽（出现横向滚动条，行号 sticky 固定） */
+     超长行时 = 内容宽（由宽度锚层撑开，出现横向滚动条，行号 sticky 固定）；
+     position:relative = 虚拟化行（GitDiffRow .git-diff-vrow 绝对定位）的包含块，
+     高度由 JS 设为 uniMetrics.total */
+  position: relative;
   width: max-content;
   min-width: 100%;
 }
 
-/* 单行：flex 结构（参考 FilePreviewPanel 代码预览），行号 sticky 性能优于 table-cell */
-.git-diff-line {
-  display: flex;
-  align-items: stretch;
-}
-
-.git-diff-line-num {
-  /* 固定宽度使 text-align: right 生效：不同位数行号右对齐（个位对齐），
-     数字左侧留出空白 */
-  flex: 0 0 48px;
-  width: 48px;
-  padding: 0 12px 0 4px;
-  text-align: right;
-  user-select: none;
-  font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-placeholder);
-  /* 横向滚动时行号固定钉在左侧 */
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  /* 项目主题变量（style.css --color-bg，跟随主题切换） */
-  background-color: var(--color-bg);
-  /* 右缘分隔线用背景色 2px：普通行同色不可见；add/del 彩色行上呈现
-     面板背景色竖条，把行号区与彩色内容区分开（sticky 滚动时遮住滑过的内容） */
-  border-right: 2px solid var(--color-bg);
-  /* 条纹周期：1lh（20px）量化成 2px 整数倍 → 整数周期 2px，
-     每行 10 个整周期、行间虚线相位对齐（参考项目 bars 指示器公式） */
-  --stripe-size: calc(1lh * (1 / round(1lh * (1 / 2px))));
-}
-
-.git-diff-content {
-  /* 绝不自动换行（white-space: pre）：短行单行显示，超长行撑宽表格由容器横向滚动；
-     flex:1 + min-width:0 使内容短时填满容器（背景铺满整行），长时跟随内容宽度 */
-  white-space: pre;
-  flex: 1;
-  min-width: 0;
-  padding: 0 12px 0 8px;
-  color: var(--el-text-color-primary);
-}
-
-/* ── 新增/删除行：不透明背景（color-mix 混合纯色，滚动时内容不会从行号下透出） ── */
-
-/* 新增行：整行淡绿底 + 行号左侧绿色实线竖条（不做虚线处理） */
-.git-diff-line.git-diff-add {
-  /* 基色用项目主题变量 --color-bg（不是 Element Plus 的 --el-bg-color） */
-  --diff-bg: color-mix(in srgb, #2da44e 8%, var(--color-bg));
-  background: var(--diff-bg);
-}
-.git-diff-line.git-diff-add .git-diff-line-num {
-  background: var(--diff-bg);
-  box-shadow: inset 3px 0 0 #2da44e;
-  color: #1a7f37;
-}
-
-/* 删除行：整行淡红底 + 行号左缘红色虚线状指示条。
-   虚线不是 border:dashed，而是 ::before 窄条上铺 0deg 渐变细条纹：
-   每个周期下半段为红色（虚线色块）、上半段为行底色（空隙），
-   background-size 用 --stripe-size（1lh 量化到 2px 整数倍）保证每行
-   整数个周期、行间虚线相位对齐（参考项目 bars 指示器实现）。 */
-.git-diff-line.git-diff-del {
-  --diff-bg: color-mix(in srgb, #cf222e 6%, var(--color-bg));
-  background: var(--diff-bg);
-}
-.git-diff-line.git-diff-del .git-diff-line-num {
-  background: var(--diff-bg);
-  color: #cf222e;
-}
-.git-diff-line.git-diff-del .git-diff-line-num::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background-image: linear-gradient(0deg, rgba(207, 34, 46, 0.55) 50%, var(--diff-bg) 50%);
-  background-repeat: repeat;
-  background-size: 100% var(--stripe-size);
-}
-
-html.dark .git-diff-line.git-diff-add {
-  --diff-bg: color-mix(in srgb, #3fb950 12%, var(--color-bg));
-}
-html.dark .git-diff-line.git-diff-del {
-  --diff-bg: color-mix(in srgb, #f85149 10%, var(--color-bg));
-}
-html.dark .git-diff-line.git-diff-add .git-diff-line-num {
-  box-shadow: inset 3px 0 0 #3fb950;
-  color: #3fb950;
-}
-html.dark .git-diff-line.git-diff-del .git-diff-line-num {
-  color: #f85149;
-}
-html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
-  background-image: linear-gradient(0deg, rgba(248, 81, 73, 0.6) 50%, var(--diff-bg) 50%);
-}
-
-/* hunk 头兜底样式（解析失败时） */
-.git-diff-line.git-diff-hunk {
-  background: var(--el-fill-color-light);
-}
-.git-diff-line.git-diff-hunk .git-diff-line-num {
-  background: var(--el-fill-color-light);
-}
-.git-diff-line.git-diff-hunk .git-diff-content {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-
-/* 二进制文件提示行（图片等不支持文本预览） */
-.git-diff-line.git-diff-binary {
-  padding: 6px 0;
-}
-.git-diff-line.git-diff-binary .git-diff-content {
-  font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: default;
-  user-select: none;
-}
-
-/* 「N 行未修改」折叠条（替代 @@ hunk 头）：占满整行，不缩进行号列 */
-.git-diff-line.git-diff-gap {
-  padding: 3px 8px 3px 3px;
-}
-
-.git-diff-gap-inner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
-  border-radius: 4px;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
-  font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
-  font-size: 11px;
-  user-select: none;
-}
-
-.git-diff-gap-icon {
-  color: var(--el-text-color-placeholder);
-  flex-shrink: 0;
-}
-
-/* 可点击展开的折叠条（对齐 GitHub/VS Code）：hover 加深 + 手型 */
-.git-diff-gap-click {
-  cursor: pointer;
-}
-
-.git-diff-gap-click:hover .git-diff-gap-inner {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
-}
-
-.git-diff-gap-click:hover .git-diff-gap-icon {
-  color: var(--el-text-color-secondary);
-}
-
-.git-diff-gap-click.expanded .git-diff-gap-icon {
-  transform: rotate(90deg);
-}
+/* 行样式（.git-diff-line / 行号 / 内容 / add·del·placeholder 着色 / gap / hunk / binary /
+   虚拟化定位）统一由 GitDiffRow.vue 的 scoped 样式持有（unified 与 split 两列共用） */
 </style>
