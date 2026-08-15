@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { ChildProcess, exec, execSync, spawn } from "child_process";
+import { ChildProcess, exec, spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -199,11 +199,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * Windows：优先查找 Git Bash，找不到则回退 cmd.exe。
    * Unix：使用默认 sh。
    *
-   * Git Bash 查找顺序：
+   * Git Bash 查找顺序（全程纯 fs 探测，零子进程，避免任何控制台窗口闪现）：
    * 1. 环境变量 GIT_BASH（用户手动指定）
-   * 2. `where bash`（搜索 PATH，最通用）
-   * 3. 注册表 GitForWindows\InstallPath
-   * 4. 常见安装路径（C:\Program Files\Git 等）
+   * 2. PATH 环境变量逐项解析（替代 `where bash`，排除 WSL 的 System32\bash.exe）
+   * 3. 常见安装路径（C:\Program Files\Git 等）
    */
   private detectShell(): void {
     if (process.platform !== "win32") {
@@ -219,26 +218,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // 2. where bash — 搜索 PATH，排除 WSL 的 System32\bash.exe
-    const pathBash = this.findInPath("bash.exe");
+    // 2. PATH 逐项解析 — 排除 WSL 的 System32\bash.exe
+    const pathBash = this.findBashInPath();
     if (pathBash && !pathBash.toLowerCase().includes("\\system32\\")) {
       this.shellInfo = { kind: "bash", path: pathBash };
       this.logger.log(`Shell detected: bash (PATH) at ${pathBash}`);
       return;
     }
 
-    // 3. 注册表 GitForWindows
-    const regPath = this.readGitRegistryPath();
-    if (regPath) {
-      const bashPath = path.join(regPath, "bin", "bash.exe");
-      if (fsSync.existsSync(bashPath)) {
-        this.shellInfo = { kind: "bash", path: bashPath };
-        this.logger.log(`Shell detected: bash (registry) at ${bashPath}`);
-        return;
-      }
-    }
-
-    // 4. 常见安装路径（兜底）
+    // 3. 常见安装路径（兜底）
     const fallbacks = [
       path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Git", "bin", "bash.exe"),
       path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
@@ -254,33 +242,19 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log("Shell detected: cmd.exe (bash not found)");
   }
 
-  /** 使用 `where <exe>` 搜索 PATH，返回第一个存在的路径 */
-  private findInPath(exe: string): string | null {
-    try {
-      const result = execSync(`where ${exe}`, {
-        encoding: "utf-8",
-        timeout: 5000,
-        windowsHide: true,
-      });
-      const lines = result.trim().split(/\r?\n/);
-      return lines.length > 0 && lines[0] ? lines[0] : null;
-    } catch {
-      return null;
+  /** 解析 PATH 环境变量查找 bash.exe（纯 fs 检查，不启动子进程） */
+  private findBashInPath(): string | null {
+    const pathEnv = process.env.PATH || "";
+    for (const dir of pathEnv.split(";")) {
+      if (!dir) continue;
+      const candidate = path.join(dir.trim().replace(/^"|"$/g, ""), "bash.exe");
+      try {
+        if (fsSync.existsSync(candidate)) return candidate;
+      } catch {
+        // 单个目录解析失败 — 跳过继续
+      }
     }
-  }
-
-  /** 读取注册表 GitForWindows 的 InstallPath */
-  private readGitRegistryPath(): string | null {
-    try {
-      const result = execSync(
-        'reg query "HKLM\\SOFTWARE\\GitForWindows" /v InstallPath 2>nul || reg query "HKCU\\SOFTWARE\\GitForWindows" /v InstallPath 2>nul',
-        { encoding: "utf-8", timeout: 5000, windowsHide: true },
-      );
-      const match = result.match(/InstallPath\s+REG_(?:SZ|EXPAND_SZ)\s+(.+)/);
-      return match ? match[1].trim() : null;
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   /** 返回检测到的 shell 的人类可读描述（供插件提示 AI） */

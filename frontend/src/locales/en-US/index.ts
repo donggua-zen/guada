@@ -8,6 +8,7 @@ import scheduler from './scheduler'
 import characters from './characters'
 import session from './session'
 import ui from './ui'
+import git from './git'
 
 export default {
   common,
@@ -20,4 +21,5 @@ export default {
   characters,
   session,
   ui,
+  git,
 }

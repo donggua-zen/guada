@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useBrowserWebviewStore } from './browserWebview'
 import { useLayoutStore } from './layout'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
@@ -8,7 +8,8 @@ import type { UnifiedTab } from '@/composables/usePreviewTabCache'
  * 标签 Store — 统一管理文件标签和浏览器标签的状态
  *
  * tabs / activeTabKey 是唯一数据源，所有组件通过此 store 读写。
- * workspacePreviewMode 由 layoutStore 管理，tabStore 通过 computed 暴露。
+ * 面板模式（tree/preview/git）由 layoutStore.workspacePanelMode 三态枚举管理，
+ * tabStore 通过 enter 系列 / exit 系列动作切换，不重复持有模式状态。
  */
 const MAX_FILE_TABS = 10
 
@@ -22,17 +23,35 @@ export const useTabStore = defineStore('tab', () => {
     /** 当前激活的标签 key（'file:<path>' 或 'browser:<windowId>'） */
     const activeTabKey = ref<string | null>(null)
 
-    /** 是否处于预览模式 */
-    const isPreviewMode = computed(() => layoutStore.workspacePreviewMode)
-
     // ── 模式切换 ──
 
+    /**
+     * 进入预览模式（三态互斥：直接置为 preview，天然退出 Git/tree）。
+     */
     function enterPreviewMode(): void {
-        layoutStore.workspacePreviewMode = true
+        layoutStore.setWorkspacePanelMode('preview')
     }
 
+    /** 退出预览模式（仅当处于预览模式时回到目录树，不影响其他模式） */
     function exitPreviewMode(): void {
-        layoutStore.workspacePreviewMode = false
+        if (layoutStore.workspacePanelMode === 'preview') {
+            layoutStore.setWorkspacePanelMode('tree')
+        }
+    }
+
+    /**
+     * 进入 Git 变更面板模式（三态互斥：直接置为 git）。
+     * 复用预览宽度（workspacePreviewSplitSize），但不触发任何预览相关派生逻辑。
+     */
+    function enterGitMode(): void {
+        layoutStore.setWorkspacePanelMode('git')
+    }
+
+    /** 退出 Git 模式（仅当处于 Git 模式时回到目录树，不影响其他模式） */
+    function exitGitMode(): void {
+        if (layoutStore.workspacePanelMode === 'git') {
+            layoutStore.setWorkspacePanelMode('tree')
+        }
     }
 
     // ── 标签选中（幂等，不加载内容） ──
@@ -175,7 +194,7 @@ export const useTabStore = defineStore('tab', () => {
         }
 
         // 全部标签关闭时退出预览模式
-        if (tabs.value.length === 0 && isPreviewMode.value) {
+        if (tabs.value.length === 0 && layoutStore.workspacePanelMode === 'preview') {
             exitPreviewMode()
         }
     }
@@ -185,14 +204,17 @@ export const useTabStore = defineStore('tab', () => {
     function clearAll(): void {
         tabs.value = []
         activeTabKey.value = null
+        // 模式状态一并重置（会话切换后回到目录树模式）
+        layoutStore.setWorkspacePanelMode('tree')
     }
 
     return {
         tabs,
         activeTabKey,
-        isPreviewMode,
         enterPreviewMode,
         exitPreviewMode,
+        enterGitMode,
+        exitGitMode,
         selectTab,
         addTab,
         removeTab,

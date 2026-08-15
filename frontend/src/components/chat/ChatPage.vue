@@ -8,7 +8,7 @@
           :min-size="layoutStore.workspaceFullscreen ? 0 : 30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"
-              style="height: 100%; display: flex; flex-direction: column;">
+              style="position: relative; height: 100%; display: flex; flex-direction: column;">
               <!-- 页面标题栏 -->
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
@@ -314,8 +314,11 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 // 根据当前模式计算工作目录分割比例
+// 目录树模式：窄宽度 workspaceSplitSize；预览/Git 模式：共享宽宽度 workspacePreviewSplitSize
 const workspaceSize = computed(() =>
-  layoutStore.workspacePreviewMode ? layoutStore.workspacePreviewSplitSize : layoutStore.workspaceSplitSize,
+  layoutStore.workspacePanelMode !== 'tree'
+    ? layoutStore.workspacePreviewSplitSize
+    : layoutStore.workspaceSplitSize,
 );
 // 控制设置模态框的显示与隐藏
 // 布局状态
@@ -407,8 +410,9 @@ function onPaneResized(size: number) {
   }
 
   // 保存工作目录分割位置（根据当前模式分别保存）
+  // Git 模式与预览模式共享同一宽度
   if (layoutStore.workspaceVisible && isElectron) {
-    if (layoutStore.workspacePreviewMode) {
+    if (layoutStore.workspacePanelMode !== 'tree') {
       layoutStore.setWorkspacePreviewSplitSize(size);
     } else {
       layoutStore.setWorkspaceSplitSize(size);
@@ -630,6 +634,7 @@ onMounted(async () => {
 watch(() => layoutStore.workspaceVisible, (visible) => {
   if (!visible) {
     tabStore.exitPreviewMode();
+    tabStore.exitGitMode();
     layoutStore.workspaceFullscreen = false;
   }
 });
