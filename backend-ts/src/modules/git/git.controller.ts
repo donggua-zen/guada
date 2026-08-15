@@ -149,6 +149,13 @@ export class GitController {
     return await this.gitService.unstage(workspacePath, files);
   }
 
+  @Post("sessions/:id/git/push")
+  async push(@Param("id") id: string, @CurrentUser() user: any) {
+    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitRepo(workspacePath);
+    return await this.gitService.push(workspacePath);
+  }
+
   @Get("sessions/:id/git/diff")
   async getDiff(
     @Param("id") id: string,

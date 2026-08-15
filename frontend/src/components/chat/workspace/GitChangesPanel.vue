@@ -1,56 +1,69 @@
 <template>
   <div class="git-changes-panel h-full flex flex-col min-h-0">
-    <!-- 分支栏 -->
-    <div class="shrink-0 px-2 pt-2 pb-1">
-      <div class="flex items-center gap-1">
-        <el-icon :size="16" class="text-gray-500 dark:text-[#8b8d95] shrink-0">
-          <Branch20Regular />
-        </el-icon>
-        <el-select
-          v-model="selectedBranch"
-          size="small"
-          filterable
-          :placeholder="t('git.branchSelectPlaceholder')"
-          class="flex-1 min-w-0"
-          :disabled="!isGitRepo || refreshing"
-          @change="onBranchChange"
-        >
-          <el-option v-for="b in branches" :key="b.name" :label="b.name" :value="b.name">
-            <span>{{ b.current ? '✓ ' : '' }}{{ b.name }}</span>
-          </el-option>
-        </el-select>
+    <!-- 顶部工具栏（单行紧凑）：分支 chip | 全量变更统计 | 领先/落后 | 刷新 | 视图切换 | 目录树开关 | 提交（弹窗） -->
+    <div class="shrink-0 git-toolbar">
+      <!-- 分支：简洁 chip + 自定义下拉（替代 el-select 原生样式） -->
+      <DropdownMenu @command="onBranchChange">
+        <button class="git-branch-chip" :disabled="!isGitRepo || refreshing">
+          <!-- Branch20Regular 为 20 viewBox：16px 仍非整数缩放，但 0.8 倍较柔和；
+               图标优先选原生尺寸更锐利 -->
+          <el-icon :size="16"><Branch20Regular /></el-icon>
+          <span class="git-branch-chip-name">{{ selectedBranch || t('git.branchSelectPlaceholder') }}</span>
+          <el-icon :size="10" class="git-branch-chip-chevron"><ArrowDown /></el-icon>
+        </button>
+        <template #dropdown>
+          <div class="git-branch-menu">
+            <DropdownMenuItem v-for="b in branches" :key="b.name" :command="b.name">
+              <span class="git-branch-menu-item">
+                <span class="git-branch-menu-check">{{ b.current ? '✓' : '' }}</span>
+                <span class="git-branch-menu-name">{{ b.name }}</span>
+              </span>
+            </DropdownMenuItem>
+          </div>
+        </template>
+      </DropdownMenu>
+      <!-- 全量变更统计：所有变更文件增删行数之和 -->
+      <span v-if="isGitRepo && (totalStats.add || totalStats.del)" class="git-diff-stats git-toolbar-stats">
+        <span v-if="totalStats.add" class="git-stat-add">+{{ totalStats.add }}</span>
+        <span v-if="totalStats.del" class="git-stat-del">-{{ totalStats.del }}</span>
+      </span>
+      <span v-if="isGitRepo && (status?.ahead || status?.behind)" class="git-toolbar-ab"
+        :title="t('git.aheadBehind', { ahead: status?.ahead, behind: status?.behind })">
+        ↑{{ status?.ahead || 0 }} ↓{{ status?.behind || 0 }}
+      </span>
+      <div class="flex-1"></div>
+      <LTooltip :content="t('git.refresh')" placement="bottom">
         <button class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
-          <el-icon :size="14" :class="{ 'is-loading': refreshing }">
+          <!-- Refresh 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
+          <el-icon :size="16" :class="{ 'is-loading': refreshing }">
             <Refresh />
           </el-icon>
         </button>
-      </div>
-      <div v-if="isGitRepo && (status?.ahead || status?.behind)"
-        class="text-xs text-gray-400 dark:text-[#6b6d73] px-1 mt-0.5">
-        {{ t('git.aheadBehind', { ahead: status?.ahead, behind: status?.behind }) }}
-      </div>
-    </div>
-
-    <!-- 提交区 -->
-    <div v-if="isGitRepo" class="shrink-0 px-2 pb-2 pt-1">
-      <el-input
-        v-model="commitMessage"
-        type="textarea"
-        :rows="2"
-        resize="none"
-        :placeholder="t('git.commitMessagePlaceholder')"
-        @keydown.ctrl.enter="handleCommit"
-        @keydown.meta.enter="handleCommit"
-      />
-      <div class="flex items-center gap-1 mt-1">
-        <el-button type="primary" size="small" :disabled="!commitMessage.trim() || committing"
-          :loading="committing" @click="handleCommit">
-          {{ t('git.commit') }}
-        </el-button>
-        <el-button size="small" :disabled="totalChanges === 0" @click="handleStageAll">
-          {{ t('git.stageAll') }}
-        </el-button>
-      </div>
+      </LTooltip>
+      <!-- 视图切换（unified/split）：单按钮，图标随当前状态切换（显示目标视图图标）：
+           分栏视图下显示统一视图图标（CalendarAgenda），统一视图下显示分栏图标（DualScreen） -->
+      <LTooltip :content="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" placement="bottom">
+        <button class="git-tool-btn" @click="toggleDiffView">
+          <!-- 20 viewBox：原生尺寸 20px，保证像素对齐锐利 -->
+          <el-icon :size="20">
+            <CalendarAgenda20Regular v-if="diffView === 'split'" />
+            <DualScreen20Regular v-else />
+          </el-icon>
+        </button>
+      </LTooltip>
+      <!-- 右侧变更目录树开关 -->
+      <LTooltip :content="t('git.toggleTree')" placement="bottom">
+        <button class="git-tool-btn" :class="{ 'git-tool-btn--active': showTree }"
+          @click="showTree = !showTree">
+          <el-icon :size="20"><TextboxAlignTopRotate9020Regular /></el-icon>
+        </button>
+      </LTooltip>
+      <!-- 提交（弹窗：消息 + 是否包含未暂存 + 提交/提交并推送/推送）：胶囊按钮 -->
+      <button class="git-commit-btn" :disabled="!isGitRepo || totalChanges === 0"
+        @click="commitDialogVisible = true">
+        <el-icon :size="16"><BranchFork16Regular /></el-icon>
+        <span>{{ t('git.commitOrPush') }}</span>
+      </button>
     </div>
 
     <!-- 左：选中文件 diff 预览（弹性，窗口缩小时优先被压缩）| 右：变更文件目录树
@@ -75,22 +88,6 @@
               <span v-if="selectedStats.add" class="git-stat-add">+{{ selectedStats.add }}</span>
               <span v-if="selectedStats.del" class="git-stat-del">-{{ selectedStats.del }}</span>
             </span>
-            <div class="git-diff-view-toggle">
-              <button class="git-diff-view-btn" :class="{ active: diffView === 'unified' }"
-                :title="t('git.unifiedView')" @click="diffView = 'unified'">
-                <svg viewBox="0 0 16 16" width="13" height="13">
-                  <rect x="1.5" y="3" width="13" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-                  <line x1="1.5" y1="8" x2="14.5" y2="8" stroke="currentColor" stroke-width="1.3"/>
-                </svg>
-              </button>
-              <button class="git-diff-view-btn" :class="{ active: diffView === 'split' }"
-                :title="t('git.splitView')" @click="diffView = 'split'">
-                <svg viewBox="0 0 16 16" width="13" height="13">
-                  <rect x="1.5" y="3" width="5.8" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-                  <rect x="8.7" y="3" width="5.8" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-                </svg>
-              </button>
-            </div>
             <button class="git-diff-close" :title="t('git.closePreview')" @click="clearSelection">
               <el-icon :size="12"><Close /></el-icon>
             </button>
@@ -230,7 +227,9 @@
                 <el-icon :size="12"><Close /></el-icon>
               </button>
             </div>
-            <div class="git-tree-scroll">
+            <div ref="treeScrollRef" class="git-tree-scroll" tabindex="0"
+              :class="{ focused: treeFocused }"
+              @keydown="onTreeKeydown" @focus="treeFocused = true" @blur="treeFocused = false">
         <template v-if="isGitRepo">
           <div v-for="group in displayGroups" :key="group.key">
             <div class="git-group-header">
@@ -240,16 +239,29 @@
               :class="{
                 'git-tree-row--dir': trow.isDir,
                 'git-tree-row--partial': !trow.isDir && !!trow.row?.isPartial,
+                'git-tree-row--active': treeFocused && activeTreeKey === trow.key,
                 selected: !trow.isDir && selectedKey === trow.key,
               }"
+              :ref="(el) => setTreeRowRef(trow.key, el)"
               :style="{ paddingLeft: 8 + trow.depth * 14 + 'px', '--indent': trow.depth * 14 + 'px' }"
-              @click="trow.isDir ? toggleDir(trow) : trow.row && selectRow(trow.row)">
+              @click="onTreeRowClick(trow)">
               <template v-if="trow.isDir">
                 <el-icon :size="12" class="git-tree-chevron"
                   :class="{ expanded: !collapsedDirs.has(trow.key) }">
                   <ArrowRight />
                 </el-icon>
                 <span class="git-tree-name" :title="trow.path">{{ trow.name }}</span>
+                <!-- 文件夹级操作：暂存/取消暂存整个目录下的全部变更文件（hover 显示） -->
+                <span class="git-row-actions" @click.stop>
+                  <button v-if="(trow.stagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.unstageAll')"
+                    @click="unstageDir(group, trow)">
+                    <el-icon :size="12"><Subtract16Regular /></el-icon>
+                  </button>
+                  <button v-if="(trow.unstagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.stageAll')"
+                    @click="stageDir(group, trow)">
+                    <el-icon :size="12"><Add16Regular /></el-icon>
+                  </button>
+                </span>
               </template>
               <template v-else>
                 <span class="git-status" :class="`git-status--${statusClass(trow.row!)}`">{{ trow.row!.statusChar }}</span>
@@ -257,10 +269,10 @@
                 <span class="git-row-actions" @click.stop>
                   <button v-if="trow.row!.group === 'staged'" class="git-row-btn" :title="t('git.unstage')"
                     @click="unstageFile(trow.row!)">
-                    <el-icon :size="12"><Remove /></el-icon>
+                    <el-icon :size="12"><Subtract16Regular /></el-icon>
                   </button>
                   <button v-else class="git-row-btn" :title="t('git.stage')" @click="stageFile(trow.row!)">
-                    <el-icon :size="12"><Plus /></el-icon>
+                    <el-icon :size="12"><Add16Regular /></el-icon>
                   </button>
                 </span>
               </template>
@@ -278,6 +290,55 @@
         </template>
       </LiteSplitpanes>
     </div>
+
+    <!-- 提交弹窗（自定义 LDialog，极简卡片风格）：分支行 + 无边框输入 + 包含未暂存
+         + 统计 + 堆叠操作行（提交/提交并推送/推送）。无标题栏，点遮罩/Esc 关闭 -->
+    <LDialog v-model="commitDialogVisible" width="440px" append-to-body :show-close="false"
+      class="git-commit-dialog">
+      <div class="git-commit-form">
+        <!-- 分支行（仅展示当前分支，暂不支持下拉，故无箭头） -->
+        <div class="git-cd-branch">
+          <el-icon :size="16"><Branch20Regular /></el-icon>
+          <span class="git-cd-branch-name">{{ status?.branch || selectedBranch || '-' }}</span>
+        </div>
+        <!-- 提交信息：无边框极简输入 -->
+        <textarea v-model="commitMessage" class="git-cd-message" rows="6"
+          :placeholder="t('git.commitMessagePlaceholder')"
+          @keydown.ctrl.enter="submitCommit(false)" @keydown.meta.enter="submitCommit(false)"></textarea>
+        <!-- 包含未暂存（自定义 checkbox 行）+ 右侧统计 -->
+        <div class="git-cd-row">
+          <button type="button" class="git-cd-check" :class="{ checked: commitIncludeUnstaged }"
+            @click="commitIncludeUnstaged = !commitIncludeUnstaged">
+            <span class="git-cd-check-box">
+              <el-icon v-if="commitIncludeUnstaged" :size="10"><Check /></el-icon>
+            </span>
+            <span>{{ t('git.includeUnstaged') }}</span>
+          </button>
+          <span v-if="commitStats.add || commitStats.del" class="git-diff-stats git-cd-stats">
+            <span v-if="commitStats.add" class="git-stat-add">+{{ commitStats.add }}</span>
+            <span v-if="commitStats.del" class="git-stat-del">-{{ commitStats.del }}</span>
+          </span>
+        </div>
+        <!-- 堆叠操作行：提交（高亮 + Ctrl+↵ 提示）/ 提交并推送 / 推送（无领先提交时禁用） -->
+        <div class="git-cd-actions">
+          <button type="button" class="git-cd-action git-cd-action--primary" :disabled="committing"
+            @click="submitCommit(false)">
+            <el-icon :size="14"><BranchFork16Regular /></el-icon>
+            <span class="git-cd-action-label">{{ t('git.commit') }}</span>
+            <span class="git-cd-action-hint">Ctrl + ↵</span>
+          </button>
+          <button type="button" class="git-cd-action" :disabled="committing" @click="submitCommit(true)">
+            <el-icon :size="14"><ArrowUpload16Regular /></el-icon>
+            <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
+          </button>
+          <button type="button" class="git-cd-action" :disabled="committing || (status?.ahead ?? 0) === 0"
+            @click="handlePush">
+            <el-icon :size="14"><ArrowUpload16Regular /></el-icon>
+            <span class="git-cd-action-label">{{ t('git.push') }}</span>
+          </button>
+        </div>
+      </div>
+    </LDialog>
   </div>
 </template>
 
@@ -286,9 +347,13 @@ import { ref, computed, watch, nextTick, reactive, onMounted, onUnmounted } from
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, Plus, Remove, ArrowRight, Close } from "@element-plus/icons-vue";
-import { Branch20Regular, Search20Regular } from "@vicons/fluent";
+import { Refresh, ArrowRight, ArrowDown, Check, Close } from "@element-plus/icons-vue";
+import { Branch20Regular, BranchFork16Regular, Search20Regular, ArrowUpload16Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
 import { LiteSplitpanes } from "../../ui";
+import LDialog from "../../ui/LDialog.vue";
+import DropdownMenu from "../../ui/DropdownMenu.vue";
+import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
+import LTooltip from "../../ui/LTooltip.vue";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
 import type { GitStatus, GitFileChange, GitBranch, GitDiff } from "@/services/modules/git.api";
@@ -335,6 +400,9 @@ interface GitTreeRow {
   depth: number;
   isDir: boolean;
   row?: GitRow;
+  /** 目录行：子树中已暂存/未暂存文件数（+ / − 按钮显隐依据，文件行无此字段） */
+  stagedCount?: number;
+  unstagedCount?: number;
 }
 
 interface GitTreeNode {
@@ -343,6 +411,9 @@ interface GitTreeNode {
   isDir: boolean;
   row?: GitRow;
   children: GitTreeNode[];
+  /** 子树（含叶子）已暂存/未暂存文件数，目录聚合 */
+  stagedCount: number;
+  unstagedCount: number;
 }
 
 /** 单文件 diff 行数上限，防止大文件拖垮渲染 */
@@ -413,8 +484,10 @@ watch(bodyRef, (el) => {
  * pane1（diff 预览）百分比 = 100 - 目录宽百分比：
  * 目录固定像素宽（treePaneWidthPx），diff 弹性吃剩余空间，
  * 窗口缩放时优先压缩 diff 预览（规则不变）。
+ * 目录树隐藏（showTree=false）时返回 100 → LiteSplitpanes 折叠 pane2（diff 占满）。
  */
 const diffSplitPct = computed(() => {
+  if (!showTree.value) return 100;
   const cw = containerWidth.value;
   if (cw <= 0) return 70;
   const available = cw - 1; // 分割条 1px
@@ -447,6 +520,112 @@ const totalChanges = computed(() => status.value?.files.length || 0);
 
 /** 目录树搜索关键字 */
 const searchText = ref("");
+
+/** 树滚动容器引用（键盘导航聚焦/滚动用） */
+const treeScrollRef = ref<HTMLElement | null>(null);
+/** 树键盘高亮行 key（方向键移动、Enter 确认，对齐 VS Code） */
+const activeTreeKey = ref<string | null>(null);
+const treeFocused = ref(false);
+/** 行 DOM 引用表（滚动到可见用；普通 Map 即可，无需响应式） */
+const treeRowEls = new Map<string, HTMLElement>();
+
+function setTreeRowRef(key: string, el: unknown): void {
+  if (el) treeRowEls.set(key, el as HTMLElement);
+  else treeRowEls.delete(key);
+}
+
+/** 当前可见树行（含搜索过滤后的展示顺序，与模板 v-for 一致） */
+const visibleTreeRows = computed<GitTreeRow[]>(() =>
+  displayGroups.value.flatMap((g) => g.treeRows),
+);
+
+/** 设置高亮行并滚动到可见（nearest：尽量不动，越界才滚） */
+function setActiveTreeRow(row: GitTreeRow): void {
+  activeTreeKey.value = row.key;
+  treeRowEls.get(row.key)?.scrollIntoView({ block: "nearest" });
+}
+
+/** 树键盘导航：↑/↓ 移动高亮、Enter 确认（目录=折叠切换、文件=打开 diff）、Home/End 跳首尾 */
+function onTreeKeydown(e: KeyboardEvent): void {
+  const rows = visibleTreeRows.value;
+  if (!rows.length) return;
+  let idx = activeTreeKey.value
+    ? rows.findIndex((r) => r.key === activeTreeKey.value)
+    : -1;
+  // 无高亮行时回退到当前已打开文件，方便 Enter 直达
+  if (idx < 0 && selectedKey.value) {
+    idx = rows.findIndex((r) => r.key === selectedKey.value);
+  }
+  switch (e.key) {
+    case "ArrowDown":
+      e.preventDefault();
+      idx = idx < 0 ? 0 : Math.min(idx + 1, rows.length - 1);
+      setActiveTreeRow(rows[idx]);
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      idx = idx < 0 ? rows.length - 1 : Math.max(idx - 1, 0);
+      setActiveTreeRow(rows[idx]);
+      break;
+    case "Home":
+      e.preventDefault();
+      setActiveTreeRow(rows[0]);
+      break;
+    case "End":
+      e.preventDefault();
+      setActiveTreeRow(rows[rows.length - 1]);
+      break;
+    case "Enter":
+      e.preventDefault();
+      if (idx < 0) idx = 0;
+      const row = rows[idx];
+      if (!row) return;
+      if (row.isDir) toggleDir(row);
+      else if (row.row) selectRow(row.row);
+      break;
+  }
+}
+
+/** 点击树行：同步键盘高亮 + 聚焦树容器（后续方向键直接可用）+ 原有行为 */
+function onTreeRowClick(trow: GitTreeRow): void {
+  activeTreeKey.value = trow.key;
+  treeScrollRef.value?.focus({ preventScroll: true });
+  if (trow.isDir) toggleDir(trow);
+  else if (trow.row) selectRow(trow.row);
+}
+
+/** 右侧变更目录树显隐（持久化；隐藏时 LiteSplitpanes splitSize=100 → pane2 折叠） */
+const showTree = useStorage("guada-git-tree-visible", true);
+
+/** 各会话上次打开的文件 key（group:path）——切换会话回来恢复选中（持久化） */
+const sessionSelection = useStorage("guada-git-session-selection", {} as Record<string, string>);
+
+/** 提交弹窗状态 */
+const commitDialogVisible = ref(false);
+/** 提交时是否包含未暂存的更改（勾选 → 先全部暂存再提交，VS Code「全部提交」语义） */
+const commitIncludeUnstaged = ref(true);
+
+/** 全量变更统计：所有变更文件增删行数之和（顶部工具栏 +N -M 聚合显示） */
+const totalStats = computed<DiffStats>(() => {
+  let add = 0;
+  let del = 0;
+  for (const f of status.value?.files || []) {
+    add += f.additions || 0;
+    del += f.deletions || 0;
+  }
+  return { add, del };
+});
+
+/** 仅暂存统计（HEAD vs 暂存区）——提交弹窗未勾选「包含未暂存」时的实际提交量 */
+const stagedStats = computed<DiffStats>(() => ({
+  add: status.value?.stagedAdditions ?? 0,
+  del: status.value?.stagedDeletions ?? 0,
+}));
+
+/** 提交弹窗统计：随「包含未暂存」勾选切换（勾选 = 全部变更，否则 = 仅已暂存） */
+const commitStats = computed<DiffStats>(() =>
+  commitIncludeUnstaged.value ? totalStats.value : stagedStats.value,
+);
 
 /**
  * 搜索过滤后的分组树：匹配文件行（名称/路径包含关键字）+ 保留其祖先目录行，
@@ -550,7 +729,7 @@ function buildTree(rows: GitRow[]): GitTreeNode[] {
       cur = cur ? `${cur}/${parts[i]}` : parts[i];
       let node = map.get(cur);
       if (!node) {
-        node = { name: parts[i], path: cur, isDir: i < parts.length - 1, children: [] };
+        node = { name: parts[i], path: cur, isDir: i < parts.length - 1, children: [], stagedCount: 0, unstagedCount: 0 };
         map.set(cur, node);
         parent.push(node);
       }
@@ -558,8 +737,23 @@ function buildTree(rows: GitRow[]): GitTreeNode[] {
       parent = node.children;
     }
   }
+  aggregateCounts(roots);
   sortTree(roots);
   return roots;
+}
+
+/** 自底向上聚合子树内已暂存/未暂存文件数（目录行 + / − 按钮显隐依据） */
+function aggregateCounts(nodes: GitTreeNode[]): void {
+  for (const n of nodes) {
+    if (n.isDir) {
+      aggregateCounts(n.children);
+      n.stagedCount = n.children.reduce((s, c) => s + c.stagedCount, 0);
+      n.unstagedCount = n.children.reduce((s, c) => s + c.unstagedCount, 0);
+    } else {
+      n.stagedCount = n.row?.group === "staged" ? 1 : 0;
+      n.unstagedCount = n.row?.group !== "staged" ? 1 : 0;
+    }
+  }
 }
 
 function sortTree(nodes: GitTreeNode[]): void {
@@ -575,7 +769,10 @@ function flattenTree(nodes: GitTreeNode[], depth: number, groupKey: string, out:
   for (const n of nodes) {
     if (n.isDir) {
       const key = `d:${groupKey}:${n.path}`;
-      out.push({ key, path: n.path, name: n.name, depth, isDir: true });
+      out.push({
+        key, path: n.path, name: n.name, depth, isDir: true,
+        stagedCount: n.stagedCount, unstagedCount: n.unstagedCount,
+      });
       if (!collapsedDirs.value.has(key)) {
         flattenTree(n.children, depth + 1, groupKey, out);
       }
@@ -1073,16 +1270,24 @@ watch(
 /** 内容行数变化（gap 展开/收起、加载完成）后刷新滚动条上限与滑块 */
 watch([rowMetrics, uniMetrics], () => updateVScroll(), { flush: "post" });
 
-/** 切换选中文件：偏移复位到顶部、清空 gap 展开状态 */
+/** 切换选中文件：记录本会话打开的文件（切会话回来恢复）、偏移复位到顶部、清空 gap 展开状态 */
 watch(
   () => selectedKey.value,
   () => {
+    if (props.sessionId && selectedKey.value) {
+      sessionSelection.value[props.sessionId] = selectedKey.value;
+    }
     vScroll.offset = 0;
     applyColumnsTransform();
     gapExpanded.value = new Set();
     gapRows.value = {};
   },
 );
+
+/** 工具栏单按钮切换 unified/split（图标显示目标视图） */
+function toggleDiffView(): void {
+  diffView.value = diffView.value === "unified" ? "split" : "unified";
+}
 
 /** 切换 diff 视图：两种视图共用同一套滚动状态，切换即复位到顶部（布局不同，保留位置无意义）。
     必须同步 transform，否则 offset=0 而 transform 残留旧值 → 空白 */
@@ -1321,11 +1526,16 @@ function renderDiff(
 ): { lines: DiffLine[]; full: FullHighlight | null } {
   const lang = getLanguage(filePath);
 
-  // 二进制文件（图片等）：不渲染内容，只显示提示行
-  if (res.binary) {
+  // 二进制文件（图片等）/ 体积超限文件（单行极长的打包产物等）：不渲染内容，
+  // 显示居中提示行（binary 行复用 GitDiffRow 的居中占满样式）
+  if (res.binary || res.tooLarge) {
     return {
       lines: [
-        { type: "binary", sign: "", html: escapeHtml(t("git.binaryNotPreview")) },
+        {
+          type: "binary" as const,
+          sign: "",
+          html: escapeHtml(res.tooLarge ? t("git.fileTooLarge") : t("git.binaryNotPreview")),
+        },
       ],
       full: null,
     };
@@ -1567,17 +1777,27 @@ async function refresh(): Promise<void> {
     for (const g of groups.value) collectDirKeys(g.rows, g.key, validDirs);
     collapsedDirs.value = new Set([...collapsedDirs.value].filter((k) => validDirs.has(k)));
 
-    // 选中保持：路径仍在变更列表中则按新分组重新加载；否则清空
+    // 选中保持/恢复：
+    // 1) 当前选中路径仍在变更列表中 → 按新分组重载 diff；
+    // 2) 否则尝试恢复本会话上次打开的文件（切会话回来时选中已被清空）；
+    // 3) 都不存在 → 清空选中。
+    let target: GitRow | null = null;
     if (prevPath) {
       const f = res.files.find((ff) => ff.path === prevPath);
-      if (f) {
-        const c = classifyFile(f);
-        selectedKey.value = `${c.group}:${f.path}`;
-        diffLines.value = {};
-        void loadDiff({ file: f, ...c });
-      } else {
-        clearSelection();
-      }
+      if (f) target = { file: f, ...classifyFile(f) };
+    }
+    if (!target && props.sessionId && sessionSelection.value[props.sessionId]) {
+      // 缓存存的是 group:path，取 path 部分在当前状态中重查（分组可能已变化）
+      const cachedPath = sessionSelection.value[props.sessionId].split(":").slice(1).join(":");
+      const f = res.files.find((ff) => ff.path === cachedPath);
+      if (f) target = { file: f, ...classifyFile(f) };
+    }
+    if (target) {
+      selectedKey.value = `${target.group}:${target.file.path}`;
+      diffLines.value = {};
+      void loadDiff(target);
+    } else {
+      clearSelection();
     }
 
     if (res.isGitRepo) {
@@ -1616,14 +1836,41 @@ async function unstageFile(row: GitRow): Promise<void> {
   }
 }
 
-async function handleStageAll(): Promise<void> {
+/** 目录下所有文件行（分组内路径前缀匹配，聚合计数已保证数量正确） */
+function dirRows(group: GitGroup, trow: GitTreeRow): GitRow[] {
+  const prefix = trow.path + "/";
+  return group.rows.filter((r) => r.file.path.startsWith(prefix));
+}
+
+/** 暂存目录下全部变更文件（+ 按钮） */
+async function stageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
   if (!props.sessionId) return;
+  const paths = dirRows(group, trow)
+    .filter((r) => r.group !== "staged")
+    .map((r) => r.file.path);
+  if (!paths.length) return;
   markOwnGitWrite();
   try {
-    await apiService.gitStage(props.sessionId);
+    await apiService.gitStage(props.sessionId, paths);
     await refresh();
   } catch {
     ElMessage.error(t("git.stageFailed"));
+  }
+}
+
+/** 取消暂存目录下全部文件（− 按钮） */
+async function unstageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
+  if (!props.sessionId) return;
+  const paths = dirRows(group, trow)
+    .filter((r) => r.group === "staged")
+    .map((r) => r.file.path);
+  if (!paths.length) return;
+  markOwnGitWrite();
+  try {
+    await apiService.gitUnstage(props.sessionId, paths);
+    await refresh();
+  } catch {
+    ElMessage.error(t("git.unstageFailed"));
   }
 }
 
@@ -1642,27 +1889,50 @@ async function onBranchChange(branch: string): Promise<void> {
   await refresh();
 }
 
-async function handleCommit(): Promise<void> {
+/**
+ * 提交（弹窗内）：勾选「包含未暂存的更改」→ 先全部暂存再提交（VS Code「全部提交」语义）。
+ * push=true 时提交后接着推送。
+ */
+async function submitCommit(push: boolean): Promise<void> {
   const message = commitMessage.value.trim();
-  if (!message || !props.sessionId || committing.value) return;
+  if (!message) {
+    ElMessage.warning(t("git.commitMessageEmpty"));
+    return;
+  }
+  if (!props.sessionId || committing.value) return;
   markOwnGitWrite();
   committing.value = true;
   try {
-    const st = status.value;
-    const stagedCount =
-      st?.files.filter((f) => f.index.trim() && f.index.trim() !== "?").length || 0;
-    // 无暂存内容时自动全部暂存再提交（VS Code「全部提交」语义）
-    if (stagedCount === 0) {
+    if (commitIncludeUnstaged.value) {
       await apiService.gitStage(props.sessionId);
     }
     await apiService.gitCommit(props.sessionId, message);
-    ElMessage.success(t("git.commitSuccess"));
+    if (push) await apiService.gitPush(props.sessionId);
+    ElMessage.success(t(push ? "git.commitPushSuccess" : "git.commitSuccess"));
     commitMessage.value = "";
+    commitDialogVisible.value = false;
     clearSelection();
     await refresh();
   } catch (e: any) {
-    ElMessage.error(t("git.commitFailed", { msg: e?.message || "" }));
+    ElMessage.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: e?.message || "" }));
     await refresh();
+  } finally {
+    committing.value = false;
+  }
+}
+
+/** 仅推送当前分支 */
+async function handlePush(): Promise<void> {
+  if (!props.sessionId || committing.value) return;
+  markOwnGitWrite();
+  committing.value = true;
+  try {
+    await apiService.gitPush(props.sessionId);
+    ElMessage.success(t("git.pushSuccess"));
+    commitDialogVisible.value = false;
+    await refresh();
+  } catch (e: any) {
+    ElMessage.error(t("git.pushFailed", { msg: e?.message || "" }));
   } finally {
     committing.value = false;
   }
@@ -1677,6 +1947,8 @@ watch(
     commitMessage.value = "";
     clearSelection();
     collapsedDirs.value = new Set();
+    activeTreeKey.value = null;
+    treeFocused.value = false;
     if (props.sessionId) void refresh();
   },
   { immediate: true },
@@ -1694,19 +1966,21 @@ defineExpose({ refresh });
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-gray);
   cursor: pointer;
   flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
+/* hover/active 参考标签栏 seg-btn：hover 用侧栏 hover 底、active 用侧栏 active 底，文字色不变 */
 .git-tool-btn:hover:not(:disabled) {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
+  background: var(--color-sidebar-bg-hover);
+  color: var(--color-text);
 }
 
 .git-tool-btn:disabled {
@@ -1716,6 +1990,239 @@ defineExpose({ refresh });
 
 .git-tool-btn .is-loading {
   animation: git-spin 1s linear infinite;
+}
+
+/* ── 顶部工具栏（单行紧凑，简洁风格：扁平无边框 + 微悬停底） ── */
+.git-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+/* 分支 chip：无边框扁平按钮 + DropdownMenu 下拉（替代 el-select 原生样式） */
+.git-branch-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: var(--size-text-sm);
+  cursor: pointer;
+  max-width: 200px;
+  transition: background 0.15s ease;
+}
+.git-branch-chip:hover:not(:disabled) {
+  background: var(--color-sidebar-bg-hover);
+}
+.git-branch-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.git-branch-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-branch-chip-chevron {
+  color: var(--color-text-disabled);
+  flex-shrink: 0;
+}
+
+/* 分支下拉菜单：限高滚动，选中项 ✓ 列对齐 */
+.git-branch-menu {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.git-branch-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 140px;
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: var(--size-text-sm);
+}
+.git-branch-menu-check {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+.git-branch-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-toolbar-stats {
+  font-size: 12px;
+}
+
+.git-toolbar-ab {
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  white-space: nowrap;
+}
+
+/* 目录树开关激活态：对齐标签栏 seg-btn.active —— 仅背景高亮，文字颜色不变 */
+.git-tool-btn--active {
+  color: var(--color-text);
+  background: var(--color-sidebar-bg-active);
+}
+
+/* 提交按钮：胶囊（图片同款白底细边圆角 pill） */
+.git-commit-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.git-commit-btn:hover:not(:disabled) {
+  background: var(--color-sidebar-bg-hover);
+}
+.git-commit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── 提交弹窗（极简卡片风格，对齐参考图） ── */
+.git-commit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* LDialog body 默认 padding 12px：收紧为卡片内边距 */
+.git-commit-dialog :deep(.l-dialog__body) {
+  padding: 12px 12px 10px;
+  overflow: visible;
+}
+
+/* 分支行：图标 + 等宽分支名（仅展示当前分支） */
+.git-cd-branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: var(--size-text-sm);
+  color: var(--color-text);
+}
+.git-cd-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 提交信息：无边框极简输入（图片同款，只有光标提示） */
+.git-cd-message {
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 2px;
+  font-size: var(--size-text-sm);
+  line-height: 1.5;
+  font-family: inherit;
+  color: var(--color-text);
+}
+.git-cd-message::placeholder {
+  color: var(--color-text-disabled);
+}
+
+/* 复选行 + 右侧统计 */
+.git-cd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.git-cd-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  font-size: var(--size-text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+.git-cd-check-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.git-cd-check.checked .git-cd-check-box {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.git-cd-stats {
+  font-size: var(--size-text-sm);
+}
+
+/* 堆叠操作行：提交（浅灰底高亮 + Ctrl+↵ 提示）/ 提交并推送 / 推送 */
+.git-cd-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+.git-cd-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: var(--size-text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+.git-cd-action:hover:not(:disabled) {
+  background: var(--color-sidebar-bg-hover);
+}
+.git-cd-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.git-cd-action--primary {
+  background: var(--color-surface-hover);
+}
+.git-cd-action--primary:hover:not(:disabled) {
+  background: var(--color-conversation-bg-active);
+}
+.git-cd-action-label {
+  flex: 1;
+}
+.git-cd-action-hint {
+  font-size: 11px;
+  color: var(--color-text-disabled);
 }
 
 @keyframes git-spin {
@@ -1731,7 +2238,7 @@ defineExpose({ refresh });
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-gray);
   padding: 8px 12px 4px;
 }
 
@@ -1808,7 +2315,7 @@ defineExpose({ refresh });
 .git-diff-split-col-divider {
   flex-shrink: 0;
   width: 1px;
-  background: var(--el-border-color-lighter);
+  background: var(--color-surface-border);
 }
 
 /* 统一竖向滚动条：两列纵向滚动的单一控制入口（拖滑块/点轨道 → JS 同步两列）。
@@ -1826,7 +2333,7 @@ defineExpose({ refresh });
   left: 2px;
   right: 2px;
   border-radius: 3px;
-  background: var(--el-border-color);
+  background: var(--color-border);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -1836,7 +2343,7 @@ defineExpose({ refresh });
 .git-diff-vscroll-thumb.dragging,
 /* 轨道聚焦时滑块提亮（键盘可操作指示） */
 .git-diff-vscroll.focused .git-diff-vscroll-thumb {
-  background: var(--el-text-color-placeholder);
+  background: var(--color-text-disabled);
 }
 
 /* 拖拽遮罩：全屏，阻止其他元素响应（原生滚动条拖拽时鼠标捕获，其他元素不响应） */
@@ -1847,40 +2354,9 @@ defineExpose({ refresh });
   cursor: grabbing;
 }
 
-/* ── 拆分视图 ── */
-.git-diff-view-toggle {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex-shrink: 0;
-}
-
-.git-diff-view-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 20px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--el-text-color-secondary);
-  cursor: pointer;
-}
-
-.git-diff-view-btn:hover {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
-}
-
-.git-diff-view-btn.active {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-}
-
 /* ── 右栏：变更文件目录树 ── */
 .git-body {
-  border-top: 1px solid var(--el-border-color-lighter);
+  border-top: 1px solid var(--color-surface-border);
 }
 
 .git-tree-pane {
@@ -1904,7 +2380,7 @@ defineExpose({ refresh });
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg);
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
 }
 
 .git-tree-search-input {
@@ -1914,11 +2390,11 @@ defineExpose({ refresh });
   outline: none;
   background: transparent;
   font-size: 13px;
-  color: var(--el-text-color-primary);
+  color: var(--color-text);
 }
 
 .git-tree-search-input::placeholder {
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
 }
 
 .git-tree-search-clear {
@@ -1930,14 +2406,14 @@ defineExpose({ refresh });
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .git-tree-search-clear:hover {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 /* 树列表滚动区（搜索框保持固定） */
@@ -1975,7 +2451,7 @@ defineExpose({ refresh });
   background-image: repeating-linear-gradient(
     to right,
     transparent 0 6px,
-    var(--el-border-color-lighter) 6px 7px,
+    var(--color-surface-border) 6px 7px,
     transparent 7px 14px
   );
   pointer-events: none;
@@ -1986,13 +2462,24 @@ defineExpose({ refresh });
   background: var(--color-sidebar-bg-hover);
 }
 
+/* 树键盘导航高亮行：方向键移动（VS Code 风格），无需鼠标悬停即可见；
+   与 hover 区分：用对话高亮底色，避免与悬停完全同色分不清焦点在哪 */
+.git-tree-row--active {
+  background: var(--color-conversation-bg-active);
+}
+
+/* 树滚动容器可聚焦（键盘导航），去掉聚焦外框 */
+.git-tree-scroll:focus {
+  outline: none;
+}
+
 .git-tree-row--dir {
   font-weight: 500;
-  color: var(--el-text-color-primary);
+  color: var(--color-text);
 }
 
 .git-tree-row--partial .git-tree-name {
-  color: var(--el-color-warning);
+  color: var(--color-warning);
 }
 
 /* 选中行：与 hover 同一颜色（--color-sidebar-bg-hover，微透明），不加深 */
@@ -2002,7 +2489,7 @@ defineExpose({ refresh });
 
 .git-tree-chevron {
   flex-shrink: 0;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
   transition: transform 0.15s ease;
 }
 
@@ -2015,7 +2502,7 @@ defineExpose({ refresh });
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--el-text-color-primary);
+  color: var(--color-text);
 }
 
 .git-status {
@@ -2027,11 +2514,11 @@ defineExpose({ refresh });
   flex-shrink: 0;
 }
 
-.git-status--modified { color: var(--el-color-warning); }
-.git-status--added { color: var(--el-color-success); }
-.git-status--deleted { color: var(--el-color-danger); }
-.git-status--renamed { color: var(--el-color-primary); }
-.git-status--conflict { color: var(--el-color-danger); }
+.git-status--modified { color: var(--color-warning); }
+.git-status--added { color: var(--color-success); }
+.git-status--deleted { color: var(--color-danger); }
+.git-status--renamed { color: var(--color-primary); }
+.git-status--conflict { color: var(--color-danger); }
 
 .git-row-actions {
   display: none;
@@ -2053,13 +2540,13 @@ defineExpose({ refresh });
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-gray);
   cursor: pointer;
 }
 
 .git-row-btn:hover {
-  background: var(--el-fill-color-dark);
-  color: var(--el-text-color-primary);
+  background: var(--color-conversation-bg-active);
+  color: var(--color-text);
 }
 
 /* ── 左栏：diff 预览 ── */
@@ -2093,7 +2580,7 @@ defineExpose({ refresh });
   text-align: center;
   padding: 0 16px;
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
   user-select: none;
 }
 
@@ -2124,7 +2611,7 @@ defineExpose({ refresh });
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   /* 字体用全局文本基准 --size-text-base（15px） */
   font-size: var(--size-text-base);
-  color: var(--el-text-color-primary);
+  color: var(--color-text);
 }
 
 .git-diff-close {
@@ -2136,7 +2623,7 @@ defineExpose({ refresh });
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-gray);
   cursor: pointer;
   flex-shrink: 0;
   /* 固定在标题栏最右端 */
@@ -2144,8 +2631,8 @@ defineExpose({ refresh });
 }
 
 .git-diff-close:hover {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 /* ── diff 统计徽标 +N -M（紧跟标题文字，字体大小与标题统一） ── */
@@ -2174,7 +2661,7 @@ html.dark .git-stat-del { color: #f85149; }
   padding: 0 12px 0 8px;
   font-size: 12px;
   line-height: 20px;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-disabled);
 }
 
 /* 字体与行高两种视图共用（拆出行号大小不一致的根源：统一 12px/20px，

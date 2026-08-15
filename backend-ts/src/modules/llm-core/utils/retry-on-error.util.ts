@@ -16,6 +16,10 @@ import {
   UpstreamRequestError,
 } from "./upstream-errors";
 import { getRetryAfterFromError } from "./retry.util";
+import { createAbortError } from "./abort-error.util";
+
+// 统一的中止错误工厂（复用，避免各层 new Error("AbortError") 导致 name 判断失效）
+export { createAbortError };
 
 // ==================== Types ====================
 
@@ -68,13 +72,13 @@ export function computeRetryDelayMs(attempt: number, error: any): number {
  */
 export function retrySleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
   if (abortSignal?.aborted) {
-    return Promise.reject(new Error("LLM request aborted"));
+    return Promise.reject(createAbortError("LLM request aborted"));
   }
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new Error("LLM request aborted"));
+      reject(createAbortError("LLM request aborted"));
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
   });

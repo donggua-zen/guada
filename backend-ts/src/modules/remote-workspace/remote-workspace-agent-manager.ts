@@ -131,9 +131,23 @@ export class RemoteAgentManager {
 
     // Check cache
     const cached = this.cache.get(cacheKey);
+    // 缓存命中但底层 WebSocket 已断开 → 视为失效,清理并重建
     if (cached && !cached.busy) {
-      cached.lastActive = Date.now();
-      return new RemoteAgent(cached.rpc, conn.config);
+      if (cached.ws.readyState !== WebSocket.OPEN) {
+        this.logger.warn(
+          `Agent connection '${cacheKey}' ws closed, reconnecting...`,
+        );
+        try {
+          cached.ws.close();
+        } catch {}
+        try {
+          cached.sshClient?.end();
+        } catch {}
+        this.cache.delete(cacheKey);
+      } else {
+        cached.lastActive = Date.now();
+        return new RemoteAgent(cached.rpc, conn.config);
+      }
     }
 
     // Deploy + connect
@@ -146,6 +160,15 @@ export class RemoteAgentManager {
       lastActive: Date.now(),
     };
     this.cache.set(cacheKey, cached2);
+    // 断线时自动清理该缓存,使下次调用走重建路径(自动恢复)
+    connInfo.rpc.onDisconnect(() => {
+      if (this.cache.get(cacheKey) === cached2) {
+        this.logger.warn(
+          `Agent connection '${cacheKey}' disconnected, removing from cache`,
+        );
+        this.cache.delete(cacheKey);
+      }
+    });
     return new RemoteAgent(cached2.rpc, conn.config);
   }
 

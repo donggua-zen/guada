@@ -12,6 +12,10 @@ export interface GitFileChange {
   index: string;
   /** 工作区状态：A/M/D/R/U，"" 表示无变更，"?" 表示未跟踪 */
   workingDir: string;
+  /** 新增行数（tracked=HEAD vs 工作区；未跟踪=全文行数；二进制=0） */
+  additions: number;
+  /** 删除行数 */
+  deletions: number;
 }
 
 export interface GitStatusResult {
@@ -19,6 +23,9 @@ export interface GitStatusResult {
   ahead: number;
   behind: number;
   files: GitFileChange[];
+  /** 仅暂存区的增删行数（HEAD vs 暂存区）——提交弹窗未勾选「包含未暂存」时的提交量 */
+  stagedAdditions: number;
+  stagedDeletions: number;
 }
 
 export interface GitFileLinesResult {
@@ -44,10 +51,26 @@ export interface GitDiffResult {
   newContent?: string;
   /** 该文件为二进制（图片/压缩包/媒体等），不支持文本预览 */
   binary?: boolean;
+  /** 文件体积超限（总体积 > 2MB 或含超长行 > 4KB），拒绝预览 */
+  tooLarge?: boolean;
 }
 
 /** 附带全文内容的体积上限（每侧）：超出则省略，前端降级为 hunk 级高亮 + gap 后端展开 */
 const MAX_FULL_CONTENT_BYTES = 512 * 1024;
+/** 未跟踪文件行数统计的体积上限（超出不计数，避免读大文件） */
+const MAX_STAT_BYTES = 1024 * 1024;
+/**
+ * 预览总体积兜底上限（2MB）：超过则拒绝预览。多行大文件（package-lock / 大 i18n /
+ * 生成的 .d.ts 等）行都很短，由 MAX_DIFF_LINES=800 + 虚拟化 + 降级高亮正常预览，
+ * 此处只拦「无论如何都不可能预览」的巨型文件。
+ */
+const MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
+/**
+ * 单行长度上限（4KB）：普通代码行 <300B，4KB 已远超任何正常行；
+ * minified/打包产物/内嵌 base64 等「一行极长」文件的特征 —— 这才是拖垮
+ * 高亮与 DOM 布局的真正病根（按行数/总大小都拦不住），命中即拒绝预览。
+ */
+const MAX_PREVIEW_LINE_BYTES = 4 * 1024;
 
 /** 常见二进制扩展名：命中即不预览（避免读取/展示乱码） */
 const BINARY_EXTENSIONS = new Set<string>([
@@ -79,6 +102,36 @@ function hasNulByte(buf: Buffer): boolean {
 /** git 自身对已跟踪二进制文件的 diff 输出特征 */
 function isBinaryDiff(diff: string): boolean {
   return diff.startsWith("Binary files") || diff.includes("GIT binary patch");
+}
+
+/** Buffer 中是否存在超长行（按字节计，不转字符串，快路径先判总长） */
+function bufferHasTooLongLine(buf: Buffer, maxBytes: number): boolean {
+  if (buf.length <= maxBytes) return false;
+  let start = 0;
+  for (let i = 0; i <= buf.length; i++) {
+    if (i === buf.length || buf[i] === 10 /* \n */) {
+      if (i - start > maxBytes) return true;
+      start = i + 1;
+    }
+  }
+  return false;
+}
+
+/** diff 文本中是否存在超长内容行（+/-/空格开头的行；排除 +++/---/@@ 元行） */
+function diffHasTooLongLine(diff: string, maxBytes: number): boolean {
+  for (const line of diff.split("\n")) {
+    const c = line.charCodeAt(0);
+    if (
+      (c === 43 /* + */ || c === 45 /* - */ || c === 32 /* 空格 */) &&
+      !line.startsWith("+++") &&
+      !line.startsWith("---") &&
+      !line.startsWith("@@") &&
+      Buffer.byteLength(line, "utf-8") > maxBytes
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -125,20 +178,95 @@ export class GitService {
     const git = this.getGit(workspacePath);
     markGitRead(); // 读命令打点：抑制 .git watcher 对本命令引发的 index 刷新噪声
     const status = await git.status();
+
+    // 行数统计（顶部聚合 +N -M 用）：
+    // - tracked 文件：git diff HEAD --numstat -z（HEAD vs 工作区，一次命令覆盖暂存+未暂存；
+    //   -z 输出 NUL 分隔、路径不转义，与 status 的 path 对齐）
+    // - 未跟踪文件：直接读文件数行数（体积上限内）
+    // - 二进制（numstat 为 "-\t-"）计 0/0
+    const numstatMap = new Map<string, { add: number; del: number }>();
+    try {
+      const raw = await git.raw(["diff", "HEAD", "--numstat", "-z"]);
+      for (const entry of raw.split("\0")) {
+        const m = entry.match(/^(\d+|-)\t(\d+|-)\t(.+)$/s);
+        if (!m) continue;
+        numstatMap.set(m[3], {
+          add: m[1] === "-" ? 0 : parseInt(m[1], 10),
+          del: m[2] === "-" ? 0 : parseInt(m[2], 10),
+        });
+      }
+    } catch {
+      // HEAD 不存在（空仓库）等情况：无统计，保持 0/0
+    }
+
+    const files = await Promise.all(
+      status.files
+        // 过滤目录级条目（嵌入式仓库/未跟踪目录/子模块），diff 树只保留可预览的文件
+        .filter((f) => !isSkipStatusEntry(workspacePath, f.path))
+        .map(async (f) => {
+          const change: GitFileChange = {
+            path: f.path,
+            // simple-git 无变更时返回单个空格 " "，统一 trim 为空字符串
+            index: f.index.trim(),
+            workingDir: f.working_dir.trim(),
+            additions: 0,
+            deletions: 0,
+          };
+          if (change.index === "?" && change.workingDir === "?") {
+            // 未跟踪：全新增，行数 = 文件行数
+            change.additions = await this.countFileLines(
+              path.resolve(workspacePath, f.path),
+            );
+          } else {
+            const st = numstatMap.get(f.path);
+            if (st) {
+              change.additions = st.add;
+              change.deletions = st.del;
+            }
+          }
+          return change;
+        }),
+    );
+
+    // 已暂存统计（提交弹窗勾选状态切换用）：git diff --cached = HEAD vs 暂存区
+    let stagedAdd = 0;
+    let stagedDel = 0;
+    try {
+      const stagedRaw = await git.raw(["diff", "--cached", "--numstat", "-z"]);
+      for (const entry of stagedRaw.split("\0")) {
+        const m = entry.match(/^(\d+|-)\t(\d+|-)\t(.+)$/s);
+        if (!m) continue;
+        stagedAdd += m[1] === "-" ? 0 : parseInt(m[1], 10);
+        stagedDel += m[2] === "-" ? 0 : parseInt(m[2], 10);
+      }
+    } catch {
+      // 空仓库等情况：0/0
+    }
+
     return {
       branch: status.current,
       ahead: status.ahead,
       behind: status.behind,
-      files: status.files
-        // 过滤目录级条目（嵌入式仓库/未跟踪目录/子模块），diff 树只保留可预览的文件
-        .filter((f) => !isSkipStatusEntry(workspacePath, f.path))
-        .map((f) => ({
-          path: f.path,
-          // simple-git 无变更时返回单个空格 " "，统一 trim 为空字符串
-          index: f.index.trim(),
-          workingDir: f.working_dir.trim(),
-        })),
+      files,
+      stagedAdditions: stagedAdd,
+      stagedDeletions: stagedDel,
     };
+  }
+
+  /** 数文件行数（未跟踪文件的增行统计用）：超体积上限/二进制/读取失败 → 0 */
+  private async countFileLines(absPath: string): Promise<number> {
+    try {
+      const buf = await fsp.readFile(absPath);
+      if (buf.length > MAX_STAT_BYTES || hasNulByte(buf)) return 0;
+      const text = buf.toString("utf-8");
+      if (!text) return 0;
+      const lines = text.split("\n");
+      // 末尾换行产生的空尾巴不算一行
+      if (lines[lines.length - 1] === "") lines.pop();
+      return lines.length;
+    } catch {
+      return 0;
+    }
   }
 
   async getBranches(workspacePath: string) {
@@ -158,6 +286,13 @@ export class GitService {
     const git = this.getGit(workspacePath);
     await git.checkout(branch);
     return { success: true, branch };
+  }
+
+  /** 推送当前分支到远端（simple-git push，失败信息原样抛出由前端展示） */
+  async push(workspacePath: string) {
+    const git = this.getGit(workspacePath);
+    await git.push();
+    return { success: true };
   }
 
   async commit(workspacePath: string, message: string, files?: string[]) {
@@ -210,6 +345,10 @@ export class GitService {
       const diff = await git.diff(["--cached", "--", filePath]);
       const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
       if (binary) return { type: "diff", path: filePath, diff, binary };
+      // 新侧（暂存区）体积上限检查：cat-file -s 只读大小不读内容
+      if (await this.versionTooLarge(git, `:${filePath}`)) {
+        return { type: "diff", path: filePath, tooLarge: true };
+      }
       // staged diff = HEAD vs 暂存区：附带两侧全文（前端全文高亮 + gap 本地展开）
       const [oldContent, newContent] = await Promise.all([
         this.showCapped(git, `HEAD:${filePath}`),
@@ -229,6 +368,10 @@ export class GitService {
       if (entry && entry.index === "?" && entry.working_dir === "?") {
         // 先读 Buffer 嗅探二进制：utf-8 直读会把二进制内容解码成乱码替换符
         const buf = await fsp.readFile(absPath);
+        // 体积上限：超大未跟踪文件直接拒绝预览
+        if (buf.length > MAX_PREVIEW_BYTES) {
+          return { type: "new-file", path: filePath, tooLarge: true };
+        }
         const binary = isBinaryPath(filePath) || hasNulByte(buf);
         const content = binary ? undefined : buf.toString("utf-8");
         return {
@@ -249,11 +392,29 @@ export class GitService {
     const diff = await git.diff(["--", filePath]);
     const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
     if (binary) return { type: "diff", path: filePath, diff, binary };
+    // 工作区新侧体积上限检查（已删除的文件跳过——diff 只剩删除行，量小）
+    try {
+      if (fs.statSync(absPath).size > MAX_PREVIEW_BYTES) {
+        return { type: "diff", path: filePath, tooLarge: true };
+      }
+    } catch {
+      // 工作区已删除：不检查体积
+    }
     const [oldContent, newContent] = await Promise.all([
       this.showCapped(git, `:${filePath}`, `HEAD:${filePath}`),
       this.readWorkingTreeCapped(absPath),
     ]);
     return { type: "diff", path: filePath, diff, oldContent, newContent };
+  }
+
+  /** 检查某版本文件是否超过预览体积上限（git cat-file -s，只读大小不读内容） */
+  private async versionTooLarge(git: SimpleGit, spec: string): Promise<boolean> {
+    try {
+      const size = await git.raw(["cat-file", "-s", spec]);
+      return parseInt(size.trim(), 10) > MAX_PREVIEW_BYTES;
+    } catch {
+      return false; // 该版本不存在（新增文件等）
+    }
   }
 
   /**

@@ -1,4 +1,5 @@
 import { LLMResponseChunk } from "../../llm-core/types/llm.types";
+import { createAbortError } from "../../llm-core/utils/retry-on-error.util";
 
 /**
  * 流式输出限流器
@@ -183,7 +184,7 @@ export async function* throttledStream(
         if (finalChunk) {
           yield finalChunk;
         }
-        throw new Error("AbortError");
+        throw createAbortError();
       }
 
       // 竞争：等待下一个 chunk 或定时器到期

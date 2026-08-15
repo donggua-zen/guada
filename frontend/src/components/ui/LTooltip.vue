@@ -12,10 +12,11 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import {
   showTooltip,
   hideTooltip,
+  refreshTooltip,
   type TooltipPlacement,
   type TooltipEffect,
 } from './tooltip'
@@ -43,6 +44,17 @@ function onMouseEnter(): void {
 function onMouseLeave(): void {
   hideTooltip()
 }
+
+// content 变化且 tooltip 当前正显示（如点击切换按钮后文案变化但鼠标未移开）：
+// 立即刷新文本并重定位，无需重新 hover
+watch(
+  () => props.content,
+  () => {
+    if (triggerRef.value) {
+      refreshTooltip(triggerRef.value, props.content, props.placement, props.effect)
+    }
+  },
+)
 
 onUnmounted(() => {
   hideTooltip()
