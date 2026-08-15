@@ -6,7 +6,7 @@
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
                 <LTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
-                  <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: !isPreviewMode }"
+                  <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: panelMode === 'tree' }"
                       @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
                       <el-icon :size="20">
                           <Folder16Regular />
@@ -14,17 +14,25 @@
                   </button>
                 </LTooltip>
                 <LTooltip :content="t('chat.workspace.previewArea')" placement="bottom">
-                  <button class="seg-btn" :class="{ active: isPreviewMode }" :disabled="!props.sessionId"
+                  <button class="seg-btn" :class="{ active: panelMode === 'preview' }" :disabled="!props.sessionId"
                       @click="enterPreviewMode">
                       <el-icon :size="20">
                           <Window16Regular />
                       </el-icon>
                   </button>
                 </LTooltip>
+                <LTooltip :content="t('git.title')" placement="bottom">
+                  <button class="seg-btn" :class="{ active: panelMode === 'git' }" :disabled="!props.sessionId"
+                      @click="enterGitMode">
+                      <el-icon :size="20">
+                          <Branch20Regular />
+                      </el-icon>
+                  </button>
+                </LTooltip>
             </div>
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
-            <div ref="tabBarRef" v-if="isPreviewMode && tabs.length > 0"
+            <div ref="tabBarRef" v-if="panelMode === 'preview' && tabs.length > 0"
                 class="flex items-center gap-0.5 min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
                 @wheel="onTabBarWheel">
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
@@ -87,17 +95,19 @@
             <WindowControls v-if="isElectron" class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <div :class="treeContainerClass" :style="isPreviewMode && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
+        <GitChangesPanel v-show="panelMode === 'git' && !!props.sessionId" ref="gitPanelRef"
+            :session-id="props.sessionId" class="flex-1 min-h-0" />
+        <div :class="treeContainerClass" :style="panelMode === 'preview' && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
             @mouseleave="hideTreePanel">
             <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
             <SessionBrowserWindowList v-if="isElectron && browserStore.sessionWebviews.length > 0"
-                v-show="!isPreviewMode" :session-id="props.sessionId"
+                v-show="panelMode !== 'preview'" :session-id="props.sessionId"
                 @activate="handleBrowserWindowActivate" @close="handleBrowserWindowClose"
                 @create="createNewBrowserWindow" />
-            <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="!isPreviewMode"
+            <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="panelMode !== 'preview'"
                 class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
             <!-- 待办事项列表 -->
-            <SessionTodoList v-show="!isPreviewMode" :session-id="props.sessionId" />
+            <SessionTodoList v-show="panelMode !== 'preview'" :session-id="props.sessionId" />
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -143,14 +153,14 @@
         </div>
 
         <!-- 浏览器窗口预览占位（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
-        <BrowserPreviewPlaceholder v-if="isElectron" v-show="isPreviewMode && !!browserStore.activeWindowId" />
+        <BrowserPreviewPlaceholder v-if="isElectron" v-show="panelMode === 'preview' && !!browserStore.activeWindowId" />
 
         <!-- 文件预览面板（visibility:hidden 持久化，DOM 不销毁且保留滚动位置，含跨域 iframe） -->
         <template v-if="sessionId">
             <FilePreviewPanel v-for="tab in fileTabs" :key="tab.key"
-                :class="{ 'panel-hidden': !(isPreviewMode && activeTabKey === tab.key && !browserStore.activeWindowId) }"
+                :class="{ 'panel-hidden': !(panelMode === 'preview' && activeTabKey === tab.key && !browserStore.activeWindowId) }"
                 :session-id="sessionId" :tab="tab"
-                :is-active="isPreviewMode && activeTabKey === tab.key && !browserStore.activeWindowId"
+                :is-active="panelMode === 'preview' && activeTabKey === tab.key && !browserStore.activeWindowId"
                 :content-version="fileChangeVersions[tab.path!] || 0"
                 :workspace-path="currentWorkspacePath"
                 @close="closeTab(tab)"
@@ -159,7 +169,7 @@
         </template>
 
         <!-- 空状态页（预览模式但无激活标签时显示） -->
-        <div v-if="isPreviewMode && !activeTabKey"
+        <div v-if="panelMode === 'preview' && !activeTabKey"
             class="flex flex-col items-center justify-center h-full w-full flex-1">
             <div class="text-center">
                 <svg class="w-12 h-12 mx-auto mb-3 text-gray-200 dark:text-[#3a3c40]" viewBox="0 0 24 24" fill="none"
@@ -202,7 +212,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, Branch20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
@@ -212,6 +222,7 @@ import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import SessionTodoList from './SessionTodoList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
+import GitChangesPanel from './GitChangesPanel.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import { useLayoutStore } from '@/stores/layout';
 import { useTabStore } from '@/stores/tab';
@@ -356,7 +367,8 @@ function onTabDblClick(tab: UnifiedTab): void {
 }
 
 // ── 悬浮目录树面板 ──
-const isPreviewMode = computed(() => tabStore.isPreviewMode);
+const panelMode = computed(() => layoutStore.workspacePanelMode);
+const gitPanelRef = ref<InstanceType<typeof GitChangesPanel> | null>(null);
 const tabs = computed(() => tabStore.tabs);
 const activeTabKey = computed(() => tabStore.activeTabKey);
 const isTreePanelVisible = ref(false);
@@ -390,7 +402,11 @@ function updateTreePanelPosition() {
 const treePhase1Hide = ref(false);
 
 const treeContainerClass = computed(() => {
-    if (!isPreviewMode.value) {
+    if (panelMode.value === 'git') {
+        // Git 模式下隐藏目录树区域（absolute + visibility:hidden，不触发布局）
+        return 'tree-hidden-preview';
+    }
+    if (panelMode.value !== 'preview') {
         return 'h-full flex flex-col flex-1 min-h-0';
     }
     if (treePhase1Hide.value) {
@@ -406,7 +422,8 @@ const treeContainerClass = computed(() => {
 });
 
 function showTreePanel() {
-    if (!isPreviewMode.value) return;
+    if (panelMode.value === 'git') return;
+    if (panelMode.value !== 'preview') return;
     if (treeHideTimer) {
         clearTimeout(treeHideTimer);
         treeHideTimer = null;
@@ -420,7 +437,7 @@ function showTreePanel() {
 }
 
 function hideTreePanel() {
-    if (!isPreviewMode.value) return;
+    if (panelMode.value !== 'preview') return;
     if (treeShowTimer) {
         clearTimeout(treeShowTimer);
         treeShowTimer = null;
@@ -431,8 +448,8 @@ function hideTreePanel() {
     }, 1000);
 }
 
-watch(isPreviewMode, (preview) => {
-    if (!preview) {
+watch(panelMode, (mode) => {
+    if (mode !== 'preview') {
         isTreePanelVisible.value = false;
         treeTransitionReady.value = false;
         treePhase1Hide.value = false;
@@ -486,14 +503,22 @@ function onTabBarWheel(e: WheelEvent): void {
     el.scrollLeft += e.deltaY;
 }
 
-/** 点击工作区按钮：退出预览模式 */
+/** 点击工作区按钮：退出预览模式 + 退出 Git 模式（回到目录树） */
 function showFileTree(): void {
     tabStore.exitPreviewMode()
+    tabStore.exitGitMode()
 }
 
-/** 点击预览区按钮：进入预览模式 */
+/** 点击预览区按钮：进入预览模式（自动退出 Git 模式） */
 function enterPreviewMode(): void {
     tabStore.enterPreviewMode()
+}
+
+/** 点击 Git 按钮：进入 Git 变更面板（复用预览宽度，不触发预览逻辑） */
+function enterGitMode(): void {
+    tabStore.enterGitMode()
+    // 进入时立即刷新，避免挂载早于变化事件导致数据过期
+    void gitPanelRef.value?.refresh();
 }
 
 /** 取消所有标签选中，显示空状态页 */
@@ -524,15 +549,15 @@ watch(() => browserStore.sessionWebviews.map(w =>
 function savePreviewCache(): void {
     if (!props.sessionId) return;
     previewTabCache.saveSession(props.sessionId, {
-        isPreviewMode: isPreviewMode.value,
+        mode: panelMode.value,
         activeTabKey: tabStore.activeTabKey,
         tabs: tabStore.tabs.map(t => ({ ...t })),
     });
 }
 
-// 自动保存：当预览状态、标签列表、激活标签变化时
+// 自动保存：当面板模式、标签列表、激活标签变化时
 let isRestoring = false;
-watch([isPreviewMode, () => tabStore.activeTabKey, () => tabStore.tabs], () => {
+watch([panelMode, () => tabStore.activeTabKey, () => tabStore.tabs], () => {
     if (!isRestoring) savePreviewCache();
 }, { deep: true });
 
@@ -563,8 +588,8 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             }
         }
 
-        // 恢复预览模式 + 激活标签
-        if (cached.isPreviewMode) {
+        // 恢复面板模式（三态枚举，互斥保证）+ 激活标签
+        if (cached.mode === 'preview') {
             tabStore.enterPreviewMode()
             if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
                 await nextTick()
@@ -574,8 +599,11 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
                 await nextTick()
                 tabStore.selectTab(tabStore.tabs[0].key)
             }
+        } else if (cached.mode === 'git') {
+            // Git 模式与会话状态一起还原（标签栏仅在预览模式显示，无需恢复激活标签）
+            tabStore.enterGitMode()
         } else {
-            // 非预览模式：恢复 activeTabKey 但不进入预览（通过 selectTab 确保 browserStore 同步）
+            // 目录树模式：恢复 activeTabKey 但不进入预览（通过 selectTab 确保 browserStore 同步）
             if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
                 tabStore.selectTab(cached.activeTabKey)
             }
@@ -772,8 +800,26 @@ function handleFileChange(event: FileChangeEvent) {
 
     if (!event.path) return;
 
+    // Git 模式下，文件变化 debounce 触发 git status 刷新（准实时变更列表）
+    if (panelMode.value === 'git') {
+        scheduleGitRefresh();
+    }
+
     // 本地更新节点
     updateNodeLocal(event);
+}
+
+/** Git 状态刷新防抖（与 VS Code 一致的准实时刷新策略） */
+let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleGitRefresh() {
+    if (gitRefreshTimer) {
+        clearTimeout(gitRefreshTimer);
+    }
+    gitRefreshTimer = setTimeout(() => {
+        gitRefreshTimer = null;
+        gitPanelRef.value?.refresh();
+    }, 500);
 }
 
 /**
@@ -1299,6 +1345,8 @@ async function handleWorkspaceWatcherConnected(sessionId: string) {
 watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     treeLoadGeneration++;
     isLoading.value = false;
+    // 会话切换回到目录树模式
+    tabStore.exitGitMode();
 
     // 会话切换或组件重新挂载时清理旧状态
     // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
@@ -1347,6 +1395,10 @@ onUnmounted(() => {
     if (unsubscribeWatcher) {
         unsubscribeWatcher();
         unsubscribeWatcher = null;
+    }
+    if (gitRefreshTimer) {
+        clearTimeout(gitRefreshTimer);
+        gitRefreshTimer = null;
     }
     if (treeHideTimer) {
         clearTimeout(treeHideTimer);

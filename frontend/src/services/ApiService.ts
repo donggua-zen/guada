@@ -44,6 +44,7 @@ import { botApi, type BotApi } from "./modules/bot.api";
 import { schedulerApi, type SchedulerApi } from "./modules/scheduler.api";
 import { pluginApi, type PluginApi } from "./modules/plugin.api";
 import { remoteWorkspaceApi, type RemoteWorkspaceApi } from "./modules/remote-workspace.api";
+import { gitApi, type GitApi } from "./modules/git.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
@@ -66,7 +67,8 @@ interface ApiService
     BotApi,
     SchedulerApi,
     PluginApi,
-    RemoteWorkspaceApi {}
+    RemoteWorkspaceApi,
+    GitApi {}
 
 class ApiService {
   baseURL: string;
@@ -350,6 +352,7 @@ Object.assign(
   schedulerApi,
   pluginApi,
   remoteWorkspaceApi,
+  gitApi,
 );
 
 /**

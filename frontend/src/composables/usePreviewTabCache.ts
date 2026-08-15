@@ -1,4 +1,5 @@
 import { useStorage } from '@vueuse/core'
+import type { WorkspacePanelMode } from '@/stores/layout'
 
 /**
  * 统一标签（文件 / 浏览器），同时用于 UI 渲染和持久化缓存
@@ -24,12 +25,17 @@ export interface UnifiedTab {
  * 单个会话的预览标签缓存
  */
 export interface SessionPreviewCache {
-    /** 是否处于预览模式 */
-    isPreviewMode: boolean
+    /** 工作区面板模式（tree / preview / git） */
+    mode: WorkspacePanelMode
     /** 当前激活的标签统一标识（如 'file:src/index.ts' 或 'browser:win_123'），无则为 null */
     activeTabKey: string | null
     /** 完整标签列表（含浏览器元数据，保留顺序） */
     tabs: UnifiedTab[]
+    /**
+     * @deprecated 旧版缓存字段（isPreviewMode/gitMode 双布尔），仅用于一次性迁移读取
+     */
+    isPreviewMode?: boolean
+    gitMode?: boolean
 }
 
 const MAX_SESSIONS = 10
@@ -67,10 +73,20 @@ export function usePreviewTabCache() {
         }
     }
 
-    /** 读取会话的预览状态，不存在返回 null */
+    /** 读取会话的预览状态，不存在返回 null；旧版双布尔缓存在此一次性迁移为 mode 枚举 */
     function getSession(sessionId: string): SessionPreviewCache | null {
         const state = cache.value[sessionId]
         if (!state) return null
+
+        // 旧版缓存迁移（mode 不存在时按 isPreviewMode/gitMode 推导并写回）
+        if (!state.mode) {
+            const legacy: SessionPreviewCache = {
+                mode: state.isPreviewMode ? 'preview' : state.gitMode ? 'git' : 'tree',
+                activeTabKey: state.activeTabKey,
+                tabs: state.tabs,
+            }
+            cache.value[sessionId] = legacy
+        }
 
         // LRU: 移到最前
         const idx = lruOrder.value.indexOf(sessionId)
@@ -79,7 +95,7 @@ export function usePreviewTabCache() {
             lruOrder.value.unshift(sessionId)
         }
 
-        return state
+        return cache.value[sessionId]
     }
 
     /** 删除会话的缓存 */

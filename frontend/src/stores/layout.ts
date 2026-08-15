@@ -9,6 +9,15 @@ import { useTheme } from '@/composables/useTheme'
  * 全局布局状态 Store
  * 管理侧边栏、工作目录等跨页面共享的布局状态
  */
+
+/**
+ * 工作区面板模式（三态互斥枚举）
+ * - tree：目录树（窄宽度 workspaceSplitSize）
+ * - preview：预览区（宽宽度 workspacePreviewSplitSize）
+ * - git：Git 变更面板（复用预览宽宽度）
+ */
+export type WorkspacePanelMode = 'tree' | 'preview' | 'git'
+
 export const useLayoutStore = defineStore('layout', () => {
   // 侧边栏可见性（持久化到 localStorage）
   const sidebarVisible = useStorage('sidebarVisible', true)
@@ -22,8 +31,10 @@ export const useLayoutStore = defineStore('layout', () => {
   // 工作目录预览模式分割比例（持久化，默认 pane1=50%, pane2=50%）
   const workspacePreviewSplitSize = useStorage('workspacePreviewSplitSize', 50)
 
-  // 工作目录预览模式（非持久化，会话级运行时状态）
-  const workspacePreviewMode = ref(false)
+  // 工作区面板模式（非持久化，会话级运行时状态）
+  // 三态枚举：tree=目录树（窄宽度）、preview=预览区、git=Git 变更面板
+  // 预览与 Git 复用同一宽宽度（workspacePreviewSplitSize），互斥切换
+  const workspacePanelMode = ref<WorkspacePanelMode>('tree')
 
   // 工作目录全屏模式（非持久化，会话级运行时状态）
   const workspaceFullscreen = ref(false)
@@ -81,6 +92,13 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const setWorkspacePreviewSplitSize = (size: number): void => {
     workspacePreviewSplitSize.value = size
+  }
+
+  /**
+   * 设置工作区面板模式（三态枚举：tree / preview / git）
+   */
+  const setWorkspacePanelMode = (mode: WorkspacePanelMode): void => {
+    workspacePanelMode.value = mode
   }
 
   /**
@@ -283,7 +301,7 @@ export const useLayoutStore = defineStore('layout', () => {
     workspaceVisible,
     workspaceSplitSize,
     workspacePreviewSplitSize,
-    workspacePreviewMode,
+    workspacePanelMode,
     workspaceFullscreen,
     floatingChatCollapsed,
     floatingChatHidden,
@@ -300,6 +318,7 @@ export const useLayoutStore = defineStore('layout', () => {
     toggleWorkspace,
     setWorkspaceSplitSize,
     setWorkspacePreviewSplitSize,
+    setWorkspacePanelMode,
     toggleWorkspaceFullscreen,
     setWallpaperUrl,
     setSidebarOpacity,
