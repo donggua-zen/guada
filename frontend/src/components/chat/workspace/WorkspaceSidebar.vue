@@ -99,15 +99,7 @@
             :session-id="props.sessionId" class="flex-1 min-h-0" />
         <div :class="treeContainerClass" :style="panelMode === 'preview' && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
             @mouseleave="hideTreePanel">
-            <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
-            <SessionBrowserWindowList v-if="isElectron && browserStore.sessionWebviews.length > 0"
-                v-show="panelMode !== 'preview'" :session-id="props.sessionId"
-                @activate="handleBrowserWindowActivate" @close="handleBrowserWindowClose"
-                @create="createNewBrowserWindow" />
-            <div v-if="isElectron && browserStore.sessionWebviews.length > 0" v-show="panelMode !== 'preview'"
-                class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
-            <!-- 待办事项列表 -->
-            <SessionTodoList v-show="panelMode !== 'preview'" :session-id="props.sessionId" />
+            <!-- 浏览器窗口列表 / 待办事项已迁往概览面板（OverviewPanel） -->
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -180,16 +172,6 @@
                 </svg>
                 <p class="text-gray-400 dark:text-[#6b6d73] text-sm mb-4">{{ t('chat.workspace.noPreviewFile') }}</p>
                 <div class="flex items-center gap-2 justify-center">
-                    <button v-if="isElectron" class="empty-state-btn" :disabled="!props.sessionId"
-                        @click="createNewBrowserWindow">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10" />
-                            <path
-                                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                        <span>{{ t('chat.workspace.newBrowser') }}</span>
-                    </button>
                     <button class="empty-state-btn" @click="showFileTree">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round">
@@ -218,8 +200,7 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import LTooltip from '@/components/ui/LTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
-import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
-import SessionTodoList from './SessionTodoList.vue';
+import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import GitChangesPanel from './GitChangesPanel.vue';
@@ -529,22 +510,7 @@ function deselectAllTabs(): void {
     tabStore.selectTab(null)
 }
 
-// ── 浏览器 store 同步：由 tabStore 统一管理 ──
-// 外部激活浏览器窗口时同步 activeTabKey
-watch(() => browserStore.activeWindowId, () => {
-    tabStore.syncActiveWindowId()
-})
-
-// 浏览器标签增删 + 元数据同步
-// 使用字符串 fingerprint（基元类型，按值比较）避免 setActive 修改 isVisible 时
-// map() 产生新对象引用导致 { deep: true } watch 误触发和 re-entrancy
-watch(() => browserStore.sessionWebviews.map(w =>
-    `${w.windowId}\0${w.title}\0${w.favicon || ''}\0${w.url}`
-).join('\n'), () => {
-    tabStore.syncBrowserTabs(browserStore.sessionWebviews.map(w => ({
-        windowId: w.windowId, title: w.title, favicon: w.favicon, url: w.url,
-    })))
-})
+// 浏览器 store → tabStore 同步已迁往 OverviewPanel（概览常驻，工作区隐藏时仍保持同步）
 
 // ── 预览标签缓存：保存当前会话状态到 localStorage ──
 
@@ -633,41 +599,7 @@ async function closeTab(tab: UnifiedTab): Promise<void> {
     tabStore.removeTab(tab.key)
 }
 
-/** 新建浏览器窗口：加载简约新建标签页 */
-async function createNewBrowserWindow(): Promise<void> {
-    if (!window.electronAPI || !props.sessionId) return;
-    try {
-        const result = await window.electronAPI.createBrowserWindow('about:blank', {
-            sessionId: props.sessionId,
-            createdBy: props.sessionId,
-        });
-        if (!result.success) {
-            ElMessage.warning(result.error || t('chat.workspace.createWindowFailed'));
-        } else if (result.window?.windowId) {
-            tabStore.enterPreviewMode()
-            tabStore.selectTab(`browser:${result.window.windowId}`)
-        }
-    } catch (e) {
-        console.error('Failed to create browser window:', e);
-    }
-}
-
-/** SessionBrowserWindowList 激活窗口 */
-function handleBrowserWindowActivate(windowId: string): void {
-    tabStore.enterPreviewMode()
-    tabStore.selectTab(`browser:${windowId}`)
-}
-
-/** SessionBrowserWindowList 关闭窗口 */
-function handleBrowserWindowClose(windowId: string): void {
-    const key = `browser:${windowId}`;
-    const tab = tabStore.tabs.find(t => t.key === key);
-    if (tab) {
-        void closeTab(tab);
-    } else if (window.electronAPI) {
-        void window.electronAPI.closeBrowserWindow(windowId);
-    }
-}
+/** 浏览器窗口创建/激活/关闭已迁往概览面板（OverviewPanel） */
 
 /**
  * 异步加载目录的子节点
@@ -1353,6 +1285,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     // 会话切换或组件重新挂载时清理旧状态
     // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
     if (newSessionId !== oldSessionId) {
+        // 旧会话解除 file 订阅（SSE 连接由 OverviewPanel 常驻持有，勿断开）
+        if (oldSessionId) void apiService.setWorkspaceWatchScope(oldSessionId, "file", false);
         tabStore.exitPreviewMode()
         tabStore.clearAll();
         fileChangeVersions.value = {};
@@ -1360,7 +1294,6 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
         resetExpandedPaths();
         treeData.value = [];
         currentWorkspacePath.value = null;
-        apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
             unsubscribeWatcher();
             unsubscribeWatcher = null;
@@ -1370,11 +1303,11 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     if (newSessionId) {
         loadTree(true); // 会话切换时强制启动新请求
 
-        // 先注册变化监听器，再连接并在每次自动重连后重报展开状态
+        // 先注册变化监听器，再订阅 file 范围激活工作区根 watcher
         unsubscribeWatcher = apiService.onWorkspaceChange(handleFileChange);
-        apiService.connectWorkspaceWatcher(newSessionId, () => {
-            void handleWorkspaceWatcherConnected(newSessionId);
-        });
+        void apiService.setWorkspaceWatchScope(newSessionId, "file", true);
+        // 初始化工作区路径监听状态（不依赖 SSE onConnected —— 连接可能已由概览建立）
+        void handleWorkspaceWatcherConnected(newSessionId);
 
         // 恢复预览标签状态
         await restorePreviewCache(newSessionId);
@@ -1382,7 +1315,6 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
         watchedWorkspacePath = null;
         resetExpandedPaths();
         treeData.value = [];
-        apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
             unsubscribeWatcher();
             unsubscribeWatcher = null;
@@ -1393,7 +1325,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
 onUnmounted(() => {
     watchedWorkspacePath = null;
     resetExpandedPaths();
-    apiService.disconnectWorkspaceWatcher();
+    // 解除 file 订阅（连接由 OverviewPanel 持有，SSE 不断开）
+    if (props.sessionId) void apiService.setWorkspaceWatchScope(props.sessionId, "file", false);
     if (unsubscribeWatcher) {
         unsubscribeWatcher();
         unsubscribeWatcher = null;

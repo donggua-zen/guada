@@ -3,7 +3,7 @@
     <!-- 顶部工具栏（单行紧凑）：分支 chip | 全量变更统计 | 领先/落后 | 刷新 | 视图切换 | 目录树开关 | 提交（弹窗） -->
     <div class="shrink-0 git-toolbar">
       <!-- 分支：简洁 chip + 自定义下拉（替代 el-select 原生样式） -->
-      <DropdownMenu @command="onBranchChange">
+      <DropdownMenu @command="git.checkout">
         <button class="git-branch-chip" :disabled="!isGitRepo || refreshing">
           <!-- Branch20Regular 为 20 viewBox：16px 仍非整数缩放，但 0.8 倍较柔和；
                图标优先选原生尺寸更锐利 -->
@@ -60,7 +60,7 @@
       </LTooltip>
       <!-- 提交（弹窗：消息 + 是否包含未暂存 + 提交/提交并推送/推送）：胶囊按钮 -->
       <button class="git-commit-btn" :disabled="!isGitRepo || totalChanges === 0"
-        @click="commitDialogVisible = true">
+        @click="git.openCommitDialog()">
         <el-icon :size="16"><BranchFork16Regular /></el-icon>
         <span>{{ t('git.commitOrPush') }}</span>
       </button>
@@ -291,74 +291,28 @@
       </LiteSplitpanes>
     </div>
 
-    <!-- 提交弹窗（自定义 LDialog，极简卡片风格）：分支行 + 无边框输入 + 包含未暂存
-         + 统计 + 堆叠操作行（提交/提交并推送/推送）。无标题栏，点遮罩/Esc 关闭 -->
-    <LDialog v-model="commitDialogVisible" width="440px" append-to-body :show-close="false"
-      class="git-commit-dialog">
-      <div class="git-commit-form">
-        <!-- 分支行（仅展示当前分支，暂不支持下拉，故无箭头） -->
-        <div class="git-cd-branch">
-          <el-icon :size="16"><Branch20Regular /></el-icon>
-          <span class="git-cd-branch-name">{{ status?.branch || selectedBranch || '-' }}</span>
-        </div>
-        <!-- 提交信息：无边框极简输入 -->
-        <textarea v-model="commitMessage" class="git-cd-message" rows="6"
-          :placeholder="t('git.commitMessagePlaceholder')"
-          @keydown.ctrl.enter="submitCommit(false)" @keydown.meta.enter="submitCommit(false)"></textarea>
-        <!-- 包含未暂存（自定义 checkbox 行）+ 右侧统计 -->
-        <div class="git-cd-row">
-          <button type="button" class="git-cd-check" :class="{ checked: commitIncludeUnstaged }"
-            @click="commitIncludeUnstaged = !commitIncludeUnstaged">
-            <span class="git-cd-check-box">
-              <el-icon v-if="commitIncludeUnstaged" :size="10"><Check /></el-icon>
-            </span>
-            <span>{{ t('git.includeUnstaged') }}</span>
-          </button>
-          <span v-if="commitStats.add || commitStats.del" class="git-diff-stats git-cd-stats">
-            <span v-if="commitStats.add" class="git-stat-add">+{{ commitStats.add }}</span>
-            <span v-if="commitStats.del" class="git-stat-del">-{{ commitStats.del }}</span>
-          </span>
-        </div>
-        <!-- 堆叠操作行：提交（高亮 + Ctrl+↵ 提示）/ 提交并推送 / 推送（无领先提交时禁用） -->
-        <div class="git-cd-actions">
-          <button type="button" class="git-cd-action git-cd-action--primary" :disabled="committing"
-            @click="submitCommit(false)">
-            <el-icon :size="14"><BranchFork16Regular /></el-icon>
-            <span class="git-cd-action-label">{{ t('git.commit') }}</span>
-            <span class="git-cd-action-hint">Ctrl + ↵</span>
-          </button>
-          <button type="button" class="git-cd-action" :disabled="committing" @click="submitCommit(true)">
-            <el-icon :size="14"><ArrowUpload16Regular /></el-icon>
-            <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
-          </button>
-          <button type="button" class="git-cd-action" :disabled="committing || (status?.ahead ?? 0) === 0"
-            @click="handlePush">
-            <el-icon :size="14"><ArrowUpload16Regular /></el-icon>
-            <span class="git-cd-action-label">{{ t('git.push') }}</span>
-          </button>
-        </div>
-      </div>
-    </LDialog>
+    <!-- 提交弹窗已抽为全局组件 GitCommitDialog（数据走 GitStore），
+         本面板顶部「提交或推送」按钮与概览面板共用同一入口 -->
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, reactive, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, ArrowRight, ArrowDown, Check, Close } from "@element-plus/icons-vue";
-import { Branch20Regular, BranchFork16Regular, Search20Regular, ArrowUpload16Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
+import { Refresh, ArrowRight, ArrowDown, Close } from "@element-plus/icons-vue";
+import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
 import { LiteSplitpanes } from "../../ui";
-import LDialog from "../../ui/LDialog.vue";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import LTooltip from "../../ui/LTooltip.vue";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
-import type { GitStatus, GitFileChange, GitBranch, GitDiff } from "@/services/modules/git.api";
-import type { FileChangeEvent } from "@/services/modules/WorkspaceWatcherService";
+import type { GitFileChange, GitDiff } from "@/services/modules/git.api";
 import type { DiffLine, SplitDiffLine, DisplaySplitLine } from "./git-diff-types";
+import { useGitStore } from "@/stores/git";
 import { useHighlight } from "@/composables/useHighlight";
 
 const { t } = useI18n();
@@ -431,12 +385,18 @@ interface FullHighlight {
   newHtml: string[];
 }
 
-const status = ref<GitStatus | null>(null);
-const branches = ref<GitBranch[]>([]);
-const selectedBranch = ref("");
-const commitMessage = ref("");
-const refreshing = ref(false);
-const committing = ref(false);
+/**
+ * GitStore 只读别名：status/branches/分支/刷新态/统计等已上收至 GitStore
+ * （概览面板常驻共用），本面板只读消费；写入统一走 store（refresh/checkout/提交）。
+ */
+const git = useGitStore();
+const status = computed(() => git.status);
+const branches = computed(() => git.branches);
+const selectedBranch = computed(() => git.selectedBranch);
+const refreshing = computed(() => git.refreshing);
+const isGitRepo = computed(() => git.isGitRepo);
+const totalChanges = computed(() => git.totalChanges);
+const totalStats = computed(() => git.totalStats);
 /** 左侧当前选中文件（主从布局单选中） */
 const selectedKey = ref<string | null>(null);
 /** 正在加载的选中 key（单并发） */
@@ -514,9 +474,6 @@ function onTreeSplitResized(size: number): void {
     Math.min(Math.round((available * (100 - size)) / 100), maxPx),
   );
 }
-
-const isGitRepo = computed(() => status.value?.isGitRepo === true);
-const totalChanges = computed(() => status.value?.files.length || 0);
 
 /** 目录树搜索关键字 */
 const searchText = ref("");
@@ -599,33 +556,6 @@ const showTree = useStorage("guada-git-tree-visible", true);
 
 /** 各会话上次打开的文件 key（group:path）——切换会话回来恢复选中（持久化） */
 const sessionSelection = useStorage("guada-git-session-selection", {} as Record<string, string>);
-
-/** 提交弹窗状态 */
-const commitDialogVisible = ref(false);
-/** 提交时是否包含未暂存的更改（勾选 → 先全部暂存再提交，VS Code「全部提交」语义） */
-const commitIncludeUnstaged = ref(true);
-
-/** 全量变更统计：所有变更文件增删行数之和（顶部工具栏 +N -M 聚合显示） */
-const totalStats = computed<DiffStats>(() => {
-  let add = 0;
-  let del = 0;
-  for (const f of status.value?.files || []) {
-    add += f.additions || 0;
-    del += f.deletions || 0;
-  }
-  return { add, del };
-});
-
-/** 仅暂存统计（HEAD vs 暂存区）——提交弹窗未勾选「包含未暂存」时的实际提交量 */
-const stagedStats = computed<DiffStats>(() => ({
-  add: status.value?.stagedAdditions ?? 0,
-  del: status.value?.stagedDeletions ?? 0,
-}));
-
-/** 提交弹窗统计：随「包含未暂存」勾选切换（勾选 = 全部变更，否则 = 仅已暂存） */
-const commitStats = computed<DiffStats>(() =>
-  commitIncludeUnstaged.value ? totalStats.value : stagedStats.value,
-);
 
 /**
  * 搜索过滤后的分组树：匹配文件行（名称/路径包含关键字）+ 保留其祖先目录行，
@@ -1297,17 +1227,9 @@ watch(diffView, () => {
   void nextTick(updateVScroll);
 });
 
-/** 外部 git 变化自动刷新订阅（事件按 sessionId 过滤，仅监听自己的会话） */
-let unsubscribeWorkspaceGit: (() => void) | null = null;
-onMounted(() => {
-  unsubscribeWorkspaceGit = apiService.onWorkspaceChange(onWorkspaceGitEvent);
-});
+/* 外部 git 变化自动刷新已上收至 GitStore（概览面板常驻时同样生效），此处不再订阅 */
 
 onUnmounted(() => {
-  unsubscribeWorkspaceGit?.();
-  unsubscribeWorkspaceGit = null;
-  if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
-  gitRefreshTimer = null;
   vScrollResizeObserver?.disconnect();
   vScrollResizeObserver = null;
   document.removeEventListener("mousemove", onThumbMove);
@@ -1737,86 +1659,65 @@ async function loadGapRows(idx: number): Promise<void> {
 }
 
 /**
- * 外部 git 操作自动刷新（对齐 VS Code：监听 .git 目录 + 防抖 → 重跑 status）：
- * 后端 .git watcher 变化时经 workspace SSE 推送 type:"git"，这里再防抖后 refresh。
- * 面板自身的 commit/stage 等操作也会写 .git 触发事件，OWN_GIT_WRITE_SUPPRESS_MS 内抑制，
- * 避免刚操作完立刻被事件再刷一次。
+ * 刷新：数据获取（status/branches）已上收至 GitStore（概览面板常驻共用）。
+ * 本面板只负责刷新后的本地后处理：折叠目录修剪 + 选中保持/恢复 + diff 重拉。
  */
-let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-let lastOwnGitWrite = 0;
-const OWN_GIT_WRITE_SUPPRESS_MS = 1000;
+let lastHandledRefreshSeq = 0;
 
-/** 面板自身执行的 git 写操作（commit/stage/unstage/checkout）入口标记 */
-function markOwnGitWrite(): void {
-  lastOwnGitWrite = Date.now();
-}
+/** 选中保持/恢复（基于当前 selectedKey + store 最新 status）：
+ *  1) 当前选中路径仍在变更列表中 → 按新分组重载 diff；
+ *  2) 否则尝试恢复本会话上次打开的文件（切会话回来时选中已被清空）；
+ *  3) 都不存在 → 清空选中。 */
+function postProcessSelection(): void {
+  const st = git.status;
+  if (!st) return;
 
-function onWorkspaceGitEvent(event: FileChangeEvent): void {
-  if (event.type !== "git") return;
-  if (event.sessionId && event.sessionId !== props.sessionId) return;
-  if (Date.now() - lastOwnGitWrite < OWN_GIT_WRITE_SUPPRESS_MS) return;
-  if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
-  gitRefreshTimer = setTimeout(() => {
-    gitRefreshTimer = null;
-    void refresh();
-  }, 200);
-}
+  // 折叠状态修剪：仅保留仍存在的目录（refresh 只增不减，否则残留幽灵目录）
+  const validDirs = new Set<string>();
+  for (const g of groups.value) collectDirKeys(g.rows, g.key, validDirs);
+  collapsedDirs.value = new Set([...collapsedDirs.value].filter((k) => validDirs.has(k)));
 
-async function refresh(): Promise<void> {
-  if (!props.sessionId || refreshing.value) return;
-  refreshing.value = true;
-  // 刷新前记录当前选中文件路径：刷新后按路径保持选中（分组可能变化，diff 重新拉取）
-  const prevPath = selectedRow.value?.file.path;
-  try {
-    const res = await apiService.getGitStatus(props.sessionId);
-    status.value = res;
-    if (res.branch) selectedBranch.value = res.branch;
-
-    // 折叠状态修剪：仅保留仍存在的目录（refresh 只增不减，否则残留幽灵目录）
-    const validDirs = new Set<string>();
-    for (const g of groups.value) collectDirKeys(g.rows, g.key, validDirs);
-    collapsedDirs.value = new Set([...collapsedDirs.value].filter((k) => validDirs.has(k)));
-
-    // 选中保持/恢复：
-    // 1) 当前选中路径仍在变更列表中 → 按新分组重载 diff；
-    // 2) 否则尝试恢复本会话上次打开的文件（切会话回来时选中已被清空）；
-    // 3) 都不存在 → 清空选中。
-    let target: GitRow | null = null;
-    if (prevPath) {
-      const f = res.files.find((ff) => ff.path === prevPath);
-      if (f) target = { file: f, ...classifyFile(f) };
-    }
-    if (!target && props.sessionId && sessionSelection.value[props.sessionId]) {
-      // 缓存存的是 group:path，取 path 部分在当前状态中重查（分组可能已变化）
-      const cachedPath = sessionSelection.value[props.sessionId].split(":").slice(1).join(":");
-      const f = res.files.find((ff) => ff.path === cachedPath);
-      if (f) target = { file: f, ...classifyFile(f) };
-    }
-    if (target) {
-      selectedKey.value = `${target.group}:${target.file.path}`;
-      diffLines.value = {};
-      void loadDiff(target);
-    } else {
-      clearSelection();
-    }
-
-    if (res.isGitRepo) {
-      const b = await apiService.getGitBranches(props.sessionId);
-      branches.value = b.branches;
-    } else {
-      branches.value = [];
-    }
-  } catch {
-    status.value = null;
-    ElMessage.error(t("git.loadFailed"));
-  } finally {
-    refreshing.value = false;
+  let target: GitRow | null = null;
+  const cur = selectedKey.value;
+  if (cur) {
+    const path = cur.split(":").slice(1).join(":");
+    const f = st.files.find((ff) => ff.path === path);
+    if (f) target = { file: f, ...classifyFile(f) };
+  }
+  if (!target && props.sessionId && sessionSelection.value[props.sessionId]) {
+    const cachedPath = sessionSelection.value[props.sessionId].split(":").slice(1).join(":");
+    const f = st.files.find((ff) => ff.path === cachedPath);
+    if (f) target = { file: f, ...classifyFile(f) };
+  }
+  if (target) {
+    selectedKey.value = `${target.group}:${target.file.path}`;
+    diffLines.value = {};
+    void loadDiff(target);
+  } else {
+    clearSelection();
   }
 }
 
+async function refresh(): Promise<void> {
+  await git.refresh();
+  lastHandledRefreshSeq = git.refreshSeq;
+  postProcessSelection();
+}
+
+/** store 自动刷新（外部 git 操作事件）完成后，面板同步做选中恢复/diff 重拉 */
+watch(
+  () => git.refreshSeq,
+  () => {
+    if (git.refreshSeq !== lastHandledRefreshSeq) {
+      lastHandledRefreshSeq = git.refreshSeq;
+      postProcessSelection();
+    }
+  },
+);
+
 async function stageFile(row: GitRow): Promise<void> {
   if (!props.sessionId) return;
-  markOwnGitWrite();
+  git.markGitWrite();
   try {
     await apiService.gitStage(props.sessionId, [row.file.path]);
     await refresh();
@@ -1827,7 +1728,7 @@ async function stageFile(row: GitRow): Promise<void> {
 
 async function unstageFile(row: GitRow): Promise<void> {
   if (!props.sessionId) return;
-  markOwnGitWrite();
+  git.markGitWrite();
   try {
     await apiService.gitUnstage(props.sessionId, [row.file.path]);
     await refresh();
@@ -1849,7 +1750,7 @@ async function stageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
     .filter((r) => r.group !== "staged")
     .map((r) => r.file.path);
   if (!paths.length) return;
-  markOwnGitWrite();
+  git.markGitWrite();
   try {
     await apiService.gitStage(props.sessionId, paths);
     await refresh();
@@ -1865,7 +1766,7 @@ async function unstageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
     .filter((r) => r.group === "staged")
     .map((r) => r.file.path);
   if (!paths.length) return;
-  markOwnGitWrite();
+  git.markGitWrite();
   try {
     await apiService.gitUnstage(props.sessionId, paths);
     await refresh();
@@ -1874,82 +1775,15 @@ async function unstageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
   }
 }
 
-async function onBranchChange(branch: string): Promise<void> {
-  const prev = status.value?.branch || selectedBranch.value;
-  if (!props.sessionId || !branch) return;
-  markOwnGitWrite();
-  try {
-    await apiService.gitCheckout(props.sessionId, branch);
-    ElMessage.success(t("git.checkoutSuccess", { branch }));
-    clearSelection();
-  } catch (e: any) {
-    ElMessage.error(t("git.checkoutFailed", { msg: e?.message || "" }));
-    selectedBranch.value = prev;
-  }
-  await refresh();
-}
-
-/**
- * 提交（弹窗内）：勾选「包含未暂存的更改」→ 先全部暂存再提交（VS Code「全部提交」语义）。
- * push=true 时提交后接着推送。
- */
-async function submitCommit(push: boolean): Promise<void> {
-  const message = commitMessage.value.trim();
-  if (!message) {
-    ElMessage.warning(t("git.commitMessageEmpty"));
-    return;
-  }
-  if (!props.sessionId || committing.value) return;
-  markOwnGitWrite();
-  committing.value = true;
-  try {
-    if (commitIncludeUnstaged.value) {
-      await apiService.gitStage(props.sessionId);
-    }
-    await apiService.gitCommit(props.sessionId, message);
-    if (push) await apiService.gitPush(props.sessionId);
-    ElMessage.success(t(push ? "git.commitPushSuccess" : "git.commitSuccess"));
-    commitMessage.value = "";
-    commitDialogVisible.value = false;
-    clearSelection();
-    await refresh();
-  } catch (e: any) {
-    ElMessage.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: e?.message || "" }));
-    await refresh();
-  } finally {
-    committing.value = false;
-  }
-}
-
-/** 仅推送当前分支 */
-async function handlePush(): Promise<void> {
-  if (!props.sessionId || committing.value) return;
-  markOwnGitWrite();
-  committing.value = true;
-  try {
-    await apiService.gitPush(props.sessionId);
-    ElMessage.success(t("git.pushSuccess"));
-    commitDialogVisible.value = false;
-    await refresh();
-  } catch (e: any) {
-    ElMessage.error(t("git.pushFailed", { msg: e?.message || "" }));
-  } finally {
-    committing.value = false;
-  }
-}
-
 watch(
   () => props.sessionId,
   () => {
-    status.value = null;
-    branches.value = [];
-    selectedBranch.value = "";
-    commitMessage.value = "";
+    // 数据（status/branches/分支/提交弹窗）由 GitStore.bindSession 管理
+    git.bindSession(props.sessionId);
     clearSelection();
     collapsedDirs.value = new Set();
     activeTreeKey.value = null;
     treeFocused.value = false;
-    if (props.sessionId) void refresh();
   },
   { immediate: true },
 );
@@ -2098,132 +1932,6 @@ defineExpose({ refresh });
   cursor: not-allowed;
 }
 
-/* ── 提交弹窗（极简卡片风格，对齐参考图） ── */
-.git-commit-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* LDialog body 默认 padding 12px：收紧为卡片内边距 */
-.git-commit-dialog :deep(.l-dialog__body) {
-  padding: 12px 12px 10px;
-  overflow: visible;
-}
-
-/* 分支行：图标 + 等宽分支名（仅展示当前分支） */
-.git-cd-branch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 2px 6px;
-  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
-}
-.git-cd-branch-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 提交信息：无边框极简输入（图片同款，只有光标提示） */
-.git-cd-message {
-  width: 100%;
-  resize: none;
-  border: none;
-  outline: none;
-  background: transparent;
-  padding: 2px;
-  font-size: var(--size-text-sm);
-  line-height: 1.5;
-  font-family: inherit;
-  color: var(--color-text);
-}
-.git-cd-message::placeholder {
-  color: var(--color-text-disabled);
-}
-
-/* 复选行 + 右侧统计 */
-.git-cd-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.git-cd-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-  border: none;
-  background: transparent;
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
-  cursor: pointer;
-  user-select: none;
-}
-.git-cd-check-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  color: #fff;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.git-cd-check.checked .git-cd-check-box {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.git-cd-stats {
-  font-size: var(--size-text-sm);
-}
-
-/* 堆叠操作行：提交（浅灰底高亮 + Ctrl+↵ 提示）/ 提交并推送 / 推送 */
-.git-cd-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-}
-.git-cd-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s ease;
-}
-.git-cd-action:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
-}
-.git-cd-action:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.git-cd-action--primary {
-  background: var(--color-surface-hover);
-}
-.git-cd-action--primary:hover:not(:disabled) {
-  background: var(--color-conversation-bg-active);
-}
-.git-cd-action-label {
-  flex: 1;
-}
-.git-cd-action-hint {
-  font-size: 11px;
-  color: var(--color-text-disabled);
-}
 
 @keyframes git-spin {
   from { transform: rotate(0deg); }

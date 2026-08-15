@@ -12,6 +12,15 @@ export interface FileChangeEvent {
   timestamp: number;
 }
 
+/** watcher 订阅范围：file=工作区根目录文件事件；git=.git 目录变化（独立 watcher） */
+export type WatchScope = "file" | "git";
+
+/** 订阅范围校验/规范化 */
+export function normalizeWatchScope(scope: string | undefined): WatchScope | null {
+  if (scope === "file" || scope === "git") return scope;
+  return null;
+}
+
 interface NormalizedPath {
   key: string;
   value: string;
@@ -58,6 +67,13 @@ interface SessionState {
   pathKey: string;
   /** connectionId → Connection */
   connections: Map<symbol, Connection>;
+  /**
+   * clientId → 订阅范围集合（连接级引用计数）：
+   * - REST setWatchScope 增删；
+   * - 对应连接关闭时整项清除（SSE 断开即取消订阅）；
+   * - watcher 激活 = 任一在线的 clientId 订阅了该范围。
+   */
+  scopes: Map<string, Set<WatchScope>>;
 }
 
 const IDLE_TTL_MS = 30_000;
@@ -102,6 +118,8 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
   private readonly logger = new Logger(WorkspaceWatcherService.name);
   private readonly watchers = new Map<string, WatchEntry>();
   private readonly sessions = new Map<string, SessionState>();
+  /** REST 订阅先于 SSE 连接时暂存：sessionId → clientId → scopes（连接建立后迁入 sessionState） */
+  private readonly pendingScopes = new Map<string, Map<string, Set<WatchScope>>>();
   private readonly listeners = new Map<
     string,
     Set<(event: FileChangeEvent) => void>
@@ -132,7 +150,16 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         workspaceKey: normalized.key,
         pathKey: normalized.key,
         connections: new Map(),
+        scopes: new Map(),
       };
+      // 迁入连接建立前已到达的订阅（REST 先于 SSE 的场景）
+      const pending = this.pendingScopes.get(sessionId);
+      if (pending) {
+        for (const [cid, scopes] of pending) {
+          sessionState.scopes.set(cid, new Set(scopes));
+        }
+        this.pendingScopes.delete(sessionId);
+      }
       this.sessions.set(sessionId, sessionState);
     }
 
@@ -186,6 +213,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     const callbacks = this.collectForceCloseCallbacks(sessionState);
     this.sessions.delete(sessionId);
     this.listeners.delete(sessionId);
+    this.pendingScopes.delete(sessionId);
 
     this.releaseWatcherRef(sessionState.pathKey, sessionId);
     this.logger.debug(`Stopped workspace watcher for session ${sessionId}`);
@@ -231,6 +259,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     }
     this.sessions.clear();
     this.listeners.clear();
+    this.pendingScopes.clear();
 
     const entries = Array.from(this.watchers.values());
     this.watchers.clear();
@@ -262,7 +291,14 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
   private releaseConnection(sessionId: string, connectionId: symbol): void {
     const sessionState = this.sessions.get(sessionId);
     if (!sessionState) return;
-    if (!sessionState.connections.delete(connectionId)) return;
+    const conn = sessionState.connections.get(connectionId);
+    if (!conn) return;
+    sessionState.connections.delete(connectionId);
+
+    // SSE 断开 → 该 clientId 的订阅整项清除（无需显式取消订阅）
+    if (conn.clientId) {
+      sessionState.scopes.delete(conn.clientId);
+    }
 
     if (sessionState.connections.size === 0) {
       this.sessions.delete(sessionId);
@@ -270,6 +306,10 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       this.logger.debug(
         `Released workspace watcher connection for session ${sessionId}`,
       );
+    } else {
+      // 还有其他连接：重算 watcher 激活（可能因 scope 减少而停用部分 watcher）
+      const entry = this.watchers.get(sessionState.pathKey);
+      if (entry) this.updateWatcherSubscriptions(entry);
     }
   }
 
@@ -286,6 +326,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       }
       entry.sessionIds.add(sessionId);
       entry.lastUsedAt = Date.now();
+      this.updateWatcherSubscriptions(entry);
       return;
     }
 
@@ -306,10 +347,112 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       ready: false,
     };
     this.watchers.set(pathKey, entry);
-    this.subscribeEntry(entry);
+    // 不自动订阅：watcher 由连接级 scope（setWatchScope）驱动激活
+    this.updateWatcherSubscriptions(entry);
   }
 
-  private subscribeEntry(entry: WatchEntry): void {
+  /**
+   * 设置某连接的订阅范围（连接级引用计数）：
+   * - 同一 clientId 的多个 scope 取并集；
+   * - 只要还有任一在线 clientId 订阅某 scope，对应 watcher 就保持激活；
+   * - SSE 断开时该 clientId 的 scopes 整项清除（releaseConnection）。
+   */
+  setWatchScope(
+    sessionId: string,
+    clientId: string,
+    scope: WatchScope,
+    enabled: boolean,
+  ): void {
+    const sessionState = this.sessions.get(sessionId);
+    if (!sessionState) {
+      // 连接尚未建立（REST 先于 SSE）：暂存，SSE join 时迁入
+      let pending = this.pendingScopes.get(sessionId);
+      if (!pending) {
+        pending = new Map();
+        this.pendingScopes.set(sessionId, pending);
+      }
+      let scopes = pending.get(clientId);
+      if (!scopes) {
+        scopes = new Set();
+        pending.set(clientId, scopes);
+      }
+      if (enabled) scopes.add(scope);
+      else scopes.delete(scope);
+      if (scopes.size === 0) pending.delete(clientId);
+      if (pending.size === 0) this.pendingScopes.delete(sessionId);
+      return;
+    }
+    let scopes = sessionState.scopes.get(clientId);
+    if (!scopes) {
+      scopes = new Set();
+      sessionState.scopes.set(clientId, scopes);
+    }
+    if (enabled) scopes.add(scope);
+    else scopes.delete(scope);
+    if (scopes.size === 0) sessionState.scopes.delete(clientId);
+
+    const entry = this.watchers.get(sessionState.pathKey);
+    if (entry) {
+      this.updateWatcherSubscriptions(entry);
+    }
+    this.logger.debug(
+      `setWatchScope(${sessionId}, ${clientId}, ${scope}, ${enabled}) → scopes ${JSON.stringify(
+        Array.from(sessionState.scopes.values()).map((s) => Array.from(s)),
+      )}`,
+    );
+  }
+
+  /** 聚合 entry 关联全部会话的激活范围（任一在线 clientId 订阅即激活） */
+  private computeEntryScopes(entry: WatchEntry): { file: boolean; git: boolean } {
+    let file = false;
+    let git = false;
+    for (const sessionId of entry.sessionIds) {
+      const ss = this.sessions.get(sessionId);
+      if (!ss) continue;
+      for (const scopes of ss.scopes.values()) {
+        if (scopes.has("file")) file = true;
+        if (scopes.has("git")) git = true;
+        if (file && git) return { file, git };
+      }
+      if (file && git) return { file, git };
+    }
+    return { file, git };
+  }
+
+  /** 按激活范围增删两个独立 parcel watcher（root / .git），幂等、防重入 */
+  private updateWatcherSubscriptions(entry: WatchEntry): void {
+    const { file, git } = this.computeEntryScopes(entry);
+
+    // 根 watcher（工作区文件事件）
+    if (file && !entry.subscription && !entry.ready) {
+      this.subscribeRoot(entry);
+    } else if (!file && entry.subscription) {
+      const sub = entry.subscription;
+      entry.subscription = null;
+      entry.ready = false;
+      sub.unsubscribe().catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to unsubscribe root watcher ${entry.absolutePath}: ${String(error)}`,
+        );
+      });
+    }
+
+    // .git watcher（git 事件，独立订阅）
+    if (git && !entry.gitSubscription) {
+      this.subscribeGitEntry(entry);
+    } else if (!git && entry.gitSubscription) {
+      const sub = entry.gitSubscription;
+      entry.gitSubscription = null;
+      sub.unsubscribe().catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to unsubscribe git watcher ${entry.absolutePath}: ${String(error)}`,
+        );
+      });
+    }
+  }
+
+  /** 订阅工作区根目录（文件事件），激活期间有效 */
+  private subscribeRoot(entry: WatchEntry): void {
     parcelWatcher
       .subscribe(
         entry.absolutePath,
@@ -328,6 +471,11 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         { ignore: IGNORE_GLOBS },
       )
       .then((subscription) => {
+        // 订阅完成前 scope 可能已撤销 → 撤销后立刻退订
+        if (!this.computeEntryScopes(entry).file) {
+          subscription.unsubscribe().catch(() => undefined);
+          return;
+        }
         entry.subscription = subscription;
         entry.ready = true;
         entry.lastUsedAt = Date.now();
@@ -340,10 +488,6 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
         );
       });
-
-    // 额外监听 .git 目录：外部 git 操作（commit/stage/checkout）只改 .git 内部文件，
-    // 但工作区根 watcher 忽略 .git/**（避免文件编辑风暴）→ 需要独立订阅。
-    this.subscribeGitEntry(entry);
   }
 
   /**
@@ -414,6 +558,11 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         { ignore: GIT_IGNORE_GLOBS },
       )
       .then((subscription) => {
+        // 订阅完成前 scope 可能已撤销 → 撤销后立刻退订
+        if (!this.computeEntryScopes(entry).git) {
+          subscription.unsubscribe().catch(() => undefined);
+          return;
+        }
         entry.gitSubscription = subscription;
         this.logger.debug(`Started git watcher for ${gitDir}`);
       })

@@ -103,6 +103,32 @@ export class WorkspaceWatcherService {
   }
 
   /**
+   * 设置 watcher 订阅范围（连接级）：后端按本页 clientId 计数；
+   * SSE 断开时该 clientId 的全部订阅自动清除。scope = 'file' | 'git'
+   */
+  async setWatchScope(
+    sessionId: string,
+    scope: "file" | "git",
+    enabled: boolean,
+  ): Promise<void> {
+    try {
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+      await fetch(`${this.getBaseURL()}/sessions/${sessionId}/workspace/watch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Client-Id": this.currentClientId,
+        },
+        body: JSON.stringify({ scope, enabled }),
+      });
+    } catch (error) {
+      console.error(`[WorkspaceWatcher] setWatchScope(${scope}, ${enabled}) 失败:`, error);
+    }
+  }
+
+  /**
    * 注册文件变化监听器
    */
   onChange(callback: (event: FileChangeEvent) => void): () => void {

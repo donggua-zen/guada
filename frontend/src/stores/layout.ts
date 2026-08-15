@@ -80,6 +80,10 @@ export const useLayoutStore = defineStore('layout', () => {
     workspaceVisible.value = !workspaceVisible.value
   }
 
+  const setWorkspaceVisible = (visible: boolean): void => {
+    workspaceVisible.value = visible
+  }
+
   /**
    * 设置工作目录分割比例（目录模式）
    */
@@ -316,6 +320,7 @@ export const useLayoutStore = defineStore('layout', () => {
     toggleSidebar,
     setSidebarVisible,
     toggleWorkspace,
+    setWorkspaceVisible,
     setWorkspaceSplitSize,
     setWorkspacePreviewSplitSize,
     setWorkspacePanelMode,
