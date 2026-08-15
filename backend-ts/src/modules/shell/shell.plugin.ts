@@ -173,7 +173,7 @@ export class ShellPlugin extends PluginBase {
         text: { executing: "%run_command.executing%", completed: "%run_command.completed%" },
         aggregate: { executing: "%run_command.aggregate.executing%", completed: "%run_command.aggregate.completed%" },
         argsKey: "command",
-        icon: "shell",
+        icon: "terminal",
       },
       dangerLevel: "critical",
     });
@@ -295,7 +295,7 @@ export class ShellPlugin extends PluginBase {
         text: { executing: "%process.executing%", completed: "%process.completed%" },
         aggregate: { executing: "%process.aggregate.executing%", completed: "%process.aggregate.completed%" },
         argsKey: "action",
-        icon: "run_command",
+        icon: "terminal",
       },
       dangerLevel: "high",
     });

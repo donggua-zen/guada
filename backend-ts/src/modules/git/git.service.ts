@@ -3,6 +3,7 @@ import { simpleGit, SimpleGit } from "simple-git";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
+import { markGitRead } from "../../common/services/git-activity";
 
 export interface GitFileChange {
   /** 相对工作目录的路径（正斜杠分隔） */
@@ -80,6 +81,22 @@ function isBinaryDiff(diff: string): boolean {
   return diff.startsWith("Binary files") || diff.includes("GIT binary patch");
 }
 
+/**
+ * 过滤目录级状态条目（不支持嵌套仓库/子目录 diff）：
+ * 1. 未跟踪目录：git status 折叠为 `?? dir/`（path 带尾斜杠）——嵌入式仓库（内含 .git
+ *    的独立仓库）也走这条路，diff 无法展开；
+ * 2. 实际是目录的条目（gitlink/子模块注册在 index 时可能不带尾斜杠）：目录本身不可 diff。
+ * 其余（含已删除文件，路径可能已不存在）保留。
+ */
+function isSkipStatusEntry(workspacePath: string, entryPath: string): boolean {
+  if (entryPath.endsWith("/")) return true;
+  try {
+    return fs.statSync(path.resolve(workspacePath, entryPath)).isDirectory();
+  } catch {
+    return false; // 文件已删除等路径不存在的情况：不是目录，保留
+  }
+}
+
 @Injectable()
 export class GitService {
   private readonly logger = new Logger(GitService.name);
@@ -106,22 +123,27 @@ export class GitService {
 
   async getStatus(workspacePath: string): Promise<GitStatusResult> {
     const git = this.getGit(workspacePath);
+    markGitRead(); // 读命令打点：抑制 .git watcher 对本命令引发的 index 刷新噪声
     const status = await git.status();
     return {
       branch: status.current,
       ahead: status.ahead,
       behind: status.behind,
-      files: status.files.map((f) => ({
-        path: f.path,
-        // simple-git 无变更时返回单个空格 " "，统一 trim 为空字符串
-        index: f.index.trim(),
-        workingDir: f.working_dir.trim(),
-      })),
+      files: status.files
+        // 过滤目录级条目（嵌入式仓库/未跟踪目录/子模块），diff 树只保留可预览的文件
+        .filter((f) => !isSkipStatusEntry(workspacePath, f.path))
+        .map((f) => ({
+          path: f.path,
+          // simple-git 无变更时返回单个空格 " "，统一 trim 为空字符串
+          index: f.index.trim(),
+          workingDir: f.working_dir.trim(),
+        })),
     };
   }
 
   async getBranches(workspacePath: string) {
     const git = this.getGit(workspacePath);
+    markGitRead();
     const branches = await git.branch();
     // 只返回本地分支（远程分支 remotes/* 不参与切换）
     return branches.all
@@ -183,6 +205,7 @@ export class GitService {
     const git = this.getGit(workspacePath);
     const absPath = path.resolve(workspacePath, filePath);
 
+    markGitRead(); // 读命令打点（diff 会刷新 index stat 缓存 → 抑制自触发事件）
     if (cached) {
       const diff = await git.diff(["--cached", "--", filePath]);
       const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
@@ -286,6 +309,7 @@ export class GitService {
     // 展开一次最多 200 行，防止大区间拉爆
     const count = Math.min(toLine - fromLine + 1, 200);
     const git = this.getGit(workspacePath);
+    markGitRead();
     const spec = cached ? `:${filePath}` : `HEAD:${filePath}`;
     try {
       const content = await git.show([spec]);

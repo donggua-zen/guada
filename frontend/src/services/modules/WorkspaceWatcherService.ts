@@ -10,7 +10,8 @@ import { getClientId } from "@/utils/clientId";
  * 工作目录文件变化事件
  */
 export interface FileChangeEvent {
-  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "heartbeat";
+  /** git = .git 目录变化（外部 commit/stage/checkout 等），消费方应刷新 git 状态 */
+  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "heartbeat" | "git";
   path: string;
   sessionId: string;
   timestamp: number;

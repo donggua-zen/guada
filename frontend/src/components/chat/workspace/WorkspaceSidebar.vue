@@ -514,11 +514,13 @@ function enterPreviewMode(): void {
     tabStore.enterPreviewMode()
 }
 
-/** 点击 Git 按钮：进入 Git 变更面板（复用预览宽度，不触发预览逻辑） */
+/**
+ * 点击 Git 按钮：进入 Git 变更面板（复用预览宽度，不触发预览逻辑）。
+ * 不再强制 refresh：面板 v-show 常驻 + workspace SSE 常开，git 事件自动刷新已保证数据新鲜；
+ * 切回时强制刷新会重拉当前选中文件的 diff → 闪烁。
+ */
 function enterGitMode(): void {
     tabStore.enterGitMode()
-    // 进入时立即刷新，避免挂载早于变化事件导致数据过期
-    void gitPanelRef.value?.refresh();
 }
 
 /** 取消所有标签选中，显示空状态页 */

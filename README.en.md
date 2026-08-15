@@ -8,115 +8,143 @@
   <img src="https://img.shields.io/badge/NestJS-11.x-red.svg" alt="NestJS">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js&logoColor=white" alt="Vue">
   <img src="https://img.shields.io/badge/TypeScript-6.x-blue.svg" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Electron-latest-47848F?logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/Prisma-7.x-2D3748?logo=prisma&logoColor=white" alt="Prisma">
   <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT">
 </p>
 
 <p align="center">
-  <a href="#-quick-start-5-minute-setup"><b> Quick Start</b></a> ·
-  <a href="#-core-capabilities"><b> Core Capabilities</b></a> ·
-  <a href="https://gitee.com/zhendongdong/guada_ai/issues"><b> Feedback</b></a> ·
-  <a href="#-community"><b> Join Community</b></a>
+  <a href="#-project-introduction"><b>💡 Introduction</b></a> ·
+  <a href="#-comparison"><b>📊 Comparison</b></a> ·
+  <a href="#-core-capabilities"><b>🧠 Core Capabilities</b></a> ·
+  <a href="#-quick-start-5-minute-setup"><b>🚀 Quick Start</b></a> ·
+  <a href="https://gitee.com/zhendongdong/guada_ai/issues"><b>💬 Feedback</b></a> ·
+  <a href="#-community"><b>🤝 Community</b></a>
 </p>
 
 <p align="center">
   <b>English</b> ·
-  <a href="README.md">中文</a>
+  <a href="README.md">中文</a> ·
+  <a href="https://gitee.com/zhendongdong/guada_ai">Gitee</a> ·
+  <a href="https://github.com/donggua-zen/guada">GitHub</a> ·
+  <a href="https://gitcode.com/donggua_sherlock/GuaDaAI">GitCode</a>
 </p>
 
 ---
 
-##   Quick Start (5-Minute Setup)
+## 📖 Project Introduction
 
-```bash
-# Clone the repository
-git clone https://gitee.com/zhendongdong/guada_ai.git
-cd guada_ai
+GuaDa is a **local-first** open-source AI workstation — it's not just a chat box, but an AI workbench that can actually get things done: reading/writing files, executing commands, and controlling an embedded browser. Tasks go from planning to execution in a fully automated loop.
 
-# One-click deployment (Docker)
-cp .env.example .env
-./deploy.sh
+**One Agent engine, three ways to use it:** the **Desktop** app works out of the box, the **Web** version supports private deployment, and you can summon it directly in **QQ / WeCom / Feishu / Discord / WeChat** groups. Combined with the RAG knowledge base, long-term memory, and scheduled tasks, it remembers your materials, works the way you do, and keeps going while you sleep. Data stays on your own machine by default — safe and controllable.
 
-# Open your browser at http://localhost:3000
-# Start chatting with your AI assistant!
-```
-
-> You can also choose the [Electron Desktop](docs/ELECTRON_DEPLOYMENT.md) or [Traditional Web Deployment](docs/PRODUCTION_DEPLOYMENT.md).
+Whether you're a **content creator** writing scripts and chasing trends, a **programmer** who wants the Agent to write code, a **writer** who needs it to remember character settings, or a **team** that wants an internal AI assistant with a bound knowledge base and IM integration — GuaDa is ready to use out of the box. If this project helps you, please light up the Star ⭐ — your support keeps the updates coming.
 
 ---
 
-##   What Can It Do for You?
+## 🖼️ Product Screenshots
 
-<table>
-<tr>
-  <td width="25%" align="center">
-    <h3>   Content Creator</h3>
-    <sub>Social media · Copywriting · Scriptwriting</sub>
-    <br><br>
-    Write scripts, craft copy, track trends. Agents automatically scrape competitor updates, organize material libraries, and even open the browser to crawl data for you.
-  </td>
-  <td width="25%" align="center">
-    <h3>   Developer</h3>
-    <sub>Coding · Architecture · DevOps</sub>
-    <br><br>
-    Analyze code, write technical proposals, review PRs. Drop your project into the knowledge base and ask questions anytime — let the Agent handle the scripting.
-  </td>
-  <td width="25%" align="center">
-    <h3>✍️ Writer</h3>
-    <sub>Creative writing · Storytelling · Brainstorming</sub>
-    <br><br>
-    Develop characters, build story worlds, brainstorm plots. GuaDa remembers your settings — no more "it forgot what was said earlier."
-  </td>
-  <td width="25%" align="center">
-    <h3>   Teams & Enterprises</h3>
-    <sub>Internal AI · Knowledge base · Customer service</sub>
-    <br><br>
-    Set up an internal AI assistant, connect your knowledge base, let AI answer employee questions automatically. Integrate with QQ/WeCom.
-    <br><br>
-    <b>Data stays on your machine — safe and controllable.</b>
-  </td>
-</tr>
-</table>
+<p align="center">
+  <img src="./images/demo_task.gif" width="45%" alt="Scheduled task demo">
+  <img src="./images/demo_solar.gif" width="45%" alt="Browser automation: collecting solar system data">
+</p>
+<p align="center">
+  <img src="./images/demo_game.gif" width="45%" alt="Agent playing a game">
+  <img src="./images/demo_kb.gif" width="45%" alt="Knowledge base usage">
+</p>
+<p align="center">
+  <img src="./images/themes_1.png" width="45%" alt="Knowledge base interface">
+  <img src="./images/themes_2.png" width="45%" alt="Browser automation interface">
+</p>
 
 ---
 
-##   Core Capabilities
+## 📊 Comparison with Similar Tools
+
+| Dimension | **GuaDa** | Claude Code | Codex | Trae Work |
+|------|:---------:|:-----------:|:-----:|:---------:|
+| **Product Positioning** | 🏠 General AI Workstation | 💻 Coding Agent | 💻 Coding Agent | 📋 AI Task Platform |
+| **Open Source** | ✅ | ❌ | ✅ CLI | ❌ |
+| **Self-hosted Web Deployment** | ✅ | ❌ | ❌ | ❌ |
+| **Desktop App** | ✅ | ✅ | ✅ | ✅ |
+| **CLI** | ❌ | ✅ | ✅ | ⚠️ |
+| **Bot / IM Integration** | ✅ QQ·WeCom·Feishu·Discord·WeChat | ❌ | ❌ | ❌ |
+| **Knowledge Base (RAG)** | ✅ Hybrid retrieval·40+ formats | ❌ | ❌ | ⚠️ Code index |
+| **Browser Automation** | ✅ Embedded·Visual control | ✅ Embedded·Visual control (2026.7) | ⚠️ Needs Chrome extension·Preview only | ⚠️ Remote screen·Preview only |
+| **Sandbox** | ✅ Lightweight sandbox | ✅ File+network isolation | ✅ Cloud container+local | ✅ Cloud container+local file permissions |
+| **Long-term Memory** | ✅ Editable & reversible | ⚠️ File-based | ⚠️ File-based | ❌ |
+| **Scheduled Tasks** | ✅ | ❌ | ❌ | ❌ |
+| **Multi-Agent** | ✅ Full independent config (character/model/tools/knowledge base) | ⚠️ Sub-agents only·Claude only·No nesting | ⚠️ Sub-agents only·No nesting | ❌ |
+| **Multi-Model Support** | ✅ 17 vendors·incl. domestic models | ❌ Claude only | ❌ OpenAI only | ⚠️ |
+| **Local Data Control** | ✅ | ❌ | ❌ | ❌ |
+| **Setup Difficulty** | ⭐⭐⭐⭐ Out of the box | ⭐⭐⭐ Login and use | ⭐⭐⭐ API Key and use | ⭐⭐⭐⭐⭐ Login and use |
+| **Cost** | Free (bring your own Key) | $20+/mo | $20+/mo | Free during beta |
+
+## 🧠 Core Capabilities
 
 | Capability | Highlights | Docs |
 |------|---------|------|
-| **⚡ Agent** | ReAct multi-turn autonomous loop + Sub-Agent hierarchical delegation. Supports session locks, streaming, interruption handling, and regeneration mode | [→ Details](docs/agent-engine.md) |
-| **   Sub-Agent System** | Main Agent auto-decomposes complex tasks → delegates sub-agents to execute independently → results auto-collected | [→ Details](docs/sub-agent.md) |
-| **   Knowledge Base (RAG)** | Semantic + keyword hybrid retrieval, Agent self-service multi-round search and write, supports **40+ file formats** | [→ Details](docs/knowledge-base.md) |
-| **   Long-Term Memory** | Two-level compression (trim → semantic), editable, reversible, with history tracking — non-destructive compression | [→ Details](docs/memory.md) |
-| **   Skills Management** | Files-as-skills, hot-pluggable with instant effect, progressive loading saves tokens | [→ Details](docs/skills.md) |
+| **🤖 Agent** | ReAct multi-turn autonomous loop + Sub-Agent hierarchical delegation, session locks, streaming, interruption handling, and three regeneration modes | [→ Details](docs/agent-engine.md) |
+| **👥 Sub-Agent System** | Full independent configuration (character/model/tools/knowledge base), complex tasks auto-decompose → delegate → collect results | [→ Details](docs/sub-agent.md) |
+| **🔌 Plugin System** | All core features are pluginized (browser/file/search/memory/scheduled tasks/characters), PluginBase lifecycle + hot-swap with instant effect, toolkit-level permission filtering | — |
+| **📚 Knowledge Base (RAG)** | Semantic + keyword hybrid retrieval, Agent self-service multi-round search and write, supports **40+ file formats** (incl. OCR) | [→ Details](docs/knowledge-base.md) |
+| **🧠 Long-Term Memory** | Two-level compression (trim → semantic), editable, reversible, with history — non-destructive compression | [→ Details](docs/memory.md) |
+| **🛠️ Skills Management** | Files-as-skills, chokidar hot-reload with instant effect, progressive loading saves tokens | [→ Details](docs/skills.md) |
 | **⏰ Scheduled Tasks** | Agent runs automatically on Cron schedules, independent session isolation, complete execution logs | [→ Details](docs/scheduler.md) |
-| **   Bot Gateway** | Unified access to **QQ / WeCom** and other IM platforms. Auto-reconnect, message merging, dynamic start/stop | [→ Details](docs/bot-gateway.md) |
-| **   Browser Automation** | Electron-embedded Chromium, Agent controls the browser directly. **6-layer smart compression**, saves 70%+ tokens without losing structure | [→ Details](docs/browser-automation.md) |
-| **   Multi-Model Management** | Unified adapters for OpenAI / Anthropic / Azure / Google etc. Role-level / session-level / global-level configuration | [→ Details](docs/models.md) |
-| **   Multiple Deployment Options** | Electron desktop + Web app + Docker containerization, ready out of the box | [→ Deployment Guide](#-quick-start-5-minute-setup) |
-| **️ Enterprise-Grade Data** | SQLite by default, Prisma ORM for seamless switch to MySQL / PostgreSQL | — |
-| **   Custom Wallpaper** | Custom backgrounds, transparency, glassmorphism — create your own workstation | — |
+| **🤖 Bot Gateway** | Unified access to **QQ / WeCom / Feishu / Discord / personal WeChat**, auto-reconnect, message merging, dynamic start/stop | [→ Details](docs/bot-gateway.md) |
+| **🌐 Browser Automation** | Electron-embedded Chromium, Agent real-time visual control | [→ Details](docs/browser-automation.md) |
+| **🧩 Multi-Model Management** | 5 protocol adapters × **17 vendors** (OpenAI / Claude / Gemini / Azure / DeepSeek / Qwen / ERNIE / Zhipu / Kimi / Volcano / MiniMax etc.), role-level/session-level/global-level config | [→ Details](docs/models.md) |
+| **🛡️ Sandbox Mode** | Shell commands execute in an isolated sandbox process, Agent acts more safely | [→ Details](docs/windows-sandbox-isolation-design.md) |
+| **🔗 MCP Integration** | Native MCP protocol support, connect to external tool ecosystem | — |
+| **📦 Multiple Deployment Options** | Electron desktop + Web app + Docker containerization, ready out of the box | [→ Deployment Guide](#-quick-start-5-minute-setup) |
+| **🗄️ Enterprise-Grade Data** | SQLite by default, Prisma 7 ORM for seamless switch to MySQL / PostgreSQL | — |
+| **🎨 Custom Wallpaper** | Custom backgrounds, transparency, glassmorphism — create your own workstation | — |
 
 ---
 
-## ️ Product Screenshots
+## 🚀 Quick Start (5-Minute Setup)
 
-<p align="center">
-  <img src="./images/image_001.png" width="45%" alt="Screenshot 1">
-  <img src="./images/image_002.png" width="45%" alt="Screenshot 2">
-</p>
-<p align="center">
-  <img src="./images/image_003.png" width="45%" alt="Screenshot 3">
-  <img src="./images/image_004.png" width="45%" alt="Screenshot 4">
-</p>
-<p align="center">
-  <img src="./images/image_005.png" width="45%" alt="Knowledge Base">
-  <img src="./images/image_006.png" width="45%" alt="Browser Automation">
-</p>
+### Option 1: Docker One-Click Deployment (Recommended)
+
+```bash
+git clone https://gitee.com/zhendongdong/guada_ai.git
+cd guada_ai
+docker compose up -d --build
+
+# Open your browser at http://localhost:8787
+# Start chatting with your AI assistant!
+```
+
+### Option 2: Electron Desktop
+
+Download the pre-built installer (see the [QQ Group 1047993501](#-community)), or build from source:
+
+```bash
+npm install
+npm run build:electron   # Installer output in release/
+```
+
+### Option 3: Develop from Source
+
+```bash
+# Terminal 1: Start the backend (initialize DB on first run)
+cd backend-ts
+npm install
+npm run db:seed:force
+npm run start:dev
+
+# Terminal 2: Start the frontend
+cd frontend
+npm install
+npm run dev
+# Visit http://localhost:5173
+```
+
+> More deployment details: [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) · [Electron Deployment](docs/ELECTRON_DEPLOYMENT.md) · [Production Deployment](docs/PRODUCTION_DEPLOYMENT.md) · [Quick Start](QUICK_START.md)
 
 ---
 
-## ️ System Architecture
+## 🏗️ System Architecture
 
 ![System Architecture](./images/system-architecture.png)
 
@@ -124,54 +152,50 @@ cp .env.example .env
 
 | Layer | Responsibility | Core Components |
 |------|------|----------|
-| **Frontend Entry** | User interaction | Vue 3, Electron, QQ/WeCom Bot |
-| **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway |
-| **Core Service Layer** | Agent engine + Sub-Agent + RAG + Tools + Skills + LLM adapters | Agent Engine, Sub-Agent Manager, Context Compression, RAG, MCP, Skills Framework, LLM Adapters |
-| **Data Layer** | Persistent storage | SQLite (Prisma ORM, switchable to MySQL/PostgreSQL), sqlite-vec + FTS5, file system |
+| **Frontend Entry** | User interaction | Vue 3, Electron (embedded Chromium), QQ/WeCom/Feishu/Discord/WeChat Bot |
+| **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway, Bridge (named pipe ↔ Electron) |
+| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, LLM Adapters |
+| **Data Layer** | Persistent storage | SQLite (Prisma 7, switchable to MySQL/PostgreSQL), sqlite-vec + FTS5, file system |
+
+**Browser automation chain:** Agent decision (backend) → named-pipe Bridge → Electron controls embedded Chromium → accessibility snapshot compressed in 6 layers back → Agent continues reasoning.
 
 ---
 
-## ️ Project Structure
+## 🗂️ Project Structure
 
 ```
 ai_chat/
 ├── backend-ts/                  # NestJS Backend
 │   ├── prisma/schema.prisma     # Database Schema
 │   ├── src/
-│   │   ├── common/              # Infrastructure (database, vector, MCP, utils)
+│   │   ├── common/              # Infrastructure (database, vector DB, MCP, logging, utils)
 │   │   └── modules/
 │   │       ├── chat/            # ⭐ Core dialogue (Agent engine, compression, context, approval)
-│   │       ├── tools/           # ⭐ Tool invocation system (scheduler, MCP, context)
-│   │       ├── skills/          # ⭐ Skills framework
-│   │       ├── sub-agent/       # ⭐ Sub-Agent system
-│   │       ├── knowledge-base/  # ⭐ Knowledge base (RAG)
-│   │       ├── llm-core/        # LLM adapter layer
-│   │       ├── bot-gateway/     # Bot gateway
+│   │       ├── sub-agent/       # ⭐ Sub-Agent system (hierarchical delegation, foreground/background)
+│   │       ├── plugins/         # ⭐ Plugin system (PluginBase, hot-swap, toolkit-level permissions)
+│   │       ├── skills/          # ⭐ Skills framework (files-as-skills, hot-reload)
+│   │       ├── knowledge-base/  # ⭐ Knowledge base (RAG, chunking, vectorization, OCR)
+│   │       ├── llm-core/        # LLM adapter layer (5 protocols × 17 vendors)
+│   │       ├── bot-gateway/     # Bot gateway (QQ/WeCom/Feishu/Discord/WeChat)
+│   │       ├── scheduler/       # Scheduled tasks (Cron, session isolation)
+│   │       ├── shell/           # Shell execution + lightweight sandbox
+│   │       ├── bridge/          # Named-pipe communication (↔ Electron)
+│   │       ├── tools/           # Tool orchestration
+│   │       ├── mcp-servers/     # MCP server integration
+│   │       ├── commands/        # Slash commands
 │   │       ├── characters/      # Character management
-│   │       ├── scheduler/       # Scheduled tasks
-│   │       └── ...              # auth, files, models, settings, users
+│   │       └── ...              # auth, files, models, settings, users, remote-workspace
 │   └── main.ts
-├── frontend/                    # Vue 3 Frontend
-├── electron/                    # Electron Desktop
+├── frontend/                    # Vue 3 Frontend (Vite + Pinia + Element Plus + Tailwind 4)
+├── electron/                    # Electron Desktop (embedded Chromium browser automation)
+├── sandbox/                     # Sandbox process (sandbox executable)
 ├── docs/                        # Documentation
 └── LICENSE
 ```
 
 ---
 
-##   Development Roadmap
-
-| Feature | Status | Description |
-|------|:----:|------|
-| **Sub-Agent System** | ✅ Done | Hierarchical Agent system, complex task auto-decomposition |
-| **Agent Workflow** | ✅ Done | Multi-step Agent orchestration, task decomposition & collaboration |
-| **Sub-accounts** |   Backend done | Data isolation, shared configuration, suitable for family/team use |
-| **Sandbox** |   Planning | Secure code execution environment, Agent writes and runs scripts |
-| **Agent Workflow Visualization** |   Planning | Visual display of Agent reasoning, tool calls, and sub-agent execution chains |
-
----
-
-##   Community
+## 🤝 Community
 
 **Got questions? Want to discuss tech? Download pre-built clients? Come here:**
 
@@ -198,7 +222,7 @@ ai_chat/
 
 ---
 
-##   License
+## 📄 License
 
 This project is open-sourced under the [MIT License](LICENSE). Free to use, modify, and for commercial purposes.
 

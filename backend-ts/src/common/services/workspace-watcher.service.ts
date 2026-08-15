@@ -2,9 +2,11 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import * as parcelWatcher from "@parcel/watcher";
+import { gitActivity } from "./git-activity";
 
 export interface FileChangeEvent {
-  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
+  /** git = 工作区 .git 目录内容变化（外部 commit/stage/checkout 等），前端应刷新 git 状态 */
+  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "git";
   path: string;
   sessionId: string;
   timestamp: number;
@@ -20,12 +22,17 @@ interface WatchEntry {
   pathKey: string;
   absolutePath: string;
   subscription: parcelWatcher.AsyncSubscription | null;
+  /** .git 目录的独立订阅（外部 git 操作检测，见 subscribeGitEntry） */
+  gitSubscription: parcelWatcher.AsyncSubscription | null;
   /** 引用该目录的所有 sessionId，事件广播给这些会话 */
   sessionIds: Set<string>;
   idleTimer: ReturnType<typeof setTimeout> | null;
   /** 事件合并缓冲：absolutePath → 待推送事件 */
   pendingEvents: Map<string, PendingChangeEvent>;
   coalesceTimer: ReturnType<typeof setTimeout> | null;
+  /** .git 变化待推送标志 + 防抖定时器 */
+  gitDirty: boolean;
+  gitTimer: ReturnType<typeof setTimeout> | null;
   /** 熔断：事件风暴时增大合并窗口 */
   degraded: boolean;
   eventTimestamps: number[];
@@ -60,6 +67,18 @@ const DEGRADED_COALESCE_MS = 500;
 const EVENT_RATE_WINDOW_MS = 5_000;
 const EVENT_RATE_THRESHOLD = 5_000;
 const MAX_EVENTS_PER_FLUSH = 500;
+/** .git 变化防抖：一次 commit 会连续写 HEAD/refs/index 等，合并为单次「git 已变化」通知 */
+const GIT_DEBOUNCE_MS = 300;
+/** .git 内部需要忽略的路径：loose objects 每次提交大量写入（refs/HEAD 已足以触发）；
+    *.lock 为 git 写操作的瞬时锁文件（index.lock 等），其 create/delete 无状态意义 */
+const GIT_IGNORE_GLOBS = ["**/objects/**", "**/*.lock"];
+/**
+ * 读命令噪声抑制窗口：git 读命令（status/diff/show）在 stat 缓存过期时会写 index
+ * （创建 index.lock + 写 index），这些是「本端读命令引发的噪声」；窗口内到达的
+ * .git 事件一律忽略，避免 读命令 → 事件 → 刷新 → 读命令 的死循环。
+ * 窗口外的 index 变化（外部 git add / reset）仍会正常推送。
+ */
+const GIT_READ_SUPPRESS_MS = 1000;
 
 /**
  * parcel watcher ignore globs —— 在 C++ 原生层生效，直接减少 inotify 句柄数量。
@@ -218,11 +237,19 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     for (const entry of entries) {
       if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
       if (entry.idleTimer) clearTimeout(entry.idleTimer);
+      if (entry.gitTimer) clearTimeout(entry.gitTimer);
       try {
         await entry.subscription?.unsubscribe();
       } catch (error: unknown) {
         this.logger.warn(
           `Failed to unsubscribe watcher ${entry.absolutePath}: ${String(error)}`,
+        );
+      }
+      try {
+        await entry.gitSubscription?.unsubscribe();
+      } catch (error: unknown) {
+        this.logger.warn(
+          `Failed to unsubscribe git watcher ${entry.absolutePath}: ${String(error)}`,
         );
       }
     }
@@ -266,10 +293,13 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       pathKey,
       absolutePath,
       subscription: null,
+      gitSubscription: null,
       sessionIds: new Set([sessionId]),
       idleTimer: null,
       pendingEvents: new Map(),
       coalesceTimer: null,
+      gitDirty: false,
+      gitTimer: null,
       degraded: false,
       eventTimestamps: [],
       lastUsedAt: Date.now(),
@@ -310,6 +340,88 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
         );
       });
+
+    // 额外监听 .git 目录：外部 git 操作（commit/stage/checkout）只改 .git 内部文件，
+    // 但工作区根 watcher 忽略 .git/**（避免文件编辑风暴）→ 需要独立订阅。
+    this.subscribeGitEntry(entry);
+  }
+
+  /**
+   * 解析工作区的 git 目录：
+   * - 常规仓库：workspace/.git 目录；
+   * - worktree/submodule：workspace/.git 是文件，内容为 `gitdir: <path>`；
+   * - 非仓库：null（不订阅）。
+   */
+  private resolveGitDir(workspacePath: string): string | null {
+    const dotGit = path.join(workspacePath, ".git");
+    try {
+      const stat = fs.statSync(dotGit);
+      if (stat.isDirectory()) return dotGit;
+      if (stat.isFile()) {
+        const content = fs.readFileSync(dotGit, "utf-8");
+        const m = content.match(/^gitdir:\s*(.+)$/m);
+        return m ? path.resolve(workspacePath, m[1].trim()) : null;
+      }
+    } catch {
+      // 不是 git 仓库
+    }
+    return null;
+  }
+
+  /**
+   * 订阅 .git 目录：内部任一文件变化 → 防抖（合并一次 commit 的连续写入）→
+   * 向该工作区的全部会话推送 type:"git" 事件（前端刷新 git 状态，对齐 VS Code 的
+   * 「监听 .git + 防抖 + status」自动刷新机制）。
+   */
+  private subscribeGitEntry(entry: WatchEntry): void {
+    const gitDir = this.resolveGitDir(entry.absolutePath);
+    if (!gitDir) return;
+
+    parcelWatcher
+      .subscribe(
+        gitDir,
+        (error) => {
+          if (error) {
+            this.logger.warn(
+              `Git watcher error for ${gitDir}: ${String(error.message || error)}`,
+            );
+            return;
+          }
+          if (entry.gitDirty) return;
+          entry.gitDirty = true;
+          if (entry.gitTimer) clearTimeout(entry.gitTimer);
+          entry.gitTimer = setTimeout(() => {
+            entry.gitTimer = null;
+            entry.gitDirty = false;
+            // 本端读命令刚写过 index（stat 缓存刷新）→ 这是自己引发的噪声，忽略
+            if (Date.now() - gitActivity.lastReadAt < GIT_READ_SUPPRESS_MS) {
+              return;
+            }
+            const now = Date.now();
+            for (const sessionId of entry.sessionIds) {
+              const sessionState = this.sessions.get(sessionId);
+              if (!sessionState) continue;
+              this.notifyListeners(sessionId, {
+                type: "git",
+                path: "",
+                sessionId,
+                timestamp: now,
+              });
+            }
+          }, GIT_DEBOUNCE_MS);
+          entry.gitTimer.unref?.();
+        },
+        { ignore: GIT_IGNORE_GLOBS },
+      )
+      .then((subscription) => {
+        entry.gitSubscription = subscription;
+        this.logger.debug(`Started git watcher for ${gitDir}`);
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to subscribe git watcher for ${gitDir}: ${String(error)}`,
+        );
+      });
   }
 
   private releaseWatcherRef(pathKey: string, sessionId: string): void {
@@ -333,11 +445,19 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
     this.watchers.delete(entry.pathKey);
     if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
+    if (entry.gitTimer) clearTimeout(entry.gitTimer);
     entry.subscription
       ?.unsubscribe()
       .catch((error: unknown) => {
         this.logger.warn(
           `Failed to dispose watcher ${entry.absolutePath}: ${String(error)}`,
+        );
+      });
+    entry.gitSubscription
+      ?.unsubscribe()
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to dispose git watcher ${entry.absolutePath}: ${String(error)}`,
         );
       });
     this.logger.debug(
