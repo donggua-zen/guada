@@ -2083,9 +2083,15 @@ defineExpose({ refresh });
   min-height: 0;
 }
 
+/* diff 空状态（未选中文件/无变更/非仓库）：占满预览区，垂直水平居中 */
 .git-diff-empty {
-  padding: 32px 16px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  padding: 0 16px;
   font-size: 12px;
   color: var(--el-text-color-placeholder);
   user-select: none;
