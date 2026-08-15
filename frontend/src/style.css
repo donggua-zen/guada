@@ -97,6 +97,11 @@
   --color-dialog-border: var(--color-border);
   --size-dialog-rounded-radius: 12px;
 
+  --color-warning: #e6a23c;
+  --color-success: #67c23a;
+  --color-danger: #f56c6c;
+  --color-info: #909399;
+
   --size-text-base: 15px;
   --size-text-sm: 14px;
   --size-rounded-radius: 18px;
@@ -233,6 +238,11 @@ html.dark {
   --color-bubble-assitant-text-strong: var(--color-text);
 
   --size-dialog-rounded-radius: 12px;
+
+  --color-warning: #e6a23c;
+  --color-success: #67c23a;
+  --color-danger: #f56c6c;
+  --color-info: #909399;
 
   /* 
     --color-gray-50: #111827;

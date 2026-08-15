@@ -14,6 +14,8 @@ let tipEl: HTMLDivElement | null = null
 let contentEl: HTMLSpanElement | null = null
 let arrowEl: HTMLDivElement | null = null
 let showTimer: ReturnType<typeof setTimeout> | null = null
+/** 当前显示的触发元素（已打开状态下刷新内容用） */
+let currentTrigger: HTMLElement | null = null
 
 const SHOW_DELAY = 200
 const GAP = 14
@@ -102,6 +104,7 @@ export function showTooltip(
   showTimer = setTimeout(() => {
     showTimer = null
     const tip = ensureEl()
+    currentTrigger = trigger
 
     if (contentEl) contentEl.textContent = content
     tip.setAttribute('data-effect', effect)
@@ -126,9 +129,33 @@ export function hideTooltip(): void {
     clearTimeout(showTimer)
     showTimer = null
   }
+  currentTrigger = null
   if (tipEl) {
     tipEl.style.display = 'none'
   }
+}
+
+/**
+ * 已打开状态下刷新内容（如点击后 content prop 变化而 tooltip 仍可见）：
+ * 直接更新文本并按新尺寸重定位，不走 SHOW_DELAY。仅当该触发元素当前正显示时生效。
+ */
+export function refreshTooltip(
+  trigger: HTMLElement,
+  content: string,
+  placement: TooltipPlacement = 'top',
+  effect: TooltipEffect = 'dark',
+): void {
+  if (currentTrigger !== trigger || !content || !tipEl || tipEl.style.display === 'none') {
+    return
+  }
+  if (contentEl) contentEl.textContent = content
+  tipEl.setAttribute('data-effect', effect)
+  const triggerRect = trigger.getBoundingClientRect()
+  const tipRect = tipEl.getBoundingClientRect()
+  const { x, y, actual } = computePosition(triggerRect, tipRect, placement)
+  tipEl.style.left = `${x}px`
+  tipEl.style.top = `${y}px`
+  tipEl.setAttribute('data-placement', actual)
 }
 
 // Global listeners — hide on any scroll or resize.
@@ -138,6 +165,7 @@ export function hideTooltip(): void {
 function onScrollOrResize(): void {
   if (tipEl && tipEl.style.display !== 'none') {
     tipEl.style.display = 'none'
+    currentTrigger = null
   }
 }
 

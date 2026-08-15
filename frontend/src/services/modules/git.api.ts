@@ -7,6 +7,10 @@ export interface GitFileChange {
   index: string;
   /** 工作区状态：A/M/D/R/U，"" 表示无变更，"?" 表示未跟踪 */
   workingDir: string;
+  /** 新增行数（顶部聚合统计用） */
+  additions: number;
+  /** 删除行数 */
+  deletions: number;
 }
 
 export interface GitStatus {
@@ -15,6 +19,9 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   files: GitFileChange[];
+  /** 仅暂存区的增删行数（提交弹窗未勾选「包含未暂存」时的提交量） */
+  stagedAdditions: number;
+  stagedDeletions: number;
 }
 
 export interface GitBranch {
@@ -33,6 +40,8 @@ export interface GitDiff {
   newContent?: string;
   /** 该文件为二进制（图片/压缩包/媒体等），不支持文本预览 */
   binary?: boolean;
+  /** 文件体积超限（总体积 > 2MB 或含超长行 > 4KB），拒绝预览 */
+  tooLarge?: boolean;
 }
 
 export interface GitCommitResult {
@@ -62,6 +71,7 @@ export interface GitApi {
   ): Promise<GitCommitResult>;
   gitStage(sessionId: string, files?: string[]): Promise<{ success: boolean }>;
   gitUnstage(sessionId: string, files?: string[]): Promise<{ success: boolean }>;
+  gitPush(sessionId: string): Promise<{ success: boolean }>;
   getGitDiff(
     sessionId: string,
     file: string,
@@ -115,6 +125,12 @@ export const gitApi: GitApi = {
     return await this._request(`/sessions/${sessionId}/git/unstage`, {
       method: "POST",
       data: { files },
+    });
+  },
+
+  async gitPush(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/git/push`, {
+      method: "POST",
     });
   },
 

@@ -24,6 +24,7 @@ import {
   computeRetryDelayMs,
   retrySleep,
   buildRetryMessage,
+  createAbortError,
   type RetryableErrorType,
 } from "../llm-core/utils/retry-on-error.util";
 
@@ -437,9 +438,12 @@ export class AgentEngine {
           // 记录思考结束（异常路径仍需正确追踪思考时长）
           this.recordThinkingFinished(currentTurnThinkingInfo, "stream error");
           // 业务层：异常终止（区分用户取消和真实错误）
+          // 注意：executeLLMStream 已保证 abort 场景抛出 name=AbortError，
+          // 这里额外检查 abortSignal 作为兜底（防第三方 adapter 抛非标准错误）
           if (
             streamError.name === "AbortError" ||
-            streamError.message.toLowerCase().includes("abort")
+            streamError.message.toLowerCase().includes("abort") ||
+            abortSignal?.aborted
           ) {
             businessReason = "user_cancel";
           } else if (streamError instanceof UpstreamTimeoutError) {
@@ -765,6 +769,12 @@ export class AgentEngine {
 
         // 流"干净地提前结束"检测：for-await 正常退出但缺少 finishReason
         // 某些不稳定平台可能输出一半就断开，不发送 finish chunk
+        // 注意：用户手动 abort 时部分 provider/SDK 也会"干净地结束"流（不抛 AbortError），
+        // 必须先排除 abort 场景，否则会被误判为流异常
+        if (abortSignal?.aborted) {
+          throw createAbortError("LLM stream aborted by user");
+        }
+
         if (!accumulated.finishReason) {
           const hasPartialContent =
             !!accumulated.content ||
@@ -802,13 +812,22 @@ export class AgentEngine {
             continue;
           }
 
-          // 重试耗尽
+          // 重试耗尽（retrySleep 已处理 abort，此处仅防御性检查）
+          if (abortSignal?.aborted) {
+            throw createAbortError("LLM stream aborted by user");
+          }
           throw new Error("LLM stream ended prematurely without finish signal (retries exhausted)");
         }
 
         // 流正常结束，退出重试循环
         return;
       } catch (error: any) {
+        // 用户手动中止：无论 provider 以何种方式结束（抛错/干净结束/重试等待），
+        // 只要 abort 信号已触发，一律归一化为 AbortError，避免误判为流异常或触发重试
+        if (abortSignal?.aborted) {
+          throw createAbortError("LLM stream aborted by user");
+        }
+
         const errorType = classifyError(error);
 
         // 不可重试 或 重试耗尽 → 直接抛出

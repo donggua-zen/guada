@@ -35,6 +35,7 @@ export class RpcClient {
   private pushHandlers = new Map<string, (data: any) => void>();
   private msgId = 0;
   private connected = false;
+  private disconnectHandlers: Array<() => void> = [];
 
   constructor(ws: WebSocket) {
     this.ws = ws;
@@ -68,11 +69,25 @@ export class RpcClient {
         reject(new Error("WebSocket closed"));
       }
       this.pending.clear();
+      // 通知断开(供上层清理缓存/重建连接)
+      for (const handler of this.disconnectHandlers) {
+        try {
+          handler();
+        } catch {}
+      }
     });
   }
 
   get isConnected(): boolean {
     return this.connected;
+  }
+
+  /**
+   * 注册断开回调:WebSocket 关闭时触发。
+   * 用于上层(RemoteAgentManager)清理失效缓存,使下次调用自动重建连接。
+   */
+  onDisconnect(handler: () => void): void {
+    this.disconnectHandlers.push(handler);
   }
 
   setConnected(): void {

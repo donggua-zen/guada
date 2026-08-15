@@ -5,6 +5,7 @@ import {
   UpstreamNetworkError,
   UpstreamRequestError,
 } from "./upstream-errors";
+import { createAbortError } from "./abort-error.util";
 
 // Re-export for backward compatibility (consumers should migrate to Upstream* names)
 export { UpstreamRateLimitError as RateLimitError } from "./upstream-errors";
@@ -67,13 +68,13 @@ function computeDelay(attempt: number): number {
  */
 function sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
   if (abortSignal?.aborted) {
-    return Promise.reject(new Error("LLM request aborted"));
+    return Promise.reject(createAbortError("LLM request aborted"));
   }
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new Error("LLM request aborted"));
+      reject(createAbortError("LLM request aborted"));
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
   });
