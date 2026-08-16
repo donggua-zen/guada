@@ -2,6 +2,7 @@ export default {
   title: 'Git 变更',
   overviewTitle: '工作区概览',
   notGitRepo: '当前工作目录不是 Git 仓库',
+  notInstalled: '未安装 Git，Git 功能不可用',
   noChanges: '没有变更',
   loading: '加载中...',
   refresh: '刷新',

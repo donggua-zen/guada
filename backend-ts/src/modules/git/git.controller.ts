@@ -72,9 +72,32 @@ export class GitController {
     }
   }
 
+  /** 系统未安装 git → 明确报错（避免每次调用 500 ENOENT） */
+  private assertGitAvailable(): void {
+    if (!this.gitService.isGitAvailable()) {
+      throw new HttpException(
+        "Git is not installed",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
   @Get("sessions/:id/git/status")
   async getStatus(@Param("id") id: string, @CurrentUser() user: any) {
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    // 未安装 git：优雅降级（不弹错，前端展示「未安装 Git」提示）
+    if (!this.gitService.isGitAvailable()) {
+      return {
+        isGitRepo: false,
+        gitUnavailable: true,
+        branch: null,
+        ahead: 0,
+        behind: 0,
+        files: [],
+        stagedAdditions: 0,
+        stagedDeletions: 0,
+      };
+    }
     if (!this.gitService.isGitRepo(workspacePath)) {
       return { isGitRepo: false, branch: null, ahead: 0, behind: 0, files: [] };
     }
@@ -85,6 +108,9 @@ export class GitController {
   @Get("sessions/:id/git/branches")
   async getBranches(@Param("id") id: string, @CurrentUser() user: any) {
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    if (!this.gitService.isGitAvailable()) {
+      return { branches: [] };
+    }
     if (!this.gitService.isGitRepo(workspacePath)) {
       return { branches: [] };
     }
@@ -102,6 +128,7 @@ export class GitController {
       throw new HttpException("branch is required", HttpStatus.BAD_REQUEST);
     }
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     return await this.gitService.checkout(workspacePath, body.branch);
   }
@@ -120,6 +147,7 @@ export class GitController {
       );
     }
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
     return await this.gitService.commit(workspacePath, message, files);
@@ -132,6 +160,7 @@ export class GitController {
     @CurrentUser() user: any,
   ) {
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
     return await this.gitService.stage(workspacePath, files);
@@ -144,6 +173,7 @@ export class GitController {
     @CurrentUser() user: any,
   ) {
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
     return await this.gitService.unstage(workspacePath, files);
@@ -152,6 +182,7 @@ export class GitController {
   @Post("sessions/:id/git/push")
   async push(@Param("id") id: string, @CurrentUser() user: any) {
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     return await this.gitService.push(workspacePath);
   }
@@ -167,6 +198,7 @@ export class GitController {
       throw new HttpException("file is required", HttpStatus.BAD_REQUEST);
     }
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const [validatedFile] = this.validateFilePaths([file], workspacePath)!;
     return await this.gitService.getDiff(
@@ -194,6 +226,7 @@ export class GitController {
       throw new HttpException("Invalid line range", HttpStatus.BAD_REQUEST);
     }
     const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const [validatedFile] = this.validateFilePaths([file], workspacePath)!;
     return await this.gitService.getFileLines(

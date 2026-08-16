@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { simpleGit, SimpleGit } from "simple-git";
+import { execFileSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
@@ -172,6 +173,25 @@ export class GitService {
   isGitRepo(workspacePath: string): boolean {
     // .git 可能是目录（常规仓库）或文件（worktree/submodule）
     return fs.existsSync(path.join(workspacePath, ".git"));
+  }
+
+  private gitAvailable: boolean | null = null;
+
+  /**
+   * 探测 git 是否已安装（spawn `git --version`，结果缓存）。
+   * 目录是 git 仓库但系统未装 git 时，所有 simple-git 命令都会 ENOENT 抛错 →
+   * 用此标志提前降级，避免每个接口反复 500。
+   */
+  isGitAvailable(): boolean {
+    if (this.gitAvailable !== null) return this.gitAvailable;
+    try {
+      execFileSync("git", ["--version"], { stdio: "ignore", timeout: 5000 });
+      this.gitAvailable = true;
+    } catch {
+      this.logger.warn("Git is not installed in this environment — Git features degraded");
+      this.gitAvailable = false;
+    }
+    return this.gitAvailable;
   }
 
   async getStatus(workspacePath: string): Promise<GitStatusResult> {

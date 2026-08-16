@@ -5,9 +5,16 @@
     <!-- 标题行 -->
     <div class="overview-header">
       <span class="overview-title">{{ t('git.overviewTitle') }}</span>
-      <button class="overview-collapse-btn" :title="t('chat.workspace.collapseOverview')" @click="emit('collapse')">
-        <el-icon :size="14"><Dismiss16Regular /></el-icon>
-      </button>
+      <div class="overview-header-actions">
+        <!-- 重新检测：手动刷新 git 状态（覆盖 git init / 仓库状态变化等 watcher 无法感知的场景） -->
+        <button class="overview-collapse-btn" :title="t('git.refresh')" :disabled="git.refreshing"
+          @click="git.refresh()">
+          <el-icon :size="14" :class="{ 'is-loading': git.refreshing }"><ArrowSync20Regular /></el-icon>
+        </button>
+        <button class="overview-collapse-btn" :title="t('chat.workspace.collapseOverview')" @click="emit('collapse')">
+          <el-icon :size="14"><Dismiss16Regular /></el-icon>
+        </button>
+      </div>
     </div>
 
     <div class="overview-rows">
@@ -19,6 +26,7 @@
           <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
           <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
         </span>
+        <span v-else-if="git.status?.gitUnavailable" class="overview-row-value overview-row-value--empty">{{ t('git.notInstalled') }}</span>
         <span v-else class="overview-row-value overview-row-value--empty">{{ t('git.noChanges') }}</span>
       </button>
 
@@ -108,6 +116,7 @@ import { ArrowDown, Check } from "@element-plus/icons-vue";
 import {
   Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
   Globe16Regular, ClipboardTaskListLtr20Regular, Dismiss16Regular, Add16Regular,
+  ArrowSync20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
@@ -262,6 +271,14 @@ async function createBrowser(): Promise<void> {
   letter-spacing: 0.03em;
   color: var(--color-text-gray);
   text-transform: uppercase;
+}
+.overview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.overview-collapse-btn .is-loading {
+  animation: overview-spin 1s linear infinite;
 }
 .overview-collapse-btn {
   display: flex;
