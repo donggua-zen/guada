@@ -516,6 +516,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
    * 订阅 .git 目录：内部任一文件变化 → 防抖（合并一次 commit 的连续写入）→
    * 向该工作区的全部会话推送 type:"git" 事件（前端刷新 git 状态，对齐 VS Code 的
    * 「监听 .git + 防抖 + status」自动刷新机制）。
+   * 当前还不是 git 仓库时不订阅 —— 由前端「重新检测」按钮触发刷新感知 git init。
    */
   private subscribeGitEntry(entry: WatchEntry): void {
     const gitDir = this.resolveGitDir(entry.absolutePath);
@@ -537,21 +538,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           entry.gitTimer = setTimeout(() => {
             entry.gitTimer = null;
             entry.gitDirty = false;
-            // 本端读命令刚写过 index（stat 缓存刷新）→ 这是自己引发的噪声，忽略
-            if (Date.now() - gitActivity.lastReadAt < GIT_READ_SUPPRESS_MS) {
-              return;
-            }
-            const now = Date.now();
-            for (const sessionId of entry.sessionIds) {
-              const sessionState = this.sessions.get(sessionId);
-              if (!sessionState) continue;
-              this.notifyListeners(sessionId, {
-                type: "git",
-                path: "",
-                sessionId,
-                timestamp: now,
-              });
-            }
+            this.notifyGitChangedForEntry(entry);
           }, GIT_DEBOUNCE_MS);
           entry.gitTimer.unref?.();
         },
@@ -571,6 +558,25 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           `Failed to subscribe git watcher for ${gitDir}: ${String(error)}`,
         );
       });
+  }
+
+  /** 向 entry 关联的全部会话推送 type:"git"（含读命令噪声抑制） */
+  private notifyGitChangedForEntry(entry: WatchEntry): void {
+    // 本端读命令刚写过 index（stat 缓存刷新）→ 这是自己引发的噪声，忽略
+    if (Date.now() - gitActivity.lastReadAt < GIT_READ_SUPPRESS_MS) {
+      return;
+    }
+    const now = Date.now();
+    for (const sessionId of entry.sessionIds) {
+      const sessionState = this.sessions.get(sessionId);
+      if (!sessionState) continue;
+      this.notifyListeners(sessionId, {
+        type: "git",
+        path: "",
+        sessionId,
+        timestamp: now,
+      });
+    }
   }
 
   private releaseWatcherRef(pathKey: string, sessionId: string): void {

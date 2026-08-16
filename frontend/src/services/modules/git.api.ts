@@ -15,6 +15,8 @@ export interface GitFileChange {
 
 export interface GitStatus {
   isGitRepo: boolean;
+  /** 系统未安装 git：true 时 git 功能整体不可用（非仓库的另一种降级） */
+  gitUnavailable?: boolean;
   branch: string | null;
   ahead: number;
   behind: number;

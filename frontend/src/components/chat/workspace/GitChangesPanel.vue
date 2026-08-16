@@ -203,7 +203,7 @@
           </div>
         </template>
         <div v-else class="git-diff-empty">
-          {{ isGitRepo ? (totalChanges === 0 ? t('git.noChanges') : t('git.selectFileToPreview')) : t('git.notGitRepo') }}
+          {{ status?.gitUnavailable ? t('git.notInstalled') : (isGitRepo ? (totalChanges === 0 ? t('git.noChanges') : t('git.selectFileToPreview')) : t('git.notGitRepo')) }}
         </div>
           </div>
         </template>
@@ -283,7 +283,7 @@
           </div>
         </template>
         <div v-else class="text-center py-8 text-gray-400 dark:text-[#6b6d73] text-xs px-4">
-          {{ t('git.notGitRepo') }}
+          {{ status?.gitUnavailable ? t('git.notInstalled') : t('git.notGitRepo') }}
         </div>
             </div>
           </div>

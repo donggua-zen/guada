@@ -2,6 +2,7 @@ export default {
   title: 'Git Changes',
   overviewTitle: 'Workspace Overview',
   notGitRepo: 'Current working directory is not a Git repository',
+  notInstalled: 'Git is not installed, Git features unavailable',
   noChanges: 'No changes',
   loading: 'Loading...',
   refresh: 'Refresh',
