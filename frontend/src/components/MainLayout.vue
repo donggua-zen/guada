@@ -24,6 +24,7 @@
 import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
+import { useSessionStore } from '@/stores/session'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { useSessionEvents } from '@/composables/useSessionEvents'
@@ -34,6 +35,7 @@ import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
 import FloatingChatPanel from './chat/FloatingChatPanel.vue'
 
 const layoutStore = useLayoutStore()
+const sessionStore = useSessionStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -68,6 +70,20 @@ const handleGlobalShortcut = (e: KeyboardEvent) => {
   router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
 }
 
+// workspace SSE 连接：跟随当前激活会话（连接生命周期 = app 壳，不依赖任何 UI 组件；
+// 后端 watcher 按工作目录共享，切换会话不重建 watcher；scope 订阅由消费方（GitStore/Sidebar）显式管理）
+watch(
+  () => sessionStore.activeSessionId,
+  (id) => {
+    if (id && id !== 'new-session') {
+      apiService.connectWorkspaceWatcher(id)
+    } else {
+      apiService.disconnectWorkspaceWatcher()
+    }
+  },
+  { immediate: true },
+)
+
 // 启动 SSE 连接 + 全局事件监听
 onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
@@ -91,6 +107,7 @@ onUnmounted(() => {
   console.log('[MainLayout] 断开 SSE 连接')
   cleanupSessionEvents()
   apiService.disconnectSessionEvents()
+  apiService.disconnectWorkspaceWatcher()
   window.removeEventListener('keydown', handleGlobalShortcut)
 })
 </script>

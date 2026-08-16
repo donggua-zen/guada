@@ -64,10 +64,16 @@ export const useGitStore = defineStore("git", () => {
 
   /**
    * 会话绑定（幂等）：切换会话 → 重置并刷新。概览与面板均可调用。
+   * 同时订阅 git 事件范围（消费方订阅）：SSE 连接由 MainLayout 持有，
+   * 这里按会话订阅/退订 git scope —— 后端据此激活 .git watcher。
    */
   function bindSession(id: string | null): void {
-    if (sessionId.value === id) return;
+    const oldId = sessionId.value;
+    if (oldId === id) return;
     sessionId.value = id;
+    // git 事件消费方订阅：会话切换时更新（旧会话退订、新会话订阅）
+    if (oldId) void apiService.setWorkspaceWatchScope(oldId, "git", false);
+    if (id) void apiService.setWorkspaceWatchScope(id, "git", true);
     status.value = null;
     branches.value = [];
     selectedBranch.value = "";
