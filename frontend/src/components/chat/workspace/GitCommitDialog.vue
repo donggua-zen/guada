@@ -24,8 +24,8 @@
           <span>{{ t('git.includeUnstaged') }}</span>
         </button>
         <span v-if="git.commitStats.add || git.commitStats.del" class="git-diff-stats git-cd-stats">
-          <span v-if="git.commitStats.add" class="git-stat-add">+{{ git.commitStats.add }}</span>
-          <span v-if="git.commitStats.del" class="git-stat-del">-{{ git.commitStats.del }}</span>
+          <span v-if="git.commitStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.commitStats.add }}</span>
+          <span v-if="git.commitStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.commitStats.del }}</span>
         </span>
       </div>
       <!-- 堆叠操作行：提交（高亮 + Ctrl+↵ 提示）/ 提交并推送 / 推送（无领先提交时禁用） -->

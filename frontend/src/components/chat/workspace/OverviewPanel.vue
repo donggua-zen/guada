@@ -16,8 +16,8 @@
         <el-icon :size="16" class="overview-row-icon"><Branch20Regular /></el-icon>
         <span class="overview-row-label">{{ t('git.title') }}</span>
         <span v-if="git.totalStats.add || git.totalStats.del" class="overview-row-value overview-row-value--stats">
-          <span v-if="git.totalStats.add" class="git-stat-add">+{{ git.totalStats.add }}</span>
-          <span v-if="git.totalStats.del" class="git-stat-del">-{{ git.totalStats.del }}</span>
+          <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
+          <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
         </span>
         <span v-else class="overview-row-value overview-row-value--empty">{{ t('git.noChanges') }}</span>
       </button>
@@ -187,9 +187,8 @@ watch(
   },
 );
 
-// ── 会话绑定：概览常驻 → 持有 workspace SSE 连接并订阅 git 范围。
-//    工作区关闭（Sidebar 卸载）时连接与 git watcher 仍存活，概览才能收到外部 git 事件；
-//    file 范围由 WorkspaceSidebar 显式订阅（打开工作区时）。
+// ── 会话绑定：git 数据与事件订阅由 GitStore 管理（bindSession 订阅 git scope），
+//    workspace SSE 连接由 MainLayout 持有 —— 本组件仅展示，不参与连接/订阅生命周期。
 watch(
   () => props.sessionId,
   (id) => {
@@ -197,23 +196,9 @@ watch(
     todoExpanded.value = false;
     browserExpanded.value = false;
     void loadTodo();
-    if (id) {
-      // connect 内部会先断开旧连接（旧连接的 SSE close → 后端自动清除本页订阅）
-      apiService.connectWorkspaceWatcher(id);
-      void apiService.setWorkspaceWatchScope(id, "git", true);
-    } else {
-      apiService.disconnectWorkspaceWatcher();
-    }
   },
   { immediate: true },
 );
-
-onUnmounted(() => {
-  unsubscribeTodoUpdated?.();
-  unsubscribeTodoUpdated = null;
-  // 常驻组件卸载（离开聊天页等）→ 断开连接，后端自动清除本页 git 订阅
-  apiService.disconnectWorkspaceWatcher();
-});
 
 function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
@@ -390,7 +375,7 @@ async function createBrowser(): Promise<void> {
   gap: 6px;
   min-width: 140px;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--size-text-sm);
 }
 .overview-branch-check {
   width: 12px;
