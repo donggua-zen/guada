@@ -1,5 +1,6 @@
 <template>
-  <div v-if="isElectron" class="window-controls flex items-center h-full no-drag">
+  <!-- macOS 使用系统红绿灯按钮，隐藏自定义窗口控制 -->
+  <div v-if="isElectron && !isMac" class="window-controls flex items-center h-full no-drag">
     <button
       class="flex items-center justify-center w-11 h-full border-none bg-transparent cursor-pointer transition-all duration-150 ease-in-out opacity-70 outline-none hover:opacity-100 focus:outline-none focus-visible:outline-none"
       @click="minimizeWindow">
@@ -26,6 +27,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { WindowMinimize, WindowMaximize, WindowRestore, WindowClose } from '@/components/icons'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+const isMac = isElectron && window.electronAPI.platform === 'darwin'
 
 const isMaximized = ref(false)
 

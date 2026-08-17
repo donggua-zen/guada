@@ -103,13 +103,41 @@ env: {
 npm run build:electron
 ```
 
+> macOS 构建请使用 `npm run build:electron:mac`（等价命令，显式指定 `electron-builder --mac`）。
+
 构建过程包括：
 1. 构建后端（TypeScript → JavaScript）
 2. 构建前端（Vue → 静态文件）
 3. 打包 Electron 应用
 4. 重新编译原生模块（better-sqlite3 等）
+5. 按目标平台裁剪原生二进制（见下文「平台二进制裁剪」）
 
 **构建时间**：首次构建约 10-30 分钟（取决于机器性能）
+
+### 2.1 平台二进制裁剪
+
+后端依赖中包含大量按平台分发的预编译二进制（sharp / sqlite-vec / @node-rs/jieba /
+@parcel/watcher / Prisma 引擎）。构建时**只保留目标平台的二进制**，避免打包体积膨胀：
+
+- 目标平台由 `TARGET_PLATFORMS`（或兼容的 `SHARP_TARGET_PLATFORMS`）控制，
+  默认取当前构建平台；多值用逗号分隔，如 `TARGET_PLATFORMS=darwin-x64,darwin-arm64`
+- 平台包清单集中在 `scripts/platform-manifest.js`，新增平台包时在此登记
+- 裁剪发生在 `scripts/optimize-electron-deps.js`（Step 5.2），
+  原生模块重建由跨平台的 `scripts/rebuild-native-electron.js`（基于 @electron/rebuild）执行
+- `npm run build:electron:backend` 会自动按当前平台选择目标，无需手工传参
+
+常用脚本：
+
+```bash
+npm run optimize:electron-deps:mac      # 单独执行 macOS 依赖裁剪
+npm run optimize:electron-deps:linux    # 单独执行 Linux 依赖裁剪
+npm run build:electron:mac              # macOS 完整构建（.app + dmg）
+npm run build:electron:dir              # 只生成未打包目录（本地验证最快）
+```
+
+> 注意：dmg 目标同时声明了 x64 与 arm64。原生模块只会按当前架构重建，
+> 因此本地构建请使用与机器一致的架构（如 Apple Silicon 执行
+> `npx electron-builder --mac --arm64`），多架构产物建议由 CI 分 Job 构建。
 
 ### 3. 构建产物
 

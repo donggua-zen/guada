@@ -1,7 +1,10 @@
 <template>
   <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden ">
     <!-- 标题栏左侧面板 -->
-    <TitlebarLeftPanel />
+    <!-- macOS：为系统红绿灯按钮预留左侧空间，避免遮挡 logo/菜单 -->
+    <div :class="{ 'mac-sidebar-title-padding': isMac }">
+      <TitlebarLeftPanel />
+    </div>
     <!-- 导航菜单 -->
     <div class="px-2 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
@@ -302,6 +305,7 @@ import { Loading } from '@element-plus/icons-vue'
 import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+const isMac = isElectron && window.electronAPI.platform === 'darwin'
 
 const router = useRouter()
 const route = useRoute()
@@ -996,5 +1000,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* macOS：红绿灯按钮占左上角约 70px，标题行左侧留白避免遮挡 */
+.mac-sidebar-title-padding {
+  padding-left: 78px;
 }
 </style>

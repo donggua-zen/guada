@@ -8,6 +8,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { execSync } = require('child_process')
 const glob = require('glob')
+const platformManifest = require('./platform-manifest')
 
 console.log('========================================')
 console.log('Optimizing node_modules for Electron production')
@@ -15,7 +16,6 @@ console.log('========================================')
 console.log()
 
 const backendPath = path.join(__dirname, '..', 'backend-ts')
-const electronNodeModulesPath = path.join(backendPath, 'node_modules_electron')
 const optimizedPath = path.join(backendPath, 'node_modules_production')
 
 function getDirSize(dirPath) {
@@ -44,6 +44,11 @@ function getDependenciesHash() {
     overrides: pkg.overrides
   }
   let hash = crypto.createHash('md5').update(JSON.stringify(deps))
+
+  // 目标平台纳入哈希：切换构建平台时强制重新安装与裁剪
+  hash = hash.update(
+    JSON.stringify({ targetPlatforms: platformManifest.resolveTargetPlatforms(process.env) })
+  )
 
   // 将 schema.prisma 内容纳入哈希计算，schema 变更时强制重新生成
   const prismaSchemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
@@ -211,9 +216,9 @@ if (removedSize > 0) {
   console.log(`  Total removed: ${(removedSize / (1024 * 1024)).toFixed(2)} MB`)
 }
 
-// 5.2 移除不需要的 sharp 平台特定包（根据构建目标动态保留）
+// 5.2 移除平台特定二进制包（根据构建目标动态保留）
 console.log()
-console.log('Removing unnecessary sharp platform-specific packages...')
+console.log('Removing unnecessary platform-specific packages...')
 
 // 检测当前构建平台
 const isWindows = process.platform === 'win32'
@@ -222,51 +227,97 @@ const isLinux = process.platform === 'linux'
 
 console.log(`  Current platform: ${process.platform} (${isWindows ? 'Windows' : isMacOS ? 'macOS' : 'Linux'})`)
 
-// 定义所有平台包，稍后根据目标平台决定保留哪些
-const allSharpPlatformPackages = [
-  { name: '@img/sharp-darwin-arm64', platform: 'darwin', arch: 'arm64' },
-  { name: '@img/sharp-darwin-x64', platform: 'darwin', arch: 'x64' },
-  { name: '@img/sharp-libvips-darwin-arm64', platform: 'darwin', arch: 'arm64' },
-  { name: '@img/sharp-libvips-darwin-x64', platform: 'darwin', arch: 'x64' },
-  { name: '@img/sharp-libvips-linux-arm', platform: 'linux', arch: 'arm' },
-  { name: '@img/sharp-libvips-linux-arm64', platform: 'linux', arch: 'arm64' },
-  { name: '@img/sharp-libvips-linux-x64', platform: 'linux', arch: 'x64' },
-  { name: '@img/sharp-linux-arm', platform: 'linux', arch: 'arm' },
-  { name: '@img/sharp-linux-arm64', platform: 'linux', arch: 'arm64' },
-  { name: '@img/sharp-linux-x64', platform: 'linux', arch: 'x64' },
-  { name: '@img/sharp-win32-x64', platform: 'win32', arch: 'x64' },
-  { name: '@img/sharp-win32-ia32', platform: 'win32', arch: 'ia32' }
-]
-
 // 确定需要保留的平台（支持多平台构建）
-// 可以通过环境变量 SHARP_TARGET_PLATFORMS 指定，例如: "win32,linux"
-const targetPlatforms = process.env.SHARP_TARGET_PLATFORMS
-  ? process.env.SHARP_TARGET_PLATFORMS.split(',')
-  : [process.platform] // 默认只保留当前平台
+// 可通过 TARGET_PLATFORMS / SHARP_TARGET_PLATFORMS 指定，例如: "win32,linux" / "darwin"
+const targetPlatforms = platformManifest.resolveTargetPlatforms(process.env)
 
 console.log(`  Target platforms: ${targetPlatforms.join(', ')}`)
 
-let sharpRemovedSize = 0
-let sharpKeptCount = 0
+let platformRemovedSize = 0
+let platformRemovedCount = 0
 
-for (const pkg of allSharpPlatformPackages) {
-  const packagePath = path.join(optimizedPath, 'node_modules', pkg.name)
-  if (fs.existsSync(packagePath)) {
-    const shouldKeep = targetPlatforms.includes(pkg.platform)
-    
+// 先处理更长前缀的包族（如 sharp-libvips-* 先于 sharp-*），避免误删
+const families = [...platformManifest.PACKAGE_FAMILIES].sort(
+  (a, b) => b.prefix.length - a.prefix.length
+)
+const handledPackageNames = new Set()
+
+for (const family of families) {
+  const scanDir = family.name.includes('/')
+    ? path.join(optimizedPath, 'node_modules', family.name.split('/')[0])
+    : path.join(optimizedPath, 'node_modules')
+
+  if (!fs.existsSync(scanDir)) {
+    continue
+  }
+
+  const entries = fs.readdirSync(scanDir, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+
+    const entryName = entry.name
+    if (handledPackageNames.has(entryName)) continue
+    if (!entryName.startsWith(family.prefix)) continue
+    handledPackageNames.add(entryName)
+
+    const entryPath = path.join(scanDir, entryName)
+    const shouldKeep = family.keep(entryName, targetPlatforms)
+
     if (shouldKeep) {
-      sharpKeptCount++
-      console.log(`  ✓ Keeping ${pkg.name} (target: ${pkg.platform}-${pkg.arch})`)
+      console.log(`  ✓ Keeping ${entryName} (target: ${targetPlatforms.join(',')})`)
     } else {
-      const size = getDirSize(packagePath)
-      fs.rmSync(packagePath, { recursive: true, force: true })
-      sharpRemovedSize += size
-      console.log(`  ✗ Removed ${pkg.name} (${(size / (1024 * 1024)).toFixed(2)} MB)`)
+      const size = getDirSize(entryPath)
+      fs.rmSync(entryPath, { recursive: true, force: true })
+      platformRemovedSize += size
+      platformRemovedCount++
+      console.log(`  ✗ Removed ${entryName} (${(size / (1024 * 1024)).toFixed(2)} MB)`)
     }
   }
 }
 
-console.log(`  Summary: Kept ${sharpKeptCount} packages, removed ${(sharpRemovedSize / (1024 * 1024)).toFixed(2)} MB`)
+// 5.2.1 单包内嵌多平台二进制（如 @huggingface/tokenizers 内含多平台 .node 文件）
+for (const spec of platformManifest.IN_PACKAGE_BINARIES) {
+  const pkgPath = path.join(optimizedPath, 'node_modules', spec.name)
+  if (!fs.existsSync(pkgPath)) {
+    continue
+  }
+
+  console.log()
+  console.log(`Removing unnecessary ${spec.describe}...`)
+
+  const candidates = []
+  const walkDir = (dir) => {
+    const dirEntries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const dirEntry of dirEntries) {
+      const fullPath = path.join(dir, dirEntry.name)
+      if (dirEntry.isDirectory()) {
+        walkDir(fullPath)
+      } else if (spec.match(dirEntry.name)) {
+        candidates.push(fullPath)
+      }
+    }
+  }
+  walkDir(pkgPath)
+
+  for (const fullPath of candidates) {
+    const fileName = path.basename(fullPath)
+    const filePlatform = spec.platformOf(fileName)
+    const shouldKeep = filePlatform && targetPlatforms.includes(filePlatform)
+
+    if (shouldKeep) {
+      console.log(`  ✓ Keeping ${fileName} (${filePlatform})`)
+    } else {
+      const size = fs.statSync(fullPath).size
+      fs.unlinkSync(fullPath)
+      platformRemovedSize += size
+      platformRemovedCount++
+      console.log(`  ✗ Removed ${fileName} (${(size / 1024).toFixed(1)} KB)`)
+    }
+  }
+}
+
+console.log(`  Summary: removed ${platformRemovedCount} platform packages/files (${(platformRemovedSize / (1024 * 1024)).toFixed(2)} MB)`)
 
 // 5.2 清理文件扩展名和目录
 function cleanDirectory(dirPath, patterns) {
@@ -340,29 +391,22 @@ if (fs.existsSync(prismaEnginesPath)) {
     let keptEngines = 0
     
     for (const file of engineFiles) {
-      // 跳过目录和非可执行文件
       const filePath = path.join(prismaEnginesPath, file)
       const stats = fs.statSync(filePath)
-      if (!stats.isFile() || !file.endsWith('.exe')) {
+      if (!stats.isFile()) {
         continue
       }
-      
-      // 检测文件对应的平台
-      let filePlatform = null
-      if (file.includes('windows') || file.includes('win32')) {
-        filePlatform = 'win32'
-      } else if (file.includes('linux')) {
-        filePlatform = 'linux'
-      } else if (file.includes('darwin') || file.includes('macos')) {
-        filePlatform = 'darwin'
-      }
-      
-      // 如果没有识别出平台，保留（可能是通用文件）
+
+      // 识别引擎文件对应的平台（schema-engine-* / query-engine-* / libquery_engine-* 等，
+      // 支持 .exe / .dylib.node / .so.node / 无后缀二进制）
+      const filePlatform = platformManifest.prismaEnginePlatform(file)
+
+      // 没有平台标记的文件（如 WASM、说明文件）保留
       if (!filePlatform) {
         keptEngines++
         continue
       }
-      
+
       // 根据目标平台决定是否保留
       const shouldKeep = targetPlatforms.includes(filePlatform)
       if (shouldKeep) {
