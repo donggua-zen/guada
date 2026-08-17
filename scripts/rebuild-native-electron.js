@@ -1,228 +1,167 @@
 /**
- * 为 Electron 环境重新编译 backend-ts 的原生模块
- * 将编译结果输出到独立的 node_modules_electron 目录
+ * 为 Electron 环境重建 backend-ts 的原生模块（跨平台：Windows / macOS / Linux）
+ *
+ * - better-sqlite3 需要针对 Electron ABI 重新编译（使用 @electron/rebuild）
+ * - sqlite-vec / @node-rs/jieba 为预编译二进制，仅校验目标平台产物是否存在
+ * - 目标目录：backend-ts/node_modules_production
+ * - 平台/架构/Electron 版本任一变化都会强制重建（marker 文件包含三者信息）
+ *
+ * 环境变量：
+ *   TARGET_ARCH     覆盖目标架构（默认 process.arch，交叉构建时使用）
+ *   ELECTRON_VERSION 覆盖 Electron 版本（默认读取已安装的 electron）
  */
 
-const { execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const os = require('os')
-
-// Electron 版本配置
-const ELECTRON_VERSION = '41.2.2'
-const TARGET_ARCH = 'x64'
-
-console.log('========================================')
-console.log('Rebuilding native modules for Electron (isolated)')
-console.log('========================================')
-console.log()
 
 const backendPath = path.join(__dirname, '..', 'backend-ts')
 const productionNodeModulesPath = path.join(backendPath, 'node_modules_production')
+const productionModulesPath = path.join(productionNodeModulesPath, 'node_modules')
 
-// 需要重建的原生模块列表
-// sharp 使用预编译二进制文件，不需要重新编译
-const nativeModules = ['better-sqlite3', 'sqlite-vec', '@node-rs/jieba']
-
-// 检查原生模块是否已为正确的 Electron 版本编译
-function isModuleBuiltForElectron(modulePath, electronVersion, arch) {
-  if (!fs.existsSync(modulePath)) {
-    return false
-  }
-  
-  // 对于 better-sqlite3，检查 .node 文件是否存在
-  if (modulePath.includes('better-sqlite3')) {
-    const nodeFile = path.join(modulePath, 'build', 'Release', 'better_sqlite3.node')
-    if (!fs.existsSync(nodeFile)) {
-      return false
-    }
-    
-    // 注意：这里无法直接检查 ABI 版本，只能通过重新编译来确保
-    // 返回 false 强制重新编译
-    return false
-  }
-  
-  // 对于 sqlite-vec 和 @node-rs/jieba，它们是预编译的，不需要重新编译
-  return true
-}
-
-// 检查是否已经执行过优化（通过检查缓存文件）
-function isOptimizationDone() {
-  const cacheHashPath = path.join(productionNodeModulesPath, '.cache-hash')
-  // 只有当 node_modules 存在且有缓存文件时才跳过
-  return fs.existsSync(productionNodeModulesPath) && fs.existsSync(cacheHashPath)
-}
-
-// 重建函数
-function rebuildNativeModules(targetPath, targetName) {
-  if (!fs.existsSync(targetPath)) {
-    console.warn(`⚠️  ${targetName} does not exist, skipping...`)
-    return
-  }
-  
-  // 检查是否已经执行过优化（有缓存文件说明已处理过）
-  if (isOptimizationDone()) {
-    console.log()
-    console.log('✓ Optimization cache found, skipping native module rebuild')
-    console.log('  (Delete node_modules_production/.cache-hash to force rebuild)')
-    return
-  }
-  
-  console.log()
-  console.log(`Checking native modules for ${targetName}...`)
-  console.log(`Target: Electron ${ELECTRON_VERSION} (${TARGET_ARCH})`)
-  
-  // 检查是否所有模块都已正确编译
-  let allModulesBuilt = true
-  const modulesToRebuild = []
-  
-  for (const moduleName of nativeModules) {
-    const modulePath = path.join(targetPath, 'node_modules', moduleName)
-    if (!isModuleBuiltForElectron(modulePath, ELECTRON_VERSION, TARGET_ARCH)) {
-      allModulesBuilt = false
-      modulesToRebuild.push(moduleName)
-      console.log(`  ⚠️  ${moduleName} needs rebuilding`)
-    } else {
-      console.log(`  ✓ ${moduleName} already built`)
-    }
-  }
-  
-  if (allModulesBuilt) {
-    console.log('✓ All native modules are already built')
-    return
-  }
-  
-  console.log()
-  console.log(`Rebuilding modules: ${modulesToRebuild.join(', ')}`)
-  
-  // 创建临时批处理文件
-  const tempBatPath = path.join(backendPath, `_temp_rebuild_${targetName.replace(/\s+/g, '_')}.bat`)
-  const modulesList = modulesToRebuild.join(' ')
-  const batContent = `@echo off
-call "${vcvarsallPath}" x64
-if errorlevel 1 exit /b 1
-echo VCINSTALLDIR=%VCINSTALLDIR%
-set npm_config_target=${ELECTRON_VERSION}
-set npm_config_arch=${TARGET_ARCH}
-set npm_config_target_arch=${TARGET_ARCH}
-set npm_config_disturl=https://electronjs.org/headers
-set npm_config_runtime=electron
-set npm_config_build_from_source=true
-cd "${targetPath}"
-npm rebuild ${modulesList}
-exit /b %errorlevel%
-`
-  
-  fs.writeFileSync(tempBatPath, batContent)
-  
-  try {
-    execSync(tempBatPath, {
-      cwd: backendPath,
-      stdio: 'inherit',
-      env: process.env
-    })
-    
-    console.log(`✓ ${targetName} native modules rebuilt`)
-  } catch (error) {
-    console.error(`❌ Failed to rebuild ${targetName}:`, error.message)
-    throw error
-  } finally {
-    if (fs.existsSync(tempBatPath)) {
-      fs.unlinkSync(tempBatPath)
-    }
-  }
-}
-
-// 动态检测 Visual Studio 路径（使用 vswhere.exe，比 VSSetup PowerShell 模块更可靠）
-function findVisualStudio() {
-  console.log('Step 1: Detecting Visual Studio installation...')
-  
-  // 可能的 vswhere 路径
-  const vswhereCandidates = [
-    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Microsoft Visual Studio', 'Installer', 'vswhere.exe'),
-    path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Microsoft Visual Studio', 'Installer', 'vswhere.exe'),
-    path.join(__dirname, '..', 'vswhere.exe')
-  ]
-  
-  let vswherePath = null
-  for (const candidate of vswhereCandidates) {
-    if (fs.existsSync(candidate)) {
-      vswherePath = candidate
-      break
-    }
-  }
-  
-  if (vswherePath) {
+// ── 参数解析 ──
+const ELECTRON_VERSION =
+  process.env.ELECTRON_VERSION ||
+  (() => {
     try {
-      const vsPath = execSync(`"${vswherePath}" -latest -property installationPath`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe']
-      }).trim()
-      
-      if (vsPath && fs.existsSync(vsPath)) {
-        console.log(`Found Visual Studio at: ${vsPath}`)
-        return vsPath
-      }
+      return require(path.join(__dirname, '..', 'node_modules', 'electron', 'package.json')).version
     } catch (e) {
-      // fall through to fallback
+      return null
+    }
+  })()
+
+const TARGET_ARCH = process.env.TARGET_ARCH || process.arch
+const TARGET_PLATFORM =
+  process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux'
+
+// 需要针对 Electron ABI 重新编译的模块
+const COMPILE_MODULES = ['better-sqlite3']
+
+// 预编译模块：仅校验目标平台二进制是否存在
+const PREBUILT_MODULES = [
+  { name: 'sqlite-vec', token: (platform) => (platform === 'win32' ? 'windows' : platform) },
+  { name: '@node-rs/jieba', token: (platform) => platform },
+]
+
+// 设置 Electron 下载镜像（与 package.json 构建脚本保持一致；已设置则不覆盖）
+process.env.ELECTRON_MIRROR ||= 'https://npmmirror.com/mirrors/electron/'
+process.env.npm_config_disturl ||= 'https://npmmirror.com/mirrors/electron/'
+
+console.log('========================================')
+console.log('Rebuilding native modules for Electron (cross-platform)')
+console.log('========================================')
+console.log()
+
+function findPrebuiltPackage(name) {
+  const isScoped = name.startsWith('@')
+  const scopeDir = isScoped
+    ? path.join(productionModulesPath, name.split('/')[0])
+    : productionModulesPath
+  const base = isScoped ? name.split('/')[1] : name
+  const prefix = `${base}-${TARGET_PLATFORM}-${TARGET_ARCH}`
+
+  if (!fs.existsSync(scopeDir)) {
+    return null
+  }
+
+  const found = fs.readdirSync(scopeDir).find((entry) => entry.startsWith(prefix))
+  return found ? path.join(scopeDir, found) : null
+}
+
+async function main() {
+  if (!fs.existsSync(productionModulesPath)) {
+    console.error(`❌ ${productionNodeModulesPath} does not exist.`)
+    console.error('Please run "npm run optimize:electron-deps" first.')
+    process.exit(1)
+  }
+
+  if (!ELECTRON_VERSION) {
+    console.error('❌ Cannot determine Electron version. Install dependencies or set ELECTRON_VERSION.')
+    process.exit(1)
+  }
+
+  console.log(`Target: Electron ${ELECTRON_VERSION} (${TARGET_ARCH}, ${TARGET_PLATFORM})`)
+  console.log()
+
+  // macOS 前置检查：better-sqlite3 编译需要 Xcode Command Line Tools
+  if (TARGET_PLATFORM === 'darwin') {
+    try {
+      const { execSync } = require('child_process')
+      execSync('xcode-select -p', { stdio: 'ignore' })
+      console.log('✓ Xcode Command Line Tools detected')
+    } catch (e) {
+      console.warn('⚠️  Xcode Command Line Tools not detected.')
+      console.warn('   better-sqlite3 编译需要它，请先运行: xcode-select --install')
+    }
+    console.log()
+  }
+
+  // 预编译模块校验
+  console.log('Verifying prebuilt platform binaries...')
+  for (const mod of PREBUILT_MODULES) {
+    const pkgName = mod.name
+    const token = mod.token(TARGET_PLATFORM)
+    const found = findPrebuiltPackage(pkgName)
+
+    if (found) {
+      console.log(`  ✓ ${pkgName}: prebuilt binary found (${path.basename(found)})`)
+    } else {
+      console.warn(`  ⚠️  ${pkgName}: no ${token}-${TARGET_ARCH} prebuilt package found.`)
+      console.warn(`     Delete ${productionNodeModulesPath} and rerun "npm run optimize:electron-deps" to reinstall.`)
     }
   }
-  
-  // 回退方案：检查常见安装路径
-  const commonPaths = [
-    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community',
-    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional',
-    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise',
-    'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools',
-    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community',
-    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional',
-    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise',
-    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools',
-    'D:\\Program Files\\Microsoft Visual Studio\\18\\Community',
-    'D:\\Program Files\\Microsoft Visual Studio\\17\\Community',
-    'D:\\Program Files\\Microsoft Visual Studio\\16\\Community'
-  ]
-  
-  for (const vsPath of commonPaths) {
-    const vcvarsall = path.join(vsPath, 'VC\\Auxiliary\\Build\\vcvarsall.bat')
-    if (fs.existsSync(vcvarsall)) {
-      console.log(`Found Visual Studio at: ${vsPath}`)
-      return vsPath
+  console.log()
+
+  // 重建缓存标记：平台/架构/Electron 版本任一变化都会强制重建
+  const markerFile = path.join(
+    productionNodeModulesPath,
+    `.rebuild-electron-${ELECTRON_VERSION}-${TARGET_PLATFORM}-${TARGET_ARCH}`
+  )
+
+  if (fs.existsSync(markerFile)) {
+    console.log('✓ Rebuild marker found, skipping better-sqlite3 rebuild')
+    console.log(`  (Marker: ${path.basename(markerFile)})`)
+    console.log('  Delete the marker file to force a rebuild')
+  } else {
+    console.log(`Rebuilding ${COMPILE_MODULES.join(', ')} for Electron ${ELECTRON_VERSION}...`)
+    console.log()
+
+    try {
+      const { rebuild } = require('@electron/rebuild')
+
+      await rebuild({
+        buildPath: productionNodeModulesPath,
+        // 关键：限制模块搜索范围，避免沿目录向上把 dev 的 node_modules 也重建掉
+        projectRootPath: productionNodeModulesPath,
+        electronVersion: ELECTRON_VERSION,
+        arch: TARGET_ARCH,
+        onlyModules: COMPILE_MODULES,
+        force: true,
+        prebuildTagPrefix: 'v',
+      })
+
+      console.log()
+      console.log(`✓ ${COMPILE_MODULES.join(', ')} rebuilt for Electron`)
+
+      // 写入 marker，供后续构建跳过
+      fs.writeFileSync(markerFile, `${new Date().toISOString()}\n`)
+      console.log(`✓ Rebuild marker saved: ${path.basename(markerFile)}`)
+    } catch (error) {
+      console.error()
+      console.error('❌ Native module rebuild failed:', error.message)
+      console.error('   Windows: 需要 Visual Studio Build Tools (Desktop development with C++)')
+      console.error('   macOS:   需要 Xcode Command Line Tools (xcode-select --install)')
+      console.error('   Linux:   需要 build-essential + python3')
+      process.exit(1)
     }
   }
-  
-  console.error('Failed to detect Visual Studio automatically')
-  console.error('Please ensure:')
-  console.error('1. Visual Studio is installed with "Desktop development with C++" workload')
-  throw new Error('No Visual Studio installation found')
-}
 
-const vsPath = findVisualStudio()
-const vcvarsallPath = path.join(vsPath, 'VC\\Auxiliary\\Build\\vcvarsall.bat')
-
-if (!fs.existsSync(vcvarsallPath)) {
-  console.error(`ERROR: vcvarsall.bat not found at ${vcvarsallPath}`)
-  process.exit(1)
-}
-
-console.log('Step 2: Setting up Visual Studio environment...')
-
-try {
-  console.log('Step 3: Rebuilding native modules...')
-  console.log(`Target: Electron ${ELECTRON_VERSION} (${TARGET_ARCH})`)
-  console.log()
-  
-  // 为 node_modules_production 重建
-  rebuildNativeModules(productionNodeModulesPath, 'node_modules_production')
-  
   console.log()
   console.log('========================================')
-  console.log('SUCCESS: Native modules rebuilt for Electron!')
+  console.log('SUCCESS: Native modules ready for Electron')
   console.log('========================================')
-} catch (error) {
-  console.error()
-  console.error('========================================')
-  console.error('ERROR: Rebuild failed!')
-  console.error('========================================')
-  process.exit(1)
 }
+
+main().catch((error) => {
+  console.error('❌ Rebuild failed:', error.message)
+  process.exit(1)
+})

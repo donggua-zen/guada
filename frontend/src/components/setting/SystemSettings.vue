@@ -4,6 +4,8 @@
             <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
             <div
                 class="h-full sidebar-transparent-bg global-sidebar flex flex-col overflow-hidden">
+                <!-- macOS：侧边栏按钮为整行铺满无法左预留，顶部腾出 28px 给红绿灯 -->
+                <div v-if="isMac" class="h-7 shrink-0 drag-region"></div>
                 <!-- 返回应用 -->
                 <div class="px-3 pt-3 pb-2">
                     <div @click="goBack"
@@ -276,6 +278,10 @@ const getDefaultTabPath = () => {
 
 const currentTabValue = ref(getDefaultTabPath())
 
+const isMac = typeof window !== 'undefined' &&
+  window.electronAPI !== undefined &&
+  window.electronAPI.platform === 'darwin'
+
 // Teleport 目标就绪标志：确保 #settings-sidebar-portal 已挂载到 DOM
 const portalReady = ref(false)
 
@@ -318,3 +324,10 @@ onMounted(() => {
     })
 })
 </script>
+
+<style scoped>
+/* 顶部红绿灯预留区可拖拽窗口 */
+.drag-region {
+  -webkit-app-region: drag;
+}
+</style>

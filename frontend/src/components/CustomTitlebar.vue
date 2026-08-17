@@ -1,6 +1,7 @@
 <template>
   <div v-if="isElectron"
-    class="custom-titlebar flex items-center justify-between h-8 sidebar-transparent-bg select-none drag-region">
+    class="custom-titlebar flex items-center justify-between h-10 sidebar-transparent-bg select-none drag-region"
+    :class="{ 'mac-traffic-light-padding': isMac }">
     <!-- 左侧：应用标题 + 菜单按钮 -->
     <TitlebarLeftPanel />
 
@@ -19,6 +20,10 @@ defineEmits(['openGuide'])
 const isElectron = computed(() => {
   return typeof window !== 'undefined' && window.electronAPI !== undefined
 })
+
+const isMac = computed(() => {
+  return isElectron.value && window.electronAPI.platform === 'darwin'
+})
 </script>
 
 <style scoped>
@@ -32,5 +37,10 @@ const isElectron = computed(() => {
 .custom-titlebar {
   --window-controls-color: var(--titlebar-text-color);
   --window-controls-hover-color: var(--titlebar-text-color);
+}
+
+/* macOS 红绿灯按钮占用左上角约 70px，左侧留白避免遮挡 */
+.mac-traffic-light-padding {
+  padding-left: 78px;
 }
 </style>
