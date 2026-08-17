@@ -44,7 +44,7 @@ console.log('========================================')
 console.log()
 
 const directories = [
-  { name: 'node_modules_electron', path: path.join(backendPath, 'node_modules_electron', 'node_modules') },
+  { name: 'node_modules (dev)', path: path.join(backendPath, 'node_modules') },
   { name: 'node_modules_production', path: path.join(backendPath, 'node_modules_production') }
 ]
 
