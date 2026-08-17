@@ -2,7 +2,7 @@
     <div class="workspace-sidebar h-full flex flex-col relative">
         <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制 -->
         <div
-            class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
+            class="flex items-center h-10 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
                 <LTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
@@ -1355,7 +1355,7 @@ onUnmounted(() => {
 /* 非激活文件预览面板：visibility:hidden 保留渲染状态（含滚动位置），不触发 display:none 的重置 */
 .workspace-sidebar .panel-hidden {
     position: absolute !important;
-    top: 2.75rem; /* 44px = h-11 工具栏高度，避免覆盖 drag-region */
+    top: 2.5rem; /* 40px = h-10 工具栏高度，避免覆盖 drag-region */
     left: 0;
     right: 0;
     bottom: 0;
@@ -1527,7 +1527,7 @@ onUnmounted(() => {
 /* Phase 1 hide: visibility:hidden without transform/opacity to avoid compositing layer flash */
 .tree-hidden-preview {
     position: absolute;
-    top: 2.75rem;
+    top: 2.5rem;
     left: 0;
     right: 0;
     bottom: 0;

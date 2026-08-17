@@ -10,6 +10,7 @@ import {
   clipboard,
   screen,
   crashReporter,
+  nativeImage,
 } from "electron";
 import * as path from "path";
 import * as os from "os";
@@ -718,12 +719,19 @@ async function startBackend(): Promise<void> {
 function createTray() {
   // 开发环境：electron/dist/main.js 在 electron/dist/ 下，向上两级到项目根目录
   // 生产环境：build-resources 在 resources/ 下
-  const iconName = process.platform === "win32" ? "icon.ico" : "icon.png";
+  const isMac = process.platform === "darwin";
+  const iconName = process.platform === "win32" ? "icon.ico" : isMac ? "menubar-iconTemplate.png" : "icon.png";
   const iconPath = isDev
     ? path.join(__dirname, "..", "..", "build-resources", iconName)
     : path.join(process.resourcesPath, "build-resources", iconName);
 
-  tray = new Tray(iconPath);
+  // macOS 菜单栏使用 Template 图标（自动适配深色/浅色菜单栏）
+  const trayIcon = nativeImage.createFromPath(iconPath);
+  if (isMac) {
+    trayIcon.setTemplateImage(true);
+  }
+
+  tray = new Tray(trayIcon);
   tray.setToolTip("GuaDa");
 
   updateTrayMenu();
@@ -994,6 +1002,100 @@ async function handleExternalUrl(url: string): Promise<void> {
   }
 }
 
+// 设置应用菜单（macOS 需要标准菜单栏：App 菜单 / 编辑 / 视图 / 窗口 / 帮助）
+function setupApplicationMenu() {
+  const isMac = process.platform === "darwin";
+
+  const appMenuItems: MenuItemConstructorOptions[] = isMac
+    ? [
+        { role: "about" },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ]
+    : [];
+
+  const editSubmenu: MenuItemConstructorOptions[] = [
+    { role: "undo" },
+    { role: "redo" },
+    { type: "separator" },
+    { role: "cut" },
+    { role: "copy" },
+    { role: "paste" },
+    ...(isMac
+      ? ([
+          { role: "pasteAndMatchStyle" },
+          { role: "delete" },
+          { role: "selectAll" },
+        ] as MenuItemConstructorOptions[])
+      : ([
+          { role: "delete" },
+          { type: "separator" },
+          { role: "selectAll" },
+        ] as MenuItemConstructorOptions[])),
+  ];
+
+  const windowSubmenu: MenuItemConstructorOptions[] = isMac
+    ? [
+        { role: "minimize" },
+        { role: "zoom" },
+        { type: "separator" },
+        { role: "front" },
+        { type: "separator" },
+        { role: "window" },
+      ]
+    : [{ role: "minimize" }, { role: "close" }];
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac ? ([{ label: app.name, submenu: appMenuItems }] as MenuItemConstructorOptions[]) : []),
+    {
+      label: "编辑",
+      submenu: editSubmenu,
+    },
+    {
+      label: "视图",
+      submenu: [
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "窗口",
+      submenu: windowSubmenu,
+    },
+    {
+      role: "help",
+      submenu: [
+        {
+          label: "打开数据目录",
+          click: () => shell.openPath(app.getPath("userData")),
+        },
+        {
+          label: "打开安装目录",
+          click: () => {
+            const installPath = isDev ? __dirname : path.dirname(app.getPath("exe"));
+            shell.openPath(installPath);
+          },
+        },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 // 创建窗口
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -1015,10 +1117,12 @@ function createWindow() {
     show: false,
     backgroundColor: "#000000",
     titleBarStyle: "hidden", // 隐藏标题栏但保留系统按钮（macOS）
+    // macOS：红绿灯与 40px 高标题行垂直对齐（默认位置偏上）
+    trafficLightPosition: { x: 14, y: 13 },
   });
 
   // 设置应用菜单
-  // setupApplicationMenu()
+  setupApplicationMenu();
 
   if (isDev) {
     // 开发环境：根据 USE_STATIC_FRONTEND 决定加载方式
