@@ -13,6 +13,7 @@ import {
 } from "./types/plugin.types";
 import { PluginApiImpl } from "./api/plugin-api";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { EventBusService } from "../../common/events/event-bus.service";
 import { SG_PLUGINS } from "../../constants/settings.constants";
 import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
@@ -81,6 +82,7 @@ export class PluginManager {
     private readonly promptCollector: PromptCollector,
     private readonly commandRegistry: CommandProviderRegistry,
     private readonly nlsService: NlsService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   // ── 生命周期 ──
@@ -167,6 +169,9 @@ export class PluginManager {
     for (const cp of cmdProviders) {
       this.commandRegistry.register(cp);
     }
+
+    // 插件集合变化 → 通知前端刷新 slot 清单
+    this.eventBus.emit("plugins.changed", { pluginId: id, action: "registered" });
   }
 
   /**
@@ -289,6 +294,7 @@ export class PluginManager {
     PluginRegistry.clearPlugin(pluginId);
     this.instances.delete(pluginId);
     this.logger.log(`Plugin unregistered: ${pluginId}`);
+    this.eventBus.emit("plugins.changed", { pluginId, action: "unregistered" });
   }
 
   /**
@@ -355,6 +361,9 @@ export class PluginManager {
       instance.enabled = false;
       this.logger.log(`Plugin ${pluginId} disabled`);
     }
+
+    // 插件启停状态变化 → 通知前端刷新 slot 清单
+    this.eventBus.emit("plugins.changed", { pluginId, action: enabled ? "enabled" : "disabled" });
   }
 
   // ── 工具聚合 ──

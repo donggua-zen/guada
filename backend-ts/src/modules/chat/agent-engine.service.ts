@@ -568,6 +568,14 @@ export class AgentEngine {
 
       // 【回合拦截器】仅在正常结束时检查
       // 正常结束 = 无业务原因（businessReason 未设置）+ 无 needToContinue + 无 abort
+      // 【abort 及时性】每轮结束时立即检查用户停止：
+      // 若已 abort（例如工具执行期间被 kill），直接以 user_cancel 结束循环，
+      // 不再发起下一轮 LLM 调用，避免等待一次完整 LLM 响应造成的数秒延迟
+      if (abortSignal?.aborted) {
+        businessReason = "user_cancel";
+        needToContinue = false;
+      }
+
       const isNormalFinish =
         !needToContinue && !abortSignal?.aborted && !businessReason;
 

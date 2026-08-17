@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   Res,
+  Req,
   UseGuards,
   Logger,
   BadRequestException,
@@ -20,7 +21,7 @@ import { Public } from "../auth/public.decorator";
 import { PluginManager } from "./plugin.manager";
 import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { NlsService } from "./i18n/nls.service";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";import { PluginRegistry } from "./registry/plugin-registry";
 
 @Controller("plugins")
 export class PluginsController {
@@ -253,6 +254,124 @@ export class PluginsController {
   ) {
     await this.settingsStorage.deleteSettingValue(`plugin:${pluginId}`, key);
     return { success: true };
+  }
+
+  // ── Slot 注册表 API（v2 插件 UI）──
+
+  /**
+   * 获取所有已启用插件的 slot 注册清单（按 slot 名归并，已排序）
+   */
+  @Public()
+  @Get("slots")
+  async getSlots(@Query("lang") lang?: string) {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const nlsLocale = this.toNlsLocale(lang);
+    const result: Record<string, Array<Record<string, any>>> = {};
+    for (const r of resolved) {
+      if (!r.enabled) continue;
+      const pluginPath = this.externalLoader.getPluginPath(r.plugin.id);
+      for (const slot of PluginRegistry.getSlots(r.plugin.id)) {
+        if (!result[slot.name]) result[slot.name] = [];
+        result[slot.name].push({
+          pluginId: r.plugin.id,
+          component: slot.component,
+          mode: slot.mode || "list",
+          order: slot.order ?? 100,
+          loadMode: slot.loadMode || "lazy",
+          props: slot.props || {},
+          meta: slot.meta
+            ? {
+                label: this.nlsService.resolveString(r.plugin.id, slot.meta.label || "", nlsLocale),
+                icon: slot.meta.icon,
+                group: slot.meta.group,
+              }
+            : undefined,
+          rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
+        });
+      }
+    }
+    for (const name of Object.keys(result)) {
+      result[name].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    }
+    return { slots: result };
+  }
+
+  /**
+   * 插件前端产物静态服务（预编译 ESM/IIFE + CSS）
+   * 安全：文件名只允许 [A-Za-z0-9_-]，拒绝路径分隔符/目录穿越
+   */
+  @Public()
+  @Get(":pluginId/assets/:fileName")
+  async getPluginAsset(
+    @Param("pluginId") pluginId: string,
+    @Param("fileName") fileName: string,
+    @Res() res: Response,
+  ) {
+    if (!/^[A-Za-z0-9_-]+\.(js|css)$/.test(fileName)) {
+      return res.status(403).send("Invalid asset name");
+    }
+    const pluginPath = this.externalLoader.getPluginPath(pluginId);
+    if (!pluginPath) return res.status(404).send("Plugin directory not found");
+    const distDir = path.join(pluginPath, "frontend", "dist");
+    const filePath = path.join(distDir, fileName);
+    if (!filePath.startsWith(distDir + path.sep)) {
+      return res.status(403).send("Access denied");
+    }
+    if (!fs.existsSync(filePath)) return res.status(404).send("Asset not found");
+    const contentType = fileName.endsWith(".css")
+      ? "text/css"
+      : "application/javascript";
+    return res.type(contentType).sendFile(filePath);
+  }
+
+  /**
+   * 插件 RPC：插件 UI 调用插件后端的业务方法
+   * Body: { args?: any, sessionId?, workspaceId? }
+   */
+  @UseGuards(AuthGuard)
+  @Post(":pluginId/rpc/:method")
+  async callPluginRpc(
+    @Param("pluginId") pluginId: string,
+    @Param("method") method: string,
+    @Body() body: { args?: any; sessionId?: string; workspaceId?: string },
+    @Req() req: any,
+  ) {
+    if (!/^[a-z][a-zA-Z0-9_]*$/.test(method)) {
+      throw new BadRequestException("Invalid rpc method name");
+    }
+    const handler = PluginRegistry.getRpcHandler(pluginId, method);
+    if (!handler) {
+      throw new BadRequestException(`rpc method ${pluginId}.${method} not found`);
+    }
+    try {
+      return await handler(body?.args, {
+        sessionId: body?.sessionId,
+        workspaceId: body?.workspaceId,
+        userId: req?.user?.id,
+      });
+    } catch (e: any) {
+      this.logger.error(`Plugin rpc ${pluginId}.${method} failed: ${e.message}`);
+      throw new BadRequestException(e.message || "rpc failed");
+    }
+  }
+
+  /**
+   * 插件产物 rev：取 frontend/dist 最新文件 mtime（变化时前端重新加载）
+   */
+  private assetRev(pluginPath: string): string {
+    try {
+      const distDir = path.join(pluginPath, "frontend", "dist");
+      if (!fs.existsSync(distDir)) return "";
+      const files = fs.readdirSync(distDir);
+      let latest = 0;
+      for (const f of files) {
+        const st = fs.statSync(path.join(distDir, f));
+        if (st.mtimeMs > latest) latest = st.mtimeMs;
+      }
+      return latest ? Math.round(latest).toString(36) : "";
+    } catch {
+      return "";
+    }
   }
 
   // ── Attachment Types API ──

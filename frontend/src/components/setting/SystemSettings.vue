@@ -84,6 +84,11 @@
                         </template>
                         <template v-else-if="currentTabValue === 'connections'">
                             <ConnectionSettings />
+                        </template>                        <template v-else-if="isPluginTab">
+                            <component
+                                :is="activePluginItem?._item.component"
+                                v-bind="activePluginItem?._item.props"
+                            />
                         </template>
                     </ScrollContainer>
                 </div>
@@ -129,6 +134,8 @@ import { useAuthStore } from '../../stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { usePluginSlots } from '../../stores/pluginSlots'
+import { PuzzleCube20Regular } from '@vicons/fluent'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -148,9 +155,26 @@ const groupMap = computed<Record<string, string>>(() => ({
     community: t('settings.system.groups.system'),
     'session-groups': t('settings.system.groups.dataManagement'),
     'session-archived': t('settings.system.groups.dataManagement'),
+    plugin: t('settings.system.groups.system'),
     profile: t('settings.system.groups.account'),
     security: t('settings.system.groups.account'),
 }))
+
+// ── 插件 slots（v2）：把已启用插件的设置页并入侧边栏 ──
+const pluginSlots = usePluginSlots()
+onMounted(() => pluginSlots.init())
+const pluginSidebarItems = computed(() =>
+  pluginSlots
+    .resolve('settings')
+    .filter((item) => item.meta?.label)
+    .map((item) => ({
+      label: item.meta.label,
+      path: `plugin:${item.pluginId}:${item.component}`,
+      icon: PuzzleCube20Regular,
+      roles: ['primary', 'subaccount'],
+      _item: item,
+    })),
+)
 
 // 设置项菜单
 const sidebarItems = computed(() => [
@@ -237,7 +261,8 @@ const sidebarItems = computed(() => [
 // 根据用户角色过滤菜单项
 const filteredSidebarItems = computed(() => {
     const userRole = authStore.user?.role || 'primary'
-    return sidebarItems.value.filter(item => !item.roles || item.roles.includes(userRole))
+    const all = [...sidebarItems.value, ...pluginSidebarItems.value]
+    return all.filter(item => !item.roles || item.roles.includes(userRole))
 })
 
 // 按分组组织侧边栏项
@@ -275,6 +300,11 @@ const getDefaultTabPath = () => {
 }
 
 const currentTabValue = ref(getDefaultTabPath())
+// ── 插件 slots（v2）：当前激活的插件 tab ──
+const isPluginTab = computed(() => currentTabValue.value.startsWith('plugin:'))
+const activePluginItem = computed(() =>
+  pluginSidebarItems.value.find((i) => i.path === currentTabValue.value),
+)
 
 // Teleport 目标就绪标志：确保 #settings-sidebar-portal 已挂载到 DOM
 const portalReady = ref(false)

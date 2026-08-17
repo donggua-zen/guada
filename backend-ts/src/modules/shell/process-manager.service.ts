@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { ChildProcess, exec, spawn } from "child_process";
+import { ChildProcess, exec, execSync, spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -519,9 +519,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (isWindows) {
       const pid = entry.childProcess.pid;
       if (pid) {
-        exec(`taskkill /F /T /PID ${pid}`, { windowsHide: true }, (err) => {
-          if (err) this.logger.warn(`taskkill 失败: ${err.message}`);
-        });
+        // 异步执行 taskkill（spawn 不阻塞主进程事件循环），失败自动重试一次，
+        // 避免同步 execSync 卡住主进程；taskkill 作为独立进程执行，可靠性不降低。
+        this.killWindowsProcess(pid, entry);
       }
     } else {
       entry.childProcess.kill("SIGTERM");
@@ -541,6 +541,35 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     this.cleanupProcess(entry.id, entry.sessionId);
 
     return "killed";
+  }
+
+  /**
+   * 异步强杀 Windows 进程树（taskkill /F /T）
+   *
+   * 用 spawn 启动 taskkill（不阻塞主进程事件循环），taskkill 作为独立进程
+   * 执行强杀，失败时延迟重试一次，最后兜底 SIGTERM。
+   */
+  private killWindowsProcess(pid: number, entry: ProcessEntry): void {
+    const runTaskkill = (attempt: number) => {
+      const child = spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      const onFailure = (reason: string) => {
+        this.logger.warn(`taskkill 第 ${attempt} 次失败 (PID ${pid}): ${reason}`);
+        if (attempt < 2) {
+          setTimeout(() => runTaskkill(attempt + 1), 300);
+        } else {
+          this.logger.error(`taskkill 均失败，尝试 SIGTERM (PID ${pid})`);
+          entry.childProcess?.kill("SIGTERM");
+        }
+      };
+      child.on("error", (err: any) => onFailure(err?.message ?? String(err)));
+      child.on("exit", (code) => {
+        if (code !== 0) onFailure(`退出码 ${code}`);
+      });
+    };
+    runTaskkill(1);
   }
 
   /**

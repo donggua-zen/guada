@@ -62,11 +62,13 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item flex items-center gap-2 py-1.5 pr-1 pl-2 ml-1 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item relative flex items-center gap-2 py-1.5 pr-1 pl-2 ml-1 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId
-                }" @click="selectSession(session)">
+                }" @click="selectSession(session)"
+                @mouseenter="hoveredSessionId = session.id"
+                @mouseleave="hoveredSessionId = null">
                 <!-- 状态指示器 -->
                 <div class="status-indicator w-3 h-3 shrink-0 flex items-center justify-center">
                   <div v-if="getSessionWorking(session.id)"
@@ -77,26 +79,22 @@
                 </div>
 
                 <div class="session-info flex-1 min-w-0 flex items-center">
-                  <div class="session-title text-sm font-medium w-full">
-                    {{ session.title }}
-                  </div>
+                  <!-- 标题：渐变遮罩 + 整个 item hover 时滚动显示全文（含 more 按钮区） -->
+                  <SessionTitle :title="session.title"
+                    :actions-visible="session.id === currentSessionId || hoveredSessionId === session.id"
+                    :scroll-active="hoveredSessionId === session.id" />
                 </div>
-                <div class="session-actions shrink-0 relative min-w-5 h-full flex items-center">
-                  <!-- 最后活跃时间（非当前会话时显示，hover 时隐藏，右对齐悬浮） -->
-                  <span v-if="session.id !== currentSessionId"
-                    class="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 group-hover:hidden whitespace-nowrap">
-                    {{ formatLastActive(session.lastActiveAt || session.updatedAt) }}
-                  </span>
-                  <!-- 操作菜单（默认隐藏，hover 时显示） -->
-                  <div
-                    class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex items-center"
-                    :class="{ 'opacity-100': session.id === currentSessionId }">
-                    <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
-                      <div class="session-action-trigger">
-                        <el-icon class="w-4 h-4">
-                          <MoreHorizontal20Filled />
-                        </el-icon>
-                      </div>
+                <!-- 操作菜单：绝对定位悬浮于右缘，不占 flex 空间，标题可占满整行 -->
+                <div class="session-actions absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center"
+                  :class="session.id === currentSessionId
+                    ? 'opacity-100 pointer-events-auto'
+                    : 'opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none'">
+                  <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
+                    <div class="session-action-trigger">
+                      <el-icon class="w-4 h-4">
+                        <MoreHorizontal20Filled />
+                      </el-icon>
+                    </div>
                       <template #dropdown>
                         <DropdownMenuItem command="rename">
                           <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
@@ -117,7 +115,6 @@
                       </template>
                     </DropdownMenu>
                   </div>
-                </div>
               </div>
 
               <!-- 分组内加载更多 -->
@@ -253,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -263,6 +260,7 @@ import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
+import SessionTitle from './SessionTitle.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
@@ -588,29 +586,10 @@ const loadMoreForGroup = async (groupId: string) => {
   }
 }
 
-// 友好格式化最后活跃时间
-const updateTick = ref(0)
-let tickTimer: ReturnType<typeof setInterval> | null = null
-
-const formatLastActive = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return ''
-  // 读取 tick 让 Vue 将其视为响应式依赖，实现定时刷新
-  void updateTick.value
-  const now = Date.now()
-  const diff = now - new Date(dateStr).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes}min`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d`
-  const months = Math.floor(days / 30)
-  if (months < 12) return `${months}m`
-  return t('ui.sidebar.earlier')
-}
-
 // 侧边栏状态辅助方法
+// 当前 hover 的会话 id（用于控制标题渐隐区扩大，给更多按钮腾空间）
+const hoveredSessionId = ref<string | null>(null)
+
 const getSessionUnread = (sessionId: string): boolean => {
   return sessionStore.getSidebarFlag(sessionId, 'unread')
 }
@@ -901,42 +880,10 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
     loadSessions()
   }
 }, { immediate: true })
-
-onMounted(() => {
-  // 每分钟更新一次最后活跃时间显示（无需SSE事件驱动，自动刷新相对时间）
-  tickTimer = setInterval(() => {
-    updateTick.value++
-  }, 60_000)
-})
-
-
-// 组件卸载时清理
-onUnmounted(() => {
-  if (tickTimer !== null) {
-    clearInterval(tickTimer)
-    tickTimer = null
-  }
-})
 </script>
 
 <style scoped>
 /* 会话项样式 */
-.session-title {
-  overflow: hidden;
-  white-space: nowrap;
-  /* 渐变遮罩自然淡出：fade 宽约半字符，紧贴右侧时间文本/按钮；mask 作用于自身 alpha，不依赖背景色，兼容壁纸/毛玻璃背景 */
-  -webkit-mask-image: linear-gradient(to right,
-    black 0%,
-    black calc(100% - 6px),
-    rgba(0, 0, 0, 0.65) calc(100% - 3px),
-    transparent 100%);
-  mask-image: linear-gradient(to right,
-    black 0%,
-    black calc(100% - 6px),
-    rgba(0, 0, 0, 0.65) calc(100% - 3px),
-    transparent 100%);
-}
-
 .session-item-inactive {
   color: var(--color-text);
 }

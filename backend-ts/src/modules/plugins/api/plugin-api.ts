@@ -10,6 +10,8 @@ import {
   TurnInterceptor,
   AttachmentTypeRegistration,
   UiPageRegistration,
+  SlotRegistration,
+  RpcHandler,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
@@ -142,6 +144,16 @@ export interface PluginApi {
    * 前端通过 PluginSlot 加载插件 frontend/ 目录下的组件。
    */
   registerUiPage(reg: import("../types/plugin.types").UiPageRegistration): void;
+
+  /**
+   * 注册前端 slot（插件 UI 能力声明）
+   */
+  registerSlot(reg: import("../types/plugin.types").SlotRegistration): void;
+
+  /**
+   * 注册 RPC 方法（插件 UI 通过 pluginApi.call 调用）
+   */
+  registerRpc(methods: Record<string, import("../types/plugin.types").RpcHandler>): void;
 
   /**
    * 注册语言包（NLS）
@@ -365,6 +377,8 @@ export class PluginApiImpl implements PluginApi {
 
   private _attachmentTypes: AttachmentTypeRegistration[] = [];
   private _uiPages: UiPageRegistration[] = [];
+  private _slots: SlotRegistration[] = [];
+  private _rpcHandlers: Record<string, RpcHandler> = {};
 
   registerAttachmentType(reg: AttachmentTypeRegistration): void {
     if (!this._attachmentTypes.find((x) => x.id === reg.id)) {
@@ -377,6 +391,15 @@ export class PluginApiImpl implements PluginApi {
       this._uiPages.push(reg);
     }
   }
+  registerSlot(reg: SlotRegistration): void {
+    if (!this._slots.find((x) => x.name === reg.name && x.component === reg.component)) {
+      this._slots.push(reg);
+    }
+  }
+
+  registerRpc(methods: Record<string, RpcHandler>): void {
+    Object.assign(this._rpcHandlers, methods);
+  }
 
   /** 获取附件类型（供 PluginManager 消费） */
   getAttachmentTypes(): AttachmentTypeRegistration[] {
@@ -386,6 +409,15 @@ export class PluginApiImpl implements PluginApi {
   /** 获取 UI 页面（供 PluginManager 消费） */
   getUiPages(): UiPageRegistration[] {
     return this._uiPages;
+  }
+  /** 获取插件声明的 slots（供 PluginManager 消费） */
+  getSlots(): SlotRegistration[] {
+    return this._slots;
+  }
+
+  /** 获取插件声明的 RPC handlers（供 PluginManager 消费） */
+  getRpcHandlers(): Record<string, RpcHandler> {
+    return this._rpcHandlers;
   }
 
   registerNls(locale: string, messages: Record<string, string>): void {
@@ -475,6 +507,14 @@ export class PluginApiImpl implements PluginApi {
     for (const att of this._attachmentTypes) {
       PluginRegistry.registerAttachmentType(this.pluginId, att);
     }
+
+    // 注册 slots
+    for (const slot of this._slots) {
+      PluginRegistry.registerSlot(this.pluginId, slot);
+    }
+
+    // 注册 rpc handlers
+    PluginRegistry.registerRpc(this.pluginId, this._rpcHandlers);
 
     // 注册 ui pages
     for (const page of this._uiPages) {

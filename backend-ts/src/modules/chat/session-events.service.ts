@@ -27,7 +27,8 @@ export type SessionEventType =
   | "user_message_created"
   | "sub_agent_create"
   | "sub_agent_closed"
-  | "todo_updated";
+  | "todo_updated"
+  | "plugins_changed";
 
 /**
  * 会话事件
@@ -242,6 +243,21 @@ export class SessionEventsService implements OnModuleDestroy {
   }
 
   /**
+   * 监听内部 plugins.changed 事件（插件注册/卸载/启停），广播给所有在线用户
+   */
+  @OnEvent("plugins.changed")
+  handlePluginsChanged(event: { pluginId: string; action: string }) {
+    const sessionEvent: SessionEvent = {
+      type: "plugins_changed",
+      userId: "*",
+      sessionId: "*",
+      timestamp: new Date().toISOString(),
+      payload: event,
+    };
+    this.broadcastToAll(sessionEvent);
+  }
+
+  /**
    * 向指定用户的所有客户端广播事件
    */
   private broadcastToUser(userId: string, event: SessionEvent): void {
@@ -262,6 +278,28 @@ export class SessionEventsService implements OnModuleDestroy {
           `Failed to send event to ${userId}/${subscriber.clientId}, removing`,
         );
         this.unsubscribe(userId, subscriber.clientId);
+      }
+    }
+  }
+
+  /**
+   * 向所有在线用户广播事件（用于系统级变更，如插件启停）
+   */
+  private broadcastToAll(event: SessionEvent): void {
+    for (const [userId, subscribers] of this.userSubscribers) {
+      if (subscribers.size === 0) continue;
+      const messageEvent: MessageEvent = {
+        data: JSON.stringify(event),
+      } as MessageEvent;
+      for (const subscriber of subscribers.values()) {
+        try {
+          subscriber.subject.next(messageEvent);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to send event to ${userId}/${subscriber.clientId}, removing`,
+          );
+          this.unsubscribe(userId, subscriber.clientId);
+        }
       }
     }
   }

@@ -12,7 +12,8 @@ export type SessionEventType =
   | "user_message_created"
   | "sub_agent_create"
   | "sub_agent_closed"
-  | "todo_updated";
+  | "todo_updated"
+  | "plugins_changed";
 
 /**
  * 会话事件

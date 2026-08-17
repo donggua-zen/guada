@@ -167,9 +167,13 @@ export class PersistentSessionContext implements ISessionContext {
       merged.maxTokensLimit,
     );
 
-    // 4. 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan/sandbox）
+    // 4. 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan/sandbox/free）
     const savedRunMode = this.session.settings?.runMode;
-    if (savedRunMode === "plan" || savedRunMode === "sandbox") {
+    if (
+      savedRunMode === "plan" ||
+      savedRunMode === "sandbox" ||
+      savedRunMode === "free"
+    ) {
       this.runMode = savedRunMode;
     }
 
