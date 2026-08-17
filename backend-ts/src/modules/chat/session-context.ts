@@ -85,8 +85,15 @@ export interface MemoryConfig {
  *           用于影子轮次等需要限制工具范围的场景
  * - plan: 计划模式，仅允许 safe 等级的只读工具，
  *         terminal (run_command) 例外，通过 sandbox --read-only 执行（全盘只读）
+ * - free: 自由模式，在 normal 基础上取消文件工具（write/edit）的工作区
+ *         路径限制，允许读写任意路径（高风险，UI 以红色警示）
  */
-export type SessionRunMode = "normal" | "sandbox" | "memory" | "plan";
+export type SessionRunMode =
+  | "normal"
+  | "sandbox"
+  | "memory"
+  | "plan"
+  | "free";
 
 /**
  * 获取消息选项

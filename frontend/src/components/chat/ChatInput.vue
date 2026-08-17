@@ -68,11 +68,11 @@
           <slot name="buttons"></slot>
           <!-- 运行模式按钮 -->
           <template v-if="!props.readonly">
-            <button ref="runModeButtonRef" class="tool-btn" @click.stop="toggleRunModePopover">
+            <button ref="runModeButtonRef" class="tool-btn" :class="{ 'run-mode-free': isFreeMode }" @click.stop="toggleRunModePopover">
               <el-icon size="16">
-                <component :is="runModeIcon" class="text-gray-600" />
+                <component :is="runModeIcon" :class="isFreeMode ? 'text-red-500' : 'text-gray-600'" />
               </el-icon>
-              <span class="text-xs font-medium">{{ runModeLabel }}</span>
+              <span class="text-xs font-medium" :class="isFreeMode ? 'text-red-500' : ''">{{ runModeLabel }}</span>
             </button>
             <RunModePopover v-model:visible="runModePopoverVisible" :anchor-el="runModeButtonRef"
               :current-value="currentRunMode" @select="handleRunModeChange" />
@@ -172,7 +172,7 @@ import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUt
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
-  DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
+  DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add24Regular
 } from '@vicons/fluent'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
@@ -455,13 +455,16 @@ const currentRunMode = computed(() => props.config?.runMode || 'normal');
 const runModeLabel = computed(() => {
   if (currentRunMode.value === 'plan') return t('chat.input.runModePlan');
   if (currentRunMode.value === 'sandbox') return t('chat.input.runModeSandbox');
+  if (currentRunMode.value === 'free') return t('chat.input.runModeFree');
   return t('chat.input.runModeNormal');
 });
 const runModeIcon = computed(() => {
   if (currentRunMode.value === 'plan') return ClipboardTask24Regular;
   if (currentRunMode.value === 'sandbox') return ShieldLock24Regular;
+  if (currentRunMode.value === 'free') return ShieldError16Regular;
   return DrinkCoffee16Regular;
 });
+const isFreeMode = computed(() => currentRunMode.value === 'free');
 
 const toggleRunModePopover = () => {
   runModePopoverVisible.value = !runModePopoverVisible.value;
@@ -1627,6 +1630,16 @@ defineExpose({ insertText, insertBadge });
 
 .tool-btn:active {
   background: var(--color-sidebar-bg-active);
+}
+
+/* 自由模式按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */
+.run-mode-free {
+  color: #ef4444 !important;
+  font-weight: 500;
+}
+
+.run-mode-free:hover {
+  color: #ef4444 !important;
 }
 
 /* 模型选择器按钮 - 原生 button */

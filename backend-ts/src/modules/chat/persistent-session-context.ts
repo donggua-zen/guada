@@ -402,6 +402,12 @@ export class PersistentSessionContext implements ISessionContext {
     if (currentMode !== "plan" && prevRunMode === "plan") {
       return "The user has disabled Plan mode. All tool restrictions have been lifted and you may proceed with normal operations.";
     }
+    if (currentMode === "free" && prevRunMode !== "free") {
+      return "The user has enabled Free mode. All path restrictions on file tools (write/edit) are lifted — you may read and write ANY file on the system outside the working directory. This is a high-risk operation: be extra careful, double-check the target path before writing, and never modify system-critical files unless explicitly requested.";
+    }
+    if (currentMode !== "free" && prevRunMode === "free") {
+      return "The user has disabled Free mode. File write/edit tools are once again restricted to the current working directory.";
+    }
     return null;
   }
 

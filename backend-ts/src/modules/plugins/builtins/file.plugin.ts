@@ -653,6 +653,14 @@ export class FilePlugin extends PluginBase {
   }
 
   private validateWritePath(filePath: string, context?: PluginContext): void {
+    // 自由模式：不限制只能编辑工作区内的文件，允许写入任意路径
+    if (context?.session.getRunMode?.() === "free") {
+      this.logger.warn(
+        `[Free mode] 跳过工作区路径校验，允许写入任意路径: ${filePath}`,
+      );
+      return;
+    }
+
     const resolved = this.resolvePath(filePath, context);
     const extra = context?.session.workspacePath
       ? [context.session.workspacePath]
