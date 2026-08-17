@@ -687,7 +687,7 @@ onUnmounted(() => {
    不占布局空间；顶部避开 PageHeader（44px）；高度自适应内容（不设 bottom） */
 .overview-float {
   position: absolute;
-  top: 44px;
+  top: 40px;
   right: 8px;
   width: 280px;
   z-index: 20;
