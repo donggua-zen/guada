@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center justify-between gap-2 h-11 drag-region"
+  <div class="flex items-center justify-between gap-2 h-10 drag-region"
     :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
