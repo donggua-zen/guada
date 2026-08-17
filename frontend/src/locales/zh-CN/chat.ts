@@ -23,6 +23,7 @@ export default {
     runModeNormal: '工作模式',
     runModeSandbox: '轻沙盒模式',
     runModePlan: '计划模式',
+    runModeFree: '自由模式',
 
     // AttachmentPopover.vue
     uploadImage: '上传图片',
@@ -60,6 +61,8 @@ export default {
     runModeNormalDesc: '不对工具进行限制,正常读写工作目录，命令行除外',
     runModeSandboxDesc: 'Shell命令工作目录内可写，外部只读',
     runModePlanDesc: '仅允许只读工具和只读终端,适合做只读规划',
+    runModeFreeTest: '自由模式',
+    runModeFreeDesc: '不限制工具与路径，可读写任意文件（高风险操作）',
 
     // ThinkingEffortPopover.vue
     thinkingEffortTitle: '思考强度',

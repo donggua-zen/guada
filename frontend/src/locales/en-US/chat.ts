@@ -23,6 +23,7 @@
     runModeNormal: 'Normal Mode',
     runModeSandbox: 'Lightweight Sandbox Mode',
     runModePlan: 'Plan Mode',
+    runModeFree: 'Free Mode',
 
     // AttachmentPopover.vue
     uploadImage: 'Upload Image',
@@ -60,6 +61,8 @@
     runModeNormalDesc: 'No restrictions on tools, normal read/write to working directory, except command line',
     runModeSandboxDesc: 'Shell commands can write within the working directory, read-only outside',
     runModePlanDesc: 'Only read-only tools and read-only terminals are allowed, suitable for read-only planning',
+    runModeFreeTest: 'Free Mode',
+    runModeFreeDesc: 'No restrictions on tools or paths, can read/write any file (high risk)',
 
     // ThinkingEffortPopover.vue
     thinkingEffortTitle: 'Thinking Effort',

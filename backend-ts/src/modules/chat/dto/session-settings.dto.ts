@@ -49,7 +49,7 @@ export class SessionSettingsDto {
 
   @IsOptional()
   @IsString()
-  runMode?: string; // "normal" | "sandbox" | "plan"
+  runMode?: string; // "normal" | "sandbox" | "plan" | "free"
 
   @IsOptional()
   @IsNumber()
