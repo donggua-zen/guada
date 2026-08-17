@@ -5,6 +5,8 @@ import {
   TurnInterceptor,
   AttachmentTypeRegistration,
   UiPageRegistration,
+  SlotRegistration,
+  RpcHandler,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
@@ -25,6 +27,8 @@ interface PluginRegistration {
   workspaceProviders: WorkspaceProviderFactory[];
   attachmentTypes: AttachmentTypeRegistration[];
   uiPages: UiPageRegistration[];
+  slots: SlotRegistration[];
+  rpcHandlers: Record<string, RpcHandler>;
   ctor?: new (...args: any[]) => PluginBase;
 }
 
@@ -33,7 +37,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [], attachmentTypes: [], uiPages: [] });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], rpcHandlers: {} });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -157,6 +161,40 @@ class PluginRegistryImpl {
   }
 
   has(pluginId: string): boolean { return this.registrations.has(pluginId); }
+  /** 注册 slot */
+  registerSlot(pluginId: string, reg: SlotRegistration) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (!pReg.slots.find((x) => x.name === reg.name && x.component === reg.component)) {
+      pReg.slots.push(reg);
+    }
+  }
+
+  /** 获取插件的所有 slot */
+  getSlots(pluginId: string): SlotRegistration[] {
+    return this.registrations.get(pluginId)?.slots || [];
+  }
+
+  /** 获取所有插件的 slot */
+  getAllSlots(): Array<{ pluginId: string; reg: SlotRegistration }> {
+    const result: Array<{ pluginId: string; reg: SlotRegistration }> = [];
+    for (const [pluginId, reg] of this.registrations) {
+      for (const slot of reg.slots) result.push({ pluginId, reg: slot });
+    }
+    return result;
+  }
+
+  /** 注册 RPC handler */
+  registerRpc(pluginId: string, methods: Record<string, RpcHandler>) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    Object.assign(pReg.rpcHandlers, methods);
+  }
+
+  /** 获取 RPC handler */
+  getRpcHandler(pluginId: string, method: string): RpcHandler | undefined {
+    return this.registrations.get(pluginId)?.rpcHandlers?.[method];
+  }
   getAllIds(): string[] { return Array.from(this.registrations.keys()); }
   getAll(): PluginRegistration[] { return Array.from(this.registrations.values()); }
 

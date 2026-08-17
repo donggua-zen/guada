@@ -298,7 +298,9 @@ export class RemoteWorkspaceService {
         clearTimeout(timer);
         // List directories only (for path picker usability)
         // Output format: name/isDir/size per line
-        const cmd = `ls -la --time-style=+0 "${dirPath}" 2>/dev/null | awk 'NR>1 {print $NF "/" ($1 ~ /^d/ ? "1" : "0") "/" $5}'`;
+        // 注意:不要用 --time-style(GNU 专属),macOS BSD ls 不支持会导致命令失败;
+        // BSD/GNU 的 -l 输出中 size 始终是 $5、文件名始终是 $NF,兼容两者。
+        const cmd = `ls -la "${dirPath}" 2>/dev/null | awk 'NR>1 {print $NF "/" ($1 ~ /^d/ ? "1" : "0") "/" $5}'`;
         client.exec(cmd, (err, stream) => {
           if (err) {
             client.end();

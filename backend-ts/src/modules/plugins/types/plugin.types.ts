@@ -313,6 +313,31 @@ export interface UiPageRegistration {
   order?: number;
 }
 
+// ── Slot 注册（v2：插件前端 UI 能力）──
+
+export interface SlotRegistration {
+  /** 命名 slot，点号分层：'settings.my-plugin'、'chat.toolbar.actions' */
+  name: string;
+  /** 组件名（对应插件 frontend/dist/<component>.js） */
+  component: string;
+  /** 渲染模式：'single'（唯一）/ 'list'（并列，默认）/ 'chain'（selector 路由，暂缓） */
+  mode?: "single" | "list" | "chain";
+  /** 排序，默认 100 */
+  order?: number;
+  /** 加载策略：'immediate' / 'lazy'（默认） */
+  loadMode?: "immediate" | "lazy";
+  /** 静态 props（可序列化 JSON，与渲染时注入的 inject 合并，inject 覆盖） */
+  props?: Record<string, unknown>;
+  /** 显示用元信息（tab 标题/图标等，%key% 走 NLS 解析） */
+  meta?: { label?: string; icon?: string; group?: string };
+}
+
+/** RPC 方法 handler：参数与返回值为可序列化 JSON */
+export type RpcHandler = (
+  args: any,
+  ctx: { sessionId?: string; workspaceId?: string; userId?: string },
+) => unknown | Promise<unknown>;
+
 /**
  * 插件决议后的信息（统一由 PluginManager.resolvePlugins 返回）
  * 各消费方（ToolExecutor、PromptCollector 等）通过此类型消费插件运行时状态。

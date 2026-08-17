@@ -17,6 +17,10 @@ import "./style.css";
 import "nprogress/nprogress.css";
 
 import { apiService } from "@/services/ApiService";
+import * as Vue from "vue";
+import ElementPlus from "element-plus";
+import { reactive, watch } from "vue";
+import "@/services/plugin-loader";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
 import { useLayoutStore } from "./stores/layout";
 import {
@@ -250,11 +254,55 @@ router.afterEach(() => {
 });
 
 const app = createApp(App);
+// ── 插件运行时共享环境（__GuaDaShared__）──
+// runtime：响应式共享数据（用户/会话/语言/主题），插件 UI 可响应式读取
+// i18n：插件语言包注册表（{ zh, en } 字典）
+window.__GuaDaShared__ = {
+  // 共享依赖：主应用同一个 Vue / ElementPlus 实例（插件产物从这里取，不 import）
+  vue: Vue,
+  "element-plus": ElementPlus,
+  runtime: reactive({
+    user: undefined,
+    session: { id: undefined, workspaceId: undefined, workspaceName: undefined },
+    locale: localStorage.getItem("app-language") || "zh-CN",
+    theme: "dark",
+  }),
+  i18n: {
+    dictionaries: new Map(),
+    register(pluginId, messages) {
+      this.dictionaries.set(pluginId, messages);
+      return () => this.dictionaries.delete(pluginId);
+    },
+    t(pluginId, key, params) {
+      const dict = this.dictionaries.get(pluginId);
+      const lang = window.__GuaDaShared__?.runtime?.locale;
+      const table = (dict && (dict[lang] || dict.en)) || {};
+      let text = table[key] ?? key;
+      if (params) for (const [k, v] of Object.entries(params)) text = text.replace(`{${k}}`, v);
+      return text;
+    },
+  },
+  // apiService 实例（含 _request 和所有领域 API 方法）
+  pluginApi: apiService,
+};
 const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
 app.use(i18n);
+// 全局注册 ElementPlus：主应用自身靠 unplugin 按需导入，但插件产物是运行时加载的 IIFE，
+// resolveComponent('el-xxx') 需要全局注册才能解析（插件模板可直接写 el-button/el-input）
+app.use(ElementPlus);
+
+// 用户信息同步到插件运行时（__GuaDaShared__.runtime.user），登录/登出自动更新
+const authStore = useAuthStore(pinia);
+watch(
+  () => authStore.user,
+  (user) => {
+    window.__GuaDaShared__.runtime.user = user;
+  },
+  { immediate: true },
+);
 
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router);
