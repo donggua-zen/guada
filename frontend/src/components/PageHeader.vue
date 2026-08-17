@@ -1,5 +1,6 @@
 <template>
-  <div class="flex items-center justify-between gap-2 h-11 drag-region">
+  <div class="flex items-center justify-between gap-2 h-11 drag-region"
+    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
       <LTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
@@ -36,6 +37,7 @@ import LTooltip from '@/components/ui/LTooltip.vue'
 const { t } = useI18n()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+const isMac = isElectron && window.electronAPI.platform === 'darwin'
 
 /**
  * 页面通用标题栏组件
@@ -57,6 +59,11 @@ defineProps<{
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* macOS：全局侧边栏折叠后红绿灯按钮会压在主内容区顶部，左侧预留空间避让 */
+.mac-sidebar-collapsed-padding {
+  padding-left: 78px;
 }
 </style>
 
