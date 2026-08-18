@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-full min-h-0 flex-1 bg-(--color-bg)">
+    <div class="flex flex-col h-full min-h-0 flex-1 bg-(--gd-color-bg)">
         <!-- 标题栏 -->
         <div
             class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
@@ -671,7 +671,7 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
 
 <style>
 .code-preview-container pre code.hljs {
-    color: var(--color-text, #333) !important;
+    color: var(--gd-color-text, #333) !important;
     background-color: transparent !important;
 }
 
@@ -713,13 +713,13 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
     left: 0;
     z-index: 1;
     /* 背景色防止代码透过行号显示 */
-    background: var(--color-bg, #fff);
+    background: var(--gd-color-bg, #fff);
 }
 
 .dark .line-num {
     color: #4b5563;
     border-right-color: #374151;
-    background: var(--color-bg, #222);
+    background: var(--gd-color-bg, #222);
 }
 
 .line-content {
@@ -751,18 +751,18 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
     border-radius: 4px;
     cursor: pointer;
     background: transparent;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     transition: background 0.15s ease, color 0.15s ease;
     outline: none;
 }
 
 .preview-mode-btn:hover {
-    background: var(--color-sidebar-bg-hover);
+    background: var(--gd-color-sidebar-bg-hover);
 }
 
 .preview-mode-btn.is-active {
-    color: var(--color-text);
-    background: var(--color-bg);
+    color: var(--gd-color-text);
+    background: var(--gd-color-bg);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
@@ -777,12 +777,12 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
     border-radius: 4px;
     cursor: pointer;
     background: transparent;
-    color: var(--color-text);
+    color: var(--gd-color-text);
     transition: background 0.15s ease, color 0.15s ease;
     outline: none;
 }
 
 .preview-close-btn:hover {
-    background: var(--color-sidebar-bg-hover);
+    background: var(--gd-color-sidebar-bg-hover);
 }
 </style>

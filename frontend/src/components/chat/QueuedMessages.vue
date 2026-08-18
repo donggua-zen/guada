@@ -60,7 +60,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: var(--size-dialog-rounded-radius);
+  border-radius: var(--gd-size-dialog-rounded-radius);
   font-size: 13px;
   transition: all 0.2s;
 }
@@ -78,7 +78,7 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   gap: 2px;
-  color: var(--color-text-gray, #999);
+  color: var(--gd-color-text-gray, #999);
   flex-shrink: 0;
   font-size: 11px;
 }
@@ -94,7 +94,7 @@ const emit = defineEmits<{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--color-text, #333);
+  color: var(--gd-color-text, #333);
   line-height: 1.5;
 }
 
@@ -103,7 +103,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  color: var(--color-text-gray, #999);
+  color: var(--gd-color-text-gray, #999);
   font-size: 11px;
 }
 
@@ -127,14 +127,14 @@ const emit = defineEmits<{
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-gray, #999);
+  color: var(--gd-color-text-gray, #999);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .queue-action-btn:hover {
-  background: var(--color-sidebar-bg-hover, rgba(0, 0, 0, 0.06));
-  color: var(--color-text, #333);
+  background: var(--gd-color-sidebar-bg-hover, rgba(0, 0, 0, 0.06));
+  color: var(--gd-color-text, #333);
 }
 
 .queue-enter-active,

@@ -178,7 +178,7 @@ onBeforeUnmount(() => {
   content: "";
   position: absolute;
   inset: 0;
-  background-color: var(--color-overlay-bg, rgba(0, 0, 0, 0.5));
+  background-color: var(--gd-color-overlay-bg, rgba(0, 0, 0, 0.5));
   opacity: 0.8;
   pointer-events: none;
 }
@@ -199,10 +199,10 @@ html.dark .l-dialog__overlay::before {
 .l-dialog {
   margin: 0 auto;
   max-height: 85vh;
-  border-radius: var(--size-dialog-rounded-radius, 12px);
-  background-color: var(--color-dialog-bg, var(--color-bg));
+  border-radius: var(--gd-size-dialog-rounded-radius, 12px);
+  background-color: var(--gd-color-dialog-bg, var(--gd-color-bg));
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 4px 16px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--color-dialog-border, var(--color-border));
+  border: 1px solid var(--gd-color-dialog-border, var(--gd-color-border));
   display: flex;
   flex-direction: column;
   position: relative;
@@ -222,9 +222,9 @@ html.dark .l-dialog {
 }
 
 .l-dialog__title {
-  font-size: var(--size-text-sm, 14px);
+  font-size: var(--gd-size-text-sm, 14px);
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--gd-color-text);
   line-height: 1.5;
 }
 
@@ -237,7 +237,7 @@ html.dark .l-dialog {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--color-text-gray, #999);
+  color: var(--gd-color-text-gray, #999);
   border-radius: 6px;
   transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
@@ -245,8 +245,8 @@ html.dark .l-dialog {
 }
 
 .l-dialog__close-btn:hover {
-  background: var(--color-surface-hover, rgba(0, 0, 0, 0.06));
-  color: var(--color-text);
+  background: var(--gd-color-surface-hover, rgba(0, 0, 0, 0.06));
+  color: var(--gd-color-text);
 }
 
 .l-dialog__close-btn--floating {

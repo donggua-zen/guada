@@ -4,7 +4,7 @@
             <!-- 对话设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.chat') }}</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
                     <!-- 默认对话模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
                         <div class="flex flex-col gap-1 min-w-0">
@@ -41,7 +41,7 @@
             <!-- 视觉辅助设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.visual') }}</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.visualAssistantModel') }}</span>
@@ -62,7 +62,7 @@
             <!-- 历史压缩设置分组 -->
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.compression') }}</h3>
-                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden">
+                <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.historyCompressionModel') }}</span>
@@ -82,7 +82,7 @@
         </div>
 
         <!-- 模型选择对话框 -->
-        <LDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <GdDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <div class="mb-4">
                 <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
@@ -141,13 +141,13 @@
 
                                             <!-- 高级功能图标 -->
                                             <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                                <LTooltip :content="getFeatureLabel(feature)" placement="top">
+                                                <GdTooltip :content="getFeatureLabel(feature)" placement="top">
                                                     <el-icon class="hover:text-primary transition-colors" :size="14">
                                                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                                                         <LightbulbFilament24Regular
                                                             v-else-if="feature === 'thinking'" />
                                                     </el-icon>
-                                                </LTooltip>
+                                                </GdTooltip>
                                             </template>
                                         </div>
                                     </div>
@@ -167,7 +167,7 @@
                     <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
                 </div>
             </div>
-        </LDialog>
+        </GdDialog>
     </div>
 </template>
 
@@ -189,7 +189,7 @@ import { apiService } from '@/services/ApiService'
 
 import { usePopup } from '@/composables/usePopup'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
-import LTooltip from '@/components/ui/LTooltip.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 // Element Plus 组件导入
 import {
@@ -198,7 +198,7 @@ import {
     ElTag,
     ElIcon
 } from 'element-plus'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
@@ -533,7 +533,7 @@ onMounted(async () => {
 
 <style scoped>
 .footer {
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid var(--gd-color-border);
 }
 
 /* 模型选择器按钮样式 */

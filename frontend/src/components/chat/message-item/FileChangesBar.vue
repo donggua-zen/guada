@@ -98,7 +98,7 @@ function openFile(filePath: string) {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--gd-color-surface);
   font-size: 12px;
 }
 
@@ -113,7 +113,7 @@ function openFile(filePath: string) {
 }
 
 .fcb__header:hover {
-  background: var(--color-surface-hover);
+  background: var(--gd-color-surface-hover);
 }
 
 .fcb__icon {

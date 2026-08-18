@@ -40,7 +40,7 @@ defineEmits<{
 
 <style scoped>
 .attachment-chip {
-  background: var(--color-secondary-surface);
+  background: var(--gd-color-secondary-surface);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border: 1px solid rgba(0, 0, 0, 0.06);

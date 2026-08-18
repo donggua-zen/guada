@@ -238,7 +238,7 @@ onUnmounted(() => {
   height: 36px;
   flex-shrink: 0;
   background: transparent;
-  border-bottom: 1px solid var(--color-border, #d0d0d0);
+  border-bottom: 1px solid var(--gd-color-border, #d0d0d0);
 }
 
 /* 导航按钮组 */
@@ -254,7 +254,7 @@ onUnmounted(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-secondary, #555);
+  color: var(--gd-color-text-secondary, #555);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -263,11 +263,11 @@ onUnmounted(() => {
 }
 
 .nav-btn:hover:not(:disabled) {
-  background: var(--color-hover-bg, #e0e0e0);
+  background: var(--gd-color-hover-bg, #e0e0e0);
 }
 
 .nav-btn:active:not(:disabled) {
-  background: var(--color-border, #d0d0d0);
+  background: var(--gd-color-border, #d0d0d0);
 }
 
 .nav-btn:disabled {
@@ -280,7 +280,7 @@ onUnmounted(() => {
 }
 
 .dark .nav-btn:hover:not(:disabled) {
-  background: var(--color-hover-bg, #3e4147);
+  background: var(--gd-color-hover-bg, #3e4147);
 }
 
 .close-btn:hover {
@@ -295,8 +295,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   margin-left: 4px;
-  background: var(--color-bg-primary, #ffffff);
-  border: 1px solid var(--color-border, #c0d0d0);
+  background: var(--gd-color-bg-primary, #ffffff);
+  border: 1px solid var(--gd-color-border, #c0d0d0);
   border-radius: 14px;
   padding: 0 10px;
   height: 26px;
@@ -304,12 +304,12 @@ onUnmounted(() => {
 }
 
 .address-bar-wrapper.focused {
-  border-color: var(--color-primary, #4a90d9);
+  border-color: var(--gd-color-primary, #4a90d9);
 }
 
 .dark .address-bar-wrapper {
-  background: var(--color-bg-primary, #1a1b1e);
-  border-color: var(--color-border, #3e4147);
+  background: var(--gd-color-bg-primary, #1a1b1e);
+  border-color: var(--gd-color-border, #3e4147);
 }
 
 .security-icon {
@@ -338,8 +338,8 @@ onUnmounted(() => {
 .loading-spinner {
   width: 12px;
   height: 12px;
-  border: 1.5px solid var(--color-border, #ccc);
-  border-top-color: var(--color-primary, #4a90d9);
+  border: 1.5px solid var(--gd-color-border, #ccc);
+  border-top-color: var(--gd-color-primary, #4a90d9);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
   flex-shrink: 0;

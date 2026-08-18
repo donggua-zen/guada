@@ -1,14 +1,14 @@
 <template>
   <div
-    class="bot-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm">
+    class="bot-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm">
     <!-- Header: icon + name + platform tag -->
     <div class="flex items-center gap-2.5 mb-3">
       <div
-        class="w-8 h-8 rounded-[var(--size-surface-radius)] shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] overflow-hidden">
+        class="w-8 h-8 rounded-[var(--gd-size-surface-radius)] shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] overflow-hidden">
         <img :src="getPlatformAvatar(bot.platform)" :alt="getPlatformName(bot.platform)"
           class="w-full h-full object-contain p-1" @error="handleImageError" />
       </div>
-      <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);"
+      <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);"
         :title="bot.name">
         {{ bot.name }}
       </h3>
@@ -16,15 +16,15 @@
     </div>
 
     <!-- Description: status info -->
-    <div class="flex items-center gap-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+    <div class="flex items-center gap-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
       <el-tag :type="getStatusType(bot.status, bot.runtimeStatus)" size="small" effect="plain">
         {{ getStatusText(bot.status, bot.runtimeStatus) }}
       </el-tag>
-      <LTooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
+      <GdTooltip v-if="bot.lastError" :content="bot.lastError" placement="top" effect="dark">
         <span class="text-xs text-red-500 truncate flex-1 cursor-help">
           {{ bot.lastError }}
         </span>
-      </LTooltip>
+      </GdTooltip>
     </div>
 
     <!-- Footer: action buttons + switch -->
@@ -44,7 +44,7 @@
   </div>
 
   <!-- 二维码弹窗 -->
-  <LDialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
+  <GdDialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="qrLoading" class="py-8">
         <el-icon class="is-loading" :size="32">
@@ -87,7 +87,7 @@
         {{ qrMessage || t('bot.card.qrUnavailable') }}
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -98,8 +98,8 @@ import { ElMessage, ElIcon } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
-import LTooltip from '@/components/ui/LTooltip.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
   bot: BotInstance

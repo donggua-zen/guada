@@ -1,5 +1,5 @@
 <template>
-  <CustomPopover :show="visible" @update:show="onMainShowChange" :width="300" :max-height="440" :anchor-el="anchorEl"
+  <GdPopover :show="visible" @update:show="onMainShowChange" :width="300" :max-height="440" :anchor-el="anchorEl"
     popper-class="model-popover compact-popover">
     <div class="model-panel">
       <!-- 已选择模型（hover 弹出全部模型） -->
@@ -57,7 +57,7 @@
         <div class="section-label">{{ t('chat.input.favoriteModels') }}</div>
         <div class="favorite-models-list space-y-0.5" style="max-height: 220px; overflow-y: auto;">
           <div v-for="model in favoriteModels" :key="model.id"
-            class="model-item-compact px-1.5 py-1 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
+            class="model-item-compact px-1.5 py-1 rounded-(--gd-size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
             :class="{
               'model-item-active': currentModelId === model.id
             }" @click="handleSelect(model.id)">
@@ -83,10 +83,10 @@
         </div>
       </template>
     </div>
-  </CustomPopover>
+  </GdPopover>
 
   <!-- 级联：全部模型列表 -->
-  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'" @update:show="onCascadeShowChange"
+  <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'" @update:show="onCascadeShowChange"
     :width="300" :max-height="400" :position="cascadePosition" @mouseenter="cancelCloseCascade"
     @mouseleave="scheduleCloseCascade">
     <template v-for="provider in filteredProviders" :key="provider.id">
@@ -96,7 +96,7 @@
         </div>
         <div class="provider-models space-y-1">
           <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
-            class="model-item-compact p-1.5 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
+            class="model-item-compact p-1.5 rounded-(--gd-size-dialog-rounded-radius) cursor-pointer transition-all flex items-center space-x-1.5"
             :class="{
               'model-item-active': currentModelId === model.id
             }" @click.stop="handleSelect(model.id)">
@@ -127,10 +127,10 @@
         </div>
       </div>
     </template>
-  </CustomPopover>
+  </GdPopover>
 
   <!-- 级联：推理强度列表 -->
-  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'" @update:show="onCascadeShowChange"
+  <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'" @update:show="onCascadeShowChange"
     :width="180" :max-height="300" :position="cascadePosition" @mouseenter="cancelCloseCascade"
     @mouseleave="scheduleCloseCascade">
     <div v-for="effort in thinkingEffortOptions" :key="effort"
@@ -141,7 +141,7 @@
       <span>{{ getThinkingEffortLabel(effort) }}</span>
       <span class="text-xs text-gray-400">{{ effort }}</span>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
@@ -149,7 +149,7 @@ import { computed, ref, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon } from 'element-plus'
 import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 import Avatar from '../../ui/Avatar.vue'
 import { getModelDisplayName, getModelAvatarPath, getThinkingEffortLabel } from '@/utils/modelUtils'
 import { apiService } from '@/services/ApiService'
@@ -350,13 +350,13 @@ watch(() => props.visible, (newVal) => {
 .section-label {
   font-size: 11px;
   font-weight: 500;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   padding: 4px 8px;
 }
 
 .section-divider {
   height: 1px;
-  background: var(--color-surface-border);
+  background: var(--gd-color-surface-border);
   margin: 3px 4px;
 }
 
@@ -371,23 +371,23 @@ watch(() => props.visible, (newVal) => {
 }
 
 .current-model-card:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .model-item-compact:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .model-item-active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 .te-item:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .te-item-active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 /* 收藏图标 */
@@ -408,7 +408,7 @@ watch(() => props.visible, (newVal) => {
 }
 
 .favorite-icon .text-gray-400 {
-  color: var(--color-text-gray) !important;
+  color: var(--gd-color-text-gray) !important;
 }
 
 .cascade-trigger {
@@ -419,11 +419,11 @@ watch(() => props.visible, (newVal) => {
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 .cascade-trigger:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .thinking-active-icon {

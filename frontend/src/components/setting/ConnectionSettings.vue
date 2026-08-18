@@ -44,7 +44,7 @@
     </div>
 
     <!-- 新建/编辑弹窗：分步向导 -->
-    <LDialog v-model="editing" width="640px"
+    <GdDialog v-model="editing" width="640px"
       :close-on-click-modal="false" append-to-body class="conn-dialog">
       <div class="flex" style="height: 480px;">
         <!-- 左侧步骤导航 -->
@@ -131,15 +131,15 @@
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
                 {{ t('settings.connection.permTitle') }}
               </label>
-              <div class="flex w-fit rounded-lg overflow-hidden border border-(--color-border) dark:border-gray-700">
+              <div class="flex w-fit rounded-lg overflow-hidden border border-(--gd-color-border) dark:border-gray-700">
                 <button
                   v-for="opt in permOptions"
                   :key="opt.value"
                   type="button"
                   class="px-4 py-1.5 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
                   :class="editConfig.perm === opt.value
-                    ? 'bg-(--color-primary) text-white border-(--color-primary)'
-                    : 'text-(--color-text-gray) hover:bg-(--color-primary-100) hover:text-(--color-primary)'"
+                    ? 'bg-(--gd-color-primary) text-white border-(--gd-color-primary)'
+                    : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-primary-100) hover:text-(--gd-color-primary)'"
                   @click="editConfig.perm = opt.value">
                   {{ opt.label }}
                 </button>
@@ -264,7 +264,7 @@
           </div>
         </div>
       </div>
-    </LDialog>
+    </GdDialog>
   </div>
 </template>
 
@@ -272,7 +272,7 @@
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
 
 const { t } = useI18n()

@@ -335,7 +335,7 @@ function handleItemClick(messageId: string) {
   overflow-y: auto;
   padding: 8px 10px;
   background-color: var(--el-bg-color, #fff);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 40;

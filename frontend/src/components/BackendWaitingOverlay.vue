@@ -41,7 +41,7 @@ defineProps<{
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg);
+  background: var(--gd-color-bg);
 }
 
 .waiting-content,
@@ -59,7 +59,7 @@ defineProps<{
 }
 
 .logo-spin {
-  color: var(--color-primary, #409eff);
+  color: var(--gd-color-primary, #409eff);
 }
 
 .spinner-ring {
@@ -80,13 +80,13 @@ defineProps<{
 .loading-title {
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-text, #303133);
+  color: var(--gd-color-text, #303133);
   margin: 0 0 8px;
 }
 
 .loading-desc {
   font-size: 14px;
-  color: var(--color-text-secondary, #909399);
+  color: var(--gd-color-text-secondary, #909399);
   margin: 0;
 }
 
@@ -98,13 +98,13 @@ defineProps<{
 .error-title {
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-danger, #f56c6c);
+  color: var(--gd-color-danger, #f56c6c);
   margin: 0 0 8px;
 }
 
 .error-text {
   font-size: 14px;
-  color: var(--color-text-secondary, #909399);
+  color: var(--gd-color-text-secondary, #909399);
   margin: 0;
   line-height: 1.6;
 }

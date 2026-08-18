@@ -64,13 +64,13 @@
         <div class="flex items-center min-w-0">
           <template v-if="!item.isDirectory">
             <!-- 处理中或等待处理时显示进度百分比 -->
-            <LTooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
+            <GdTooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
               :content="item.currentStep" 
               placement="top">
               <el-tag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
                 {{ getStatusDisplayText(item) }}
               </el-tag>
-            </LTooltip>
+            </GdTooltip>
             <!-- 其他状态直接显示 -->
             <el-tag v-else size="small" :type="getStatusType(item.processingStatus)">
               {{ getStatusDisplayText(item) }}
@@ -131,16 +131,16 @@
     />
 
     <!-- 重命名对话框 -->
-    <LDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" width="400px" :close-on-click-modal="false" append-to-body>
+    <GdDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" width="400px" :close-on-click-modal="false" append-to-body>
       <el-input v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
       <template #footer>
         <el-button @click="showRenameDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="confirmRename" :loading="renameLoading">{{ t('common.ok') }}</el-button>
       </template>
-    </LDialog>
+    </GdDialog>
 
     <!-- 移动对话框 -->
-    <LDialog v-model="showMoveDialog" :title="t('knowledge.tree.moveTitle')" width="500px" :close-on-click-modal="false" append-to-body>
+    <GdDialog v-model="showMoveDialog" :title="t('knowledge.tree.moveTitle')" width="500px" :close-on-click-modal="false" append-to-body>
       <div class="max-h-80 overflow-y-auto">
         <!-- 根目录选项 -->
         <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
@@ -168,7 +168,7 @@
         <el-button @click="showMoveDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="confirmMove" :loading="moveLoading">{{ t('common.ok') }}</el-button>
       </template>
-    </LDialog>
+    </GdDialog>
   </div>
 </template>
 
@@ -181,8 +181,8 @@ import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
-import LTooltip from '@/components/ui/LTooltip.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'

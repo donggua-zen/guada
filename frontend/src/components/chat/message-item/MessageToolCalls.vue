@@ -38,7 +38,7 @@
 
 
   <!-- 单个工具详情对话框 -->
-  <LDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
+  <GdDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
     :title="t('chat.toolCalls.detailTitle', { index: selectedToolIndex + 1 })" width="700px" :close-on-click-modal="true" destroy-on-close
     :append-to-body="true" class="tool-dialog" @closed="keepElement = false">
     <div class="tool-dialog-content">
@@ -135,7 +135,7 @@
         <el-button @click="closeDialog">关闭</el-button>
       </span>
     </template>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -149,7 +149,7 @@ import { Loading } from '@/components/icons';
 import { parse as partialParse } from 'partial-json';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
-import LDialog from '@/components/ui/LDialog.vue';
+import GdDialog from '@/components/ui/GdDialog.vue';
 import {
   type ToolCall,
   resolveToolName, getToolConfig, getToolIcon,

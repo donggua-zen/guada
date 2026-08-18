@@ -48,7 +48,7 @@ const elLocale = computed(() => (getLocale() === 'en-US' ? en : zhCn))
 // 主题切换过渡状态
 const showThemeTransition = ref(false)
 const isTransitioning = ref(false)
-const transitionColor = ref('var(--color-sidebar-bg)') // 使用 CSS 变量,自动适配主题
+const transitionColor = ref('var(--gd-color-sidebar-bg)') // 使用 CSS 变量,自动适配主题
 
 // 监听主题变化,触发过渡动画
 watch(

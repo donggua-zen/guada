@@ -10,17 +10,17 @@
         </div>
 
         <!-- 分组列表（可拖拽排序） -->
-        <div class="group-list border border-(--color-border) rounded-lg overflow-hidden">
+        <div class="group-list border border-(--gd-color-border) rounded-lg overflow-hidden">
             <div v-if="groups.length === 0" class="py-8 text-center text-sm text-gray-400">
                 暂无自定义分组
             </div>
             <div v-else>
                 <draggable v-model="localGroups" item-key="id" handle=".drag-handle"
-                    @end="onDragEnd" class="divide-y divide-(--color-border)">
+                    @end="onDragEnd" class="divide-y divide-(--gd-color-border)">
                     <template #item="{ element }">
                         <div
                             class="group-item flex items-center gap-2 px-3 py-2.5 transition-colors duration-200"
-                            :class="{ 'bg-(--color-surface)': editingId === element.id }">
+                            :class="{ 'bg-(--gd-color-surface)': editingId === element.id }">
                             <!-- 拖拽手柄 -->
                             <div
                                 class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
@@ -171,7 +171,7 @@ const onDragEnd = async () => {
 }
 
 .group-item:hover {
-    background-color: var(--color-sidebar-bg-hover);
+    background-color: var(--gd-color-sidebar-bg-hover);
 }
 
 .drag-handle {

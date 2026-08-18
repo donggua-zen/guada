@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-2">
     <template v-for="field in visibleFields" :key="field.key">
       <div class="flex flex-col gap-0.5">
-        <label class="text-xs font-medium text-(--color-text) dark:text-[#e5e7eb]">
+        <label class="text-xs font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">
           {{ field.label }}
           <span v-if="field.required" class="text-red-500">*</span>
         </label>

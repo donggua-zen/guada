@@ -365,7 +365,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   width: 1px;
   cursor: col-resize;
-  background-color: var(--color-sidebar-border, #f5f5f5);
+  background-color: var(--gd-color-sidebar-border, #f5f5f5);
   transition: background-color 0.2s ease;
   position: relative;
   z-index: 10;

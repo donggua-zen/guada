@@ -2,7 +2,8 @@
   <!-- 消息+输入 区域容器 -->
   <div class="flex-1 overflow-hidden w-full relative">
     <ScrollContainer ref="scrollContainerRef" class="h-full chat-scroll-container transition-opacity duration-300 px-5"
-      :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+      :auto-scroll="needScrollToBottom" @scroll="handleScroll"
+      :style="(props.asideWidth || 0) > 0 && props.asideBleed ? { paddingRight: ((props.asideWidth || 0) + ASIDE_GAP + 'px') } : undefined">
       <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
       <div class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
         <template v-if="showSkeleton">
@@ -68,7 +69,7 @@
           <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
           <Transition name="queue-drawer">
             <div v-if="queueLength > 0"
-              class="queue-drawer bg-(--color-surface)/80 backdrop-blur-xl rounded-(--size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
+              class="queue-drawer bg-(--gd-color-surface)/80 backdrop-blur-xl rounded-(--gd-size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
               <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
             </div>
           </Transition>
@@ -98,7 +99,7 @@
               @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
               <template #right-actions-before>
                 <!-- 上下文使用率：圆形进度条 -->
-                <LTooltip :content="contextTooltip" placement="top">
+                <GdTooltip :content="contextTooltip" placement="top">
                   <button class="context-ring-btn" @click="memoPanelVisible = true">
                     <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
                       <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
@@ -107,7 +108,7 @@
                         transform="rotate(-90 18 18)" />
                     </svg>
                   </button>
-                </LTooltip>
+                </GdTooltip>
               </template>
             </ChatInput>
           </div>
@@ -115,15 +116,25 @@
       </div>
     </ScrollContainer>
 
+    <!-- 右侧 aside 槽位（工作区概览）：位于滚动条左侧、不随消息滚动；
+         消息/输入区按 asideWidth 让出宽度（只挤位置、不挤宽度）。
+         进出场用 Transition 动画（离散/单次翻转时正常播放） -->
+    <Transition name="aside-fade">
+      <div v-if="(props.asideWidth || 0) > 0" class="chat-aside"
+        :style="{ width: (props.asideWidth || 0) + 'px', right: asideRight + 'px' }">
+        <slot name="aside" />
+      </div>
+    </Transition>
+
     <!-- 回到底部悬浮按钮 -->
     <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
       @click="handleScrollToBottomClick" />
   </div>
   <!-- 记忆管理弹窗 -->
-  <LDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px"
+  <GdDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px"
     :close-on-click-modal="false" destroy-on-close class="memo-panel-dialog" append-to-body>
     <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -155,8 +166,8 @@ import QueuedMessages from './QueuedMessages.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
-import LTooltip from '../ui/LTooltip.vue';
-import LDialog from '@/components/ui/LDialog.vue'
+import GdTooltip from '../ui/GdTooltip.vue';
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 
 // 常量定义
@@ -213,6 +224,11 @@ const props = defineProps<{
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
   agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
   activeTabId?: string;
+  /** 右侧 aside 预留宽度（px，默认 0 = 不预留不渲染）；消息/输入区自动让出该宽度 */
+  asideWidth?: number;
+  /** 是否避让（挤压消息位置）：true = 滚动容器 padding-right 让出 aside 区；
+       false = 消息留白已足够，概览直接悬浮于右侧留白（不避让） */
+  asideBleed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -221,6 +237,13 @@ const emit = defineEmits<{
   'save-settings': []
   'select-character': [character: Character]  // 切换角色
   'switch-agent': [tabId: string]
+  /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
+  'container-resize': [contentWidth: number]
+}>();
+
+defineSlots<{
+  /** 右侧 aside 槽位：渲染于滚动条左侧、不随消息滚动；宽度由 asideWidth 控制 */
+  aside?: () => any
 }>();
 
 // 计算属性 - 类型化
@@ -257,6 +280,34 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const needScrollToBottom = ref(true);
 let scrollTicking = false;
 let lastScrollTop = 0;
+
+// ── 右侧 aside（工作区概览）自适应 ──
+// 滚动条恒定 10px（ScrollContainer ::-webkit-scrollbar + scrollbar-gutter），
+// 概览 absolute 定位在滚动条左侧；概览只挤压消息位置、不挤压宽度：
+// 父级按 asideWidth 让出 padding-right，消息(≤ max-w-186)自动在剩余区内左移。
+const SCROLLBAR_W = 10;
+const ASIDE_GAP = 8;
+/** aside 定位：right = 滚动条宽 + 间距（位于滚动条左侧） */
+const asideRight = SCROLLBAR_W + ASIDE_GAP;
+
+let chatResizeObserver: ResizeObserver | null = null;
+
+/** 上报滚动容器可视宽（px）——父级据此判断概览显隐 */
+function measureChatContainer(): void {
+  const el = scrollContainerRef.value?.getScrollElement?.() as HTMLElement | null;
+  if (!el) return;
+  emit('container-resize', el.clientWidth);
+}
+
+watch(scrollContainerRef, (ref) => {
+  chatResizeObserver?.disconnect();
+  chatResizeObserver = null;
+  const el = ref?.getScrollElement?.() as HTMLElement | null;
+  if (!el) return;
+  chatResizeObserver = new ResizeObserver(measureChatContainer);
+  chatResizeObserver.observe(el);
+  measureChatContainer();
+}, { flush: 'post' });
 
 /**
  * 锁定自动滚动到底部，供子组件通过 inject 调用。
@@ -1183,10 +1234,46 @@ function scrollToMessage(messageId: string) {
   will-change: transform;
   transform: translateZ(0);
   contain: layout style paint;
+  /* aside 让出（padding-right 变化）平滑过渡；保留原有 opacity 过渡 */
+  transition: opacity 0.3s ease, padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* aside 进出场：淡入淡出 + 滑移（缩放/右移） */
+.aside-fade-enter-active,
+.aside-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top right;
+}
+.aside-fade-enter-from,
+.aside-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.92) translateX(8px);
+}
+
+/* 分栏拖拽豁免：GdSplitpanes 拖拽时用
+   .lite-splitpanes--resizing * { transition: none !important } 屏蔽概览/避让过渡，
+   用更高特异性 + important 豁免，保证拖拽时概览显隐与消息避让也有动画 */
+.lite-splitpanes--resizing .chat-aside {
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+/* 消息避让（padding-right 变化在滚动容器上）同样豁免，拖拽时平滑过渡 */
+.lite-splitpanes--resizing .chat-scroll-container {
+  transition: opacity 0.3s ease, padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* 右侧 aside（工作区概览）：位于滚动条左侧、固定不随消息滚动；
+   高度随内容自适应（不撑满槽位）；top 与消息区顶部对齐 */
+.chat-aside {
+  position: absolute;
+  top: 12px;
+  z-index: 20;
+}
+.chat-aside :deep(> *) {
+  width: 100%;
 }
 
 .queue-drawer {
-  border: 1px solid var(--color-surface-border);
+  border: 1px solid var(--gd-color-surface-border);
 }
 
 /* 抽屉过渡动画 */
@@ -1216,7 +1303,7 @@ function scrollToMessage(messageId: string) {
   position: absolute;
   height: 48px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--color-bg) 25px, transparent 48px);
+  background: linear-gradient(to top, var(--gd-color-bg) 25px, transparent 48px);
 }
 
 /* 加载指示器淡入淡出 */
@@ -1283,11 +1370,11 @@ function scrollToMessage(messageId: string) {
 }
 
 .context-ring-btn:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .context-ring .ring-bg {
-  stroke: var(--color-text-disabled);
+  stroke: var(--gd-color-text-disabled);
   opacity: 0.3;
 }
 

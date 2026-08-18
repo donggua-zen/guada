@@ -19,13 +19,13 @@
         <div
           v-for="tool in globalTools"
           :key="tool.pluginId"
-          class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+          class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
           @click="showDetail(tool)"
         >
           <!-- Header: icon + name + source tag -->
           <div class="flex items-center gap-2.5 mb-3">
             <CardAvatar :src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null" :name="tool.displayName" :disabled="!tool.enabled" />
-            <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+            <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
               {{ tool.displayName }}
             </h3>
             <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
@@ -33,7 +33,7 @@
           </div>
 
           <!-- Description (max 2 lines) -->
-          <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+          <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
             {{ tool.description }}
           </p>
 
@@ -64,7 +64,7 @@
     </div>
 
     <!-- Detail Dialog -->
-    <LDialog v-model="detailVisible" width="560px" align-center destroy-on-close>
+    <GdDialog v-model="detailVisible" width="560px" align-center destroy-on-close>
       <template #header>
         <div class="flex items-center gap-3">
           <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
@@ -86,7 +86,7 @@
           <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2">{{ t('plugins.localTools.toolsLabel', { count: currentTool.tools.length }) }}</div>
           <div class="space-y-1.5">
             <div v-for="sub in currentTool.tools" :key="sub.name"
-              class="flex items-start gap-2 py-1.5 px-3 rounded-[var(--size-surface-radius)] bg-gray-50 dark:bg-[#2a2a2e]">
+              class="flex items-start gap-2 py-1.5 px-3 rounded-[var(--gd-size-surface-radius)] bg-gray-50 dark:bg-[#2a2a2e]">
               <div class="flex-1 min-w-0">
                 <div class="text-sm text-gray-700 dark:text-[#d0d1d5] font-medium">{{ sub.name }}</div>
                 <div v-if="sub.description" class="text-xs text-gray-400 mt-0.5">{{ sub.description }}</div>
@@ -99,7 +99,7 @@
       <template #footer>
         <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
       </template>
-    </LDialog>
+    </GdDialog>
   </div>
 </template>
 
@@ -110,7 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { t } = useI18n()
 

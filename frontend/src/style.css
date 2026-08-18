@@ -1,122 +1,122 @@
 /* 通用重置和基础样式 */
 
 :root {
-  --color-primary-0f: #fb72990f;
+  --gd-color-primary-0f: #fb72990f;
 
-  --color-primary: oklab(72.117% 0.17379 0.01397);
-  --color-primary-50: oklch(98.921% 0.00548 3.3339);
-  --color-primary-100: oklch(96.614% 0.01843 356.42);
-  --color-primary-200: oklch(92.119% 0.04192 359.34);
-  --color-primary-300: oklch(87.574% 0.06833 358.92);
-  --color-primary-400: oklch(83.432% 0.09481 0.91169);
-  --color-primary-500: oklch(79.406% 0.12101 1.7634);
-  --color-primary-600: oklch(75.718% 0.14788 3.5877);
-  --color-primary-700: oklch(72.118% 0.17434 4.6237);
-  --color-primary-800: oklch(69.574% 0.19291 5.8639);
-  --color-primary-900: oklch(68.911% 0.1982 6.5103);
-  --color-primary-950: oklch(66.081% 0.22168 9.2391);
+  --gd-color-primary: oklab(72.117% 0.17379 0.01397);
+  --gd-color-primary-50: oklch(98.921% 0.00548 3.3339);
+  --gd-color-primary-100: oklch(96.614% 0.01843 356.42);
+  --gd-color-primary-200: oklch(92.119% 0.04192 359.34);
+  --gd-color-primary-300: oklch(87.574% 0.06833 358.92);
+  --gd-color-primary-400: oklch(83.432% 0.09481 0.91169);
+  --gd-color-primary-500: oklch(79.406% 0.12101 1.7634);
+  --gd-color-primary-600: oklch(75.718% 0.14788 3.5877);
+  --gd-color-primary-700: oklch(72.118% 0.17434 4.6237);
+  --gd-color-primary-800: oklch(69.574% 0.19291 5.8639);
+  --gd-color-primary-900: oklch(68.911% 0.1982 6.5103);
+  --gd-color-primary-950: oklch(66.081% 0.22168 9.2391);
 
-  --color-primary-disabled: var(--color-primary-200);
-  --color-primary-hover: var(--color-primary-800);
-  --color-primary-active: var(--color-primary-900);
-  --color-primary-text: #fff;
-  --color-primary-text-disabled: var(--color-primary-text);
+  --gd-color-primary-disabled: var(--gd-color-primary-200);
+  --gd-color-primary-hover: var(--gd-color-primary-800);
+  --gd-color-primary-active: var(--gd-color-primary-900);
+  --gd-color-primary-text: #fff;
+  --gd-color-primary-text-disabled: var(--gd-color-primary-text);
 
-  --color-secondary: oklch(70.645% 0.14612 233.1);
-  --color-secondary-50: oklch(97.205% 0.01869 222.16);
-  --color-secondary-100: oklch(94.886% 0.03466 221.88);
-  --color-secondary-200: oklch(90.388% 0.06622 221.86);
-  --color-secondary-300: oklch(86.223% 0.09496 222.67);
-  --color-secondary-400: oklch(82.459% 0.11938 224.22);
-  --color-secondary-500: oklch(78.943% 0.13807 227.44);
-  --color-secondary-600: oklch(76.104% 0.15071 231.02);
-  --color-secondary-700: oklch(70.645% 0.14612 233.1);
-  --color-secondary-800: oklch(68.498% 0.14112 232.79);
-  --color-secondary-900: oklch(66.385% 0.13699 232.92);
-  --color-secondary-950: oklch(65.177% 0.13475 233.07);
+  --gd-color-secondary: oklch(70.645% 0.14612 233.1);
+  --gd-color-secondary-50: oklch(97.205% 0.01869 222.16);
+  --gd-color-secondary-100: oklch(94.886% 0.03466 221.88);
+  --gd-color-secondary-200: oklch(90.388% 0.06622 221.86);
+  --gd-color-secondary-300: oklch(86.223% 0.09496 222.67);
+  --gd-color-secondary-400: oklch(82.459% 0.11938 224.22);
+  --gd-color-secondary-500: oklch(78.943% 0.13807 227.44);
+  --gd-color-secondary-600: oklch(76.104% 0.15071 231.02);
+  --gd-color-secondary-700: oklch(70.645% 0.14612 233.1);
+  --gd-color-secondary-800: oklch(68.498% 0.14112 232.79);
+  --gd-color-secondary-900: oklch(66.385% 0.13699 232.92);
+  --gd-color-secondary-950: oklch(65.177% 0.13475 233.07);
 
   /* #53a4ff27转换为rgba */
-  --color-secondary-hover: var(--color-secondary-800);
+  --gd-color-secondary-hover: var(--gd-color-secondary-800);
   /* #53a4ff4d转换为rgba */
-  --color-secondary-active: var(--color-secondary-900);
+  --gd-color-secondary-active: var(--gd-color-secondary-900);
   /* #53a4ff99转换为rgba */
-  --color-secondary-disabled: var(--color-secondary-200);
+  --gd-color-secondary-disabled: var(--gd-color-secondary-200);
   /* #53a4ff1a转换为rgba */
-  --color-secondary-text: #fff;
-  --color-secondary-text-disabled: #fff;
+  --gd-color-secondary-text: #fff;
+  --gd-color-secondary-text-disabled: #fff;
 
-  --color-text: #171717;
-  --color-text-gray: #666;
-  --color-text-disabled: #9ca3af;
-  --color-surface: #fff;
-  --color-secondary-surface: var(--color-sidebar-bg);
+  --gd-color-text: #171717;
+  --gd-color-text-gray: #666;
+  --gd-color-text-disabled: #9ca3af;
+  --gd-color-surface: #fff;
+  --gd-color-secondary-surface: var(--gd-color-sidebar-bg);
   /*#fcfcfc*/
-  --color-surface-border: #efefef;
-  --color-surface-hover: var(--color-sidebar-bg-hover);
-  --size-surface-radius: 12px;
-  --color-bg: #fff;
-  --color-border: #e0e0e0;
-  --code-block-bg: #f8f8f8;
+  --gd-color-surface-border: #efefef;
+  --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
+  --gd-size-surface-radius: 12px;
+  --gd-color-bg: #fff;
+  --gd-color-border: #e0e0e0;
+  --gd-code-block-bg: #f8f8f8;
 
-  --color-bubble-user-bg: #f0f0f0;
-  --color-bubble-user-text: #1f2937;
-  --color-bubble-user-border: #e1e1e1;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #0d0d0d;
-  --color-bubble-assitant-border: none;
-  --color-bubble-assitant-text-strong: #17181a;
+  --gd-color-bubble-user-bg: #f0f0f0;
+  --gd-color-bubble-user-text: #1f2937;
+  --gd-color-bubble-user-border: #e1e1e1;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #0d0d0d;
+  --gd-color-bubble-assitant-border: none;
+  --gd-color-bubble-assitant-text-strong: #17181a;
 
-  --color-sidebar-bg: #f9f9f9;
-  --color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
-  /* --color-sidebar-text-active: var(--color-primary); */
-  --color-sidebar-text-active: var(--color-text);
-  --color-sidebar-bg-hover: var(--color-sidebar-bg-active);
-  --color-sidebar-text: var(--color-text);
-  --color-sidebar-text-hover: var(--color-text);
-  --color-titlebar-bg: var(--color-sidebar-bg);
-  --color-titlebar-border: var(--color-sidebar-bg);
+  --gd-color-sidebar-bg: #f9f9f9;
+  --gd-color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
+  /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
+  --gd-color-sidebar-text-active: var(--gd-color-text);
+  --gd-color-sidebar-bg-hover: var(--gd-color-sidebar-bg-active);
+  --gd-color-sidebar-text: var(--gd-color-text);
+  --gd-color-sidebar-text-hover: var(--gd-color-text);
+  --gd-color-titlebar-bg: var(--gd-color-sidebar-bg);
+  --gd-color-titlebar-border: var(--gd-color-sidebar-bg);
 
   /* 聊天对话样式 */
-  --color-conversation-bg: #f9f9f9;
-  /* --color-conversation-bg: var(--color-surface); */
-  --color-conversation-text: #333;
-  --color-conversation-border: transparent;
-  /* --color-conversation-bg-active: var(--color-primary-100); */
-  --color-conversation-bg-active: rgba(0, 0, 0, 0.05);
-  --color-conversation-text-active: var(--color-text);
-  --color-conversation-bg-hover: var(--color-conversation-bg-active);
-  --color-conversation-text-hover: var(--color-conversation-text-active);
+  --gd-color-conversation-bg: #f9f9f9;
+  /* --gd-color-conversation-bg: var(--gd-color-surface); */
+  --gd-color-conversation-text: #333;
+  --gd-color-conversation-border: transparent;
+  /* --gd-color-conversation-bg-active: var(--gd-color-primary-100); */
+  --gd-color-conversation-bg-active: rgba(0, 0, 0, 0.05);
+  --gd-color-conversation-text-active: var(--gd-color-text);
+  --gd-color-conversation-bg-hover: var(--gd-color-conversation-bg-active);
+  --gd-color-conversation-text-hover: var(--gd-color-conversation-text-active);
 
   /* 输入框背景 */
-  --color-input-bg: #ffffff;
-  --color-input-border: #e1e1e1;
+  --gd-color-input-bg: #ffffff;
+  --gd-color-input-border: #e1e1e1;
 
   /* 模态框：默认继承，主题可覆盖 */
-  --color-overlay-bg: var(--color-surface);
-  --color-dialog-bg: #fff;
-  --color-dialog-border: var(--color-border);
-  --size-dialog-rounded-radius: 12px;
+  --gd-color-overlay-bg: var(--gd-color-surface);
+  --gd-color-dialog-bg: #fff;
+  --gd-color-dialog-border: var(--gd-color-border);
+  --gd-size-dialog-rounded-radius: 12px;
 
-  --color-warning: #e6a23c;
-  --color-success: #67c23a;
-  --color-danger: #f56c6c;
-  --color-info: #909399;
+  --gd-color-warning: #e6a23c;
+  --gd-color-success: #67c23a;
+  --gd-color-danger: #f56c6c;
+  --gd-color-info: #909399;
 
-  --size-text-base: 15px;
-  --size-text-sm: 14px;
-  --size-rounded-radius: 18px;
+  --gd-size-text-base: 15px;
+  --gd-size-text-sm: 14px;
+  --gd-size-rounded-radius: 18px;
 
-  /* --color-gray-50: #f9fafb;
-    --color-gray-100: #f3f4f6;
-    --color-gray-200: #e5e7eb;
-    --color-gray-300: #d1d5db;
-    --color-gray-400: #9ca3af;
-    --color-gray-500: #6b7280;
-    --color-gray-600: #4b5563;
-    --color-gray-700: #374151;
-    --color-gray-800: #1f2937;
-    --color-gray-900: #111827;
-    --color-gray-950: #030712; */
+  /* --gd-color-gray-50: #f9fafb;
+    --gd-color-gray-100: #f3f4f6;
+    --gd-color-gray-200: #e5e7eb;
+    --gd-color-gray-300: #d1d5db;
+    --gd-color-gray-400: #9ca3af;
+    --gd-color-gray-500: #6b7280;
+    --gd-color-gray-600: #4b5563;
+    --gd-color-gray-700: #374151;
+    --gd-color-gray-800: #1f2937;
+    --gd-color-gray-900: #111827;
+    --gd-color-gray-950: #030712; */
 }
 
 html.dark {
@@ -126,39 +126,39 @@ html.dark {
        ==================== */
 
   /* 主色调 - 在暗色模式下稍微降低饱和度，提升可读性 */
-  --color-primary: oklch(70% 0.14 355);
+  --gd-color-primary: oklch(70% 0.14 355);
   /* 柔和的粉红色 */
-  --color-primary-hover: oklch(75% 0.16 355);
-  --color-primary-active: oklch(65% 0.12 355);
-  --color-primary-disabled: oklch(45% 0.08 355);
-  --color-primary-text: #d3d3d3;
-  --color-primary-text-disabled: rgba(255, 255, 255, 0.5);
+  --gd-color-primary-hover: oklch(75% 0.16 355);
+  --gd-color-primary-active: oklch(65% 0.12 355);
+  --gd-color-primary-disabled: oklch(45% 0.08 355);
+  --gd-color-primary-text: #d3d3d3;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.5);
 
   /* 主色调渐变系列 - 用于背景和状态 */
-  --color-primary-50: oklch(25% 0.03 355);
+  --gd-color-primary-50: oklch(25% 0.03 355);
   /* 极淡粉 - 最浅背景 */
-  --color-primary-100: oklch(30% 0.05 355);
+  --gd-color-primary-100: oklch(30% 0.05 355);
   /* 淡粉 - 悬停/选中背景 */
-  --color-primary-200: oklch(35% 0.07 355);
+  --gd-color-primary-200: oklch(35% 0.07 355);
   /* 浅粉 - 边框/分隔线 */
-  --color-primary-300: oklch(40% 0.09 355);
+  --gd-color-primary-300: oklch(40% 0.09 355);
   /* 中粉 - 强调元素 */
-  --color-primary-500: oklch(55% 0.11 355);
+  --gd-color-primary-500: oklch(55% 0.11 355);
   /* 标准粉 - 主要交互 */
-  --color-primary-700: oklch(65% 0.13 355);
+  --gd-color-primary-700: oklch(65% 0.13 355);
   /* 深粉 - 激活状态 */
-  --color-primary-900: oklch(70% 0.14 355);
+  --gd-color-primary-900: oklch(70% 0.14 355);
   /* 最深粉 - 重点强调 */
-  --color-primary-950: oklch(72% 0.15 355);
+  --gd-color-primary-950: oklch(72% 0.15 355);
   /* 最深变体 */
 
   /* 次要颜色 - 蓝灰色调，与主色形成互补 */
-  --color-secondary: oklch(55% 0.08 240);
-  --color-secondary-hover: oklch(60% 0.1 240);
-  --color-secondary-active: oklch(50% 0.07 240);
-  --color-secondary-disabled: oklch(35% 0.04 240);
-  --color-secondary-text: #e5e7eb;
-  --color-secondary-text-disabled: rgba(229, 231, 235, 0.5);
+  --gd-color-secondary: oklch(55% 0.08 240);
+  --gd-color-secondary-hover: oklch(60% 0.1 240);
+  --gd-color-secondary-active: oklch(50% 0.07 240);
+  --gd-color-secondary-disabled: oklch(35% 0.04 240);
+  --gd-color-secondary-text: #e5e7eb;
+  --gd-color-secondary-text-disabled: rgba(229, 231, 235, 0.5);
 
   /* ====================
        核心背景色系统
@@ -166,60 +166,60 @@ html.dark {
        ==================== */
 
   /* 页面主背景 */
-  --color-bg: #222;
+  --gd-color-bg: #222;
 
   /* 表面层背景 - 用于卡片、面板等 */
-  --color-surface: #222;
-  --color-surface-border: oklch(28% 0.02 250);
-  --color-secondary-surface: #222;
+  --gd-color-surface: #222;
+  --gd-color-surface-border: oklch(28% 0.02 250);
+  --gd-color-secondary-surface: #222;
   /* #2e3035 左右 */
   /* 文本颜色 - 确保在深色背景下的可读性 */
-  --color-text: #d3d3d3;
+  --gd-color-text: #d3d3d3;
   /* 主文本，柔和亮色 */
-  --color-text-gray: #a8aab3;
+  --gd-color-text-gray: #a8aab3;
   /* 次要文本 */
-  --color-text-disabled: #5a5c63;
+  --gd-color-text-disabled: #5a5c63;
   /* 禁用文本 */
 
   /* 边框和分隔线 */
-  --color-border: oklch(32% 0.02 250);
+  --gd-color-border: oklch(32% 0.02 250);
   /* #383a40 - 细边框 */
 
   /* ====================
        侧边栏专用配色
        比主背景稍深，营造层次感
        ==================== */
-  --color-sidebar-bg: #1f1f1f;
-  --color-sidebar-bg-active: #2f3131;
-  /* --color-sidebar-text-active: var(--color-primary); */
-  --color-sidebar-text-active: var(--color-text);
-  --color-sidebar-bg-hover: #2f3131;
-  --color-sidebar-text-hover: oklch(85% 0.02 250);
+  --gd-color-sidebar-bg: #1f1f1f;
+  --gd-color-sidebar-bg-active: #2f3131;
+  /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
+  --gd-color-sidebar-text-active: var(--gd-color-text);
+  --gd-color-sidebar-bg-hover: #2f3131;
+  --gd-color-sidebar-text-hover: oklch(85% 0.02 250);
 
   /* 标题栏配色 */
-  --color-titlebar-bg: var(--color-sidebar-bg);
+  --gd-color-titlebar-bg: var(--gd-color-sidebar-bg);
 
   /* ====================
        聊天对话区域配色
        ==================== */
-  --color-conversation-bg: var(--color-surface);
+  --gd-color-conversation-bg: var(--gd-color-surface);
   /* 使用表面色作为对话列表背景 */
-  --color-conversation-text: var(--color-text);
-  --color-conversation-border: var(--color-surface-border);
-  --color-conversation-bg-active: var(--color-sidebar-bg-active);
+  --gd-color-conversation-text: var(--gd-color-text);
+  --gd-color-conversation-border: var(--gd-color-surface-border);
+  --gd-color-conversation-bg-active: var(--gd-color-sidebar-bg-active);
   /* 与侧边栏保持一致 */
-  --color-conversation-text-active: var(--color-sidebar-text-active);
-  --color-conversation-bg-hover: var(--color-sidebar-bg-hover);
-  --color-conversation-text-hover: oklch(88% 0.02 250);
+  --gd-color-conversation-text-active: var(--gd-color-sidebar-text-active);
+  --gd-color-conversation-bg-hover: var(--gd-color-sidebar-bg-hover);
+  --gd-color-conversation-text-hover: oklch(88% 0.02 250);
 
   /* 输入框背景 */
-  --color-input-bg: #2d2d2d;
-  --color-input-border: #404040;
+  --gd-color-input-bg: #2d2d2d;
+  --gd-color-input-border: #404040;
 
   /* 模态框：默认继承，主题可覆盖 */
-  --color-overlay-bg: var(--color-surface);
-  --color-dialog-bg: var(--color-surface);
-  --color-dialog-border: var(--color-border);
+  --gd-color-overlay-bg: var(--gd-color-surface);
+  --gd-color-dialog-bg: var(--gd-color-surface);
+  --gd-color-dialog-border: var(--gd-color-border);
 
   /* ====================
        消息气泡配色
@@ -227,95 +227,98 @@ html.dark {
        ==================== */
 
   /* 用户消息气泡 - 暗色模式下使用与侧边栏一致的配色 */
-  --color-bubble-user-bg: #2f3131;
-  --color-bubble-user-text: var(--color-text);
-  --color-bubble-user-border: var(--color-border);
+  --gd-color-bubble-user-bg: #2f3131;
+  --gd-color-bubble-user-text: var(--gd-color-text);
+  --gd-color-bubble-user-border: var(--gd-color-border);
 
   /* AI助手消息气泡 - 透明背景，融入整体 */
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: var(--color-text);
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: var(--color-text);
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: var(--gd-color-text);
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: var(--gd-color-text);
 
-  --size-dialog-rounded-radius: 12px;
+  --gd-size-dialog-rounded-radius: 12px;
 
-  --color-warning: #e6a23c;
-  --color-success: #67c23a;
-  --color-danger: #f56c6c;
-  --color-info: #909399;
+  --gd-color-warning: #e6a23c;
+  --gd-color-success: #67c23a;
+  --gd-color-danger: #f56c6c;
+  --gd-color-info: #909399;
 
   /* 
-    --color-gray-50: #111827;
-    --color-gray-100: #1f2937;
-    --color-gray-200: #374151;
-    --color-gray-300: #4b5563;
-    --color-gray-400: #6b7280;
-    --color-gray-500: #9ca3af;
-    --color-gray-600: #d1d5db;
-    --color-gray-700: #e5e7eb;
-    --color-gray-800: #f3f4f6;
-    --color-gray-900: #f9fafb;
-    --color-gray-950: #ffffff; */
+    --gd-color-gray-50: #111827;
+    --gd-color-gray-100: #1f2937;
+    --gd-color-gray-200: #374151;
+    --gd-color-gray-300: #4b5563;
+    --gd-color-gray-400: #6b7280;
+    --gd-color-gray-500: #9ca3af;
+    --gd-color-gray-600: #d1d5db;
+    --gd-color-gray-700: #e5e7eb;
+    --gd-color-gray-800: #f3f4f6;
+    --gd-color-gray-900: #f9fafb;
+    --gd-color-gray-950: #ffffff; */
+
+  /* 代码块背景（暗色）：:root 定义了亮色 #f8f8f8，此处覆盖避免暗色下代码块保持白底 */
+  --gd-code-block-bg: #2f3131;
 }
 
 :root {
-  --el-color-primary: var(--color-primary) !important;
-  --el-color-primary-light-9: var(--color-primary-100) !important;
-  --el-color-primary-light-8: var(--color-primary-200) !important;
-  --el-color-primary-light-7: var(--color-primary-300) !important;
-  --el-color-primary-light-5: var(--color-primary-500) !important;
-  --el-color-primary-light-3: var(--color-primary-800) !important;
-  --el-color-primary-dark-2: var(--color-primary-950) !important;
-  --el-color-primary-light-1: var(--color-primary-950) !important;
+  --el-color-primary: var(--gd-color-primary) !important;
+  --el-color-primary-light-9: var(--gd-color-primary-100) !important;
+  --el-color-primary-light-8: var(--gd-color-primary-200) !important;
+  --el-color-primary-light-7: var(--gd-color-primary-300) !important;
+  --el-color-primary-light-5: var(--gd-color-primary-500) !important;
+  --el-color-primary-light-3: var(--gd-color-primary-800) !important;
+  --el-color-primary-dark-2: var(--gd-color-primary-950) !important;
+  --el-color-primary-light-1: var(--gd-color-primary-950) !important;
 
   /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
-  --el-bg-color-overlay: var(--color-surface) !important;
-  --el-border-color-light: var(--color-surface-border) !important;
-  --el-fill-color-light: var(--color-sidebar-bg-hover) !important;
+  --el-bg-color-overlay: var(--gd-color-surface) !important;
+  --el-border-color-light: var(--gd-color-surface-border) !important;
+  --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
 
   /* 标题栏样式变量 */
-  --titlebar-text-color: #222;
-  --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
+  --gd-titlebar-text-color: #222;
+  --gd-titlebar-hover-bg: rgba(0, 0, 0, 0.06);
 
   /* 窗口控制按钮（最小化/最大化/关闭）配色，主题可按需覆盖 */
-  --window-controls-color: var(--color-text);
-  --window-controls-hover-bg: var(--titlebar-hover-bg);
-  --window-controls-hover-color: var(--window-controls-color);
+  --gd-window-controls-color: var(--gd-color-text);
+  --gd-window-controls-hover-bg: var(--gd-titlebar-hover-bg);
+  --gd-window-controls-hover-color: var(--gd-window-controls-color);
 
   /* 流式波纹动画配色 */
-  --shimmer-base: #606266;
-  --shimmer-highlight: #c0c4cc;
+  --gd-shimmer-base: #606266;
+  --gd-shimmer-highlight: #c0c4cc;
 }
 
 html.dark {
-  --el-color-primary: var(--color-primary) !important;
-  --el-color-primary-light-9: var(--color-primary-100) !important;
-  --el-color-primary-light-8: var(--color-primary-200) !important;
-  --el-color-primary-light-7: var(--color-primary-300) !important;
-  --el-color-primary-light-5: var(--color-primary-500) !important;
-  --el-color-primary-light-3: var(--color-primary-800) !important;
-  --el-color-primary-dark-2: var(--color-primary-950) !important;
-  --el-color-primary-light-1: var(--color-primary-950) !important;
+  --el-color-primary: var(--gd-color-primary) !important;
+  --el-color-primary-light-9: var(--gd-color-primary-100) !important;
+  --el-color-primary-light-8: var(--gd-color-primary-200) !important;
+  --el-color-primary-light-7: var(--gd-color-primary-300) !important;
+  --el-color-primary-light-5: var(--gd-color-primary-500) !important;
+  --el-color-primary-light-3: var(--gd-color-primary-800) !important;
+  --el-color-primary-dark-2: var(--gd-color-primary-950) !important;
+  --el-color-primary-light-1: var(--gd-color-primary-950) !important;
 
   /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
-  --el-bg-color-overlay: var(--color-surface) !important;
-  --el-border-color-light: var(--color-surface-border) !important;
-  --el-fill-color-light: var(--color-sidebar-bg-hover) !important;
+  --el-bg-color-overlay: var(--gd-color-surface) !important;
+  --el-border-color-light: var(--gd-color-surface-border) !important;
+  --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
 
   /* 标题栏暗色模式样式变量 */
-  --titlebar-text-color: var(--color-text);
+  --gd-titlebar-text-color: var(--gd-color-text);
   /* #a8aab3 - 柔和的灰白色 */
-  --titlebar-hover-bg: rgba(255, 255, 255, 0.06);
+  --gd-titlebar-hover-bg: rgba(255, 255, 255, 0.06);
   /* 更柔和的悬停效果 */
 
   /* 窗口控制按钮（最小化/最大化/关闭）暗色默认配色 */
-  --window-controls-color: #8b8d95;
-  --window-controls-hover-bg: var(--titlebar-hover-bg);
-  --window-controls-hover-color: var(--window-controls-color);
+  --gd-window-controls-color: #8b8d95;
+  --gd-window-controls-hover-bg: var(--gd-titlebar-hover-bg);
+  --gd-window-controls-hover-color: var(--gd-window-controls-color);
 
   /* 流式波纹动画配色（暗色模式） */
-  --shimmer-base: #a8aab3;
-  --shimmer-highlight: #ffffff;
+  --gd-shimmer-base: #a8aab3;
+  --gd-shimmer-highlight: #ffffff;
 }
 
 /* .el-button:not(.el-button--large) {
@@ -332,19 +335,19 @@ html.dark {
 }
 
 /* @theme {
-    --color-primary: var(--color-primary);
-    --color-primary-50: var(--color-primary-50);
-    --color-primary-100: var(--color-primary-100);
-    --color-primary-200: var(--color-primary-200);
-    --color-primary-300: var(--color-primary-300);
-    --color-primary-400: var(--color-primary-400);
-    --color-primary-500: var(--color-primary-500);
-    --color-primary-600: var(--color-primary-600);
-    --color-primary-700: var(--color-primary-700);
-    --color-primary-800: var(--color-primary-800);
-    --color-primary-900: var(--color-primary-900);
+    --gd-color-primary: var(--gd-color-primary);
+    --gd-color-primary-50: var(--gd-color-primary-50);
+    --gd-color-primary-100: var(--gd-color-primary-100);
+    --gd-color-primary-200: var(--gd-color-primary-200);
+    --gd-color-primary-300: var(--gd-color-primary-300);
+    --gd-color-primary-400: var(--gd-color-primary-400);
+    --gd-color-primary-500: var(--gd-color-primary-500);
+    --gd-color-primary-600: var(--gd-color-primary-600);
+    --gd-color-primary-700: var(--gd-color-primary-700);
+    --gd-color-primary-800: var(--gd-color-primary-800);
+    --gd-color-primary-900: var(--gd-color-primary-900);
 
-    --color-surface: var(--color-surface);
+    --gd-color-surface: var(--gd-color-surface);
 } */
 
 * {
@@ -408,7 +411,7 @@ html:not(.dark) body::after {
 }
 
 .dark body {
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 body,
@@ -422,7 +425,7 @@ html,
 }
 
 html {
-  background: var(--color-bg) !important;
+  background: var(--gd-color-bg) !important;
 }
 
 #app {
@@ -454,7 +457,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
 .sidebar-transparent-bg {
   background-color: color-mix(
     in srgb,
-    var(--color-sidebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
+    var(--gd-color-sidebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
     transparent
   ) !important;
 }
@@ -464,7 +467,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
 .custom-titlebar.sidebar-transparent-bg {
   background-color: color-mix(
     in srgb,
-    var(--color-titlebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
+    var(--gd-color-titlebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
     transparent
   ) !important;
 }
@@ -473,7 +476,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
 .content-transparent-bg {
   background-color: color-mix(
     in srgb,
-    var(--color-bg) calc(var(--content-opacity, 1) * 100%),
+    var(--gd-color-bg) calc(var(--content-opacity, 1) * 100%),
     transparent
   ) !important;
 }
@@ -484,7 +487,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
   overflow: hidden;
   background-color: color-mix(
     in srgb,
-    var(--color-bg) calc(var(--content-opacity, 1) * 100%),
+    var(--gd-color-bg) calc(var(--content-opacity, 1) * 100%),
     transparent
   ) !important;
 }
@@ -500,7 +503,7 @@ html.acrylic-enabled .sidebar-transparent-bg {
 
 /* 修改进度条颜色 */
 #nprogress .bar {
-  background: var(--color-primary) !important;
+  background: var(--gd-color-primary) !important;
   /* 红色 */
   height: 3px !important;
 }
@@ -508,14 +511,14 @@ html.acrylic-enabled .sidebar-transparent-bg {
 /* 修改进度条尖角阴影 */
 #nprogress .peg {
   box-shadow:
-    0 0 10px var(--color-primary),
-    0 0 5px var(--color-primary) !important;
+    0 0 10px var(--gd-color-primary),
+    0 0 5px var(--gd-color-primary) !important;
 }
 
 /* 修改圆形加载器颜色（如果启用） */
 #nprogress .spinner-icon {
-  border-top-color: var(--color-primary) !important;
-  border-left-color: var(--color-primary) !important;
+  border-top-color: var(--gd-color-primary) !important;
+  border-left-color: var(--gd-color-primary) !important;
 }
 
 .el-message-box__message {
@@ -596,23 +599,23 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.25);
 }
 
-/* LDialog styles are scoped in LDialog.vue.
+/* GdDialog styles are scoped in GdDialog.vue.
    el-message-box overrides kept for usePopup (legacy, being phased out). */
 
-/* ===== LTooltip — lightweight singleton tooltip ===== */
+/* ===== GdTooltip — lightweight singleton tooltip ===== */
 .l-tooltip {
-  --l-tooltip-bg: #303133;
-  --l-tooltip-text: #fff;
+  --gd-tooltip-bg: #303133;
+  --gd-tooltip-text: #fff;
 }
 .l-tooltip[data-effect="light"] {
-  --l-tooltip-bg: #fff;
-  --l-tooltip-text: #303133;
+  --gd-tooltip-bg: #fff;
+  --gd-tooltip-text: #303133;
 }
 
 .l-tooltip__content {
   display: block;
-  background: var(--l-tooltip-bg);
-  color: var(--l-tooltip-text);
+  background: var(--gd-tooltip-bg);
+  color: var(--gd-tooltip-text);
   font-size: 12px;
   line-height: 1.4;
   padding: 5px 11px;
@@ -633,7 +636,7 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   bottom: -5px;
   left: 50%;
   transform: translateX(-50%);
-  border-top-color: var(--l-tooltip-bg);
+  border-top-color: var(--gd-tooltip-bg);
   border-bottom: 0;
 }
 
@@ -641,7 +644,7 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   top: -5px;
   left: 50%;
   transform: translateX(-50%);
-  border-bottom-color: var(--l-tooltip-bg);
+  border-bottom-color: var(--gd-tooltip-bg);
   border-top: 0;
 }
 
@@ -649,7 +652,7 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   right: -5px;
   top: 50%;
   transform: translateY(-50%);
-  border-left-color: var(--l-tooltip-bg);
+  border-left-color: var(--gd-tooltip-bg);
   border-right: 0;
 }
 
@@ -657,7 +660,7 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   left: -5px;
   top: 50%;
   transform: translateY(-50%);
-  border-right-color: var(--l-tooltip-bg);
+  border-right-color: var(--gd-tooltip-bg);
   border-left: 0;
 }
 

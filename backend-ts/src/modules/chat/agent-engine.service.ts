@@ -386,6 +386,17 @@ export class AgentEngine {
                 currentTurnThinkingInfo.thinkingFinishedAt = new Date();
               }
 
+              // [诊断] 记录 finish chunk 是否折叠携带了内容增量，
+              // 用于确认“末尾内容增量被并入 finish（未单独发 text SSE）”这一现象。
+              // 该增量仍计入 accumulated，finish 事件携带完整全量，前端以其为权威可正常补齐。
+              const isFinishChunk =
+                chunk.type === "finish" || !!chunk.finishReason;
+              if (isFinishChunk && chunk.content) {
+                this.logger.debug(
+                  `[FINISH-CARRIES-CONTENT] contentId=${assistantResponse.contentId} deltaTail=${JSON.stringify(String(chunk.content).slice(-80))}`,
+                );
+              }
+
               const yieldEvent = this.toEventChunk(
                 chunk,
                 accumulated,

@@ -1,5 +1,5 @@
 <template>
-  <LDialog
+  <GdDialog
     v-model="dialogVisible"
     :title="sessionTitle"
     width="80%"
@@ -42,7 +42,7 @@
         <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('bot.sessionDialog.empty') }}</p>
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -54,7 +54,7 @@ import { apiService } from '@/services/ApiService'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
 import type { Message } from '@/types/message'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
   modelValue: boolean

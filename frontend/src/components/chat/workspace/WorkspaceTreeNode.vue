@@ -136,17 +136,17 @@ async function toggle() {
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--color-text);
+    color: var(--gd-color-text);
     transition: background-color 0.15s;
 }
 
 .tree-node-content:hover {
-    background-color: var(--color-sidebar-bg-hover);
+    background-color: var(--gd-color-sidebar-bg-hover);
 }
 
 .tree-node-content.is-selected {
-    background-color: var(--color-sidebar-bg-active) !important;
-    color: var(--color-sidebar-text-active) !important;
+    background-color: var(--gd-color-sidebar-bg-active) !important;
+    color: var(--gd-color-sidebar-text-active) !important;
 }
 
 .expand-icon {
@@ -155,7 +155,7 @@ async function toggle() {
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     flex-shrink: 0;
 }
 
@@ -194,7 +194,7 @@ async function toggle() {
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     flex-shrink: 0;
     margin-left: auto;
 }

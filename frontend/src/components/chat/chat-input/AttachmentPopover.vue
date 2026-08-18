@@ -1,5 +1,5 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="280" :max-height="400"
+  <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="280" :max-height="400"
     :anchor-el="anchorEl">
     <div class="att-popover">
       <!-- 上传图片 -->
@@ -54,7 +54,7 @@
         </div>
       </template>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
@@ -62,7 +62,7 @@ import { ref, watch } from 'vue'
 import { ElIcon, ElCheckbox } from 'element-plus';
 import { useI18n } from 'vue-i18n'
 import { Image24Regular, Attach24Regular } from '@vicons/fluent';
-import CustomPopover from '../../ui/CustomPopover.vue';
+import GdPopover from '../../ui/GdPopover.vue';
 import { apiService } from '@/services/ApiService';
 import type { AttachmentTypeInfo, AttachmentItem } from '@/services/modules/plugin.api';
 
@@ -155,13 +155,13 @@ function toggleAttachment(typeId: string, itemId: string) {
   align-items: center;
   gap: 10px;
   padding: 7px 8px;
-  border-radius: var(--size-dialog-rounded-radius);
+  border-radius: var(--gd-size-dialog-rounded-radius);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .att-item:hover {
-  background: var(--color-sidebar-bg-hover, #f5f5f5);
+  background: var(--gd-color-sidebar-bg-hover, #f5f5f5);
 }
 
 .dark .att-item:hover {
@@ -221,13 +221,13 @@ function toggleAttachment(typeId: string, itemId: string) {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: var(--size-dialog-rounded-radius);
+  border-radius: var(--gd-size-dialog-rounded-radius);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .att-kb-item:hover {
-  background: var(--color-sidebar-bg-hover, #f5f5f5);
+  background: var(--gd-color-sidebar-bg-hover, #f5f5f5);
 }
 
 .dark .att-kb-item:hover {

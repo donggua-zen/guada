@@ -2,8 +2,8 @@
   <div class="w-full flex flex-col items-center">
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--color-input-bg) border border-(--color-input-border) rounded-(--size-rounded-radius) transition-[border-color,background-color] duration-150"
-      :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--color-input-bg)': !backdrop }, { 'bg-(--color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
+      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
+      :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--gd-color-input-bg)': !backdrop }, { 'bg-(--gd-color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
       @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"
       @drop.prevent="handleDrop">
       <!-- 文件列表显示区域 -->
@@ -44,7 +44,7 @@
       <div class="editor-container">
         <template v-if="props.readonly">
           <div class="readonly-placeholder"
-            style="min-height: 58px; padding: 0 8px; font-size: var(--size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
+            style="min-height: 58px; padding: 0 8px; font-size: var(--gd-size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
             {{ t('chat.input.readonlyPlaceholder') }}
           </div>
         </template>
@@ -105,29 +105,29 @@
               }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <LTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
+          <GdTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
             <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
               <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
-          </LTooltip>
+          </GdTooltip>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
           <!-- 发送/停止按钮（流式时：无输入=停止，有输入=入队） -->
-          <LTooltip v-if="streaming && !inputContent.trim()" :content="t('chat.input.stopGenerating')" placement="top">
+          <GdTooltip v-if="streaming && !inputContent.trim()" :content="t('chat.input.stopGenerating')" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
               <el-icon size="18">
                 <Stop24Filled />
               </el-icon>
             </button>
-          </LTooltip>
-          <LTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
+          </GdTooltip>
+          <GdTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
               :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
               <el-icon size="18">
                 <Send24Filled />
               </el-icon>
             </button>
-          </LTooltip>
+          </GdTooltip>
         </div>
       </div>
 
@@ -161,7 +161,7 @@ import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import FileItem from '../ui/FileItem.vue';
-import LTooltip from '../ui/LTooltip.vue';
+import GdTooltip from '../ui/GdTooltip.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
 import RunModePopover from './chat-input/RunModePopover.vue';
@@ -1511,8 +1511,8 @@ defineExpose({ insertText, insertBadge });
 
 /* 拖拽悬停高亮 */
 .input-area.drag-over {
-  border-color: var(--color-primary) !important;
-  background-color: color-mix(in srgb, var(--color-primary) 8%, var(--color-input-bg)) !important;
+  border-color: var(--gd-color-primary) !important;
+  background-color: color-mix(in srgb, var(--gd-color-primary) 8%, var(--gd-color-input-bg)) !important;
 }
 
 /* Tiptap 编辑器样式 - 模拟 textarea */
@@ -1523,8 +1523,8 @@ defineExpose({ insertText, insertBadge });
   border: none;
   resize: none;
   outline: none;
-  font-size: var(--size-text-base, 14px);
-  line-height: calc(var(--size-text-base) * 1.6);
+  font-size: var(--gd-size-text-base, 14px);
+  line-height: calc(var(--gd-size-text-base) * 1.6);
   ;
   padding: 0 8px;
   background: transparent;
@@ -1560,7 +1560,7 @@ defineExpose({ insertText, insertBadge });
   cursor: pointer;
   user-select: none;
   background: #f3f3f3;
-  color: var(--color-text);
+  color: var(--gd-color-text);
   padding: 0 8px;
   border-radius: 4px;
   margin-right: 4px;
@@ -1573,7 +1573,7 @@ defineExpose({ insertText, insertBadge });
   border: none;
   resize: none;
   outline: none;
-  font-size: var(--size-text-base);
+  font-size: var(--gd-size-text-base);
   line-height: 1.8;
   padding: 0 8px;
   background: transparent;
@@ -1607,7 +1607,7 @@ defineExpose({ insertText, insertBadge });
 
 /* 工具按钮 - 原生 button */
 .tool-btn {
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
   font-size: 14px;
   height: 28px;
@@ -1624,12 +1624,12 @@ defineExpose({ insertText, insertBadge });
 }
 
 .tool-btn:hover {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 
 .tool-btn:active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 /* 自由模式按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */
@@ -1650,7 +1650,7 @@ defineExpose({ insertText, insertBadge });
   border: none;
   border-radius: 16px;
   background-color: transparent;
-  color: var(--color-text);
+  color: var(--gd-color-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1663,18 +1663,18 @@ defineExpose({ insertText, insertBadge });
 }
 
 .model-selector-btn:hover {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 
 .model-selector-btn:active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 .model-selector-btn.is-open {
   width: 200px;
   max-width: 200px;
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 /* 发送按钮 - 原生 button */
@@ -1684,8 +1684,8 @@ defineExpose({ insertText, insertBadge });
   height: 28px;
   border: none;
   border-radius: 50%;
-  background-color: var(--color-primary);
-  color: var(--color-primary-text);
+  background-color: var(--gd-color-primary);
+  color: var(--gd-color-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1695,16 +1695,16 @@ defineExpose({ insertText, insertBadge });
 }
 
 .send-btn:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
+  background-color: var(--gd-color-primary-hover);
 }
 
 .send-btn:active:not(:disabled) {
-  background-color: var(--color-primary-active);
+  background-color: var(--gd-color-primary-active);
   transform: scale(0.92);
 }
 
 .send-btn:disabled {
-  background-color: var(--color-text-disabled);
+  background-color: var(--gd-color-text-disabled);
   cursor: not-allowed;
   /* 禁用态可读性：主题色系的禁用底色只是"淡化的主题色"（如涂鸦本的
      米色、蒸汽朋克的黄铜色），看不出"关"。降不透明度 + 去饱和，
@@ -1727,12 +1727,12 @@ defineExpose({ insertText, insertBadge });
 }
 
 .send-btn.queue-btn {
-  background-color: var(--color-primary);
+  background-color: var(--gd-color-primary);
   position: relative;
 }
 
 .send-btn.queue-btn:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
+  background-color: var(--gd-color-primary-hover);
 }
 
 /* ========== 粘贴文本预览弹窗样式 ========== */

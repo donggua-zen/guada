@@ -35,8 +35,8 @@ const isMac = computed(() => {
    hover 在深红高亮背景上同样保持白色。
    CSS 变量沿 DOM 继承穿透子组件，无需 :deep 选择器 */
 .custom-titlebar {
-  --window-controls-color: var(--titlebar-text-color);
-  --window-controls-hover-color: var(--titlebar-text-color);
+  --gd-window-controls-color: var(--gd-titlebar-text-color);
+  --gd-window-controls-hover-color: var(--gd-titlebar-text-color);
 }
 
 /* macOS 红绿灯按钮占用左上角约 70px，左侧留白避免遮挡 */

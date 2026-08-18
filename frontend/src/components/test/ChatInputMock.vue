@@ -58,29 +58,29 @@
       <div class="input-actions w-full flex justify-between mt-2">
         <div class="tools left-tools flex gap-0.5 items-center">
           <!-- 图片按钮 -->
-          <LTooltip content="添加图片" placement="top">
+          <GdTooltip content="添加图片" placement="top">
             <el-button class="tool-btn" @click="triggerImageInput" text>
               <el-icon size="22"><Image24Regular /></el-icon>
             </el-button>
-          </LTooltip>
+          </GdTooltip>
           <!-- 附件按钮 -->
-          <LTooltip content="上传文件" placement="top">
+          <GdTooltip content="上传文件" placement="top">
             <el-button class="tool-btn" @click="triggerFileInput" text>
               <el-icon size="22"><Attach24Regular /></el-icon>
             </el-button>
-          </LTooltip>
+          </GdTooltip>
           <!-- 知识库按钮 -->
-          <LTooltip content="知识库" placement="top">
+          <GdTooltip content="知识库" placement="top">
             <el-button class="tool-btn" @click="openKnowledgeBasePanel" text>
               <el-icon size="22"><BookSearch24Regular /></el-icon>
             </el-button>
-          </LTooltip>
+          </GdTooltip>
           <!-- 技能按钮（新增） -->
-          <LTooltip content="选择技能 /" placement="top">
+          <GdTooltip content="选择技能 /" placement="top">
             <el-button class="tool-btn" @click="insertSkill('code-reviewer')" text>
               <el-icon size="22"><Tools /></el-icon>
             </el-button>
-          </LTooltip>
+          </GdTooltip>
         </div>
         <div class="right-actions">
           <!-- 模型选择按钮 -->
@@ -93,21 +93,21 @@
             </div>
           </el-button>
           <div class="tools right-tools">
-            <LTooltip content="会话设置" placement="top">
+            <GdTooltip content="会话设置" placement="top">
               <el-button class="tool-btn" text>
                 <el-icon size="22"><Settings24Regular /></el-icon>
               </el-button>
-            </LTooltip>
+            </GdTooltip>
           </div>
           <div>
-            <LTooltip v-if="!streaming" content="发送" placement="top">
+            <GdTooltip v-if="!streaming" content="发送" placement="top">
               <el-button class="send-btn" type="primary" @click="sendMessage" circle
                 :disabled="!rawText.trim()" :icon="Send24Filled" />
-            </LTooltip>
-            <LTooltip v-else content="停止生成" placement="top">
+            </GdTooltip>
+            <GdTooltip v-else content="停止生成" placement="top">
               <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger"
                 :icon="Stop24Filled" />
-            </LTooltip>
+            </GdTooltip>
           </div>
         </div>
       </div>
@@ -141,7 +141,7 @@ import {
   Apps20Regular
 } from '@vicons/fluent';
 import { Tools } from '@element-plus/icons-vue';
-import LTooltip from '../ui/LTooltip.vue';
+import GdTooltip from '../ui/GdTooltip.vue';
 
 // ==================== 自定义 Skill 节点 ====================
 const SkillNode = Node.create({
@@ -510,7 +510,7 @@ const abortResponse = () => {
   border: none;
   resize: none;
   outline: none;
-  font-size: var(--size-text-base, 14px);
+  font-size: var(--gd-size-text-base, 14px);
   line-height: 1.8;
   padding: 0 8px;
   background: transparent;

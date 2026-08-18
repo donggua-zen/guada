@@ -2,55 +2,55 @@
   <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
     :class="[isAssistant ? 'justify-start -translate-x-1' : 'justify-end translate-x-1']">
 
-    <LTooltip :content="t('chat.messageActions.copy')" placement="top">
+    <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
       <div class="message-action-button" @click="$emit('copy')">
         <el-icon :size="16">
           <Copy16Regular />
         </el-icon>
       </div>
-    </LTooltip>
+    </GdTooltip>
 
     <template v-if="!isAssistant && allowGenerate">
-      <LTooltip :content="t('chat.messageActions.regenerate')" placement="top">
+      <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('generate')">
           <el-icon :size="16">
             <ArrowDownwardTwotone />
           </el-icon>
         </div>
-      </LTooltip>
+      </GdTooltip>
     </template>
 
     <template v-if="isAssistant && isLast">
-      <LTooltip :content="t('chat.messageActions.regenerate')" placement="top">
+      <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('regenerate')">
           <el-icon :size="16">
             <ArrowClockwise16Regular />
           </el-icon>
         </div>
-      </LTooltip>
+      </GdTooltip>
     </template>
 
     <template v-if="isLast && contentVersions.length > 1">
-      <LTooltip :content="t('chat.messageActions.prevVersion')" placement="top">
+      <GdTooltip :content="t('chat.messageActions.prevVersion')" placement="top">
         <div class="message-action-button" @click="$emit('switchVersion', 'prev')" :disabled="!hasPrev">
           <el-icon :size="16">
             <ChevronLeft24Filled />
           </el-icon>
         </div>
-      </LTooltip>
+      </GdTooltip>
       <div class="text-gray-700 transition-colors duration-200 flex items-center py-1">
         {{ currentVersionIndex + 1 }} / {{ contentVersions.length }}
       </div>
-      <LTooltip :content="t('chat.messageActions.nextVersion')" placement="top">
+      <GdTooltip :content="t('chat.messageActions.nextVersion')" placement="top">
         <div class="message-action-button" @click="$emit('switchVersion', 'next')" :disabled="!hasNext">
           <el-icon :size="16">
             <ChevronRight24Filled />
           </el-icon>
         </div>
-      </LTooltip>
+      </GdTooltip>
     </template>
 
-    <LTooltip :content="t('chat.messageActions.more')" placement="top">
+    <GdTooltip :content="t('chat.messageActions.more')" placement="top">
       <DropdownMenu @command="handleCommand">
         <div class="message-action-button">
           <el-icon :size="16" class="pointer-events-none">
@@ -72,7 +72,7 @@
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
-    </LTooltip>
+    </GdTooltip>
     <template v-if="isAssistant">
       <div class="flex text-gray-500 shrink-0 items-center justify-center ml-2">
         <AccessTimeTwotone class="w-3 h-3 mr-1" />
@@ -92,7 +92,7 @@ import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
-import LTooltip from '../../ui/LTooltip.vue';
+import GdTooltip from '../../ui/GdTooltip.vue';
 
 const { t } = useI18n();
 import {
@@ -143,6 +143,6 @@ const handleCommand = (command: string) => {
 @reference "tailwindcss";
 
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--color-surface-hover) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
+  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--gd-color-surface-hover) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 </style>

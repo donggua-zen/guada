@@ -223,7 +223,7 @@ defineExpose({
   position: fixed;
   width: 320px;
   background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 2000;
@@ -256,17 +256,17 @@ defineExpose({
 .step-panel h3 {
   margin: 0 0 8px 0;
   font-size: 16px;
-  color: var(--color-text-primary);
+  color: var(--gd-color-text-primary);
 }
 
 .desc {
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: var(--gd-color-text-secondary);
   margin-bottom: 12px;
 }
 
 .account-info {
-  background: var(--color-bg-muted);
+  background: var(--gd-color-bg-muted);
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 12px;
@@ -288,7 +288,7 @@ defineExpose({
 }
 
 .provider-card {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 8px;
   padding: 8px;
   cursor: pointer;
@@ -297,8 +297,8 @@ defineExpose({
 }
 
 .provider-card:hover, .provider-card.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
+  border-color: var(--gd-color-primary);
+  background: var(--gd-color-primary-light);
 }
 
 .provider-avatar {
@@ -325,7 +325,7 @@ defineExpose({
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--gd-color-primary);
   color: white;
   display: flex;
   align-items: center;
@@ -339,6 +339,6 @@ defineExpose({
 
 .guide-fab:hover {
   transform: scale(1.1);
-  background: var(--color-primary-hover);
+  background: var(--gd-color-primary-hover);
 }
 </style>

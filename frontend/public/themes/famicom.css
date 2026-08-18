@@ -13,202 +13,202 @@
 /* ---------- 亮色模式：红白机塑料外壳 ---------- */
 [data-theme="famicom"] {
   /* 主色：红白机标志红 */
-  --color-primary: #c8102e;
-  --color-primary-hover: #a50d26;
-  --color-primary-active: #8f0a20;
-  --color-primary-disabled: #e8a0aa;
-  --color-primary-text: #ffffff;
-  --color-primary-text-disabled: rgba(255, 255, 255, 0.55);
-  --color-primary-50:  #fef0f1;
-  --color-primary-100: #fcdde0;
-  --color-primary-200: #f7b6bb;
-  --color-primary-300: #ef8590;
-  --color-primary-400: #dd4255;
-  --color-primary-500: #c8102e;
-  --color-primary-600: #a50d26;
-  --color-primary-700: #8f0a20;
-  --color-primary-800: #6e0819;
-  --color-primary-900: #4d0510;
-  --color-primary-950: #2c0309;
+  --gd-color-primary: #c8102e;
+  --gd-color-primary-hover: #a50d26;
+  --gd-color-primary-active: #8f0a20;
+  --gd-color-primary-disabled: #e8a0aa;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.55);
+  --gd-color-primary-50:  #fef0f1;
+  --gd-color-primary-100: #fcdde0;
+  --gd-color-primary-200: #f7b6bb;
+  --gd-color-primary-300: #ef8590;
+  --gd-color-primary-400: #dd4255;
+  --gd-color-primary-500: #c8102e;
+  --gd-color-primary-600: #a50d26;
+  --gd-color-primary-700: #8f0a20;
+  --gd-color-primary-800: #6e0819;
+  --gd-color-primary-900: #4d0510;
+  --gd-color-primary-950: #2c0309;
 
   /* 副色：卡带金色 */
-  --color-secondary: #f0b400;
-  --color-secondary-hover: #d49d00;
-  --color-secondary-active: #b08200;
-  --color-secondary-disabled: #f5d985;
-  --color-secondary-text: #1a1200;
-  --color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
-  --color-secondary-50:  #fdf8e6;
-  --color-secondary-100: #f9edbf;
-  --color-secondary-200: #f4db80;
-  --color-secondary-300: #efc63d;
-  --color-secondary-400: #f5c620;
-  --color-secondary-500: #f0b400;
-  --color-secondary-600: #d49d00;
-  --color-secondary-700: #b08200;
-  --color-secondary-800: #8c6600;
-  --color-secondary-900: #684a00;
-  --color-secondary-950: #442f00;
+  --gd-color-secondary: #f0b400;
+  --gd-color-secondary-hover: #d49d00;
+  --gd-color-secondary-active: #b08200;
+  --gd-color-secondary-disabled: #f5d985;
+  --gd-color-secondary-text: #1a1200;
+  --gd-color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
+  --gd-color-secondary-50:  #fdf8e6;
+  --gd-color-secondary-100: #f9edbf;
+  --gd-color-secondary-200: #f4db80;
+  --gd-color-secondary-300: #efc63d;
+  --gd-color-secondary-400: #f5c620;
+  --gd-color-secondary-500: #f0b400;
+  --gd-color-secondary-600: #d49d00;
+  --gd-color-secondary-700: #b08200;
+  --gd-color-secondary-800: #8c6600;
+  --gd-color-secondary-900: #684a00;
+  --gd-color-secondary-950: #442f00;
 
   /* 基础表面与文字 */
-  --color-text: #2a2520;
-  --color-text-gray: #6a6055;
-  --color-text-disabled: #b0a89a;
-  --color-surface: #faf6ed;
-  --color-surface-border: #c8bfa8;
-  --color-bg: #f0ebde;
-  --color-border: #8a7e6a;
+  --gd-color-text: #2a2520;
+  --gd-color-text-gray: #6a6055;
+  --gd-color-text-disabled: #b0a89a;
+  --gd-color-surface: #faf6ed;
+  --gd-color-surface-border: #c8bfa8;
+  --gd-color-bg: #f0ebde;
+  --gd-color-border: #8a7e6a;
 
   /* 侧边栏（左栏）：仿红白机底座灰白塑料 */
-  --color-sidebar-bg: #e8e2d2;
-  --color-sidebar-bg-active: #c8102e;
-  --color-sidebar-bg-hover: #ddd6c4;
-  --color-sidebar-text: #2a2520;
-  --color-sidebar-text-hover: #2a2520;
-  --color-sidebar-text-active: #ffffff;
+  --gd-color-sidebar-bg: #e8e2d2;
+  --gd-color-sidebar-bg-active: #c8102e;
+  --gd-color-sidebar-bg-hover: #ddd6c4;
+  --gd-color-sidebar-text: #2a2520;
+  --gd-color-sidebar-text-hover: #2a2520;
+  --gd-color-sidebar-text-active: #ffffff;
 
   /* 标题栏：红白机红色顶条 */
-  --color-titlebar-bg: #c8102e;
-  --color-titlebar-border: #8f0a20;
-  --titlebar-text-color: #ffffff;
-  --titlebar-hover-bg: #a50d26;
+  --gd-color-titlebar-bg: #c8102e;
+  --gd-color-titlebar-border: #8f0a20;
+  --gd-titlebar-text-color: #ffffff;
+  --gd-titlebar-hover-bg: #a50d26;
 
   /* 会话列表 */
-  --color-conversation-bg: #faf6ed;
-  --color-conversation-text: #2a2520;
-  --color-conversation-border: #c8bfa8;
-  --color-conversation-bg-active: #c8102e;
-  --color-conversation-text-active: #ffffff;
-  --color-conversation-bg-hover: #e8e2d2;
-  --color-conversation-text-hover: #2a2520;
+  --gd-color-conversation-bg: #faf6ed;
+  --gd-color-conversation-text: #2a2520;
+  --gd-color-conversation-border: #c8bfa8;
+  --gd-color-conversation-bg-active: #c8102e;
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: #e8e2d2;
+  --gd-color-conversation-text-hover: #2a2520;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #c8102e;
-  --color-bubble-user-text: #ffffff;
-  --color-bubble-user-border: #8f0a20;
-  --color-bubble-assitant-bg: #faf6ed;
-  --color-bubble-assitant-text: #2a2520;
-  --color-bubble-assitant-border: #c8bfa8;
-  --color-bubble-assitant-text-strong: #c8102e;
+  --gd-color-bubble-user-bg: #c8102e;
+  --gd-color-bubble-user-text: #ffffff;
+  --gd-color-bubble-user-border: #8f0a20;
+  --gd-color-bubble-assitant-bg: #faf6ed;
+  --gd-color-bubble-assitant-text: #2a2520;
+  --gd-color-bubble-assitant-border: #c8bfa8;
+  --gd-color-bubble-assitant-text-strong: #c8102e;
 
   /* 输入框 */
-  --color-input-bg: #faf6ed;
-  --color-input-border: #8a7e6a;
+  --gd-color-input-bg: #faf6ed;
+  --gd-color-input-border: #8a7e6a;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #faf6ed;
-  --code-block-bg: #f0ebde;
+  --gd-color-dialog-bg: #faf6ed;
+  --gd-code-block-bg: #f0ebde;
 
   /* 排版与细节 */
-  --size-text-base: 15px;
-  --size-text-sm: 14px;
-  --shimmer-base: #c8bfa8;
-  --shimmer-highlight: #c8102e;
+  --gd-size-text-base: 15px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #c8bfa8;
+  --gd-shimmer-highlight: #c8102e;
 
-  /* 窗口控制按钮：hover 背景是主题红（--titlebar-hover-bg），
+  /* 窗口控制按钮：hover 背景是主题红（--gd-titlebar-hover-bg），
      图标需变白才能看清 */
-  --window-controls-hover-color: #ffffff;
+  --gd-window-controls-hover-color: #ffffff;
 }
 
 /* ---------- 暗色模式：深夜游戏厅 ---------- */
 html.dark[data-theme="famicom"] {
   /* 主色：亮红，在深色背景上跳出来 */
-  --color-primary: #e6203a;
-  --color-primary-hover: #ee4055;
-  --color-primary-active: #d01028;
-  --color-primary-disabled: #5a0814;
-  --color-primary-text: #ffffff;
-  --color-primary-text-disabled: rgba(255, 255, 255, 0.5);
-  --color-primary-50:  #2c0309;
-  --color-primary-100: #4d0510;
-  --color-primary-200: #6e0819;
-  --color-primary-300: #8f0a20;
-  --color-primary-400: #b00d26;
-  --color-primary-500: #e6203a;
-  --color-primary-600: #ee4055;
-  --color-primary-700: #f56070;
-  --color-primary-800: #f88095;
-  --color-primary-900: #fba0b0;
-  --color-primary-950: #fdc5d0;
+  --gd-color-primary: #e6203a;
+  --gd-color-primary-hover: #ee4055;
+  --gd-color-primary-active: #d01028;
+  --gd-color-primary-disabled: #5a0814;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.5);
+  --gd-color-primary-50:  #2c0309;
+  --gd-color-primary-100: #4d0510;
+  --gd-color-primary-200: #6e0819;
+  --gd-color-primary-300: #8f0a20;
+  --gd-color-primary-400: #b00d26;
+  --gd-color-primary-500: #e6203a;
+  --gd-color-primary-600: #ee4055;
+  --gd-color-primary-700: #f56070;
+  --gd-color-primary-800: #f88095;
+  --gd-color-primary-900: #fba0b0;
+  --gd-color-primary-950: #fdc5d0;
 
   /* 副色：亮金，霓虹街机灯 */
-  --color-secondary: #f5c020;
-  --color-secondary-hover: #f7cd42;
-  --color-secondary-active: #e0ac00;
-  --color-secondary-disabled: #634a00;
-  --color-secondary-text: #1a1200;
-  --color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
-  --color-secondary-50:  #221800;
-  --color-secondary-100: #442f00;
-  --color-secondary-200: #684a00;
-  --color-secondary-300: #8c6600;
-  --color-secondary-400: #b08200;
-  --color-secondary-500: #f5c020;
-  --color-secondary-600: #f7cd42;
-  --color-secondary-700: #f9d96b;
-  --color-secondary-800: #fbe594;
-  --color-secondary-900: #fdf2bd;
-  --color-secondary-950: #fef8e6;
+  --gd-color-secondary: #f5c020;
+  --gd-color-secondary-hover: #f7cd42;
+  --gd-color-secondary-active: #e0ac00;
+  --gd-color-secondary-disabled: #634a00;
+  --gd-color-secondary-text: #1a1200;
+  --gd-color-secondary-text-disabled: rgba(26, 18, 0, 0.5);
+  --gd-color-secondary-50:  #221800;
+  --gd-color-secondary-100: #442f00;
+  --gd-color-secondary-200: #684a00;
+  --gd-color-secondary-300: #8c6600;
+  --gd-color-secondary-400: #b08200;
+  --gd-color-secondary-500: #f5c020;
+  --gd-color-secondary-600: #f7cd42;
+  --gd-color-secondary-700: #f9d96b;
+  --gd-color-secondary-800: #fbe594;
+  --gd-color-secondary-900: #fdf2bd;
+  --gd-color-secondary-950: #fef8e6;
 
   /* 基础表面与文字 */
-  --color-text: #d8d0c0;
-  --color-text-gray: #8a8275;
-  --color-text-disabled: #5a554a;
-  --color-surface: #1e1e24;
-  --color-surface-border: #3a3a42;
-  --color-bg: #141418;
-  --color-border: #3a3a42;
+  --gd-color-text: #d8d0c0;
+  --gd-color-text-gray: #8a8275;
+  --gd-color-text-disabled: #5a554a;
+  --gd-color-surface: #1e1e24;
+  --gd-color-surface-border: #3a3a42;
+  --gd-color-bg: #141418;
+  --gd-color-border: #3a3a42;
 
   /* 侧边栏（左栏） */
-  --color-sidebar-bg: #1a1a20;
-  --color-sidebar-bg-active: #e6203a;
-  --color-sidebar-bg-hover: #26262e;
-  --color-sidebar-text: #d8d0c0;
-  --color-sidebar-text-hover: #e8e0d0;
-  --color-sidebar-text-active: #ffffff;
+  --gd-color-sidebar-bg: #1a1a20;
+  --gd-color-sidebar-bg-active: #e6203a;
+  --gd-color-sidebar-bg-hover: #26262e;
+  --gd-color-sidebar-text: #d8d0c0;
+  --gd-color-sidebar-text-hover: #e8e0d0;
+  --gd-color-sidebar-text-active: #ffffff;
 
   /* 标题栏 */
-  --color-titlebar-bg: #1a1a20;
-  --color-titlebar-border: #3a3a42;
-  --titlebar-text-color: #d8d0c0;
-  --titlebar-hover-bg: #26262e;
+  --gd-color-titlebar-bg: #1a1a20;
+  --gd-color-titlebar-border: #3a3a42;
+  --gd-titlebar-text-color: #d8d0c0;
+  --gd-titlebar-hover-bg: #26262e;
 
   /* 会话列表 */
-  --color-conversation-bg: #141418;
-  --color-conversation-text: #d8d0c0;
-  --color-conversation-border: #3a3a42;
-  --color-conversation-bg-active: #e6203a;
-  --color-conversation-text-active: #ffffff;
-  --color-conversation-bg-hover: #26262e;
-  --color-conversation-text-hover: #d8d0c0;
+  --gd-color-conversation-bg: #141418;
+  --gd-color-conversation-text: #d8d0c0;
+  --gd-color-conversation-border: #3a3a42;
+  --gd-color-conversation-bg-active: #e6203a;
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: #26262e;
+  --gd-color-conversation-text-hover: #d8d0c0;
 
   /* 消息气泡：金色描边 + 暗底卡片 */
-  --color-bubble-user-bg: #e6203a;
-  --color-bubble-user-text: #ffffff;
-  --color-bubble-user-border: #f5c020;
-  --color-bubble-assitant-bg: #1e1e24;
-  --color-bubble-assitant-text: #d8d0c0;
-  --color-bubble-assitant-border: #3a3a42;
-  --color-bubble-assitant-text-strong: #f5c020;
+  --gd-color-bubble-user-bg: #e6203a;
+  --gd-color-bubble-user-text: #ffffff;
+  --gd-color-bubble-user-border: #f5c020;
+  --gd-color-bubble-assitant-bg: #1e1e24;
+  --gd-color-bubble-assitant-text: #d8d0c0;
+  --gd-color-bubble-assitant-border: #3a3a42;
+  --gd-color-bubble-assitant-text-strong: #f5c020;
 
   /* 输入框 */
-  --color-input-bg: #1e1e24;
-  --color-input-border: #3a3a42;
+  --gd-color-input-bg: #1e1e24;
+  --gd-color-input-border: #3a3a42;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #1e1e24;
-  --code-block-bg: #141418;
+  --gd-color-dialog-bg: #1e1e24;
+  --gd-code-block-bg: #141418;
 
   /* 排版与细节 */
-  --size-text-base: 15px;
-  --size-text-sm: 14px;
-  --shimmer-base: #3a3a42;
-  --shimmer-highlight: #e6203a;
+  --gd-size-text-base: 15px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #3a3a42;
+  --gd-shimmer-highlight: #e6203a;
 
   /* 窗口控制按钮：常态跟随主题文字色（比全局暗色默认更亮），
      hover 进一步变白 */
-  --window-controls-color: var(--color-text);
-  --window-controls-hover-color: #ffffff;
+  --gd-window-controls-color: var(--gd-color-text);
+  --gd-window-controls-hover-color: #ffffff;
 }
 
 /* ---------- 主题专属细节 ---------- */
@@ -256,7 +256,7 @@ html[data-theme="famicom"] body::before {
     linear-gradient(rgba(42, 37, 32, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(42, 37, 32, 0.035) 1px, transparent 1px);
   background-size: 4px 4px;
-  background-color: var(--color-bg);
+  background-color: var(--gd-color-bg);
 }
 
 /* 暗色模式：CRT 扫描线 + 像素网格 */
@@ -342,18 +342,18 @@ html.dark[data-theme="famicom"] .assistant-section .message-item__card {
 
 /* 左栏：红色粗线分割，像游戏 UI 边界 */
 html[data-theme="famicom"] .global-sidebar {
-  border-right: 3px solid var(--color-primary);
+  border-right: 3px solid var(--gd-color-primary);
   box-shadow: none;
 }
 
 /* 右栏：红色粗线分割 */
 html[data-theme="famicom"] .workspace-sidebar {
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--gd-color-primary);
 }
 
 /* 标题栏：红色顶条下压一道深红粗线（FC 顶部分割条） */
 html[data-theme="famicom"] .custom-titlebar {
-  border-bottom: 3px solid var(--color-titlebar-border);
+  border-bottom: 3px solid var(--gd-color-titlebar-border);
 }
 
 /* 会话激活项：FC 按钮斜面（内高光 + 内暗影），去圆角 */
@@ -422,13 +422,13 @@ html[data-theme="famicom"] .markdown-text h2 {
   border-bottom: none;
   padding-bottom: 6px;
   background:
-    repeating-linear-gradient(90deg, var(--color-primary) 0 4px, transparent 4px 8px)
+    repeating-linear-gradient(90deg, var(--gd-color-primary) 0 4px, transparent 4px 8px)
     repeat-x left bottom / 8px 2px;
 }
 
 /* 链接：2px 实线下划线 */
 html[data-theme="famicom"] .markdown-text a {
-  color: var(--color-primary);
+  color: var(--gd-color-primary);
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
@@ -436,7 +436,7 @@ html[data-theme="famicom"] .markdown-text a {
 
 /* 引用块：4px 红色实线左杠，无圆角 */
 html[data-theme="famicom"] .markdown-text blockquote {
-  border-left: 4px solid var(--color-primary);
+  border-left: 4px solid var(--gd-color-primary);
   border-radius: 0;
 }
 
@@ -445,27 +445,27 @@ html[data-theme="famicom"] .markdown-text hr {
   height: 2px;
   border: none;
   background:
-    repeating-linear-gradient(90deg, var(--color-border) 0 4px, transparent 4px 8px)
+    repeating-linear-gradient(90deg, var(--gd-color-border) 0 4px, transparent 4px 8px)
     repeat-x center / 8px 2px;
 }
 
 /* 行内代码：卡带金底 + 无圆角小框（:not(pre *) 排除代码块内部） */
 html[data-theme="famicom"] .markdown-text code:not(pre code) {
-  background: var(--color-secondary-100);
-  color: var(--color-text);
-  border: 2px solid var(--color-secondary-300);
+  background: var(--gd-color-secondary-100);
+  color: var(--gd-color-text);
+  border: 2px solid var(--gd-color-secondary-300);
   border-radius: 0;
   padding: 0 4px;
 }
 html.dark[data-theme="famicom"] .markdown-text code:not(pre code) {
-  background: var(--color-secondary-100);
-  color: var(--color-secondary-800);
+  background: var(--gd-color-secondary-100);
+  color: var(--gd-color-secondary-800);
 }
 
 /* 表格：2px 实线行分隔（像素网格感） */
 html[data-theme="famicom"] .markdown-text table th,
 html[data-theme="famicom"] .markdown-text table td {
-  border-bottom: 2px solid var(--color-surface-border);
+  border-bottom: 2px solid var(--gd-color-surface-border);
 }
 
 /* 代码块（真实选择器 .markdown-text pre，旧主题的 .md-code 已失效）：
@@ -509,7 +509,7 @@ html[data-theme="famicom"] .el-button:active {
 }
 html[data-theme="famicom"] .l-dialog {
   border-radius: 0;
-  border: 2px solid var(--color-border);
+  border: 2px solid var(--gd-color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);
 }
 html[data-theme="famicom"] .el-tag {
@@ -519,7 +519,7 @@ html[data-theme="famicom"] .el-tag {
 html[data-theme="famicom"] .el-popper.is-light {
   border-radius: 0;
   border-width: 2px;
-  border-color: var(--color-border);
+  border-color: var(--gd-color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.15);
 }
 

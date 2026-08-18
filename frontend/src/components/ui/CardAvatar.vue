@@ -43,7 +43,7 @@ const sizeClass = computed(() => {
 })
 
 const radiusStyle = computed(() => ({
-  'border-radius': 'var(--size-surface-radius)',
+  'border-radius': 'var(--gd-size-surface-radius)',
 }))
 
 const hue = computed(() => avatarHue(props.name || '?'))

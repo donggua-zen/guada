@@ -326,19 +326,19 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   min-width: 320px;
   max-height: 70vh;
   height: 700px;
-  background: var(--color-bg, #ffffff);
-  border: 1px solid var(--color-surface-border, #e5e7eb);
-  border-radius: var(--size-dialog-rounded-radius);
+  background: var(--gd-color-bg, #ffffff);
+  border: 1px solid var(--gd-color-surface-border, #e5e7eb);
+  border-radius: var(--gd-size-dialog-rounded-radius);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   overflow: hidden;
   transition: height 0.25s ease;
   padding: 0;
-  --size-text-base: 14px;
+  --gd-size-text-base: 14px;
 }
 
 .dark .floating-chat-container {
-  background: var(--color-bg, #1a1a1a);
-  border-color: var(--color-surface-border, #2e3035);
+  background: var(--gd-color-bg, #1a1a1a);
+  border-color: var(--gd-color-surface-border, #2e3035);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
@@ -350,12 +350,12 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   justify-content: space-between;
   padding: 0 8px 0 12px;
   cursor: move;
-  background: var(--color-surface, #f9fafb);
+  background: var(--gd-color-surface, #f9fafb);
 }
 
 .dark .floating-chat-header {
-  background: var(--color-surface, #1a1a1a);
-  border-color: var(--color-surface-border, #2e3035);
+  background: var(--gd-color-surface, #1a1a1a);
+  border-color: var(--gd-color-surface-border, #2e3035);
 }
 
 .floating-chat-btn {
@@ -368,13 +368,13 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
-  color: var(--color-text-gray, #9ca3af);
+  color: var(--gd-color-text-gray, #9ca3af);
   transition: background 0.15s, color 0.15s;
 }
 
 .floating-chat-btn:hover {
-  background: var(--color-sidebar-bg-hover, #f3f4f6);
-  color: var(--color-text, #374151);
+  background: var(--gd-color-sidebar-bg-hover, #f3f4f6);
+  color: var(--gd-color-text, #374151);
 }
 
 .floating-chat-body {
@@ -413,7 +413,7 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary, #409eff);
+  background: var(--gd-color-primary, #409eff);
   color: #fff;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -438,7 +438,7 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
 
 .floating-chat-mode :deep(.input-area) {
   border: none !important;
-  border-top: 1px solid var(--color-input-border, #e5e7eb) !important;
+  border-top: 1px solid var(--gd-color-input-border, #e5e7eb) !important;
   box-shadow: none !important;
   padding: 12px 8px 12px 8px !important;
   min-height: auto !important;

@@ -45,11 +45,11 @@
         <template v-else-if="archivedSessions.length > 0">
             <div class="rounded-lg border border-gray-100 dark:border-gray-700/40 overflow-hidden">
                 <div v-for="(session, idx) in archivedSessions" :key="session.id"
-                    class="flex items-center gap-2 px-3 py-2 transition-colors duration-150 hover:bg-(--color-sidebar-bg-hover)"
+                    class="flex items-center gap-2 px-3 py-2 transition-colors duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
                     :class="idx < archivedSessions.length - 1 ? 'border-b border-gray-50 dark:border-gray-700/30' : ''">
                     <el-checkbox :model-value="selectedIds.has(session.id)"
                         @change="(val: string | number | boolean) => toggleSelect(session.id, val)" />
-                    <span class="flex-1 truncate text-sm text-(--color-text)">{{ session.title }}</span>
+                    <span class="flex-1 truncate text-sm text-(--gd-color-text)">{{ session.title }}</span>
                     <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
                         :title="t('settings.archived.unarchive')" @click="handleUnarchive(session)">

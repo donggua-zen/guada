@@ -1,5 +1,5 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="180" :anchor-el="anchorEl">
+  <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="180" :anchor-el="anchorEl">
     <template #header>
       <div class="flex items-center gap-2">
         <el-icon size="16" class="text-gray-600 dark:text-gray-400">
@@ -10,21 +10,21 @@
     </template>
     <div class="popover-content space-y-0.5">
       <div v-for="effort in options" :key="effort"
-        class="te-item flex items-center justify-between px-2 py-1.5 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all text-sm" :class="{
+        class="te-item flex items-center justify-between px-2 py-1.5 rounded-(--gd-size-dialog-rounded-radius) cursor-pointer transition-all text-sm" :class="{
           'te-item-active': currentValue === effort
         }" :data-effort="effort" @click="handleSelect(effort)">
         <span>{{ getLabel(effort) }}</span>
         <span class="text-xs text-gray-400 dark:text-gray-500">{{ effort }}</span>
       </div>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
 import { ElIcon } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { LightbulbFilament24Regular } from '@vicons/fluent'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 import { getThinkingEffortLabel } from '@/utils/modelUtils'
 
 const { t } = useI18n()
@@ -63,10 +63,10 @@ function handleSelect(effort: string) {
 }
 
 .te-item:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .te-item-active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 </style>

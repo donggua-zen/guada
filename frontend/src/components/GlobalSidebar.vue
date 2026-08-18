@@ -10,8 +10,8 @@
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
         class="nav-item flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
-          ? 'nav-item-active bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-          : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+          ? 'nav-item-active bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+          : 'text-(--gd-color-text) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
         <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
         <span class="text-sm font-medium flex-1 truncate">{{ item.label }}</span>
         <span v-if="item.shortcut"
@@ -44,14 +44,14 @@
             </div>
             <div class="flex items-center gap-1">
               <!-- 新建会话按钮（始终显示） -->
-              <LTooltip :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
+              <GdTooltip :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
                 <div @click.stop="openNewSession(group.id)">
                   <div
                     class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
                     <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
                   </div>
                 </div>
-              </LTooltip>
+              </GdTooltip>
             </div>
           </div>
 
@@ -146,10 +146,10 @@
       <el-dropdown trigger="hover" placement="top-start" @command="handleUserMenuCommand"
         popper-class="user-menu-dropdown" style="flex: 1 1 0%; min-width: 0;">
         <div
-          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--color-sidebar-bg-hover) transition-all duration-200">
+          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--gd-color-sidebar-bg-hover) transition-all duration-200">
           <Avatar class="w-7 h-7 shrink-0" type="user" :round="true" :src="authStore.user?.avatarUrl"
             :name="authStore.user?.nickname || authStore.user?.username" />
-          <span class="text-sm font-medium text-(--color-text) truncate min-w-0">
+          <span class="text-sm font-medium text-(--gd-color-text) truncate min-w-0">
             {{ authStore.user?.nickname || authStore.user?.username || t('ui.sidebar.defaultUserName') }}
           </span>
         </div>
@@ -186,20 +186,20 @@
       </el-dropdown>
 
       <!-- 设置 -->
-      <LTooltip :content="t('ui.sidebar.settings')" placement="bottom">
+      <GdTooltip :content="t('ui.sidebar.settings')" placement="bottom">
         <div @click="handleNavClick('setting')"
           class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
           :class="currentActiveTab === 'setting'
-            ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-            : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+            ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+            : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
           <component :is="Settings16Filled" class="w-4 h-4" />
         </div>
-      </LTooltip>
+      </GdTooltip>
     </div>
   </div>
 
   <!-- 删除会话确认对话框 -->
-  <LDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
+  <GdDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
     <div class="space-y-4">
       <p class="text-gray-700 dark:text-gray-300">
         {{ t('ui.sidebar.deleteSessionConfirm', { title: deleteSessionData?.title }) }}
@@ -224,14 +224,14 @@
         <el-button type="danger" @click="confirmDeleteSession">{{ t('ui.sidebar.confirmDelete') }}</el-button>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 
   <!-- 移动会话到分组弹窗 -->
-  <LDialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
+  <GdDialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
     <div class="space-y-1 py-2">
       <div v-for="(g) in moveGroupOptions" :key="g.value"
         class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
-        :class="moveSelectedGroupId === g.value ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
+        :class="moveSelectedGroupId === g.value ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)' : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'"
         @click="moveSelectedGroupId = g.value">
         <el-icon class="w-4 h-4">
           <Folder20Regular />
@@ -245,7 +245,7 @@
         <el-button type="primary" @click="confirmMoveSession">{{ t('common.ok') }}</el-button>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 
   <!-- 分组右键菜单 -->
   <ContextMenu :visible="groupContextMenu.visible" :x="groupContextMenu.x" :y="groupContextMenu.y"
@@ -267,8 +267,8 @@ import SessionTitle from './SessionTitle.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
-import LTooltip from './ui/LTooltip.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdTooltip from './ui/GdTooltip.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { SessionGroup } from '@/types/session'
 import { ElMessageBox } from 'element-plus'
@@ -889,17 +889,17 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
 <style scoped>
 /* 会话项样式 */
 .session-item-inactive {
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 .session-item-inactive:hover {
-  background-color: var(--color-sidebar-bg-hover);
-  color: var(--color-sidebar-text-hover);
+  background-color: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-sidebar-text-hover);
 }
 
 .session-item-active {
-  background-color: var(--color-sidebar-bg-active);
-  color: var(--color-sidebar-text-active);
+  background-color: var(--gd-color-sidebar-bg-active);
+  color: var(--gd-color-sidebar-text-active);
 }
 
 

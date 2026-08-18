@@ -1,5 +1,5 @@
 <template>
-  <LDialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')" width="775px" align-center
+  <GdDialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')" width="775px" align-center
     destroy-on-close class="dialog-with-scroll" style="max-height: 70vh;">
     <div class="dialog-content">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="left" label-width="100px" size="default">
@@ -195,7 +195,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">{{ t('scheduler.edit.save') }}</el-button>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -207,7 +207,7 @@ import type { ScheduledTask } from '../../types/scheduler'
 import type { Character } from '../../types/character'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { t } = useI18n()
 type TimeMode = 'period' | 'interval' | 'once' | 'advanced'

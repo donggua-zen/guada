@@ -1,13 +1,13 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
-        <LTooltip content="点击可更换头像" placement="top">
+        <GdTooltip content="点击可更换头像" placement="top">
             <Avatar class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity"
                 @click="triggerAvatarUpload" :src="previewUrl" :type="type" :name="name"></Avatar>
-        </LTooltip>
+        </GdTooltip>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
     <!-- 头像裁剪模态框 -->
-    <LDialog v-model="showCropModal" title="裁剪头像" width="600px">
+    <GdDialog v-model="showCropModal" title="裁剪头像" width="600px">
         <div class="modal-body">
             <cropper ref="cropperAvatar" :src="cropImageSrc" :stencil-props="{
                 aspectRatio: 1,
@@ -23,15 +23,15 @@
                 <el-button type="primary" @click="cropAvatar">确认裁剪</el-button>
             </div>
         </template>
-    </LDialog>
+    </GdDialog>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import Avatar from './Avatar.vue'
-import LTooltip from './LTooltip.vue'
+import GdTooltip from './GdTooltip.vue'
 // @ts-ignore - Element Plus 类型缺失
 import { ElButton } from 'element-plus'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 // @ts-ignore - icons 类型缺失

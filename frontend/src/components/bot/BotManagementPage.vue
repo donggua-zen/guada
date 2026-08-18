@@ -40,7 +40,7 @@
 
           <!-- 空状态 -->
           <div v-if="!botStore.loading && botStore.botInstances.length === 0"
-            class="col-span-full text-center py-12 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface)">
+            class="col-span-full text-center py-12 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface)">
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <Cpu />
             </el-icon>
