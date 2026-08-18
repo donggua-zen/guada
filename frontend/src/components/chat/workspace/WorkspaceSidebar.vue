@@ -734,26 +734,10 @@ function handleFileChange(event: FileChangeEvent) {
 
     if (!event.path) return;
 
-    // Git 模式下，文件变化 debounce 触发 git status 刷新（准实时变更列表）
-    if (panelMode.value === 'git') {
-        scheduleGitRefresh();
-    }
-
+    // Git 状态刷新只由 git 事件（后端 .git watcher → type:"git"）触发（GitStore 订阅）——
+    // 文件变更事件（含被 git 忽略的文件）不刷新 git，避免无关变更重载当前预览 diff
     // 本地更新节点
     updateNodeLocal(event);
-}
-
-/** Git 状态刷新防抖（与 VS Code 一致的准实时刷新策略） */
-let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleGitRefresh() {
-    if (gitRefreshTimer) {
-        clearTimeout(gitRefreshTimer);
-    }
-    gitRefreshTimer = setTimeout(() => {
-        gitRefreshTimer = null;
-        gitPanelRef.value?.refresh();
-    }, 500);
 }
 
 /**
@@ -1330,10 +1314,6 @@ onUnmounted(() => {
     if (unsubscribeWatcher) {
         unsubscribeWatcher();
         unsubscribeWatcher = null;
-    }
-    if (gitRefreshTimer) {
-        clearTimeout(gitRefreshTimer);
-        gitRefreshTimer = null;
     }
     if (treeHideTimer) {
         clearTimeout(treeHideTimer);

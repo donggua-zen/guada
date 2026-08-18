@@ -1543,12 +1543,20 @@ function clearSelection(): void {
   diffLoadSeq++;
 }
 
-async function loadDiff(row: GitRow): Promise<void> {
+/**
+ * 加载/重载文件 diff。
+ * silent=false（用户切换文件）：清空旧 diff + 标 loading（可见加载态）。
+ * silent=true（后台刷新重载当前文件）：保留旧内容、不标 loading，拉到新 diff 后
+ *   原子替换 —— 避免无关 git 事件触发的刷新导致预览闪烁。
+ */
+async function loadDiff(row: GitRow, silent = false): Promise<void> {
   if (!props.sessionId) return;
   const key = rowKey(row);
   const seq = ++diffLoadSeq;
-  loadingKey.value = key;
-  fullHighlight.value = null; // 旧文件全文高亮即刻失效，新值由下方当前响应写入
+  if (!silent) {
+    loadingKey.value = key;
+    fullHighlight.value = null; // 切换文件：旧全文高亮即刻失效
+  }
   try {
     const res = await apiService.getGitDiff(props.sessionId, row.file.path, row.group === "staged");
     const { lines, full } = renderDiff(res, row.file.path);
@@ -1558,13 +1566,14 @@ async function loadDiff(row: GitRow): Promise<void> {
       fullHighlight.value = full;
     }
   } catch {
-    if (seq === diffLoadSeq && selectedKey.value === key) {
+    // 刷新重载失败：保留旧内容（silent），不打断用户预览
+    if (seq === diffLoadSeq && selectedKey.value === key && !silent) {
       ElMessage.error(t("git.loadFailed"));
       diffLines.value = { [key]: [] };
       fullHighlight.value = null;
     }
   } finally {
-    if (seq === diffLoadSeq) loadingKey.value = null;
+    if (seq === diffLoadSeq && !silent) loadingKey.value = null;
   }
 }
 
@@ -1693,8 +1702,8 @@ function postProcessSelection(): void {
   }
   if (target) {
     selectedKey.value = `${target.group}:${target.file.path}`;
-    diffLines.value = {};
-    void loadDiff(target);
+    // 刷新后自动重载当前预览：silent（保留旧内容、无加载闪烁），拉到新内容后原子替换
+    void loadDiff(target, true);
   } else {
     clearSelection();
   }
