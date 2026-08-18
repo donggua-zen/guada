@@ -27,6 +27,8 @@ export const useGitStore = defineStore("git", () => {
   const selectedBranch = ref("");
   const refreshing = ref(false);
   const committing = ref(false);
+  /** 当前进行中的提交/推送动作（供按钮显示进行中 ICON；null = 空闲） */
+  const commitAction = ref<"commit" | "commitAndPush" | "push" | null>(null);
 
   // ── 提交弹窗状态（GitCommitDialog / GitChangesPanel / OverviewPanel 共用） ──
   const commitDialogVisible = ref(false);
@@ -158,6 +160,7 @@ export const useGitStore = defineStore("git", () => {
     if (!sessionId.value || committing.value) return;
     markGitWrite();
     committing.value = true;
+    commitAction.value = push ? "commitAndPush" : "commit";
     try {
       // 勾选「包含未暂存的更改」→ 先全部暂存再提交（VS Code「全部提交」语义）
       if (commitIncludeUnstaged.value) {
@@ -174,6 +177,7 @@ export const useGitStore = defineStore("git", () => {
       await refresh();
     } finally {
       committing.value = false;
+      commitAction.value = null;
     }
   }
 
@@ -181,6 +185,7 @@ export const useGitStore = defineStore("git", () => {
     if (!sessionId.value || committing.value) return;
     markGitWrite();
     committing.value = true;
+    commitAction.value = "push";
     try {
       await apiService.gitPush(sessionId.value);
       ElMessage.success(t("git.pushSuccess"));
@@ -200,6 +205,7 @@ export const useGitStore = defineStore("git", () => {
     selectedBranch,
     refreshing,
     committing,
+    commitAction,
     commitDialogVisible,
     commitMessage,
     commitIncludeUnstaged,
