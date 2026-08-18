@@ -173,7 +173,7 @@
 
         <!-- 查看文档对话框 -->
         <GdDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
-            align-center destroy-on-close>
+            align-center destroy-on-close append-to-body>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
                 <el-icon class="is-loading" size="32">

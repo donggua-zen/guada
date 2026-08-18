@@ -32,25 +32,25 @@
       <div class="git-cd-actions">
         <button type="button" class="git-cd-action git-cd-action--primary" :disabled="git.committing"
           @click="git.submitCommit(false)">
-          <el-icon :size="16">
-            <LoadingOutlined v-if="git.commitAction === 'commit'" class="is-loading" />
-            <BranchFork16Regular v-else />
+          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commit' }">
+            <BranchFork16Regular v-if="git.commitAction !== 'commit'" />
+            <LoadingOutlined v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.commit') }}</span>
           <span class="git-cd-action-hint">Ctrl + ↵</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing" @click="git.submitCommit(true)">
-          <el-icon :size="16">
-            <LoadingOutlined v-if="git.commitAction === 'commitAndPush'" class="is-loading" />
-            <ArrowUpload16Regular v-else />
+          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commitAndPush' }">
+            <ArrowUpload16Regular v-if="git.commitAction !== 'commitAndPush'" />
+            <LoadingOutlined v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing || (git.status?.ahead ?? 0) === 0"
           @click="git.handlePush">
-          <el-icon :size="16">
-            <LoadingOutlined v-if="git.commitAction === 'push'" class="is-loading" />
-            <ArrowUpload16Regular v-else />
+          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'push' }">
+            <ArrowUpload16Regular v-if="git.commitAction !== 'push'" />
+            <LoadingOutlined v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.push') }}</span>
         </button>

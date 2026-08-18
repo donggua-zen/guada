@@ -43,6 +43,8 @@ export default {
   aheadBehind: '{ahead} ahead / {behind} behind',
   selectFileToPreview: 'Select a file to view changes',
   closePreview: 'Close preview',
+  prevFileShortcut: 'Previous file (Ctrl+Alt+↑)',
+  nextFileShortcut: 'Next file (Ctrl+Alt+↓)',
   searchFiles: 'Search changed files',
   unifiedView: 'Unified view',
   splitView: 'Split view',

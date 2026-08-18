@@ -43,6 +43,8 @@ export default {
   aheadBehind: '领先 {ahead} / 落后 {behind}',
   selectFileToPreview: '选择文件查看变更详情',
   closePreview: '关闭预览',
+  prevFileShortcut: '上一个文件 (Ctrl+Alt+↑)',
+  nextFileShortcut: '下一个文件 (Ctrl+Alt+↓)',
   searchFiles: '搜索变更文件',
   unifiedView: '统一视图',
   splitView: '拆分视图',
