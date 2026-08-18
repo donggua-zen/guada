@@ -973,6 +973,12 @@ export class AgentEngine {
 
       const tc = target.toolCalls[index];
 
+      // 补全 name：首个 delta 可能未携带 name（如先发 arguments 分片），
+      // 后续 delta 携带 name 时回填，避免 name 永久为空被下游过滤丢弃
+      if (delta?.name && !tc.name) {
+        tc.name = delta.name;
+      }
+
       // 将本次分片的参数字符串追加到已有参数中，实现完整参数的重建
       if (delta?.arguments) {
         tc.arguments += delta.arguments;
@@ -1128,13 +1134,21 @@ export class AgentEngine {
     pendingTools: any[];
     approvedTools: any[];
     rejectedTools: any[];
+    invalidTools: any[];
   } {
     const pendingTools: any[] = [];
     const approvedTools: any[] = [];
     const rejectedTools: any[] = [];
+    const invalidTools: any[] = [];
 
     // 防御：过滤掉 undefined 或无效的工具调用
-    const validToolCalls = (toolCalls || []).filter((tc: any) => tc && tc.name);
+    // 缺少 name 的畸形调用不再静默丢弃，收集到 invalidTools，
+    // 由调用方生成错误响应反馈给模型，避免工具循环被静默终止
+    const validToolCalls = (toolCalls || []).filter((tc: any) => {
+      if (tc && tc.name) return true;
+      if (tc) invalidTools.push(tc);
+      return false;
+    });
 
     // 检查是否有审批上下文
     const approvalContext = metadata?.approvalContext;
@@ -1174,7 +1188,7 @@ export class AgentEngine {
       }
     }
 
-    return { pendingTools, approvedTools, rejectedTools };
+    return { pendingTools, approvedTools, rejectedTools, invalidTools };
   }
 
   /**
@@ -1358,7 +1372,7 @@ Scan history. ONLY trigger an update if:
     const toolCalls = assistantResponse.toolCalls;
     if (!toolCalls) return { toolParts: [] };
     // 1. 分为三组
-    const { pendingTools, approvedTools, rejectedTools } =
+    const { pendingTools, approvedTools, rejectedTools, invalidTools } =
       this.classifyToolsByApproval(
         toolCalls,
         assistantResponse.metadata,
@@ -1433,6 +1447,26 @@ Scan history. ONLY trigger an update if:
         (t: any) => t.id === rejected.id,
       );
       if (tc) tc.outcome = "rejected";
+    }
+
+    // 缺少 name 的畸形工具调用：生成错误响应反馈给模型，
+    // 而不是静默丢弃导致 toolParts 为空、工具循环被直接终止
+    for (const invalid of invalidTools) {
+      toolResponses.push({
+        toolCallId: invalid.id || "",
+        name: invalid.name || "(unknown)",
+        content: JSON.stringify({
+          success: false,
+          message:
+            "Invalid tool call: missing tool name. Please call a valid registered tool.",
+        }),
+        isError: true,
+        outcome: "error",
+      });
+      const tc = assistantResponse.toolCalls?.find(
+        (t: any) => t.id === invalid.id,
+      );
+      if (tc) tc.outcome = "error";
     }
 
     if (toolResponses.length === 0) {
