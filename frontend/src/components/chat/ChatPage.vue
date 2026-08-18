@@ -160,7 +160,7 @@ const chatDecisionWidth = ref(0);
 let decisionFreezeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onChatContainerResize(cw: number): void {
-  if (decisionFreezeTimer) return; // 冻结期忽略动画中间宽度
+  // 实时跟随（临时去掉 freeze 冻结，flex 权重已让过渡自然）
   chatDecisionWidth.value = cw;
 }
 
@@ -418,10 +418,8 @@ const layoutStore = useLayoutStore();
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
 
-// 分栏动画驱动源（visible/fullscreen/panelMode → pane1Ratio 变化）→ 预知终态冻结
-watch(pane1Ratio, (n) => {
-  freezeDecisionForPaneAnimation(n);
-});
+// 临时去掉 freeze（flex 权重已缓解），暂停 pane1Ratio → freeze 预知冻结
+// watch(pane1Ratio, (n) => { freezeDecisionForPaneAnimation(n); });
 
 // 全屏模式下 Teleport 延迟一帧启用，避免与 pane collapse 同帧触发 moveTeleport 竞态
 const teleportDisabled = ref(true);
