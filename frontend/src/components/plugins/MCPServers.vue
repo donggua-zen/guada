@@ -25,16 +25,16 @@
         <div v-if="servers.length > 0" class="grid gap-y-4 gap-x-3"
             style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div v-for="server in servers" :key="server.id"
-                class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
                 @click="handleEditServer(server)">
                 <div class="flex items-center gap-2.5 mb-3">
                     <CardAvatar :name="server.name" :disabled="!server.enabled" />
-                    <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                    <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                         {{ server.name }}
                     </h3>
                 </div>
 
-                <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
                     {{ server.description || t('plugins.mcp.noDescription') }}
                 </p>
 
@@ -49,7 +49,7 @@
             </div>
         </div>
         <div v-else
-            class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+            class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
             <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
@@ -58,7 +58,7 @@
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <LDialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')" width="80%" align-center
+        <GdDialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')" width="80%" align-center
             destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
@@ -210,10 +210,10 @@
                     <el-button type="primary" @click="handleSaveServer" :loading="saving">{{ t('common.ok') }}</el-button>
                 </span>
             </template>
-        </LDialog>
+        </GdDialog>
 
         <!-- 导入配置对话框 -->
-        <LDialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
+        <GdDialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
             width="80%">
 
             <div class="mb-4">
@@ -250,7 +250,7 @@
                     <el-button type="primary" @click="handleImportJson" :loading="importing">{{ t('plugins.mcp.importBtn') }}</el-button>
                 </span>
             </template>
-        </LDialog>
+        </GdDialog>
     </div>
 </template>
 
@@ -271,7 +271,7 @@ import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()

@@ -361,7 +361,7 @@ html,body{
   }
 
 </style>
-<style>:root{html,body{margin:0;padding:0;font-size:15px;color:var(--color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
+<style>:root{html,body{margin:0;padding:0;font-size:15px;color:var(--gd-color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
 </head>
 <body style="padding:16px;overflow-x:auto;overflow-y:auto;height:100%;">
 <div class="markdown-text">

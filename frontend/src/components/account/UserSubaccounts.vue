@@ -45,7 +45,7 @@
   </div>
 
   <!-- 子账户编辑/新增模态框 -->
-  <LDialog v-model="showAccountModal" :title="modalTitle" width="500px">
+  <GdDialog v-model="showAccountModal" :title="modalTitle" width="500px">
     <el-form ref="accountFormRef" :model="accountForm" :rules="accountFormRules" label-position="top">
       <el-form-item :label="t('ui.account.nickname')" prop="nickname">
         <el-input v-model="accountForm.nickname" :placeholder="t('ui.account.inputNickname')" />
@@ -67,7 +67,7 @@
         <el-button type="primary" @click="saveAccount">{{ t('common.save') }}</el-button>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup>
@@ -77,7 +77,7 @@ import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/m
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
 import { Avatar } from '../ui/'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 // Element Plus 组件导入
 import {

@@ -179,7 +179,7 @@ const handleLogin = async (): Promise<void> => {
 <style scoped>
 /* Element Plus 深度样式定制 */
 :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--color-border) inset;
+  box-shadow: 0 0 0 1px var(--gd-color-border) inset;
   border-radius: 10px;
   background-color: #ffffff;
   transition: all 0.2s ease;
@@ -191,27 +191,27 @@ const handleLogin = async (): Promise<void> => {
 }
 
 :deep(.el-input.is-focus .el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--color-primary) inset;
+  box-shadow: 0 0 0 1px var(--gd-color-primary) inset;
 }
 
 :deep(.el-button--primary) {
-  --el-button-bg-color: var(--color-primary);
-  --el-button-border-color: var(--color-primary);
-  --el-button-hover-bg-color: var(--color-primary-hover);
-  --el-button-hover-border-color: var(--color-primary-hover);
-  --el-button-active-bg-color: var(--color-primary-active);
-  --el-button-active-border-color: var(--color-primary-active);
+  --el-button-bg-color: var(--gd-color-primary);
+  --el-button-border-color: var(--gd-color-primary);
+  --el-button-hover-bg-color: var(--gd-color-primary-hover);
+  --el-button-hover-border-color: var(--gd-color-primary-hover);
+  --el-button-active-bg-color: var(--gd-color-primary-active);
+  --el-button-active-border-color: var(--gd-color-primary-active);
 }
 
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--gd-color-text);
   font-size: 14px;
   padding-bottom: 6px;
 }
 
 :deep(.el-checkbox__label) {
   font-size: 14px;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
 }
 </style>

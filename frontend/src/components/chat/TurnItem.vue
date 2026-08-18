@@ -641,7 +641,7 @@ const handleClick = (event: MouseEvent) => {
 
 /* 消息卡片 */
 .message-item__card {
-  font-size: var(--size-text-base);
+  font-size: var(--gd-size-text-base);
   max-width: 100%;
 }
 
@@ -654,15 +654,15 @@ const handleClick = (event: MouseEvent) => {
 
 .user-section .message-item__card {
 
-  background-color: var(--color-bubble-user-bg);
+  background-color: var(--gd-color-bubble-user-bg);
 
-  color: var(--color-bubble-user-text);
+  color: var(--gd-color-bubble-user-text);
 
   padding: 5px 12px;
 
   border-radius: 16px;
 
-  border: 1px solid var(--color-bubble-user-border);
+  border: 1px solid var(--gd-color-bubble-user-border);
 
 }
 
@@ -680,8 +680,8 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .assistant-section .message-item__card {
-  background: var(--color-bubble-assitant-bg);
-  color: var(--color-bubble-assitant-text);
+  background: var(--gd-color-bubble-assitant-bg);
+  color: var(--gd-color-bubble-assitant-text);
   margin-right: auto;
   width: 100%;
   padding: 0;
@@ -690,7 +690,7 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .assistant-section .message-item__card strong {
-  color: var(--color-bubble-assitant-text-strong);
+  color: var(--gd-color-bubble-assitant-text-strong);
 }
 
 .assistant-section .message-item__wrapper {
@@ -700,11 +700,11 @@ const handleClick = (event: MouseEvent) => {
 
 /* 消息文本 */
 .message-item__text {
-  line-height: calc(var(--size-text-base) * 1.6);
+  line-height: calc(var(--gd-size-text-base) * 1.6);
   color: inherit;
   max-width: 100%;
   vertical-align: middle;
-  font-size: var(--size-text-base);
+  font-size: var(--gd-size-text-base);
 }
 
 .user-section .message-item__text {
@@ -783,11 +783,11 @@ const handleClick = (event: MouseEvent) => {
 /* 流式过程中的文字波纹效果（action + args 一起波纹） */
 .shimmer-text {
   background: linear-gradient(90deg,
-      var(--shimmer-base, #a8aab3) 0%,
-      var(--shimmer-base, #a8aab3) 25%,
-      var(--shimmer-highlight, #ffffff) 50%,
-      var(--shimmer-base, #a8aab3) 75%,
-      var(--shimmer-base, #a8aab3) 100%);
+      var(--gd-shimmer-base, #a8aab3) 0%,
+      var(--gd-shimmer-base, #a8aab3) 25%,
+      var(--gd-shimmer-highlight, #ffffff) 50%,
+      var(--gd-shimmer-base, #a8aab3) 75%,
+      var(--gd-shimmer-base, #a8aab3) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;

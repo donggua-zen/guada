@@ -6,7 +6,7 @@
       <div class="banner w-20 mb-4">
         <img :src="bannerPath" alt=""></img>
       </div>
-      <h1 class="text-4xl mb-6 text-(--color-text) ml-5">
+      <h1 class="text-4xl mb-6 text-(--gd-color-text) ml-5">
         <span class="typewriter-text">{{ displayedText }}</span>
         <span class="typewriter-cursor" :class="{ 'cursor-blink': isTypingComplete }"></span>
       </h1>
@@ -14,26 +14,26 @@
     <!-- 已选角色 + 抽屉切换 -->
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
       <!-- 角色选择行 -->
-      <div class="flex items-center justify-center gap-1.5 mb-4 text-sm text-(--color-text-gray) ml-4">
+      <div class="flex items-center justify-center gap-1.5 mb-4 text-sm text-(--gd-color-text-gray) ml-4">
         <span>{{ t('chat.welcome.use') }}</span>
         <span v-if="currentCharacter"
-          class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
+          class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
           @click="goToCharacters">
           <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.title"
             class="w-4 h-4 shrink-0 rounded overflow-hidden" />
-          <span class="text-sm font-medium text-(--color-text)">{{ currentCharacter.title }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text)">{{ currentCharacter.title }}</span>
           <el-icon size="12"
-            class="shrink-0 text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
+            class="shrink-0 text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
             <ChevronRight24Regular />
           </el-icon>
         </span>
         <button v-else
-          class="character-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--size-dialog-rounded-radius) bg-(--color-surface) border border-(--color-surface-border) hover:bg-(--color-surface-hover) transition-colors"
+          class="character-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
           @click="goToCharacters">
-          <el-icon size="14" class="text-(--color-text-gray) group-hover:text-(--color-text) transition-colors">
+          <el-icon size="14" class="text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
             <PersonAdd24Regular />
           </el-icon>
-          <span class="text-sm font-medium text-(--color-text-gray) group-hover:text-(--color-text)">{{
+          <span class="text-sm font-medium text-(--gd-color-text-gray) group-hover:text-(--gd-color-text)">{{
             t('chat.welcome.selectCharacter') }}</span>
         </button>
         <span>{{ t('chat.welcome.startNewSession') }}</span>
@@ -630,7 +630,7 @@ const sendMessage = async (): Promise<void> => {
 <style scoped>
 /* 创建会话页：输入区域不透明，消除与工具栏负边距重叠时的半透明穿透 */
 :deep(.input-area) {
-  background: var(--color-input-bg) !important;
+  background: var(--gd-color-input-bg) !important;
   backdrop-filter: none !important;
   backdrop-saturate: unset !important;
 }

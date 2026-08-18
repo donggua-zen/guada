@@ -1,5 +1,5 @@
 <template>
-  <LDialog v-model="dialogVisible" :title="t('session.group.title')" width="420px" :close-on-click-modal="false"
+  <GdDialog v-model="dialogVisible" :title="t('session.group.title')" width="420px" :close-on-click-modal="false"
     destroy-on-close>
     <div class="flex flex-col gap-3">
       <!-- 新建分组 -->
@@ -12,17 +12,17 @@
       </div>
 
       <!-- 分组列表（可拖拽排序） -->
-      <div class="group-list border border-(--color-border) rounded-lg overflow-hidden">
+      <div class="group-list border border-(--gd-color-border) rounded-lg overflow-hidden">
         <div v-if="groups.length === 0" class="py-8 text-center text-sm text-gray-400">
           {{ t('session.group.empty') }}
         </div>
         <div v-else>
           <draggable v-model="localGroups" item-key="id" handle=".drag-handle"
-            @end="onDragEnd" class="divide-y divide-(--color-border)">
+            @end="onDragEnd" class="divide-y divide-(--gd-color-border)">
             <template #item="{ element, index }">
               <div
                 class="group-item flex items-center gap-2 px-3 py-2.5 transition-colors duration-200"
-                :class="{ 'bg-(--color-surface)': editingId === element.id }">
+                :class="{ 'bg-(--gd-color-surface)': editingId === element.id }">
                 <!-- 拖拽手柄 -->
                 <div class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
                   <el-icon class="w-4 h-4">
@@ -73,7 +73,7 @@
         </ul>
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -84,7 +84,7 @@ import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { usePopup } from '@/composables/usePopup'
 import { ReOrderDotsHorizontal20Regular, Edit16Regular, Delete20Regular } from '@vicons/fluent'
 import type { SessionGroup } from '@/types/session'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -223,7 +223,7 @@ const onDragEnd = async () => {
 }
 
 .group-item:hover {
-  background-color: var(--color-sidebar-bg-hover);
+  background-color: var(--gd-color-sidebar-bg-hover);
 }
 
 .drag-handle {

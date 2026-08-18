@@ -1,5 +1,5 @@
 <template>
-  <LDialog
+  <GdDialog
     :model-value="visible"
     @update:model-value="onVisibleChange"
     width="480px"
@@ -18,8 +18,8 @@
           </svg>
         </div>
         <div>
-          <h3 class="text-base font-semibold text-(--color-text-primary)">{{ t('ui.update.foundNew') }}</h3>
-          <p class="text-xs text-(--color-text-secondary)">{{ t('ui.update.versionInfo', { current: updateInfo?.clientVersion, latest: updateInfo?.version }) }}</p>
+          <h3 class="text-base font-semibold text-(--gd-color-text-primary)">{{ t('ui.update.foundNew') }}</h3>
+          <p class="text-xs text-(--gd-color-text-secondary)">{{ t('ui.update.versionInfo', { current: updateInfo?.clientVersion, latest: updateInfo?.version }) }}</p>
         </div>
       </div>
     </template>
@@ -27,7 +27,7 @@
     <!-- 内容区 -->
     <div class="space-y-4">
       <!-- 发布日期 -->
-      <div class="flex items-center gap-2 text-xs text-(--color-text-secondary)">
+      <div class="flex items-center gap-2 text-xs text-(--gd-color-text-secondary)">
         <svg class="w-3.5 h-3.5" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
           <path d="M512 64C264.576 64 64 264.576 64 512s200.576 448 448 448 448-200.576 448-448S759.424 64 512 64z m0 832c-211.744 0-384-172.256-384-384S300.256 128 512 128s384 172.256 384 384-172.256 384-384 384z" fill="currentColor"/>
           <path d="M672 352H352c-17.664 0-32 14.336-32 32v256c0 17.664 14.336 32 32 32h320c17.664 0 32-14.336 32-32V384c0-17.664-14.336-32-32-32z m-32 256H384V416h256v192z" fill="currentColor"/>
@@ -38,8 +38,8 @@
 
       <!-- 更新描述 -->
       <div>
-        <h4 class="text-sm font-medium text-(--color-text-primary) mb-2">{{ t('ui.update.content') }}</h4>
-        <p class="text-sm text-(--color-text-secondary) leading-relaxed whitespace-pre-wrap">{{ updateInfo?.description || t('ui.update.noDescription') }}</p>
+        <h4 class="text-sm font-medium text-(--gd-color-text-primary) mb-2">{{ t('ui.update.content') }}</h4>
+        <p class="text-sm text-(--gd-color-text-secondary) leading-relaxed whitespace-pre-wrap">{{ updateInfo?.description || t('ui.update.noDescription') }}</p>
       </div>
 
       <!-- 强制更新提示 -->
@@ -68,14 +68,14 @@
         </div>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElCheckbox } from 'element-plus'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -132,5 +132,5 @@ const handleViewChangelog = () => {
 </script>
 
 <style scoped>
-/* LDialog scoped styles handle dialog body/header/footer — no :deep overrides needed */
+/* GdDialog scoped styles handle dialog body/header/footer — no :deep overrides needed */
 </style>

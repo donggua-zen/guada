@@ -3,11 +3,11 @@
     :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
-      <LTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
+      <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
         <div class="header-icon-btn" @click="layoutStore.toggleSidebar()">
           <LeftBarIcon class="w-5 h-5" />
         </div>
-      </LTooltip>
+      </GdTooltip>
     </div>
 
     <!-- 中间：标题区域 -->
@@ -32,7 +32,7 @@ import { useLayoutStore } from '@/stores/layout'
 import { useI18n } from 'vue-i18n'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
 import WindowControls from '@/components/WindowControls.vue'
-import LTooltip from '@/components/ui/LTooltip.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const { t } = useI18n()
 
@@ -74,19 +74,19 @@ defineProps<{
     justify-content: center;
     padding: 4px;
     border-radius: 8px;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
 }
 
 .header-icon-btn:hover {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
 }
 
 .header-icon-btn.active {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
 }
 </style>

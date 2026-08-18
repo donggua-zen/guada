@@ -1,5 +1,5 @@
 <template>
-  <CustomPopover :show="visible" @update:show="handleVisibleChange" :width="220" :anchor-el="anchorEl">
+  <GdPopover :show="visible" @update:show="handleVisibleChange" :width="220" :anchor-el="anchorEl">
     <template #header>
       <div class="flex items-center gap-2 px-1 pb-2 pt-1">
         <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.input.tokenLimit') }}</span>
@@ -13,14 +13,14 @@
         <span class="text-xs text-gray-400 dark:text-gray-500">1M</span>
       </div>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElSlider } from 'element-plus'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 
 const { t } = useI18n()
 

@@ -1,5 +1,5 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="320" :max-height="400"
+  <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="320" :max-height="400"
     :anchor-el="anchorEl" popper-class="kb-popover compact-popover">
     <template #header>
       <div class="mb-3">
@@ -39,7 +39,7 @@
         </div>
       </div>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
@@ -48,7 +48,7 @@ import { useI18n } from 'vue-i18n'
 import { ElInput, ElCheckbox, ElIcon } from 'element-plus'
 import { Search12Regular } from '@vicons/fluent'
 import ScrollContainer from '../../ui/ScrollContainer.vue'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 
 const { t } = useI18n()
 
@@ -102,11 +102,11 @@ watch(() => props.visible, (newVal) => {
 }
 
 .kb-item-compact:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .kb-item-active {
-  background: var(--color-sidebar-bg-active);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 .kb-list-container {

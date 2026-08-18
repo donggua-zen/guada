@@ -105,13 +105,13 @@ onUnmounted(() => {
 .window-add-btn {
   padding: 4px;
   margin-right: 8px;
-  color: var(--color-text-secondary, #9ca3af);
+  color: var(--gd-color-text-secondary, #9ca3af);
   transition: all 0.2s;
 }
 
 .window-add-btn:hover {
-  color: var(--color-primary, #3b82f6);
-  background: var(--color-hover-bg, #f3f4f6);
+  color: var(--gd-color-primary, #3b82f6);
+  background: var(--gd-color-hover-bg, #f3f4f6);
   border-radius: 4px;
 }
 </style>

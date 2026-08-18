@@ -5,30 +5,30 @@
             class="flex items-center h-10 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 工作区 / 预览区 切换按钮 -->
             <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
-                <LTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
+                <GdTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
                   <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: panelMode === 'tree' }"
                       @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
                       <el-icon :size="20">
                           <Folder16Regular />
                       </el-icon>
                   </button>
-                </LTooltip>
-                <LTooltip :content="t('chat.workspace.previewArea')" placement="bottom">
+                </GdTooltip>
+                <GdTooltip :content="t('chat.workspace.previewArea')" placement="bottom">
                   <button class="seg-btn" :class="{ active: panelMode === 'preview' }" :disabled="!props.sessionId"
                       @click="enterPreviewMode">
                       <el-icon :size="20">
                           <Window16Regular />
                       </el-icon>
                   </button>
-                </LTooltip>
-                <LTooltip :content="t('git.title')" placement="bottom">
+                </GdTooltip>
+                <GdTooltip :content="t('git.title')" placement="bottom">
                   <button class="seg-btn" :class="{ active: panelMode === 'git' }" :disabled="!props.sessionId"
                       @click="enterGitMode">
                       <el-icon :size="20">
                           <Branch20Regular />
                       </el-icon>
                   </button>
-                </LTooltip>
+                </GdTooltip>
             </div>
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
@@ -69,27 +69,27 @@
                 </div>
 
                 <!-- 新建标签按钮：进入预览模式并取消当前选中（显示空状态页） -->
-                <LTooltip :content="t('chat.workspace.newTab')" placement="bottom">
+                <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
                     <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="deselectAllTabs">
                         <el-icon size="14">
                             <Plus />
                         </el-icon>
                     </button>
-                </LTooltip>
+                </GdTooltip>
             </div>
 
             <!-- 弹性占位（拖拽区域） -->
             <div class="flex-1"></div>
 
             <!-- 全屏按钮 -->
-            <LTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
+            <GdTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
                 <button class="sidebar-tool-btn no-drag" @click="layoutStore.toggleWorkspaceFullscreen()">
                     <el-icon :size="16">
                         <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
                         <ArrowMinimize16Regular v-else />
                     </el-icon>
                 </button>
-            </LTooltip>
+            </GdTooltip>
 
             <!-- 窗口控制按钮（仅 Electron） -->
             <WindowControls v-if="isElectron" class="no-drag" />
@@ -106,29 +106,29 @@
                     {{ t('chat.workspace.workingDir') }}</h3>
                 <div class="flex items-center gap-0 shrink-0">
                     <!-- 打开文件夹按钮（仅 Electron 环境） -->
-                    <LTooltip v-if="isElectron" :content="t('chat.workspace.openInFileManager')" placement="bottom">
+                    <GdTooltip v-if="isElectron" :content="t('chat.workspace.openInFileManager')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openInFileManager">
                             <el-icon size="15">
                                 <WindowsExplorer />
                             </el-icon>
                         </el-button>
-                    </LTooltip>
+                    </GdTooltip>
                     <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
-                    <LTooltip v-if="isElectron" :content="t('chat.workspace.openInVSCode')" placement="bottom">
+                    <GdTooltip v-if="isElectron" :content="t('chat.workspace.openInVSCode')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
                             <el-icon size="15">
                                 <VsCode />
                             </el-icon>
                         </el-button>
-                    </LTooltip>
+                    </GdTooltip>
                     <!-- 刷新按钮 -->
-                    <LTooltip :content="t('chat.workspace.refresh')" placement="bottom">
+                    <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
                             <el-icon size="15">
                                 <Refresh />
                             </el-icon>
                         </el-button>
-                    </LTooltip>
+                    </GdTooltip>
                 </div>
             </div>
 
@@ -198,7 +198,7 @@ import { Folder16Regular, Window16Regular, Branch20Regular, ArrowMinimize16Regul
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
-import LTooltip from '@/components/ui/LTooltip.vue';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
@@ -1372,7 +1372,7 @@ onUnmounted(() => {
 
 /* 工作目录工具按钮 - 纯图标无框样式 */
 .workspace-tool-btn {
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     cursor: pointer;
     font-size: 14px;
     height: 24px;
@@ -1390,8 +1390,8 @@ onUnmounted(() => {
 }
 
 .workspace-tool-btn:hover {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
 }
 
 .drag-region {
@@ -1412,15 +1412,15 @@ onUnmounted(() => {
     border-radius: 8px;
     background: transparent;
     cursor: pointer;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     flex-shrink: 0;
     align-self: center;
     transition: all 0.2s;
 }
 
 .sidebar-tool-btn:hover:not(:disabled) {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
 }
 
 .sidebar-tool-btn:disabled {
@@ -1453,12 +1453,12 @@ onUnmounted(() => {
 }
 
 .browser-tab:hover {
-    background: var(--color-sidebar-bg-hover);
+    background: var(--gd-color-sidebar-bg-hover);
 }
 
 .browser-tab.active {
-    background: var(--color-sidebar-bg-active);
-    color: var(--color-sidebar-text-active);
+    background: var(--gd-color-sidebar-bg-active);
+    color: var(--gd-color-sidebar-text-active);
 }
 
 .tab-favicon {
@@ -1476,13 +1476,13 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
 }
 
 .tab-title {
     font-size: 13px;
     line-height: 1;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1490,7 +1490,7 @@ onUnmounted(() => {
 }
 
 .browser-tab.active .tab-title {
-    color: var(--color-sidebar-text-active);
+    color: var(--gd-color-sidebar-text-active);
     font-weight: 500;
 }
 
@@ -1506,7 +1506,7 @@ onUnmounted(() => {
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    color: var(--color-text);
+    color: var(--gd-color-text);
     flex-shrink: 0;
     opacity: 0.7;
     transition: opacity 0.15s, background 0.15s, color 0.15s;
@@ -1522,7 +1522,7 @@ onUnmounted(() => {
     color: #ef4444;
 }
 
-/* ── 悬浮目录树面板（预览模式下） ── 视觉风格对齐 CustomPopover */
+/* ── 悬浮目录树面板（预览模式下） ── 视觉风格对齐 GdPopover */
 
 /* Phase 1 hide: visibility:hidden without transform/opacity to avoid compositing layer flash */
 .tree-hidden-preview {
@@ -1557,8 +1557,8 @@ onUnmounted(() => {
 }
 
 .dark .tree-floating-panel {
-    background: var(--color-surface, #242529);
-    border-color: var(--color-surface-border, #2e3035);
+    background: var(--gd-color-surface, #242529);
+    border-color: var(--gd-color-surface-border, #2e3035);
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
 }
 
@@ -1577,7 +1577,7 @@ onUnmounted(() => {
     padding: 4px;
     border: none;
     background: transparent;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     cursor: pointer;
     border-radius: 8px;
     transition: all 0.2s;
@@ -1590,14 +1590,14 @@ onUnmounted(() => {
 }
 
 .seg-btn:hover:not(:disabled) {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
 }
 
 .seg-btn.active {
-    color: var(--color-text);
-    background: var(--color-sidebar-bg-active);
-    color: var(--color-sidebar-text-active);
+    color: var(--gd-color-text);
+    background: var(--gd-color-sidebar-bg-active);
+    color: var(--gd-color-sidebar-text-active);
 }
 
 .seg-btn:disabled {
@@ -1614,7 +1614,7 @@ onUnmounted(() => {
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     background: transparent;
-    color: var(--color-text-gray);
+    color: var(--gd-color-text-gray);
     cursor: pointer;
     font-size: 13px;
     transition: all 0.15s ease;
@@ -1622,9 +1622,9 @@ onUnmounted(() => {
 }
 
 .empty-state-btn:hover:not(:disabled) {
-    background: var(--color-sidebar-bg-hover);
-    color: var(--color-text);
-    border-color: var(--color-text-gray);
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
+    border-color: var(--gd-color-text-gray);
 }
 
 .empty-state-btn:disabled {
@@ -1633,6 +1633,6 @@ onUnmounted(() => {
 }
 
 .dark .empty-state-btn {
-    border-color: var(--color-surface-border, #2e3035);
+    border-color: var(--gd-color-surface-border, #2e3035);
 }
 </style>

@@ -3,56 +3,56 @@
     <div class="flex items-center h-full no-drag">
       <!-- macOS 下红绿灯占用左上角，隐藏 logo 与文案为侧边栏腾出空间 -->
       <img v-if="!isMac" :src="logoPath" class="h-6 ml-2 mr-2" />
-      <span v-if="!isMac" class="text-xs font-normal text-(--titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
+      <span v-if="!isMac" class="text-xs font-normal text-(--gd-titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->
-      <LTooltip v-if="authStore.isAuthenticated" :content="t('ui.titlebar.searchSession')" placement="bottom">
+      <GdTooltip v-if="authStore.isAuthenticated" :content="t('ui.titlebar.searchSession')" placement="bottom">
         <button class="titlebar-menu-btn" @click="showSearchDialog = true">
           <Search16Regular class="w-4 h-4" />
         </button>
-      </LTooltip>
+      </GdTooltip>
 
       <!-- Debug 下拉菜单（仅 Electron） -->
       <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
-        <LTooltip :content="t('ui.titlebar.debugTools')" placement="bottom">
+        <GdTooltip :content="t('ui.titlebar.debugTools')" placement="bottom">
           <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu">
             <Bug16Regular class="w-4 h-4" />
           </button>
-        </LTooltip>
+        </GdTooltip>
 
         <div v-if="showDebugMenu"
-          class="absolute top-full left-0 mt-1 bg-(--color-sidebar-bg) border border-(--color-titlebar-border) rounded-md shadow-lg min-w-40 z-1000 overflow-hidden">
-          <div class="px-4 py-2 cursor-pointer text-sm text-(--titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg) hover:text-(--color-text)" @click="openDevTools">
+          class="absolute top-full left-0 mt-1 bg-(--gd-color-sidebar-bg) border border-(--gd-color-titlebar-border) rounded-md shadow-lg min-w-40 z-1000 overflow-hidden">
+          <div class="px-4 py-2 cursor-pointer text-sm text-(--gd-titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg) hover:text-(--gd-color-text)" @click="openDevTools">
             <span>{{ t('ui.titlebar.devConsole') }}</span>
           </div>
           <div v-if="migrationStatus === 'available'"
-            class="px-4 py-2 cursor-pointer text-sm text-yellow-400 transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg)" @click="startMigration">
+            class="px-4 py-2 cursor-pointer text-sm text-yellow-400 transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg)" @click="startMigration">
             <span>{{ t('ui.titlebar.dataMigration') }}</span>
           </div>
           <div v-if="migrationStatus === 'migrated'"
             class="px-4 py-2 text-sm text-green-400 whitespace-nowrap opacity-70">
             <span>{{ t('ui.titlebar.dataMigrated') }}</span>
           </div>
-          <div class="px-4 py-2 cursor-pointer text-sm text-(--titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg) hover:text-(--color-text)" @click="openUserDataFolder">
+          <div class="px-4 py-2 cursor-pointer text-sm text-(--gd-titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg) hover:text-(--gd-color-text)" @click="openUserDataFolder">
             <span>{{ t('ui.titlebar.openDataFolder') }}</span>
           </div>
-          <div class="px-4 py-2 cursor-pointer text-sm text-(--titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg) hover:text-(--color-text)" @click="openInstallFolder">
+          <div class="px-4 py-2 cursor-pointer text-sm text-(--gd-titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg) hover:text-(--gd-color-text)" @click="openInstallFolder">
             <span>{{ t('ui.titlebar.openInstallFolder') }}</span>
           </div>
         </div>
       </div>
 
       <!-- GitHub 仓库 -->
-      <LTooltip :content="t('ui.titlebar.githubRepo')" placement="bottom">
+      <GdTooltip :content="t('ui.titlebar.githubRepo')" placement="bottom">
         <button class="titlebar-menu-btn" @click="openInExternalBrowser('https://github.com/donggua-zen/guada')">
           <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
           </svg>
         </button>
-      </LTooltip>
+      </GdTooltip>
 
       <!-- 更新提示 -->
-      <LTooltip v-if="updateAvailable" :content="t('ui.titlebar.newVersionTip')" placement="bottom">
+      <GdTooltip v-if="updateAvailable" :content="t('ui.titlebar.newVersionTip')" placement="bottom">
         <div
           class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
           @click="handleUpdateClick">
@@ -63,7 +63,7 @@
           </svg>
           <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
         </div>
-      </LTooltip>
+      </GdTooltip>
     </div>
   </div>
 
@@ -83,7 +83,7 @@ import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useAuthStore } from '@/stores/auth'
-import LTooltip from '@/components/ui/LTooltip.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI.platform === 'darwin'
@@ -231,7 +231,7 @@ onUnmounted(() => {
   background: transparent;
   cursor: pointer;
   font-size: 12px;
-  color: var(--titlebar-text-color, rgba(255,255,255,0.4));
+  color: var(--gd-titlebar-text-color, rgba(255,255,255,0.4));
   border-radius: 4px;
   transition: all 0.15s ease-in-out;
   outline: none;
@@ -240,7 +240,7 @@ onUnmounted(() => {
 }
 
 .titlebar-menu-btn:hover {
-  background: var(--titlebar-hover-bg, rgba(255,255,255,0.1));
-  color: var(--titlebar-text-color, rgba(255,255,255,0.7));
+  background: var(--gd-titlebar-hover-bg, rgba(255,255,255,0.1));
+  color: var(--gd-titlebar-text-color, rgba(255,255,255,0.7));
 }
 </style>

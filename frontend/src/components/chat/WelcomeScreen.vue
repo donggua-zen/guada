@@ -14,7 +14,7 @@
 
       <!-- 标题和描述 -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-4 text-(--color-primary)">
+        <h1 class="text-3xl font-bold mb-4 text-(--gd-color-primary)">
           {{ session?.character.title || '' }}
         </h1>
         <h2 class="text-lg font-normal text-gray-600 leading-relaxed">

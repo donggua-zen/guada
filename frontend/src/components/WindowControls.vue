@@ -73,7 +73,7 @@ onUnmounted(() => {
    主题 CSS 可覆盖）。变量靠继承传递，不受 scoped 特异性影响。
    关闭按钮保留自身的红底白字逻辑，故排除在外 */
 .window-controls {
-  color: var(--window-controls-color);
+  color: var(--gd-window-controls-color);
 }
 
 .window-controls button {
@@ -81,7 +81,7 @@ onUnmounted(() => {
 }
 
 .window-controls button:not(.close-button):hover {
-  background-color: var(--window-controls-hover-bg);
-  color: var(--window-controls-hover-color);
+  background-color: var(--gd-window-controls-hover-bg);
+  color: var(--gd-window-controls-hover-color);
 }
 </style>

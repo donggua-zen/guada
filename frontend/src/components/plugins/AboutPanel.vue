@@ -4,12 +4,12 @@
             <!-- 应用图标与版本 -->
             <div class="space-y-2">
                 <img :src="logoPath" alt="GuaDa Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
-                <h2 class="text-2xl font-bold text-(--color-text-primary)">GuaDa</h2>
-                <p class="text-sm text-(--color-text-secondary)">{{ t('plugins.about.version', { version: appVersion }) }}</p>
+                <h2 class="text-2xl font-bold text-(--gd-color-text-primary)">GuaDa</h2>
+                <p class="text-sm text-(--gd-color-text-secondary)">{{ t('plugins.about.version', { version: appVersion }) }}</p>
             </div>
 
             <!-- 更新状态区域 -->
-            <div class="w-full bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
+            <div class="w-full bg-(--gd-color-surface-elevated) rounded-lg p-6 border border-(--gd-color-border)">
                 <div class="flex flex-col items-center space-y-4">
                     <div v-if="updateStatus === 'checking'" class="flex items-center space-x-2 text-blue-500">
                         <el-icon class="is-loading"><Loading /></el-icon>
@@ -23,7 +23,7 @@
 
                     <div v-else-if="updateStatus === 'available'" class="space-y-3 w-full">
                         <div class="text-orange-500 font-medium">{{ t('plugins.about.newVersion', { version: updateInfo?.version }) }}</div>
-                        <p class="text-xs text-(--color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || t('plugins.about.noUpdateDesc') }}</p>
+                        <p class="text-xs text-(--gd-color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || t('plugins.about.noUpdateDesc') }}</p>
                         <div class="flex gap-2">
                             <el-button type="primary" @click="handleDownload" class="flex-1">
                                 {{ t('plugins.about.downloadUpdate') }}
@@ -48,26 +48,26 @@
             </div>
 
             <!-- 仓库地址 -->
-            <div class="w-full bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
-                <h3 class="text-sm font-medium text-(--color-text-primary) mb-4">{{ t('plugins.about.repository') }}</h3>
+            <div class="w-full bg-(--gd-color-surface-elevated) rounded-lg p-6 border border-(--gd-color-border)">
+                <h3 class="text-sm font-medium text-(--gd-color-text-primary) mb-4">{{ t('plugins.about.repository') }}</h3>
                 <div class="flex flex-col space-y-3">
                     <div v-for="repo in repositories" :key="repo.url"
-                        class="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-(--color-bg) transition-colors"
+                        class="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-(--gd-color-bg) transition-colors"
                         @click="openRepo(repo.url)">
                         <div class="flex items-center space-x-3">
                             <span class="text-lg">{{ repo.icon }}</span>
                             <div>
-                                <div class="text-sm text-(--color-text-primary)">{{ repo.name }}</div>
-                                <div class="text-xs text-(--color-text-secondary)">{{ repo.url }}</div>
+                                <div class="text-sm text-(--gd-color-text-primary)">{{ repo.name }}</div>
+                                <div class="text-xs text-(--gd-color-text-secondary)">{{ repo.url }}</div>
                             </div>
                         </div>
-                        <el-icon class="text-(--color-text-secondary)"><Link /></el-icon>
+                        <el-icon class="text-(--gd-color-text-secondary)"><Link /></el-icon>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div v-else class="p-8 text-center text-(--color-text-secondary)">
+    <div v-else class="p-8 text-center text-(--gd-color-text-secondary)">
         {{ t('plugins.about.desktopOnly') }}
     </div>
 </template>

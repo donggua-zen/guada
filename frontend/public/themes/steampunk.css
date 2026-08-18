@@ -9,188 +9,188 @@
 /* ---------- 亮色模式：羊皮纸工作台 ---------- */
 [data-theme="steampunk"] {
   /* 主色：紫铜 */
-  --color-primary: #a55e28;
-  --color-primary-hover: #8f5021;
-  --color-primary-active: #6f3e1a;
-  --color-primary-disabled: #d9b98f;
-  --color-primary-text: #fdf6e9;
-  --color-primary-text-disabled: rgba(253, 246, 233, 0.55);
-  --color-primary-50:  #faf3ea;
-  --color-primary-100: #f3e2cd;
-  --color-primary-200: #e5c19a;
-  --color-primary-300: #d49d67;
-  --color-primary-400: #bd7a44;
-  --color-primary-500: #a55e28;
-  --color-primary-600: #8f5021;
-  --color-primary-700: #6f3e1a;
-  --color-primary-800: #4f2c12;
-  --color-primary-900: #311b0b;
-  --color-primary-950: #180d05;
+  --gd-color-primary: #a55e28;
+  --gd-color-primary-hover: #8f5021;
+  --gd-color-primary-active: #6f3e1a;
+  --gd-color-primary-disabled: #d9b98f;
+  --gd-color-primary-text: #fdf6e9;
+  --gd-color-primary-text-disabled: rgba(253, 246, 233, 0.55);
+  --gd-color-primary-50:  #faf3ea;
+  --gd-color-primary-100: #f3e2cd;
+  --gd-color-primary-200: #e5c19a;
+  --gd-color-primary-300: #d49d67;
+  --gd-color-primary-400: #bd7a44;
+  --gd-color-primary-500: #a55e28;
+  --gd-color-primary-600: #8f5021;
+  --gd-color-primary-700: #6f3e1a;
+  --gd-color-primary-800: #4f2c12;
+  --gd-color-primary-900: #311b0b;
+  --gd-color-primary-950: #180d05;
 
   /* 副色：铜绿 */
-  --color-secondary: #3e7d6f;
-  --color-secondary-hover: #356a5e;
-  --color-secondary-active: #285148;
-  --color-secondary-disabled: #a9cfc5;
-  --color-secondary-text: #f2faf7;
-  --color-secondary-text-disabled: rgba(242, 250, 247, 0.55);
-  --color-secondary-50:  #ecf5f2;
-  --color-secondary-100: #d3e9e3;
-  --color-secondary-200: #a5d1c6;
-  --color-secondary-300: #74b3a4;
-  --color-secondary-400: #4f9283;
-  --color-secondary-500: #3e7d6f;
-  --color-secondary-600: #356a5e;
-  --color-secondary-700: #285148;
-  --color-secondary-800: #1c3832;
-  --color-secondary-900: #11221e;
-  --color-secondary-950: #081210;
+  --gd-color-secondary: #3e7d6f;
+  --gd-color-secondary-hover: #356a5e;
+  --gd-color-secondary-active: #285148;
+  --gd-color-secondary-disabled: #a9cfc5;
+  --gd-color-secondary-text: #f2faf7;
+  --gd-color-secondary-text-disabled: rgba(242, 250, 247, 0.55);
+  --gd-color-secondary-50:  #ecf5f2;
+  --gd-color-secondary-100: #d3e9e3;
+  --gd-color-secondary-200: #a5d1c6;
+  --gd-color-secondary-300: #74b3a4;
+  --gd-color-secondary-400: #4f9283;
+  --gd-color-secondary-500: #3e7d6f;
+  --gd-color-secondary-600: #356a5e;
+  --gd-color-secondary-700: #285148;
+  --gd-color-secondary-800: #1c3832;
+  --gd-color-secondary-900: #11221e;
+  --gd-color-secondary-950: #081210;
 
   /* 基础表面与文字 */
-  --color-text: #3a2c1c;
-  --color-text-gray: #7a6448;
-  --color-text-disabled: #b3a181;
-  --color-surface: #f6eeda;
-  --color-surface-border: #d3bd93;
-  --color-bg: #ece0c8;
-  --color-border: #c9b48c;
+  --gd-color-text: #3a2c1c;
+  --gd-color-text-gray: #7a6448;
+  --gd-color-text-disabled: #b3a181;
+  --gd-color-surface: #f6eeda;
+  --gd-color-surface-border: #d3bd93;
+  --gd-color-bg: #ece0c8;
+  --gd-color-border: #c9b48c;
 
   /* 侧边栏（左栏）：皮革 */
-  --color-sidebar-bg: #e4d3b0;
-  --color-sidebar-bg-active: #d6bf91;
-  --color-sidebar-bg-hover: #dcc99e;
-  --color-sidebar-text: #3a2c1c;
-  --color-sidebar-text-hover: #3a2c1c;
-  --color-sidebar-text-active: #3a2c1c;
+  --gd-color-sidebar-bg: #e4d3b0;
+  --gd-color-sidebar-bg-active: #d6bf91;
+  --gd-color-sidebar-bg-hover: #dcc99e;
+  --gd-color-sidebar-text: #3a2c1c;
+  --gd-color-sidebar-text-hover: #3a2c1c;
+  --gd-color-sidebar-text-active: #3a2c1c;
 
   /* 标题栏 */
-  --color-titlebar-bg: #e4d3b0;
-  --color-titlebar-border: #d3bd93;
-  --titlebar-text-color: #3a2c1c;
-  --titlebar-hover-bg: #d6bf91;
+  --gd-color-titlebar-bg: #e4d3b0;
+  --gd-color-titlebar-border: #d3bd93;
+  --gd-titlebar-text-color: #3a2c1c;
+  --gd-titlebar-hover-bg: #d6bf91;
 
   /* 会话列表 */
-  --color-conversation-bg: #ece0c8;
-  --color-conversation-text: #3a2c1c;
-  --color-conversation-border: #d3bd93;
-  --color-conversation-bg-active: #d6bf91;
-  --color-conversation-text-active: #3a2c1c;
-  --color-conversation-bg-hover: #dcc99e;
-  --color-conversation-text-hover: #3a2c1c;
+  --gd-color-conversation-bg: #ece0c8;
+  --gd-color-conversation-text: #3a2c1c;
+  --gd-color-conversation-border: #d3bd93;
+  --gd-color-conversation-bg-active: #d6bf91;
+  --gd-color-conversation-text-active: #3a2c1c;
+  --gd-color-conversation-bg-hover: #dcc99e;
+  --gd-color-conversation-text-hover: #3a2c1c;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #e9d5ac;
-  --color-bubble-user-text: #3a2512;
-  --color-bubble-user-border: #a55e28;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #3a2c1c;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #a55e28;
+  --gd-color-bubble-user-bg: #e9d5ac;
+  --gd-color-bubble-user-text: #3a2512;
+  --gd-color-bubble-user-border: #a55e28;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #3a2c1c;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #a55e28;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #f6eeda;
-  --code-block-bg: #ece0c8;
-  --color-input-bg: #f6eeda;
+  --gd-color-dialog-bg: #f6eeda;
+  --gd-code-block-bg: #ece0c8;
+  --gd-color-input-bg: #f6eeda;
 
   /* 排版与细节 */
-  --size-text-base: 15.5px;
-  --size-text-sm: 14px;
-  --shimmer-base: #b3a181;
-  --shimmer-highlight: #3a2c1c;
+  --gd-size-text-base: 15.5px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #b3a181;
+  --gd-shimmer-highlight: #3a2c1c;
   --theme-font: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
 }
 
 /* ---------- 暗色模式：胡桃木机舱 ---------- */
 html.dark[data-theme="steampunk"] {
   /* 主色：抛光黄铜 */
-  --color-primary: #d9a441;
-  --color-primary-hover: #e0b665;
-  --color-primary-active: #c4912f;
-  --color-primary-disabled: #6b541f;
-  --color-primary-text: #241704;
-  --color-primary-text-disabled: rgba(36, 23, 4, 0.55);
-  --color-primary-50:  #1a1206;
-  --color-primary-100: #2e2109;
-  --color-primary-200: #57400f;
-  --color-primary-300: #8a6417;
-  --color-primary-400: #bd8f27;
-  --color-primary-500: #d9a441;
-  --color-primary-600: #e0b665;
-  --color-primary-700: #e9cb8c;
-  --color-primary-800: #f2e0b8;
-  --color-primary-900: #faf1de;
-  --color-primary-950: #fdfaf3;
+  --gd-color-primary: #d9a441;
+  --gd-color-primary-hover: #e0b665;
+  --gd-color-primary-active: #c4912f;
+  --gd-color-primary-disabled: #6b541f;
+  --gd-color-primary-text: #241704;
+  --gd-color-primary-text-disabled: rgba(36, 23, 4, 0.55);
+  --gd-color-primary-50:  #1a1206;
+  --gd-color-primary-100: #2e2109;
+  --gd-color-primary-200: #57400f;
+  --gd-color-primary-300: #8a6417;
+  --gd-color-primary-400: #bd8f27;
+  --gd-color-primary-500: #d9a441;
+  --gd-color-primary-600: #e0b665;
+  --gd-color-primary-700: #e9cb8c;
+  --gd-color-primary-800: #f2e0b8;
+  --gd-color-primary-900: #faf1de;
+  --gd-color-primary-950: #fdfaf3;
 
   /* 副色：夜光铜绿 */
-  --color-secondary: #57b3a0;
-  --color-secondary-hover: #6fc0af;
-  --color-secondary-active: #45a08d;
-  --color-secondary-disabled: #265048;
-  --color-secondary-text: #081f1a;
-  --color-secondary-text-disabled: rgba(8, 31, 26, 0.55);
-  --color-secondary-50:  #081713;
-  --color-secondary-100: #0e2a24;
-  --color-secondary-200: #174a3f;
-  --color-secondary-300: #22705f;
-  --color-secondary-400: #37937e;
-  --color-secondary-500: #57b3a0;
-  --color-secondary-600: #76c2b1;
-  --color-secondary-700: #99d2c5;
-  --color-secondary-800: #bfe3d9;
-  --color-secondary-900: #e1f3ee;
-  --color-secondary-950: #f2fbf8;
+  --gd-color-secondary: #57b3a0;
+  --gd-color-secondary-hover: #6fc0af;
+  --gd-color-secondary-active: #45a08d;
+  --gd-color-secondary-disabled: #265048;
+  --gd-color-secondary-text: #081f1a;
+  --gd-color-secondary-text-disabled: rgba(8, 31, 26, 0.55);
+  --gd-color-secondary-50:  #081713;
+  --gd-color-secondary-100: #0e2a24;
+  --gd-color-secondary-200: #174a3f;
+  --gd-color-secondary-300: #22705f;
+  --gd-color-secondary-400: #37937e;
+  --gd-color-secondary-500: #57b3a0;
+  --gd-color-secondary-600: #76c2b1;
+  --gd-color-secondary-700: #99d2c5;
+  --gd-color-secondary-800: #bfe3d9;
+  --gd-color-secondary-900: #e1f3ee;
+  --gd-color-secondary-950: #f2fbf8;
 
   /* 基础表面与文字 */
-  --color-text: #e8dcc4;
-  --color-text-gray: #a89271;
-  --color-text-disabled: #6b5a40;
-  --color-surface: #2a1f13;
-  --color-surface-border: #4a3823;
-  --color-bg: #1d150e;
-  --color-border: #4a3823;
+  --gd-color-text: #e8dcc4;
+  --gd-color-text-gray: #a89271;
+  --gd-color-text-disabled: #6b5a40;
+  --gd-color-surface: #2a1f13;
+  --gd-color-surface-border: #4a3823;
+  --gd-color-bg: #1d150e;
+  --gd-color-border: #4a3823;
 
   /* 侧边栏（左栏） */
-  --color-sidebar-bg: #18110a;
-  --color-sidebar-bg-active: #3a2b18;
-  --color-sidebar-bg-hover: #251b0f;
-  --color-sidebar-text: #e8dcc4;
-  --color-sidebar-text-hover: #e8dcc4;
-  --color-sidebar-text-active: #f2e0b8;
+  --gd-color-sidebar-bg: #18110a;
+  --gd-color-sidebar-bg-active: #3a2b18;
+  --gd-color-sidebar-bg-hover: #251b0f;
+  --gd-color-sidebar-text: #e8dcc4;
+  --gd-color-sidebar-text-hover: #e8dcc4;
+  --gd-color-sidebar-text-active: #f2e0b8;
 
   /* 标题栏 */
-  --color-titlebar-bg: #18110a;
-  --color-titlebar-border: #4a3823;
-  --titlebar-text-color: #e8dcc4;
-  --titlebar-hover-bg: #3a2b18;
+  --gd-color-titlebar-bg: #18110a;
+  --gd-color-titlebar-border: #4a3823;
+  --gd-titlebar-text-color: #e8dcc4;
+  --gd-titlebar-hover-bg: #3a2b18;
 
   /* 会话列表 */
-  --color-conversation-bg: #1d150e;
-  --color-conversation-text: #e8dcc4;
-  --color-conversation-border: #4a3823;
-  --color-conversation-bg-active: #3a2b18;
-  --color-conversation-text-active: #f2e0b8;
-  --color-conversation-bg-hover: #251b0f;
-  --color-conversation-text-hover: #e8dcc4;
+  --gd-color-conversation-bg: #1d150e;
+  --gd-color-conversation-text: #e8dcc4;
+  --gd-color-conversation-border: #4a3823;
+  --gd-color-conversation-bg-active: #3a2b18;
+  --gd-color-conversation-text-active: #f2e0b8;
+  --gd-color-conversation-bg-hover: #251b0f;
+  --gd-color-conversation-text-hover: #e8dcc4;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #43301a;
-  --color-bubble-user-text: #f6e9cd;
-  --color-bubble-user-border: #d9a441;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #e8dcc4;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #d9a441;
+  --gd-color-bubble-user-bg: #43301a;
+  --gd-color-bubble-user-text: #f6e9cd;
+  --gd-color-bubble-user-border: #d9a441;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #e8dcc4;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #d9a441;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #2a1f13;
-  --code-block-bg: #1d150e;
-  --color-input-bg: #241a10;
+  --gd-color-dialog-bg: #2a1f13;
+  --gd-code-block-bg: #1d150e;
+  --gd-color-input-bg: #241a10;
 
   /* 排版与细节 */
-  --size-text-base: 15.5px;
-  --size-text-sm: 14px;
-  --shimmer-base: #6b5a40;
-  --shimmer-highlight: #e8dcc4;
+  --gd-size-text-base: 15.5px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #6b5a40;
+  --gd-shimmer-highlight: #e8dcc4;
   --theme-font: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
 }
 
@@ -206,7 +206,7 @@ html[data-theme="steampunk"] body::before {
     repeating-linear-gradient(0deg, rgba(122, 100, 72, 0.05) 0 1px, transparent 1px 4px),
     radial-gradient(900px 600px at 100% 0%, rgba(165, 94, 40, 0.10), transparent 60%),
     radial-gradient(800px 500px at 0% 100%, rgba(62, 125, 111, 0.08), transparent 60%);
-  background-color: var(--color-bg);
+  background-color: var(--gd-color-bg);
 }
 html.dark[data-theme="steampunk"] body::before {
   background-image:
@@ -217,46 +217,46 @@ html.dark[data-theme="steampunk"] body::before {
 
 /* 用户气泡：黄铜包边 + 底部金属压边，对角圆角像铭牌 */
 html[data-theme="steampunk"] .user-section .message-item__card {
-  border: 1.5px solid var(--color-bubble-user-border);
+  border: 1.5px solid var(--gd-color-bubble-user-border);
   border-radius: 4px 16px 4px 16px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    0 3px 0 var(--color-bubble-user-border);
+    0 3px 0 var(--gd-color-bubble-user-border);
 }
 html.dark[data-theme="steampunk"] .user-section .message-item__card {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 3px 0 var(--color-bubble-user-border);
+    0 3px 0 var(--gd-color-bubble-user-border);
 }
 
 /* 助手消息：双线铜规，如古籍栏线 */
 html[data-theme="steampunk"] .assistant-section .message-item__card {
-  border-left: 4px double var(--color-primary);
+  border-left: 4px double var(--gd-color-primary);
   padding-left: 14px;
 }
 
 /* 左栏 / 右栏：铜条收边 + 铆钉点 */
 html[data-theme="steampunk"] .global-sidebar {
-  border-right: 2px solid var(--color-primary);
+  border-right: 2px solid var(--gd-color-primary);
   box-shadow: inset -6px 0 14px rgba(58, 44, 28, 0.10);
 }
 html[data-theme="steampunk"] .workspace-sidebar {
-  border-left: 2px solid var(--color-primary);
+  border-left: 2px solid var(--gd-color-primary);
   box-shadow: inset 6px 0 14px rgba(58, 44, 28, 0.10);
 }
 
 /* 输入框：压边金属槽 */
 html[data-theme="steampunk"] .mock-inputbar {
-  border: 1.5px solid var(--color-primary);
+  border: 1.5px solid var(--gd-color-primary);
   border-radius: 12px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 3px 0 var(--color-primary);
+    0 3px 0 var(--gd-color-primary);
 }
 
 /* 代码块：铆接钢板 */
 html[data-theme="steampunk"] .md-code {
-  border: 1.5px solid var(--color-border);
+  border: 1.5px solid var(--gd-color-border);
   border-radius: 6px;
   box-shadow: inset 0 2px 6px rgba(58, 44, 28, 0.12);
 }

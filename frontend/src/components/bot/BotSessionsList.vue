@@ -15,8 +15,8 @@
         <div 
           class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
           :class="selectedBotId === null 
-            ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)'
-            : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+            ? 'bg-(--gd-color-primary) text-white border-(--gd-color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--gd-color-primary-hover) hover:border-(--gd-color-primary-hover)'
+            : 'bg-(--gd-color-surface) text-(--gd-color-text-gray) border-(--gd-color-border) hover:bg-(--gd-color-primary-100) hover:text-(--gd-color-primary) hover:border-(--gd-color-primary-200)'"
           @click="selectBot(null)">
           {{ t('bot.sessions.allSessions') }}
         </div>
@@ -27,8 +27,8 @@
           :key="bot.id"
           class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
           :class="selectedBotId === bot.id 
-            ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)'
-            : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+            ? 'bg-(--gd-color-primary) text-white border-(--gd-color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--gd-color-primary-hover) hover:border-(--gd-color-primary-hover)'
+            : 'bg-(--gd-color-surface) text-(--gd-color-text-gray) border-(--gd-color-border) hover:bg-(--gd-color-primary-100) hover:text-(--gd-color-primary) hover:border-(--gd-color-primary-200)'"
           @click="selectBot(bot.id)">
           {{ bot.name }}
         </div>

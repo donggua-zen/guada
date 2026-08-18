@@ -38,7 +38,7 @@
       </template>
 
       <!-- 供应商编辑弹窗 -->
-      <LDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
+      <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
         class="provider-modal dialog-with-scroll">
         <div class="dialog-content">
           <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
@@ -95,7 +95,7 @@
             <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
           </span>
         </template>
-      </LDialog>
+      </GdDialog>
     </div>
   </div>
 </template>
@@ -117,7 +117,7 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 // Element Plus 组件导入
 import { ElInput, ElFormItem, ElForm, ElButton, ElSelect, ElOption } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { t } = useI18n()
 const { notify, confirm } = usePopup()

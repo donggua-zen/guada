@@ -143,16 +143,16 @@ const gapText = computed(() => {
   text-align: right;
   user-select: none;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   /* 横向滚动时行号固定钉在左侧（split 列内 / unified 表内同样生效） */
   position: sticky;
   left: 0;
   z-index: 1;
-  /* 项目主题变量（style.css --color-bg，跟随主题切换） */
-  background-color: var(--color-bg);
+  /* 项目主题变量（style.css --gd-color-bg，跟随主题切换） */
+  background-color: var(--gd-color-bg);
   /* 右缘分隔线用背景色 2px：普通行同色不可见；add/del 彩色行上呈现
      面板背景色竖条，把行号区与彩色内容区分开（sticky 滚动时遮住滑过的内容） */
-  border-right: 2px solid var(--color-bg);
+  border-right: 2px solid var(--gd-color-bg);
   /* 条纹周期：1lh（20px）量化成 2px 整数倍 → 整数周期 2px，
      每行 10 个整周期、行间虚线相位对齐（参考项目 bars 指示器公式） */
   --stripe-size: calc(1lh * (1 / round(1lh * (1 / 2px))));
@@ -166,7 +166,7 @@ const gapText = computed(() => {
   flex: 1;
   min-width: max-content;
   padding: 0 12px 0 8px;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 /* ── 新增/删除行：不透明背景（color-mix 混合纯色，滚动时内容不会从行号下透出）。
@@ -175,8 +175,8 @@ const gapText = computed(() => {
 /* 新增行：整行淡绿底 + 行号左侧绿色实线竖条（不做虚线处理）。
    背景同时铺在行 div（可视区兜底）与内容 span（跟随文本宽度 → 横向滚动后不截断） */
 .git-diff-line.git-diff-add {
-  /* 基色用项目主题变量 --color-bg */
-  --diff-bg: color-mix(in srgb, #2da44e 8%, var(--color-bg));
+  /* 基色用项目主题变量 --gd-color-bg */
+  --diff-bg: color-mix(in srgb, #2da44e 8%, var(--gd-color-bg));
   background: var(--diff-bg);
 }
 .git-diff-line.git-diff-add .git-diff-content {
@@ -194,7 +194,7 @@ const gapText = computed(() => {
    background-size 用 --stripe-size（1lh 量化到 2px 整数倍）保证每行
    整数个周期、行间虚线相位对齐（参考项目 bars 指示器实现）。 */
 .git-diff-line.git-diff-del {
-  --diff-bg: color-mix(in srgb, #cf222e 6%, var(--color-bg));
+  --diff-bg: color-mix(in srgb, #cf222e 6%, var(--gd-color-bg));
   background: var(--diff-bg);
 }
 .git-diff-line.git-diff-del .git-diff-content {
@@ -217,10 +217,10 @@ const gapText = computed(() => {
 }
 
 html.dark .git-diff-line.git-diff-add {
-  --diff-bg: color-mix(in srgb, #3fb950 12%, var(--color-bg));
+  --diff-bg: color-mix(in srgb, #3fb950 12%, var(--gd-color-bg));
 }
 html.dark .git-diff-line.git-diff-del {
-  --diff-bg: color-mix(in srgb, #f85149 10%, var(--color-bg));
+  --diff-bg: color-mix(in srgb, #f85149 10%, var(--gd-color-bg));
 }
 html.dark .git-diff-line.git-diff-add .git-diff-line-num {
   box-shadow: inset 3px 0 0 #3fb950;
@@ -238,16 +238,16 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
    （repeating-linear-gradient，明/暗主题自适应）：placeholder 色 8% 浅灰底
    + 25% 斜线，行号区与内容区一体（整行连贯）。 */
 .git-diff-line.git-diff-placeholder .git-diff-line-num {
-  background: color-mix(in srgb, var(--color-text-disabled) 8%, var(--color-bg));
+  background: color-mix(in srgb, var(--gd-color-text-disabled) 8%, var(--gd-color-bg));
 }
 .git-diff-line.git-diff-placeholder .git-diff-content {
   background:
     repeating-linear-gradient(
       -45deg,
       transparent 0 5.6569px,
-      color-mix(in srgb, var(--color-text-disabled) 25%, transparent) 5.6569px 7.0711px
+      color-mix(in srgb, var(--gd-color-text-disabled) 25%, transparent) 5.6569px 7.0711px
     ),
-    color-mix(in srgb, var(--color-text-disabled) 8%, var(--color-bg));
+    color-mix(in srgb, var(--gd-color-text-disabled) 8%, var(--gd-color-bg));
   /* 细斜线 + 相位对齐：-45° 斜向渐变必须按「垂直投影周期」整除 tile 高 ——
      轴周期 7.0711px（= 10px/√2）的垂直投影恰好 10px，tile 高 20px = 2 个整周期，
      行与行之间斜线无缝衔接；条纹轴宽 1.4142px → 实际厚度 = 1.4142px × cos45° = 1px。
@@ -257,13 +257,13 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
 
 /* hunk 头兜底样式（解析失败时） */
 .git-diff-line.git-diff-hunk {
-  background: var(--color-conversation-bg-active);
+  background: var(--gd-color-conversation-bg-active);
 }
 .git-diff-line.git-diff-hunk .git-diff-line-num {
-  background: var(--color-conversation-bg-active);
+  background: var(--gd-color-conversation-bg-active);
 }
 .git-diff-line.git-diff-hunk .git-diff-content {
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   font-size: 11px;
 }
 
@@ -279,7 +279,7 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
 .git-diff-line.git-diff-binary .git-diff-content {
   font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 12px;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -300,8 +300,8 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
   gap: 6px;
   padding: 2px 10px;
   border-radius: 4px;
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text-gray);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text-gray);
   font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 11px;
   user-select: none;
@@ -311,7 +311,7 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
 }
 
 .git-diff-gap-icon {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   flex-shrink: 0;
 }
 
@@ -321,12 +321,12 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
 }
 
 .git-diff-gap-click:hover .git-diff-gap-inner {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
+  background: var(--gd-color-surface-hover);
+  color: var(--gd-color-text);
 }
 
 .git-diff-gap-click:hover .git-diff-gap-icon {
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
 }
 
 /* 展开态（gap-close）：向右箭头旋转 90° 变为向下（对齐文件树 chevron 惯例） */

@@ -55,11 +55,11 @@
         </div>
       </div>
 
-      <!-- 右侧：LiteSplitpanes -->
+      <!-- 右侧：GdSplitpanes -->
       <div class="test-section">
-        <h3>LiteSplitpanes</h3>
+        <h3>GdSplitpanes</h3>
         <div ref="liteContainer" class="split-container">
-          <LiteSplitpanes
+          <GdSplitpanes
             style="height: 100%"
             :split-size="50" :min-size="20" :max-size="80"
             @resize="onLiteResize"
@@ -77,7 +77,7 @@
                 <div v-for="i in 50" :key="i" class="dummy-item">Item {{ i }}</div>
               </div>
             </template>
-          </LiteSplitpanes>
+          </GdSplitpanes>
         </div>
         <div class="metrics">
           <div class="metric">
@@ -106,7 +106,7 @@
       <el-table :data="compareData" style="width: 100%">
         <el-table-column prop="metric" label="指标" width="120" />
         <el-table-column prop="native" label="原生 splitpanes" />
-        <el-table-column prop="lite" label="LiteSplitpanes" />
+        <el-table-column prop="lite" label="GdSplitpanes" />
         <el-table-column prop="diff" label="差异">
           <template #default="{ row }">
             <span :class="row.better ? 'better' : 'worse'">{{ row.diff }}</span>
@@ -121,7 +121,7 @@
 import { ref, computed } from 'vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
-import { LiteSplitpanes } from '../ui';
+import { GdSplitpanes } from '../ui';
 import { usePerfMonitor } from '@/composables/usePerfMonitor';
 import { ElButton, ElTable, ElTableColumn } from 'element-plus';
 
@@ -129,7 +129,7 @@ import { ElButton, ElTable, ElTableColumn } from 'element-plus';
 const nativeMonitor = usePerfMonitor();
 const nativeMetrics = nativeMonitor.metrics;
 
-// LiteSplitpanes 性能监控
+// GdSplitpanes 性能监控
 const liteMonitor = usePerfMonitor();
 const liteMetrics = liteMonitor.metrics;
 

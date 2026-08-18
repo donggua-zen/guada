@@ -1,10 +1,10 @@
 <!-- KnowledgeBasePage/KBSidebar.vue -->
 <template>
-    <div class="kb-sidebar h-full flex flex-col bg-(--color-conversation-bg)">
+    <div class="kb-sidebar h-full flex flex-col bg-(--gd-color-conversation-bg)">
         <!-- 头部 -->
         <div class="px-4 pt-2.5 pb-2.5 ">
             <div class="flex justify-between items-center">
-                <span class="font-semibold text-base text-(--color-text)">{{ t('knowledge.sidebar.title') }}</span>
+                <span class="font-semibold text-base text-(--gd-color-text)">{{ t('knowledge.sidebar.title') }}</span>
                 <el-button type="primary" @click="handleCreate" :icon="Plus">
                     {{ t('knowledge.sidebar.create') }}
                 </el-button>
@@ -154,19 +154,19 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
 <style scoped>
 /* 搜索框样式 */
 .search-box :deep(.el-input__wrapper) {
-    background-color: var(--color-surface);
+    background-color: var(--gd-color-surface);
     border-radius: 8px;
-    box-shadow: 0 0 0 1px var(--color-border) inset;
+    box-shadow: 0 0 0 1px var(--gd-color-border) inset;
     padding: 6px 12px;
     transition: all 0.2s ease;
 }
 
 .search-box :deep(.el-input__wrapper:hover) {
-    box-shadow: 0 0 0 1px var(--color-primary-300) inset;
+    box-shadow: 0 0 0 1px var(--gd-color-primary-300) inset;
 }
 
 .search-box :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--color-primary) inset;
+    box-shadow: 0 0 0 1px var(--gd-color-primary) inset;
 }
 
 .search-box :deep(.el-input__inner) {
@@ -186,17 +186,17 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
 }
 
 .kb-item-inactive {
-    color: var(--color-text);
+    color: var(--gd-color-text);
 }
 
 .kb-item-inactive:hover {
-    background-color: var(--color-conversation-bg-hover);
-    color: var(--color-conversation-text-hover);
+    background-color: var(--gd-color-conversation-bg-hover);
+    color: var(--gd-color-conversation-text-hover);
 }
 
 .kb-item-active {
-    background-color: var(--color-conversation-bg-active);
-    color: var(--color-conversation-text-active);
+    background-color: var(--gd-color-conversation-bg-active);
+    color: var(--gd-color-conversation-text-active);
 }
 
 .kb-title {
@@ -207,7 +207,7 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--color-text-secondary);
+    color: var(--gd-color-text-secondary);
     font-size: 0.75rem;
     margin-left: 2rem;
 }

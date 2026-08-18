@@ -32,17 +32,17 @@
         ↑{{ status?.ahead || 0 }} ↓{{ status?.behind || 0 }}
       </span>
       <div class="flex-1"></div>
-      <LTooltip :content="t('git.refresh')" placement="bottom">
+      <GdTooltip :content="t('git.refresh')" placement="bottom">
         <button class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
           <!-- Refresh 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
           <el-icon :size="16" :class="{ 'is-loading': refreshing }">
             <Refresh />
           </el-icon>
         </button>
-      </LTooltip>
+      </GdTooltip>
       <!-- 视图切换（unified/split）：单按钮，图标随当前状态切换（显示目标视图图标）：
            分栏视图下显示统一视图图标（CalendarAgenda），统一视图下显示分栏图标（DualScreen） -->
-      <LTooltip :content="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" placement="bottom">
+      <GdTooltip :content="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" placement="bottom">
         <button class="git-tool-btn" @click="toggleDiffView">
           <!-- 20 viewBox：原生尺寸 20px，保证像素对齐锐利 -->
           <el-icon :size="20">
@@ -50,14 +50,14 @@
             <DualScreen20Regular v-else />
           </el-icon>
         </button>
-      </LTooltip>
+      </GdTooltip>
       <!-- 右侧变更目录树开关 -->
-      <LTooltip :content="t('git.toggleTree')" placement="bottom">
+      <GdTooltip :content="t('git.toggleTree')" placement="bottom">
         <button class="git-tool-btn" :class="{ 'git-tool-btn--active': showTree }"
           @click="showTree = !showTree">
           <el-icon :size="20"><TextboxAlignTopRotate9020Regular /></el-icon>
         </button>
-      </LTooltip>
+      </GdTooltip>
       <!-- 提交（弹窗：消息 + 是否包含未暂存 + 提交/提交并推送/推送）：胶囊按钮 -->
       <button class="git-commit-btn" :disabled="!isGitRepo || totalChanges === 0"
         @click="git.openCommitDialog()">
@@ -67,9 +67,9 @@
     </div>
 
     <!-- 左：选中文件 diff 预览（弹性，窗口缩小时优先被压缩）| 右：变更文件目录树
-         （固定像素宽，LiteSplitpanes 拖拽分割；优先压缩的仍是 diff 预览，规则不变） -->
+         （固定像素宽，GdSplitpanes 拖拽分割；优先压缩的仍是 diff 预览，规则不变） -->
     <div ref="bodyRef" class="git-body flex-1 min-h-0">
-      <LiteSplitpanes
+      <GdSplitpanes
         :split-size="diffSplitPct"
         :min-size="diffMinPct"
         :max-size="100"
@@ -288,7 +288,7 @@
             </div>
           </div>
         </template>
-      </LiteSplitpanes>
+      </GdSplitpanes>
     </div>
 
     <!-- 提交弹窗已抽为全局组件 GitCommitDialog（数据走 GitStore），
@@ -304,10 +304,10 @@ import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
 import { Refresh, ArrowRight, ArrowDown, Close } from "@element-plus/icons-vue";
 import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
-import { LiteSplitpanes } from "../../ui";
+import { GdSplitpanes } from "../../ui";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
-import LTooltip from "../../ui/LTooltip.vue";
+import GdTooltip from "../../ui/GdTooltip.vue";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
 import type { GitFileChange, GitDiff } from "@/services/modules/git.api";
@@ -414,9 +414,9 @@ let diffLoadSeq = 0;
 const fullHighlight = ref<FullHighlight | null>(null);
 
 /**
- * 目录宽度（右侧固定像素，LiteSplitpanes 拖拽调整，持久化到 localStorage）。
+ * 目录宽度（右侧固定像素，GdSplitpanes 拖拽调整，持久化到 localStorage）。
  * diff 预览在 pane1 弹性吃剩余空间，窗口缩放时优先压缩 diff（规则不变）：
- * 存储与拖拽结果均为像素，渲染时换算 pane1（diff）百分比喂给 LiteSplitpanes
+ * 存储与拖拽结果均为像素，渲染时换算 pane1（diff）百分比喂给 GdSplitpanes
  * （组件内部仍是百分比布局，换算保证 pane2 目录像素不变）。
  */
 const MIN_TREE_WIDTH = 160;
@@ -444,7 +444,7 @@ watch(bodyRef, (el) => {
  * pane1（diff 预览）百分比 = 100 - 目录宽百分比：
  * 目录固定像素宽（treePaneWidthPx），diff 弹性吃剩余空间，
  * 窗口缩放时优先压缩 diff 预览（规则不变）。
- * 目录树隐藏（showTree=false）时返回 100 → LiteSplitpanes 折叠 pane2（diff 占满）。
+ * 目录树隐藏（showTree=false）时返回 100 → GdSplitpanes 折叠 pane2（diff 占满）。
  */
 const diffSplitPct = computed(() => {
   if (!showTree.value) return 100;
@@ -551,7 +551,7 @@ function onTreeRowClick(trow: GitTreeRow): void {
   else if (trow.row) selectRow(trow.row);
 }
 
-/** 右侧变更目录树显隐（持久化；隐藏时 LiteSplitpanes splitSize=100 → pane2 折叠） */
+/** 右侧变更目录树显隐（持久化；隐藏时 GdSplitpanes splitSize=100 → pane2 折叠） */
 const showTree = useStorage("guada-git-tree-visible", true);
 
 /** 各会话上次打开的文件 key（group:path）——切换会话回来恢复选中（持久化） */
@@ -1793,7 +1793,7 @@ defineExpose({ refresh });
 
 <style scoped>
 .git-changes-panel {
-  background: var(--color-bg);
+  background: var(--gd-color-bg);
 }
 
 .git-tool-btn {
@@ -1805,7 +1805,7 @@ defineExpose({ refresh });
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s ease, color 0.15s ease;
@@ -1813,8 +1813,8 @@ defineExpose({ refresh });
 
 /* hover/active 参考标签栏 seg-btn：hover 用侧栏 hover 底、active 用侧栏 active 底，文字色不变 */
 .git-tool-btn:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 
 .git-tool-btn:disabled {
@@ -1844,15 +1844,15 @@ defineExpose({ refresh });
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text);
+  color: var(--gd-color-text);
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
   cursor: pointer;
   max-width: 200px;
   transition: background 0.15s ease;
 }
 .git-branch-chip:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 .git-branch-chip:disabled {
   opacity: 0.5;
@@ -1864,7 +1864,7 @@ defineExpose({ refresh });
   white-space: nowrap;
 }
 .git-branch-chip-chevron {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   flex-shrink: 0;
 }
 
@@ -1879,12 +1879,12 @@ defineExpose({ refresh });
   gap: 6px;
   min-width: 140px;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
 }
 .git-branch-menu-check {
   width: 12px;
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--gd-color-primary);
 }
 .git-branch-menu-name {
   overflow: hidden;
@@ -1898,14 +1898,14 @@ defineExpose({ refresh });
 
 .git-toolbar-ab {
   font-size: 11px;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   white-space: nowrap;
 }
 
 /* 目录树开关激活态：对齐标签栏 seg-btn.active —— 仅背景高亮，文字颜色不变 */
 .git-tool-btn--active {
-  color: var(--color-text);
-  background: var(--color-sidebar-bg-active);
+  color: var(--gd-color-text);
+  background: var(--gd-color-sidebar-bg-active);
 }
 
 /* 提交按钮：胶囊（图片同款白底细边圆角 pill） */
@@ -1915,17 +1915,17 @@ defineExpose({ refresh });
   gap: 5px;
   height: 28px;
   padding: 0 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 14px;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--gd-color-bg);
+  color: var(--gd-color-text);
   font-size: 13px;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .git-commit-btn:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 .git-commit-btn:disabled {
   opacity: 0.45;
@@ -1946,7 +1946,7 @@ defineExpose({ refresh });
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   padding: 8px 12px 4px;
 }
 
@@ -2023,7 +2023,7 @@ defineExpose({ refresh });
 .git-diff-split-col-divider {
   flex-shrink: 0;
   width: 1px;
-  background: var(--color-surface-border);
+  background: var(--gd-color-surface-border);
 }
 
 /* 统一竖向滚动条：两列纵向滚动的单一控制入口（拖滑块/点轨道 → JS 同步两列）。
@@ -2041,7 +2041,7 @@ defineExpose({ refresh });
   left: 2px;
   right: 2px;
   border-radius: 3px;
-  background: var(--color-border);
+  background: var(--gd-color-border);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -2051,7 +2051,7 @@ defineExpose({ refresh });
 .git-diff-vscroll-thumb.dragging,
 /* 轨道聚焦时滑块提亮（键盘可操作指示） */
 .git-diff-vscroll.focused .git-diff-vscroll-thumb {
-  background: var(--color-text-disabled);
+  background: var(--gd-color-text-disabled);
 }
 
 /* 拖拽遮罩：全屏，阻止其他元素响应（原生滚动条拖拽时鼠标捕获，其他元素不响应） */
@@ -2064,7 +2064,7 @@ defineExpose({ refresh });
 
 /* ── 右栏：变更文件目录树 ── */
 .git-body {
-  border-top: 1px solid var(--color-surface-border);
+  border-top: 1px solid var(--gd-color-surface-border);
 }
 
 .git-tree-pane {
@@ -2085,10 +2085,10 @@ defineExpose({ refresh });
   margin: 8px 8px 6px;
   padding: 0 8px;
   height: 30px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 8px;
-  background: var(--color-bg);
-  color: var(--color-text-disabled);
+  background: var(--gd-color-bg);
+  color: var(--gd-color-text-disabled);
 }
 
 .git-tree-search-input {
@@ -2098,11 +2098,11 @@ defineExpose({ refresh });
   outline: none;
   background: transparent;
   font-size: 13px;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 .git-tree-search-input::placeholder {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 
 .git-tree-search-clear {
@@ -2114,14 +2114,14 @@ defineExpose({ refresh });
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .git-tree-search-clear:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
+  background: var(--gd-color-surface-hover);
+  color: var(--gd-color-text);
 }
 
 /* 树列表滚动区（搜索框保持固定） */
@@ -2159,21 +2159,21 @@ defineExpose({ refresh });
   background-image: repeating-linear-gradient(
     to right,
     transparent 0 6px,
-    var(--color-surface-border) 6px 7px,
+    var(--gd-color-surface-border) 6px 7px,
     transparent 7px 14px
   );
   pointer-events: none;
 }
 
 .git-tree-row:hover {
-  /* 与全局侧边栏 hover 一致（--color-sidebar-bg-hover：浅色 rgba(40,5,5,0.05) 微透明，暗色 #2f3131） */
-  background: var(--color-sidebar-bg-hover);
+  /* 与全局侧边栏 hover 一致（--gd-color-sidebar-bg-hover：浅色 rgba(40,5,5,0.05) 微透明，暗色 #2f3131） */
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 /* 树键盘导航高亮行：方向键移动（VS Code 风格），无需鼠标悬停即可见；
    与 hover 区分：用对话高亮底色，避免与悬停完全同色分不清焦点在哪 */
 .git-tree-row--active {
-  background: var(--color-conversation-bg-active);
+  background: var(--gd-color-conversation-bg-active);
 }
 
 /* 树滚动容器可聚焦（键盘导航），去掉聚焦外框 */
@@ -2183,21 +2183,21 @@ defineExpose({ refresh });
 
 .git-tree-row--dir {
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 .git-tree-row--partial .git-tree-name {
-  color: var(--color-warning);
+  color: var(--gd-color-warning);
 }
 
-/* 选中行：与 hover 同一颜色（--color-sidebar-bg-hover，微透明），不加深 */
+/* 选中行：与 hover 同一颜色（--gd-color-sidebar-bg-hover，微透明），不加深 */
 .git-tree-row.selected {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .git-tree-chevron {
   flex-shrink: 0;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   transition: transform 0.15s ease;
 }
 
@@ -2210,7 +2210,7 @@ defineExpose({ refresh });
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 
 .git-status {
@@ -2222,11 +2222,11 @@ defineExpose({ refresh });
   flex-shrink: 0;
 }
 
-.git-status--modified { color: var(--color-warning); }
-.git-status--added { color: var(--color-success); }
-.git-status--deleted { color: var(--color-danger); }
-.git-status--renamed { color: var(--color-primary); }
-.git-status--conflict { color: var(--color-danger); }
+.git-status--modified { color: var(--gd-color-warning); }
+.git-status--added { color: var(--gd-color-success); }
+.git-status--deleted { color: var(--gd-color-danger); }
+.git-status--renamed { color: var(--gd-color-primary); }
+.git-status--conflict { color: var(--gd-color-danger); }
 
 .git-row-actions {
   display: none;
@@ -2248,13 +2248,13 @@ defineExpose({ refresh });
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
 }
 
 .git-row-btn:hover {
-  background: var(--color-conversation-bg-active);
-  color: var(--color-text);
+  background: var(--gd-color-conversation-bg-active);
+  color: var(--gd-color-text);
 }
 
 /* ── 左栏：diff 预览 ── */
@@ -2288,11 +2288,11 @@ defineExpose({ refresh });
   text-align: center;
   padding: 0 16px;
   font-size: 12px;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   user-select: none;
 }
 
-/* 文件头：纵向吸顶 + 横向钉左缘（背景用面板背景色 --color-bg，不透明吸顶不透内容；无底部边框线）。
+/* 文件头：纵向吸顶 + 横向钉左缘（背景用面板背景色 --gd-color-bg，不透明吸顶不透内容；无底部边框线）。
    sticky 的 top 只对纵向滚动生效；必须再给 left:0 才会在横向滚动时固定 ——
    否则 unified 视图横滚（内容比视口宽）时标题栏会跟着内容滑走 */
 .git-diff-header {
@@ -2305,7 +2305,7 @@ defineExpose({ refresh });
   top: 0;
   left: 0;
   z-index: 3;
-  background: var(--color-bg);
+  background: var(--gd-color-bg);
 }
 
 .git-diff-header-path {
@@ -2317,9 +2317,9 @@ defineExpose({ refresh });
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  /* 字体用全局文本基准 --size-text-base（15px） */
-  font-size: var(--size-text-base);
-  color: var(--color-text);
+  /* 字体用全局文本基准 --gd-size-text-base（15px） */
+  font-size: var(--gd-size-text-base);
+  color: var(--gd-color-text);
 }
 
 .git-diff-close {
@@ -2331,7 +2331,7 @@ defineExpose({ refresh });
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
   flex-shrink: 0;
   /* 固定在标题栏最右端 */
@@ -2339,8 +2339,8 @@ defineExpose({ refresh });
 }
 
 .git-diff-close:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
+  background: var(--gd-color-surface-hover);
+  color: var(--gd-color-text);
 }
 
 /* ── diff 统计徽标 +N -M（紧跟标题文字，字体大小与标题统一） ── */
@@ -2350,7 +2350,7 @@ defineExpose({ refresh });
   gap: 6px;
   flex-shrink: 0;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-base);
+  font-size: var(--gd-size-text-base);
   font-weight: 600;
 }
 
@@ -2369,7 +2369,7 @@ html.dark .git-stat-del { color: #f85149; }
   padding: 0 12px 0 8px;
   font-size: 12px;
   line-height: 20px;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 
 /* 字体与行高两种视图共用（拆出行号大小不一致的根源：统一 12px/20px，

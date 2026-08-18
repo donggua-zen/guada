@@ -1,11 +1,11 @@
 <template>
-  <LDialog v-model="dialogVisible" width="520px" :close-on-click-modal="true" :show-close="false"
+  <GdDialog v-model="dialogVisible" width="520px" :close-on-click-modal="true" :show-close="false"
     append-to-body class="session-search-dialog" @open="handleOpen">
     <!-- 搜索输入 -->
     <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <Search16Regular class="w-4 h-4 text-gray-400 shrink-0" />
       <input ref="inputRef" v-model="keyword" type="text" :placeholder="t('session.search.placeholder')"
-        class="flex-1 bg-transparent outline-none text-sm text-(--color-text) placeholder-gray-400"
+        class="flex-1 bg-transparent outline-none text-sm text-(--gd-color-text) placeholder-gray-400"
         @keyup.enter="doSearch" @keyup.esc="dialogVisible = false" />
       <span v-if="isSearching" class="text-xs text-gray-400">{{ t('session.search.searching') }}</span>
     </div>
@@ -29,11 +29,11 @@
           </div>
           <!-- 分组内会话 -->
           <div v-for="session in group.sessions" :key="session.id"
-            class="flex flex-col gap-0.5 px-4 py-2 mx-1 rounded-md cursor-pointer transition-colors duration-150 hover:bg-(--color-sidebar-bg-hover)"
+            class="flex flex-col gap-0.5 px-4 py-2 mx-1 rounded-md cursor-pointer transition-colors duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
             @click="handleSelectSession(session)">
             <div class="flex items-center gap-2">
               <div class="w-1.5 h-1.5 rounded-full bg-gray-400 opacity-50 shrink-0" />
-              <span class="flex-1 truncate text-sm text-(--color-text)" v-html="highlightText(session.title, keyword)">
+              <span class="flex-1 truncate text-sm text-(--gd-color-text)" v-html="highlightText(session.title, keyword)">
               </span>
               <span v-if="session.matchType === 'content'"
                 class="text-xs text-blue-400 shrink-0 px-1 rounded bg-blue-50 dark:bg-blue-900/30">{{ t('session.search.contentMatch') }}</span>
@@ -52,7 +52,7 @@
           <span class="text-xs">{{ t('session.search.loadingMore') }}</span>
         </div>
         <div v-else-if="hasMore" class="flex items-center justify-center py-3 text-gray-400">
-          <button class="text-xs hover:text-(--color-text) transition-colors" @click="loadMore">{{ t('session.search.loadMore') }}</button>
+          <button class="text-xs hover:text-(--gd-color-text) transition-colors" @click="loadMore">{{ t('session.search.loadMore') }}</button>
         </div>
       </template>
 
@@ -68,7 +68,7 @@
         <span class="text-xs">{{ t('session.search.initial') }}</span>
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
@@ -82,7 +82,7 @@ import { apiService } from '@/services/ApiService'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { UNGROUPED_ID } from '@/stores/session'
 import type { SearchSessionResult } from '@/types/session'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -261,5 +261,5 @@ function formatLastActive(dateStr: string | null | undefined): string {
 </script>
 
 <style scoped>
-/* LDialog scoped styles handle dialog body/header — no :deep overrides needed */
+/* GdDialog scoped styles handle dialog body/header — no :deep overrides needed */
 </style>

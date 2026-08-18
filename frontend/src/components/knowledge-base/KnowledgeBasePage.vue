@@ -32,19 +32,19 @@
           <!-- 知识库卡片网格 -->
           <div v-if="filteredKnowledgeBases.length > 0" class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
-              class="kb-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+              class="kb-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
               @click="handleSelectKB(kb)">
               <!-- Header: icon + name + tag -->
               <div class="flex items-center gap-2.5 mb-3">
                 <CardAvatar :name="kb.name" />
-                <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                   {{ kb.name }}
                 </h3>
                 <el-tag size="small" effect="plain">{{ kb.isPublic ? t('knowledge.page.tagPublic') : t('knowledge.page.tagPrivate') }}</el-tag>
               </div>
 
               <!-- Description -->
-              <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+              <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
                 {{ kb.description || t('knowledge.page.noDescription') }}
               </div>
 
@@ -58,7 +58,7 @@
           </div>
 
           <!-- 空状态 -->
-          <div v-else-if="!store.loading" class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+          <div v-else-if="!store.loading" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <MenuBookOutlined />
             </el-icon>
@@ -75,7 +75,7 @@
       <div class="sticky top-0 z-10 flex flex-col max-w-260 mx-auto w-full">
         <div class="px-2 py-3 flex items-center gap-3 w-full">
           <el-button link @click="backToList"
-            class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium">
+            class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium">
             <el-icon :size="22">
               <ArrowLeft24Filled />
             </el-icon>
@@ -142,7 +142,7 @@
   </div>
 
   <!-- 创建/编辑知识库对话框 -->
-  <LDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
+  <GdDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
     <el-form :model="dialogForm" label-width="140px" size="large">
       <el-form-item :label="t('knowledge.page.kbName')" required>
         <el-input v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
@@ -200,7 +200,7 @@
         </el-button>
       </div>
     </template>
-  </LDialog>
+  </GdDialog>
 
   <!-- 文件分块查看弹窗 -->
   <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile" />
@@ -228,7 +228,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()

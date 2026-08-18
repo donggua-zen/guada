@@ -30,8 +30,8 @@
     <!-- 分组筛选标签区域 -->
     <div class="flex flex-wrap gap-1">
       <div class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm" :class="currentGroupId === null
-        ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--color-text-primary) font-medium'
-        : 'text-(--color-text-secondary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
+        ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--gd-color-text-primary) font-medium'
+        : 'text-(--gd-color-text-secondary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
         @click="$emit('selectGroup', null)">
         {{ t('characters.list.all') }}
       </div>
@@ -39,14 +39,14 @@
       <div v-for="group in groups" :key="group.id"
         class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center gap-1"
         :class="currentGroupId === group.id
-          ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--color-text-primary) font-medium'
+          ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--gd-color-text-primary) font-medium'
           : 'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
         @click="$emit('selectGroup', group.id)" @contextmenu.prevent="$emit('renameGroup', group)">
         <span>{{ group.name }}</span>
       </div>
 
       <div
-        class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center text-gray-500 dark:text-[#8b8d95] hover:text-(--color-primary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50"
+        class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center text-gray-500 dark:text-[#8b8d95] hover:text-(--gd-color-primary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50"
         @click="$emit('createGroup')">
         <el-icon :size="14" class="mr-1">
           <PlusOutlined />
@@ -59,7 +59,7 @@
     <div class="flex-1 overflow-y-auto pt-4">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
         <div v-for="character in characters" :key="character.id"
-          class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+          class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--gd-color-primary) transition-all duration-200 overflow-hidden">
           <!-- 毛玻璃背景层 -->
           <div v-if="character.avatarUrl" class="absolute inset-0 z-0" :style="{
             backgroundImage: `url(${character.avatarUrl})`,

@@ -426,7 +426,7 @@ h2 {
   padding: 0 2px;
   margin: 0 2px;
   color: var(--el-text-color-regular);
-  font-size: var(--size-text-base, 14px);
+  font-size: var(--gd-size-text-base, 14px);
   line-height: 1.8;
   cursor: pointer;
   user-select: none;

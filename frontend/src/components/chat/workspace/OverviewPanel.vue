@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowDown, Check } from "@element-plus/icons-vue";
 import {
@@ -211,7 +211,9 @@ watch(
 
 function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
-  tabStore.enterGitMode();
+  // 等 WorkspaceSidebar 挂载后再切 git —— 挂载时其会话 watcher 会 exitGitMode
+  // 回到目录树，若同步设置会被覆盖导致切不到 git 标签
+  nextTick(() => tabStore.enterGitMode());
 }
 
 function openWorkspaceTree(): void {
@@ -222,8 +224,10 @@ function openWorkspaceTree(): void {
 
 function activateBrowser(windowId: string): void {
   layoutStore.setWorkspaceVisible(true);
-  tabStore.enterPreviewMode();
-  tabStore.selectTab(`browser:${windowId}`);
+  nextTick(() => {
+    tabStore.enterPreviewMode();
+    tabStore.selectTab(`browser:${windowId}`);
+  });
 }
 
 async function createBrowser(): Promise<void> {
@@ -235,8 +239,10 @@ async function createBrowser(): Promise<void> {
     });
     if (result.success && result.window?.windowId) {
       layoutStore.setWorkspaceVisible(true);
-      tabStore.enterPreviewMode();
-      tabStore.selectTab(`browser:${result.window.windowId}`);
+      nextTick(() => {
+        tabStore.enterPreviewMode();
+        tabStore.selectTab(`browser:${result.window.windowId}`);
+      });
     }
   } catch (e) {
     console.error("Failed to create browser window:", e);
@@ -248,9 +254,10 @@ async function createBrowser(): Promise<void> {
 .overview-panel {
   display: flex;
   flex-direction: column;
+  width: 100%;
   min-width: 0;
-  background: var(--color-dialog-bg, var(--color-surface));
-  border: 1px solid var(--color-surface-border);
+  background: var(--gd-color-dialog-bg, var(--gd-color-surface));
+  border: 1px solid var(--gd-color-surface-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   overflow: hidden;
@@ -269,7 +276,7 @@ async function createBrowser(): Promise<void> {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   text-transform: uppercase;
 }
 .overview-header-actions {
@@ -289,15 +296,15 @@ async function createBrowser(): Promise<void> {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
 }
 .overview-collapse-btn:hover {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 
-/* 行列表：高度自适应内容（悬浮卡片随内容长高），超高时内部滚动 */
+/* 行列表：高度随内容自适应（悬浮卡片），超高时内部滚动 */
 .overview-rows {
   flex: 0 1 auto;
   min-height: 0;
@@ -320,21 +327,21 @@ async function createBrowser(): Promise<void> {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text);
-  font-size: var(--size-text-sm);
+  color: var(--gd-color-text);
+  font-size: var(--gd-size-text-sm);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
 }
 .overview-row:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 .overview-row:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .overview-row-icon {
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   flex-shrink: 0;
 }
 .overview-row-label {
@@ -348,7 +355,7 @@ async function createBrowser(): Promise<void> {
   flex-shrink: 0;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-size: 12px;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 .overview-row-value--stats {
   display: flex;
@@ -359,13 +366,13 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
 }
 .overview-row-value--empty {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 .overview-row-chevron {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   flex-shrink: 0;
   transition: transform 0.15s ease;
 }
@@ -392,12 +399,12 @@ async function createBrowser(): Promise<void> {
   gap: 6px;
   min-width: 140px;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
 }
 .overview-branch-check {
   width: 12px;
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--gd-color-primary);
 }
 .overview-branch-name {
   overflow: hidden;
@@ -426,19 +433,19 @@ async function createBrowser(): Promise<void> {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--color-success);
+  color: var(--gd-color-success);
 }
 .overview-todo-ring {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid var(--color-text-disabled);
+  border: 1px solid var(--gd-color-text-disabled);
 }
 .overview-todo-spinner {
   width: 9px;
   height: 9px;
-  border: 1.5px solid var(--color-primary-200);
-  border-top-color: var(--color-primary);
+  border: 1.5px solid var(--gd-color-primary-200);
+  border-top-color: var(--gd-color-primary);
   border-radius: 50%;
   animation: overview-spin 0.8s linear infinite;
 }
@@ -447,14 +454,14 @@ async function createBrowser(): Promise<void> {
 }
 .overview-todo-text {
   font-size: 12px;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .overview-todo-item.done .overview-todo-text {
   text-decoration: line-through;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 
 /* 浏览器展开区 */
@@ -472,14 +479,14 @@ async function createBrowser(): Promise<void> {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
 .overview-browser-tab:hover {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 .overview-browser-favicon {
   display: flex;
@@ -488,10 +495,10 @@ async function createBrowser(): Promise<void> {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  background: var(--color-surface-hover);
+  background: var(--gd-color-surface-hover);
   font-size: 9px;
   font-weight: 600;
-  color: var(--color-text-gray);
+  color: var(--gd-color-text-gray);
   flex-shrink: 0;
 }
 .overview-browser-title {
@@ -509,12 +516,12 @@ async function createBrowser(): Promise<void> {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
   font-size: 12px;
   cursor: pointer;
 }
 .overview-browser-new:hover {
-  color: var(--color-text);
-  background: var(--color-sidebar-bg-hover);
+  color: var(--gd-color-text);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 </style>

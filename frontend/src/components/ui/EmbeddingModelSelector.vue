@@ -4,7 +4,7 @@
         <!-- 触发按钮 -->
         <el-button @click="openDialog" plain type="primary" class="w-full flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <el-icon class="text-(--color-primary)">
+                <el-icon class="text-(--gd-color-primary)">
                     <ScienceOutlined />
                 </el-icon>
                 <span class="text-sm">{{ selectedModelName || t('ui.embeddingModel.selectPlaceholder') }}</span>
@@ -15,7 +15,7 @@
         </el-button>
 
         <!-- 模型选择对话框 -->
-        <LDialog v-model="dialogVisible" :title="t('ui.embeddingModel.dialogTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <GdDialog v-model="dialogVisible" :title="t('ui.embeddingModel.dialogTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
             destroy-on-close>
             <!-- 搜索框 -->
             <div class="mb-4">
@@ -77,7 +77,7 @@
                     <el-button type="primary" @click="confirmSelection">{{ t('common.ok') }}</el-button>
                 </div>
             </template>
-        </LDialog>
+        </GdDialog>
     </div>
 </template>
 
@@ -88,7 +88,7 @@ import { ElMessage } from 'element-plus'
 import { ScienceOutlined, SearchFilled, CheckCircleFilled, ArrowDropDownTwotone } from '@vicons/material'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 
 interface Model {

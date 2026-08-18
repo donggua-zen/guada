@@ -3,8 +3,8 @@
   <div class="flex flex-col h-full w-full">
     <template v-if="sessionStore.activeSessionId !== 'new-session'">
       <!-- 可拖拽分割区域 -->
-      <div class="flex-1 overflow-hidden">
-        <LiteSplitpanes :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
+      <div ref="splitContainerRef" class="flex-1 overflow-hidden">
+        <GdSplitpanes :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
           :min-size="layoutStore.workspaceFullscreen ? 0 : 30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"
@@ -13,12 +13,12 @@
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
                   <!-- 工作目录切换 -->
-                  <LTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
+                  <GdTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
                     @click="layoutStore.toggleWorkspace()">
                     <PanelRightExpand20Filled class="w-5 h-5" />
                   </div>
-                  </LTooltip>
+                  </GdTooltip>
                   <!-- 更多操作下拉菜单 -->
                   <DropdownMenu @command="handleMoreSelect">
                     <div class="header-icon-btn">
@@ -37,23 +37,29 @@
               </PageHeader>
 
               <!-- 主体：会话面板（主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换） -->
-              <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器 -->
+              <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器（aside 槽位随之） -->
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
                 <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
                   :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+                  :aside-width="asideWidth" :aside-bleed="asideBleed" @container-resize="onChatContainerResize"
                   @switch-agent="switchTab"
                   @save-settings="handleSaveSessionSettings"
-                  @select-character="handleSelectCharacter" />
+                  @select-character="handleSelectCharacter">
+                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧），
+                       不遮对话内容；宽度不足时由 asideWidth=0 自动隐藏 -->
+                  <template #aside>
+                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                      @collapse="overviewVisible = false" />
+                  </template>
+                </ChatPanel>
               </Teleport>
 
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
 
-              <!-- 工作区概览（悬浮窗：不占布局，位于聊天右上、滚动条内侧；可折叠为小按钮） -->
-              <OverviewPanel v-if="overviewVisible && mainSession" :session-id="mainSession.id"
-                class="overview-float" @collapse="overviewVisible = false" />
-              <button v-else-if="mainSession" class="overview-restore-bar"
+              <!-- 概览折叠后的恢复小按钮（悬浮于右上） -->
+              <button v-if="mainSession && !overviewVisible" class="overview-restore-bar"
                 :title="t('chat.workspace.openOverview')" @click="overviewVisible = true">
                 <el-icon :size="14"><PanelLeftExpand16Filled /></el-icon>
               </button>
@@ -64,7 +70,7 @@
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
               @insert-to-input="handleInsertToInput" @insert-snip="handleInsertSnip" />
           </template>
-        </LiteSplitpanes>
+        </GdSplitpanes>
       </div>
       <!-- 全局提交/推送弹窗（GitChangesPanel 顶部按钮与概览面板共用入口） -->
       <GitCommitDialog v-if="mainSession" />
@@ -95,7 +101,7 @@ import { useTabStore } from "@/stores/tab";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
 import type { Character } from '@/types/character';
-import { LiteSplitpanes } from "../ui";
+import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
 /**
@@ -111,7 +117,7 @@ interface AgentTab {
 
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
-import LTooltip from "@/components/ui/LTooltip.vue";
+import GdTooltip from "@/components/ui/GdTooltip.vue";
 import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
@@ -123,15 +129,81 @@ import {
 import { PanelRightExpand20Filled, PanelLeftExpand16Filled } from "@vicons/fluent";
 import { useStorage } from '@vueuse/core';
 
+// 仅 WorkspaceSidebar 影响「展开工作区」的首次停顿（v-if 懒加载）→ 同步 import；
+// 概览面板 / 提交弹窗与会话/概览关联、按需弹窗，保留懒加载以减小主包
+import WorkspaceSidebar from "./workspace/WorkspaceSidebar.vue";
 const OverviewPanel = defineAsyncComponent(() => import("./workspace/OverviewPanel.vue"));
 const GitCommitDialog = defineAsyncComponent(() => import("./workspace/GitCommitDialog.vue"));
 
 /** 工作区概览列显隐（持久化；折叠为窄条后点按钮恢复） */
 const overviewVisible = useStorage('workspaceOverviewVisible', true);
 
+/**
+ * 概览三态决策（JS 判断）：
+ *   C = 内容宽（决策容器宽 - 两侧 padding 40）；S = 单侧留白 = (C - 消息实际宽)/2
+ *   ASIDE_TOTAL = 概览 280 + gap 8 = 288
+ * - 单侧能放下（S ≥ 288）        → asideWidth=280, bleed=false（悬浮于留白，不避让）
+ * - 单侧放不下、双侧能放（避让后消息仍 744）→ asideWidth=280, bleed=true（padding 让出，消息左移）
+ * - 避让后也放不下（C-288 < 744） → asideWidth=0（隐藏，消息照旧）
+ *
+ * 防动画跳动（方案 A）：工作区展开/收起是分栏动画，宽度逐帧变化会导致三态决策
+ * 来回翻转（避让→隐藏→居中抖动）。切换瞬间按「目标 pane1 宽」预知终态并冻结决策，
+ * 动画结束（~350ms）后解除冻结、恢复 ResizeObserver 跟随。
+ */
+const ASIDE_WIDTH = 280;
+const ASIDE_GAP = 8;
+const ASIDE_TOTAL = ASIDE_WIDTH + ASIDE_GAP;
+const MSG_MAX_WIDTH = 744; // max-w-186
+
+/** 决策用容器宽（冻结期 = 预知目标宽，非冻结期 = ResizeObserver 上报） */
+const chatDecisionWidth = ref(0);
+let decisionFreezeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onChatContainerResize(cw: number): void {
+  if (decisionFreezeTimer) return; // 冻结期忽略动画中间宽度
+  chatDecisionWidth.value = cw;
+}
+
+/** pane1 占总宽比例（split-size / 100）：full/visible/panelMode 任一变化都会驱动动画 */
+function pane1Ratio(): number {
+  if (layoutStore.workspaceFullscreen) return 0;
+  return layoutStore.workspaceVisible ? workspaceSize.value / 100 : 1;
+}
+
+/** 预知终态：切换瞬间按目标 pane1 宽决定概览显隐/避让，并冻结决策至动画结束。
+    总宽 = 分栏容器宽（不随切换变化）；目标 pane1 宽 = 总宽 × 新比例 */
+function freezeDecisionForPaneAnimation(newRatio: number): void {
+  const totalW = splitContainerRef.value?.offsetWidth ?? 0;
+  if (totalW > 0) {
+    chatDecisionWidth.value = totalW * newRatio;
+  }
+  if (decisionFreezeTimer) clearTimeout(decisionFreezeTimer);
+  decisionFreezeTimer = setTimeout(() => {
+    decisionFreezeTimer = null;
+  }, 350);
+}
+
+const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40));
+
+/** 三态结果（宽度/是否避让），0 与 false 表示隐藏 */
+const asideMode = computed<{ width: number; bleed: boolean }>(() => {
+  if (!overviewVisible.value) return { width: 0, bleed: false };
+  const c = chatContentWidth.value;
+  const msgW = Math.min(MSG_MAX_WIDTH, c);
+  const singleGap = (c - msgW) / 2;
+  // 1) 单侧留白足够 → 悬浮（不避让）
+  if (singleGap >= ASIDE_TOTAL) return { width: ASIDE_WIDTH, bleed: false };
+  // 2) 双侧让出后消息仍能保持 744 → 避让（只挤位置）
+  if (c - ASIDE_TOTAL >= MSG_MAX_WIDTH) return { width: ASIDE_WIDTH, bleed: true };
+  // 3) 避让后也放不下 → 隐藏
+  return { width: 0, bleed: false };
+});
+
+const asideWidth = computed(() => asideMode.value.width);
+const asideBleed = computed(() => asideMode.value.bleed);
+
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
-const WorkspaceSidebar = defineAsyncComponent(() => import("./workspace/WorkspaceSidebar.vue"));
 
 // 子 Agent Tab 状态
 const agentTabs = ref<AgentTab[]>([
@@ -330,6 +402,8 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
+/** 分栏容器（LiteSplitpanes 根，总宽稳定不随切换变化） */
+const splitContainerRef = ref<HTMLElement | null>(null);
 // 根据当前模式计算工作目录分割比例
 // 目录树模式：窄宽度 workspaceSplitSize；预览/Git 模式：共享宽宽度 workspacePreviewSplitSize
 const workspaceSize = computed(() =>
@@ -343,6 +417,11 @@ const layoutStore = useLayoutStore();
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
+
+// 分栏动画驱动源（visible/fullscreen/panelMode → pane1Ratio 变化）→ 预知终态冻结
+watch(pane1Ratio, (n) => {
+  freezeDecisionForPaneAnimation(n);
+});
 
 // 全屏模式下 Teleport 延迟一帧启用，避免与 pane collapse 同帧触发 moveTeleport 竞态
 const teleportDisabled = ref(true);
@@ -683,17 +762,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 工作区概览（悬浮窗）：绝对定位于聊天右上、滚动条内侧（right 偏移避开滚动条），
-   不占布局空间；顶部避开 PageHeader（44px）；高度自适应内容（不设 bottom） */
-.overview-float {
-  position: absolute;
-  top: 40px;
-  right: 8px;
-  width: 280px;
-  z-index: 20;
-}
-
-/* 概览折叠后的恢复小按钮（同样悬浮于右上、滚动条内侧） */
+/* 概览折叠后的恢复小按钮（悬浮于右上） */
 .overview-restore-bar {
   display: flex;
   align-items: center;
@@ -704,16 +773,16 @@ onUnmounted(() => {
   width: 28px;
   height: 56px;
   z-index: 20;
-  border: 1px solid var(--color-surface-border);
+  border: 1px solid var(--gd-color-surface-border);
   border-radius: 8px;
-  background: var(--color-dialog-bg, var(--color-surface));
-  color: var(--color-text-gray);
+  background: var(--gd-color-dialog-bg, var(--gd-color-surface));
+  color: var(--gd-color-text-gray);
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 .overview-restore-bar:hover {
-  background: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
 }
 
 .slide-right-enter-active,
@@ -737,7 +806,7 @@ onUnmounted(() => {
 }
 
 :deep(.splitpanes.default-theme .splitpanes__splitter) {
-  background-color: var(--color-sidebar-bg, #f5f5f5);
+  background-color: var(--gd-color-sidebar-bg, #f5f5f5);
   position: relative;
   transition: background-color 0.2s ease;
 }
@@ -782,7 +851,7 @@ onUnmounted(() => {
 </style>
 
 <style>
-/* LDialog scoped styles handle dialog body/header/footer — no global overrides needed */
+/* GdDialog scoped styles handle dialog body/header/footer — no global overrides needed */
 
 /* 工作目录删除警告弹窗样式 */
 .workspace-delete-warning {

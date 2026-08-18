@@ -4,7 +4,7 @@
     <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
       <div class="flex items-center gap-3 min-w-0">
         <el-button link @click="$emit('back')"
-          class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium shrink-0">
+          class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium shrink-0">
           <el-icon :size="20"><ArrowBackIosFilled /></el-icon>
           <span>{{ t('settings.providerDetail.back') }}</span>
         </el-button>
@@ -20,7 +20,7 @@
     <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
       <div class="px-4 pb-4 w-full md:max-w-260 md:mx-auto">
         <!-- 空状态 -->
-        <div v-if="models.length === 0" class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+        <div v-if="models.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
           <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
             <Box16Regular />
           </el-icon>
@@ -35,7 +35,7 @@
         </div>
 
         <!-- 模型列表 -->
-        <div v-else class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) px-3 py-1 mb-4">
+        <div v-else class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) px-3 py-1 mb-4">
           <ul>
             <li v-for="model in models" :key="model.id"
               class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors rounded px-3 -mx-3">
@@ -53,12 +53,12 @@
                       class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
-                          <LTooltip :content="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
+                          <GdTooltip :content="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" />
                             </el-icon>
-                          </LTooltip>
+                          </GdTooltip>
                         </template>
                       </div>
                       <el-icon class="text-gray-300 dark:text-[#3e4046] mx-0.5" :size="12">
@@ -66,24 +66,24 @@
                       </el-icon>
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
-                          <LTooltip :content="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
+                          <GdTooltip :content="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" />
                             </el-icon>
-                          </LTooltip>
+                          </GdTooltip>
                         </template>
                       </div>
                       <template v-if="(model.config?.features || []).length > 0">
                         <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                         <template v-for="feature in (model.config?.features || [])" :key="feature">
-                          <LTooltip :content="getLableName(feature)" placement="top">
+                          <GdTooltip :content="getLableName(feature)" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                               <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                               <ScienceOutlined v-else />
                             </el-icon>
-                          </LTooltip>
+                          </GdTooltip>
                         </template>
                       </template>
                     </div>
@@ -108,7 +108,7 @@
     </div>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <LDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
+    <GdDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
@@ -250,10 +250,10 @@
           <el-button type="primary" @click="handleSaveModel" :loading="saving">{{ t('settings.providerDetail.saveChanges') }}</el-button>
         </div>
       </template>
-    </LDialog>
+    </GdDialog>
 
     <!-- 获取模型列表的模态框 -->
-    <LDialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
+    <GdDialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
       class="model-fetch-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
@@ -284,13 +284,13 @@
                     {{ t('settings.providerDetail.embeddingBadge') }}
                   </span>
                   <template v-for="feature in (model.config?.features || [])" :key="feature">
-                    <LTooltip :content="getLableName(feature)" placement="top">
+                    <GdTooltip :content="getLableName(feature)" placement="top">
                       <el-icon class="hover:text-primary transition-colors" :size="14">
                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                         <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                         <ScienceOutlined v-else />
                       </el-icon>
-                    </LTooltip>
+                    </GdTooltip>
                   </template>
                 </div>
                 <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
@@ -305,7 +305,7 @@
           </div>
         </div>
       </div>
-    </LDialog>
+    </GdDialog>
   </div>
 </template>
 
@@ -315,7 +315,7 @@ import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { ElMessageBox } from 'element-plus'
 import Avatar from '../ui/Avatar.vue'
-import LTooltip from '../ui/LTooltip.vue'
+import GdTooltip from '../ui/GdTooltip.vue'
 import {
   SettingsOutlined,
   RemoveCircleOutlineRound,
@@ -329,7 +329,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
   provider: any
@@ -676,7 +676,7 @@ const handleFetchModels = async () => {
   align-items: center;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--color-primary);
+  color: var(--gd-color-primary);
   cursor: pointer;
   opacity: 0.8;
   transition: opacity 0.15s;

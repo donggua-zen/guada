@@ -5,7 +5,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">主题模式</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
         >
           <!-- 显示模式 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
@@ -81,7 +81,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">背景壁纸</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
         >
           <!-- 壁纸预览与上传 -->
           <div class="px-4 py-3.5 flex flex-col gap-4">
@@ -123,7 +123,7 @@
                 accept="image/jpeg,image/png,image/webp"
               >
                 <div
-                  class="w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--color-primary) transition-colors"
+                  class="w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
                 >
                   <el-icon class="text-3xl text-gray-400 mb-2">
                     <Plus />
@@ -142,7 +142,7 @@
       <div v-if="previewUrl">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">透明度调节</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
         >
           <!-- 侧边栏透明度 -->
           <div
@@ -198,7 +198,7 @@
       <div v-if="previewUrl">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">毛玻璃效果</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
         >
           <!-- 毛玻璃开关 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
@@ -240,7 +240,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">悬浮任务状态</h3>
         <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--color-surface) overflow-hidden"
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
         >
           <!-- 显隐开关 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">

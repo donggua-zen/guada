@@ -83,7 +83,7 @@ defineExpose({
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    background-color: var(--color-primary, #3b82f6);
+    background-color: var(--gd-color-primary, #3b82f6);
     border: none;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
     cursor: pointer;
@@ -98,7 +98,7 @@ defineExpose({
 
 /* 悬停效果 */
 .scroll-to-bottom-btn:hover {
-    background-color: var(--color-primary-hover, #2563eb);
+    background-color: var(--gd-color-primary-hover, #2563eb);
     box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
     transform: translateX(-50%) translateY(-2px);
 }
@@ -172,12 +172,12 @@ defineExpose({
 /* 深色模式适配 */
 @media (prefers-color-scheme: dark) {
     .scroll-to-bottom-btn {
-        background-color: var(--color-primary, #60a5fa);
+        background-color: var(--gd-color-primary, #60a5fa);
         box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
     }
     
     .scroll-to-bottom-btn:hover {
-        background-color: var(--color-primary-hover, #3b82f6);
+        background-color: var(--gd-color-primary-hover, #3b82f6);
         box-shadow: 0 6px 16px rgba(96, 165, 250, 0.4);
     }
 }

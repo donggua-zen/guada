@@ -9,188 +9,188 @@
 /* ---------- 亮色模式：浅色绘图纸 ---------- */
 [data-theme="blueprint"] {
   /* 主色：绘图蓝 */
-  --color-primary: #2060b0;
-  --color-primary-hover: #1c539a;
-  --color-primary-active: #173f75;
-  --color-primary-disabled: #a7c4e4;
-  --color-primary-text: #ffffff;
-  --color-primary-text-disabled: rgba(255, 255, 255, 0.6);
-  --color-primary-50:  #edf4fb;
-  --color-primary-100: #d7e7f6;
-  --color-primary-200: #adcbe9;
-  --color-primary-300: #7ca9d9;
-  --color-primary-400: #4a82c4;
-  --color-primary-500: #2060b0;
-  --color-primary-600: #1c539a;
-  --color-primary-700: #173f75;
-  --color-primary-800: #112c53;
-  --color-primary-900: #0b1b33;
-  --color-primary-950: #060f1e;
+  --gd-color-primary: #2060b0;
+  --gd-color-primary-hover: #1c539a;
+  --gd-color-primary-active: #173f75;
+  --gd-color-primary-disabled: #a7c4e4;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-primary-50:  #edf4fb;
+  --gd-color-primary-100: #d7e7f6;
+  --gd-color-primary-200: #adcbe9;
+  --gd-color-primary-300: #7ca9d9;
+  --gd-color-primary-400: #4a82c4;
+  --gd-color-primary-500: #2060b0;
+  --gd-color-primary-600: #1c539a;
+  --gd-color-primary-700: #173f75;
+  --gd-color-primary-800: #112c53;
+  --gd-color-primary-900: #0b1b33;
+  --gd-color-primary-950: #060f1e;
 
   /* 副色：标注青 */
-  --color-secondary: #0e8fa8;
-  --color-secondary-hover: #0c7d92;
-  --color-secondary-active: #095e6e;
-  --color-secondary-disabled: #a2dbe5;
-  --color-secondary-text: #ffffff;
-  --color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
-  --color-secondary-50:  #e9f9fb;
-  --color-secondary-100: #c9f0f5;
-  --color-secondary-200: #93e0ea;
-  --color-secondary-300: #55c7d8;
-  --color-secondary-400: #25a7bd;
-  --color-secondary-500: #0e8fa8;
-  --color-secondary-600: #0c7d92;
-  --color-secondary-700: #095e6e;
-  --color-secondary-800: #063f4a;
-  --color-secondary-900: #04262d;
-  --color-secondary-950: #021418;
+  --gd-color-secondary: #0e8fa8;
+  --gd-color-secondary-hover: #0c7d92;
+  --gd-color-secondary-active: #095e6e;
+  --gd-color-secondary-disabled: #a2dbe5;
+  --gd-color-secondary-text: #ffffff;
+  --gd-color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-secondary-50:  #e9f9fb;
+  --gd-color-secondary-100: #c9f0f5;
+  --gd-color-secondary-200: #93e0ea;
+  --gd-color-secondary-300: #55c7d8;
+  --gd-color-secondary-400: #25a7bd;
+  --gd-color-secondary-500: #0e8fa8;
+  --gd-color-secondary-600: #0c7d92;
+  --gd-color-secondary-700: #095e6e;
+  --gd-color-secondary-800: #063f4a;
+  --gd-color-secondary-900: #04262d;
+  --gd-color-secondary-950: #021418;
 
   /* 基础表面与文字 */
-  --color-text: #10314f;
-  --color-text-gray: #4d6f92;
-  --color-text-disabled: #9cb4cc;
-  --color-surface: #f8fbff;
-  --color-surface-border: #b9d2ea;
-  --color-bg: #e9f1f9;
-  --color-border: #9dbfdd;
+  --gd-color-text: #10314f;
+  --gd-color-text-gray: #4d6f92;
+  --gd-color-text-disabled: #9cb4cc;
+  --gd-color-surface: #f8fbff;
+  --gd-color-surface-border: #b9d2ea;
+  --gd-color-bg: #e9f1f9;
+  --gd-color-border: #9dbfdd;
 
   /* 侧边栏（左栏） */
-  --color-sidebar-bg: #e2edf8;
-  --color-sidebar-bg-active: #c9def3;
-  --color-sidebar-bg-hover: #d6e6f5;
-  --color-sidebar-text: #10314f;
-  --color-sidebar-text-hover: #10314f;
-  --color-sidebar-text-active: #10314f;
+  --gd-color-sidebar-bg: #e2edf8;
+  --gd-color-sidebar-bg-active: #c9def3;
+  --gd-color-sidebar-bg-hover: #d6e6f5;
+  --gd-color-sidebar-text: #10314f;
+  --gd-color-sidebar-text-hover: #10314f;
+  --gd-color-sidebar-text-active: #10314f;
 
   /* 标题栏 */
-  --color-titlebar-bg: #e2edf8;
-  --color-titlebar-border: #b9d2ea;
-  --titlebar-text-color: #10314f;
-  --titlebar-hover-bg: #c9def3;
+  --gd-color-titlebar-bg: #e2edf8;
+  --gd-color-titlebar-border: #b9d2ea;
+  --gd-titlebar-text-color: #10314f;
+  --gd-titlebar-hover-bg: #c9def3;
 
   /* 会话列表 */
-  --color-conversation-bg: #e9f1f9;
-  --color-conversation-text: #10314f;
-  --color-conversation-border: #b9d2ea;
-  --color-conversation-bg-active: #c9def3;
-  --color-conversation-text-active: #10314f;
-  --color-conversation-bg-hover: #d6e6f5;
-  --color-conversation-text-hover: #10314f;
+  --gd-color-conversation-bg: #e9f1f9;
+  --gd-color-conversation-text: #10314f;
+  --gd-color-conversation-border: #b9d2ea;
+  --gd-color-conversation-bg-active: #c9def3;
+  --gd-color-conversation-text-active: #10314f;
+  --gd-color-conversation-bg-hover: #d6e6f5;
+  --gd-color-conversation-text-hover: #10314f;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #d3e5f8;
-  --color-bubble-user-text: #0e2a47;
-  --color-bubble-user-border: #2060b0;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #10314f;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #2060b0;
+  --gd-color-bubble-user-bg: #d3e5f8;
+  --gd-color-bubble-user-text: #0e2a47;
+  --gd-color-bubble-user-border: #2060b0;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #10314f;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #2060b0;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #ffffff;
-  --code-block-bg: #f0f6fc;
-  --color-input-bg: #ffffff;
+  --gd-color-dialog-bg: #ffffff;
+  --gd-code-block-bg: #f0f6fc;
+  --gd-color-input-bg: #ffffff;
 
   /* 排版与细节 */
-  --size-text-base: 14.5px;
-  --size-text-sm: 13.5px;
-  --shimmer-base: #9cb4cc;
-  --shimmer-highlight: #10314f;
+  --gd-size-text-base: 14.5px;
+  --gd-size-text-sm: 13.5px;
+  --gd-shimmer-base: #9cb4cc;
+  --gd-shimmer-highlight: #10314f;
   --theme-font: 'Cascadia Code', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 
 /* ---------- 暗色模式：经典蓝晒法 ---------- */
 html.dark[data-theme="blueprint"] {
   /* 主色：图纸白线 */
-  --color-primary: #6fb7ff;
-  --color-primary-hover: #8cc6ff;
-  --color-primary-active: #55a7f5;
-  --color-primary-disabled: #2b5a8f;
-  --color-primary-text: #08203f;
-  --color-primary-text-disabled: rgba(8, 32, 63, 0.55);
-  --color-primary-50:  #06121f;
-  --color-primary-100: #0b2338;
-  --color-primary-200: #12436b;
-  --color-primary-300: #1a65a3;
-  --color-primary-400: #3390d6;
-  --color-primary-500: #6fb7ff;
-  --color-primary-600: #8cc6ff;
-  --color-primary-700: #add6ff;
-  --color-primary-800: #cce5ff;
-  --color-primary-900: #e6f2ff;
-  --color-primary-950: #f5faff;
+  --gd-color-primary: #6fb7ff;
+  --gd-color-primary-hover: #8cc6ff;
+  --gd-color-primary-active: #55a7f5;
+  --gd-color-primary-disabled: #2b5a8f;
+  --gd-color-primary-text: #08203f;
+  --gd-color-primary-text-disabled: rgba(8, 32, 63, 0.55);
+  --gd-color-primary-50:  #06121f;
+  --gd-color-primary-100: #0b2338;
+  --gd-color-primary-200: #12436b;
+  --gd-color-primary-300: #1a65a3;
+  --gd-color-primary-400: #3390d6;
+  --gd-color-primary-500: #6fb7ff;
+  --gd-color-primary-600: #8cc6ff;
+  --gd-color-primary-700: #add6ff;
+  --gd-color-primary-800: #cce5ff;
+  --gd-color-primary-900: #e6f2ff;
+  --gd-color-primary-950: #f5faff;
 
   /* 副色：荧光青 */
-  --color-secondary: #3fd4e0;
-  --color-secondary-hover: #5fdce6;
-  --color-secondary-active: #2cc3d0;
-  --color-secondary-disabled: #1b5b63;
-  --color-secondary-text: #04262d;
-  --color-secondary-text-disabled: rgba(4, 38, 45, 0.55);
-  --color-secondary-50:  #021418;
-  --color-secondary-100: #04262d;
-  --color-secondary-200: #063f4a;
-  --color-secondary-300: #095e6e;
-  --color-secondary-400: #0e8fa8;
-  --color-secondary-500: #3fd4e0;
-  --color-secondary-600: #64dde7;
-  --color-secondary-700: #8fe7ee;
-  --color-secondary-800: #bcf0f4;
-  --color-secondary-900: #e0f9fb;
-  --color-secondary-950: #f3fdfd;
+  --gd-color-secondary: #3fd4e0;
+  --gd-color-secondary-hover: #5fdce6;
+  --gd-color-secondary-active: #2cc3d0;
+  --gd-color-secondary-disabled: #1b5b63;
+  --gd-color-secondary-text: #04262d;
+  --gd-color-secondary-text-disabled: rgba(4, 38, 45, 0.55);
+  --gd-color-secondary-50:  #021418;
+  --gd-color-secondary-100: #04262d;
+  --gd-color-secondary-200: #063f4a;
+  --gd-color-secondary-300: #095e6e;
+  --gd-color-secondary-400: #0e8fa8;
+  --gd-color-secondary-500: #3fd4e0;
+  --gd-color-secondary-600: #64dde7;
+  --gd-color-secondary-700: #8fe7ee;
+  --gd-color-secondary-800: #bcf0f4;
+  --gd-color-secondary-900: #e0f9fb;
+  --gd-color-secondary-950: #f3fdfd;
 
   /* 基础表面与文字 */
-  --color-text: #d9e9fa;
-  --color-text-gray: #8fb2d4;
-  --color-text-disabled: #4a6c92;
-  --color-surface: #0d3560;
-  --color-surface-border: #2f6296;
-  --color-bg: #0a2b4d;
-  --color-border: #2f6296;
+  --gd-color-text: #d9e9fa;
+  --gd-color-text-gray: #8fb2d4;
+  --gd-color-text-disabled: #4a6c92;
+  --gd-color-surface: #0d3560;
+  --gd-color-surface-border: #2f6296;
+  --gd-color-bg: #0a2b4d;
+  --gd-color-border: #2f6296;
 
   /* 侧边栏（左栏） */
-  --color-sidebar-bg: #082544;
-  --color-sidebar-bg-active: #14497e;
-  --color-sidebar-bg-hover: #0d3560;
-  --color-sidebar-text: #d9e9fa;
-  --color-sidebar-text-hover: #d9e9fa;
-  --color-sidebar-text-active: #eaf4ff;
+  --gd-color-sidebar-bg: #082544;
+  --gd-color-sidebar-bg-active: #14497e;
+  --gd-color-sidebar-bg-hover: #0d3560;
+  --gd-color-sidebar-text: #d9e9fa;
+  --gd-color-sidebar-text-hover: #d9e9fa;
+  --gd-color-sidebar-text-active: #eaf4ff;
 
   /* 标题栏 */
-  --color-titlebar-bg: #082544;
-  --color-titlebar-border: #2f6296;
-  --titlebar-text-color: #d9e9fa;
-  --titlebar-hover-bg: #14497e;
+  --gd-color-titlebar-bg: #082544;
+  --gd-color-titlebar-border: #2f6296;
+  --gd-titlebar-text-color: #d9e9fa;
+  --gd-titlebar-hover-bg: #14497e;
 
   /* 会话列表 */
-  --color-conversation-bg: #0a2b4d;
-  --color-conversation-text: #d9e9fa;
-  --color-conversation-border: #2f6296;
-  --color-conversation-bg-active: #14497e;
-  --color-conversation-text-active: #eaf4ff;
-  --color-conversation-bg-hover: #0d3560;
-  --color-conversation-text-hover: #d9e9fa;
+  --gd-color-conversation-bg: #0a2b4d;
+  --gd-color-conversation-text: #d9e9fa;
+  --gd-color-conversation-border: #2f6296;
+  --gd-color-conversation-bg-active: #14497e;
+  --gd-color-conversation-text-active: #eaf4ff;
+  --gd-color-conversation-bg-hover: #0d3560;
+  --gd-color-conversation-text-hover: #d9e9fa;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #11406f;
-  --color-bubble-user-text: #eaf4ff;
-  --color-bubble-user-border: #6fb7ff;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #d9e9fa;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #6fb7ff;
+  --gd-color-bubble-user-bg: #11406f;
+  --gd-color-bubble-user-text: #eaf4ff;
+  --gd-color-bubble-user-border: #6fb7ff;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #d9e9fa;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #6fb7ff;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #0d3560;
-  --code-block-bg: #0a2b4d;
-  --color-input-bg: #0a2b4d;
+  --gd-color-dialog-bg: #0d3560;
+  --gd-code-block-bg: #0a2b4d;
+  --gd-color-input-bg: #0a2b4d;
 
   /* 排版与细节 */
-  --size-text-base: 14.5px;
-  --size-text-sm: 13.5px;
-  --shimmer-base: #4a6c92;
-  --shimmer-highlight: #d9e9fa;
+  --gd-size-text-base: 14.5px;
+  --gd-size-text-sm: 13.5px;
+  --gd-shimmer-base: #4a6c92;
+  --gd-shimmer-highlight: #d9e9fa;
   --theme-font: 'Cascadia Code', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 
@@ -208,7 +208,7 @@ html[data-theme="blueprint"] body::before {
     linear-gradient(rgba(32, 96, 176, 0.20) 1px, transparent 1px),
     linear-gradient(90deg, rgba(32, 96, 176, 0.20) 1px, transparent 1px);
   background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
-  background-color: var(--color-bg);
+  background-color: var(--gd-color-bg);
 }
 html.dark[data-theme="blueprint"] body::before {
   background-image:
@@ -221,35 +221,35 @@ html.dark[data-theme="blueprint"] body::before {
 
 /* 用户气泡：虚线框 + 直角，像图纸上的标注框 */
 html[data-theme="blueprint"] .user-section .message-item__card {
-  border: 1.5px dashed var(--color-bubble-user-border);
+  border: 1.5px dashed var(--gd-color-bubble-user-border);
   border-radius: 2px;
   box-shadow: none;
 }
 
 /* 助手消息：左侧虚线引出，像尺寸标注的延长线 */
 html[data-theme="blueprint"] .assistant-section .message-item__card {
-  border-left: 1.5px dashed var(--color-primary);
+  border-left: 1.5px dashed var(--gd-color-primary);
   padding-left: 14px;
 }
 
 /* 分栏线也用虚线 */
 html[data-theme="blueprint"] .global-sidebar {
-  border-right: 1.5px dashed var(--color-border);
+  border-right: 1.5px dashed var(--gd-color-border);
   box-shadow: none;
 }
 html[data-theme="blueprint"] .workspace-sidebar {
-  border-left: 1.5px dashed var(--color-border);
+  border-left: 1.5px dashed var(--gd-color-border);
 }
 
 /* 输入框：图纸标题栏式的虚线框 */
 html[data-theme="blueprint"] .mock-inputbar {
-  border: 1.5px dashed var(--color-border);
+  border: 1.5px dashed var(--gd-color-border);
   border-radius: 2px;
   box-shadow: none;
 }
 
 /* 代码块：实线框 + 直角 */
 html[data-theme="blueprint"] .md-code {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 2px;
 }

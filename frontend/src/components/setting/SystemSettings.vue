@@ -9,7 +9,7 @@
                 <!-- 返回应用 -->
                 <div class="px-3 pt-3 pb-2">
                     <div @click="goBack"
-                        class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover) transition-all duration-200">
+                        class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover) transition-all duration-200">
                         <ArrowBackIosNewTwotone class="w-4 h-4" />
                         <span>{{ t('settings.system.backToApp') }}</span>
                     </div>
@@ -25,8 +25,8 @@
                             <div v-for="item in group.items" :key="item.path" @click="handleItemClick(item.path)"
                                 class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
                                 :class="currentTabValue === item.path
-                                    ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-                                    : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+                                    ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+                                    : 'text-(--gd-color-text) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
                                 <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
                                 <span class="text-sm font-medium">{{ item.label }}</span>
                             </div>

@@ -1,9 +1,9 @@
 <template>
   <div style="height: 100vh; padding: 20px;">
-    <h2>LiteSplitpanes 简单测试</h2>
+    <h2>GdSplitpanes 简单测试</h2>
     
     <div style="height: 400px; border: 2px solid red;">
-      <LiteSplitpanes
+      <GdSplitpanes
         style="height: 100%;"
         :split-size="50" :min-size="20" :max-size="80"
       >
@@ -20,7 +20,7 @@
             <p>这是第二个面板</p>
           </div>
         </template>
-      </LiteSplitpanes>
+      </GdSplitpanes>
     </div>
     
     <div style="margin-top: 20px;">
@@ -31,5 +31,5 @@
 </template>
 
 <script setup lang="ts">
-import { LiteSplitpanes } from '../ui';
+import { GdSplitpanes } from '../ui';
 </script>

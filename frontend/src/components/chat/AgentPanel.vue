@@ -74,8 +74,8 @@ const runningCount = computed(() =>
 
 <style scoped>
 .agent-panel {
-  border-radius: var(--size-dialog-rounded-radius) var(--size-dialog-rounded-radius) 0 0;
-  background: var(--color-secondary-surface);
+  border-radius: var(--gd-size-dialog-rounded-radius) var(--gd-size-dialog-rounded-radius) 0 0;
+  background: var(--gd-color-secondary-surface);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
   overflow: hidden;
@@ -137,7 +137,7 @@ const runningCount = computed(() =>
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: calc(var(--size-dialog-rounded-radius)/2);
+  border-radius: calc(var(--gd-size-dialog-rounded-radius)/2);
   cursor: pointer;
   transition: background 0.15s;
   margin-top: 2px;

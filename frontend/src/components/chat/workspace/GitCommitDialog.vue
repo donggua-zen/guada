@@ -1,8 +1,8 @@
 <template>
-  <!-- 提交弹窗（自定义 LDialog，极简卡片风格）：分支行 + 无边框输入 + 包含未暂存
+  <!-- 提交弹窗（自定义 GdDialog，极简卡片风格）：分支行 + 无边框输入 + 包含未暂存
        + 统计 + 堆叠操作行（提交/提交并推送/推送）。无标题栏，点遮罩/Esc 关闭。
        数据与提交/推送逻辑全部走 GitStore，供概览面板与 Git 变更面板双入口共用。 -->
-  <LDialog :model-value="git.commitDialogVisible" width="440px" append-to-body :show-close="false"
+  <GdDialog :model-value="git.commitDialogVisible" width="440px" append-to-body :show-close="false"
     class="git-commit-dialog" @update:model-value="git.commitDialogVisible = $event">
     <div class="git-commit-form">
       <!-- 分支行（仅展示当前分支，暂不支持下拉，故无箭头） -->
@@ -47,14 +47,14 @@
         </button>
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { Check } from "@element-plus/icons-vue";
 import { Branch20Regular, BranchFork16Regular, ArrowUpload16Regular } from "@vicons/fluent";
-import LDialog from "../../ui/LDialog.vue";
+import GdDialog from "../../ui/GdDialog.vue";
 import { useGitStore } from "@/stores/git";
 
 const { t } = useI18n();
@@ -81,8 +81,8 @@ const git = useGitStore();
   gap: 6px;
   padding: 2px 2px 6px;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
+  font-size: var(--gd-size-text-sm);
+  color: var(--gd-color-text);
 }
 .git-cd-branch-name {
   overflow: hidden;
@@ -98,13 +98,13 @@ const git = useGitStore();
   outline: none;
   background: transparent;
   padding: 2px;
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
   line-height: 1.5;
   font-family: inherit;
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 .git-cd-message::placeholder {
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 
 /* 复选行 + 右侧统计 */
@@ -121,8 +121,8 @@ const git = useGitStore();
   padding: 2px 0;
   border: none;
   background: transparent;
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
+  font-size: var(--gd-size-text-sm);
+  color: var(--gd-color-text);
   cursor: pointer;
   user-select: none;
 }
@@ -132,17 +132,17 @@ const git = useGitStore();
   justify-content: center;
   width: 14px;
   height: 14px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--gd-color-border);
   border-radius: 3px;
   color: #fff;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .git-cd-check.checked .git-cd-check-box {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  background: var(--gd-color-primary);
+  border-color: var(--gd-color-primary);
 }
 .git-cd-stats {
-  font-size: var(--size-text-sm);
+  font-size: var(--gd-size-text-sm);
 }
 
 /* 堆叠操作行 */
@@ -161,30 +161,30 @@ const git = useGitStore();
   border: none;
   border-radius: 6px;
   background: transparent;
-  font-size: var(--size-text-sm);
-  color: var(--color-text);
+  font-size: var(--gd-size-text-sm);
+  color: var(--gd-color-text);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
 }
 .git-cd-action:hover:not(:disabled) {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 .git-cd-action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 .git-cd-action--primary {
-  background: var(--color-surface-hover);
+  background: var(--gd-color-surface-hover);
 }
 .git-cd-action--primary:hover:not(:disabled) {
-  background: var(--color-conversation-bg-active);
+  background: var(--gd-color-conversation-bg-active);
 }
 .git-cd-action-label {
   flex: 1;
 }
 .git-cd-action-hint {
   font-size: 11px;
-  color: var(--color-text-disabled);
+  color: var(--gd-color-text-disabled);
 }
 </style>

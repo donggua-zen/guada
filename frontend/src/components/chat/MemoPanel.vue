@@ -9,13 +9,13 @@
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.contextUsage')
                 }}</span>
-              <LTooltip :content="t('chat.memo.contextUsageTooltip')" placement="top">
+              <GdTooltip :content="t('chat.memo.contextUsageTooltip')" placement="top">
                 <el-icon
                   class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors"
                   :size="14">
                   <QuestionFilled />
                 </el-icon>
-              </LTooltip>
+              </GdTooltip>
             </div>
             <span class="text-base font-bold" :class="usageColorClass">
               {{ tokenStats.percentage }}%
@@ -172,7 +172,7 @@
     </div>
 
     <!-- 编辑摘要对话框 -->
-    <LDialog v-model="editDialogVisible" :title="t('chat.memo.editSummaryTitle')" width="600px" append-to-body>
+    <GdDialog v-model="editDialogVisible" :title="t('chat.memo.editSummaryTitle')" width="600px" append-to-body>
       <el-input v-model="editingSummary.content" type="textarea" :rows="10"
         :placeholder="t('chat.memo.summaryPlaceholder')" />
       <template #footer>
@@ -181,10 +181,10 @@
           <el-button type="primary" @click="saveEdit">{{ t('chat.memo.save') }}</el-button>
         </span>
       </template>
-    </LDialog>
+    </GdDialog>
 
     <!-- 压缩历史记录对话框 -->
-    <LDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
+    <GdDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
       append-to-body>
       <template v-if="summaries.length > 0">
         <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
@@ -284,7 +284,7 @@
           <el-button @click="historyDialogVisible = false">{{ t('chat.memo.close') }}</el-button>
         </span>
       </template>
-    </LDialog>
+    </GdDialog>
   </div>
 </template>
 
@@ -293,13 +293,13 @@ import { ref, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSessionTokenStats } from '@/composables/useSessionTokenStats';
 import { useDebounceFn } from '@vueuse/core';
-import LDialog from '@/components/ui/LDialog.vue';
+import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
 import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
-import LTooltip from '@/components/ui/LTooltip.vue';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 
 const { confirm, toast } = usePopup();
 const { t } = useI18n();

@@ -36,12 +36,12 @@
             <!-- 技能卡片列表 -->
             <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
                 <div v-for="skill in skills" :key="skill.id"
-                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
                     :style="skill.enabled === false ? { opacity: 0.6 } : {}"
                     @click="handleViewDocumentation(skill.id)">
                     <div class="flex items-center gap-2.5 mb-3">
                         <CardAvatar :name="skill.manifest.name || skill.id" :disabled="skill.enabled === false" />
-                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                             {{ skill.manifest.name || skill.id }}
                         </h3>
                         <el-tag v-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
@@ -49,7 +49,7 @@
                         <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
                     </div>
 
-                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
                     {{ skill.manifest.description || t('plugins.skills.noDescription') }}
                     </p>
 
@@ -63,11 +63,11 @@
                             :loading="uninstallingSkills.has(skill.id)">
                             {{ t('plugins.skills.uninstall') }}
                         </el-button>
-                        <LTooltip v-else-if="skill.source === 'agents'" :content="t('plugins.skills.sharedTooltip')" placement="top">
+                        <GdTooltip v-else-if="skill.source === 'agents'" :content="t('plugins.skills.sharedTooltip')" placement="top">
                             <el-button link size="small" type="danger" disabled>
                                 {{ t('plugins.skills.uninstall') }}
                             </el-button>
-                        </LTooltip>
+                        </GdTooltip>
                         <el-switch
                             :model-value="skill.enabled !== false"
                             :loading="updatingSkills.has(skill.id)"
@@ -84,7 +84,7 @@
 
             <!-- 空状态 -->
             <div v-if="!loading && skills.length === 0"
-                class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) overflow-hidden bg-(--color-surface)">
+                class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) overflow-hidden bg-(--gd-color-surface)">
                 <div class="p-12 text-center">
                     <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
                         <InboxOutlined />
@@ -121,7 +121,7 @@
 
             <!-- 错误提示 -->
             <div v-if="marketError"
-                class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-6 text-center">
+                class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-6 text-center">
                 <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
                     <InboxOutlined />
                 </el-icon>
@@ -134,18 +134,18 @@
             <div v-else-if="marketSkills.length > 0" class="grid gap-3"
                 style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
                 <div v-for="skill in marketSkills" :key="skill.id"
-                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
                     @click="handleShowMarketInstallDialog(skill)">
                     <div class="flex items-center gap-2.5 mb-3">
                         <CardAvatar :name="skill.name" />
-                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                             {{ skill.name }}
                         </h3>
                         <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
                         <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
                     </div>
 
-                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
                     {{ skill.description || t('plugins.skills.noDescription') }}
                     </p>
 
@@ -172,7 +172,7 @@
         </div>
 
         <!-- 查看文档对话框 -->
-        <LDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
+        <GdDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
             align-center destroy-on-close>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
@@ -202,10 +202,10 @@
             <template #footer>
                 <el-button @click="showDocDialog = false">{{ t('common.close') }}</el-button>
             </template>
-        </LDialog>
+        </GdDialog>
 
         <!-- 安装 Skill 对话框 -->
-        <LDialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
+        <GdDialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
             <div class="py-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
                     {{ t('plugins.skills.installDesc') }}
@@ -259,10 +259,10 @@
                     {{ t('plugins.skills.installBtn') }}
                 </el-button>
             </template>
-        </LDialog>
+        </GdDialog>
 
         <!-- 市场技能安装对话框 -->
-        <LDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
+        <GdDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
             <div v-if="selectedMarketSkill" class="py-2">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
                     {{ selectedMarketSkill.name }}
@@ -300,7 +300,7 @@
             <template #footer>
                 <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
             </template>
-        </LDialog>
+        </GdDialog>
     </div>
 </template>
 
@@ -316,8 +316,8 @@ import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from
 import { useMarkdown } from '@/composables/useMarkdown'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
-import LTooltip from '@/components/ui/LTooltip.vue'
-import LDialog from '@/components/ui/LDialog.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 
 interface SkillManifest {
     name: string
@@ -1073,7 +1073,7 @@ onMounted(async () => {
     background-color: #f0f0f2;
     border: none;
     color: #6b6d75;
-    font-size: calc(var(--size-text-base) - 3px);
+    font-size: calc(var(--gd-size-text-base) - 3px);
 }
 html.dark .skills-page :deep(.el-tag) {
     background-color: #2a2a2e;

@@ -86,7 +86,7 @@ defineProps<{
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background-color: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
+  background-color: color-mix(in srgb, var(--gd-color-text) 10%, var(--gd-color-bg));
   flex-shrink: 0;
 }
 
@@ -108,7 +108,7 @@ defineProps<{
 .skeleton-line {
   height: 16px;
   border-radius: 4px;
-  background-color: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
+  background-color: color-mix(in srgb, var(--gd-color-text) 10%, var(--gd-color-bg));
   width: 100%;
 }
 

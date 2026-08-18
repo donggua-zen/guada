@@ -44,19 +44,19 @@
             <!-- 任务卡片网格 -->
             <div v-if="tasks.length > 0" class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
               <div v-for="task in tasks" :key="task.id"
-                class="task-card flex flex-col overflow-hidden p-2.5 rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) transition-all hover:bg-(--color-surface-hover) hover:shadow-sm cursor-pointer"
+                class="task-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
                 @click="handleEditTask(task)">
                 <!-- Header: name + tag -->
                 <div class="flex items-center gap-2.5 mb-3">
                   <CardAvatar :name="task.name" />
-                  <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--size-text-sm);">
+                  <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                     {{ task.name }}
                   </h3>
                   <el-tag v-if="isTaskLimited(task)" size="small" effect="plain">{{ t('scheduler.page.remainingCount', { count: getRemainingCount(task) }) }}</el-tag>
                 </div>
 
                 <!-- Description: prompt -->
-                <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--size-text-base) - 2px);">
+                <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
                   {{ task.prompt }}
                 </div>
 
@@ -83,7 +83,7 @@
             </div>
 
             <!-- 空状态 -->
-            <div v-else class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+            <div v-else class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
               <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mx-auto mb-4">
                 <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
                   <ScheduleOutlined />
@@ -126,7 +126,7 @@
                       <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                   </div>
-                  <div v-else class="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-[#4a4c52] bg-(--color-surface)"></div>
+                  <div v-else class="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-[#4a4c52] bg-(--gd-color-surface)"></div>
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
@@ -150,7 +150,7 @@
                 </el-button>
               </div>
             </div>
-            <div v-else-if="!historyLoading" class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+            <div v-else-if="!historyLoading" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
               <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mx-auto mb-4">
                 <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
                   <HistoryOutlined />
@@ -168,7 +168,7 @@
                 <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('scheduler.page.templatesSubtitle') }}</p>
               </div>
             </div>
-            <div class="rounded-[var(--size-surface-radius)] border border-(--color-surface-border) bg-(--color-surface) p-12 text-center">
+            <div class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
               <div class="w-14 h-14 rounded-full bg-gray-100 dark:bg-[#2a2c30] flex items-center justify-center mx-auto mb-4">
                 <el-icon :size="28" class="text-gray-400 dark:text-[#6b6d75]">
                   <DashboardOutlined />

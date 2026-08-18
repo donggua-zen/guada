@@ -11,8 +11,8 @@
             <div v-for="item in group.items" :key="item.path" @click="tabsValue = item.path"
               class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
               :class="tabsValue === item.path
-                ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-                : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+                ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+                : 'text-(--gd-color-text) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
               <el-icon :size="16">
                 <component :is="item.icon" />
               </el-icon>
@@ -1405,7 +1405,7 @@ defineExpose({
   word-break: break-word !important;
 }
 
-/* 工具配置对话框样式已迁移到 LDialog scoped styles */
+/* 工具配置对话框样式已迁移到 GdDialog scoped styles */
 
 .mcp-server-item {
   transition: all 0.2s;

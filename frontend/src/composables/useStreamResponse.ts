@@ -439,9 +439,21 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     // finish 携带完整内容时，直接覆盖（天然聚合）
     if (response.content !== undefined) {
+      // 防御：上游可能把最后一个内容增量与 finish_reason 打包进 finish chunk，
+      // 导致该增量未单独作为 text 事件存在。此处用权威全量覆盖前，
+      // 先丢弃本 content 的残缺增量缓冲，避免下方 forceFlushContent/flushContent
+      // 把残缺增量反向覆盖回完整内容（造成“最后几块丢失”“非必现”的根因）。
+      if (contentBuffer && currentBufferContentId === content.id) {
+        contentBuffer = null;
+        currentBufferContentId = null;
+      }
       content.content = response.content;
     }
     if (response.reasoningContent !== undefined) {
+      if (contentBuffer && currentBufferContentId === content.id) {
+        contentBuffer = null;
+        currentBufferContentId = null;
+      }
       content.reasoningContent = response.reasoningContent;
     }
 

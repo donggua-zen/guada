@@ -1,10 +1,10 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="260" :anchor-el="anchorEl">
+  <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="260" :anchor-el="anchorEl">
     <template #header>
     </template>
     <div class="popover-content space-y-0.5">
       <div v-for="opt in options" :key="opt.value"
-        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--size-dialog-rounded-radius)"
+        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--gd-size-dialog-rounded-radius)"
         :class="{ 'rm-item--danger': opt.danger }"
         @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
@@ -22,7 +22,7 @@
         </el-icon>
       </div>
     </div>
-  </CustomPopover>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
@@ -30,7 +30,7 @@ import { computed, type Component } from 'vue'
 import { ElIcon } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { DrinkCoffee20Regular, ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, CheckmarkCircle20Filled } from '@vicons/fluent'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 
 const { t } = useI18n()
 
@@ -72,7 +72,7 @@ function handleSelect(mode: string) {
 }
 
 .rm-item:hover {
-  background: var(--color-sidebar-bg-hover);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .rm-item--danger:hover {

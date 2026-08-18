@@ -1,5 +1,5 @@
 <template>
-  <LDialog
+  <GdDialog
     v-model="visible"
     :title="dialogTitle"
     width="46.5rem"
@@ -48,12 +48,12 @@
         </div>
       </div>
     </div>
-  </LDialog>
+  </GdDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import LDialog from "@/components/ui/LDialog.vue";
+import GdDialog from "@/components/ui/GdDialog.vue";
 import { useI18n } from "vue-i18n";
 import { diffLines as computeDiffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";

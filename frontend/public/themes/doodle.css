@@ -9,195 +9,195 @@
 /* ---------- 亮色模式：作业本纸面 ---------- */
 [data-theme="doodle"] {
   /* 主色：蜡笔蓝 */
-  --color-primary: #3a7bd5;
-  --color-primary-hover: #2e6ab8;
-  --color-primary-active: #245a9e;
-  --color-primary-disabled: #9ec5ef;
-  --color-primary-text: #ffffff;
-  --color-primary-text-disabled: rgba(255, 255, 255, 0.55);
+  --gd-color-primary: #3a7bd5;
+  --gd-color-primary-hover: #2e6ab8;
+  --gd-color-primary-active: #245a9e;
+  --gd-color-primary-disabled: #9ec5ef;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.55);
 
-  --color-primary-50:  #eff6fe;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bee3fd;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #6ba6f5;
-  --color-primary-500: #3a7bd5;
-  --color-primary-600: #2e6ab8;
-  --color-primary-700: #245a9e;
-  --color-primary-800: #1a4072;
-  --color-primary-900: #122a4d;
-  --color-primary-950: #0a1a30;
+  --gd-color-primary-50:  #eff6fe;
+  --gd-color-primary-100: #dbeafe;
+  --gd-color-primary-200: #bee3fd;
+  --gd-color-primary-300: #93c5fd;
+  --gd-color-primary-400: #6ba6f5;
+  --gd-color-primary-500: #3a7bd5;
+  --gd-color-primary-600: #2e6ab8;
+  --gd-color-primary-700: #245a9e;
+  --gd-color-primary-800: #1a4072;
+  --gd-color-primary-900: #122a4d;
+  --gd-color-primary-950: #0a1a30;
 
   /* 副色：蜡笔橙 */
-  --color-secondary: #e8854a;
-  --color-secondary-hover: #d6733a;
-  --color-secondary-active: #b85f2e;
-  --color-secondary-disabled: #f5c4a0;
-  --color-secondary-text: #ffffff;
-  --color-secondary-text-disabled: rgba(255, 255, 255, 0.55);
-  --color-secondary-50:  #fdf3ee;
-  --color-secondary-100: #fae3d4;
-  --color-secondary-200: #f5c7a8;
-  --color-secondary-300: #efa67a;
-  --color-secondary-400: #e8854a;
-  --color-secondary-500: #d6733a;
-  --color-secondary-600: #b85f2e;
-  --color-secondary-700: #8a4622;
-  --color-secondary-800: #5c2e16;
-  --color-secondary-900: #3a1d0d;
-  --color-secondary-950: #1f0f07;
+  --gd-color-secondary: #e8854a;
+  --gd-color-secondary-hover: #d6733a;
+  --gd-color-secondary-active: #b85f2e;
+  --gd-color-secondary-disabled: #f5c4a0;
+  --gd-color-secondary-text: #ffffff;
+  --gd-color-secondary-text-disabled: rgba(255, 255, 255, 0.55);
+  --gd-color-secondary-50:  #fdf3ee;
+  --gd-color-secondary-100: #fae3d4;
+  --gd-color-secondary-200: #f5c7a8;
+  --gd-color-secondary-300: #efa67a;
+  --gd-color-secondary-400: #e8854a;
+  --gd-color-secondary-500: #d6733a;
+  --gd-color-secondary-600: #b85f2e;
+  --gd-color-secondary-700: #8a4622;
+  --gd-color-secondary-800: #5c2e16;
+  --gd-color-secondary-900: #3a1d0d;
+  --gd-color-secondary-950: #1f0f07;
 
   /* 基础表面与文字 */
-  --color-text: #3a3328;
-  --color-text-gray: #7a6e5e;
-  --color-text-disabled: #b0a48f;
-  --color-surface: #fbf7ed;
-  --color-surface-border: #d4c9b0;
-  --color-bg: #f7f1e3;
-  --color-border: #c9b896;
+  --gd-color-text: #3a3328;
+  --gd-color-text-gray: #7a6e5e;
+  --gd-color-text-disabled: #b0a48f;
+  --gd-color-surface: #fbf7ed;
+  --gd-color-surface-border: #d4c9b0;
+  --gd-color-bg: #f7f1e3;
+  --gd-color-border: #c9b896;
 
   /* 侧边栏（左栏）：略深的纸面 */
-  --color-sidebar-bg: #f2ebd9;
-  --color-sidebar-bg-active: #e0d4ba;
-  --color-sidebar-bg-hover: #ebe3cd;
-  --color-sidebar-text: #3a3328;
-  --color-sidebar-text-hover: #3a3328;
-  --color-sidebar-text-active: #2a2418;
+  --gd-color-sidebar-bg: #f2ebd9;
+  --gd-color-sidebar-bg-active: #e0d4ba;
+  --gd-color-sidebar-bg-hover: #ebe3cd;
+  --gd-color-sidebar-text: #3a3328;
+  --gd-color-sidebar-text-hover: #3a3328;
+  --gd-color-sidebar-text-active: #2a2418;
 
   /* 标题栏 */
-  --color-titlebar-bg: #f2ebd9;
-  --color-titlebar-border: #d4c9b0;
-  --titlebar-text-color: #3a3328;
-  --titlebar-hover-bg: #e0d4ba;
+  --gd-color-titlebar-bg: #f2ebd9;
+  --gd-color-titlebar-border: #d4c9b0;
+  --gd-titlebar-text-color: #3a3328;
+  --gd-titlebar-hover-bg: #e0d4ba;
 
   /* 会话列表 */
-  --color-conversation-bg: #f7f1e3;
-  --color-conversation-text: #3a3328;
-  --color-conversation-border: #d4c9b0;
-  --color-conversation-bg-active: #e0d4ba;
-  --color-conversation-text-active: #2a2418;
-  --color-conversation-bg-hover: #ebe3cd;
-  --color-conversation-text-hover: #3a3328;
+  --gd-color-conversation-bg: #f7f1e3;
+  --gd-color-conversation-text: #3a3328;
+  --gd-color-conversation-border: #d4c9b0;
+  --gd-color-conversation-bg-active: #e0d4ba;
+  --gd-color-conversation-text-active: #2a2418;
+  --gd-color-conversation-bg-hover: #ebe3cd;
+  --gd-color-conversation-text-hover: #3a3328;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #e3edf8;
-  --color-bubble-user-text: #1a2a40;
-  --color-bubble-user-border: #3a7bd5;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #3a3328;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #3a7bd5;
+  --gd-color-bubble-user-bg: #e3edf8;
+  --gd-color-bubble-user-text: #1a2a40;
+  --gd-color-bubble-user-border: #3a7bd5;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #3a3328;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #3a7bd5;
 
   /* 输入框 */
-  --color-input-bg: #fbf7ed;
-  --color-input-border: #c9b896;
+  --gd-color-input-bg: #fbf7ed;
+  --gd-color-input-border: #c9b896;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #fbf7ed;
-  --code-block-bg: #f3ecdc;
+  --gd-color-dialog-bg: #fbf7ed;
+  --gd-code-block-bg: #f3ecdc;
 
   /* 排版与细节 */
-  --size-text-base: 15px;
-  --size-text-sm: 14px;
-  --shimmer-base: #b0a48f;
-  --shimmer-highlight: #3a3328;
+  --gd-size-text-base: 15px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #b0a48f;
+  --gd-shimmer-highlight: #3a3328;
 }
 
 /* ---------- 暗色模式：夜晚涂鸦 ---------- */
 html.dark[data-theme="doodle"] {
   /* 主色：亮蜡笔蓝 */
-  --color-primary: #6ba6f5;
-  --color-primary-hover: #8abaf7;
-  --color-primary-active: #5590e8;
-  --color-primary-disabled: #2a4868;
-  --color-primary-text: #0a1a30;
-  --color-primary-text-disabled: rgba(10, 26, 48, 0.5);
+  --gd-color-primary: #6ba6f5;
+  --gd-color-primary-hover: #8abaf7;
+  --gd-color-primary-active: #5590e8;
+  --gd-color-primary-disabled: #2a4868;
+  --gd-color-primary-text: #0a1a30;
+  --gd-color-primary-text-disabled: rgba(10, 26, 48, 0.5);
 
-  --color-primary-50:  #0a1a30;
-  --color-primary-100: #122a4d;
-  --color-primary-200: #1a4072;
-  --color-primary-300: #245a9e;
-  --color-primary-400: #3a7bd5;
-  --color-primary-500: #6ba6f5;
-  --color-primary-600: #8abaf7;
-  --color-primary-700: #a8cdf9;
-  --color-primary-800: #c5dffb;
-  --color-primary-900: #e0edfd;
-  --color-primary-950: #f0f7fe;
+  --gd-color-primary-50:  #0a1a30;
+  --gd-color-primary-100: #122a4d;
+  --gd-color-primary-200: #1a4072;
+  --gd-color-primary-300: #245a9e;
+  --gd-color-primary-400: #3a7bd5;
+  --gd-color-primary-500: #6ba6f5;
+  --gd-color-primary-600: #8abaf7;
+  --gd-color-primary-700: #a8cdf9;
+  --gd-color-primary-800: #c5dffb;
+  --gd-color-primary-900: #e0edfd;
+  --gd-color-primary-950: #f0f7fe;
 
   /* 副色：暖蜡笔橙 */
-  --color-secondary: #efa67a;
-  --color-secondary-hover: #f5c7a8;
-  --color-secondary-active: #e8854a;
-  --color-secondary-disabled: #4a2f1a;
-  --color-secondary-text: #1a0e04;
-  --color-secondary-text-disabled: rgba(26, 14, 4, 0.5);
-  --color-secondary-50:  #1f0f07;
-  --color-secondary-100: #3a1d0d;
-  --color-secondary-200: #5c2e16;
-  --color-secondary-300: #8a4622;
-  --color-secondary-400: #b85f2e;
-  --color-secondary-500: #efa67a;
-  --color-secondary-600: #f5c7a8;
-  --color-secondary-700: #f9d9c0;
-  --color-secondary-800: #fce5d4;
-  --color-secondary-900: #fef0e6;
-  --color-secondary-950: #fff7f2;
+  --gd-color-secondary: #efa67a;
+  --gd-color-secondary-hover: #f5c7a8;
+  --gd-color-secondary-active: #e8854a;
+  --gd-color-secondary-disabled: #4a2f1a;
+  --gd-color-secondary-text: #1a0e04;
+  --gd-color-secondary-text-disabled: rgba(26, 14, 4, 0.5);
+  --gd-color-secondary-50:  #1f0f07;
+  --gd-color-secondary-100: #3a1d0d;
+  --gd-color-secondary-200: #5c2e16;
+  --gd-color-secondary-300: #8a4622;
+  --gd-color-secondary-400: #b85f2e;
+  --gd-color-secondary-500: #efa67a;
+  --gd-color-secondary-600: #f5c7a8;
+  --gd-color-secondary-700: #f9d9c0;
+  --gd-color-secondary-800: #fce5d4;
+  --gd-color-secondary-900: #fef0e6;
+  --gd-color-secondary-950: #fff7f2;
 
   /* 基础表面与文字 */
-  --color-text: #d8d0c0;
-  --color-text-gray: #8a7e6a;
-  --color-text-disabled: #555048;
-  --color-surface: #2a2620;
-  --color-surface-border: #48403a;
-  --color-bg: #1e1b16;
-  --color-border: #48403a;
+  --gd-color-text: #d8d0c0;
+  --gd-color-text-gray: #8a7e6a;
+  --gd-color-text-disabled: #555048;
+  --gd-color-surface: #2a2620;
+  --gd-color-surface-border: #48403a;
+  --gd-color-bg: #1e1b16;
+  --gd-color-border: #48403a;
 
   /* 侧边栏（左栏） */
-  --color-sidebar-bg: #242019;
-  --color-sidebar-bg-active: #3a3328;
-  --color-sidebar-bg-hover: #2e2920;
-  --color-sidebar-text: #d8d0c0;
-  --color-sidebar-text-hover: #e5ddcc;
-  --color-sidebar-text-active: #e5ddcc;
+  --gd-color-sidebar-bg: #242019;
+  --gd-color-sidebar-bg-active: #3a3328;
+  --gd-color-sidebar-bg-hover: #2e2920;
+  --gd-color-sidebar-text: #d8d0c0;
+  --gd-color-sidebar-text-hover: #e5ddcc;
+  --gd-color-sidebar-text-active: #e5ddcc;
 
   /* 标题栏 */
-  --color-titlebar-bg: #242019;
-  --color-titlebar-border: #48403a;
-  --titlebar-text-color: #d8d0c0;
-  --titlebar-hover-bg: #3a3328;
+  --gd-color-titlebar-bg: #242019;
+  --gd-color-titlebar-border: #48403a;
+  --gd-titlebar-text-color: #d8d0c0;
+  --gd-titlebar-hover-bg: #3a3328;
 
   /* 会话列表 */
-  --color-conversation-bg: #1e1b16;
-  --color-conversation-text: #d8d0c0;
-  --color-conversation-border: #48403a;
-  --color-conversation-bg-active: #3a3328;
-  --color-conversation-text-active: #e5ddcc;
-  --color-conversation-bg-hover: #2e2920;
-  --color-conversation-text-hover: #e5ddcc;
+  --gd-color-conversation-bg: #1e1b16;
+  --gd-color-conversation-text: #d8d0c0;
+  --gd-color-conversation-border: #48403a;
+  --gd-color-conversation-bg-active: #3a3328;
+  --gd-color-conversation-text-active: #e5ddcc;
+  --gd-color-conversation-bg-hover: #2e2920;
+  --gd-color-conversation-text-hover: #e5ddcc;
 
   /* 消息气泡 */
-  --color-bubble-user-bg: #2a3548;
-  --color-bubble-user-text: #c5dffb;
-  --color-bubble-user-border: #6ba6f5;
-  --color-bubble-assitant-bg: transparent;
-  --color-bubble-assitant-text: #d8d0c0;
-  --color-bubble-assitant-border: transparent;
-  --color-bubble-assitant-text-strong: #6ba6f5;
+  --gd-color-bubble-user-bg: #2a3548;
+  --gd-color-bubble-user-text: #c5dffb;
+  --gd-color-bubble-user-border: #6ba6f5;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #d8d0c0;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #6ba6f5;
 
   /* 输入框 */
-  --color-input-bg: #2a2620;
-  --color-input-border: #48403a;
+  --gd-color-input-bg: #2a2620;
+  --gd-color-input-border: #48403a;
 
   /* 弹窗 / 代码块 */
-  --color-dialog-bg: #2a2620;
-  --code-block-bg: #221f19;
+  --gd-color-dialog-bg: #2a2620;
+  --gd-code-block-bg: #221f19;
 
   /* 排版与细节 */
-  --size-text-base: 15px;
-  --size-text-sm: 14px;
-  --shimmer-base: #555048;
-  --shimmer-highlight: #d8d0c0;
+  --gd-size-text-base: 15px;
+  --gd-size-text-sm: 14px;
+  --gd-shimmer-base: #555048;
+  --gd-shimmer-highlight: #d8d0c0;
 }
 
 /* ---------- 主题专属细节 ---------- */
@@ -259,7 +259,7 @@ html.dark[data-theme="doodle"] {
 html[data-theme="doodle"] body::before {
   background-image:
     repeating-linear-gradient(0deg, var(--doodle-ruled-line) 0 1px, transparent 1px 24px);
-  background-color: var(--color-bg);
+  background-color: var(--gd-color-bg);
 }
 
 /* 内容区：横线（body::before 常被不透明背景盖住，双保险对齐） */
@@ -394,16 +394,16 @@ html[data-theme="doodle"] .session-item-active::after {
 
 /* 左栏 / 右栏：虚线分割（虚线本身就有手绘感） */
 html[data-theme="doodle"] .global-sidebar {
-  border-right: 2px dashed var(--color-border);
+  border-right: 2px dashed var(--gd-color-border);
   box-shadow: none;
 }
 html[data-theme="doodle"] .workspace-sidebar {
-  border-left: 2px dashed var(--color-border);
+  border-left: 2px dashed var(--gd-color-border);
 }
 
 /* 标题栏：底部虚线，和侧栏虚线连成作业本格线 */
 html[data-theme="doodle"] .custom-titlebar {
-  border-bottom: 2px dashed var(--color-titlebar-border);
+  border-bottom: 2px dashed var(--gd-color-titlebar-border);
 }
 
 /* ============================================================
@@ -420,14 +420,14 @@ html[data-theme="doodle"] .markdown-text h2 {
 
 /* 链接：波浪下划线 */
 html[data-theme="doodle"] .markdown-text a {
-  color: var(--color-primary);
-  text-decoration: underline wavy var(--color-secondary) 1.5px;
+  color: var(--gd-color-primary);
+  text-decoration: underline wavy var(--gd-color-secondary) 1.5px;
   text-underline-offset: 3px;
 }
 
 /* 引用块：双线竖杠，像荧光笔画的 */
 html[data-theme="doodle"] .markdown-text blockquote {
-  border-left: 4px double var(--color-primary-300);
+  border-left: 4px double var(--gd-color-primary-300);
   border-radius: 2px;
 }
 
@@ -441,7 +441,7 @@ html[data-theme="doodle"] .markdown-text hr {
 /* 行内代码：虚线小框，像铅笔圈注（:not(pre *) 排除代码块内部） */
 html[data-theme="doodle"] .markdown-text code:not(pre code) {
   background: transparent;
-  border: 1.5px dashed var(--color-primary-300);
+  border: 1.5px dashed var(--gd-color-primary-300);
   border-radius: 8px 12px 8px 12px / 12px 8px 12px 8px;
   padding: 0 5px;
 }
@@ -449,7 +449,7 @@ html[data-theme="doodle"] .markdown-text code:not(pre code) {
 /* 表格：虚线行分隔 */
 html[data-theme="doodle"] .markdown-text table th,
 html[data-theme="doodle"] .markdown-text table td {
-  border-bottom: 1.5px dashed var(--color-surface-border);
+  border-bottom: 1.5px dashed var(--gd-color-surface-border);
 }
 
 /* 代码块（真实选择器 .markdown-text pre，旧主题的 .md-code 已失效）：
@@ -483,7 +483,7 @@ html[data-theme="doodle"] .markdown-text pre::after {
   height: 17px;
   background:
     repeating-linear-gradient(-45deg, transparent 0 4px, rgba(255, 255, 255, 0.25) 4px 6px),
-    var(--color-primary);
+    var(--gd-color-primary);
   opacity: 0.38;
   border-radius: 2px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
@@ -508,7 +508,7 @@ html[data-theme="doodle"] .el-button {
 html[data-theme="doodle"] .el-popper.is-light {
   border-radius: 12px 15px 13px 16px / 15px 12px 16px 13px;
   border-width: 2px;
-  border-color: var(--color-border);
+  border-color: var(--gd-color-border);
   box-shadow: 3px 3px 0 rgba(58, 51, 40, 0.10);
 }
 html.dark[data-theme="doodle"] .el-popper.is-light {
@@ -516,16 +516,16 @@ html.dark[data-theme="doodle"] .el-popper.is-light {
 }
 /* 弹层小箭头跟随主题边框色 */
 html[data-theme="doodle"] .el-popper.is-light .el-popper__arrow::before {
-  border-color: var(--color-border);
-  background: var(--color-surface);
+  border-color: var(--gd-color-border);
+  background: var(--gd-color-surface);
 }
 
 /* 用户菜单里的主题分段控件：修正硬编码灰/白底，接入纸面配色 */
 html[data-theme="doodle"] .user-menu-dropdown .bg-gray-100 {
-  background-color: var(--color-sidebar-bg-active);
+  background-color: var(--gd-color-sidebar-bg-active);
 }
 html[data-theme="doodle"] .user-menu-dropdown .bg-white {
-  background-color: var(--color-surface);
+  background-color: var(--gd-color-surface);
   box-shadow: 1px 1px 0 rgba(58, 51, 40, 0.15);
 }
 html[data-theme="doodle"] .l-dialog {

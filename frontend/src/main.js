@@ -21,6 +21,7 @@ import * as Vue from "vue";
 import ElementPlus from "element-plus";
 import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
+import { registerUiPrimitives } from "@/components/ui/register";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
 import { useLayoutStore } from "./stores/layout";
 import {
@@ -293,6 +294,8 @@ app.use(i18n);
 // 全局注册 ElementPlus：主应用自身靠 unplugin 按需导入，但插件产物是运行时加载的 IIFE，
 // resolveComponent('el-xxx') 需要全局注册才能解析（插件模板可直接写 el-button/el-input）
 app.use(ElementPlus);
+// 插件 UI 原语全局注册：让插件产物运行时能 resolveComponent('GdXxx')
+registerUiPrimitives(app);
 
 // 用户信息同步到插件运行时（__GuaDaShared__.runtime.user），登录/登出自动更新
 const authStore = useAuthStore(pinia);

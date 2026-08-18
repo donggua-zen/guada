@@ -1,5 +1,5 @@
 <template>
-  <div class="-mb-4 pb-5 pt-2 px-2 w-full flex justify-start gap-1 bg-(--color-secondary-surface) rounded-t-(--size-rounded-radius)">
+  <div class="-mb-4 pb-5 pt-2 px-2 w-full flex justify-start gap-1 bg-(--gd-color-secondary-surface) rounded-t-(--gd-size-rounded-radius)">
     <!-- 工作目录按钮 -->
     <el-button ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
       <el-icon size="18">
@@ -34,25 +34,25 @@
     :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
 
   <!-- 分组选择弹窗 -->
-  <CustomPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
+  <GdPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
     :anchor-el="groupButtonRef?.$el" :max-height="400">
     <div class="flex flex-col gap-0.5">
       <div v-for="g in groupSelectorOptions" :key="g.value"
-        class="flex items-center gap-1.25 px-2 py-1 rounded-(--size-dialog-rounded-radius) cursor-pointer transition-all duration-150"
+        class="flex items-center gap-1.25 px-2 py-1 rounded-(--gd-size-dialog-rounded-radius) cursor-pointer transition-all duration-150"
         :class="selectedGroupId === g.value
-          ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
-          : 'hover:bg-(--color-sidebar-bg-hover)'"
+          ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
+          : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="selectGroup(g.value)">
-        <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
+        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
           <Folder20Regular />
         </el-icon>
-        <span class="flex-1 text-sm font-medium text-(--color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
+        <span class="flex-1 text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
         <el-icon v-if="selectedGroupId === g.value" size="14" class="shrink-0 text-(--el-color-primary)">
           <Checkmark16Filled />
         </el-icon>
       </div>
     </div>
-  </CustomPopover>
+  </GdPopover>
 
 </template>
 
@@ -61,7 +61,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
-import CustomPopover from '../../ui/CustomPopover.vue'
+import GdPopover from '../../ui/GdPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -165,7 +165,7 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
 
 <style scoped>
 .workspace-btn {
-  color: var(--color-text);
+  color: var(--gd-color-text);
   cursor: pointer;
   font-size: 14px;
   height: 26px;
@@ -173,10 +173,10 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
   display: flex;
   align-items: center;
   transition: all 0.2s;
-  border-radius: var(--size-dialog-rounded-radius);
+  border-radius: var(--gd-size-dialog-rounded-radius);
 }
 
 .workspace-btn:hover {
-  color: var(--color-text);
+  color: var(--gd-color-text);
 }
 </style>
