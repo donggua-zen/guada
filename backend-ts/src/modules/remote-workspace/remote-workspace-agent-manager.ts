@@ -248,14 +248,14 @@ export class RemoteAgent {
     return this.config.path || "/";
   }
 
-  async readFile(filePath: string, offset = 0, limit = 200): Promise<string> {
+  async readFile(filePath: string, offset = 0, limit = 200, signal?: AbortSignal): Promise<string> {
     const absPath = filePath.startsWith("/")
       ? filePath
       : path.posix.join(this.basePath, filePath);
     const result = await this.rpc.call<{
       data: string | number[];
       encoding?: string;
-    }>("readFile", { path: absPath, encoding: "utf-8" });
+    }>("readFile", { path: absPath, encoding: "utf-8" }, signal);
     const content =
       typeof result.data === "string"
         ? result.data
@@ -275,17 +275,18 @@ export class RemoteAgent {
     return result2;
   }
 
-  async writeFile(filePath: string, content: string): Promise<void> {
+  async writeFile(filePath: string, content: string, signal?: AbortSignal): Promise<void> {
     const absPath = filePath.startsWith("/")
       ? filePath
       : path.posix.join(this.basePath, filePath);
-    await this.rpc.call("writeFile", { path: absPath, content });
+    await this.rpc.call("writeFile", { path: absPath, content }, signal);
   }
 
   async replaceInFile(
     filePath: string,
     oldText: string,
     newText: string,
+    signal?: AbortSignal,
   ): Promise<{ matched: boolean; count: number }> {
     const absPath = filePath.startsWith("/")
       ? filePath
@@ -294,10 +295,10 @@ export class RemoteAgent {
       path: absPath,
       oldText,
       newText,
-    });
+    }, signal);
   }
 
-  async grep(pattern: string, searchPath?: string, maxResults = 50): Promise<string> {
+  async grep(pattern: string, searchPath?: string, maxResults = 50, signal?: AbortSignal): Promise<string> {
     const absPath = searchPath
       ? searchPath.startsWith("/")
         ? searchPath
@@ -307,18 +308,18 @@ export class RemoteAgent {
       pattern,
       path: absPath,
       maxResults,
-    });
+    }, signal);
     if (results.length === 0) return "No matches found.";
     return results.join("\n");
   }
 
-  async execute(command: string): Promise<string> {
+  async execute(command: string, signal?: AbortSignal): Promise<string> {
     const result = await this.rpc.call<{
       kind: string;
       output: string;
       exitCode: number | null;
       uptimeMs: number;
-    }>("execute", { command, cwd: this.basePath, timeout: 60000, background: false });
+    }>("execute", { command, cwd: this.basePath, timeout: 60000, background: false }, signal);
 
     if (result.kind === "completed") {
       const parts: string[] = [];
@@ -334,23 +335,23 @@ export class RemoteAgent {
     return parts.join("\n\n");
   }
 
-  async upload(localPath: string, remotePath: string): Promise<string> {
+  async upload(localPath: string, remotePath: string, signal?: AbortSignal): Promise<string> {
     const content = await fs.promises.readFile(localPath);
     const base64 = content.toString("base64");
     const absRemote = remotePath.startsWith("/")
       ? remotePath
       : path.posix.join(this.basePath, remotePath);
-    await this.rpc.call("upload", { remotePath: absRemote, content: base64 });
+    await this.rpc.call("upload", { remotePath: absRemote, content: base64 }, signal);
     return `Uploaded: ${localPath} → ${absRemote} (${content.length} bytes)`;
   }
 
-  async download(remotePath: string, localPath: string): Promise<string> {
+  async download(remotePath: string, localPath: string, signal?: AbortSignal): Promise<string> {
     const absRemote = remotePath.startsWith("/")
       ? remotePath
       : path.posix.join(this.basePath, remotePath);
     const result = await this.rpc.call<{ data: string }>("download", {
       remotePath: absRemote,
-    });
+    }, signal);
     const buf = Buffer.from(result.data, "base64");
     await fs.promises.mkdir(path.dirname(localPath), { recursive: true });
     await fs.promises.writeFile(localPath, buf);

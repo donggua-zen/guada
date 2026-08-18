@@ -616,6 +616,93 @@ export class SessionService {
   }
 
   /**
+   * 根据 git diff 生成提交信息
+   * 模型选择：优先标题总结模型（SK_MOD_TITLE_MODEL），无则回退当前对话模型（SK_MOD_CHAT）
+   * @param diffText 由 GitController 收集并截断后的 diff 文本
+   */
+  async generateCommitMessage(
+    diffText: string,
+  ): Promise<{
+    message: string;
+    modelId?: string;
+    modelName?: string;
+    modelSource?: string;
+    skipped?: boolean;
+    reason?: string;
+    error?: string;
+  }> {
+    try {
+      if (!diffText?.trim()) {
+        return { message: "", skipped: true, reason: "empty_diff" };
+      }
+
+      // 1. 模型选择：标题总结模型优先，无则回退当前对话模型
+      let modelId = await this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_TITLE_MODEL,
+      );
+      let modelSource = "title";
+      if (!modelId) {
+        modelId = await this.settingsStorage.getSettingValue(
+          SG_MODELS,
+          SK_MOD_CHAT,
+        );
+        modelSource = "chat";
+      }
+      if (!modelId) {
+        return { message: "", skipped: true, reason: "no_model_configured" };
+      }
+
+      const model = await this.modelRepo.findById(modelId);
+      if (!model) {
+        return { message: "", skipped: true, reason: "model_not_found" };
+      }
+
+      // 2. 构建提示词：引导输出项目提交风格（Conventional Commits + 中文标题 + 要点正文）
+      const prompt = `你是一名资深工程师，请根据以下 git diff 生成一条规范的提交信息。
+
+提交信息格式要求：
+1. 第一行为标题：type(scope): 中文描述（type 取 feat/fix/refactor/chore/docs/style/perf/test；scope 可选，如组件/模块名）
+2. 若改动有多个要点，标题下空一行，用编号列表（1. 2. 3.）补充 2-5 条要点
+3. 直接返回提交信息本体，不要任何解释、引号或代码块包裹
+
+git diff：
+${diffText}
+
+生成的提交信息：`;
+
+      // 3. 调用 LLM 生成（非流式，禁用思考）
+      const response = await this.llmService.completions({
+        model: model.modelName,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        maxTokens: 300,
+        thinkingEffort: resolveThinkingEffort(model, "none"),
+        stream: false,
+        providerConfig: model.provider,
+      });
+
+      const message = response.content?.trim() || "";
+      if (!message) {
+        return { message: "", skipped: true, reason: "generation_failed" };
+      }
+      return {
+        message,
+        modelId: model.id,
+        modelName: model.modelName,
+        modelSource,
+        skipped: false,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Error generating commit message: ${error.message}`,
+        error.stack,
+      );
+      return { message: "", skipped: true, reason: "error", error: error.message };
+    }
+  }
+
+  /**
    * 获取会话的 Token 使用统计
    * 使用 SessionContextService 确保与 Agent 对话使用完全一致的参数
    */
