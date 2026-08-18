@@ -155,32 +155,11 @@ const ASIDE_GAP = 8;
 const ASIDE_TOTAL = ASIDE_WIDTH + ASIDE_GAP;
 const MSG_MAX_WIDTH = 744; // max-w-186
 
-/** 决策用容器宽（冻结期 = 预知目标宽，非冻结期 = ResizeObserver 上报） */
+/** 决策用容器宽（flex 权重已让过渡自然，不再冻结 —— ResizeObserver 实时上报） */
 const chatDecisionWidth = ref(0);
-let decisionFreezeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onChatContainerResize(cw: number): void {
-  // 实时跟随（临时去掉 freeze 冻结，flex 权重已让过渡自然）
   chatDecisionWidth.value = cw;
-}
-
-/** pane1 占总宽比例（split-size / 100）：full/visible/panelMode 任一变化都会驱动动画 */
-function pane1Ratio(): number {
-  if (layoutStore.workspaceFullscreen) return 0;
-  return layoutStore.workspaceVisible ? workspaceSize.value / 100 : 1;
-}
-
-/** 预知终态：切换瞬间按目标 pane1 宽决定概览显隐/避让，并冻结决策至动画结束。
-    总宽 = 分栏容器宽（不随切换变化）；目标 pane1 宽 = 总宽 × 新比例 */
-function freezeDecisionForPaneAnimation(newRatio: number): void {
-  const totalW = splitContainerRef.value?.offsetWidth ?? 0;
-  if (totalW > 0) {
-    chatDecisionWidth.value = totalW * newRatio;
-  }
-  if (decisionFreezeTimer) clearTimeout(decisionFreezeTimer);
-  decisionFreezeTimer = setTimeout(() => {
-    decisionFreezeTimer = null;
-  }, 350);
 }
 
 const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40));
@@ -417,9 +396,6 @@ const layoutStore = useLayoutStore();
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
-
-// 临时去掉 freeze（flex 权重已缓解），暂停 pane1Ratio → freeze 预知冻结
-// watch(pane1Ratio, (n) => { freezeDecisionForPaneAnimation(n); });
 
 // 全屏模式下 Teleport 延迟一帧启用，避免与 pane collapse 同帧触发 moveTeleport 竞态
 const teleportDisabled = ref(true);

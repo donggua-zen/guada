@@ -308,11 +308,25 @@ export class GitService {
     return { success: true, branch };
   }
 
-  /** 推送当前分支到远端（simple-git push，失败信息原样抛出由前端展示） */
+  /**
+   * 推送当前分支到远端。
+   * simple-git 无参 git.push() 在分支无上游 / 未显式指定 remote+branch 时常静默 resolve
+   * 却未真正推送（"提示成功但没推"）—— 故这里显式取 remote + 当前分支，
+   * 无 remote 时明确报错；无上游时用 --set-upstream 建立跟踪后推送。
+   */
   async push(workspacePath: string) {
     const git = this.getGit(workspacePath);
-    await git.push();
-    return { success: true };
+    const remotes = await git.getRemotes();
+    if (remotes.length === 0) {
+      throw new Error("No remote repository configured — cannot push. Add a remote first.");
+    }
+    const current = (await git.branch()).current;
+    if (!current) {
+      throw new Error("Cannot determine current branch — nothing to push.");
+    }
+    // -u 建立/确认上游，确保真正推送（失败会抛错，不再静默）
+    await git.push(["-u", remotes[0].name, current]);
+    return { success: true, branch: current, remote: remotes[0].name };
   }
 
   async commit(workspacePath: string, message: string, files?: string[]) {
