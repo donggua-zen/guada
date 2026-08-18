@@ -6,126 +6,120 @@
       <!-- 消息行：flex row（消息列 + 避让占位列）；占位在滚动内容右端 = 滚动条左侧 -->
       <div class="scroll-inner">
         <div class="scroll-main">
-      <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
-      <div class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
-        <template v-if="showSkeleton">
-          <div class="absolute inset-0 z-1 overflow-hidden">
-            <div class="px-5 max-w-186 mx-auto h-full flex flex-col py-10 ">
-              <MessageSkeleton :count="2" />
+          <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
+          <div class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
+            <template v-if="showSkeleton">
+              <div class="absolute inset-0 z-1 overflow-hidden">
+                <div class="px-5 max-w-186 mx-auto h-full flex flex-col py-10 ">
+                  <MessageSkeleton :count="2" />
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <template v-if="currentSessionId && activeMessages.length === 0 && currentSession?.character">
+                <!-- 欢迎页 -->
+                <WelcomeScreen :session="currentSession" class="flex-1" />
+              </template>
+              <template v-else>
+                <!-- 加载更多历史消息指示器 -->
+                <Transition name="fade-slide">
+                  <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
+                    <el-icon class="is-loading mr-2" size="16">
+                      <LoadingOutlined />
+                    </el-icon>
+                    <span class="text-xs">{{ t('chat.panel.loadingHistory') }}</span>
+                  </div>
+                </Transition>
+
+                <!-- 没有更多消息提示 -->
+                <Transition name="fade-slide">
+                  <div v-if="!isLoadingMore && !hasMoreMessages && activeMessages.length > MESSAGES_PAGE_SIZE"
+                    class="w-full py-4 text-center text-gray-400 text-xs">
+                    {{ t('chat.panel.noMoreMessages') }}
+                  </div>
+                </Transition>
+
+                <TurnItem :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
+                  v-for="(turn, index) in visibleTurns" :key="turn.user.id" :turn="turn" :avatar="userAvater"
+                  :character-name="currentSession?.character?.title"
+                  :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
+                  :allow-generate="!isStreaming && index === lastUserMessageIndex"
+                  :animate-in="animateIds.includes(turn.user.id)" @delete="deleteMessage" @edit="editMessage"
+                  @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+                  @continue="continueResponse" @switch="switchContent" />
+                <!-- <div class="min-h-60"></div> -->
+
+                <!-- 压缩中状态显示 -->
+                <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')"
+                  class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
+                  <el-icon class="is-loading mb-2" size="24">
+                    <LoadingOutlined />
+                  </el-icon>
+                  <span class="text-sm">{{ t('chat.panel.compressing') }}</span>
+                </div>
+
+                <!-- 流式输出状态指示 -->
+              </template>
+            </template>
+          </div>
+          <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位） -->
+          <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
+            <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
+            <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto"></div>
+            <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
+
+              <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
+              <Transition name="queue-drawer">
+                <div v-if="queueLength > 0"
+                  class="queue-drawer bg-(--gd-color-surface)/80 backdrop-blur-xl rounded-(--gd-size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
+                  <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
+                </div>
+              </Transition>
+
+              <!-- 编辑模式提示条 -->
+              <div v-if="editMode" class="max-w-full w-full flex px-4">
+                <div
+                  class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
+                  <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
+                    }}</span>
+                  <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+                    {{ t('common.cancel') }}
+                  </el-button>
+                </div>
+              </div>
+
+              <!-- 子代理面板（编辑模式时隐藏） -->
+              <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+                @switch="emit('switch-agent', $event)" />
+
+              <div class="w-full flex items-center relative">
+
+                <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+                  :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
+                  :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+                  :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
+                  @abort="abortResponse">
+                  <template #right-actions-before>
+                    <!-- 上下文使用率：圆形进度条 -->
+                    <GdTooltip :content="contextTooltip" placement="top">
+                      <button class="context-ring-btn" @click="memoPanelVisible = true">
+                        <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
+                          <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
+                          <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
+                            :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset" stroke-linecap="round"
+                            transform="rotate(-90 18 18)" />
+                        </svg>
+                      </button>
+                    </GdTooltip>
+                  </template>
+                </ChatInput>
+              </div>
             </div>
           </div>
-        </template>
-        <template v-else>
-          <template v-if="currentSessionId && activeMessages.length === 0 && currentSession?.character">
-            <!-- 欢迎页 -->
-            <WelcomeScreen :session="currentSession" class="flex-1" />
-          </template>
-          <template v-else>
-            <!-- 加载更多历史消息指示器 -->
-            <Transition name="fade-slide">
-              <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
-                <el-icon class="is-loading mr-2" size="16">
-                  <LoadingOutlined />
-                </el-icon>
-                <span class="text-xs">{{ t('chat.panel.loadingHistory') }}</span>
-              </div>
-            </Transition>
-
-            <!-- 没有更多消息提示 -->
-            <Transition name="fade-slide">
-              <div v-if="!isLoadingMore && !hasMoreMessages && activeMessages.length > MESSAGES_PAGE_SIZE"
-                class="w-full py-4 text-center text-gray-400 text-xs">
-                {{ t('chat.panel.noMoreMessages') }}
-              </div>
-            </Transition>
-
-            <TurnItem :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
-              v-for="(turn, index) in visibleTurns" :key="turn.user.id" :turn="turn" :avatar="userAvater"
-              :character-name="currentSession?.character?.title"
-              :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
-              :allow-generate="!isStreaming && index === lastUserMessageIndex"
-              :animate-in="animateIds.includes(turn.user.id)" @delete="deleteMessage" @edit="editMessage"
-              @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @continue="continueResponse" @switch="switchContent" />
-            <!-- <div class="min-h-60"></div> -->
-
-            <!-- 压缩中状态显示 -->
-            <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')"
-              class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
-              <el-icon class="is-loading mb-2" size="24">
-                <LoadingOutlined />
-              </el-icon>
-              <span class="text-sm">{{ t('chat.panel.compressing') }}</span>
-            </div>
-
-            <!-- 流式输出状态指示 -->
-          </template>
-        </template>
-        </div>
         </div>
         <!-- 避让占位（常驻，flex-basis 0↔268 过渡；flex-shrink 优先压缩，消息列不先动） -->
         <div class="aside-bleed-col"
-          :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }"></div>
-      </div>
-      <!-- 输入区域 - sticky 底部 -->
-      <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2">
-        <div class="chat-input-inner">
-          <div class="chat-input-col">
-        <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
-        <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto left-0 right-0 bottom-0"></div>
-        <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
-
-          <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
-          <Transition name="queue-drawer">
-            <div v-if="queueLength > 0"
-              class="queue-drawer bg-(--gd-color-surface)/80 backdrop-blur-xl rounded-(--gd-size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
-              <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
-            </div>
-          </Transition>
-
-          <!-- 编辑模式提示条 -->
-          <div v-if="editMode" class="max-w-full w-full flex px-4">
-            <div
-              class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
-              <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
-                }}</span>
-              <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-                {{ t('common.cancel') }}
-              </el-button>
-            </div>
-          </div>
-
-          <!-- 子代理面板（编辑模式时隐藏） -->
-          <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
-            @switch="emit('switch-agent', $event)" />
-
-          <div class="w-full flex items-center relative">
-
-            <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-              :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
-              :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
-              :backdrop="hasWallpaper"
-              @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
-              <template #right-actions-before>
-                <!-- 上下文使用率：圆形进度条 -->
-                <GdTooltip :content="contextTooltip" placement="top">
-                  <button class="context-ring-btn" @click="memoPanelVisible = true">
-                    <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
-                      <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
-                      <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
-                        :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringDashOffset" stroke-linecap="round"
-                        transform="rotate(-90 18 18)" />
-                    </svg>
-                  </button>
-                </GdTooltip>
-              </template>
-            </ChatInput>
-          </div>
-        </div>
-          </div>
-          <!-- 与消息列同步的避让占位 -->
-          <div class="input-bleed-col"
-            :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }"></div>
+          :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }">
         </div>
       </div>
     </ScrollContainer>
@@ -1260,8 +1254,10 @@ function scrollToMessage(messageId: string) {
 }
 
 /* 消息列：basis = 目标宽 744（不塌零），shrink 权重小 → 几乎不缩；
-   空间不足时负空间几乎全由占位承担，占位缩到 0 后消息才缩 */
+   空间不足时负空间几乎全由占位承担，占位缩到 0 后消息才缩。
+   position:relative 让 absolute 骨架屏相对消息列宽（随避让让出） */
 .scroll-main {
+  position: relative;
   flex: 1 1 744px;
   min-width: 0;
   display: flex;
@@ -1277,21 +1273,7 @@ function scrollToMessage(messageId: string) {
   transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 输入区：内部 flex 行同步让出避让占位（与消息列对齐） */
-.chat-input-inner {
-  display: flex;
-  align-items: stretch;
-}
-.chat-input-col {
-  flex: 1 0 0%;
-  min-width: 0;
-}
-.input-bleed-col {
-  flex-grow: 0;
-  flex-shrink: 100;
-  min-width: 0;
-  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* 输入区在 scroll-main 内（消息列统一避让，无需独立占位） */
 
 /* aside 进出场：淡入淡出 + 滑移（缩放/右移） */
 .aside-fade-enter-active,
@@ -1299,6 +1281,7 @@ function scrollToMessage(messageId: string) {
   transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   transform-origin: top right;
 }
+
 .aside-fade-enter-from,
 .aside-fade-leave-to {
   opacity: 0;
@@ -1311,9 +1294,9 @@ function scrollToMessage(messageId: string) {
 .lite-splitpanes--resizing .chat-aside {
   transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
+
 /* 避让占位（flex-basis 变化）拖拽时同样豁免 */
-.lite-splitpanes--resizing .aside-bleed-col,
-.lite-splitpanes--resizing .input-bleed-col {
+.lite-splitpanes--resizing .aside-bleed-col {
   transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -1324,6 +1307,7 @@ function scrollToMessage(messageId: string) {
   top: 12px;
   z-index: 20;
 }
+
 .chat-aside :deep(> *) {
   width: 100%;
 }
@@ -1354,9 +1338,14 @@ function scrollToMessage(messageId: string) {
   max-height: 400px;
 }
 
-/* 底部渐变遮罩：底部25px完全隐藏，上方渐变过渡 */
+/* 底部渐变遮罩：位于输入区底部（bottom:0），遮罩滚动区底部消息渐隐；
+   containing block = chat-input-area（现位于 scroll-main 内 = 已避让的列），
+   故 left-0 right-0 宽度天然 = 消息列宽（随避让让出） */
 .chat-bottom-fade {
   position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   height: 48px;
   pointer-events: none;
   background: linear-gradient(to top, var(--gd-color-bg) 25px, transparent 48px);

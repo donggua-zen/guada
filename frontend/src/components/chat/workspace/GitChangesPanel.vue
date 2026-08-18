@@ -1329,6 +1329,8 @@ function parseUnifiedDiff(text: string): DiffLine[] {
   let nextNewLine = 1;
 
   for (const raw of rawLines) {
+    // 跳过 split("\n") 末尾产生的裸空串（diff 内空内容行以 " " 表示，裸 "" 仅来自尾部换行）
+    if (raw === "") continue;
     if (result.length >= MAX_DIFF_LINES) {
       result.push({
         type: "ctx",
