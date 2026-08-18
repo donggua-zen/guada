@@ -32,17 +32,26 @@
       <div class="git-cd-actions">
         <button type="button" class="git-cd-action git-cd-action--primary" :disabled="git.committing"
           @click="git.submitCommit(false)">
-          <el-icon :size="16"><BranchFork16Regular /></el-icon>
+          <el-icon :size="16">
+            <LoadingOutlined v-if="git.commitAction === 'commit'" class="is-loading" />
+            <BranchFork16Regular v-else />
+          </el-icon>
           <span class="git-cd-action-label">{{ t('git.commit') }}</span>
           <span class="git-cd-action-hint">Ctrl + ↵</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing" @click="git.submitCommit(true)">
-          <el-icon :size="16"><ArrowUpload16Regular /></el-icon>
+          <el-icon :size="16">
+            <LoadingOutlined v-if="git.commitAction === 'commitAndPush'" class="is-loading" />
+            <ArrowUpload16Regular v-else />
+          </el-icon>
           <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing || (git.status?.ahead ?? 0) === 0"
           @click="git.handlePush">
-          <el-icon :size="16"><ArrowUpload16Regular /></el-icon>
+          <el-icon :size="16">
+            <LoadingOutlined v-if="git.commitAction === 'push'" class="is-loading" />
+            <ArrowUpload16Regular v-else />
+          </el-icon>
           <span class="git-cd-action-label">{{ t('git.push') }}</span>
         </button>
       </div>
@@ -53,6 +62,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { Check } from "@element-plus/icons-vue";
+import { LoadingOutlined } from "@vicons/antd";
 import { Branch20Regular, BranchFork16Regular, ArrowUpload16Regular } from "@vicons/fluent";
 import GdDialog from "../../ui/GdDialog.vue";
 import { useGitStore } from "@/stores/git";
