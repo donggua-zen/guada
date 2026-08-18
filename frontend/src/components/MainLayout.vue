@@ -60,14 +60,36 @@ function loadToolDisplays() {
   })
 }
 
-// 全局快捷键：新建会话。Electron 用 Ctrl/Cmd+N；Web 下 Ctrl+N 是浏览器保留快捷键无法拦截，改用 Ctrl+Alt+N
+// 全局快捷键
 const handleGlobalShortcut = (e: KeyboardEvent) => {
-  if (e.isComposing || e.shiftKey || e.code !== 'KeyN') return
-  if (!e.ctrlKey && !e.metaKey) return
-  const matched = isElectron ? !e.altKey : e.altKey
-  if (!matched) return
-  e.preventDefault()
-  router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+  if (e.isComposing || e.shiftKey) return
+  const ctrlOrMeta = e.ctrlKey || e.metaKey
+
+  // 新建会话：Electron 用 Ctrl/Cmd+N；Web 下 Ctrl+N 是浏览器保留快捷键无法拦截，改用 Ctrl+Alt+N
+  if (e.code === 'KeyN') {
+    if (!ctrlOrMeta) return
+    const matched = isElectron ? !e.altKey : e.altKey
+    if (!matched) return
+    e.preventDefault()
+    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    return
+  }
+
+  // 工作区侧边栏：Ctrl+Alt+W（workspace）。Electron/Web 一致，无浏览器保留冲突
+  if (e.code === 'KeyW' && e.ctrlKey && e.altKey && !e.metaKey) {
+    e.preventDefault()
+    layoutStore.setWorkspaceVisible(!layoutStore.workspaceVisible)
+    return
+  }
+
+  // 主导航侧边栏：Electron Ctrl/Cmd+B（VS Code 默认同款）；Web 用 Ctrl+Alt+B（浏览器保留 Ctrl+B 不可拦截）
+  if (e.code === 'KeyB') {
+    const matchedB = isElectron ? ctrlOrMeta && !e.altKey : e.ctrlKey && e.altKey && !e.metaKey
+    if (!matchedB) return
+    e.preventDefault()
+    layoutStore.toggleSidebar()
+    return
+  }
 }
 
 // workspace SSE 连接：跟随当前激活会话（连接生命周期 = app 壳，不依赖任何 UI 组件；

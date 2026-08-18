@@ -96,7 +96,7 @@
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
         <GitChangesPanel v-show="panelMode === 'git' && !!props.sessionId" ref="gitPanelRef"
-            :session-id="props.sessionId" class="flex-1 min-h-0" />
+            :session-id="props.sessionId" :active="panelMode === 'git'" class="flex-1 min-h-0" />
         <div :class="treeContainerClass" :style="panelMode === 'preview' && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
             @mouseleave="hideTreePanel">
             <!-- 浏览器窗口列表 / 待办事项已迁往概览面板（OverviewPanel） -->

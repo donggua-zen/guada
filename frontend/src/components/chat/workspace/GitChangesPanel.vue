@@ -88,9 +88,18 @@
               <span v-if="selectedStats.add" class="git-stat-add">+{{ selectedStats.add }}</span>
               <span v-if="selectedStats.del" class="git-stat-del">-{{ selectedStats.del }}</span>
             </span>
-            <button class="git-diff-close" :title="t('git.closePreview')" @click="clearSelection">
-              <el-icon :size="12"><Close /></el-icon>
-            </button>
+            <div class="git-diff-nav-group">
+              <GdTooltip :content="t('git.prevFileShortcut')" placement="bottom">
+                <button class="git-diff-nav" @click="cycleSelection(-1)">
+                  <el-icon :size="12"><ArrowUp /></el-icon>
+                </button>
+              </GdTooltip>
+              <GdTooltip :content="t('git.nextFileShortcut')" placement="bottom">
+                <button class="git-diff-nav" @click="cycleSelection(1)">
+                  <el-icon :size="12"><ArrowDown /></el-icon>
+                </button>
+              </GdTooltip>
+            </div>
           </div>
           <div v-if="loadingKey === selectedKey" class="git-diff-loading">
             {{ t('git.loading') }}
@@ -302,7 +311,7 @@ import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, ArrowRight, ArrowDown, Close } from "@element-plus/icons-vue";
+import { Refresh, ArrowRight, ArrowDown, ArrowUp, Close } from "@element-plus/icons-vue";
 import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
 import { GdSplitpanes } from "../../ui";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
@@ -320,6 +329,8 @@ const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighligh
 
 const props = defineProps<{
   sessionId: string | null;
+  /** git 面板是否处于打开（激活）状态：控制全局 Ctrl+Alt+↑/↓ 快捷键开关 */
+  active?: boolean;
 }>();
 
 interface GitRow {
@@ -722,7 +733,10 @@ function collectDirKeys(rows: GitRow[], groupKey: string, out: Set<string>): voi
   }
 }
 
-/** 当前选中行（从分组中反查，refresh 后跟随新状态） */
+/** 最近一次预览的文件（status 中已消失时回退用 —— 如已提交后降级为纯代码高亮） */
+const lastSelectedRowRef = ref<GitRow | null>(null);
+
+/** 当前选中行（从分组中反查，refresh 后跟随新状态；消失时回退最近预览以维持纯代码展示） */
 const selectedRow = computed<GitRow | null>(() => {
   if (!selectedKey.value) return null;
   for (const g of groups.value) {
@@ -730,7 +744,7 @@ const selectedRow = computed<GitRow | null>(() => {
       if (rowKey(r) === selectedKey.value) return r;
     }
   }
-  return null;
+  return lastSelectedRowRef.value;
 });
 
 const selectedLines = computed<DiffLine[]>(() => {
@@ -1142,6 +1156,8 @@ function onVScrollTrackDown(e: MouseEvent): void {
 /** 键盘：方向键/翻页/Home/End 调整纵向偏移（对齐原生滚动条；聚焦在 split 区域或滚动条上时）。
     仅在处理到的键上 preventDefault（模板不再用 .prevent，避免拦截其他按键） */
 function onVScrollKeydown(e: KeyboardEvent): void {
+  // 组合键（Ctrl/Alt/Meta）不参与行滚动，交由全局切文件快捷键处理
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
   let dy = 0;
   const vh = viewH.value || 0;
   switch (e.key) {
@@ -1171,6 +1187,94 @@ function onVScrollKeydown(e: KeyboardEvent): void {
   e.preventDefault();
   setColumnsOffset(vScroll.offset + dy);
 }
+
+/** Alt+↑/↓：在当前会话变更文件列表中循环切换上一个/下一个文件并加载其 diff（同步目录树高亮） */
+/** 消失文件锚点：当前预览文件被提交后，记录其在上一版顺序中的位置，供差位跳转 */
+interface MissingAnchor {
+  path: string;
+  prevIndex: number;
+  order: string[];
+}
+const missingAnchorRef = ref<MissingAnchor | null>(null);
+/** 上一版可见文件顺序（path 序列，展示顺序）：供检测消失与差位跳转 */
+let prevOrderPaths: string[] = [];
+
+/** 当前可见变更文件（目录树展平，非目录）的 path 序列 */
+function curFileOrder(): string[] {
+  return visibleTreeRows.value.filter((r) => !r.isDir && r.row).map((r) => r.row!.file.path);
+}
+
+/** 上一个/下一个文件：非循环（到边界停在原地）；当前选中已消失时按上一版顺序差位跳转 */
+function cycleSelection(delta: 1 | -1): void {
+  const rows = visibleTreeRows.value.filter((r) => !r.isDir && r.row);
+  if (!rows.length) return;
+  let idx = rows.findIndex((r) => r.key === selectedKey.value);
+
+  // 当前选中不在列表（已提交消失）：按上一版顺序差位跳转（不循环）
+  if (idx < 0 && cycleToMissingAnchor(delta, rows)) return;
+  if (idx < 0) idx = 0;
+
+  // 非循环：到边界停在原地
+  const next = Math.min(Math.max(idx + delta, 0), rows.length - 1);
+  const t = rows[next];
+  if (t && t.row && next !== idx) {
+    selectRow(t.row);
+    setActiveTreeRow(t);
+  }
+}
+
+/** 上一个/下一个文件：非循环（到边界停在原地）；当前选中已消失时按上一版顺序差位跳转 */
+
+/** 消失锚点差位跳转：现存文件按消失前顺序排序，找到位于点之后/之前最近的现存文件；
+    其后/前无现存时停在端点（不循环）。返回是否已处理。 */
+function cycleToMissingAnchor(delta: 1 | -1, rows: GitTreeRow[]): boolean {
+  const anchor = missingAnchorRef.value;
+  if (!anchor) return false;
+  const idxOf = (p: string) => anchor.order.indexOf(p);
+  const ordered = rows.slice().sort((a, b) => idxOf(a.row!.file.path) - idxOf(b.row!.file.path));
+  let t: GitTreeRow | undefined;
+  if (delta > 0) {
+    // 第一个位于点之后（prevIndex 之后）的现存文件；没有 → 停在最后一个
+    t = ordered.find((r) => idxOf(r.row!.file.path) > anchor.prevIndex) ?? ordered[ordered.length - 1];
+  } else {
+    // 最后一个位于点之前（prevIndex 之前）的现存文件；没有 → 停在第一个
+    t = [...ordered].reverse().find((r) => idxOf(r.row!.file.path) < anchor.prevIndex) ?? ordered[0];
+  }
+  if (!t) return false;
+  selectRow(t.row!);
+  setActiveTreeRow(t);
+  missingAnchorRef.value = null; // 导航成功，恢复正常锚点
+  return true;
+}
+
+/** 全局（git 面板打开状态生效）Ctrl+Alt+↑/↓：切换上一个/下一个变更文件。
+    由 active 门控：仅 git 面板激活时注册 document 监听，其他区域不受影响。 */
+function onGlobalGitKeydown(e: KeyboardEvent): void {
+  if (e.isComposing) return;
+  if (!(e.ctrlKey && e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown"))) return;
+  e.preventDefault();
+  cycleSelection(e.key === "ArrowDown" ? 1 : -1);
+}
+let gitKeydownActive = false;
+watch(
+  () => props.active,
+  (active) => {
+    if (active && !gitKeydownActive) {
+      window.addEventListener("keydown", onGlobalGitKeydown);
+      gitKeydownActive = true;
+    } else if (!active && gitKeydownActive) {
+      window.removeEventListener("keydown", onGlobalGitKeydown);
+      gitKeydownActive = false;
+    }
+  },
+  { immediate: true },
+);
+onUnmounted(() => {
+  if (gitKeydownActive) {
+    window.removeEventListener("keydown", onGlobalGitKeydown);
+    gitKeydownActive = false;
+  }
+});
 
 /** 内容/尺寸变化后刷新滚动条（列挂载/视图切换/加载完成/窗口缩放） */
 let vScrollResizeObserver: ResizeObserver | null = null;
@@ -1493,6 +1597,25 @@ function renderDiff(
       }
     } else {
       result = parseUnifiedDiff(res.diff || "");
+      // 无差异（文件已提交/工作区=HEAD，diff 为空）：
+      // 不显示空 diff，降级为「纯代码高亮」—— 全部成为 ctx 行（无 +/−，VS Code 行为）
+      if (!result.length && oldLines.length) {
+        result = newLines.slice(0, MAX_DIFF_LINES).map((_, i) => ({
+          type: "ctx" as const,
+          sign: " ",
+          html: "",
+          text: newLines[i],
+          oldLine: i + 1,
+          newLine: i + 1,
+        }));
+        if (newLines.length > MAX_DIFF_LINES) {
+          result.push({
+            type: "ctx",
+            sign: " ",
+            html: escapeHtml(t("git.diffTooLarge", { count: MAX_DIFF_LINES })),
+          });
+        }
+      }
     }
     resolveFullHtml(result, full);
     return { lines: result, full };
@@ -1528,6 +1651,8 @@ function renderDiff(
 function selectRow(row: GitRow): void {
   const key = rowKey(row);
   if (selectedKey.value === key) return;
+  missingAnchorRef.value = null; // 用户主动选中列表内文件：恢复正常锚点
+  lastSelectedRowRef.value = row;
   selectedKey.value = key;
   diffLoadSeq++;
   diffLines.value = {};
@@ -1705,9 +1830,59 @@ function postProcessSelection(): void {
     // 刷新后自动重载当前预览：silent（保留旧内容、无加载闪烁），拉到新内容后原子替换
     void loadDiff(target, true);
   } else {
-    clearSelection();
+    // 当前选中文件已不在变更列表（如已提交）：不清空，保持预览并降级为「纯代码高亮」
+    // （renderDiff 收到空 diff → 全 ctx 行，无 +/−，VS Code 行为）
+    if (cur && props.sessionId) {
+      const idx = cur.indexOf(":");
+      const group = (idx >= 0 ? cur.slice(0, idx) : "changes") as GitRow["group"];
+      const path = idx >= 0 ? cur.slice(idx + 1) : cur;
+      // 捕获消失锚点：记录其在上一版顺序中的位置（供 Ctrl+Alt+↑/↓ 差位跳转；同文件重复刷新不覆盖）
+      if (!missingAnchorRef.value || missingAnchorRef.value.path !== path) {
+        missingAnchorRef.value = { path, prevIndex: prevOrderPaths.indexOf(path), order: [...prevOrderPaths] };
+      }
+      const row: GitRow = { file: { path } as GitFileChange, group, statusChar: "", isPartial: false };
+      lastSelectedRowRef.value = row;
+      void loadDiff(row, true);
+    } else {
+      clearSelection();
+    }
   }
+  // 更新上一版顺序快照（供下次检测消失 / 差位跳转）
+  prevOrderPaths = curFileOrder();
 }
+
+/** 首个非目录变更文件行（未选中 & 无会话缓存时默认打开它） */
+function firstGitRow(): GitRow | null {
+  for (const g of groups.value) {
+    const r = g.treeRows.find((t) => !t.isDir && t.row);
+    if (r?.row) return r.row;
+  }
+  return null;
+}
+
+/** 首次无选中且存在变更文件时 → 默认选第一个并高亮目录树（打开 git 即有内容）。
+    之后（含用户清空/切换）不再自动干预。
+    由 active（面板激活）+ status（数据就绪）双源触发，覆盖 store 预加载/延迟就绪时序。 */
+let didInitialSelect = false;
+function ensureDefaultSelection(): void {
+  if (didInitialSelect) return;
+  if (selectedKey.value) {
+    didInitialSelect = true;
+    return;
+  }
+  const first = firstGitRow();
+  if (!first) return; // 无变更/数据未就绪：不锁死，等下次触发
+  didInitialSelect = true;
+  selectRow(first);
+  const key = rowKey(first);
+  activeTreeKey.value = key;
+  treeRowEls.get(key)?.scrollIntoView({ block: "nearest" });
+}
+watch(
+  [() => props.active, () => git.status],
+  () => ensureDefaultSelection(),
+  { immediate: true },
+);
 
 async function refresh(): Promise<void> {
   await git.refresh();
@@ -2350,6 +2525,32 @@ defineExpose({ refresh });
 }
 
 .git-diff-close:hover {
+  background: var(--gd-color-surface-hover);
+  color: var(--gd-color-text);
+}
+
+/* 切换上一个/下一个文件按钮组（标题栏最右；快捷键 Ctrl+Alt+↑/↓） */
+.git-diff-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto; /* 右对齐 */
+}
+.git-diff-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.git-diff-nav:hover {
   background: var(--gd-color-surface-hover);
   color: var(--gd-color-text);
 }
