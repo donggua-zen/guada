@@ -272,15 +272,58 @@ export class OpenAIAdapter implements IProtocolAdapter {
       if (!choice) continue;
 
       const delta = choice.delta;
+      const reasoning = (delta as any)?.reasoning_content || null;
+      const content = delta?.content || null;
+
+      // 【修复】上游可能在同一个 delta 中同时携带 reasoning_content 与 content
+      // （思考→回答的过渡 chunk）。下游（throttle / SSE / 前端）均按"单类型事件"消费，
+      // 若混在一个块里，前端 think 分支只读 reasoningContent 会丢掉正式 content。
+      // 这里拆成两条独立事件：先 think（思考增量），再 text（回答增量），
+      // finish_reason / usage 归属到回答块，保证全链路单类型语义。
+      if (reasoning && content) {
+        this.logger.debug(
+          `[SPLIT-THINK-CONTENT] split mixed delta into think+text (finish=${choice.finish_reason || "none"})`,
+        );
+
+        yield {
+          type: "think",
+          content: null,
+          reasoningContent: reasoning,
+          finishReason: null,
+          toolCalls: undefined,
+          usage: null,
+        };
+
+        const answerChunk: LLMResponseChunk = {
+          type: choice.finish_reason ? "finish" : "text",
+          content,
+          reasoningContent: null,
+          finishReason: choice.finish_reason || null,
+          toolCalls: undefined,
+          usage: null,
+        };
+        if ((chunk as any).usage) {
+          const rawUsage = (chunk as any).usage;
+          answerChunk.usage = {
+            promptTokens: rawUsage.prompt_tokens,
+            completionTokens: rawUsage.completion_tokens,
+            totalTokens: rawUsage.total_tokens,
+            cachedTokens: extractOpenAICachedTokens(rawUsage),
+          };
+        }
+        yield answerChunk;
+        continue;
+      }
+
       const responseChunk: LLMResponseChunk = {
         type: "text",
-        content: delta?.content || null,
-        reasoningContent: (delta as any)?.reasoning_content || null,
+        content,
+        reasoningContent: reasoning,
         finishReason: choice.finish_reason || null,
         toolCalls: undefined,
         usage: null,
       };
-      if ((delta as any)?.reasoning_content) responseChunk.type = "think";
+      if (reasoning) responseChunk.type = "think";
       if (choice.finish_reason) responseChunk.type = "finish";
       if ((chunk as any).usage) {
         const rawUsage = (chunk as any).usage;

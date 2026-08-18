@@ -2,8 +2,10 @@
   <!-- 消息+输入 区域容器 -->
   <div class="flex-1 overflow-hidden w-full relative">
     <ScrollContainer ref="scrollContainerRef" class="h-full chat-scroll-container transition-opacity duration-300 px-5"
-      :auto-scroll="needScrollToBottom" @scroll="handleScroll"
-      :style="(props.asideWidth || 0) > 0 && props.asideBleed ? { paddingRight: ((props.asideWidth || 0) + ASIDE_GAP + 'px') } : undefined">
+      :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+      <!-- 消息行：flex row（消息列 + 避让占位列）；占位在滚动内容右端 = 滚动条左侧 -->
+      <div class="scroll-inner">
+        <div class="scroll-main">
       <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
       <div class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
         <template v-if="showSkeleton">
@@ -59,9 +61,16 @@
             <!-- 流式输出状态指示 -->
           </template>
         </template>
+        </div>
+        </div>
+        <!-- 避让占位（常驻，flex-basis 0↔268 过渡；flex-shrink 优先压缩，消息列不先动） -->
+        <div class="aside-bleed-col"
+          :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }"></div>
       </div>
       <!-- 输入区域 - sticky 底部 -->
       <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2">
+        <div class="chat-input-inner">
+          <div class="chat-input-col">
         <!-- 底部渐变遮罩：撑满滚动区域宽度，位于输入框上方，被输入框遮挡 -->
         <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto left-0 right-0 bottom-0"></div>
         <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
@@ -112,6 +121,11 @@
               </template>
             </ChatInput>
           </div>
+        </div>
+          </div>
+          <!-- 与消息列同步的避让占位 -->
+          <div class="input-bleed-col"
+            :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }"></div>
         </div>
       </div>
     </ScrollContainer>
@@ -1234,8 +1248,49 @@ function scrollToMessage(messageId: string) {
   will-change: transform;
   transform: translateZ(0);
   contain: layout style paint;
-  /* aside 让出（padding-right 变化）平滑过渡；保留原有 opacity 过渡 */
-  transition: opacity 0.3s ease, padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s ease;
+}
+
+/* 消息行：flex row；撑满剩余高度（flex:1 0 auto），消息列拉伸对齐 */
+.scroll-inner {
+  display: flex;
+  align-items: stretch;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* 消息列：basis = 目标宽 744（不塌零），shrink 权重小 → 几乎不缩；
+   空间不足时负空间几乎全由占位承担，占位缩到 0 后消息才缩 */
+.scroll-main {
+  flex: 1 1 744px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 避让占位（消息行右端 = 滚动条左侧）：shrink 权重极大（100×268）
+   优先承担压缩；flex-basis 0↔268 过渡 */
+.aside-bleed-col {
+  flex-grow: 0;
+  flex-shrink: 100;
+  min-width: 0;
+  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 输入区：内部 flex 行同步让出避让占位（与消息列对齐） */
+.chat-input-inner {
+  display: flex;
+  align-items: stretch;
+}
+.chat-input-col {
+  flex: 1 0 0%;
+  min-width: 0;
+}
+.input-bleed-col {
+  flex-grow: 0;
+  flex-shrink: 100;
+  min-width: 0;
+  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* aside 进出场：淡入淡出 + 滑移（缩放/右移） */
@@ -1252,13 +1307,14 @@ function scrollToMessage(messageId: string) {
 
 /* 分栏拖拽豁免：GdSplitpanes 拖拽时用
    .lite-splitpanes--resizing * { transition: none !important } 屏蔽概览/避让过渡，
-   用更高特异性 + important 豁免，保证拖拽时概览显隐与消息避让也有动画 */
+   用更高特异性 + important 豁免，保证拖拽时概览显隐与避让占位也有动画 */
 .lite-splitpanes--resizing .chat-aside {
   transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
-/* 消息避让（padding-right 变化在滚动容器上）同样豁免，拖拽时平滑过渡 */
-.lite-splitpanes--resizing .chat-scroll-container {
-  transition: opacity 0.3s ease, padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+/* 避让占位（flex-basis 变化）拖拽时同样豁免 */
+.lite-splitpanes--resizing .aside-bleed-col,
+.lite-splitpanes--resizing .input-bleed-col {
+  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 /* 右侧 aside（工作区概览）：位于滚动条左侧、固定不随消息滚动；
