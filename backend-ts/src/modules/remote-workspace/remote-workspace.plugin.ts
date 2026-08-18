@@ -126,7 +126,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
               .optional()
               .describe("Max lines to read (default 200)"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
@@ -137,6 +137,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
               args.file_path,
               args.offset || 0,
               args.limit || 200,
+              signal,
             );
           },
           display: {
@@ -166,14 +167,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
               .describe("Absolute path on the remote server"),
             content: z.string().describe("File content to write"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
               ctx.session.sessionId,
               attachments,
             );
-            await agent.writeFile(args.file_path, args.content);
+            await agent.writeFile(args.file_path, args.content, signal);
             return `File written: ${args.file_path} (${args.content.length} chars)`;
           },
           display: {
@@ -204,7 +205,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             old_text: z.string().describe("Text to find (must match exactly)"),
             new_text: z.string().describe("Replacement text"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
@@ -215,6 +216,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
               args.file_path,
               args.old_text,
               args.new_text,
+              signal,
             );
             if (!result.matched)
               throw new Error(`No match found: ${args.old_text}`);
@@ -255,14 +257,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
               .optional()
               .describe("Max matching lines (default 50)"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
               ctx.session.sessionId,
               attachments,
             );
-            return agent.grep(args.pattern, args.path, args.max_results || 50);
+            return agent.grep(args.pattern, args.path, args.max_results || 50, signal);
           },
           display: {
             argsKey: "pattern",
@@ -292,14 +294,14 @@ export class RemoteWorkspacePlugin extends PluginBase {
               ),
             command: z.string().describe("Shell command to execute"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
               ctx.session.sessionId,
               attachments,
             );
-            return agent.execute(args.command);
+            return agent.execute(args.command, signal);
           },
           display: {
             argsKey: "command",
@@ -332,7 +334,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
             local_path: z.string().describe("Local file path"),
             remote_path: z.string().describe("Remote file path"),
           }),
-          execute: async (args: any, ctx: PluginContext) => {
+          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
             const attachments = ctx.session.getSettings?.()?.attachments || {};
             const agent = await this.manager.getAgent(
               args.connection,
@@ -340,9 +342,9 @@ export class RemoteWorkspacePlugin extends PluginBase {
               attachments,
             );
             if (args.action === "upload") {
-              return agent.upload(args.local_path, args.remote_path);
+              return agent.upload(args.local_path, args.remote_path, signal);
             } else {
-              return agent.download(args.remote_path, args.local_path);
+              return agent.download(args.remote_path, args.local_path, signal);
             }
           },
           display: {

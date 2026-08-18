@@ -94,14 +94,47 @@ export class RpcClient {
     this.connected = true;
   }
 
-  call<T = any>(method: string, params?: any): Promise<T> {
+  call<T = any>(method: string, params?: any, signal?: AbortSignal): Promise<T> {
     return new Promise((resolve, reject) => {
       const id = `r${++this.msgId}`;
       this.pending.set(id, { resolve, reject });
       const req: RPCRequest = { id, method, params };
+
+      // abort 支持:调用方取消时移除 pending、以 AbortError 拒绝,
+      // 并通知远端 agent 终止对应前台命令(requestId = 本次 call 的 id)
+      const onAbort = () => {
+        this.pending.delete(id);
+        reject(new DOMException("RPC call aborted", "AbortError"));
+        try {
+          const cancelReq: RPCRequest = {
+            id: `cancel-${id}`,
+            method: "cancel",
+            params: { requestId: id },
+          };
+          this.ws.send(JSON.stringify(cancelReq));
+        } catch {
+          /* ws 可能已关闭,忽略 */
+        }
+      };
+      if (signal) {
+        if (signal.aborted) {
+          this.pending.delete(id);
+          reject(new DOMException("RPC call aborted", "AbortError"));
+          return;
+        }
+        signal.addEventListener("abort", onAbort, { once: true });
+        // 请求完成时清理监听
+        const origReject = reject;
+        reject = (e: any) => {
+          signal.removeEventListener("abort", onAbort);
+          origReject(e);
+        };
+      }
+
       this.ws.send(JSON.stringify(req), (err) => {
         if (err) {
           this.pending.delete(id);
+          if (signal) signal.removeEventListener("abort", onAbort);
           reject(err);
         }
       });
