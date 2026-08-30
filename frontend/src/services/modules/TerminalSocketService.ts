@@ -1,0 +1,155 @@
+import type {
+  ClientTerminalMessage,
+  ServerTerminalMessage,
+} from "@/types/terminal.types";
+
+/** 终端事件监听器 */
+export type TerminalEventListener = (msg: ServerTerminalMessage) => void;
+
+export interface TerminalSocketOptions {
+  terminalId?: string;
+  onTerminalId?: (terminalId: string) => void;
+}
+
+/**
+ * 终端 WebSocket 服务（原生 WebSocket，双向通信）
+ *
+ * 协议：
+ *  客户端 → 服务端：input / resize / close
+ *  服务端 → 客户端：transcript / output / exit / error
+ *
+ * 自动重连（页面刷新/后端重启），最大重试 5 次。
+ */
+export class TerminalSocketService {
+  private ws: WebSocket | null = null;
+  private listeners: Set<TerminalEventListener> = new Set();
+  private statusListeners: Set<(s: "connecting" | "open" | "closed") => void> =
+    new Set();
+  private reconnectAttempts = 0;
+  private maxReconnect = 5;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private url: string | null = null;
+  private shouldReconnect = true;
+  private terminalId: string | undefined;
+  private onTerminalId: ((terminalId: string) => void) | undefined;
+
+  /** 获取终端 WS URL（不含 query），区分 Electron(file:) 与 Web(http/https) */
+  private getWsUrl(): string {
+    if (typeof window === "undefined") return "";
+    if (window.location.protocol === "file:") {
+      // Electron：后端默认 localhost:3000
+      return "ws://localhost:3000/api/v1/terminal/ws";
+    }
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${window.location.host}/api/v1/terminal/ws`;
+  }
+
+  connect(token: string, sessionId: string, options: TerminalSocketOptions = {}): void {
+    this.shouldReconnect = true;
+    this.terminalId = options.terminalId;
+    this.onTerminalId = options.onTerminalId;
+    const url = this.getWsUrl();
+    const params = new URLSearchParams({ token, sessionId });
+    if (this.terminalId) params.set("terminalId", this.terminalId);
+    this.url = `${url}?${params.toString()}`;
+    this.open();
+  }
+
+  private open(): void {
+    if (!this.url) return;
+    this.setStatus("connecting");
+    const ws = new WebSocket(this.url);
+    this.ws = ws;
+
+    ws.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.setStatus("open");
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg: ServerTerminalMessage = JSON.parse(e.data);
+        if (msg.type === "ready") {
+          this.terminalId = msg.terminalId;
+          this.onTerminalId?.(msg.terminalId);
+        }
+        this.emit(msg);
+        // 退出/错误后停止重连
+        if (msg.type === "exit") {
+          this.shouldReconnect = false;
+        }
+      } catch {
+        /* ignore 非 JSON 帧 */
+      }
+    };
+
+    ws.onclose = () => {
+      this.setStatus("closed");
+      if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnect) {
+        this.reconnectAttempts++;
+        this.reconnectTimer = setTimeout(() => this.open(), 1000);
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }
+
+  /** 发送输入（原始文本） */
+  input(text: string): void {
+    this.send({ type: "input", text });
+  }
+
+  /** 发送 resize */
+  resize(cols: number, rows: number): void {
+    this.send({ type: "resize", cols, rows });
+  }
+
+  /** 关闭终端：通知后端销毁 PTY 并断开 WS */
+  close(): void {
+    this.shouldReconnect = false;
+    // 发送 close 消息通知后端销毁 PTY
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "close" }));
+    }
+    this.disconnect();
+  }
+
+  /** 断开 WS（不通知后端，用于页面刷新/会话切换） */
+  disconnect(): void {
+    this.shouldReconnect = false;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.ws?.close();
+    this.ws = null;
+  }
+
+  private send(msg: ClientTerminalMessage): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  /** 订阅终端消息 */
+  onMessage(fn: TerminalEventListener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  /** 订阅连接状态 */
+  onStatus(fn: (s: "connecting" | "open" | "closed") => void): () => void {
+    this.statusListeners.add(fn);
+    return () => this.statusListeners.delete(fn);
+  }
+
+  private emit(msg: ServerTerminalMessage): void {
+    for (const fn of this.listeners) fn(msg);
+  }
+
+  private setStatus(s: "connecting" | "open" | "closed"): void {
+    for (const fn of this.statusListeners) fn(s);
+  }
+}
+
+/** 单例 */
+export const terminalSocket = new TerminalSocketService();

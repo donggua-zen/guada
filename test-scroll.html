@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app {
+  height: 100vh;
+  width: 100vw;
+  background: rgba(30,30,30,0.7);
+  display: flex;
+  flex-direction: column;
+}
+
+.titlebar {
+  height: 36px;
+  flex-shrink: 0;
+  background: rgba(40,40,40,0.9);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #aaa;
+}
+
+.code-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.code-content-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+}
+
+.line-num-col {
+  flex-shrink: 0;
+  text-align: right;
+  color: #858585;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid #333;
+  padding-right: 10px;
+  margin-right: 10px;
+  will-change: transform;
+}
+
+.line-num {
+  padding-right: 2px;
+  white-space: pre;
+}
+
+.code-col-clip {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.code-col {
+  width: 800px;
+  will-change: transform;
+}
+
+.line-content {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.scrollbars {
+  flex-shrink: 0;
+  display: flex;
+  height: 10px;
+}
+
+.scrollbar-x-spacer {
+  flex-shrink: 0;
+}
+
+.scrollbar-x {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.scrollbar-x-thumb {
+  position: absolute;
+  top: 1px;
+  height: 8px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+  min-width: 30px;
+}
+
+.scrollbar-x-thumb:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+.scrollbar-y {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.scrollbar-y-thumb {
+  position: absolute;
+  left: 1px;
+  width: 8px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+  min-height: 30px;
+}
+
+.scrollbar-y-thumb:hover {
+  background: rgba(255,255,255,0.35);
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="titlebar">📄 test-file.ts — 源码预览</div>
+  <div class="code-viewport" id="viewport">
+    <div class="code-content-wrap" id="contentWrap">
+      <div class="line-num-col" id="lineNumCol"></div>
+      <div class="code-col-clip" id="codeColClip">
+        <div class="code-col" id="codeCol"></div>
+      </div>
+    </div>
+    <div class="scrollbars">
+      <div class="scrollbar-x-spacer" id="scrollbarXSpacer"></div>
+      <div class="scrollbar-x" id="scrollbarX">
+        <div class="scrollbar-x-thumb" id="scrollbarXThumb"></div>
+      </div>
+    </div>
+    <div class="scrollbar-y" id="scrollbarY">
+      <div class="scrollbar-y-thumb" id="scrollbarYThumb"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const codeLines = [
+  '// test-file.ts — 用于测试代码预览的折行和滚动效果',
+  'import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";',
+  'import { ElMessage } from "element-plus";',
+  'import { apiService } from "@/services/ApiService";',
+  'import { useStorage } from "@vueuse/core";',
+  '',
+  'interface SelectedFile {',
+  '    name: string',
+  '    path: string',
+  '    extension: string',
+  '    size: number',
+  '    content: string',
+  '    mimeType: string',
+  '}',
+  '',
+  '// 这是一段非常长的注释，用于测试代码折行效果。当代码行超过 800px 宽度时，应该自动折行显示，而不是出现横向滚动条。只有当窗口宽度小于 800px 时，才应该出现横向滚动条。这段文字刻意写得很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长。',
+  'const props = defineProps<{ sessionId: string; tab: UnifiedTab; isActive: boolean; fileChangeVersions: Record<string, number> }>()',
+  '',
+  'const selectedFile = ref<SelectedFile | null>(null)',
+  'const fileContent = ref("")',
+  'const previewLoading = ref(false)',
+  'const previewError = ref("")',
+  'const fileNotFound = ref(false)',
+  'const cachedWorkspacePath = ref<string | null>(null)',
+  'const markdownIframeRef = ref<HTMLIFrameElement | null>(null)',
+  '',
+  'const isHtmlFile = computed(() => {',
+  '    if (!selectedFile.value) return false',
+  '    const ext = selectedFile.value.extension.toLowerCase()',
+  '    return ext === ".html" || ext === ".htm"',
+  '})',
+  '',
+  'const isMarkdownFile = computed(() => {',
+  '    if (!selectedFile.value) return false',
+  '    const ext = selectedFile.value.extension.toLowerCase()',
+  '    return ext === ".md" || ext === ".markdown"',
+  '})',
+  '',
+  '// 另一段超长行：const veryLongVariableName = someFunctionWithVeryLongName(parameterOne, parameterTwo, parameterThree, parameterFour, parameterFive, parameterSix, parameterSeven, parameterEight, parameterNine, parameterTen)',
+  'const canTogglePreview = computed(() => {',
+  '    return isMarkdownFile.value || isHtmlFile.value',
+  '})',
+  '',
+  'const markdownHtml = computed(() => {',
+  '    if (!selectedFile.value || !fileContent.value) return ""',
+  '    return parseMarkdown(fileContent.value)',
+  '})',
+  '',
+  'const { isDark: isDarkMode } = useTheme()',
+  '',
+  'const markdownSrcDoc = computed(() => {',
+  '    if (!markdownHtml.value || !props.sessionId) return ""',
+  '    const mdFilePath = (selectedFile.value?.path || "").replace(/\\\\/g, "/")',
+  '    const lastSlashIndex = mdFilePath.lastIndexOf("/")',
+  '    const mdFileDir = lastSlashIndex > 0 ? mdFilePath.substring(0, lastSlashIndex) : ""',
+  '    let baseUrl: string',
+  '    if (isElectron && window.location.protocol === "file:" && cachedWorkspacePath.value) {',
+  '        const separator = cachedWorkspacePath.value.endsWith("/") || cachedWorkspacePath.value.endsWith("\\\\") ? "" : "/"',
+  '        const fullPath = (cachedWorkspacePath.value + separator + mdFileDir).replace(/\\\\/g, "/")',
+  '        const encodedPath = encodeURI(fullPath)',
+  '        baseUrl = encodedPath.startsWith("/") ? `file://${encodedPath}/` : `file:///${encodedPath}/`',
+  '    } else {',
+  '        baseUrl = `/api/v1/sessions/${props.sessionId}/workspace/html-preview/${mdFileDir ? mdFileDir + "/" : ""}`',
+  '    }',
+  '    return buildMarkdownSrcDoc(markdownHtml.value, baseUrl, isDarkMode.value)',
+  '})',
+  '',
+  '// 又一段超长行：function handleTreeNodeSelect(node: WorkspaceNode) { if (node.isDirectory) return; selectedNodePath.value = node.path; handleFileSelect(node); }',
+  'function onMarkdownMessage(e: MessageEvent) {',
+  '    if (!e.data || typeof e.data !== "object") return',
+  '    if (e.data.type === "md-preview-link" && e.data.url) {',
+  '        import("@/utils/workspacePreview").then(({ openLink }) => openLink(e.data.url))',
+  '    }',
+  '}',
+  '',
+  'onMounted(() => {',
+  '    window.addEventListener("message", onMarkdownMessage)',
+  '})',
+  'onBeforeUnmount(() => {',
+  '    window.removeEventListener("message", onMarkdownMessage)',
+  '})',
+  '',
+  'async function loadFileContent(filePath: string, force = false, skipLoading = false) {',
+  '    if (!props.sessionId) return',
+  '    if (!skipLoading) {',
+  '        previewLoading.value = true',
+  '    }',
+  '    previewError.value = ""',
+  '    fileNotFound.value = false',
+  '    try {',
+  '        const response = await apiService.getWorkspaceFile(props.sessionId, filePath)',
+  '        const newHash = hashString(response.content)',
+  '        if (!force && fileContentHash.value && newHash === fileContentHash.value) {',
+  '            previewLoading.value = false',
+  '            return',
+  '        }',
+  '        fileContentHash.value = newHash',
+  '        selectedFile.value!.content = response.content',
+  '        selectedFile.value!.extension = response.extension',
+  '        selectedFile.value!.mimeType = response.mimeType',
+  '        fileContent.value = response.content',
+  '        if (isHtmlFile.value && currentPreviewMode.value === "rendered") {',
+  '            htmlPreviewVersion.value++',
+  '        }',
+  '    } catch (error: any) {',
+  '        const status = error?.response?.status',
+  '        const msg = error?.response?.data?.message || error.message || ""',
+  '        if (status === 404 || msg.includes("not found") || msg.includes("does not exist") || msg.includes("ENOENT")) {',
+  '            fileNotFound.value = true',
+  '        } else if (msg.includes("File too large") || msg.includes("too large")) {',
+  '            previewError.value = "文件过大暂不支持预览"',
+  '        } else {',
+  '            previewError.value = "加载文件失败"',
+  '        }',
+  '        console.error("Failed to load file:", error)',
+  '    } finally {',
+  '        previewLoading.value = false',
+  '    }',
+  '}',
+  '',
+  '// 最后一行：export default { name: "FilePreviewPanel", components: { ContextMenu, WorkspaceTree }, setup() { return { selectedFile, fileContent, previewLoading, previewError, fileNotFound, isHtmlFile, isMarkdownFile, canTogglePreview, markdownHtml, markdownSrcDoc, highlightedCode, htmlPreviewSrc, loadFileContent, handleManualRefresh, closePreview, onImageError, handleOpenInExplorerForCurrent } } }',
+];
+
+const lineNumCol = document.getElementById('lineNumCol');
+const codeCol = document.getElementById('codeCol');
+const contentWrap = document.getElementById('contentWrap');
+const scrollbarX = document.getElementById('scrollbarX');
+const scrollbarXThumb = document.getElementById('scrollbarXThumb');
+const scrollbarXSpacer = document.getElementById('scrollbarXSpacer');
+const scrollbarY = document.getElementById('scrollbarY');
+const scrollbarYThumb = document.getElementById('scrollbarYThumb');
+
+lineNumCol.innerHTML = codeLines.map((_, i) =>
+  `<div class="line-num" data-idx="${i}">${i + 1}</div>`
+).join('');
+
+codeCol.innerHTML = codeLines.map((line, i) =>
+  `<div class="line-content" data-idx="${i}">${escapeHtml(line)}</div>`
+).join('');
+
+let scrollX = 0;
+let scrollY = 0;
+
+function syncHeights() {
+  const contents = codeCol.querySelectorAll('.line-content');
+  const nums = lineNumCol.querySelectorAll('.line-num');
+  contents.forEach((content, i) => {
+    if (nums[i]) {
+      const h = content.getBoundingClientRect().height;
+      nums[i].style.height = h + 'px';
+    }
+  });
+}
+
+function updateScrollbars() {
+  const lineNumWidth = lineNumCol.getBoundingClientRect().width;
+  scrollbarXSpacer.style.width = lineNumWidth + 'px';
+
+  const contentWidth = codeCol.scrollWidth;
+  const contentHeight = Math.max(lineNumCol.scrollHeight, codeCol.scrollHeight);
+  const viewWidth = contentWrap.clientWidth;
+  const viewHeight = contentWrap.clientHeight;
+
+  const maxX = Math.max(0, contentWidth - (viewWidth - lineNumWidth));
+  const trackXWidth = viewWidth - lineNumWidth;
+  const xRatio = trackXWidth / contentWidth;
+  const thumbXWidth = Math.max(30, trackXWidth * xRatio);
+  const thumbXMax = trackXWidth - thumbXWidth;
+  scrollbarXThumb.style.width = thumbXWidth + 'px';
+
+  const maxY = Math.max(0, contentHeight - viewHeight);
+  const yRatio = viewHeight / contentHeight;
+  const thumbYHeight = Math.max(30, viewHeight * yRatio);
+  const thumbYMax = viewHeight - thumbYHeight;
+  scrollbarYThumb.style.height = thumbYHeight + 'px';
+
+  scrollX = Math.max(0, Math.min(scrollX, maxX));
+  scrollY = Math.max(0, Math.min(scrollY, maxY));
+
+  lineNumCol.style.transform = `translateY(${-scrollY}px)`;
+  codeCol.style.transform = `translate(${-scrollX}px, ${-scrollY}px)`;
+
+  if (maxX > 0) {
+    scrollbarXThumb.style.left = (scrollX / maxX * thumbXMax) + 'px';
+    scrollbarX.style.display = '';
+  } else {
+    scrollbarX.style.display = 'none';
+  }
+  if (maxY > 0) {
+    scrollbarYThumb.style.top = (scrollY / maxY * thumbYMax) + 'px';
+    scrollbarY.style.display = '';
+  } else {
+    scrollbarY.style.display = 'none';
+  }
+}
+
+let dragX = false, dragXStart = 0, dragXScrollStart = 0;
+scrollbarX.addEventListener('mousedown', (e) => {
+  if (e.target === scrollbarXThumb) return;
+  const rect = scrollbarX.getBoundingClientRect();
+  const thumbW = scrollbarXThumb.offsetWidth;
+  const clickX = e.clientX - rect.left;
+  const maxX = codeCol.scrollWidth - (contentWrap.clientWidth - lineNumCol.getBoundingClientRect().width);
+  if (maxX <= 0) return;
+  scrollX = Math.max(0, Math.min(maxX, (clickX / (rect.width - thumbW)) * maxX));
+  updateScrollbars();
+});
+scrollbarXThumb.addEventListener('mousedown', (e) => {
+  dragX = true; dragXStart = e.clientX; dragXScrollStart = scrollX;
+  e.preventDefault(); e.stopPropagation();
+});
+
+let dragY = false, dragYStart = 0, dragYScrollStart = 0;
+scrollbarY.addEventListener('mousedown', (e) => {
+  if (e.target === scrollbarYThumb) return;
+  const rect = scrollbarY.getBoundingClientRect();
+  const thumbH = scrollbarYThumb.offsetHeight;
+  const clickY = e.clientY - rect.top;
+  const maxY = Math.max(lineNumCol.scrollHeight, codeCol.scrollHeight) - contentWrap.clientHeight;
+  if (maxY <= 0) return;
+  scrollY = Math.max(0, Math.min(maxY, (clickY / (rect.height - thumbH)) * maxY));
+  updateScrollbars();
+});
+scrollbarYThumb.addEventListener('mousedown', (e) => {
+  dragY = true; dragYStart = e.clientY; dragYScrollStart = scrollY;
+  e.preventDefault(); e.stopPropagation();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (dragX) {
+    const maxX = codeCol.scrollWidth - (contentWrap.clientWidth - lineNumCol.getBoundingClientRect().width);
+    if (maxX > 0) {
+      const rect = scrollbarX.getBoundingClientRect();
+      const delta = e.clientX - dragXStart;
+      scrollX = Math.max(0, Math.min(maxX, dragXScrollStart + (delta / (rect.width - scrollbarXThumb.offsetWidth)) * maxX));
+      updateScrollbars();
+    }
+  }
+  if (dragY) {
+    const maxY = Math.max(lineNumCol.scrollHeight, codeCol.scrollHeight) - contentWrap.clientHeight;
+    if (maxY > 0) {
+      const rect = scrollbarY.getBoundingClientRect();
+      const delta = e.clientY - dragYStart;
+      scrollY = Math.max(0, Math.min(maxY, dragYScrollStart + (delta / (rect.height - scrollbarYThumb.offsetHeight)) * maxY));
+      updateScrollbars();
+    }
+  }
+});
+
+document.addEventListener('mouseup', () => { dragX = false; dragY = false; });
+
+contentWrap.addEventListener('wheel', (e) => {
+  const maxY = Math.max(lineNumCol.scrollHeight, codeCol.scrollHeight) - contentWrap.clientHeight;
+  if (maxY <= 0) return;
+  e.preventDefault();
+  scrollY = Math.max(0, Math.min(maxY, scrollY + e.deltaY));
+  updateScrollbars();
+}, { passive: false });
+
+syncHeights();
+updateScrollbars();
+
+const ro = new ResizeObserver(() => { syncHeights(); updateScrollbars(); });
+ro.observe(codeCol);
+ro.observe(contentWrap);
+
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+</script>
+
+</body>
+</html>

@@ -27,6 +27,8 @@ import { ShellModule } from './modules/shell/shell.module';
 import { CommandsModule } from './modules/commands/commands.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
 import { GitModule } from './modules/git/git.module';
+import { TerminalModule } from './modules/terminal/terminal.module';
+import { PersistenceModule } from './common/persistence/persistence.module';
 
 @Module({
   imports: [
@@ -65,6 +67,8 @@ import { GitModule } from './modules/git/git.module';
     CommandsModule,   // 命令提供者注册 & 聚合接口
     BridgeModule,     // Electron ↔ Backend 通信桥（全局）
     GitModule,        // Git 源码管理模块
+    TerminalModule,   // 终端模块（后端 PTY + WebSocket）
+    PersistenceModule, // 持久化存储模块（全局：PersistenceBackend + IMessageStore 抽象）
   ],
 })
 export class AppModule {}

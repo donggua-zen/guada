@@ -9,5 +9,7 @@
   "subagent_manager.executing": "Managing sub-agents",
   "subagent_manager.completed": "Managed sub-agents",
   "subagent_manager.aggregate.executing": "Managing {n} sub-agents",
-  "subagent_manager.aggregate.completed": "Managed {n} sub-agents"
+  "subagent_manager.aggregate.completed": "Managed {n} sub-agents",
+  "subAgent.toolkitDescription": "Spawn sub-agents to carry out independent subtasks"
+
 }

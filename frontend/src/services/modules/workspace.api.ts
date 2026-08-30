@@ -14,6 +14,8 @@ export interface WorkspaceApi {
   getWorkspaceRawFileUrl(sessionId: string, filePath: string): string;
   getWorkspaceHtmlPreviewUrl(sessionId: string, filePath: string): string;
   deleteWorkspaceFile(sessionId: string, filePath: string): Promise<{ success: boolean; isDirectory?: boolean }>;
+  saveWorkspaceFile(sessionId: string, filePath: string, content: string): Promise<{ success: boolean; path: string }>;
+  disposeTerminal(terminalId: string): Promise<{ success: boolean; terminalId: string }>;
   renameWorkspaceFile(sessionId: string, filePath: string, newName: string): Promise<{ success: boolean; isDirectory?: boolean; newPath?: string }>;
 }
 
@@ -63,6 +65,18 @@ export const workspaceApi: WorkspaceApi = {
     return await this._request(`/sessions/${sessionId}/workspace/rename`, {
       method: "POST",
       data: { path: filePath, newName },
+    });
+  },
+  async saveWorkspaceFile(this: ApiContext, sessionId: string, filePath: string, content: string) {
+    return await this._request(`/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`, {
+      method: "POST",
+      data: { content },
+    });
+  },
+
+  async disposeTerminal(this: ApiContext, terminalId: string) {
+    return await this._request(`/terminal/${encodeURIComponent(terminalId)}`, {
+      method: "DELETE",
     });
   },
 };

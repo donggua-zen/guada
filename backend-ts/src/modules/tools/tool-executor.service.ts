@@ -17,6 +17,7 @@ import type { ToolResultObject, ImageContent } from "../plugins/api/plugin-api";
 import { safeTruncate } from "../../common/utils/string.utils";
 import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
+import { AskDeniedError } from "../../common/types/ask.types";
 
 /**
  * 工具执行器
@@ -54,7 +55,7 @@ export class ToolExecutor {
       const lazyTool = rp.allTools.find((t) => t.name === toolName);
       if (lazyTool) {
         const inLazyKit = rp.enabledToolKits.some(
-          (tk) => tk.id === lazyTool.toolSet,
+          (tk) => tk.enabled && tk.id === lazyTool.toolSet,
         );
         if (inLazyKit) {
           return lazyTool;
@@ -155,32 +156,19 @@ export class ToolExecutor {
     if (!toolEntry)
       throw new Error(`Tool ${fullToolName} is not available or disabled`);
 
-    // 记忆模式运行时限制：仅允许 memory 插件的工具
-    if (session.getRunMode?.() === "memory") {
-      const inMemoryPlugin = resolved.some(
+    // 工具范围锁定（影子轮次等瞬态机制）：仅允许锁定插件的工具
+    const toolScope = session.getToolScope?.();
+    if (toolScope) {
+      const inScope = resolved.some(
         (rp) =>
-          rp.plugin.id === "memory" &&
+          rp.plugin.id === toolScope &&
           rp.enabledTools.some((t) => t.name === fullToolName),
       );
-      if (!inMemoryPlugin) {
+      if (!inScope) {
         return {
           toolCallId,
           name: fullToolName,
-          content: `In memory mode, only the memory tool is allowed`,
-          isError: true,
-        };
-      }
-    }
-
-    // 计划模式运行时限制：仅允许 safe 等级的只读工具
-    // 例外：terminal (run_command) 允许执行，由 shell.plugin.ts 强制走 sandbox --read-only
-    if (session.getRunMode?.() === "plan") {
-      const isTerminal = fullToolName === "run_command";
-      if (toolEntry.dangerLevel && toolEntry.dangerLevel !== "safe" && !isTerminal) {
-        return {
-          toolCallId,
-          name: fullToolName,
-          content: `The user has enabled plan mode. In this mode, only safe-level tools (typically read-only) are available. "${fullToolName}" is a ${toolEntry.dangerLevel} level tool and has been blocked. Unless the user disables plan mode, do not attempt to call this tool again. If the task cannot be completed without this tool, stop your work and inform the user.`,
+          content: `The current tool scope only allows the "${toolScope}" plugin tools`,
           isError: true,
         };
       }
@@ -203,7 +191,7 @@ export class ToolExecutor {
 
       let result = await toolEntry.handler(
         validatedArgs,
-        { session } as PluginContext,
+        { session, toolCallId } as PluginContext,
         abortSignal,
       );
 
@@ -239,6 +227,17 @@ export class ToolExecutor {
     } catch (error: any) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error executing tool ${fullToolName}: ${errorMsg}`);
+      // 统一交互拒绝（AskDeniedError）：feedback 携带用户自定义回复/拒绝语义，
+      // 原样反馈模型（区别于普通执行错误），模型据此自行调整
+      if (error instanceof AskDeniedError) {
+        const feedback = error.feedback || errorMsg;
+        return {
+          toolCallId,
+          name: fullToolName,
+          content: feedback,
+          isError: true,
+        };
+      }
       return {
         toolCallId,
         name: fullToolName,

@@ -28,6 +28,7 @@ export class SchedulerPlugin extends PluginBase {
     const schedKit = api.registerToolKit({
       id: "scheduler",
       name: "%scheduler.toolkitName%",
+      description: "%scheduler.toolkitDescription%",
       loadMode: "lazy",
       activator:
         "Scheduled task management tool for creating, viewing, and deleting scheduled tasks. Use this tool when you need to automatically execute a task at a specified time.",

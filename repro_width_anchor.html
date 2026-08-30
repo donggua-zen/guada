@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { margin: 8px; font-family: monospace; font-size: 12px; }
+.col { width: 400px; height: 200px; overflow-x: scroll; overflow-y: hidden; border: 1px solid #ccc; background: #fff; }
+.inner { position: relative; width: max-content; min-width: 100%; will-change: transform; }
+.size { position: relative; visibility: hidden; height: 0; overflow: hidden; width: max-content; pointer-events: none; }
+.size-line { display: block; width: max-content; white-space: pre; }
+.row { position: absolute; left: 0; width: max-content; min-width: 100%; height: 20px; box-sizing: border-box; background: rgba(0,200,0,.15); }
+.line { display: flex; }
+.num { flex: 0 0 48px; background: #eee; }
+.content { white-space: pre; flex: 1; min-width: max-content; padding: 0 12px 0 8px; }
+</style>
+</head>
+<body>
+<h3>Case A: anchor = widest text, rows use min-width:100%</h3>
+<div class="col" id="colA">
+  <div class="inner" id="innerA">
+    <div class="size" id="sizeA">
+      <span class="size-line">short line</span>
+      <span class="size-line">this is a very long line that should stretch the inner beyond the 400px viewport, blah blah blah blah blah blah blah blah blah blah blah blah blah blah</span>
+    </div>
+    <div class="row" style="top:0"><div class="line"><span class="num">1</span><span class="content">short line</span></div></div>
+    <div class="row" style="top:20px"><div class="line"><span class="num">2</span><span class="content">this is a very long line that should stretch the inner beyond the 400px viewport, blah blah blah blah blah blah blah blah blah blah blah blah blah blah</span></div></div>
+  </div>
+</div>
+
+<h3>Case B: same but anchor has height:0+overflow:hidden+visibility:hidden (exact CSS)</h3>
+<div class="col" id="colB">
+  <div class="inner" id="innerB">
+    <div class="size" id="sizeB" style="height:0;overflow:hidden;visibility:hidden">
+      <span class="size-line">short line</span>
+      <span class="size-line">this is a very long line that should stretch the inner beyond the 400px viewport, blah blah blah blah blah blah blah blah blah blah blah blah blah blah</span>
+    </div>
+    <div class="row" style="top:0"><div class="line"><span class="num">1</span><span class="content">short line</span></div></div>
+    <div class="row" style="top:20px"><div class="line"><span class="num">2</span><span class="content">this is a very long line that should stretch the inner beyond the 400px viewport, blah blah blah blah blah blah blah blah blah blah blah blah blah blah</span></div></div>
+  </div>
+</div>
+
+<pre id="out"></pre>
+<script>
+function m(el){ if(!el) return 'null'; const r = el.getBoundingClientRect(); return Math.round(r.width); }
+function report(id){
+  const col = document.getElementById(id);
+  const inner = col.querySelector('.inner');
+  const size = col.querySelector('.size');
+  const rows = col.querySelectorAll('.row');
+  const out = document.getElementById('out');
+  out.textContent += id + ': col.clientWidth=' + col.clientWidth + ' col.scrollWidth=' + col.scrollWidth +
+    ' inner.width=' + m(inner) + ' size.width=' + m(size) +
+    ' rows=' + Array.from(rows).map(r=>m(r)).join(',') + '\n';
+}
+report('colA');
+report('colB');
+</script>
+</body>
+</html>

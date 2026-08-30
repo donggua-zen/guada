@@ -173,28 +173,9 @@ const browserExpanded = ref(false);
 /** 当前会话的浏览器窗口列表（browserStore 已按会话过滤） */
 const browserWindows = computed(() => browserStore.sessionWebviews);
 
-// 浏览器 store → tabStore 同步（原由 WorkspaceSidebar 承担；概览常驻 → 迁到此处，
-// 工作区隐藏时标签列表仍保持同步，否则 preview 标签栏会过期）
-watch(
-  () => browserStore.activeWindowId,
-  () => tabStore.syncActiveWindowId(),
-);
-watch(
-  () =>
-    browserStore.sessionWebviews
-      .map((w) => `${w.windowId}\0${w.title}\0${w.favicon || ""}\0${w.url}`)
-      .join("\n"),
-  () => {
-    tabStore.syncBrowserTabs(
-      browserStore.sessionWebviews.map((w) => ({
-        windowId: w.windowId,
-        title: w.title,
-        favicon: w.favicon,
-        url: w.url,
-      })),
-    );
-  },
-);
+// 浏览器 store → tabStore 同步已迁移至 BrowserWebviewLayer（MainLayout 常驻层）：
+// 概览面板是条件渲染（asideWidth>0 才挂载），概览折叠/宽度不足时此处 watch 失效，
+// 会导致浏览器标签不出现；BrowserWebviewLayer 常驻，同步不会断。
 
 // ── 会话绑定：git 数据与事件订阅由 GitStore 管理（bindSession 订阅 git scope），
 //    workspace SSE 连接由 MainLayout 持有 —— 本组件仅展示，不参与连接/订阅生命周期。
@@ -211,21 +192,19 @@ watch(
 
 function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
-  // 等 WorkspaceSidebar 挂载后再切 git —— 挂载时其会话 watcher 会 exitGitMode
-  // 回到目录树，若同步设置会被覆盖导致切不到 git 标签
-  nextTick(() => tabStore.enterGitMode());
+  // 显示完全由激活标签驱动：打开 Git 审阅标签
+  nextTick(() => tabStore.openGitTab());
 }
 
 function openWorkspaceTree(): void {
   layoutStore.setWorkspaceVisible(true);
-  tabStore.exitPreviewMode();
-  tabStore.exitGitMode();
+  // 显示完全由激活标签驱动：回到起始页（无激活标签时展示，可再打开文件）
+  nextTick(() => tabStore.openNewTab());
 }
 
 function activateBrowser(windowId: string): void {
   layoutStore.setWorkspaceVisible(true);
   nextTick(() => {
-    tabStore.enterPreviewMode();
     tabStore.selectTab(`browser:${windowId}`);
   });
 }
@@ -240,7 +219,6 @@ async function createBrowser(): Promise<void> {
     if (result.success && result.window?.windowId) {
       layoutStore.setWorkspaceVisible(true);
       nextTick(() => {
-        tabStore.enterPreviewMode();
         tabStore.selectTab(`browser:${result.window.windowId}`);
       });
     }

@@ -12,6 +12,7 @@ import {
   UseGuards,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from "@nestjs/common";
 import { Response } from "express";
 import * as fs from "fs";
@@ -64,6 +65,8 @@ export class PluginsController {
           enabled: r.enabled,
           icon: r.plugin.icon,
           source: r.source || "builtin",
+          version: r.plugin.version,
+          author: r.plugin.author,
           tools: r.allTools.map((t) => ({
             name: t.name,
             description: t.description,
@@ -82,8 +85,11 @@ export class PluginsController {
           toolkits: r.enabledToolKits.map((k) => ({
             id: k.id,
             name: this.nlsService.resolveString(r.plugin.id, k.name, nlsLocale),
+            description: this.nlsService.resolveString(r.plugin.id, k.description || "", nlsLocale),
             loadMode: k.loadMode,
             enabled: k.enabled,
+            toolCount: k.toolCount,
+            promptCount: k.promptCount,
           })),
         })),
     };
@@ -214,6 +220,43 @@ export class PluginsController {
     }
     await this.externalLoader.uninstallPlugin(pluginId);
     return { success: true, pluginId };
+  }
+
+  /**
+   * 从分发源安装外部插件（后台任务，返回 jobId；前端轮询 install-log 显示进度）
+   * source: github:owner/repo[#ref] / gitee:owner/repo[#ref] / git:https://...[#ref] / local:path
+   */
+  @UseGuards(AuthGuard)
+  @Post("install")
+  async installPlugin(@Body() body: { source: string }) {
+    if (!body?.source) throw new BadRequestException("source is required");
+    return await this.externalLoader.installPluginJob(body.source);
+  }
+
+  /** 查询安装任务日志（假终端轮询） */
+  @UseGuards(AuthGuard)
+  @Get("install-log/:jobId")
+  async getInstallLog(@Param("jobId") jobId: string) {
+    const state = await this.externalLoader.getInstallLog(jobId);
+    if (!state) throw new NotFoundException("安装任务不存在或已过期");
+    return state;
+  }
+
+  /** 取消安装任务（窗口关闭/组件卸载时调用） */
+  @UseGuards(AuthGuard)
+  @Post("install-cancel/:jobId")
+  async cancelInstall(@Param("jobId") jobId: string) {
+    return await this.externalLoader.cancelInstall(jobId);
+  }
+
+  /**
+   * 更新已安装的外部插件（git 分发）
+   */
+  @UseGuards(AuthGuard)
+  @Post(":pluginId/update")
+  async updatePlugin(@Param("pluginId") pluginId: string) {
+    const res = await this.externalLoader.updatePlugin(pluginId);
+    return { success: true, ...res };
   }
 
   // ── Plugin Data API: 插件数据自治 ──

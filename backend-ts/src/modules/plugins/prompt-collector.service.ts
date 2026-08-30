@@ -62,9 +62,10 @@ export class PromptCollector {
   }
 
   /**
-   * 收集所有启用插件的 type=user 插件级提示词（注入到 user 消息，而非 system prompt）。
+   * 收集所有启用插件的 type=user 提示词（注入到 user 消息，而非 system prompt）。
    *
-   * 只在插件级 prompts（api.registerPrompt）中扫描，不涉及工具包级。
+   * 扫描两个来源：插件级 prompts（api.registerPrompt）与已启用工具包中
+   * type=user 的提示词（kit.registerPrompt({ type: "user" })）。
    */
   async collectUserPrompts(
     resolvedPlugins: ResolvedPluginInfo[],
@@ -75,8 +76,36 @@ export class PromptCollector {
     for (const rp of resolvedPlugins) {
       if (!rp.enabled) continue;
 
+      const pluginId = rp.plugin.id;
+      // 已启用工具包的 user 型提示词
+      const enabledKitIds = new Set(
+        rp.enabledToolKits.filter((tk) => tk.enabled).map((tk) => tk.id),
+      );
+      for (const kitId of enabledKitIds) {
+        const kitReg = PluginRegistry.getToolKits(pluginId).find(
+          (k) => k.def.id === kitId,
+        );
+        for (const pm of kitReg?.prompts || []) {
+          if (pm.type !== "user") continue;
+          try {
+            const content = await pm.handler(context);
+            if (content) {
+              pieces.push({
+                content,
+                frequency: pm.frequency as any,
+                loadMode: "user",
+                type: "user",
+                pluginId,
+                description: pm.description,
+              });
+            }
+          } catch {}
+        }
+      }
+
+      // 插件级 user 型提示词
       const { prompts: pluginPrompts } = PluginRegistry.getPromptMetas(
-        rp.plugin.id,
+        pluginId,
       );
       for (const meta of pluginPrompts) {
         if (meta.type !== "user") continue;
@@ -133,6 +162,7 @@ export class PromptCollector {
         if (!kitReg) continue;
 
         for (const pm of kitReg.prompts) {
+          if (pm.type === "user") continue; // user 型由 collectUserPrompts 收集
           try {
             const content = await pm.handler(context);
             if (content) {

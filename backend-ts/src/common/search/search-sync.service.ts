@@ -31,8 +31,10 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.initTimer = setTimeout(() => {
-      // 启动后触发一次全量回填（如已有游标则 worker 会快速跳过/只做增量）
-      this.spawnWorker("fullbackfill");
+      // 有同步游标 → 只做增量；无游标（首次/表结构或策略版本迁移）→ 全量回填
+      const needsFullbackfill =
+        this.searchIndex.getSyncMeta("last_synced_at") === null;
+      this.spawnWorker(needsFullbackfill ? "fullbackfill" : "incremental");
       // 定期增量同步
       this.syncInterval = setInterval(
         () => this.spawnWorker("incremental"),
@@ -40,7 +42,7 @@ export class SearchSyncService implements OnModuleInit, OnModuleDestroy {
       );
       if (!this.destroyed) {
         this.logger.log(
-          `搜索索引同步调度已启动: 全量回填(启动时) + 增量每 ${SYNC_INTERVAL_MS / 1000 / 60} 分钟`,
+          `搜索索引同步调度已启动: ${needsFullbackfill ? "全量回填" : "增量"} + 增量每 ${SYNC_INTERVAL_MS / 1000 / 60} 分钟`,
         );
       }
     }, INITIAL_DELAY_MS);

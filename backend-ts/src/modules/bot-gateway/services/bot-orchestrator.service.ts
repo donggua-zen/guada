@@ -374,8 +374,8 @@ export class BotOrchestrator {
             },
             {
               onEvent: (chunk) => {
-                if (chunk.type === "text" && chunk.content) {
-                  accumulatedContent += chunk.content;
+                if (chunk.type === "text_delta") {
+                  accumulatedContent += chunk.text;
                   if (capabilities.supportsStreaming) {
                     void sendReply(accumulatedContent, {
                       streamId,

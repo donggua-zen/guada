@@ -26,6 +26,4 @@ export abstract class PluginBase {
 
   /** 获取插件的所有提示词（旧适配器兼容，新插件通过 onLoad(api).registerPrompt() 注册） */
   getPrompts?(context: PluginContext): Promise<PromptPiece[]>;
-  /** 获取插件的持久注入提示词（每次对话都注入） */
-  getPersistentPrompts?(context: PluginContext): Promise<PromptPiece[]>;
 }

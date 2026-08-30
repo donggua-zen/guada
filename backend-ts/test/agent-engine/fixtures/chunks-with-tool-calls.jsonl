@@ -1,100 +1,106 @@
-{"content":null,"reasoningContent":"用户","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"想要","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"测试","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"的多","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"路","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"并发","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"稳定性","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"，","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"需要","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"：\n","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"1","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":".","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":" ","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"使用","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"写入","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"5","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"个","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"（","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"test","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"1","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":".txt","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":" ~","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":" test","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"5","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":".txt","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"）\n","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"2","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":".","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":" ","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"使用","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"并发","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"读取","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"这","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"5","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"个","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"\n","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"3","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":".","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":" ","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"使用","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"命令行","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"并发","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"读取","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"这","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"5","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"个","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"\n\n","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"首先","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"我需要","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"加载","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"集","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"来","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"了解","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"如何使用","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"操作","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"。\n\n","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"让我","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"先","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"加载","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"文件","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"。","finishReason":null,"usage":null}
-{"content":"好的","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"！","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"我先","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"加载","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"文件","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"工具","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"集的","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"用法","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"，","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"然后","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"进行","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"并发","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"测试","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"。","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"id":"call_00_OqvDAfT37BtLapqkSQTX2479","index":0,"type":"function","name":"tool_load","arguments":""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"{"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"namespace"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":": "}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"file"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"}"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":"tool_calls","usage":{"promptTokens":4057,"completionTokens":132,"totalTokens":4189}}
+{"type": "block_start", "index": 0, "blockType": "reasoning"}
+{"type": "reasoning_delta", "index": 0, "text": "用户"}
+{"type": "reasoning_delta", "index": 0, "text": "想要"}
+{"type": "reasoning_delta", "index": 0, "text": "测试"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "的多"}
+{"type": "reasoning_delta", "index": 0, "text": "路"}
+{"type": "reasoning_delta", "index": 0, "text": "并发"}
+{"type": "reasoning_delta", "index": 0, "text": "稳定性"}
+{"type": "reasoning_delta", "index": 0, "text": "，"}
+{"type": "reasoning_delta", "index": 0, "text": "需要"}
+{"type": "reasoning_delta", "index": 0, "text": "：\n"}
+{"type": "reasoning_delta", "index": 0, "text": "1"}
+{"type": "reasoning_delta", "index": 0, "text": "."}
+{"type": "reasoning_delta", "index": 0, "text": " "}
+{"type": "reasoning_delta", "index": 0, "text": "使用"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "写入"}
+{"type": "reasoning_delta", "index": 0, "text": "5"}
+{"type": "reasoning_delta", "index": 0, "text": "个"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "（"}
+{"type": "reasoning_delta", "index": 0, "text": "test"}
+{"type": "reasoning_delta", "index": 0, "text": "1"}
+{"type": "reasoning_delta", "index": 0, "text": ".txt"}
+{"type": "reasoning_delta", "index": 0, "text": " ~"}
+{"type": "reasoning_delta", "index": 0, "text": " test"}
+{"type": "reasoning_delta", "index": 0, "text": "5"}
+{"type": "reasoning_delta", "index": 0, "text": ".txt"}
+{"type": "reasoning_delta", "index": 0, "text": "）\n"}
+{"type": "reasoning_delta", "index": 0, "text": "2"}
+{"type": "reasoning_delta", "index": 0, "text": "."}
+{"type": "reasoning_delta", "index": 0, "text": " "}
+{"type": "reasoning_delta", "index": 0, "text": "使用"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "并发"}
+{"type": "reasoning_delta", "index": 0, "text": "读取"}
+{"type": "reasoning_delta", "index": 0, "text": "这"}
+{"type": "reasoning_delta", "index": 0, "text": "5"}
+{"type": "reasoning_delta", "index": 0, "text": "个"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "\n"}
+{"type": "reasoning_delta", "index": 0, "text": "3"}
+{"type": "reasoning_delta", "index": 0, "text": "."}
+{"type": "reasoning_delta", "index": 0, "text": " "}
+{"type": "reasoning_delta", "index": 0, "text": "使用"}
+{"type": "reasoning_delta", "index": 0, "text": "命令行"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "并发"}
+{"type": "reasoning_delta", "index": 0, "text": "读取"}
+{"type": "reasoning_delta", "index": 0, "text": "这"}
+{"type": "reasoning_delta", "index": 0, "text": "5"}
+{"type": "reasoning_delta", "index": 0, "text": "个"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "\n\n"}
+{"type": "reasoning_delta", "index": 0, "text": "首先"}
+{"type": "reasoning_delta", "index": 0, "text": "我需要"}
+{"type": "reasoning_delta", "index": 0, "text": "加载"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "集"}
+{"type": "reasoning_delta", "index": 0, "text": "来"}
+{"type": "reasoning_delta", "index": 0, "text": "了解"}
+{"type": "reasoning_delta", "index": 0, "text": "如何使用"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "操作"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "。\n\n"}
+{"type": "reasoning_delta", "index": 0, "text": "让我"}
+{"type": "reasoning_delta", "index": 0, "text": "先"}
+{"type": "reasoning_delta", "index": 0, "text": "加载"}
+{"type": "reasoning_delta", "index": 0, "text": "文件"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "reasoning_delta", "index": 0, "text": "。"}
+{"type": "block_start", "index": 1, "blockType": "text"}
+{"type": "text_delta", "index": 1, "text": "好的"}
+{"type": "text_delta", "index": 1, "text": "！"}
+{"type": "text_delta", "index": 1, "text": "我先"}
+{"type": "text_delta", "index": 1, "text": "加载"}
+{"type": "text_delta", "index": 1, "text": "文件"}
+{"type": "text_delta", "index": 1, "text": "工具"}
+{"type": "text_delta", "index": 1, "text": "集的"}
+{"type": "text_delta", "index": 1, "text": "用法"}
+{"type": "text_delta", "index": 1, "text": "，"}
+{"type": "text_delta", "index": 1, "text": "然后"}
+{"type": "text_delta", "index": 1, "text": "进行"}
+{"type": "text_delta", "index": 1, "text": "并发"}
+{"type": "text_delta", "index": 1, "text": "测试"}
+{"type": "text_delta", "index": 1, "text": "。"}
+{"type": "block_start", "index": 2, "blockType": "tool-call"}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "", "toolCallId": "call_00_OqvDAfT37BtLapqkSQTX2479", "name": "tool_load"}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "{"}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "\""}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "namespace"}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "\""}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": ": "}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "\""}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "file"}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "\""}
+{"type": "tool_call_delta", "index": 2, "argumentsDelta": "}"}
+{"type": "block_end", "index": 0, "block": {"type": "reasoning", "contentId": "", "summary": "用户想要测试工具的多路并发稳定性，需要：\n1. 使用文件工具写入5个文件（test1.txt ~ test5.txt）\n2. 使用文件工具并发读取这5个文件\n3. 使用命令行工具并发读取这5个文件\n\n首先我需要加载文件工具集来了解如何使用文件操作工具。\n\n让我先加载文件工具。"}}
+{"type": "block_end", "index": 1, "block": {"type": "text", "contentId": "", "text": "好的！我先加载文件工具集的用法，然后进行并发测试。"}}
+{"type": "usage", "usage": {"promptTokens": 4057, "completionTokens": 132, "totalTokens": 4189}}
+{"type": "finish", "finishReason": "tool_calls"}

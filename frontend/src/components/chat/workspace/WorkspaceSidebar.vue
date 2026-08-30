@@ -3,49 +3,23 @@
         <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制 -->
         <div
             class="flex items-center h-10 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
-            <!-- 工作区 / 预览区 切换按钮 -->
-            <div class="ml-1 shrink-0 no-drag flex items-center gap-0.5 mr-1">
-                <GdTooltip :content="t('chat.workspace.workspaceArea')" placement="bottom">
-                  <button ref="workspaceBtnRef" class="seg-btn" :class="{ active: panelMode === 'tree' }"
-                      @click="showFileTree" @mouseenter="showTreePanel" @mouseleave="hideTreePanel">
-                      <el-icon :size="20">
-                          <Folder16Regular />
-                      </el-icon>
-                  </button>
-                </GdTooltip>
-                <GdTooltip :content="t('chat.workspace.previewArea')" placement="bottom">
-                  <button class="seg-btn" :class="{ active: panelMode === 'preview' }" :disabled="!props.sessionId"
-                      @click="enterPreviewMode">
-                      <el-icon :size="20">
-                          <Window16Regular />
-                      </el-icon>
-                  </button>
-                </GdTooltip>
-                <GdTooltip :content="t('git.title')" placement="bottom">
-                  <button class="seg-btn" :class="{ active: panelMode === 'git' }" :disabled="!props.sessionId"
-                      @click="enterGitMode">
-                      <el-icon :size="20">
-                          <Branch20Regular />
-                      </el-icon>
-                  </button>
-                </GdTooltip>
-            </div>
+            <!-- 所有类型标签统一一行（文件 / 浏览器 / Git 审阅） -->
 
             <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
-            <div ref="tabBarRef" v-if="panelMode === 'preview' && tabs.length > 0"
-                class="flex items-center gap-0.5 min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
+            <div ref="tabBarRef" v-if="props.sessionId"
+                class="flex items-center min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
                 @wheel="onTabBarWheel">
                 <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                 <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
                     :class="{ active: activeTabKey === tab.key }"
-                    :title="tab.type === 'file' ? tab.name : (tab.title || t('chat.workspace.unnamedWindow'))" draggable="true"
-                    @click="onTabClick(tab)" @dblclick="onTabDblClick(tab)"
+                    :title="tabTitle(tab)" draggable="true"
+                    @click="onTabClick(tab)"
                     @dragstart="onTabDragStart(index, $event)"
                     @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
                     <!-- 文件图标 -->
                     <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
                     <!-- 浏览器图标 -->
-                    <template v-else>
+                    <template v-else-if="tab.type === 'browser'">
                         <img v-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt=""
                             @error="onFaviconImageError($event, tab)" />
                         <span v-else class="tab-globe">
@@ -57,9 +31,11 @@
                             </svg>
                         </span>
                     </template>
-                    <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{
-                        truncateTabTitle(tab.type === 'file' ? tab.name! : (tab.title || t('chat.workspace.newWindow')))
-                        }}</span>
+                    <!-- Git 审阅图标 -->
+                    <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
+                        <el-icon :size="13"><Branch20Regular /></el-icon>
+                    </span>
+                    <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
                         <el-icon size="10">
@@ -68,9 +44,9 @@
                     </span>
                 </div>
 
-                <!-- 新建标签按钮：进入预览模式并取消当前选中（显示空状态页） -->
+                <!-- 起始页按钮：打开起始页（无任何标签时同样显示该页） -->
                 <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
-                    <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="deselectAllTabs">
+                    <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="tabStore.openNewTab()">
                         <el-icon size="14">
                             <Plus />
                         </el-icon>
@@ -94,92 +70,82 @@
             <!-- 窗口控制按钮（仅 Electron） -->
             <WindowControls v-if="isElectron" class="no-drag" />
         </div>
-        <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <GitChangesPanel v-show="panelMode === 'git' && !!props.sessionId" ref="gitPanelRef"
-            :session-id="props.sessionId" :active="panelMode === 'git'" class="flex-1 min-h-0" />
-        <div :class="treeContainerClass" :style="panelMode === 'preview' && !treePhase1Hide ? treePanelStyle : {}" @mouseenter="showTreePanel"
-            @mouseleave="hideTreePanel">
-            <!-- 浏览器窗口列表 / 待办事项已迁往概览面板（OverviewPanel） -->
-            <!-- 头部 -->
-            <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
-                <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
-                    {{ t('chat.workspace.workingDir') }}</h3>
-                <div class="flex items-center gap-0 shrink-0">
-                    <!-- 打开文件夹按钮（仅 Electron 环境） -->
-                    <GdTooltip v-if="isElectron" :content="t('chat.workspace.openInFileManager')" placement="bottom">
-                        <el-button class="workspace-tool-btn" text @click="openInFileManager">
-                            <el-icon size="15">
-                                <WindowsExplorer />
-                            </el-icon>
-                        </el-button>
-                    </GdTooltip>
-                    <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
-                    <GdTooltip v-if="isElectron" :content="t('chat.workspace.openInVSCode')" placement="bottom">
-                        <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
-                            <el-icon size="15">
-                                <VsCode />
-                            </el-icon>
-                        </el-button>
-                    </GdTooltip>
-                    <!-- 刷新按钮 -->
-                    <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-                        <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
-                            <el-icon size="15">
-                                <Refresh />
-                            </el-icon>
-                        </el-button>
-                    </GdTooltip>
-                </div>
+        <!-- 内容区：主内容（左）+ 目录树（右） -->
+        <div class="flex-1 min-h-0 flex overflow-hidden">
+            <!-- 左侧主内容：按激活标签渲染（file / git / browser / 空态） -->
+            <div class="flex-1 min-w-0 relative">
+                <!-- 起始页：无任何标签 或 点击 + 号时显示（不占用标签栏） -->
+                <WorkspaceStartPage v-if="showStartPage" @open-file="onNewTabOpenFile" @open-terminal="onNewTabOpenTerminal"
+                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" />
+
+                <!-- Git 审阅标签 -->
+                <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
+                    :session-id="props.sessionId" :active="activeTab?.type === 'git'" class="h-full" />
+                <!-- 终端标签 -->
+                <TerminalPanel v-if="activeTab?.type === 'terminal'" :session-id="sessionId"
+                    :terminal-id="activeTab.terminalId" @terminal-id="onTerminalIdReady(activeTab, $event)" />
+                <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
+                <BrowserPreviewPlaceholder v-if="isElectron"
+                    v-show="activeTab?.type === 'browser' && !!browserStore.activeWindowId" />
+                <!-- 文件标签：渲染所有 fileTabs，隐藏非激活（保留 DOM/滚动位置） -->
+                <template v-if="sessionId">
+                    <FilePreviewPanel v-for="tab in fileTabs" :key="tab.key"
+                        :class="{ 'panel-hidden': !(activeTab?.type === 'file' && activeTabKey === tab.key) }"
+                        :session-id="sessionId" :tab="tab"
+                        :is-active="activeTab?.type === 'file' && activeTabKey === tab.key"
+                        :content-version="fileChangeVersions[tab.path!] || 0"
+                        :workspace-path="currentWorkspacePath"
+                        @close="closeTab(tab)"
+                        @insert-to-input="emit('insert-to-input', $event)"
+                        @insert-snip="emit('insert-snip', $event)" />
+                </template>
+                <!-- 起始页已覆盖空态（无激活标签时显示），此处不再需要单独空态 -->
             </div>
 
-            <!-- 目录树内容 -->
-            <div class="flex-1 overflow-auto min-w-0">
-                <div v-if="!treeData.length" class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
-                    {{ t('chat.workspace.noFiles') }}
+            <!-- 右侧目录树：仅文件标签激活时显示（起始页/浏览器/Git 均隐藏） -->
+            <div v-if="activeTab?.type === 'file'"
+                class="shrink-0 w-72 border-l border-gray-100 dark:border-[#2e3035] flex flex-col min-h-0 bg-[var(--gd-color-surface)]">
+                <!-- 头部 -->
+                <div class="shrink-0 flex items-center justify-between px-2 py-3">
+                    <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
+                        {{ t('chat.workspace.workingDir') }}</h3>
+                    <div class="flex items-center gap-0 shrink-0">
+                        <!-- 刷新按钮 -->
+                        <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
+                            <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
+                                <el-icon size="15">
+                                    <Refresh />
+                                </el-icon>
+                            </el-button>
+                        </GdTooltip>
+                    </div>
                 </div>
-
-                <WorkspaceTree v-else :nodes="treeData" :selected-path="selectedNodePath" :loading-paths="loadingPaths"
-                    :on-load="(node) => handleTreeNodeToggle(node, true)" @select="handleTreeNodeSelect"
-                    @toggle="handleTreeNodeExpandToggle" @contextmenu="handleContextMenu" />
-            </div>
-        </div>
-
-        <!-- 浏览器窗口预览占位（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
-        <BrowserPreviewPlaceholder v-if="isElectron" v-show="panelMode === 'preview' && !!browserStore.activeWindowId" />
-
-        <!-- 文件预览面板（visibility:hidden 持久化，DOM 不销毁且保留滚动位置，含跨域 iframe） -->
-        <template v-if="sessionId">
-            <FilePreviewPanel v-for="tab in fileTabs" :key="tab.key"
-                :class="{ 'panel-hidden': !(panelMode === 'preview' && activeTabKey === tab.key && !browserStore.activeWindowId) }"
-                :session-id="sessionId" :tab="tab"
-                :is-active="panelMode === 'preview' && activeTabKey === tab.key && !browserStore.activeWindowId"
-                :content-version="fileChangeVersions[tab.path!] || 0"
-                :workspace-path="currentWorkspacePath"
-                @close="closeTab(tab)"
-                @insert-to-input="emit('insert-to-input', $event)"
-                @insert-snip="emit('insert-snip', $event)" />
-        </template>
-
-        <!-- 空状态页（预览模式但无激活标签时显示） -->
-        <div v-if="panelMode === 'preview' && !activeTabKey"
-            class="flex flex-col items-center justify-center h-full w-full flex-1">
-            <div class="text-center">
-                <svg class="w-12 h-12 mx-auto mb-3 text-gray-200 dark:text-[#3a3c40]" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <path d="M3 9h18" />
-                    <path d="M9 21V9" />
-                </svg>
-                <p class="text-gray-400 dark:text-[#6b6d73] text-sm mb-4">{{ t('chat.workspace.noPreviewFile') }}</p>
-                <div class="flex items-center gap-2 justify-center">
-                    <button class="empty-state-btn" @click="showFileTree">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                        </svg>
-                        <span>{{ t('chat.workspace.selectFile') }}</span>
-                    </button>
-                </div>
+                <!-- 目录树内容 -->
+                <TreeView ref="treeViewRef" :rows="treeRows" :selected-key="selectedNodePath"
+                    :collapsed-keys="collapsedTreeKeys" class="flex-1 min-h-0"
+                    @select="onTreeSelect" @toggle="onTreeToggle" @contextmenu="onTreeContextMenu">
+                    <template #row="{ row }">
+                        <!-- 文件图标（目录行与 diff 树一致：仅 chevron + 名称，无文件夹图标） -->
+                        <span v-if="!row.isDir" class="node-icon file-icon">
+                            <img :src="getFileIcon(row.name)" width="16" height="16" />
+                        </span>
+                        <!-- 节点名称 -->
+                        <span class="node-label">{{ row.name }}</span>
+                        <!-- 加载中（右对齐，带淡出过渡） -->
+                        <Transition name="fade">
+                            <span v-if="loadingPaths.has(row.path)" class="loading-indicator">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin">
+                                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                </svg>
+                            </span>
+                        </Transition>
+                    </template>
+                    <template #empty>
+                        <div class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
+                            {{ t('chat.workspace.noFiles') }}
+                        </div>
+                    </template>
+                </TreeView>
             </div>
         </div>
     </div>
@@ -201,9 +167,12 @@ import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.v
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SessionAgentList from './SessionAgentList.vue';
-import WorkspaceTree from './WorkspaceTree.vue';
+import TreeView, { type TreeViewRow } from './TreeView.vue';
+import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import GitChangesPanel from './GitChangesPanel.vue';
+import TerminalPanel from './TerminalPanel.vue';
+import NewTabPage from './NewTabPage.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import { useLayoutStore } from '@/stores/layout';
 import { useTabStore } from '@/stores/tab';
@@ -225,11 +194,13 @@ const emit = defineEmits<{
 const treeData = ref<WorkspaceNode[]>([]);
 const isLoading = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
-// 树节点高亮路径：从 activeTabKey 派生，与预览标签选中自动对齐
+// 树节点高亮路径：从激活文件标签的 path 派生（不依赖 key，
+// 兼容"当前标签页打开"原地更新 path 而 key 不变的空占位标签场景）
 const selectedNodePath = computed(() => {
     const key = tabStore.activeTabKey;
-    if (key?.startsWith('file:')) return key.slice(5);
-    return '';
+    if (!key) return '';
+    const tab = tabStore.tabs.find(t => t.key === key);
+    return tab?.type === 'file' ? (tab.path || '') : '';
 });
 
 // 文件变更版本号（SSE 事件递增，驱动 FilePreviewPanel 重载）
@@ -237,6 +208,17 @@ const fileChangeVersions = ref<Record<string, number>>({});
 
 // 文件标签列表（用于 v-for 渲染 FilePreviewPanel）
 const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
+
+// 当前激活标签（内容区按类型渲染 + 目录树显隐）
+const activeTab = computed(() => tabStore.tabs.find(t => t.key === tabStore.activeTabKey) || null);
+
+// 标签标题（file→文件名 / browser→网页标题 / git→Git审阅）
+function tabTitle(tab: UnifiedTab): string {
+    if (tab.type === 'file') return tab.name || tab.path || tab.key;
+    if (tab.type === 'git') return t('chat.workspace.gitTab');
+    if (tab.type === 'terminal') return t('chat.workspace.terminal');
+    return tab.title || t('chat.workspace.unnamedWindow');
+}
 
 // 正在加载子节点的目录路径集合
 const loadingPaths = ref<Set<string>>(new Set());
@@ -336,126 +318,16 @@ function onTabDragEnd(): void {
 
 function onTabClick(tab: UnifiedTab): void {
     if (suppressClick) return;
-    tabStore.enterPreviewMode()
     tabStore.selectTab(tab.key)
 }
 
-/** 双击标签栏：临时标签提升为持久 */
-function onTabDblClick(tab: UnifiedTab): void {
-    if (tab.type === 'file' && tab.isPreview) {
-        tabStore.promoteTab(tab.key)
-    }
-}
-
-// ── 悬浮目录树面板 ──
-const panelMode = computed(() => layoutStore.workspacePanelMode);
+// 标签与起始页状态
 const gitPanelRef = ref<InstanceType<typeof GitChangesPanel> | null>(null);
 const tabs = computed(() => tabStore.tabs);
 const activeTabKey = computed(() => tabStore.activeTabKey);
-const isTreePanelVisible = ref(false);
-const treeTransitionReady = ref(false);
-const workspaceBtnRef = ref<HTMLElement | null>(null);
 const tabBarRef = ref<HTMLElement | null>(null);
-const treePanelStyle = ref<Record<string, string>>({});
-let treeHideTimer: ReturnType<typeof setTimeout> | null = null;
-let treeShowTimer: ReturnType<typeof setTimeout> | null = null;
-
-const TREE_PANEL_WIDTH = 320;
-const TREE_PANEL_HEIGHT = 420;
-const TREE_PANEL_GAP = 4;
-
-function updateTreePanelPosition() {
-    if (!workspaceBtnRef.value) return;
-    const rect = workspaceBtnRef.value.getBoundingClientRect();
-    let left = rect.left - TREE_PANEL_WIDTH - TREE_PANEL_GAP;
-    if (left < TREE_PANEL_GAP) left = TREE_PANEL_GAP;
-    const top = rect.bottom + TREE_PANEL_GAP;
-    treePanelStyle.value = {
-        position: 'fixed',
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${TREE_PANEL_WIDTH}px`,
-        height: `${TREE_PANEL_HEIGHT}px`,
-    };
-}
-
-// Phase 1 hide: visibility:hidden without transform/opacity to avoid compositing layer flash
-const treePhase1Hide = ref(false);
-
-const treeContainerClass = computed(() => {
-    if (panelMode.value === 'git') {
-        // Git 模式下隐藏目录树区域（absolute + visibility:hidden，不触发布局）
-        return 'tree-hidden-preview';
-    }
-    if (panelMode.value !== 'preview') {
-        return 'h-full flex flex-col flex-1 min-h-0';
-    }
-    if (treePhase1Hide.value) {
-        return 'tree-hidden-preview';
-    }
-    return [
-        'tree-floating-panel',
-        {
-            'tree-floating-visible': isTreePanelVisible.value,
-            'tree-transition-ready': treeTransitionReady.value,
-        },
-    ];
-});
-
-function showTreePanel() {
-    if (panelMode.value === 'git') return;
-    if (panelMode.value !== 'preview') return;
-    if (treeHideTimer) {
-        clearTimeout(treeHideTimer);
-        treeHideTimer = null;
-    }
-    if (isTreePanelVisible.value) return;
-    if (treeShowTimer) clearTimeout(treeShowTimer);
-    treeShowTimer = setTimeout(() => {
-        updateTreePanelPosition();
-        isTreePanelVisible.value = true;
-    }, 300);
-}
-
-function hideTreePanel() {
-    if (panelMode.value !== 'preview') return;
-    if (treeShowTimer) {
-        clearTimeout(treeShowTimer);
-        treeShowTimer = null;
-    }
-    if (treeHideTimer) clearTimeout(treeHideTimer);
-    treeHideTimer = setTimeout(() => {
-        isTreePanelVisible.value = false;
-    }, 1000);
-}
-
-watch(panelMode, (mode) => {
-    if (mode !== 'preview') {
-        isTreePanelVisible.value = false;
-        treeTransitionReady.value = false;
-        treePhase1Hide.value = false;
-        if (treeHideTimer) {
-            clearTimeout(treeHideTimer);
-            treeHideTimer = null;
-        }
-        if (treeShowTimer) {
-            clearTimeout(treeShowTimer);
-            treeShowTimer = null;
-        }
-    } else {
-        // Phase 1: 用 visibility:hidden + position:absolute 立即隐藏（无 transform/opacity，不创建合成层）
-        treePhase1Hide.value = true;
-        // Phase 2: 下一帧切换到 floating-panel class（此时已是 visibility:hidden，position 变化不可见）
-        requestAnimationFrame(() => {
-            treeTransitionReady.value = false;
-            treePhase1Hide.value = false;
-            // Phase 3: 再下一帧启用过渡（此时 floating-panel 已渲染，opacity:0 不会闪）
-            requestAnimationFrame(() => {
-                treeTransitionReady.value = true;
-            });
-        });
-    }
-});
+// 起始页显示条件：无任何激活标签（空态）或点击 + 号后的哨兵键 'newtab'
+const showStartPage = computed(() => !activeTabKey.value || activeTabKey.value === 'newtab');
 
 // ── 浏览器标签操作 ──
 
@@ -484,30 +356,45 @@ function onTabBarWheel(e: WheelEvent): void {
     el.scrollLeft += e.deltaY;
 }
 
-/** 点击工作区按钮：退出预览模式 + 退出 Git 模式（回到目录树） */
-function showFileTree(): void {
-    tabStore.exitPreviewMode()
-    tabStore.exitGitMode()
+// 起始页选项：打开文件 / 审阅 / 网页
+function onNewTabOpenFile(): void {
+    // 起始页不占用标签：直接创建空文件标签并激活（path 为空，右侧目录树可选文件）
+    const key = `file:new-${Date.now()}`;
+    tabStore.addTab({
+        type: 'file',
+        key,
+        name: t('chat.workspace.newTab'),
+        path: '',
+    });
+    tabStore.selectTab(key);
 }
 
-/** 点击预览区按钮：进入预览模式（自动退出 Git 模式） */
-function enterPreviewMode(): void {
-    tabStore.enterPreviewMode()
+function onNewTabOpenGit(): void {
+    tabStore.openGitTab();
 }
 
-/**
- * 点击 Git 按钮：进入 Git 变更面板（复用预览宽度，不触发预览逻辑）。
- * 不再强制 refresh：面板 v-show 常驻 + workspace SSE 常开，git 事件自动刷新已保证数据新鲜；
- * 切回时强制刷新会重拉当前选中文件的 diff → 闪烁。
- */
-function enterGitMode(): void {
-    tabStore.enterGitMode()
+function onNewTabOpenBrowser(): void {
+    createBrowserTab();
 }
 
-/** 取消所有标签选中，显示空状态页 */
-function deselectAllTabs(): void {
-    tabStore.enterPreviewMode()
-    tabStore.selectTab(null)
+function onNewTabOpenTerminal(): void {
+    tabStore.openTerminalTab(props.sessionId);
+}
+
+/** 新建浏览器：直接创建 webview 并激活 */
+async function createBrowserTab(): Promise<void> {
+    if (!window.electronAPI || !props.sessionId) return;
+    try {
+        const result = await window.electronAPI.createBrowserWindow("about:blank", {
+            sessionId: props.sessionId,
+            createdBy: props.sessionId,
+        });
+        if (result.success && result.window?.windowId) {
+            tabStore.selectTab(`browser:${result.window.windowId}`);
+        }
+    } catch (e) {
+        console.error("Failed to create browser window:", e);
+    }
 }
 
 // 浏览器 store → tabStore 同步已迁往 OverviewPanel（概览常驻，工作区隐藏时仍保持同步）
@@ -517,16 +404,17 @@ function deselectAllTabs(): void {
 function savePreviewCache(): void {
     if (!props.sessionId) return;
     previewTabCache.saveSession(props.sessionId, {
-        mode: panelMode.value,
         activeTabKey: tabStore.activeTabKey,
         tabs: tabStore.tabs.map(t => ({ ...t })),
     });
 }
 
-// 自动保存：当面板模式、标签列表、激活标签变化时
+// 自动保存：当标签列表、激活标签变化时（排除会话切换期间的自动保存）
 let isRestoring = false;
-watch([panelMode, () => tabStore.activeTabKey, () => tabStore.tabs], () => {
-    if (!isRestoring) savePreviewCache();
+let skipNextSave = false;
+watch([() => tabStore.activeTabKey, () => tabStore.tabs], () => {
+    if (!isRestoring && !skipNextSave) savePreviewCache();
+    skipNextSave = false;
 }, { deep: true });
 
 // ── 预览标签缓存：从 localStorage 恢复会话状态 ──
@@ -541,7 +429,9 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
         tabStore.tabs = cached.tabs.map(t => ({ ...t }));
 
         // 过滤掉 webview 已不存在的浏览器标签（页面刷新场景）
+        // 同时过滤历史遗留的 newtab 标签（起始页已不占用标签栏）
         tabStore.tabs = tabStore.tabs.filter(tab => {
+            if (tab.type === 'newtab') return false;
             if (tab.type === 'browser') {
                 return browserStore.allWebviews.some(w => w.windowId === tab.windowId);
             }
@@ -556,25 +446,16 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             }
         }
 
-        // 恢复面板模式（三态枚举，互斥保证）+ 激活标签
-        if (cached.mode === 'preview') {
-            tabStore.enterPreviewMode()
-            if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
-                await nextTick()
-                tabStore.selectTab(cached.activeTabKey)
-                // 内容加载由 FilePreviewPanel 自动处理
-            } else if (tabStore.tabs.length > 0) {
-                await nextTick()
-                tabStore.selectTab(tabStore.tabs[0].key)
-            }
-        } else if (cached.mode === 'git') {
-            // Git 模式与会话状态一起还原（标签栏仅在预览模式显示，无需恢复激活标签）
-            tabStore.enterGitMode()
-        } else {
-            // 目录树模式：恢复 activeTabKey 但不进入预览（通过 selectTab 确保 browserStore 同步）
-            if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
-                tabStore.selectTab(cached.activeTabKey)
-            }
+        // 恢复激活标签（显示完全由激活标签驱动）
+        if (cached.activeTabKey === 'newtab') {
+            // 起始页不占用标签：恢复为无激活标签，显示起始页
+            tabStore.selectTab(null)
+        } else if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
+            await nextTick()
+            tabStore.selectTab(cached.activeTabKey)
+        } else if (tabStore.tabs.length > 0) {
+            await nextTick()
+            tabStore.selectTab(tabStore.tabs[0].key)
         }
     } finally {
         isRestoring = false
@@ -584,8 +465,22 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
 
 // ── 统一标签操作 ──
 
+/** 后端创建 PTY 后，将稳定 terminalId 写回标签缓存 */
+function onTerminalIdReady(tab: UnifiedTab, terminalId: string): void {
+    if (tab.type !== 'terminal' || tab.terminalId === terminalId) return;
+    tab.terminalId = terminalId;
+    savePreviewCache();
+}
+
 /** 关闭标签（统一入口） */
 async function closeTab(tab: UnifiedTab): Promise<void> {
+    if (tab.type === 'terminal' && tab.terminalId) {
+        try {
+            await apiService.disposeTerminal(tab.terminalId);
+        } catch (e) {
+            console.error('[WorkspaceSidebar] Failed to dispose terminal:', e);
+        }
+    }
     if (tab.type === 'browser' && tab.windowId) {
         if (window.electronAPI) {
             try {
@@ -635,6 +530,71 @@ async function handleTreeNodeToggle(node: WorkspaceNode, expanded: boolean) {
 }
 
 const expandedPaths = ref<Set<string>>(new Set());
+/** 目录树滚动容器（TreeView 组件引用，用于滚动定位选中节点） */
+const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null);
+
+/**
+ * 将嵌套 treeData 拍平为 TreeView 扁平行：
+ * 展开的目录（在 expandedPaths 中）递归输出子行，折叠目录只输出目录行。
+ */
+function flattenWorkspaceTree(
+    nodes: WorkspaceNode[],
+    expanded: Set<string>,
+    depth: number,
+    out: TreeViewRow[],
+): void {
+    for (const n of nodes) {
+        const isDir = n.isDirectory;
+        out.push({
+            key: n.path,
+            depth,
+            isDir,
+            name: n.name,
+            path: n.path,
+            node: n,
+        });
+        if (isDir && expanded.has(n.path)) {
+            flattenWorkspaceTree(n.children || [], expanded, depth + 1, out);
+        }
+    }
+}
+
+/** 目录树扁平行（treeData + expandedPaths 派生，供 TreeView 渲染） */
+const treeRows = computed<TreeViewRow[]>(() => {
+    const out: TreeViewRow[] = [];
+    flattenWorkspaceTree(treeData.value, expandedPaths.value, 0, out);
+    return out;
+});
+
+/** 折叠集合：所有目录中不在 expandedPaths 的（TreeView 语义：在集合 = 折叠） */
+const collapsedTreeKeys = computed<Set<string>>(() => {
+    const collapsed = new Set<string>();
+    const walk = (nodes: WorkspaceNode[]) => {
+        for (const n of nodes) {
+            if (n.isDirectory) {
+                if (!expandedPaths.value.has(n.path)) collapsed.add(n.path);
+                walk(n.children || []);
+            }
+        }
+    };
+    walk(treeData.value);
+    return collapsed;
+});
+
+/** TreeView 行事件 → WorkspaceNode 事件适配 */
+function onTreeSelect(row: TreeViewRow): void {
+    handleTreeNodeSelect(row.node as WorkspaceNode);
+}
+
+function onTreeToggle(row: TreeViewRow, expanded: boolean): void {
+    const node = row.node as WorkspaceNode;
+    handleTreeNodeExpandToggle(node, expanded);
+    if (expanded) void handleTreeNodeToggle(node, true);
+}
+
+function onTreeContextMenu(event: MouseEvent, row: TreeViewRow): void {
+    handleContextMenu(event, row.node as WorkspaceNode);
+}
 
 function resetExpandedPaths() {
     expandedPaths.value = new Set();
@@ -651,11 +611,42 @@ function handleTreeNodeExpandToggle(node: WorkspaceNode, expanded: boolean) {
 }
 
 /**
+ * 展开选中文件的所有祖先目录（含懒加载），展开完成后将选中节点滚动到可视区域。
+ * 切换标签定位文件时调用，配合树节点对 expandedPaths 的受控展开：
+ * 先把祖先目录路径加入 expandedPaths（节点 watch 自动展开），
+ * 再确保子节点已加载（未加载过的目录触发懒加载）。
+ */
+async function revealPathInTree(path: string): Promise<void> {
+    if (!path) return;
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    for (let i = 1; i < parts.length; i++) {
+        const ancestorPath = parts.slice(0, i).join('/');
+        const node = findNodeByPath(treeData.value, ancestorPath);
+        if (!node?.isDirectory) return;
+        if (!expandedPaths.value.has(ancestorPath)) {
+            expandedPaths.value = new Set(expandedPaths.value).add(ancestorPath);
+        }
+        if (!node.children || node.children.length === 0) {
+            await handleTreeNodeToggle(node, true);
+        }
+    }
+
+    // 等待展开后的子节点渲染完成，再把选中节点滚动进可视区
+    await nextTick();
+    treeViewRef.value?.scrollToKey(path);
+}
+
+// 切换标签（激活文件路径变化）时展开其祖先目录并滚动定位
+watch(selectedNodePath, (path) => {
+    if (path) void revealPathInTree(path);
+});
+
+/**
  * 点击文件节点选中
  */
-function handleTreeNodeSelect(node: WorkspaceNode, isPreview?: boolean) {
+function handleTreeNodeSelect(node: WorkspaceNode) {
     if (node.isDirectory) return;
-    handleFileSelect(node, isPreview);
+    handleFileSelect(node);
 }
 
 /**
@@ -1158,13 +1149,23 @@ async function handleDelete() {
  * - 图片文件（非 Electron）→ 使用 rawfile URL（后端限制 20MB）
  * - 不支持格式 → 显示"此文件暂不支持预览" + Electron 打开按钮
  */
-async function handleFileSelect(node: WorkspaceNode, isPreview: boolean = true) {
+async function handleFileSelect(node: WorkspaceNode) {
     if (node.isDirectory) return;
     if (!props.sessionId) return;
 
     const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
 
-    // 添加标签 + 选中 + 进入预览模式（内容加载由 FilePreviewPanel 自动处理）
+    // 在"当前标签页"打开：若当前激活的是文件标签（含空态），直接更新路径，不新建标签
+    const activeTab = tabStore.tabs.find(t => t.key === tabStore.activeTabKey);
+    if (activeTab?.type === 'file') {
+        activeTab.path = node.path;
+        activeTab.name = node.name;
+        activeTab.extension = ext;
+        activeTab.size = node.size || 0;
+        return;
+    }
+
+    // 无激活文件标签（如激活 git/browser 或空态）：新建文件标签
     const tabKey = `file:${node.path}`;
     tabStore.addTab({
         type: 'file',
@@ -1173,44 +1174,17 @@ async function handleFileSelect(node: WorkspaceNode, isPreview: boolean = true) 
         path: node.path,
         extension: ext,
         size: node.size || 0,
-        isPreview,
     });
-    tabStore.enterPreviewMode()
     tabStore.selectTab(tabKey)
 }
 
 /**
- * 在文件管理器中打开工作目录
+ * 在文件管理器中打开工作目录（已迁移至 ChatPage Header）
  */
-async function openInFileManager() {
-    if (!props.sessionId || !isElectron) return;
-
-    try {
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        if (response.workspacePath && window.electronAPI) {
-            await window.electronAPI.openFolder(response.workspacePath);
-        }
-    } catch (error: any) {
-        console.error('Failed to open workspace folder:', error);
-    }
-}
 
 /**
- * 以 VSCode 打开工作目录
+ * 以 VSCode 打开工作目录（已迁移至 ChatPage Header）
  */
-async function openWorkspaceInVSCode() {
-    if (!props.sessionId || !isElectron) return;
-
-    try {
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        if (response.workspacePath && window.electronAPI) {
-            await window.electronAPI.openWithEditor(response.workspacePath, 'vscode');
-        }
-    } catch (error: any) {
-        console.error('Failed to open workspace in VSCode:', error);
-        ElMessage.error(t('chat.workspace.openVSCodeFailed'));
-    }
-}
 
 let unsubscribeWatcher: (() => void) | null = null;
 let watchedWorkspacePath: string | null = null;
@@ -1263,15 +1237,21 @@ async function handleWorkspaceWatcherConnected(sessionId: string) {
 watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     treeLoadGeneration++;
     isLoading.value = false;
-    // 会话切换回到目录树模式
-    tabStore.exitGitMode();
 
     // 会话切换或组件重新挂载时清理旧状态
     // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
     if (newSessionId !== oldSessionId) {
+        // 保存旧会话缓存：必须用 oldSessionId，不能用 props.sessionId（已指向新会话）
+        if (oldSessionId) {
+            previewTabCache.saveSession(oldSessionId, {
+                activeTabKey: tabStore.activeTabKey,
+                tabs: tabStore.tabs.map(t => ({ ...t })),
+            });
+        }
+        // 跳过 clearAll 触发的自动保存，避免空标签覆盖新会话缓存
+        skipNextSave = true;
         // 旧会话解除 file 订阅（SSE 连接由 OverviewPanel 常驻持有，勿断开）
         if (oldSessionId) void apiService.setWorkspaceWatchScope(oldSessionId, "file", false);
-        tabStore.exitPreviewMode()
         tabStore.clearAll();
         fileChangeVersions.value = {};
         watchedWorkspacePath = null;
@@ -1315,14 +1295,6 @@ onUnmounted(() => {
         unsubscribeWatcher();
         unsubscribeWatcher = null;
     }
-    if (treeHideTimer) {
-        clearTimeout(treeHideTimer);
-        treeHideTimer = null;
-    }
-    if (treeShowTimer) {
-        clearTimeout(treeShowTimer);
-        treeShowTimer = null;
-    }
     closeContextMenu();
 });
 </script>
@@ -1330,6 +1302,56 @@ onUnmounted(() => {
 .workspace-sidebar {
     width: 100%;
     height: 100%;
+}
+
+/* ── 文件树插槽内容样式（行结构/高亮由 TreeView 统一渲染，此处只定义行内内容） ── */
+.node-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.file-icon img {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.node-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    color: var(--gd-color-text);
+}
+
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--gd-color-text-gray);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.spin {
+    animation: tree-spin 0.6s linear infinite;
+}
+
+@keyframes tree-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 加载指示器淡出过渡 */
+.fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+.fade-leave-to {
+    opacity: 0;
 }
 
 /* 非激活文件预览面板：visibility:hidden 保留渲染状态（含滚动位置），不触发 display:none 的重置 */
@@ -1422,14 +1444,37 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 1px 6px;
+    padding: 1px 8px;
     height: 26px;
-    min-width: 0;
-    max-width: 190px;
+    width: 120px;
+    min-width: 120px;
+    max-width: 120px;
+    flex: 0 0 120px;
+    box-sizing: border-box;
     border-radius: 6px;
     cursor: pointer;
     flex-shrink: 0;
     transition: background 0.15s;
+    position: relative;
+}
+/* 分隔竖线：短直线，垂直居中，不随标签圆角弯曲。
+   仅未选中标签右侧显示；选中标签两侧都无线。 */
+.browser-tab:not(.active)::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 12px;
+    border-radius: 0;
+    background: var(--gd-color-border, rgba(0, 0, 0, 0.1));
+}
+/* 紧贴选中标签右侧的线不显示（选中右侧无线） */
+.browser-tab.active + .browser-tab:not(.active)::after,
+/* 紧贴选中标签左侧的线不显示（选中左侧无线） */
+.browser-tab:not(.active):has(+ .browser-tab.active)::after {
+    display: none;
 }
 
 .browser-tab:hover {
@@ -1447,6 +1492,14 @@ onUnmounted(() => {
     border-radius: 2px;
     flex-shrink: 0;
     object-fit: contain;
+}
+
+/* Git 审阅图标：span 包裹 el-icon，需 flex 居中（否则按基线对齐偏下） */
+.tab-git {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gd-color-text-gray);
 }
 
 .tab-globe {
@@ -1467,6 +1520,8 @@ onUnmounted(() => {
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+    /* 撑满剩余空间，让关闭按钮始终右对齐 */
+    flex: 1 1 auto;
 }
 
 .browser-tab.active .tab-title {

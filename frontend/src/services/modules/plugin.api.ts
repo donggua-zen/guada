@@ -54,6 +54,20 @@ export interface PluginApi {
   getPluginData(pluginId: string): Promise<Record<string, any>>;
   setPluginData(pluginId: string, key: string, value: any): Promise<{ success: boolean }>;
   deletePluginData(pluginId: string, key: string): Promise<{ success: boolean }>;
+  /** 查询插件列表（分发管理） */
+  queryPlugins(): Promise<{ plugins: any[] }>;
+  /** 从分发源安装插件（后台任务，返回 jobId，轮询 install-log 看进度） */
+  installPlugin(source: string): Promise<{ jobId: string }>;
+  /** 查询安装任务日志（假终端） */
+  getInstallLog(jobId: string): Promise<{ log: string[]; done: boolean; result?: { success: boolean; id?: string } }>;
+  /** 取消安装任务 */
+  cancelInstall(jobId: string): Promise<{ cancelled: boolean }>;
+  /** 卸载插件 */
+  uninstallPlugin(pluginId: string): Promise<{ success: boolean }>;
+  /** 更新插件（git 分发） */
+  updatePlugin(pluginId: string): Promise<{ success: boolean }>;
+  /** 启用/停用插件 */
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<any>;
 }
 
 export const pluginApi: PluginApi = {
@@ -103,6 +117,40 @@ export const pluginApi: PluginApi = {
   async deletePluginData(this: ApiContext, pluginId: string, key: string) {
     return await this._request(`/plugins/${pluginId}/data/${key}`, {
       method: "DELETE",
+    });
+  },
+
+  async queryPlugins(this: ApiContext) {
+    return await this._request("/plugins/query", { method: "POST", data: {} });
+  },
+
+  async installPlugin(this: ApiContext, source: string) {
+    return await this._request("/plugins/install", {
+      method: "POST",
+      data: { source },
+    });
+  },
+
+  async getInstallLog(this: ApiContext, jobId: string) {
+    return await this._request(`/plugins/install-log/${jobId}`);
+  },
+
+  async cancelInstall(this: ApiContext, jobId: string) {
+    return await this._request(`/plugins/install-cancel/${jobId}`, { method: "POST" });
+  },
+
+  async uninstallPlugin(this: ApiContext, pluginId: string) {
+    return await this._request(`/plugins/${pluginId}`, { method: "DELETE" });
+  },
+
+  async updatePlugin(this: ApiContext, pluginId: string) {
+    return await this._request(`/plugins/${pluginId}/update`, { method: "POST" });
+  },
+
+  async setPluginEnabled(this: ApiContext, pluginId: string, enabled: boolean) {
+    return await this._request("/plugins/global", {
+      method: "PUT",
+      data: { pluginId, enabled },
     });
   },
 };

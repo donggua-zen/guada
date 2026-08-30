@@ -20,5 +20,7 @@
   "grep.executing": "Searching content",
   "grep.completed": "Searched content",
   "grep.aggregate.executing": "Performing {n} searches",
-  "grep.aggregate.completed": "Performed {n} searches"
+  "grep.aggregate.completed": "Performed {n} searches",
+  "file.toolkitDescription": "Read, write and edit workspace files with pagination and content search"
+
 }

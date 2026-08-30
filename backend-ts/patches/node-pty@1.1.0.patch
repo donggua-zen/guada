@@ -1,0 +1,22 @@
+diff --git a/lib/conpty_console_list_agent.js b/lib/conpty_console_list_agent.js
+index 8c4fca9022a6d6f015bca87f61625cde2278f428..f8f97c20b4ce74ba1eb4be10432e4534d637f054 100644
+--- a/lib/conpty_console_list_agent.js
++++ b/lib/conpty_console_list_agent.js
+@@ -10,7 +10,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ var utils_1 = require("./utils");
+ var getConsoleProcessList = utils_1.loadNativeModule('conpty_console_list').module.getConsoleProcessList;
+ var shellPid = parseInt(process.argv[2], 10);
+-var consoleProcessList = getConsoleProcessList(shellPid);
++// GuaDa patch: AttachConsole 在无控制台环境（Electron/ts-node-dev）下会失败抛错，
++// 导致整个后端进程被 ts-node-dev 当作崩溃重启。这里捕获失败并返回空列表，
++// windowsPtyAgent 对空列表安全（仅少做一次进程清扫），不破坏 ConPTY resize。
++var consoleProcessList;
++try {
++    consoleProcessList = getConsoleProcessList(shellPid);
++}
++catch (e) {
++    consoleProcessList = [];
++}
+ process.send({ consoleProcessList: consoleProcessList });
+ process.exit(0);
+ //# sourceMappingURL=conpty_console_list_agent.js.map

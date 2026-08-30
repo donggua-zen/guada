@@ -35,7 +35,7 @@ export interface StreamSubAgentFinishEvent {
  * 流式事件类型联合
  */
 export type StreamEvent =
-    | StreamCreateEvent
+    | StreamTurnStartEvent
     | StreamThinkEvent
     | StreamToolCallEvent
     | StreamToolCallsResponseEvent
@@ -48,10 +48,10 @@ export type StreamEvent =
     | StreamSubAgentFinishEvent      // 新增
 
 /**
- * 创建消息事件
+ * 回合开始事件(规范化后替代原 create)
  */
-export interface StreamCreateEvent {
-    type: 'create'
+export interface StreamTurnStartEvent {
+    type: 'turn_start'
     messageId: string
     turnsId: string
     contentId: string

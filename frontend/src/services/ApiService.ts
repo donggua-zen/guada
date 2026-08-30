@@ -12,7 +12,6 @@ import axios, {
   type AxiosResponse,
 } from "axios";
 import { useStorage } from "@vueuse/core";
-import type { StreamEvent } from "@/types/service";
 import { getClientId } from "@/utils/clientId";
 import { NetworkError, AuthError, ApiError } from "@/utils/errors";
 import { t } from "@/locales";
@@ -247,7 +246,8 @@ class ApiService {
   }
 
   // ========== 流式聊天 ==========
-  async *chat(params: {
+  /** 触发后端流(合并后为 RPC,立即返回;流式事件经全局 SSE → StreamEventHub) */
+  async chat(params: {
     sessionId: string;
     regenerationMode?: string | null;
     assistantMessageId?: string | null;
@@ -256,25 +256,17 @@ class ApiService {
       id?: string;
       content?: string;
       files?: string[];
-      replaceMessageId?: string;
+      replaceTurnId?: string;
       knowledgeBaseIds?: string[];
+      /** 非新建回合模式(resume)复用既有回合时,前端传入回合外壳 id */
+      turnId?: string;
     };
-  }): AsyncGenerator<StreamEvent, void, unknown> {
-    return yield* this.chatStreamService.chat(params);
+  }): Promise<void> {
+    return this.chatStreamService.chat(params);
   }
 
   async cancelResponse(sessionId: string): Promise<void> {
     return this.chatStreamService.cancelResponse(sessionId);
-  }
-
-  async sendMessage(params: {
-    sessionId: string;
-    content: string;
-    fileIds?: string[];
-    knowledgeBaseIds?: string[];
-    replaceMessageId?: string;
-  }): Promise<{ success: boolean }> {
-    return this.chatStreamService.sendMessage(params);
   }
 
   async getStreamStatus(sessionId: string): Promise<{

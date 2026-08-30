@@ -47,11 +47,8 @@ describe("ChatController", () => {
 
     await controller.streamMessage(body, user, res as any, { on: jest.fn() } as any);
 
-    // SSE headers should have been set before calling startStream
-    expect(res.setHeader).toHaveBeenCalled();
-    // startStream should have been called
+    // /chat/stream 已降级为 RPC:startStream 应被调用,错误以 HTTP 响应返回(不 re-throw)
     expect(chatRunner.startStream).toHaveBeenCalled();
-    // Error should have been written as HTTP response (not re-thrown)
     expect(res.status).toHaveBeenCalledWith(HttpStatus.UNAUTHORIZED);
     expect(res.json).toHaveBeenCalled();
   });
@@ -85,14 +82,16 @@ describe("ChatController", () => {
       on: jest.fn(),
       write: jest.fn(),
       end: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
       writableEnded: false,
     };
 
     await controller.streamMessage(body, user, res as any, { on: jest.fn() } as any);
 
-    expect(res.setHeader).toHaveBeenCalled();
     expect(chatRunner.startStream).toHaveBeenCalled();
-    // Response should not have been ended (stream is ongoing)
+    // RPC 模式:触发后立即返回 ok,不再阻塞到流结束
+    expect(res.json).toHaveBeenCalledWith({ ok: true });
     expect(res.end).not.toHaveBeenCalled();
   });
 });

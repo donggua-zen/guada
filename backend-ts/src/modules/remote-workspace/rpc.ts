@@ -26,6 +26,12 @@ export interface PushEvent {
   data: any;
 }
 
+/** 心跳配置:intervalMs 心跳间隔,deadlineMs 超过该时长无任何消息即判死 */
+export interface HeartbeatOptions {
+  intervalMs?: number;
+  deadlineMs?: number;
+}
+
 export class RpcClient {
   private ws: WebSocket;
   private pending = new Map<
@@ -36,10 +42,19 @@ export class RpcClient {
   private msgId = 0;
   private connected = false;
   private disconnectHandlers: Array<() => void> = [];
+  private heartbeat: { intervalMs: number; deadlineMs: number };
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private lastActivity = 0;
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, heartbeat?: HeartbeatOptions) {
     this.ws = ws;
+    this.heartbeat = {
+      intervalMs: heartbeat?.intervalMs ?? 60_000,
+      deadlineMs: heartbeat?.deadlineMs ?? 180_000,
+    };
     this.ws.on("message", (raw: WebSocket.RawData) => {
+      // 任何消息到达都视为连接活跃(含心跳响应)
+      this.lastActivity = Date.now();
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.id !== undefined) {
@@ -55,6 +70,20 @@ export class RpcClient {
           }
         } else if (msg.event !== undefined) {
           // Push event
+          if (msg.event === "shutdown") {
+            // agent 进程退出前广播:立即拒绝所有挂起请求并通知断开,
+            // 避免"agent 被信号杀死"时对未完成请求无限等待
+            for (const [, { reject }] of this.pending) {
+              reject(new Error("Agent shutting down"));
+            }
+            this.pending.clear();
+            for (const handler of this.disconnectHandlers) {
+              try {
+                handler();
+              } catch {}
+            }
+            return;
+          }
           const handler = this.pushHandlers.get(msg.event);
           if (handler) handler(msg.data);
         }
@@ -65,6 +94,7 @@ export class RpcClient {
 
     this.ws.on("close", () => {
       this.connected = false;
+      this.stopHeartbeat();
       for (const [, { reject }] of this.pending) {
         reject(new Error("WebSocket closed"));
       }
@@ -92,17 +122,70 @@ export class RpcClient {
 
   setConnected(): void {
     this.connected = true;
+    this.startHeartbeat();
   }
 
-  call<T = any>(method: string, params?: any, signal?: AbortSignal): Promise<T> {
+  /** 启动心跳:定时发 ping 探测 + 检查超时判死(半开连接检测) */
+  private startHeartbeat(): void {
+    if (this.heartbeatTimer) return;
+    this.lastActivity = Date.now();
+    this.heartbeatTimer = setInterval(() => {
+      this.checkHeartbeat();
+    }, this.heartbeat.intervalMs);
+    this.heartbeatTimer.unref?.();
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private checkHeartbeat(): void {
+    // 1) 发心跳 ping(不挂 pending,响应到达会更新 lastActivity)
+    try {
+      const pingReq: RPCRequest = { id: `hb-${++this.msgId}`, method: "ping" };
+      this.ws.send(JSON.stringify(pingReq));
+    } catch {
+      /* ws 已关闭 */
+    }
+    // 2) 判死:超过 deadlineMs 无任何消息(含心跳响应)→ 主动断开
+    //    触发 close → pending reject → onDisconnect → 上层清理缓存 + 下次调用自动重建
+    if (Date.now() - this.lastActivity > this.heartbeat.deadlineMs) {
+      try {
+        this.ws.close();
+      } catch {}
+    }
+  }
+
+  call<T = any>(
+    method: string,
+    params?: any,
+    signal?: AbortSignal,
+    timeoutMs?: number,
+    requestId?: string,
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
-      const id = `r${++this.msgId}`;
+      // 支持调用方自定义 requestId(用于 abort/超时后可预测的日志路径)
+      const id = requestId || `r${++this.msgId}`;
       this.pending.set(id, { resolve, reject });
       const req: RPCRequest = { id, method, params };
+
+      // 超时兜底:响应未达时主动失败,避免无限挂起(如命令早完成但响应丢失)
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      if (timeoutMs && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          this.pending.delete(id);
+          if (signal) signal.removeEventListener("abort", onAbort);
+          reject(new Error(`RPC timeout after ${timeoutMs}ms: ${method}`));
+        }, timeoutMs);
+      }
 
       // abort 支持:调用方取消时移除 pending、以 AbortError 拒绝,
       // 并通知远端 agent 终止对应前台命令(requestId = 本次 call 的 id)
       const onAbort = () => {
+        if (timer) clearTimeout(timer);
         this.pending.delete(id);
         reject(new DOMException("RPC call aborted", "AbortError"));
         try {
@@ -118,6 +201,7 @@ export class RpcClient {
       };
       if (signal) {
         if (signal.aborted) {
+          if (timer) clearTimeout(timer);
           this.pending.delete(id);
           reject(new DOMException("RPC call aborted", "AbortError"));
           return;
@@ -126,6 +210,7 @@ export class RpcClient {
         // 请求完成时清理监听
         const origReject = reject;
         reject = (e: any) => {
+          if (timer) clearTimeout(timer);
           signal.removeEventListener("abort", onAbort);
           origReject(e);
         };
@@ -133,6 +218,7 @@ export class RpcClient {
 
       this.ws.send(JSON.stringify(req), (err) => {
         if (err) {
+          if (timer) clearTimeout(timer);
           this.pending.delete(id);
           if (signal) signal.removeEventListener("abort", onAbort);
           reject(err);
@@ -150,6 +236,7 @@ export class RpcClient {
   }
 
   close(): void {
+    this.stopHeartbeat();
     this.ws.close();
   }
 }

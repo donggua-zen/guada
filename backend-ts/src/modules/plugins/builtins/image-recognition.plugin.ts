@@ -8,6 +8,7 @@ import { UploadPathService } from "../../../common/services/upload-path.service"
 import { LLMService } from "../../llm-core/llm.service";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
+import type { Message } from "../../../common/types/conversation.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
@@ -65,6 +66,7 @@ export class ImageRecognitionPlugin extends PluginBase {
     api.registerToolKit({
       id: "image_recognition",
       name: "%imageRecognition.toolkitName%",
+      description: "%imageRecognition.toolkitDescription%",
       loadMode: "eager",
       activator:
         "Use this toolkit when you need to recognize image content from a user-provided image ID or image path and return a detailed description.",
@@ -129,6 +131,7 @@ export class ImageRecognitionPlugin extends PluginBase {
     api.registerToolKit({
       id: "image_view",
       name: "%imageRecognition.imageViewName%",
+      description: "%imageRecognition.imageViewDescription%",
       loadMode: "eager",
       activator:
         "Use this toolkit when you need to view or analyze an image from a image path. The image will be returned to you directly for visual analysis.",
@@ -243,14 +246,24 @@ export class ImageRecognitionPlugin extends PluginBase {
 
       const userPrompt = prompt?.trim() || DEFAULT_PROMPT;
 
-      const messages = [
+      const messages: Message[] = [
         {
-          role: "user" as const,
+          id: "image_user",
+          role: "user",
+          kind: "user",
+          source: { kind: "user" },
+          metadata: {},
           content: [
-            { type: "text" as const, text: userPrompt },
+            { type: "text", contentId: "image_text", text: userPrompt },
             {
-              type: "image_url" as const,
-              image_url: { url: `data:${mimeType};base64,${base64Image}` },
+              type: "image",
+              contentId: "image_block",
+              attachment: {
+                attachmentId: "image_attach",
+                mediaType: mimeType,
+                bytes: 0,
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
             },
           ],
         },

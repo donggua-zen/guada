@@ -1,21 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useBrowserWebviewStore } from './browserWebview'
-import { useLayoutStore } from './layout'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
 /**
  * 标签 Store — 统一管理文件标签和浏览器标签的状态
  *
  * tabs / activeTabKey 是唯一数据源，所有组件通过此 store 读写。
- * 面板模式（tree/preview/git）由 layoutStore.workspacePanelMode 三态枚举管理，
- * tabStore 通过 enter 系列 / exit 系列动作切换，不重复持有模式状态。
+ * 工作区显示完全由激活标签驱动，无独立的面板模式。
  */
 const MAX_FILE_TABS = 10
 
 export const useTabStore = defineStore('tab', () => {
     const browserStore = useBrowserWebviewStore()
-    const layoutStore = useLayoutStore()
 
     /** 统一标签列表（文件 + 浏览器，按顺序排列） */
     const tabs = ref<UnifiedTab[]>([])
@@ -23,35 +20,28 @@ export const useTabStore = defineStore('tab', () => {
     /** 当前激活的标签 key（'file:<path>' 或 'browser:<windowId>'） */
     const activeTabKey = ref<string | null>(null)
 
-    // ── 模式切换 ──
-
-    /**
-     * 进入预览模式（三态互斥：直接置为 preview，天然退出 Git/tree）。
-     */
-    function enterPreviewMode(): void {
-        layoutStore.setWorkspacePanelMode('preview')
-    }
-
-    /** 退出预览模式（仅当处于预览模式时回到目录树，不影响其他模式） */
-    function exitPreviewMode(): void {
-        if (layoutStore.workspacePanelMode === 'preview') {
-            layoutStore.setWorkspacePanelMode('tree')
+    /** 打开 Git 审阅标签（标签唯一，已存在则直接激活） */
+    function openGitTab(): void {
+        if (!tabs.value.some(t => t.type === 'git')) {
+            tabs.value.push({ type: 'git', key: 'git' })
         }
+        selectTab('git')
     }
 
     /**
-     * 进入 Git 变更面板模式（三态互斥：直接置为 git）。
-     * 复用预览宽度（workspacePreviewSplitSize），但不触发任何预览相关派生逻辑。
+     * 打开"起始页"（无任何标签 或 点击 + 号时显示）。
+     * 起始页不占用标签栏：仅设置哨兵键 'newtab' 作为激活态，不向 tabs 数组 push，
+     * 因此标签栏不会出现对应标签；模板按 activeTabKey === 'newtab' 渲染起始页。
      */
-    function enterGitMode(): void {
-        layoutStore.setWorkspacePanelMode('git')
+    function openNewTab(): void {
+        selectTab('newtab')
     }
 
-    /** 退出 Git 模式（仅当处于 Git 模式时回到目录树，不影响其他模式） */
-    function exitGitMode(): void {
-        if (layoutStore.workspacePanelMode === 'git') {
-            layoutStore.setWorkspacePanelMode('tree')
-        }
+    /** 打开终端标签（UI 终端，每会话限 3，由后端校验配额） */
+    function openTerminalTab(sessionId: string): void {
+        const id = `terminal:${sessionId}:${Date.now().toString(36)}`
+        tabs.value.push({ type: 'terminal', key: id })
+        selectTab(id)
     }
 
     // ── 标签选中（幂等，不加载内容） ──
@@ -144,7 +134,6 @@ export const useTabStore = defineStore('tab', () => {
                 selectTab(next.key)
             } else {
                 selectTab(null)
-                exitPreviewMode()
             }
         }
     }
@@ -158,12 +147,11 @@ export const useTabStore = defineStore('tab', () => {
 
     // ── 浏览器 store 同步 ──
 
-    /** 外部激活浏览器窗口时，同步 activeTabKey 并自动进入预览模式 */
+    /** 外部激活浏览器窗口时，同步 activeTabKey */
     function syncActiveWindowId(): void {
         const active = browserStore.activeWindowId
         if (active && activeTabKey.value !== `browser:${active}`) {
             activeTabKey.value = `browser:${active}`
-            enterPreviewMode()
         }
     }
 
@@ -192,11 +180,6 @@ export const useTabStore = defineStore('tab', () => {
                 existing.url = wv.url
             }
         }
-
-        // 全部标签关闭时退出预览模式
-        if (tabs.value.length === 0 && layoutStore.workspacePanelMode === 'preview') {
-            exitPreviewMode()
-        }
     }
 
     // ── 会话切换清理 ──
@@ -204,17 +187,14 @@ export const useTabStore = defineStore('tab', () => {
     function clearAll(): void {
         tabs.value = []
         activeTabKey.value = null
-        // 模式状态一并重置（会话切换后回到目录树模式）
-        layoutStore.setWorkspacePanelMode('tree')
     }
 
     return {
         tabs,
         activeTabKey,
-        enterPreviewMode,
-        exitPreviewMode,
-        enterGitMode,
-        exitGitMode,
+        openGitTab,
+        openNewTab,
+        openTerminalTab,
         selectTab,
         addTab,
         removeTab,

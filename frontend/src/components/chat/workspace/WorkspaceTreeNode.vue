@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
 
 // 递归组件需要显式导入自身
@@ -75,6 +75,7 @@ const props = defineProps<{
     depth: number;
     selectedPath: string;
     loadingPaths: Set<string>;
+    expandedPaths?: Set<string>;
     onLoad?: (node: WorkspaceNode) => Promise<void>;
 }>();
 
@@ -86,26 +87,27 @@ const emit = defineEmits<{
 
 const expanded = ref(false);
 
-// 单击/双击延迟区分（仅文件节点）
-let clickTimer: ReturnType<typeof setTimeout> | null = null;
+// 受控展开：父组件（切换标签定位文件）把祖先目录路径加入 expandedPaths，
+// 节点监测到自身路径在集合中时自动展开；子节点加载由父组件 reveal 逻辑负责，
+// 用户手动点击展开仍走 toggle() → onLoad。
+watch(
+    () => props.expandedPaths,
+    (paths) => {
+        if (props.node.isDirectory && !expanded.value && paths?.has(props.node.path)) {
+            expanded.value = true;
+        }
+    },
+    { immediate: true },
+);
 
+// 单击/双击延迟区分（仅文件节点）
 function handleClick() {
     if (props.node.isDirectory) {
         toggle();
         return
     }
-    // 文件节点：延迟区分单击/双击
-    if (clickTimer) {
-        // 第二次点击在延迟内到达 → 双击 → 持久标签
-        clearTimeout(clickTimer)
-        clickTimer = null
-        emit('select', props.node, false)
-    } else {
-        clickTimer = setTimeout(() => {
-            clickTimer = null
-            emit('select', props.node, true)
-        }, 250)
-    }
+    // 文件节点：单击即打开（不再区分单击/双击、临时/常驻）
+    emit('select', props.node, false)
 }
 
 async function toggle() {

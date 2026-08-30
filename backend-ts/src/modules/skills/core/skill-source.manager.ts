@@ -8,7 +8,7 @@ import { SkillDefinition, SkillSourceType } from "../interfaces/skill-manifest.i
 import { SkillLoaderService } from "./skill-loader.service";
 import { SkillRegistry } from "./skill-registry.service";
 import { SkillWatcherService } from "./skill-watcher.service";
-import { StreamStartedEvent } from "../../../common/events/stream.events";
+import { StreamStatusChangedEvent } from "../../../common/events/stream.events";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 
 export interface SkillSourceConfig {
@@ -247,9 +247,12 @@ export class SkillSourceManager implements OnModuleDestroy {
 
   // ── Workspace 动态管理 ──
 
-  @OnEvent("stream.started")
-  async handleStreamStarted(event: StreamStartedEvent): Promise<void> {
-    const wp = event.payload?.session?.workspacePath as string | undefined;
+  @OnEvent("stream.status_changed")
+  async handleStreamStarted(event: StreamStatusChangedEvent): Promise<void> {
+    if (event.payload.status !== "running") return;
+    // running 事件 workspacePath 在 payload 顶层(chat-runner 注入);兼容旧 session 内嵌
+    const wp = (event.payload?.workspacePath ||
+      event.payload?.session?.workspacePath) as string | undefined;
     if (!wp) return;
 
     const skillsDir = path.join(wp, WORKSPACE_SKILLS_RELATIVE);

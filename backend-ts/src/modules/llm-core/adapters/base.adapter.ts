@@ -1,4 +1,4 @@
-import { LLMCompletionParams, LLMResponseChunk } from "../types/llm.types";
+import { LLMCompletionParams, StreamChunk } from "../types/llm.types";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 
 /**
@@ -23,11 +23,11 @@ export interface IProtocolAdapter {
   /**
    * 执行聊天补全
    * @param params 请求参数
-   * @returns 流式响应生成器或 Promise
+   * @returns 流式响应生成器（StreamChunk 词表）或非流式响应（chunk 数组：block_end* → usage → finish）
    */
   chatCompletion(
     params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> | Promise<LLMResponseChunk>;
+  ): AsyncGenerator<StreamChunk> | Promise<StreamChunk[]>;
 
   /**
    * 从远程 API 同步该协议下的可用模型列表

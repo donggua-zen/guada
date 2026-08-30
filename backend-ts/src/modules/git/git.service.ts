@@ -380,8 +380,9 @@ export class GitService {
       const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
       if (binary) return { type: "diff", path: filePath, diff, binary };
       // 新侧（暂存区）体积上限检查：cat-file -s 只读大小不读内容
+      // 文件超限但 diff 文本仍可提供（文件大 ≠ diff 大），保留 diff 供生成提交信息参考
       if (await this.versionTooLarge(git, `:${filePath}`)) {
-        return { type: "diff", path: filePath, tooLarge: true };
+        return { type: "diff", path: filePath, diff, tooLarge: true };
       }
       // staged diff = HEAD vs 暂存区：附带两侧全文（前端全文高亮 + gap 本地展开）
       const [oldContent, newContent] = await Promise.all([
@@ -402,11 +403,19 @@ export class GitService {
       if (entry && entry.index === "?" && entry.working_dir === "?") {
         // 先读 Buffer 嗅探二进制：utf-8 直读会把二进制内容解码成乱码替换符
         const buf = await fsp.readFile(absPath);
-        // 体积上限：超大未跟踪文件直接拒绝预览
-        if (buf.length > MAX_PREVIEW_BYTES) {
-          return { type: "new-file", path: filePath, tooLarge: true };
-        }
         const binary = isBinaryPath(filePath) || hasNulByte(buf);
+        // 体积上限：超大未跟踪文件前端不可预览，但保留截断内容供生成提交信息参考
+        if (buf.length > MAX_PREVIEW_BYTES) {
+          return {
+            type: "new-file",
+            path: filePath,
+            content: binary
+              ? undefined
+              : buf.toString("utf-8").slice(0, MAX_FULL_CONTENT_BYTES),
+            binary,
+            tooLarge: true,
+          };
+        }
         const content = binary ? undefined : buf.toString("utf-8");
         return {
           type: "new-file",
@@ -427,9 +436,10 @@ export class GitService {
     const binary = isBinaryPath(filePath) || isBinaryDiff(diff);
     if (binary) return { type: "diff", path: filePath, diff, binary };
     // 工作区新侧体积上限检查（已删除的文件跳过——diff 只剩删除行，量小）
+    // 文件超限但 diff 文本仍可提供（文件大 ≠ diff 大），保留 diff 供生成提交信息参考
     try {
       if (fs.statSync(absPath).size > MAX_PREVIEW_BYTES) {
-        return { type: "diff", path: filePath, tooLarge: true };
+        return { type: "diff", path: filePath, diff, tooLarge: true };
       }
     } catch {
       // 工作区已删除：不检查体积

@@ -51,6 +51,8 @@ export interface PluginContext {
   session: ISessionContext;
   /** 插件原始配置（原 roles.tools / settings.plugins 的原始配置） */
   pluginsConfig?: any;
+  /** 当前工具调用 id（toolCallId，execute 内可作审批关联） */
+  toolCallId?: string;
 }
 
 /** @deprecated 使用 PluginContext */
@@ -64,17 +66,20 @@ export type ConditionFn = (
   context: PluginContext,
 ) => boolean | Promise<boolean>;
 /**
- * 插件级配置项（新格式 v2）
- * - enabled: 是否启用插件（默认 true）
- * - toolkits_filter: 工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单
- * - toolkits_deny: 黑名单：禁用的工具包 ID 列表
- * - toolkits_allow: 白名单：允许的工具包 ID 列表
- * - params: 插件私有参数（预留）
+ * 插件条目配置
+ *
+ * 两层开关体系下各字段归属：
+ * - enabled: 仅全局层消费（插件装载/生命周期）；角色层不再控制插件启停，旧角色数据中的该字段被忽略
+ * - toolkits_*: 仅角色层消费（能力包/工具包裁剪）
  */
 export interface PluginEntryConfig {
+  /** 仅全局层：插件启停 */
   enabled?: boolean;
+  /** 仅角色层：工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单 */
   toolkits_filter?: "deny" | "allow";
+  /** 仅角色层：黑名单模式下禁用的工具包 ID 列表 */
   toolkits_deny?: string[];
+  /** 仅角色层：白名单模式下允许的工具包 ID 列表 */
   toolkits_allow?: string[];
   params?: Record<string, any>;
 }
@@ -178,6 +183,8 @@ export interface ToolKitDef {
   id: string;
   /** 显示名称 */
   name?: string;
+  /** 显示描述（支持 %key% NLS 引用） */
+  description?: string;
   /** 加载模式（默认 lazy） */
   loadMode?: ToolKitLoadMode;
   /** 是否默认启用（默认 true） */
@@ -219,6 +226,8 @@ export interface ToolKitHandle {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     description?: string;
+    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
+    type?: "system" | "user";
   }): void;
 }
 
@@ -229,6 +238,8 @@ export interface ToolKitRegistration {
   prompts: Array<{
     frequency: string;
     description: string;
+    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
+    type?: "system" | "user";
     handler: (ctx: any) => string | Promise<string>;
   }>;
 }
@@ -263,23 +274,6 @@ export interface LLMResponseEvent {
   messages: any[];
   response: any;
   pluginId?: string;
-}
-
-// ==================== 回合拦截器 ====================
-
-/**
- * 回合拦截器（Turn Interceptor）
- *
- * 在 AgentEngine 的 do...while 循环退出后（AI 认为对话可以结束），
- * 但在 SSE 关闭前执行。如果拦截器返回非 null 字符串，则作为 hidden user
- * 消息注入到当前 assistant 消息下，并触发新一轮 LLM 调用。
- *
- * 典型场景：shell 插件检测到子代理仍有未完成的后台进程，
- * 注入"你必须等待任务结束"消息强制 AI 继续工作。
- */
-export interface TurnInterceptor {
-  name: string;
-  intercept: (ctx: PluginContext) => Promise<string | null>;
 }
 
 // ==================== 插件决议信息 ====================
@@ -353,16 +347,22 @@ export interface ResolvedPluginInfo {
   enabledTools: ToolHandlerDef[];
   /** 所有注册的工具（不过滤） */
   allTools: ToolHandlerDef[];
-  /** 工具包运行时信息 */
+  /**
+   * 全部工具包的运行时信息（含被角色层禁用的，以 enabled=false 标记；
+   * 被禁用的工具包不解析 handler，loadMode/activator 取注册默认值）
+   */
   enabledToolKits: Array<{
     id: string;
     name: string;
+    description?: string;
     loadMode: ToolLoadMode;
     activator?: string;
     enabled: boolean;
+    /** 该工具包注册的工具数量 */
+    toolCount: number;
+    /** 该工具包注册的提示词数量 */
+    promptCount: number;
   }>;
-  /** 注册的回合拦截器 */
-  interceptors: TurnInterceptor[];
   /** 注册的 WorkspaceProvider 工厂 */
   workspaceProviders: WorkspaceProviderFactory[];
   /** 注册的附件类型 */

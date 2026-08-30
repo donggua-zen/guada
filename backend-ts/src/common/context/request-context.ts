@@ -130,7 +130,7 @@ export const RequestContext = {
    * 
    * @example
    * ```typescript
-   * async function compressHistory(messages: MessageRecord[]) {
+   * async function compressHistory(messages: Message[]) {
    *   // 在关键操作前检查
    *   RequestContext.checkAborted();
    *   

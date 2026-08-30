@@ -5,5 +5,7 @@
   "memory.executing": "Editing memory",
   "memory.completed": "Edited memory",
   "memory.aggregate.executing": "Editing {n} memories",
-  "memory.aggregate.completed": "Edited {n} memories"
+  "memory.aggregate.completed": "Edited {n} memories",
+  "memory.toolkitDescription": "Long-term memory: save facts, preferences and memos"
+
 }

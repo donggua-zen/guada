@@ -2,7 +2,6 @@ import {
   PluginManifest,
   ToolHandlerDef,
   ToolKitRegistration,
-  TurnInterceptor,
   AttachmentTypeRegistration,
   UiPageRegistration,
   SlotRegistration,
@@ -23,7 +22,6 @@ interface PluginRegistration {
     description: string;
     handler: (context: any) => string | Promise<string>;
   }>;
-  interceptors: TurnInterceptor[];
   workspaceProviders: WorkspaceProviderFactory[];
   attachmentTypes: AttachmentTypeRegistration[];
   uiPages: UiPageRegistration[];
@@ -37,7 +35,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], interceptors: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], rpcHandlers: {} });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], rpcHandlers: {} });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -71,20 +69,6 @@ class PluginRegistryImpl {
   getPromptMetas(pluginId: string) {
     const reg = this.registrations.get(pluginId);
     return { prompts: reg?.prompts || [] };
-  }
-
-  /** 注册回合拦截器 */
-  registerInterceptor(pluginId: string, interceptor: TurnInterceptor) {
-    const reg = this.registrations.get(pluginId);
-    if (!reg) return;
-    if (!reg.interceptors.find((x) => x.name === interceptor.name)) {
-      reg.interceptors.push(interceptor);
-    }
-  }
-
-  /** 获取插件的所有回合拦截器 */
-  getInterceptors(pluginId: string): TurnInterceptor[] {
-    return this.registrations.get(pluginId)?.interceptors || [];
   }
 
   /** 注册 WorkspaceProvider 工厂 */

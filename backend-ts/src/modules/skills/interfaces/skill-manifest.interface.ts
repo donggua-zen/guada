@@ -18,6 +18,15 @@ export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace';
 /**
  * 完整 Skill 定义（内存表示）
  */
+/**
+ * 技能资源基（参考 DSH resourceBase）
+ * 模型以它为基准 + SKILL.md 内的相对路径访问脚本/资源，避免硬编码绝对路径。
+ */
+export type SkillResourceBase =
+  | { kind: "directory"; path: string }
+  | { kind: "url"; url: string }
+  | { kind: "opaque"; description: string };
+
 export interface SkillDefinition {
   id: string;                    // = manifest.name
   baseDir: string;               // 技能根目录（skillsDir），用于还原绝对路径
@@ -26,4 +35,10 @@ export interface SkillDefinition {
   contentHash: string;           // SHA256（用于变更检测）
   source: SkillSourceType;       // 技能来源：global=用户安装, system=系统内置
   enabled: boolean;              // 是否启用（默认 true）
+  /** 内嵌正文（注册式技能直接持有，不为空时 loadInstructions 不读文件） */
+  content?: string;
+  /** 技能提供方名（溯源；如 "bundled"、"plugin:<id>"） */
+  provider?: string;
+  /** 资源基：模型按此 + 相对路径访问脚本/资源（未声明时默认技能目录） */
+  resourceBase?: SkillResourceBase;
 }

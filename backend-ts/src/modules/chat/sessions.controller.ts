@@ -363,6 +363,54 @@ export class SessionsController {
     });
   }
 
+  /**
+   * 保存工作区文件内容
+   */
+  @Post("sessions/:id/workspace/file")
+  async saveWorkspaceFile(
+    @Param("id") id: string,
+    @Query("path") filePath: string,
+    @Body() body: { content: string },
+    @CurrentUser() user: any,
+  ) {
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new HttpException("Session not found or unauthorized", HttpStatus.FORBIDDEN);
+    }
+
+    if (!filePath) {
+      throw new HttpException("File path is required", HttpStatus.BAD_REQUEST);
+    }
+
+    if (typeof body.content !== 'string') {
+      throw new HttpException("Content must be a string", HttpStatus.BAD_REQUEST);
+    }
+
+    // 确定工作目录路径
+    const workspaceDir = await this.workspaceService.resolveSessionWorkspaceDir(session);
+
+    // 解析文件路径并安全检查
+    const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
+
+    // 确保文件在工作目录内
+    if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
+      throw new HttpException("Access denied: File is outside workspace directory", HttpStatus.FORBIDDEN);
+    }
+
+    // 确保目标目录存在
+    const dir = path.dirname(resolvedPath);
+    await fsPromises.mkdir(dir, { recursive: true });
+
+    // 写入文件
+    await fsPromises.writeFile(resolvedPath, body.content, 'utf-8');
+
+    // 触发文件变更事件（通知前端刷新）
+    this.eventBus.emit('workspace.file.changed', { sessionId: id, path: filePath });
+
+    return { success: true, path: filePath };
+  }
+
   @Get("sessions/:id/workspace/children")
   async getWorkspaceChildren(
     @Param("id") id: string,

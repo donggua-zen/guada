@@ -9,7 +9,9 @@ export function useMessageOperations(
     currentSessionId: Ref<string | null>
 ) {
     // editMode 移到内部统一管理
-    const editMode = ref<{ message: any; inputMessage: InputMessageState } | null>(null)
+    // turnId:被编辑消息所属的回合外壳 id,进入编辑模式时直接定位,
+    // 由 handleSendMessage 直接使用(不再反查)。
+    const editMode = ref<{ message: any; turnId?: string; inputMessage: InputMessageState } | null>(null)
 
     // 监听 sessionId 变化，自动退出编辑模式
     watch(currentSessionId, (newId, oldId) => {
@@ -60,12 +62,12 @@ export function useMessageOperations(
     async function prepareNewMessage(
         text: string,
         files: any[],
-        replaceMessageId: string | null = null,
+        replaceTurnId: string | null = null,
         knowledgeBaseIds?: string[]
     ): Promise<{
         content: string;
         fileIds: string[];
-        replaceMessageId: string | null;
+        replaceTurnId: string | null;
         knowledgeBaseIds?: string[];
         updatedFiles: any[];
     }> {
@@ -128,7 +130,7 @@ export function useMessageOperations(
         return {
             content: finalContent,
             fileIds,
-            replaceMessageId,
+            replaceTurnId,
             knowledgeBaseIds,
             updatedFiles,
         }
@@ -137,7 +139,7 @@ export function useMessageOperations(
     /**
      * 进入编辑模式
      */
-    function enterEditMode(message: any) {
+    function enterEditMode(message: any, turnId: string) {
         let knowledgeBaseIds = []
         const referencedKbs = message.contents[0].metadata?.referencedKbs || []
         for (let i = 0; i < referencedKbs.length; i++) {
@@ -151,8 +153,10 @@ export function useMessageOperations(
             isWaiting: false
         }
 
+        // turnId 由调用方经渲染链路直接传入(整轮 turn 携带),此处零反查。
         editMode.value = {
             message: message,
+            turnId: turnId,
             inputMessage: inputMsg
         }
 

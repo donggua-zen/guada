@@ -12,7 +12,34 @@
       >
         {{ t('common.loading') }}
       </el-button>
+      <el-button type="primary" size="small" @click="startInstallDialog">安装插件</el-button>
     </div>
+
+    <!-- 安装进度弹窗（输入 source → 假终端进度） -->
+    <GdDialog v-model="installDialogVisible" width="600px" :close-on-click-modal="false" destroy-on-close @closed="handleInstallClosed">
+      <template #header>
+        <span>安装插件</span>
+      </template>
+      <!-- 输入 + 安装按钮（并排） -->
+      <div class="install-row">
+        <el-input
+          v-model="installSource"
+          placeholder="github:owner/repo#ref / gitee:owner/repo / git:https://…#ref / local:path"
+          clearable
+          @keyup.enter="beginInstall"
+        />
+        <el-button type="primary" :loading="installing" @click="beginInstall">安装</el-button>
+      </div>
+      <!-- 假终端（常驻） -->
+      <div ref="installLogBox" class="install-terminal">
+        <pre class="install-log">{{ installLog || '等待安装…' }}</pre>
+        <span v-if="installing" class="terminal-cursor"></span>
+      </div>
+      <template #footer>
+        <el-button v-if="installing" @click="cancelInstallDialog">取消</el-button>
+        <el-button v-else @click="installDialogVisible = false">关闭</el-button>
+      </template>
+    </GdDialog>
 
     <div class="space-y-4">
       <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
@@ -104,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiService } from '@/services/ApiService'
@@ -129,6 +156,8 @@ interface ToolMetadata {
 const loading = ref(false)
 const error = ref<string | null>(null)
 const updatingTools = ref<Set<string>>(new Set())
+const installSource = ref('')
+const installing = ref(false)
 
 const globalTools = ref<ToolMetadata[]>([])
 
@@ -141,10 +170,87 @@ function showDetail(tool: ToolMetadata) {
   detailVisible.value = true
 }
 
+async function handleInstall() {
+  // 兼容保留：直接同步安装（无轮询）。UI 用 startInstallDialog（假终端）。
+  await startInstall()
+}
+
+// ── 安装假终端（轮询日志）──
+const installDialogVisible = ref(false)
+const installLog = ref('')
+const installLogBox = ref<HTMLElement | null>(null)
+let installPollCancelled = false
+let activeInstallJobId: string | null = null
+
+function startInstallDialog() {
+  // 打开弹窗，进入输入阶段（不立即安装）
+  installSource.value = ''
+  installLog.value = ''
+  installDialogVisible.value = true
+}
+
+function beginInstall() {
+  const src = installSource.value.trim()
+  if (!src || installing.value) return
+  void startInstall()
+}
+
+async function startInstall() {
+  installing.value = true
+  installLog.value = ''
+  installPollCancelled = false
+  try {
+    const { jobId } = await apiService.installPlugin(installSource.value.trim())
+    activeInstallJobId = jobId
+    while (!installPollCancelled) {
+      const state = await apiService.getInstallLog(jobId)
+      installLog.value = state.log.join('\n')
+      if (state.done) {
+        activeInstallJobId = null
+        installing.value = false
+        if (state.result?.success) {
+          installLog.value += '\n\n✅ 安装成功'
+          installSource.value = ''
+          await loadGlobalTools()
+        } else {
+          installLog.value += '\n\n❌ 安装失败'
+        }
+        break
+      }
+      await new Promise((r) => setTimeout(r, 500))
+    }
+  } catch (err: any) {
+    installLog.value += '\n❌ ' + (err.message || String(err))
+    installing.value = false
+  }
+}
+
+function cancelInstallDialog() {
+  if (activeInstallJobId) {
+    apiService.cancelInstall(activeInstallJobId).catch(() => {})
+  }
+  installPollCancelled = true
+  activeInstallJobId = null
+  installing.value = false
+}
+
+function handleInstallClosed() {
+  cancelInstallDialog()
+}
+
+// 自动滚动假终端到底部
+watch(installLog, () => {
+  nextTick(() => {
+    if (installLogBox.value) {
+      installLogBox.value.scrollTop = installLogBox.value.scrollHeight
+    }
+  })
+})
+
 async function loadGlobalTools() {
   loading.value = true
   error.value = null
-  
+
   try {
     const response = await apiService.queryPlugins(undefined, getLocale())
     globalTools.value = response.plugins
@@ -216,4 +322,33 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.install-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.install-terminal {
+  background-color: #0d1117;
+  color: #c9d1d9;
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.install-log {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.terminal-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: #58a6ff;
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
 </style>

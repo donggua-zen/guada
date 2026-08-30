@@ -1,12 +1,29 @@
+/**
+ * Anthropic Messages 协议适配器。
+ *
+ * Provider quirks（本协议私有的兼容细节，新增兼容时在此登记）：
+ * 1. thinking 块回传必须携带 signature（metadata.signature），无签名不回传；
+ *    redacted_thinking（metadata.redactedData）原样回传。
+ * 2. 连续多条 tool 结果消息必须合并为单条 user 消息内的多个 tool_result block；
+ *    assistant 的 tool_use 缺失对应 tool_result 时需注入空结果（patchMissingToolResults），
+ *    否则 API 报 400。
+ * 3. system prompt 使用顶层 system 字段（非消息数组）。
+ * 4. 图片：base64 走 source.type=base64；远程 URL 走 source.type=url。
+ *
+ * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
+ * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
+ */
 import { Logger } from "@nestjs/common";
 import Anthropic from "@anthropic-ai/sdk";
 import { IProtocolAdapter } from "./base.adapter";
 import {
-  MessageRecord,
   LLMCompletionParams,
-  LLMResponseChunk,
-  ToolCallItem,
+  StreamChunk,
+  StreamUsage,
 } from "../types/llm.types";
+import type { Message, ContentBlock } from "../../../common/types/conversation.types";
+import { attachmentToPart, fileBlockToText } from "../utils/attachment.util";
+import { assertNoImageContent } from "../utils/content.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import { insecureFetch } from "../utils/tls.util";
@@ -100,7 +117,15 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
   async *chatCompletion(
     params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
+    // fail-loud 最终防线：L1 管线绕过时，图片不得静默发给纯文本模型
+    assertNoImageContent(
+      params.messages,
+      params.modelCapabilities?.supportsImageInput,
+      this.protocol,
+      params.model,
+    );
+
     const providerConfig = params.providerConfig || {};
     const apiKey = providerConfig.apiKey || process.env.ANTHROPIC_API_KEY;
 
@@ -119,7 +144,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
     const { system, messages } = this.extractSystemMessage(params.messages);
 
     // 转换消息格式
-    const anthropicMessages = this.formatMessages(messages);
+    const anthropicMessages = await this.formatMessages(messages);
 
     // 构建请求参数
     const requestParams: Anthropic.MessageCreateParams = {
@@ -160,7 +185,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
           ...requestParams,
           stream: false,
         }, { signal: params.abortSignal }) as Anthropic.Messages.Message;
-        yield this.handleNonStreamResponse(message);
+        yield* this.handleNonStreamResponse(message);
       }
     } catch (error) {
       this.handleError(error, !!params.stream);
@@ -168,277 +193,256 @@ export class AnthropicAdapter implements IProtocolAdapter {
   }
 
   /**
-   * 处理流式响应
-   * Anthropic SDK 使用 for await ... of stream 模式
+   * 处理流式响应：Anthropic 原生 content_block 流 → 规范 StreamChunk 词表
+   *
+   * Anthropic 协议自带块生命周期（content_block_start/delta/stop），映射近乎 1:1：
+   * - text_delta / thinking_delta → text_delta / reasoning_delta
+   * - input_json_delta → tool_call_delta（partial_json 分片原样透传）
+   * - content_block_stop → block_end（携带本 adapter 组装的权威块）
+   * - signature_delta / redacted_thinking 拦截缓存，随 finish 注入（多轮思考连续性回传）
+   * - message_delta → usage + finish（usage 固定先于 finish）
    */
   private async *handleStreamResponse(
     stream: AsyncIterable<Anthropic.MessageStreamEvent>,
-  ): AsyncGenerator<LLMResponseChunk> {
-    // 迭代 stream 进行事件处理
-
-    // 维护块索引 → 工具序号的映射（Anthropic 的 index 是全局消息块索引）
-    const blockToToolIndex = new Map<number, number>();
-    let nextToolIndex = 0;
-    // 缓存 thinking signature + redacted data，在 content_block_stop 时清理
-    let pendingSignature = '';
-    let pendingRedactedData = '';
-    // 缓存 message_start 返回的 input_tokens（总输入 token 数），合并到 message_delta
+  ): AsyncGenerator<StreamChunk> {
+    // 块 index → 中间态（Anthropic 的 index 是全局消息块索引，直接复用为输出 index）
+    const blocks = new Map<
+      number,
+      { kind: "text" | "reasoning" | "tool-call"; text: string }
+    >();
+    const toolMeta = new Map<number, { id: string; name: string }>();
+    let pendingSignature = "";
+    let pendingRedactedData = "";
+    // message_start 返回的 input_tokens（总输入 token 数），合并到 message_delta
     let inputTokensFromStart = 0;
 
+    // 首个增量前合成 block_start
+    const ensure = (
+      index: number,
+      kind: "text" | "reasoning" | "tool-call",
+    ): StreamChunk[] => {
+      if (!blocks.has(index)) {
+        blocks.set(index, { kind, text: "" });
+        return [{ type: "block_start", index, blockType: kind }];
+      }
+      return [];
+    };
+
     for await (const event of stream) {
-      // 拦截 message_start：缓存 input_tokens，不下发
-      if (event.type === "message_start") {
-        inputTokensFromStart = (event as any).message?.usage?.input_tokens || 0;
-        continue;
-      }
+      switch (event.type) {
+        case "message_start":
+          inputTokensFromStart = (event as any).message?.usage?.input_tokens || 0;
+          continue;
 
-      // 调试：记录关键事件
-      // if (event.type === "content_block_start" || event.type === "content_block_stop" || 
-      //     (event.type === "content_block_delta" && ["input_json_delta", "thinking_delta"].includes((event.delta as any).type))) {
-      //   this.logger.debug(`Stream event: type=${event.type}, index=${(event as any).index}, deltaType=${(event as any).delta?.type}`);
-      // }
-
-      // 拦截 input_json_delta：用工具序号替换块索引后向下游发射
-      if (
-        event.type === "content_block_delta" &&
-        (event.delta as any).type === "input_json_delta"
-      ) {
-        const toolIndex = blockToToolIndex.get(event.index);
-        if (toolIndex !== undefined) {
-          yield {
-            type: "tool_call",
-            content: null,
-            reasoningContent: null,
-            finishReason: null,
-            toolCalls: [{
-              index: toolIndex,
-              id: "",
-              type: "function" as const,
-              name: "",
-              arguments: (event.delta as any).partial_json || "",
-            }],
-            usage: null,
-          };
-        }
-        continue;
-      }
-
-      // 拦截 signature_delta：缓存签名，不在单独事件中发射
-      if (
-        event.type === "content_block_delta" &&
-        (event.delta as any).type === "signature_delta"
-      ) {
-        const sig = (event.delta as any).signature || (event.delta as any).signature_delta || '';
-        if (sig) {
-          // TODO: 待验证 — Anthropic signature_delta 可能是分片到达，此处用 += 拼接
-          // 若实际是完整签名覆盖，则应改回 = sig
-          pendingSignature += sig;
-        }
-        continue;
-      }
-
-      // content_block_start(redacted_thinking)：记录加密 data，不发射 think 事件
-      if (event.type === "content_block_start" && (event.content_block as any).type === "redacted_thinking") {
-        pendingRedactedData = (event.content_block as any).data || '';
-        continue;
-      }
-
-      // content_block_stop：不发射 finish，只处理缓存清理
-      // finish 统一由 message_delta 发射
-      if (event.type === "content_block_stop") {
-        continue;
-      }
-
-      const chunk = this.parseStreamEvent(event, inputTokensFromStart);
-
-      // content_block_start(tool_use)：分配自增工具序号
-      if (chunk?.toolCalls?.length) {
-        for (const tc of chunk.toolCalls) {
-          const ti = nextToolIndex++;
-          tc.index = ti;
-          blockToToolIndex.set((event as any).index, ti);
-        }
-      }
-
-      // 将缓存的 signature/redactedData 注入到 message_delta 的 finish 事件中
-      if (chunk?.type === "finish") {
-        if (pendingSignature) {
-          chunk.signature = pendingSignature;
-          pendingSignature = '';
-        }
-        if (pendingRedactedData) {
-          chunk.redactedData = pendingRedactedData;
-          pendingRedactedData = '';
-        }
-      }
-
-      if (chunk) yield chunk;
-    }
-  }
-
-  /**
-   * 解析 Anthropic 流式事件
-   */
-  private parseStreamEvent(
-    event: Anthropic.MessageStreamEvent,
-    inputTokensFromStart: number,
-  ): LLMResponseChunk | null {
-    switch (event.type) {
-      case "content_block_delta": {
-        const delta = event.delta;
-        if (delta.type === "text_delta") {
-          return {
-            type: "text",
-            content: delta.text || null,
-            reasoningContent: null,
-            finishReason: null,
-            usage: null,
-          };
-        }
-        if (delta.type === "thinking_delta") {
-          return {
-            type: "think",
-            content: null,
-            reasoningContent: delta.thinking || null,
-            finishReason: null,
-            usage: null,
-          };
-        }
-        // signature_delta 不需要暴露给前端
-        return null;
-      }
-
-      case "content_block_start": {
-        const block = event.content_block;
-        if (block.type === "thinking") {
-          return {
-            type: "think",
-            content: null,
-            reasoningContent: block.thinking || null,
-            finishReason: null,
-            usage: null,
-          };
-        }
-        if (block.type === "tool_use") {
-          // tool_use block 开始，携带 id、name 和初始 input（可能有完整参数）
-          const initialArgs = block.input ? JSON.stringify(block.input) : "";
-          return {
-            type: "tool_call",
-            content: null,
-            reasoningContent: null,
-            finishReason: null,
-            toolCalls: [
-              {
-                id: block.id,
+        case "content_block_start": {
+          const block = event.content_block;
+          if ((block as any).type === "redacted_thinking") {
+            // 加密思考内容不进块流，缓存后随 finish 注入
+            pendingRedactedData = (block as any).data || "";
+            continue;
+          }
+          if (block.type === "thinking") {
+            for (const c of ensure(event.index, "reasoning")) yield c;
+            if (block.thinking) {
+              blocks.get(event.index)!.text += block.thinking;
+              yield { type: "reasoning_delta", index: event.index, text: block.thinking };
+            }
+            continue;
+          }
+          if (block.type === "text") {
+            for (const c of ensure(event.index, "text")) yield c;
+            if (block.text) {
+              blocks.get(event.index)!.text += block.text;
+              yield { type: "text_delta", index: event.index, text: block.text };
+            }
+            continue;
+          }
+          if (block.type === "tool_use") {
+            toolMeta.set(event.index, { id: block.id, name: block.name });
+            for (const c of ensure(event.index, "tool-call")) yield c;
+            // tool_use 起始可能携带完整初始参数（parsed input）
+            const initialArgs = block.input ? JSON.stringify(block.input) : "";
+            if (initialArgs && initialArgs !== "{}") {
+              blocks.get(event.index)!.text += initialArgs;
+              yield {
+                type: "tool_call_delta",
                 index: event.index,
-                type: "function" as const,
+                toolCallId: block.id,
                 name: block.name,
-                arguments: initialArgs === "{}" ? "" : initialArgs,
-              },
-            ],
-            usage: null,
-          };
+                argumentsDelta: initialArgs,
+              };
+            } else {
+              yield {
+                type: "tool_call_delta",
+                index: event.index,
+                toolCallId: block.id,
+                name: block.name,
+                argumentsDelta: "",
+              };
+            }
+            continue;
+          }
+          continue;
         }
-        return null;
-      }
 
-      case "content_block_stop":
-      case "message_stop":
-        return null;
+        case "content_block_delta": {
+          const delta = event.delta;
+          if (delta.type === "text_delta") {
+            for (const c of ensure(event.index, "text")) yield c;
+            blocks.get(event.index)!.text += delta.text || "";
+            yield { type: "text_delta", index: event.index, text: delta.text || "" };
+          } else if (delta.type === "thinking_delta") {
+            for (const c of ensure(event.index, "reasoning")) yield c;
+            blocks.get(event.index)!.text += delta.thinking || "";
+            yield { type: "reasoning_delta", index: event.index, text: delta.thinking || "" };
+          } else if (delta.type === "input_json_delta") {
+            const partial = (delta as any).partial_json || "";
+            for (const c of ensure(event.index, "tool-call")) yield c;
+            blocks.get(event.index)!.text += partial;
+            yield { type: "tool_call_delta", index: event.index, argumentsDelta: partial };
+          } else if (delta.type === "signature_delta") {
+            const sig =
+              (delta as any).signature || (delta as any).signature_delta || "";
+            // 分片到达时拼接；完整签名覆盖时等价于赋值
+            if (sig) pendingSignature += sig;
+          }
+          continue;
+        }
 
-      case "message_delta": {
-        const usage = event.usage;
-        // 合并 message_start 缓存的 input_tokens + message_delta 的 output_tokens
-        // Anthropic API input_tokens 不包含缓存部分，需手动加回
-        const promptTokens = (inputTokensFromStart || usage?.input_tokens || 0)
-          + (usage?.cache_read_input_tokens || 0)
-          + (usage?.cache_creation_input_tokens || 0);
-        const completionTokens = usage?.output_tokens || 0;
-        // Anthropic 缓存字段：cache_creation_input_tokens / cache_read_input_tokens
-        const cachedTokens = usage?.cache_creation_input_tokens || usage?.cache_read_input_tokens
-          ? { read: usage.cache_read_input_tokens, written: usage.cache_creation_input_tokens }
-          : undefined;
-        return {
-          type: "finish",
-          content: null,
-          reasoningContent: null,
-          finishReason: event.delta?.stop_reason || null,
-          usage: {
+        case "content_block_stop": {
+          const info = blocks.get(event.index);
+          if (!info) continue;
+          if (info.kind === "tool-call") {
+            const meta = toolMeta.get(event.index);
+            yield {
+              type: "block_end",
+              index: event.index,
+              block: {
+                type: "tool-call",
+                contentId: "",
+                toolCallId: meta?.id || "",
+                name: meta?.name || "",
+                arguments: info.text,
+              },
+            };
+          } else if (info.text) {
+            yield {
+              type: "block_end",
+              index: event.index,
+              block:
+                info.kind === "text"
+                  ? { type: "text", contentId: "", text: info.text }
+                  : { type: "reasoning", contentId: "", summary: info.text },
+            };
+          }
+          continue;
+        }
+
+        case "message_delta": {
+          const usage = (event as any).usage;
+          // 合并 message_start 缓存的 input_tokens + message_delta 的 output_tokens
+          // Anthropic API input_tokens 不包含缓存部分，需手动加回
+          const promptTokens = (inputTokensFromStart || usage?.input_tokens || 0)
+            + (usage?.cache_read_input_tokens || 0)
+            + (usage?.cache_creation_input_tokens || 0);
+          const completionTokens = usage?.output_tokens || 0;
+          const cachedTokens: StreamUsage["cachedTokens"] =
+            usage?.cache_creation_input_tokens || usage?.cache_read_input_tokens
+              ? { read: usage.cache_read_input_tokens, written: usage.cache_creation_input_tokens }
+              : undefined;
+          const streamUsage: StreamUsage = {
             promptTokens,
             completionTokens,
             totalTokens: promptTokens + completionTokens,
             cachedTokens,
-          },
-        };
-      }
+          };
+          // usage 固定先于 finish
+          yield { type: "usage", usage: streamUsage };
+          const finish: Extract<StreamChunk, { type: "finish" }> = {
+            type: "finish",
+            finishReason: event.delta?.stop_reason || "stop",
+          };
+          if (pendingSignature) {
+            finish.signature = pendingSignature;
+            pendingSignature = "";
+          }
+          if (pendingRedactedData) {
+            finish.redactedData = pendingRedactedData;
+            pendingRedactedData = "";
+          }
+          yield finish;
+          continue;
+        }
 
-      default:
-        return null;
+        default:
+          // content_block_stop 已处理 / message_stop 等忽略
+          continue;
+      }
     }
   }
 
   /**
-   * 处理非流式响应
+   * 非流式响应 → 同一词表的 chunk 数组（block_end* → usage → finish）
    */
-  private async handleNonStreamResponse(
+  private *handleNonStreamResponse(
     message: Anthropic.Messages.Message,
-  ): Promise<LLMResponseChunk> {
+  ): Generator<StreamChunk> {
+    let index = 0;
+    let signature: string | undefined;
+    for (const block of message.content) {
+      if (block.type === "thinking" && block.thinking) {
+        if (!signature && (block as any).signature) {
+          signature = (block as any).signature;
+        }
+        yield {
+          type: "block_end",
+          index: index++,
+          block: { type: "reasoning", contentId: "", summary: block.thinking },
+        };
+      } else if (block.type === "text" && block.text) {
+        yield {
+          type: "block_end",
+          index: index++,
+          block: { type: "text", contentId: "", text: block.text },
+        };
+      } else if (block.type === "tool_use") {
+        yield {
+          type: "block_end",
+          index: index++,
+          block: {
+            type: "tool-call",
+            contentId: "",
+            toolCallId: block.id,
+            name: block.name,
+            arguments: JSON.stringify(block.input ?? {}),
+          },
+        };
+      }
+    }
 
-    // 提取 thinking blocks → reasoningContent
-    const thinkingBlocks = message.content.filter((block): block is any => block.type === "thinking");
-    const signature = thinkingBlocks.length > 0 ? (thinkingBlocks[0] as any).signature : undefined;
-    const thinkingContent = thinkingBlocks
-      .map((block) => block.thinking)
-      .join("");
-
-    // 提取 redacted_thinking blocks → redactedData
-    const redactedBlocks = message.content.filter((block): block is any => block.type === "redacted_thinking");
-    const redactedData = redactedBlocks.length > 0 ? redactedBlocks[0].data : undefined;
-
-    // 提取 text blocks → content
-    const textContent = message.content
-      .filter((block): block is any => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-
-    // 提取 tool_use blocks → toolCalls
-    const toolUseBlocks = message.content.filter(
-      (block): block is any => block.type === "tool_use",
-    );
-    const toolCalls: ToolCallItem[] | undefined = toolUseBlocks.length
-      ? toolUseBlocks.map((block, index) => ({
-          id: block.id,
-          index,
-          type: "function",
-          name: block.name,
-          arguments: JSON.stringify(block.input),
-        }))
-      : undefined;
-
-    return {
-      type: "finish",
-      content: textContent || null,
-      reasoningContent: thinkingContent || null,
-      finishReason: message.stop_reason || null,
-      toolCalls,
-      signature,
-      redactedData,
-      usage: message.usage
-        ? {
-            promptTokens: message.usage.input_tokens
-              + (message.usage.cache_read_input_tokens || 0)
-              + (message.usage.cache_creation_input_tokens || 0),
-            completionTokens: message.usage.output_tokens,
-            totalTokens:
-              message.usage.input_tokens
-              + (message.usage.cache_read_input_tokens || 0)
-              + (message.usage.cache_creation_input_tokens || 0)
-              + message.usage.output_tokens,
-            cachedTokens: message.usage.cache_creation_input_tokens || message.usage.cache_read_input_tokens
-              ? { read: message.usage.cache_read_input_tokens, written: message.usage.cache_creation_input_tokens }
+    const usage = (message as any).usage;
+    if (usage) {
+      const promptTokens = (usage.input_tokens || 0)
+        + (usage.cache_read_input_tokens || 0)
+        + (usage.cache_creation_input_tokens || 0);
+      const completionTokens = usage.output_tokens || 0;
+      yield {
+        type: "usage",
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+          cachedTokens:
+            usage.cache_creation_input_tokens || usage.cache_read_input_tokens
+              ? { read: usage.cache_read_input_tokens, written: usage.cache_creation_input_tokens }
               : undefined,
-          }
-        : null,
+        },
+      };
+    }
+    yield {
+      type: "finish",
+      finishReason: (message as any).stop_reason || "stop",
+      ...(signature ? { signature } : {}),
     };
   }
 
@@ -446,9 +450,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
    * 从 messages 中提取 system 消息
    * 返回 content block 数组，最后一个 block 带 cache_control 标记（ephemeral 缓存）
    */
-  private extractSystemMessage(messages: MessageRecord[]): {
+  private extractSystemMessage(messages: Message[]): {
     system?: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
-    messages: MessageRecord[];
+    messages: Message[];
   } {
     const systemMessages = messages.filter((m) => m.role === "system");
     const otherMessages = messages.filter((m) => m.role !== "system");
@@ -457,38 +461,42 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     const blocks = systemMessages.map((m, i) => ({
       type: "text" as const,
-      text: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      text: m.content
+        .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+        .map((b) => b.text)
+        .join("") || "",
       ...(i === systemMessages.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
     }));
     return { system: blocks, messages: otherMessages };
   }
 
   /**
-   * 将内部消息格式转换为 Anthropic 格式
+   * 将内部三层消息格式转换为 Anthropic 格式
    * TODO: 多模态内容支持（image base64 → source）
    */
-  private formatMessages(
-    messages: MessageRecord[],
-  ): Anthropic.Messages.MessageParam[] {
+  private async formatMessages(
+    messages: Message[],
+  ): Promise<Anthropic.Messages.MessageParam[]> {
     const result: Anthropic.Messages.MessageParam[] = [];
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
 
-      // 合并连续的 tool 角色消息 → 单条 user 消息，每个工具一个 tool_result block
-      if (msg.role === "tool") {
+      // 合并连续的 tool 结果消息（source.kind === 'tool'）→ 单条 user 消息，每个工具一个 tool_result block
+      if (msg.source.kind === "tool") {
         const toolBlocks: Anthropic.Messages.ContentBlock[] = [];
-        // 收集当前及后续所有连续的 tool 消息
-        while (i < messages.length && messages[i].role === "tool") {
+        // 收集当前及后续所有连续的 tool 结果消息
+        while (i < messages.length && messages[i].source.kind === "tool") {
           const toolMsg = messages[i];
+          const tr = toolMsg.content.find(
+            (b): b is Extract<ContentBlock, { type: "tool-result" }> =>
+              b.type === "tool-result",
+          );
           toolBlocks.push({
             type: "tool_result",
-            tool_use_id: toolMsg.toolCallId || "",
-            content:
-              typeof toolMsg.content === "string"
-                ? toolMsg.content
-                : JSON.stringify(toolMsg.content),
-            is_error: false,
+            tool_use_id: tr?.toolCallId ?? "",
+            content: tr?.content ?? "",
+            is_error: tr?.isError ?? false,
           } as any);
           i++;
         }
@@ -501,13 +509,17 @@ export class AnthropicAdapter implements IProtocolAdapter {
       if (msg.role === "assistant") {
         const blocks: any[] = [];
 
-        // 如果有 reasoningContent 且包含签名，回传 thinking block
+        // 如果有 reasoning 且包含签名，回传 thinking block
         const signature = msg.metadata?.signature;
         const redactedData = msg.metadata?.redactedData;
-        if (msg.reasoningContent && signature) {
+        const reasoning = msg.content.find(
+          (b): b is Extract<ContentBlock, { type: "reasoning" }> =>
+            b.type === "reasoning",
+        );
+        if (reasoning && signature) {
           blocks.push({
             type: "thinking",
-            thinking: msg.reasoningContent,
+            thinking: reasoning.summary,
             signature,
           });
         }
@@ -519,60 +531,71 @@ export class AnthropicAdapter implements IProtocolAdapter {
           });
         }
 
-        // 如果有文本内容，加 text block
-        if (msg.content) {
-          blocks.push({ type: "text", text: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) });
+        // 文本块
+        const textBlocks = msg.content.filter(
+          (b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text",
+        );
+        for (const tb of textBlocks) {
+          if (tb.text) blocks.push({ type: "text", text: tb.text });
         }
 
-        // 如果有工具调用，加 tool_use blocks
-        if (msg.toolCalls?.length) {
-          for (const tc of msg.toolCalls) {
-            blocks.push({
-              type: "tool_use",
-              id: tc.id,
-              name: tc.name,
-              input: tc.arguments ? JSON.parse(tc.arguments) : {},
-            });
-          }
+        // 工具调用块 → tool_use
+        const toolCalls = msg.content.filter(
+          (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
+            b.type === "tool-call",
+        );
+        for (const tc of toolCalls) {
+          blocks.push({
+            type: "tool_use",
+            id: tc.toolCallId,
+            name: tc.name,
+            input: tc.arguments ? JSON.parse(tc.arguments) : {},
+          });
         }
 
         // 只有在有实际内容块时才返回
         if (blocks.length > 0) {
           result.push({ role: "assistant", content: blocks });
         } else {
-          // 没有内容块则降级为纯文本（兼容旧数据）
-          const content = msg.content || "";
-          result.push({ role: "assistant", content: typeof content === "string" ? content : JSON.stringify(content) });
+          // 没有内容块则降级为空文本
+          result.push({ role: "assistant", content: "" });
         }
         continue;
       }
 
-      // Anthropic 的 role 只支持 user / assistant
-      const content = msg.content || "";
-      if (typeof content === "string") {
-        result.push({ role: "user", content });
-      } else if (Array.isArray(content)) {
-        const blocks: any[] = [];
-        for (const part of content) {
-          if (part.type === "text") {
-            blocks.push({ type: "text", text: part.text || "" });
-          } else if (part.type === "image_url" && part.image_url?.url) {
-            const match = part.image_url.url.match(
-              /^data:(.+?);base64,(.+)$/,
-            );
-            if (match) {
-              blocks.push({
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: match[1],
-                  data: match[2],
-                },
-              });
-            }
+      // user 消息（含注入/普通用户输入）：text / image / file 块
+      const blocks: any[] = [];
+      for (const block of msg.content) {
+        if (block.type === "text") {
+          if (block.text) blocks.push({ type: "text", text: block.text });
+        } else if (block.type === "image") {
+          // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射
+          const part = await attachmentToPart(
+            block.attachment.url ?? block.attachment.attachmentId,
+            block.attachment.mediaType,
+          );
+          if (part?.kind === "base64") {
+            blocks.push({
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: part.mimeType,
+                data: part.base64,
+              },
+            });
+          } else if (part?.kind === "url") {
+            // Anthropic Messages API 支持远程 URL source
+            blocks.push({
+              type: "image",
+              source: { type: "url", url: part.url },
+            });
           }
+        } else if (block.type === "file") {
+          blocks.push({ type: "text", text: fileBlockToText(block.attachment) });
         }
-        result.push({ role: "user", content: blocks });
+      }
+      if (blocks.length > 0) {
+        result.push({ role: "user", content: blocks } as any);
       } else {
         result.push({ role: "user", content: "" });
       }

@@ -774,8 +774,10 @@ async function ensureAgentRunning(
   rootDir?: string,
   perm?: string,
 ): Promise<number> {
-  // 清理本连接的残留进程(避免前一次异常退出遗留的同二进制进程占用)
-  await execCommand(client, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
+  // 会话级独立进程架构:每次连接启动独立 agent(随机端口)。
+  // 注意:不能 pkill 该二进制 —— 同一服务器可能有多会话 agent 实例在运行,
+  // pkill -f 会误杀其他会话正在执行的命令(导致响应丢失、"命令卡住")。
+  // 二进制更新由部署链路(needDeploy)统一处理,此处只负责启动新实例。
 
   // 随机端口启动(--port 0),从输出解析实际监听端口
   const startOutput = await startAgentBackground(

@@ -1,12 +1,15 @@
 import { useStorage } from '@vueuse/core'
-import type { WorkspacePanelMode } from '@/stores/layout'
 
 /**
- * 统一标签（文件 / 浏览器），同时用于 UI 渲染和持久化缓存
+ * 统一标签（文件 / 浏览器 / Git 审阅）
  */
 export interface UnifiedTab {
-    type: 'file' | 'browser';
-    key: string;       // 'file:<path>' 或 'browser:<windowId>'
+    /**
+     * 'newtab' 仅作遗留兼容：起始页不再占用标签栏（openNewTab 只设置哨兵键 activeTabKey='newtab'），
+     * 此处保留类型以便缓存恢复时过滤旧数据。
+     */
+    type: 'file' | 'browser' | 'git' | 'terminal' | 'newtab';
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;
@@ -19,14 +22,15 @@ export interface UnifiedTab {
     title?: string;
     favicon?: string;
     url?: string;
+    // terminal
+    cwd?: string;
+    terminalId?: string;
 }
 
 /**
- * 单个会话的预览标签缓存
+ * 单个会话的预览标签缓存（显示完全由激活标签驱动，无面板模式字段）
  */
 export interface SessionPreviewCache {
-    /** 工作区面板模式（tree / preview / git） */
-    mode: WorkspacePanelMode
     /** 当前激活的标签统一标识（如 'file:src/index.ts' 或 'browser:win_123'），无则为 null */
     activeTabKey: string | null
     /** 完整标签列表（含浏览器元数据，保留顺序） */
@@ -73,20 +77,10 @@ export function usePreviewTabCache() {
         }
     }
 
-    /** 读取会话的预览状态，不存在返回 null；旧版双布尔缓存在此一次性迁移为 mode 枚举 */
+    /** 读取会话的预览状态，不存在返回 null */
     function getSession(sessionId: string): SessionPreviewCache | null {
         const state = cache.value[sessionId]
         if (!state) return null
-
-        // 旧版缓存迁移（mode 不存在时按 isPreviewMode/gitMode 推导并写回）
-        if (!state.mode) {
-            const legacy: SessionPreviewCache = {
-                mode: state.isPreviewMode ? 'preview' : state.gitMode ? 'git' : 'tree',
-                activeTabKey: state.activeTabKey,
-                tabs: state.tabs,
-            }
-            cache.value[sessionId] = legacy
-        }
 
         // LRU: 移到最前
         const idx = lruOrder.value.indexOf(sessionId)

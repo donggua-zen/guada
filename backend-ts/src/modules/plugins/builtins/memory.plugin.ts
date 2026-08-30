@@ -8,6 +8,7 @@ import { PluginContext } from "../types/plugin.types";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeTruncate } from "../../../common/utils/string.utils";
+import { HOOKS } from "../../../modules/chat/types/hooks.contract";
 import langZh from "./memory.lang.zh.json";
 import langEn from "./memory.lang.en.json";
 
@@ -44,7 +45,7 @@ export class MemoryPlugin extends PluginBase {
     super();
   }
 
-  @OnEvent("memory.compacted")
+  @OnEvent(HOOKS.MEMORY_COMPACTED)
   handleMemoryCompressed(payload: { sessionId: string }) {
     if (this.cache.has(payload.sessionId)) {
       this.cache.delete(payload.sessionId);
@@ -57,8 +58,21 @@ export class MemoryPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    // 长期记忆内容：插件级，每次对话都注入（AI 需要知道记住了什么）
-    api.registerPrompt({
+
+    // 记忆管理指南：工具包级，懒加载，需要时才看说明
+    const memoryKit = api.registerToolKit({
+      id: "memory",
+      name: "%memory.toolkitName%",
+      description: "%memory.toolkitDescription%",
+      loadMode: "eager",
+      activator: "Read this guide when the user asks to remember something",
+      handler: async (ctx) => {
+        return { loadMode: "eager" as const };
+      },
+    });
+
+    // 长期记忆内容：随 memory 工具包注入（角色层禁用该包时一并隐藏）
+    memoryKit.registerPrompt({
       frequency: "VOLATILE",
       description: "长期记忆内容",
       content: async (context: PluginContext) => {
@@ -106,17 +120,6 @@ export class MemoryPlugin extends PluginBase {
           );
           return "";
         }
-      },
-    });
-
-    // 记忆管理指南：工具包级，懒加载，需要时才看说明
-    const memoryKit = api.registerToolKit({
-      id: "memory",
-      name: "%memory.toolkitName%",
-      loadMode: "eager",
-      activator: "Read this guide when the user asks to remember something",
-      handler: async (ctx) => {
-        return { loadMode: "eager" as const };
       },
     });
 

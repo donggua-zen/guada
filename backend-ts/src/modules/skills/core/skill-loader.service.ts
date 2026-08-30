@@ -53,9 +53,29 @@ export class SkillLoaderService {
   }
 
   /**
+   * 从目录提取技能（frontmatter manifest + 正文 + 哈希），供注册式内置/嵌入式技能复用。
+   */
+  async extractSkill(skillDir: string): Promise<{
+    manifest: SkillManifest;
+    body: string;
+    contentHash: string;
+  }> {
+    const skillMdPath = path.join(skillDir, 'SKILL.md');
+    const content = await fs.readFile(skillMdPath, 'utf-8');
+    const { manifest, body } = this.parseFrontmatter(content);
+    this.validateManifest(manifest);
+    return { manifest, body, contentHash: this.computeContentHash(content) };
+  }
+
+  /**
    * 加载 L2 指令（SKILL.md 正文）
+   * 注册式技能（带内嵌 content）直接返回内嵌正文，不读磁盘。
    */
   async loadInstructions(skill: SkillDefinition): Promise<string> {
+    if (skill.content) {
+      this.logger.debug(`Loaded embedded instructions for skill: ${skill.id}`);
+      return skill.content.replace(/\r\n/g, '\n').trim();
+    }
     const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
     const content = await fs.readFile(skillMdPath, 'utf-8');
     const { body } = this.parseFrontmatter(content);
@@ -68,6 +88,8 @@ export class SkillLoaderService {
    * 重新加载 Manifest（用于热更新）
    */
   async reloadManifest(skill: SkillDefinition): Promise<SkillDefinition> {
+    // 注册式技能（内嵌 content）无磁盘文件，直接返回原定义
+    if (skill.content) return skill;
     const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
     const content = await fs.readFile(skillMdPath, 'utf-8');
     const { manifest, body } = this.parseFrontmatter(content);

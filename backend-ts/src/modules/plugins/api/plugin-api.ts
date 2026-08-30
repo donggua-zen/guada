@@ -7,7 +7,6 @@ import {
   ToolKitDef,
   ToolKitHandle,
   ToolKitRegistration,
-  TurnInterceptor,
   AttachmentTypeRegistration,
   UiPageRegistration,
   SlotRegistration,
@@ -15,6 +14,8 @@ import {
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
+import { SkillRegistry } from "../../skills/core/skill-registry.service";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { ICommandProvider } from "../../commands/interfaces/command-provider.interface";
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
@@ -107,15 +108,6 @@ export interface PluginApi {
   registerCommandProvider(def: ICommandProvider): void;
 
   /**
-   * 注册回合拦截器
-   *
-   * 在 AgentEngine 的对话循环退出后（AI 认为对话可以结束）执行。
-   * 如果返回非 null 字符串，则作为 hidden user 消息注入，触发新一轮 LLM 调用。
-   * 如果返回 null，表示不需要拦截，对话正常结束。
-   */
-  registerInterceptor(def: TurnInterceptor): void;
-
-  /**
    * 注册 WorkspaceProvider 工厂（旧接口，保留兼容）
    */
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void;
@@ -149,6 +141,20 @@ export interface PluginApi {
    * 注册前端 slot（插件 UI 能力声明）
    */
   registerSlot(reg: import("../types/plugin.types").SlotRegistration): void;
+
+  /**
+   * 注册技能（第三方插件注册技能，内嵌正文，无需文件/复制）
+   */
+  registerSkill(input: {
+    name: string;
+    description: string;
+    content: string;
+    version?: string;
+    dependencies?: string[];
+    author?: string;
+    tags?: string[];
+    resourceBase?: { kind: "directory" | "url" | "opaque"; path?: string; url?: string; description?: string };
+  }): void;
 
   /**
    * 注册 RPC 方法（插件 UI 通过 pluginApi.call 调用）
@@ -192,7 +198,6 @@ export class PluginApiImpl implements PluginApi {
     handler: (context: any) => string | Promise<string>;
   }> = [];
   private _commandProviders: ICommandProvider[] = [];
-  private _interceptors: TurnInterceptor[] = [];
   private _workspaceProviders: WorkspaceProviderFactory[] = [];
 
   constructor(
@@ -355,12 +360,6 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
-  registerInterceptor(def: TurnInterceptor): void {
-    if (!this._interceptors.find((x) => x.name === def.name)) {
-      this._interceptors.push(def);
-    }
-  }
-
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void {
     if (!this._workspaceProviders.find((f) => f.scheme === factory.scheme)) {
       this._workspaceProviders.push(factory);
@@ -395,6 +394,54 @@ export class PluginApiImpl implements PluginApi {
     if (!this._slots.find((x) => x.name === reg.name && x.component === reg.component)) {
       this._slots.push(reg);
     }
+  }
+
+  /**
+   * 注册技能（第三方插件）：构造 SkillDefinition（内嵌 content）并注入技能注册表。
+   */
+  registerSkill(input: {
+    name: string;
+    description: string;
+    content: string;
+    version?: string;
+    dependencies?: string[];
+    author?: string;
+    tags?: string[];
+    resourceBase?: { kind: "directory" | "url" | "opaque"; path?: string; url?: string; description?: string };
+  }): void {
+    const registry = SkillRegistry.getInstance();
+    if (!registry) {
+      console.warn(`[plugin:${this.pluginId}] SkillRegistry not ready, cannot register skill: ${input.name}`);
+      return;
+    }
+    const rb = input.resourceBase;
+    registry.register({
+      id: input.name.toLowerCase(),
+      baseDir: "",
+      basePath: "__plugin__",
+      manifest: {
+        name: input.name.toLowerCase(),
+        description: input.description,
+        ...(input.version ? { version: input.version } : {}),
+        ...(input.dependencies ? { dependencies: input.dependencies } : {}),
+        ...(input.author ? { author: input.author } : {}),
+        ...(input.tags ? { tags: input.tags } : {}),
+      },
+      contentHash: createHash("sha256").update(input.content).digest("hex"),
+      content: input.content,
+      source: "system",
+      enabled: true,
+      provider: `plugin:${this.pluginId}`,
+      ...(rb
+        ? {
+            resourceBase:
+              rb.kind === "directory" ? { kind: "directory", path: rb.path } :
+              rb.kind === "url" ? { kind: "url", url: rb.url } :
+              { kind: "opaque", description: rb.description },
+          }
+        : {}),
+    });
+    console.log(`[plugin:${this.pluginId}] registered skill: ${input.name}`);
   }
 
   registerRpc(methods: Record<string, RpcHandler>): void {
@@ -487,15 +534,10 @@ export class PluginApiImpl implements PluginApi {
     // 注册 prompts
     if (reg) {
       for (const pm of this._promptMetas) {
-        if (!reg.prompts.find((x: any) => x.description === pm.description)) {
+        if (!reg.prompts.find((x) => x.description === pm.description)) {
           reg.prompts.push(pm);
         }
       }
-    }
-
-    // 注册 interceptors
-    for (const interceptor of this._interceptors) {
-      PluginRegistry.registerInterceptor(this.pluginId, interceptor);
     }
 
     // 注册 workspace providers
@@ -534,11 +576,6 @@ export class PluginApiImpl implements PluginApi {
   /** 获取命令提供者 供 PluginManager 消费 */
   getCommandProviders(): ICommandProvider[] {
     return this._commandProviders;
-  }
-
-  /** 获取拦截器 供 PluginManager 消费 */
-  getInterceptors(): TurnInterceptor[] {
-    return this._interceptors;
   }
 
   /** 获取 WorkspaceProvider 工厂 供 PluginManager 消费 */

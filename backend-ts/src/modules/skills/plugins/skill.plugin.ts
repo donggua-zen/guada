@@ -63,6 +63,7 @@ export class SkillPlugin extends PluginBase {
     const skillKit = api.registerToolKit({
       id: "skill",
       name: "%skill.toolkitName%",
+      description: "%skill.toolkitDescription%",
       loadMode: "eager",
       activator:
         "Call this toolkit to get the full instructions for a skill when you need to use one",
@@ -70,6 +71,7 @@ export class SkillPlugin extends PluginBase {
         const skills = this.orchestrator.listSkills(
           true,
           ctx?.session.workspacePath,
+          ctx?.session,
         );
         if (skills.length === 0) return { loadMode: "none" as const };
         return { loadMode: "eager" as const };
@@ -86,8 +88,8 @@ export class SkillPlugin extends PluginBase {
           .string()
           .describe("技能名称（SKILL.md frontmatter 中定义的 name 字段）"),
       }),
-      execute: async (args) => {
-        const result = await this.orchestrator.skillLearn(args.name);
+      execute: async (args, ctx) => {
+        const result = await this.orchestrator.skillLearn(args.name, ctx?.session);
         if (!result) {
           throw new Error(`skill "${args.name}" not found`);
         }
@@ -96,6 +98,7 @@ export class SkillPlugin extends PluginBase {
           name: result.name,
           content: result.content,
           path: result.path,
+          resourceBase: result.resourceBase,
         };
       },
       display: {
@@ -118,6 +121,7 @@ export class SkillPlugin extends PluginBase {
         const allSkills = this.orchestrator.listSkills(
           true,
           context?.session.workspacePath,
+          context?.session,
         );
 
         // 按角色级偏好过滤

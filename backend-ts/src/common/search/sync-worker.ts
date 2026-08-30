@@ -211,6 +211,13 @@ async function fullBackfill(
   getMeta: (k: string) => string | null,
   setMeta: (k: string, v: string) => void,
 ): Promise<void> {
+  // 兜底：已存在同步游标说明回填已完成/增量在维护，避免重复全量回填
+  if (getMeta(META_LAST_SYNC)) {
+    console.log("[worker] 已存在同步游标，跳过全量回填，转为增量");
+    await incrementalSync(mainDb, searchDb, getMeta, setMeta);
+    return;
+  }
+
   let offset = Number(getMeta(META_OFFSET) || 0);
   let totalIndexed = 0;
   const startedAt = Date.now();

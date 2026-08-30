@@ -2,7 +2,7 @@ export default {
   // ── 插件页面 (PluginsPage.vue) ──
   page: {
     title: '插件',
-    tabLocalTools: '本地工具',
+    tabLocalTools: '插件',
     tabSkills: 'Skills',
     tabMcp: 'MCP 服务器',
   },
@@ -112,6 +112,8 @@ export default {
     uninstallFailed: '卸载失败',
     noDescription: '暂无描述',
     sharedTooltip: '共享目录技能不可卸载，请手动删除 ~/.agents/skills/ 下的对应目录',
+    fromPlugin: '插件',
+    pluginManaged: '该技能由插件提供，请在「插件」页面控制启停',
     sourceBuiltin: '内置',
     sourceShared: '共享',
     // 空状态
@@ -154,9 +156,9 @@ export default {
     toggleFailed: '切换技能状态失败',
   },
 
-  // ── 本地工具 (LocalTools.vue) ──
+  // ── 插件 (LocalTools.vue) ──
   localTools: {
-    title: '本地工具',
+    title: '插件',
     subtitle: '全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。',
     loading: '加载中...',
     noDescription: '暂无描述',

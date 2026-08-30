@@ -8,7 +8,6 @@ import { SessionGroupController } from "./session-group.controller";
 import { SessionGroupService } from "./session-group.service";
 import { SessionsController } from "./sessions.controller";
 import { WorkspaceEventsController } from "./workspace-events.controller";
-import { MessageService } from "./message.service";
 import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
@@ -24,11 +23,14 @@ import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
-import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { EventBusService } from "../../common/events/event-bus.service";
-
+import { JsonlSessionContextFactory } from "./jsonl-session-context.factory";
 import { CompressionEngine } from "./compression-engine";
-import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
+import { TokenMeterService } from "./token-meter.service";
+import { MemorySyncService } from "./memory-sync.service";
+import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
+import { CompactionService } from "./compaction/compaction.service";
+import { SessionReplayService } from "./session-replay.service";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
@@ -39,22 +41,27 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   providers: [
     AgentEngine,
     SessionContextFactory,
-    CompressionEngine,
-    { provide: COMPRESSION_STRATEGY_TOKEN, useExisting: CompressionEngine },
-    MessageService,
     SessionService,
     SessionGroupService,
+
+    // 会话上下文工厂与压缩引擎（依赖经全局 PersistenceModule 注入的 MESSAGE_STORE_TOKEN）
+    JsonlSessionContextFactory,
+    CompressionEngine,
+    TokenMeterService,
+    MemorySyncService,
+    CompactionService,
+    CompactionCoordinatorService,
 
     SessionStreamManager,
     UploadPathService,
     WorkspaceWatcherService,
     SessionEventsService,
     ChatRunnerService,
-    SessionTokenTracker,
+    SessionReplayService,
 
     // 标签解析器管道
     TagParserPipeline,
   ],
-  exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory],
+  exports: [AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
 export class ChatModule {}

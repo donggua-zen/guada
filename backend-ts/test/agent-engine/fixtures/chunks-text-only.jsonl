@@ -1,16 +1,21 @@
-{"content":null,"reasoningContent":"让我","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"思考","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"一下","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"这个","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"问题","finishReason":null,"usage":null}
-{"content":"根据","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"我的","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"理解","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"，","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"这","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"是","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"一个","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"测试","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"用例","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"。","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":"stop","usage":{"promptTokens":100,"completionTokens":50,"totalTokens":150}}
+{"type": "block_start", "index": 0, "blockType": "reasoning"}
+{"type": "reasoning_delta", "index": 0, "text": "让我"}
+{"type": "reasoning_delta", "index": 0, "text": "思考"}
+{"type": "reasoning_delta", "index": 0, "text": "一下"}
+{"type": "reasoning_delta", "index": 0, "text": "这个"}
+{"type": "reasoning_delta", "index": 0, "text": "问题"}
+{"type": "block_start", "index": 1, "blockType": "text"}
+{"type": "text_delta", "index": 1, "text": "根据"}
+{"type": "text_delta", "index": 1, "text": "我的"}
+{"type": "text_delta", "index": 1, "text": "理解"}
+{"type": "text_delta", "index": 1, "text": "，"}
+{"type": "text_delta", "index": 1, "text": "这"}
+{"type": "text_delta", "index": 1, "text": "是"}
+{"type": "text_delta", "index": 1, "text": "一个"}
+{"type": "text_delta", "index": 1, "text": "测试"}
+{"type": "text_delta", "index": 1, "text": "用例"}
+{"type": "text_delta", "index": 1, "text": "。"}
+{"type": "block_end", "index": 0, "block": {"type": "reasoning", "contentId": "", "summary": "让我思考一下这个问题"}}
+{"type": "block_end", "index": 1, "block": {"type": "text", "contentId": "", "text": "根据我的理解，这是一个测试用例。"}}
+{"type": "usage", "usage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150}}
+{"type": "finish", "finishReason": "stop"}

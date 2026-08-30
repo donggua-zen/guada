@@ -10,5 +10,8 @@
   "image_view.executing": "Viewing image",
   "image_view.completed": "Viewed image",
   "image_view.aggregate.executing": "Viewing {n} images",
-  "image_view.aggregate.completed": "Viewed {n} images"
+  "image_view.aggregate.completed": "Viewed {n} images",
+  "imageRecognition.toolkitDescription": "Recognize image content, extract text and visual information",
+  "imageRecognition.imageViewDescription": "View details of image attachments in the session"
+
 }

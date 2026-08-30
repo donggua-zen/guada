@@ -1,5 +1,5 @@
 import { OpenAIResponseAdapter } from '../../adapters/openai-response.adapter';
-import { LLMCompletionParams, LLMResponseChunk } from '../../types/llm.types';
+import { LLMCompletionParams } from '../../types/llm.types';
 
 /**
  * 火山引擎专用 OpenAI Response 适配器

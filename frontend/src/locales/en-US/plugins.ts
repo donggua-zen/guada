@@ -2,7 +2,7 @@
   // ── 插件页面 (PluginsPage.vue) ──
   page: {
     title: 'Plugins',
-    tabLocalTools: 'Local Tools',
+    tabLocalTools: 'Plugins',
     tabSkills: 'Skills',
     tabMcp: 'MCP Servers',
   },
@@ -114,6 +114,8 @@
     sharedTooltip: 'Shared directory skills cannot be uninstalled. Please manually delete the corresponding directory under ~/.agents/skills/',
     sourceBuiltin: 'Built-in',
     sourceShared: 'Shared',
+    fromPlugin: 'Plugin',
+    pluginManaged: 'Provided by a plugin; control it from the Plugins page',
     // 空状态
     empty: 'No Skills',
     emptyHint: 'Click "Refresh" to scan the local Skills directory',
@@ -156,7 +158,7 @@
 
   // ── 本地工具 (LocalTools.vue) ──
   localTools: {
-    title: 'Local Tools',
+    title: 'Plugins',
     subtitle: 'Global tool settings determine which tools are available to all characters. Character-level tool settings further restrict on top of this.',
     loading: 'Loading...',
     noDescription: 'No description',

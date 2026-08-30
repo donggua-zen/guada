@@ -1,0 +1,13 @@
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/engines': true
+  better-sqlite3: true
+  cpu-features: true
+  node-pty: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  ssh2: true
+  unrs-resolver: true
+patchedDependencies:
+  node-pty@1.1.0: patches/node-pty@1.1.0.patch

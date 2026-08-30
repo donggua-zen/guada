@@ -1,10 +1,10 @@
 <template>
   <div class="turn-wrapper last:min-h-[60vh]" :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn }"
-    :data-message-id="turn.user?.id">
+    :data-message-id="user?.messageId">
     <!-- ============================================ -->
     <!-- User 部分 -->
     <!-- ============================================ -->
-    <div v-if="turn.user" class="user-section">
+    <div v-if="user" class="user-section">
       <div class="message-item__wrapper">
         <div class="message-item__card">
           <!-- 用户文本 -->
@@ -26,8 +26,8 @@
         </div>
         <!-- 知识库 -->
         <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
-          v-if="turn.user.contents?.[0]?.metadata?.referencedKbs?.length > 0">
-          <div v-for="kb in turn.user.contents?.[0]?.metadata?.referencedKbs" :key="kb.id">
+          v-if="user?.metadata?.referencedKbs?.length > 0">
+          <div v-for="kb in user?.metadata?.referencedKbs" :key="kb.id">
             <div
               class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
               <MenuBookOutlined class="w-4 h-4" />
@@ -36,24 +36,30 @@
           </div>
         </div>
         <!-- 文件列表 -->
-        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto"
-          v-if="(turn.user.contents?.[0]?.files?.length ?? 0) > 0">
-          <FileItem v-for="file, index in turn.user.contents?.[0]?.files" :key="file.id" :name="file.displayName"
+        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(user?.files?.length ?? 0) > 0">
+          <FileItem v-for="file, index in user?.files" :key="file.id" :name="file.displayName"
             :type="file.fileType" :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
             :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
-        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate" :content-versions="[]"
-          :current-version-index="0" :time-full="userTime.full" :time-friendly="userTime.firendly"
-          @copy="emit('copy', turn.user)" @generate="emit('generate', turn.user)" @edit="emit('edit', turn.user)"
-          @delete="emit('delete', turn.user)" />
+        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
+          :time-full="userTime.full" :time-friendly="userTime.firendly"
+          @copy="emit('copy', user)" @generate="emit('generate', props.turn)" @edit="emit('edit', user)"
+          @delete="emit('delete', props.turn)" />
       </div>
     </div>
 
     <!-- ============================================ -->
+    <!-- 事件类消息（role='event'：command/compaction 等），位置=消息顺序 -->
+    <!-- ============================================ -->
+    <template v-for="evt in events" :key="evt.id">
+      <EventCard class="mt-1" :event="evt" />
+    </template>
+
+    <!-- ============================================ -->
     <!-- Assistant 部分（有回复时） -->
     <!-- ============================================ -->
-    <template v-if="activeAssistant">
+    <template v-if="activeBlocks.length > 0">
       <div class="assistant-section">
         <div class="text-xs text-gray-400 mb-3">
           <div class="flex items-center">
@@ -108,11 +114,11 @@
                         :reasoning-content="item.reasoningContent || ''"
                         :is-thinking="item.source.state?.isThinking || false"
                         :is-streaming="item.source.state?.isStreaming || false"
-                        :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
-                        :metadata="item.source.metadata" />
+                        :thinking-duration-ms="item.source.thinkingDurationMs"
+                        :thinking-started-at="item.source.thinkingStartedAt" />
                       <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
                         :tool-responses="item.toolResponses" :content-id="item.source.id"
-                        :is-streaming="streamingState.isStreaming" />
+                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId" />
                     </template>
                   </div>
                 </div>
@@ -120,59 +126,6 @@
             </div>
           </template>
 
-          <!-- 错误提示 -->
-          <el-alert v-if="assistantMetadata?.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error" :closable="false">
-            {{ assistantMetadata.errorDetail }}
-          </el-alert>
-
-          <!-- 超时提示 -->
-          <el-alert v-if="assistantMetadata?.finishReason === 'timeout'" :title="t('chat.turn.requestTimeout')" type="warning" :closable="false">
-            {{ assistantMetadata.errorDetail || t('chat.turn.serverNoResponse') }}
-          </el-alert>
-
-          <!-- 用户终止提示 -->
-          <div v-if="assistantMetadata?.finishReason === 'user_cancel'"
-            class="mt-2 text-sm text-gray-400 dark:text-gray-500">
-            {{ t('chat.turn.manuallyTerminated') }}
-          </div>
-
-          <!-- 继续执行按钮 -->
-          <template v-if="assistantMetadata && !streamingState.isStreaming">
-            <div v-if="assistantMetadata.finishReason === 'max_iterations_reached'" class="max-iterations-notice mt-3">
-              <el-alert type="warning" :closable="false">
-                <template #title>
-                  <span>{{ t('chat.turn.maxIterationsReached') }}</span>
-                </template>
-                <div v-if="isLast" class="flex items-center gap-3 mt-2">
-                  <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
-                    {{ t('chat.turn.continueExecution') }}
-                  </el-button>
-                </div>
-              </el-alert>
-            </div>
-            <div v-if="assistantMetadata.finishReason === 'rate_limited'" class="max-iterations-notice mt-3">
-              <el-alert type="warning" :closable="false">
-                <template #title>
-                  <span>{{ assistantMetadata.errorDetail }}</span>
-                </template>
-                <div v-if="isLast" class="flex items-center gap-3 mt-2">
-                  <el-button type="primary" size="small" @click="emit('continue', activeAssistant)">
-                    {{ t('chat.turn.continueExecution') }}
-                  </el-button>
-                </div>
-              </el-alert>
-            </div>
-          </template>
-          <!-- 流式期间：工作中 / 重试中状态 -->
-          <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
-            <template v-if="assistantMetadata?.retryInfo">
-              <span class="text-amber-500 dark:text-amber-400">{{ assistantMetadata.retryInfo.message }}</span>
-            </template>
-            <template v-else>
-              <span v-if="durationText">{{ t('chat.turn.workingWithDuration', { duration: durationText }) }}</span>
-              <span v-else>{{ t('chat.turn.working') }}</span>
-            </template>
-          </div>
 
           <!-- Token 消耗 -->
           <div v-if="tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
@@ -201,17 +154,58 @@
         <!-- 文件变更摘要 -->
         <FileChangesBar v-if="!streamingState.isStreaming && fileChanges.length > 0" :changes="fileChanges"
           @open-diff="openDiffDialog" />
-
-        <!-- 操作按钮（含版本切换） -->
-        <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
-          :allow-generate="false" :content-versions="siblingVersions" :current-version-index="currentVersionIndex"
-          :time-full="assistantTime.full" :time-friendly="assistantTime.firendly" :duration-text="durationText"
-          @copy="emit('copy', activeAssistant)" @regenerate="emit('regenerate', activeAssistant)"
-          @switch-version="switchContent" @edit="emit('edit', activeAssistant)"
-          @delete="emit('delete', activeAssistant)" />
       </div>
     </template>
 
+    <!-- 回合级状态提示：独立于 assistant 块门渲染。
+     LLM 在产出任何内容前即报错（如 402 / 网络错误）时回合内无 assistant 块，
+     若在门内则错误提示永不显示。finishReason/errorDetail
+     来自 turn.metadata（streamProjector.turn_end 写入，持久化后同样可用）。 -->
+    <template v-if="assistantMetadata?.finishReason">
+      <!-- 错误提示 -->
+      <el-alert v-if="assistantMetadata.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error"
+        :closable="false" class="mt-2">
+        {{ assistantMetadata.errorDetail }}
+      </el-alert>
+
+      <!-- 超时提示 -->
+      <el-alert v-if="assistantMetadata.finishReason === 'timeout'" :title="t('chat.turn.requestTimeout')"
+        type="warning" :closable="false" class="mt-2">
+        {{ assistantMetadata.errorDetail || t('chat.turn.serverNoResponse') }}
+      </el-alert>
+
+      <!-- 限流提示（文字说明，无继续按钮——用户自行继续） -->
+      <el-alert v-if="assistantMetadata.finishReason === 'rate_limited'"
+        :title="t('chat.turn.rateLimitedPaused')" type="warning" :closable="false" class="mt-2">
+        {{ assistantMetadata.errorDetail || t('chat.turn.rateLimitedPaused') }}
+      </el-alert>
+
+      <!-- 用户终止提示 -->
+      <div v-if="assistantMetadata.finishReason === 'user_cancel'"
+        class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+        {{ t('chat.turn.manuallyTerminated') }}
+      </div>
+    </template>
+
+    <!-- 操作按钮：移到门外、置于状态提示之后——控制条永远在最下方。
+         控制条（复制/再生/编辑/删除/时间）不依赖 assistant 消息存在，流结束即显示；
+         仅复制按钮与 assistant 消息相关（无消息时复制空内容即可）。 -->
+    <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
+      :allow-generate="false" :time-full="assistantTime.full"
+      :time-friendly="assistantTime.firendly" :duration-text="durationText" @copy="emit('copy', activeBlock)"
+      @regenerate="emit('regenerate', props.turn)" @edit="emit('edit', activeBlock)"
+      @delete="emit('delete', props.turn)" />
+
+    <!-- 流式期间：工作中 / 重试中状态（retry 为回合级瞬态 turn.state.retry，不落库） -->
+    <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
+      <template v-if="retryState">
+        <span class="text-amber-500 dark:text-amber-400">{{ retryState.message }}</span>
+      </template>
+      <template v-else>
+        <span v-if="durationText">{{ t('chat.turn.workingWithDuration', { duration: durationText }) }}</span>
+        <span v-else>{{ t('chat.turn.working') }}</span>
+      </template>
+    </div>
     <!-- 图片预览 -->
     <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
       :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
@@ -230,7 +224,8 @@ import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Reg
 import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
-import { getCurrentTurns, groupContentsForDisplay, type DisplayGroup, type DisplayItem, type Message } from '@/utils/messageUtils';
+import { groupContentsForDisplay, type DisplayGroup, type DisplayItem } from '@/utils/messageUtils';
+import type { Turn, MessageContent, TurnContent } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { usePopup } from "../../composables/usePopup";
@@ -239,29 +234,36 @@ import MessageToolCalls from './message-item/MessageToolCalls.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
 import FileDiffDialog from './message-item/FileDiffDialog.vue';
+import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
+import { apiService } from '@/services/ApiService';
 
 const { toast } = usePopup();
 const { t } = useI18n();
 
 const props = defineProps<{
-  turn: { user: Message; assistants: Message[] };
+  turn: Turn;
   isLast: boolean;
   allowGenerate: boolean;
   characterName?: string;
   characterAvatar?: string;
   animateIn?: boolean;
+  sessionId?: string;
 }>();
 
 const emit = defineEmits<{
-  switch: [message: Message, versionId: string]
-  delete: [message: Message]
-  edit: [message: Message]
-  copy: [message: Message]
-  generate: [message: Message]
-  regenerate: [message: Message]
-  continue: [message: Message]
+  delete: [turn: Turn]
+  edit: [block: TurnContent | null]
+  copy: [block: TurnContent | null]
+  generate: [turn: Turn]
+  regenerate: [turn: Turn]
 }>();
+
+// 二级结构（turn → block）：直接从 turn.blocks 按 role 拆分。
+// user 锚点块 + 事件块（command/compaction）单独抽离 + 其余块（assistant/tool）作为展示源。
+const user = computed(() => props.turn.blocks?.find((b) => b.role === 'user') ?? null);
+const events = computed(() => props.turn.blocks?.filter((b) => b.role === 'event') ?? []);
+const activeBlocks = computed(() => props.turn.blocks?.filter((b) => b.role !== 'user' && b.role !== 'event') ?? []);
 
 // ============================================
 // 内部状态
@@ -307,56 +309,36 @@ const isGroupExpanded = (groupId: string): boolean => {
 };
 
 // ============================================
-// 版本管理
-// ============================================
-const siblingVersions = computed(() =>
-  props.turn.assistants.map((a) => a.id)
-);
-
-const activeAssistant = computed(() => {
-  const user = props.turn.user;
-  const activeId = user?.currentVersionId;
-  if (activeId) return props.turn.assistants.find((a) => a.id === activeId);
-  return props.turn.assistants[props.turn.assistants.length - 1];
-});
-
-const currentVersionIndex = computed(() => {
-  if (!activeAssistant.value) return 0;
-  return siblingVersions.value.indexOf(activeAssistant.value.id);
-});
-
-const switchContent = (direction: 'prev' | 'next') => {
-  const currentIndex = currentVersionIndex.value;
-  if (currentIndex === -1) return;
-  let newIndex: number;
-  if (direction === 'prev' && currentIndex > 0) {
-    newIndex = currentIndex - 1;
-  } else if (direction === 'next' && currentIndex < siblingVersions.value.length - 1) {
-    newIndex = currentIndex + 1;
-  } else {
-    return;
-  }
-  const targetId = siblingVersions.value[newIndex];
-  const targetMsg = props.turn.assistants.find((a) => a.id === targetId);
-  if (targetMsg && activeAssistant.value) {
-    emit('switch', activeAssistant.value, targetId);
-  }
-};
-
-// ============================================
 // 展示计算
 // ============================================
-const turnsCache = computed(() => {
-  if (!activeAssistant.value) return [];
-  return getCurrentTurns(activeAssistant.value);
+/**
+ * 当前回合的全部展示块（assistant + tool 块）。
+ * 二级结构天然平铺：事件折叠直接产出块，无需再"合并消息 contents → 拆回扁平块"。
+ */
+const activeContents = computed<MessageContent[]>(() =>
+  (activeBlocks.value ?? []).filter((c) => c != null),
+);
+
+/**
+ * 编辑/复制锚点块：取最后一条带文本内容的 assistant 块（编辑消息文本语义 = 最终回答块）；
+ * 无文本块（纯工具回合）回退到最后一个展示块。
+ */
+const activeBlock = computed<TurnContent | null>(() => {
+  const list = activeBlocks.value;
+  if (list.length === 0) return null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const b = list[i];
+    if (typeof b.content === "string" && b.content) return b;
+  }
+  return list[list.length - 1];
 });
 
 const displayGroups = computed<DisplayGroup[]>(() => {
-  return groupContentsForDisplay(turnsCache.value);
+  return groupContentsForDisplay(activeContents.value);
 });
 
 // 文件变更记录
-const { fileChanges } = useFileChanges(turnsCache);
+const { fileChanges } = useFileChanges(activeContents);
 const diffDialogVisible = ref(false);
 const activeDiffEntry = ref<FileChangeEntry | null>(null);
 
@@ -366,7 +348,7 @@ const openDiffDialog = (entry: FileChangeEntry) => {
 };
 
 // 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
-watch(turnsCache, () => {
+watch(activeContents, () => {
   if (!streamingState.value.isStreaming) return;
   nextTick(() => {
     const el = activeBodyRef.value;
@@ -442,26 +424,24 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
 };
 // ============================================
 const userContent = computed(() => {
-  const content = props.turn.user?.contents?.[0];
-  return content?.content || '';
+  return user.value?.content || '';
 });
 
 const userTime = computed(() => {
-  const content = props.turn.user?.contents?.[0];
   return {
-    firendly: formatTime(content?.createdAt || '', 'friendly'),
-    full: formatTime(content?.createdAt || '', 'full'),
+    firendly: formatTime(user.value?.createdAt || '', 'friendly'),
+    full: formatTime(user.value?.createdAt || '', 'full'),
   };
 });
 
 const isSystemMessage = computed(() => {
-  const meta = props.turn.user?.metadata;
+  const meta = user.value?.metadata;
   const type = meta?.type;
   return type && type !== 'client';
 });
 
 const systemMessageLabel = computed(() => {
-  const meta = props.turn.user?.metadata;
+  const meta = user.value?.metadata;
   const type = meta?.type || '';
   const name = meta?.subAgentName || '';
   switch (type) {
@@ -498,21 +478,33 @@ const renderSkillBadges = (text: string): string => {
 // ============================================
 // Assistant 部分
 // ============================================
+/**
+ * 回合级元信息（Turn/Message/ContentBlock 模型下，回合的结束原因等元数据统一在 turn.metadata）：
+ * - 历史：replayer turn/finish 折叠合并（finishReason/errorDetail/usage/modelName）
+ * - 流式：turn_start 写 modelName、turn_end 写 finishReason/errorDetail/usage
+ * 流式瞬态（重试提示等）为回合级 turn.state，不挂消息 metadata（v1.9 迁移）。
+ * 审批卡/暂停卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
+ */
 const assistantMetadata = computed<Record<string, any> | null>(() => {
-  const cache = turnsCache.value;
-  const contentMeta = cache.length > 0 ? (cache[cache.length - 1]?.metadata || {}) : {};
-  const messageMeta = activeAssistant.value?.metadata || {};
-  // Message 级别：finishReason/errorDetail（turn_end 写入）
-  // Content 级别：usage/toolCalls 等每轮迭代信息
+  const turnMeta = props.turn?.metadata || {};
   return {
-    ...contentMeta,
-    ...messageMeta,
+    ...turnMeta,
   };
 });
 
 const streamingState = computed(() => ({
-  isStreaming: activeAssistant.value?.state?.isStreaming ?? false,
+  // 回合级工作态：turn_start 置位、turn_end 复位（turn.state.isWorking，
+  // 纯前端瞬态视图态）。历史加载的回合无此字段 = 非工作态。
+  isStreaming: props.turn?.state?.isWorking ?? false,
 }));
+
+// LLM 流重试瞬态（回合级 turn.state.retry，retry 事件标记，重试成功输出/turn_end 清除）
+const retryState = computed<{
+  message?: string;
+} | null>(() => {
+  const retry = props.turn?.state?.retry;
+  return retry?.message ? { message: retry.message } : null;
+});
 
 const currentModelName = computed(() => {
   const modelName = assistantMetadata.value?.modelName;
@@ -532,7 +524,7 @@ const modelAvatarPath = computed(() => {
 });
 
 const assistantTime = computed(() => {
-  const cache = turnsCache.value;
+  const cache = activeContents.value;
   if (cache.length === 0) {
     return { firendly: '', full: '' };
   }
@@ -542,7 +534,7 @@ const assistantTime = computed(() => {
   };
 });
 
-const totalDurationMs = computed(() => activeAssistant.value?.totalDurationMs ?? null);
+const totalDurationMs = computed(() => props.turn?.metadata?.totalDurationMs ?? null);
 
 const formatDuration = (ms: number): string => {
   const s = ms / 1000;
@@ -559,12 +551,12 @@ const durationText = computed(() => {
 });
 
 const tokenUsage = computed(() => {
-  if (!turnsCache.value || turnsCache.value.length === 0) return null;
+  if (!activeContents.value || activeContents.value.length === 0) return null;
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
   let totalTokens = 0;
-  for (const turn of turnsCache.value) {
-    const usage = turn?.metadata?.usage;
+  for (const content of activeContents.value) {
+    const usage = content?.metadata?.usage;
     if (usage) {
       totalPromptTokens += usage.promptTokens || 0;
       totalCompletionTokens += usage.completionTokens || 0;
@@ -586,7 +578,7 @@ const formatTokenNumber = (num: number | null): string => {
 // 图片预览
 // ============================================
 const previewList = computed(() => {
-  const files = props.turn.user?.contents?.[0]?.files || [];
+  const files = user.value?.files || [];
   return files.map((f: any) => f.url || f.previewUrl);
 });
 
@@ -632,6 +624,7 @@ const handleClick = (event: MouseEvent) => {
     opacity: 0;
     transform: translateY(120px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -822,7 +815,8 @@ const handleClick = (event: MouseEvent) => {
 
 .process-group__body-scroll {
   overflow-y: auto;
-  max-height: 400px;
+  overflow-x: hidden;
+  /* max-height: 400px; */
   /* 真实遮罩渐变（不叠加背景色，壁纸不受影响） */
   -webkit-mask-image: linear-gradient(to bottom,
       transparent 0,

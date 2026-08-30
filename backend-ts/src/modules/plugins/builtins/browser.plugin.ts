@@ -52,6 +52,7 @@ export class BrowserPlugin extends PluginBase {
     api.registerNls("en", langEn);
     api.registerToolKit({
       id: "browser",
+      description: "%browser.toolkitDescription%",
       name: "%browser.toolkitName%",
       loadMode: "lazy",
       activator:

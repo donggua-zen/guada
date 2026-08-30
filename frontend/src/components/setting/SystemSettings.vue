@@ -86,7 +86,8 @@
                         </template>
                         <template v-else-if="currentTabValue === 'connections'">
                             <ConnectionSettings />
-                        </template>                        <template v-else-if="isPluginTab">
+                        </template>
+                        <template v-else-if="isPluginTab">
                             <component
                                 :is="activePluginItem?._item.component"
                                 v-bind="activePluginItem?._item.props"
@@ -137,7 +138,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePluginSlots } from '../../stores/pluginSlots'
-import { PuzzleCube20Regular } from '@vicons/fluent'
+import { PuzzleCube20Regular, PuzzleCube24Regular } from '@vicons/fluent'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

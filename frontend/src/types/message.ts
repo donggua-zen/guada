@@ -5,9 +5,9 @@
 import type { ISODateString } from './common'
 
 /**
- * 消息角色类型
+ * 消息角色类型（与后端协议对齐）
  */
-export type MessageRole = 'user' | 'assistant'
+export type MessageRole = 'user' | 'assistant' | 'tool' | 'event'
 
 /**
  * 消息状态
@@ -42,28 +42,81 @@ export interface MessageContent {
     metadata?: Record<string, any>
     createdAt?: ISODateString
     updatedAt?: ISODateString
+    /** 思考跳动锚点（本地收包时钟，仅展示层流式期间使用） */
     thinkingStartedAt?: number | null
+    /** 思考时长 ms（由 reasoning 块的 timing 派生；历史加载来自持久化 timing） */
     thinkingDurationMs?: number | null
+    /** 内容级状态（思考展开/计时等渲染用；与回合级工作态正交） */
     state: MessageState
-    _thinkingTimer?: number
     isCurrent?: boolean
     files?: FileAttachment[]
 }
 
 /**
- * 消息对象
+ * 消息对象（id 为后端真实消息 id）
  */
 export interface Message {
     id: string
     role: MessageRole
     contents: MessageContent[]
     parentId?: string
-    currentVersionId?: string
-    state: MessageState
     createdAt?: ISODateString
     files?: FileAttachment[]
     index?: number
     totalDurationMs?: number | null
+    /**
+     * 轮次级元数据（来自后端 Turn.metadata / 三层适配层）：
+     * finishReason / errorDetail / modelName / totalDurationMs / compactInfo / hidden / shadowed 等
+     */
+    metadata?: Record<string, any>
+}
+
+/**
+ * 回合瞬态状态（纯前端视图态，不落库、不进协议）
+ */
+export interface TurnState {
+    /** 是否工作中：turn_start/turn_resume 置位，turn_end 复位 */
+    isWorking?: boolean
+    /**
+     * LLM 流重试瞬态（回合级，与 isWorking 同层；retry 事件标记，重试成功输出或 turn_end 清除）。
+     * 不落库、不进消息 metadata——纯流式期间的瞬态视图态。
+     */
+    retry?: {
+        retryReason: 'timeout' | 'rate_limited' | 'network_error'
+        retryAttempt: number
+        retryMaxAttempts: number
+        retryDelayMs: number
+        message?: string
+    }
+}
+
+/**
+ * 回合内内容块（二级结构：turn → block，跳过 Message 容器级）。
+ * 在 MessageContent（展示基类）基础上补 role/messageId：
+ * - role：折叠器按事件源打标（user_message→'user'；assistant 块→'assistant'；tool-result 块→'tool'；compaction 占位→'event'）
+ * - messageId：所属后端消息 id（编辑/审批/继续执行 API 锚点）
+ * - blockIndex：消息内块序号（assistant 流式寻址 (messageId, index) 用；展示无关）
+ */
+export interface TurnContent extends MessageContent {
+    role: MessageRole
+    messageId: string
+    blockIndex?: number
+}
+
+/**
+ * 回合外壳（直接对应后端 Turn：一次输入回合 = user + assistant/tool 消息）
+ * 二级结构：contents 直接平铺该回合全部块（role 区分 user/assistant/tool/event），
+ * 不再经 Message 容器——折叠器直接产出块，渲染直接消费块（消除组装→拆分）。
+ */
+export interface Turn {
+    id: string
+    /** 'turn' 对话回合 / 'event' 事件类消息外壳（command/compaction 等） */
+    kind: 'turn' | 'event'
+    metadata: Record<string, any>
+    visible: boolean
+    blocks: TurnContent[]
+    /** 回合瞬态视图态（历史加载的回合无此字段 = 非工作态） */
+    state?: TurnState
 }
 
 /**

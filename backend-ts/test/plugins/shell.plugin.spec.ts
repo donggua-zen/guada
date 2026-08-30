@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ShellPlugin } from '../../src/modules/shell/shell.plugin';
 import { ProcessManagerService } from '../../src/modules/shell/process-manager.service';
+import { AskService } from '../../src/common/services/ask.service';
+import { InteractionWaitService } from '../../src/common/services/interaction-wait.service';
 
 describe('ShellPlugin', () => {
   let plugin: ShellPlugin;
@@ -16,6 +18,10 @@ describe('ShellPlugin', () => {
       providers: [
         ShellPlugin,
         { provide: ProcessManagerService, useValue: mockProcessManager },
+        {
+          provide: AskService,
+          useValue: new AskService(new InteractionWaitService()),
+        },
       ],
     }).compile();
 
@@ -28,7 +34,8 @@ describe('ShellPlugin', () => {
 
   it('should have correct manifest', () => {
     expect(plugin.manifest.id).toBe('shell');
-    expect(plugin.manifest.name).toBe('Shell 命令行');
+    // manifest 使用 NLS key，由 NlsService 按 locale 解析
+    expect(plugin.manifest.name).toBe('%shell.name%');
     expect(plugin.manifest.category).toBe('core');
   });
 

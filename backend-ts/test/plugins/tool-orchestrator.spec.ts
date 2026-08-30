@@ -11,6 +11,8 @@ import { ISessionContext } from "../../src/modules/chat/session-context";
 import { TokenizerService } from "../../src/common/utils/tokenizer.service";
 import { PromptCollector } from "../../src/modules/plugins/prompt-collector.service";
 import { CommandProviderRegistry } from "../../src/modules/commands/command-provider-registry.service";
+import { NlsService } from "../../src/modules/plugins/i18n/nls.service";
+import { EventBusService } from "../../src/common/events/event-bus.service";
 import { z } from "zod";
 
 // ── Mock SettingsStorage ──
@@ -29,14 +31,15 @@ function createMockSessionContext(): ISessionContext {
     userId: "u1",
     sessionType: "web",
     workspacePath: "/tmp",
-    getRunMode: () => "normal",
-    setRunMode: jest.fn(),
+    getSandboxMode: () => "workspace-write",
+    setSandboxMode: jest.fn(),
+    setToolScope: jest.fn(),
+    getToolScope: () => null,
     getModelConfig: () => ({ id: "m1", modelName: "test", name: "Test", provider: { id: "p1", provider: "test", protocol: "openai" }, modelType: "chat", config: { temperature: 0.7, topP: 1, frequencyPenalty: 0 } }),
     supportsFeature: () => false,
     getThinkingEffort: () => undefined,
     getResolvedPlugins: jest.fn(() => []),
     getSettings: () => ({}),
-    getToolApprovalConfig: () => ({ enabled: false, requiresApproval: [] }),
     getMemoryConfig: () => ({}),
     getEffectiveContextWindow: () => 4096,
     getWorkspacePath: () => "/tmp",
@@ -72,6 +75,8 @@ describe("ToolOrchestrator", () => {
         { provide: SettingsStorage, useFactory: () => ({ getSettings: jest.fn().mockResolvedValue(true) }) },
         { provide: PromptCollector, useValue: { addPrompt: jest.fn() } },
         { provide: CommandProviderRegistry, useValue: { register: jest.fn() } },
+        { provide: NlsService, useValue: { resolveString: (_p: string, v: any) => v, resolveDisplay: (_p: string, d: any) => d } },
+        { provide: EventBusService, useValue: { emit: jest.fn() } },
         { provide: TokenizerService, useValue: { countTextTokens: jest.fn().mockResolvedValue(1), encode: jest.fn().mockResolvedValue([]), decode: jest.fn().mockResolvedValue("") } },
       ],
     }).compile();
@@ -152,7 +157,7 @@ describe("ToolOrchestrator", () => {
               age: z.number().optional().describe("年龄"),
             }),
             execute: async (args) => "hello",
-            display: { action: "打招呼", icon: "chat" },
+            display: { text: { executing: "打招呼", completed: "打招呼" }, icon: "chat" },
           });
         }
       }

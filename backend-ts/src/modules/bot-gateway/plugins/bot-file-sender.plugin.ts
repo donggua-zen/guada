@@ -38,6 +38,7 @@ export class BotFileSenderPlugin extends PluginBase {
     const fileKit = api.registerToolKit({
       id: "bot_file",
       name: "%botFileSender.toolkitName%",
+      description: "%botFileSender.toolkitDescription%",
       loadMode: "none",
       handler: (ctx: PluginContext) => {
         if (ctx?.session?.sessionType !== "bot") {

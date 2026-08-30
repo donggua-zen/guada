@@ -52,6 +52,7 @@ export class SubAgentPlugin extends PluginBase {
     const subKit = api.registerToolKit({
       id: "subagent",
       name: "%subAgent.toolkitName%",
+      description: "%subAgent.toolkitDescription%",
       loadMode: "eager",
       activator:
         "Call this toolkit when you need to create a sub-agent to execute an independent task",

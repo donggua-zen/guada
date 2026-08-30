@@ -11,6 +11,8 @@ import {
   ResolvedPluginInfo,
 } from "../../plugins/types/plugin.types";
 import { ToolOrchestrator } from "../tool-orchestrator.service";
+import type { ContentBlock } from "../../../common/types/conversation.types";
+import { HOOKS } from "../../chat/types/hooks.contract";
 import langZh from "./universal-tools.lang.zh.json";
 import langEn from "./universal-tools.lang.en.json";
 
@@ -39,7 +41,7 @@ export class UniversalToolsPlugin extends PluginBase {
   }
 
   /** 压缩发生后清除对应 session 的缓存，下次 getMessages 时自动重建 */
-  @OnEvent("memory.compacted")
+  @OnEvent(HOOKS.MEMORY_COMPACTED)
   handleCompacted(payload: { sessionId: string }) {
     if (this.toolkitMemoryCache.has(payload.sessionId)) {
       this.toolkitMemoryCache.delete(payload.sessionId);
@@ -56,6 +58,7 @@ export class UniversalToolsPlugin extends PluginBase {
     const lazyKit = api.registerToolKit({
       id: "lazy_tools",
       name: "%universalTools.toolkitName%",
+      description: "%universalTools.toolkitDescription%",
       loadMode: "eager",
       activator:
         "Use tool_learn to learn toolkit usage, use tool_use to invoke specific tools",
@@ -167,8 +170,11 @@ export class UniversalToolsPlugin extends PluginBase {
     const existingToolkits = new Set<string>();
 
     for (const msg of history) {
-      if (msg.role !== "assistant" || !msg.toolCalls) continue;
-      for (const tc of msg.toolCalls) {
+      if (msg.role !== "assistant") continue;
+      for (const tc of msg.content.filter(
+        (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
+          b.type === "tool-call",
+      )) {
         try {
           const args =
             typeof tc.arguments === "string"
@@ -349,7 +355,7 @@ export class UniversalToolsPlugin extends PluginBase {
     for (const rp of resolved) {
       if (!rp.enabled) continue;
       const kitInfo = rp.enabledToolKits.find(
-        (k) => k.id === name || k.name === name,
+        (k) => k.enabled && (k.id === name || k.name === name),
       );
       if (!kitInfo) continue;
       // 懒加载工具包的工具存在 allTools 中（enabledTools 不含未激活的懒加载工具）

@@ -22,6 +22,8 @@ export interface PaginatedResponse<T> {
   pageSize: number
   hasNext: boolean
   hasPrev: boolean
+  /** 游标:历史快照最后一条已入库事件的 seq(messages 端点返回,订阅增量去重用) */
+  lastSeq?: number
 }
 
 /**

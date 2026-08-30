@@ -1,3 +1,16 @@
+/**
+ * Gemini GenerateContent 协议适配器。
+ *
+ * Provider quirks（本协议私有的兼容细节，新增兼容时在此登记）：
+ * 1. 消息历史使用 startChat({ history })，最后一条消息单独 sendMessage 发送
+ *    （history 传 messages.slice(0, -1)）。
+ * 2. tool 结果 → functionResponse part（name/response.output 包装），role 恒为 'user'。
+ * 3. 图片走 inlineData（base64 + mimeType）；远程 URL 不受支持，投影为引用文本。
+ * 4. thinking 级别映射 thinkingConfig.thinkingLevel。
+ *
+ * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
+ * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
+ */
 import { Logger } from "@nestjs/common";
 import {
   GoogleGenerativeAI,
@@ -8,12 +21,14 @@ import {
 } from "@google/generative-ai";
 import { IProtocolAdapter } from "./base.adapter";
 import {
-  MessageRecord,
   LLMCompletionParams,
-  LLMResponseChunk,
-  ToolCallItem,
+  StreamChunk,
 } from "../types/llm.types";
+import type { Message, ContentBlock } from "../../../common/types/conversation.types";
+import { attachmentToPart, fileBlockToText } from "../utils/attachment.util";
+import { assertNoImageContent } from "../utils/content.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
+import { StreamBlockTracker } from "../utils/block-lifecycle.util";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 
 import {
@@ -72,7 +87,15 @@ export class GeminiAdapter implements IProtocolAdapter {
 
   async *chatCompletion(
     params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
+    // fail-loud 最终防线：L1 管线绕过时，图片不得静默发给纯文本模型
+    assertNoImageContent(
+      params.messages,
+      params.modelCapabilities?.supportsImageInput,
+      this.protocol,
+      params.model,
+    );
+
     const providerConfig = params.providerConfig || {};
     const apiKey = providerConfig.apiKey || process.env.GEMINI_API_KEY;
 
@@ -94,7 +117,7 @@ export class GeminiAdapter implements IProtocolAdapter {
       tools,
     });
 
-    const chatHistory = this.formatMessages(params.messages.slice(0, -1));
+    const chatHistory = await this.formatMessages(params.messages.slice(0, -1));
     const chat = model.startChat({ history: chatHistory });
 
     try {
@@ -131,61 +154,57 @@ export class GeminiAdapter implements IProtocolAdapter {
     }
   }
 
-  private async *handleGeminiStream(result: any): AsyncGenerator<LLMResponseChunk> {
-      for await (const chunk of result.stream) {
-        const responseChunk: LLMResponseChunk = {
-          type: "text",
-          content: null,
-          reasoningContent: null,
-          finishReason: null,
-          toolCalls: undefined,
-          usage: null,
-        };
+  /**
+   * Gemini wire 流 → 规范 StreamChunk 词表
+   *
+   * Gemini 无原生块边界事件，由 StreamBlockTracker 合成生命周期；
+   * 工具调用通常在流结束时一次性给出（完整 args，作为单个 delta 发出）。
+   */
+  private async *handleGeminiStream(result: any): AsyncGenerator<StreamChunk> {
+    const tracker = new StreamBlockTracker();
 
-        // 处理文本内容
-        const text = chunk.text();
-        if (text) {
-          responseChunk.content = text;
-        }
-
-        // 处理工具调用 (Gemini 通常在流结束时提供完整的函数调用)
-        const functionCalls = chunk.functionCalls();
-        if (functionCalls && functionCalls.length > 0) {
-          responseChunk.type = "tool_call";
-          responseChunk.toolCalls = functionCalls.map(
-            (fc, index): ToolCallItem => ({
-              id: fc.name, // Gemini 默认不提供唯一 ID，通常用名称代替
-              index,
-              type: "function",
-              name: fc.name,
-              arguments: JSON.stringify(fc.args),
-            }),
-          );
-        }
-
-        yield responseChunk;
+    for await (const chunk of result.stream) {
+      // 处理文本内容
+      const text = chunk.text();
+      if (text) {
+        for (const c of tracker.textDelta(text)) yield c;
       }
 
-      // 模拟结束块
-      // Gemini 流结束后，尝试获取 usage_metadata（缓存统计 + token 统计）
-      const usageMetadata = (result as any)?.response?.usageMetadata || (result as any)?.usageMetadata;
-      const geminiUsage = usageMetadata
-        ? {
-            promptTokens: usageMetadata.promptTokenCount ?? 0,
-            completionTokens: usageMetadata.candidatesTokenCount ?? 0,
-            totalTokens: usageMetadata.totalTokenCount ?? 0,
-            cachedTokens: usageMetadata.cachedContentTokenCount
-              ? { read: usageMetadata.cachedContentTokenCount }
-              : undefined,
+      // 处理工具调用 (Gemini 通常在流结束时提供完整的函数调用)
+      const functionCalls = chunk.functionCalls();
+      if (functionCalls && functionCalls.length > 0) {
+        for (let index = 0; index < functionCalls.length; index++) {
+          const fc = functionCalls[index];
+          for (const c of tracker.toolCallDelta(index, {
+            toolCallId: fc.name, // Gemini 默认不提供唯一 ID，用名称代替
+            name: fc.name,
+            argumentsDelta: JSON.stringify(fc.args),
+          })) {
+            yield c;
           }
-        : null;
+        }
+      }
+    }
 
+    // 收尾：闭块 → usage → finish
+    for (const c of tracker.closeAll()) yield c;
+    // Gemini 流结束后，尝试获取 usage_metadata（缓存统计 + token 统计）
+    const usageMetadata =
+      (result as any)?.response?.usageMetadata || (result as any)?.usageMetadata;
+    if (usageMetadata) {
       yield {
-        type: "finish",
-        content: null,
-        finishReason: "stop",
-        usage: geminiUsage,
+        type: "usage",
+        usage: {
+          promptTokens: usageMetadata.promptTokenCount ?? 0,
+          completionTokens: usageMetadata.candidatesTokenCount ?? 0,
+          totalTokens: usageMetadata.totalTokenCount ?? 0,
+          cachedTokens: usageMetadata.cachedContentTokenCount
+            ? { read: usageMetadata.cachedContentTokenCount }
+            : undefined,
+        },
       };
+    }
+    yield { type: "finish", finishReason: "stop" };
   }
 
   private buildGenerationConfig(params: LLMCompletionParams) {
@@ -214,35 +233,68 @@ export class GeminiAdapter implements IProtocolAdapter {
     return config;
   }
 
-  private formatMessages(messages: MessageRecord[]): any[] {
-    return messages.map((msg) => {
-      // 处理 content 为数组的情况（多模态）
+  private async formatMessages(messages: Message[]): Promise<any[]> {
+    const result: any[] = [];
+    for (const msg of messages) {
+      // tool 结果消息（source.kind === 'tool'）→ user part（functionResponse 由流式响应处理时另行装配）
       let parts: any[] = [];
-      if (Array.isArray(msg.content)) {
-        parts = msg.content.map((item) => {
-          if (item.type === "text") return { text: item.text };
-          if (item.type === "image_url" && item.image_url) {
-            const url = item.image_url.url;
-            const match = url.match(/^data:(.+?);base64,/);
-            const mimeType = match ? match[1] : "image/jpeg";
-            return {
-              inlineData: {
-                data: url.split(",")[1],
-                mimeType,
-              },
-            };
-          }
-          return { text: JSON.stringify(item) };
-        });
-      } else {
-        parts = [{ text: msg.content || "" }];
+      if (msg.source.kind === "tool") {
+        const tr = msg.content.find(
+          (b): b is Extract<ContentBlock, { type: "tool-result" }> =>
+            b.type === "tool-result",
+        );
+        parts = [
+          {
+            functionResponse: {
+              name: tr?.name ?? "",
+              response: { output: tr?.content ?? "" },
+            },
+          },
+        ];
+        result.push({ role: "user", parts });
+        continue;
       }
 
-      return {
+      // 普通消息：按 ContentBlock 块拆分 parts
+      parts = [];
+      for (const block of msg.content) {
+        if (block.type === "text") {
+          if (block.text) parts.push({ text: block.text });
+        } else if (block.type === "image") {
+          // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射
+          const part = await attachmentToPart(
+            block.attachment.url ?? block.attachment.attachmentId,
+            block.attachment.mediaType,
+          );
+          if (part?.kind === "base64") {
+            parts.push({
+              inlineData: {
+                data: part.base64,
+                mimeType: part.mimeType,
+              },
+            });
+          } else if (part?.kind === "url") {
+            // Gemini inlineData 不支持远程 URL，退回引用文本提示
+            parts.push({ text: `[远程图片: ${part.url}]` });
+          }
+        } else if (block.type === "file") {
+          parts.push({ text: fileBlockToText(block.attachment) });
+        } else if (block.type === "tool-call") {
+          parts.push({
+            functionCall: {
+              name: block.name,
+              args: block.arguments ? JSON.parse(block.arguments) : {},
+            },
+          });
+        }
+      }
+
+      result.push({
         role: msg.role === "assistant" ? "model" : "user",
         parts,
-      };
-    });
+      });
+    }
+    return result;
   }
 
   private convertTools(tools: ToolDefinition[]): any[] {

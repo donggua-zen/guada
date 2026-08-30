@@ -17,5 +17,7 @@
   "scheduler_toggle_task.executing": "正在切换任务状态",
   "scheduler_toggle_task.completed": "已切换任务状态",
   "scheduler_toggle_task.aggregate.executing": "正在切换{n}个定时任务状态",
-  "scheduler_toggle_task.aggregate.completed": "已切换{n}个定时任务状态"
+  "scheduler_toggle_task.aggregate.completed": "已切换{n}个定时任务状态",
+  "scheduler.toolkitDescription": "定时任务管理与提醒"
+
 }

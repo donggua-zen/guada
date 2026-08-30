@@ -162,7 +162,6 @@ export async function previewFile(filePath: string): Promise<void> {
         size: 0,
         isPreview: true,
     })
-    tabStore.enterPreviewMode()
     tabStore.selectTab(tabKey)
 }
 
@@ -203,7 +202,6 @@ export async function previewUrl(url: string): Promise<void> {
             }
 
             const tabStore = useTabStore()
-            tabStore.enterPreviewMode()
             tabStore.selectTab(`browser:${result.window.windowId}`)
         }
     } catch (error) {

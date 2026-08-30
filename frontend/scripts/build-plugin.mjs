@@ -1,18 +1,20 @@
 /**
- * 构建 demo 插件前端产物
+ * 构建插件前端产物（通用：--plugin=<插件目录>）
  *
- * 在主应用 frontend 目录运行（利用主应用已安装的 vite/vue 插件）：
- *   node scripts/build-plugin.mjs
+ * 用法（在主应用 frontend 目录）：
+ *   node scripts/build-plugin.mjs          # 构建 demo-settings（默认示例）
+ *   node scripts/build-plugin.mjs --plugin=D:/AI/.../plugin-dir
  *
- * 说明：正式插件在自己的目录里放 package.json + node_modules 即可独立构建；
- * demo 借主应用依赖，避免在插件目录重复安装。
+ * 说明：借主应用已安装的 vite/vue 插件构建；正式插件可自带依赖独立构建。
  */
 import { build } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const pluginDir = 'D:/AI/ai_chat/plugins/demo-settings/frontend';
+const argv = process.argv.slice(2);
+const flag = argv.find((a) => a.startsWith('--plugin='));
+// 默认 demo-settings（若存在）
+let pluginDir = flag ? flag.slice('--plugin='.length) : 'D:/AI/ai_chat/plugins/demo-settings/frontend';
 
 try {
   await build({
@@ -37,7 +39,7 @@ try {
       },
     },
   });
-  console.log('✓ demo-settings 插件前端构建完成');
+  console.log(`✓ 插件前端构建完成: ${pluginDir}`);
 } catch (e) {
   console.error('✗ 构建失败:', e.message || e);
   process.exitCode = 1;

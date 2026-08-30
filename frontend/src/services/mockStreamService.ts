@@ -265,8 +265,8 @@ function createMockError(errorType: string): Error {
  * 
  * @param sessionId 会话 ID
  * @param config Mock 配置
- * @param assistantMessageId 现有助手消息 ID（用于 multi_version 模式）
- * @param regenerationMode 再生模式：'overwrite' | 'multi_version' | 'append'
+ * @param assistantMessageId 现有助手消息 ID（可选，resume 复用）
+ * @param regenerationMode 再生模式：'overwrite' | 'resume' | 'append'
  * @returns 异步生成器，产生 StreamEvent
  */
 export async function* mockChatStream(
@@ -290,23 +290,19 @@ export async function* mockChatStream(
     customToolCalls,
   } = mergedConfig
 
-  // 生成 IDs
-  // multi_version 模式下使用传入的 assistantMessageId，否则生成新的
-  const finalAssistantMessageId = (regenerationMode === 'multi_version' && assistantMessageId)
-    ? assistantMessageId
-    : generateId()
+  // 生成 IDs:resume 复用既有助手消息 id,否则生成新的
+  const finalAssistantMessageId = assistantMessageId || generateId()
   const turnsId = generateTurnsId()
   const contentId = generateId()
 
   console.log(`[Mock] 开始模拟流式响应`, {
     regenerationMode,
     assistantMessageId: finalAssistantMessageId,
-    isNewMessage: regenerationMode !== 'multi_version'
   })
 
-  // 发送 create 事件
+  // 发送 turn_start 事件(回合开始,规范化后替代 create)
   yield {
-    type: 'create',
+    type: 'turn_start',
     messageId: finalAssistantMessageId,
     turnsId,
     contentId,

@@ -5,5 +5,7 @@
   "get_current_time.executing": "Getting current time",
   "get_current_time.completed": "Got current time",
   "get_current_time.aggregate.executing": "Getting current time",
-  "get_current_time.aggregate.completed": "Got current time"
+  "get_current_time.aggregate.completed": "Got current time",
+  "time.toolkitDescription": "Get current date, time, weekday and timezone information"
+
 }

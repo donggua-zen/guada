@@ -8,5 +8,7 @@
   "process.executing": "正在管理进程",
   "process.completed": "已管理进程",
   "process.aggregate.executing": "正在管理进程",
-  "process.aggregate.completed": "已管理进程"
+  "process.aggregate.completed": "已管理进程",
+  "shell.toolkitDescription": "执行系统命令并管理后台进程"
+
 }

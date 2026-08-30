@@ -7,8 +7,7 @@ export type SessionEventType =
   | "session_deleted"
   | "session_renamed"
   | "session_updated"
-  | "stream_started"
-  | "stream_finished"
+  | "stream_status_changed"
   | "user_message_created"
   | "sub_agent_create"
   | "sub_agent_closed"
@@ -40,6 +39,7 @@ type EventListener = (event: SessionEvent) => void;
  */
 import { EventSourcePolyfill } from "event-source-polyfill";
 import { getClientId } from "@/utils/clientId";
+import { streamEventHub } from "./StreamEventHub";
 
 export class SessionEventsService {
   private eventSource: EventSourcePolyfill | null = null;
@@ -89,8 +89,16 @@ export class SessionEventsService {
 
     this.eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as SessionEvent;
-        this.handleEvent(data);
+        const data = JSON.parse(event.data);
+        // 合并后:流式事件(UnifiedEvent,method 以 stream/ 开头)路由到 StreamEventHub
+        if (data?.method && typeof data.method === "string" && data.method.startsWith("stream/")) {
+          streamEventHub.route({
+            ...(data.payload || {}),
+            sessionId: data.payload?.sessionId,
+          });
+          return;
+        }
+        this.handleEvent(data as SessionEvent);
       } catch (error) {
         console.error("[SessionEvents] 解析事件失败:", error);
       }

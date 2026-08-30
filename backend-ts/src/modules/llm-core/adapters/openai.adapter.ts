@@ -1,3 +1,16 @@
+/**
+ * OpenAI Chat Completions 协议适配器。
+ *
+ * Provider quirks（本协议私有的兼容细节，新增兼容时在此登记）：
+ * 1. reasoning 块 ↔ `reasoning_content` 字段（DeepSeek 系）：请求侧 assistant 消息持续回传，
+ *    响应侧从 delta.reasoning_content 解析——一旦输出 reasoning 须跨轮持续回传，不可丢弃。
+ * 2. usage 兼容 `prompt_cache_hit_tokens`（DeepSeek 缓存命中计费口径）。
+ * 3. 流式 usage 需显式 `stream_options.include_usage`（OpenAI/Azure 严格遵循标准）。
+ * 4. 思考强度映射 `reasoning_effort`；'none' 时需显式 thinking disabled。
+ *
+ * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
+ * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
+ */
 import { Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
 import * as path from "path";
@@ -9,11 +22,14 @@ import {
   RemoteModel,
 } from "../types/provider.types";
 import {
-  MessageRecord,
   LLMCompletionParams,
-  LLMResponseChunk,
-  ToolCallItem,
+  StreamChunk,
+  StreamUsage,
 } from "../types/llm.types";
+import type { Message, ContentBlock } from "../../../common/types/conversation.types";
+import { attachmentToPart, fileBlockToText } from "../utils/attachment.util";
+import { assertNoImageContent } from "../utils/content.util";
+import { StreamBlockTracker } from "../utils/block-lifecycle.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
 import {
@@ -183,9 +199,17 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
   async *chatCompletion(
     params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
+    // fail-loud 最终防线：L1 管线绕过时，图片不得静默发给纯文本模型
+    assertNoImageContent(
+      params.messages,
+      params.modelCapabilities?.supportsImageInput,
+      this.protocol,
+      params.model,
+    );
+
     const client = this.createClient(params.providerConfig);
-    const filterMessages = this.formatMessages(params.messages);
+    const filterMessages = await this.formatMessages(params.messages);
 
     // 构建最终请求参数
     const requestParams = this.buildRequestParam({
@@ -215,7 +239,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
       if (params.stream) {
         yield* this.handleStreamResponse(response);
       } else {
-        yield this.handleNonStreamResponse(response);
+        yield* this.handleNonStreamResponse(response);
       }
     } catch (error) {
       this.handleError(error, params.stream);
@@ -224,30 +248,86 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }
   }
 
-  private formatMessages(messages: MessageRecord[]) {
-    return messages.map((msg) => {
-      const rawContent = msg.content || "";
-      const filtered: any = {
-        role: msg.role,
-        content:
-          typeof rawContent === "string"
-            ? rawContent
-            : rawContent,
-      };
-      if (msg.reasoningContent !== undefined)
-        filtered.reasoning_content = msg.reasoningContent;
-      if (msg.toolCallId !== undefined) filtered.tool_call_id = msg.toolCallId;
+  private async formatMessages(messages: Message[]) {
+    const result: any[] = [];
+    for (const msg of messages) {
+      // tool 结果消息（source.kind === 'tool'）→ role=tool + function_call_output
+      if (msg.source.kind === "tool") {
+        const tr = msg.content.find(
+          (b): b is Extract<ContentBlock, { type: "tool-result" }> =>
+            b.type === "tool-result",
+        );
+        result.push({
+          role: "tool",
+          tool_call_id: msg.source.toolCallId,
+          name: tr?.name,
+          content: tr?.content ?? "",
+        });
+        continue;
+      }
 
-      if (msg.toolCalls) {
-        filtered.tool_calls = msg.toolCalls.map((tc, index) => ({
-          id: tc.id,
+      // 普通消息：按 ContentBlock 块拆分 content
+      const filtered: any = {
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: await this.resolveLocalImageParts(msg.content),
+      };
+
+      // reasoning 块 → reasoning_content
+      const reasoning = msg.content.find(
+        (b): b is Extract<ContentBlock, { type: "reasoning" }> =>
+          b.type === "reasoning",
+      );
+      if (reasoning) filtered.reasoning_content = reasoning.summary;
+
+      // tool-call 块 → tool_calls
+      const toolCalls = msg.content.filter(
+        (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
+          b.type === "tool-call",
+      );
+      if (toolCalls.length > 0) {
+        filtered.tool_calls = toolCalls.map((tc, index) => ({
+          id: tc.toolCallId,
           index,
           type: "function",
           function: { name: tc.name, arguments: tc.arguments },
         }));
       }
-      return filtered;
-    });
+      result.push(filtered);
+    }
+    return result;
+  }
+
+  /**
+   * 将 ContentBlock[] 转为 OpenAI content 数组（text/image_url/file→路径）。
+   * 存储层只存引用（FileRef.url），此处是 adapter 序列化边界，读文件转 base64。
+   */
+  private async resolveLocalImageParts(
+    content: ContentBlock[],
+  ): Promise<Array<Record<string, any>>> {
+    const parts: Array<Record<string, any>> = [];
+    for (const block of content) {
+      if (block.type === "text") {
+        if (block.text) parts.push({ type: "text", text: block.text });
+      } else if (block.type === "image") {
+        const part = await attachmentToPart(
+          block.attachment.url ?? block.attachment.attachmentId,
+          block.attachment.mediaType,
+        );
+        if (part) {
+          parts.push({
+            type: "image_url",
+            image_url: {
+              url: part.kind === "base64"
+                ? `data:${part.mimeType};base64,${part.base64}`
+                : part.url,
+            },
+          });
+        }
+      } else if (block.type === "file") {
+        parts.push({ type: "text", text: fileBlockToText(block.attachment) });
+      }
+    }
+    return parts;
   }
 
   /**
@@ -264,9 +344,21 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }));
   }
 
+  /**
+   * OpenAI 兼容 wire 流 → 规范 StreamChunk 词表
+   *
+   * OpenAI 协议没有块边界事件，由 StreamBlockTracker 合成生命周期：
+   * 首个增量前发 block_start；finish_reason/usage 暂存，收尾统一补发
+   * block_end*（权威终态）→ usage → finish，保证 finish 之后无 chunk。
+   * 旧版"同 delta 混载 reasoning+content 拆两条事件"的补丁随词表统一自然消失。
+   */
   private async *handleStreamResponse(
     response: any,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
+    const tracker = new StreamBlockTracker();
+    let pendingFinish: string | null = null;
+    let pendingUsage: StreamUsage | null = null;
+
     for await (const chunk of response) {
       const choice = chunk.choices?.[0];
       if (!choice) continue;
@@ -275,137 +367,101 @@ export class OpenAIAdapter implements IProtocolAdapter {
       const reasoning = (delta as any)?.reasoning_content || null;
       const content = delta?.content || null;
 
-      // 【修复】上游可能在同一个 delta 中同时携带 reasoning_content 与 content
-      // （思考→回答的过渡 chunk）。下游（throttle / SSE / 前端）均按"单类型事件"消费，
-      // 若混在一个块里，前端 think 分支只读 reasoningContent 会丢掉正式 content。
-      // 这里拆成两条独立事件：先 think（思考增量），再 text（回答增量），
-      // finish_reason / usage 归属到回答块，保证全链路单类型语义。
-      if (reasoning && content) {
-        this.logger.debug(
-          `[SPLIT-THINK-CONTENT] split mixed delta into think+text (finish=${choice.finish_reason || "none"})`,
-        );
-
-        yield {
-          type: "think",
-          content: null,
-          reasoningContent: reasoning,
-          finishReason: null,
-          toolCalls: undefined,
-          usage: null,
-        };
-
-        const answerChunk: LLMResponseChunk = {
-          type: choice.finish_reason ? "finish" : "text",
-          content,
-          reasoningContent: null,
-          finishReason: choice.finish_reason || null,
-          toolCalls: undefined,
-          usage: null,
-        };
-        if ((chunk as any).usage) {
-          const rawUsage = (chunk as any).usage;
-          answerChunk.usage = {
-            promptTokens: rawUsage.prompt_tokens,
-            completionTokens: rawUsage.completion_tokens,
-            totalTokens: rawUsage.total_tokens,
-            cachedTokens: extractOpenAICachedTokens(rawUsage),
-          };
-        }
-        yield answerChunk;
-        continue;
-      }
-
-      const responseChunk: LLMResponseChunk = {
-        type: "text",
-        content,
-        reasoningContent: reasoning,
-        finishReason: choice.finish_reason || null,
-        toolCalls: undefined,
-        usage: null,
-      };
-      if (reasoning) responseChunk.type = "think";
-      if (choice.finish_reason) responseChunk.type = "finish";
+      // finish_reason / usage 只暂存，收尾时统一发射
+      if (choice.finish_reason) pendingFinish = choice.finish_reason;
       if ((chunk as any).usage) {
-        const rawUsage = (chunk as any).usage;
-        responseChunk.usage = {
-          promptTokens: rawUsage.prompt_tokens,
-          completionTokens: rawUsage.completion_tokens,
-          totalTokens: rawUsage.total_tokens,
-          cachedTokens: extractOpenAICachedTokens(rawUsage),
-        };
+        pendingUsage = this.mapUsage((chunk as any).usage);
       }
 
+      if (reasoning) {
+        for (const c of tracker.reasoningDelta(reasoning)) yield c;
+      }
+      if (content) {
+        for (const c of tracker.textDelta(content)) yield c;
+      }
       if (delta?.tool_calls) {
-        responseChunk.type = "tool_call";
-        responseChunk.toolCalls = delta.tool_calls.map(
-          (tc): ToolCallItem => ({
-            id: tc.id,
-            index: tc.index,
-            type: "function",
+        for (const tc of delta.tool_calls) {
+          for (const c of tracker.toolCallDelta(tc.index, {
+            toolCallId: tc.id,
             name: tc.function?.name,
-            arguments: tc.function?.arguments,
-          }),
-        );
-      }
-
-      if (
-        responseChunk.content ||
-        responseChunk.reasoningContent ||
-        responseChunk.finishReason ||
-        responseChunk.toolCalls ||
-        responseChunk.usage
-      ) {
-        yield responseChunk;
+            argumentsDelta: tc.function?.arguments,
+          })) {
+            yield c;
+          }
+        }
       }
     }
+
+    // [DONE] 收尾：先闭所有块，再 usage，最后 finish
+    for (const c of tracker.closeAll()) yield c;
+    if (pendingUsage) {
+      yield { type: "usage", usage: pendingUsage };
+    }
+    yield { type: "finish", finishReason: pendingFinish || "stop" };
   }
 
-  private handleNonStreamResponse(response: any): LLMResponseChunk {
+  /** OpenAI usage 原始结构 → StreamUsage */
+  private mapUsage(raw: any): StreamUsage {
+    return {
+      promptTokens: raw.prompt_tokens,
+      completionTokens: raw.completion_tokens,
+      totalTokens: raw.total_tokens,
+      cachedTokens: extractOpenAICachedTokens(raw),
+    };
+  }
+
+  /**
+   * 非流式响应 → 同一词表的 chunk 数组（block_end* → usage → finish）
+   */
+  private *handleNonStreamResponse(response: any): Generator<StreamChunk> {
     const choice = response.choices?.[0];
     if (!choice || !choice.message)
       throw new Error("Invalid response from LLM API");
 
     const message = choice.message;
-    const hasToolCalls = !!message.tool_calls;
     const hasReasoning = !!(message as any).reasoning_content;
-    const result: LLMResponseChunk = {
-      type: hasToolCalls ? "tool_call" : hasReasoning ? "think" : "finish",
-      content: message.content || null,
-      reasoningContent: (message as any).reasoning_content || null,
-      finishReason: choice.finish_reason || null,
-      toolCalls: undefined,
-      usage: null,
-    };
 
-    if (response.usage) {
-      result.usage = {
-        promptTokens: response.usage.prompt_tokens,
-        completionTokens: response.usage.completion_tokens,
-        totalTokens: response.usage.total_tokens,
-        cachedTokens: extractOpenAICachedTokens(response.usage),
+    if (hasReasoning) {
+      yield {
+        type: "block_end",
+        index: 0,
+        block: { type: "reasoning", contentId: "", summary: (message as any).reasoning_content },
       };
     }
-
-    // 正确映射工具调用到 toolCalls 字段
+    if (message.content) {
+      yield {
+        type: "block_end",
+        index: hasReasoning ? 1 : 0,
+        block: { type: "text", contentId: "", text: message.content },
+      };
+    }
     if (message.tool_calls) {
       this.logger.debug(
         `非流式响应检测到 ${message.tool_calls.length} 个工具调用`,
       );
-      result.toolCalls = message.tool_calls.map(
-        (tc: any): ToolCallItem => ({
-          id: tc.id,
-          index: tc.index,
-          type: tc.type || "function",
-          name: tc.function?.name,
-          arguments: tc.function?.arguments,
-        }),
-      );
-      this.logger.debug(
-        `工具调用详情: ${JSON.stringify(result.toolCalls.map((tc) => ({ name: tc.name, hasArgs: !!tc.arguments })))}`,
-      );
+      let index = (hasReasoning ? 1 : 0) + (message.content ? 1 : 0);
+      for (const tc of message.tool_calls) {
+        yield {
+          type: "block_end",
+          index: index++,
+          block: {
+            type: "tool-call",
+            contentId: "",
+            toolCallId: tc.id || "",
+            name: tc.function?.name || "",
+            arguments:
+              typeof tc.function?.arguments === "string"
+                ? tc.function.arguments
+                : JSON.stringify(tc.function?.arguments ?? {}),
+          },
+        };
+      }
     }
 
-    return result;
+    if (response.usage) {
+      yield { type: "usage", usage: this.mapUsage(response.usage) };
+    }
+    yield { type: "finish", finishReason: choice.finish_reason || "stop" };
   }
 
   private handleError(

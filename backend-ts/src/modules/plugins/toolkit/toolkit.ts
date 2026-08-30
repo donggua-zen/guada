@@ -23,6 +23,8 @@ export class Toolkit implements ToolKitHandle {
   private _prompts: Array<{
     frequency: string;
     description: string;
+    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
+    type?: "system" | "user";
     handler: (ctx: any) => string | Promise<string>;
   }> = [];
 
@@ -184,10 +186,13 @@ export class Toolkit implements ToolKitHandle {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     description?: string;
+    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
+    type?: "system" | "user";
   }): void {
     this._prompts.push({
       frequency: def.frequency || "REGULAR",
       description: def.description || "",
+      type: def.type,
       handler: (
         typeof def.content === "function"
           ? def.content

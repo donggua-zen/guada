@@ -43,6 +43,7 @@ export class KnowledgeBasePlugin extends PluginBase {
     const kbKit = api.registerToolKit({
       id: "knowledge_base",
       name: "%knowledgeBase.toolkitName%",
+      description: "%knowledgeBase.toolkitDescription%",
       loadMode: "lazy",
       activator: "Use this toolkit to search knowledge base content when the user asks questions related to the knowledge base",
       handler: (ctx) => ({

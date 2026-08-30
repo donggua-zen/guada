@@ -166,6 +166,48 @@ export function buildRetryMessage(errorType: RetryableErrorType, attempt: number
   return `${reasonText[errorType]}，正在重试 ${attempt}/${maxRetries} 次...`;
 }
 
+/**
+ * 检测"上下文窗口溢出"错误（对齐 DSH CONTEXT_WINDOW_EXCEEDED_CODE）。
+ *
+ * 这类错误不可通过退避重试解决，正确动作是强制压缩上下文后重试请求
+ * （见 agent-engine 溢出恢复路径）。各 provider 的错误形态不同，这里按
+ * error.code / 错误消息关键词做启发式识别。
+ */
+export function isContextWindowExceeded(error: any): boolean {
+  if (!error) return false;
+
+  const code = error?.code ?? error?.error?.code ?? error?.error?.error?.code;
+  if (typeof code === "string") {
+    const c = code.toLowerCase();
+    if (
+      c.includes("context_length") ||
+      c.includes("contextlength") ||
+      c.includes("context_window") ||
+      c.includes("contextwindow") ||
+      c.includes("max_context")
+    ) {
+      return true;
+    }
+  }
+
+  const rawMessages = [
+    error?.message,
+    error?.error?.message,
+    error?.error?.error?.message,
+    typeof error === "string" ? error : undefined,
+  ].filter(Boolean);
+  const msg = rawMessages.join(" ").toLowerCase();
+  return (
+    msg.includes("maximum context length") ||
+    msg.includes("context length exceeded") ||
+    msg.includes("context window") ||
+    msg.includes("prompt is too long") ||
+    msg.includes("too many tokens") ||
+    msg.includes("token limit") ||
+    msg.includes("max context")
+  );
+}
+
 // ==================== Core retry loop ====================
 
 /**
