@@ -29,11 +29,18 @@ export const useGitStore = defineStore("git", () => {
   const committing = ref(false);
   /** 当前进行中的提交/推送动作（供按钮显示进行中 ICON；null = 空闲） */
   const commitAction = ref<"commit" | "commitAndPush" | "push" | null>(null);
+  /** 是否正在生成提交信息（LLM 调用中） */
+  const generatingMessage = ref(false);
 
   // ── 提交弹窗状态（GitCommitDialog / GitChangesPanel / OverviewPanel 共用） ──
   const commitDialogVisible = ref(false);
   const commitMessage = ref("");
   const commitIncludeUnstaged = ref(true);
+
+  // ── 项目提交约束（.guada/git/commit_constraint.md） ──
+  const constraintDialogVisible = ref(false);
+  const constraintContent = ref("");
+  const constraintSaving = ref(false);
 
   // ── 派生统计 ──
   const isGitRepo = computed(() => status.value?.isGitRepo ?? false);
@@ -198,6 +205,104 @@ export const useGitStore = defineStore("git", () => {
     }
   }
 
+  /** 当前生成请求的取消控制器（点击生成按钮时若正在生成则调用 cancel） */
+  let generateAbortController: AbortController | null = null;
+
+  /**
+   * 调用 LLM 根据当前变更流式生成提交信息，实时填入提交信息输入框
+   * 模型选择在后端完成：优先标题总结模型，无则回退当前对话模型
+   */
+  async function generateCommitMessage(): Promise<void> {
+    if (!sessionId.value || generatingMessage.value) return;
+    if (!status.value?.isGitRepo) {
+      ElMessage.warning(t("git.notGitRepo"));
+      return;
+    }
+    generatingMessage.value = true;
+    // 生成前清空旧内容，开始流式累积
+    commitMessage.value = "";
+    generateAbortController = new AbortController();
+    try {
+      await apiService.generateCommitMessage(
+        sessionId.value,
+        commitIncludeUnstaged.value,
+        (text) => {
+          commitMessage.value += text;
+        },
+        generateAbortController.signal,
+      );
+      ElMessage.success(t("git.generateMessageSuccess"));
+    } catch (e: any) {
+      // 用户主动取消：保留已生成内容，不报错
+      if (e?.name === "AbortError" || generateAbortController?.signal.aborted) {
+        ElMessage.info(t("git.generateMessageCancelled"));
+        return;
+      }
+      // skipped 事件：错误 message 即 reason 键（如 no_model_configured）
+      const reason = e?.message || "";
+      const knownReasons = [
+        "empty_diff",
+        "no_model_configured",
+        "model_not_found",
+        "generation_failed",
+        "aborted",
+        "error",
+      ];
+      if (knownReasons.includes(reason)) {
+        ElMessage.warning(
+          t("git.generateMessageFailed", {
+            reason: t(`git.generateReason.${reason}` as any),
+          }),
+        );
+      } else {
+        ElMessage.error(
+          t("git.generateMessageError", { msg: reason }),
+        );
+      }
+    } finally {
+      generatingMessage.value = false;
+      generateAbortController = null;
+    }
+  }
+
+  /** 取消当前生成（生成中点击按钮触发） */
+  function cancelGenerateMessage(): void {
+    generateAbortController?.abort();
+  }
+
+  // ── 项目提交约束管理 ──
+
+  /** 打开约束编辑对话框并加载当前内容 */
+  async function openConstraintDialog(): Promise<void> {
+    constraintDialogVisible.value = true;
+    if (!sessionId.value) return;
+    try {
+      const res = await apiService.getCommitConstraint(sessionId.value);
+      constraintContent.value = res.content || "";
+    } catch (e: any) {
+      constraintContent.value = "";
+      ElMessage.error(t("git.constraintLoadFailed", { msg: e?.message || "" }));
+    }
+  }
+
+  /** 保存约束内容到 .guada/git/commit_constraint.md */
+  async function saveConstraint(): Promise<void> {
+    if (!sessionId.value || constraintSaving.value) return;
+    constraintSaving.value = true;
+    try {
+      await apiService.saveCommitConstraint(
+        sessionId.value,
+        constraintContent.value,
+      );
+      constraintDialogVisible.value = false;
+      ElMessage.success(t("git.constraintSaveSuccess"));
+    } catch (e: any) {
+      ElMessage.error(t("git.constraintSaveFailed", { msg: e?.message || "" }));
+    } finally {
+      constraintSaving.value = false;
+    }
+  }
+
   return {
     sessionId,
     status,
@@ -206,9 +311,13 @@ export const useGitStore = defineStore("git", () => {
     refreshing,
     committing,
     commitAction,
+    generatingMessage,
     commitDialogVisible,
     commitMessage,
     commitIncludeUnstaged,
+    constraintDialogVisible,
+    constraintContent,
+    constraintSaving,
     isGitRepo,
     totalChanges,
     totalStats,
@@ -223,5 +332,9 @@ export const useGitStore = defineStore("git", () => {
     openCommitDialog,
     submitCommit,
     handlePush,
+    generateCommitMessage,
+    cancelGenerateMessage,
+    openConstraintDialog,
+    saveConstraint,
   };
 });

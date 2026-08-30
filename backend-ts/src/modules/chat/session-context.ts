@@ -1,5 +1,5 @@
-import { MessageRecord } from "../llm-core/types/llm.types";
-import { TokenBreakdown } from "./interfaces";
+import { TokenBreakdown, TurnFinish } from "./interfaces";
+import type { Message, FileRef } from "../../common/types/conversation.types";
 
 // ============================================================================
 // DTO: 模型配置
@@ -49,51 +49,25 @@ export interface ModelConfig {
 }
 
 // ============================================================================
-// DTO: 工具审批配置
+// 会话运行模式
 // ============================================================================
 
 /**
- * 工具审批配置
- */
-export interface ToolApprovalConfig {
-  /** 是否启用审批 */
-  enabled: boolean;
-  /** 需要审批的工具列表（支持命名空间通配，如 file__*） */
-  requiresApproval: string[];
-}
-
-// ============================================================================
-// DTO: 记忆与压缩配置
-// ============================================================================
-
-/**
- * 记忆与压缩配置
- */
-export interface MemoryConfig {
-  compressionTriggerRatio?: number;
-  compressionTargetRatio?: number;
-  summaryMode?: string;
-}
-
-/**
- * 会话运行模式
+ * 会话安全模式（三档词表，与 DSH SandboxMode 同构，对 shell 与文件工具同时生效）
  *
- * - normal: 默认模式，所有插件、技能完整可用
- * - sandbox: 轻沙盒模式，与 normal 一致，但 shell 命令通过 sandbox 执行，
- *            限制写入仅在工作目录内
- * - memory: 记忆模式，仅暴露 file 插件工具，技能为空
- *           用于影子轮次等需要限制工具范围的场景
- * - plan: 计划模式，仅允许 safe 等级的只读工具，
- *         terminal (run_command) 例外，通过 sandbox --read-only 执行（全盘只读）
- * - free: 自由模式，在 normal 基础上取消文件工具（write/edit）的工作区
- *         路径限制，允许读写任意路径（高风险，UI 以红色警示）
+ * - read-only: 只读——文件写入被拒绝，run_command 经沙盒 --read-only 执行（全盘只读）
+ * - workspace-write: 工作区可写（默认）——文件工具限工作区内，shell 命令经沙盒
+ *                    限制写入仅在工作目录内
+ * - danger-full-access: 自由编辑——不启用沙盒，文件工具不限制工作目录，
+ *                       可读写任意路径（高风险，UI 以红色警示）
+ *
+ * 提权 = 模型带 sandbox_permissions + justification 经审批 one-shot 放宽
+ * （read-only < workspace-write < danger-full-access 严格放宽阶梯）。
+ *
+ * 计划模式（原 plan）已从安全词表移除，列入后续待办——计划协作本质是只读执行的
+ * 软引导，后续以独立协作状态回归，不与安全词表混同（对齐 DSH plan-mode 正交设计）。
  */
-export type SessionRunMode =
-  | "normal"
-  | "sandbox"
-  | "memory"
-  | "plan"
-  | "free";
+export type SessionSandboxMode = import("../../common/services/sandbox-policy").SandboxMode;
 
 /**
  * 获取消息选项
@@ -135,11 +109,15 @@ export interface ISessionContext {
   /** 外部 ID（bot 会话中为 "platform:type:nativeId"，nativeId 即平台 conversationId） */
   readonly externalId?: string | null;
 
-  // === 运行模式 ===
-  /** 获取当前会话运行模式 */
-  getRunMode(): SessionRunMode;
-  /** 设置会话运行模式（运行时切换，如影子轮次临时切换为 memory） */
-  setRunMode(mode: SessionRunMode): Promise<void>;
+  // === 安全模式 ===
+  /** 获取当前会话安全模式（read-only | workspace-write | danger-full-access） */
+  getSandboxMode(): SessionSandboxMode;
+  /** 设置会话安全模式（运行时切换，如 UI 政策控件） */
+  setSandboxMode(mode: SessionSandboxMode): Promise<void>;
+  /** 工具范围锁定（瞬态、不入库，正交于安全模式）：仅允许指定插件的工具；null = 不限制（影子轮次等场景使用） */
+  setToolScope(pluginId: string | null): void;
+  /** 读取当前工具范围锁定 */
+  getToolScope(): string | null;
 
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */
@@ -156,13 +134,27 @@ export interface ISessionContext {
   getResolvedPlugins(): import("../plugins/types/plugin.types").ResolvedPluginInfo[];
   /** 获取合并后的会话设置（指定字段或全部） */
   getSettings(field?: string): any;
-  /** 获取工具审批配置 */
-  getToolApprovalConfig(): ToolApprovalConfig;
+  // === 统一交互（审批/询问/迭代暂停共用 ask/* 审计；无超时） ===
+  /** 记录交互请求事件（发起 ask 时写日志，审计源） */
+  appendAskAsked(
+    data: import("../../common/persistence/types").AskAskedData,
+  ): Promise<void>;
+  /** 记录交互应答事件（应答/取消后写日志；每次 asked 必有 answered） */
+  appendAskAnswered(
+    data: import("../../common/persistence/types").AskAnsweredData,
+  ): Promise<void>;
 
-  // === 压缩与记忆 ===
-  /** 获取记忆与压缩配置 */
-  getMemoryConfig(): MemoryConfig;
-  /** 获取实际生效的上下文窗口大小 */
+  // === 流事件发布（唯一发布面，对齐 DSH session.append 直发） ===
+  /**
+   * 发布流式事件到会话活跃流（deep 层模块直发入口：引擎、钩子订阅者、审批服务等）。
+   *
+   * 实现内组装 prevSeq 续传游标（"先入库后发事件"契约）后交 SessionStreamManager.publish
+   * （eventBuffer 缓存 + 进程内扇出 + SSE 直投三合一）。无活跃流时静默丢弃。
+   */
+  publishStream(chunk: import("./types/event-chunk.types").SessionStreamEvent): Promise<void>;
+
+  // === 压缩数据源 ===
+  /** 获取实际生效的上下文窗口大小（压缩决策等场景使用） */
   getEffectiveContextWindow(): number;
 
   // === 工作目录 ===
@@ -171,20 +163,15 @@ export interface ISessionContext {
   getWorkspacePath(): string;
 
   // === 游标控制 ===
-  /** 设置消息游标：第一次 getMessages 时从数据库只加载**到此消息为止**的历史（含该消息） */
-  setMessageCursor(messageId: string): void;
-
   // === 对话状态管理 ===
   /** 初始化：加载历史消息、恢复压缩状态 */
   initialize(): Promise<void>;
-  /** 预加载历史消息（可选传入游标限制范围），供调用方在 addUserMessage 前提前加载 */
-  loadHistory(cursor?: string): Promise<void>;
   /**
-   * 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
+   * 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史），返回三层 Message[]。
    *
    * ⚠️ 禁止在插件中调用，否则会导致无限递归！插件应使用 getHistory()
    */
-  getMessages(options?: GetMessagesOptions): Promise<MessageRecord[]>;
+  getMessages(options?: GetMessagesOptions): Promise<Message[]>;
   /**
    * 获取原始的对话历史消息列表（不含 system prompt / 摘要 / 插件提示词）。
    *
@@ -194,37 +181,53 @@ export interface ISessionContext {
    *
    * 返回的数组是浅拷贝，修改不会影响内部状态。
    */
-  getHistory(): Promise<MessageRecord[]>;
-  /** 追加消息记录到历史并持久化 */
-  appendParts(records: MessageRecord[]): Promise<void>;
-  /** 持久化待保存的消息 */
+  getHistory(): Promise<Message[]>;
+  /** 追加一次 LLM 调用/注入到历史并持久化（Message[]，三层） */
+  appendMessages(messages: Message[]): Promise<void>;
+  /**
+   * 持久化待保存的消息。
+   *
+   * ⚠️ 历史遗留：JSONL append 即实时落盘,persist 不再承担真实落盘职责,
+   * 保留为空实现,未来可用于分卷/整理等杂活。
+   */
   persist(): Promise<void>;
-  /** 原子累加消息总耗时并保存结束信息到 Message.metadata */
-  finalizeMessage(messageId: string, durationMs: number, finishMeta: Record<string, any>): Promise<void>;
+  /** 原子累加轮次总耗时并保存结束信息到 Turn.metadata */
+  finalizeTurn(turnId: string, durationMs: number, finish: TurnFinish): Promise<void>;
 
-  /** 添加用户消息到历史并持久化 */
+  /**
+   * agent 开始消费该回合时开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
+   * 返回回合 turnId,作为后续 appendMessages / finalizeTurn 的归属游标。
+   * @param options.replaceTurnId 整轮次重答:先写 turn/delete 遮蔽旧轮次,再开新回合
+   */
+  beginTurn(options?: {
+    replaceTurnId?: string;
+    preGenTurnId?: string;
+  }): Promise<string>;
+
+  /**
+   * 删除本轮对话:写 turn/delete 事件(append-only),replayer 重放时 splice 移除该回合。
+   * 与压缩遮蔽(visible=false,前端保留占位)语义区分:删除 = 视图彻底移除。
+   */
+  deleteTurn(turnId: string): Promise<void>;
+
+  /**
+   * 追加用户消息:写 user/message(后于 turn/start),不建回合外壳、不返回三层结构。
+   * 返回用户消息(三层 Message),供 agent-engine 广播 user_message 事件。
+   */
   addUserMessage(
     content: string,
-    files?: string[],
-    replaceMessageId?: string,
-    knowledgeBaseIds?: string[],
-    metadata?: Record<string, any>,
-    preGenAssistantId?: string,
-  ): Promise<any>;
+    files?: FileRef[],
+    options?: {
+      replaceTurnId?: string;
+      knowledgeBaseIds?: string[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<{ messageId: string; userMessage: any }>;
 
-  /** 准备助手回复的消息 ID */
-  addAssistantMessageVersion(
-    userMessageId: string,
-    preGenAssistantId?: string,
-  ): Promise<string>;
   /** 生成唯一 ID */
   generateId(): string;
-  /** 获取当前 Token 计数 */
-  getTokenCount(): number;
-  /** 获取细粒度 Token 统计（系统提示词/摘要/用户提示/历史/工具定义） */
-  getTokenBreakdown(): TokenBreakdown;
-  /** 检查是否达到压缩阈值 */
-  shouldCompress(): Promise<boolean>;
-  /** 执行压缩 */
-  compress(onBeforeCompaction?: () => Promise<void>): Promise<MessageRecord[]>;
+  /** 获取当前 Token 计数（当前视图按需估算，provider 真值锚点 + 启发式增量） */
+  getTokenCount(): Promise<number>;
+  /** 获取细粒度 Token 统计（系统提示词/摘要/用户提示/历史/工具定义，按需计算） */
+  getTokenBreakdown(): Promise<TokenBreakdown>;
 }

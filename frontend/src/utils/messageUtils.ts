@@ -4,120 +4,14 @@
 
 import { shallowReactive, type ShallowReactive } from "vue";
 import { t } from "@/locales";
-
-/**
- * 消息接口定义
- */
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  contents: MessageContent[];
-  parentId?: string;
-  currentVersionId?: string;
-  state: {
-    isStreaming: boolean;
-    isThinking?: boolean;
-  };
-  createdAt?: string;
-  files?: FileAttachment[];
-  index?: number;
-  metadata?: Record<string, any>;
-  totalDurationMs?: number | null;
-}
-
-/**
- * 消息内容接口
- */
-export interface MessageContent {
-  id: string;
-  role?: "user" | "assistant" | "tool";
-  content: string | null;
-  reasoningContent?: string | null;
-  turnsId?: string;
-  additionalKwargs?: Record<string, any>;
-  metadata?: {
-    toolCalls?: Array<{
-      id?: string;
-      name?: string;
-      arguments?: any;
-      args?: any;
-      [key: string]: any;
-    }>;
-    toolCallId?: string;
-    [key: string]: any;
-  };
-  createdAt?: string;
-  updatedAt?: string;
-  thinkingStartedAt?: number | null;
-  thinkingDurationMs?: number | null;
-  state: {
-    isStreaming: boolean;
-    isThinking: boolean;
-  };
-  _thinkingTimer?: number;
-  isCurrent?: boolean;
-  files?: FileAttachment[];
-}
-
-/**
- * 文件附件接口
- */
-export interface FileAttachment {
-  id?: string;
-  name: string;
-  url?: string;
-  type?: string;
-  size?: number;
-  file?: File;
-  [key: string]: any;
-}
+// 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
+import type { Message, MessageContent, FileAttachment } from "@/types/message";
+export type { Message, MessageContent, FileAttachment } from "@/types/message";
 
 /**
  * 消息对类型
  */
 export type MessagePair = [Message] | [Message, Message];
-
-/**
- * 获取当前内容索引（已废弃）
- * @deprecated 已废弃，直接使用 message.currentTurnsId 和 turns 过滤
- */
-export function getCurrentIndex(messageContents: MessageContent[]): number {
-  console.warn("getCurrentIndex 已废弃，请使用 message.currentTurnsId");
-  if (!messageContents?.length) return 0;
-  const currentIndex = messageContents.findIndex(
-    (content) => content.isCurrent,
-  );
-  return currentIndex !== -1 ? currentIndex : 0;
-}
-
-/**
- * 获取当前版本的内容数组
- * @param message - 消息对象
- * @returns 当前版本的内容数组（过滤后的 turns）
- */
-export function getCurrentTurns(message: Message): MessageContent[] {
-  if (!message?.contents) return [];
-
-  // 过滤掉无效的 content
-  const validContents = message.contents.filter((content) => content != null);
-  if (validContents.length === 0) return [];
-
-  // 新模型：每个消息的 contents 就是该版本的全部内容，无需过滤
-  return validContents;
-}
-
-/**
- * 获取当前内容的版本号集合
- * @param message - 消息对象
- * @returns 所有唯一的 turnsId 集合
- */
-export function getContentVersions(message: Message): string[] {
-  // 新模型：每个 assistant 消息就是一个版本，返回自身 ID
-  if (message.role === "assistant" && message.id) {
-    return [message.id];
-  }
-  return [];
-}
 
 /**
  * 创建浅响应式消息对象
@@ -128,7 +22,6 @@ export function createShallowMessage(data: Message): ShallowReactive<Message> {
   return shallowReactive({
     ...data,
     contents: data.contents?.map((c) => shallowReactive(c)) || [],
-    state: shallowReactive(data.state || {}),
     files: data.files || [],
   });
 }
@@ -217,8 +110,12 @@ function flattenSingleContent(content: MessageContent): DisplayItem[] {
     });
   }
 
-  // 2. content
-  if (content.content && content.content.trim().length > 0) {
+  // 2. content（排除 tool-result 块：其结果已挂到 tool-call 的 toolCallsResponse 内联展示，不重复渲染文本）
+  if (
+    content.content &&
+    content.content.trim().length > 0 &&
+    !content.metadata?.toolCallId
+  ) {
     items.push({
       id: `${content.id}-content`,
       type: "content",

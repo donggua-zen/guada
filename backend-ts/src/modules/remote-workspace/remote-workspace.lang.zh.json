@@ -19,5 +19,7 @@
   "remote_transfer.executing": "正在传输文件",
   "remote_transfer.completed": "已传输文件",
   "remote_transfer.aggregate.executing": "正在传输{n}个文件",
-  "remote_transfer.aggregate.completed": "已传输{n}个文件"
+  "remote_transfer.aggregate.completed": "已传输{n}个文件",
+  "remoteWorkspace.toolkitDescription": "通过 SSH 远程操作服务器：读写文件与执行命令"
+
 }

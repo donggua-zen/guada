@@ -12,16 +12,32 @@ export type SkillRegistryEvent =
   | { type: 'enabled'; skillId: string; enabled: boolean }
   | { type: 'disabled'; skillId: string; enabled: boolean };
 
+/** 技能提供方（注册式技能源，参考 DSH ctx.skills.registerProvider 简化版） */
+export interface SkillProvider {
+  name: string;
+  /** 返回该提供方提供的技能（可含内嵌 content） */
+  getSkills(): SkillDefinition[];
+}
+
 @Injectable()
 export class SkillRegistry {
+  private static instance?: SkillRegistry;
   private readonly logger = new Logger(SkillRegistry.name);
   private readonly skills = new Map<string, SkillDefinition>();
   private readonly listeners: Array<(event: SkillRegistryEvent) => void> = [];
+  private readonly providers = new Map<string, SkillProvider>();
   private static SKILL_ENABLED_PREFIX = 'skills.';
 
   constructor(
     @Optional() @Inject(SettingsStorage) private settingsStorage?: SettingsStorage,
-  ) {}
+  ) {
+    SkillRegistry.instance = this;
+  }
+
+  /** 供非注入上下文（如插件 API）访问注册表单例 */
+  static getInstance(): SkillRegistry | undefined {
+    return SkillRegistry.instance;
+  }
 
   /**
    * 注册 Skill
@@ -39,6 +55,40 @@ export class SkillRegistry {
     this.skills.set(skill.id, skill);
     this.notifyListeners({ type: 'registered', skill });
     this.logger.debug(`Registered skill: ${skill.id}`);
+  }
+
+  /**
+   * 注册技能提供方：将提供方返回的技能注册进注册表（支持内嵌 content）。
+   * 供内置技能（bundled）及第三方插件注册技能——不再需要文件复制/扫描。
+   */
+  registerProvider(provider: SkillProvider): void {
+    if (this.providers.has(provider.name)) {
+      throw new Error(`Skill provider ${provider.name} already registered`);
+    }
+    this.providers.set(provider.name, provider);
+    const skills = provider.getSkills();
+    for (const skill of skills) {
+      this.register(skill);
+    }
+    this.logger.log(`Registered skill provider: ${provider.name} (${skills.length} skills)`);
+  }
+
+  /** 已注册的支持权方名列表（诊断） */
+  listProviders(): string[] {
+    return Array.from(this.providers.keys());
+  }
+
+  /**
+   * 按提供方移除技能（插件禁用/卸载时撤销其注册的技能）。
+   */
+  unregisterByProvider(provider: string): void {
+    for (const [id, skill] of Array.from(this.skills.entries())) {
+      if (skill.provider === provider) {
+        this.skills.delete(id);
+        this.notifyListeners({ type: "unregistered", skillId: id });
+        this.logger.log(`Unregistered skill by provider: ${id} (${provider})`);
+      }
+    }
   }
 
   /**

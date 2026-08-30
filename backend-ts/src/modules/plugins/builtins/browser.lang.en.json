@@ -33,5 +33,7 @@
   "browser_screenshot.executing": "Taking screenshot",
   "browser_screenshot.completed": "Took screenshot",
   "browser_screenshot.aggregate.executing": "Taking screenshots of {n} pages",
-  "browser_screenshot.aggregate.completed": "Took screenshots of {n} pages"
+  "browser_screenshot.aggregate.completed": "Took screenshots of {n} pages",
+  "browser.toolkitDescription": "Browser automation: navigate pages, click, type, screenshot and read content"
+
 }

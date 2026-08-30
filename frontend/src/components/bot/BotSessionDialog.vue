@@ -19,10 +19,10 @@
       </div>
 
       <!-- 消息列表 -->
-      <div v-else-if="messages.length > 0" class="message-list">
+      <div v-else-if="turns.length > 0" class="message-list">
         <TurnItem
           v-for="(turn, index) in visibleTurns"
-          :key="turn.user.id"
+          :key="turn.id"
           :turn="turn"
           :character-name="props.session?.character?.title"
           :character-avatar="props.session?.character?.avatarUrl"
@@ -51,9 +51,10 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
+import { foldEvents } from '@/services/modules/streamProjector'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
-import type { Message } from '@/types/message'
+import type { Turn, TurnContent } from '@/types/message'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
@@ -77,29 +78,13 @@ const sessionTitle = computed(() => {
 })
 
 const loading = ref(false)
-const messages = ref<Message[]>([])
+const turns = ref<Turn[]>([])
 
-// 将扁平消息列表按 user 消息分组为轮次
-const turns = computed(() => {
-  const map: Record<string, { user: any; assistants: any[] }> = {}
-  const order: string[] = []
-  for (const msg of messages.value) {
-    if (msg.role === 'user') {
-      map[msg.id] = { user: msg, assistants: [] }
-      order.push(msg.id)
-    } else if (msg.role === 'assistant' && msg.parentId) {
-      if (!map[msg.parentId]) {
-        map[msg.parentId] = { user: null, assistants: [] }
-        order.push(msg.parentId)
-      }
-      map[msg.parentId].assistants.push(msg)
-    }
-  }
-  return order.map((id) => map[id])
-})
+// 从回合中取用户锚点块（role=user，二级结构：turn → block）
+const userOfTurn = (turn: Turn): any => turn.blocks?.find((b) => b.role === 'user') ?? null
 
-// 过滤：只保留有 user 消息的组
-const visibleTurns = computed(() => turns.value.filter((t) => t.user))
+// 只保留含 user 锚点块的回合
+const visibleTurns = computed(() => turns.value.filter((t) => userOfTurn(t)))
 
 // 监听对话框打开,加载消息
 watch(dialogVisible, async (visible) => {
@@ -108,14 +93,29 @@ watch(dialogVisible, async (visible) => {
   }
 })
 
-// 加载消息列表
+// 加载消息列表（前端自折叠：拉事件页 → foldEvents 重建本地回合树）
 const loadMessages = async () => {
   if (!props.session) return
-  
+
   loading.value = true
   try {
-    const response = await apiService.fetchSessionMessages(props.session.id)
-    messages.value = response.items || []
+    const page = await apiService.fetchSessionEvents(props.session.id, {
+      turns: 100,
+    })
+    // 本地 store 适配器：foldEvents 通过 getTurns/setTurns 操作本地 turns ref
+    const localStore = {
+      getTurns: () => turns.value as any,
+      setTurns: (_sid: string, t: any[]) => {
+        turns.value = t
+      },
+      deleteTurnById: (_sid: string, id: string) => {
+        turns.value = turns.value.filter((t) => t.id !== id)
+      },
+      setSessionIsCompressing: () => {},
+      sessionIsCompressing: () => false,
+      getSessionState: () => ({ loaded: true, turns: turns.value, eventLog: [] }),
+    }
+    foldEvents(localStore as any, props.session.id, page.events)
   } catch (error) {
     console.error('加载消息失败:', error)
     ElMessage.error(t('bot.sessionDialog.loadFailed'))
@@ -124,13 +124,11 @@ const loadMessages = async () => {
   }
 }
 
-// 删除消息
-const handleDeleteMessage = async (message: Message) => {
+// 删除本轮对话（按回合 id）
+const handleDeleteMessage = async (turn: Turn) => {
   try {
     await ElMessageBox.confirm(
-      message.role === 'user'
-        ? t('bot.sessionDialog.deleteUserMsg')
-        : t('bot.sessionDialog.deleteAssistantMsg'),
+      t('bot.sessionDialog.deleteTurnDesc'),
       t('bot.sessionDialog.deleteTitle'),
       {
         confirmButtonText: t('common.ok'),
@@ -139,36 +137,31 @@ const handleDeleteMessage = async (message: Message) => {
       }
     )
     
-    await apiService.deleteMessage(message.id)
-    
-    // 如果是用户消息,同时删除对应的助手消息
-    if (message.role === 'user') {
-      const assistantMessage = messages.value.find(msg => msg.parentId === message.id)
-      if (assistantMessage) {
-        messages.value = messages.value.filter(msg => msg.id !== assistantMessage.id)
-      }
+    if (props.session?.id) {
+      // 按回合 id 整轮删除（前端直接消费 Turn 结构）
+      await apiService.deleteTurn(props.session.id, turn.id)
     }
     
-    // 从列表中移除
-    messages.value = messages.value.filter(msg => msg.id !== message.id)
+    // 整轮移除该回合
+    turns.value = turns.value.filter((t) => t.id !== turn.id)
     
     ElMessage.success(t('bot.sessionDialog.deleteSuccess'))
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除消息失败:', error)
+      console.error('删除本轮对话失败:', error)
       ElMessage.error(t('bot.sessionDialog.deleteFailed'))
     }
   }
 }
 
 // 编辑消息
-const handleEditMessage = async (message: Message) => {
+const handleEditMessage = async (block: TurnContent | null) => {
   ElMessage.info(t('bot.sessionDialog.editNotImplemented'))
   // TODO: 实现编辑功能
 }
 
 // 复制消息
-const handleCopyMessage = (message: Message) => {
+const handleCopyMessage = (block: TurnContent | null) => {
   // TurnItem 组件内部已经处理了复制逻辑
   // 这里可以添加额外的处理
 }

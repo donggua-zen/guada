@@ -6,10 +6,9 @@ import {
   RemoteModel,
 } from "../types/provider.types";
 import {
-  MessageRecord,
   LLMCompletionParams,
-  LLMResponseChunk,
-  ToolCallItem,
+  StreamChunk,
+  StreamUsage,
 } from "../types/llm.types";
 
 import {
@@ -47,7 +46,7 @@ export class MockAdapter implements IProtocolAdapter {
 
   async *chatCompletion(
     params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
     const model = params.model;
     const behavior = this.parseBehavior(model);
 
@@ -139,23 +138,22 @@ export class MockAdapter implements IProtocolAdapter {
   }
 
   /**
-   * 模拟正常流式输出
+   * 模拟正常流式输出（规范词表：block_start → text_delta* → block_end → usage → finish）
    */
   private async *simulateNormalStream(
     slow: boolean,
-  ): AsyncGenerator<LLMResponseChunk> {
+  ): AsyncGenerator<StreamChunk> {
     const text = "这是一条来自 Mock 供应商的测试消息。用于验证流式输出、超时重试等机制是否正常工作。";
     const chunks = text.split("");
+    const usage: StreamUsage = {
+      promptTokens: 10,
+      completionTokens: 30,
+      totalTokens: 40,
+    };
 
+    yield { type: "block_start", index: 0, blockType: "text" };
     for (const char of chunks) {
-      yield {
-        type: "text",
-        content: char,
-        reasoningContent: null,
-        finishReason: null,
-        toolCalls: undefined,
-        usage: null,
-      };
+      yield { type: "text_delta", index: 0, text: char };
 
       if (slow) {
         await new Promise((r) => setTimeout(r, 100));
@@ -163,20 +161,13 @@ export class MockAdapter implements IProtocolAdapter {
         await new Promise((r) => setTimeout(r, 20));
       }
     }
-
-    // 发送 finish chunk
     yield {
-      type: "finish",
-      content: null,
-      reasoningContent: null,
-      finishReason: "stop",
-      toolCalls: undefined,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 30,
-        totalTokens: 40,
-      },
+      type: "block_end",
+      index: 0,
+      block: { type: "text", contentId: "", text },
     };
+    yield { type: "usage", usage };
+    yield { type: "finish", finishReason: "stop" };
   }
 
   /**

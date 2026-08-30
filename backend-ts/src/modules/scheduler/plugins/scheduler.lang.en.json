@@ -17,5 +17,7 @@
   "scheduler_toggle_task.executing": "Toggling task state",
   "scheduler_toggle_task.completed": "Toggled task state",
   "scheduler_toggle_task.aggregate.executing": "Toggling state of {n} scheduled tasks",
-  "scheduler_toggle_task.aggregate.completed": "Toggled state of {n} scheduled tasks"
+  "scheduler_toggle_task.aggregate.completed": "Toggled state of {n} scheduled tasks",
+  "scheduler.toolkitDescription": "Scheduled task management and reminders"
+
 }

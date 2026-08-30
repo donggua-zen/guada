@@ -3,5 +3,7 @@
   "skill.description": "Skill system management tools",
   "skill.toolkitName": "Skill Instructions",
   "skill_learn.executing": "Reading skill",
-  "skill_learn.completed": "Read skill"
+  "skill_learn.completed": "Read skill",
+  "skill.toolkitDescription": "Discover and load skills"
+
 }

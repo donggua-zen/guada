@@ -68,14 +68,14 @@
           <slot name="buttons"></slot>
           <!-- 运行模式按钮 -->
           <template v-if="!props.readonly">
-            <button ref="runModeButtonRef" class="tool-btn" :class="{ 'run-mode-free': isFreeMode }" @click.stop="toggleRunModePopover">
+            <button ref="sandboxModeButtonRef" class="tool-btn" :class="{ 'run-mode-unrestricted': isUnrestrictedMode }" @click.stop="toggleSandboxModePopover">
               <el-icon size="16">
-                <component :is="runModeIcon" :class="isFreeMode ? 'text-red-500' : 'text-gray-600'" />
+                <component :is="sandboxModeIcon" :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
               </el-icon>
-              <span class="text-xs font-medium" :class="isFreeMode ? 'text-red-500' : ''">{{ runModeLabel }}</span>
+              <span class="text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{ sandboxModeLabel }}</span>
             </button>
-            <RunModePopover v-model:visible="runModePopoverVisible" :anchor-el="runModeButtonRef"
-              :current-value="currentRunMode" @select="handleRunModeChange" />
+            <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
+              :current-value="currentSandboxMode" @select="handleSandboxModeChange" />
             <el-divider direction="vertical"></el-divider>
           </template>
 
@@ -164,7 +164,7 @@ import FileItem from '../ui/FileItem.vue';
 import GdTooltip from '../ui/GdTooltip.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
-import RunModePopover from './chat-input/RunModePopover.vue';
+import SandboxModePopover from './chat-input/SandboxModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
@@ -172,7 +172,7 @@ import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUt
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
-  DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add24Regular
+  ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add24Regular
 } from '@vicons/fluent'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
@@ -203,7 +203,7 @@ interface ChatConfig {
   workspacePath?: string | null
   maxTokensLimit?: number | null
   knowledgeBaseIds?: string[]
-  runMode?: string
+  sandboxMode?: string
   attachments?: Record<string, string[]>
 }
 
@@ -448,30 +448,28 @@ watch(() => currentModel.value?.config, (config) => {
 const localThinkingEffort = ref<string>('none'); // 'none' | 'low' | 'medium' | 'high' | 'max' | ...
 
 // 运行模式相关
-const runModeButtonRef = ref<any>(null);
-const runModePopoverVisible = ref(false);
+const sandboxModeButtonRef = ref<any>(null);
+const sandboxModePopoverVisible = ref(false);
 
-const currentRunMode = computed(() => props.config?.runMode || 'normal');
-const runModeLabel = computed(() => {
-  if (currentRunMode.value === 'plan') return t('chat.input.runModePlan');
-  if (currentRunMode.value === 'sandbox') return t('chat.input.runModeSandbox');
-  if (currentRunMode.value === 'free') return t('chat.input.runModeFree');
-  return t('chat.input.runModeNormal');
+const currentSandboxMode = computed(() => props.config?.sandboxMode || 'workspace-write');
+const sandboxModeLabel = computed(() => {
+  if (currentSandboxMode.value === 'read-only') return t('chat.input.runModeReadOnly');
+  if (currentSandboxMode.value === 'workspace-write') return t('chat.input.runModeWorkspaceWrite');
+  return t('chat.input.runModeFullAccess');
 });
-const runModeIcon = computed(() => {
-  if (currentRunMode.value === 'plan') return ClipboardTask24Regular;
-  if (currentRunMode.value === 'sandbox') return ShieldLock24Regular;
-  if (currentRunMode.value === 'free') return ShieldError16Regular;
-  return DrinkCoffee16Regular;
+const sandboxModeIcon = computed(() => {
+  if (currentSandboxMode.value === 'read-only') return ClipboardTask24Regular;
+  if (currentSandboxMode.value === 'workspace-write') return ShieldLock24Regular;
+  return ShieldError16Regular;
 });
-const isFreeMode = computed(() => currentRunMode.value === 'free');
+const isUnrestrictedMode = computed(() => currentSandboxMode.value === 'danger-full-access');
 
-const toggleRunModePopover = () => {
-  runModePopoverVisible.value = !runModePopoverVisible.value;
+const toggleSandboxModePopover = () => {
+  sandboxModePopoverVisible.value = !sandboxModePopoverVisible.value;
 };
 
-const handleRunModeChange = (mode: string) => {
-  emit('config-change', { runMode: mode });
+const handleSandboxModeChange = (mode: string) => {
+  emit('config-change', { sandboxMode: mode });
 };
 
 const thinkingEffortOptions = computed(() => {
@@ -1632,13 +1630,13 @@ defineExpose({ insertText, insertBadge });
   background: var(--gd-color-sidebar-bg-active);
 }
 
-/* 自由模式按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */
-.run-mode-free {
+/* 自由编辑（danger-full-access）按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */
+.run-mode-unrestricted {
   color: #ef4444 !important;
   font-weight: 500;
 }
 
-.run-mode-free:hover {
+.run-mode-unrestricted:hover {
   color: #ef4444 !important;
 }
 

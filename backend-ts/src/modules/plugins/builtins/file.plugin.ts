@@ -5,6 +5,12 @@ import fg from "fast-glob";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
+import {
+  parseEscalationArgs,
+  type SandboxMode,
+  assertStrictlyWider,
+} from "../../../common/services/sandbox-policy";
+import { AskService } from "../../../common/services/ask.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { z } from "zod";
@@ -69,14 +75,24 @@ export class FilePlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(private workspaceService: WorkspaceService) {
+  constructor(
+    private workspaceService: WorkspaceService,
+    private askService: AskService,
+  ) {
     super();
   }
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    api.registerTool({
+    // ── file 能力包：全部文件工具与工作目录说明统一挂载，角色层按包启停 ──
+    const fileKit = api.registerToolKit({
+      id: "file",
+      name: "%file.name%",
+      description: "%file.toolkitDescription%",
+      activator: "Read, write, edit, list and search files in the workspace.",
+    });
+    fileKit.registerTool({
       name: "read",
       description:
         "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and appends continuation parameters when truncated. NOTE: line numbers are prepended by the tool (e.g. '     1\\t') and are NOT part of the original file content.",
@@ -224,7 +240,7 @@ export class FilePlugin extends PluginBase {
       dangerLevel: "safe",
     });
 
-    api.registerTool({
+    fileKit.registerTool({
       name: "glob",
       description:
         "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits. Automatically skips node_modules/.git/dist/build directories. Each result includes the file size (B/KB/MB); text files <=512KB also include the line count, helping you gauge file scale before reading.",
@@ -334,10 +350,10 @@ export class FilePlugin extends PluginBase {
       dangerLevel: "safe",
     });
 
-    api.registerTool({
+    fileKit.registerTool({
       name: "write",
       description:
-        "Write content to the specified file in full, automatically creating directories.",
+        "Write content to the specified file in full, automatically creating directories. Writes are confined to the workspace unless sandbox escalation is approved.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -349,12 +365,28 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe("File encoding, default utf-8"),
+        sandbox_permissions: z
+          .literal("danger-full-access")
+          .optional()
+          .describe(
+            "The wider sandbox mode this write needs (workspace → full access). Only valid as a one-shot retry after the workspace containment denied the path; requires justification and user approval.",
+          ),
+        justification: z
+          .string()
+          .optional()
+          .describe(
+            "Required with sandbox_permissions: one sentence for the user explaining why this exact write needs the wider access.",
+          ),
       }),
       execute: async (args, ctx) => {
         const { file_path, content, encoding = "utf-8" } = args;
         if (!file_path) throw new Error("file_path is required");
         const resolvedPath = this.resolvePath(file_path, ctx);
-        this.validateWritePath(file_path, ctx);
+        // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
+        // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
+        const approved = await this.resolveWriteEscalation("write", args, ctx);
+        if (approved !== "danger-full-access")
+          this.validateWritePath(file_path, ctx, approved ?? undefined);
         this.logger.log(`写入文件: ${file_path}`);
         return this.withFileLock(resolvedPath, async () => {
           await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
@@ -374,10 +406,10 @@ export class FilePlugin extends PluginBase {
       dangerLevel: "high",
     });
 
-    api.registerTool({
+    fileKit.registerTool({
       name: "edit",
       description:
-        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits.",
+        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. Edits are confined to the workspace unless sandbox escalation is approved.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -394,6 +426,18 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe("File encoding, default utf-8"),
+        sandbox_permissions: z
+          .literal("danger-full-access")
+          .optional()
+          .describe(
+            "The wider sandbox mode this edit needs (workspace → full access). Only valid as a one-shot retry after the workspace containment denied the path; requires justification and user approval.",
+          ),
+        justification: z
+          .string()
+          .optional()
+          .describe(
+            "Required with sandbox_permissions: one sentence for the user explaining why this exact edit needs the wider access.",
+          ),
       }),
       execute: async (args, ctx) => {
         const { file_path, old_text, new_text, encoding = "utf-8" } = args;
@@ -401,7 +445,11 @@ export class FilePlugin extends PluginBase {
         if (!old_text) throw new Error("old_text is required");
         if (new_text === undefined) throw new Error("new_text is required");
         const resolvedPath = this.resolvePath(file_path, ctx);
-        this.validateWritePath(file_path, ctx);
+        // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
+        // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
+        const approved = await this.resolveWriteEscalation("edit", args, ctx);
+        if (approved !== "danger-full-access")
+          this.validateWritePath(file_path, ctx, approved ?? undefined);
         this.logger.log(`编辑文件: ${file_path}`);
         return this.withFileLock(resolvedPath, async () => {
           const content = await fs.readFile(resolvedPath, {
@@ -473,7 +521,7 @@ export class FilePlugin extends PluginBase {
     //   dangerLevel: "critical",
     // });
 
-    api.registerTool({
+    fileKit.registerTool({
       name: "grep",
       description:
         "Search file contents. Supports single-file or recursive directory search (automatically skips node_modules/.git/dist/build). When pattern is all lowercase, the search is case-insensitive; when it contains uppercase letters, it is case-sensitive.",
@@ -568,7 +616,7 @@ export class FilePlugin extends PluginBase {
       dangerLevel: "safe",
     });
 
-    api.registerPrompt({
+    fileKit.registerPrompt({
       frequency: "STATIC",
       description: "当前会话工作目录和安全路径说明",
       content: (ctx: PluginContext) => {
@@ -652,11 +700,22 @@ export class FilePlugin extends PluginBase {
     );
   }
 
-  private validateWritePath(filePath: string, context?: PluginContext): void {
-    // 自由模式：不限制只能编辑工作区内的文件，允许写入任意路径
-    if (context?.session.getRunMode?.() === "free") {
+  private validateWritePath(
+    filePath: string,
+    context?: PluginContext,
+    approvedMode?: SandboxMode,
+  ): void {
+    // 安全模式判定：read-only 拒绝一切写入（one-shot 提权到 workspace-write 除外）；
+    // danger-full-access（自由编辑）不限工作目录
+    const mode = context?.session.getSandboxMode?.() ?? "workspace-write";
+    if (mode === "read-only" && approvedMode !== "workspace-write") {
+      throw new Error(
+        "Read-only mode: file writes are denied. To modify a file, retry once with sandbox_permissions + justification (user approval required), or ask the user to switch modes.",
+      );
+    }
+    if (mode === "danger-full-access") {
       this.logger.warn(
-        `[Free mode] 跳过工作区路径校验，允许写入任意路径: ${filePath}`,
+        `[danger-full-access] 跳过工作区路径校验，允许写入任意路径: ${filePath}`,
       );
       return;
     }
@@ -666,6 +725,43 @@ export class FilePlugin extends PluginBase {
       ? [context.session.workspacePath]
       : [];
     this.workspaceService.validateWritePath(resolved, extra);
+  }
+
+  /**
+   * 解析并执行一次文件写入提权（对齐 DSH escalation，one-shot）。
+   *
+   * 文件写入始终受会话安全模式约束：read-only / workspace-write 下有效模式 = 会话模式，
+   * 经 assertStrictlyWider 放宽（read-only → workspace-write/danger-full-access，
+   * workspace-write → danger-full-access）；danger-full-access 下提权无意义直接报错。
+   * 返回批准的模式（本次调用按其放行）；null = 未请求提权。
+   */
+  private async resolveWriteEscalation(
+    toolName: "write" | "edit",
+    args: { sandbox_permissions?: "danger-full-access" | "workspace-write"; justification?: string },
+    context?: PluginContext,
+  ): Promise<SandboxMode | null> {
+    const escalation = parseEscalationArgs(
+      args.sandbox_permissions,
+      args.justification,
+    );
+    if (!escalation) return null;
+
+    const currentMode: SandboxMode =
+      context?.session.getSandboxMode?.() ?? "workspace-write";
+    if (currentMode === "danger-full-access") {
+      throw new Error(
+        "danger-full-access already allows arbitrary paths; sandbox_permissions is unnecessary.",
+      );
+    }
+
+    assertStrictlyWider(currentMode, escalation.mode);
+    // 统一 Ask 审批（同意/拒绝/自定义回复，无超时）：批准正常返回；拒绝/中止抛 AskDeniedError
+    await this.askService.requestApproval(context!.session, {
+      toolCallId: context?.toolCallId || "",
+      toolName,
+      detail: `请求沙盒提权 ${currentMode} → ${escalation.mode}：${escalation.justification}`,
+    });
+    return escalation.mode;
   }
 
   private findEnclosingFunction(

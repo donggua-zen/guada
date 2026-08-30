@@ -1,6 +1,9 @@
 /// <reference types="jest" />
 
-import { LLMResponseChunk } from '../../../src/modules/llm-core/types/llm.types';
+import { StreamChunk } from '../../../src/common/types/stream-chunk.types';
+import type { SessionStreamEvent } from '../../../src/modules/chat/types/event-chunk.types';
+import { AskService } from '../../../src/common/services/ask.service';
+import { InteractionWaitService } from '../../../src/common/services/interaction-wait.service';
 
 /**
  * SessionRepository Mock 工厂
@@ -51,7 +54,7 @@ export function createMockSessionLockService(options?: { shouldFail?: boolean })
  *                          支持多轮调用时返回不同的流
  */
 export function createMockLLMService(
-  chunksOrGenerator?: LLMResponseChunk[] | (() => AsyncGenerator<LLMResponseChunk>)
+  chunksOrGenerator?: StreamChunk[] | (() => AsyncGenerator<StreamChunk>)
 ) {
   let callCount = 0;
   
@@ -105,16 +108,6 @@ export function createMockToolOrchestrator(options?: {
 }
 
 /**
- * SessionTokenTracker Mock 工厂
- */
-export function createMockTokenTracker() {
-  return {
-    addUsage: jest.fn().mockResolvedValue(undefined),
-    getStats: jest.fn().mockReturnValue(null),
-  };
-}
-
-/**
  * 创建 ISessionContext Mock（合并后包含对话状态）
  */
 export function createMockSessionContext(options?: {
@@ -128,8 +121,10 @@ export function createMockSessionContext(options?: {
     parentSessionId: null,
     characterId: null,
     workspacePath: '',
-    getRunMode: jest.fn(() => 'normal' as const),
-    setRunMode: jest.fn().mockResolvedValue(undefined),
+    getSandboxMode: jest.fn(() => 'workspace-write' as const),
+    setSandboxMode: jest.fn().mockResolvedValue(undefined),
+    setToolScope: jest.fn(),
+    getToolScope: jest.fn(() => null),
     getModelConfig: jest.fn((): any => ({
       id: 'model-1',
       modelName: 'gpt-4',
@@ -151,25 +146,32 @@ export function createMockSessionContext(options?: {
         ],
         allTools: [],
         enabledToolKits: [],
+        interceptors: [],
       },
     ]),
     getSettings: jest.fn(() => ({})),
-    getToolApprovalConfig: jest.fn(() => ({ enabled: false, requiresApproval: [] })),
+    appendAskAsked: jest.fn(async () => {}),
+    appendAskAnswered: jest.fn(async () => {}),
+    publishStream: jest.fn().mockResolvedValue(undefined),
     getMemoryConfig: jest.fn(() => ({})),
     getEffectiveContextWindow: jest.fn(() => options?.contextWindow || 8000),
     getWorkspacePath: jest.fn(() => ''),
     setMessageCursor: jest.fn(),
     // 对话状态方法
     initialize: jest.fn().mockResolvedValue(undefined),
+    loadHistory: jest.fn().mockResolvedValue(undefined),
     getMessages: jest.fn().mockResolvedValue([]),
     getHistory: jest.fn().mockResolvedValue([]),
-    appendParts: jest.fn().mockResolvedValue(undefined),
+    appendMessages: jest.fn().mockResolvedValue(undefined),
     persist: jest.fn().mockResolvedValue(undefined),
+    finalizeTurn: jest.fn().mockResolvedValue(undefined),
+    beginTurn: jest.fn().mockResolvedValue('turn-test-001'),
+    deleteTurn: jest.fn().mockResolvedValue(undefined),
+    resumeTurn: jest.fn().mockResolvedValue(undefined),
     addUserMessage: jest.fn().mockResolvedValue({ id: 'user-msg-id', contents: [{ id: 'content-001' }] }),
-    addAssistantMessageVersion: jest.fn().mockResolvedValue('assistant-msg-id'),
     generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
-    getTokenCount: jest.fn(() => 0),
-    getTokenBreakdown: jest.fn(() => ({ systemPrompt: 0, summary: 0, userPrompt: 0, history: 0, tools: 0 })),
+    getTokenCount: jest.fn(async () => 0),
+    getTokenBreakdown: jest.fn(async () => ({ systemPrompt: 0, summary: 0, userPrompt: 0, history: 0, tools: 0 })),
     shouldCompress: jest.fn().mockResolvedValue(false),
     compress: jest.fn().mockResolvedValue([]),
   };
@@ -199,16 +201,40 @@ export function createMockSessionContextService(options?: {
 export function createAllMocks(options?: {
   sessionData?: any;
   lockShouldFail?: boolean;
-  llmChunks?: LLMResponseChunk[];
-  llmGenerator?: () => AsyncGenerator<LLMResponseChunk>;
+  llmChunks?: StreamChunk[];
+  llmGenerator?: () => AsyncGenerator<StreamChunk>;
   toolCallsResponse?: any[];
   contextWindow?: number;
   thinkingEffort?: string;
 }) {
+  // publishStream 直发模式下测试断言的唯一事件源（引擎不再 yield，事件经 mock 捕获）
+  const publishedEvents: SessionStreamEvent[] = [];
+  const sessionContext = createMockSessionContext({
+    contextWindow: options?.contextWindow,
+    thinkingEffort: options?.thinkingEffort,
+  });
+  sessionContext.publishStream.mockImplementation(async (chunk: SessionStreamEvent) => {
+    publishedEvents.push(chunk);
+    // 默认对迭代暂停（kind=continue）应答"停止"，防止循环触顶后 ask 永久悬挂；
+    // 专项用例（继续/abort）会整体覆盖 publishStream 实现，不受此默认影响
+    if (chunk.type === 'ask_requested' && chunk.kind === 'continue') {
+      setImmediate(() => {
+        askWait.resolveAnswers('test-session-001', chunk.requestId, [
+          { id: 'continue', selected: ['停止'] },
+        ]);
+      });
+    }
+  });
+
+  // 统一 Ask：真实等待表 + 服务共享同一张表
+  // （publishStream 经 mock 捕获，等待由测试侧 askWait.resolveAnswers 唤醒）
+  const askWait = new InteractionWaitService();
+  const askService = new AskService(askWait);
+
   return {
     sessionRepo: createMockSessionRepo(options?.sessionData),
-    sessionLockService: createMockSessionLockService({ 
-      shouldFail: options?.lockShouldFail 
+    sessionLockService: createMockSessionLockService({
+      shouldFail: options?.lockShouldFail
     }),
     llmService: createMockLLMService(
       options?.llmGenerator || (options?.llmChunks ? () => {
@@ -223,14 +249,13 @@ export function createAllMocks(options?: {
     toolOrchestrator: createMockToolOrchestrator({
       toolCallsResponse: options?.toolCallsResponse,
     }),
-    sessionContext: createMockSessionContext({
-      contextWindow: options?.contextWindow,
-      thinkingEffort: options?.thinkingEffort,
-    }),
+    sessionContext,
+    publishedEvents,
     streamManager: {
-      broadcast: jest.fn(),
+      publish: jest.fn(),
       stopStream: jest.fn(),
     },
-    tokenTracker: createMockTokenTracker(),
+    askWait,
+    askService,
   };
 }

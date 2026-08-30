@@ -13,6 +13,8 @@ import { ref, type Ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useSessionStore } from "@/stores/session";
 import { apiService } from "@/services/ApiService";
+import { streamReceiver } from "@/services/modules/StreamReceiver";
+import { projectChunk } from "@/services/modules/streamProjector";
 
 export function useSessionEvents() {
   const sessionStore = useSessionStore();
@@ -44,6 +46,18 @@ export function useSessionEvents() {
     unsubscribers.push(stopRouteWatch);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // === 接收链路常驻(与发送分离) ===
+    // 应用启动即建立:唯一 receiver 常驻消费全局 SSE 所有会话事件,
+    // 按 sessionId 路由 → 有缓存写缓存 / 无缓存暂存 finish 后事件。
+    // 与发送链路(handleSendMessage → apiService.chat)完全独立。
+    unsubscribers.push(
+      streamReceiver.subscribeAll((chunk: any) => {
+        const sid = chunk.sessionId;
+        if (!sid) return;
+        projectChunk(sessionStore, sid, chunk);
+      }),
+    );
 
     // === 会话 CRUD 事件 ===
 
@@ -124,26 +138,56 @@ export function useSessionEvents() {
     // === 流式状态事件 ===
 
     unsubscribers.push(
-      apiService.onSessionEvent("stream_started", (event) => {
+      apiService.onSessionEvent("stream_status_changed", (event) => {
         const { sessionId, payload } = event;
-        if (
-          payload?.session?.sessionType === "sub_agent" ||
-          payload?.session?.sessionType === "bot"
-        )
-          return;
+        const status = payload?.status;
+        const sessionType = payload?.sessionType ?? payload?.session?.sessionType;
+        const isSubOrBot = sessionType === "sub_agent" || sessionType === "bot";
 
-        // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
-        sessionStore.setSidebarFlag(sessionId, "working", true);
+        // 统一写流状态(子 Agent 也写——ChatPage watch store 派生 agentTabs 状态)
+        sessionStore.setStreamStatus(
+          sessionId,
+          status === "running" ? "running" : status === "completed" ? "completed" : "error",
+        );
 
-        // 忽略自身发起的流
+        // isStreaming 由实际流状态驱动(修复:此前 subscribeToActiveStream 盲置 true 且不置回,
+        // 导致打开每个会话都显示流式当中):running → true,completed/error → false。
+        sessionStore.setSessionIsStreaming(sessionId, status === "running");
+
+        // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象
+        if (isSubOrBot) return;
+
+        // 主会话:侧边栏"工作中"(后端确认 running 才显示)
+        sessionStore.setSidebarFlag(sessionId, "working", status === "running");
+
+        // 回合级工作态兜底复位：流终止(completed/user_cancel/error)时,
+        // 即使 turn_end 事件因连接中断丢失,也确保回合不卡在"工作中"。
+        if (status !== "running") {
+          const turns = sessionStore.getTurns(sessionId) || [];
+          for (const t of turns) {
+            if (t.state?.isWorking) t.state.isWorking = false;
+          }
+        }
+
+        // 流结束后自动消费队列——放在 source 过滤之前：
+        // 队列是本窗口 store 的本地状态,任何本窗可见的流完成都应尝试消费
+        // (自身流完成触发单窗口排队补发;他窗流完成触发多窗口补发)。
+        // 修复:原先在 source 过滤之后,自身流完成时被跳过 → 单窗口排队卡死。
+        if (status !== "running" && sessionStore.getQueueLength(sessionId) > 0) {
+          drainQueue(sessionId);
+        }
+
+        // 忽略自身发起的流(不更新会话对象/未读标记)
         if (event.source === apiService.getClientId()) return;
 
-        if (payload?.session) {
-          const existing = sessionStore.getSession(sessionId);
-          if (existing) {
-            Object.assign(existing, payload.session);
-          } else {
-            sessionStore.setSession(payload.session);
+        if (status === "running") {
+          if (payload?.session) {
+            const existing = sessionStore.getSession(sessionId);
+            if (existing) {
+              Object.assign(existing, payload.session);
+            } else {
+              sessionStore.setSession(payload.session);
+            }
           }
         }
 
@@ -157,38 +201,13 @@ export function useSessionEvents() {
         }
       }),
     );
-
-    unsubscribers.push(
-      apiService.onSessionEvent("stream_finished", (event) => {
-        const { sessionId, payload } = event;
-        if (
-          payload?.sessionType === "sub_agent" ||
-          payload?.sessionType === "bot"
-        )
-          return;
-
-        sessionStore.setSidebarFlag(sessionId, "working", false);
-
-        if (
-          sessionId !== currentSessionId.value ||
-          windowHidden.value
-        ) {
-          sessionStore.setSidebarFlag(sessionId, "unread", true);
-        }
-
-        if (sessionStore.getQueueLength(sessionId) > 0) {
-          drainQueue(sessionId);
-        }
-      }),
-    );
   }
 
   /**
    * 消费指定会话的队列
    *
-   * 统一用 fire-and-forget (POST /chat/send) 发送。
-   * 活动会话：后端 stream_started 事件到达后 ChatPage 自动 subscribeToActiveStream
-   *   （POST /chat/send 的 source.clientId=null，不会被 ChatPage 的"忽略自身发起"逻辑过滤）
+   * 统一用 fire-and-forget (POST /chat/stream) 发送。
+   * 活动会话：流完成事件触发 drainQueue（排在 source 过滤前,自身流完成也会消费队列）；
    * 非活动会话：后台运行，用户切回时从后端重新读取消息
    */
   async function drainQueue(targetSessionId: string) {
@@ -201,11 +220,14 @@ export function useSessionEvents() {
       });
 
       try {
-        await apiService.sendMessage({
+        await apiService.chat({
           sessionId: targetSessionId,
-          content: item.content,
-          fileIds: item.files.map((f: any) => f.id),
-          knowledgeBaseIds: item.knowledgeBaseIds,
+          regenerationMode: "overwrite",
+          userMessage: {
+            content: item.content,
+            files: item.files.map((f: any) => f.id),
+            knowledgeBaseIds: item.knowledgeBaseIds,
+          },
         });
         // 成功：出队
         sessionStore.dequeueMessage(targetSessionId);
@@ -228,19 +250,6 @@ export function useSessionEvents() {
     }
   }
 
-  /**
-   * 尝试立即消费指定会话的队列（用于会话切换时恢复）
-   * 供 ChatPanel 调用
-   */
-  async function tryDrainQueue(sessionId: string) {
-    if (
-      sessionStore.getQueueLength(sessionId) > 0 &&
-      !sessionStore.sessionIsStreaming(sessionId)
-    ) {
-      await drainQueue(sessionId);
-    }
-  }
-
   function cleanup() {
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     for (const unsub of unsubscribers) {
@@ -253,5 +262,5 @@ export function useSessionEvents() {
     unsubscribers.length = 0;
   }
 
-  return { init, cleanup, drainQueue, tryDrainQueue };
+  return { init, cleanup, drainQueue };
 }

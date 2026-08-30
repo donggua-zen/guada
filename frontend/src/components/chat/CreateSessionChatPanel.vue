@@ -171,7 +171,7 @@ const currentSession = ref<any>({
     referencedKbs: userSelectedKnowledgeBaseIds.value,
     modelName: null,
     thinkingEffort: userSelectedThinkingEffort.value,
-    runMode: 'normal',
+    sandboxMode: 'workspace-write',
     maxTokensLimit: null
   }
 })
@@ -426,7 +426,7 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
 
   // 运行模式
-  runMode: currentSession.value?.settings?.runMode || 'normal',
+  sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
 
   // 工作目录路径
   workspacePath: currentSession.value?.workspacePath || null,
@@ -478,10 +478,10 @@ const handleConfigChange = (config: any): void => {
     console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
 
-  // 处理运行模式变更
-  if (typeof config.runMode !== 'undefined') {
-    currentSession.value.settings.runMode = config.runMode;
-    console.log('保存 runMode 到会话:', config.runMode);
+  // 处理安全模式变更
+  if (typeof config.sandboxMode !== 'undefined') {
+    currentSession.value.settings.sandboxMode = config.sandboxMode;
+    console.log('保存 sandboxMode 到会话:', config.sandboxMode);
   }
 
   // 处理分组选择

@@ -78,7 +78,12 @@ export class SkillsController {
       return { content: '' };
     }
 
-    // 直接读取原始 SKILL.md 文件内容
+    // 注册式技能（插件提供，内嵌正文）→ 直接返回 content
+    if (skill.content) {
+      return { content: skill.content };
+    }
+
+    // 文件式技能：直接读取原始 SKILL.md 文件内容
     const fs = await import('fs/promises');
     const path = await import('path');
     const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');

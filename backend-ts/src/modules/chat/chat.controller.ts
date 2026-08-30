@@ -11,16 +11,20 @@ import {
   HttpException,
   HttpStatus,
   Headers,
+  BadRequestException,
+  NotFoundException,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
 import { SessionService } from "./session.service";
 import { MessageRepository } from "../../common/database/message.repository";
+import { MessageFile } from "../../common/persistence/types";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
+import { InteractionWaitService } from "../../common/services/interaction-wait.service";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
@@ -33,6 +37,7 @@ export class ChatController {
     private streamManager: SessionStreamManager,
     private chatRunner: ChatRunnerService,
     private tagParserPipeline: TagParserPipeline,
+    private interactionWait: InteractionWaitService,
   ) {}
 
   /**
@@ -50,12 +55,11 @@ export class ChatController {
       sessionId: string;
       regenerationMode?: string;
       resumeData?: any;
-      lastContentId?: string | null;
       userMessage?: {
         id?: string;
         content?: string;
-        files?: string[];
-        replaceMessageId?: string;
+        files?: MessageFile[];
+        replaceTurnId?: string;
         knowledgeBaseIds?: string[];
       };
     },
@@ -68,7 +72,6 @@ export class ChatController {
       sessionId,
       regenerationMode = "overwrite",
       resumeData,
-      lastContentId,
       userMessage,
     } = body;
 
@@ -92,58 +95,25 @@ export class ChatController {
       }
     }
 
-    // 设置 SSE 响应头
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
-    // 定义回调函数，将流事件写入 HTTP 响应
-    const callbacks = {
-      onEvent: (data) => {
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify(data)}\n\n`);
-        }
-      },
-      onComplete: () => {
-        if (!res.writableEnded) {
-          res.write("data: [DONE]\n\n");
-          res.end();
-        }
-      },
-      onError: (err: any) => {
-        this.logger.error(`Stream error for ${sessionId}:`, err);
-        if (!res.writableEnded) {
-          res.end();
-        }
-      },
-    };
-
-    // 调用 ChatRunnerService 处理全部业务逻辑
+    // 合并后:/chat/stream 降级为 RPC,不再持有 SSE 长连接。
+    // 流式事件经 chat-runner 单点发布 streamManager.publish(eventBuffer 补发 + SSE 直投合一)。
     try {
-      const unsubscribe = await this.chatRunner.startStream(
+      await this.chatRunner.startStream(
         {
           sessionId,
           userId: user.id,
           userMessage,
           regenerationMode: regenerationMode || "overwrite",
           resumeData,
-          lastContentId: lastContentId || null,
           source,
         },
-        callbacks,
+        undefined, // 不再通过 HTTP 长连接接收事件,事件走全局 SSE
       );
 
-      // 客户端断开时取消订阅
-      let closed = false;
-      const handleClose = () => {
-        if (closed) return;
-        closed = true;
-        unsubscribe();
-        if (!res.writableEnded) res.end();
-      };
-      req.on("close", handleClose);
+      // 立即返回,不再阻塞到流结束
+      if (!res.writableEnded) {
+        res.status(200).json({ ok: true });
+      }
     } catch (error: any) {
       if (error instanceof HttpException) {
         const response = error.getResponse() as any;
@@ -206,82 +176,70 @@ export class ChatController {
   }
 
   /**
-   * 工具审批接口
+   * 统一交互应答接口（审批 / 询问 / 迭代暂停共用，对齐 DSH POST /api/respond）
    *
-   * 前端调用此接口批量提交审批决策。
-   * 审批后，前端需要重新发起流式请求，Agent 循环会检测到 approvalContext.decisions
-   * 并根据每个工具的决策执行相应的操作（approved: 执行工具, rejected: 生成错误响应）。
+   * 前端回传 ask_requested 帧携带的凭证 requestId（uuid）与答案批。
+   * 只做一件事：校验答案与挂起问题单匹配 → InteractionWaitService.resolveAnswers
+   * 原地唤醒阻塞中的工具/引擎；无等待者 → 404。
+   * 审计（ask/answered）与终结帧（ask_resolved）由 AskService 应答落地后统一写回，
+   * 本端点不落库、不加载历史。
    */
-  @Post("approve-tools")
-  async approveTools(
+  @Post("respond")
+  async respond(
     @Body()
     body: {
-      messageId: string; // 助手消息 ID
-      decisions: Array<{
-        // 所有需要审批的工具的决策
-        toolCallId: string;
-        decision: "approve" | "reject";
-        reason?: string; // 拒绝原因（可选）
+      sessionId: string; // 会话 ID
+      requestId: string; // 临时凭证（uuid，ask_requested 事件携带）
+      answers: Array<{
+        // 与问题单逐 id 对应
+        id: string;
+        selected: string[]; // 选中的 option label（custom 时可为空）
+        custom?: string; // 自定义回复（单选时与 selected 互斥）
       }>;
     },
   ) {
-    const { messageId, decisions } = body;
-
-    // 验证消息存在，并获取当前的 content
-    const message = await this.messageRepo.findById(messageId, {
-      withContents: true,
-    });
-
-    if (!message || !message.contents || message.contents.length === 0) {
-      throw new Error("Message not found");
+    const { sessionId, requestId, answers } = body ?? ({} as any);
+    if (!sessionId || !requestId) {
+      throw new BadRequestException("sessionId and requestId are required");
+    }
+    if (!Array.isArray(answers) || answers.length === 0) {
+      throw new BadRequestException("answers are required");
     }
 
-    // 获取当前 content 的最后一个轮次（ReAct 循环中最新的一轮）
-    const currentContent = message.contents[message.contents.length - 1];
-    const metadata = (currentContent.metadata as any) || {};
-    const approvalContext = metadata.approvalContext;
-
-    if (!approvalContext || approvalContext.type !== "approval") {
-      throw new Error("No pending approval context found");
-    }
-
-    if (approvalContext.status !== "pending") {
-      throw new Error(`Approval already ${approvalContext.status}`);
-    }
-
-    // 验证决策数量匹配
-    const pendingToolCallIds = approvalContext.pendingToolCallIds || [];
-    if (decisions.length !== pendingToolCallIds.length) {
-      throw new Error(
-        `Expected ${pendingToolCallIds.length} decisions, got ${decisions.length}`,
-      );
-    }
-
-    // 验证所有决策的工具 ID 都在 pendingToolCallIds 中
-    const pendingIds = new Set(pendingToolCallIds);
-    for (const decision of decisions) {
-      if (!pendingIds.has(decision.toolCallId)) {
-        throw new Error(`Invalid toolCallId: ${decision.toolCallId}`);
+    // 轻校验：答案 id 与挂起问题单逐 id 对应，选中 label 必须是原题选项，
+    // 单选至多一项且与 custom 互斥（对齐 DSH matchesQuestions）
+    const questions = this.interactionWait.getPendingQuestions(sessionId, requestId);
+    if (questions) {
+      const byId = new Map(questions.map((q) => [q.id, q]));
+      for (const a of answers) {
+        const q = byId.get(a.id);
+        if (!q) {
+          throw new BadRequestException(`answer id mismatch: ${a.id}`);
+        }
+        const selected = Array.isArray(a.selected) ? a.selected : [];
+        for (const label of selected) {
+          if (!q.options.some((o) => o.label === label)) {
+            throw new BadRequestException(`invalid option for question ${a.id}: ${label}`);
+          }
+        }
+        if (!q.multiSelect && selected.length > 1) {
+          throw new BadRequestException(`question ${a.id} is single-select`);
+        }
+        if (!q.multiSelect && selected.length > 0 && a.custom?.trim()) {
+          throw new BadRequestException(`question ${a.id}: custom and selection are mutually exclusive`);
+        }
       }
     }
 
-    // 更新审批状态和决策
-    metadata.approvalContext = {
-      ...approvalContext,
-      status: "completed", // 标记为已完成
-      decisions: decisions,
-      updatedAt: new Date().toISOString(),
-    };
+    // 有等待者 → 唤醒原地阻塞的工具/引擎；无等待者 → 报错
+    const delivered = this.interactionWait.resolveAnswers(sessionId, requestId, answers);
+    if (!delivered) {
+      throw new NotFoundException(
+        `No pending ask wait for session ${sessionId}, request ${requestId}`,
+      );
+    }
 
-    // 保存更新后的 content metadata
-    await this.messageRepo.update(currentContent.id, { metadata });
-
-    return {
-      success: true,
-      messageId,
-      contentId: currentContent.id,
-      decisionsCount: decisions.length,
-    };
+    return { success: true, requestId, answersCount: answers.length };
   }
 
   /**
@@ -291,64 +249,4 @@ export class ChatController {
    * 前端通过全局 stream_started/stream_finished SSE 事件感知状态。
    * 如果会话已有活跃流，返回 409 SESSION_BUSY。
    */
-  @Post("send")
-  async sendMessage(
-    @Body()
-    body: {
-      sessionId: string;
-      content: string;
-      fileIds?: string[];
-      knowledgeBaseIds?: string[];
-      replaceMessageId?: string;
-    },
-    @CurrentUser() user: any,
-  ) {
-    const { sessionId, content, fileIds, knowledgeBaseIds, replaceMessageId } =
-      body;
-
-    const source: Record<string, any> = { clientId: null };
-
-    if (content) {
-      try {
-        const parsed = await this.tagParserPipeline.parse(content, {
-          sessionId,
-          userId: user.id,
-        });
-        if (parsed.content !== parsed.originalText) {
-          source.parseResult = { content: parsed.content };
-        }
-      } catch (error: any) {
-        this.logger.warn(
-          `标签解析失败，使用原始内容: ${error?.message || error}`,
-        );
-      }
-    }
-
-    try {
-      await this.chatRunner.startStream(
-        {
-          sessionId,
-          userId: user.id,
-          userMessage: {
-            content,
-            files: fileIds,
-            replaceMessageId,
-            knowledgeBaseIds,
-          },
-          regenerationMode: "overwrite",
-          source,
-        },
-        // 不传 callbacks → 后端启动流但不向此请求者推送 SSE
-      );
-      return { success: true, sessionId };
-    } catch (error: any) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException(
-        { error: error.message || "发送失败", code: "SEND_FAILED" },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
 }

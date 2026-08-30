@@ -1,7 +1,8 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
-import type { Session, SessionState, SessionSettings, QueuedMessage } from '@/types/session'
+import type { Session, SessionState, SessionSettings, QueuedMessage, StreamStatus } from '@/types/session'
+import type { Turn } from '@/types/message'
 
 /**
  * 未分组的默认分组ID（虚拟ID，不对应后端实体）
@@ -45,19 +46,32 @@ export const useSessionStore = defineStore('session', () => {
 
     const sessions: Ref<Map<string, SessionState>> = ref(new Map())
 
+    /** 非响应式 LRU 访问时间戳(按会话记录最近访问,淘汰时用;不触发 Vue 响应式) */
+    const sessionLastAccess = new Map<string, number>()
+
     // 会话侧边栏状态（未读 / 工作中）
     const sessionSidebarStates: Ref<Map<string, { unread: boolean; working: boolean }>> = ref(new Map())
 
+    /** 会话内容缓存上限(LRU):超过则淘汰最久未用的会话缓存 */
+    const MAX_CACHED_SESSIONS = 8
+
+    /** 每会话消息轮次上限:单会话 turns 超过自动移除最旧 */
+    const MAX_TURNS_PER_SESSION = 200
+
     /**
-     * 获取或初始化会话状态
+     * 获取或初始化会话状态(LRU 缓存:命中续期,超限淘汰最久未用)
+     * 续期只更新非响应式访问时间戳,绝不 delete/set sessions.value(响应式 Map)——
+     * 否则渲染路径每次 getSessionState 都会改响应式状态 → 无限递归(Maximum recursive updates)。
      * @param sessionId - 会话 ID
      */
     const getSessionState = (sessionId: string): SessionState => {
         if (!sessions.value.has(sessionId)) {
             sessions.value.set(sessionId, {
                 messages: [],
+                turns: [],
                 isStreaming: false,
                 isCompressing: false,
+                streamStatus: 'idle',
                 inputMessage: {
                     content: '',
                     files: [],
@@ -69,6 +83,24 @@ export const useSessionStore = defineStore('session', () => {
                 },
                 messageQueue: [],
             })
+            sessionLastAccess.set(sessionId, Date.now())
+            // LRU:超限淘汰最久未用(按非响应式访问时间,不淘汰刚插入的当前会话)
+            while (sessions.value.size > MAX_CACHED_SESSIONS) {
+                let oldest: string | null = null
+                let oldestTime = Infinity
+                for (const [sid, t] of sessionLastAccess) {
+                    if (sessions.value.has(sid) && t < oldestTime) {
+                        oldestTime = t
+                        oldest = sid
+                    }
+                }
+                if (oldest === null || oldest === sessionId) break
+                sessions.value.delete(oldest)
+                sessionLastAccess.delete(oldest)
+            }
+        } else {
+            // LRU 续期:只更新非响应式访问时间戳,不修改响应式 Map(避免渲染递归)
+            sessionLastAccess.set(sessionId, Date.now())
         }
         return sessions.value.get(sessionId)!
     }
@@ -221,6 +253,67 @@ export const useSessionStore = defineStore('session', () => {
         session.lastUpdated = Date.now()
     }
 
+    // ── Turn 直连（后端 getTurns → 前端渲染，不再打平为扁平消息） ──
+
+    /**
+     * 获取回合列表
+     * @param sessionId - 会话 ID
+     */
+    const getTurns = (sessionId: string): Turn[] => {
+        return getSessionState(sessionId).turns
+    }
+
+    /**
+     * 设置回合列表（初始/整页加载）
+     * @param sessionId - 会话 ID
+     * @param newTurns - 回合列表
+     */
+    const setTurns = (sessionId: string, newTurns: Turn[]): void => {
+        const session = getSessionState(sessionId)
+        session.turns.splice(0, session.turns.length, ...newTurns)
+        session.lastUpdated = Date.now()
+    }
+
+    /**
+     * 在回合列表前部插入（用于加载历史更早回合）
+     * @param sessionId - 会话 ID
+     * @param newTurns - 要插入的回合列表
+     */
+    const prependTurns = (sessionId: string, newTurns: Turn[]): void => {
+        const session = getSessionState(sessionId)
+        session.turns.unshift(...newTurns)
+        session.lastUpdated = Date.now()
+    }
+
+    /**
+     * 追加回合(投影写:事件到达即改缓存时调用),超过轮次上限自动移除最旧。
+     * @param sessionId - 会话 ID
+     * @param turn - 要追加的回合外壳
+     */
+    const pushTurn = (sessionId: string, turn: Turn): void => {
+        const session = getSessionState(sessionId)
+        session.turns.push(turn)
+        // 每会话消息轮次上限:超出移除最旧
+        while (session.turns.length > MAX_TURNS_PER_SESSION) {
+            session.turns.shift()
+        }
+        session.lastUpdated = Date.now()
+    }
+
+    /**
+     * 按回合 id 删除回合（整轮遮蔽）
+     * @param sessionId - 会话 ID
+     * @param turnId - 回合 id
+     */
+    const deleteTurnById = (sessionId: string, turnId: string): void => {
+        const session = getSessionState(sessionId)
+        const index = session.turns.findIndex((t: Turn) => t.id === turnId)
+        if (index !== -1) {
+            session.turns.splice(index, 1)
+            session.lastUpdated = Date.now()
+        }
+    }
+
     /**
      * 在消息列表前部插入消息（用于加载历史消息）
      * @param sessionId - 会话 ID
@@ -233,23 +326,15 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 获取最早的消息 ID（用于分页加载更早消息）
+     * 获取最早的回合 ID（用于向上滚动分页的游标）。
+     * ⚠️ 必须是回合 id：后端 getTurns 按 beforeTurnId 匹配回合外壳 id，
+     * 传消息 id 会 findIndex 落空返回空页并静默终止分页。
      * @param sessionId - 会话 ID
-     * @returns 最早消息的 ID，如果没有则返回 null
+     * @returns 最早回合的 ID，如果没有则返回 null
      */
-    const getEarliestMessageId = (sessionId: string): string | null => {
-        const messages = getSessionState(sessionId).messages
-        return messages.length > 0 ? messages[0].id : null
-    }
-
-    /**
-     * 获取最新消息 ID
-     * @param sessionId - 会话 ID
-     * @returns 最新消息的 ID，如果没有则返回 null
-     */
-    const getLatestMessageId = (sessionId: string): string | null => {
-        const messages = getSessionState(sessionId).messages
-        return messages.length > 0 ? messages[messages.length - 1].id : null
+    const getEarliestTurnId = (sessionId: string): string | null => {
+        const turns = getSessionState(sessionId).turns
+        return turns.length > 0 ? turns[0].id : null
     }
 
     /**
@@ -297,6 +382,20 @@ export const useSessionStore = defineStore('session', () => {
      */
     const setSessionIsStreaming = (sessionId: string, isStreaming: boolean): void => {
         getSessionState(sessionId).isStreaming = isStreaming
+    }
+
+    /**
+     * 设置统一流状态(统一订阅器写入)
+     *
+     * 仅更新 streamStatus 字段。侧边栏 working 由 useSessionEvents 显式设置(仅主会话),
+     * 此处不写——子 Agent 也通过此方法写状态(供 ChatPage watch 派生 tab),但不出现在侧边栏。
+     * 注意:不同步 isStreaming——那是前端"本窗口已订阅/发起"标记,
+     * 由 processStreamLoop / subscribeToActiveStream 维护;若在此置 true,
+     * 会误挡 subscribeToActiveStream 的 isStreaming 守卫(其他窗口发起时本窗口无法订阅)。
+     */
+    const setStreamStatus = (sessionId: string, status: StreamStatus): void => {
+        const state = getSessionState(sessionId)
+        state.streamStatus = status
     }
 
     // === 消息队列操作 ===
@@ -364,6 +463,18 @@ export const useSessionStore = defineStore('session', () => {
      */
     const setSessionIsCompressing = (sessionId: string, isCompressing: boolean): void => {
         getSessionState(sessionId).isCompressing = isCompressing
+    }
+
+    // ─── 会话级统一交互卡（审批/询问/迭代暂停共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+
+    /** 读取会话级统一交互卡状态 */
+    const sessionPendingAsk = (sessionId: string) => {
+        return getSessionState(sessionId).pendingAsk
+    }
+
+    /** 写入/清除会话级统一交互卡状态 */
+    const setSessionPendingAsk = (sessionId: string, pendingAsk: SessionState['pendingAsk']): void => {
+        getSessionState(sessionId).pendingAsk = pendingAsk
     }
 
     /**
@@ -507,6 +618,7 @@ export const useSessionStore = defineStore('session', () => {
             state.messages = []
             state.isStreaming = false
             state.isCompressing = false
+            state.pendingAsk = undefined
             state.inputMessage = {
                 content: '',
                 files: [],
@@ -530,14 +642,21 @@ export const useSessionStore = defineStore('session', () => {
         addMessage,
         setMessages,
         prependMessages,
-        getEarliestMessageId,
-        getLatestMessageId,
+        getTurns,
+        setTurns,
+        prependTurns,
+        pushTurn,
+        deleteTurnById,
+        getEarliestTurnId,
         deleteMessage,
         updateMessage,
         sessionIsStreaming,
         setSessionIsStreaming,
+        setStreamStatus,
         sessionIsCompressing,
         setSessionIsCompressing,
+        sessionPendingAsk,
+        setSessionPendingAsk,
         enqueueMessage,
         dequeueMessage,
         peekQueue,

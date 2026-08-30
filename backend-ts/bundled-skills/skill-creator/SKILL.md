@@ -2,8 +2,8 @@
 name: skill-creator
 description: Creating and authoring new AI skills with proper SKILL.md structure, YAML frontmatter validation, directory conventions, and registration workflow
 version: 1.2.0
-author: system
-tags: [system, meta, skill-management, authoring, creating]
+author: guada
+tags: [meta, skill-management, authoring]
 ---
 
 # Skill Creator — Comprehensive Skill Authoring Guide
@@ -54,10 +54,8 @@ A single `SKILL.md` file is all that's required. The optional directories are fo
 
 | Source | Directory | Persistence |
 |--------|-----------|-------------|
-| **System (built-in)** | `{SKILLS_DIR}/.system/<name>/` | Synced from `bundled-skills/` on startup, overwritten on upgrade, **cannot be uninstalled** |
-| **User (installed)** | `{SKILLS_DIR}/<name>/` | Installed by user, can be updated/uninstalled |
+| **User (installed)** | `{SKILL_DIR}/<name>/` | Installed by user, can be updated/uninstalled |
 
-`SKILLS_DIR` defaults to `~/.guada/skills/` (where `~` is the user's home directory, e.g. `C:\Users\<username>\.guada\skills` on Windows); configurable via `SKILLS_DIR` environment variable.
 
 ---
 
@@ -261,7 +259,7 @@ Directory name **must** match the planned `name` field.
 
 ### Step 3: Write SKILL.md
 
-Create `{SKILLS_DIR}/<skill-name>/SKILL.md` with:
+Create `{SKILL_DIR}/<skill-name>/SKILL.md` with:
 
 ```markdown
 ---
@@ -282,13 +280,8 @@ mkdir scripts/ references/ assets/
 
 ### Step 5: Validate the Skill ⚠️ Required
 
-**Before installing**, run the bundled validation script to check for errors:
+**Before installing**, run the bundled validation script to check for errors. The script lives in this skill's own directory (`scripts/validate-skill.mjs`), relative to the `resourceBase` directory returned by the `skill_learn` tool. Run it from that directory:
 
-```bash
-node ~/.guada/skills/skill-creator/scripts/validate-skill.mjs <skill-name>
-```
-
-Or if you're in the skill-creator directory:
 ```bash
 node scripts/validate-skill.mjs <skill-name>
 ```
@@ -302,7 +295,7 @@ If validation fails, fix the reported issues and re-run until it passes.
 After validation passes, move the skill directory to the system's skills directory:
 
 ```
-mv <skill-name> ~/.guada/skills/<skill-name>
+mv <skill-name> {SKILL_DIR}/<skill-name>
 ```
 
 > **Windows users**: `~` maps to your user directory, i.e. `C:\Users\<username>\.guada\skills\`.  
@@ -310,14 +303,14 @@ mv <skill-name> ~/.guada/skills/<skill-name>
 
 ### Step 7: Automatic Registration
 
-Once placed in `~/.guada/skills/`, the file watcher automatically detects the new SKILL.md and registers the skill within seconds — no manual action needed.
+Once placed in `{SKILL_DIR}/`, the file watcher automatically detects the new SKILL.md and registers the skill within seconds — no manual action needed.
 
 ### Step 8: Verify Registration
 
 Use the `read` tool to confirm the skill is registered:
 
 ```markdown
-read({ path: "~/.guada/skills/my-skill-name/SKILL.md" })
+read({ path: "{SKILL_DIR}/my-skill-name/SKILL.md" })
 ```
 
 This checks **14 items** including frontmatter format, name rules, directory-name consistency, description constraints, optional fields, and directory structure. See `scripts/validate-skill.mjs` for details.
@@ -417,7 +410,7 @@ Skills must **not** contain malware, exploit code, or content that could comprom
 name: hello-world
 description: Printing a friendly greeting and demonstrating basic skill structure
 version: 1.0.0
-author: system
+author: guada
 tags: [example, demonstration]
 ---
 
@@ -448,9 +441,9 @@ When asked to say hello:
 | Phase | Action | Method |
 |-------|--------|--------|
 | Create | Author SKILL.md + optional resources | Manual or via this skill |
-| Place | Put in correct directory | `~/.guada/skills/<name>/` |
+| Place | Put in correct directory | `{SKILL_DIR}/<name>/` |
 | Register | Auto-detected by file watcher | Within seconds, no manual action |
-| Verify | Confirm it's loaded | `read({ path: "~/.guada/skills/<name>/SKILL.md" })` |
+| Verify | Confirm it's loaded | `read({ path: "{SKILL_DIR}/<name>/SKILL.md" })` |
 | Use | Mention in conversation | AI matches and activates |
 | Update (same name) | Edit SKILL.md, auto-detected | File watcher reloads automatically |
 | Update (renamed) | Move directory | File watcher detects removal + new registration |
@@ -514,7 +507,7 @@ assets/
 
 ## 10. Validation Reference
 
-### 10.1 System Auto-Validation
+### 10.1 Auto-Validation
 
 The system validates on every automatic scan or reload, triggered by the file watcher on any SKILL.md change:
 
@@ -548,10 +541,7 @@ This skill bundles `scripts/validate-skill.mjs` — a more comprehensive Node.js
 
 **Usage:**
 ```bash
-# Via absolute path (recommended)
-node ~/.guada/skills/skill-creator/scripts/validate-skill.mjs <skill-directory>
-
-# Or via relative path from the skill-creator directory
+# Run from this skill's `resourceBase` directory (returned by skill_learn):
 node scripts/validate-skill.mjs <skill-directory>
 ```
 

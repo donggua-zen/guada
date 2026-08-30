@@ -48,6 +48,7 @@ export class WebSearchPlugin extends PluginBase {
 
     api.registerToolKit({
       id: "web_search",
+      description: "%webSearch.toolkitDescription%",
       name: "%webSearch.toolkitName%",
       loadMode: "eager",
       activator:

@@ -210,7 +210,7 @@
                   </div>
                 </el-form-item>
 
-                <div v-if="localTools.length === 0" class="text-center text-gray-500 py-8">
+                <div v-if="visibleLocalTools.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
@@ -218,19 +218,35 @@
                   <div class="text-sm mt-2">{{ t('characters.setting.noLocalToolsHint') }}</div>
                 </div>
 
-                <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                  <div v-for="tool in localTools" :key="tool.pluginId"
-                    class="tool-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
-                    :class="{ 'opacity-50 pointer-events-none': allDisabled }">
+                <div v-else class="grid gap-2"
+                  style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));"
+                  :class="{ 'opacity-50 pointer-events-none': allDisabled }">
+                  <!-- 扁平工具包卡片网格：不按插件分组，右下角标注来源插件 -->
+                  <div v-for="card in visibleKitCards" :key="card.key"
+                    class="tool-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] bg-gray-50/60 dark:bg-[#242629]/60">
                     <div class="flex items-start justify-between gap-2 mb-1">
-                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ tool.displayName }}</div>
-                      <div class="flex items-center gap-2 shrink-0">
-                        <el-switch :model-value="isToolProviderEnabled(tool.pluginId)"
-                          @update:model-value="(val) => handleLocalToolToggle(tool.pluginId, val)"
-                          :disabled="allDisabled" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" size="small" />
-                      </div>
+                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ card.kit.name || card.kit.id }}</div>
+                      <el-switch :model-value="isKitEnabled(card.pluginId, card.kit.id)"
+                        @update:model-value="(val) => handleKitToggle(card.pluginId, card.kit.id, !!val)"
+                        :disabled="allDisabled" size="small" inline-prompt />
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2">{{ tool.description }}</p>
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">
+                      {{ card.kit.description || t('characters.setting.noDescription') }}
+                    </p>
+                    <!-- 底部：左侧工具/提示词统计，右侧来源插件 -->
+                    <div class="flex items-center justify-between mt-1.5 text-xs text-gray-400">
+                      <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1">
+                          <el-icon :size="13"><Wrench16Regular /></el-icon>
+                          {{ card.kit.toolCount ?? 0 }}
+                        </span>
+                        <span class="flex items-center gap-1">
+                          <el-icon :size="13"><TextDescription20Regular /></el-icon>
+                          {{ card.kit.promptCount ?? 0 }}
+                        </span>
+                      </div>
+                      <span class="truncate ml-2">{{ t('characters.setting.kitSource', { plugin: card.pluginName }) }}</span>
+                    </div>
                   </div>
                 </div>
               </el-form>
@@ -446,7 +462,7 @@ import {
   ThunderboltOutlined
 } from '@vicons/antd'
 
-import { Code24Regular, Bot24Regular } from '@vicons/fluent'
+import { Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular } from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
 
@@ -574,10 +590,7 @@ const characterForm = reactive({
   systemPrompt: '',
   modelId: null,
   memoryType: '',
-  enabledTools: [],  // 启用的本地工具
-  toolsMode: 'inherit',
   enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
-  skillsMode: 'inherit',  // Skills 模式: 'inherit' | 'custom' | 'disabled'
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
   summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
@@ -667,8 +680,30 @@ const characterGroups = ref([]);
 // 本地工具数据
 const localTools = ref([]);
 
-// 角色工具设置（pluginId -> boolean | 'all'）
-const characterToolSettings = ref({});
+// 卡片展示列表：只显示有工具包的插件（无能力包的插件不受角色层控制，不在此显示）
+const visibleLocalTools = computed(() =>
+  localTools.value.filter(t => Array.isArray(t.toolkits) && t.toolkits.length > 0),
+);
+
+// 扁平化的工具包卡片列表（不按插件分组），每项携带来源插件信息
+const visibleKitCards = computed(() =>
+  visibleLocalTools.value.flatMap(tool =>
+    tool.toolkits.map(kit => ({
+      key: `${tool.pluginId}::${kit.id}`,
+      pluginId: tool.pluginId,
+      pluginName: tool.displayName || tool.pluginId,
+      kit,
+    })),
+  ),
+);
+
+// 角色能力包设置（key = `${pluginId}::${kitId}` -> boolean）
+const characterToolSettings = ref<Record<string, boolean>>({});
+
+// 从角色配置回填的工具包偏好（新格式，工具包粒度）
+// savedKitDeny: 黑名单模式下各插件的拒绝列表；savedKitAllow: 白名单下的允许列表
+const savedKitDeny = ref<Record<string, string[]>>({});
+const savedKitAllow = ref<Record<string, string[]>>({});
 
 // 是否全部禁用本地工具
 const allDisabled = ref(false);
@@ -701,11 +736,28 @@ const loadingAgents = ref(false);
 
 
 
-// 是否自动启用全部工具
-const allToolsEnabled = computed(() => {
-  // 如果角色工具配置为 true，则认为启用了全部工具
-  return characterToolSettings.value === true;
-});
+// 能力包 key 构造
+const kitKey = (pluginId, kitId) => `${pluginId}::${kitId}`;
+
+// 判断某个能力包是否启用（用于 Switch 显示）
+const isKitEnabled = (pluginId, kitId) => {
+  const key = kitKey(pluginId, kitId);
+  if (key in characterToolSettings.value) return characterToolSettings.value[key];
+  // 未初始化时回退到查询结果（已含角色配置的生效状态）
+  const tool = localTools.value.find(t => t.pluginId === pluginId);
+  const kit = tool?.toolkits?.find(k => k.id === kitId);
+  return kit ? !!kit.enabled : false;
+};
+
+// 能力包开关切换
+const handleKitToggle = (pluginId, kitId, enabled) => {
+  // 从全部禁用模式切回正常模式
+  if (allDisabled.value) allDisabled.value = false;
+  characterToolSettings.value = {
+    ...characterToolSettings.value,
+    [kitKey(pluginId, kitId)]: enabled,
+  };
+};
 
 // 计算技能的最终显示状态（不受模式影响，始终 = 用户显式值 → 全局继承）
 const getSkillEffectiveEnabled = (skill) => {
@@ -721,27 +773,13 @@ const visibleSkills = computed(() => {
   void skillsAllowlistMode.value;
   // 全部禁用模式下仍然展示所有技能（灰色不可操作状态）
   return skillsList.value.filter(skill => {
-    // 全局禁用的技能，但角色级覆盖启用了 → 显示
-    if (skill.enabled === false) {
-      if (characterForm.skillsMode === 'custom' && characterForm.enabledSkills[skill.id] === true) {
-        return true;
+      // 全局禁用的技能，仅当角色显式启用时显示
+      if (skill.enabled === false) {
+        return characterForm.enabledSkills[skill.id] === true;
       }
-      return false;
-    }
     return true;
   });
 });
-
-// 判断某个工具提供者是否启用（用于 Switch 显示）
-const isToolProviderEnabled = (pluginId) => {
-  // 优先读取角色稳定的工具偏好，避免主开关切换时后端重查导致开关跟随变化；
-  // 主开关只负责灰显，不改变单个工具开关的原有状态。
-  if (pluginId in characterToolSettings.value) {
-    return characterToolSettings.value[pluginId];
-  }
-  const tool = localTools.value.find(t => t.pluginId === pluginId);
-  return tool ? tool.enabled : false;
-};
 
 // 判断 MCP 服务器是否启用（根据当前模式）
 const isMcpServerEnabled = (serverId) => {
@@ -780,35 +818,31 @@ watch(() => props.data, (newVal, oldVal) => {
   characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
   characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
   characterForm.summaryMode = memoryConfig.summaryMode ?? DEFAULT_SUMMARY_MODE;
-  // 加载已启用的插件
-  characterForm.enabledTools = newVal.settings?.plugins || [];
-  // 加载角色插件设置（新格式：{ pluginId: { enabled: true/false } }）
-  let pluginsConfig = newVal.settings?.plugins;
-  // 向后兼容：旧数据使用 tools 字段
-  if (pluginsConfig === undefined) {
-    pluginsConfig = newVal.settings?.tools;
-  }
+  // 加载角色插件设置（新格式：工具包粒度，仅消费 __strategy/__default/toolkits_*）
+  // 旧版插件级开关条目（{ pluginId: { enabled } } / 裸布尔）直接忽略
+  const pluginsConfig = newVal.settings?.plugins;
   if (typeof pluginsConfig === 'object' && pluginsConfig !== null && !Array.isArray(pluginsConfig)) {
-    // 读取策略 → 全部禁用开关
-    const strategy = pluginsConfig?.__strategy;
-    allDisabled.value = strategy === 'deny_nonsystem';
-    // 读取白名单模式：__default === false 表示白名单
-    allowlistMode.value = pluginsConfig?.__default === false;
-    characterToolSettings.value = {};
+    allDisabled.value = pluginsConfig.__strategy === 'deny_nonsystem';
+    allowlistMode.value = pluginsConfig.__default === false;
+    savedKitDeny.value = {};
+    savedKitAllow.value = {};
     for (const [pluginId, cfg] of Object.entries(pluginsConfig)) {
-      if (pluginId === '__strategy' || pluginId === '__default') continue;
+      if (pluginId.startsWith('__')) continue;
       if (typeof cfg === 'object' && cfg !== null) {
-        characterToolSettings.value[pluginId] = (cfg as Record<string, unknown>).enabled !== false;
-      } else {
-        characterToolSettings.value[pluginId] = cfg === true;
+        if ((cfg as Record<string, unknown>).toolkits_filter === 'allow') {
+          savedKitAllow.value[pluginId] = ((cfg as Record<string, any>).toolkits_allow || []) as string[];
+        } else if (Array.isArray((cfg as Record<string, any>).toolkits_deny) && (cfg as Record<string, any>).toolkits_deny.length) {
+          savedKitDeny.value[pluginId] = (cfg as Record<string, any>).toolkits_deny;
+        }
       }
     }
   } else {
-    // undefined / null / true → 继承全局
-    // 继承全局
-    characterToolSettings.value = {};
+    allDisabled.value = false;
+    allowlistMode.value = false;
+    savedKitDeny.value = {};
+    savedKitAllow.value = {};
   }
-  // 加载 MCP 配置（黑白名单兼容）
+  // 加载 MCP 配置（工具包粒度：每个 server 即 mcp 插件的一个能力包）
   const mcpPluginsCfg = newVal.settings?.plugins?.mcp;
   const mcpDeny = mcpPluginsCfg?.toolkits_deny;
   mcpDeniedServers.value = mcpDeny
@@ -819,11 +853,17 @@ watch(() => props.data, (newVal, oldVal) => {
     ? mcpAllow.map((id: string) => id.replace(/^mcp_/, ''))
     : [];
   mcpAllowlistMode.value = mcpPluginsCfg?.toolkits_filter === 'allow';
-  allMcpDisabled.value = mcpPluginsCfg?.enabled === false;
+  // 全部禁用标记：白名单过滤但允许列表为空（拒绝全部 MCP 能力包）
+  allMcpDisabled.value =
+    mcpPluginsCfg?.toolkits_filter === 'allow' &&
+    !(mcpPluginsCfg?.toolkits_allow?.length > 0);
 
   // 加载角色技能偏好
-  // 全部禁用：从 plugins.skill.enabled 读取
-  allSkillsDisabled.value = newVal.settings?.plugins?.skill?.enabled === false;
+  // 全部禁用：skill 插件的能力包被整体拒绝（allow 过滤 + 空允许列表）
+  const skillKitCfg = newVal.settings?.plugins?.skill;
+  allSkillsDisabled.value =
+    skillKitCfg?.toolkits_filter === 'allow' &&
+    !(skillKitCfg?.toolkits_allow?.length > 0);
   // 白名单模式：从 skills.__default 读取
   const skillsConfig = newVal.settings?.skills;
   skillsAllowlistMode.value = skillsConfig?.__default === false;
@@ -838,9 +878,13 @@ watch(() => props.data, (newVal, oldVal) => {
     characterForm.enabledSkills = {};
   }
 
-  // 加载子代理偏好（固定白名单：仅显式 true 的角色被启用）
+  // 加载子代理偏好（固定白名单语义：仅显式允许 subagent 能力包时启用）
   // 默认禁用：无配置时 allAgentsDisabled = true
-  allAgentsDisabled.value = newVal.settings?.plugins?.sub_agent?.enabled !== true;
+  const subAgentCfg = newVal.settings?.plugins?.sub_agent;
+  allAgentsDisabled.value = !(
+    subAgentCfg?.toolkits_filter === 'allow' &&
+    subAgentCfg?.toolkits_allow?.includes('subagent')
+  );
   const agentsConfig = newVal.settings?.agents;
   // 重建 enabledAgents
   for (const key of Object.keys(enabledAgents)) delete enabledAgents[key];
@@ -1015,75 +1059,76 @@ const handleAllSkillsDisabledToggle = async (val) => {
   allSkillsDisabled.value = val;
 };
 
+// 工具包粒度状态 → 查询/保存用的条目
+function buildKitEntries() {
+  const denyByPlugin: Record<string, string[]> = {};
+  const allowByPlugin: Record<string, string[]> = {};
+  for (const [key, enabled] of Object.entries(characterToolSettings.value)) {
+    const idx = key.indexOf('::');
+    if (idx === -1) continue;
+    const pluginId = key.slice(0, idx);
+    const kitId = key.slice(idx + 2);
+    if (allowlistMode.value) {
+      // 白名单：只收集显式开启的能力包
+      if (enabled) (allowByPlugin[pluginId] ||= []).push(kitId);
+    } else {
+      // 黑名单：只收集显式关闭的能力包
+      if (!enabled) (denyByPlugin[pluginId] ||= []).push(kitId);
+    }
+  }
+  return { denyByPlugin, allowByPlugin };
+}
+
+// 根据查询结果初始化各能力包开关的显示状态（保留已有偏好）
+function initKitSettings(stored: Record<string, boolean> = {}) {
+  const next: Record<string, boolean> = {};
+  for (const p of localTools.value) {
+    for (const tk of p.toolkits || []) {
+      const key = kitKey(p.pluginId, tk.id);
+      next[key] = key in stored ? stored[key] : !!tk.enabled;
+    }
+  }
+  characterToolSettings.value = next;
+}
+
 // 加载本地工具列表
 async function loadLocalTools() {
   try {
-    // 根据当前 UI 状态动态构建查询配置
-    // 不等于全部禁用时，按当前模式从内存状态构建查询
+    const stored = { ...characterToolSettings.value };
+    // 根据当前 UI 状态动态构建查询配置（工具包粒度预览）
     if (!allDisabled.value) {
-      const queryConfig: any = {};
-      queryConfig.__strategy = 'custom';
-      queryConfig.__default = allowlistMode.value ? false : true;
-
-      // 从当前内存状态（characterToolSettings）构建，按模式过滤
-      for (const [pluginId, enabled] of Object.entries(characterToolSettings.value)) {
-        if (allowlistMode.value) {
-          // 白名单：只传 enabled: true
-          if (enabled) queryConfig[pluginId] = { enabled: true };
-        } else {
-          // 黑名单：只传 enabled: false
-          if (!enabled) queryConfig[pluginId] = { enabled: false };
-        }
+      const queryConfig: any = {
+        __strategy: 'custom',
+        __default: allowlistMode.value ? false : true,
+      };
+      const { denyByPlugin, allowByPlugin } = buildKitEntries();
+      for (const [pid, list] of Object.entries(allowByPlugin)) {
+        queryConfig[pid] = { toolkits_filter: 'allow', toolkits_allow: list };
+      }
+      for (const [pid, list] of Object.entries(denyByPlugin)) {
+        queryConfig[pid] = { toolkits_deny: list };
       }
 
       const response = await apiService.queryPlugins(queryConfig, getLocale());
 
-      // API 返回 plugins[]，每个元素含 enabled 有效状态
       const plugins = response.plugins || [];
-
       // 本地工具列表：后端已过滤 system 插件，此处只排除全局关闭的
       localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));
-
-      // 正常模式：初始化 characterToolSettings
-      const stored = { ...characterToolSettings.value };
-      characterToolSettings.value = {};
-      for (const tool of localTools.value) {
-        characterToolSettings.value[tool.pluginId] = stored[tool.pluginId] ?? tool.enabled;
-      }
+      initKitSettings(stored);
     } else {
-      // 全部禁用时，不传 __default 和具体条目，只传 strategy
+      // 全部禁用：仅传 strategy，由后端拒绝所有非受保护插件的能力包
       const response = await apiService.queryPlugins({
         __strategy: 'deny_nonsystem',
       }, getLocale());
 
       const plugins = response.plugins || [];
       localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));
+      initKitSettings(stored);
     }
   } catch (error) {
     console.error('加载本地工具失败:', error);
     toast.error(t('characters.setting.loadLocalToolsFailed'));
   }
-}
-
-// 全部工具开关切换处理
-const handleAllToolsToggle = (enabled) => {
-  // 直接设置为布尔值，保存到数据库时也是布尔值
-  characterToolSettings.value = enabled;
-  console.log(`角色工具整体${enabled ? '启用' : '禁用'}`);
-}
-
-// 本地工具开关切换处理
-const handleLocalToolToggle = (pluginId, enabled) => {
-  // 从全部禁用模式切换到正常模式
-  if (allDisabled.value) {
-    allDisabled.value = false;
-    characterToolSettings.value = {};
-  }
-  characterToolSettings.value[pluginId] = enabled;
-  // 同步更新 localTools 以便 isToolProviderEnabled 即时反馈
-  const tool = localTools.value.find(t => t.pluginId === pluginId);
-  if (tool) tool.enabled = enabled;
-  console.log(`本地工具 ${pluginId} ${enabled ? '启用' : '禁用'}`);
 }
 
 const loadModels = async () => {
@@ -1136,27 +1181,17 @@ const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
 }
 
-// localTools 加载完成后，自定义模式下初始化 characterToolSettings
+// localTools 加载完成后，自定义模式下初始化能力包开关
 watch(localTools, (tools) => {
   if (!allDisabled.value && tools.length > 0) {
-    const stored = { ...characterToolSettings.value };
-    characterToolSettings.value = {};
-    for (const tool of tools) {
-      const defaultEnabled = allowlistMode.value ? false : tool.enabled;
-      characterToolSettings.value[tool.pluginId] = stored[tool.pluginId] ?? defaultEnabled;
-    }
+    initKitSettings({ ...characterToolSettings.value });
   }
 });
 
-// 监听白名单模式切换 → 本地翻转，不查询后端
+// 监听白名单模式切换 → 按新模式重算未显式设置过的能力包默认值
 watch(allowlistMode, () => {
   if (allDisabled.value || localTools.value.length === 0) return;
-  const stored = { ...characterToolSettings.value };
-  characterToolSettings.value = {};
-  for (const tool of localTools.value) {
-    const defaultEnabled = allowlistMode.value ? false : tool.enabled;
-    characterToolSettings.value[tool.pluginId] = stored[tool.pluginId] ?? defaultEnabled;
-  }
+  initKitSettings({ ...characterToolSettings.value });
 });
 
 // 生命周期
@@ -1201,41 +1236,40 @@ const getFormData = () => {
         'compressionTargetRatio': characterForm.compressionTargetRatio,
         'summaryMode': characterForm.summaryMode,
       },
-      // 插件配置
+      // 插件配置（工具包/能力包粒度）
       'plugins': (() => {
         const buildCustom = () => {
           const result: Record<string, any> = {};
-          for (const [pluginId, enabled] of Object.entries(characterToolSettings.value)) {
-            if (allowlistMode.value) {
-              // 白名单：只存 enabled: true（未显式开启的默认禁用）
-              if (enabled) result[pluginId] = { enabled: true };
-            } else {
-              // 黑名单：只存 enabled: false（未显式关闭的默认启用）
-              if (!enabled) result[pluginId] = { enabled: false };
+          // 本地工具：按当前模式写入能力包过滤条目
+          const { denyByPlugin, allowByPlugin } = buildKitEntries();
+          if (allowlistMode.value) {
+            // 白名单：只存显式开启的能力包（未列出的默认禁用）
+            for (const [pid, list] of Object.entries(allowByPlugin)) {
+              result[pid] = { toolkits_filter: 'allow', toolkits_allow: list };
+            }
+          } else {
+            // 黑名单：只存显式关闭的能力包（未列出的默认启用）
+            for (const [pid, list] of Object.entries(denyByPlugin)) {
+              result[pid] = { toolkits_deny: list };
             }
           }
-          // MCP 配置（黑白名单兼容）
-          const mcpConfig: Record<string, any> = {};
-          mcpConfig.enabled = !allMcpDisabled.value;
-          if (mcpAllowlistMode.value) {
-            // 白名单模式
-            mcpConfig.toolkits_filter = 'allow';
-            if (mcpAllowlistServers.value.length > 0) {
-              mcpConfig.toolkits_allow = mcpAllowlistServers.value.map((id: string) => `mcp_${id}`);
-            }
+          // MCP：每个 server 即 mcp 插件的一个能力包（黑白名单兼容）
+          const mcpAllow = mcpAllowlistServers.value.map((id: string) => `mcp_${id}`);
+          if (allMcpDisabled.value || mcpAllowlistMode.value) {
+            // 全部禁用 → 空允许列表；白名单 → 允许列表中的 server
+            result.mcp = mcpAllow.length > 0
+              ? { toolkits_filter: 'allow', toolkits_allow: mcpAllow }
+              : { toolkits_filter: 'allow' };
           } else if (mcpDeniedServers.value.length > 0) {
-            // 黑名单模式（有拒绝列表时才写入）
-            mcpConfig.toolkits_filter = 'deny';
-            mcpConfig.toolkits_deny = mcpDeniedServers.value.map((id: string) => `mcp_${id}`);
+            result.mcp = { toolkits_deny: mcpDeniedServers.value.map((id: string) => `mcp_${id}`) };
           }
-
-          if (Object.keys(mcpConfig).length > 0) {
-            result.mcp = mcpConfig;
-          }
-          // Skills：始终显式写入 enabled 状态，true=启用 false=全部禁用
-          result.skill = { enabled: !allSkillsDisabled.value };
-          // 预设 Agent
-          result.sub_agent = { enabled: !allAgentsDisabled.value };
+          // Skills / 子代理：统一为能力包条目（禁用=空允许列表，启用=允许对应包）
+          result.skill = allSkillsDisabled.value
+            ? { toolkits_filter: 'allow' }
+            : { toolkits_filter: 'allow', toolkits_allow: ['skill'] };
+          result.sub_agent = allAgentsDisabled.value
+            ? { toolkits_filter: 'allow' }
+            : { toolkits_filter: 'allow', toolkits_allow: ['subagent'] };
           return result;
         };
         // 全部禁用：保留原有配置值，追加 __default 以便切回时恢复白名单模式

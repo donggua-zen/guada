@@ -58,7 +58,7 @@ export default {
     groupTools: '工具与能力',
     navBasic: '基础',
     navPrompt: '提示词',
-    navLocalTools: '本地工具',
+    navLocalTools: '工具包',
     navMcpTools: 'MCP 工具',
     navSkills: 'Skills',
     navSubAgents: '子代理',
@@ -109,6 +109,7 @@ export default {
     keepDisabled: '保持禁用',
     noLocalTools: '暂无可用的本地工具',
     noLocalToolsHint: '请先到"插件 > 本地工具"中启用工具',
+    kitSource: '来源：{plugin}',
     // MCP 工具
     newMcpLabel: '新增MCP',
     mcpRunning: '运行中',

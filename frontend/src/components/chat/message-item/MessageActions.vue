@@ -30,26 +30,6 @@
       </GdTooltip>
     </template>
 
-    <template v-if="isLast && contentVersions.length > 1">
-      <GdTooltip :content="t('chat.messageActions.prevVersion')" placement="top">
-        <div class="message-action-button" @click="$emit('switchVersion', 'prev')" :disabled="!hasPrev">
-          <el-icon :size="16">
-            <ChevronLeft24Filled />
-          </el-icon>
-        </div>
-      </GdTooltip>
-      <div class="text-gray-700 transition-colors duration-200 flex items-center py-1">
-        {{ currentVersionIndex + 1 }} / {{ contentVersions.length }}
-      </div>
-      <GdTooltip :content="t('chat.messageActions.nextVersion')" placement="top">
-        <div class="message-action-button" @click="$emit('switchVersion', 'next')" :disabled="!hasNext">
-          <el-icon :size="16">
-            <ChevronRight24Filled />
-          </el-icon>
-        </div>
-      </GdTooltip>
-    </template>
-
     <GdTooltip :content="t('chat.messageActions.more')" placement="top">
       <DropdownMenu @command="handleCommand">
         <div class="message-action-button">
@@ -68,7 +48,7 @@
           <el-icon class="mr-2">
             <Delete16Regular />
           </el-icon>
-          {{ t('chat.messageActions.deleteMessage') }}
+          {{ t('chat.messageActions.deleteTurn') }}
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
@@ -99,8 +79,6 @@ import {
   Copy16Regular,
   ArrowClockwise16Regular,
   MoreHorizontal16Regular,
-  ChevronLeft24Filled,
-  ChevronRight24Filled,
   Delete16Regular,
   Edit16Regular,
 } from '@vicons/fluent';
@@ -110,8 +88,6 @@ const props = defineProps<{
   isAssistant: boolean;
   isLast: boolean;
   allowGenerate: boolean;
-  contentVersions: string[];
-  currentVersionIndex: number;
   timeFull: string;
   timeFriendly: string;
   durationText?: string | null;
@@ -121,14 +97,9 @@ const emit = defineEmits<{
   (e: 'copy'): void;
   (e: 'generate'): void;
   (e: 'regenerate'): void;
-  (e: 'switchVersion', direction: 'prev' | 'next'): void;
   (e: 'edit'): void;
   (e: 'delete'): void;
 }>();
-
-const hasPrev = computed(() => props.currentVersionIndex > 0);
-
-const hasNext = computed(() => props.currentVersionIndex < props.contentVersions.length - 1);
 
 const handleCommand = (command: string) => {
   if (command === 'edit') {

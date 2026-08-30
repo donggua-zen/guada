@@ -18,8 +18,9 @@ describe('TimePlugin', () => {
 
   it('should have correct manifest', () => {
     expect(plugin.manifest.id).toBe('time');
-    expect(plugin.manifest.name).toBe('时间工具');
-    expect(plugin.manifest.description).toContain('获取当前详细时间信息');
+    // manifest 使用 NLS key，由 NlsService 按 locale 解析
+    expect(plugin.manifest.name).toBe('%time.name%');
+    expect(plugin.manifest.description).toBe('%time.description%');
     expect(plugin.manifest.category).toBe('core');
   });
 

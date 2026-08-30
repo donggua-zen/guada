@@ -59,7 +59,23 @@ export class RemoteWorkspacePlugin extends PluginBase {
     });
 
     // Prompt: list bound connections by name so AI can identify the target server
-    api.registerPrompt({
+    // （随 ssh-tools 工具包注入：角色层禁用该包时一并隐藏）
+    const sshKit = api.registerToolKit({
+      id: "ssh-tools",
+      name: "%remoteWorkspace.toolkitName%",
+      description: "%remoteWorkspace.toolkitDescription%",
+      loadMode: "eager",
+      activator:
+        "Use these tools when the user asks to operate on remote servers via SSH connections.",
+      handler: (ctx: PluginContext) => {
+        const attachments = ctx.session.getSettings?.()?.attachments || {};
+        const sshConns = attachments["ssh-connection"] || [];
+        return sshConns.length > 0
+          ? { loadMode: "eager" as const }
+          : { loadMode: "none" as const };
+      },
+    });
+    sshKit.registerPrompt({
       frequency: "STATIC",
       description: "Remote SSH connections info",
       content: async (ctx: PluginContext) => {
@@ -86,21 +102,10 @@ export class RemoteWorkspacePlugin extends PluginBase {
       },
     });
 
-    api.registerToolKit({
-      id: "ssh-tools",
-      name: "%remoteWorkspace.toolkitName%",
-      loadMode: "eager",
-      activator:
-        "Use these tools when the user asks to operate on remote servers via SSH connections.",
-      handler: (ctx: PluginContext) => {
-        const attachments = ctx.session.getSettings?.()?.attachments || {};
-        const sshConns = attachments["ssh-connection"] || [];
-        return sshConns.length > 0
-          ? { loadMode: "eager" as const }
-          : { loadMode: "none" as const };
-      },
-      onLoad: (tk) => {
-        // remote_read
+    // ── 工具注册（直接在工具包句柄上注册）──
+    const tk = sshKit;
+
+    // remote_read
         tk.registerTool({
           name: "remote_read",
           description:
@@ -361,7 +366,5 @@ export class RemoteWorkspacePlugin extends PluginBase {
           },
           dangerLevel: "high",
         });
-      },
-    });
   }
 }

@@ -1,8 +1,0 @@
-{
-  "id": "demo-settings",
-  "name": "Demo Settings",
-  "version": "1.0.0",
-  "description": "Slot 机制 demo 插件：设置页面板 + RPC + i18n 全链路验证",
-  "main": "index.ts",
-  "category": "core"
-}

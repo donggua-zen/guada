@@ -15,6 +15,7 @@ import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 import { FileNamingService } from "../../common/services/file-naming.service";
+import { MessageFile } from "../../common/persistence/types";
 
 @Injectable()
 export class FileService implements OnModuleInit {
@@ -240,6 +241,35 @@ export class FileService implements OnModuleInit {
   }
 
   /**
+   * 构建文件元数据（不上 DB，直接返回）。
+   * 上传接口返回完整元数据，前端发消息时直接携带。
+   */
+  private buildFileMeta(params: {
+    fileName: string;
+    displayName: string;
+    fileSize: number;
+    fileType: string;
+    fileExtension: string;
+    url: string;
+    previewUrl?: string | null;
+    contentHash: string;
+  }): MessageFile & { id: string } {
+    const fileId = `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return {
+      id: fileId,
+      fileId,
+      fileName: params.fileName,
+      displayName: params.displayName,
+      fileSize: params.fileSize,
+      fileType: params.fileType,
+      fileExtension: params.fileExtension,
+      url: params.url,
+      previewUrl: params.previewUrl ?? undefined,
+      contentHash: params.contentHash,
+    };
+  }
+
+  /**
    * 上传图片文件
    */
   async uploadImageFile(
@@ -256,9 +286,8 @@ export class FileService implements OnModuleInit {
       // 计算哈希
       const contentHash = this.calculateContentHash(file.buffer);
 
-      // 保存到数据库
-      return await this.fileRepo.create({
-        sessionId,
+      // 生成文件元数据（不写 DB File 表，直接返回）
+      return this.buildFileMeta({
         fileName: fileInfo.fileName,
         displayName: fileInfo.displayName,
         fileSize: fileInfo.fileSize,
@@ -267,8 +296,6 @@ export class FileService implements OnModuleInit {
         url,
         previewUrl,
         contentHash,
-        uploadUserId: userId,
-        fileMetadata: metadata || null,
       });
     } catch (error: any) {
       throw new Error(`图片上传失败：${error.message}`);
@@ -303,9 +330,8 @@ export class FileService implements OnModuleInit {
       // 计算哈希
       const contentHash = this.calculateContentHash(file.buffer);
 
-      // 保存到数据库
-      return await this.fileRepo.create({
-        sessionId,
+      // 生成文件元数据（不写 DB File 表，直接返回）
+      return this.buildFileMeta({
         fileName: fileInfo.fileName,
         displayName: fileInfo.displayName,
         fileSize: fileInfo.fileSize,
@@ -313,8 +339,6 @@ export class FileService implements OnModuleInit {
         fileExtension: fileInfo.fileExt,
         url,
         contentHash,
-        uploadUserId: userId,
-        content: fileContent,
       });
     } catch (error: any) {
       throw new Error(`PDF 文件上传失败：${error.message}`);
@@ -334,20 +358,21 @@ export class FileService implements OnModuleInit {
       // 读取文件内容
       const fileContent = file.buffer.toString("utf-8");
 
+      // 保存文本文件到磁盘（JSONL 方案需要物理文件）
+      const url = await this.saveFile(file, fileInfo.fileExt);
+
       // 计算哈希
       const contentHash = this.calculateContentHash(file.buffer);
 
-      // 保存到数据库
-      return await this.fileRepo.create({
-        sessionId,
+      // 生成文件元数据（不写 DB File 表，直接返回）
+      return this.buildFileMeta({
         fileName: fileInfo.fileName,
         displayName: fileInfo.displayName,
         fileSize: fileInfo.fileSize,
         fileType: "text",
         fileExtension: fileInfo.fileExt,
+        url,
         contentHash,
-        uploadUserId: userId,
-        content: fileContent,
       });
     } catch (error: any) {
       if (error instanceof Error && error.message.includes("utf-8")) {

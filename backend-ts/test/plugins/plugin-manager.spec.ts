@@ -3,6 +3,8 @@ import { PluginBase } from "../../src/modules/plugins/base-plugin";
 import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
 
 // ==================== Mock Helpers ====================
+// V3 决议语义：全局层控插件启停；角色层只裁剪工具包（能力包），
+// 不消费 entry.enabled（旧插件级开关被忽略）
 
 function createMockPlugin(id: string, category: "system" | "core" | "extended" | "user" = "extended"): PluginBase {
   return {
@@ -18,10 +20,6 @@ function createEssentialPlugin(id: string): PluginBase {
   } as PluginBase;
 }
 
-function createMockToolKit(id: string) {
-  return { def: { id, name: id, loadMode: "eager" as const }, tools: [], prompts: [] };
-}
-
 describe("PluginManager", () => {
   let manager: PluginManager;
   let mockSettingsStorage: any;
@@ -31,7 +29,13 @@ describe("PluginManager", () => {
     (PluginRegistry as any).registrations?.clear?.();
     mockSettingsStorage = { getSettings: jest.fn().mockResolvedValue({}), updateSettings: jest.fn() };
     mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    manager = new (PluginManager as any)(mockSettingsStorage, null, null, null, null, null);
+    manager = new (PluginManager as any)(
+      mockSettingsStorage,
+      null,
+      null,
+      null,
+      { emit: jest.fn() },
+    );
     (manager as any).logger = mockLogger;
     (manager as any).instances = new Map();
   });
@@ -49,6 +53,24 @@ describe("PluginManager", () => {
       manifest: { id: id, category: "extended", essential: true },
       plugin: createEssentialPlugin(id),
     });
+  }
+
+  /** 给实例挂一个真实注册的工具包（eager，含一个工具），供角色层裁剪测试 */
+  function addKit(pluginId: string, kitId: string) {
+    const inst = (manager as any).instances.get(pluginId);
+    expect(inst).toBeDefined();
+    PluginRegistry.registerManifest({ ...inst.manifest, name: inst.manifest.id ?? pluginId, version: "1.0", description: "" } as any);
+    PluginRegistry.registerToolKit(pluginId, {
+      def: { id: kitId, name: kitId, loadMode: "eager" as const },
+      tools: [{
+        name: `${kitId}_tool`,
+        description: "",
+        parameters: { type: "object", properties: {} },
+        handler: async () => ({ content: "" }),
+        toolSet: kitId,
+      }],
+      prompts: [],
+    } as any);
   }
 
   // ==================== 基础流程 ====================
@@ -90,77 +112,112 @@ describe("PluginManager", () => {
       mockSettingsStorage.getSettings.mockResolvedValue({ p_core: { enabled: false } }); // 全局禁用
     });
 
-    it("全局禁用后角色层无法通过 { enabled: true } 复活", async () => {
-      const r = await manager.resolvePlugins(undefined, { p_core: { enabled: true } });
+    it("全局禁用后角色层无法通过旧格式 { enabled: true } 复活", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_core: { enabled: true } } as any);
       expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
     });
 
     it("全局禁用后角色层无法通过白名单复活", async () => {
-      const r = await manager.resolvePlugins(undefined, { __default: false, p_core: { enabled: true } });
+      const r = await manager.resolvePlugins(undefined, { __default: false, p_core: { toolkits_filter: "allow", toolkits_allow: ["k"] } } as any);
       expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
     });
   });
 
-  // ==================== 角色层：黑名单 ====================
+  // ==================== 角色层：只控工具包，不控插件启停 ====================
 
-  describe("角色层黑名单", () => {
+  describe("角色层黑名单（toolkits_deny）", () => {
     beforeEach(() => {
       addPlugin("p_a", "core");
+      addKit("p_a", "ka1");
+      addKit("p_a", "ka2");
       addPlugin("p_b", "core");
-      mockSettingsStorage.getSettings.mockResolvedValue({ p_a: { enabled: true }, p_b: { enabled: true } });
+      mockSettingsStorage.getSettings.mockResolvedValue({});
     });
 
-    it("角色层 { enabled: false } 可禁用单个插件", async () => {
-      const r = await manager.resolvePlugins(undefined, { p_a: { enabled: false } });
-      expect(r.find((x) => x.plugin.id === "p_a")?.enabled).toBe(false);
-      expect(r.find((x) => x.plugin.id === "p_a")?.effective).toBe("role");
+    it("角色层 { enabled: false }（旧格式）被忽略，不影响插件与工具包", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_a: { enabled: false } } as any);
+      expect(r.find((x) => x.plugin.id === "p_a")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_a")?.enabledToolKits.every((k) => k.enabled)).toBe(true);
+    });
+
+    it("toolkits_deny 裁剪指定工具包，其余保留，插件仍启用", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_a: { toolkits_deny: ["ka1"] } } as any);
+      const pa = r.find((x) => x.plugin.id === "p_a")!;
+      expect(pa.enabled).toBe(true);
+      expect(pa.enabledToolKits.find((k) => k.id === "ka1")!.enabled).toBe(false);
+      expect(pa.enabledToolKits.find((k) => k.id === "ka2")!.enabled).toBe(true);
+      // eager 工具包被拒后其工具不进 enabledTools
+      expect(pa.enabledTools.map((t) => t.name)).not.toContain("ka1_tool");
+      expect(pa.enabledTools.map((t) => t.name)).toContain("ka2_tool");
+    });
+
+    it("未配置的其它插件不受影响", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_a: { toolkits_deny: ["ka1"] } } as any);
       expect(r.find((x) => x.plugin.id === "p_b")?.enabled).toBe(true);
     });
   });
 
-  // ==================== 角色层：白名单 ====================
+  // ==================== 角色层：白名单 (__default: false) ====================
 
   describe("角色层白名单 (__default: false)", () => {
     beforeEach(() => {
       addPlugin("p_a", "core");
+      addKit("p_a", "ka1");
       addPlugin("p_b", "core");
-      mockSettingsStorage.getSettings.mockResolvedValue({ p_a: { enabled: true }, p_b: { enabled: true } });
+      addKit("p_b", "kb1");
+      mockSettingsStorage.getSettings.mockResolvedValue({});
     });
 
-    it("__default: false 时仅显式 { enabled: true } 的插件启用", async () => {
-      const r = await manager.resolvePlugins(undefined, { __default: false, p_a: { enabled: true } });
-      expect(r.find((x) => x.plugin.id === "p_a")?.enabled).toBe(true);
-      expect(r.find((x) => x.plugin.id === "p_b")?.enabled).toBe(false);
-      expect(r.find((x) => x.plugin.id === "p_b")?.effective).toBe("role");
+    it("__default: false 时仅显式 allow 的工具包放行", async () => {
+      const r = await manager.resolvePlugins(undefined, {
+        __default: false,
+        p_a: { toolkits_filter: "allow", toolkits_allow: ["ka1"] },
+      } as any);
+      const pa = r.find((x) => x.plugin.id === "p_a")!;
+      expect(pa.enabled).toBe(true); // 插件不被禁用
+      expect(pa.enabledToolKits.find((k) => k.id === "ka1")!.enabled).toBe(true);
+
+      // 未显式配置的插件：全部工具包默认拒绝
+      const pb = r.find((x) => x.plugin.id === "p_b")!;
+      expect(pb.enabled).toBe(true);
+      expect(pb.enabledToolKits.every((k) => !k.enabled)).toBe(true);
     });
 
-    it("__default: false 影响所有非显式配置的插件（system 也不例外）", async () => {
-      addPlugin("p_sys", "system");
-      const r = await manager.resolvePlugins(undefined, { __default: false });
-      // system 插件没有在配置条目中 → 也被禁用
-      expect(r.find((x) => x.plugin.id === "p_sys")?.enabled).toBe(false);
+    it("system 分类插件的工具包同样受白名单约束，但插件本体不禁用", async () => {
+      addPlugin("mcp", "system");
+      addKit("mcp", "mcp_srv1");
+      const r = await manager.resolvePlugins(undefined, { __default: false } as any);
+      const mcp = r.find((x) => x.plugin.id === "mcp")!;
+      expect(mcp.enabled).toBe(true);
+      expect(mcp.enabledToolKits.every((k) => !k.enabled)).toBe(true);
     });
   });
 
-  // ==================== deny_nonsystem 策略 ====================
+  // ==================== deny_nonsystem 策略（角色层=拒绝全部非 essential 工具包） ====================
 
   describe("deny_nonsystem 策略", () => {
     beforeEach(() => {
       addPlugin("p_sys", "system");
+      addKit("p_sys", "sys_k");
       addPlugin("p_core", "core");
+      addKit("p_core", "core_k");
     });
 
-    it("deny_nonsystem 禁用所有非 system 插件", async () => {
+    it("全局层的 __strategy 不再消费（仅角色层生效）", async () => {
       mockSettingsStorage.getSettings.mockResolvedValue({ __strategy: "deny_nonsystem" });
       const r = await manager.resolvePlugins();
-      expect(r.find((x) => x.plugin.id === "p_sys")?.enabled).toBe(true);
-      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+      // 全局层只读 entry.enabled；__strategy 被忽略 → 插件保持默认状态
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(true);
     });
 
-    it("角色层 deny_nonsystem 覆盖全局", async () => {
-      mockSettingsStorage.getSettings.mockResolvedValue({ p_core: { enabled: true } });
-      const r = await manager.resolvePlugins(undefined, { __strategy: "deny_nonsystem" });
-      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+    it("角色层 deny_nonsystem 拒绝所有非 essential 插件的工具包，但不禁用插件", async () => {
+      const r = await manager.resolvePlugins(undefined, { __strategy: "deny_nonsystem" } as any);
+      const core = r.find((x) => x.plugin.id === "p_core")!;
+      expect(core.enabled).toBe(true);
+      expect(core.enabledToolKits.every((k) => !k.enabled)).toBe(true);
+      const sys = r.find((x) => x.plugin.id === "p_sys")!;
+      expect(sys.enabled).toBe(true);
+      expect(sys.enabledToolKits.every((k) => !k.enabled)).toBe(true);
     });
   });
 
@@ -169,60 +226,62 @@ describe("PluginManager", () => {
   describe("MCP Toolkit 过滤", () => {
     beforeEach(() => {
       addPlugin("mcp", "system");
-      jest.spyOn(PluginRegistry, "getToolKits").mockImplementation((pluginId: string) => {
-        if (pluginId === "mcp") return [createMockToolKit("mcp_srv1"), createMockToolKit("mcp_srv2")];
-        return [];
-      });
+      addKit("mcp", "mcp_srv1");
+      addKit("mcp", "mcp_srv2");
     });
-    afterEach(() => jest.restoreAllMocks());
 
-    it("默认黑名单：toolkits_deny 中的工具包被拒绝", async () => {
+    it("默认黑名单：toolkits_deny 中的工具包被标记禁用", async () => {
       const r = await manager.resolvePlugins(undefined, {
-        mcp: { enabled: true, toolkits_filter: "deny", toolkits_deny: ["mcp_srv1"] },
-      });
+        mcp: { toolkits_filter: "deny", toolkits_deny: ["mcp_srv1"] },
+      } as any);
       const mcp = r.find((x) => x.plugin.id === "mcp")!;
-      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
-      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
+      const byId = Object.fromEntries(mcp.enabledToolKits.map((k) => [k.id, k.enabled]));
+      expect(byId["mcp_srv1"]).toBe(false);
+      expect(byId["mcp_srv2"]).toBe(true);
     });
 
     it("白名单：toolkits_allow 中的工具包被保留", async () => {
       const r = await manager.resolvePlugins(undefined, {
-        mcp: { enabled: true, toolkits_filter: "allow", toolkits_allow: ["mcp_srv2"] },
-      });
+        mcp: { toolkits_filter: "allow", toolkits_allow: ["mcp_srv2"] },
+      } as any);
       const mcp = r.find((x) => x.plugin.id === "mcp")!;
-      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
-      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
+      const byId = Object.fromEntries(mcp.enabledToolKits.map((k) => [k.id, k.enabled]));
+      expect(byId["mcp_srv2"]).toBe(true);
+      expect(byId["mcp_srv1"]).toBe(false);
     });
 
-    it("空 tk_allow 拒绝所有工具包", async () => {
+    it("空 allow 列表拒绝所有工具包", async () => {
       const r = await manager.resolvePlugins(undefined, {
-        mcp: { enabled: true, toolkits_filter: "allow", toolkits_allow: [] },
-      });
-      expect(r.find((x) => x.plugin.id === "mcp")?.enabledToolKits).toHaveLength(0);
+        mcp: { toolkits_filter: "allow", toolkits_allow: [] },
+      } as any);
+      const mcp = r.find((x) => x.plugin.id === "mcp")!;
+      expect(mcp.enabledToolKits.every((k) => !k.enabled)).toBe(true);
+      // 全部工具包仍完整列出（供 UI 渲染）
+      expect(mcp.enabledToolKits).toHaveLength(2);
     });
 
-    it("白名单 + 全局禁用插件：层级收窄", async () => {
+    it("白名单 + 全局禁用插件：插件级禁用优先，无能力可裁剪", async () => {
       addPlugin("p_ext", "extended");
       mockSettingsStorage.getSettings.mockResolvedValue({ p_ext: { enabled: false } });
       const r = await manager.resolvePlugins(undefined, {
         __default: false,
-        p_ext: { enabled: true },
-        mcp: { enabled: true, toolkits_filter: "deny", toolkits_deny: ["mcp_srv1"] },
-      });
-      // extended 插件初始禁用，全局也禁用 → 无法复活
+        p_ext: { enabled: true }, // 旧格式，被忽略且无法复活
+        mcp: { toolkits_deny: ["mcp_srv1"] },
+      } as any);
       expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
-      // MCP 黑名单拒绝
       const mcp = r.find((x) => x.plugin.id === "mcp")!;
-      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
-      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
+      const byId = Object.fromEntries(mcp.enabledToolKits.map((k) => [k.id, k.enabled]));
+      expect(byId["mcp_srv1"]).toBe(false);
+      expect(byId["mcp_srv2"]).toBe(true);
     });
   });
 
-  // ==================== essential 插件：不可被任何方式禁用 ====================
+  // ==================== essential 插件：不可被任何方式禁用/裁剪 ====================
 
   describe("essential 插件保护", () => {
     beforeEach(() => {
       addEssentialPlugin("p_ess");
+      addKit("p_ess", "ess_k");
       addPlugin("p_ext", "extended"); // 对照组
       mockSettingsStorage.getSettings.mockResolvedValue({});
     });
@@ -238,27 +297,26 @@ describe("PluginManager", () => {
       expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
     });
 
-    it("角色层 { enabled: false } 不能禁用 essential", async () => {
-      const r = await manager.resolvePlugins(undefined, { p_ess: { enabled: false } });
+    it("角色层条目不能禁用 essential", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_ess: { enabled: false } } as any);
       expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
     });
 
-    it("白名单模式 (__default: false) 不能禁用 essential", async () => {
-      const r = await manager.resolvePlugins(undefined, { __default: false });
+    it("白名单模式 (__default: false) 不能禁用 essential 插件本体", async () => {
+      const r = await manager.resolvePlugins(undefined, { __default: false } as any);
       expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
     });
 
-    it("deny_nonsystem 不能禁用 essential", async () => {
-      mockSettingsStorage.getSettings.mockResolvedValue({ __strategy: "deny_nonsystem" });
+    it("deny_nonsystem 不能裁剪 essential 的工具包", async () => {
+      const r = await manager.resolvePlugins(undefined, { __strategy: "deny_nonsystem" } as any);
+      const ess = r.find((x) => x.plugin.id === "p_ess")!;
+      expect(ess.enabled).toBe(true);
+      expect(ess.enabledToolKits.every((k) => k.enabled)).toBe(true);
+    });
+
+    it("非 essential 插件不受保护（对照组可被全局禁用）", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_ext: { enabled: false } });
       const r = await manager.resolvePlugins();
-      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
-    });
-
-    it("非 essential 插件不受影响（对照组可被禁用）", async () => {
-      const r = await manager.resolvePlugins(undefined, {
-        __default: false,
-        p_ext: { enabled: false },
-      });
       expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
       expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
     });

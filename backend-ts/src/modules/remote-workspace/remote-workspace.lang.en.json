@@ -19,5 +19,7 @@
   "remote_transfer.executing": "Transferring files",
   "remote_transfer.completed": "Transferred files",
   "remote_transfer.aggregate.executing": "Transferring {n} files",
-  "remote_transfer.aggregate.completed": "Transferred {n} files"
+  "remote_transfer.aggregate.completed": "Transferred {n} files",
+  "remoteWorkspace.toolkitDescription": "Operate remote servers via SSH: read/write files and run commands"
+
 }

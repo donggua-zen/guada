@@ -33,5 +33,7 @@
   "browser_screenshot.executing": "正在截图",
   "browser_screenshot.completed": "已截图",
   "browser_screenshot.aggregate.executing": "正在截图{n}个网页",
-  "browser_screenshot.aggregate.completed": "已截图{n}个网页"
+  "browser_screenshot.aggregate.completed": "已截图{n}个网页",
+  "browser.toolkitDescription": "浏览器自动化：打开网页、点击输入、截图与读取页面内容"
+
 }

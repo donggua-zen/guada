@@ -16,7 +16,7 @@
               </div>
             </template>
             <template v-else>
-              <template v-if="currentSessionId && activeMessages.length === 0 && currentSession?.character">
+              <template v-if="currentSessionId && activeTurns.length === 0 && currentSession?.character">
                 <!-- 欢迎页 -->
                 <WelcomeScreen :session="currentSession" class="flex-1" />
               </template>
@@ -33,20 +33,23 @@
 
                 <!-- 没有更多消息提示 -->
                 <Transition name="fade-slide">
-                  <div v-if="!isLoadingMore && !hasMoreMessages && activeMessages.length > MESSAGES_PAGE_SIZE"
+                  <div v-if="!isLoadingMore && !hasMoreMessages && activeTurns.length > MESSAGES_PAGE_SIZE"
                     class="w-full py-4 text-center text-gray-400 text-xs">
                     {{ t('chat.panel.noMoreMessages') }}
                   </div>
                 </Transition>
 
-                <TurnItem :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
-                  v-for="(turn, index) in visibleTurns" :key="turn.user.id" :turn="turn" :avatar="userAvater"
-                  :character-name="currentSession?.character?.title"
-                  :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
-                  :allow-generate="!isStreaming && index === lastUserMessageIndex"
-                  :animate-in="animateIds.includes(turn.user.id)" @delete="deleteMessage" @edit="editMessage"
-                  @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-                  @continue="continueResponse" @switch="switchContent" />
+                <template v-for="(turn, index) in visibleTurns" :key="turn.id">
+                  <!-- 事件类消息外壳（turn.kind='event'，compaction/command 等）：渲染专门事件卡片 -->
+                  <EventCard v-if="turn.kind === 'event'" :event="turn" />
+                  <TurnItem v-else :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
+                    :turn="turn" :avatar="userAvater"
+                    :character-name="currentSession?.character?.title"
+                    :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
+                    :allow-generate="!isStreaming && index === lastUserMessageIndex"
+                    :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
+                    @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+                    :session-id="currentSessionId || undefined" />                </template>
                 <!-- <div class="min-h-60"></div> -->
 
                 <!-- 压缩中状态显示 -->
@@ -75,6 +78,9 @@
                   <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
                 </div>
               </Transition>
+
+              <!-- 会话级全局卡：审批卡 / 暂停卡（对齐 DSH：sessionId 唯一锚点，不挂回合） -->
+              <SessionCards :session-id="currentSessionId || undefined" />
 
               <!-- 编辑模式提示条 -->
               <div v-if="editMode" class="max-w-full w-full flex px-4">
@@ -155,8 +161,12 @@ import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
-import { getCurrentTurns } from "@/utils/messageUtils"
-import { useStreamResponse } from "@/composables/useStreamResponse"
+import { streamReceiver } from "@/services/modules/StreamReceiver"
+import {
+  applyLiveChunk,
+  foldEvents,
+  takeStash as takeProjectorStash,
+} from "@/services/modules/streamProjector"
 import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
 import type { Character } from '@/types/character';
 
@@ -167,19 +177,18 @@ import { useSessionTokenStats } from '@/composables/useSessionTokenStats'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
+import EventCard from "./EventCard.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
 import QueuedMessages from './QueuedMessages.vue';
+import SessionCards from './SessionCards.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
 import GdTooltip from '../ui/GdTooltip.vue';
 import GdDialog from '@/components/ui/GdDialog.vue'
 
-
-// 常量定义
-const MAX_REGENERATE_VERSIONS = 5
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -262,6 +271,8 @@ const currentSession = computed({
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
 const currentSessionId = ref<string | null>(null);
+/** 各会话历史快照最后入库 seq(loadSession 返回,作订阅游标用) */
+const lastSeqBySession = new Map<string, number | null>();
 
 // 共享的 Token 统计（useSessionTokenStats 自动监听流状态刷新）
 const currentSessionIdRef = computed(() => currentSessionId.value);
@@ -429,11 +440,13 @@ function handleScroll(event: any) {
       !isLoadingMore.value &&
       currentSessionId.value
     ) {
-      const earliestId = sessionStore.getEarliestMessageId(currentSessionId.value);
-      if (earliestId) {
+      // 分页游标：事件页的 nextBeforeSeq（null = 无更早内容）
+      const eventCursor =
+        sessionStore.getSessionState(currentSessionId.value)?.eventCursor ?? null;
+      if (eventCursor != null) {
         // 立即设置标记，防止重复触发
         isLoadingMore.value = true;
-        loadMoreMessages(currentSessionId.value, earliestId);
+        loadMoreMessages(currentSessionId.value, eventCursor);
       }
     }
 
@@ -475,11 +488,20 @@ const activeMessages = computed({
   }
 });
 
+// 直接消费后端 Turn[]（不再打平为扁平消息再按 parentId 归组）
+const activeTurns = computed(() => {
+  const sessionId = currentSessionId.value;
+  return sessionId && !isLoading.value ? sessionStore.getTurns(sessionId) || [] : [];
+});
+
+// 从回合中取用户锚点块（role=user），渲染与操作均基于该块（二级结构：turn → block）
+const userOfTurn = (turn: any): any => turn?.blocks?.find((b: any) => b.role === 'user') ?? null;
+
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
   const turns = visibleTurns.value;
   for (let i = turns.length - 1; i >= 0; i--) {
-    if (turns[i].user) {
+    if (userOfTurn(turns[i])) {
       return i;
     }
   }
@@ -487,38 +509,22 @@ const lastUserMessageIndex = computed(() => {
 });
 
 // ============================================
-// 轮次分组：将扁平消息列表按 user 消息分组
+// 回合列表：直接消费后端 Turn[]（无需按 parentId 归组）
 // ============================================
-const turns = computed(() => {
-  const map: Record<string, { user: any; assistants: any[] }> = {};
-  const order: string[] = [];
-  for (const msg of activeMessages.value) {
-    if (msg.role === 'user') {
-      map[msg.id] = { user: msg, assistants: [] };
-      order.push(msg.id);
-    } else if (msg.role === 'assistant' && msg.parentId) {
-      if (!map[msg.parentId]) {
-        map[msg.parentId] = { user: null, assistants: [] };
-        order.push(msg.parentId);
-      }
-      map[msg.parentId].assistants.push(msg);
-    }
-  }
-  return order.map((id) => map[id]);
-});
+const turns = computed(() => activeTurns.value);
 
 
-// 过滤：只保留有 user 消息的组
+// 过滤：保留含 user 锚点消息的回合 + 事件类消息外壳（kind='event'，无 user 锚点也能显示）
 const visibleTurns = computed(() =>
-  turns.value.filter((t) => t.user),
+  turns.value.filter((t) => userOfTurn(t) || t.kind === 'event'),
 );
 
 // 监听轮次变化：仅 handleSendMessage 发送的新消息才标记动画
 watch(() => visibleTurns.value.length, (newLen, oldLen) => {
   if (!expectingNewMessage || newLen <= (oldLen || 0)) return;
   const lastTurn = visibleTurns.value[visibleTurns.value.length - 1];
-  if (!lastTurn?.user) return;
-  const newId = lastTurn.user.id;
+  if (!lastTurn) return;
+  const newId = lastTurn.id;
   animateIds.value = [...animateIds.value, newId];
   setTimeout(() => {
     animateIds.value = animateIds.value.filter(id => id !== newId);
@@ -555,7 +561,7 @@ const chatInputConfig = computed(() => ({
   maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
   workspacePath: currentSession.value?.workspacePath || null,
-  runMode: currentSession.value?.settings?.runMode || 'normal',
+  sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
   attachments: currentSession.value?.settings?.attachments || {},
 }));
 
@@ -603,9 +609,9 @@ const handleConfigChange = (config: any) => {
     console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
 
-  // 处理运行模式
-  if (typeof config.runMode !== 'undefined') {
-    currentSession.value.settings.runMode = config.runMode;
+  // 处理安全模式
+  if (typeof config.sandboxMode !== 'undefined') {
+    currentSession.value.settings.sandboxMode = config.sandboxMode;
   }
 
   // 处理附加连接
@@ -648,23 +654,31 @@ async function loadSession(sessionId: string) {
 }
 
 /**
- * 加载会话消息
+ * 加载会话消息（前端自折叠：拉事件页 → foldEvents 重建树）
  * @param sessionId - 会话 ID
  * @param options - 加载选项
- *   - isInitial: 是否为首次加载（加载最近 N 条）
- *   - beforeMessageId: 加载此 ID 之前（更早）的消息
+ *   - isInitial: 是否为首次加载（拉最近 N 个回合的事件页）
+ *   - beforeSeq: 加载此 seq 之前（更早）的事件页（load-more）
  */
 async function loadMessages(
   sessionId: string,
-  options: { isInitial?: boolean; beforeMessageId?: string } = {},
+  options: { isInitial?: boolean; beforeSeq?: number } = {},
 ) {
   const isInitial = options.isInitial ?? true;
 
-  // 初始加载会替换整个消息数组（setMessages），流式输出期间执行会丢失正在输出的消息
-  // 加载更多仅 prepend 到头部，与流式的 push/findIndex 互不干扰
+  // 初始加载会替换整个消息数组（foldEvents 清树重建），流式输出期间执行会丢失正在输出的消息
+  // 加载更多仅前插事件数组后 re-fold，与流式的增量应用互不干扰（live 事件已在 eventLog）
   if (isInitial) {
     const sessionState = sessionStore.getSessionState(sessionId);
     if (sessionState.isStreaming) {
+      // 恢复本会话自己的分页状态(组件级单例 ref 会残留上一个会话的值)
+      hasMoreMessages.value = sessionState.turnsHasMore ?? true;
+      return;
+    }
+    // 二次打开:该会话内容已缓存(loaded)且非流式 → 不重新向后端拉取,
+    // 直接用缓存,增量由订阅补新(前端会话级内容缓存 + eventLog 重建)。
+    if (sessionState.loaded === true) {
+      hasMoreMessages.value = sessionState.turnsHasMore ?? true;
       return;
     }
   }
@@ -674,60 +688,61 @@ async function loadMessages(
   }
 
   try {
-    const requestOptions: any = {};
+    const sessionState = sessionStore.getSessionState(sessionId);
+    // 记录 load-more 前的滚动位置（内容高度），rebuild 后恢复
+    const scrollElement = scrollContainerRef.value?.getScrollElement?.();
+    const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
+
+    const page = await apiService.fetchSessionEvents(sessionId, {
+      beforeSeq: isInitial ? undefined : options.beforeSeq,
+      turns: isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE,
+    });
+
+    // 事件数组：初始替换 / load-more 前插（live 终态事件已由 applyLiveChunk 追加进 eventLog）
+    const prevLog = sessionState.eventLog || [];
+    sessionState.eventLog = isInitial
+      ? [...page.events]
+      : [...page.events, ...prevLog];
+
+    // 记录历史快照最后入库 seq,作订阅游标(订阅时按 prevSeq >= lastSeq 取增量)
     if (isInitial) {
-      // 首次加载：加载最近 INITIAL_PAGE_SIZE 条
-      requestOptions.limit = INITIAL_PAGE_SIZE;
-    } else if (options.beforeMessageId) {
-      // 加载更多：加载指定 ID 之前的更早消息
-      requestOptions.limit = MESSAGES_PAGE_SIZE;
-      requestOptions.beforeMessageId = options.beforeMessageId;
+      lastSeqBySession.set(sessionId, page.endSeq ?? null);
+      // 时序:历史拉取完成后,通知唯一 receiver 设置基线,
+      // receiver 对该会话才处理 prevSeq >= lastSeq 的增量(历史未拉取前不处理)
+      streamReceiver.setHistoryBaseline(sessionId, page.endSeq ?? 0);
     }
 
-    const sessionMessages = await apiService.fetchSessionMessages(
-      sessionId,
-      requestOptions,
-    );
+    // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
+    foldEvents(sessionStore, sessionId, sessionState.eventLog);
 
-    // 处理历史消息的思考时长回填
-    sessionMessages.items.forEach(
-      (message: { id: string; contents: any[] }) => {
-        if (message.contents && Array.isArray(message.contents)) {
-          message.contents.forEach((content) => {
-            if (content.meta_data?.thinking_duration_ms) {
-              content.thinking_duration_ms =
-                content.meta_data.thinking_duration_ms;
-            }
-          });
-        }
-      },
-    );
+    // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
+    sessionState.eventCursor = page.nextBeforeSeq;
 
-    if (isInitial) {
-      // 首次加载：替换消息列表
-      activeMessages.value = sessionMessages.items;
-      const pageSize = isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE;
-      hasMoreMessages.value = sessionMessages.items.length >= pageSize;
-    } else {
-      // 加载更多：prepend 到列表前部
-      if (sessionMessages.items.length > 0) {
-        // 记录当前滚动位置（内容高度）
-        const scrollElement = scrollContainerRef.value?.getScrollElement?.();
-        const oldScrollHeight = scrollElement?.scrollHeight || 0;
-
-        sessionStore.prependMessages(sessionId, sessionMessages.items);
-
-        // 恢复滚动位置，避免跳到顶部
-        nextTick(() => {
-          const newScrollHeight = scrollElement?.scrollHeight || 0;
-          const heightDiff = newScrollHeight - oldScrollHeight;
-          if (scrollElement && heightDiff > 0) {
-            scrollElement.scrollTop = heightDiff;
-          }
-        });
+    // 消费暂存:打开会话时把"无缓存期间暂存的 finish 后事件"应用进 store
+    // （加载期间 SSE 事件先于历史到达被 streamProjector 暂存；先折叠历史再应用增量）
+    const projectorStash = takeProjectorStash(sessionId);
+    if (projectorStash.length > 0) {
+      for (const chunk of projectorStash) {
+        applyLiveChunk(sessionStore, sessionId, chunk);
       }
-      const pageSize = isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE;
-      hasMoreMessages.value = sessionMessages.items.length >= pageSize;
+    }
+
+    hasMoreMessages.value = page.hasMore;
+    // 分页游标状态按会话记忆(切会话回来时恢复)
+    sessionStore.getSessionState(sessionId).turnsHasMore = page.hasMore;
+
+    // 标记会话内容已缓存(二次打开不再向后端拉取)
+    if (isInitial) {
+      sessionStore.getSessionState(sessionId).loaded = true;
+    } else if (page.events.length > 0) {
+      // 恢复滚动位置，避免跳到顶部（rebuild 替换整树，需补偿高度差）
+      nextTick(() => {
+        const newScrollHeight = scrollElement?.scrollHeight || 0;
+        const heightDiff = newScrollHeight - oldScrollHeight;
+        if (scrollElement && heightDiff > 0) {
+          scrollElement.scrollTop = heightDiff;
+        }
+      });
     }
   } catch (error: any) {
     console.error('加载消息失败:', error);
@@ -740,10 +755,10 @@ async function loadMessages(
 /**
  * 加载更多历史消息
  * @param sessionId - 会话 ID
- * @param beforeMessageId - 从此 ID 之前开始加载
+ * @param beforeSeq - 从此 seq 之前（更早）加载
  */
-async function loadMoreMessages(sessionId: string, beforeMessageId: string) {
-  await loadMessages(sessionId, { isInitial: false, beforeMessageId });
+async function loadMoreMessages(sessionId: string, beforeSeq: number) {
+  await loadMessages(sessionId, { isInitial: false, beforeSeq });
 }
 /**
  * 处理会话切换
@@ -802,6 +817,8 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   if (newSessionId === oldSessionId) return;
 
   resetTitleFlag();
+  // 方案A 会话级:切换会话时通知唯一 receiver(当前会话处理,切换时注销上一会话订阅)
+  streamReceiver.setActiveSession(newSessionId);
   if (newSessionId === null) {
     currentSessionId.value = null;
     return;
@@ -812,10 +829,12 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     lastScrollTop = 0;
     currentSessionId.value = newSessionId;
+    // 打开会话:直接拉历史快照(loadSession 返回 lastSeq 作为订阅游标)。
+    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——订阅时按 prevSeq >= lastSeq 取增量。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
-    // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
-    await checkActiveStreamOnLoad(newSessionId);
+    // 打开会话后一次性尝试订阅活跃流(刷新/多窗口同步;无活跃流时 subscribe 模式自行结束)
+    await subscribeToActiveStream(newSessionId);
     if (token !== sessionChangeToken) return;
 
     nextTick(() => {
@@ -838,80 +857,6 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   }
 }
 
-/**
- * 页面加载时一次性检查活跃流
- * 用于刷新后的初始状态同步，后续通过 SSE 事件驱动
- */
-async function checkActiveStreamOnLoad(sessionId: string) {
-  try {
-    const status = await apiService.getStreamStatus(sessionId);
-    if (status.isRunning) {
-      await subscribeToActiveStream();
-    }
-  } catch (error) {
-    console.error('初始流状态检查失败:', error);
-  }
-}
-
-// 流式响应处理（委托给 composable 处理，用于 regenerate / continue）
-async function handleStreamResponse(
-  streamingSessionId: string,
-  regenerationMode: any = null,
-  assistantMessageId: string | null = null,
-  userMessageId?: string | null,
-) {
-  try {
-    const handler = useStreamResponse(sessionStore, apiService)
-    await handler.processStream(
-      streamingSessionId,
-      regenerationMode,
-      assistantMessageId,
-      userMessageId,
-    )
-  } catch (error) {
-    // 错误已在 composable 中处理，这里只负责显示通知
-    if ((error as Error).message.includes('SessionBusyError')) {
-      notify.warning(t('chat.panel.sessionBusy'), t('chat.panel.sessionBusyDesc'))
-      return
-    }
-    if (error.name !== 'AbortError') {
-      notify.error(t('common.error.unknown'), error.message)
-      console.error("请求错误:", error)
-    }
-  }
-}
-
-/**
- * 合并消息创建和流式响应处理
- * 后端会在启动流时自动创建消息
- */
-async function handleStreamResponseWithCreate(
-  streamingSessionId: string,
-  content: string,
-  fileIds: string[],
-  replaceMessageId: string | null = null,
-  knowledgeBaseIds?: string[],
-) {
-  try {
-    const handler = useStreamResponse(sessionStore, apiService)
-    await handler.processStreamWithCreate(
-      streamingSessionId,
-      content,
-      fileIds,
-      replaceMessageId,
-      knowledgeBaseIds,
-    )
-  } catch (error) {
-    if ((error as Error).message.includes('SessionBusyError')) {
-      notify.warning(t('chat.panel.sessionBusy'), t('chat.panel.sessionBusyDesc'))
-      return
-    }
-    if (error.name !== 'AbortError') {
-      notify.error(t('common.error.unknown'), error.message)
-    }
-  }
-}
-
 // 消息操作方法
 function abortResponse() {
   if (currentSessionId.value) {
@@ -919,50 +864,48 @@ function abortResponse() {
   }
 }
 
-async function deleteMessage(message: any) {
+async function deleteTurnMessage(turn: any) {
   try {
     if (
       await confirm(
-        t('chat.panel.deleteMessageTitle'),
-        message.role === "user"
-          ? t('chat.panel.deleteUserMessageDesc')
-          : t('chat.panel.deleteAssistantMessageDesc')
+        t('chat.panel.deleteTurnTitle'),
+        t('chat.panel.deleteTurnDesc')
       )
     ) {
-      await apiService.deleteMessage(message.id);
-      if (message.role === "user") {
-        const assistantMessage = activeMessages.value.find((msg) => msg.parentId === message.id);
-        if (assistantMessage && currentSessionId.value) {
-          sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
-        }
-      }
       if (currentSessionId.value) {
-        sessionStore.deleteMessage(currentSessionId.value, message.id);
+        // 删除本轮对话：按回合 id 整轮遮蔽（前端 turn 结构直接消费）
+        const turnId = turn?.id;
+        await apiService.deleteTurn(currentSessionId.value, turnId);
+        sessionStore.deleteTurnById(currentSessionId.value, turnId);
+        toast.success(t('common.deleteSuccess'));
       }
-      toast.success(t('common.deleteSuccess'));
     }
   } catch (error) {
     toast.error(t('common.error.deleteFailed'));
-    console.error("删除消息失败:", error);
+    console.error("删除本轮对话失败:", error);
   }
 }
 
-async function editMessage(message: any) {
+async function editMessage(block: any) {
   try {
-    const turns = getCurrentTurns(message)
-    const currentContent = turns[turns.length - 1]
+    // 无 assistant 块（如立即报错无任何产出）→ 无可编辑内容，提前返回
+    if (!block) {
+      toast.info(t('chat.panel.editCancelled'));
+      return;
+    }
 
     const result = await editText({
       title: t('chat.panel.editMessageTitle'),
-      defaultValue: currentContent.content || "",
+      defaultValue: block.content || "",
       confirmText: t('common.save'),
       cancelText: t('common.cancel')
     }) as string | null;
 
     if (result != null && currentSessionId.value) {
-      currentContent.content = result;
-      await apiService.updateMessage(message.id, { content: result });
-      sessionStore.updateMessage(currentSessionId.value, message.id, message);
+      block.content = result;
+      // 按消息级 messageId 回传（块继承自所属消息）
+      await apiService.updateMessage(currentSessionId.value, block.messageId, { content: result });
+      sessionStore.updateMessage(currentSessionId.value, block.messageId, block);
       toast.success(t('common.updateSuccess'));
     } else if (result === null || result === undefined) {
       toast.info(t('chat.panel.editCancelled'));
@@ -973,13 +916,16 @@ async function editMessage(message: any) {
   }
 }
 
-async function copyMessage(message: any) {
+async function copyMessage(block: any) {
   try {
-    const turns = getCurrentTurns(message)
-    const currentContent = turns[turns.length - 1]
+    // 无 assistant 块（如立即报错无任何产出）→ 复制空内容
+    if (!block) {
+      await navigator.clipboard.writeText("");
+      return;
+    }
 
-    if (currentContent.content) {
-      await navigator.clipboard.writeText(currentContent.content);
+    if (block.content) {
+      await navigator.clipboard.writeText(block.content);
       toast.success(t('common.copySuccess'));
     }
   } catch (error) {
@@ -1015,32 +961,37 @@ async function handleSendMessage(payload?: InputMessageState) {
     const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
 
     // 如果是编辑模式，需要处理替换逻辑
-    let replaceMessageId: string | undefined = undefined;
-    if (editMode.value && editMode.value.message && currentSessionId.value) {
-      const rid = editMode.value.message.id;
-      replaceMessageId = rid;
+    // replaceTurnId 已由 enterEditMode 定位好(回合外壳 id=turnId),直接使用,无需反查。
+    let replaceTurnId: string | undefined = undefined;
+    if (editMode.value && editMode.value.turnId && currentSessionId.value) {
+      replaceTurnId = editMode.value.turnId;
+      const rid = editMode.value.message?.id;
       const sid = currentSessionId.value;
-      // 删除旧消息及其回答
-      sessionStore.deleteMessage(sid, rid);
-      const assistantMessage = sessionStore
+      // 删除该回合（user 及其 assistant 一并移除），随后由 replaceTurnId 触发后端 turn/delete + 新建回合
+      const roundMessages = sessionStore
         .getMessages(sid)
-        .find((msg: any) => msg.parentId === rid);
-      if (assistantMessage) {
-        sessionStore.deleteMessage(sid, assistantMessage.id);
+        .filter((msg: any) => msg.id === rid || msg.parentId === rid);
+      for (const rm of roundMessages) {
+        sessionStore.deleteMessage(sid, rm.id);
       }
       exitEditMode();
     }
 
     // 发起流式请求（后端会自动创建消息并启动流）
+    // 发送链路独立:只调 apiService.chat 发起,不订阅、不处理事件;
+    // 发送后的事件由常驻接收链路(唯一 receiver)消费。
     if (currentSessionId.value) {
       expectingNewMessage = true;
-      handleStreamResponseWithCreate(
-        currentSessionId.value,
-        prepared.content,
-        prepared.fileIds,
-        replaceMessageId,
-        prepared.knowledgeBaseIds,
-      );
+      sessionStore.setStreamStatus(currentSessionId.value, "pending");
+      await apiService.chat({
+        sessionId: currentSessionId.value,
+        userMessage: {
+          content: prepared.content,
+          files: prepared.fileIds,
+          replaceTurnId,
+          knowledgeBaseIds: prepared.knowledgeBaseIds,
+        },
+      });
     }
   } catch (error: any) {
     notify.error(t('chat.panel.sendMessageFailed'), error.message);
@@ -1073,128 +1024,64 @@ function handleEditQueued(item: QueuedMessage) {
 
 /**
  * 进入编辑模式以重新生成消息
+ * TurnItem 已直接传入整轮 turn(渲染链路传递,零反查),
+ * enterEditMode 直接用 turn.id 作为被编辑回合外壳 id。
  */
-function generateResponse(message: any) {
-  enterEditMode(message)
+function generateResponse(turn: any) {
+  const user = (turn?.blocks || []).find((b: any) => b.role === "user");
+  if (!user) return;
+  enterEditMode(user, turn.id)
 }
 
 /**
- * 重新生成响应（多版本）
+ * 重新生成响应（整轮次重答：删除旧轮次 + 正常回答流程，overwrite 模式）
+ * TurnItem 已直接传入整轮 turn,用户块与回合外壳 id 均从 turn 直接取(零反查),
+ * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
-function regenerateResponse(message: any) {
-  // 新模型：统计同 parentId 的兄弟 assistant 消息数量
-  const parentId = message.parentId;
-  const existingVersions = activeMessages.value.filter(
-    (m) => m.parentId === parentId && m.role === "assistant"
-  );
+function regenerateResponse(turn: any) {
+  const userBlocks = (turn?.blocks || []).filter((b: any) => b.role === "user");
+  if (userBlocks.length === 0) return;
+  // 二级结构：用户文本/文件分散在多个 user 块，跨块聚合
+  const userContent = userBlocks.map((b: any) => b.content || "").filter(Boolean).join("\n");
+  const userFileIds = userBlocks
+    .flatMap((b: any) => b.files || [])
+    .filter((f: any) => f.id)
+    .map((f: any) => f.id);
+  const knowledgeBaseIds = userBlocks[0]?.metadata?.knowledgeBaseIds;
 
-  if (existingVersions.length >= MAX_REGENERATE_VERSIONS) {
-    toast.error(t('chat.panel.maxVersionsExceeded'));
-    return;
-  }
-
-  const assistantMessage = activeMessages.value.find(m => m.id === message.id);
-  if (assistantMessage) {
-    assistantMessage.state = { isStreaming: true };
-  }
+  const replaceTurnId = turn.id;
 
   nextTick(() => {
     immediateScrollToBottom();
-    if (message.sessionId) {
-      // multi_version 模式需要传递 userMessageId（通过 parentId 获取）
-      const userMessageId = message.parentId || null;
-      handleStreamResponse(message.sessionId, "multi_version", message.id, userMessageId);
+    if (currentSessionId.value) {
+      // 发送链路独立:只调 apiService.chat 发起(重答=replaceTurnId 触发 turn/delete+新建),
+      // 不订阅、不处理事件;事件由常驻接收链路(唯一 receiver)消费。
+      sessionStore.setStreamStatus(currentSessionId.value, "pending");
+      apiService.chat({
+        sessionId: currentSessionId.value,
+        userMessage: {
+          content: userContent,
+          files: userFileIds,
+          replaceTurnId,
+          knowledgeBaseIds,
+        },
+      });
     }
   });
 }
-
-/**
- * 从断点继续执行（恢复工具调用）
- */
-function continueResponse(message: any) {
-  const assistantMessage = activeMessages.value.find(m => m.id === message.id);
-  if (assistantMessage) {
-    assistantMessage.state = { isStreaming: true };
-  }
-
-  nextTick(() => {
-    immediateScrollToBottom();
-    if (message.sessionId) {
-      // resume 模式需要传递 userMessageId（通过 parentId 获取）
-      const userMessageId = message.parentId || null;
-      handleStreamResponse(message.sessionId, "resume", message.id, userMessageId);
-    }
-  });
-}
-
-function switchContent(message: any, versionId: string) {
-  // 新模型：找到用户消息，更新 currentVersionId
-  const userMessage = activeMessages.value.find((m) => m.role === "user" && m.currentVersionId === message.id);
-  if (userMessage && currentSessionId.value) {
-    userMessage.currentVersionId = versionId;
-    apiService.updateMessage(userMessage.id, { currentVersionId: versionId });
-    sessionStore.updateMessage(currentSessionId.value, userMessage.id, userMessage);
-  }
-  nextTick(() => {
-    immediateScrollToBottom();
-  });
-}
-
-
 
 /**
  * 订阅活跃流
  * 当检测到会话有正在进行的流式输出时调用（如刷新页面后重连或多窗口打开）
  */
-async function subscribeToActiveStream() {
-  if (!currentSessionId.value || isStreaming.value) return;
+async function subscribeToActiveStream(sessionId?: string) {
+  const sid = sessionId || currentSessionId.value;
+  if (!sid || isStreaming.value) return;
 
-  // 设置流式状态
-  sessionStore.setSessionIsStreaming(currentSessionId.value, true);
-
-  // 以订阅模式启动流式响应（用于刷新重连/多窗口观察）
-  // 不能 await：该 Promise 会持续到整个 SSE 流结束，否则页面加载态无法结束。
-  void handleStreamResponseAsSubscriber(currentSessionId.value);
-}
-
-/**
- * 以订阅者身份处理流式响应（不发起新聊天，只观察已有流）
- */
-async function handleStreamResponseAsSubscriber(
-  streamingSessionId: string,
-) {
-  try {
-    // 从后往前查找最后一个有 contents 的消息，用于后端过滤已完成的 content
-    // 注意：最后一条消息可能是刚创建的空助手消息（contents 为空），
-    // 此时需要向前回溯，否则 lastContentId 为 null 会导致整个 eventBuffer 被重放，
-    // 包括 user_message 事件，从而造成用户消息重复。
-    const messages = sessionStore.getMessages(streamingSessionId);
-    let lastContentId: string | null = null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].contents?.length > 0) {
-        lastContentId = messages[i].contents[messages[i].contents.length - 1].id;
-        break;
-      }
-    }
-
-    const handler = useStreamResponse(sessionStore, apiService)
-    await handler.processStream(
-      streamingSessionId,
-      'subscribe',
-      null,
-      null,
-      lastContentId,
-    );
-  } catch (error) {
-    // 订阅模式下无活跃流的错误可以静默忽略
-    if ((error as Error).message?.includes("NO_ACTIVE_STREAM")) {
-      sessionStore.setSessionIsStreaming(streamingSessionId, false);
-      return;
-    }
-    if ((error as Error).name !== "AbortError") {
-      console.error("订阅流失败:", error);
-    }
-  }
+  // 常驻接收链路(useSessionEvents 的 streamReceiver.subscribeAll)已消费所有会话事件
+  // (按 sessionId 路由 → projectChunk 写缓存/暂存),无需再启动 processStream('subscribe') 事件循环,
+  // 也不再盲置 isStreaming=true —— isStreaming 由后端 stream_status_changed 实际流状态驱动。
+  void sid;
 }
 
 // 将方法暴露给父组件

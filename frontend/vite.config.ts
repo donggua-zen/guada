@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
@@ -49,11 +49,17 @@ export default defineConfig({
       '/api/v1': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        ws: true,
       },
       '/static': {
         target: 'http://localhost:3000',
         changeOrigin: true
       }
     }
-  }
+  },
+  test: {
+    // 纯逻辑/store 单测,node 环境即可;组件测试(如需要)再切 jsdom
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+  },
 })

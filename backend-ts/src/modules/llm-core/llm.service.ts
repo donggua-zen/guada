@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ProviderHub } from "./provider-hub.service";
 import { IProtocolAdapter } from "./adapters/base.adapter";
-import { LLMCompletionParams, MessageRecord } from "./types/llm.types";
+import { LLMCompletionParams } from "./types/llm.types";
+import type { Message } from "../../common/types/conversation.types";
 import { RequestContext } from "../../common/context/request-context";
 import { removeOrphanSurrogates } from "../../common/utils/string.utils";
 import {
@@ -129,23 +130,22 @@ export class LLMService {
       }
     }
 
-    // 清洗消息
-    const sanitizedMessages = params.messages.map((msg) => {
-      const sanitized: MessageRecord = { ...msg };
-      if (typeof sanitized.content === "string") {
-        sanitized.content = removeOrphanSurrogates(sanitized.content);
-      } else if (Array.isArray(sanitized.content)) {
-        sanitized.content = sanitized.content.map((part) =>
-          part.type === "text" && part.text
-            ? { ...part, text: removeOrphanSurrogates(part.text) }
-            : part,
-        );
-      }
-      if (sanitized.reasoningContent) {
-        sanitized.reasoningContent = removeOrphanSurrogates(sanitized.reasoningContent);
-      }
-      return sanitized;
-    });
+    // 清洗消息（三层 Message[]：清洗各 text/reasoning 块中的孤儿代理字符）
+    const sanitizedMessages: Message[] = params.messages.map((msg) => ({
+      ...msg,
+      content: msg.content.map((block) => {
+        if (block.type === "text" && block.text) {
+          return { ...block, text: removeOrphanSurrogates(block.text) };
+        }
+        if (block.type === "reasoning" && block.summary) {
+          return { ...block, summary: removeOrphanSurrogates(block.summary) };
+        }
+        if (block.type === "tool-result" && block.content) {
+          return { ...block, content: removeOrphanSurrogates(block.content) };
+        }
+        return block;
+      }),
+    }));
 
     // ===== 统一 idle timeout 控制（在 service 层创建，adapter 只需使用 signal） =====
     const idleTimeoutMs = await this.getIdleTimeoutMs();

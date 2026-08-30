@@ -64,7 +64,7 @@ export function createMockMethods() {
         id?: string;
         content?: string;
         files?: string[];
-        replaceMessageId?: string;
+        replaceTurnId?: string;
         knowledgeBaseIds?: string[];
       };
     }
@@ -109,14 +109,14 @@ export function createMockMethods() {
     sessionId: string,
     content: string,
     files: any[] = [],
-    replaceMessageId: string | null = null,
+    replaceTurnId: string | null = null,
     knowledgeBaseIds?: string[],
   ): Promise<any> => {
     console.log(`[Mock] 拦截 createMessage 请求:`, {
       sessionId,
       content: content.substring(0, 50) + (content.length > 50 ? "..." : ""),
       filesCount: files.length,
-      replaceMessageId,
+      replaceTurnId,
       knowledgeBaseIds,
     });
 
@@ -134,7 +134,7 @@ export function createMockMethods() {
       role: "user",
       content,
       files: files || [],
-      parentId: replaceMessageId,
+      parentId: replaceTurnId,
       currentVersionId: null,
       state: {
         isStreaming: false,

@@ -786,7 +786,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.logger.warn(
-      `sandbox binary (${binName}) not found, sandbox/plan mode will be unavailable`,
+      `sandbox binary (${binName}) not found, confined sandbox modes will be unavailable`,
     );
     this.sandboxBinPath = null;
     return null;

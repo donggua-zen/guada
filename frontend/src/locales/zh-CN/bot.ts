@@ -145,11 +145,10 @@ export default {
     loading: '加载中...',
     empty: '暂无消息',
     loadFailed: '加载消息失败',
-    // 删除消息确认
-    deleteUserMsg: '确定要删除这条提问吗?对应的回答也会被删除。此操作不可撤销。',
-    deleteAssistantMsg: '确定要删除这条回答吗?此操作不可撤销。',
-    deleteTitle: '删除消息',
-    deleteSuccess: '消息已删除',
+    // 删除本轮对话确认
+    deleteTurnDesc: '确定要删除本轮对话吗？提问与回答将一并删除。此操作不可撤销。',
+    deleteTitle: '删除本轮对话',
+    deleteSuccess: '本轮对话已删除',
     deleteFailed: '删除失败',
     editNotImplemented: '编辑功能待实现',
   },

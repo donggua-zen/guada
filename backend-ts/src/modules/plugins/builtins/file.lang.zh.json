@@ -20,5 +20,7 @@
   "grep.executing": "正在搜索内容",
   "grep.completed": "已搜索内容",
   "grep.aggregate.executing": "正在执行{n}次搜索",
-  "grep.aggregate.completed": "已执行{n}次搜索"
+  "grep.aggregate.completed": "已执行{n}次搜索",
+  "file.toolkitDescription": "读取、写入、编辑工作区文件，支持分页与内容搜索"
+
 }

@@ -8,6 +8,8 @@ import { TokenCacheService } from "../utils/token-cache.service";
 import { TokenizerService } from "../utils/tokenizer.service";
 import { FileNamingService } from "./file-naming.service";
 import { EventBusService } from "../events/event-bus.service";
+import { InteractionWaitService } from "./interaction-wait.service";
+import { AskService } from "./ask.service";
 
 /**
  * 共享服务模块
@@ -16,7 +18,7 @@ import { EventBusService } from "../events/event-bus.service";
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService],
-  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService],
+  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService],
+  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService],
 })
 export class SharedModule {}

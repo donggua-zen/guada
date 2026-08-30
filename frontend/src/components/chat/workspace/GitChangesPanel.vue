@@ -236,65 +236,54 @@
                 <el-icon :size="12"><Close /></el-icon>
               </button>
             </div>
-            <div ref="treeScrollRef" class="git-tree-scroll" tabindex="0"
-              :class="{ focused: treeFocused }"
-              @keydown="onTreeKeydown" @focus="treeFocused = true" @blur="treeFocused = false">
-        <template v-if="isGitRepo">
-          <div v-for="group in displayGroups" :key="group.key">
-            <div class="git-group-header">
-              {{ group.label }} ({{ group.rows.length }})
-            </div>
-            <div v-for="trow in group.treeRows" :key="trow.key" class="git-tree-row"
-              :class="{
-                'git-tree-row--dir': trow.isDir,
-                'git-tree-row--partial': !trow.isDir && !!trow.row?.isPartial,
-                'git-tree-row--active': treeFocused && activeTreeKey === trow.key,
-                selected: !trow.isDir && selectedKey === trow.key,
-              }"
-              :ref="(el) => setTreeRowRef(trow.key, el)"
-              :style="{ paddingLeft: 8 + trow.depth * 14 + 'px', '--indent': trow.depth * 14 + 'px' }"
-              @click="onTreeRowClick(trow)">
-              <template v-if="trow.isDir">
-                <el-icon :size="12" class="git-tree-chevron"
-                  :class="{ expanded: !collapsedDirs.has(trow.key) }">
-                  <ArrowRight />
-                </el-icon>
-                <span class="git-tree-name" :title="trow.path">{{ trow.name }}</span>
-                <!-- 文件夹级操作：暂存/取消暂存整个目录下的全部变更文件（hover 显示） -->
-                <span class="git-row-actions" @click.stop>
-                  <button v-if="(trow.stagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.unstageAll')"
-                    @click="unstageDir(group, trow)">
-                    <el-icon :size="12"><Subtract16Regular /></el-icon>
-                  </button>
-                  <button v-if="(trow.unstagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.stageAll')"
-                    @click="stageDir(group, trow)">
-                    <el-icon :size="12"><Add16Regular /></el-icon>
-                  </button>
-                </span>
+            <TreeView ref="treeViewRef" :rows="gitTreeRows" :selected-key="selectedKey"
+              :active-key="activeTreeKey" :collapsed-keys="collapsedDirs" keyboard-nav class="git-tree-scroll"
+              @select="onTreeSelect" @toggle="onTreeToggle">
+              <template #row="{ row }">
+                <!-- 组头行 -->
+                <template v-if="row.isGroup">
+                  <span class="git-group-label">{{ row.label }} ({{ row.count }})</span>
+                </template>
+                <!-- 目录行：名称 + hover 操作（暂存/取消暂存整个目录） -->
+                <template v-else-if="row.isDir">
+                  <span class="git-tree-name" :title="row.path">{{ row.name }}</span>
+                  <span class="git-row-actions" @click.stop>
+                    <button v-if="(row.stagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.unstageAll')"
+                      @click="unstageDir(row.group, row as GitTreeRow)">
+                      <el-icon :size="12"><Subtract16Regular /></el-icon>
+                    </button>
+                    <button v-if="(row.unstagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.stageAll')"
+                      @click="stageDir(row.group, row as GitTreeRow)">
+                      <el-icon :size="12"><Add16Regular /></el-icon>
+                    </button>
+                  </span>
+                </template>
+                <!-- 文件行：状态字符 + 名称 + hover 操作 -->
+                <template v-else>
+                  <span class="git-status" :class="`git-status--${statusClass(row.row)}`">{{ row.row.statusChar }}</span>
+                  <span class="git-tree-name" :class="{ 'git-tree-name--partial': row.row?.isPartial }"
+                    :title="row.row.file.path">{{ row.name }}</span>
+                  <span class="git-row-actions" @click.stop>
+                    <button v-if="row.row.group === 'staged'" class="git-row-btn" :title="t('git.unstage')"
+                      @click="unstageFile(row.row)">
+                      <el-icon :size="12"><Subtract16Regular /></el-icon>
+                    </button>
+                    <button v-else class="git-row-btn" :title="t('git.stage')" @click="stageFile(row.row)">
+                      <el-icon :size="12"><Add16Regular /></el-icon>
+                    </button>
+                  </span>
+                </template>
               </template>
-              <template v-else>
-                <span class="git-status" :class="`git-status--${statusClass(trow.row!)}`">{{ trow.row!.statusChar }}</span>
-                <span class="git-tree-name" :title="trow.row!.file.path">{{ trow.name }}</span>
-                <span class="git-row-actions" @click.stop>
-                  <button v-if="trow.row!.group === 'staged'" class="git-row-btn" :title="t('git.unstage')"
-                    @click="unstageFile(trow.row!)">
-                    <el-icon :size="12"><Subtract16Regular /></el-icon>
-                  </button>
-                  <button v-else class="git-row-btn" :title="t('git.stage')" @click="stageFile(trow.row!)">
-                    <el-icon :size="12"><Add16Regular /></el-icon>
-                  </button>
-                </span>
+              <template #empty>
+                <div v-if="!refreshing && totalChanges === 0"
+                  class="text-center py-8 text-gray-400 dark:text-[#6b6d73] text-xs">
+                  {{ t('git.noChanges') }}
+                </div>
+                <div v-else class="text-center py-8 text-gray-400 dark:text-[#6b6d73] text-xs px-4">
+                  {{ status?.gitUnavailable ? t('git.notInstalled') : t('git.notGitRepo') }}
+                </div>
               </template>
-            </div>
-          </div>
-          <div v-if="!refreshing && totalChanges === 0" class="text-center py-8 text-gray-400 dark:text-[#6b6d73] text-xs">
-            {{ t('git.noChanges') }}
-          </div>
-        </template>
-        <div v-else class="text-center py-8 text-gray-400 dark:text-[#6b6d73] text-xs px-4">
-          {{ status?.gitUnavailable ? t('git.notInstalled') : t('git.notGitRepo') }}
-        </div>
-            </div>
+            </TreeView>
           </div>
         </template>
       </GdSplitpanes>
@@ -311,12 +300,13 @@ import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, ArrowRight, ArrowDown, ArrowUp, Close } from "@element-plus/icons-vue";
+import { Refresh, ArrowDown, ArrowUp, Close } from "@element-plus/icons-vue";
 import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
 import { GdSplitpanes } from "../../ui";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
+import TreeView, { type TreeViewRow } from "./TreeView.vue";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";
 import type { GitFileChange, GitDiff } from "@/services/modules/git.api";
@@ -489,20 +479,23 @@ function onTreeSplitResized(size: number): void {
 /** 目录树搜索关键字 */
 const searchText = ref("");
 
-/** 树滚动容器引用（键盘导航聚焦/滚动用） */
-const treeScrollRef = ref<HTMLElement | null>(null);
+/** TreeView 组件引用（滚动定位选中节点用） */
+const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null);
 /** 树键盘高亮行 key（方向键移动、Enter 确认，对齐 VS Code） */
 const activeTreeKey = ref<string | null>(null);
-const treeFocused = ref(false);
-/** 行 DOM 引用表（滚动到可见用；普通 Map 即可，无需响应式） */
-const treeRowEls = new Map<string, HTMLElement>();
 
-function setTreeRowRef(key: string, el: unknown): void {
-  if (el) treeRowEls.set(key, el as HTMLElement);
-  else treeRowEls.delete(key);
-}
+/**
+ * 拍平 displayGroups 为 TreeView 扁平行：
+ * 每组先输出组头行（isGroup），再输出该组的 treeRows（保留 group 引用供行操作）。
+ */
+const gitTreeRows = computed<TreeViewRow[]>(() =>
+  displayGroups.value.flatMap((g) => [
+    { key: `group:${g.key}`, depth: 0, isDir: false, isGroup: true, label: g.label, count: g.rows.length },
+    ...g.treeRows.map((r) => ({ ...r, group: g })),
+  ]),
+);
 
-/** 当前可见树行（含搜索过滤后的展示顺序，与模板 v-for 一致） */
+/** 当前可见树行（含搜索过滤后的展示顺序，供键盘导航/差位跳转） */
 const visibleTreeRows = computed<GitTreeRow[]>(() =>
   displayGroups.value.flatMap((g) => g.treeRows),
 );
@@ -510,56 +503,23 @@ const visibleTreeRows = computed<GitTreeRow[]>(() =>
 /** 设置高亮行并滚动到可见（nearest：尽量不动，越界才滚） */
 function setActiveTreeRow(row: GitTreeRow): void {
   activeTreeKey.value = row.key;
-  treeRowEls.get(row.key)?.scrollIntoView({ block: "nearest" });
+  treeViewRef.value?.scrollToKey(row.key);
 }
 
-/** 树键盘导航：↑/↓ 移动高亮、Enter 确认（目录=折叠切换、文件=打开 diff）、Home/End 跳首尾 */
-function onTreeKeydown(e: KeyboardEvent): void {
-  const rows = visibleTreeRows.value;
-  if (!rows.length) return;
-  let idx = activeTreeKey.value
-    ? rows.findIndex((r) => r.key === activeTreeKey.value)
-    : -1;
-  // 无高亮行时回退到当前已打开文件，方便 Enter 直达
-  if (idx < 0 && selectedKey.value) {
-    idx = rows.findIndex((r) => r.key === selectedKey.value);
-  }
-  switch (e.key) {
-    case "ArrowDown":
-      e.preventDefault();
-      idx = idx < 0 ? 0 : Math.min(idx + 1, rows.length - 1);
-      setActiveTreeRow(rows[idx]);
-      break;
-    case "ArrowUp":
-      e.preventDefault();
-      idx = idx < 0 ? rows.length - 1 : Math.max(idx - 1, 0);
-      setActiveTreeRow(rows[idx]);
-      break;
-    case "Home":
-      e.preventDefault();
-      setActiveTreeRow(rows[0]);
-      break;
-    case "End":
-      e.preventDefault();
-      setActiveTreeRow(rows[rows.length - 1]);
-      break;
-    case "Enter":
-      e.preventDefault();
-      if (idx < 0) idx = 0;
-      const row = rows[idx];
-      if (!row) return;
-      if (row.isDir) toggleDir(row);
-      else if (row.row) selectRow(row.row);
-      break;
-  }
+/** TreeView select（文件行）：同步键盘高亮 + 打开 diff */
+function onTreeSelect(row: TreeViewRow): void {
+  activeTreeKey.value = row.key;
+  const trow = row as unknown as GitTreeRow;
+  if (trow.row) selectRow(trow.row);
 }
 
-/** 点击树行：同步键盘高亮 + 聚焦树容器（后续方向键直接可用）+ 原有行为 */
-function onTreeRowClick(trow: GitTreeRow): void {
-  activeTreeKey.value = trow.key;
-  treeScrollRef.value?.focus({ preventScroll: true });
-  if (trow.isDir) toggleDir(trow);
-  else if (trow.row) selectRow(trow.row);
+/** TreeView toggle（目录行）：折叠/展开切换（collapsedDirs 语义：在集合 = 折叠） */
+function onTreeToggle(row: TreeViewRow, expanded: boolean): void {
+  activeTreeKey.value = row.key;
+  const next = new Set(collapsedDirs.value);
+  if (expanded) next.delete(row.key);
+  else next.add(row.key);
+  collapsedDirs.value = next;
 }
 
 /** 右侧变更目录树显隐（持久化；隐藏时 GdSplitpanes splitSize=100 → pane2 折叠） */
@@ -733,10 +693,7 @@ function collectDirKeys(rows: GitRow[], groupKey: string, out: Set<string>): voi
   }
 }
 
-/** 最近一次预览的文件（status 中已消失时回退用 —— 如已提交后降级为纯代码高亮） */
-const lastSelectedRowRef = ref<GitRow | null>(null);
-
-/** 当前选中行（从分组中反查，refresh 后跟随新状态；消失时回退最近预览以维持纯代码展示） */
+/** 当前选中行（从分组中反查，refresh 后跟随新状态） */
 const selectedRow = computed<GitRow | null>(() => {
   if (!selectedKey.value) return null;
   for (const g of groups.value) {
@@ -744,7 +701,7 @@ const selectedRow = computed<GitRow | null>(() => {
       if (rowKey(r) === selectedKey.value) return r;
     }
   }
-  return lastSelectedRowRef.value;
+  return null;
 });
 
 const selectedLines = computed<DiffLine[]>(() => {
@@ -1652,7 +1609,6 @@ function selectRow(row: GitRow): void {
   const key = rowKey(row);
   if (selectedKey.value === key) return;
   missingAnchorRef.value = null; // 用户主动选中列表内文件：恢复正常锚点
-  lastSelectedRowRef.value = row;
   selectedKey.value = key;
   diffLoadSeq++;
   diffLines.value = {};
@@ -1700,13 +1656,6 @@ async function loadDiff(row: GitRow, silent = false): Promise<void> {
   } finally {
     if (seq === diffLoadSeq && !silent) loadingKey.value = null;
   }
-}
-
-function toggleDir(trow: GitTreeRow): void {
-  const next = new Set(collapsedDirs.value);
-  if (next.has(trow.key)) next.delete(trow.key);
-  else next.add(trow.key);
-  collapsedDirs.value = next;
 }
 
 /**
@@ -1826,23 +1775,22 @@ function postProcessSelection(): void {
     if (f) target = { file: f, ...classifyFile(f) };
   }
   if (target) {
-    selectedKey.value = `${target.group}:${target.file.path}`;
-    // 刷新后自动重载当前预览：silent（保留旧内容、无加载闪烁），拉到新内容后原子替换
-    void loadDiff(target, true);
+    const curPath = cur ? cur.split(":").slice(1).join(":") : "";
+    // 同一文件仅级别（unstaged↔staged）变化：工作区内容未变，保持现有预览
+    // （不重载、不闪烁、滚动位置也保持）
+    if (!cur || curPath !== target.file.path) {
+      selectedKey.value = `${target.group}:${target.file.path}`;
+      // 真切换/新增文件：刷新后自动重载当前预览（silent，拉到新内容后原子替换）
+      void loadDiff(target, true);
+    }
   } else {
-    // 当前选中文件已不在变更列表（如已提交）：不清空，保持预览并降级为「纯代码高亮」
-    // （renderDiff 收到空 diff → 全 ctx 行，无 +/−，VS Code 行为）
+    // 当前选中文件消失（如已提交）：智能差位跳转到下一个现存文件（不保留、不循环）
     if (cur && props.sessionId) {
       const idx = cur.indexOf(":");
-      const group = (idx >= 0 ? cur.slice(0, idx) : "changes") as GitRow["group"];
       const path = idx >= 0 ? cur.slice(idx + 1) : cur;
-      // 捕获消失锚点：记录其在上一版顺序中的位置（供 Ctrl+Alt+↑/↓ 差位跳转；同文件重复刷新不覆盖）
-      if (!missingAnchorRef.value || missingAnchorRef.value.path !== path) {
-        missingAnchorRef.value = { path, prevIndex: prevOrderPaths.indexOf(path), order: [...prevOrderPaths] };
-      }
-      const row: GitRow = { file: { path } as GitFileChange, group, statusChar: "", isPartial: false };
-      lastSelectedRowRef.value = row;
-      void loadDiff(row, true);
+      missingAnchorRef.value = { path, prevIndex: prevOrderPaths.indexOf(path), order: [...prevOrderPaths] };
+      const rows = visibleTreeRows.value.filter((r) => !r.isDir && r.row);
+      if (!cycleToMissingAnchor(1, rows)) clearSelection();
     } else {
       clearSelection();
     }
@@ -1860,9 +1808,56 @@ function firstGitRow(): GitRow | null {
   return null;
 }
 
-/** 首次无选中且存在变更文件时 → 默认选第一个并高亮目录树（打开 git 即有内容）。
-    之后（含用户清空/切换）不再自动干预。
-    由 active（面板激活）+ status（数据就绪）双源触发，覆盖 store 预加载/延迟就绪时序。 */
+/**
+ * 尝试恢复本会话上次打开的文件（sessionSelection 缓存）。
+ * 缓存文件仍在本会话变更列表中则恢复选中，成功返回 true。
+ */
+function tryRestoreSessionSelection(): boolean {
+  const sid = props.sessionId;
+  if (!sid) return false;
+  const cached = sessionSelection.value[sid];
+  if (!cached) return false;
+  const st = git.status;
+  if (!st) return false;
+  const cachedPath = cached.split(":").slice(1).join(":");
+  const f = st.files.find((ff) => ff.path === cachedPath);
+  if (!f) return false;
+  const target: GitRow = { file: f, ...classifyFile(f) };
+  const key = rowKey(target);
+  selectedKey.value = key;
+  activeTreeKey.value = key;
+  void loadDiff(target);
+  treeViewRef.value?.scrollToKey(key);
+  return true;
+}
+
+/**
+ * 缓存文件已消失时智能选择"下一个"现存文件（而非直接选第一个）。
+ * 以当前展示顺序为基准，按缓存文件路径的字典序插入点估算其原位置，
+ * 构造 MissingAnchor 后复用 cycleToMissingAnchor 差位跳转：
+ * 选中位于该位置之后最近的现存文件；其后无文件则停在最后一个（不循环）。
+ */
+function selectNextAfterCached(cachedPath: string): boolean {
+  const rows = visibleTreeRows.value.filter((r) => !r.isDir && r.row);
+  if (!rows.length) return false;
+  const order = curFileOrder();
+  let insertIdx = order.findIndex((p) => p.localeCompare(cachedPath) > 0);
+  if (insertIdx === -1) insertIdx = order.length;
+  missingAnchorRef.value = {
+    path: cachedPath,
+    prevIndex: insertIdx - 1, // 缓存文件之前最后一个现存文件的位置
+    order: [...order],
+  };
+  return cycleToMissingAnchor(1, rows);
+}
+
+/**
+ * 无选中且存在变更文件时 → 优先恢复本会话上次打开的文件；
+ * 无缓存 → 默认选第一个；缓存文件已消失 → 智能选择"下一个"（按缓存位置差位跳转）。
+ * 之后（含用户清空/切换）不再自动干预。
+ * 由 active（面板激活）+ status（数据就绪）+ sessionId（跨会话重置）双源触发，
+ * 覆盖 store 预加载/延迟就绪时序。
+ */
 let didInitialSelect = false;
 function ensureDefaultSelection(): void {
   if (didInitialSelect) return;
@@ -1870,13 +1865,27 @@ function ensureDefaultSelection(): void {
     didInitialSelect = true;
     return;
   }
+  // 优先恢复本会话上次打开的文件
+  if (tryRestoreSessionSelection()) {
+    didInitialSelect = true;
+    return;
+  }
+  // 缓存存在但缓存文件已消失 → 智能选择"下一个"，而非直接选第一个
+  const cached = props.sessionId ? sessionSelection.value[props.sessionId] : undefined;
+  if (cached) {
+    const cachedPath = cached.split(":").slice(1).join(":");
+    if (selectNextAfterCached(cachedPath)) {
+      didInitialSelect = true;
+      return;
+    }
+  }
   const first = firstGitRow();
   if (!first) return; // 无变更/数据未就绪：不锁死，等下次触发
   didInitialSelect = true;
   selectRow(first);
   const key = rowKey(first);
   activeTreeKey.value = key;
-  treeRowEls.get(key)?.scrollIntoView({ block: "nearest" });
+  treeViewRef.value?.scrollToKey(key);
 }
 watch(
   [() => props.active, () => git.status],
@@ -1969,7 +1978,8 @@ watch(
     clearSelection();
     collapsedDirs.value = new Set();
     activeTreeKey.value = null;
-    treeFocused.value = false;
+    // 跨会话重置默认选中标志：新会话需要重新执行"恢复缓存选中 / 默认选第一个"
+    didInitialSelect = false;
   },
   { immediate: true },
 );
@@ -2124,7 +2134,7 @@ defineExpose({ refresh });
   to { transform: rotate(360deg); }
 }
 
-.git-group-header {
+.git-group-label {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -2351,8 +2361,8 @@ defineExpose({ refresh });
   pointer-events: none;
 }
 
+/* 行 hover/active/selected 由 TreeView（.tree-view-row）统一处理 */
 .git-tree-row:hover {
-  /* 与全局侧边栏 hover 一致（--gd-color-sidebar-bg-hover：浅色 rgba(40,5,5,0.05) 微透明，暗色 #2f3131） */
   background: var(--gd-color-sidebar-bg-hover);
 }
 
@@ -2372,23 +2382,9 @@ defineExpose({ refresh });
   color: var(--gd-color-text);
 }
 
-.git-tree-row--partial .git-tree-name {
+/* partial 文件行：名称警告色（行高亮/选中由 TreeView 统一处理） */
+.git-tree-name--partial {
   color: var(--gd-color-warning);
-}
-
-/* 选中行：与 hover 同一颜色（--gd-color-sidebar-bg-hover，微透明），不加深 */
-.git-tree-row.selected {
-  background: var(--gd-color-sidebar-bg-hover);
-}
-
-.git-tree-chevron {
-  flex-shrink: 0;
-  color: var(--gd-color-text-disabled);
-  transition: transform 0.15s ease;
-}
-
-.git-tree-chevron.expanded {
-  transform: rotate(90deg);
 }
 
 .git-tree-name {
@@ -2419,7 +2415,8 @@ defineExpose({ refresh });
   flex-shrink: 0;
 }
 
-.git-tree-row:hover .git-row-actions {
+/* hover 显隐：行由 TreeView 渲染（.tree-view-row），需穿透其 scoped 作用域 */
+.git-tree-scroll :deep(.tree-view-row:hover) .git-row-actions {
   display: flex;
   align-items: center;
   gap: 2px;

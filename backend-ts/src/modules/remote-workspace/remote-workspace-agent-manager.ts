@@ -13,6 +13,7 @@ import { Logger } from "@nestjs/common";
 import { deployAgent } from "./agent-deploy";
 import { RpcClient } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
+import { StreamingSanitizer } from "../shell/stream-sanitizer";
 
 interface CachedAgent {
   rpc: RpcClient;
@@ -22,6 +23,9 @@ interface CachedAgent {
   /** 最近一次被使用的时间戳(ms),用于空闲回收判断 */
   lastActive: number;
 }
+
+/** 分块传输块大小(与 agent 端 chunkSize 一致):1MB,内存恒定 */
+const CHUNK_SIZE = 1024 * 1024;
 
 export class RemoteAgentManager {
   private cache = new Map<string, CachedAgent>();
@@ -248,6 +252,16 @@ export class RemoteAgent {
     return this.config.path || "/";
   }
 
+  /**
+   * 清洗命令输出:复用 shell 插件的 StreamingSanitizer,
+   * 擦除 ANSI 转义、归一化 \r\r\n/\r\n、折叠 \r 进度条帧(每行保留最后 \r 后内容)
+   */
+  private sanitizeOutput(text: string): string {
+    if (!text) return "";
+    const s = new StreamingSanitizer();
+    return s.feed(text) + s.flush();
+  }
+
   async readFile(filePath: string, offset = 0, limit = 200, signal?: AbortSignal): Promise<string> {
     const absPath = filePath.startsWith("/")
       ? filePath
@@ -314,47 +328,143 @@ export class RemoteAgent {
   }
 
   async execute(command: string, signal?: AbortSignal): Promise<string> {
-    const result = await this.rpc.call<{
+    // 90s 超时兜底(> agent 60s 命令超时):即使响应丢失/延迟也不无限挂起。
+    // requestId 可预测:agent 端日志文件按 requestId 命名(/tmp/guada-logs/<requestId>.out),
+    // abort/超时后即使没拿到响应,也能直接给出日志路径供 AI 读取。
+    const reqId = `exec-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const predictedLog = `/tmp/guada-logs/${reqId}.out`;
+    let result: {
       kind: string;
       output: string;
       exitCode: number | null;
       uptimeMs: number;
-    }>("execute", { command, cwd: this.basePath, timeout: 60000, background: false }, signal);
+      logFile?: string;
+    };
+    try {
+      result = await this.rpc.call(
+        "execute",
+        { command, cwd: this.basePath, timeout: 60000, background: false },
+        signal,
+        90000,
+        reqId,
+      );
+    } catch (e: any) {
+      // abort:原样抛出(由上层处理)
+      if (e?.name === "AbortError") throw e;
+      // 超时/断线/响应丢失:给出可预测的日志路径,AI 可自行读取
+      return (
+        `[Command did not return in time (${e?.message || e}). ` +
+        `It may still be running in the background on the remote server. ` +
+        `Read its log file with remote_read (file_path: "${predictedLog}") ` +
+        `or check with remote_bash ('ls -la ${predictedLog}' / 'tail -f ${predictedLog}').]`
+      );
+    }
 
     if (result.kind === "completed") {
       const parts: string[] = [];
-      if (result.output) parts.push(`Output:\n---\n${result.output}\n---`);
+      if (result.output) parts.push(`Output:\n---\n${this.sanitizeOutput(result.output)}\n---`);
       parts.push(`[exit code: ${result.exitCode}, uptime: ${Math.round(result.uptimeMs / 1000)}s]`);
       return parts.join("\n\n");
     }
+    // 超时转后台 / background:进程仍在远端运行,输出写入远端日志文件,
+    // 不阻塞后续命令;AI 用 remote_read 读日志文件监控进度
     const parts: string[] = [];
-    if (result.output) parts.push(`Partial output:\n---\n${result.output}\n---`);
-    parts.push(
-      `[Command timed out after 60s but is still running on the remote server. Use remote_bash to run 'ps -ef' or 'tail -f' to check progress.]`,
-    );
+    if (result.output) parts.push(`Partial output:\n---\n${this.sanitizeOutput(result.output)}\n---`);
+    if (result.logFile) {
+      parts.push(
+        `[Command is still running in the background on the remote server. Output is being written to log file: ${result.logFile}. ` +
+          `Use remote_read (file_path: "${result.logFile}") or remote_bash ('tail -f ${result.logFile}') to read the log. ` +
+          `Other commands are not blocked and can be executed normally.]`,
+      );
+    } else {
+      parts.push(
+        `[Command is still running in the background on the remote server. Use remote_bash to run 'ps -ef' or 'tail -f' to check progress.]`,
+      );
+    }
     return parts.join("\n\n");
   }
 
   async upload(localPath: string, remotePath: string, signal?: AbortSignal): Promise<string> {
-    const content = await fs.promises.readFile(localPath);
-    const base64 = content.toString("base64");
     const absRemote = remotePath.startsWith("/")
       ? remotePath
       : path.posix.join(this.basePath, remotePath);
-    await this.rpc.call("upload", { remotePath: absRemote, content: base64 }, signal);
-    return `Uploaded: ${localPath} → ${absRemote} (${content.length} bytes)`;
+    // 分块上传:本地文件分块读(1MB),逐块发送,内存恒定,避免大文件 OOM
+    const handle = await fs.promises.open(localPath, "r");
+    try {
+      const stat = await handle.stat();
+      const start = await this.rpc.call<{ uploadId: string }>(
+        "uploadStart",
+        { remotePath: absRemote, totalBytes: stat.size },
+        signal,
+      );
+      const uploadId = start.uploadId;
+      const buf = Buffer.alloc(CHUNK_SIZE);
+      let position = 0;
+      try {
+        while (position < stat.size) {
+          const { bytesRead } = await handle.read(buf, 0, CHUNK_SIZE, position);
+          if (bytesRead <= 0) break;
+          const chunk = buf.subarray(0, bytesRead);
+          await this.rpc.call(
+            "uploadChunk",
+            { uploadId, data: chunk.toString("base64") },
+            signal,
+          );
+          position += bytesRead;
+        }
+        const end = await this.rpc.call<{ bytes: number }>("uploadEnd", { uploadId }, signal);
+        return `Uploaded: ${localPath} → ${absRemote} (${end.bytes} bytes)`;
+      } catch (e) {
+        // 异常/中止:通知远端清理半成品
+        try {
+          await this.rpc.call("uploadAbort", { uploadId });
+        } catch {}
+        throw e;
+      }
+    } finally {
+      await handle.close();
+    }
   }
 
   async download(remotePath: string, localPath: string, signal?: AbortSignal): Promise<string> {
     const absRemote = remotePath.startsWith("/")
       ? remotePath
       : path.posix.join(this.basePath, remotePath);
-    const result = await this.rpc.call<{ data: string }>("download", {
-      remotePath: absRemote,
-    }, signal);
-    const buf = Buffer.from(result.data, "base64");
+    // 分块下载:逐块拉取并写入本地文件(1MB),内存恒定,避免大文件 OOM
+    const start = await this.rpc.call<{ downloadId: string; totalBytes: number }>(
+      "downloadStart",
+      { remotePath: absRemote },
+      signal,
+    );
+    const downloadId = start.downloadId;
     await fs.promises.mkdir(path.dirname(localPath), { recursive: true });
-    await fs.promises.writeFile(localPath, buf);
-    return `Downloaded: ${absRemote} → ${localPath} (${buf.length} bytes)`;
+    const handle = await fs.promises.open(localPath, "w");
+    try {
+      let offset = 0;
+      let received = 0;
+      while (true) {
+        const chunk = await this.rpc.call<{ data: string; isLast: string }>(
+          "downloadChunk",
+          { downloadId, offset, size: CHUNK_SIZE },
+          signal,
+        );
+        const buf = Buffer.from(chunk.data, "base64");
+        if (buf.length === 0) break;
+        await handle.write(buf, 0, buf.length, received);
+        received += buf.length;
+        offset += buf.length;
+        if (chunk.isLast === "true") break;
+      }
+      await this.rpc.call("downloadEnd", { downloadId }, signal);
+      return `Downloaded: ${absRemote} → ${localPath} (${received} bytes)`;
+    } catch (e) {
+      // 异常/中止:通知远端释放会话
+      try {
+        await this.rpc.call("downloadEnd", { downloadId });
+      } catch {}
+      throw e;
+    } finally {
+      await handle.close();
+    }
   }
 }

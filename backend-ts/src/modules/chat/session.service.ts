@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { CharacterRepository } from "../../common/database/character.repository";
@@ -6,8 +6,11 @@ import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "../llm-core/llm.service";
-import { MessageService } from "./message.service";
-import { AgentEngine } from "./agent-engine.service";
+import {
+  IMessageStore,
+  MESSAGE_STORE_TOKEN,
+} from "../../common/persistence/message-store.interface";
+import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
 import { SessionGroupService } from "./session-group.service";
 import {
   createPaginatedResponse,
@@ -25,7 +28,6 @@ import {
 import { SessionContextFactory } from "./session-context.factory";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
-import { SummaryMode } from "./compression-engine";
 import { resolveThinkingEffort } from "../llm-core";
 
 @Injectable()
@@ -39,13 +41,13 @@ export class SessionService {
     private settingsStorage: SettingsStorage,
     private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
-    private contextManager: MessageService,
+    @Inject(MESSAGE_STORE_TOKEN) private contextManager: IMessageStore,
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
     private sessionContextFactory: SessionContextFactory,
     private workspaceWatcherService: WorkspaceWatcherService,
     private streamManager: SessionStreamManager,
-    private agentEngine: AgentEngine,
+    private compactionCoordinator: CompactionCoordinatorService,
     private searchIndex: SearchIndexService,
     private prisma: PrismaService,
     private sessionGroupService: SessionGroupService,
@@ -500,7 +502,7 @@ export class SessionService {
       }
 
       // 使用 MessageStoreService 获取最近的 3 条消息（已过滤系统消息，正序排列）
-      const recentMessages = await this.contextManager.loadMessages({
+      const recentMessages = await this.contextManager.loadContext({
         sessionId,
         maxMessages: 2,
       });
@@ -528,19 +530,19 @@ export class SessionService {
       // 遍历 recentMessages，构建简洁的消息数组（只保留 role 和 content）
       const simplifiedMessages = recentMessages
         .filter((m) => {
-          // 过滤掉空内容
-          if (!m.content) return false;
-          // 如果是字符串，检查是否为空或只有空白字符
-          if (typeof m.content === "string") return m.content.trim().length > 0;
-          // 如果是数组，检查是否非空
-          return Array.isArray(m.content) && m.content.length > 0;
+          // 过滤掉空内容（三层 Message：提取 text/tool-result 块文本）
+          const text = m.content
+            .map((b) => (b.type === "text" ? b.text : b.type === "tool-result" ? b.content : ""))
+            .join("")
+            .trim();
+          return text.length > 0;
         })
         .map((m) => ({
           role: m.role,
-          content:
-            typeof m.content === "string"
-              ? m.content
-              : JSON.stringify(m.content),
+          content: m.content
+            .map((b) => (b.type === "text" ? b.text : b.type === "tool-result" ? b.content : ""))
+            .join("")
+            .trim(),
         }));
 
       if (simplifiedMessages.length === 0) {
@@ -564,7 +566,16 @@ export class SessionService {
       // 注意：使用 model.id 或 model.code 作为 API 请求的模型标识，而非 name
       const response = await this.llmService.completions({
         model: model.modelName,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            id: "title",
+            role: "user",
+            kind: "user",
+            source: { kind: "user" },
+            metadata: {},
+            content: [{ type: "text", contentId: "title", text: prompt }],
+          },
+        ],
         temperature: 0.3, // 较低的温度使输出更稳定
         maxTokens: 50, // 限制输出长度
         thinkingEffort: resolveThinkingEffort(model, "none"), // 禁用思考功能
@@ -616,24 +627,27 @@ export class SessionService {
   }
 
   /**
-   * 根据 git diff 生成提交信息
+   * 根据 git diff 流式生成提交信息（SSE）
    * 模型选择：优先标题总结模型（SK_MOD_TITLE_MODEL），无则回退当前对话模型（SK_MOD_CHAT）
-   * @param diffText 由 GitController 收集并截断后的 diff 文本
+   * 事件序列：{ type: "text", content } 增量 / { type: "done", message, modelId, modelName, modelSource } /
+   *          { type: "skipped", reason }
+   * @param diffText git diff 文本
+   * @param constraintText 项目提交约束（.guada/git/commit_constraint.md 内容，可为空）
+   * @param abortSignal 取消信号
    */
-  async generateCommitMessage(
+  async *generateCommitMessageStream(
     diffText: string,
-  ): Promise<{
-    message: string;
-    modelId?: string;
-    modelName?: string;
-    modelSource?: string;
-    skipped?: boolean;
-    reason?: string;
-    error?: string;
-  }> {
+    constraintText?: string,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<
+    { type: string; content?: string; message?: string; modelId?: string; modelName?: string; modelSource?: string; reason?: string; error?: string },
+    void,
+    unknown
+  > {
     try {
       if (!diffText?.trim()) {
-        return { message: "", skipped: true, reason: "empty_diff" };
+        yield { type: "skipped", reason: "empty_diff" };
+        return;
       }
 
       // 1. 模型选择：标题总结模型优先，无则回退当前对话模型
@@ -650,55 +664,85 @@ export class SessionService {
         modelSource = "chat";
       }
       if (!modelId) {
-        return { message: "", skipped: true, reason: "no_model_configured" };
+        yield { type: "skipped", reason: "no_model_configured" };
+        return;
       }
 
       const model = await this.modelRepo.findById(modelId);
       if (!model) {
-        return { message: "", skipped: true, reason: "model_not_found" };
+        yield { type: "skipped", reason: "model_not_found" };
+        return;
       }
 
       // 2. 构建提示词：引导输出项目提交风格（Conventional Commits + 中文标题 + 要点正文）
+      const constraintSection =
+        constraintText?.trim()
+          ? `\n项目提交规范（必须严格遵守）：\n${constraintText.trim()}\n`
+          : "";
       const prompt = `你是一名资深工程师，请根据以下 git diff 生成一条规范的提交信息。
 
 提交信息格式要求：
 1. 第一行为标题：type(scope): 中文描述（type 取 feat/fix/refactor/chore/docs/style/perf/test；scope 可选，如组件/模块名）
 2. 若改动有多个要点，标题下空一行，用编号列表（1. 2. 3.）补充 2-5 条要点
 3. 直接返回提交信息本体，不要任何解释、引号或代码块包裹
-
+${constraintSection}
 git diff：
 ${diffText}
 
 生成的提交信息：`;
 
-      // 3. 调用 LLM 生成（非流式，禁用思考）
-      const response = await this.llmService.completions({
+      // 3. 流式调用 LLM（禁用思考）
+      const stream = await this.llmService.completions({
         model: model.modelName,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            id: "commit",
+            role: "user",
+            kind: "user",
+            source: { kind: "user" },
+            metadata: {},
+            content: [{ type: "text", contentId: "commit", text: prompt }],
+          },
+        ],
         temperature: 0.3,
         maxTokens: 300,
         thinkingEffort: resolveThinkingEffort(model, "none"),
-        stream: false,
+        stream: true,
+        abortSignal,
         providerConfig: model.provider,
       });
 
-      const message = response.content?.trim() || "";
-      if (!message) {
-        return { message: "", skipped: true, reason: "generation_failed" };
+      let fullText = "";
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) break;
+        if (chunk?.type === "text" && chunk.content) {
+          fullText += chunk.content;
+          yield { type: "text", content: chunk.content };
+        }
       }
-      return {
+
+      const message = fullText.trim();
+      if (!message) {
+        yield { type: "skipped", reason: "generation_failed" };
+        return;
+      }
+      yield {
+        type: "done",
         message,
         modelId: model.id,
         modelName: model.modelName,
         modelSource,
-        skipped: false,
       };
     } catch (error: any) {
+      if (abortSignal?.aborted) {
+        yield { type: "skipped", reason: "aborted" };
+        return;
+      }
       this.logger.error(
-        `Error generating commit message: ${error.message}`,
+        `Error streaming commit message: ${error.message}`,
         error.stack,
       );
-      return { message: "", skipped: true, reason: "error", error: error.message };
+      yield { type: "skipped", reason: "error", error: error.message };
     }
   }
 
@@ -716,7 +760,7 @@ ${diffText}
     const effectiveContextWindow = context.getEffectiveContextWindow();
 
     const messages = await context.getMessages();
-    const usedTokens = context.getTokenCount();
+    const usedTokens = await context.getTokenCount();
     const percentage = Math.min(
       (usedTokens / effectiveContextWindow) * 100,
       100,
@@ -730,7 +774,7 @@ ${diffText}
       percentage: parseFloat(percentage.toFixed(2)),
       modelName: session.model?.modelName || "gpt-4",
       messageCount: messages.length,
-      breakdown: context.getTokenBreakdown(),
+      breakdown: await context.getTokenBreakdown(),
     };
   }
 
@@ -757,19 +801,18 @@ ${diffText}
 
     const context = await this.sessionContextFactory.createFromSession(session);
 
-    const beforeTokenCount = context.getTokenCount();
+    const beforeTokenCount = await context.getTokenCount();
     const beforeMessageCount = (await context.getMessages()).length;
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
-    await context.compress(async () => {
-      if (context.getMemoryConfig().summaryMode === SummaryMode.MEMORY_SYNC) {
-        console.log("run memory save shadow turn");
-        await this.agentEngine.runMemorySaveShadowTurn(context);
-        console.log("memory save shadow turn done");
-      }
+    // 手动路径走同一事件机制（coordinator.maybeCompress）：
+    // 确认二级压缩后发 compaction.before → MemorySyncService 按 summaryMode 执行影子轮次
+    await this.compactionCoordinator.maybeCompress(context, {
+      force: true,
+      reason: "manual",
     });
 
-    const afterTokenCount = context.getTokenCount();
+    const afterTokenCount = await context.getTokenCount();
     const compressedMessages = await context.getMessages();
     const afterMessageCount = compressedMessages.length;
 

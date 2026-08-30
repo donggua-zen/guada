@@ -59,23 +59,54 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    * 列出所有 Skills，支持按工作目录合并 workspace skills。
    * 优先级：workspace > global > system。
    */
-  listSkills(filterEnabled = true, workspacePath?: string): SkillDefinition[] {
+  listSkills(
+    filterEnabled = true,
+    workspacePath?: string,
+    session?: any,
+  ): SkillDefinition[] {
     // system + global（来自 Registry，按 enabled 过滤）
     const base = filterEnabled
       ? this.registry.getEnabled()
       : Array.from(this.registry.getAll().values());
 
-    if (!workspacePath) return base;
+    if (!workspacePath) return this.filterByPlugins(base, session);
 
     // workspace 技能（来自 SourceManager 独立缓存）
     const wsKey = "workspace_" + workspacePath;
     const wsSkills = this.sourceManager.getSourceSkills(wsKey);
-    if (wsSkills.length === 0) return base;
+    if (wsSkills.length === 0) return this.filterByPlugins(base, session);
 
     const merged = new Map<string, SkillDefinition>();
     for (const s of base) merged.set(s.id, s);
     for (const s of wsSkills) merged.set(s.id, s); // 同名覆盖
-    return Array.from(merged.values());
+    return this.filterByPlugins(Array.from(merged.values()), session);
+  }
+
+  /**
+   * 单技能在此会话是否可见（插件启停过滤，对齐工具"插件关闭→搜集跳过"）。
+   * 非插件技能（file/workspace）始终可见；插件技能在插件未启用或已卸载时不可见。
+   */
+  isPluginSkillVisible(skill: SkillDefinition, session?: any): boolean {
+    if (!skill.provider || !skill.provider.startsWith("plugin:")) return true;
+    if (!session || typeof session.getResolvedPlugins !== "function") return true;
+    const pluginId = skill.provider.slice("plugin:".length);
+    const plugins = session.getResolvedPlugins() as Array<{
+      plugin?: { id?: string };
+      enabled?: boolean;
+    }>;
+    const entry = plugins.find((p) => p.plugin?.id === pluginId);
+    return !!entry && entry.enabled !== false;
+  }
+
+  /** 按会话过滤技能集合 */
+  private filterByPlugins(
+    skills: SkillDefinition[],
+    session?: any,
+  ): SkillDefinition[] {
+    if (!session || typeof session.getResolvedPlugins !== "function") {
+      return skills;
+    }
+    return skills.filter((s) => this.isPluginSkillVisible(s, session));
   }
 
   /**
@@ -88,12 +119,22 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   async enableSkill(skillId: string): Promise<void> {
     const skill = this.registry.get(skillId);
     if (!skill) throw new Error(`Skill ${skillId} not found`);
+    if (skill.provider?.startsWith("plugin:")) {
+      throw new Error(
+        `Skill ${skillId} 由插件提供，请到「插件」页面控制启停`,
+      );
+    }
     return this.registry.enable(skillId);
   }
 
   async disableSkill(skillId: string): Promise<void> {
     const skill = this.registry.get(skillId);
     if (!skill) throw new Error(`Skill ${skillId} not found`);
+    if (skill.provider?.startsWith("plugin:")) {
+      throw new Error(
+        `Skill ${skillId} 由插件提供，请到「插件」页面控制启停`,
+      );
+    }
     return this.registry.disable(skillId);
   }
 
@@ -118,12 +159,31 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    */
   async skillLearn(
     name: string,
-  ): Promise<{ name: string; content: string; path: string } | null> {
+    session?: any,
+  ): Promise<{
+    name: string;
+    content: string;
+    path: string;
+    resourceBase: import("../interfaces/skill-manifest.interface").SkillResourceBase;
+  } | null> {
     const skill = this.registry.get(name.toLowerCase());
     if (!skill) return null;
+    // 对齐工具：插件关闭（当前会话岗位/角色配置下未启用）→ 该插件技能等同于不存在
+    if (!this.isPluginSkillVisible(skill, session)) return null;
     const content = await this.loader.loadInstructions(skill);
-    const fullPath = path.join(skill.baseDir, skill.basePath, "SKILL.md");
-    return { name: skill.manifest.name, content, path: fullPath };
+    // 插件注册式技能无 SKILL.md 文件：path 指向资源基目录（供定位 scripts/ 等资源）
+    const fullPath =
+      skill.resourceBase?.kind === "directory"
+        ? skill.resourceBase.path
+        : path.join(skill.baseDir, skill.basePath, "SKILL.md");
+    return {
+      name: skill.manifest.name,
+      content,
+      path: fullPath,
+      resourceBase:
+        skill.resourceBase ??
+        { kind: "directory", path: path.join(skill.baseDir, skill.basePath) },
+    };
   }
 
   /**

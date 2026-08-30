@@ -599,6 +599,22 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.25);
 }
 
+/* ===== Terminal xterm viewport =====
+   必须覆盖 xterm.css 的默认纯黑背景（.xterm-viewport background #000）：
+   项目滚动条 thumb 是半透明黑 rgba(0,0,0,0.15)，叠在黑背景上会完全不可见，
+   看起来像"默认黑色滚动条"。滚动条样式本身走全局规则，这里只处理布局与背景。
+ */
+.terminal-panel .xterm-viewport {
+  background-color: var(--gd-color-bg, #fff) !important;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
+}
+
+html.dark .terminal-panel .xterm-viewport {
+  background-color: var(--gd-color-bg, #1e1e1e) !important;
+}
+
 /* GdDialog styles are scoped in GdDialog.vue.
    el-message-box overrides kept for usePopup (legacy, being phased out). */
 

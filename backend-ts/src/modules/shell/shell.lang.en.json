@@ -8,5 +8,7 @@
   "process.executing": "Managing processes",
   "process.completed": "Managed processes",
   "process.aggregate.executing": "Managing processes",
-  "process.aggregate.completed": "Managed processes"
+  "process.aggregate.completed": "Managed processes",
+  "shell.toolkitDescription": "Run system commands and manage background processes"
+
 }

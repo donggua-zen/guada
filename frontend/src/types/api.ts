@@ -154,10 +154,9 @@ export interface ApiResponses {
     deleteSession: { success: boolean }
 
     // 消息相关
-    fetchSessionMessages: PaginatedResponse<Message>
     createMessage: Message
     updateMessage: Message
-    deleteMessage: { success: boolean }
+    deleteTurn: { success: boolean }
 
     // 认证相关
     login: { accessToken: string; user: User }

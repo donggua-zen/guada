@@ -44,7 +44,8 @@
                         <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                             {{ skill.manifest.name || skill.id }}
                         </h3>
-                        <el-tag v-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
+                        <el-tag v-if="skill.provider" size="small" type="warning" effect="light">{{ t('plugins.skills.fromPlugin') }}</el-tag>
+                        <el-tag v-else-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
                         <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</el-tag>
                         <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
                     </div>
@@ -68,7 +69,11 @@
                                 {{ t('plugins.skills.uninstall') }}
                             </el-button>
                         </GdTooltip>
+                        <GdTooltip v-if="skill.provider" :content="t('plugins.skills.pluginManaged')" placement="top">
+                            <el-switch :model-value="skill.enabled !== false" disabled size="small" />
+                        </GdTooltip>
                         <el-switch
+                            v-else
                             :model-value="skill.enabled !== false"
                             :loading="updatingSkills.has(skill.id)"
                             @update:model-value="(val: string | number | boolean) => handleToggleSkill(skill.id, !!val)"

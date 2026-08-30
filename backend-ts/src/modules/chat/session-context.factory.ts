@@ -1,54 +1,27 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { ISessionContext } from "./session-context";
-import { PersistentSessionContext } from "./persistent-session-context";
-import { ModelRepository } from "../../common/database/model.repository";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { WorkspaceService } from "../../common/services/workspace.service";
-import { TokenizerService } from "../../common/utils/tokenizer.service";
-import { ICompressionStrategy } from "./interfaces";
-import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
-import { PluginManager } from "../plugins/plugin.manager";
-import { PromptCollector } from "../plugins/prompt-collector.service";
-import { MessageService } from "./message.service";
+import { Inject, Injectable } from '@nestjs/common';
+import { ISessionContext } from './session-context';
+import { JsonlSessionContextFactory } from './jsonl-session-context.factory';
+import {
+  IMessageStore,
+  MESSAGE_STORE_TOKEN,
+} from '../../common/persistence/message-store.interface';
 
 /**
  * SessionContext 工厂
  *
- * 负责从原始 session 对象构建类型安全的 ISessionContext 实例。
- * 只负责注入依赖和触发初始化，所有数据准备逻辑在 PersistentSessionContext 内部完成。
- *
- * 支持两种构建模式：
- * - 持久化会话：从数据库 session 记录构建（当前主要模式）
- * - 内存虚拟会话：未来可从内存配置直接构建，无需数据库
+ * 所有会话统一走持久化存储后端（由 MESSAGE_STORE_TOKEN 注入，不感知具体实现）：
+ * - 已迁移会话 → 直接读现有存储
+ * - 新会话 → ensureSession 自动创建（不写 DB）
  */
 @Injectable()
 export class SessionContextFactory {
   constructor(
-    private modelRepository: ModelRepository,
-    private settingsStorage: SettingsStorage,
-    private pluginManager: PluginManager,
-    private promptCollector: PromptCollector,
-    private workspaceService: WorkspaceService,
-    private messageStore: MessageService,
-    @Inject(COMPRESSION_STRATEGY_TOKEN) private compressionStrategy: ICompressionStrategy,
-    private tokenizerService: TokenizerService,
+    private jsonlSessionContextFactory: JsonlSessionContextFactory,
+    @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
   ) {}
 
   async createFromSession(session: any): Promise<ISessionContext> {
-    const context = new PersistentSessionContext(
-      session,
-      this.modelRepository,
-      this.settingsStorage,
-      this.pluginManager,
-      this.promptCollector,
-      this.workspaceService,
-      this.messageStore,
-      this.compressionStrategy,
-      this.tokenizerService,
-    );
-
-    await context.initialize();
-
-    return context;
+    await this.messageStore.ensureSession(session.id, { title: session.title });
+    return this.jsonlSessionContextFactory.createFromSession(session);
   }
 }

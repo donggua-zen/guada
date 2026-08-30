@@ -133,8 +133,8 @@ export class SubAgentManager implements OnModuleInit {
 
     // 思考强度：无论是否有角色，都从父会话继承
     settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
-    // 运行模式：从父会话继承，防止子代理权限逃逸（如 sandbox → normal）
-    settings.runMode = parentContext.getRunMode();
+    // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
+    settings.sandboxMode = parentContext.getSandboxMode();
     // 附加连接配置：从父会话继承（如 ssh-connection 远程连接），使子代理可复用主代理绑定的连接
     settings.attachments = parentContext.getSettings("attachments") ?? {};
 
@@ -806,6 +806,9 @@ export class SubAgentManager implements OnModuleInit {
         status: "completed",
         content: "",
       };
+      // 当前迭代(一次 LLM 调用)的可见文本累积；messageId 变化 = 新一轮工具调用迭代
+      let iterContentId: string | undefined;
+      let iterContent = "";
 
       // 父 Agent 中止时同步取消子 Agent 流
       if (abortSignal) {
@@ -846,12 +849,22 @@ export class SubAgentManager implements OnModuleInit {
           },
           {
             onEvent: (event) => {
-              // turn_end 事件携带整个 ReAct 循环结束后的完整 content + 归一化原因
+              // 消息级事件按 messageId 归属一次 LLM 调用；messageId 变化 = 新一轮
+              // 工具调用迭代，重置累积——子 Agent 结果只保留最后一轮的可见文本
+              const chunkMessageId = (event as { messageId?: string }).messageId;
+              if (chunkMessageId && chunkMessageId !== iterContentId) {
+                iterContentId = chunkMessageId;
+                iterContent = "";
+              }
+              if (event.type === "text_delta") {
+                iterContent += event.text;
+                capturedResult.content = iterContent;
+              }
               if (event.type === "turn_end") {
                 capturedResult = {
+                  ...capturedResult,
                   subSessionId,
                   status: event.error ? "error" : "completed",
-                  content: event.content || "",
                   finishReason: event.finishReason,
                   error: event.error,
                 };

@@ -12,6 +12,34 @@
               <!-- 页面标题栏 -->
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
+                  <!-- 工作目录打开操作（仅 Electron）：主按钮 VSCode + 下拉箭头选其他方式 -->
+                  <template v-if="isElectron && mainSession?.id">
+                    <div class="relative inline-flex items-center">
+                      <GdTooltip :content="t('chat.workspace.openInVSCode')" placement="bottom">
+                        <div class="header-icon-btn" @click="openWorkspaceInVSCode">
+                          <VsCode class="w-5 h-5" />
+                        </div>
+                      </GdTooltip>
+                      <GdTooltip :content="t('chat.workspace.openWith')" placement="bottom">
+                        <div ref="openWithBtnRef" class="header-icon-btn" style="padding: 4px 2px"
+                          @click="openWithMenuVisible = !openWithMenuVisible">
+                          <ChevronDown16Regular class="w-3.5 h-3.5" />
+                        </div>
+                      </GdTooltip>
+                      <GdPopover v-model:show="openWithMenuVisible" :anchor-el="openWithBtnRef" :width="190">
+                        <div class="py-1">
+                          <div class="open-with-item" @click="handleOpenWith('explorer')">
+                            <WindowsExplorer class="w-4 h-4" />
+                            <span>{{ t('chat.workspace.openInFileManager') }}</span>
+                          </div>
+                          <div class="open-with-item" @click="handleOpenWith('terminal')">
+                            <TerminalOutlined class="w-4 h-4" />
+                            <span>{{ t('chat.workspace.openInTerminal') }}</span>
+                          </div>
+                        </div>
+                      </GdPopover>
+                    </div>
+                  </template>
                   <!-- 工作目录切换 -->
                   <GdTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
@@ -126,7 +154,10 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled, PanelLeftExpand16Filled } from "@vicons/fluent";
+import { PanelRightExpand20Filled, PanelLeftExpand16Filled, ChevronDown16Regular } from "@vicons/fluent";
+import { VsCode, WindowsExplorer } from "@/components/icons";
+import { TerminalOutlined } from "@vicons/material";
+import { ElMessage } from "element-plus";
 import { useStorage } from '@vueuse/core';
 
 // 仅 WorkspaceSidebar 影响「展开工作区」的首次停顿（v-if 懒加载）→ 同步 import；
@@ -263,75 +294,6 @@ function handleSubAgentClosed(event: any) {
 }
 
 /**
- * 处理流开始事件（统一的状态来源）
- *
- * 包括主会话和子 Agent 会话的流开始，根据 sessionId 匹配更新状态。
- */
-function handleStreamStarted(event: any) {
-  const { sessionId } = event;
-  if (!sessionId) return;
-
-  // 更新对应 Tab 状态为 running（子 Agent 按 sessionId 匹配）
-  const tab = agentTabs.value.find(t => t.id === sessionId);
-  if (tab) {
-    tab.status = 'running';
-  }
-  // 主会话流开始：同步更新 main Tab 状态
-  if (sessionId === mainSession.value?.id) {
-    const mainTab = agentTabs.value.find(t => t.id === 'main');
-    if (mainTab) mainTab.status = 'running';
-  }
-  // 忽略自身发起的流
-  if (event.source === apiService.getClientId()) {
-    return;
-  }
-
-  // 如果是主会话的流，通知 ChatPanel 订阅流
-  if (sessionId === mainSession.value?.id) {
-    const chatPanel = chatPanelRef.value;
-    if (chatPanel && chatPanel.subscribeToActiveStream) {
-      const replaceMessageId = event.payload?.replaceMessageId;
-      if (replaceMessageId) {
-        const messages = sessionStore.getMessages(sessionId);
-        const index = messages.findIndex((m: any) => m.id === replaceMessageId);
-        if (index !== -1) {
-          messages.splice(index, 1);
-        }
-      }
-      chatPanel.subscribeToActiveStream();
-    }
-    return;
-  }
-
-
-}
-
-/**
- * 处理流结束事件（统一的状态来源）
- *
- * 根据 reason 判断子 Agent 的最终状态。
- */
-function handleStreamFinished(event: any) {
-  const { sessionId, payload } = event;
-  if (!sessionId) return;
-
-  // 更新对应 Tab 状态（子 Agent 按 sessionId 匹配）
-  const tab = agentTabs.value.find(t => t.id === sessionId);
-  if (tab) {
-    const reason = payload?.reason;
-    tab.status = reason === 'completed' ? 'completed' : 'error';
-  }
-  // 主会话流结束：同步更新 main Tab 状态
-  if (sessionId === mainSession.value?.id) {
-    const mainTab = agentTabs.value.find(t => t.id === 'main');
-    if (mainTab) {
-      const reason = payload?.reason;
-      mainTab.status = reason === 'completed' ? 'completed' : 'error';
-    }
-  }
-}
-
-/**
  * 切换 Tab
  */
 async function switchTab(tabId: string) {
@@ -383,13 +345,8 @@ const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 /** 分栏容器（LiteSplitpanes 根，总宽稳定不随切换变化） */
 const splitContainerRef = ref<HTMLElement | null>(null);
-// 根据当前模式计算工作目录分割比例
-// 目录树模式：窄宽度 workspaceSplitSize；预览/Git 模式：共享宽宽度 workspacePreviewSplitSize
-const workspaceSize = computed(() =>
-  layoutStore.workspacePanelMode !== 'tree'
-    ? layoutStore.workspacePreviewSplitSize
-    : layoutStore.workspaceSplitSize,
-);
+// 工作目录分割比例（目录树 / 预览 / Git 统一使用单一宽度）
+const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
 // 控制设置模态框的显示与隐藏
 // 布局状态
 const layoutStore = useLayoutStore();
@@ -412,9 +369,33 @@ watch(() => layoutStore.workspaceFullscreen, async (fs) => {
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 
-// SSE 事件监听取消函数
-let unsubscribeStreamStarted: (() => void) | null = null;
-let unsubscribeStreamFinished: (() => void) | null = null;
+// 统一流状态派生:useSessionEvents(MainLayout 常驻)统一订阅 stream_status_changed 并写入
+// sessionStore.streamStatus,本组件 watch 派生:
+// - 更新 agentTabs 状态(running/completed/error)
+// - 主会话 running → 触发 ChatPanel 订阅(自身发起的流 isStreaming 已 true,subscribeToActiveStream 守卫自动挡住)
+watch(
+  () =>
+    agentTabs.value
+      .map((t) => (t.id === "main" ? mainSession.value?.id : t.id))
+      .map((id) => (id ? sessionStore.getSessionState(id)?.streamStatus : undefined)),
+  (statuses) => {
+    agentTabs.value.forEach((tab, i) => {
+      const status = statuses[i];
+      if (!status || status === "idle") return;
+      tab.status = status === "running" ? "running" : status === "error" ? "error" : "completed";
+    });
+    const mainId = mainSession.value?.id;
+    if (mainId && sessionStore.getSessionState(mainId)?.streamStatus === "running") {
+      const chatPanel = chatPanelRef.value;
+      if (chatPanel && chatPanel.subscribeToActiveStream) {
+        chatPanel.subscribeToActiveStream();
+      }
+    }
+  },
+  { deep: true },
+);
+
+// SSE 事件监听取消函数(stream_status_changed 已由 useSessionEvents 统一订阅,此处不再重复监听)
 let unsubscribeSubAgentCreate: (() => void) | null = null;
 let unsubscribeSubAgentClosed: (() => void) | null = null;
 
@@ -479,14 +460,9 @@ function onPaneResized(size: number) {
     el.style.width = '';
   }
 
-  // 保存工作目录分割位置（根据当前模式分别保存）
-  // Git 模式与预览模式共享同一宽度
+  // 保存工作目录分割位置（目录树 / 预览 / Git 统一保存到单一宽度）
   if (layoutStore.workspaceVisible && isElectron) {
-    if (layoutStore.workspacePanelMode !== 'tree') {
-      layoutStore.setWorkspacePreviewSplitSize(size);
-    } else {
-      layoutStore.setWorkspaceSplitSize(size);
-    }
+    layoutStore.setWorkspaceSplitSize(size);
   }
   console.log('onPaneResized', size);
 }
@@ -510,12 +486,70 @@ const updateSessionById = async (sessionId: string, data: any) => {
   }
 };
 
+/**
+ * 在文件管理器中打开当前会话的工作目录（仅 Electron；由 Header 工作目录按钮触发）
+ */
+async function openInFileManager() {
+  const sessionId = mainSession.value?.id;
+  if (!sessionId || !isElectron) return;
+
+  try {
+    const response = await apiService.getWorkspacePath(sessionId);
+    if (response.workspacePath && window.electronAPI) {
+      await window.electronAPI.openFolder(response.workspacePath);
+    }
+  } catch (error: any) {
+    console.error('Failed to open workspace folder:', error);
+  }
+}
+
+/**
+ * 以 VSCode 打开当前会话的工作目录（仅 Electron；由 Header 工作目录按钮触发）
+ */
+async function openWorkspaceInVSCode() {
+  const sessionId = mainSession.value?.id;
+  if (!sessionId || !isElectron) return;
+
+  try {
+    const response = await apiService.getWorkspacePath(sessionId);
+    if (response.workspacePath && window.electronAPI) {
+      await window.electronAPI.openWithEditor(response.workspacePath, 'vscode');
+    }
+  } catch (error: any) {
+    console.error('Failed to open workspace in VSCode:', error);
+    ElMessage.error(t('chat.workspace.openVSCodeFailed'));
+  }
+}
+
+// ── 工作目录打开方式下拉（Header 箭头按钮） ──
+const openWithMenuVisible = ref(false);
+const openWithBtnRef = ref<HTMLElement | null>(null);
+
+/** 选择下拉中的其他打开方式：explorer = 资源管理器，terminal = 系统终端 */
+async function handleOpenWith(mode: 'explorer' | 'terminal') {
+  openWithMenuVisible.value = false;
+  const sessionId = mainSession.value?.id;
+  if (!sessionId || !isElectron) return;
+
+  try {
+    const response = await apiService.getWorkspacePath(sessionId);
+    if (!response.workspacePath || !window.electronAPI) return;
+    if (mode === 'explorer') {
+      await window.electronAPI.openFolder(response.workspacePath);
+    } else {
+      await window.electronAPI.openWithEditor(response.workspacePath, 'terminal');
+    }
+  } catch (error: any) {
+    console.error(`Failed to open workspace in ${mode}:`, error);
+    ElMessage.error(t('chat.workspace.openVSCodeFailed'));
+  }
+}
+
 
 const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === 'new-session') {
     mainSession.value = null;
     sessionStore.activeSessionId = "new-session";
-    tabStore.exitPreviewMode();
     return;
   }
   sessionStore.activeSessionId = sessionId;
@@ -691,34 +725,23 @@ onMounted(async () => {
 
   await updateSelectedSession(sessionId);
 
-  // 注册流事件监听（统一的状态来源）
-  unsubscribeStreamStarted = apiService.onSessionEvent('stream_started', handleStreamStarted);
-  unsubscribeStreamFinished = apiService.onSessionEvent('stream_finished', handleStreamFinished);
+  // stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入 sessionStore.streamStatus,
+  // 本组件改为 watch 派生,不再重复 onSessionEvent。
 
   // 注册子 Agent 生命周期事件监听（仅负责增删 Tab）
   unsubscribeSubAgentCreate = apiService.onSessionEvent('sub_agent_create', handleSubAgentCreate);
   unsubscribeSubAgentClosed = apiService.onSessionEvent('sub_agent_closed', handleSubAgentClosed);
 });
 
-// 工作目录隐藏时重置预览模式和全屏状态
+// 工作目录隐藏时重置全屏状态（显示由激活标签驱动，无需重置标签）
 watch(() => layoutStore.workspaceVisible, (visible) => {
   if (!visible) {
-    tabStore.exitPreviewMode();
-    tabStore.exitGitMode();
     layoutStore.workspaceFullscreen = false;
   }
 });
 
 // 组件卸载时取消监听
 onUnmounted(() => {
-  if (unsubscribeStreamStarted) {
-    unsubscribeStreamStarted();
-    unsubscribeStreamStarted = null;
-  }
-  if (unsubscribeStreamFinished) {
-    unsubscribeStreamFinished();
-    unsubscribeStreamFinished = null;
-  }
   if (unsubscribeSubAgentCreate) {
     unsubscribeSubAgentCreate();
     unsubscribeSubAgentCreate = null;
@@ -757,6 +780,24 @@ onUnmounted(() => {
 .overview-restore-bar:hover {
   background: var(--gd-color-sidebar-bg-hover);
   color: var(--gd-color-text);
+}
+
+/* 工作目录打开方式下拉项 */
+.open-with-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--gd-color-text);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.open-with-item:hover {
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 .slide-right-enter-active,

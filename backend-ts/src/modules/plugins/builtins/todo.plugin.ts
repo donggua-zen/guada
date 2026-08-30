@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { OnEvent, EventEmitter2 } from "@nestjs/event-emitter";
+import { OnEvent } from "@nestjs/event-emitter";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { z } from "zod";
@@ -7,6 +7,8 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import { TodoUpdatedEvent } from "../../../common/events/stream.events";
+import { EventBusService } from "../../../common/events/event-bus.service";
+import { HOOKS } from "../../../modules/chat/types/hooks.contract";
 import langZh from "./todo.lang.zh.json";
 import langEn from "./todo.lang.en.json";
 
@@ -43,12 +45,12 @@ export class TodoPlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(private readonly eventEmitter: EventEmitter2) {
+  constructor(private readonly eventBus: EventBusService) {
     super();
   }
 
   /** 压缩发生后清除缓存，下次 getMessages 时自动重建 */
-  @OnEvent("memory.compacted")
+  @OnEvent(HOOKS.MEMORY_COMPACTED)
   handleCompacted(payload: { sessionId: string }) {
     if (this.todoPromptCache.has(payload.sessionId)) {
       this.todoPromptCache.delete(payload.sessionId);
@@ -61,8 +63,16 @@ export class TodoPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
+    // ── todo 能力包：工具 + 待办状态提示词统一挂载，角色层按包启停 ──
+    const todoKit = api.registerToolKit({
+      id: "todo",
+      name: "%todo.name%",
+      description: "%todo.toolkitDescription%",
+      activator:
+        "Track task steps and progress with a visible todo list for multi-step work.",
+    });
     // ── todo 工具 ──
-    api.registerTool({
+    todoKit.registerTool({
       name: "todo",
       description: `You have access to a todo tool which tracks steps and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and conveys how you're approaching it. A todo list can help make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good todo list should break the task into meaningful, logically ordered steps that are easy to verify as you go.
 
@@ -125,7 +135,7 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
     });
 
     // ── 待办状态 user 提示词（仅首次加载 + 压缩后重建时注入） ──
-    api.registerPrompt({
+    todoKit.registerPrompt({
       frequency: "VOLATILE",
       type: "user",
       description: "Current todo items status",
@@ -149,7 +159,9 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
           const hasTodoCall = history?.some(
             (msg) =>
               msg.role === "assistant" &&
-              msg.toolCalls?.some((tc) => tc.name === "todo"),
+              msg.content.some(
+                (b) => b.type === "tool-call" && b.name === "todo",
+              ),
           );
           if (hasTodoCall) return "";
         } catch {
@@ -232,7 +244,7 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       sessionId: ctx.session.sessionId,
       timestamp: new Date().toISOString(),
     };
-    this.eventEmitter.emit("todo.updated", event);
+    this.eventBus.emit(HOOKS.TODO_UPDATED, event);
   }
 
   /** 删除存储文件（全部完成或创建新待办时使用） */

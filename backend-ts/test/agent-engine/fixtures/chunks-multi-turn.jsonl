@@ -1,19 +1,26 @@
-{"content":null,"reasoningContent":"我需要","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"先","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"调用","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"id":"call_001","index":0,"type":"function","name":"file__read","arguments":""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"{\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"file"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"_path"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\":\""}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"test"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":".txt\"}"}],"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":"tool_calls","usage":{"promptTokens":200,"completionTokens":30,"totalTokens":230}}
-{"content":"文件","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"内容","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"是","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"：","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":"Hello","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":" World","reasoningContent":null,"finishReason":null,"usage":null}
-{"content":null,"reasoningContent":null,"finishReason":"stop","usage":{"promptTokens":250,"completionTokens":80,"totalTokens":330}}
+{"type": "block_start", "index": 0, "blockType": "reasoning"}
+{"type": "reasoning_delta", "index": 0, "text": "我需要"}
+{"type": "reasoning_delta", "index": 0, "text": "先"}
+{"type": "reasoning_delta", "index": 0, "text": "调用"}
+{"type": "reasoning_delta", "index": 0, "text": "工具"}
+{"type": "block_start", "index": 1, "blockType": "tool-call"}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "", "toolCallId": "call_001", "name": "file__read"}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "{\""}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "file"}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "_path"}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "\":\""}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": "test"}
+{"type": "tool_call_delta", "index": 1, "argumentsDelta": ".txt\"}"}
+{"type": "block_end", "index": 0, "block": {"type": "reasoning", "contentId": "", "summary": "我需要先调用工具"}}
+{"type": "usage", "usage": {"promptTokens": 200, "completionTokens": 30, "totalTokens": 230}}
+{"type": "finish", "finishReason": "tool_calls"}
+{"type": "block_start", "index": 0, "blockType": "text"}
+{"type": "text_delta", "index": 0, "text": "文件"}
+{"type": "text_delta", "index": 0, "text": "内容"}
+{"type": "text_delta", "index": 0, "text": "是"}
+{"type": "text_delta", "index": 0, "text": "："}
+{"type": "text_delta", "index": 0, "text": "Hello"}
+{"type": "text_delta", "index": 0, "text": " World"}
+{"type": "block_end", "index": 0, "block": {"type": "text", "contentId": "", "text": "文件内容是：Hello World"}}
+{"type": "usage", "usage": {"promptTokens": 250, "completionTokens": 80, "totalTokens": 330}}
+{"type": "finish", "finishReason": "stop"}

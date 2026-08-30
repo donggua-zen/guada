@@ -1,21 +1,21 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
-import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionService } from "./session.service";
 import { SessionContextFactory } from "./session-context.factory";
-import { EventChunk } from "./types/event-chunk.types";
+import { WireStreamEvent } from "./types/event-chunk.types";
 import {
-  StreamFinishedEvent,
-  StreamStartedEvent,
+  StreamStatusChangedEvent,
 } from "../../common/events/stream.events";
 import { ISessionContext } from "./session-context";
+import { MessageFile } from "../../common/persistence/types";
+import { EventBusService } from "../../common/events/event-bus.service";
 
 /**
  * 流订阅回调
  */
 export interface StreamCallbacks {
-  onEvent: (data: EventChunk) => void;
+  onEvent: (data: WireStreamEvent) => void;
   onComplete: (reason: string) => void;
   onError: (err: any) => void;
 }
@@ -61,7 +61,7 @@ export class ChatRunnerService {
     private sessionService: SessionService,
     private agentEngine: AgentEngine,
     private sessionContextFactory: SessionContextFactory,
-    private eventEmitter: EventEmitter2,
+    private eventBus: EventBusService,
   ) {}
 
   /**
@@ -90,15 +90,14 @@ export class ChatRunnerService {
       userMessage?: {
         id?: string;
         content?: string;
-        files?: string[];
-        replaceMessageId?: string;
+        files?: MessageFile[];
+        replaceTurnId?: string;
         knowledgeBaseIds?: string[];
         metadata?: Record<string, any>;
       };
       regenerationMode?: string;
       resumeData?: any;
       source?: Record<string, any>;
-      lastContentId?: string | null;
       /** 预解析的会话对象（跳过 DB 重查，保留内存挂载的 model/character） */
       preloadedSession?: any;
     },
@@ -111,7 +110,6 @@ export class ChatRunnerService {
       regenerationMode = "overwrite",
       resumeData,
       source,
-      lastContentId = null,
       preloadedSession,
     } = params;
 
@@ -134,38 +132,19 @@ export class ChatRunnerService {
     // 更新会话最后活跃时间，用于会话管理和清理策略
     await this.sessionService.updateLastActiveAt(sessionId);
 
-    const isSubscribeMode = regenerationMode === "subscribe";
     const hasActiveStream = this.streamManager.hasActiveStream(sessionId);
 
-    // 发起模式：如果已有活跃流，拒绝
-    if (!isSubscribeMode && hasActiveStream) {
+    // 已有活跃流则拒绝（subscribe 模式已由前端常驻接收链路取代，不再有加入订阅的路径）
+    if (hasActiveStream) {
       throw new HttpException(
         { error: "当前已有任务正在进行，请等待结束", code: "SESSION_BUSY" },
         HttpStatus.CONFLICT,
       );
     }
 
-    // 订阅模式：如果没有活跃流，拒绝
-    if (isSubscribeMode && !hasActiveStream) {
-      throw new HttpException(
-        { error: "No active stream to subscribe", code: "NO_ACTIVE_STREAM" },
-        HttpStatus.CONFLICT,
-      );
-    }
-
     const subscriberId = `${userId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    // 情况 1: 该会话已有活跃流，加入订阅
-    if (hasActiveStream) {
-      return this.subscribeToStream(
-        sessionId,
-        subscriberId,
-        callbacks,
-        lastContentId,
-      );
-    }
-
-    // 情况 2: 该会话没有活跃流，需要启动新流
+    // 启动新流
     const abortController = new AbortController();
 
     const started = this.streamManager.startStream(
@@ -198,19 +177,8 @@ export class ChatRunnerService {
       }
     }
 
-    // 广播流开始事件，携带完整会话信息供前端同步
-    // source 使用前端传入的 clientId，使前端能正确识别自身发起的事件
-    const streamStartedEvent: StreamStartedEvent = {
-      userId,
-      sessionId,
-      timestamp: new Date().toISOString(),
-      source: clientId || subscriberId,
-      payload: {
-        replaceMessageId: userMessage?.replaceMessageId || null,
-        session,
-      },
-    };
-    this.eventEmitter.emit("stream.started", streamStartedEvent);
+    // 回合开括号 turn_start 由 agent-engine 在 executeAgentLoop 内广播(与 turn_end 成对,同一文件)。
+    // 不再单独构造 stream_started(携带 session 对象) — 规范化:回合开始语义统一为 stream/turn_start。
     const sessionContext =
       await this.sessionContextFactory.createFromSession(session);
 
@@ -225,7 +193,7 @@ export class ChatRunnerService {
       clientId,
     ).catch((error) => {
       this.logger.error(`Agent engine error stack:`, error?.stack);
-      this.streamManager.broadcast(sessionId, {
+      this.streamManager.publish(sessionId, {
         type: "error",
         error: error.message,
       } as any);
@@ -233,37 +201,6 @@ export class ChatRunnerService {
     });
 
     return unsubscribe || (() => {});
-  }
-
-  /**
-   * 订阅已存在的活跃流
-   */
-  private subscribeToStream(
-    sessionId: string,
-    subscriberId: string,
-    callbacks?: StreamCallbacks,
-    lastContentId?: string | null,
-  ): (() => void) | null {
-    if (!callbacks) {
-      // 后台执行不需要订阅
-      return () => {};
-    }
-
-    const unsubscribe = this.streamManager.subscribe(
-      sessionId,
-      subscriberId,
-      callbacks.onEvent,
-      callbacks.onComplete,
-      callbacks.onError,
-      lastContentId || null,
-    );
-
-    if (!unsubscribe) {
-      this.logger.warn(`订阅流失败: ${sessionId}`);
-      return null;
-    }
-
-    return unsubscribe;
   }
 
   /**
@@ -549,77 +486,92 @@ export class ChatRunnerService {
     const sessionId = sessionContext.sessionId;
     let lastFinishReason: string | undefined;
     try {
-      const iterator = this.agentEngine.run(
+      // 流开始:广播会话"工作中"状态(统一状态改变事件,running)
+      const startEvent: StreamStatusChangedEvent = {
+        userId,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        source: clientId,
+        payload: {
+          status: "running",
+          workspacePath: sessionContext.workspacePath,
+          sessionType: sessionContext.sessionType,
+        },
+      };
+      this.eventBus.emit("stream.status_changed", startEvent);
+
+      // 引擎直发模式：流式事件由引擎经 sessionContext.publishStream 发布（prevSeq 在发布点组装），
+      // chat-runner 只 await 完成并做流生命周期收尾（supervisor 职责）
+      const { finishReason } = await this.agentEngine.run(
         sessionContext,
         userMessage,
         regenerationMode,
         abortController.signal,
         resumeData,
       );
+      lastFinishReason = finishReason;
 
-      for await (const chunk of iterator) {
-        if (chunk.type === "turn_end") {
-          lastFinishReason = chunk.finishReason;
-        }
-        this.streamManager.broadcast(sessionId, chunk as EventChunk);
-      }
-
-      // Agent 引擎内部已捕获 abort 并 yield finish 事件，这里自然结束
+      // Agent 引擎内部已捕获 abort 并发布 finish/turn_end 事件，这里自然结束
       const reason = abortController.signal.aborted
         ? "user_cancel"
         : "completed";
       this.streamManager.stopStream(sessionId, reason);
 
-      const streamFinishedEvent: StreamFinishedEvent = {
+      const statusEvent: StreamStatusChangedEvent = {
         userId,
         sessionId,
         timestamp: new Date().toISOString(),
         source: clientId,
         payload: {
+          status: reason,
           reason,
           workspacePath: sessionContext.workspacePath,
           sessionType: sessionContext.sessionType,
         },
       };
-      this.eventEmitter.emit("stream.finished", streamFinishedEvent);
+      this.eventBus.emit("stream.status_changed", statusEvent);
     } catch (error: any) {
       if (error.name === "AbortError") {
         this.logger.log(`Stream ${sessionId} aborted`);
         this.streamManager.stopStream(sessionId, "user_cancel");
 
-        const streamFinishedEvent: StreamFinishedEvent = {
+        const statusEvent: StreamStatusChangedEvent = {
           userId,
           sessionId,
           timestamp: new Date().toISOString(),
           source: clientId,
           payload: {
+            status: "user_cancel",
             reason: "user_cancel",
             workspacePath: sessionContext.workspacePath,
             sessionType: sessionContext.sessionType,
           },
         };
-        this.eventEmitter.emit("stream.finished", streamFinishedEvent);
+        this.eventBus.emit("stream.status_changed", statusEvent);
       } else {
         this.streamManager.stopStream(sessionId, "error");
 
-        const streamFinishedEvent: StreamFinishedEvent = {
+        const statusEvent: StreamStatusChangedEvent = {
           userId,
           sessionId,
           timestamp: new Date().toISOString(),
           source: clientId,
           payload: {
+            status: "error",
             reason: "error",
             error: error.message,
             workspacePath: sessionContext.workspacePath,
             sessionType: sessionContext.sessionType,
           },
         };
-        this.eventEmitter.emit("stream.finished", streamFinishedEvent);
+        this.eventBus.emit("stream.status_changed", statusEvent);
 
         throw error;
       }
     } finally {
-      // 队列消息等待暂停态（max_iterations / approval / rate_limited）由用户操作触发 resume 后处理，不自动消费
+      // 队列消息仅在回合正常结束时自动消费。approval / 迭代暂停（max_iterations / rate_limited）
+      // 均为回合内原地阻塞（回合不闭合、无暂停态 finish），无需在此处理；用户"停止"后以
+      // user_cancel 收尾，同样不自动消费（暂停中的任务由用户操作解除，不重复触发）。
       const NORMAL_FINISH = new Set(["stop", undefined]);
       if (NORMAL_FINISH.has(lastFinishReason)) {
         await this.processQueue(sessionId);

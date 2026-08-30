@@ -1,24 +1,41 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs";
-import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { SettingsService } from "../settings/settings.service";
-import { SG_SYSTEM, SK_SYS_MAX_TOOL_ITERATIONS } from "../../constants/settings.constants";
-import { PluginContext } from "../plugins/types/plugin.types";
 import {
-  MessageRecord,
-  MessagePart,
-  LLMResponseChunk,
-} from "../llm-core/types/llm.types";
+  SG_SYSTEM,
+  SK_SYS_MAX_TOOL_ITERATIONS,
+} from "../../constants/settings.constants";
+import type {
+  Message,
+  ContentBlock,
+} from "../../common/types/conversation.types";
 import { RequestContext } from "../../common/context/request-context";
-import { throttledStream } from "./utils/stream-throttle.util";
-import { partialParse } from "partial-json-parser";
-import { SessionTokenTracker } from "./utils/session-token-tracker";
-import { ISessionContext, ModelConfig } from "./session-context";
-import { EventChunk } from "./types/event-chunk.types";
-import { SummaryMode } from "./compression-engine";
-import { UpstreamRateLimitError, UpstreamTimeoutError, UpstreamRequestError } from "../llm-core/utils/upstream-errors";
+import { ISessionContext } from "./session-context";
+import { MessageFile } from "../../common/persistence/types";
+import { SessionStreamEvent } from "./types/event-chunk.types";
+import { BlockAssembler } from "./block-assembler";
+import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
+import { EventBusService } from "../../common/events/event-bus.service";
+import { AskService } from "../../common/services/ask.service";
+import { AskDeniedError } from "../../common/types/ask.types";
+import {
+  HOOKS,
+  type RequestErrorAction,
+  type TurnStoppingDecision,
+  type TurnStoppingPayload,
+} from "./types/hooks.contract";
+import {
+  UpstreamRateLimitError,
+  UpstreamTimeoutError,
+  UpstreamRequestError,
+} from "../llm-core/utils/upstream-errors";
+import { LLMService } from "../llm-core/llm.service";
+import type {
+  LLMCompletionParams,
+  StreamChunk,
+} from "../llm-core/types/llm.types";
 import {
   classifyError,
   computeRetryDelayMs,
@@ -29,17 +46,6 @@ import {
 } from "../llm-core/utils/retry-on-error.util";
 
 /**
- * 思考时间信息（简单数据容器）
- *
- * 用于保存消息内容的思考开始和结束时间，避免依赖 MessageContent 的临时属性。
- * 这样可以确保即使 messageContent 是重新查询的，思考时间信息也不会丢失。
- */
-class ThinkingTimeInfo {
-  thinkingStartedAt: Date | null = null;
-  thinkingFinishedAt: Date | null = null;
-}
-
-/**
  * Agent 推理引擎
  *
  * 负责协调会话级别的 AI 代理执行流程，包括多轮工具调用循环、流式响应管理。
@@ -48,12 +54,12 @@ class ThinkingTimeInfo {
  * 核心职责：
  * - 管理会话级别的并发锁，防止同一会话的多次请求冲突
  * - 协调 LLM 流式请求、工具执行和消息持久化的完整生命周期
- * - 处理思维链（Reasoning Content）的时间追踪和时长计算
  * - 实现安全的 JSON 解析和工具调用参数累加机制
- * - 支持对话再生模式（overwrite / multi_version）
+ * - 支持对话再生模式（overwrite / resume）
  *
  * 设计原则：
- * - 异步生成器模式：通过 yield 实现流式数据推送，降低内存占用
+ * - 直发模式：流式事件经 sessionContext.publishStream 直发（对齐 DSH session.append 深层直发），
+ *   不经生成器 yield 冒泡——主循环与深层模块（钩子订阅者/审批服务）共用同一发布面
  * - 容错降级：完善的错误捕获和分类处理机制，确保异常不会导致会话崩溃
  * - 防御性编程：多重安全检查（迭代次数限制、JSON 解析容错、空值保护）
  */
@@ -61,14 +67,12 @@ class ThinkingTimeInfo {
 export class AgentEngine {
   private readonly logger = new Logger(AgentEngine.name);
 
-  // 流式输出限流间隔（毫秒）
-  private readonly THROTTLE_MS = 80;
-
   constructor(
     private toolOrchestrator: ToolOrchestrator,
-    private llmService: LLMService,
-    private tokenTracker: SessionTokenTracker,
     private settingsService: SettingsService,
+    private llmService: LLMService,
+    private eventBus: EventBusService,
+    private askService: AskService,
   ) {}
 
   /**
@@ -95,630 +99,18 @@ export class AgentEngine {
   }
 
   /**
-   * 执行会话补全请求（主入口）
+   * 主循环 LLM 流式请求：纯传输 + 重试壳（agent 循环局部语义，对齐 DSH retryPolicy 在 agent 层）。
    *
-   * 该方法采用异步生成器模式，实时向前端推送 LLM 的流式响应。
-   * 整个流程受会话锁保护，确保同一时刻只有一个请求在处理该会话。
+   * 仅主对话循环使用——影子轮次/压缩摘要是失败容忍的辅助调用，单次请求不重试
+   * （重试退避会拖慢压缩，且 DSH 辅助调用同样单次）。
+   * 不做任何累积——累积由调用方持有的 BlockAssembler 完成；
+   * 收到 retry 信号时调用方应 assembler.reset()（重试不保留半截内容）。
    *
-   * 执行流程：
-   * - 加载会话并更新最后活跃时间
-   * - 委托 ISessionContext 提供所有运行配置
-   * - 进入多轮工具调用循环，逐轮生成响应
-   *
-   * @param sessionContext 类型安全的会话上下文
-   * @param messageId 触发本次补全的用户消息 ID
-   * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本 / "resume" 断点续传）
-   * @param assistantMessageId 现有助手消息 ID（仅 multi_version 模式使用）
-   * @param abortSignal 中断信号，用于客户端断开连接时中止 LLM 请求
-   * @param resumeData 断点续传数据（如审批决策、表单数据等）
-   * @yields SSE 的事件对象（create / text / think / tool_call / finish 等）
+   * @param params 已由 SessionLlmRequestBuilder 组装的请求参数
+   * @yields StreamChunk | retry 信号
    */
-  async *run(
-    sessionContext: ISessionContext,
-    userMessage: {
-      id?: string;
-      content?: string;
-      files?: string[];
-      replaceMessageId?: string;
-      knowledgeBaseIds?: string[];
-      metadata?: Record<string, any>;
-    },
-    regenerationMode: string = "overwrite",
-    abortSignal?: AbortSignal,
-    resumeData?: any,
-  ): AsyncGenerator<EventChunk> {
-    const sessionId = sessionContext.sessionId;
-
-    // 预加载历史（统一提前，供 addUserMessage 做模式切换检测）
-    // multi_version 模式用 userMessage.id 作为游标，限制加载范围
-    const historyCursor =
-      regenerationMode === "multi_version" ? userMessage?.id : undefined;
-    await sessionContext.loadHistory(historyCursor);
-
-    // 创建用户消息
-    const createdUserMessage =
-      regenerationMode === "overwrite"
-        ? await sessionContext.addUserMessage(
-            userMessage?.content,
-            userMessage?.files || [],
-            userMessage?.replaceMessageId,
-            userMessage?.knowledgeBaseIds,
-            userMessage?.metadata,
-            undefined,
-          )
-        : null;
-
-    // 必须在用户消息之后创建预生成助手消息 ID
-    const preGenAssistantId = sessionContext.generateId();
-
-    // 广播用户消息事件
-    if (createdUserMessage) {
-      yield {
-        type: "user_message",
-        messageId: createdUserMessage.id,
-        contentId: createdUserMessage.contents[0].id,
-        userMessage: createdUserMessage,
-      };
-    }
-
-    const userMessageId = userMessage?.id || createdUserMessage?.id;
-    if (!userMessageId) {
-      throw new Error("userMessageId is required");
-    }
-    if (regenerationMode !== "resume") {
-      sessionContext.setMessageCursor(userMessageId);
-    }
-
-    const generatorFn = async function* (this: AgentEngine) {
-      yield* this.executeAgentLoop(
-        sessionContext,
-        userMessageId,
-        regenerationMode,
-        abortSignal,
-        resumeData,
-        preGenAssistantId,
-      );
-    }.bind(this);
-
-    const wrappedGenerator = RequestContext.run(
-      {
-        abortSignal,
-        sessionId,
-        requestId: crypto.randomUUID(),
-      },
-      () => generatorFn(),
-    );
-
-    yield* wrappedGenerator;
-  }
-
-  /**
-   * 执行 Agent 多轮工具调用循环
-   *
-   * 该方法实现了一个完整的 ReAct（Reasoning + Acting）循环：
-   * - 初始化会话上下文并加载历史消息
-   * - 根据模型特性决定是否启用思维链和工具调用
-   * - 在循环中交替执行 LLM 推理和工具调用，直到不再需要继续
-   * - 每轮迭代都会持久化助手回复和工具响应
-   *
-   * 安全机制：
-   * - 最大迭代次数限制（100 次），防止无限循环
-   * - SessionStreamManager 确保同一会话不会同时启动多个流
-   *
-   * @param sessionContext 类型安全的会话上下文（包含对话状态）
-   * @param userMessageId 触发本次循环的用户消息 ID
-   * @param regenerationMode 再生模式标识（'overwrite' | 'multi_version' | 'resume'）
-   * @param assistantMessageId 现有助手消息 ID（可选）
-   * @param abortSignal 中断信号（可选）
-   * @param resumeData 断点续传数据（如审批决策、表单数据等）
-   * @yields SSE 格式的事件对象
-   */
-  private async *executeAgentLoop(
-    sessionContext: ISessionContext,
-    userMessageId: string,
-    regenerationMode: string,
-    abortSignal?: AbortSignal,
-    resumeData?: any,
-    preGenAssistantId?: string,
-  ): AsyncGenerator<EventChunk> {
-    const resolved = sessionContext.getResolvedPlugins();
-    const tools =
-      resolved.length > 0
-        ? ToolOrchestrator.toFlatToolDefs(resolved)
-        : undefined;
-
-    // 判断是否为断点模式
-
-    let isResumeMode = regenerationMode === "resume";
-    let responseMessageId: string;
-    if (!isResumeMode) {
-      // 创建新版本的助手消息
-      responseMessageId = await sessionContext.addAssistantMessageVersion(
-        userMessageId,
-        preGenAssistantId,
-      );
-    }
-    let needToContinue = false;
-
-    // 记录 ReAct 循环开始时间，用于计算总耗时
-    const loopStartTime = Date.now();
-
-    // 从系统设置读取最大工具调用轮次，默认 100
-    const maxToolIterations = await this.getMaxToolIterations();
-
-    // 工具调用轮次计数器
-    let iterationCount = 0;
-    // 回合拦截器触发次数（防止无限循环）
-    let interceptorCount = 0;
-    const MAX_INTERCEPTOR_ITERATIONS = 3;
-    let finalError: string | undefined;
-    let finalUsage: any;
-    let finalContent = "";
-    let finalReasoningContent: string | undefined;
-    let finalContentId: string | undefined;
-    // 业务层结束原因：完全独立于上游适配器的 finishReason
-    // 上游 finishReason 留在 MessageContent.metadata 供审计，不参与业务判断
-    let businessReason: string | undefined;
-    do {
-      iterationCount++;
-      needToContinue = false;
-
-      // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
-      let historyMessages = await sessionContext.getMessages();
-
-      // 消息已加载，此时检查是否需要进入保存/压缩状态
-      if (await sessionContext.shouldCompress()) {
-        // onBeforeCompaction 回调：仅在需要二级压缩（摘要/丢弃）时触发
-        const onBeforeCompaction = async () => {
-          this.logger.debug(
-            `onBeforeCompaction ${JSON.stringify(sessionContext.getMemoryConfig())}`,
-          );
-          if (
-            sessionContext.getMemoryConfig().summaryMode ===
-            SummaryMode.MEMORY_SYNC
-          ) {
-            this.logger.debug("run memory save shadow turn");
-            await this.runMemorySaveShadowTurn(sessionContext, abortSignal);
-            this.logger.debug("memory save shadow turn done");
-          }
-        };
-        historyMessages = await sessionContext.compress(onBeforeCompaction);
-        // 必须继续循环，确保压缩完成后再继续
-        // needToContinue = true;
-        // continue;
-      }
-
-      // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
-      const assistantResponse: MessageRecord = {
-        role: "assistant",
-        content: "",
-        messageId: responseMessageId,
-        contentId: sessionContext.generateId(),
-        metadata: {
-          modelName: sessionContext.getModelConfig().modelName,
-        },
-      };
-      if (isResumeMode) {
-        const lastMessage = historyMessages[historyMessages.length - 1];
-        if (
-          lastMessage.metadata?.finishReason === "rate_limited" &&
-          lastMessage.role === "assistant"
-        ) {
-          historyMessages.pop();
-          isResumeMode = false;
-          needToContinue = true;
-          continue;
-        }
-        Object.assign(assistantResponse, lastMessage);
-        responseMessageId = lastMessage.messageId;
-        if (lastMessage.role === "tool") {
-          isResumeMode = false;
-          needToContinue = true;
-          continue;
-        } else if (lastMessage.role === "user") {
-          this.logger.warn("invalid resume mode, last message is user");
-          continue;
-        }
-        this.logger.debug("Enter resume mode");
-      }
-
-      // 断点模式：发送 update 事件
-      yield {
-        type: isResumeMode ? "update" : "create",
-        messageId: responseMessageId,
-        contentId: assistantResponse.contentId,
-        modelName: sessionContext.getModelConfig().modelName,
-        requestId: RequestContext.current()?.requestId,
-        parentId: userMessageId,
-      };
-
-      // 构建待保存的消息记录数组
-      const parts: MessageRecord[] = [];
-
-      // 【关键】如果不是断点模式，或者需要继续循环，才调用 LLM
-      if (isResumeMode) {
-        isResumeMode = false;
-      } else {
-        const currentTurnThinkingInfo = new ThinkingTimeInfo();
-        let streamAborted = false;
-
-        try {
-          const streamResult = this.executeLLMStream(
-            historyMessages,
-            sessionContext.getModelConfig(),
-            ToolOrchestrator.toFlatToolDefs(
-              sessionContext.getResolvedPlugins(),
-            ),
-            sessionContext.getThinkingEffort(),
-            abortSignal,
-          );
-          for await (const result of streamResult) {
-            // 重试事件：直接转发给前端，不处理 chunk/accumulated
-            if ("type" in result && result.type === "retry") {
-              yield {
-                type: "retry",
-                retryReason: result.retryReason,
-                retryAttempt: result.attempt,
-                retryMaxAttempts: result.maxRetries,
-                retryDelayMs: result.delayMs,
-                message: result.message,
-              };
-              continue;
-            }
-
-            // 正常的 { chunk, accumulated }
-            if (!("type" in result)) {
-              const { chunk, accumulated } = result;
-
-              // 记录思考时间：第一次收到 reasoningContent 时标记思考开始
-              if (
-                accumulated.reasoningContent &&
-                !currentTurnThinkingInfo.thinkingStartedAt
-              ) {
-                currentTurnThinkingInfo.thinkingStartedAt = new Date();
-              }
-              // 记录思考时间：reasoningContent 结束后标记思考结束
-              if (
-                !chunk.reasoningContent &&
-                currentTurnThinkingInfo.thinkingStartedAt &&
-                !currentTurnThinkingInfo.thinkingFinishedAt
-              ) {
-                currentTurnThinkingInfo.thinkingFinishedAt = new Date();
-              }
-
-              // [诊断] 记录 finish chunk 是否折叠携带了内容增量，
-              // 用于确认“末尾内容增量被并入 finish（未单独发 text SSE）”这一现象。
-              // 该增量仍计入 accumulated，finish 事件携带完整全量，前端以其为权威可正常补齐。
-              const isFinishChunk =
-                chunk.type === "finish" || !!chunk.finishReason;
-              if (isFinishChunk && chunk.content) {
-                this.logger.debug(
-                  `[FINISH-CARRIES-CONTENT] contentId=${assistantResponse.contentId} deltaTail=${JSON.stringify(String(chunk.content).slice(-80))}`,
-                );
-              }
-
-              const yieldEvent = this.toEventChunk(
-                chunk,
-                accumulated,
-                assistantResponse.contentId,
-              );
-              if (yieldEvent) {
-                if (yieldEvent.type === "finish") {
-                  yieldEvent.contextStats = {
-                    usedTokens: sessionContext.getTokenCount(),
-                    effectiveContextWindow:
-                      sessionContext.getEffectiveContextWindow(),
-                  };
-                }
-                yield yieldEvent;
-              }
-
-              // 直接写入 assistantResponse，无需中间变量
-              assistantResponse.content = accumulated.content || "";
-              if (accumulated.reasoningContent) {
-                assistantResponse.reasoningContent =
-                  accumulated.reasoningContent;
-              }
-              if (accumulated.toolCalls) {
-                assistantResponse.toolCalls = accumulated.toolCalls;
-              }
-              if (accumulated.usage) {
-                assistantResponse.metadata.usage = accumulated.usage;
-              }
-              if (accumulated.signature) {
-                assistantResponse.metadata.signature = accumulated.signature;
-              }
-              if (accumulated.redactedData) {
-                assistantResponse.metadata.redactedData =
-                  accumulated.redactedData;
-              }
-              if (accumulated.finishReason) {
-                assistantResponse.metadata.finishReason =
-                  accumulated.finishReason;
-              }
-            }
-          }
-        } catch (error) {
-          streamAborted = true;
-          const streamError =
-            error instanceof Error ? error : new Error(String(error));
-          this.logger.error(
-            `Stream error in agent loop:${streamError.message}`,
-            streamError.stack,
-          );
-          // 记录思考结束（异常路径仍需正确追踪思考时长）
-          this.recordThinkingFinished(currentTurnThinkingInfo, "stream error");
-          // 业务层：异常终止（区分用户取消和真实错误）
-          // 注意：executeLLMStream 已保证 abort 场景抛出 name=AbortError，
-          // 这里额外检查 abortSignal 作为兜底（防第三方 adapter 抛非标准错误）
-          if (
-            streamError.name === "AbortError" ||
-            streamError.message.toLowerCase().includes("abort") ||
-            abortSignal?.aborted
-          ) {
-            businessReason = "user_cancel";
-          } else if (streamError instanceof UpstreamTimeoutError) {
-            businessReason = "timeout";
-            finalError = streamError.message;
-          } else if (streamError instanceof UpstreamRateLimitError) {
-            businessReason = "rate_limited";
-            finalError = streamError.message;
-          } else {
-            businessReason = "error";
-            finalError = streamError.message;
-          }
-        }
-
-        // LLM SDK 收到 abort 信号后可能直接关闭流（不抛异常），需手动检测
-        if (!streamAborted && abortSignal?.aborted) {
-          streamAborted = true;
-          this.recordThinkingFinished(currentTurnThinkingInfo, "abort signal");
-          businessReason = "user_cancel";
-        }
-
-        // 流结束后计算思考时长（仅一次，确保在所有 recordThinkingFinished 调用之后）
-        assistantResponse.metadata.thinkingDurationMs =
-          this.calculateThinkingDuration(currentTurnThinkingInfo);
-
-        // 校验并修复 toolCalls 参数 JSON
-        // streamAborted: 截断的 JSON + 标记 outcome=aborted
-        // 正常完成: 模型可能输出无效 JSON，不修复会导致下轮回传时 400
-        if (assistantResponse.toolCalls) {
-          assistantResponse.toolCalls = assistantResponse.toolCalls.map(
-            (tc: any) => ({
-              ...tc,
-              arguments: this.repairToolCallArguments(tc.arguments),
-              ...(streamAborted ? { outcome: "aborted" } : {}),
-            }),
-          );
-        }
-
-        // 共享后处理：token 统计（正常和中止都需要，如果 usage 已到达）
-        if (assistantResponse.metadata?.usage) {
-          this.tokenTracker.addUsage(
-            sessionContext.getWorkspacePath(),
-            assistantResponse.metadata.usage.promptTokens,
-            assistantResponse.metadata.usage.completionTokens,
-            assistantResponse.metadata.usage.cachedTokens?.read,
-          );
-        }
-
-        // 先将 assistantResponse 和合成工具响应放入 parts
-        if (assistantResponse.metadata?.finishReason !== "rate_limited") {
-          parts.push(assistantResponse);
-        }
-        // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
-        if (streamAborted && assistantResponse.toolCalls) {
-          for (const tc of assistantResponse.toolCalls) {
-            parts.push({
-              role: "tool",
-              name: tc.name,
-              content:
-                "<system_reminder>Request aborted by user</system_reminder>",
-              toolCallId: tc.id,
-              messageId: responseMessageId,
-            });
-          }
-          await sessionContext.appendParts(parts);
-          parts.length = 0;
-        }
-      }
-
-      // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-      // 中止时不执行工具（已在 catch 中注入合成响应）
-      if (assistantResponse.toolCalls && tools && !abortSignal?.aborted) {
-        // 【工具轮次限制】检查是否达到最大工具调用轮次
-        if (iterationCount >= maxToolIterations) {
-          this.logger.warn(
-            `工具调用达到最大轮次限制 (${maxToolIterations})，暂停执行等待用户确认`,
-          );
-
-          // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
-          await sessionContext.appendParts(parts);
-          businessReason = "max_iterations_reached";
-          finalUsage = assistantResponse.metadata?.usage;
-          break;
-        }
-
-        // 【关键】将工具分为三组并执行
-        const execResult = await this.executeToolsAndBuildParts(
-          assistantResponse,
-          sessionContext,
-          abortSignal,
-        );
-
-        // 【原子性审批】需要审批时提前终止
-        if (execResult.approvalContext) {
-          assistantResponse.metadata.approvalContext =
-            execResult.approvalContext;
-          businessReason = "approval_required";
-          needToContinue = false;
-        } else if (execResult.toolParts.length > 0) {
-          yield execResult.toolEvent!;
-          parts.push(...execResult.toolParts);
-          needToContinue = true;
-        }
-      }
-
-      // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
-      if (parts.length > 0) {
-        await sessionContext.appendParts(parts);
-      }
-
-      this.logger.debug(
-        `Iteration ${iterationCount} completed. reason: ${assistantResponse.metadata?.finishReason} continue=${needToContinue}`,
-      );
-
-      // 开发模式下每次迭代完成后保存对话历史到 .guada/logs 便于审计
-      this.saveTranscript(
-        historyMessages,
-        parts,
-        sessionContext.getWorkspacePath(),
-        sessionContext.sessionId,
-      );
-
-      // 【回合拦截器】仅在正常结束时检查
-      // 正常结束 = 无业务原因（businessReason 未设置）+ 无 needToContinue + 无 abort
-      // 【abort 及时性】每轮结束时立即检查用户停止：
-      // 若已 abort（例如工具执行期间被 kill），直接以 user_cancel 结束循环，
-      // 不再发起下一轮 LLM 调用，避免等待一次完整 LLM 响应造成的数秒延迟
-      if (abortSignal?.aborted) {
-        businessReason = "user_cancel";
-        needToContinue = false;
-      }
-
-      const isNormalFinish =
-        !needToContinue && !abortSignal?.aborted && !businessReason;
-
-      if (
-        isNormalFinish &&
-        interceptorCount < MAX_INTERCEPTOR_ITERATIONS &&
-        (await this.runTurnInterceptors(sessionContext, responseMessageId))
-      ) {
-        interceptorCount++;
-        this.logger.log(
-          `Turn interceptor injected hidden message (count=${interceptorCount})`,
-        );
-        needToContinue = true;
-      }
-
-      finalUsage = assistantResponse.metadata?.usage;
-      finalContent =
-        typeof assistantResponse.content === "string"
-          ? assistantResponse.content
-          : "";
-      finalReasoningContent =
-        typeof assistantResponse.reasoningContent === "string"
-          ? assistantResponse.reasoningContent
-          : undefined;
-      finalContentId = assistantResponse.contentId;
-    } while (needToContinue);
-
-    // 业务层结束原因：完全独立于上游适配器
-    // businessReason 在各业务决策点设置（abort/审批/最大轮次/频率限制/异常）
-    // 未设置 → 模型正常结束 → "stop"
-    const finalFinishReason = businessReason || "stop";
-
-    // 保存结束信息到 Message 级别 metadata
-    const loopDuration = Date.now() - loopStartTime;
-    const finishMeta: Record<string, any> = {
-      finishReason: finalFinishReason,
-      ...(finalError ? { errorDetail: finalError } : {}),
-      ...(finalUsage ? { usage: finalUsage } : {}),
-    };
-    await sessionContext.finalizeMessage(
-      responseMessageId,
-      loopDuration,
-      finishMeta,
-    );
-
-    await sessionContext.persist();
-
-    // 发送 turn_end 事件：整个 ReAct 循环结束后的收尾信号
-    // 携带归一化结束原因 + 最终 content，供下游（SubAgent/BotOrchestrator/前端）消费
-    yield {
-      type: "turn_end",
-      content: finalContent || undefined,
-      reasoningContent: finalReasoningContent,
-      finishReason: finalFinishReason,
-      error: finalError,
-      usage: finalUsage,
-      messageId: responseMessageId,
-      contentId: finalContentId,
-      contextStats: {
-        usedTokens: sessionContext.getTokenCount(),
-        effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
-      },
-    };
-  }
-
-  /**
-   * 执行回合拦截器
-   *
-   * 收集所有已启用插件的 TurnInterceptor，并行调用。
-   * 如果任一拦截器返回非 null，则合并为一条 hidden user 消息追加到当前
-   * assistant 消息下（同 responseMessageId），返回 true 表示需要继续对话。
-   *
-   * @param sessionContext 会话上下文
-   * @param responseMessageId 当前 assistant 消息 ID
-   * @returns 是否注入了拦截消息（true → 触发新一轮 LLM 调用）
-   */
-  private async runTurnInterceptors(
-    sessionContext: ISessionContext,
-    responseMessageId: string,
-  ): Promise<boolean> {
-    const resolved = sessionContext.getResolvedPlugins();
-    const allInterceptors = resolved
-      .filter((rp) => rp.enabled && rp.interceptors.length > 0)
-      .flatMap((rp) => rp.interceptors);
-
-    if (allInterceptors.length === 0) return false;
-
-    const pluginCtx: PluginContext = { session: sessionContext };
-    const results = await Promise.all(
-      allInterceptors.map((i) =>
-        i.intercept(pluginCtx).catch((err) => {
-          this.logger.warn(`Interceptor ${i.name} error: ${err.message}`);
-          return null;
-        }),
-      ),
-    );
-    const messages = results.filter((r): r is string => r != null);
-    if (messages.length === 0) return false;
-
-    await sessionContext.appendParts([
-      {
-        role: "user",
-        content: messages.join("\n\n"),
-        messageId: responseMessageId,
-        contentId: sessionContext.generateId(),
-        metadata: { hidden: true },
-      },
-    ]);
-    return true;
-  }
-
-  /**
-   * 执行 LLM 流式请求，返回累积的响应块。
-   *
-   * @param messages 发送给 LLM 的消息列表
-   * @param modelConfig 模型配置（含运行时调用参数）
-   * @param tools 工具定义列表
-   * @param thinkingEffort 思考强度
-   * @param abortSignal 中断信号
-   * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk }
-   */
-  // LLM 重试最大次数
-  private readonly LLM_MAX_RETRIES = 5;
-
-  private async *executeLLMStream(
-    messages: MessageRecord[],
-    modelConfig: ModelConfig,
-    tools: any[] | undefined,
-    thinkingEffort: string | undefined,
-    abortSignal?: AbortSignal,
-  ): AsyncGenerator<
-    | { chunk: LLMResponseChunk; accumulated: LLMResponseChunk }
+  private async *streamWithRetry(params: LLMCompletionParams): AsyncGenerator<
+    | StreamChunk
     | {
         type: "retry";
         retryReason: RetryableErrorType;
@@ -727,100 +119,74 @@ export class AgentEngine {
         delayMs: number;
         message: string;
       },
-    any,
+    void,
     unknown
   > {
+    const maxRetries = 5;
+    let attempt = 0;
+    const { abortSignal } = params;
+
     this.logger.debug(
-      `[LLM] ${modelConfig.modelName} temperature=${modelConfig.config.temperature} topP=${modelConfig.config.topP} frequencyPenalty=${modelConfig.config.frequencyPenalty}`,
+      `[LLM] ${params.model} temperature=${params.temperature} topP=${params.topP} frequencyPenalty=${params.frequencyPenalty}`,
     );
 
-    let attempt = 0;
-    const maxRetries = this.LLM_MAX_RETRIES;
-
     while (true) {
-      // 每次尝试使用全新的 accumulator（重试不保留之前的半截内容）
-      const accumulated: LLMResponseChunk = {};
+      // 本次尝试是否已产出可见内容/finish（重试决策依据）
+      let sawContent = false;
+      let sawFinish = false;
 
       try {
         const stream = (await this.llmService.completions({
-          model: modelConfig.modelName,
-          messages,
-          tools,
-          temperature: modelConfig.config.temperature,
-          topP: modelConfig.config.topP,
-          frequencyPenalty: modelConfig.config.frequencyPenalty,
-          maxTokens: modelConfig.config.maxOutputTokens,
-          providerConfig: modelConfig.provider,
+          ...params,
           stream: true,
-          thinkingEffort,
-          abortSignal,
-        }) as AsyncGenerator<LLMResponseChunk>);
+        })) as AsyncGenerator<StreamChunk>;
 
-        const throttled = throttledStream(
-          stream,
-          this.THROTTLE_MS,
-          abortSignal,
-        );
-
-        for await (const chunk of throttled) {
-          if (chunk.content) {
-            accumulated.content = (accumulated.content || "") + chunk.content;
+        for await (const chunk of stream) {
+          if (chunk.type === "finish") {
+            sawFinish = true;
+          } else if (chunk.type !== "usage") {
+            sawContent = true;
           }
-          if (chunk.reasoningContent) {
-            accumulated.reasoningContent =
-              (accumulated.reasoningContent || "") + chunk.reasoningContent;
-          }
-          if (chunk.toolCalls) {
-            this.accumulateToolCalls(accumulated, chunk.toolCalls);
-          }
-          if (chunk.usage) {
-            accumulated.usage = chunk.usage;
-          }
-          if (chunk.finishReason) {
-            accumulated.finishReason = chunk.finishReason;
-          }
-          if (chunk.signature) {
-            accumulated.signature = chunk.signature;
-          }
-
-          yield { chunk, accumulated: { ...accumulated } };
+          yield chunk;
         }
 
-        // 流"干净地提前结束"检测：for-await 正常退出但缺少 finishReason
-        // 某些不稳定平台可能输出一半就断开，不发送 finish chunk
-        // 注意：用户手动 abort 时部分 provider/SDK 也会"干净地结束"流（不抛 AbortError），
-        // 必须先排除 abort 场景，否则会被误判为流异常
+        // 流"干净地提前结束"检测：for-await 正常退出但没有 finish chunk。
+        // 某些不稳定平台可能输出一半就断开。注意：用户手动 abort 时部分
+        // provider/SDK 也会"干净地结束"流，必须先排除 abort 场景。
         if (abortSignal?.aborted) {
           throw createAbortError("LLM stream aborted by user");
         }
 
-        if (!accumulated.finishReason) {
-          const hasPartialContent =
-            !!accumulated.content ||
-            !!accumulated.reasoningContent ||
-            !!accumulated.toolCalls?.length;
-
-          if (hasPartialContent) {
+        if (!sawFinish) {
+          if (sawContent) {
             // 有内容但无 finish — 不重试（避免连续 assistant 消息），抛出明确错误
             this.logger.warn(
-              `[LLM] Stream ended prematurely without finishReason (partial content present), not retrying`,
+              `[LLM] Stream ended prematurely without finish (partial content present), not retrying`,
             );
-            throw new Error("LLM stream ended prematurely without finish signal");
+            throw new Error(
+              "LLM stream ended prematurely without finish signal",
+            );
           }
 
           // 无内容且无 finish — 视为网络错误，可重试
           if (attempt < maxRetries) {
             attempt++;
-            const delayMs = computeRetryDelayMs(attempt - 1, { code: "ECONNRESET" });
-            const message = buildRetryMessage("network_error", attempt, maxRetries);
+            const delayMs = computeRetryDelayMs(attempt - 1, {
+              code: "ECONNRESET",
+            });
+            const message = buildRetryMessage(
+              "network_error",
+              attempt,
+              maxRetries,
+            );
 
             this.logger.warn(
-              `[LLM] Stream ended without finishReason or content (attempt ${attempt}/${maxRetries}), retrying`,
+              `[LLM] Stream ended without finish or content (attempt ${attempt}/${maxRetries}), retrying`,
             );
 
             yield {
               type: "retry",
-              retryReason: "network_error" as any,
+              retryReason: "network_error",
               attempt,
               maxRetries,
               delayMs,
@@ -835,7 +201,9 @@ export class AgentEngine {
           if (abortSignal?.aborted) {
             throw createAbortError("LLM stream aborted by user");
           }
-          throw new Error("LLM stream ended prematurely without finish signal (retries exhausted)");
+          throw new Error(
+            "LLM stream ended prematurely without finish signal (retries exhausted)",
+          );
         }
 
         // 流正常结束，退出重试循环
@@ -861,12 +229,7 @@ export class AgentEngine {
 
         // 已产生部分内容则不重试 — 重试会导致消息历史中出现连续 assistant 消息，
         // 部分平台（如 Anthropic）不允许连续 assistant 消息
-        const hasPartialContent =
-          !!accumulated.content ||
-          !!accumulated.reasoningContent ||
-          !!accumulated.toolCalls?.length;
-
-        if (hasPartialContent) {
+        if (sawContent) {
           this.logger.warn(
             `[LLM] ${errorType} 错误但已有部分内容输出，不重试以避免连续 assistant 消息: ${error.message?.substring(0, 200)}`,
           );
@@ -898,507 +261,607 @@ export class AgentEngine {
   }
 
   /**
-   * 构建 SSE Yield 事件
+   * 执行会话补全请求（主入口）
    *
-   * 将 LLM 响应块转换为前端可识别的 SSE 事件格式。
-   * 根据 chunk 的内容类型决定事件类型（text / think / tool_call / finish）。
+   * 该方法采用异步生成器模式，实时向前端推送 LLM 的流式响应。
+   * 整个流程受会话锁保护，确保同一时刻只有一个请求在处理该会话。
    *
-   * @param contentId 内容标识符
-   * @returns SSE 事件对象，若 chunk 为空则返回 null
+   * 执行流程：
+   * - 加载会话并更新最后活跃时间
+   * - 委托 ISessionContext 提供所有运行配置
+   * - 进入多轮工具调用循环，逐轮生成响应
+   *
+   * @param sessionContext 类型安全的会话上下文
+   * @param userMessage 本次用户消息(含 id/content/files;非新建回合模式带 turnId=复用回合外壳 id)
+   * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "resume" 断点续传）
+   * @param abortSignal 中断信号，用于客户端断开连接时中止 LLM 请求
+   * @param resumeData 断点续传数据（如审批决策、表单数据等）
+   * @returns 回合结束原因（finishReason，供调用方做队列消费等收尾决策）
    */
-  private toEventChunk(
-    chunk: LLMResponseChunk,
-    accumulated?: LLMResponseChunk,
-    contentId?: string,
-  ): EventChunk | null {
-    // 优先使用显式 type，兼容旧数据无 type 时的字段推断
-    let eventType: EventChunk["type"];
-
-    if (chunk.type === "finish" || chunk.finishReason) {
-      eventType = "finish";
-    } else if (chunk.type === "think" || chunk.reasoningContent) {
-      eventType = "think";
-    } else if (chunk.type === "tool_call" || chunk.toolCalls) {
-      eventType = "tool_call";
-    } else if (chunk.type === "text" || chunk.content) {
-      eventType = "text";
-    } else if (chunk.usage) {
-      // 只有 usage 没有内容的情况（通常是最后一个块）
-    } else {
-      // 其他未知情况，跳过不处理
-      return null;
-    }
-
-    const isFinish = eventType === "finish";
-
-    return {
-      type: eventType,
-      content: isFinish ? accumulated?.content : chunk.content,
-      reasoningContent: isFinish
-        ? accumulated?.reasoningContent
-        : chunk.reasoningContent,
-      toolCalls: isFinish ? accumulated?.toolCalls : chunk.toolCalls,
-      finishReason: chunk.finishReason,
-      usage: chunk.usage,
-      contentId: contentId,
-    } as EventChunk;
-  }
-
-  /**
-   * 累加工具调用参数（处理流式分片）
-   *
-   * LLM 在流式输出工具调用时，会将参数分成多个块逐步发送。
-   * 该方法负责将这些分片按 index 合并为完整的工具调用对象。
-   *
-   * @param target 目标 LLM 响应块，其 toolCalls 数组会被原地修改
-   * @param deltaCalls 本次收到的增量工具调用分片数组
-   */
-  private accumulateToolCalls(target: LLMResponseChunk, deltaCalls: any[]) {
-    if (!target.toolCalls) target.toolCalls = [];
-
-    for (const delta of deltaCalls) {
-      const index = delta.index;
-
-      // 若该索引位置尚无工具调用对象，则创建新对象并初始化字段
-      // 注意：只在新创建时设置 id/name，后续 delta 事件（如 content_block_stop）不覆盖
-      if (!target.toolCalls[index]) {
-        target.toolCalls[index] = {
-          type: "function",
-          id: delta.id || "",
-          name: delta.name || "",
-          arguments: "",
-          index: index,
-        };
-      }
-
-      const tc = target.toolCalls[index];
-
-      // 补全 name：首个 delta 可能未携带 name（如先发 arguments 分片），
-      // 后续 delta 携带 name 时回填，避免 name 永久为空被下游过滤丢弃
-      if (delta?.name && !tc.name) {
-        tc.name = delta.name;
-      }
-
-      // 将本次分片的参数字符串追加到已有参数中，实现完整参数的重建
-      if (delta?.arguments) {
-        tc.arguments += delta.arguments;
-      }
-    }
-
-    // 清理数组空洞（thinking block 可能占用了低索引但未创建 toolCalls 条目）
-    // 使用 filter 去除 undefined 条目，保持连续
-    target.toolCalls = target.toolCalls.filter(Boolean);
-  }
-
-  /**
-   * 修复不完整的工具调用参数 JSON
-   *
-   * 用户中止流式输出时，toolCall.arguments 可能是截断的 JSON 字符串。
-   * 使用 partialParse 解析后重新序列化为合法 JSON，确保下游消费方（LLM 回传、持久化）不报错。
-   *
-   * @param args 原始参数字符串（可能不完整）
-   * @returns 合法 JSON 字符串
-   */
-  private repairToolCallArguments(args: string): string {
-    if (!args || typeof args !== "string") return "{}";
-    try {
-      JSON.parse(args);
-      return args;
-    } catch {
-      try {
-        const parsed = partialParse(args);
-        return JSON.stringify(parsed);
-      } catch {
-        return "{}";
-      }
-    }
-  }
-
-  /**
-   * 记录思考结束时间
-   *
-   * 仅在思考已开始但尚未结束时记录结束时间，避免重复设置。
-   * 该方法被多处调用（收到 tool_calls、收到 content、发生错误等），确保在各种场景下都能正确追踪思维链耗时。
-   *
-   * @param currentTurnThinkingInfo 当前轮次的思考时间信息对象
-   * @param reason 记录原因（用于日志，便于调试和问题排查）
-   */
-  private recordThinkingFinished(
-    currentTurnThinkingInfo: ThinkingTimeInfo,
-    reason: string,
-  ): void {
-    if (
-      currentTurnThinkingInfo.thinkingStartedAt &&
-      !currentTurnThinkingInfo.thinkingFinishedAt
-    ) {
-      currentTurnThinkingInfo.thinkingFinishedAt = new Date();
-      this.logger.debug(`Thinking finished at ${reason}`); // 记录触发思考结束的具体事件
-    }
-  }
-
-  /**
-   * 计算思考时长（毫秒）
-   *
-   * 根据思考开始和结束时间计算差值，用于性能分析和优化。
-   * 若时间戳不完整（例如模型未产生思维链内容），则返回 null。
-   *
-   * @param currentTurnThinkingInfo 当前轮次的思考时间信息对象
-   * @returns 思考时长（毫秒），如果时间不完整则返回 null
-   */
-  private calculateThinkingDuration(
-    currentTurnThinkingInfo: ThinkingTimeInfo,
-  ): number | null {
-    if (
-      currentTurnThinkingInfo.thinkingStartedAt &&
-      currentTurnThinkingInfo.thinkingFinishedAt
-    ) {
-      const durationMs = Math.floor(
-        currentTurnThinkingInfo.thinkingFinishedAt.getTime() -
-          currentTurnThinkingInfo.thinkingStartedAt.getTime(),
-      );
-      this.logger.log(`Thinking duration calculated: ${durationMs}ms`);
-      return durationMs;
-    }
-
-    // 两个时间戳都为空：模型未产生思维链，属于正常情况，无需告警
-    if (
-      !currentTurnThinkingInfo.thinkingStartedAt &&
-      !currentTurnThinkingInfo.thinkingFinishedAt
-    ) {
-      return null;
-    }
-
-    // 仅一个时间戳存在：思考时间追踪不完整，可能存在逻辑问题
-    this.logger.warn(
-      `Thinking timestamps incomplete. ` +
-        `Has start: ${currentTurnThinkingInfo.thinkingStartedAt !== null}, ` +
-        `Has finish: ${currentTurnThinkingInfo.thinkingFinishedAt !== null}`,
-    );
-    return null;
-  }
-
-  /**
-   * 开发模式下保存当前对话历史到 .guada/logs（每次覆盖，便于审计）
-   */
-  private saveTranscript(
-    historyMessages: MessageRecord[],
-    newParts: MessageRecord[],
-    workspacePath: string,
-    sessionId: string,
-  ): void {
-    // 仅开发模式下保存
-    if (process.env.NODE_ENV === "production" || !workspacePath || !sessionId) {
-      return;
-    }
-    try {
-      const transcriptDir = path.join(workspacePath, ".guada", "logs");
-      fs.mkdirSync(transcriptDir, { recursive: true });
-      const filePath = path.join(transcriptDir, `${sessionId}_transcript.json`);
-      const allMessages = [...historyMessages, ...newParts];
-      const data = allMessages.map((m) => ({
-        role: m.role,
-        metadata: m.metadata,
-        content:
-          typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-        toolCalls: m.toolCalls
-          ? m.toolCalls.map((tc) => ({
-              name: tc.name,
-              arguments: tc.arguments,
-            }))
-          : undefined,
-        toolCallId: m.toolCallId,
-        name: m.name,
-        reasoningContent: m.reasoningContent,
-      }));
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
-    } catch (e) {
-      this.logger.warn(
-        `保存对话历史失败: ${e instanceof Error ? e.message : e}`,
-      );
-    }
-  }
-
-  /**
-   * 将工具按审批状态分类
-   *
-   * @param toolCalls 所有工具调用
-   * @param metadata 消息的 metadata（包含 approvalContext）
-   * @param sessionContext 会话上下文（用于获取审批配置）
-   * @returns 三类工具：pendingTools（需要审批但未决策）、approvedTools（已通过/不需要审批）、rejectedTools（被拒绝）
-   */
-  private classifyToolsByApproval(
-    toolCalls: any[],
-    metadata?: any,
-    sessionContext?: ISessionContext,
-  ): {
-    pendingTools: any[];
-    approvedTools: any[];
-    rejectedTools: any[];
-    invalidTools: any[];
-  } {
-    const pendingTools: any[] = [];
-    const approvedTools: any[] = [];
-    const rejectedTools: any[] = [];
-    const invalidTools: any[] = [];
-
-    // 防御：过滤掉 undefined 或无效的工具调用
-    // 缺少 name 的畸形调用不再静默丢弃，收集到 invalidTools，
-    // 由调用方生成错误响应反馈给模型，避免工具循环被静默终止
-    const validToolCalls = (toolCalls || []).filter((tc: any) => {
-      if (tc && tc.name) return true;
-      if (tc) invalidTools.push(tc);
-      return false;
-    });
-
-    // 检查是否有审批上下文
-    const approvalContext = metadata?.approvalContext;
-
-    if (approvalContext && approvalContext.status !== "pending") {
-      // 已审批场景：根据 decisions 分类
-      const decisions = approvalContext.decisions || [];
-
-      for (const tc of validToolCalls) {
-        const decision = decisions.find((d: any) => d.toolCallId === tc.id);
-
-        if (!decision) {
-          // 【异常】前端未对该工具做出决策，视为 pending
-          pendingTools.push(tc);
-        } else if (decision.decision === "approve") {
-          approvedTools.push(tc);
-        } else if (decision.decision === "reject") {
-          rejectedTools.push(tc);
-        }
-      }
-    } else {
-      // 未审批场景：检查哪些工具需要审批
-      const approvalConfig = sessionContext?.getToolApprovalConfig();
-      const requiresApprovalTools = approvalConfig?.requiresApproval || [];
-
-      for (const tc of validToolCalls) {
-        const needsApproval = this.isToolRequiresApproval(
-          tc.name,
-          requiresApprovalTools,
-        );
-
-        if (needsApproval) {
-          pendingTools.push(tc);
-        } else {
-          approvedTools.push(tc); // 不需要审批的工具归为 approved
-        }
-      }
-    }
-
-    return { pendingTools, approvedTools, rejectedTools, invalidTools };
-  }
-
-  /**
-   * 【辅助】检查单个工具是否需要审批
-   */
-  private isToolRequiresApproval(
-    toolName: string,
-    requiresApprovalTools: string[],
-  ): boolean {
-    // 精确匹配
-    if (requiresApprovalTools.includes(toolName)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * 执行影子轮次：在压缩前静默调用 LLM 保存记忆。
-   *
-   * 使用对话模型 + 仅文件读写工具，让 AI 自行判断需要保存的内容。
-   * 整个交互不入库，不 yield SSE 事件。
-   * 最多 5 轮工具调用，无工具调用即提前结束。
-   */
-  async runMemorySaveShadowTurn(
+  async run(
     sessionContext: ISessionContext,
+    userMessage: {
+      id?: string;
+      content?: string;
+      files?: MessageFile[];
+      replaceTurnId?: string;
+      knowledgeBaseIds?: string[];
+      metadata?: Record<string, any>;
+      /** 非新建回合模式(resume/regenerate)复用既有回合时,由前端传入回合外壳 id */
+      turnId?: string;
+    },
+    regenerationMode: string = "overwrite",
     abortSignal?: AbortSignal,
-  ): Promise<void> {
-    // 切换到 memory 模式：getResolvedPlugins() 只返回 memory 插件，
-    // getSettings('skills') 返回空，确保 LLM 和工具执行层一致受限
-    const originalMode = sessionContext.getRunMode();
-    await sessionContext.setRunMode("memory");
-    try {
-      // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
-      const messages = await sessionContext.getMessages();
-      const shadowMessages: MessageRecord[] = [];
+    resumeData?: any,
+  ): Promise<{ finishReason: string }> {
+    const sessionId = sessionContext.sessionId;
 
-      const modelConfig = sessionContext.getModelConfig();
+    // overwrite 模式:开回合(turn/start)与用户消息(user/message)的入库 + 发布移入
+    // executeAgentLoop 开头(turn_start 与 turn_end 配对在同一方法);run() 只负责
+    // 重答删除(turn/delete 入库 + 发布)与历史加载(两者无配对闭合事件,留在此处)。
+    // 非 overwrite(resume/regenerate)复用既有回合,不新建 turn/start,不追加用户消息;
+    // 回合外壳 id 由前端传入 userMessage.turnId(与消息 id 解耦,不新建回合因此无新 turnId)。
+    const preGenAssistantId = sessionContext.generateId();
+    let turnId = "";
+    if (regenerationMode === "overwrite") {
+      // ── 1. 重答:先删除(turn/delete 入库 + 发布),再加载 ──
+      // 删除先于加载:turn/delete 事件落库后,replayer 重放时 splice 移除该回合,
+      // 后续 loadHistory 从 JSONL 重建(LLM 上下文自然不含被删回合,无需失效缓存 hack)。
+      if (userMessage?.replaceTurnId) {
+        await sessionContext.deleteTurn(userMessage.replaceTurnId);
+        // turn 事件纯净:只携带回合外壳 id(turnId),不携带任何 Message 字段
+        await sessionContext.publishStream({
+          type: "turn_delete",
+          turnId: userMessage.replaceTurnId,
+        });
+      }
+    }
 
-      // 组装指令消息（history 中不含系统提示词，此处自行注入）
-      const instructionParts: string[] = [
-        `<system>
-[BEGIN SILENT SYSTEM PROCESS - MEMORY MAINTENANCE]
-⚠️ CRITICAL MODE SWITCH: You are currently executing a background system routine. 
-You are NOT in a conversation with the user. Do not attempt to answer the user's previous prompt in this specific turn.
-Your output will be parsed by the system, not read by the user.
+    const finishReason = await RequestContext.run(
+      {
+        abortSignal,
+        sessionId,
+        requestId: crypto.randomUUID(),
+      },
+      () =>
+        this.executeAgentLoop(
+          sessionContext,
+          turnId,
+          regenerationMode,
+          abortSignal,
+          resumeData,
+          preGenAssistantId,
+          userMessage,
+        ),
+    );
+    return { finishReason };
+  }
 
-【OBJECTIVE】
-The context is too long and will be compressed. The conversation history may be trimmed or discarded.
-Scan the conversation history to see if there is any content that needs long-term memory. If there is, use the memory tool to save it.
+  /**
+   * 执行 Agent 多轮工具调用循环
+   *
+   * 该方法实现了一个完整的 ReAct（Reasoning + Acting）循环：
+   * - 初始化会话上下文并加载历史消息
+   * - 根据模型特性决定是否启用思维链和工具调用
+   * - 在循环中交替执行 LLM 推理和工具调用，直到不再需要继续
+   * - 每轮迭代都会持久化助手回复和工具响应
+   *
+   * 安全机制：
+   * - 最大迭代次数限制（100 次），防止无限循环
+   * - SessionStreamManager 确保同一会话不会同时启动多个流
+   *
+   * @param sessionContext 类型安全的会话上下文（包含对话状态）
+   * @param turnId 回合外壳 id（overwrite 由 beginTurn 新建;resume 复用既有回合,由 run() 从 userMessage.turnId 取）
+   * @param regenerationMode 再生模式标识（'overwrite' | 'resume'）
+   * @param abortSignal 中断信号（可选）
+   * @param resumeData 断点续传数据（如审批决策、表单数据等）
+   * @returns 回合结束原因（businessReason 或 "stop"）
+   */
+  private async executeAgentLoop(
+    sessionContext: ISessionContext,
+    turnId: string,
+    regenerationMode: string,
+    abortSignal?: AbortSignal,
+    resumeData?: any,
+    preGenAssistantId?: string,
+    userMessage?: any,
+  ): Promise<string> {
+    const resolved = sessionContext.getResolvedPlugins();
+    const tools =
+      resolved.length > 0
+        ? ToolOrchestrator.toFlatToolDefs(resolved)
+        : undefined;
 
-【EVALUATION LOGIC】
-Scan history. ONLY trigger an update if:
-- New explicit long-term preferences/habits found.
-- Critical factual corrections provided.
-- Existing memory conflicts or is outdated.
-(Note: If <factual-memory/> is already accurate, do nothing.)
-
-【EXECUTION PROTOCOL】
-1. IF NO update needed:
-   - Output EXACTLY: DONE
-   - STOP immediately.
-
-2. IF update IS needed:
-   - Use memory tool ('memory') to update memory.
-   - Max 5 tool calls.
-   - After tools finish, Output EXACTLY: DONE
-   - STOP immediately.
-
-【STRICT OUTPUT FORMAT】
-- The ONLY valid output string is "DONE".
-- Any other text (including explanations, apologies, or reasoning) will cause a system error.
-- Do not worry about the user's pending questions; the system will return to normal mode after receiving "DONE".
-[END SILENT SYSTEM PROCESS]
-</system>`,
-      ];
-
-      shadowMessages.push({
-        role: "user",
-        content: instructionParts.join("\n"),
+    // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
+    // 在本方法开头同位置发布,与末尾 turn_end 配对成对(同一方法内成对闭合)。
+    // v1.8：resume 分支已删除（审批/迭代暂停均为回合内原地阻塞），仅 overwrite 有效。
+    if (regenerationMode !== "overwrite") {
+      this.logger.warn(
+        `未知的 regenerationMode "${regenerationMode}"，回退为 overwrite`,
+      );
+    }
+    {
+      // ── 3. 开回合:turn/start 入库 + 发布 turn_start ──
+      turnId = await sessionContext.beginTurn({
+        preGenTurnId: preGenAssistantId,
+      });
+      // turn 事件纯净:只携带回合级信息(turnId/modelName),不携带任何 Message 字段。
+      // assistant 消息由后续 message 级事件(think/text,带 messageId)惰性创建。
+      await sessionContext.publishStream({
+        type: "turn_start",
+        turnId,
+        modelName: sessionContext.getModelConfig().modelName,
       });
 
-      // 与主循环共用 executeLLMStream，保证参数一致
-      const MAX_ROUNDS = 5;
+      // ── 4. 用户消息:user/message 入库 + 发布 user_message(与入库同位置) ──
+      const userMsgResult = await sessionContext.addUserMessage(
+        userMessage?.content,
+        (userMessage?.files || []).map((f) => ({
+          attachmentId: f.fileId || f.url || "",
+          mediaType: f.fileType || "application/octet-stream",
+          bytes: f.fileSize || 0,
+          name: f.displayName ?? f.fileName,
+          url: f.url ?? f.previewUrl,
+        })),
+        {
+          replaceTurnId: userMessage?.replaceTurnId,
+          knowledgeBaseIds: userMessage?.knowledgeBaseIds,
+          metadata: userMessage?.metadata,
+        },
+      );
+      if (userMsgResult?.userMessage) {
+        await sessionContext.publishStream({
+          type: "user_message",
+          messageId: userMsgResult.messageId,
+          turnId,
+          userMessage: userMsgResult.userMessage,
+        });
+      }
+    }
+    let needToContinue = false;
 
-      for (let round = 1; round <= MAX_ROUNDS; round++) {
+    // 记录 ReAct 循环开始时间，用于计算总耗时
+    const loopStartTime = Date.now();
+
+    // 从系统设置读取最大工具调用轮次，默认 100
+    const maxToolIterations = await this.getMaxToolIterations();
+
+    // 工具调用轮次计数器
+    let iterationCount = 0;
+    // 回合拦截器触发次数（防止无限循环）
+    let interceptorCount = 0;
+    const MAX_INTERCEPTOR_ITERATIONS = 3;
+    let finalError: string | undefined;
+    let finalUsage: any;
+    // 业务层结束原因：完全独立于上游适配器的 finishReason
+    // 上游 finishReason 留在 MessageContent.metadata 供审计，不参与业务判断
+    let businessReason: string | undefined;
+    do {
+      iterationCount++;
+      needToContinue = false;
+      let skipLLMCall = false;
+
+      // 通过 agent 钩子（PRE_STEP，副作用管线）让能力订阅者（压缩等）检查/执行——
+      // 订阅者原地改写会话存储（store 写即更新）后放行；agent-engine 不感知压缩细节，
+      // 并在钩子后重读消息（对齐 DSH：请求消息派生自会话 surface）。
+      // 钩子产生的流内事件（compression_start/error）由订阅者经 sessionContext.publishStream 直发。
+      {
+        await this.eventBus.serial<void>(
+          HOOKS.PRE_STEP,
+          { sessionContext, abortSignal },
+          () => undefined,
+        );
+      }
+
+      // 副作用后重读完整请求消息列表（含 system prompt、摘要和历史）——压缩等已生效
+      let historyMessages = await sessionContext.getMessages();
+
+      // 生成本轮助手回复的内容 ID（= 落库消息 id，与 SSE 消息级事件一致）
+      // 累积统一走 BlockAssembler（全链路唯一 StreamChunk→ContentBlock 组装实现），
+      // 不再存在 MessageRecord 平铺累积对象与双向转换。
+      let messageId = sessionContext.generateId();
+      const modelConfig = sessionContext.getModelConfig();
+      const assembler = new BlockAssembler();
+      assembler.setContentId(messageId);
+
+      // 本轮组装产物（流结束后填充；同一 Message 对象入 parts，便于后续回写元数据）
+      let assistantMessage: Message | null = null;
+
+      // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
+      {
+        let streamAborted = false;
+
         try {
-          const streamResult = this.executeLLMStream(
-            messages.concat(shadowMessages),
-            modelConfig,
-            ToolOrchestrator.toFlatToolDefs(
-              sessionContext.getResolvedPlugins(),
-            ),
-            sessionContext.getThinkingEffort(),
-            abortSignal,
+          // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
+          const streamResult = this.streamWithRetry(
+            SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
+              messages: historyMessages,
+              abortSignal,
+            }),
           );
+          for await (const result of streamResult) {
+            // 重试信号：清空本次尝试的半截累积（保留续传 seed 前缀），转发给前端
+            // 轮次级瞬态：带 turnId，前端挂 turn.state.retry（与 isWorking 同层，不落库）
+            if (result.type === "retry") {
+              assembler.reset();
+              await sessionContext.publishStream({
+                type: "retry",
+                turnId,
+                retryReason: result.retryReason,
+                retryAttempt: result.attempt,
+                retryMaxAttempts: result.maxRetries,
+                retryDelayMs: result.delayMs,
+                message: result.message,
+              });
+              continue;
+            }
 
-          let accumulated: LLMResponseChunk = {};
-          for await (const item of streamResult) {
-            if (!("type" in item)) {
-              accumulated = item.accumulated;
+            // 规范 StreamChunk：先喂组装器（唯一累积实现），再直通广播（消息级事件）
+            let chunk = result;
+
+            assembler.push(chunk);
+
+            // block_end 权威块回填 assembler 打点的 timing，保证广播与持久化一致
+            if (chunk.type === "block_end") {
+              chunk = {
+                ...chunk,
+                block: assembler.getTimedBlock(chunk.index) ?? chunk.block,
+              };
+            }
+
+            // 消息级事件直通：messageId 关联所属 assistant 消息，turnId 关联回合外壳
+            await sessionContext.publishStream({
+              ...chunk,
+              messageId,
+              turnId,
+            } as SessionStreamEvent);
+          }
+        } catch (error) {
+          streamAborted = true;
+          const streamError =
+            error instanceof Error ? error : new Error(String(error));
+
+          // 上下文溢出恢复（对齐 DSH overflow recovery，经 agent/request-error 钩子）：
+          // 能力订阅者（压缩插件）识别溢出错误并强制压缩，返回 { kind: 'retry' } 时重试该请求
+          const action = await this.eventBus.serial<RequestErrorAction>(
+            HOOKS.REQUEST_ERROR,
+            { sessionContext, error: streamError, abortSignal },
+            () => undefined,
+          );
+          if (action?.kind === "retry") {
+            // 压缩改变存储：重载历史并重试本步（messageId/assembler 在循环头部重建，
+            // 半截累积不落库，不会产生连续 assistant 消息）
+            historyMessages = await sessionContext.getMessages();
+            needToContinue = true;
+            continue;
+          }
+
+          this.logger.error(
+            `Stream error in agent loop:${streamError.message}`,
+            streamError.stack,
+          );
+          // 业务层：异常终止（区分用户取消和真实错误）
+          // 注意：executeLLMStream 已保证 abort 场景抛出 name=AbortError，
+          // 这里额外检查 abortSignal 作为兜底（防第三方 adapter 抛非标准错误）
+          if (
+            streamError.name === "AbortError" ||
+            streamError.message.toLowerCase().includes("abort") ||
+            abortSignal?.aborted
+          ) {
+            businessReason = "user_cancel";
+          } else if (streamError instanceof UpstreamTimeoutError) {
+            businessReason = "timeout";
+            finalError = streamError.message;
+          } else if (streamError instanceof UpstreamRateLimitError) {
+            businessReason = "rate_limited";
+            finalError = streamError.message;
+          } else {
+            businessReason = "error";
+            finalError = streamError.message;
+          }
+        }
+
+        // LLM SDK 收到 abort 信号后可能直接关闭流（不抛异常），需手动检测
+        if (!streamAborted && abortSignal?.aborted) {
+          streamAborted = true;
+          businessReason = "user_cancel";
+        }
+
+        // 组装三层 assistant Message（消息 id = messageId）。
+        // 工具参数 JSON 修复在 assembler 内统一完成（中止截断与正常完成同规则），
+        // 不再需要流后单独修复。块级计时由 assembler 打点，随块持久化/广播。
+        // 【DSH 对齐（agent.ts:392）】assembler 自判内容：toMessage 在累加任何有效 chunk
+        // 时返回 null（立即报错/中止无任何产出）→ 表示本轮无有效消息，跳过落库与一切消息后处理；
+        // 业务错误归拢 turn 级（finalizeTurn → turn.metadata）。
+        assistantMessage = assembler.toMessage({
+          id: messageId,
+          model: modelConfig.modelName,
+          extraMetadata: {
+            modelName: modelConfig.modelName,
+          },
+        });
+
+        // 空消息（toMessage 返回 null）已在上方跳过；此处无需 token 统计
+
+        // 【DSH 对齐（agent.ts:354-390）】assembler 自判内容，空消息（null）跳过一切消息后处理：
+        // 有内容 → 落库 assistant 消息 + 中止注入合成工具响应；
+        // 空（立即报错/中止无任何产出）→ 不落地、不注入——业务错误由 finalizeTurn 归拢 turn 级。
+        // 注：429 限流通常发生在请求阶段（模型尚无输出）→ 空消息路径自然覆盖；罕见的流中段
+        // 429（已有部分内容）按普通有内容消息处理，部分内容照常落库，不做额外拦截。
+        if (assistantMessage !== null) {
+          await sessionContext.appendMessages([assistantMessage]);
+
+          // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
+          if (streamAborted) {
+            const abortedToolCalls = assistantMessage.content.filter(
+              (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
+                b.type === "tool-call",
+            );
+            const parts: Message[] = [];
+            for (const tc of abortedToolCalls) {
+              parts.push({
+                id: sessionContext.generateId(),
+                role: "tool",
+                kind: "model",
+                source: { kind: "tool", toolCallId: tc.toolCallId },
+                metadata: {},
+                content: [
+                  {
+                    type: "tool-result",
+                    contentId: sessionContext.generateId(),
+                    toolCallId: tc.toolCallId,
+                    name: tc.name,
+                    content:
+                      "<system_reminder>Request aborted by user</system_reminder>",
+                  },
+                ],
+              });
+            }
+            if (abortedToolCalls.length > 0) {
+              await sessionContext.appendMessages(parts);
+              parts.length = 0;
+            }
+          }
+        }
+
+        // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
+        // 中止时不执行工具（已在上方注入合成响应）
+        // 空消息（立即报错/中止无任何产出，assistantMessage 为 null）→ 无工具调用，跳过
+        const hasToolCalls =
+          assistantMessage?.content.some((b) => b.type === "tool-call") ??
+          false;
+        if (hasToolCalls && tools && !abortSignal?.aborted) {
+          // 【工具轮次限制：统一 Ask 迭代暂停】达到最大轮次时不终止回合——
+          // 落库当前消息 → 系统发起 ask（kind='continue'：继续执行/停止，支持自定义回复）
+          // → 原地等待应答（无超时）→ 继续则重置迭代计数执行 pending 工具；
+          // 停止/自定义/取消（用户停止）→ user_cancel 收尾（不执行工具）。
+          let iterationPaused = false;
+          if (iterationCount >= maxToolIterations) {
+            this.logger.warn(
+              `工具调用达到最大轮次限制 (${maxToolIterations})，暂停执行等待用户确认`,
+            );
+
+            try {
+              const answers = await this.askService.ask(
+                sessionContext,
+                {
+                  kind: "continue",
+                  title: "已达到最大工具调用轮次限制",
+                  toolCallId: undefined,
+                  questions: [
+                    {
+                      id: "continue",
+                      question: "是否继续执行剩余工具？",
+                      options: [{ label: "继续执行" }, { label: "停止" }],
+                    },
+                  ],
+                },
+                abortSignal,
+              );
+              const answer = answers[0];
+              if (answer.custom?.trim() || answer.selected.includes("停止")) {
+                businessReason = "user_cancel";
+                needToContinue = false;
+                iterationPaused = true; // 停止/自定义：跳过工具执行
+              } else {
+                iterationCount = 0; // 授权新一轮迭代批次（对齐原 resume 重启循环语义）
+                this.logger.log(`用户确认继续，重置迭代计数，执行剩余工具`);
+              }
+            } catch (e) {
+              if (e instanceof AskDeniedError) {
+                // 用户停止（abort 竞速胜出）→ 撤回等待走 user_cancel
+                businessReason = "user_cancel";
+                needToContinue = false;
+                iterationPaused = true;
+              } else {
+                throw e;
+              }
             }
           }
 
-          shadowMessages.push({
-            role: "assistant",
-            reasoningContent: accumulated.reasoningContent || null,
-            content: accumulated.content || null,
-            toolCalls: accumulated.toolCalls,
-          });
-          if (!accumulated.toolCalls?.length) break;
-
-          const responses = await this.toolOrchestrator.executeBatch(
-            accumulated.toolCalls.map((tc: any) => ({
-              id: tc.id,
-              name: tc.name,
-              arguments: (() => {
-                try {
-                  return typeof tc.arguments === "string"
-                    ? JSON.parse(tc.arguments)
-                    : tc.arguments;
-                } catch {
-                  return {};
-                }
-              })(),
-            })),
-            sessionContext,
-          );
-          for (const r of responses) {
-            shadowMessages.push({
-              role: "tool",
-              content: r.content,
-              toolCallId: r.toolCallId,
-              name: r.name,
-            });
-          }
-        } catch (error: any) {
-          this.logger.error(`记忆保存第${round}轮失败: ${error.message}`);
-          break;
+          // 暂停后中止时不执行工具；正常继续则执行 pending 工具（可能再触发审批）
+          if (!iterationPaused && !abortSignal?.aborted) {
+            // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
+            // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
+            const execResult = await this.executeToolsAndBuildParts(
+              assistantMessage!,
+              messageId,
+              turnId,
+              sessionContext,
+              abortSignal,
+            );
+            if (execResult.toolParts.length > 0) {
+              await sessionContext.appendMessages(execResult.toolParts);
+              await sessionContext.publishStream(execResult.toolEvent!);
+              needToContinue = true;
+            }
+          } // 暂停后中止守卫闭合（iterationPaused/abort 时不执行工具）
         }
       }
-      // 落盘原始交互记录
-      try {
-        const logDir = path.join(
-          sessionContext.getWorkspacePath(),
-          ".guada",
-          "logs",
-        );
-        fs.mkdirSync(logDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(logDir, "compression.jsonl"),
-          JSON.stringify({
-            time: new Date().toISOString(),
-            sessionId: sessionContext.sessionId,
-            records: [messages[0] || {}].concat(shadowMessages),
-          }) + "\n",
-        );
-      } catch (e) {
-        // 非关键
+
+      this.logger.debug(
+        `Iteration ${iterationCount} completed. reason: ${assistantMessage?.metadata.finishReason} continue=${needToContinue}`,
+      );
+
+      // 【回合拦截器】仅在正常结束时检查
+      // 正常结束 = 无业务原因（businessReason 未设置）+ 无 needToContinue + 无 abort
+      // 【abort 及时性】每轮结束时立即检查用户停止：
+      // 若已 abort（例如工具执行期间被 kill），直接以 user_cancel 结束循环，
+      // 不再发起下一轮 LLM 调用，避免等待一次完整 LLM 响应造成的数秒延迟
+      if (abortSignal?.aborted) {
+        businessReason = "user_cancel";
+        needToContinue = false;
       }
-      // 不入库，不 yield
-    } finally {
-      await sessionContext.setRunMode(originalMode);
-    }
+
+      const isNormalFinish =
+        !needToContinue && !abortSignal?.aborted && !businessReason;
+
+      if (
+        isNormalFinish &&
+        interceptorCount < MAX_INTERCEPTOR_ITERATIONS &&
+        (await this.runTurnStoppingHook(sessionContext))
+      ) {
+        interceptorCount++;
+        this.logger.log(
+          `Turn stopping hook injected hidden message (count=${interceptorCount})`,
+        );
+        needToContinue = true;
+      }
+
+      finalUsage = assistantMessage?.metadata.usage;
+    } while (needToContinue);
+
+    // 业务层结束原因：完全独立于上游适配器
+    // businessReason 在各业务决策点设置（abort/审批/最大轮次/频率限制/异常）
+    // 未设置 → 模型正常结束 → "stop"
+    const finalFinishReason = businessReason || "stop";
+
+    // 保存结束信息到 Turn 级别 metadata
+    const loopDuration = Date.now() - loopStartTime;
+    const finishMeta: Record<string, any> = {
+      finishReason: finalFinishReason,
+      ...(finalError ? { errorDetail: finalError } : {}),
+      ...(finalUsage ? { usage: finalUsage } : {}),
+      ...(sessionContext.getModelConfig().modelName
+        ? { modelName: sessionContext.getModelConfig().modelName }
+        : {}),
+    };
+    await sessionContext.finalizeTurn(turnId, loopDuration, finishMeta as any);
+
+    await sessionContext.persist();
+
+    // 发送 turn_end 事件:回合级收尾信号,只携带回合级信息(turnId/finishReason/usage/contextStats),
+    // 不携带 Message 内容(content/reasoningContent/messageId 已由 message 级事件承载)。
+    await sessionContext.publishStream({
+      type: "turn_end",
+      turnId,
+      finishReason: finalFinishReason,
+      error: finalError,
+      usage: finalUsage,
+      contextStats: {
+        usedTokens: await sessionContext.getTokenCount(),
+        effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
+      },
+    });
+
+    return finalFinishReason;
   }
 
   /**
-   * 执行工具并构建入库数据和事件（不 yield，不入库）
+   * 回合关闭前续跑钩子（HOOKS.TURN_STOPPING，parallel 调度）
    *
-   * 由 executeAgentLoop 调用，返回执行结果后由调用方负责 yield 和 persist。
+   * 在 do...while 循环正常退出后（AI 认为对话可以结束）、回合关闭前执行。
+   * 订阅者（如 shell 插件检测后台进程）返回 { kind: 'continue', messages } 时，
+   * 合并为一条 hidden user 消息追加，触发新一轮 LLM 调用（对齐 DSH turn-stopping + steer）。
+   *
+   * @param sessionContext 会话上下文
+   * @returns 是否注入了续跑消息（true → 触发新一轮 LLM 调用）
+   */
+  private async runTurnStoppingHook(
+    sessionContext: ISessionContext,
+  ): Promise<boolean> {
+    const decisions = await this.eventBus.parallel<TurnStoppingDecision>(
+      HOOKS.TURN_STOPPING,
+      { sessionContext } satisfies TurnStoppingPayload,
+    );
+    const messages = decisions
+      .filter((d): d is NonNullable<TurnStoppingDecision> => d != null)
+      .flatMap((d) => (d.kind === "continue" ? d.messages : []));
+
+    if (messages.length === 0) return false;
+
+    await sessionContext.appendMessages([
+      {
+        id: sessionContext.generateId(),
+        role: "user",
+        kind: "model",
+        source: { kind: "plugin", plugin: "interceptor" },
+        metadata: { hidden: true },
+        content: [
+          {
+            type: "text",
+            contentId: sessionContext.generateId(),
+            text: messages.join("\n\n"),
+          },
+        ],
+      },
+    ]);
+    return true;
+  }
+
+  /**
+   * 执行工具并构建入库数据和事件（不发布，不入库）
+   *
+   * 由 executeAgentLoop 调用，返回执行结果后由调用方负责发布和 persist。
+   * 审批由工具 execute 内主动发起（沙盒提权/通用审批服务原地等待），引擎不再预分类挂起。
+   *
+   * @param assistantMessage 本轮组装的 assistant 消息（工具调用从 tool-call 内容块读取）
+   * @param messageId 本轮消息 id（事件关联字段）
+   * @param turnId 本轮回合外壳 id（事件关联字段）
    */
   private async executeToolsAndBuildParts(
-    assistantResponse: MessageRecord,
+    assistantMessage: Message,
+    messageId: string,
+    turnId: string,
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
   ): Promise<{
-    toolParts: MessageRecord[];
-    toolEvent?: EventChunk;
-    approvalContext?: any;
+    toolParts: Message[];
+    toolEvent?: SessionStreamEvent;
   }> {
-    const toolCalls = assistantResponse.toolCalls;
-    if (!toolCalls) return { toolParts: [] };
-    // 1. 分为三组
-    const { pendingTools, approvedTools, rejectedTools, invalidTools } =
-      this.classifyToolsByApproval(
-        toolCalls,
-        assistantResponse.metadata,
-        sessionContext,
-      );
+    const toolCalls = assistantMessage.content.filter(
+      (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
+        b.type === "tool-call",
+    );
+    if (toolCalls.length === 0) return { toolParts: [] };
 
-    // 2. 需要审批 → 返回 approvalContext
-    if (pendingTools.length > 0) {
-      return {
-        toolParts: [],
-        approvalContext: {
-          type: "approval",
-          status: "pending",
-          pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
-          createdAt: new Date().toISOString(),
-        },
-      };
+    // 上游可能漏发/缓发 toolCallId：为空则合成稳定 id 并写回块，
+    // 保证 tool-result 配对一致，避免 tool 消息缺 tool_call_id 触发上游 422
+    for (const tc of toolCalls) {
+      if (!tc.toolCallId) {
+        tc.toolCallId = `call_${crypto.randomUUID()}`;
+        this.logger.warn(
+          `[TOOLCALL-SYNTH-ID] synthesized id for tool call name=${tc.name || "(no-name)"}`,
+        );
+      }
     }
 
-    // 3. 执行 approved + 为 rejected 生成错误响应
+    // 1. 过滤畸形调用（缺 name）→ invalidTools 生成错误响应，合法调用直接执行
+    const validToolCalls: any[] = [];
+    const invalidTools: any[] = [];
+    for (const tc of toolCalls) {
+      if (tc && tc.name) validToolCalls.push(tc);
+      else invalidTools.push(tc);
+    }
+
+    // 执行结果收集
     const toolResponses: any[] = [];
 
-    if (approvedTools.length > 0) {
+    // 2. 直接执行全部合法工具调用（同一消息内多工具按 executeBatch 并发）
+    if (validToolCalls.length > 0) {
       const results = await this.toolOrchestrator.executeBatch(
-        approvedTools.map((tc: any) => ({
-          id: tc.id,
+        validToolCalls.map((tc: any) => ({
+          id: tc.toolCallId,
           name: tc.name,
           arguments: (() => {
             try {
@@ -1415,46 +878,21 @@ Scan history. ONLY trigger an update if:
       );
       toolResponses.push(...results);
 
-      for (let i = 0; i < approvedTools.length; i++) {
-        const at = approvedTools[i];
-        const tc = assistantResponse.toolCalls?.find(
-          (t: any) => t.id === at.id,
-        );
-        if (tc) {
-          if (!tc.metadata) tc.metadata = {};
-          const result = results[i];
-          tc.outcome = result?.isError ? "error" : "success";
-          if (result) result.outcome = tc.outcome;
+      // 结果 outcome 回填到响应事件（瞬态；不写回内容块——块只承载模型产出）
+      for (let i = 0; i < validToolCalls.length; i++) {
+        const result = results[i];
+        if (result) {
+          result.outcome = result?.isError ? "error" : "success";
         }
       }
-    }
-
-    for (const rejected of rejectedTools) {
-      const decision =
-        assistantResponse.metadata?.approvalContext?.decisions?.find(
-          (d: any) => d.toolCallId === rejected.id,
-        );
-      let errorMessage = "用户拒绝了工具执行";
-      if (decision?.reason) errorMessage += `，原因：${decision.reason}`;
-      toolResponses.push({
-        toolCallId: rejected.id,
-        name: rejected.name,
-        content: JSON.stringify({ success: false, message: errorMessage }),
-        isError: true,
-        outcome: "rejected",
-      });
-      const tc = assistantResponse.toolCalls?.find(
-        (t: any) => t.id === rejected.id,
-      );
-      if (tc) tc.outcome = "rejected";
     }
 
     // 缺少 name 的畸形工具调用：生成错误响应反馈给模型，
     // 而不是静默丢弃导致 toolParts 为空、工具循环被直接终止
     for (const invalid of invalidTools) {
       toolResponses.push({
-        toolCallId: invalid.id || "",
-        name: invalid.name || "(unknown)",
+        toolCallId: invalid.toolCallId,
+        name: "(unknown)",
         content: JSON.stringify({
           success: false,
           message:
@@ -1463,10 +901,6 @@ Scan history. ONLY trigger an update if:
         isError: true,
         outcome: "error",
       });
-      const tc = assistantResponse.toolCalls?.find(
-        (t: any) => t.id === invalid.id,
-      );
-      if (tc) tc.outcome = "error";
     }
 
     if (toolResponses.length === 0) {
@@ -1474,7 +908,7 @@ Scan history. ONLY trigger an update if:
     }
 
     // 构建事件
-    const toolEvent: EventChunk = {
+    const toolEvent: SessionStreamEvent = {
       type: "tool_calls_response",
       toolCallsResponse: toolResponses.map((tr: any) => ({
         name: tr.name,
@@ -1482,43 +916,60 @@ Scan history. ONLY trigger an update if:
         toolCallId: tr.toolCallId,
         outcome: tr.outcome,
       })),
-      contentId: assistantResponse.contentId,
+      messageId,
+      turnId,
     };
 
-    // 构建 parts（tool 消息 + 图片消息）
-    const toolParts: MessageRecord[] = [];
-    const pendingImageParts: MessagePart[] = [];
+    // 构建 parts（tool 结果消息 + 图片注入消息，三层 Message[]）
+    const toolParts: Message[] = [];
 
     for (const res of toolResponses) {
       toolParts.push({
+        id: sessionContext.generateId(),
         role: "tool",
-        name: res.name,
-        content: res.content,
-        toolCallId: res.toolCallId,
-        messageId: assistantResponse.messageId,
+        kind: "model",
+        source: { kind: "tool", toolCallId: res.toolCallId },
+        metadata: {},
+        content: [
+          {
+            type: "tool-result",
+            contentId: sessionContext.generateId(),
+            toolCallId: res.toolCallId,
+            name: res.name,
+            content: res.content,
+            isError: !!res.isError,
+          },
+        ],
       });
 
       if (res.images && res.images.length > 0) {
-        pendingImageParts.push(
-          { type: "text", text: res.content || "" },
-          ...res.images.map((img) => ({
-            type: "image_url" as const,
-            image_url: {
+        // 图片注入：user 消息 + image 块（hidden 标记）
+        const imageBlocks: ContentBlock[] = [
+          {
+            type: "text",
+            contentId: sessionContext.generateId(),
+            text: res.content || "",
+          },
+          ...res.images.map((img: any) => ({
+            type: "image" as const,
+            contentId: sessionContext.generateId(),
+            attachment: {
+              attachmentId: sessionContext.generateId(),
+              mediaType: img.media_type || "image/png",
+              bytes: 0,
               url: `data:${img.media_type};base64,${img.data}`,
             },
           })),
-        );
+        ];
+        toolParts.push({
+          id: sessionContext.generateId(),
+          role: "user",
+          kind: "model",
+          source: { kind: "plugin", plugin: "image" },
+          metadata: { hidden: true },
+          content: imageBlocks,
+        });
       }
-    }
-
-    if (pendingImageParts.length > 0) {
-      toolParts.push({
-        role: "user",
-        content: pendingImageParts,
-        messageId: assistantResponse.messageId,
-        contentId: sessionContext.generateId(),
-        metadata: { hidden: true },
-      });
     }
 
     return { toolParts, toolEvent };

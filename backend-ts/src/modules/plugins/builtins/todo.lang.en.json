@@ -4,5 +4,7 @@
   "todo.executing": "Managing todos",
   "todo.completed": "Managed todos",
   "todo.aggregate.executing": "Managing {n} todos",
-  "todo.aggregate.completed": "Managed {n} todos"
+  "todo.aggregate.completed": "Managed {n} todos",
+  "todo.toolkitDescription": "Todo list: track progress of multi-step tasks"
+
 }

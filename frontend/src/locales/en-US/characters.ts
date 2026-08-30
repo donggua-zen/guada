@@ -58,7 +58,7 @@
     groupTools: 'Tools & Capabilities',
     navBasic: 'Basics',
     navPrompt: 'Prompt',
-    navLocalTools: 'Local Tools',
+    navLocalTools: 'Toolkits',
     navMcpTools: 'MCP Tools',
     navSkills: 'Skills',
     navSubAgents: 'Sub-agents',
@@ -109,6 +109,7 @@
     keepDisabled: 'Keep Disabled',
     noLocalTools: 'No local tools available',
     noLocalToolsHint: 'Please enable tools in "Plugins > Local Tools" first',
+    kitSource: 'Source: {plugin}',
     // MCP 工具
     newMcpLabel: 'New MCP',
     mcpRunning: 'Running',

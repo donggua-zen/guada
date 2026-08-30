@@ -204,13 +204,13 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
   it('非流式·多轮：每个 finish 事件发送独立消息', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: '让我查一下' });
+    cb.onEvent({ type: 'text_delta', text: '让我查一下' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'tool_calls' });
     await flushPromises();
     cb.onEvent({ type: 'tool_calls_response', toolCallsResponse: [] });
     await flushPromises();
-    cb.onEvent({ type: 'text', content: '根据结果...' });
+    cb.onEvent({ type: 'text_delta', text: '根据结果...' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();
@@ -226,7 +226,7 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
   it('非流式·单轮：finish 事件发送消息，onComplete 不重复发送', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: 'Hello' });
+    cb.onEvent({ type: 'text_delta', text: 'Hello' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();
@@ -254,13 +254,13 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
   it('非流式·轮间空 finish：跳过空内容不发送', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: 'A' });
+    cb.onEvent({ type: 'text_delta', text: 'A' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'tool_calls' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'tool_calls' });
     await flushPromises();
-    cb.onEvent({ type: 'text', content: 'B' });
+    cb.onEvent({ type: 'text_delta', text: 'B' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();
@@ -276,7 +276,7 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
   it('非流式·错误处理：onError 发送错误消息', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: 'partial reply' });
+    cb.onEvent({ type: 'text_delta', text: 'partial reply' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();
@@ -313,11 +313,11 @@ describe('BotOrchestrator - 流式平台不受影响', () => {
   it('流式·多轮：finish 事件不影响流式行为，onComplete 发送最终完整内容', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: 'A' });
+    cb.onEvent({ type: 'text_delta', text: 'A' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'tool_calls' });
     await flushPromises();
-    cb.onEvent({ type: 'text', content: 'B' });
+    cb.onEvent({ type: 'text_delta', text: 'B' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();
@@ -338,7 +338,7 @@ describe('BotOrchestrator - 流式平台不受影响', () => {
   it('流式·单轮：保持原有流式行为', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
-    cb.onEvent({ type: 'text', content: 'Hello' });
+    cb.onEvent({ type: 'text_delta', text: 'Hello' });
     await flushPromises();
     cb.onEvent({ type: 'finish', finishReason: 'stop' });
     await flushPromises();

@@ -26,6 +26,11 @@
                 <span class="font-medium text-gray-600 dark:text-[#8b8d95] truncate ml-2">
                     {{ tab.name }}
                 </span>
+                <!-- 保存状态 -->
+                <span v-if="saveStatus === 'saving'" class="text-xs text-gray-400 ml-1">{{ t('chat.workspace.saving') }}</span>
+                <span v-else-if="saveStatus === 'unsaved'" class="text-xs text-amber-500 ml-1">{{ t('chat.workspace.unsaved') }}</span>
+                <!-- 外部冲突提示 -->
+                <span v-if="externalConflict" class="text-xs text-red-500 ml-2">{{ t('chat.workspace.fileModifiedExternal') }}</span>
                 <div class="flex items-center gap-1 shrink-0">
                     <!-- 手动刷新预览按钮 -->
                     <button class="preview-close-btn" :title="t('chat.workspace.refreshPreview')" @click="handleManualRefresh">
@@ -38,7 +43,14 @@
         </div>
 
         <div class="flex-1 flex overflow-hidden w-full min-h-0 p-1" @contextmenu.prevent="handleContextMenu($event)">
-            <div v-if="previewLoading" class="flex items-center justify-center h-full w-full">
+            <!-- 空态标签（path 为空）：新建标签页提示 -->
+            <div v-if="!selectedFile && props.tab.type === 'file'" class="flex items-center justify-center h-full w-full">
+                <div class="text-center">
+                    <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.newTabHint') }}</p>
+                </div>
+            </div>
+
+            <div v-else-if="previewLoading" class="flex items-center justify-center h-full w-full">
                 <el-icon class="is-loading" size="20">
                     <LoadingOutlined />
                 </el-icon>
@@ -90,7 +102,19 @@
                         ref="markdownIframeRef" class="w-full border-0" style="height: 100%;background-color: transparent !important;
     color-scheme: light; /* 强制使用浅色模式以确保透明生效 */" allowtransparency="true" sandbox="allow-same-origin allow-scripts" />
 
-                    <!-- 源码高亮（所有文件的 source 模式 + 不支持预览的文本文件） -->
+                    <!-- 源码编辑模式（CodeMirror 编辑器，可编辑可保存） -->
+                    <template v-if="renderMode === 'source' && selectedFile">
+                        <!-- 外部冲突横幅 -->
+                        <div v-if="externalConflict" class="conflict-banner">
+                            <span class="conflict-banner-text">{{ t('chat.workspace.externalConflictHint') }}</span>
+                            <button class="conflict-banner-btn" @click="handleConflictReload">{{ t('chat.workspace.externalConflictReload') }}</button>
+                            <button class="conflict-banner-btn primary" @click="handleConflictSave">{{ t('chat.workspace.externalConflictSave') }}</button>
+                        </div>
+                        <CodeMirrorEditor :model-value="editContent"
+                            :extension="selectedFile.extension" @update:model-value="editContent = $event" @save="handleSaveFile" />
+                    </template>
+
+                    <!-- 源码高亮（rendered 模式 fallback，只读） -->
                     <div v-else-if="highlightedCode" class="code-preview-container min-w-full"
                         v-html="highlightedCode" />
 
@@ -119,6 +143,7 @@ import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
 import { useHighlight } from '@/composables/useHighlight'
+import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
@@ -160,6 +185,10 @@ const { t } = useI18n()
 // ── 预览状态 ──
 
 const selectedFile = ref<SelectedFile | null>(null)
+const editContent = ref('') // CodeMirror 编辑内容（source 模式）
+const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
+const externalConflict = ref(false) // 外部修改冲突（用户有未保存编辑时外部文件变化）
+
 const fileContent = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -169,6 +198,13 @@ const imagePreviewUrl = ref('')
 const htmlPreviewUrl = ref('')
 const htmlPreviewVersion = ref(0)
 const fileContentHash = ref('')
+
+// 文件加载/切换时，同步编辑内容（冲突时不覆盖）
+watch([() => selectedFile.value?.path, () => fileContent.value], () => {
+    if (externalConflict.value) return
+    editContent.value = fileContent.value
+    saveStatus.value = 'saved'
+})
 
 // 缓存的工作目录绝对路径（用于 Electron file:// URL 拼接）
 const cachedWorkspacePath = ref<string | null>(props.workspacePath)
@@ -276,6 +312,16 @@ function hashString(str: string): string {
 
 async function loadFilePreview(): Promise<void> {
     if (!props.sessionId || props.tab.type !== 'file') return
+    // 空态标签（path 为空）：显示"新建标签页"提示，不加载内容
+    if (!props.tab.path) {
+        selectedFile.value = null
+        previewLoading.value = false
+        previewError.value = ''
+        fileNotFound.value = false
+        previewType.value = null
+        imagePreviewUrl.value = ''
+        return
+    }
 
     const tab = props.tab
     selectedFile.value = {
@@ -417,6 +463,36 @@ async function loadHtmlPreviewLocal(): Promise<void> {
 function handleManualRefresh(): void {
     if (!selectedFile.value) return
     loadFileContent(selectedFile.value.path, true, false)
+}
+
+// 保存文件（Ctrl+S 触发）
+async function handleSaveFile(content: string): Promise<void> {
+    if (!selectedFile.value || !props.sessionId) return
+    const filePath = selectedFile.value.path
+    saveStatus.value = 'saving'
+    try {
+        await apiService.saveWorkspaceFile(props.sessionId, filePath, content)
+        saveStatus.value = 'saved'
+        externalConflict.value = false
+        ElMessage.success(t('chat.workspace.saveSuccess'))
+    } catch (e: any) {
+        saveStatus.value = 'unsaved'
+        ElMessage.error(e?.message || t('chat.workspace.saveFailed'))
+    }
+}
+
+// 冲突处理：覆盖本地（放弃编辑，重新加载外部内容）
+async function handleConflictReload(): Promise<void> {
+    if (!selectedFile.value) return
+    externalConflict.value = false
+    saveStatus.value = 'saved'
+    await loadFileContent(selectedFile.value.path, true, false)
+}
+
+// 冲突处理：覆盖外部（保存当前编辑）
+async function handleConflictSave(): Promise<void> {
+    externalConflict.value = false
+    await handleSaveFile(editContent.value)
 }
 
 function onImageError(event: Event | string): void {
@@ -661,8 +737,25 @@ watch(() => props.isActive, async (active) => {
 
 watch(() => props.contentVersion, (newVer, oldVer) => {
     if (oldVer === 0 || newVer <= oldVer) return
+    if (saveStatus.value === 'unsaved') {
+        // 用户有未保存编辑 + 外部文件变化 → 冲突标记，不覆盖编辑内容
+        externalConflict.value = true
+        return
+    }
     if (props.isActive) {
         loadFileContent(props.tab.path!, false, true)
+    } else {
+        isStale.value = true
+    }
+})
+
+// tab.path 变化（空占位标签选中文件 / 在当前标签页切换其他文件）：
+// 原地更新路径时不重建组件，需手动触发重新加载预览
+watch(() => props.tab.path, (newPath, oldPath) => {
+    if (newPath === oldPath) return
+    if (props.isActive) {
+        hasLoaded.value = true
+        loadFilePreview()
     } else {
         isStale.value = true
     }
@@ -731,6 +824,43 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
 </style>
 
 <style scoped>
+.conflict-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    background: var(--gd-color-danger-bg, #fef0f0);
+    border-bottom: 1px solid var(--gd-color-danger-border, #fde2e2);
+    flex-shrink: 0;
+}
+.conflict-banner-text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--gd-color-danger, #f56c6c);
+}
+.conflict-banner-btn {
+    padding: 3px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--gd-color-border, #dcdfe6);
+    background: var(--gd-color-surface, #fff);
+    color: var(--gd-color-text, #333);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.conflict-banner-btn:hover {
+    border-color: var(--gd-color-primary, #409eff);
+    color: var(--gd-color-primary, #409eff);
+}
+.conflict-banner-btn.primary {
+    background: var(--gd-color-primary, #409eff);
+    border-color: var(--gd-color-primary, #409eff);
+    color: #fff;
+}
+.conflict-banner-btn.primary:hover {
+    opacity: 0.85;
+}
+
 .code-preview-container {
     overflow-y: auto;
     overflow-x: auto;

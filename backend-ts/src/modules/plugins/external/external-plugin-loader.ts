@@ -3,10 +3,16 @@ import { ConfigService } from "@nestjs/config";
 import * as fs from "fs";
 import * as path from "path";
 import Module from "module";
+import { execFile as execFileCb, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { PluginManager } from "../plugin.manager";
 import { PluginBase } from "../base-plugin";
 import { PluginManifest } from "../types/plugin.types";
 import { NlsService } from "../i18n/nls.service";
+import { EventBusService } from "../../../common/events/event-bus.service";
+import { parsePluginSource } from "./plugin-source";
+
+const execFile = promisify(execFileCb);
 
 interface ExternalManifest {
   id: string;
@@ -25,11 +31,22 @@ export class ExternalPluginLoader implements OnModuleInit {
   private readonly logger = new Logger(ExternalPluginLoader.name);
   private pluginPaths = new Map<string, { dir: string; source: "dev" | "user" }>();
   private requireQueue: Promise<void> = Promise.resolve();
+  /** 安装 job 队列（前端轮询日志/取消） */
+  private installJobs = new Map<
+    string,
+    {
+      log: string[];
+      done: boolean;
+      result?: { success: boolean; id?: string };
+      controller?: AbortController;
+    }
+  >();
 
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly configService: ConfigService,
     private readonly nlsService: NlsService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async onModuleInit() {
@@ -137,13 +154,18 @@ export class ExternalPluginLoader implements OnModuleInit {
     // 添加 backend-ts/node_modules 作为 fallback 搜索路径
     const pluginModule = await this.requireWithFallback(entryPath);
 
-    // 支持 default 导出或命名导出
-    const PluginClass =
-      pluginModule.default ||
-      pluginModule[Object.keys(pluginModule).find((k) => {
+    // 支持 default 导出 / 命名导出 / CommonJS 直出类（module.exports = class）
+    let PluginClass = pluginModule?.default;
+    if (!PluginClass && typeof pluginModule === "function" && pluginModule.prototype) {
+      // CommonJS 直出类：module.exports = class Valid { ... }
+      PluginClass = pluginModule;
+    }
+    if (!PluginClass) {
+      PluginClass = pluginModule[Object.keys(pluginModule).find((k) => {
         const val = pluginModule[k];
         return typeof val === "function" && val.prototype;
       }) || ""];
+    }
 
     if (!PluginClass) {
       throw new Error("No plugin class export found in entry file");
@@ -312,5 +334,188 @@ export class ExternalPluginLoader implements OnModuleInit {
     await this.pluginManager.unregisterPlugin(pluginId);
     this.pluginPaths.delete(pluginId);
     await this.loadExternalPlugin(info.dir, info.source);
+  }
+
+  // ── 分发安装（分发体系）──
+
+  /** 用户插件安装目录 */
+  private userPluginDir(): string {
+    const dir = this.configService.get<string>("PLUGINS_USER_DIR");
+    if (!dir) throw new Error("PLUGINS_USER_DIR is not configured; cannot install plugins");
+    return dir;
+  }
+
+  /**
+   * 从分发源安装插件（github:/gitee:/git:/local:）
+   * 下载到用户插件目录 → 加载 → 广播 plugins.changed。onLog 实时推送进度行。
+   */
+  private async doInstall(
+    source: string,
+    onLog?: (line: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; dir: string }> {
+    const parsed = parsePluginSource(source);
+    const userDir = this.userPluginDir();
+    const targetDir = path.join(userDir, parsed.dirName);
+    const push = (line: string) => onLog?.(line);
+
+    if (fs.existsSync(targetDir)) {
+      throw new Error(`插件目录已存在，请先卸载或使用更新: ${parsed.dirName}`);
+    }
+
+    // 下载
+    if (parsed.protocol === "local") {
+      if (!fs.existsSync(parsed.localPath)) {
+        throw new Error(`本地插件路径不存在: ${parsed.localPath}`);
+      }
+      push(`[local] 复制本地插件: ${parsed.localPath}`);
+      await fs.promises.cp(parsed.localPath, targetDir, { recursive: true });
+    } else {
+      const tmpDir = `${targetDir}.tmp-${Date.now()}`;
+      push(`[git] 克隆 ${parsed.display}${parsed.ref ? ` @${parsed.ref}` : ""}`);
+      try {
+        await this.gitClone(parsed.cloneUrl!, parsed.ref, tmpDir, push, signal);
+        await fs.promises.rename(tmpDir, targetDir);
+        push(`[git] 下载完成`);
+      } catch (err: any) {
+        await fs.promises.rm(tmpDir, { recursive: true, force: true });
+        throw err;
+      }
+    }
+
+    // 记录分发源（供 update/溯源）
+    try {
+      await fs.promises.writeFile(path.join(targetDir, ".gd-source"), source, "utf-8");
+    } catch {
+      /* 记录失败不致命 */
+    }
+
+    // 加载
+    push(`[load] 加载插件 ${parsed.dirName} …`);
+    await this.loadExternalPlugin(targetDir, "user");
+    const id = this.readManifestId(targetDir);
+    this.eventBus.emit("plugins.changed", { pluginId: id, action: "installed" });
+    this.logger.log(`Plugin installed: ${id} from ${source}`);
+    push(`[done] 插件已安装: ${id}`);
+    return { id, dir: targetDir };
+  }
+
+  /** 同步安装（内部/测试用），无日志回调 */
+  async installPlugin(source: string): Promise<{ id: string; dir: string }> {
+    return this.doInstall(source);
+  }
+
+  /**
+   * 后台任务安装：立即返回 jobId，前端轮询 getInstallLog 实时显示进度。
+   */
+  async installPluginJob(source: string): Promise<{ jobId: string }> {
+    const jobId = `plugin-install-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job: {
+      log: string[];
+      done: boolean;
+      result?: { success: boolean; id?: string };
+      controller?: AbortController;
+    } = { log: [], done: false };
+    const controller = new AbortController();
+    job.controller = controller;
+    this.installJobs.set(jobId, job);
+
+    void (async () => {
+      try {
+        const res = await this.doInstall(source, (line) => job.log.push(line), controller.signal);
+        job.result = { success: true, id: res.id };
+        job.done = true;
+      } catch (err: any) {
+        job.log.push(`❌ 安装失败: ${err?.message || err}`);
+        job.result = { success: false };
+        job.done = true;
+      }
+    })();
+
+    return { jobId };
+  }
+
+  /** 查询安装任务日志（前端轮询） */
+  async getInstallLog(jobId: string): Promise<
+    { log: string[]; done: boolean; result?: { success: boolean; id?: string } } | null
+  > {
+    const job = this.installJobs.get(jobId);
+    if (!job) return null;
+    return { log: job.log, done: job.done, result: job.result };
+  }
+
+  /** 取消安装任务（窗口关闭/组件卸载时调用） */
+  async cancelInstall(jobId: string): Promise<{ cancelled: boolean }> {
+    const job = this.installJobs.get(jobId);
+    if (!job || job.done) return { cancelled: false };
+    job.controller?.abort();
+    job.log.push("⛔ 已取消安装");
+    job.done = true;
+    return { cancelled: true };
+  }
+
+  /** 更新已安装插件（重新拉取分发源并重载）。仅 git 分发的插件可更新。 */
+  async updatePlugin(pluginId: string): Promise<{ id: string; dir: string }> {
+    const info = this.pluginPaths.get(pluginId);
+    if (!info) throw new Error(`外部插件不存在: ${pluginId}`);
+
+    const sourceFile = path.join(info.dir, ".gd-source");
+    const source = fs.existsSync(sourceFile)
+      ? (await fs.promises.readFile(sourceFile, "utf-8")).trim()
+      : "";
+    if (!source) {
+      throw new Error(`${pluginId} 无分发源记录，无法更新（仅 git 安装的插件可更新）`);
+    }
+
+    await this.pluginManager.unregisterPlugin(pluginId);
+    this.pluginPaths.delete(pluginId);
+    await fs.promises.rm(info.dir, { recursive: true, force: true });
+
+    return this.doInstall(source);
+  }
+
+  /**
+   * git 浅克隆，支持分支/tag/commit
+   * onLog 实时推送 git 输出（进度条等），signal 可中止
+   */
+  private async gitClone(
+    url: string,
+    ref: string | undefined,
+    dir: string,
+    onLog?: (line: string) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const args = ["clone", "--depth", "1", "--single-branch"];
+      if (ref) {
+        args.push("-b", ref);
+      }
+      args.push(url, dir);
+      const child = spawn("git", args, { windowsHide: true });
+      const push = (d: Buffer) => {
+        const s = d.toString().trim();
+        if (s) onLog?.(s);
+      };
+      child.stdout?.on("data", push);
+      child.stderr?.on("data", push); // git 进度/错误走 stderr
+      child.on("error", (e) => reject(e));
+      child.on("close", (code) => {
+        if (signal?.aborted) return reject(new Error("aborted"));
+        if (code === 0) resolve();
+        else reject(new Error(`git clone 退出码 ${code}`));
+      });
+    });
+  }
+
+  /** 读取插件目录 manifest 的 id */
+  private readManifestId(dir: string): string {
+    try {
+      const m = JSON.parse(
+        fs.readFileSync(path.join(dir, "manifest.json"), "utf-8"),
+      );
+      return m.id;
+    } catch {
+      return path.basename(dir);
+    }
   }
 }

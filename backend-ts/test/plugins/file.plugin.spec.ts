@@ -6,6 +6,8 @@ import { FilePlugin } from "../../src/modules/plugins/builtins/file.plugin";
 import { WorkspaceService } from "../../src/common/services/workspace.service";
 import { WorkspaceProviderResolver } from "../../src/common/workspace/workspace-provider.resolver";
 import { LocalWorkspaceProvider } from "../../src/common/workspace/local-workspace-provider";
+import { AskService } from "../../src/common/services/ask.service";
+import { InteractionWaitService } from "../../src/common/services/interaction-wait.service";
 import { PluginApi } from "../../src/modules/plugins/api/plugin-api";
 
 /** Captures registered tools/prompts from PluginApi so tests can invoke execute() */
@@ -26,7 +28,13 @@ function capturePluginApi(): PluginApi & {
     registerRawTool: (def: any) => tools.push(def),
     registerPrompt: (def: any) => prompts.push(def),
     registerToolSet: () => {},
-    registerToolKit: () => ({ registerTool: () => {}, registerRawTool: () => {}, registerPrompt: () => {} }),
+    registerNls: () => {},
+    // 工具包化后，插件把工具/提示词注册到 kit 句柄上 —— 捕获进同一集合
+    registerToolKit: () => ({
+      registerTool: (def: any) => tools.push(def),
+      registerRawTool: (def: any) => tools.push(def),
+      registerPrompt: (def: any) => prompts.push(def),
+    }),
     registerCommandProvider: () => {},
   } as any;
 }
@@ -57,6 +65,10 @@ describe("FilePlugin", () => {
         FilePlugin,
         { provide: WorkspaceService, useValue: mockWorkspaceService },
         { provide: WorkspaceProviderResolver, useValue: mockResolver },
+        {
+          provide: AskService,
+          useValue: new AskService(new InteractionWaitService()),
+        },
       ],
     }).compile();
 
@@ -97,13 +109,14 @@ describe("FilePlugin", () => {
 
     it("should have correct manifest", () => {
       expect(plugin.manifest.id).toBe("file");
-      expect(plugin.manifest.name).toBe("文件工具");
+      // manifest 使用 NLS key，由 NlsService 按 locale 解析
+      expect(plugin.manifest.name).toBe("%file.name%");
       expect(plugin.manifest.version).toBe("1.0.0");
       expect(plugin.manifest.category).toBe("core");
     });
 
-    it("should register 6 tools and 1 prompt", () => {
-      expect(api.tools).toHaveLength(6);
+    it("should register 5 tools and 1 prompt", () => {
+      expect(api.tools).toHaveLength(5);
       expect(api.prompts).toHaveLength(1);
     });
   });
@@ -286,29 +299,7 @@ describe("FilePlugin", () => {
   });
 
   // ── delete ──
-
-  describe("delete tool", () => {
-    it("should delete a file", async () => {
-      const fp = await writeFile("toDelete.txt", "content");
-      const result = await getTool("delete").execute(
-        { path: fp },
-        ctx(),
-      );
-      expect(result).toContain("File deleted");
-      await expect(fs.access(fp)).rejects.toThrow();
-    });
-
-    it("should delete a directory recursively", async () => {
-      const dirPath = path.join(tmpDir, "toDeleteDir");
-      await writeFile("toDeleteDir/inner.txt", "content");
-      const result = await getTool("delete").execute(
-        { path: dirPath },
-        ctx(),
-      );
-      expect(result).toContain("Directory deleted");
-      await expect(fs.access(dirPath)).rejects.toThrow();
-    });
-  });
+  // 说明：delete 工具已在源码中停用（file.plugin.ts 中整段注释），相关用例移除
 
   // ── grep ──
 

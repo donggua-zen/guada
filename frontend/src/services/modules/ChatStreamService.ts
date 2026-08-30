@@ -7,7 +7,6 @@
  * - 同一会话的多个窗口可以实时同步流式输出
  */
 
-import type { StreamEvent } from "@/types/service";
 import { getClientId } from "@/utils/clientId";
 import { t } from "@/locales";
 
@@ -19,16 +18,17 @@ export interface ChatStreamParams {
   regenerationMode?: string | null;
   assistantMessageId?: string | null;
   resumeData?: any;
-  lastContentId?: string | null;
   // 用户消息参数
-  // overwrite 模式：按需设置 content/files/replaceMessageId/knowledgeBaseIds，不设置 id
-  // multi_version/resume/subscribe 模式：只需设置 id
+  // overwrite 模式：按需设置 content/files/replaceTurnId/knowledgeBaseIds，不设置 id
+  // resume 模式：只需设置 id;resume 复用既有回合,另带 turnId(回合外壳 id,与消息 id 解耦)
   userMessage?: {
     id?: string;
     content?: string;
     files?: string[];
-    replaceMessageId?: string;
+    replaceTurnId?: string;
     knowledgeBaseIds?: string[];
+    /** 非新建回合模式(resume)复用既有回合时,前端传入回合外壳 id */
+    turnId?: string;
   };
 }
 
@@ -55,13 +55,19 @@ export class ChatStreamService {
    *
    * 通过 regenerationMode 参数区分，避免竞态条件（不先 check 再请求，而是直接带 regenerationMode 请求）。
    */
-  async *chat(params: ChatStreamParams): AsyncGenerator<StreamEvent, void, unknown> {
+  /**
+   * 发起/续传流式对话(合并后为 RPC,不再持有 SSE 长连接)
+   *
+   * 合并后:POST /chat/stream 立即返回 200,流式事件经全局 SSE(UnifiedEvent)
+   * → SessionEventsService → StreamEventHub 路由到前端增量组装。
+   * 此处只负责触发后端启动流,并处理业务错误(会话不存在/忙碌/无活跃流)。
+   */
+  async chat(params: ChatStreamParams): Promise<void> {
     const {
       sessionId,
       regenerationMode = null,
       assistantMessageId = null,
       resumeData,
-      lastContentId,
       userMessage,
     } = params;
 
@@ -91,68 +97,23 @@ export class ChatStreamService {
           regenerationMode,
           stream: true,
           resumeData,
-          lastContentId,
           userMessage,
         }),
         signal: controller.signal,
       });
 
-      yield* this.parseStream(response, sessionId);
+      // 合并后:后端立即返回 JSON(不再是 SSE),只处理业务错误
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          throw new Error(
+            "SessionBusyError: " + (errorData.error || "Session is busy"),
+          );
+        }
+        throw new Error(errorData.error || t("session.api.responseFailed", { status: response.status }));
+      }
     } finally {
       this.abortControllerMap.delete(sessionId);
-    }
-  }
-
-  /**
-   * 解析 SSE 流
-   */
-  private async *parseStream(
-    response: Response,
-    sessionId: string,
-  ): AsyncGenerator<StreamEvent, void, unknown> {
-    // 检查响应头中的 Content-Type
-    const contentType = response.headers.get("Content-Type");
-
-    if (contentType && contentType.includes("application/json")) {
-      const errorData = await response.json();
-      if (response.status === 409) {
-        throw new Error(
-          "SessionBusyError: " + (errorData.error || "Session is busy"),
-        );
-      }
-      throw new Error(errorData.error || t("session.api.responseFailed", { status: response.status }));
-    }
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let boundary;
-        while ((boundary = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.substring(0, boundary).trim();
-          buffer = buffer.substring(boundary + 1);
-
-          if (line === "data: [DONE]") return;
-
-          if (line.startsWith("data: ")) {
-            try {
-              const json = JSON.parse(line.substring(6));
-              yield json as StreamEvent;
-            } catch (e) {
-              console.error("JSON 解析失败:", e, line);
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
     }
   }
 
@@ -189,40 +150,4 @@ export class ChatStreamService {
     }
   }
 
-  /**
-   * 发送消息（不接收 SSE 流）
-   *
-   * 用于非活动会话的队列消息发送：只创建用户消息并启动 Agent 循环。
-   * 前端通过全局 stream_started/stream_finished 事件感知状态。
-   */
-  async sendMessage(params: {
-    sessionId: string;
-    content: string;
-    fileIds?: string[];
-    knowledgeBaseIds?: string[];
-    replaceMessageId?: string;
-  }): Promise<{ success: boolean }> {
-    const accessToken = this.getAccessToken();
-    const response = await fetch(`${this.getBaseURL()}/chat/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        "X-Client-Id": getClientId(),
-      },
-      body: JSON.stringify(params),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      if (response.status === 409) {
-        throw new Error(
-          "SessionBusyError: " + (errorData.error || "Session is busy"),
-        );
-      }
-      throw new Error(errorData.error || t("session.api.sendFailed", { status: response.status }));
-    }
-
-    return response.json();
-  }
 }

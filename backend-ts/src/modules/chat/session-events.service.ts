@@ -1,10 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { Subject, Observable, Subscription } from "rxjs";
 import { MessageEvent } from "@nestjs/common";
 import {
-  StreamFinishedEvent,
-  StreamStartedEvent,
+  StreamStatusChangedEvent,
   SessionCreatedEvent,
   SessionUpdatedEvent,
   SessionDeletedEvent,
@@ -13,6 +12,14 @@ import {
   TodoUpdatedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
+import {
+  EVENT_METHOD,
+  createUnifiedEvent,
+  type EventMethod,
+} from "../../common/events/unified-event.types";
+import type { SessionStreamEvent } from "./types/event-chunk.types";
+import { SessionStreamManager } from "./session-stream.manager";
+import { HOOKS } from "./types/hooks.contract";
 /**
  * 会话事件类型
  */
@@ -22,8 +29,7 @@ export type SessionEventType =
   | "session_deleted"
   | "session_renamed"
   | "session_updated"
-  | "stream_started"
-  | "stream_finished"
+  | "stream_status_changed"
   | "user_message_created"
   | "sub_agent_create"
   | "sub_agent_closed"
@@ -72,12 +78,26 @@ interface InternalEventListener {
  * - 支持多客户端同时连接（同用户多窗口/多设备）
  */
 @Injectable()
-export class SessionEventsService implements OnModuleDestroy {
+export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
   private readonly userSubscribers = new Map<
     string,
     Map<string, UserEventSubscriber>
   >();
+
+  constructor(private readonly streamManager: SessionStreamManager) {}
+
+  /**
+   * 注册 SSE 直投回调（唯一发布入口的消费者侧）
+   *
+   * 流式事件的发布统一走 streamManager.publish（缓存+进程内扇出+直投三合一），
+   * 本服务经此回调接收并推给该用户全部在线客户端——发布点唯一，无生产者双写。
+   */
+  onModuleInit() {
+    this.streamManager.setStreamRelay((userId, sessionId, chunk) =>
+      this.pushStreamToUser(userId, sessionId, chunk),
+    );
+  }
 
   /**
    * 订阅用户事件流
@@ -132,6 +152,37 @@ export class SessionEventsService implements OnModuleDestroy {
       }),
     } as MessageEvent);
 
+    // 统一 SSE:连接建立时按 userId 补发该用户全部活跃流的 eventBuffer 增量。
+    // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
+    // 前端按 payload.sessionId 归会话、按 prevSeq >= lastSeq 去重后消费。
+    for (const stream of this.streamManager.getActiveStreamsForUser(userId)) {
+      for (const chunk of stream.eventBuffer) {
+        const unified = createUnifiedEvent(
+          this.mapStreamMethod(chunk.type),
+          { sessionId: stream.sessionId, ...chunk } as Record<string, any>,
+        );
+        subject.next({
+          data: JSON.stringify(unified),
+        } as MessageEvent);
+      }
+    }
+
+    // 刷新安全（v1.8）：stream_status_changed 不在 eventBuffer 中、不随 catchup 重放，
+    // 刷新后会话级 isStreaming/streamStatus 会丢失。对活跃流补发 running 状态，
+    // 恢复"暂停中的循环仍工作中"的会话级视图（审批/迭代暂停卡；阻止新消息撞 SESSION_BUSY）。
+    for (const stream of this.streamManager.getActiveStreamsForUser(userId)) {
+      subject.next({
+        data: JSON.stringify(
+          toSessionEvent("stream_status_changed", {
+            userId,
+            sessionId: stream.sessionId,
+            timestamp: new Date().toISOString(),
+            payload: { status: "running" },
+          }),
+        ),
+      } as MessageEvent);
+    }
+
     return subject.asObservable();
   }
 
@@ -158,21 +209,15 @@ export class SessionEventsService implements OnModuleDestroy {
   }
 
   /**
-   * 监听内部 stream.started 事件，转发给 SSE 客户端
+   * 监听内部 stream.status_changed 事件，转发给 SSE 客户端
+   *
+   * 统一会话流生命周期状态（running/completed/user_cancel/error），取代旧 stream.started/stream.finished。
    */
-  @OnEvent("stream.started")
-  handleStreamStarted(event: StreamStartedEvent) {
-    this.broadcastToUser(event.userId, toSessionEvent("stream_started", event));
-  }
-
-  /**
-   * 监听内部 stream.finished 事件，转发给 SSE 客户端
-   */
-  @OnEvent("stream.finished")
-  handleStreamFinished(event: StreamFinishedEvent) {
+  @OnEvent("stream.status_changed")
+  handleStreamStatusChanged(event: StreamStatusChangedEvent) {
     this.broadcastToUser(
       event.userId,
-      toSessionEvent("stream_finished", event),
+      toSessionEvent("stream_status_changed", event),
     );
   }
 
@@ -234,7 +279,7 @@ export class SessionEventsService implements OnModuleDestroy {
   /**
    * 监听内部 todo.updated 事件，转发给 SSE 客户端
    */
-  @OnEvent("todo.updated")
+  @OnEvent(HOOKS.TODO_UPDATED)
   handleTodoUpdated(event: TodoUpdatedEvent) {
     this.broadcastToUser(
       event.userId,
@@ -278,6 +323,74 @@ export class SessionEventsService implements OnModuleDestroy {
           `Failed to send event to ${userId}/${subscriber.clientId}, removing`,
         );
         this.unsubscribe(userId, subscriber.clientId);
+      }
+    }
+  }
+
+  /**
+   * SSE 直投（唯一发布入口的消费者侧，由 streamManager relay 调用）
+   *
+   * 构造统一事件信封(UnifiedEvent),method = stream/*,payload 保留原始 EventChunk 字段 + sessionId。
+   * 该用户的所有在线客户端(多窗口)都会收到,前端按 method 路由、按 payload.sessionId 归会话。
+   *
+   * @param userId 用户 ID
+   * @param sessionId 会话 ID
+   * @param chunk 流式事件块(EventChunk)
+   */
+  private pushStreamToUser(userId: string, sessionId: string, chunk: SessionStreamEvent): void {
+    const subscribers = this.userSubscribers.get(userId);
+    if (!subscribers || subscribers.size === 0) {
+      return;
+    }
+
+    const unified = createUnifiedEvent(
+      this.mapStreamMethod(chunk.type),
+      { sessionId, ...chunk } as Record<string, any>,
+    );
+    const messageEvent: MessageEvent = {
+      data: JSON.stringify(unified),
+    } as MessageEvent;
+
+    for (const subscriber of subscribers.values()) {
+      try {
+        subscriber.subject.next(messageEvent);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send stream event to ${userId}/${subscriber.clientId}, removing`,
+        );
+        this.unsubscribe(userId, subscriber.clientId);
+      }
+    }
+  }
+
+  /** 将 SessionStreamEvent.type 映射为统一 method(stream/*，消息级与 chunk.type 一致) */
+  private mapStreamMethod(type: SessionStreamEvent["type"]): EventMethod {
+    switch (type) {
+      case "turn_start": return EVENT_METHOD.STREAM_TURN_START;
+      case "turn_end": return EVENT_METHOD.STREAM_TURN_END;
+      case "turn_delete": return EVENT_METHOD.STREAM_TURN_DELETE;
+      case "user_message": return EVENT_METHOD.STREAM_USER_MESSAGE;
+      case "retry": return EVENT_METHOD.STREAM_RETRY;
+      case "tool_calls_response": return EVENT_METHOD.STREAM_TOOL_CALLS_RESPONSE;
+      // 引擎级附属（压缩）
+      case "compression_start": return EVENT_METHOD.STREAM_COMPRESSION_START;
+      case "compression_error": return EVENT_METHOD.STREAM_COMPRESSION_ERROR;
+      case "compaction_summary": return EVENT_METHOD.STREAM_COMPACTION_SUMMARY;
+      // 统一交互（审批/询问/迭代暂停共用）
+      case "ask_requested": return EVENT_METHOD.STREAM_ASK_REQUESTED;
+      case "ask_resolved": return EVENT_METHOD.STREAM_ASK_RESOLVED;
+      // 消息级:StreamChunk 直通
+      case "block_start": return EVENT_METHOD.STREAM_BLOCK_START;
+      case "text_delta": return EVENT_METHOD.STREAM_TEXT_DELTA;
+      case "reasoning_delta": return EVENT_METHOD.STREAM_REASONING_DELTA;
+      case "tool_call_delta": return EVENT_METHOD.STREAM_TOOL_CALL_DELTA;
+      case "block_end": return EVENT_METHOD.STREAM_BLOCK_END;
+      case "usage": return EVENT_METHOD.STREAM_USAGE;
+      case "finish": return EVENT_METHOD.STREAM_FINISH;
+      default: {
+        const exhaustive: never = type;
+        this.logger.warn(`Unknown stream event type: ${exhaustive}`);
+        return EVENT_METHOD.STREAM_FINISH;
       }
     }
   }

@@ -6,6 +6,3 @@
 
 // 分页相关类型
 export { PaginatedResponse, createPaginatedResponse } from './pagination';
-
-// LLM 交互相关类型
-export { MessagePart, ToolCallItem, MessageRecord } from './message.types';

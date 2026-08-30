@@ -9,5 +9,7 @@
   "tool_use.executing": "Invoking tool",
   "tool_use.completed": "Invoked tool",
   "tool_use.aggregate.executing": "Invoking {n} tools",
-  "tool_use.aggregate.completed": "Invoked {n} tools"
+  "tool_use.aggregate.completed": "Invoked {n} tools",
+  "universalTools.toolkitDescription": "Toolkit learning and on-demand loading (meta capability)"
+
 }

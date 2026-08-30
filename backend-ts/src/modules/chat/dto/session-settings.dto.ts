@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean, IsNumber, ValidateNested, IsArray } from "class-validator";
+import { IsOptional, IsString, IsBoolean, IsNumber, IsIn, ValidateNested, IsArray } from "class-validator";
 import { Type } from "class-transformer";
 
 /**
@@ -48,8 +48,8 @@ export class SessionSettingsDto {
   memory?: MemorySettingsDto;
 
   @IsOptional()
-  @IsString()
-  runMode?: string; // "normal" | "sandbox" | "plan" | "free"
+  @IsIn(["read-only", "workspace-write", "danger-full-access"])
+  sandboxMode?: string; // 三档安全模式（对齐 DSH SandboxMode）
 
   @IsOptional()
   @IsNumber()

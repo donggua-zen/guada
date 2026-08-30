@@ -7,6 +7,7 @@
             :depth="0"
             :selected-path="selectedPath"
             :loading-paths="loadingPaths"
+            :expanded-paths="expandedPaths"
             :on-load="onLoad"
             @select="(n, isPreview) => $emit('select', n, isPreview)"
             @toggle="(n, e) => $emit('toggle', n, e)"
@@ -31,6 +32,7 @@ const props = defineProps<{
     nodes: WorkspaceNode[];
     selectedPath: string;
     loadingPaths: Set<string>;
+    expandedPaths?: Set<string>;
     onLoad?: (node: WorkspaceNode) => Promise<void>;
 }>();
 

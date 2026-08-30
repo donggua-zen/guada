@@ -5,11 +5,11 @@ import { SkillSourceManager } from './core/skill-source.manager';
 import { SkillLoaderService } from './core/skill-loader.service';
 import { SkillVersionManager } from './core/skill-version-manager.service';
 import { SkillWatcherService } from './core/skill-watcher.service';
-import { SkillBundledService } from './core/skill-bundled.service';
 import { SkillsController } from './api/skills.controller';
 import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
 import { SkillPlugin } from './plugins/skill.plugin';
+import { SkillBundledPlugin } from './plugins/skill-bundled.plugin';
 
 @Module({
   imports: [ToolsModule],
@@ -17,7 +17,7 @@ import { SkillPlugin } from './plugins/skill.plugin';
   providers: [
     SkillOrchestrator, SkillRegistry, SkillSourceManager,
     SkillLoaderService, SkillVersionManager, SkillWatcherService,
-    SkillBundledService, SkillPlugin,
+    SkillPlugin, SkillBundledPlugin,
   ],
   exports: [SkillOrchestrator],
 })
@@ -26,14 +26,15 @@ export class SkillsModule implements OnModuleInit {
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
     private sourceManager: SkillSourceManager,
-    private bundledService: SkillBundledService,
     private pluginManager: PluginManager,
     private skillPlugin: SkillPlugin,
+    private skillBundledPlugin: SkillBundledPlugin,
   ) {}
 
   async onModuleInit() {
     await this.pluginManager.registerPlugin(this.skillPlugin);
-    await this.bundledService.syncBundledSkills();
+    // 内置技能作为独立插件注册（可单独启用/停用）
+    await this.pluginManager.registerPlugin(this.skillBundledPlugin);
 
     // watcher 不传初始路径，所有路径由 SkillSourceManager 的 addWatch 添加
     await this.watcher.start();

@@ -33,7 +33,15 @@ export class DocumentPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    api.registerTool({
+    // ── document 能力包：文档解析工具与说明统一挂载，角色层按包启停 ──
+    const docKit = api.registerToolKit({
+      id: "document",
+      name: "%document.name%",
+      description: "%document.toolkitDescription%",
+      activator:
+        "Parse PDF, Word or Excel documents and extract plain text content.",
+    });
+    docKit.registerTool({
       name: "doc_parse",
       description:
         "解析 PDF、Word 或 Excel 文档，提取其中的纯文本内容。支持 .pdf、.docx、.xlsx 和 .xls 格式。",
@@ -84,7 +92,7 @@ export class DocumentPlugin extends PluginBase {
       },
     });
 
-    api.registerTool({
+    docKit.registerTool({
       name: "doc_batch_parse",
       description:
         "批量解析多个 PDF 或 Word 文档，返回每个文件的文本内容摘要。",
@@ -147,7 +155,7 @@ export class DocumentPlugin extends PluginBase {
       },
     });
 
-    api.registerPrompt({
+    docKit.registerPrompt({
       frequency: "REGULAR",
       description: "文档解析工具使用说明",
       content: [

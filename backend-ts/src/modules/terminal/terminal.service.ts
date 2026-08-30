@@ -1,0 +1,169 @@
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { randomUUID } from "node:crypto";
+import { PtyHandle } from "./types";
+
+/** transcript 保留上限（字节，超出丢弃头部） */
+const TRANSCRIPT_LIMIT = 1 << 20; // 1MB
+
+/**
+ * 终端服务：node-pty 进程管理（PTY 注册表）
+ *
+ * 关键设计：
+ *  - WS 断连（页面刷新/会话切换）不立即杀 PTY，标记为 orphan 等待回收
+ *  - 只有显式关闭 tab（前端发 close 消息）才立即 kill
+ *  - 定时回收：orphan PTY 超过 5 分钟自动 kill
+ *  - 会话归属/权限校验在 Gateway 层完成
+ */
+@Injectable()
+export class TerminalService implements OnModuleDestroy {
+  private readonly logger = new Logger(TerminalService.name);
+  /** PTY 注册表 */
+  private readonly sessions = new Map<string, PtyHandle>();
+  /** 每会话 UI 终端上限 */
+  private readonly MAX_UI_TERMINALS = 3;
+  /** orphan 回收定时器 */
+  private readonly orphanTimer: ReturnType<typeof setInterval>;
+  /** orphan 超时（毫秒）：5 分钟 */
+  private readonly ORPHAN_TIMEOUT_MS = 5 * 60 * 1000;
+
+  constructor(private configService: ConfigService) {
+    this.orphanTimer = setInterval(() => this.reclaimOrphans(), 30_000);
+    this.orphanTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.orphanTimer);
+    for (const id of this.sessions.keys()) this.dispose(id);
+  }
+
+  /** 回收超时的 orphan PTY */
+  private reclaimOrphans(): void {
+    const now = Date.now();
+    for (const [id, handle] of this.sessions) {
+      if (handle.disconnectedAt && now - handle.disconnectedAt > this.ORPHAN_TIMEOUT_MS) {
+        this.logger.log(`Reclaiming orphan terminal: ${id}`);
+        this.dispose(id);
+      }
+    }
+  }
+
+  /** 解析默认 shell */
+  private defaultShell(): string {
+    const cfg = this.configService.get<string>("TERMINAL_SHELL");
+    if (cfg) return cfg;
+    if (process.platform === "win32") {
+      // 与 DSH 一致：Windows 优先 PowerShell，避免 cmd 把
+      // xterm 的设备属性应答（ESC[?1;2c）原样回显为 ^[[?1;2c。
+      return process.env.TERMINAL_SHELL || "powershell.exe";
+    }
+    return process.env.TERMINAL_SHELL || process.env.SHELL || "/bin/sh";
+  }
+
+  createUiTerminal(sessionId: string, cwd: string, cols = 80, rows = 24): PtyHandle {
+    const uiCount = [...this.sessions.values()].filter((t) => t.sessionId === sessionId).length;
+    if (uiCount >= this.MAX_UI_TERMINALS) {
+      throw new Error(`Terminal limit reached (${this.MAX_UI_TERMINALS}) for this session`);
+    }
+    const id = `${sessionId}:${randomUUID().slice(0, 8)}`;
+    return this.spawn(id, sessionId, cwd, cols, rows);
+  }
+
+  createAgentTerminal(sessionId: string, cwd: string, command?: string, cols = 100, rows = 30): PtyHandle {
+    const id = randomUUID();
+    const handle = this.spawn(id, sessionId, cwd, cols, rows);
+    if (command) handle.pty.write(command + "\r");
+    return handle;
+  }
+
+  get(id: string): PtyHandle {
+    const handle = this.sessions.get(id);
+    if (!handle) throw new Error(`Terminal ${id} not found`);
+    return handle;
+  }
+
+  /** 仅允许终端所属会话显式销毁 */
+  disposeForSession(id: string, sessionId: string): void {
+    const handle = this.get(id);
+    if (handle.sessionId !== sessionId) throw new Error("Terminal does not belong to session");
+    this.dispose(id);
+  }
+
+  /**
+   * WS 断连时调用：标记 orphan，不杀 PTY。
+   * 前端重连时可通过 id 恢复；超时后由 reclaimOrphans 回收。
+   */
+  markDisconnected(id: string): void {
+    const handle = this.sessions.get(id);
+    if (handle) handle.disconnectedAt = Date.now();
+  }
+
+  /**
+   * 显式关闭（用户关 tab / 前端发 close）：立即 kill PTY。
+   */
+  dispose(id: string): void {
+    const handle = this.sessions.get(id);
+    if (!handle) return;
+    try {
+      handle.pty.kill();
+    } catch {
+      /* ignore */
+    }
+    this.sessions.delete(id);
+    this.logger.log(`Terminal disposed: ${id}`);
+  }
+
+  list(sessionId: string): PtyHandle[] {
+    return [...this.sessions.values()].filter((t) => t.sessionId === sessionId);
+  }
+
+  private spawn(id: string, sessionId: string, cwd: string, cols: number, rows: number): PtyHandle {
+    const shell = this.defaultShell();
+    this.logger.log(`[Terminal] spawn shell=${shell} id=${id}`);
+    let pty: import("node-pty").IPty;
+    try {
+      // 与 DSH 完全一致的 ConPTY 配置：不传 useConptyDll，
+      // 保证 resize 能正确传递到 shell（useConptyDll 会破坏 resize）。
+      pty = this.loadNodePty().spawn(shell, [], {
+        name: "xterm-256color",
+        cols,
+        rows,
+        cwd,
+        env: { ...process.env, TERM: "xterm-256color" },
+        useConpty: true,
+      });
+    } catch (e: any) {
+      this.logger.error(`Terminal spawn failed: ${e?.message}`);
+      throw new Error(`Terminal spawn failed: ${e?.message}`);
+    }
+
+    const handle: PtyHandle = { id, sessionId, cwd, pty, transcript: "", exited: false, disconnectedAt: undefined };
+
+    pty.onData((data) => {
+      handle.transcript += data;
+      if (handle.transcript.length > TRANSCRIPT_LIMIT) {
+        handle.transcript = handle.transcript.slice(-TRANSCRIPT_LIMIT);
+      }
+    });
+
+    pty.onExit(({ exitCode }) => {
+      handle.exited = true;
+      handle.exitCode = exitCode;
+      this.logger.log(`Terminal exited: ${id} code=${exitCode}`);
+    });
+
+    this.sessions.set(id, handle);
+    this.logger.log(`Terminal created: ${id} cwd=${cwd}`);
+    return handle;
+  }
+
+  private loadNodePty(): typeof import("node-pty") {
+    try {
+      return require("node-pty") as typeof import("node-pty");
+    } catch (e: any) {
+      throw new Error(
+        `node-pty is not available: ${e?.message} — run "pnpm approve-builds && pnpm rebuild node-pty"`,
+      );
+    }
+  }
+}

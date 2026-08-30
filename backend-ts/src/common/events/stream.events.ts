@@ -1,34 +1,25 @@
 import { SessionEvent } from "../../modules/chat/session-events.service";
 
 /**
- * 流式输出开始事件（内部模块间使用）
+ * 会话流状态改变事件（内部模块间使用）
  *
- * 事件名：stream.started
+ * 事件名：stream.status_changed
+ * 统一表达"会话是否在工作"的生命周期状态,取代旧 stream.started/stream.finished 两事件。
+ * status=running 表示流开始;completed/user_cancel/error 表示流结束。
  */
-export interface StreamStartedEvent {
+export interface StreamStatusChangedEvent {
   userId: string;
   sessionId: string;
   timestamp: string;
   source?: string;
   payload: {
+    status: "running" | "completed" | "user_cancel" | "error";
+    // running 时
     messageId?: string;
-    replaceMessageId?: string | null;
+    replaceTurnId?: string | null;
     session?: any;
-  };
-}
-
-/**
- * 流式输出完成事件（内部模块间使用）
- *
- * 事件名：stream.finished
- */
-export interface StreamFinishedEvent {
-  userId: string;
-  sessionId: string;
-  timestamp: string;
-  source?: string;
-  payload: {
-    reason: "completed" | "user_cancel" | "error";
+    // 结束态时
+    reason?: "completed" | "user_cancel" | "error";
     workspacePath?: string;
     sessionType?: string;
     error?: string;
@@ -142,8 +133,7 @@ export interface TodoUpdatedEvent {
 export function toSessionEvent(
   type: SessionEvent["type"],
   event:
-    | StreamStartedEvent
-    | StreamFinishedEvent
+    | StreamStatusChangedEvent
     | SessionCreatedEvent
     | SessionUpdatedEvent
     | SessionDeletedEvent

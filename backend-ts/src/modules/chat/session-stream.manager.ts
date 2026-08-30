@@ -1,18 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Subject } from "rxjs";
-import { EventChunk } from "./types/event-chunk.types";
+import { WireStreamEvent } from "./types/event-chunk.types";
 
 /**
  * 流式事件
  */
-export type StreamEvent = EventChunk;
+export type StreamEvent = WireStreamEvent;
 
 /**
  * 流订阅者
  */
 interface StreamSubscriber {
   id: string;
-  subject: Subject<EventChunk>;
+  subject: Subject<WireStreamEvent>;
   connectedAt: Date;
 }
 
@@ -40,12 +40,29 @@ interface ActiveStream {
  * - 支持多客户端订阅同一会话的流式输出
  * - 维护事件缓冲区，使新加入的客户端能够追赶上当前进度
  * - 将流式输出与单个客户端连接解耦，实现刷新不中断
+ * - 唯一发布点（publish）：一次调用完成 eventBuffer 缓存 + 进程内订阅者扇出
+ *   + SSE 直投（经 streamRelay 回调推给 SessionEventsService，避免循环依赖）
  */
 @Injectable()
 export class SessionStreamManager {
   private readonly logger = new Logger(SessionStreamManager.name);
   private readonly activeStreams = new Map<string, ActiveStream>();
   private readonly DEFAULT_MAX_BUFFER_SIZE = 2000;
+
+  /**
+   * SSE 直投回调（SessionEventsService 启动时注入）
+   *
+   * 经回调而非构造器注入：SessionEventsService 已依赖本服务（连接补发读 eventBuffer），
+   * 反向构造器注入会成环；回调保持 publish 同步调用链，事件顺序不因 relay 而变。
+   */
+  private streamRelay?: (userId: string, sessionId: string, event: StreamEvent) => void;
+
+  /**
+   * 注册 SSE 直投回调
+   */
+  setStreamRelay(fn: (userId: string, sessionId: string, event: StreamEvent) => void): void {
+    this.streamRelay = fn;
+  }
 
   /**
    * 启动新的流式任务
@@ -87,32 +104,26 @@ export class SessionStreamManager {
   }
 
   /**
-   * 订阅已存在的流（用于新窗口打开或刷新后重连）
-   *
-   * 支持基于 lastContentId 的过滤：
-   * - 扫描 eventBuffer 中已收到 finish 的 contentId
-   * - 已 finish 且 contentId <= lastContentId 的事件跳过（前端数据库已有）
-   * - 未 finish 的 content 按原始 chunk 发送
+   * 订阅已存在的流（内部订阅：事件实时经 subject 转发，无游标补发——
+   * 增量续传由 SSE 全局广播 + 前端 StreamEventHub(prevSeq>=lastSeq) 承担）
    *
    * @param sessionId 会话 ID
    * @param subscriberId 订阅者唯一标识
-   * @param lastContentId 前端最后已完成的 contentId（可选）
    * @returns 可观察的 Subject，如果流不存在或未运行则返回 null
    */
   subscribe(
     sessionId: string,
     subscriberId: string,
-    onEvent: (data: EventChunk) => void,
+    onEvent: (data: WireStreamEvent) => void,
     onComplete: (reason: string) => void,
     onError: (err: any) => void,
-    lastContentId: string | null = null,
   ): (() => void) | null {
     const stream = this.activeStreams.get(sessionId);
     if (!stream || !stream.isRunning) {
       return null;
     }
 
-    const subject = new Subject<EventChunk>();
+    const subject = new Subject<WireStreamEvent>();
     const subscriber: StreamSubscriber = {
       id: subscriberId,
       subject,
@@ -131,31 +142,9 @@ export class SessionStreamManager {
       error: onError,
     });
 
-    // 发送缓冲区中的历史事件，过滤掉前端已知的已完成内容
-    let sentCount = 0;
-    let skippedCount = 0;
-    for (const event of stream.eventBuffer) {
-      const contentId = event.contentId;
-
-      // 已 finish 且 <= lastContentId，前端数据库已有，跳过
-      if (contentId && lastContentId && contentId <= lastContentId) {
-        skippedCount++;
-        continue;
-      }
-
-      try {
-        subject.next(event);
-        sentCount++;
-      } catch (error) {
-        this.logger.warn(
-          `Failed to send buffered event to subscriber ${subscriberId}`,
-        );
-      }
-    }
-
-    this.logger.debug(
-      `Subscriber ${subscriberId} joined stream ${sessionId}, sent ${sentCount} events, skipped ${skippedCount} events`,
-    );
+    // 内部订阅者在流启动前注册，buffer 为空；订阅后事件经 subject 实时转发
+    // （历史补发走 SSE 连接补发 → StreamEventHub 邮箱，不在此处重放）
+    this.logger.debug(`Subscriber ${subscriberId} joined stream ${sessionId}`);
 
     // 返回取消订阅的清理函数
     return () => {
@@ -165,23 +154,26 @@ export class SessionStreamManager {
   }
 
   /**
-   * 广播事件到所有订阅者，并缓存到缓冲区
+   * 发布流式事件（唯一发布入口）
+   *
+   * 一次调用完成三件事：eventBuffer 缓存（供 SSE 连接补发）、进程内订阅者实时扇出、
+   * 经 relay 直投该用户全部 SSE 客户端，调用方无需再单独广播。
    *
    * 收到 finish 事件时，自动聚合该 content 的所有 chunk，
    * 将连续的 text/think 事件合并为单个事件，减少新订阅者的事件数量。
    *
    * @param sessionId 会话 ID
-   * @param event 流式事件
+   * @param event 流式事件（prevSeq 由生产者赋值——"先入库后发事件"契约）
    */
-  broadcast(sessionId: string, event: StreamEvent): void {
+  publish(sessionId: string, event: StreamEvent): void {
     const stream = this.activeStreams.get(sessionId);
     if (!stream || !stream.isRunning) {
       return;
     }
 
     // 收到 finish 事件时，清理该 content 的中间事件
-    if (event.type === "finish" && event.contentId) {
-      this.cleanupIntermediateEvents(stream, event.contentId);
+    if (event.type === "finish" && event.messageId) {
+      this.cleanupIntermediateEvents(stream, event.messageId);
     }
 
     // 缓存事件
@@ -201,32 +193,33 @@ export class SessionStreamManager {
         stream.subscribers.delete(subscriber.id);
       }
     }
+
+    // SSE 直投：该用户所有在线客户端（多窗口），userId 取自活跃流
+    this.streamRelay?.(stream.userId, sessionId, event);
   }
 
   /**
-   * 清理指定 contentId 在 eventBuffer 中的中间事件
+   * 清理指定 messageId 在 eventBuffer 中的中间事件
    *
-   * finish 事件已携带完整内容，新订阅者只需 create/update + finish 即可重建。
-   * 因此移除 text/think/tool_call 等中间事件，只保留首尾和特殊事件。
+   * block_end 携带该块的权威终态，新订阅者只需回合级事件 + block_end + finish 即可重建，
+   * 因此移除 block_start/text_delta/reasoning_delta/tool_call_delta 等中间增量事件。
    */
   private cleanupIntermediateEvents(
     stream: ActiveStream,
-    contentId: string,
+    messageId: string,
   ): void {
-    // 从 eventBuffer 中移除该 content 的所有中间流式事件
-    // 只保留 create/update、tool_calls_response、finish
     stream.eventBuffer = stream.eventBuffer.filter((e) => {
-      if (e.contentId !== contentId) return true;
-      return (
-        e.type === "create" ||
-        e.type === "update" ||
-        e.type === "tool_calls_response" ||
-        e.type === "finish"
+      if ((e as { messageId?: string }).messageId !== messageId) return true;
+      return !(
+        e.type === "block_start" ||
+        e.type === "text_delta" ||
+        e.type === "reasoning_delta" ||
+        e.type === "tool_call_delta"
       );
     });
 
     this.logger.debug(
-      `Cleaned up intermediate events for content ${contentId}`,
+      `Cleaned up intermediate events for message ${messageId}`,
     );
   }
 
@@ -342,6 +335,23 @@ export class SessionStreamManager {
   hasActiveStream(sessionId: string): boolean {
     const stream = this.activeStreams.get(sessionId);
     return stream !== undefined && stream.isRunning;
+  }
+
+  /**
+   * 获取某用户的所有活跃流(SSE 订阅建立时按 userId 补发 eventBuffer 用)。
+   *
+   * activeStreams 是 Map<sessionId, ActiveStream>,ActiveStream 携带 userId;
+   * 遍历过滤出该用户的活跃流,由 SessionEventsService.subscribe 逐条补发缓存事件,
+   * 替代前端 catchup HTTP 拉取——统一走全局 SSE 通道。
+   */
+  getActiveStreamsForUser(userId: string): ActiveStream[] {
+    const result: ActiveStream[] = [];
+    for (const stream of this.activeStreams.values()) {
+      if (stream.userId === userId && stream.isRunning) {
+        result.push(stream);
+      }
+    }
+    return result;
   }
 
   /**

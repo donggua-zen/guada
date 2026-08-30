@@ -1,4 +1,5 @@
 import type { ApiContext } from "./api-context";
+import { getClientId } from "@/utils/clientId";
 
 export interface GitFileChange {
   /** 相对工作目录的路径（正斜杠分隔） */
@@ -57,6 +58,21 @@ export interface GitCommitResult {
   branch: string;
 }
 
+export interface GitCommitMessageStreamEvent {
+  /** 事件类型：text=增量 / done=完成 / skipped=跳过或失败 */
+  type: "text" | "done" | "skipped";
+  /** type=text 时的文本增量 */
+  content?: string;
+  /** type=done 时的完整提交信息 */
+  message?: string;
+  modelId?: string;
+  modelName?: string;
+  /** 模型来源：title=标题总结模型；chat=当前对话模型 */
+  modelSource?: "title" | "chat";
+  /** type=skipped 时的跳过原因 */
+  reason?: string;
+}
+
 export interface GitFileLinesResult {
   content: string;
   count: number;
@@ -86,6 +102,20 @@ export interface GitApi {
     fromLine: number,
     toLine: number,
   ): Promise<GitFileLinesResult>;
+  /** 根据 git 变更流式生成提交信息（SSE）；includeUnstaged 是否包含未暂存变更，默认 true */
+  generateCommitMessage(
+    sessionId: string,
+    includeUnstaged: boolean,
+    onText: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ message: string; modelId?: string; modelName?: string; modelSource?: "title" | "chat" }>;
+  /** 读取项目提交约束（.guada/git/commit_constraint.md），不存在时返回空串 */
+  getCommitConstraint(sessionId: string): Promise<{ content: string }>;
+  /** 保存项目提交约束 */
+  saveCommitConstraint(
+    sessionId: string,
+    content: string,
+  ): Promise<{ success: boolean }>;
 }
 
 export const gitApi: GitApi = {
@@ -158,5 +188,122 @@ export const gitApi: GitApi = {
     return await this._request(
       `/sessions/${sessionId}/git/file-lines?file=${encodeURIComponent(file)}&cached=${cached}&from=${fromLine}&to=${toLine}`,
     );
+  },
+
+  /**
+   * SSE 流式生成提交信息：
+   * - 逐块回调 onText 累积文本
+   * - 正常结束 resolve { message, modelId, modelName, modelSource }
+   * - skipped 事件/网络错误 → reject Error（message 为 reason 键，如 "no_model_configured"）
+   * - 取消：外部 abort signal
+   */
+  async generateCommitMessage(
+    this: ApiContext,
+    sessionId: string,
+    includeUnstaged: boolean,
+    onText: (text: string) => void,
+    signal?: AbortSignal,
+  ) {
+    const accessToken =
+      sessionStorage.getItem("token") || localStorage.getItem("token");
+    const response = await fetch(
+      `${this.baseURL}/sessions/${sessionId}/git/generate-commit-message`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          "X-Client-Id": getClientId(),
+        },
+        body: JSON.stringify({ includeUnstaged }),
+        signal,
+      },
+    );
+
+    if (!response.ok) {
+      let message = `HTTP ${response.status}`;
+      try {
+        const data = await response.json();
+        message = data?.message || data?.error || message;
+      } catch {
+        /* 忽略 JSON 解析失败 */
+      }
+      throw new Error(message);
+    }
+    if (!response.body) {
+      throw new Error("no_response_body");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let resultMessage = "";
+    let modelId: string | undefined;
+    let modelName: string | undefined;
+    let modelSource: "title" | "chat" | undefined;
+    let skippedReason: string | null = null;
+    let streamEnded = false;
+
+    try {
+      while (!streamEnded) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundary: number;
+        while ((boundary = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.substring(0, boundary).trim();
+          buffer = buffer.substring(boundary + 1);
+
+          if (line === "data: [DONE]") {
+            streamEnded = true;
+            break;
+          }
+          if (!line.startsWith("data: ")) continue;
+
+          let event: GitCommitMessageStreamEvent;
+          try {
+            event = JSON.parse(line.substring(6));
+          } catch (e) {
+            console.error("提交信息流 JSON 解析失败:", e, line);
+            continue;
+          }
+
+          if (event.type === "text" && event.content) {
+            onText(event.content);
+          } else if (event.type === "done") {
+            resultMessage = event.message || "";
+            modelId = event.modelId;
+            modelName = event.modelName;
+            modelSource = event.modelSource;
+          } else if (event.type === "skipped") {
+            skippedReason = event.reason || "skipped";
+            streamEnded = true;
+            break;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (skippedReason) throw new Error(skippedReason);
+    if (!resultMessage) throw new Error("empty_result");
+    return { message: resultMessage, modelId, modelName, modelSource };
+  },
+
+  async getCommitConstraint(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/git/commit-constraint`);
+  },
+
+  async saveCommitConstraint(
+    this: ApiContext,
+    sessionId: string,
+    content: string,
+  ) {
+    return await this._request(`/sessions/${sessionId}/git/commit-constraint`, {
+      method: "PUT",
+      data: { content },
+    });
   },
 };

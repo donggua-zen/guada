@@ -8,5 +8,7 @@
   "doc_batch_parse.executing": "Parsing documents in batch",
   "doc_batch_parse.completed": "Parsed documents in batch",
   "doc_batch_parse.aggregate.executing": "Parsing {n} batches of documents",
-  "doc_batch_parse.aggregate.completed": "Parsed {n} batches of documents"
+  "doc_batch_parse.aggregate.completed": "Parsed {n} batches of documents",
+  "document.toolkitDescription": "Parse PDF, Word or Excel documents and extract text content"
+
 }

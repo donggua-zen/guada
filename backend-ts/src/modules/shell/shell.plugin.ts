@@ -8,7 +8,20 @@ import {
   SandboxOptions,
 } from "./process-manager.service";
 import { PluginContext } from "../plugins/types/plugin.types";
-import { StreamFinishedEvent } from "../../common/events/stream.events";
+import {
+  HOOKS,
+  type TurnStoppingDecision,
+  type TurnStoppingPayload,
+} from "../chat/types/hooks.contract";
+import { StreamStatusChangedEvent } from "../../common/events/stream.events";
+import {
+  ESCALATION_TARGETS,
+  parseEscalationArgs,
+  sandboxForMode,
+  assertStrictlyWider,
+  type SandboxMode,
+} from "../../common/services/sandbox-policy";
+import { AskService } from "../../common/services/ask.service";
 import langZh from "./shell.lang.zh.json";
 import langEn from "./shell.lang.en.json";
 
@@ -31,7 +44,10 @@ export class ShellPlugin extends PluginBase {
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
 
-  constructor(private readonly processManager: ProcessManagerService) {
+  constructor(
+    private readonly processManager: ProcessManagerService,
+    private readonly askService: AskService,
+  ) {
     super();
   }
 
@@ -46,6 +62,13 @@ export class ShellPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
+    // ── shell 能力包：run_command/process 工具与使用说明统一挂载 ──
+    const shellKit = api.registerToolKit({
+      id: "shell",
+      name: "%shell.name%",
+      description: "%shell.toolkitDescription%",
+      activator: "Execute system commands and manage background processes.",
+    });
     // ── execute 工具 ──
     const shellKind = this.processManager.getShellKind();
     const isCmd = shellKind === "cmd";
@@ -53,14 +76,15 @@ export class ShellPlugin extends PluginBase {
     const cmdWarning = isCmd
       ? `\n- WARNING: cmd.exe only executes the first line of a multi-line command and silently drops the rest. For multi-line or long commands, write them to a script file (.bat) first, then execute the script`
       : "";
-    api.registerTool({
+    shellKit.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
 - **Current Shell**: ${shellDesc}
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- processId is typically the shell process ID, not the command's own process ID${cmdWarning}`,
+- processId is typically the shell process ID, not the command's own process ID${cmdWarning}
+- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.`,
       inputSchema: z.object({
         command: z
           .string()
@@ -87,6 +111,18 @@ export class ShellPlugin extends PluginBase {
           .describe(
             "Whether to run in background mode immediately. Defaults to false. When true, returns process ID immediately without waiting.",
           ),
+        sandbox_permissions: z
+          .enum(ESCALATION_TARGETS)
+          .optional()
+          .describe(
+            "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
+          ),
+        justification: z
+          .string()
+          .optional()
+          .describe(
+            "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access.",
+          ),
       }),
       execute: async (args, ctx, abortSignal) => {
         const command: string = args.command;
@@ -95,21 +131,47 @@ export class ShellPlugin extends PluginBase {
         const encoding = args.encoding as string | undefined;
         const background = args.background === true;
         const cwd = ctx?.session.workspacePath || process.cwd();
+        const session = ctx?.session;
 
-        // sandbox 映射：sandbox 模式工作区内可写；plan 模式全盘只读
-        const runMode = ctx?.session.getRunMode?.();
-        const sandbox: SandboxOptions | undefined =
-          runMode === "sandbox" || runMode === "plan"
-            ? { enabled: true, readOnly: runMode === "plan" }
-            : undefined;
+        // 安全模式 → 沙盒选项：read-only 全盘只读 / workspace-write 工作区内可写 / danger-full-access 不沙盒
+        const mode: SandboxMode =
+          session?.getSandboxMode?.() ?? "workspace-write";
+        let sandbox: SandboxOptions | undefined = sandboxForMode(mode);
 
-        // sandbox 不可用时提前报错（execute/background 内部也会检查）
+        // sandbox 不可用时提前报错（execute/background 内部也会检查，fail-closed 不静默放行）
         if (sandbox?.enabled) {
           if (!(await this.processManager.isSandboxAvailable())) {
             throw new Error(
-              `The user has enabled ${runMode} mode, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
+              `The session sandbox mode is ${mode}, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
             );
           }
+        }
+
+        // 提权请求：sandbox_permissions + justification 成对 → 严格放宽校验 → 审批 → 应用放宽模式
+        const escalation = parseEscalationArgs(
+          args.sandbox_permissions,
+          args.justification,
+        );
+        if (escalation) {
+          if (!sandbox?.enabled) {
+            throw new Error(
+              `Sandbox is not enabled in this session (mode: ${mode}); sandbox_permissions is unavailable.`,
+            );
+          }
+          // 非严格放宽（平级/降级）→ 直接抛错，不打扰人（对齐 DSH）
+          assertStrictlyWider(mode, escalation.mode);
+          // 原地等待审批（统一 Ask：同意/拒绝/自定义回复，无超时）：
+          // 批准正常返回；拒绝/自定义/中止抛 AskDeniedError（命令不执行，终局）
+          await this.askService.requestApproval(session, {
+            toolCallId: ctx?.toolCallId || "",
+            toolName: "run_command",
+            detail: `请求沙盒提权 ${mode} → ${escalation.mode}：${escalation.justification}`,
+            abortSignal,
+          });
+          sandbox = sandboxForMode(escalation.mode);
+          this.logger.log(
+            `Escalation approved: ${mode} → ${escalation.mode} (call=${ctx?.toolCallId})`,
+          );
         }
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
@@ -119,7 +181,7 @@ export class ShellPlugin extends PluginBase {
 
         const sandboxNote = sandbox?.enabled
           ? sandbox.readOnly
-            ? "Plan mode: sandbox read-only enabled, all writes blocked"
+            ? "Read-only mode: sandbox read-only enabled, all writes blocked"
             : "Sandbox mode enabled, read-only outside workspace"
           : null;
 
@@ -160,6 +222,17 @@ export class ShellPlugin extends PluginBase {
             break;
         }
 
+        // 沙盒拒绝提示：sandbox 启用且命令失败（非零退出）→ 附提权 hint 供模型带参重试（对齐 DSH）
+        if (
+          sandbox?.enabled &&
+          execResult.kind === "completed" &&
+          execResult.exitCode !== 0
+        ) {
+          parts.push(
+            `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`,
+          );
+        }
+
         if (execResult.truncated && execResult.logFilePath) {
           parts.push(
             `[Note: Output was truncated. The complete log is saved at: ${execResult.logFilePath}. You can read it using the read tool if needed.]`,
@@ -179,7 +252,7 @@ export class ShellPlugin extends PluginBase {
     });
 
     // ── process 管理工具 ──
-    api.registerTool({
+    shellKit.registerTool({
       name: "process",
       description: `Background Process Management
 
@@ -238,14 +311,16 @@ export class ShellPlugin extends PluginBase {
               throw new Error(`Process ${processId} does not exist`);
             }
 
-            const runMode = ctx?.session.getRunMode?.();
+            const mode: SandboxMode =
+              ctx?.session.getSandboxMode?.() ?? "workspace-write";
             const parts: string[] = [];
 
-            if (runMode === "sandbox") {
-              parts.push("Sandbox mode enabled, read-only outside workspace");
-            } else if (runMode === "plan") {
+            const sandboxForNote = sandboxForMode(mode);
+            if (sandboxForNote?.enabled) {
               parts.push(
-                "Plan mode: sandbox read-only enabled, all writes blocked",
+                sandboxForNote.readOnly
+                  ? "Read-only mode: sandbox read-only enabled, all writes blocked"
+                  : "Sandbox mode enabled, read-only outside workspace",
               );
             }
 
@@ -301,7 +376,7 @@ export class ShellPlugin extends PluginBase {
     });
 
     // ── Prompt ──
-    api.registerPrompt({
+    shellKit.registerPrompt({
       frequency: "STATIC",
       description: "Shell tool usage instructions and safety reminders",
       content: (ctx: PluginContext) => {
@@ -322,68 +397,78 @@ export class ShellPlugin extends PluginBase {
       },
     });
 
-    // ── 回合拦截器：收集未接收的 shell 进程输出，子 Agent 额外检查运行状态 ──
-    api.registerInterceptor({
-      name: "shell_background_check",
-      intercept: async (ctx: PluginContext) => {
-        const session = ctx.session;
-        const isSubAgent = session.sessionType === "sub_agent";
+    // ── 工具提示词注册完成（回合续跑钩子已迁移为类方法 @OnEvent(HOOKS.TURN_STOPPING)）──
+  }
 
-        // 1. 收割已完成进程的输出（不碰运行中进程的 offset）
-        const completed = await this.processManager.drainCompleted(
-          session.sessionId,
-        );
+  /**
+   * 回合关闭前续跑钩子（turn.stopping）：收集未接收的 shell 进程输出，子 Agent 额外检查运行状态。
+   * 返回 { kind: 'continue', messages } 时 agent-engine 注入 hidden user 消息并触发新一轮 LLM 调用。
+   */
+  @OnEvent(HOOKS.TURN_STOPPING)
+  async handleTurnStopping(
+    payload: TurnStoppingPayload,
+  ): Promise<TurnStoppingDecision> {
+    if (!this._enabled) return undefined;
+    const session = payload.sessionContext;
+    const isSubAgent = session.sessionType === "sub_agent";
 
-        // 2. 子 Agent 检查是否有运行中的进程
-        const stillRunning = isSubAgent
-          ? this.processManager
-              .listBySession(session.sessionId)
-              .filter((p) => p.status === "running")
-          : [];
+    // 1. 收割已完成进程的输出（不碰运行中进程的 offset）
+    const completed = await this.processManager.drainCompleted(
+      session.sessionId,
+    );
 
-        // 3. 无已完成输出且无运行中进程 → 不拦截
-        const hasOutput = completed.some((r) => r.output);
-        if (!hasOutput && stillRunning.length === 0) return null;
+    // 2. 子 Agent 检查是否有运行中的进程
+    const stillRunning = isSubAgent
+      ? this.processManager
+          .listBySession(session.sessionId)
+          .filter((p) => p.status === "running")
+      : [];
 
-        // 4. 组装消息
-        const parts: string[] = [];
+    // 3. 无已完成输出且无运行中进程 → 不续跑
+    const hasOutput = completed.some((r) => r.output);
+    if (!hasOutput && stillRunning.length === 0) return undefined;
 
-        for (const result of completed) {
-          if (!result.output) continue;
-          const exitInfo =
-            result.status === "completed"
-              ? ` exitcode:${result.exitCode}`
-              : "";
-          const truncNote =
-            result.truncated && result.logFilePath
-              ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the run_command tool if needed.]`
-              : "";
-          parts.push(
-            `[Process ${result.processId},status:${result.status}${exitInfo}]:\nnew Output:\n${result.output}${truncNote}`,
-          );
-        }
+    // 4. 组装消息
+    const parts: string[] = [];
 
-        if (stillRunning.length > 0) {
-          const list = stillRunning
-            .map((p) => `- \`${p.id}\` (${p.command})`)
-            .join("\n");
-          parts.push(
-            `You have ${stillRunning.length} unfinished background processes:\n${list}\n\nYou must use the process tool to check their status (poll), wait for them to complete or terminate them (kill) before ending the current task.`,
-          );
-        }
+    for (const result of completed) {
+      if (!result.output) continue;
+      const exitInfo =
+        result.status === "completed"
+          ? ` exitcode:${result.exitCode}`
+          : "";
+      const truncNote =
+        result.truncated && result.logFilePath
+          ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the run_command tool if needed.]`
+          : "";
+      parts.push(
+        `[Process ${result.processId},status:${result.status}${exitInfo}]:\nnew Output:\n${result.output}${truncNote}`,
+      );
+    }
 
-        if (parts.length === 0) return null;
+    if (stillRunning.length > 0) {
+      const list = stillRunning
+        .map((p) => `- \`${p.id}\` (${p.command})`)
+        .join("\n");
+      parts.push(
+        `You have ${stillRunning.length} unfinished background processes:\n${list}\n\nYou must use the process tool to check their status (poll), wait for them to complete or terminate them (kill) before ending the current task.`,
+      );
+    }
 
-        return `<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`;
-      },
-    });
+    if (parts.length === 0) return undefined;
+
+    return {
+      kind: "continue",
+      messages: [`<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`],
+    };
   }
 
   /**
    * 子 Agent 流结束时，自动杀死该会话下的所有后台进程
    */
-  @OnEvent("stream.finished")
-  handleStreamFinished(event: StreamFinishedEvent): void {
+  @OnEvent("stream.status_changed")
+  handleStreamFinished(event: StreamStatusChangedEvent): void {
+    if (event.payload.status === "running") return;
     if (event.payload.sessionType !== "sub_agent") return;
 
     const processes = this.processManager.listBySession(event.sessionId);

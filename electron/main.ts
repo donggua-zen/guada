@@ -524,7 +524,9 @@ async function startBackend(): Promise<void> {
         },
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
-        windowsHide: true,
+      // 后端保持隐藏；终端使用 node-pty 随包 conpty.dll，
+      // 不再依赖 Electron/ts-node-dev 的控制台上下文。
+      windowsHide: true,
       };
 
       backendProcess = spawn(nodePath, args, spawnOptions);
@@ -1607,6 +1609,16 @@ function setupIpcHandlers() {
         switch (editor) {
           case "vscode":
             cmd = `code "${targetPath}"`;
+            break;
+          case "terminal":
+            // 系统终端打开：按平台选择打开方式
+            if (process.platform === "win32") {
+              cmd = `start "" cmd /k "cd /d ${targetPath}"`;
+            } else if (process.platform === "darwin") {
+              cmd = `open -a Terminal "${targetPath}"`;
+            } else {
+              cmd = `x-terminal-emulator --working-directory="${targetPath}"`;
+            }
             break;
           default:
             return { success: false, error: `Unknown editor: ${editor}` };

@@ -30,6 +30,7 @@ export class SessionManagementPlugin extends PluginBase {
     const sessionKit = api.registerToolKit({
       id: "session",
       name: "%sessionManagement.toolkitName%",
+      description: "%sessionManagement.toolkitDescription%",
       loadMode: "none",
       handler: (ctx: PluginContext) => ({
         loadMode:

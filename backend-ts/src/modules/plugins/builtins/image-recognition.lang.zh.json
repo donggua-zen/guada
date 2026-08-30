@@ -10,5 +10,8 @@
   "image_view.executing": "正在查看图片",
   "image_view.completed": "已查看图片",
   "image_view.aggregate.executing": "正在查看{n}张图片",
-  "image_view.aggregate.completed": "已查看{n}张图片"
+  "image_view.aggregate.completed": "已查看{n}张图片",
+  "imageRecognition.toolkitDescription": "识别图片内容，提取其中的文字与视觉信息",
+  "imageRecognition.imageViewDescription": "查看会话中图片附件的详细信息"
+
 }

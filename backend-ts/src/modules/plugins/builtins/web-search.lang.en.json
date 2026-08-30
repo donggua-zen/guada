@@ -9,5 +9,7 @@
   "web_parser.executing": "Reading web page",
   "web_parser.completed": "Read web page",
   "web_parser.aggregate.executing": "Reading {n} web pages",
-  "web_parser.aggregate.completed": "Read {n} web pages"
+  "web_parser.aggregate.completed": "Read {n} web pages",
+  "webSearch.toolkitDescription": "Web search and page content fetching"
+
 }

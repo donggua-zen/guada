@@ -22,6 +22,7 @@ export class TimePlugin extends PluginBase {
     const timeKit = api.registerToolKit({
       id: "time",
       name: "%time.toolkitName%",
+      description: "%time.toolkitDescription%",
       activator: "Get current detailed time information, including date, day of week, time, timezone, etc.",
     });
     timeKit.registerTool({
@@ -57,7 +58,8 @@ export class TimePlugin extends PluginBase {
       },
     });
 
-    api.registerPrompt({
+    // 当前时间信息随工具包注入：角色层禁用 time 工具包时一并隐藏
+    timeKit.registerPrompt({
       frequency: "STATIC",
       description: "当前时间信息（自动注入）",
       content: () => this.getCurrentTimeString(),

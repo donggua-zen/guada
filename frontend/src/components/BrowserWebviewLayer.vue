@@ -24,6 +24,35 @@ import { getAutoShowSidebar } from '@/utils/workspacePreview'
 import { t } from '@/locales'
 
 const store = useBrowserWebviewStore()
+const tabStore = useTabStore()
+
+/**
+ * 浏览器 store → tabStore 同步（常驻于此，而非 OverviewPanel）：
+ * 概览面板是条件渲染（asideWidth>0 才挂载），概览折叠/宽度不足时 watch 失效，
+ * 会导致新建浏览器窗口后标签永不进入 tabs → 标签栏无标签、activeTab 找不到
+ * browser 标签 → 占位区不渲染 → previewRect 为 null → 页面不显示。
+ * BrowserWebviewLayer 挂在 MainLayout 层，始终常驻，同步不会断。
+ */
+watch(
+  () => store.activeWindowId,
+  () => tabStore.syncActiveWindowId(),
+);
+watch(
+  () =>
+    store.sessionWebviews
+      .map((w) => `${w.windowId}\0${w.title}\0${w.favicon || ""}\0${w.url}`)
+      .join("\n"),
+  () => {
+    tabStore.syncBrowserTabs(
+      store.sessionWebviews.map((w) => ({
+        windowId: w.windowId,
+        title: w.title,
+        favicon: w.favicon,
+        url: w.url,
+      })),
+    );
+  },
+);
 
 /** webview DOM 元素引用 Map（windowId → HTMLElement） */
 const webviewEls = new Map<string, HTMLElement>()
@@ -248,14 +277,13 @@ function handleCreateWebview(_event: any, data: {
 
   // 新建标签：属于当前会话的窗口，根据设置决定是否自动展开侧边栏。
   // 说明：这是 AI 路径唯一的确定性触发源（主进程创建 webview 后不会主动 setActive）。
-  // 用户路径（previewUrl/createNewBrowserWindow）会再幂等执行一次 enterPreviewMode+selectTab，无害。
+  // 用户路径（previewUrl/createNewBrowserWindow）会再幂等执行一次 selectTab，无害。
   if (data.metadata?.sessionId && data.metadata.sessionId === store.currentSessionId) {
     if (!getAutoShowSidebar()) return
     const layoutStore = useLayoutStore()
     layoutStore.workspaceVisible = true
     nextTick(() => {
       const tabStore = useTabStore()
-      tabStore.enterPreviewMode()
       tabStore.selectTab(`browser:${data.windowId}`)
     })
   }
