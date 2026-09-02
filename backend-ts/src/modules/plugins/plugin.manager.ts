@@ -7,8 +7,10 @@ import {
   ToolHandlerDef,
   PluginManifest,
   ToolLoadMode,
-  PluginConfig,
-  PluginEntryConfig,
+  GlobalPluginConfig,
+  GlobalPluginEntryConfig,
+  RolePluginConfig,
+  RolePluginEntryConfig,
   ToolKitLoadMode,
   ResolvedPluginInfo,
 } from "./types/plugin.types";
@@ -109,27 +111,15 @@ export class PluginManager {
       return;
     }
 
-    // 从全局配置读取启用状态
+    // 从全局配置读取启用状态（与全局层决议 resolveGlobalLayer 共用同一解析逻辑）
     let finalEnabled: boolean;
     if (enabled !== undefined) {
       finalEnabled = enabled;
-    } else if (plugin.manifest.category === "system") {
-      finalEnabled = true;
     } else {
       try {
-        const globalCfg = await this.settingsStorage.getSettings(SG_PLUGINS);
-        const pluginVal = globalCfg[id];
-        if (pluginVal === true || pluginVal === false) {
-          finalEnabled = pluginVal;
-        } else if (
-          pluginVal &&
-          typeof pluginVal === "object" &&
-          "enabled" in pluginVal
-        ) {
-          finalEnabled = pluginVal.enabled !== false;
-        } else {
-          finalEnabled = plugin.manifest.category === "core";
-        }
+        const globalCfg: GlobalPluginConfig =
+          await this.settingsStorage.getSettings(SG_PLUGINS);
+        finalEnabled = this.readGlobalEnabled(globalCfg, plugin.manifest);
       } catch {
         finalEnabled = plugin.manifest.category === "core";
       }
@@ -464,57 +454,102 @@ export class PluginManager {
   /**
    * 统一决议（V3）：给定上下文，返回所有插件的启用状态 + 可用工具 + 工具包信息
    *
-   * 两层开关语义：
-   * - 全局层（SG_PLUGINS 持久化配置）：仅控制插件级启停（entry.enabled），
-   *   决定装载与生命周期，工具包过滤不属于全局层
-   * - 角色层（pluginsConfig，即 character/session settings.plugins）：
-   *   仅裁剪工具包（toolkits_filter/deny/allow），不消费 entry.enabled；
-   *   插件只是能力集合的命名空间，旧角色数据中的插件级开关被直接忽略
+   * 两层开关语义（配置与解析已彻底分离）：
+   * - 全局层（GlobalPluginConfig，持久化于 SG_PLUGINS/plugins_config）：
+   *   仅控制插件级启停（entry.enabled），由 resolveGlobalLayer 独立解析；
+   *   enabled=true 与 enabled=false 均生效（默认关闭的 user/extended 插件可被显式启用）
+   * - 角色层（RolePluginConfig，即 character/session settings.plugins）：
+   *   仅裁剪工具包（toolkits_filter/deny/allow），由 applyRoleLayer 独立消费；
+   *   不消费 entry.enabled，旧角色数据中的插件级开关被直接忽略
+   * - 二级过滤：全局关闭的插件其工具包对角色层不可见——applyRoleLayer
+   *   直接跳过未启用插件，角色层对它们的 allow/deny 均不生效
    *
    * 这是 PluginManager 对外唯一决议入口。
    * ToolExecutor / PromptCollector 等消费方通过 ResolvedPluginInfo 使用结果。
    */
   async resolvePlugins(
     session?: ISessionContext,
-    pluginsConfig?: PluginConfig,
+    roleCfg?: RolePluginConfig,
     skipHandler = false,
   ): Promise<ResolvedPluginInfo[]> {
+    // 全局层 → 角色层：两个配置各自独立解析，互不耦合
+    const stateMap = await this.resolveGlobalLayer();
+    this.applyRoleLayer(stateMap, roleCfg);
+
+    const result: ResolvedPluginInfo[] = [];
+    for (const [, state] of stateMap) {
+      result.push(await this.buildPluginResult(state, skipHandler, session));
+    }
+    return result;
+  }
+
+  /**
+   * 从全局配置读取单个插件的启停状态（registerPlugin 与 resolveGlobalLayer 共用，
+   * 保证启动装载与运行时决议对同一份持久化配置的解读一致）
+   *
+   * 兼容两种持久化形态：
+   * - 旧格式：布尔直存（true/false）
+   * - 新格式：{ enabled: boolean }
+   */
+  private readGlobalEnabled(
+    globalCfg: GlobalPluginConfig,
+    manifest: PluginManifest,
+  ): boolean {
+    if (manifest.essential || manifest.category === "system") return true;
+    // 持久化可能是遗留的布尔直存或新格式对象，先按 unknown 收窄再判断
+    const pluginVal: unknown = globalCfg[manifest.id];
+    if (pluginVal === true || pluginVal === false) {
+      return pluginVal;
+    }
+    if (pluginVal && typeof pluginVal === "object" && "enabled" in pluginVal) {
+      return (pluginVal as GlobalPluginEntryConfig).enabled !== false;
+    }
+    return manifest.category === "core";
+  }
+
+  /**
+   * 全局层决议：只读 SG_PLUGINS（plugins_config），决定每个插件的启停。
+   * 不消费任何角色配置；显式配置过的插件标记 effective='global'。
+   */
+  private async resolveGlobalLayer(): Promise<
+    Map<string, PluginResolutionState>
+  > {
     const rawGlobal = await this.settingsStorage.getSettings(SG_PLUGINS);
-    // 只读拷贝：不变异持久化的全局配置，也不变异调用方传入的角色配置对象
-    const globalCfg: Record<string, unknown> = { ...(rawGlobal || {}) };
-    const roleCfg: PluginConfig = { ...(pluginsConfig || {}) };
+    // 只读拷贝：不变异持久化的全局配置
+    const globalCfg: GlobalPluginConfig = { ...(rawGlobal || {}) };
 
     const stateMap = new Map<string, PluginResolutionState>();
-
-    // 1. 初始化全部插件的默认状态（按 category/essential 决定默认启用）
     for (const [id, instance] of this.instances) {
-      const defaultEnabled =
-        instance.manifest.category === "system" ||
-        instance.manifest.category === "core" ||
-        instance.manifest.essential === true;
+      const isEssential = instance.manifest.essential === true;
       stateMap.set(id, {
         manifest: instance.manifest,
-        enabled: defaultEnabled,
-        effective: "default",
+        enabled: this.readGlobalEnabled(globalCfg, instance.manifest),
+        // 显式写入过全局配置的插件标记为全局层决策；essential 恒为默认
+        effective:
+          !isEssential && globalCfg[id] !== undefined ? "global" : "default",
         deniedToolkits: new Set(),
       });
     }
+    return stateMap;
+  }
 
-    // 2. 全局层：仅读 entry.enabled 决定插件启停
-    for (const [id, state] of stateMap) {
-      if (state.manifest.essential) continue;
-      const entry = globalCfg[id];
-      if (entry && typeof entry === "object" && (entry as PluginEntryConfig).enabled === false) {
-        state.enabled = false;
-        state.effective = "global";
-      }
-    }
+  /**
+   * 角色层决议：只消费角色配置（character/session settings.plugins），
+   * 在全局已启用的插件范围内裁剪工具包，不触碰插件启停。
+   *
+   * - __strategy="deny_nonsystem"：拒绝所有非受保护插件的全部工具包（"全部禁用"）
+   * - __default=false：白名单模式（未显式允许的工具包默认拒绝）
+   * - 全局关闭的插件直接跳过——角色层对它们的 allow/deny 均不生效（二级过滤）
+   * - essential 插件的工具包不可被任何方式拒绝（如 universal_tools 的 lazy_tools 元能力）；
+   *   system 分类插件（mcp/skill/sub_agent）的插件本体不可禁用，但工具包可按角色裁剪
+   * - 角色层条目中遗留的 enabled 字段被显式忽略（角色层不再控制插件启停）
+   */
+  private applyRoleLayer(
+    stateMap: Map<string, PluginResolutionState>,
+    roleCfg: RolePluginConfig | undefined,
+  ): void {
+    if (!roleCfg) return;
 
-    // 3. 角色层：只裁剪工具包，不影响插件启停
-    //    - __strategy="deny_nonsystem"：拒绝所有非受保护插件的全部工具包（"全部禁用"）
-    //    - __default=false：白名单模式（未显式允许的工具包默认拒绝）
-    //    - essential 插件的工具包不可被任何方式拒绝（如 universal_tools 的 lazy_tools 元能力）；
-    //      system 分类插件（mcp/skill/sub_agent）的插件本体不可禁用，但工具包可按角色裁剪
     const denyAllKits = roleCfg.__strategy === "deny_nonsystem";
     const roleDefault = roleCfg.__default ?? true;
 
@@ -541,7 +576,7 @@ export class PluginManager {
         continue;
       }
 
-      const e = entry as PluginEntryConfig;
+      const e = entry as RolePluginEntryConfig;
       if ((e.toolkits_filter ?? "deny") === "allow") {
         // 白名单：先全拒，再放行显式允许的
         denyAllOfPlugin();
@@ -555,13 +590,6 @@ export class PluginManager {
         }
       }
     }
-
-    // 4. 构建最终结果
-    const result: ResolvedPluginInfo[] = [];
-    for (const [, state] of stateMap) {
-      result.push(await this.buildPluginResult(state, skipHandler, session));
-    }
-    return result;
   }
 
   /**

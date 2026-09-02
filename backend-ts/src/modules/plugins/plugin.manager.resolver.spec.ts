@@ -234,4 +234,58 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(names).toContain("lazy_b");
     expect(names).not.toContain("lazy_a");
   });
+
+  it("全局层启用插件：enabled=true 可启用默认禁用的 extended 插件（回归）", async () => {
+    registerPlugin("t_on", "extended", [{ id: "ok", tool: "o_tool" }]);
+
+    // 默认关闭
+    const before = await manager.resolvePlugins(undefined, {}, true);
+    expect(find(before, "t_on").enabled).toBe(false);
+
+    // 全局显式启用 → 决议生效且标记为全局层决策
+    settingsStorage.getSettings.mockResolvedValue({
+      t_on: { enabled: true },
+    });
+    const after = await manager.resolvePlugins(undefined, {}, true);
+    const p = find(after, "t_on");
+    expect(p.enabled).toBe(true);
+    expect(p.effective).toBe("global");
+    expect(p.enabledTools.map((t) => t.name)).toContain("o_tool");
+  });
+
+  it("二级过滤：全局禁用插件的工具包在角色层 allow 下仍不生效", async () => {
+    registerPlugin("t_off", "extended", [{ id: "ck", tool: "c_tool" }]);
+
+    settingsStorage.getSettings.mockResolvedValue({
+      t_off: { enabled: false },
+    });
+    const res = await manager.resolvePlugins(
+      undefined,
+      { t_off: { toolkits_filter: "allow", toolkits_allow: ["ck"] } } as any,
+      true,
+    );
+    const p = find(res, "t_off");
+    expect(p.enabled).toBe(false);
+    // 即使角色层显式放行，全局关闭的插件工具包仍不可用
+    expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
+    expect(p.enabledTools).toHaveLength(0);
+  });
+
+  it("角色层条目中的遗留 enabled 字段被忽略，仅 toolkits_* 生效", async () => {
+    registerPlugin("t_legacy2", "core", [
+      { id: "la", tool: "a2_tool" },
+      { id: "lb", tool: "b2_tool" },
+    ]);
+
+    // 旧角色数据混入 enabled:false（应被忽略），同时显式 deny 一个工具包
+    const res = await manager.resolvePlugins(
+      undefined,
+      { t_legacy2: { enabled: false, toolkits_deny: ["la"] } } as any,
+      true,
+    );
+    const p = find(res, "t_legacy2");
+    expect(p.enabled).toBe(true); // enabled 被忽略，插件不被禁用
+    expect(p.enabledToolKits.find((k) => k.id === "la")!.enabled).toBe(false);
+    expect(p.enabledToolKits.find((k) => k.id === "lb")!.enabled).toBe(true);
+  });
 });

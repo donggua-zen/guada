@@ -6,7 +6,6 @@ import { Public } from "../auth/public.decorator";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
 import { WorkspaceService } from "../../common/services/workspace.service";
-import { SG_PLUGINS } from "../../constants/settings.constants";
 
 @Controller()
 export class SettingsController {
@@ -110,18 +109,14 @@ export class SettingsController {
   /**
    * 更新全局插件状态
    * 请求体：{ pluginId: string, enabled: boolean }
+   * setPluginEnabled 内部完成持久化（SG_PLUGINS）与运行时同步，此处不再重复写配置。
    */
   @UseGuards(AuthGuard)
   @Put("settings/plugins/global")
   async updateGlobalToolStatus(@Body() data: { pluginId: string; enabled: boolean }) {
     const { pluginId, enabled } = data;
 
-    // 持久化全局配置（新格式 PluginEntryConfig）
-    await this.settingsService.updateGroupSettings(SG_PLUGINS, {
-      [pluginId]: { enabled },
-    });
-
-    // 同步运行时状态（触发 onLoad/onUnload）
+    // 持久化全局配置 + 同步运行时状态（触发 onLoad/onUnload）
     await this.pluginManager.setPluginEnabled(pluginId, enabled);
 
     return { success: true, pluginId, enabled };
