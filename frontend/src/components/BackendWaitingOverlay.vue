@@ -25,14 +25,16 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CustomTitlebar from './CustomTitlebar.vue'
+import { backendError } from '@/composables/useBackendStatus'
 
 const { t } = useI18n()
 
-defineProps<{
-  error: string | null;
-}>();
+// 直接读全局后端状态：main.js 在超时（60s）/启动失败时写入 backendError，
+// 此处自动切换为错误视图（路由引入时无 props，原 error prop 为死代码）
+const error = computed(() => backendError.value)
 </script>
 
 <style scoped>

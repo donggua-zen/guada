@@ -11,7 +11,6 @@ export type {
   ContextLoadParams,
   TurnFinish,
   TurnUpdate,
-  BlockDetail,
 } from "../../common/persistence/message-store.interface";
 export { MESSAGE_STORE_TOKEN } from "../../common/persistence/message-store.interface";
 

@@ -13,6 +13,7 @@ import { OcrService } from "./ocr.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
+import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
 import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
 import { SettingsModule } from "../settings/settings.module";
@@ -30,6 +31,7 @@ import { DocumentPlugin } from "./plugins/document.plugin";
     KnowledgeBaseService, KbFileService, FileParserService,
     EmbeddingService, ChunkingService, OcrService,
     KnowledgeBaseRepository, KBFileRepository, KBChunkRepository,
+    PdfToImageService,
     PrismaService, VectorDbService, WorkspaceService,
   ],
   exports: [EmbeddingService],

@@ -3,8 +3,6 @@ import { promises as fs } from "fs";
 import * as path from "path";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
-import { FileRepository } from "../../../common/database/file.repository";
-import { UploadPathService } from "../../../common/services/upload-path.service";
 import { LLMService } from "../../llm-core/llm.service";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
@@ -47,8 +45,6 @@ export class ImageRecognitionPlugin extends PluginBase {
   };
 
   constructor(
-    private fileRepo: FileRepository,
-    private uploadPathService: UploadPathService,
     private llmService: LLMService,
     private prisma: PrismaService,
     private settingsStorage: SettingsStorage,
@@ -69,7 +65,7 @@ export class ImageRecognitionPlugin extends PluginBase {
       description: "%imageRecognition.toolkitDescription%",
       loadMode: "eager",
       activator:
-        "Use this toolkit when you need to recognize image content from a user-provided image ID or image path and return a detailed description.",
+        "Use this toolkit when you need to recognize image content from a user-provided image path and return a detailed description.",
       handler: (ctx) => ({
         loadMode: supportsMultimodal(ctx)
           ? ("none" as const)
@@ -79,17 +75,10 @@ export class ImageRecognitionPlugin extends PluginBase {
         toolkit.registerTool({
           name: "image_recognize",
           description:
-            "Recognize image content and return a detailed text description. Pass image_id for an uploaded file, or image_path for a file system path.",
+            "Recognize image content and return a detailed text description. Pass image_path for the image file (absolute path or path relative to the workspace).",
           inputSchema: z.object({
-            image_id: z
-              .string()
-              .optional()
-              .describe(
-                "Uploaded image file ID, usually obtained from the message context",
-              ),
             image_path: z
               .string()
-              .optional()
               .describe(
                 "Path to the image file. Can be an absolute path or a path relative to the working directory",
               ),
@@ -101,9 +90,8 @@ export class ImageRecognitionPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, abortSignal) => {
-            const { image_id, image_path, prompt } = args;
+            const { image_path, prompt } = args;
             const physicalPath = await this.resolveImagePath(
-              image_id,
               image_path,
               ctx,
             );
@@ -117,7 +105,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             actionType: "recognize",
             text: { executing: "%image_recognize.executing%", completed: "%image_recognize.completed%" },
             aggregate: { executing: "%image_recognize.aggregate.executing%", completed: "%image_recognize.aggregate.completed%" },
-            argsKey: "image_id",
+            argsKey: "image_path",
             icon: "vision",
           },
         });
@@ -185,27 +173,18 @@ export class ImageRecognitionPlugin extends PluginBase {
     });
   }
 
-  /** Resolve image source to a physical file path. */
+  /** Resolve image path to a physical file path (path-based only, no id lookup). */
   private async resolveImagePath(
-    imageId: string | undefined,
     imagePath: string | undefined,
     ctx: PluginContext | undefined,
   ): Promise<string> {
-    if (imageId) {
-      const file = await this.fileRepo.findById(imageId);
-      if (!file || file.fileType !== "image")
-        throw new Error(
-          `Invalid image ID or file type is not an image: ${imageId}`,
-        );
-      return this.uploadPathService.toPhysicalPath(file.url);
+    if (!imagePath) {
+      throw new Error("image_path must be provided");
     }
-    if (imagePath) {
-      return this.workspaceService.resolveFilePath(
-        imagePath,
-        ctx?.session.workspacePath,
-      );
-    }
-    throw new Error("Either image_id or image_path must be provided");
+    return this.workspaceService.resolveFilePath(
+      imagePath,
+      ctx?.session.workspacePath,
+    );
   }
 
   /** Call a separate vision model to recognize the image (text-only model path). */
@@ -254,10 +233,9 @@ export class ImageRecognitionPlugin extends PluginBase {
           source: { kind: "user" },
           metadata: {},
           content: [
-            { type: "text", contentId: "image_text", text: userPrompt },
+            { type: "text", text: userPrompt },
             {
               type: "image",
-              contentId: "image_block",
               attachment: {
                 attachmentId: "image_attach",
                 mediaType: mimeType,

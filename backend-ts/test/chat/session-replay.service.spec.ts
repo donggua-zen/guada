@@ -17,7 +17,7 @@ function makeEvents(): BaseEvent[] {
   return [
     // T1
     { type: 'turn/start', seq: 1, time: 1, data: { turnId: 'T1', kind: 'turn', metadata: {} } },
-    { type: 'user/message', seq: 2, time: 2, data: { messageId: 'u1', kind: 'user', content: 'hi1', metadata: {} } },
+    { type: 'user/message', seq: 2, time: 2, data: { messageId: 'u1', kind: 'user', blocks: [{ type: 'text', contentId: 'u1', text: 'hi1' }], metadata: {} } },
     {
       type: 'assistant/message',
       seq: 3,
@@ -31,7 +31,7 @@ function makeEvents(): BaseEvent[] {
     { type: 'turn/finish', seq: 4, time: 4, data: { turnId: 'T1', promptTokens: 10, completionTokens: 5, totalTokens: 15, finishReason: 'stop', modelName: 'm1' } },
     // T2（含 tool-call + tool-result）
     { type: 'turn/start', seq: 5, time: 5, data: { turnId: 'T2', kind: 'turn', metadata: {} } },
-    { type: 'user/message', seq: 6, time: 6, data: { messageId: 'u2', kind: 'user', content: 'hi2', metadata: {} } },
+    { type: 'user/message', seq: 6, time: 6, data: { messageId: 'u2', kind: 'user', blocks: [{ type: 'text', contentId: 'u2', text: 'hi2' }], metadata: {} } },
     {
       type: 'assistant/message',
       seq: 7,

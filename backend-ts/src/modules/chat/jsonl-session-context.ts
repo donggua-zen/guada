@@ -20,7 +20,7 @@ import {
   IMessageStore,
   MESSAGE_STORE_TOKEN,
 } from '../../common/persistence/message-store.interface';
-import type { Message, FileRef } from '../../common/types/conversation.types';
+import type { Message, FileRef, ContentBlock } from '../../common/types/conversation.types';
 import { TokenBreakdown, TurnFinish } from './interfaces';
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
 import { ModelRepository } from '../../common/database/model.repository';
@@ -29,10 +29,13 @@ import { SessionStreamManager } from './session-stream.manager';
 import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { TokenMeterService } from './token-meter.service';
-import { SummaryMode } from './compression-engine';
+import { generateOrderedMessageId } from '../../common/utils/ordered-id.util';
+import { SummaryMode } from './compaction/compression-engine';
 import {
   CompactionConfig,
   CompactionDataSource,
+  CompactWrite,
+  PruneWrite,
 } from './compaction/types';
 import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
@@ -63,6 +66,32 @@ interface EffectiveSettings {
   modelName?: string | null;
 }
 
+/**
+ * 上下文快照：以 store 版本号（lastProcessedSeq）为失效键的不可变视图缓存。
+ * 消除一轮 agent 循环内的重复投影/变换/token 统计；append 走增量 O(Δ)。
+ *
+ * 单一数据源（对齐 DSH）：快照只持有 view（对话历史）。完整请求列表（prelude + view）
+ * 是 getMessages() 组装时刻的派生表达式，不作为状态存储——两份同构列表的手动同步
+ * 即双数据源，是必须消除的冗余。
+ *
+ * 不可变契约：view 为只读共享引用，消费方禁止就地修改；getMessages 每次返回新数组
+ * （引用复制），外部对数组结构的修改天然不影响快照。
+ */
+export interface ContextSnapshot {
+  /** 版本号 = messageStore.getLastProcessedSeq()，写入后必变 */
+  revision: number;
+  /** 变换上下文指纹：模型能力变化即失效重建 */
+  transformKey: string;
+  /** 变换后的可见消息（不含 prelude）——唯一数据源，与 store 折叠态同序 */
+  view: readonly Message[];
+  /** prelude 的启发式 token（prelude 不变则复用） */
+  preludeTokens: number;
+  /** 逐消息 token，与 view 同序 */
+  perMessageTokens: readonly number[];
+  /** perMessageTokens 前缀和：prefixTokens[i] = view[0..i] 的 token 累计（不含 prelude） */
+  prefixTokens: readonly number[];
+}
+
 export class JsonlSessionContext implements ISessionContext, CompactionDataSource {
   readonly sessionId: string;
   readonly userId: string;
@@ -76,8 +105,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   // 初始化后构建完成的 DTO
   private modelConfig!: ModelConfig;
-  /** system prompt 各部件：base / team / tool / summary */
-  private preludeParts: Message[] = [];
+  /** system 提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system） */
+  private systemText = '';
   private thinkingEffortValue!: string | undefined;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
   private effectiveSettings!: EffectiveSettings;
@@ -86,6 +115,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
   private conversationStateLoaded = false;
+
+  /** 上下文快照缓存（见 ContextSnapshot 注释）；null = 未构建/已失效 */
+  private snapshot: ContextSnapshot | null = null;
+  /** prelude token 缓存（prelude 只在 initialize 构建一次，token 不变） */
+  private preludeTokensValue: number | null = null;
 
   /** L1 消息变换管线（图片投影 / reasoning 策略 / 空 content 兼容，见 message-transform.pipeline.ts） */
   private readonly transformPipeline = createDefaultMessageTransformPipeline();
@@ -177,35 +211,177 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    *
    * 管线步骤均为纯函数，在副本上执行，不污染 store 缓存态（loadContext 返回缓存对象引用）。
    */
-  private async loadVisibleMessages(): Promise<Message[]> {
-    const modelConfig = this.modelConfig;
+  // ═══ 消息读取（快照缓存：以 lastProcessedSeq 为版本号，一轮内重复读取 O(1)）═══
 
+  /** 变换上下文（模型能力派生；与 buildSnapshot 共用，避免两处漂移） */
+  private buildTransformCtx(): TransformContext {
     const shouldLoadReasoning =
       this.thinkingEffortValue && this.thinkingEffortValue !== 'none';
+    return {
+      supportsImageInput:
+        this.modelConfig.config.inputCapabilities?.includes('image') ?? false,
+      thinkingMode: !!shouldLoadReasoning,
+      providerProtocol: this.modelConfig.provider?.protocol,
+      modelName: this.modelConfig.modelName,
+    };
+  }
 
+  /** 变换上下文指纹：模型能力/思考模式/协议变化即失效重建 */
+  private transformKey(): string {
+    return [
+      this.modelConfig.config.inputCapabilities?.includes('image')
+        ? 'img'
+        : 'noimg',
+      this.thinkingEffortValue && this.thinkingEffortValue !== 'none'
+        ? 'think'
+        : 'nothink',
+      this.modelConfig.provider?.protocol ?? '-',
+    ].join('|');
+  }
+
+  /** 取快照：revision 与 transformKey 均未变则复用（O(1)），否则全量重建 */
+  private async getSnapshot(): Promise<ContextSnapshot> {
+    const revision = await this.messageStore.getLastProcessedSeq(this.sessionId);
+    const key = this.transformKey();
+    if (
+      this.snapshot &&
+      this.snapshot.revision === revision &&
+      this.snapshot.transformKey === key
+    ) {
+      return this.snapshot;
+    }
+    this.snapshot = await this.buildSnapshot(revision, key);
+    return this.snapshot;
+  }
+
+  /** 全量重建（唯一昂贵路径：冷启动 / 压缩 / 删除 / 切模型后） */
+  private async buildSnapshot(
+    revision: number,
+    key: string,
+  ): Promise<ContextSnapshot> {
+    await this.ensureConversationStateLoaded();
+    const ctx = this.buildTransformCtx();
     const rawMessages = await this.messageStore.loadContext({
       sessionId: this.sessionId,
-      keepReasoningContent: shouldLoadReasoning,
+      keepReasoningContent: ctx.thinkingMode,
     });
+    const view = this.transformPipeline.run(rawMessages, ctx);
+    const perMsg = await this.tokenMeter.estimatePerMessage(
+      this.sessionId,
+      this.currentModelName(),
+      view,
+    );
+    return this.assembleSnapshot(
+      revision,
+      key,
+      view,
+      perMsg.map((x) => x.tokens),
+      await this.getPreludeTokens(),
+    );
+  }
 
-    const transformCtx: TransformContext = {
-      supportsImageInput:
-        modelConfig.config.inputCapabilities?.includes('image') ?? false,
-      thinkingMode: !!shouldLoadReasoning,
-      providerProtocol: modelConfig.provider?.protocol,
-      modelName: modelConfig.modelName,
+  /** 组装快照（前缀和由视图派生；request 是 getMessages 时刻的派生表达式，不在此存储） */
+  private assembleSnapshot(
+    revision: number,
+    key: string,
+    view: Message[],
+    perMessageTokens: number[],
+    preludeTokens: number,
+  ): ContextSnapshot {
+    const prefixTokens: number[] = [];
+    let acc = 0;
+    for (const t of perMessageTokens) {
+      acc += t;
+      prefixTokens.push(acc);
+    }
+    return {
+      revision,
+      transformKey: key,
+      view,
+      preludeTokens,
+      perMessageTokens,
+      prefixTokens,
     };
-
-    return this.transformPipeline.run(rawMessages, transformCtx);
   }
 
-  async getMessages(options?: GetMessagesOptions): Promise<Message[]> {
-    await this.ensureConversationStateLoaded();
-    return [...this.preludeParts, ...(await this.loadVisibleMessages())];
+  /** 增量更新：新消息已落库（fold 后权威节点），只变换新增部分，O(Δ)。
+   *  revision 由调用方（写入返回值）提供，本方法不查询 store——版本号写入时确定。 */
+  private async appendToSnapshot(
+    added: Message[],
+    revision: number,
+  ): Promise<void> {
+    if (!this.snapshot || added.length === 0) return;
+    const ctx = this.buildTransformCtx();
+    const addedView = this.transformPipeline.run(added, ctx);
+    const perMsg = await this.tokenMeter.estimatePerMessage(
+      this.sessionId,
+      this.currentModelName(),
+      addedView,
+    );
+    const addedTokens = perMsg.map((x) => x.tokens);
+    this.snapshot = {
+      revision,
+      transformKey: this.snapshot.transformKey,
+      view: [...this.snapshot.view, ...addedView],
+      preludeTokens: this.snapshot.preludeTokens,
+      perMessageTokens: [
+        ...this.snapshot.perMessageTokens,
+        ...addedTokens,
+      ],
+      prefixTokens: this.extendPrefixTokens(
+        this.snapshot.prefixTokens,
+        addedTokens,
+      ),
+    };
   }
 
+  /** 前缀和增量扩展（O(k)，避免全量重算） */
+  private extendPrefixTokens(
+    prefixTokens: readonly number[],
+    added: number[],
+  ): number[] {
+    const out = [...prefixTokens];
+    let acc = prefixTokens.length > 0 ? prefixTokens[prefixTokens.length - 1] : 0;
+    for (const t of added) {
+      acc += t;
+      out.push(acc);
+    }
+    return out;
+  }
+
+  /** system 文本 token（system 只构建一次，token 不变；懒算一次后缓存） */
+  private async getPreludeTokens(): Promise<number> {
+    if (this.preludeTokensValue === null) {
+      await this.ensureConversationStateLoaded();
+      this.preludeTokensValue = await this.tokenMeter.estimateTextTokens(
+        this.currentModelName(),
+        this.systemText,
+      );
+    }
+    return this.preludeTokensValue;
+  }
+
+  /** system 提示词文本（envelope；builder 组装请求时消费） */
+  getSystemText(): string {
+    return this.systemText;
+  }
+
+  /**
+   * 读取当前可见消息视图（变换后，不含 prelude）。
+   * 共享快照引用——只读契约，消费方禁止就地修改。
+   */
+  private async loadVisibleMessages(): Promise<Message[]> {
+    return (await this.getSnapshot()).view as Message[];
+  }
+
+  /** 可见消息视图（变换后，不含 prelude），压缩引擎数据源 */
   async getHistory(): Promise<Message[]> {
     return this.loadVisibleMessages();
+  }
+
+  /** 逐消息 token（与 getHistory() 同序，来自快照；供压缩预算 O(1) 取值） */
+  async getPerMessageTokens(): Promise<number[]> {
+    return [...(await this.getSnapshot()).perMessageTokens];
   }
 
   // ═══ 消息写入 ═══
@@ -220,19 +396,32 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     preGenTurnId?: string;
   }): Promise<string> {
     // 整轮次重答的删除由 run() 先调 deleteTurn 完成(先删除再加载),beginTurn 只写 turn/start。
-    return this.messageStore.beginTurn(this.sessionId, {
+    const { turnId, revision } = await this.messageStore.beginTurn(this.sessionId, {
       replaceTurnId: options?.replaceTurnId,
       preGenTurnId: options?.preGenTurnId,
     });
+    // turn/start 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供），避免每轮误重建
+    this.refreshSnapshotRevision(revision);
+    return turnId;
+  }
+
+  /** 不改变视图的写入（turn/start、turn/finish）后：仅推进快照版本号，免全量重建。
+   *  revision 由写入方返回值提供，不查询 store（版本号契约）。 */
+  private refreshSnapshotRevision(revision: number): void {
+    if (!this.snapshot) return;
+    this.snapshot = {
+      ...this.snapshot,
+      revision,
+    };
   }
 
   /**
-   * 删除本轮对话:写 turn/delete 事件（store 折叠即 splice 移除）+ 失效块级 token 缓存。
-   * 读取直通 store，删除后 getMessages 自然不再含该回合。
+   * 删除本轮对话:写 turn/delete 事件（store 折叠即 splice 移除）+ 失效快照。
+   * 视图结构变化 → 快照作废；token 侧无需处理（TokenMeter 无状态，逐次现算）。
    */
   async deleteTurn(turnId: string): Promise<void> {
     await this.messageStore.deleteTurn(this.sessionId, turnId);
-    this.tokenMeter.invalidate(this.sessionId);
+    this.snapshot = null;
   }
 
   /**
@@ -246,6 +435,10 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       replaceTurnId?: string;
       knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
+      /** 原生内容块（S2：结构化入站消息，存在时优先于 content/files 构造） */
+      blocks?: ContentBlock[];
+      /** 显式消息来源（P4b：队列投递写入；缺省折叠时按 kind 推导） */
+      source?: import('../../common/types/conversation.types').MessageSource;
     },
   ): Promise<{ messageId: string; userMessage: any }> {
     const replaceTurnId = options?.replaceTurnId;
@@ -259,7 +452,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       enrichedMetadata.systemReminder = systemReminder;
     }
 
-    const { messageId, userMessage } =
+    const { messageId, userMessage, revision } =
       await this.messageStore.addUserMessage(
         this.sessionId,
         content,
@@ -267,8 +460,13 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         {
           knowledgeBaseIds: options?.knowledgeBaseIds,
           metadata: enrichedMetadata,
+          blocks: options?.blocks,
+          source: options?.source,
         },
       );
+
+    // 新 user 消息已入态：增量更新快照（返回值为 fold 后权威节点 + 写入后版本号），O(k)
+    await this.appendToSnapshot([userMessage as Message], revision);
 
     return { messageId, userMessage };
   }
@@ -278,8 +476,31 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
     // 原样写入（含 reasoning 内容）：思考内容属于数据，必须原样保存——
     // 若写侧按当前模式剥离/补占位，切换思考模式会永久丢失或污染真实思考内容。
-    // 模式过滤只发生在读取侧（loadVisibleMessages）。
-    await this.messageStore.appendMessages(this.sessionId, messages);
+    // 模式过滤只发生在读取侧（快照变换）。
+    const { added, revision } = await this.messageStore.appendMessages(
+      this.sessionId,
+      messages,
+    );
+    // 增量更新快照（fold 后权威节点 + 写入时确定的版本号，O(k)）；
+    // 无快照时由下次 getSnapshot 全量重建
+    await this.appendToSnapshot(added, revision);
+  }
+
+  /**
+   * 插件注入一条隐藏 user 消息（落库，成为历史的一部分；模型可见，前端可据 source/metadata 隐藏）。
+   * 折叠形态：role='user' + kind='model' + source={kind:'plugin', plugin} + metadata.hidden（replayer 支持）。
+   */
+  async injectUserPrompt(content: string, plugin: string): Promise<void> {
+    if (!content) return;
+    const message: Message = {
+      id: this.generateMessageId(),
+      role: 'user',
+      kind: 'model',
+      source: { kind: 'plugin', plugin },
+      metadata: { plugin, hidden: true },
+      content: [{ type: 'text', text: content }],
+    };
+    await this.appendMessages([message]);
   }
 
   async persist(): Promise<void> {
@@ -293,17 +514,29 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     durationMs: number,
     finish: TurnFinish,
   ): Promise<void> {
-    await this.messageStore.finalizeTurn(
+    // 上下文占用锚点：回合全部消息已 append（finalizeTurn 时序在流结束后）→ getTokenCount 即回合后占用
+    const anchor: Partial<TurnFinish> = {
+      usedTokens: await this.getTokenCount(),
+      effectiveContextWindow: this.getEffectiveContextWindow(),
+    };
+    const revision = await this.messageStore.finalizeTurn(
       this.sessionId,
       turnId,
       durationMs,
-      finish,
+      { ...finish, ...anchor },
     );
+    // turn/finish 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供）
+    this.refreshSnapshotRevision(revision);
   }
 
   generateId(): string {
-    // 与 messageStore.genId 保持一致的前缀/格式
+    // 与 messageStore.genId 保持一致的前缀/格式（通用 id：contentId/attachmentId/turnId）
     return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /** 生成下一个有序消息 id（ULID 基座，同步；m_<ULID> 按时间单调，遮蔽分界点标记依据） */
+  generateMessageId(): string {
+    return generateOrderedMessageId('m');
   }
 
   // ═══ 身份与安全模式 ═══
@@ -390,8 +623,22 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return this.compactionConfig;
   }
 
+  /** KV 前缀消息（兼容压缩摘要前缀组装：system 文本合成单条消息；envelope 改造后见 3.5 重构为 {system, tools}） */
   getPrelude(): Promise<Message[]> {
-    return this.ensureConversationStateLoaded().then(() => this.preludeParts);
+    return this.ensureConversationStateLoaded().then(() =>
+      this.systemText
+        ? [
+            {
+              id: 'system',
+              role: 'system',
+              kind: 'model',
+              source: { kind: 'plugin', plugin: 'system-prompt' },
+              metadata: {},
+              content: [{ type: 'text', text: this.systemText }],
+            } as Message,
+          ]
+        : [],
+    );
   }
 
   getTools(): import('../tools/interfaces/tool-provider.interface').ToolDefinition[] {
@@ -400,16 +647,174 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       : [];
   }
 
-  /** 压缩后会话状态恢复：store 缓存写即更新（applyToCache 覆盖 compaction/prune 事件），
-   *  此处仅失效块级 token 缓存；返回含 prelude 的刷新请求列表 */
-  async refreshAfterCompaction(): Promise<Message[]> {
-    this.tokenMeter.invalidate(this.sessionId);
-    return this.getMessages();
+  // ═══ 压缩写（v1.4：写路径与读路径同层解耦；落库经 messageStore，快照增量播种在此）═══
+
+  /** 一级裁剪写入：落库 + 快照 view/token 数组就地更新（token 无缓存，重算该条即可） */
+  async appendPrune(data: PruneWrite): Promise<void> {
+    const revision = await this.messageStore.appendPrune(this.sessionId, data);
+    if (!this.snapshot) return;
+    const view = this.snapshot.view as Message[];
+    const idx = view.findIndex((m) => m.id === data.messageId);
+    if (idx < 0) {
+      this.snapshot = { ...this.snapshot, revision };
+      return;
+    }
+    // 就地改写快照 view 中被裁剪消息的 tool-result/text 块（与引擎在共享对象上的改写幂等）
+    const msg = view[idx];
+    const tr = msg.content.find(
+      (b): b is Extract<ContentBlock, { type: 'tool-result' }> => b.type === 'tool-result',
+    );
+    if (tr) {
+      tr.content = data.newContent;
+    } else {
+      const tb = msg.content.find(
+        (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text',
+      );
+      if (tb) tb.text = data.newContent;
+    }
+    // 重算该消息 token（TokenMeter 无状态，只算这一条）并更新快照 token 数组
+    const perMessageTokens = [...this.snapshot.perMessageTokens];
+    perMessageTokens[idx] = await this.tokenMeter.estimateMessages(
+      this.sessionId,
+      this.currentModelName(),
+      [msg],
+    );
+    this.snapshot = {
+      ...this.snapshot,
+      revision,
+      perMessageTokens,
+      prefixTokens: this.recomputePrefixFrom(
+        this.snapshot.prefixTokens,
+        perMessageTokens,
+        idx,
+      ),
+    };
+  }
+
+  /** 二级遮蔽写入：落库 + 快照增量播种（splice view 前 shadowedCount 条为摘要节点） */
+  async appendCompact(
+    data: CompactWrite,
+  ): Promise<{ summaryMessageId: string; endSeq: number }> {
+    // 压缩后占用锚点（写前模拟）：当前全量 − 遮蔽区 token + 摘要 token → compaction/end 携带。
+    // 时序：此刻快照已含尾部 prune、未遮蔽 → getTokenCount 即"压缩前占用"；
+    // 摘要节点与 replayer 生成的同构，token 估算同口径。
+    const contextStats = await this.computePostCompactStats(data);
+    const out = await this.messageStore.appendCompact(this.sessionId, {
+      ...data,
+      ...(contextStats ? contextStats : {}),
+    });
+    if (!this.snapshot) return out;
+    const shadowedCount = data.shadowedCount;
+    const perMessageTokens = [...this.snapshot.perMessageTokens];
+    perMessageTokens.splice(0, shadowedCount);
+    let view: Message[];
+    if (out.summaryNode) {
+      view = [...this.snapshot.view];
+      view.splice(0, shadowedCount, out.summaryNode);
+      const summaryTokens = await this.tokenMeter.estimateMessages(
+        this.sessionId,
+        this.currentModelName(),
+        [out.summaryNode],
+      );
+      perMessageTokens.unshift(summaryTokens);
+    } else {
+      // 摘要节点不可得（防御）：仅移除遮蔽消息，视图交由下次 getSnapshot 全量重建校正
+      view = this.snapshot.view.slice(shadowedCount) as Message[];
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      revision: out.endSeq,
+      view,
+      perMessageTokens,
+      prefixTokens: this.rebuildPrefixTokens(perMessageTokens),
+    };
+    return out;
+  }
+
+  /** 压缩后完整请求 token 模拟结算（写前计算，供 compaction/end 锚点） */
+  private async computePostCompactStats(
+    data: CompactWrite,
+  ): Promise<{ usedTokens?: number; effectiveContextWindow?: number }> {
+    const effectiveContextWindow = this.getEffectiveContextWindow();
+    const shadowedCount = data.shadowedCount;
+    if (!this.snapshot || shadowedCount <= 0) {
+      // 快照不可得（冷路径）或无遮蔽：不提供锚点（调用方省略字段）
+      return { effectiveContextWindow };
+    }
+    const perMessageTokens = this.snapshot.perMessageTokens;
+    let shadowedTokens = 0;
+    for (let i = 0; i < shadowedCount && i < perMessageTokens.length; i++) {
+      shadowedTokens += perMessageTokens[i];
+    }
+    const preTotal = await this.getTokenCount();
+    // 摘要文本节点（与 replayer eventMessageFromData 生成的摘要节点同构）
+    const summaryTokens = data.summary
+      ? await this.tokenMeter.estimateMessages(
+          this.sessionId,
+          this.currentModelName(),
+          [
+            {
+              id: '',
+              role: 'user' as const,
+              kind: 'model' as const,
+              source: { kind: 'plugin' as const, plugin: 'compact' },
+              metadata: {},
+              content: [
+                {
+                  type: 'text' as const,
+                  text: data.summary,
+                },
+              ],
+            },
+          ],
+        )
+      : 0;
+    return {
+      usedTokens: Math.max(0, preTotal - shadowedTokens + summaryTokens),
+      effectiveContextWindow,
+    };
+  }
+
+  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
+   *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。 */
+  async recordContextAnchor(): Promise<void> {
+    const revision = await this.messageStore.recordContextAnchor(this.sessionId, {
+      usedTokens: await this.getTokenCount(),
+      effectiveContextWindow: this.getEffectiveContextWindow(),
+    });
+    // 不改变消息视图，仅版本号前进 → 续期快照 revision
+    this.refreshSnapshotRevision(revision);
+  }
+
+  /** 前缀和全量重建（perMessageTokens 变更后） */
+  private rebuildPrefixTokens(perMessageTokens: readonly number[]): number[] {
+    const prefixTokens: number[] = [];
+    let acc = 0;
+    for (const t of perMessageTokens) {
+      acc += t;
+      prefixTokens.push(acc);
+    }
+    return prefixTokens;
+  }
+
+  /** 前缀和部分重算（perMessageTokens[from..] 变更后） */
+  private recomputePrefixFrom(
+    prefixTokens: readonly number[],
+    perMessageTokens: readonly number[],
+    from: number,
+  ): number[] {
+    const out = [...prefixTokens];
+    let acc = from > 0 ? prefixTokens[from - 1] : 0;
+    for (let i = from; i < perMessageTokens.length; i++) {
+      acc += perMessageTokens[i];
+      out[i] = acc;
+    }
+    return out;
   }
 
   private async ensureConversationStateLoaded(): Promise<void> {
     if (!this.conversationStateLoaded) {
-      this.preludeParts = await this.buildPreludeMessages();
+      this.systemText = await this.buildSystemText();
       this.conversationStateLoaded = true;
     }
   }
@@ -431,36 +836,36 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * 当前完整请求 token（全量：prelude + 可见视图），provider 真值锚点 + 启发式增量（dsh 式）。
    *
-   * 每次从当前视图按需计算（不再维护累计账本）：
-   * - heuristicNow = 当前 prelude + 视图的启发式估算
-   * - 锚点 = 视图中最后一条带 metadata.usage.promptTokens 的 assistant 消息（provider 真值）
-   * - 锚点模型匹配时：promptTokens + (heuristicNow - heuristicAtAnchor)，heuristicAtAnchor 为
-   *   锚点时刻（视图截至锚点消息）的启发式估算；块级缓存命中，前缀重估近零成本
+   * O(1)：基于快照的前缀和（preludeTokens + prefixTokens 末项）与锚点前缀和，
+   * 不再逐次遍历视图。
    */
   async getTokenCount(): Promise<number> {
     const model = this.currentModelName();
-    const view = await this.loadVisibleMessages();
-    const heuristicNow = await this.estimateFullRequestTokens(view);
+    const snap = await this.getSnapshot();
+    const heuristicNow =
+      snap.preludeTokens +
+      (snap.prefixTokens.length > 0
+        ? snap.prefixTokens[snap.prefixTokens.length - 1]
+        : 0);
 
-    const anchor = this.findUsageAnchor(view);
+    const anchor = this.findUsageAnchor(snap.view);
     if (anchor && anchor.model === model) {
-      const heuristicAtAnchor = await this.estimateFullRequestTokens(
-        view.slice(0, anchor.index + 1),
+      const heuristicAtAnchor =
+        snap.preludeTokens + (snap.prefixTokens[anchor.index] ?? 0);
+      return Math.max(
+        0,
+        anchor.promptTokens + (heuristicNow - heuristicAtAnchor),
       );
-      return Math.max(0, anchor.promptTokens + (heuristicNow - heuristicAtAnchor));
     }
     return heuristicNow;
   }
 
   async getTokenBreakdown(): Promise<TokenBreakdown> {
-    const modelName = this.currentModelName();
-    await this.ensureConversationStateLoaded();
-    const view = await this.loadVisibleMessages();
-    const historyTokens = await this.tokenMeter.estimateMessages(
-      this.sessionId,
-      modelName,
-      view,
-    );
+    const snap = await this.getSnapshot();
+    const historyTokens =
+      snap.prefixTokens.length > 0
+        ? snap.prefixTokens[snap.prefixTokens.length - 1]
+        : 0;
     return {
       systemPrompt: this.preludeTokenStats.systemPrompt,
       summary: 0,
@@ -470,19 +875,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     };
   }
 
-  /** prelude + 给定视图的启发式估算（全量请求口径） */
-  private async estimateFullRequestTokens(view: Message[]): Promise<number> {
-    await this.ensureConversationStateLoaded();
-    return this.tokenMeter.estimateMessages(
-      this.sessionId,
-      this.currentModelName(),
-      [...this.preludeParts, ...view],
-    );
-  }
-
   /** 视图中最后一条带 provider usage 的 assistant 消息（返回其 promptTokens / 归属模型 / 索引） */
   private findUsageAnchor(
-    view: Message[],
+    view: readonly Message[],
   ): { promptTokens: number; model: string; index: number } | undefined {
     for (let i = view.length - 1; i >= 0; i--) {
       const msg = view[i];
@@ -589,6 +984,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
     return {
       compressionTriggerRatio: memory?.compressionTriggerRatio,
+      compressionRetainRatio: memory?.compressionRetainRatio,
+      // 兼容遗留（不再承担验收/保留语义）
       compressionTargetRatio: memory?.compressionTargetRatio,
       summaryMode,
     };
@@ -673,12 +1070,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /**
-   * 构建发送给 LLM 的前置消息（system prompt + 插件提示词）。
-   * 注：JSONL 版摘要（compact）已由重放注入 history（hidden user 消息），无需在此重复。
+   * 构建系统提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system）。
+   * 含：角色 systemPrompt + 插件 eager 提示词。插件 user 型提示（type="user"）已废弃——
+   * todo 状态改由压缩后落库注入（见 todo.plugin MEMORY_COMPACTED 处理器）。
    */
-  private async buildPreludeMessages(): Promise<Message[]> {
+  private async buildSystemText(): Promise<string> {
     const systemPrompts: string[] = [this.effectiveSettings.systemPrompt];
-    const userPrompts: string[] = [];
     const modelName = this.currentModelName();
 
     // 每次调用时动态搜集插件提示词，因为插件可能在运行时加载
@@ -695,63 +1092,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
           .filter(Boolean)
           .join('\n\n'),
       );
-
-      // user → user 消息（如工具包记忆）
-      const userPieces = await this.promptCollector.collectUserPrompts(
-        modePlugins,
-        { session: this },
-      );
-      const userContent = userPieces
-        .map((p) => p.content)
-        .filter(Boolean)
-        .join('\n\n');
-      if (userContent) {
-        userPrompts.push(userContent);
-      }
-
-      this.preludeTokenStats.userPrompt =
-        await this.tokenMeter.estimateTextTokens(modelName, userContent);
     }
 
-    const result: Message[] = [];
-
-    if (systemPrompts.length > 0) {
-      result.push({
-        id: 'system',
-        role: 'system',
-        kind: 'model',
-        source: { kind: 'user' },
-        metadata: {},
-        content: [
-          {
-            type: 'text',
-            contentId: 'system',
-            text: systemPrompts.filter(Boolean).join('\n\n'),
-          },
-        ],
-      });
-    }
-    this.preludeTokenStats.systemPrompt = await this.tokenMeter.estimateMessages(
-      this.sessionId,
-      modelName,
-      result.filter((p) => p.role === 'system'),
-    );
-    if (userPrompts.length > 0) {
-      result.push({
-        id: 'user_prompt',
-        role: 'user',
-        kind: 'user',
-        source: { kind: 'user' },
-        metadata: {},
-        content: [
-          {
-            type: 'text',
-            contentId: 'user_prompt',
-            text: userPrompts.join('\n\n'),
-          },
-        ],
-      });
-    }
+    const systemText = systemPrompts.filter(Boolean).join('\n\n');
+    this.preludeTokenStats.systemPrompt =
+      await this.tokenMeter.estimateTextTokens(modelName, systemText);
 
     // 工具定义 token（最详细格式，确保不低估）
     const toolDefs = ToolOrchestrator.toFlatToolDefs(this.resolvedPlugins);
@@ -775,6 +1120,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       this.preludeTokenStats.tools = 0;
     }
 
-    return result;
+    return systemText;
   }
 }

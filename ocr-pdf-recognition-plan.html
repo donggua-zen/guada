@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR 增强：PDF 转图片识别方案</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --card: #1d212e; --border: #2a2f3f;
+    --text: #e6e9f0; --muted: #8b92a5; --accent: #5b8cff; --accent2: #37c99e;
+    --warn: #f0a44b; --danger: #e5697a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: "Microsoft YaHei", "PingFang SC", sans-serif; line-height: 1.75; padding: 48px 20px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header h1 { font-size: 28px; font-weight: 700; }
+  header .sub { color: var(--muted); margin: 10px 0 14px; font-size: 14px; }
+  .tag { display: inline-block; font-size: 12px; padding: 3px 12px; border-radius: 20px; background: rgba(91,140,255,.12); color: var(--accent); border: 1px solid rgba(91,140,255,.3); margin-right: 8px; }
+  h2 { font-size: 20px; margin: 42px 0 16px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  p { margin-bottom: 13px; color: #cdd3e0; }
+  code { background: rgba(255,255,255,.07); padding: 1px 7px; border-radius: 5px; font-family: Consolas, monospace; font-size: 13px; color: #a8c7ff; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 18px; }
+  .panel-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .flow { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; font-family: Consolas, monospace; font-size: 12.5px; color: #9fb6dd; overflow-x: auto; white-space: pre; line-height: 1.9; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+  .card-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card p { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue { background: var(--accent); } .dot-green { background: var(--accent2); }
+  .dot-orange { background: var(--warn); } .dot-red { background: var(--danger); }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 720px) { .compare { grid-template-columns: 1fr; } }
+  .compare .card { border-top: 3px solid var(--border); }
+  .compare .card.win { border-top-color: var(--accent2); }
+  .compare .card.lose { border-top-color: var(--danger); opacity: .85; }
+  .timeline { position: relative; padding-left: 34px; }
+  .timeline::before { content: ""; position: absolute; left: 12px; top: 8px; bottom: 8px; width: 2px; background: linear-gradient(var(--accent), var(--accent2)); }
+  .step { position: relative; margin-bottom: 20px; }
+  .step:last-child { margin-bottom: 0; }
+  .step::before { content: attr(data-n); position: absolute; left: -34px; top: 2px; width: 26px; height: 26px; border-radius: 50%; background: var(--card); border: 2px solid var(--accent); color: var(--accent); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .step-title { font-weight: 700; font-size: 14px; }
+  .step-text { color: var(--muted); font-size: 13px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 9px; border-radius: 10px; margin-right: 6px; font-weight: 600; }
+  .b-p0 { background: rgba(229,105,122,.15); color: var(--danger); border: 1px solid rgba(229,105,122,.35); }
+  .b-p1 { background: rgba(240,164,75,.13); color: var(--warn); border: 1px solid rgba(240,164,75,.35); }
+  .b-p2 { background: rgba(139,146,165,.13); color: var(--muted); border: 1px solid rgba(139,146,165,.35); }
+  pre { background: #12151d; border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-family: Consolas, monospace; font-size: 12.5px; color: #a8c7ff; overflow-x: auto; line-height: 1.8; margin-bottom: 16px; }
+  .note { background: rgba(240,164,75,.08); border: 1px solid rgba(240,164,75,.3); border-radius: 10px; padding: 13px 18px; font-size: 13px; color: #e8c89a; margin-bottom: 16px; }
+  .ok { background: rgba(55,201,158,.08); border: 1px solid rgba(55,201,158,.3); border-radius: 10px; padding: 13px 18px; font-size: 13px; color: #9adfc7; margin-bottom: 16px; }
+  footer { margin-top: 46px; color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>OCR 增强：PDF 转图片识别方案</h1>
+  <div class="sub">让仅支持图片的云 OCR 厂商（百度等）能够处理扫描件 PDF · 基于源码实测分析 · 2026-09-01</div>
+  <div>
+    <span class="tag">现状分析</span><span class="tag">pdfjs-dist + @napi-rs/canvas</span><span class="tag">能力分派 pdfMode</span><span class="tag">最小侵入改造</span>
+  </div>
+</header>
+
+<h2>一、现状链路（源码实测）</h2>
+
+<div class="flow">KB上传 PDF
+  → FileParserService.parsePdfFileWithPages
+     → pdfjs-dist 逐页提取文本(parsePdfByPages, 记录每页 charCount)
+     → isScanPdf: charCount<50 的页 > 总页数一半 ?
+        ├─ 否 → 直接用文本层, 完成
+        └─ 是 → ocrService.getCapabilities()
+             ├─ umi   (supportsPdf=true)  → /api/doc/upload 原生 PDF 任务, 轮询取页 → 完成
+             └─ baidu (supportsPdf=false) → 【直接跳过 OCR】→ 返回空文本 → 分块为空 → completed(假完成)
+</div>
+
+<div class="panel">
+  <div class="panel-title">OcrService 现有能力矩阵</div>
+  <table>
+    <tr><th>Provider</th><th>PDF</th><th>图片</th><th>实现方式</th><th>配置来源</th></tr>
+    <tr><td><code>umi</code>（本地 Umi-OCR）</td><td>✅ 原生</td><td>✅</td><td>PDF: <code>/api/doc/upload</code> 任务+轮询（5分钟无进度超时）；图片: <code>/api/ocr</code> base64</td><td>设置组 ocr: umiHost(默认127.0.0.1) / umiPort(1224)</td></tr>
+    <tr><td><code>baidu</code>（云）</td><td>❌ 被能力声明挡掉</td><td>✅</td><td><code>general_basic</code> 接口，base64 图片（L456 URL 已验证源码正常）</td><td>baiduApiKey / baiduSecretKey，token 自动获取</td></tr>
+    <tr><td><code>none</code></td><td>—</td><td>—</td><td>跳过 OCR</td><td>—</td></tr>
+  </table>
+</div>
+
+<h2>二、问题定位</h2>
+<div class="panel">
+  <table>
+    <tr><th>#</th><th>问题</th><th>影响</th><th>代码位置</th></tr>
+    <tr><td><span class="dot dot-red"></span> 1</td><td><strong>百度 OCR 无法处理扫描件 PDF</strong>——<code>getCapabilities()</code> 声明 <code>supportsPdf:false</code>，<code>parsePdfFileWithPages</code> 据此直接跳过 OCR</td><td>百度用户上传扫描件 → 全程无 OCR，文件"处理完成"但内容为空（<span class="b-p0">P0</span> 本方案主目标）</td><td><code>ocr.service.ts getCapabilities()</code> / <code>file-parser.service.ts:259-283</code></td></tr>
+    <tr><td><span class="dot dot-orange"></span> 2</td><td><strong>混合型 PDF 不触发 OCR</strong>：<code>isScanPdf</code> 要求 &gt;一半页 charCount&lt;50 才判扫描件</td><td>一半正文一半扫描图的常见混合文档，扫描页内容丢失（<span class="b-p1">P1</span> 页面级混合可解）</td><td><code>file-parser.service.ts isScanPdf()</code></td></tr>
+    <tr><td><span class="dot dot-orange"></span> 3</td><td><strong>图片文件直传不走 OCR</strong>：<code>recognizeImage</code> 全后端无调用方（死代码）；detectFileType 把 png/jpg 判为 unknown → 当文本读二进制</td><td>图片上传知识库得到乱码/空内容；文档宣称的"图片自动 OCR"实际未接线（<span class="b-p1">P1</span> 顺手修复，与主改造共享链路）</td><td><code>file-parser.service.ts detectFileType()</code> / <code>ocr.service.ts recognizeImage()</code></td></tr>
+    <tr><td><span class="dot dot-blue"></span> 4</td><td>Umi PDF 任务失败无降级路径</td><td>本地 OCR 服务异常时整个文件失败（<span class="b-p2">P2</span> 可选降级到 render 路径）</td><td><code>ocr.service.ts recognizePdfWithUmi</code></td></tr>
+  </table>
+</div>
+
+<div class="ok">✅ 已排查排除的疑点：百度图片识别 URL（<code>ocr.service.ts L456</code>）源码为正常的 <code>?access_token=${token}</code> 模板串（编辑器脱敏显示造成的误判），不是 bug，不列入修复项。</div>
+
+<h2>三、方案设计</h2>
+
+<h3 style="font-size:16px; margin:20px 0 10px">3.1 核心思路：能力声明升级 + 渲染中间层</h3>
+<div class="panel">
+  <p>不改变现有管线结构，做两件事：<strong>① PDF→图片渲染服务</strong>（新增独立 Service）；<strong>② OcrService 能力声明从布尔升级为策略枚举</strong>，<code>recognizePdf</code> 内部按策略分派——umi 走原生 PDF 任务（现有逻辑不动），百度等 render 型厂商走"逐页渲染→复用现有图片识别→按页组装"。</p>
+  <div class="flow">recognizePdf(filePath)
+  ├─ pdfMode = "native"  → recognizePdfWithUmi (现有逻辑, 不动)
+  ├─ pdfMode = "render"  → recognizePdfViaImages (新增)
+  │     → PdfToImageService.renderPages(filePath) 逐页产出 buffer (不落盘)
+  │     → 逐页 recognizeImage(buffer)  [umi /api/ocr 或 baidu general_basic]
+  │     → pages[] 组装 → 进度按页占比上报
+  └─ pdfMode = "none"    → 返回 null (现有语义)</div>
+</div>
+
+<h3 style="font-size:16px; margin:20px 0 10px">3.2 PDF 转图片技术选型</h3>
+<div class="compare">
+  <div class="card win">
+    <div class="card-title"><span class="dot dot-green"></span>方案 A（推荐）：pdfjs-dist + @napi-rs/canvas</div>
+    <p><strong>理由</strong>：pdfjs-dist 已是项目依赖（文本提取在用），只新增 @napi-rs/canvas 一个预编译原生包（无编译步骤）；与项目现有 native 栈（better-sqlite3 / sqlite-vec / @node-rs/jieba）同构，Windows 桌面端 rebuild-native-modules 与 Docker 镜像均可覆盖；社区有 pdf-to-img 包验证过此组合可行性。</p>
+    <p><strong>代价</strong>：需配置 standardFontDataUrl / cMapUrl 资源（否则部分 PDF 渲染缺字）；Electron 打包需把资源文件带上。</p>
+  </div>
+  <div class="card lose">
+    <div class="card-title"><span class="dot dot-red"></span>方案 B（备选）：外部二进制（poppler pdftoppm / ImageMagick）</div>
+    <p><strong>优点</strong>：渲染质量最稳，格式兼容性最好。</p>
+    <p><strong>否决原因</strong>：Windows 桌面端要额外分发 exe 并处理 PATH；Docker 镜像要装系统包；部署矩阵（Electron / Web / Docker 三端）维护成本高，与"开箱即用"的产品定位冲突。</p>
+  </div>
+</div>
+<div class="card" style="margin-bottom:18px">
+  <div class="card-title"><span class="dot dot-blue"></span>折中选项：pdf-to-img npm 包</div>
+  <p>内部就是 pdfjs-dist + @napi-rs/canvas 的封装，代码量最少；但多一层抽象、需要锁版本防与项目已有 pdfjs-dist 冲突。可作为方案 A 的实现捷径：先直接用该包快速打通，遇到定制需求（只渲染指定页码集合等）再替换为自写渲染层。</p>
+</div>
+
+<h3 style="font-size:16px; margin:20px 0 10px">3.3 接口草案</h3>
+<pre>// 新增 common/pdf-render/pdf-to-image.service.ts
+export interface RenderedPage { pageNum: number; buffer: Buffer; width: number; height: number; }
+
+@Injectable()
+export class PdfToImageService {
+  // 流式逐页产出，调用方边消费边释放，避免大 PDF 全量驻留内存
+  async *renderPages(filePath: string, opts?: {
+    scale?: number;      // 默认 2.0（≈144 DPI，OCR 识别质量与体积的平衡点）
+    maxPages?: number;   // 默认 200，超出抛错提示拆分
+  }): AsyncGenerator&lt;RenderedPage&gt;
+}
+
+// ocr.service.ts 改造
+type PdfOcrMode = "native" | "render" | "none";
+
+async getCapabilities(): Promise&lt;{ pdfMode: PdfOcrMode; supportsImage: boolean }&gt;
+// umi → native；baidu → render；none → none
+
+async recognizePdf(filePath, onProgress?): Promise&lt;OcrResult | null&gt;
+// 内部按 pdfMode 分派；render 路径逐页复用 recognizeImage 现有实现
+
+private async recognizePdfViaImages(filePath, config, onProgress?): Promise&lt;OcrResult&gt;
+// 逐页 render → OCR → 组装 pages[]（page 语义与 Umi PDF 结果一致）
+// 并发默认 1（百度 QPS 安全），失败页 retryWithBackoff 重试 2 次
+// 图片守卫：最长边 ≤ 8192px、base64 后 ≤ 4MB（百度接口口径，超限自动降 scale/JPEG质量）
+</pre>
+
+<h3 style="font-size:16px; margin:20px 0 10px">3.4 关键设计决策</h3>
+<div class="grid">
+  <div class="card"><div class="card-title"><span class="dot dot-blue"></span>内存策略：流式逐页</div><p>renderPages 用 AsyncGenerator 逐页产出，OCR 完一页释放一页 buffer，只保留文本结果。200 页 PDF 按 scale 2.0 渲染若全量驻留内存可达数 GB，流式是硬要求。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-green"></span>进度映射不变</div><p>render 路径的逐页进度上报沿用现有 Umi PDF 的映射区间（15%→80%），file-parser 的 2-80% 全局映射不用改，kb-file 的进度条无感知。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-orange"></span>成本护栏</div><p>云 OCR 按页计费。maxPages 硬上限 + 处理前日志输出页数与预估调用量；百度免费额度用尽后的计费提醒属于前端设置页职责，不在本期。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-red"></span>失败语义保持</div><p>OCR 已配置但识别失败/结果为空 → 抛错（与现状一致），文件状态落 failed 可重试，不做静默降级，避免"假完成"扩散。</p></div>
+</div>
+
+<h2>四、实施里程碑</h2>
+<div class="panel">
+  <div class="timeline">
+    <div class="step" data-n="1"><div class="step-title"><span class="b-p0">P0</span> 百度扫描件 PDF 打通 <span class="b-p1">✅ 已实施 2026-09-01</span></div><div class="step-text">新增 PdfToImageService（pdfjs-dist + @napi-rs/canvas，cmaps/standard_fonts 资源配置）；OcrService 能力枚举 pdfMode + recognizePdfViaImages；图片守卫与页级重试；mock 测试 + 真实渲染冒烟（非嵌入字体 PDF → PNG 8766 非白像素，视觉确认文字清晰）+ nest build 通过。file-parser 零改动。</div></div>
+    <div class="step" data-n="2"><div class="step-title"><span class="b-p1">P1</span> 图片直传接 OCR + 页面级混合路由 <span class="b-p1">✅ 已实施 2026-09-01</span></div><div class="step-text">file-parser 增加 image 分支（png/jpg/jpeg/bmp → recognizeImage，未配置 OCR 时抛可操作提示）；PDF 解析升级为页面级路由：charCount&lt;50 的页才渲染+OCR，文本页零成本保留，按页码合并；renderPages 支持 pages 指定页（过滤越界/去重/升序）；ocrMode 策略 auto（默认）/force（全页强制 OCR，等价 ocrmypdf --force-ocr）；混合 PDF 下 umi 也能局部补页（走图片接口）。73 用例全绿 + nest build 通过。设置前端 UI 待接（后端已读 ocr.ocrMode）。</div></div>
+    <div class="step" data-n="3"><div class="step-title"><span class="b-p2">P2</span> 增强项（按需）</div><div class="step-text">结构信号辅助判定（全页大图 + 少文本算子 → 强制判扫描页，破解水印干扰）；Umi native 失败自动降级 render 路径；高精度版接口可选（百度 accurate_basic）；并发渲染提速（2-4 路）；桌面端打包验证。</div></div>
+  </div>
+</div>
+
+<h2>五、扫描件判定策略演进（2026-09-01 增补）</h2>
+<div class="panel">
+  <div class="panel-title">原文件级判定 vs 页面级路由（现行为）</div>
+  <table>
+    <tr><th>维度</th><th>旧：文件级 isScanPdf</th><th>新：页面级路由（P1 已实施）</th></tr>
+    <tr><td>判定粒度</td><td>charCount&lt;50 的页 &gt; 一半 → 整文件判扫描件，判定即终局</td><td>每页独立：charCount&lt;50 的页才 OCR，文本页零成本保留，按页码合并</td></tr>
+    <tr><td>混合 PDF</td><td>&lt;50% 扫描页时静默丢内容</td><td>扫描页补 OCR，正文页精确保留</td></tr>
+    <tr><td>成本</td><td>整本扫描时全页计费（含有文本层的页）</td><td>成本 ∝ 真实扫描页数；纯文本 PDF 零调用</td></tr>
+    <tr><td>水印干扰</td><td>水印文字抬高 charCount 导致漏判</td><td>仍用字符阈值（P2 结构信号可解）</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="panel-title">为什么不做“全量转图片 OCR”（force-ocr）作为默认</div>
+  <p>全量 OCR 确实最简单且零漏判，但三个代价：① 云 OCR 按页计费，纯文本 PDF 也白花；② <strong>质量倒退</strong>——电子版文本层是精确字符，OCR 会引入错字（0/O、l/1）污染向量索引，直接拉低 RAG 检索质量；③ 延迟。因此保留为可选策略（ocrMode=force），适合本地免费 OCR 或扫描件为主的场景。</p>
+  <p><strong>路由矩阵（parsePdfFileWithPages）</strong>：</p>
+  <table>
+    <tr><th>场景</th><th>路由</th></tr>
+    <tr><td>OCR 未配置</td><td>仅文本层（旧行为）</td></tr>
+    <tr><td>所有页均有文本层（auto）</td><td>纯文本路径，零 OCR 调用</td></tr>
+    <tr><td>整本扫描 + umi（native）</td><td>整文件原生 PDF 管线（mixed 模式内部按页处理）</td></tr>
+    <tr><td>混合 PDF + umi（native）</td><td>仅低字符页渲染+图片 OCR（/api/ocr），与文本层合并</td></tr>
+    <tr><td>百度（render）任意场景</td><td>仅低字符页（auto）或全部页（force）渲染+逐页 OCR，与文本层合并</td></tr>
+    <tr><td>图片文件（png/jpg/jpeg/bmp）</td><td>recognizeImage 直传 OCR；未配置/失败抛可操作提示</td></tr>
+  </table>
+</div>
+
+<h2>六、风险与对策</h2>
+<div class="panel">
+  <table>
+    <tr><th>风险</th><th>对策</th></tr>
+    <tr><td>pdfjs 在 Node 下渲染缺字（未内置标准字体数据）</td><td>打包 standard_fonts + cmaps 资源目录，getDocument 时配置 standardFontDataUrl / cMapUrl；用真实扫描件建立渲染冒烟测试</td></tr>
+    <tr><td>@napi-rs/canvas 平台矩阵（win x64 / linux x64+arm64）</td><td>预编译二进制全平台官方分发，Docker 无系统依赖；重点验证 Electron 打包后 asar 外原生模块加载（项目已有成熟 rebuild 机制）</td></tr>
+    <tr><td>百度接口限制（最长边 8192px、payload 上限、QPS）</td><td>渲染时按上限计算 scale，超限自动降 JPEG 质量；并发固定 1 + 重试退避；具体数值以百度官方文档为准，做成常量便于调整</td></tr>
+    <tr><td>加密/损坏 PDF</td><td>pdfjs getDocument 抛错 → 沿用现有 catch → 文件 failed 可重试，与现状一致</td></tr>
+    <tr><td>扫描件判定误伤（纯文本 PDF 被 OCR）</td><td>P0 不改判定逻辑（保持整文件语义）；P1 页面级判定后，正文页天然不受影响</td></tr>
+  </table>
+</div>
+
+<footer>OCR PDF 转图片识别方案 · 生成于 2026-09-01 · 基于 backend-ts 源码实测</footer>
+</div>
+</body>
+</html>

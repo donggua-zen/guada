@@ -366,6 +366,17 @@ export class SessionService {
 
     const session = await this.sessionRepo.create(sessionData);
 
+    // 创建即初始化 JSONL 事件存储（eager 创建）：此后所有并发请求 hasSession 恒为 true，
+    // 消除懒创建在首屏并行请求下的 TOCTOU 竞态（ensureSession 内部另有串行化兜底）。
+    // 失败不阻断建会话：懒创建兜底会在首次访问时自愈补建。
+    try {
+      await this.contextManager.ensureSession(session.id, { title: sessionData.title });
+    } catch (err: any) {
+      this.logger.error(
+        `Eager session storage init failed for ${session.id}: ${err?.message ?? err}`,
+      );
+    }
+
     // 转换 URL 后返回（avatarUrl 是上传文件）
     return {
       ...session,
@@ -443,6 +454,16 @@ export class SessionService {
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
+
+    // 同步删除 JSONL 事件存储目录，避免遗留孤儿目录（此前只删 DB，目录会永久泄漏）。
+    // 失败不影响会话删除本身：DB 行已删，目录可稍后手工清理。
+    try {
+      await this.contextManager.clearSessionTurns(sessionId);
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to delete session storage for ${sessionId}: ${err?.message ?? err}`,
+      );
+    }
 
     // 数据库删除成功后再停止监听并关闭对应 SSE
     this.workspaceWatcherService.stopWatchingSession(sessionId);
@@ -573,7 +594,7 @@ export class SessionService {
             kind: "user",
             source: { kind: "user" },
             metadata: {},
-            content: [{ type: "text", contentId: "title", text: prompt }],
+            content: [{ type: "text", text: prompt }],
           },
         ],
         temperature: 0.3, // 较低的温度使输出更稳定
@@ -701,7 +722,7 @@ ${diffText}
             kind: "user",
             source: { kind: "user" },
             metadata: {},
-            content: [{ type: "text", contentId: "commit", text: prompt }],
+            content: [{ type: "text", text: prompt }],
           },
         ],
         temperature: 0.3,
@@ -759,7 +780,7 @@ ${diffText}
     const context = await this.sessionContextFactory.createFromSession(session);
     const effectiveContextWindow = context.getEffectiveContextWindow();
 
-    const messages = await context.getMessages();
+    const messages = await context.getHistory();
     const usedTokens = await context.getTokenCount();
     const percentage = Math.min(
       (usedTokens / effectiveContextWindow) * 100,
@@ -802,7 +823,7 @@ ${diffText}
     const context = await this.sessionContextFactory.createFromSession(session);
 
     const beforeTokenCount = await context.getTokenCount();
-    const beforeMessageCount = (await context.getMessages()).length;
+    const beforeMessageCount = (await context.getHistory()).length;
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
     // 手动路径走同一事件机制（coordinator.maybeCompress）：
@@ -813,7 +834,7 @@ ${diffText}
     });
 
     const afterTokenCount = await context.getTokenCount();
-    const compressedMessages = await context.getMessages();
+    const compressedMessages = await context.getHistory();
     const afterMessageCount = compressedMessages.length;
 
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);

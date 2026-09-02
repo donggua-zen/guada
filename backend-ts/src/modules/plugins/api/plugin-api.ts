@@ -10,6 +10,7 @@ import {
   AttachmentTypeRegistration,
   UiPageRegistration,
   SlotRegistration,
+  ThemeRegistration,
   RpcHandler,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
@@ -141,6 +142,14 @@ export interface PluginApi {
    * 注册前端 slot（插件 UI 能力声明）
    */
   registerSlot(reg: import("../types/plugin.types").SlotRegistration): void;
+
+  /**
+   * 注册主题（插件主题能力声明）
+   *
+   * CSS 文件放插件 frontend/dist/ 下，通过 assets 端点静态服务；
+   * 前端下拉列表与启动应用均以本声明为准。
+   */
+  registerTheme(reg: import("../types/plugin.types").ThemeRegistration): void;
 
   /**
    * 注册技能（第三方插件注册技能，内嵌正文，无需文件/复制）
@@ -377,6 +386,7 @@ export class PluginApiImpl implements PluginApi {
   private _attachmentTypes: AttachmentTypeRegistration[] = [];
   private _uiPages: UiPageRegistration[] = [];
   private _slots: SlotRegistration[] = [];
+  private _themes: ThemeRegistration[] = [];
   private _rpcHandlers: Record<string, RpcHandler> = {};
 
   registerAttachmentType(reg: AttachmentTypeRegistration): void {
@@ -393,6 +403,11 @@ export class PluginApiImpl implements PluginApi {
   registerSlot(reg: SlotRegistration): void {
     if (!this._slots.find((x) => x.name === reg.name && x.component === reg.component)) {
       this._slots.push(reg);
+    }
+  }
+  registerTheme(reg: ThemeRegistration): void {
+    if (!this._themes.find((x) => x.id === reg.id)) {
+      this._themes.push(reg);
     }
   }
 
@@ -553,6 +568,11 @@ export class PluginApiImpl implements PluginApi {
     // 注册 slots
     for (const slot of this._slots) {
       PluginRegistry.registerSlot(this.pluginId, slot);
+    }
+
+    // 注册 themes
+    for (const theme of this._themes) {
+      PluginRegistry.registerTheme(this.pluginId, theme);
     }
 
     // 注册 rpc handlers

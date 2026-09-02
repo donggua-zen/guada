@@ -64,73 +64,15 @@ export class PromptCollector {
   /**
    * 收集所有启用插件的 type=user 提示词（注入到 user 消息，而非 system prompt）。
    *
-   * 扫描两个来源：插件级 prompts（api.registerPrompt）与已启用工具包中
-   * type=user 的提示词（kit.registerPrompt({ type: "user" })）。
+   * ⚠️ 已废弃（envelope/surface 分离改造，2026-08-30）：type="user" 提示词机制整体移除——
+   * 唯一使用者 todo 插件改由 MEMORY_COMPACTED 处理器压缩后落库注入（hidden user 消息）。
+   * 保留方法签名以兼容仍注册 type="user" 的第三方插件（行为：返回空，不注入）。
    */
   async collectUserPrompts(
     resolvedPlugins: ResolvedPluginInfo[],
     context: PluginContext,
   ): Promise<PromptPiece[]> {
-    const pieces: PromptPiece[] = [];
-
-    for (const rp of resolvedPlugins) {
-      if (!rp.enabled) continue;
-
-      const pluginId = rp.plugin.id;
-      // 已启用工具包的 user 型提示词
-      const enabledKitIds = new Set(
-        rp.enabledToolKits.filter((tk) => tk.enabled).map((tk) => tk.id),
-      );
-      for (const kitId of enabledKitIds) {
-        const kitReg = PluginRegistry.getToolKits(pluginId).find(
-          (k) => k.def.id === kitId,
-        );
-        for (const pm of kitReg?.prompts || []) {
-          if (pm.type !== "user") continue;
-          try {
-            const content = await pm.handler(context);
-            if (content) {
-              pieces.push({
-                content,
-                frequency: pm.frequency as any,
-                loadMode: "user",
-                type: "user",
-                pluginId,
-                description: pm.description,
-              });
-            }
-          } catch {}
-        }
-      }
-
-      // 插件级 user 型提示词
-      const { prompts: pluginPrompts } = PluginRegistry.getPromptMetas(
-        pluginId,
-      );
-      for (const meta of pluginPrompts) {
-        if (meta.type !== "user") continue;
-        try {
-          const content = await meta.handler(context);
-          if (content) {
-            pieces.push({
-              content,
-              frequency: meta.frequency as any,
-              loadMode: "user",
-              type: "user",
-              pluginId: rp.plugin.id,
-              description: meta.description,
-            });
-          }
-        } catch {}
-      }
-    }
-
-    const order = { STATIC: 0, REGULAR: 1, VOLATILE: 2 };
-    pieces.sort((a, b) => {
-      const diff = (order[a.frequency] ?? 1) - (order[b.frequency] ?? 1);
-      return diff !== 0 ? diff : a.pluginId.localeCompare(b.pluginId);
-    });
-    return pieces;
+    return [];
   }
 
   /**

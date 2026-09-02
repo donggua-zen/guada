@@ -9,7 +9,7 @@
         {{
           expanded
             ? "收起摘要"
-            : `已压缩 ${compactInfo?.shadowedMessageIds?.length ?? 0} 条消息`
+            : `已压缩 ${compactInfo?.shadowedCount ?? compactInfo?.shadowedMessageIds?.length ?? 0} 条消息`
         }}
       </span>
     </button>
@@ -27,6 +27,7 @@ import { ArrowDown16Regular, ArrowUp16Regular } from "@vicons/fluent";
 const props = defineProps<{
   /** 压缩信息（后端 message/compact 事件原文） */
   compactInfo?: {
+    shadowedCount?: number;
     shadowedMessageIds?: string[];
     summaryContentId?: string;
     summary?: string;

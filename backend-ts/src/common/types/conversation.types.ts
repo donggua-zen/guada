@@ -42,7 +42,6 @@ export interface BlockTiming {
 /** 纯文本块 */
 export interface TextBlock {
   type: 'text';
-  contentId: string;
   text: string;
   timing?: BlockTiming;
 }
@@ -50,7 +49,6 @@ export interface TextBlock {
 /** 推理/思考块（与可见文本分离） */
 export interface ReasoningBlock {
   type: 'reasoning';
-  contentId: string;
   /** 推理文本 */
   summary: string;
   timing?: BlockTiming;
@@ -59,7 +57,6 @@ export interface ReasoningBlock {
 /** 模型请求的工具调用 */
 export interface ToolCallBlock {
   type: 'tool-call';
-  contentId: string;
   /** 供应商颁发的调用 id，与 tool-result 关联 */
   toolCallId: string;
   name: string;
@@ -71,7 +68,6 @@ export interface ToolCallBlock {
 /** 工具执行结果（回传给模型） */
 export interface ToolResultBlock {
   type: 'tool-result';
-  contentId: string;
   toolCallId: string;
   name: string;
   content: string;
@@ -81,7 +77,6 @@ export interface ToolResultBlock {
 /** 图片块：始终引用（attachment.url），不内联 base64；LLM 侧由 adapter 转 base64 */
 export interface ImageBlock {
   type: 'image';
-  contentId: string;
   attachment: FileRef;
 }
 
@@ -91,7 +86,6 @@ export interface ImageBlock {
  */
 export interface FileBlock {
   type: 'file';
-  contentId: string;
   attachment: FileRef;
   /** TODO：小文本文件内联内容（当前版本不填充，统一引用） */
   inline?: string;
@@ -111,18 +105,51 @@ export type ContentBlockType = ContentBlock['type'];
 // ==================== Message（真实消息 = 一次 LLM 调用 / 一次注入） ====================
 
 /** 协议值（role）：转 OpenAI 等协议时直接映射 system / user / assistant / tool；
- *  'event' 事件类消息（command/compaction 等），不进入协议上下文 */
+ *  'event' 已废弃使用（2026-08-30：检查点改为 user + source.plugin='compact'，对齐 DSH
+ *  MessageRole=system/user/assistant；保留类型值以兼容旧数据/代码） */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool' | 'event';
 
 /** 逻辑归属（kind）：真实用户 / 模型工作流（含注入的系统提示、图片、工具结果） */
 export type MessageKind = 'user' | 'model';
 
-/** 消息来源判别（参考 DSH MessageSourceMap，未来承载更细来源细分） */
+/**
+ * 消息来源判别（对齐 DSH MessageSourceMap）
+ *
+ * 【单一真相】“这条消息是不是人类输入”唯一由 source.kind 决定，
+ * 判断请用 isUserFacingMessage()，不要再读 metadata.hidden
+ * （metadata.hidden 为历史兼容字段，DSH 决策笔记已否决 origin 判别字段）。
+ *
+ * 各写入点约定：
+ * - user    ：终端用户真实输入（前端可见）
+ * - plugin  ：插件注入（interceptor=TURN_STOPPING 续跑 / image=工具图片 /
+ *             todo=待办注入 / compact=压缩检查点），非人类输入
+ * - model   ：模型产出（role=assistant）
+ * - tool    ：工具结果（role=tool）
+ * - sub_agent / scheduler / process_monitor：跨回合投递的入站消息（队列来源）
+ */
 export type MessageSource =
   | { kind: 'user' } // 用户真实输入
-  | { kind: 'plugin'; plugin: string } // 注入的用户消息（图片/拦截器/命令/压缩）
+  | { kind: 'plugin'; plugin: string } // 注入的用户消息（图片/拦截器/命令/压缩/待办）
   | { kind: 'model'; provider: string; model: string } // 模型产出
-  | { kind: 'tool'; toolCallId: string }; // 工具结果（role='tool'）
+  | { kind: 'tool'; toolCallId: string } // 工具结果（role='tool'）
+  | { kind: 'sub_agent'; subSessionId: string; agentName?: string } // 子代理结果回传
+  | { kind: 'scheduler'; schedulerId: string } // 定时任务投递
+  | { kind: 'process_monitor'; processId: string } // 后台进程结束通知
+  | { kind: 'coordinator'; senderSessionId?: string }; // 协调者中继（未来：专家团/多代理）
+
+/**
+ * 消息是否面向用户的真实输入（单一真相 = source.kind）
+ *
+ * 后端语义：判断"是不是人说的话"（token 统计、模型可见性、审计等）。
+ * 注意与前端显隐判定区分——前端展示用 isHiddenBlock（metadata.hidden 开关）：
+ * 队列投递的通知（sub_agent/scheduler/process_monitor）非用户输入但仍需展示，
+ * 前端显隐只看 metadata.hidden；本函数用于后端来源语义，两者不互相替代。
+ */
+export function isUserFacingMessage(
+  message: Pick<Message, 'source'>,
+): boolean {
+  return message.source.kind === 'user';
+}
 
 /** 一次 LLM 调用的 token 明细 */
 export interface TokenUsage {

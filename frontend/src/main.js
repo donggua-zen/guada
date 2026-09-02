@@ -335,7 +335,13 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
     if (backendError.value) return; // 已显示超时错误，不再覆盖
     if (data.port) {
       console.log(` 后端已就绪，端口: ${data.port}`);
-      apiService.initBackendUrl().then(() => {
+      apiService.initBackendUrl().then(async () => {
+        // 关键时序：先让主题就绪（插件清单 + 主题 CSS 应用完成），再放行守卫
+        // 并跳回主页面——此刻用户仍停留在品牌加载页（/empty），切换后主页面
+        // 首帧即为用户所选主题，全程无闪烁。
+        // backendReady 置位必须放在 await 之后：否则路由守卫（main.js:186-193）
+        // 会在加载页状态时提前放行导航，主题尚未就绪导致闪变。
+        await ensureThemeReady();
         backendReady.value = true;
         loadLinkOpenModeWhenReady();
         // 如果当前在加载页，跳回原始目标
@@ -354,4 +360,30 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
   loadLinkOpenModeWhenReady();
 }
 
-app.mount("#app");
+// ── 主题就绪前置（防首帧主题闪烁）──
+// 挂载前预取插件 slots+themes 清单，将插件主题注册进响应式注册表；
+// useTheme 顶层 applyThemePreset 对持久化的插件主题 id 会先置 pending，
+// 清单到达后由 themeRegistryVersion watch 自动补应用。
+// 冷启动（后端未就绪）时 init 失败被内部 catch 吞掉，用户停留在品牌加载页
+// （/empty）；后端就绪后由 waitBackendReady 回调（上方 333-358）在跳回
+// 主页面之前 await 本函数补拉清单，首帧仍为正确主题。
+const ensureThemeReady = async () => {
+  try {
+    const { usePluginSlots } = await import("@/stores/pluginSlots");
+    await usePluginSlots(pinia).init();
+  } catch (e) {
+    console.warn("[theme] plugin slots init failed, degrade to default theme", e);
+  }
+};
+
+if (isElectron) {
+  ensureThemeReady().then(() => {
+    app.mount("#app");
+  });
+} else {
+  // Web 模式：同样在挂载前注册插件主题（后端未就绪时 init 失败被内部 catch，
+  // 主题由 useTheme 运行时补应用），不阻塞首屏
+  ensureThemeReady().then(() => {
+    app.mount("#app");
+  });
+}

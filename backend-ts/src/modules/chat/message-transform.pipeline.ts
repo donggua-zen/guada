@@ -8,8 +8,8 @@
  * - wire 级协议映射留给各 adapter（L3），本层不出现任何协议词汇。
  *
  * 步骤顺序即注册顺序（run() 按 registration order 执行）：
- *   1. image-projection   — 模型不支持图片输入时，image 块 → 带 attachmentId 的占位文本
- *                          （引导模型调用 image_recognize 工具完成视觉识别）
+ *   1. image-projection   — 模型不支持图片输入时，image 块 → 含文件路径的英文占位文本
+ *                          （纯信息占位，不内联 base64、不暗示调用工具；模型可凭路径调用 image_recognize）
  *   2. reasoning-policy   — 思考模式填充缺失摘要 / 非思考模式剥离 reasoning 块
  *   3. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
  */
@@ -45,9 +45,10 @@ export interface TransformStep {
 
 /**
  * 步骤 1：图片投影。
- * 不支持图片输入的模型：image 块 → 确定性占位文本（含 attachmentId），
- * 提示模型可通过 image_recognize 工具按 id 识别图片（工具由 image-recognition
- * 插件在纯文本模型上自动加载）。存储层原样保留 image 块，仅在读取视图投影。
+ * 不支持图片输入的模型：image 块 → 确定性占位文本（含文件路径，英文）。
+ * 纯信息占位，不内联 base64、不暗示调用工具；模型若要识别图片，
+ * 可凭此路径调用 image_recognize 工具（由 image-recognition 插件在纯文本模型上自动加载）。
+ * 存储层原样保留 image 块，仅在读取视图投影。
  */
 export const imageProjectionStep: TransformStep = {
   name: 'image-projection',
@@ -59,13 +60,12 @@ export const imageProjectionStep: TransformStep = {
         ...msg,
         content: msg.content.map((block): ContentBlock => {
           if (block.type !== 'image') return block;
+          const imagePath = block.attachment.url ?? block.attachment.attachmentId;
           return {
             type: 'text',
-            contentId: block.contentId,
             text:
-              `[图片已省略：当前模型仅支持文本输入，无法直接查看图片。` +
-              `如需了解此图片内容，请调用 image_recognize 工具，` +
-              `传入 image_id: ${block.attachment.attachmentId}]`,
+              `[Image omitted: the current model accepts text input only and cannot view images. ` +
+              `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.]`,
           };
         }),
       };
@@ -91,7 +91,7 @@ export const reasoningPolicyStep: TransformStep = {
             ...msg,
             content: [
               ...msg.content,
-              { type: 'reasoning' as const, contentId: '', summary: ' ' },
+              { type: 'reasoning' as const, summary: ' ' },
             ],
           };
         }
@@ -113,15 +113,17 @@ export const reasoningPolicyStep: TransformStep = {
 };
 
 /**
- * 步骤 3：assistant 空 content 兼容。
- * 部分端点（KIMI 等）拒绝空 content 数组，重建为单个 '\n' 文本块。
+ * 步骤 3：空 content 兼容（所有角色）。
+ * 部分端点（OpenAI/KIMI 等）拒绝空 content 数组（400 missing messages.content），
+ * 重建为单个 '\n' 文本块。来源：DISABLED 检查点、reasoning 剥离后的 assistant、
+ * 空 user 消息等——adapter 序列化边界前必须保证每个消息都有有效 content。
  */
 export const emptyContentCompatStep: TransformStep = {
   name: 'empty-content-compat',
   apply(messages) {
     return messages.map((msg) => {
-      if (msg.role === 'assistant' && msg.content.length === 0) {
-        return { ...msg, content: [{ type: 'text', contentId: '', text: '\n' }] };
+      if (msg.content.length === 0) {
+        return { ...msg, content: [{ type: 'text', text: '\n' }] };
       }
       return msg;
     });

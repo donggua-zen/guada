@@ -38,7 +38,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
   it("冷加载修复活跃段坏行：截断 + 未闭合回合合成 interrupted", async () => {
     const s1 = new JsonlMessageService(backend);
     // 写一个未闭合回合（不开 turn/finish）
-    const turnId = await s1.beginTurn(sid);
+    const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
       { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
       { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", contentId: "a1", text: "ans" }] },
@@ -60,14 +60,14 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
 
     // 2) 折叠态：合成的 interrupted turn/finish 已清游标；已交付消息完整保留
     expect(state.currentTurnId).toBeNull();
-    expect(state.messages.map((n) => n.message.id)).toEqual(["u1", "a1"]);
+    expect(state.messages.map((n) => n.id)).toEqual(["u1", "a1"]);
     // 3) seq 连续：合成事件 seq = 最后完整事件 seq + 1
     expect(state.lastProcessedSeq).toBe(events[events.length - 1].seq);
   });
 
   it("无未闭合回合时坏行截断即可，不合成", async () => {
     const s1 = new JsonlMessageService(backend);
-    const turnId = await s1.beginTurn(sid);
+    const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
       { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
     ]);
@@ -86,7 +86,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
     expect(events.some(e => (e.data as any)?.finishReason === "interrupted")).toBe(false);
     // 原回合完整（finish 后游标已清，消息保留）
     expect(state.currentTurnId).toBeNull();
-    expect(state.messages.some((n) => n.message.id === "u1")).toBe(true);
+    expect(state.messages.some((n) => n.id === "u1")).toBe(true);
   });
 
   it("seq 缺口 → 拒绝加载（抛 CorruptSessionLogError）", async () => {

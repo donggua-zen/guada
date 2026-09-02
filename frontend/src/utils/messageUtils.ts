@@ -222,13 +222,52 @@ export function groupContentsForDisplay(
 }
 
 /**
+ * 块是否应隐藏（唯一显隐开关 = metadata.hidden）
+ *
+ * 显隐与形态解耦（P4 修正）：
+ * - 隐藏：仅 metadata.hidden === true（插件注入：TURN_STOPPING 续跑 / 工具图片 / 待办注入）
+ * - 显示：其余全部——真实用户输入 + 队列投递的通知（sub_agent/scheduler/process_monitor，
+ *   P4b 后 source.kind 非 'user'，但仍需展示，形态由 source.kind 区分）
+ * - 无 metadata 的历史数据兜底：kind='model' 即模型工作流注入（隐藏语义的历史近似）
+ *
+ * @param block - 回合内容块（TurnContent 或任意带 metadata/kind 的对象）
+ * @returns true = 应隐藏，不作为用户消息/锚点展示
+ */
+export function isHiddenBlock(
+  block?:
+    | { metadata?: Record<string, any> | null; kind?: string }
+    | Record<string, any>
+    | null,
+): boolean {
+  if (!block) return false;
+  const metadata = (block as any).metadata as Record<string, any> | undefined;
+  if (metadata && metadata.hidden === true) return true;
+  // 无 metadata 的历史数据兜底：kind='model' 即模型工作流注入
+  return (block as any).kind === "model";
+}
+
+/**
+ * 剥离 <system_reminder> 标签，返回内部内容（P5b）
+ *
+ * 通知类消息（process_monitor / sub_agent）的 text 块以
+ * `<system_reminder>...</system_reminder>` 包裹（仅模型面语义），
+ * 前端展示需解析出标签内文本，避免原样渲染标签。无标签时原样返回。
+ */
+export function stripSystemReminder(text: string): string {
+  if (!text) return text;
+  const match = text.match(/<system_reminder>([\s\S]*?)<\/system_reminder>/);
+  return match ? match[1].trim() : text;
+}
+
+/**
  * 从消息内容中提取标题
  * @param message - 消息对象
  * @returns 提取的标题文本
  */
 export function extractMessageTitle(message: Message): string {
-  // 从内容中提取第一行或前50字符
-  const content = message.contents?.[0]?.content || "";
+  // 从内容中提取第一行或前50字符（通知类先剥离 <system_reminder> 标签）
+  const rawContent = message.contents?.[0]?.content || "";
+  const content = stripSystemReminder(rawContent) || rawContent;
   if (!content) return t("chat.message.unnamed");
 
   // 去除 Markdown 标记和空白

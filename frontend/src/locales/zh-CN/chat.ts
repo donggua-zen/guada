@@ -197,6 +197,15 @@ export default {
     executingSteps: '正在执行{n}个步骤',
     executingStepsWithCompleted: '正在执行{n}个步骤,已完成{m}个步骤',
     executedSteps: '已执行{n}个步骤',
+
+    // EventCard.vue 压缩占位
+    contextCompacted: '上下文已压缩',
+    contextCompactedCount: '上下文已压缩 · 折叠 {count} 条消息',
+    collapseSummary: '收起摘要',
+    // TurnItem.vue 通知类折叠（process_monitor / sub_agent）
+    viewProcessOutput: '查看进程输出',
+    viewSubagentResult: '查看子代理结果',
+    collapseOutput: '收起输出',
   },
 
   // ── 消息操作 ──

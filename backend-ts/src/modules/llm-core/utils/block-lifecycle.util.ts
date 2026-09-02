@@ -108,7 +108,6 @@ export class StreamBlockTracker {
       if (lane.type === "tool-call") {
         const block: ContentBlock = {
           type: "tool-call",
-          contentId: "",
           toolCallId: lane.toolCallId || "",
           name: lane.name || "",
           arguments: lane.arguments || "",
@@ -122,8 +121,8 @@ export class StreamBlockTracker {
         index: lane.index,
         block:
           lane.type === "text"
-            ? { type: "text", contentId: "", text: lane.text }
-            : { type: "reasoning", contentId: "", summary: lane.text },
+            ? { type: "text", text: lane.text }
+            : { type: "reasoning", summary: lane.text },
       });
     }
     return chunks;

@@ -164,12 +164,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /** 截断提示（追加到截断后的输出末尾） */
   private static readonly TRUNCATION_REMINDER =
-    "\n<system_reminder>The output above was truncated due to length. The middle portion has been omitted; only the head and tail are shown.</system_reminder>";
+    "\nThe output above was truncated due to length. The middle portion has been omitted; only the head and tail are shown.";
 
   private gcTimer: NodeJS.Timeout | null = null;
 
   /** 检测出的 shell：Windows 优先 Git Bash，否则 cmd.exe；Unix 为 sh/bash */
-  private shellInfo = { kind: "sh" as "bash" | "cmd" | "sh", path: "" as string };
+  private shellInfo = {
+    kind: "sh" as "bash" | "cmd" | "sh",
+    path: "" as string,
+  };
 
   constructor(private readonly chatRunnerService: ChatRunnerService) {}
 
@@ -214,7 +217,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     // 1. 环境变量
     if (process.env.GIT_BASH && fsSync.existsSync(process.env.GIT_BASH)) {
       this.shellInfo = { kind: "bash", path: process.env.GIT_BASH };
-      this.logger.log(`Shell detected: bash (GIT_BASH env) at ${process.env.GIT_BASH}`);
+      this.logger.log(
+        `Shell detected: bash (GIT_BASH env) at ${process.env.GIT_BASH}`,
+      );
       return;
     }
 
@@ -228,8 +233,18 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     // 3. 常见安装路径（兜底）
     const fallbacks = [
-      path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Git", "bin", "bash.exe"),
-      path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+      path.join(
+        process.env["ProgramFiles"] || "C:\\Program Files",
+        "Git",
+        "bin",
+        "bash.exe",
+      ),
+      path.join(
+        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+        "Git",
+        "bin",
+        "bash.exe",
+      ),
     ];
     const found = fallbacks.find((c) => fsSync.existsSync(c));
     if (found) {
@@ -457,11 +472,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     options.abortSignal?.addEventListener("abort", onAbort, { once: true });
 
     try {
-      const pollResult = await this.poll(
-        processId,
-        options.timeout,
-        sessionId,
-      );
+      const pollResult = await this.poll(processId, options.timeout, sessionId);
 
       if (!pollResult) {
         return {
@@ -556,7 +567,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         stdio: "ignore",
       });
       const onFailure = (reason: string) => {
-        this.logger.warn(`taskkill 第 ${attempt} 次失败 (PID ${pid}): ${reason}`);
+        this.logger.warn(
+          `taskkill 第 ${attempt} 次失败 (PID ${pid}): ${reason}`,
+        );
         if (attempt < 2) {
           setTimeout(() => runTaskkill(attempt + 1), 300);
         } else {
@@ -662,9 +675,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * entry 未被消费前一直在内存中，直接从 entry 读取即可。
    * 消息留在队列中，entry 被删除后 isValid() 返回 false，processQueue 自动丢弃。
    */
-  async drainCompleted(
-    sessionId: string,
-  ): Promise<PollResult[]> {
+  async drainCompleted(sessionId: string): Promise<PollResult[]> {
     const results: PollResult[] = [];
 
     for (const entry of this.processes.values()) {
@@ -905,7 +916,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       const tail = safeTail(cleanText, tailLen);
       const notice = `\n[...output truncated, ${charCount} chars total, showing head and tail...]\n`;
       return {
-        output: head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER,
+        output:
+          head + notice + tail + ProcessManagerService.TRUNCATION_REMINDER,
         truncated: true,
       };
     }
@@ -976,7 +988,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-
   // ── 进程结束处理 ──
 
   /**
@@ -1019,32 +1030,28 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     // 读取剩余增量
     const { output, truncated } = await this.readIncrementalOutput(entry);
 
-    const content = `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
-
-    this.logger.debug(`投递系统消息: ${content}`);
+    this.logger.debug(`投递进程完成通知: ${entry.id}`);
     this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
       userId: entry.userId,
-      content,
+      // P5b：只保留 <system_reminder> 包裹的模型面内容（用户文案已移除——
+      // 展示全靠前端解析 source.kind='process_monitor' 渲染为"进程完成"通知样式）。
+      // 输出长度由 readIncrementalOutput 截断 + 日志文件路径兜底。
+      blocks: [
+        {
+          type: "text",
+          text: `<system_reminder>\nBackground process \`${entry.id}\` (${entry.command}) finished with status ${entry.status}${entry.exitCode != null ? `, exit code ${entry.exitCode}` : ""}:\n${output}${truncated ? "\n(output truncated; see log file)" : ""}\nLog file: ${entry.logFilePath}\n</system_reminder>`,
+        },
+      ],
+      // 结构化标识进 source（merge-extensible；systemPayload 已移除）
       source: {
-        type: "process_monitor",
+        kind: "process_monitor",
         processId: entry.id,
         event: entry.status,
-        systemPayload: [
-          {
-            processId: entry.id,
-            command: entry.command,
-            status: entry.status,
-            exitCode: entry.exitCode,
-            output,
-            truncated,
-            logFilePath: entry.logFilePath,
-          },
-        ],
+        exitCode: entry.exitCode,
       },
       isValid: () => this.processes.has(entry.id),
       onConsumed: () => this.cleanupProcess(entry.id, entry.sessionId),
     });
   }
-
 }

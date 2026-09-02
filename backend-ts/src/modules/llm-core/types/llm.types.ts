@@ -18,7 +18,12 @@ export { ToolDefinition, ToolParameterProperty } from "../../tools/interfaces/to
 
 export interface LLMCompletionParams {
   model: string;
-  /** 三层 Message[]（role + source + ContentBlock[]）；adapter 自行按块转各自 wire */
+  /**
+   * 系统提示词文本（envelope，与对话历史分离——对齐 DSH LlmCallConfig.system）。
+   * 协议槽位由 adapter 映射：OpenAI 数组首条 / Anthropic 独立字段 / Gemini systemInstruction。
+   */
+  system?: string;
+  /** 三层 Message[]（role + source + ContentBlock[]）；纯对话历史（surface），不含 system；adapter 自行按块转各自 wire */
   messages: Message[];
   temperature?: number;
   topP?: number; // 原 top_p

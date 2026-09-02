@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { markRaw, defineAsyncComponent } from 'vue'
+import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import {
+  replaceThemesByPlugin,
+  removeThemesByPlugin,
+} from '@/themes'
+import { useTheme } from '@/composables/useTheme'
 
 // 主应用内置组件 import map：'builtin:xxx' 从这里解析
 import ConnectionSettings from '@/components/setting/ConnectionSettings.vue'
@@ -71,19 +77,70 @@ export const usePluginSlots = defineStore('pluginSlots', {
     async init() {
       if (this.initialized) return
       const data = await apiService.getPluginSlots()
-      this.applySlots(data.slots || {})
+      this.applySlots(data.slots || {}, data.themes || [])
       this.initialized = true
       this.watchRefresh()
     },
 
-    applySlots(slots) {
+    applySlots(slots, themes = []) {
       for (const [slot, items] of Object.entries(slots)) {
         for (const item of items) {
           this.prepareExternal(item)
         }
         this.slots[slot] = items.map(markRaw)
       }
+      this.syncThemes(themes)
       this.version++
+    },
+
+    /**
+     * 同步插件主题注册表（后端清单为准，全量 diff）
+     * - 清单内插件：replaceThemesByPlugin 全量替换（rev 变化自然更新 URL）
+     * - 清单外插件（禁用/卸载）：removeThemesByPlugin，若当前生效主题被移除则回退 default
+     */
+    syncThemes(themes) {
+      if (!this._registeredThemePlugins) this._registeredThemePlugins = new Set()
+      const next = new Set(themes.map((t) => t.pluginId).filter(Boolean))
+
+      for (const pluginId of next) {
+        const list = themes
+          .filter((t) => t.pluginId === pluginId)
+          .map((t) => ({
+            info: {
+              id: t.id,
+              name: t.name,
+              primaryColor: t.primaryColor,
+              secondaryColor: t.secondaryColor,
+              mode: t.mode,
+              pluginId: t.pluginId,
+              cssFile: t.cssFile,
+            },
+            cssUrl: this.themeCssUrl(t),
+          }))
+        replaceThemesByPlugin(pluginId, list)
+      }
+
+      const removed = [...this._registeredThemePlugins].filter((p) => !next.has(p))
+      for (const pluginId of removed) {
+        const removedIds = removeThemesByPlugin(pluginId)
+        if (removedIds.length) this.fallbackIfActiveThemeRemoved(removedIds)
+      }
+      this._registeredThemePlugins = next
+    },
+
+    /** 拼插件主题 CSS 完整 URL（与 prepareExternal 同一 base 规则） */
+    themeCssUrl(theme) {
+      const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
+      return `${base}/plugins/${theme.pluginId}/assets/${theme.cssFile}?rev=${theme.rev || ''}`
+    },
+
+    /** 当前生效主题被插件移除时回退 default */
+    fallbackIfActiveThemeRemoved(removedIds) {
+      const { activeThemePreset, setActiveThemePreset } = useTheme()
+      if (removedIds.includes(activeThemePreset.value)) {
+        setActiveThemePreset('default')
+        ElMessage.warning('当前主题已被插件移除，已回退到默认主题')
+      }
     },
 
     prepareExternal(item) {
@@ -106,6 +163,10 @@ export const usePluginSlots = defineStore('pluginSlots', {
           for (const item of this.slots[name]) this.prepareExternal(item)
         }
       }
+      // 同步移除该插件的主题注册；当前生效主题被移除时回退 default
+      const removedIds = removeThemesByPlugin(pluginId)
+      if (removedIds.length) this.fallbackIfActiveThemeRemoved(removedIds)
+      if (this._registeredThemePlugins) this._registeredThemePlugins.delete(pluginId)
       this.version++
     },
 
@@ -117,7 +178,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
           try {
             const data = await apiService.getPluginSlots()
             this.slots = {}
-            this.applySlots(data.slots || {})
+            this.applySlots(data.slots || {}, data.themes || [])
           } catch (e) {
             console.error('[pluginSlots] refresh failed', e)
           }

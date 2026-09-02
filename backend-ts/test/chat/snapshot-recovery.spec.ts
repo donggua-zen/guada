@@ -7,6 +7,7 @@ import { JsonlBackend } from "../../src/common/persistence/jsonl-backend";
 import { JsonlMessageService } from "../../src/common/persistence/jsonl-message.service";
 import { foldEvents, createInitialState } from "../../src/common/persistence/replayer";
 import type { BaseEvent } from "../../src/common/persistence/types";
+import type { Turn } from "../../src/common/types/conversation.types";
 
 let tmpDir: string;
 
@@ -24,7 +25,7 @@ function roundEvents(startSeq: number, roundIdx: number): BaseEvent[] {
   const tid = `t${roundIdx}`;
   return [
     { type: "turn/start", seq: startSeq, time: 1, data: { turnId: tid, kind: "turn", metadata: {} } },
-    { type: "user/message", seq: startSeq + 1, time: 2, data: { messageId: `u${roundIdx}`, kind: "user", content: `q${roundIdx}`, metadata: {} } },
+    { type: "user/message", seq: startSeq + 1, time: 2, data: { messageId: `u${roundIdx}`, kind: "user", blocks: [{ type: "text", contentId: `u${roundIdx}`, text: `q${roundIdx}` }], metadata: {} } },
     { type: "assistant/message", seq: startSeq + 2, time: 3, data: { messageId: `a${roundIdx}`, content: [{ type: "text", contentId: `a${roundIdx}`, text: `ans${roundIdx}` }], metadata: {} } },
     { type: "turn/finish", seq: startSeq + 3, time: 4, data: { turnId: tid, promptTokens: 1, completionTokens: 1, totalTokens: 2, finishReason: "stop" } },
   ] as BaseEvent[];
@@ -83,7 +84,7 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
   async function appendRounds(service: JsonlMessageService, count: number) {
     let seq = await service.getLastProcessedSeq(sid) + 1;
     for (let i = 0; i < count; i++) {
-      const turnId = await service.beginTurn(sid);
+      const { turnId } = await service.beginTurn(sid);
       await service.appendMessages(sid, [
         { id: `u${i}`, role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: `u${i}`, text: `q${i}` }] },
         { id: `a${i}`, role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", contentId: `a${i}`, text: `ans${i}` }] },
@@ -170,5 +171,86 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
     const snap = await s1["backend"].readSnapshot(sid) as { snapshotSeq: number; state: unknown };
     const lastSeq = await s1.getLastProcessedSeq(sid);
     expect(snap.snapshotSeq).toBe(lastSeq);
+  });
+});
+
+describe("importTurns 上下文占用锚点（重建路径）", () => {
+  const sid = "import-anchor-test";
+  let backend: JsonlBackend;
+
+  beforeEach(async () => {
+    backend = new JsonlBackend();
+    if (await backend.hasSession(sid)) await backend.deleteSession(sid);
+    await backend.createSession(sid, { title: "t" });
+  });
+
+  /** 一个回合：user + assistant（metadata.usage 为运行时落库位置） */
+  function turnWithUsage(usage?: any): Turn {
+    return {
+      id: "t1",
+      kind: "turn",
+      metadata: {},
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          kind: "user",
+          source: { kind: "user" },
+          metadata: {},
+          content: [{ type: "text", contentId: "c1", text: "q" }],
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          kind: "model",
+          source: { kind: "model", provider: "p", model: "m" },
+          metadata: usage ? { usage } : {},
+          content: [{ type: "text", contentId: "c2", text: "a" }],
+        },
+      ],
+      visible: true,
+    };
+  }
+
+  it("turn/finish 携带 usedTokens（回合 usage）+ effectiveContextWindow（opts）", async () => {
+    const store = new JsonlMessageService(backend);
+    const { imported } = await store.importTurns(sid, [turnWithUsage({
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    })], { effectiveContextWindow: 1000000 });
+    expect(imported).toBe(2);
+    const events = await backend.getAllEvents(sid);
+    const finish = events.find((e) => e.type === "turn/finish");
+    expect(finish?.data).toMatchObject({
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      usedTokens: 150,
+      effectiveContextWindow: 1000000,
+    });
+  });
+
+  it("无窗口 opts → 不写 effectiveContextWindow（usedTokens 仍写）", async () => {
+    const store = new JsonlMessageService(backend);
+    await store.importTurns(sid, [turnWithUsage({
+      promptTokens: 60,
+      completionTokens: 20,
+    })]);
+    const events = await backend.getAllEvents(sid);
+    const finish = events.find((e) => e.type === "turn/finish");
+    expect((finish?.data as any)?.usedTokens).toBe(80); // 60 + 20
+    expect((finish?.data as any)?.effectiveContextWindow).toBeUndefined();
+  });
+
+  it("无 provider usage → turn/finish 用累计 surface 启发式锚点", async () => {
+    const store = new JsonlMessageService(backend);
+    // user 'q'(1字符) + assistant 'a'(1字符) → ceil(1/4)+ceil(1/4) = 2
+    await store.importTurns(sid, [turnWithUsage(undefined)]);
+    const events = await backend.getAllEvents(sid);
+    const finish = events.find((e) => e.type === "turn/finish");
+    expect(finish).toBeDefined();
+    expect((finish?.data as any)?.usedTokens).toBe(2);
+    expect((finish?.data as any)?.promptTokens).toBe(0);
   });
 });

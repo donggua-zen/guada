@@ -115,6 +115,8 @@ export class GeminiAdapter implements IProtocolAdapter {
       generationConfig: this.buildGenerationConfig(params),
       safetySettings: this.getSafetySettings(),
       tools,
+      // system 为请求 envelope 独立字段 → Gemini systemInstruction 槽
+      ...(params.system ? { systemInstruction: params.system } : {}),
     });
 
     const chatHistory = await this.formatMessages(params.messages.slice(0, -1));

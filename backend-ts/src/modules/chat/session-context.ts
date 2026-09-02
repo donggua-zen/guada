@@ -167,23 +167,18 @@ export interface ISessionContext {
   /** 初始化：加载历史消息、恢复压缩状态 */
   initialize(): Promise<void>;
   /**
-   * 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史），返回三层 Message[]。
+   * 获取对话历史消息列表（surface，不含 system 提示词）。
+   * 系统提示词走 getSystemText()（envelope，与历史分离——对齐 DSH）。
    *
-   * ⚠️ 禁止在插件中调用，否则会导致无限递归！插件应使用 getHistory()
-   */
-  getMessages(options?: GetMessagesOptions): Promise<Message[]>;
-  /**
-   * 获取原始的对话历史消息列表（不含 system prompt / 摘要 / 插件提示词）。
-   *
-   * 与 getMessages() 的区别：
-   * - getMessages() 返回完整消息列表（含 system prompt），禁止在插件中调用
-   * - getHistory() 只返回 raw conversation messages，可在插件中安全使用
-   *
-   * 返回的数组是浅拷贝，修改不会影响内部状态。
+   * 返回的数组是共享快照引用（只读契约），消费方禁止就地修改。
    */
   getHistory(): Promise<Message[]>;
+  /** 系统提示词文本（envelope；请求组装经 builder 消费） */
+  getSystemText(): string;
   /** 追加一次 LLM 调用/注入到历史并持久化（Message[]，三层） */
   appendMessages(messages: Message[]): Promise<void>;
+  /** 插件注入一条隐藏 user 消息（落库成为历史；kind='model' + source.plugin + metadata.hidden） */
+  injectUserPrompt(content: string, plugin: string): Promise<void>;
   /**
    * 持久化待保存的消息。
    *
@@ -213,6 +208,8 @@ export interface ISessionContext {
   /**
    * 追加用户消息:写 user/message(后于 turn/start),不建回合外壳、不返回三层结构。
    * 返回用户消息(三层 Message),供 agent-engine 广播 user_message 事件。
+   * @param options.blocks 原生内容块（S2：结构化入站消息，存在时优先于 content/files 构造）
+   * @param options.source 显式消息来源（P4b：队列投递写入；缺省折叠时按 kind 推导）
    */
   addUserMessage(
     content: string,
@@ -221,11 +218,15 @@ export interface ISessionContext {
       replaceTurnId?: string;
       knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
+      blocks?: import('../../common/types/conversation.types').ContentBlock[];
+      source?: import('../../common/types/conversation.types').MessageSource;
     },
   ): Promise<{ messageId: string; userMessage: any }>;
 
-  /** 生成唯一 ID */
+  /** 生成唯一 ID（通用：attachmentId/turnId 等非消息 id） */
   generateId(): string;
+  /** 生成下一个有序消息 id（m_<ULID>，按时间单调；遮蔽分界点标记依据） */
+  generateMessageId(): string;
   /** 获取当前 Token 计数（当前视图按需估算，provider 真值锚点 + 启发式增量） */
   getTokenCount(): Promise<number>;
   /** 获取细粒度 Token 统计（系统提示词/摘要/用户提示/历史/工具定义，按需计算） */

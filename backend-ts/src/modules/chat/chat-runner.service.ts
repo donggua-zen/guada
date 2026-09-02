@@ -9,6 +9,7 @@ import {
 } from "../../common/events/stream.events";
 import { ISessionContext } from "./session-context";
 import { MessageFile } from "../../common/persistence/types";
+import type { ContentBlock } from "../../common/types/conversation.types";
 import { EventBusService } from "../../common/events/event-bus.service";
 
 /**
@@ -21,14 +22,52 @@ export interface StreamCallbacks {
 }
 
 /**
+ * 队列消息来源（P4a：与 Message.source.kind 同一词汇；kind 为合并分组键）
+ *
+ * 约定：投递方必须用 kind 而非 type 标记来源，与三层消息的 MessageSource 对齐；
+ * 附加业务字段（parseResult 等）经索引签名保留。
+ */
+export type QueueSource =
+  | { kind: "sub_agent"; subSessionId?: string; agentName?: string; [key: string]: any }
+  | { kind: "scheduler"; schedulerId?: string; dryRun?: boolean; [key: string]: any }
+  | { kind: "process_monitor"; processId?: string; event?: string; [key: string]: any };
+
+/**
+ * QueueSource → MessageSource（P4b：队列来源真正进入三层消息的 source）
+ *
+ * 仅映射有明确语义的非用户来源；未识别 kind（含缺省）→ undefined，
+ * 折叠时走默认 kind='user'（即真实用户输入）。
+ */
+export function toMessageSource(
+  source: Record<string, any> | undefined,
+): import("../../common/types/conversation.types").MessageSource | undefined {
+  const kind = source?.kind as string | undefined;
+  switch (kind) {
+    case "sub_agent":
+      return {
+        kind: "sub_agent",
+        subSessionId: source.subSessionId,
+        agentName: source.agentName ?? source.subAgentName,
+      };
+    case "scheduler":
+      return { kind: "scheduler", schedulerId: source.schedulerId };
+    case "process_monitor":
+      return { kind: "process_monitor", processId: source.processId };
+    default:
+      return undefined;
+  }
+}
+
+/**
  * 队列消息项
  */
 export interface QueueItem {
   id: string;
   sessionId: string;
   userId: string;
-  content: string;
-  source: Record<string, any>;
+  /** 原生内容块（S2：结构化入站消息统一载体；文本即 text 块） */
+  blocks: ContentBlock[];
+  source: QueueSource;
   createdAt: Date;
   callbacks?: StreamCallbacks;
   /** 有效性检查：返回 false 时 processQueue 丢弃此消息 */
@@ -90,6 +129,10 @@ export class ChatRunnerService {
       userMessage?: {
         id?: string;
         content?: string;
+        /** 原生内容块（S2：结构化入站消息，存在时优先于 content 构造） */
+        blocks?: ContentBlock[];
+        /** 三层消息来源（P4b：队列投递显式写入；缺省按 kind 推导） */
+        source?: import("../../common/types/conversation.types").MessageSource;
         files?: MessageFile[];
         replaceTurnId?: string;
         knowledgeBaseIds?: string[];
@@ -212,19 +255,21 @@ export class ChatRunnerService {
   async enqueueMessage(params: {
     sessionId: string;
     userId: string;
-    content: string;
-    source: Record<string, any>;
+    /** 原生内容块（S2：结构化入站消息统一载体；文本即 [{type:'text',text}]） */
+    blocks: ContentBlock[];
+    /** 队列消息来源（P4a：kind 风格，与 Message.source.kind 同一词汇） */
+    source: QueueSource;
     callbacks?: StreamCallbacks;
     isValid?: () => boolean;
     onConsumed?: () => void;
   }): Promise<void> {
-    const { sessionId, userId, content, source, callbacks, isValid, onConsumed } = params;
+    const { sessionId, userId, blocks, source, callbacks, isValid, onConsumed } = params;
 
     const queueItem: QueueItem = {
       id: `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       sessionId,
       userId,
-      content,
+      blocks,
       source,
       createdAt: new Date(),
       callbacks,
@@ -286,12 +331,12 @@ export class ChatRunnerService {
 
       if (state.items.length === 0) return;
 
-      // 提取队首连续同来源的消息进行合并
-      const firstSourceType = state.items[0].source.type;
+      // 提取队首连续同来源的消息进行合并（P4a：按 source.kind 分组）
+      const firstSourceKind = state.items[0].source.kind;
       const batch: QueueItem[] = [];
       while (
         state.items.length > 0 &&
-        state.items[0].source.type === firstSourceType
+        state.items[0].source.kind === firstSourceKind
       ) {
         batch.push(state.items.shift()!);
       }
@@ -384,38 +429,37 @@ export class ChatRunnerService {
     const firstItem = items[0];
     const sessionId = firstItem.sessionId;
     const userId = firstItem.userId;
-    const sourceType = firstItem.source.type;
+    const sourceKind = firstItem.source.kind;
 
     if (items.length === 1) {
       this.logger.log(
-        `执行队列消息: ${firstItem.id}, 来源: ${sourceType}, 会话: ${sessionId}`,
+        `执行队列消息: ${firstItem.id}, 来源: ${sourceKind}, 会话: ${sessionId}`,
       );
     } else {
       this.logger.log(
-        `执行队列消息(合并${items.length}条): 来源: ${sourceType}, 会话: ${sessionId}`,
+        `执行队列消息(合并${items.length}条): 来源: ${sourceKind}, 会话: ${sessionId}`,
       );
     }
 
-    // 合并内容：多条消息用换行分隔
-    const mergedContent = items.map((item) => item.content).join("\n");
-
-    // 合并 source，systemPayload 数组拼接，其他字段保留第一条
-    const mergedSystemPayload = items.flatMap(
-      (item) => item.source?.systemPayload || [],
+    // 合并内容块：扁平拼接 + 相邻 text 块合并（保持原"多条消息换行分隔"语义）
+    const mergedBlocks = mergeAdjacentTextBlocks(
+      items.flatMap((item) => item.blocks),
     );
+
+    // 合并 source：其他字段保留第一条（P5：systemPayload 已移除，业务数据统一在 blocks）
     // 合并 parseResult：取最后一个（最新）有 parseResult 的 source
     const lastParseResult = [...items]
       .reverse()
       .find((item) => item.source?.parseResult)?.source?.parseResult;
     const mergedSource = {
       ...firstItem.source,
-      systemPayload:
-        mergedSystemPayload.length > 0 ? mergedSystemPayload : undefined,
       parseResult: lastParseResult || undefined,
       queueItemCount: items.length,
       queueItemIds: items.map((item) => item.id),
       queuedAt: firstItem.createdAt.toISOString(),
     };
+    // P4b：队列来源 → 三层消息 source（sub_agent/scheduler/process_monitor 显式写入）
+    const messageSource = toMessageSource(mergedSource);
 
     // 取第一个带回调的项作为执行回调（合并场景下只取一个，避免重复触发）
     const callbacks = items.find((item) => item.callbacks)?.callbacks;
@@ -426,7 +470,8 @@ export class ChatRunnerService {
           sessionId,
           userId,
           userMessage: {
-            content: mergedContent,
+            blocks: mergedBlocks,
+            ...(messageSource ? { source: messageSource } : {}),
           },
           regenerationMode: "overwrite",
           source: mergedSource,
@@ -578,4 +623,21 @@ export class ChatRunnerService {
       }
     }
   }
+}
+
+/**
+ * 合并相邻 text 块（换行分隔），保持"多条队列消息合并为一条连贯文本"的语义。
+ * 非 text 块（图片/文件等）原样保留，作为 text 之间的天然分隔。
+ */
+function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  const out: ContentBlock[] = [];
+  for (const block of blocks) {
+    const last = out[out.length - 1];
+    if (block.type === "text" && last?.type === "text") {
+      last.text = last.text ? `${last.text}\n${block.text}` : block.text;
+    } else {
+      out.push({ ...block });
+    }
+  }
+  return out;
 }

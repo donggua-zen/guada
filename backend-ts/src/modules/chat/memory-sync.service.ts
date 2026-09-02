@@ -16,7 +16,7 @@ import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { LLMService } from "../llm-core/llm.service";
 import { BlockAssembler } from "./block-assembler";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
-import { SummaryMode } from "./compression-engine";
+import { SummaryMode } from "./compaction/compression-engine";
 import {
   HOOKS,
   type BeforeCompactionPayload,
@@ -66,7 +66,7 @@ export class MemorySyncService {
     sessionContext.setToolScope("memory");
     try {
       // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
-      const messages = await sessionContext.getMessages();
+      const messages = await sessionContext.getHistory();
       const shadowMessages: Message[] = [];
 
       const modelConfig = sessionContext.getModelConfig();
@@ -109,8 +109,9 @@ Scan history. ONLY trigger an update if:
 </system>`,
       ];
 
+      const shadowUserMessageId = sessionContext.generateMessageId();
       shadowMessages.push({
-        id: sessionContext.generateId(),
+        id: shadowUserMessageId,
         role: "user",
         kind: "user",
         source: { kind: "user" },
@@ -118,7 +119,6 @@ Scan history. ONLY trigger an update if:
         content: [
           {
             type: "text",
-            contentId: sessionContext.generateId(),
             text: instructionParts.join("\n"),
           },
         ],
@@ -142,8 +142,9 @@ Scan history. ONLY trigger an update if:
           }
           const shadowBlocks = shadowAssembler.blocks();
 
+          const shadowAssistantId = sessionContext.generateMessageId();
           shadowMessages.push({
-            id: sessionContext.generateId(),
+            id: shadowAssistantId,
             role: "assistant",
             kind: "model",
             source: { kind: "model", provider: "", model: modelConfig.modelName || "" },
@@ -173,8 +174,9 @@ Scan history. ONLY trigger an update if:
             sessionContext,
           );
           for (const r of responses) {
+            const shadowToolResultId = sessionContext.generateMessageId();
             shadowMessages.push({
-              id: sessionContext.generateId(),
+              id: shadowToolResultId,
               role: "tool",
               kind: "model",
               source: { kind: "tool", toolCallId: r.toolCallId },
@@ -182,7 +184,6 @@ Scan history. ONLY trigger an update if:
               content: [
                 {
                   type: "tool-result",
-                  contentId: sessionContext.generateId(),
                   toolCallId: r.toolCallId,
                   name: r.name,
                   content: r.content,

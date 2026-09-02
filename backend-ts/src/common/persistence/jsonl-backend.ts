@@ -79,7 +79,37 @@ export class JsonlBackend implements PersistenceBackend {
     const dir = this.getSessionDir(sessionId);
     await fs.mkdir(dir, { recursive: true });
 
-    // 初始化 manifest（包含初始活跃段）
+    // 初始化活跃段（内存态）
+    this.activeSegments.set(sessionId, {
+      file: 'seg-0000.jsonl',
+      startSeq: 0,
+      endSeq: null,
+      compactionCount: 0,
+      bytes: 0,
+    });
+
+    // 写入 session/init 事件（'wx' 独占创建，幂等）：
+    // - 文件已存在（并发兜底 / 半初始化恢复 / 重建 manifest）→ EEXIST 跳过，绝不重复写：
+    //   重复的 seq=0 init 会被 seq 连续性校验判为缺口，会话将永久无法加载；
+    // - 独占创建本身即原子检查点：即使调用方未串行化，也只有一个调用者能写出 init。
+    const segPath = this.getSegmentPath(sessionId, 'seg-0000.jsonl');
+    const initLine =
+      JSON.stringify({
+        type: 'session/init',
+        seq: 0,
+        time: Date.now(),
+        data: { sessionId, title: meta?.title ?? '新对话' },
+      }) + '\n';
+    try {
+      await fs.writeFile(segPath, initLine, { flag: 'wx', encoding: 'utf-8' });
+      const seg = this.activeSegments.get(sessionId);
+      if (seg) seg.bytes = Buffer.byteLength(initLine, 'utf-8');
+    } catch (e: any) {
+      if (e?.code !== 'EEXIST') throw e;
+    }
+
+    // manifest 最后写：hasSession()（= manifest 存在）为 true 时保证 init 已落盘，
+    // 消除“manifest 在而 init 缺失”的半初始化窗口
     const initialSeg: SegmentMeta = {
       file: 'seg-0000.jsonl',
       startSeq: 0,
@@ -94,23 +124,6 @@ export class JsonlBackend implements PersistenceBackend {
       compactionBoundaries: [],
     };
     await this.writeManifest(sessionId, manifest);
-
-    // 初始化活跃段
-    this.activeSegments.set(sessionId, {
-      file: 'seg-0000.jsonl',
-      startSeq: 0,
-      endSeq: null,
-      compactionCount: 0,
-      bytes: 0,
-    });
-
-    // 写入 session/init 事件
-    await this.appendEvent(sessionId, {
-      type: 'session/init',
-      seq: 0,
-      time: Date.now(),
-      data: { sessionId, title: meta?.title ?? '新对话' },
-    });
   }
 
   async getSession(sessionId: string): Promise<SessionMeta | null> {
@@ -587,9 +600,10 @@ export class JsonlBackend implements PersistenceBackend {
   }
 
   /**
-   * 记录一次 compaction（达到阈值后自动分卷）
+   * 记录一次 compaction（达到阈值后自动分卷）。
+   * 仅记录边界 seq（compactionBoundaries 只写不读，遮蔽信息由事件流承载，不在此重复）。
    */
-  async recordCompaction(sessionId: string, shadowedMessageIds?: string[]): Promise<void> {
+  async recordCompaction(sessionId: string): Promise<void> {
     const seg = this.activeSegments.get(sessionId);
     if (!seg) return;
 
@@ -599,7 +613,6 @@ export class JsonlBackend implements PersistenceBackend {
     if (manifest) {
       manifest.compactionBoundaries.push({
         seq: await this.getNextSeq(sessionId),
-        ...(shadowedMessageIds ? { shadowedMessageIds } : {}),
       });
       await this.writeManifest(sessionId, manifest);
     }

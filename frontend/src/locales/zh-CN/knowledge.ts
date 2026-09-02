@@ -8,6 +8,7 @@ export default {
     processing: '处理中',
     completed: '已完成',
     failed: '失败',
+    unknownError: '未知错误，可尝试重新处理',
     queuedShort: '排队中',
     uploadedShort: '已上传',
   },

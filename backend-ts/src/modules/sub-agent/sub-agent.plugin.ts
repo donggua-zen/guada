@@ -96,6 +96,12 @@ The sub-agent has its own independent conversation context and tool capabilities
           .describe(
             "Execution mode: foreground=wait for completion (default), background=run in background and return immediately",
           ),
+        lifecycle: z
+          .enum(["persist", "one_shot"])
+          .optional()
+          .describe(
+            'Sub-agent lifecycle: one_shot (default) = the sub-session is automatically closed and deleted once its result is delivered, no close call needed; persist = keep the session for further interaction (send_message), must be closed manually with subagent_manager close',
+          ),
       }),
       execute: async (args, ctx, abortSignal) => {
         // 校验 agentId 是否被允许
@@ -105,8 +111,10 @@ The sub-agent has its own independent conversation context and tool capabilities
           );
         }
 
+        const lifecycle = args.lifecycle || "one_shot";
+
         this.logger.log(
-          `创建子 Agent: ${args.name}, 父会话: ${ctx?.session.sessionId}`,
+          `创建子 Agent: ${args.name}, 父会话: ${ctx?.session.sessionId}, 模式: ${args.mode || "foreground"}, 生命周期: ${lifecycle}`,
         );
         const result = await this.subAgentManager.spawn(
           {
@@ -114,6 +122,7 @@ The sub-agent has its own independent conversation context and tool capabilities
             name: args.name,
             task: args.task,
             characterId: args.agentId,
+            lifecycle,
           },
           args.mode || "foreground",
           abortSignal,
@@ -124,10 +133,14 @@ The sub-agent has its own independent conversation context and tool capabilities
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
+        // one_shot 模式下会话已在结果交付后自动删除，不再返回 Session ID，
+        // 避免 AI 对已删除的会话调用 close / send_message
         const tag =
           result.status === "error"
-            ? `[Sub-agent ended with error. Session ID: ${result.subSessionId}${result.error ? `. Reason: ${result.error}` : ""}]`
-            : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
+            ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}${lifecycle === "one_shot" ? ". One-shot sub-agent auto-closed." : `. Session ID: ${result.subSessionId}`}]`
+            : lifecycle === "one_shot"
+              ? "[Sub-agent completed and auto-closed (one_shot).]"
+              : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
         parts.push(tag);
         return parts.join("\n");
       },
@@ -317,7 +330,7 @@ The sub-agent has its own independent conversation context and tool capabilities
           "",
           "### 5. Critical Operational Guidelines (Cautions)",
           "   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.",
-          "   - Resource release: Once a sub-task finishes and no further interaction with that sub-agent is required, you must immediately call close to release session resources in a timely manner.",
+          "   - Resource release: Sub-agents are one_shot by default: the sub-session is automatically closed and deleted once its result is delivered to you, so no close call is needed. Only if you explicitly spawned with lifecycle \"persist\" and the task has finished with no further interaction required, you must immediately call close to release session resources in a timely manner.",
           "   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.",
         ];
 

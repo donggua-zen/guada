@@ -163,12 +163,17 @@ export class TaskExecutorService {
     // 更新日志中的会话 ID
     await this.storage.updateLog(log.id, { sessionId });
 
-    // 投递到 ChatRunnerService 队列
+    // 投递到 ChatRunnerService 队列（S2：结构化入站消息统一载体，文本即 text 块）
     await this.chatRunner.enqueueMessage({
       sessionId,
       userId: task.userId,
-      content: task.prompt,
-      source: { type: "scheduler", schedulerId: task.id },
+      blocks: [
+        {
+          type: "text",
+          text: task.prompt,
+        },
+      ],
+      source: { kind: "scheduler", schedulerId: task.id },
     });
 
     this.logger.log(`任务已投递到消息队列: ${task.name}`);
@@ -210,8 +215,13 @@ export class TaskExecutorService {
     await this.chatRunner.enqueueMessage({
       sessionId,
       userId: task.userId,
-      content: task.prompt,
-      source: { type: "scheduler", schedulerId: task.id, dryRun: true },
+      blocks: [
+        {
+          type: "text",
+          text: task.prompt,
+        },
+      ],
+      source: { kind: "scheduler", schedulerId: task.id, dryRun: true },
     });
 
     this.logger.log(`测试任务已投递到消息队列: ${task.name}`);

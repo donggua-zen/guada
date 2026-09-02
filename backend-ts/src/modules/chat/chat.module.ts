@@ -25,7 +25,7 @@ import { WorkspaceWatcherService } from "../../common/services/workspace-watcher
 import { ChatRunnerService } from "./chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { JsonlSessionContextFactory } from "./jsonl-session-context.factory";
-import { CompressionEngine } from "./compression-engine";
+import { CompressionEngine } from "./compaction/compression-engine";
 import { TokenMeterService } from "./token-meter.service";
 import { MemorySyncService } from "./memory-sync.service";
 import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";

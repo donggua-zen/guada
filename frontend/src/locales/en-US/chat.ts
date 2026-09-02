@@ -197,6 +197,15 @@
     executingSteps: 'Executing {n} steps',
     executingStepsWithCompleted: 'Executing {n} steps, {m} completed',
     executedSteps: '{n} steps executed',
+
+    // EventCard.vue compaction placeholder
+    contextCompacted: 'Context compacted',
+    contextCompactedCount: 'Context compacted · {count} messages folded',
+    collapseSummary: 'Collapse summary',
+    // TurnItem.vue notification fold (process_monitor / sub_agent)
+    viewProcessOutput: 'View process output',
+    viewSubagentResult: 'View sub-agent result',
+    collapseOutput: 'Collapse output',
   },
 
   // ── 消息操作 ──

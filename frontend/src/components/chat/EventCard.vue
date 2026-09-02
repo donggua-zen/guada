@@ -22,19 +22,17 @@
 
     <!-- 压缩摘要事件 -->
     <div v-else-if="eventType === 'compaction'" class="event-card__compaction">
-      <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
-        <el-icon size="12" class="mr-1">
-          <Archive20Regular v-if="!expanded" />
-          <ArrowUp16Regular v-else />
-        </el-icon>
-        <span class="text-xs text-gray-400 dark:text-gray-500">
-          {{
-            expanded
-              ? "收起摘要"
-              : `上下文已压缩 · 折叠 ${shadowedCount} 条消息`
-          }}
-        </span>
-      </button>
+      <div class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
+          <el-icon size="13">
+            <Archive20Regular v-if="!expanded" />
+            <ArrowUp16Regular v-else />
+          </el-icon>
+          <span class="event-card__compaction-text">{{ compactLabel }}</span>
+        </button>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
       <div v-if="expanded && summaryText" class="event-card__summary">
         {{ summaryText }}
       </div>
@@ -49,6 +47,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
 
 const props = defineProps<{
@@ -56,16 +55,29 @@ const props = defineProps<{
   event?: Record<string, any> | null;
 }>();
 
+const { t } = useI18n();
 const expanded = ref(false);
 
 const eventType = computed(() => props.event?.metadata?.eventType ?? "");
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
 const outcome = computed(() => props.event?.metadata?.commandOutcome ?? null);
 const compactInfo = computed(() => props.event?.metadata?.compactInfo ?? null);
-const shadowedCount = computed(() => compactInfo.value?.shadowedMessageIds?.length ?? 0);
+const shadowedCount = computed(
+  () =>
+    compactInfo.value?.shadowedCount ??
+    compactInfo.value?.shadowedMessageIds?.length ??
+    0,
+);
 const summaryText = computed(
   () => compactInfo.value?.summary ?? props.event?.metadata?.summary ?? "",
 );
+
+const compactLabel = computed(() => {
+  if (expanded.value) return t("chat.turn.collapseSummary");
+  return shadowedCount.value > 0
+    ? t("chat.turn.contextCompactedCount", { count: shadowedCount.value })
+    : t("chat.turn.contextCompacted");
+});
 
 const outcomeLabel = computed(() => {
   if (!outcome.value) return "";
@@ -97,9 +109,26 @@ const outcomeClass = computed(() => {
     whitespace-pre-wrap break-words border border-gray-200/60 dark:border-gray-700/60;
 }
 
+.event-card__divider {
+  @apply flex items-center gap-3 select-none;
+}
+
+.event-card__line {
+  @apply h-px flex-1;
+}
+.event-card__line--left {
+  @apply bg-gradient-to-r from-transparent to-gray-200 dark:to-gray-700/60;
+}
+.event-card__line--right {
+  @apply bg-gradient-to-l from-transparent to-gray-200 dark:to-gray-700/60;
+}
+
 .event-card__compaction-btn {
-  @apply flex items-center gap-1 rounded-full px-2.5 py-1 text-gray-400 dark:text-gray-500
-    hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-500 dark:hover:text-gray-400 transition-colors;
+  @apply flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-gray-400 dark:text-gray-500
+    hover:bg-gray-100/70 dark:hover:bg-gray-800/50 hover:text-gray-500 dark:hover:text-gray-400 transition-colors;
+}
+.event-card__compaction-text {
+  @apply text-xs tracking-wide;
 }
 </style>
 

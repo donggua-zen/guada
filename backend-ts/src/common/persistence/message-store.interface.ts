@@ -25,11 +25,10 @@ import type { SessionMeta } from './types';
 /** LLM 上下文加载参数（存储层只做纯投影；模型能力相关变换由 chat 层 L1 管线完成） */
 export interface ContextLoadParams {
   sessionId: string;
-  /** 游标：只加载到此轮次为止（含该轮次） */
-  anchorTurnId?: string;
+  /** 只取最近 N 条（会话标题生成等用途）；缺省返回全部 */
   maxMessages?: number;
+  /** 是否保留 reasoning 内容（思考模式） */
   keepReasoningContent?: boolean;
-  lastCompactedTurnId?: string;
 }
 
 /** 轮次完成信息（usage/耗时/finishReason/error） */
@@ -39,6 +38,10 @@ export interface TurnFinish {
   finishReason?: string;
   errorDetail?: unknown;
   modelName?: string;
+  /** 回合结束后当前完整请求 token（envelope + 可见视图；前端上下文占用的持久化锚点） */
+  usedTokens?: number;
+  /** 有效上下文窗口（与 usedTokens 配套） */
+  effectiveContextWindow?: number;
 }
 
 /** 编辑轮次（版本切换 / 内容编辑） */
@@ -49,12 +52,6 @@ export interface TurnUpdate {
 }
 
 /** 单块懒加载详情（工具调用参数+结果） */
-export interface BlockDetail {
-  blockId: string;
-  turnId: string;
-  block: ContentBlock;
-}
-
 // ============================================================================
 // 消息存储统一接口
 // ============================================================================
@@ -62,16 +59,18 @@ export interface BlockDetail {
 export interface IMessageStore {
   // ─── 读取 ───
   /** 懒加载：单块的工具调用详情 */
-  getBlockDetails(sessionId: string, blockId: string): Promise<BlockDetail | null>;
   /** LLM 上下文：扁平消息 surface → 可见 Message[]（adapter 输入） */
   loadContext(params: ContextLoadParams): Promise<Message[]>;
   /** 该会话最后一条已落盘事件的 seq（广播/增量同步去重游标） */
   getLastProcessedSeq(sessionId: string): Promise<number>;
 
   // ─── 写入 ───
+  // 版本号契约：revision 由写入方在写入时随返回值原子给出（本批次最后事件的 seq），
+  // 消费方绝不事后查询 getLastProcessedSeq——写入与查询之间的并发写会让
+  // "事后查询的 revision"假领先于消费方持有的视图（静默丢消息）。
+
   /**
    * 开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
-   * 返回回合 turnId,作为后续 appendMessages / finalizeTurn 的归属游标。
    * @param options.replaceTurnId 整轮次重答:先遮蔽旧轮次,再开新回合
    */
   beginTurn(
@@ -80,10 +79,12 @@ export interface IMessageStore {
       replaceTurnId?: string;
       preGenTurnId?: string;
     },
-  ): Promise<string>;
+  ): Promise<{ turnId: string; revision: number }>;
   /**
    * 追加用户消息:写 user/message(后于 turn/start,归属由当前回合括号界定)。
-   * 返回用户消息(三层 Message,供广播 user_message 事件与内存历史)。
+   * 返回用户消息(三层 Message,供广播 user_message 事件)与写入后版本号。
+   * @param options.blocks 原生内容块（S2：结构化入站消息，存在时优先于 content/files 构造）
+   * @param options.source 显式消息来源（P4b：队列投递写入；缺省折叠时按 kind 推导）
    */
   addUserMessage(
     sessionId: string,
@@ -93,18 +94,27 @@ export interface IMessageStore {
       replaceTurnId?: string;
       knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
+      blocks?: import('../types/conversation.types').ContentBlock[];
+      source?: import('../types/conversation.types').MessageSource;
     },
-  ): Promise<{ messageId: string; userMessage: Message }>;
+  ): Promise<{ messageId: string; userMessage: Message; revision: number }>;
 
-  /** 追加一次 LLM 调用/注入（Message[]，含 ContentBlock[]） */
-  appendMessages(sessionId: string, messages: Message[]): Promise<void>;
-  /** 完成一个轮次外壳：写 usage/耗时/finishReason/error */
+  /**
+   * 追加一次 LLM 调用/注入（Message[]，含 ContentBlock[]）。
+   * @returns added = 本次实际折叠出的权威节点（fold 后对象），供调用方 O(k) 增量复用；
+   *          revision = 写入后版本号（写入时确定）。
+   */
+  appendMessages(
+    sessionId: string,
+    messages: Message[],
+  ): Promise<{ added: Message[]; revision: number }>;
+  /** 完成一个轮次外壳：写 usage/耗时/finishReason/error。@returns 写入后版本号 */
   finalizeTurn(
     sessionId: string,
     turnId: string,
     durationMs: number,
     finish: TurnFinish,
-  ): Promise<void>;
+  ): Promise<number>;
   /** 编辑轮次：内容编辑（追加 message/prune 记录新内容） */
   updateTurn(
     sessionId: string,
@@ -115,11 +125,17 @@ export interface IMessageStore {
   deleteTurn(sessionId: string, turnId: string): Promise<void>;
   /** 清空会话全部轮次 */
   clearSessionTurns(sessionId: string): Promise<void>;
-  /** 批量导入轮次 */
-  importTurns(sessionId: string, turns: Turn[]): Promise<{ imported: number }>;
+  /** 批量导入轮次（重建/导入路径）。
+   *  @param opts.effectiveContextWindow 会话模型的有效上下文窗口——传入时 turn/finish 携带
+   *    上下文占用锚点（usedTokens 取回合 usage 的 provider 报告值），供前端逆向扫描免 REST */
+  importTurns(
+    sessionId: string,
+    turns: Turn[],
+    opts?: { effectiveContextWindow?: number },
+  ): Promise<{ imported: number }>;
 
   // ─── 压缩写入（统一 CompressionEngine 只经此读写，后端无关）───
-  /** 一级压缩（裁剪）：只裁剪超长内容，不改可见性 */
+  /** 一级压缩（裁剪）：只裁剪超长内容，不改可见性。@returns 写入后版本号（revision） */
   appendPrune(
     sessionId: string,
     data: {
@@ -130,19 +146,38 @@ export interface IMessageStore {
       /** 影子价格：被裁剪内容的估算 token 数 */
       prunedTokens?: number;
     },
-  ): Promise<void>;
-  /** 二级压缩（摘要）：遮蔽一批轮次 + 写摘要（compaction 括号事件） */
+  ): Promise<number>;
+  /** 二级压缩（摘要）：遮蔽头部连续前缀 + 写摘要（compaction 括号事件）。
+   *  @returns 摘要消息 id + 写入后版本号 + 折叠后的摘要节点（供快照播种） */
   appendCompact(
     sessionId: string,
     data: {
-      shadowedMessageIds: string[];
+      /** 遮蔽末位（分界点）消息 id——前端标记"已压缩"的唯一依据 */
+      shadowedEndId: string;
+      /** 遮蔽消息条数 */
+      shadowedCount: number;
       summary: string;
       summaryMessageId?: string;
       mode?: string;
       /** 摘要调用 usage（流式累积，对齐 DSH SummaryResult） */
       usage?: import('../types/stream-chunk.types').StreamUsage;
+      /** 压缩后完整请求 token（compaction/end 携带，前端上下文占用锚点） */
+      usedTokens?: number;
+      /** 有效上下文窗口（与 usedTokens 配套） */
+      effectiveContextWindow?: number;
     },
-  ): Promise<void>;
+  ): Promise<{
+    summaryMessageId: string;
+    endSeq: number;
+    summaryNode: Message | null;
+  }>;
+  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end（无 start/summary）。
+   *  replayer 对无 start 的 end 无害（仅清 openCompactionSeq）；前端忽略 compaction/end。
+   *  @returns 写入后版本号 */
+  recordContextAnchor(
+    sessionId: string,
+    data: { usedTokens: number; effectiveContextWindow: number },
+  ): Promise<number>;
 
   // ─── 统一交互（审批/询问/迭代暂停共用 ask/* 事件溯源；无超时）───
   /** 交互请求事件（发起 ask 时写日志，审计源） */

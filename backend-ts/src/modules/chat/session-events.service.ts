@@ -375,6 +375,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       // 引擎级附属（压缩）
       case "compression_start": return EVENT_METHOD.STREAM_COMPRESSION_START;
       case "compression_error": return EVENT_METHOD.STREAM_COMPRESSION_ERROR;
+      case "compression_end": return EVENT_METHOD.STREAM_COMPRESSION_END;
       case "compaction_summary": return EVENT_METHOD.STREAM_COMPACTION_SUMMARY;
       // 统一交互（审批/询问/迭代暂停共用）
       case "ask_requested": return EVENT_METHOD.STREAM_ASK_REQUESTED;

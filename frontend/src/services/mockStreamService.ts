@@ -293,8 +293,7 @@ export async function* mockChatStream(
   // 生成 IDs:resume 复用既有助手消息 id,否则生成新的
   const finalAssistantMessageId = assistantMessageId || generateId()
   const turnsId = generateTurnsId()
-  const contentId = generateId()
-
+  
   console.log(`[Mock] 开始模拟流式响应`, {
     regenerationMode,
     assistantMessageId: finalAssistantMessageId,
@@ -305,8 +304,7 @@ export async function* mockChatStream(
     type: 'turn_start',
     messageId: finalAssistantMessageId,
     turnsId,
-    contentId,
-    modelName: 'mock-model-v1',
+modelName: 'mock-model-v1',
   }
 
   let chunkCount = 0

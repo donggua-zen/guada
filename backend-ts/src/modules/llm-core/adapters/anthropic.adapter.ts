@@ -140,18 +140,25 @@ export class AnthropicAdapter implements IProtocolAdapter {
       maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     });
 
-    // 从 messages 中提取 system prompt（Anthropic 使用顶层 system 字段）
-    const { system, messages } = this.extractSystemMessage(params.messages);
-
-    // 转换消息格式
-    const anthropicMessages = await this.formatMessages(messages);
+    // system 为请求 envelope 独立字段（对齐 DSH LlmCallConfig.system；Anthropic 顶层 system 槽）
+    const anthropicMessages = await this.formatMessages(params.messages);
 
     // 构建请求参数
     const requestParams: Anthropic.MessageCreateParams = {
       model: params.model,
       max_tokens: params.maxTokens || 8192,
       messages: anthropicMessages,
-      ...(system ? { system } : {}),
+      ...(params.system
+        ? {
+            system: [
+              {
+                type: "text" as const,
+                text: params.system,
+                cache_control: { type: "ephemeral" as const },
+              },
+            ],
+          }
+        : {}),
       ...(params.temperature !== undefined
         ? { temperature: params.temperature }
         : {}),
@@ -319,7 +326,6 @@ export class AnthropicAdapter implements IProtocolAdapter {
               index: event.index,
               block: {
                 type: "tool-call",
-                contentId: "",
                 toolCallId: meta?.id || "",
                 name: meta?.name || "",
                 arguments: info.text,
@@ -331,8 +337,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
               index: event.index,
               block:
                 info.kind === "text"
-                  ? { type: "text", contentId: "", text: info.text }
-                  : { type: "reasoning", contentId: "", summary: info.text },
+                  ? { type: "text", text: info.text }
+                  : { type: "reasoning", summary: info.text },
             };
           }
           continue;
@@ -397,13 +403,13 @@ export class AnthropicAdapter implements IProtocolAdapter {
         yield {
           type: "block_end",
           index: index++,
-          block: { type: "reasoning", contentId: "", summary: block.thinking },
+          block: { type: "reasoning", summary: block.thinking },
         };
       } else if (block.type === "text" && block.text) {
         yield {
           type: "block_end",
           index: index++,
-          block: { type: "text", contentId: "", text: block.text },
+          block: { type: "text", text: block.text },
         };
       } else if (block.type === "tool_use") {
         yield {
@@ -411,7 +417,6 @@ export class AnthropicAdapter implements IProtocolAdapter {
           index: index++,
           block: {
             type: "tool-call",
-            contentId: "",
             toolCallId: block.id,
             name: block.name,
             arguments: JSON.stringify(block.input ?? {}),
@@ -444,30 +449,6 @@ export class AnthropicAdapter implements IProtocolAdapter {
       finishReason: (message as any).stop_reason || "stop",
       ...(signature ? { signature } : {}),
     };
-  }
-
-  /**
-   * 从 messages 中提取 system 消息
-   * 返回 content block 数组，最后一个 block 带 cache_control 标记（ephemeral 缓存）
-   */
-  private extractSystemMessage(messages: Message[]): {
-    system?: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
-    messages: Message[];
-  } {
-    const systemMessages = messages.filter((m) => m.role === "system");
-    const otherMessages = messages.filter((m) => m.role !== "system");
-
-    if (systemMessages.length === 0) return { messages: otherMessages };
-
-    const blocks = systemMessages.map((m, i) => ({
-      type: "text" as const,
-      text: m.content
-        .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-        .map((b) => b.text)
-        .join("") || "",
-      ...(i === systemMessages.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
-    }));
-    return { system: blocks, messages: otherMessages };
   }
 
   /**
@@ -570,6 +551,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
           if (block.text) blocks.push({ type: "text", text: block.text });
         } else if (block.type === "image") {
           // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射
+          // 注：source.type 是 Anthropic 协议的标准字段（base64/url），
+          // 与本项目三层消息的 Message.source.kind 概念无关，勿混淆、勿改名。
           const part = await attachmentToPart(
             block.attachment.url ?? block.attachment.attachmentId,
             block.attachment.mediaType,

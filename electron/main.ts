@@ -1171,7 +1171,11 @@ function createWindow() {
     // }
   }
 
-  // 窗口准备好后显示
+  // 窗口准备好后显示。
+  // 主题防闪烁由前端加载页承担：后端未就绪时路由守卫强制停留在品牌加载页
+  // （/empty），后端就绪后前端先应用主题再跳回主页面（frontend/src/main.js
+  // 的 waitBackendReady 回调），因此窗口显示时机无需等待主题，首帧即为
+  // 加载页或主题已就绪的主页面。
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
   });

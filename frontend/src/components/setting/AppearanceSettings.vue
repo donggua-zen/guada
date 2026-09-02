@@ -51,6 +51,7 @@
                   :key="theme.id"
                   :label="themeName(theme)"
                   :value="theme.id"
+                  :disabled="themeUnavailable(theme)"
                 >
                   <div class="flex items-center gap-2">
                     <span
@@ -303,6 +304,12 @@ const { t } = useI18n()
 // 主题名称：内置主题用 i18n key，外部插件用 name 字段
 function themeName(theme: ThemePresetInfo): string {
   return theme.nameKey ? t(theme.nameKey) : theme.name
+}
+
+// 仅暗色/仅亮色主题在当前模式下不可选（置灰）
+function themeUnavailable(theme: ThemePresetInfo): boolean {
+  if (!theme.mode || theme.mode === 'all') return false
+  return (theme.mode === 'dark' && !isDark.value) || (theme.mode === 'light' && isDark.value)
 }
 
 const layoutStore = useLayoutStore()

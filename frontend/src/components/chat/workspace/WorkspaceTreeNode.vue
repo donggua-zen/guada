@@ -20,9 +20,7 @@
 
             <!-- 文件夹/文件图标 -->
             <span v-if="node.isDirectory" class="node-icon folder-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                </svg>
+                <FolderIcon :size="16" />
             </span>
             <span v-else class="node-icon file-icon">
                 <img :src="fileIcon" width="16" height="16" />
@@ -67,6 +65,7 @@ import type { WorkspaceNode } from './WorkspaceTree.vue';
 // 递归组件需要显式导入自身
 import WorkspaceTreeNode from './WorkspaceTreeNode.vue';
 import { useFileIcon } from '@/composables/useFileIcon';
+import FolderIcon from '@/components/ui/FolderIcon.vue';
 
 const fileIcon = useFileIcon(() => props.node.name);
 

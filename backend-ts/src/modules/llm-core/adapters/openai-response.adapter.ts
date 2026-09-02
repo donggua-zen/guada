@@ -107,7 +107,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     );
 
     const client = this.createClient(params.providerConfig);
-    const formattedInput = await this.formatInput(params.messages);
+    const formattedInput = await this.formatInput(params.messages, params.system);
     const requestParams = this.buildRequestParam(params, formattedInput);
 
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -160,8 +160,12 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
    * 工具调用结果通过 function_call_output 类型传递，需要关联 call_id
    * 多模态内容（文本、图片）统一映射为 input_text 和 input_image 类型
    */
-  private async formatInput(messages: Message[]): Promise<any[]> {
+  private async formatInput(messages: Message[], system?: string): Promise<any[]> {
     const items: any[] = [];
+    // Responses API：system 以首条 message item 形式出现（无 system 时不插）
+    if (system) {
+      items.push({ type: "message", role: "system", content: system });
+    }
 
     for (const msg of messages) {
       // tool 结果消息（source.kind === 'tool'）→ function_call_output
@@ -424,7 +428,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           yield {
             type: "block_end",
             index: index++,
-            block: { type: "text", contentId: "", text: content.text },
+            block: { type: "text", text: content.text },
           };
         }
       } else if (output.type === "function_call") {
@@ -433,7 +437,6 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           index: index++,
           block: {
             type: "tool-call",
-            contentId: "",
             toolCallId: output.call_id || output.id,
             name: output.name,
             arguments: output.arguments || "{}",
@@ -450,7 +453,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           yield {
             type: "block_end",
             index: index++,
-            block: { type: "reasoning", contentId: "", summary },
+            block: { type: "reasoning", summary },
           };
         }
       }

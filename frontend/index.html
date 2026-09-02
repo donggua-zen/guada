@@ -5,6 +5,24 @@
     <link rel="icon" type="image/png" href="/images/guada_logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ai_chat_web</title>
+    <script>
+      // 首帧防闪烁：在 bundle 加载前同步应用暗色 class 与持久化主题 data-theme，
+      // 使 style.css 的暗色 CSS 变量首帧即生效（避免白底→主题/暗色的闪变）。
+      // 主题 CSS（内置 public/ 或插件 assets）由 useTheme 顶层 applyThemePreset 补 link；
+      // Electron 下窗口会等待 theme-ready 信号后才显示，此处先行就位不产生可见帧。
+      (function () {
+        try {
+          var mode = localStorage.getItem('theme-mode') || 'system';
+          var dark = mode === 'dark' ||
+            (mode === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var preset = localStorage.getItem(dark ? 'theme-preset-dark' : 'theme-preset-light') || 'default';
+          document.documentElement.classList.toggle('dark', dark);
+          if (preset && preset !== 'default') {
+            document.documentElement.setAttribute('data-theme', preset);
+          }
+        } catch (e) { /* localStorage 不可用时静默降级 */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -78,6 +78,12 @@ export interface TurnState {
     /** 是否工作中：turn_start/turn_resume 置位，turn_end 复位 */
     isWorking?: boolean
     /**
+     * 工作时长秒表锚点（turn_start 置位时记录本地时钟，纯前端瞬态）：
+     * 流式期间 useElapsedTicker 从该锚点跳动展示已耗时；
+     * 回合结束以服务端 turn.metadata.totalDurationMs 为准覆盖（本地锚点不再参与）。
+     */
+    startedAt?: number
+    /**
      * LLM 流重试瞬态（回合级，与 isWorking 同层；retry 事件标记，重试成功输出或 turn_end 清除）。
      * 不落库、不进消息 metadata——纯流式期间的瞬态视图态。
      */
@@ -96,11 +102,21 @@ export interface TurnState {
  * - role：折叠器按事件源打标（user_message→'user'；assistant 块→'assistant'；tool-result 块→'tool'；compaction 占位→'event'）
  * - messageId：所属后端消息 id（编辑/审批/继续执行 API 锚点）
  * - blockIndex：消息内块序号（assistant 流式寻址 (messageId, index) 用；展示无关）
+ * - source/kind：消息来源与逻辑归属（后端 Message.source / Message.kind 透传）
  */
 export interface TurnContent extends MessageContent {
     role: MessageRole
     messageId: string
     blockIndex?: number
+    /**
+     * 消息来源（后端 Message.source）——判断"是不是人说的话"的单一真相。
+     * kind='user' 才是人类真实输入；其余（plugin/model/tool/sub_agent/...）
+     * 为注入或产出，不作为用户消息展示。
+     * 流式投影与历史加载两条路径都需补全，避免前端靠"取第一个 user 块"隐式规避。
+     */
+    source?: { kind: string; [key: string]: any }
+    /** 逻辑归属（后端 Message.kind：'user' 真实用户 / 'model' 模型工作流） */
+    kind?: 'user' | 'model'
 }
 
 /**
