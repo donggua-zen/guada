@@ -1,9 +1,10 @@
 // stores/layout.ts
 import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
-import { watch, ref } from 'vue'
+import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useTheme } from '@/composables/useTheme'
+import { useSessionStore } from '@/stores/session'
 
 /**
  * 全局布局状态 Store
@@ -17,8 +18,42 @@ export const useLayoutStore = defineStore('layout', () => {
   // 侧边栏可见性（持久化到 localStorage）
   const sidebarVisible = useStorage('sidebarVisible', true)
 
-  // 工作目录可见性（持久化）
-  const workspaceVisible = useStorage('workspaceVisible', true)
+  // 工作目录可见性（会话级，持久化，按 sessionId 记录各会话自己的开关）
+  const workspaceVisibleBySession = useStorage<Record<string, boolean>>('workspaceVisibleBySession', {})
+
+  // 当前归属会话（运行时，跟随 sessionStore.activeSessionId，不持久化）
+  const workspaceVisibleSessionId = ref<string | null>(null)
+
+  // 清理旧版全局开关键（默认开启 → 已改为会话级存储，默认关闭）
+  try {
+    localStorage.removeItem('workspaceVisible')
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+
+  // 对外统一访问器：读写「当前会话」的可见性；无会话或未记录时默认关闭。
+  // 既有调用方（ChatPage / 快捷键 / 预览入口等）经此读写即自动获得会话级行为
+  const workspaceVisible = computed<boolean>({
+    get: () => {
+      const sid = workspaceVisibleSessionId.value
+      if (!sid) return false
+      return workspaceVisibleBySession.value[sid] ?? false
+    },
+    set: (visible) => {
+      const sid = workspaceVisibleSessionId.value
+      if (sid) workspaceVisibleBySession.value[sid] = visible
+    },
+  })
+
+  // 会话切换时自动绑定归属会话（new-session / null → 无会话，面板关闭）
+  const sessionStore = useSessionStore()
+  watch(
+    () => sessionStore.activeSessionId,
+    (id) => {
+      workspaceVisibleSessionId.value = id && id !== 'new-session' ? id : null
+    },
+    { immediate: true },
+  )
 
   // 工作目录分割比例（持久化，默认 pane1=75%, pane2=25%）
   // 目录树 / 预览 / Git 三种模式统一使用该宽度
