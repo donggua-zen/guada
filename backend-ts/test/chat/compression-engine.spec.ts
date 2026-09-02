@@ -29,7 +29,7 @@ function makeTurn(
       kind: 'user',
       source: { kind: 'user' },
       metadata: {},
-      content: [{ type: 'text', contentId: `${id}_u_c`, text: `user ${id}` }],
+      content: [{ type: 'text', text: `user ${id}` }],
     },
     {
       id: `${id}_a`,
@@ -37,7 +37,7 @@ function makeTurn(
       kind: 'model',
       source: { kind: 'model', provider: 'test', model: 'm' },
       metadata: {},
-      content: [{ type: 'text', contentId: `${id}_a_c`, text: `answer ${id}` }],
+      content: [{ type: 'text', text: `answer ${id}` }],
     },
   ];
   if (opts.toolResultLen) {
@@ -50,7 +50,6 @@ function makeTurn(
       content: [
         {
           type: 'tool-result',
-          contentId: `${id}_t_c`,
           toolCallId: `call_${id}`,
           name: 'shell',
           content: 'x'.repeat(opts.toolResultLen),
@@ -68,7 +67,6 @@ function makeTurn(
       content: [
         {
           type: 'tool-call',
-          contentId: `${id}_a2_c`,
           toolCallId: `call_${id}_x`,
           name: 'shell',
           arguments: '{}',
@@ -94,7 +92,7 @@ function makeMessages(count: number): Message[] {
           : { kind: 'model', provider: 'test', model: 'm' },
       metadata: {},
       content: [
-        { type: 'text', contentId: `c${i}`, text: `${role} ${i}` },
+        { type: 'text', text: `${role} ${i}` },
       ],
     });
   }
@@ -236,7 +234,6 @@ describe('CompressionEngine', () => {
         metadata: {},
         content: [{
           type: 'tool-result' as const,
-          contentId: `tr${i + 1}`,
           toolCallId: `call_${i + 1}`,
           name: 'shell',
           content: 'x'.repeat(5000),
@@ -367,7 +364,6 @@ describe('CompressionEngine', () => {
         metadata: {},
         content: [{
           type: 'tool-result' as const,
-          contentId: `tr${i}`,
           toolCallId: `call_${i}`,
           name: 'shell',
           content: 'x'.repeat(5000),
@@ -410,7 +406,6 @@ describe('toolPairingBalancedBefore（消息级）', () => {
       content: [
         {
           type: 'tool-call',
-          contentId: `${id}_c`,
           toolCallId: `call_${id}`,
           name: 'shell',
           arguments: '{}',
@@ -428,7 +423,6 @@ describe('toolPairingBalancedBefore（消息级）', () => {
       content: [
         {
           type: 'tool-result',
-          contentId: `${id}_c`,
           toolCallId: callId,
           name: 'shell',
           content: 'result',
@@ -468,8 +462,8 @@ describe('LLMSummaryProvider', () => {
   function streamMock(text: string): AsyncGenerator<any> {
     return (async function* () {
       yield { type: 'block_start', blockType: 'text', contentId: 'b1' };
-      yield { type: 'text_delta', contentId: 'b1', text };
-      yield { type: 'block_end', blockType: 'text', contentId: 'b1', block: { type: 'text', contentId: 'b1', text } };
+      yield { type: 'text_delta', text };
+      yield { type: 'block_end', blockType: 'text', block: { type: 'text', text } };
       yield { type: 'usage', usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
       yield { type: 'finish', finishReason: 'stop' };
     })();
@@ -518,7 +512,7 @@ describe('LLMSummaryProvider', () => {
       kind: 'user',
       source: { kind: 'user' },
       metadata: {},
-      content: [{ type: 'text', contentId: 'm0_c', text: 'history user msg' }],
+      content: [{ type: 'text', text: 'history user msg' }],
     };
     const provider = new LLMSummaryProvider(llmService, {
       modelName: 'gpt-4o',
@@ -579,7 +573,7 @@ it('buildParams 复用：摘要请求参数与主请求同源，system/tools/max
     kind: 'user',
     source: { kind: 'user' },
     metadata: {},
-    content: [{ type: 'text', contentId: 'm0_c', text: 'history' }],
+    content: [{ type: 'text', text: 'history' }],
   };
   const provider = new LLMSummaryProvider(llmService, {
     modelName: 'gpt-4o',
@@ -620,7 +614,7 @@ describe('TokenMeterService', () => {
       kind: 'user',
       source: { kind: 'user' },
       metadata: {},
-      content: [{ type: 'text', contentId: 'c1', text: 'hello world' }],
+      content: [{ type: 'text', text: 'hello world' }],
     };
     const first = await meter.estimateMessages('s1', 'gpt-4o', [msg]);
     const second = await meter.estimateMessages('s1', 'gpt-4o', [msg]);
@@ -645,7 +639,7 @@ describe('TokenMeterService', () => {
       kind: 'model',
       source: { kind: 'tool', toolCallId: 'tc1' },
       metadata: {},
-      content: [{ type: 'tool-result', contentId: 'm1', toolCallId: 'tc1', name: 'shell', content: 'x'.repeat(400) }],
+      content: [{ type: 'tool-result', toolCallId: 'tc1', name: 'shell', content: 'x'.repeat(400) }],
     };
     const before = await meter.estimateMessages('s1', 'gpt-4o', [msg]);
     // 模拟一级裁剪：就地改写内容，contentId 保持 m1 不变

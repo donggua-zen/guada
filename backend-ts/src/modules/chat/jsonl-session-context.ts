@@ -647,51 +647,23 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       : [];
   }
 
-  // ═══ 压缩写（v1.4：写路径与读路径同层解耦；落库经 messageStore，快照增量播种在此）═══
+  // ═══ 压缩写（v1.4：写路径与读路径同层解耦；落库经 messageStore，快照统一失效重建）═══
 
-  /** 一级裁剪写入：落库 + 快照 view/token 数组就地更新（token 无缓存，重算该条即可） */
+  /**
+   * 一级裁剪写入：直接落库。
+   * 不就地改写快照视图——裁剪语义（tool-result/text 如何应用 newContent）唯一在 replayer
+   * 折叠时应用（单一事实源），会话层不维护第二份改写逻辑。
+   * 写入后 store revision 推进 → 快照 revision 滞后 → 下次 getSnapshot 全量重建。
+   */
   async appendPrune(data: PruneWrite): Promise<void> {
-    const revision = await this.messageStore.appendPrune(this.sessionId, data);
-    if (!this.snapshot) return;
-    const view = this.snapshot.view as Message[];
-    const idx = view.findIndex((m) => m.id === data.messageId);
-    if (idx < 0) {
-      this.snapshot = { ...this.snapshot, revision };
-      return;
-    }
-    // 就地改写快照 view 中被裁剪消息的 tool-result/text 块（与引擎在共享对象上的改写幂等）
-    const msg = view[idx];
-    const tr = msg.content.find(
-      (b): b is Extract<ContentBlock, { type: 'tool-result' }> => b.type === 'tool-result',
-    );
-    if (tr) {
-      tr.content = data.newContent;
-    } else {
-      const tb = msg.content.find(
-        (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text',
-      );
-      if (tb) tb.text = data.newContent;
-    }
-    // 重算该消息 token（TokenMeter 无状态，只算这一条）并更新快照 token 数组
-    const perMessageTokens = [...this.snapshot.perMessageTokens];
-    perMessageTokens[idx] = await this.tokenMeter.estimateMessages(
-      this.sessionId,
-      this.currentModelName(),
-      [msg],
-    );
-    this.snapshot = {
-      ...this.snapshot,
-      revision,
-      perMessageTokens,
-      prefixTokens: this.recomputePrefixFrom(
-        this.snapshot.prefixTokens,
-        perMessageTokens,
-        idx,
-      ),
-    };
+    await this.messageStore.appendPrune(this.sessionId, data);
   }
 
-  /** 二级遮蔽写入：落库 + 快照增量播种（splice view 前 shadowedCount 条为摘要节点） */
+  /**
+   * 二级遮蔽写入：落库。
+   * 遮蔽范围删除与摘要置头语义唯一在 replayer 折叠时应用（不就地 splice 快照视图）。
+   * 写入后 store revision 推进 → 快照 revision 滞后 → 下次 getSnapshot 全量重建。
+   */
   async appendCompact(
     data: CompactWrite,
   ): Promise<{ summaryMessageId: string; endSeq: number }> {
@@ -703,31 +675,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       ...data,
       ...(contextStats ? contextStats : {}),
     });
-    if (!this.snapshot) return out;
-    const shadowedCount = data.shadowedCount;
-    const perMessageTokens = [...this.snapshot.perMessageTokens];
-    perMessageTokens.splice(0, shadowedCount);
-    let view: Message[];
-    if (out.summaryNode) {
-      view = [...this.snapshot.view];
-      view.splice(0, shadowedCount, out.summaryNode);
-      const summaryTokens = await this.tokenMeter.estimateMessages(
-        this.sessionId,
-        this.currentModelName(),
-        [out.summaryNode],
-      );
-      perMessageTokens.unshift(summaryTokens);
-    } else {
-      // 摘要节点不可得（防御）：仅移除遮蔽消息，视图交由下次 getSnapshot 全量重建校正
-      view = this.snapshot.view.slice(shadowedCount) as Message[];
-    }
-    this.snapshot = {
-      ...this.snapshot,
-      revision: out.endSeq,
-      view,
-      perMessageTokens,
-      prefixTokens: this.rebuildPrefixTokens(perMessageTokens),
-    };
     return out;
   }
 
@@ -784,32 +731,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     });
     // 不改变消息视图，仅版本号前进 → 续期快照 revision
     this.refreshSnapshotRevision(revision);
-  }
-
-  /** 前缀和全量重建（perMessageTokens 变更后） */
-  private rebuildPrefixTokens(perMessageTokens: readonly number[]): number[] {
-    const prefixTokens: number[] = [];
-    let acc = 0;
-    for (const t of perMessageTokens) {
-      acc += t;
-      prefixTokens.push(acc);
-    }
-    return prefixTokens;
-  }
-
-  /** 前缀和部分重算（perMessageTokens[from..] 变更后） */
-  private recomputePrefixFrom(
-    prefixTokens: readonly number[],
-    perMessageTokens: readonly number[],
-    from: number,
-  ): number[] {
-    const out = [...prefixTokens];
-    let acc = from > 0 ? prefixTokens[from - 1] : 0;
-    for (let i = from; i < perMessageTokens.length; i++) {
-      acc += perMessageTokens[i];
-      out[i] = acc;
-    }
-    return out;
   }
 
   private async ensureConversationStateLoaded(): Promise<void> {

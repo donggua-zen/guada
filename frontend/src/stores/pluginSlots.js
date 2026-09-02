@@ -147,10 +147,12 @@ export const usePluginSlots = defineStore('pluginSlots', {
       if (!item.component || item.component.startsWith('builtin:')) return
       // apiService.baseURL：web dev = "/api/v1"，Electron = "http://localhost:PORT/api/v1"
       const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
+      // slot 组件产物约定位于插件 frontend/dist/（相对插件根），显式带上前缀；
+      // 插件主题 CSS 由 syncThemes → themeCssUrl 按 cssFile 相对插件根拼接
       window.__GuaDaModuleLoader__.prepare({
         id: `${item.pluginId}:${item.component}`,
-        url: `${base}/plugins/${item.pluginId}/assets/${item.component}.js?rev=${item.rev || ''}`,
-        cssUrl: `${base}/plugins/${item.pluginId}/assets/${item.component}.css?rev=${item.rev || ''}`,
+        url: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.js?rev=${item.rev || ''}`,
+        cssUrl: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.css?rev=${item.rev || ''}`,
       })
     },
 

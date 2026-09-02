@@ -100,6 +100,11 @@ export class ExternalPluginLoader implements OnModuleInit {
     pluginDir: string,
     source: "dev" | "user",
   ): Promise<void> {
+    // 绝对化插件目录：scanDirs 来自 env（可为相对路径，如 ../plugins），
+    // 后续 path.join / require 均基于此；require 相对路径会按当前模块文件
+    // （src/modules/plugins/external/）解析导致 Cannot find module。
+    pluginDir = path.resolve(pluginDir);
+
     // 1. 读取 manifest.json
     const manifestPath = path.join(pluginDir, "manifest.json");
     if (!fs.existsSync(manifestPath)) {

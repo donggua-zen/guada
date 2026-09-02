@@ -47,3 +47,4 @@ backend-ts/src/nul
 .atomcode/**
 mem-log/**
 CODELY.md
+memory/**
