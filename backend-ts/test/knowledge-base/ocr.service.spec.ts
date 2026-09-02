@@ -27,6 +27,21 @@ const mockSettingsService = {
   getGroupSettings: jest.fn(),
 };
 
+const mockPdfToImage = {
+  getPageCount: jest.fn(),
+  renderPages: jest.fn(),
+};
+
+function makeRenderedPage(pageNum: number, content: string) {
+  return {
+    pageNum,
+    buffer: Buffer.from(content),
+    width: 100,
+    height: 100,
+    mimeType: 'image/png',
+  };
+}
+
 describe('OcrService', () => {
   let service: OcrService;
 
@@ -34,6 +49,8 @@ describe('OcrService', () => {
     // 只清理我们手动创建的 mock，不清除 jest.mock('fs') 的全局 mock
     mockHttpService.post.mockClear();
     mockSettingsService.getGroupSettings.mockClear();
+    mockPdfToImage.getPageCount.mockClear();
+    mockPdfToImage.renderPages.mockClear();
     (fs.promises.readFile as jest.Mock).mockClear();
 
     // 默认启用 UMI OCR
@@ -43,25 +60,31 @@ describe('OcrService', () => {
       umiPort: 1224,
     });
 
-    service = new OcrService(mockHttpService as any, mockSettingsService as any);
+    service = new OcrService(
+      mockHttpService as any,
+      mockSettingsService as any,
+      mockPdfToImage as any,
+    );
   });
 
   describe('getCapabilities', () => {
-    it('UMI 提供商应支持 PDF 和图片', async () => {
+    it('UMI 提供商应支持 PDF（native 模式）和图片', async () => {
       const caps = await service.getCapabilities();
       expect(caps.supportsPdf).toBe(true);
       expect(caps.supportsImage).toBe(true);
+      expect(caps.pdfMode).toBe('native');
     });
 
-    it('百度提供商应仅支持图片', async () => {
+    it('百度提供商应通过渲染模式支持 PDF', async () => {
       mockSettingsService.getGroupSettings.mockResolvedValue({
         provider: 'baidu',
         baiduApiKey: 'test-key',
         baiduSecretKey: 'test-secret',
       });
       const caps = await service.getCapabilities();
-      expect(caps.supportsPdf).toBe(false);
+      expect(caps.supportsPdf).toBe(true);
       expect(caps.supportsImage).toBe(true);
+      expect(caps.pdfMode).toBe('render');
     });
 
     it('未配置应返回无能力', async () => {
@@ -71,6 +94,7 @@ describe('OcrService', () => {
       const caps = await service.getCapabilities();
       expect(caps.supportsPdf).toBe(false);
       expect(caps.supportsImage).toBe(false);
+      expect(caps.pdfMode).toBe('none');
     });
 
     it('配置读取失败应返回无能力', async () => {
@@ -78,6 +102,7 @@ describe('OcrService', () => {
       const caps = await service.getCapabilities();
       expect(caps.supportsPdf).toBe(false);
       expect(caps.supportsImage).toBe(false);
+      expect(caps.pdfMode).toBe('none');
     });
   });
 
@@ -88,13 +113,118 @@ describe('OcrService', () => {
       expect(result).toBeNull();
     });
 
-    it('提供商不支持 PDF 应跳过', async () => {
+    it('百度提供商应走渲染识别路径（render 模式）', async () => {
       mockSettingsService.getGroupSettings.mockResolvedValue({
         provider: 'baidu',
         baiduApiKey: 'key',
         baiduSecretKey: 'secret',
       });
+      mockPdfToImage.getPageCount.mockResolvedValue(2);
+      mockPdfToImage.renderPages.mockImplementation(async function* () {
+        yield makeRenderedPage(1, 'img-page-1');
+        yield makeRenderedPage(2, 'img-page-2');
+      });
+      // 每页识别 = token + ocr 两次请求，共 2 页 → 4 次
+      let ocrSeq = 0;
+      mockHttpService.post.mockImplementation((url: string) => {
+        if (url.includes('/oauth/2.0/token')) {
+          return of({ data: { access_token: 'tok-123' } });
+        }
+        ocrSeq++;
+        const pageText = ocrSeq === 1 ? '第一页文字' : '第二页文字';
+        return of({
+          data: { words_result: [{ words: pageText }], words_result_num: 1 },
+        });
+      });
+
       const result = await service.recognizePdf('/fake/path.pdf');
+
+      expect(result).not.toBeNull();
+      expect(result!.pages).toHaveLength(2);
+      expect(result!.text).toContain('[第 1 页]');
+      expect(result!.text).toContain('第一页文字');
+      expect(result!.text).toContain('[第 2 页]');
+      expect(result!.text).toContain('第二页文字');
+      // 必须调用了渲染服务（整文件 = 全部页）
+      expect(mockPdfToImage.getPageCount).toHaveBeenCalledWith('/fake/path.pdf');
+      expect(mockPdfToImage.renderPages).toHaveBeenCalledWith('/fake/path.pdf', {
+        pages: [1, 2],
+      });
+      // 百度图片接口必须被调用（general_basic）
+      const baiduCalls = mockHttpService.post.mock.calls.filter((c: any[]) =>
+        c[0].includes('general_basic'),
+      );
+      expect(baiduCalls).toHaveLength(2);
+    });
+
+    it('渲染识别页级失败应整体返回 null', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'key',
+        baiduSecretKey: 'secret',
+      });
+      mockPdfToImage.getPageCount.mockResolvedValue(1);
+      mockPdfToImage.renderPages.mockImplementation(async function* () {
+        yield makeRenderedPage(1, 'img-page-1');
+      });
+      // token 成功，但图片识别返回不可重试的 4xx 错误
+      mockHttpService.post.mockImplementation((url: string) => {
+        if (url.includes('/oauth/2.0/token')) {
+          return of({ data: { access_token: 'tok-123' } });
+        }
+        return throwError(() => ({
+          status: 400,
+          message: 'Request failed with status code 400',
+        }));
+      });
+
+      const result = await service.recognizePdf('/fake/path.pdf');
+      expect(result).toBeNull();
+    });
+
+    it('页级临时错误应重试后成功', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'key',
+        baiduSecretKey: 'secret',
+      });
+      mockPdfToImage.getPageCount.mockResolvedValue(1);
+      mockPdfToImage.renderPages.mockImplementation(async function* () {
+        yield makeRenderedPage(1, 'img-page-1');
+      });
+
+      let ocrAttempts = 0;
+      mockHttpService.post.mockImplementation((url: string) => {
+        if (url.includes('/oauth/2.0/token')) {
+          return of({ data: { access_token: 'tok-123' } });
+        }
+        ocrAttempts++;
+        if (ocrAttempts === 1) {
+          // 首次 5xx 可重试错误
+          return throwError(() => ({ status: 500, message: 'server error' }));
+        }
+        return of({
+          data: { words_result: [{ words: '重试后识别成功' }], words_result_num: 1 },
+        });
+      });
+
+      const result = await service.recognizePdf('/fake/path.pdf');
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('重试后识别成功');
+      expect(ocrAttempts).toBe(2);
+    });
+
+    it('渲染服务缺失时应返回 null 而非崩溃', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'key',
+        baiduSecretKey: 'secret',
+      });
+      const bareService = new OcrService(
+        mockHttpService as any,
+        mockSettingsService as any,
+      );
+      const result = await bareService.recognizePdf('/fake/path.pdf');
       expect(result).toBeNull();
     });
 
@@ -106,6 +236,55 @@ describe('OcrService', () => {
 
       const result = await service.recognizePdf('/fake/path.pdf');
       expect(result).toBeNull();
+    });
+
+    it('UMI 原生管线非连接类失败应降级渲染路径', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'umi',
+        umiHost: '127.0.0.1',
+        umiPort: 1224,
+      });
+      // 原生上传返回非 100 错误码（服务可达但任务失败）→ 触发降级
+      mockHttpService.post.mockImplementation((url: string) => {
+        if (url.includes('/api/doc/upload')) {
+          return of({ data: { code: 200, data: '任务处理失败' } });
+        }
+        // 降级后的图片识别接口
+        return of({
+          data: {
+            code: 100,
+            data: [{ text: '降级逐页识别文本', score: 0.9, box: [] as number[][] }],
+          },
+        });
+      });
+      mockPdfToImage.renderPages.mockImplementation(async function* () {
+        yield makeRenderedPage(1, 'img');
+      });
+
+      const result = await service.recognizePdf('/fake/path.pdf');
+
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('降级逐页识别文本');
+      expect(mockPdfToImage.renderPages).toHaveBeenCalledWith('/fake/path.pdf', {
+        pages: [1],
+      });
+    });
+
+    it('UMI 服务连接失败不应降级（快速失败）', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'umi',
+        umiHost: '127.0.0.1',
+        umiPort: 1224,
+      });
+      // 连接拒绝 = 服务不可用，图片接口同样不可用，不应逐页重试
+      mockHttpService.post.mockReturnValue(
+        throwError(() => new Error('connect ECONNREFUSED 127.0.0.1:1224')),
+      );
+
+      const result = await service.recognizePdf('/fake/path.pdf');
+
+      expect(result).toBeNull();
+      expect(mockPdfToImage.renderPages).not.toHaveBeenCalled();
     });
 
     it('UMI PDF 上传应使用 multipart/form-data', async () => {
@@ -140,6 +319,9 @@ describe('OcrService', () => {
       const contentType = headers['Content-Type'] || headers['content-type'];
       expect(contentType).toBeDefined();
       expect(contentType as string).toContain('multipart/form-data');
+
+      // UMI 是 native 模式，不应调用渲染服务
+      expect(mockPdfToImage.renderPages).not.toHaveBeenCalled();
     });
 
     it('UMI PDF 完整流程应返回拼接文本', async () => {
@@ -205,6 +387,82 @@ describe('OcrService', () => {
         ([, step]: [number, string]) => (step as string).includes('OCR'),
       );
       expect(ocrSteps.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('getScanOcrStrategy', () => {
+    it('默认应为 auto（仅低字符页 OCR）', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'k',
+        baiduSecretKey: 's',
+      });
+      await expect(service.getScanOcrStrategy()).resolves.toBe('auto');
+    });
+
+    it('配置 ocrMode=force 时应返回 force（全页强制 OCR）', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'umi',
+        umiHost: '127.0.0.1',
+        umiPort: 1224,
+        ocrMode: 'force',
+      });
+      await expect(service.getScanOcrStrategy()).resolves.toBe('force');
+    });
+
+    it('配置读取失败应回退 auto', async () => {
+      mockSettingsService.getGroupSettings.mockRejectedValue(new Error('x'));
+      await expect(service.getScanOcrStrategy()).resolves.toBe('auto');
+    });
+  });
+
+  describe('recognizePdfPages', () => {
+    it('应只渲染指定页并按页码升序返回', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'k',
+        baiduSecretKey: 's',
+      });
+      mockPdfToImage.renderPages.mockImplementation(async function* () {
+        // 渲染层按升序产出
+        yield makeRenderedPage(3, '页三');
+        yield makeRenderedPage(7, '页七');
+      });
+      mockHttpService.post.mockImplementation((url: string) => {
+        if (url.includes('/oauth/2.0/token')) {
+          return of({ data: { access_token: '***' } });
+        }
+        return of({ data: { words_result: [{ words: '识别文本' }] } });
+      });
+
+      const result = await service.recognizePdfPages('/fake/doc.pdf', [7, 3]);
+
+      expect(mockPdfToImage.renderPages).toHaveBeenCalledWith('/fake/doc.pdf', {
+        pages: [7, 3],
+      });
+      expect(result.map((p) => p.page)).toEqual([3, 7]);
+      expect(result[0].text).toBe('识别文本');
+    });
+
+    it('空页码集合应直接返回空数组且不调用渲染', async () => {
+      const result = await service.recognizePdfPages('/fake/doc.pdf', []);
+      expect(result).toEqual([]);
+      expect(mockPdfToImage.renderPages).not.toHaveBeenCalled();
+    });
+
+    it('渲染服务缺失应抛错', async () => {
+      mockSettingsService.getGroupSettings.mockResolvedValue({
+        provider: 'baidu',
+        baiduApiKey: 'k',
+        baiduSecretKey: 's',
+      });
+      const bareService = new OcrService(
+        mockHttpService as any,
+        mockSettingsService as any,
+      );
+      await expect(
+        bareService.recognizePdfPages('/fake/doc.pdf', [1]),
+      ).rejects.toThrow('PDF 转图片服务未初始化');
     });
   });
 

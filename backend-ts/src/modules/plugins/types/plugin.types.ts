@@ -326,6 +326,25 @@ export interface SlotRegistration {
   meta?: { label?: string; icon?: string; group?: string };
 }
 
+// ── 主题注册（v2：插件主题能力）──
+
+export interface ThemeRegistration {
+  /** 主题全局唯一 ID（建议 `${pluginId}.${name}`，防跨插件冲突） */
+  id: string;
+  /** 展示名；支持 %key% NLS 引用 */
+  name: string;
+  /** 可选 i18n key（优先于 name，走 NlsService） */
+  nameKey?: string;
+  /** 主色（下拉预览圆点） */
+  primaryColor?: string;
+  /** 副色（下拉预览圆点） */
+  secondaryColor?: string;
+  /** 适用模式：'light' / 'dark' / 'all'（默认 all） */
+  mode?: "light" | "dark" | "all";
+  /** 主题 CSS 文件名，相对插件 frontend/dist/（如 "neon.css"） */
+  cssFile: string;
+}
+
 /** RPC 方法 handler：参数与返回值为可序列化 JSON */
 export type RpcHandler = (
   args: any,

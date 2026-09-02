@@ -15,7 +15,7 @@
  * - emit 钩子：只通知，不可阻断
  *
  * 副作用管线（对齐 DSH）：PRE_STEP 订阅者（压缩等）直接改写会话存储（store 写即更新），
- * 返回 undefined 放行；agent-engine 在钩子后重读 getMessages() 派生消息（对齐 DSH deriveMessages）。
+ * 返回 undefined 放行；agent-engine 在钩子后重读 getMessages() 派生请求消息。
  * 流内事件发布：订阅者经 sessionContext.publishStream 直发（对齐 DSH session.append 深层直发），
  * 无回调注入、无缓冲中转。
  */

@@ -2,13 +2,18 @@
  * 会话级 Token 计量服务（对齐 deepseek-harness token-meter）
  *
  * 统一消息级 token 估算入口：
- * - 会话级块缓存（按 contentId，LRU 会话上限）——压缩流程多次估算（触发/裁剪后/保留预算/收敛校验）
- *   时避免重复 tiktoken 计数
+ * - **无缓存**：每次估算直接委托 TokenizerService 计数，不持有任何会话状态。
+ *   历史包袱（v1.4 移除）：曾按 contentId 做块级会话缓存，要求"任何就地改写消息内容的
+ *   操作之后必须精确失效对应块"。而 prune / compaction 的改写点分散在多个层级，
+ *   该契约被绕过时不会报错，只会静默返回过期估算并直接扭曲压缩判据
+ *   （典型后果：一级裁剪后的重测读到裁剪前的数值 → 级联触发本不必要的二级摘要）。
+ *   缓存的收益（省 tiktoken 计数）远小于它给架构带来的隐性约束，故整体移除；
+ *   待写路径完全收敛到会话层、快照增量更新稳定后，再重新设计缓存层。
  * - 精确真值仍由 provider usage 驱动（JsonlSessionContext.usageAnchor），本服务仅作估算/投影
  * - estimatePerMessage 输出逐消息 token（供上下文占用率/UI 展示扩展）
  *
- * 缓存失效契约：任何就地修改消息内容的操作（prune 改写 tool-result / compaction / 删除 / 重载）
- * 之后必须调用 invalidate(sessionId)，否则 contentId 不变但内容已变的块会返回过期估算。
+ * 无状态：本服务为纯计算服务，方法首参 sessionId 仅为兼容既有调用签名而保留，
+ * 不参与任何计算，将来重新引入会话级缓存时可零改动恢复。
  */
 import { Injectable } from '@nestjs/common';
 import { TokenizerService } from '../../common/utils/tokenizer.service';
@@ -20,34 +25,24 @@ import type {
 
 @Injectable()
 export class TokenMeterService {
-  /** sessionId → (contentId → tokens)，块级会话缓存 */
-  private readonly sessionCaches = new Map<string, Map<string, number>>();
-  /** 会话缓存上限（LRU：超限驱逐最早插入的会话） */
-  private static readonly MAX_SESSIONS = 200;
-
   constructor(private readonly tokenizer: TokenizerService) {}
 
-  /** 失效会话缓存（prune/compaction/删除/重载后调用） */
-  invalidate(sessionId: string): void {
-    this.sessionCaches.delete(sessionId);
-  }
-
-  /** 估算一组消息的 token 数（会话级块缓存） */
+  /** 估算一组消息的 token 数 */
   async estimateMessages(
-    sessionId: string,
+    _sessionId: string,
     modelName: string,
     messages: Message[],
   ): Promise<number> {
     let total = 0;
     for (const msg of messages) {
-      total += await this.estimateMessage(sessionId, modelName, msg);
+      total += await this.estimateMessage(modelName, msg);
     }
     return total;
   }
 
   /** 估算一组回合的 token 数（只算可见回合，含 visible/hidden 过滤） */
   async estimateTurns(
-    sessionId: string,
+    _sessionId: string,
     modelName: string,
     turns: Turn[],
   ): Promise<number> {
@@ -56,7 +51,7 @@ export class TokenMeterService {
       if (!turn.visible) continue;
       if (turn.metadata?.hidden === true) continue;
       for (const msg of turn.messages) {
-        total += await this.estimateMessage(sessionId, modelName, msg);
+        total += await this.estimateMessage(modelName, msg);
       }
     }
     return total;
@@ -64,7 +59,7 @@ export class TokenMeterService {
 
   /** 逐消息估算（返回每消息 token，供上下文占用率/UI 展示） */
   async estimatePerMessage(
-    sessionId: string,
+    _sessionId: string,
     modelName: string,
     messages: Message[],
   ): Promise<Array<{ id: string; tokens: number }>> {
@@ -72,7 +67,7 @@ export class TokenMeterService {
     for (const msg of messages) {
       out.push({
         id: msg.id,
-        tokens: await this.estimateMessage(sessionId, modelName, msg),
+        tokens: await this.estimateMessage(modelName, msg),
       });
     }
     return out;
@@ -80,7 +75,7 @@ export class TokenMeterService {
 
   /**
    * 纯文本 token 估算（委托 tokenizer）。
-   * useCache 默认 false：本服务已有会话级缓存，避免一次性文本挤占全局文本缓存名额。
+   * useCache 默认 false：本服务无缓存，避免一次性文本挤占全局文本缓存名额。
    */
   estimateTextTokens(
     modelName: string,
@@ -92,34 +87,15 @@ export class TokenMeterService {
 
   /** 单消息估算（逐块累计） */
   private async estimateMessage(
-    sessionId: string,
     modelName: string,
     msg: Message,
   ): Promise<number> {
     if (!Array.isArray(msg.content) || msg.content.length === 0) return 0;
     let total = 0;
     for (const block of msg.content) {
-      total += await this.estimateBlock(sessionId, modelName, block);
+      total += await this.countBlock(modelName, block);
     }
     return total;
-  }
-
-  /** 单块估算（按 contentId 缓存；无 contentId 的块直接计数） */
-  private async estimateBlock(
-    sessionId: string,
-    modelName: string,
-    block: ContentBlock,
-  ): Promise<number> {
-    const contentId = (block as { contentId?: string }).contentId;
-    if (typeof contentId === 'string' && contentId) {
-      const sessionCache = this.getOrCreateSession(sessionId);
-      const cached = sessionCache.get(contentId);
-      if (cached !== undefined) return cached;
-      const tokens = await this.countBlock(modelName, block);
-      if (contentId) sessionCache.set(contentId, tokens);
-      return tokens;
-    }
-    return this.countBlock(modelName, block);
   }
 
   /** 块级计数（与 TokenizerService.countMessageBlocks 同规则，图像统一 1500） */
@@ -149,18 +125,5 @@ export class TokenMeterService {
           false,
         );
     }
-  }
-
-  private getOrCreateSession(sessionId: string): Map<string, number> {
-    let cache = this.sessionCaches.get(sessionId);
-    if (!cache) {
-      if (this.sessionCaches.size >= TokenMeterService.MAX_SESSIONS) {
-        const oldest = this.sessionCaches.keys().next().value;
-        if (oldest !== undefined) this.sessionCaches.delete(oldest);
-      }
-      cache = new Map();
-      this.sessionCaches.set(sessionId, cache);
-    }
-    return cache;
   }
 }

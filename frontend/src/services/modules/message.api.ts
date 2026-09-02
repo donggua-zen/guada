@@ -20,7 +20,6 @@ interface TurnLike {
     metadata: Record<string, any>;
     content: Array<{
       type: string;
-      contentId: string;
       text?: string;
       summary?: string;
       toolCallId?: string;
@@ -46,11 +45,13 @@ function blockToContent(
   msgMeta: Record<string, any>,
   toolResultsMap?: Record<string, any>,
   createdAt?: string,
+  /** 块在消息内的序号 + 消息 id：P6c 起作为块唯一标识（原 contentId 已删除） */
+  blockRef?: { index: number; messageId: string },
 ): MessageContent {
   // 剔除消息级冗余平铺字段（toolCalls/toolCallsResponse 只应来自块本身）
   const { toolCalls: _msgToolCalls, toolCallsResponse: _msgToolResponses, ...restMeta } = msgMeta || {};
   const content: MessageContent = {
-    id: block.contentId,
+    id: blockRef ? `${blockRef.messageId}-${blockRef.index}` : "",
     content:
       block.type === "text"
         ? block.text ?? ""
@@ -121,10 +122,15 @@ export function messageToTurnContent(
     ? new Date((msg as any).createdAt).toISOString()
     : undefined;
   const role = (msg.role as MessageRole) || "user";
-  return (msg.content || []).map((b) => ({
-    ...blockToContent(b, msgMeta, undefined, createdAtIso),
+  // 来源透传：source.kind 是"是否人类输入"的单一真相，下游据此过滤注入消息
+  const source = (msg as any).source as TurnContent["source"] | undefined;
+  const kind = (msg as any).kind as TurnContent["kind"] | undefined;
+  return (msg.content || []).map((b, index) => ({
+    ...blockToContent(b, msgMeta, undefined, createdAtIso, { index, messageId: msg.id }),
     role,
     messageId: msg.id,
+    ...(source ? { source } : {}),
+    ...(kind ? { kind } : {}),
   }));
 }
 
@@ -156,10 +162,6 @@ export interface MessageApi {
   /** 删除本轮对话（按回合 id，整轮遮蔽） */
   deleteTurn(sessionId: string, turnId: string): Promise<{ success: boolean }>;
   updateMessage(sessionId: string, messageId: string, data: any): Promise<Message>;
-  fetchMessageContentToolDetails(sessionId: string, contentId: string): Promise<{
-    toolCalls: any[];
-    toolCallsResponse: any[];
-  }>;
   copyMessageFile(messageId: string, fileId: string): Promise<any>;
   webSearch(messageId: string): Promise<any>;
   /** 统一交互应答（审批/询问/迭代暂停继续共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
@@ -236,10 +238,6 @@ export const messageApi: MessageApi = {
       method: "PUT",
       data,
     });
-  },
-
-  async fetchMessageContentToolDetails(this: ApiContext, sessionId: string, contentId: string) {
-    return await this._request(`/sessions/${sessionId}/message-content/${contentId}/tool-details`);
   },
 
   async copyMessageFile(this: ApiContext, messageId: string, fileId: string) {

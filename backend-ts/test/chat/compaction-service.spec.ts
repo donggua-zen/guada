@@ -4,11 +4,11 @@
  * CompactionService 只依赖 CompactionDataSource 窄接口：
  * - shouldCompress：token/窗口/triggerRatio 决策
  * - compress：skip（force 外）→ pre_compact 事件 → Provider 工厂 → CompressionEngine →
- *   refreshAfterCompaction → DB 压缩历史 + memory.compacted
+ *   getHistory（写路径已播种快照）→ DB 压缩历史 + memory.compacted
  * - DISABLED 模式不构建 Provider；压缩模型解析（配置优先回退会话模型）
  */
 import { CompactionService } from '../../src/modules/chat/compaction/compaction.service';
-import { SummaryMode } from '../../src/modules/chat/compression-engine';
+import { SummaryMode } from '../../src/modules/chat/compaction/compression-engine';
 import type { CompactionDataSource } from '../../src/modules/chat/compaction/types';
 import type { Message } from '../../src/common/types/conversation.types';
 
@@ -34,13 +34,14 @@ function createDataSource(overrides: Partial<CompactionDataSource> = {}): Compac
       summaryMode: SummaryMode.MEMORY_SYNC,
     })),
     getHistory: jest.fn(async () => [makeMsg('m0'), makeMsg('m1')]),
-    getMessages: jest.fn(async () => [makeMsg('m0'), makeMsg('m1')]),
+    getPerMessageTokens: jest.fn(async () => [10, 20]),
     getModelConfig: jest.fn(() => ({ modelName: 'gpt-4o' } as any)),
     getTokenCount: jest.fn(async () => 100),
     getEffectiveContextWindow: jest.fn(() => 1000),
-    getPrelude: jest.fn(async () => []),
+    getSystemText: jest.fn(() => 'sys'),
     getTools: jest.fn(() => []),
-    refreshAfterCompaction: jest.fn(async () => [makeMsg('m0'), makeMsg('m1')]),
+    appendPrune: jest.fn(async () => {}),
+    appendCompact: jest.fn(async () => ({ summaryMessageId: 'm_sum', endSeq: 0 })),
     ...overrides,
   };
 }
@@ -50,7 +51,9 @@ function createService(overrides: any = {}) {
     execute: jest.fn(async () => ({
       pruneEvents: 1,
       compacted: true,
-      shadowedMessageIds: ['m0'],
+      shadowedCount: 1,
+      shadowedEndId: 'm0',
+      summaryMessageId: 'm_sum',
       summary: '检查点',
     })),
   };
@@ -106,13 +109,16 @@ describe('CompactionService', () => {
         expect.objectContaining({
           messages: [makeMsg('m0'), makeMsg('m1')],
           summaryMode: SummaryMode.MEMORY_SYNC,
+          force: false,
         }),
       );
-      // 会话状态恢复（refreshAfterCompaction）被调用并返回
-      expect(ds.refreshAfterCompaction).toHaveBeenCalled();
+      // 压缩后 surface：写路径已播种快照，compress 直接 getHistory()
+      expect(ds.getHistory).toHaveBeenCalled();
       expect(refreshed.messages.length).toBe(2);
       expect(refreshed.compacted).toBe(true);
-      expect(refreshed.shadowedMessageIds).toEqual(['m0']);
+      // v1.4：遮蔽为区间 + 条数（不再离散 id 清单）
+      expect(refreshed.shadowedCount).toBe(1);
+      expect(refreshed.shadowedEndId).toBe('m0');
       // 事件：pre_compact 与 compacted
       const emits = eventBus.emit.mock.calls.map((c: any[]) => c[0]);
       expect(emits).toContain('memory.pre_compact');
@@ -128,12 +134,45 @@ describe('CompactionService', () => {
       );
     });
 
+    it('force 透传：手动/溢出路径 force=true 传给引擎（跳过触发判断；retain 仍按配置比例）', async () => {
+      const { service, engine } = createService();
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      await service.compress(ds, { force: true });
+      expect(engine.execute).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({ force: true }),
+      );
+    });
+
+    it('纯裁剪（prune-only）→ 调 recordContextAnchor 写锚点；outcome 携带 contextStats', async () => {
+      const { service, engine } = createService();
+      engine.execute.mockResolvedValueOnce({
+        pruneEvents: 2,
+        compacted: false,
+        shadowedCount: 0,
+      } as any);
+      const recordContextAnchor = jest.fn(async () => {});
+      const ds = createDataSource({ recordContextAnchor });
+      const result = await service.compress(ds, { force: true });
+      expect(recordContextAnchor).toHaveBeenCalledTimes(1);
+      expect(result.compacted).toBe(false);
+      expect(result.contextStats).toEqual({ usedTokens: 100, effectiveContextWindow: 1000 });
+    });
+
+    it('compacted 路径不调 recordContextAnchor（锚点已由 appendCompact 的 compaction/end 承载）', async () => {
+      const { service } = createService();
+      const recordContextAnchor = jest.fn(async () => {});
+      const ds = createDataSource({ recordContextAnchor });
+      await service.compress(ds, { force: true });
+      expect(recordContextAnchor).not.toHaveBeenCalled();
+    });
+
     it('传入 hook 时：确认二级压缩后发 compaction.before（parallel 等待订阅者，payload 完整）', async () => {
       const { eventBus } = createService();
       // 引擎在确认二级压缩后调用 onBeforeCompaction
       const engine = { execute: jest.fn(async (_sid: string, opts: any) => {
         await opts.onBeforeCompaction();
-        return { pruneEvents: 1, compacted: true, shadowedMessageIds: ['m0'], summary: '检查点' };
+        return { pruneEvents: 1, compacted: true, shadowedCount: 1, shadowedEndId: 'm0', summaryMessageId: 'm_sum', summary: '检查点' };
       }) };
       const service2 = new CompactionService(
         engine as any,

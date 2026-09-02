@@ -303,6 +303,7 @@ export class PluginsController {
 
   /**
    * 获取所有已启用插件的 slot 注册清单（按 slot 名归并，已排序）
+   * 同时返回插件主题注册表（themes），前端据此注册可选项
    */
   @Public()
   @Get("slots")
@@ -310,6 +311,7 @@ export class PluginsController {
     const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
     const nlsLocale = this.toNlsLocale(lang);
     const result: Record<string, Array<Record<string, any>>> = {};
+    const themes: Array<Record<string, any>> = [];
     for (const r of resolved) {
       if (!r.enabled) continue;
       const pluginPath = this.externalLoader.getPluginPath(r.plugin.id);
@@ -332,11 +334,26 @@ export class PluginsController {
           rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
         });
       }
+      // 插件主题注册表（CSS 走 assets 端点，前端按 baseURL 拼完整 URL）
+      for (const theme of PluginRegistry.getThemes(r.plugin.id)) {
+        themes.push({
+          pluginId: r.plugin.id,
+          id: theme.id,
+          name: theme.nameKey
+            ? this.nlsService.resolveString(r.plugin.id, theme.nameKey, nlsLocale)
+            : theme.name,
+          primaryColor: theme.primaryColor,
+          secondaryColor: theme.secondaryColor,
+          mode: theme.mode || "all",
+          cssFile: theme.cssFile,
+          rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
+        });
+      }
     }
     for (const name of Object.keys(result)) {
       result[name].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
     }
-    return { slots: result };
+    return { slots: result, themes };
   }
 
   /**

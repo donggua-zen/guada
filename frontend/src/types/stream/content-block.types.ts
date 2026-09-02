@@ -39,7 +39,6 @@ export interface BlockTiming {
 /** 纯文本块 */
 export interface TextBlock {
   type: 'text';
-  contentId: string;
   text: string;
   timing?: BlockTiming;
 }
@@ -47,7 +46,6 @@ export interface TextBlock {
 /** 推理/思考块（与可见文本分离） */
 export interface ReasoningBlock {
   type: 'reasoning';
-  contentId: string;
   /** 推理文本 */
   summary: string;
   timing?: BlockTiming;
@@ -56,7 +54,6 @@ export interface ReasoningBlock {
 /** 模型请求的工具调用 */
 export interface ToolCallBlock {
   type: 'tool-call';
-  contentId: string;
   /** 供应商颁发的调用 id，与 tool-result 关联 */
   toolCallId: string;
   name: string;
@@ -68,7 +65,6 @@ export interface ToolCallBlock {
 /** 工具执行结果（回传给模型） */
 export interface ToolResultBlock {
   type: 'tool-result';
-  contentId: string;
   toolCallId: string;
   name: string;
   content: string;
@@ -78,14 +74,12 @@ export interface ToolResultBlock {
 /** 图片块：始终引用（attachment.url），不内联 base64；LLM 侧由 adapter 转 base64 */
 export interface ImageBlock {
   type: 'image';
-  contentId: string;
   attachment: FileRef;
 }
 
 /** 通用文件块：引用为主。inline 为可选内联文本（当前版本不填充，统一引用） */
 export interface FileBlock {
   type: 'file';
-  contentId: string;
   attachment: FileRef;
   inline?: string;
 }

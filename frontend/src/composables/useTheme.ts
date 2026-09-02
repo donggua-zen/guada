@@ -1,6 +1,6 @@
 // composables/useTheme.ts
 import { ref, computed, watch } from "vue";
-import { applyThemePreset } from "@/themes";
+import { applyThemePreset, themeRegistryVersion, retryPendingTheme } from "@/themes";
 
 /**
  * 主题管理 Composable
@@ -108,6 +108,13 @@ watch(darkThemePreset, (newVal: ThemePreset) => {
 // 监听 activeThemePreset 变化（由 isDark 切换或预设编辑触发），应用到 DOM
 watch(activeThemePreset, (newVal: ThemePreset) => {
   applyThemePreset(newVal);
+});
+
+// 插件主题注册表变化（清单到达/插件启停）时，补应用 pending 主题：
+// 启动时持久化主题 id 可能先于插件清单到达，applyThemePreset 会将其置为
+// pending 而非发起错误请求，注册表就绪后在此自动重试。
+watch(() => themeRegistryVersion.value, () => {
+  retryPendingTheme();
 });
 
 // 初始应用 DOM 状态

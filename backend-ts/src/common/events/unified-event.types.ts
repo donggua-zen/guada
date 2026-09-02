@@ -29,6 +29,7 @@ export const EVENT_METHOD = {
   // 引擎级附属
   STREAM_COMPRESSION_START: "stream/compression_start",
   STREAM_COMPRESSION_ERROR: "stream/compression_error",
+  STREAM_COMPRESSION_END: "stream/compression_end",
   STREAM_COMPACTION_SUMMARY: "stream/compaction_summary",
   STREAM_ASK_REQUESTED: "stream/ask_requested",
   STREAM_ASK_RESOLVED: "stream/ask_resolved",

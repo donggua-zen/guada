@@ -49,9 +49,9 @@
         <!-- 名称-->
         <div class="flex items-center gap-2 min-w-0">
           <!-- 文件图标 -->
-          <el-icon v-if="item.isDirectory" class="text-yellow-500 shrink-0" size="18">
-            <Folder />
-          </el-icon>
+          <span v-if="item.isDirectory" class="kb-folder-icon shrink-0">
+            <FolderIcon :size="18" />
+          </span>
           <img v-else :src="getFileIcon(item)" class="w-5 h-5 object-contain shrink-0" alt="file icon" />
 
           <!-- 名称 -->
@@ -68,6 +68,14 @@
               :content="item.currentStep" 
               placement="top">
               <el-tag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
+                {{ getStatusDisplayText(item) }}
+              </el-tag>
+            </GdTooltip>
+            <!-- 失败时 hover 显示具体错误原因 -->
+            <GdTooltip v-else-if="item.processingStatus === 'failed'"
+              :content="item.errorMessage || t('knowledge.status.unknownError')"
+              placement="top">
+              <el-tag size="small" :type="getStatusType(item.processingStatus)">
                 {{ getStatusDisplayText(item) }}
               </el-tag>
             </GdTooltip>
@@ -183,14 +191,8 @@ import { apiService } from '@/services/ApiService'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
-
-// 导入文件图标
-import fileCodeIcon from '@/assets/file_code.svg'
-import fileTxtIcon from '@/assets/file_txt.svg'
-import fileWordIcon from '@/assets/file_word.svg'
-import fileExcelIcon from '@/assets/file_excel.svg'
-import filePptIcon from '@/assets/file_ppt.svg'
-import filePdfIcon from '@/assets/file_zip.svg'
+import { getFileIconByExt } from '@/composables/useFileIcon'
+import FolderIcon from '@/components/ui/FolderIcon.vue'
 
 interface Props {
   kbId: string  // 知识库ID
@@ -792,26 +794,10 @@ defineExpose({
 })
 
 /**
- * 获取文件图标
+ * 获取文件图标（统一走 vscode-icons 彩色图标体系，与 workspace 目录树一致）
  */
 function getFileIcon(file: KBFile): string {
-  const ext = file.fileExtension?.toLowerCase() || ''
-
-  const iconMap: Record<string, string> = {
-    'pdf': filePdfIcon,
-    'docx': fileWordIcon,
-    'xlsx': fileExcelIcon,
-    'ppt': filePptIcon,
-    'pptx': filePptIcon,
-    'txt': fileTxtIcon,
-    'md': fileTxtIcon,
-    'js': fileCodeIcon,
-    'ts': fileCodeIcon,
-    'py': fileCodeIcon,
-    'java': fileCodeIcon,
-  }
-
-  return iconMap[ext] || fileTxtIcon
+  return getFileIconByExt(file.fileExtension || '')
 }
 
 /**
@@ -1141,6 +1127,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.kb-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #e6a23c;
+}
+
 .node-content:hover {
   background-color: rgba(0, 0, 0, 0.04);
 }

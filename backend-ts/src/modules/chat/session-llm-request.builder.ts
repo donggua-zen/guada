@@ -29,6 +29,9 @@ export function buildSessionLlmParams(
   const modelConfig = ctx.getModelConfig();
   return {
     model: modelConfig.modelName,
+    // envelope：system 提示词独立字段（协议槽位由 adapter 映射，对齐 DSH LlmCallConfig.system）
+    system: ctx.getSystemText(),
+    // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）
     messages: opts.messages,
     tools: ToolOrchestrator.toFlatToolDefs(ctx.getResolvedPlugins()),
     temperature: modelConfig.config.temperature,

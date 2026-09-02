@@ -209,7 +209,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
     );
 
     const client = this.createClient(params.providerConfig);
-    const filterMessages = await this.formatMessages(params.messages);
+    const filterMessages = await this.formatMessages(params.messages, params.system);
 
     // 构建最终请求参数
     const requestParams = this.buildRequestParam({
@@ -248,8 +248,12 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }
   }
 
-  private async formatMessages(messages: Message[]) {
+  private async formatMessages(messages: Message[], system?: string) {
     const result: any[] = [];
+    // OpenAI 协议：system 必须作为消息数组首条（无 system 时不插）
+    if (system) {
+      result.push({ role: "system", content: system });
+    }
     for (const msg of messages) {
       // tool 结果消息（source.kind === 'tool'）→ role=tool + function_call_output
       if (msg.source.kind === "tool") {
@@ -261,7 +265,8 @@ export class OpenAIAdapter implements IProtocolAdapter {
           role: "tool",
           tool_call_id: msg.source.toolCallId,
           name: tr?.name,
-          content: tr?.content ?? "",
+          // 空 tool-result 内容也会被 OpenAI 拒绝（missing messages.content）→ 占位 '\n'
+          content: tr?.content || "\n",
         });
         continue;
       }
@@ -425,14 +430,14 @@ export class OpenAIAdapter implements IProtocolAdapter {
       yield {
         type: "block_end",
         index: 0,
-        block: { type: "reasoning", contentId: "", summary: (message as any).reasoning_content },
+        block: { type: "reasoning", summary: (message as any).reasoning_content },
       };
     }
     if (message.content) {
       yield {
         type: "block_end",
         index: hasReasoning ? 1 : 0,
-        block: { type: "text", contentId: "", text: message.content },
+        block: { type: "text", text: message.content },
       };
     }
     if (message.tool_calls) {
@@ -446,7 +451,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
           index: index++,
           block: {
             type: "tool-call",
-            contentId: "",
             toolCallId: tc.id || "",
             name: tc.function?.name || "",
             arguments:

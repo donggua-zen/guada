@@ -31,9 +31,6 @@ const STATUS_DISPLAY: Record<string, string> = {
 export class TodoPlugin extends PluginBase {
   private readonly logger = new Logger(TodoPlugin.name);
 
-  /** sessionId → todo prompt text（压缩后清空，下次重建） */
-  private todoPromptCache = new Map<string, string>();
-
   /** 全局串行锁，所有文件读写操作排队执行 */
   private todoLock: Promise<void> = Promise.resolve();
 
@@ -49,14 +46,60 @@ export class TodoPlugin extends PluginBase {
     super();
   }
 
-  /** 压缩发生后清除缓存，下次 getMessages 时自动重建 */
+  /**
+   * 压缩后遗忘防护：有待办但历史无 todo 工具调用 → 注入隐藏 user 消息提醒 AI。
+   * 压缩会遮蔽早期 todo 调用（AI 可能遗忘待办）；注入条件驱动幂等——
+   * AI 更新过 todo（历史出现新调用）则不再注入；未更新则下次压缩再提醒。
+   */
   @OnEvent(HOOKS.MEMORY_COMPACTED)
-  handleCompacted(payload: { sessionId: string }) {
-    if (this.todoPromptCache.has(payload.sessionId)) {
-      this.todoPromptCache.delete(payload.sessionId);
-      this.logger.debug(
-        `Todo prompt cache cleared for session ${payload.sessionId} after compression`,
+  async handleCompacted(payload: {
+    sessionId: string;
+    sessionContext: import("../../chat/session-context").ISessionContext;
+  }) {
+    await this.maybeInjectTodoReminder(payload.sessionContext);
+  }
+
+  /** 注入条件：store 有待办 && 历史（压缩后视图）无 todo 工具调用 */
+  private async maybeInjectTodoReminder(
+    sessionContext: import("../../chat/session-context").ISessionContext,
+  ): Promise<void> {
+    try {
+      const workspaceDir = sessionContext.getWorkspacePath();
+      const filePath = path.join(
+        workspaceDir,
+        ".guada",
+        "todo",
+        `${sessionContext.sessionId}.json`,
       );
+      let store: TodoStore;
+      try {
+        store = JSON.parse(await fs.readFile(filePath, "utf-8")) as TodoStore;
+      } catch (e: any) {
+        if (e.code === "ENOENT") return; // 无 todo 存储 → 无需提醒
+        throw e;
+      }
+      if (store.items.length === 0) return;
+      if (store.items.every((t) => t.status === "completed")) return;
+
+      // 压缩后视图扫描：已有 todo 工具调用 → 模型知道待办，不注入
+      const history = await sessionContext.getHistory();
+      const hasTodoCall = history?.some(
+        (msg) =>
+          msg.role === "assistant" &&
+          msg.content.some(
+            (b) => b.type === "tool-call" && b.name === "todo",
+          ),
+      );
+      if (hasTodoCall) return;
+
+      const text = `[Current todo]\n${this.formatTodoList(store)}\n[Current todo — end]`;
+      await sessionContext.injectUserPrompt(text, "todo");
+      this.logger.debug(
+        `[todo] injected todo reminder for session ${sessionContext.sessionId}`,
+      );
+    } catch (e) {
+      // 注入失败不阻断压缩流程
+      this.logger.warn(`[todo] inject todo reminder failed: ${e}`);
     }
   }
 
@@ -134,46 +177,8 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       },
     });
 
-    // ── 待办状态 user 提示词（仅首次加载 + 压缩后重建时注入） ──
-    todoKit.registerPrompt({
-      frequency: "VOLATILE",
-      type: "user",
-      description: "Current todo items status",
-      content: async (context: PluginContext) => {
-        const sessionId = context.session.sessionId;
-
-        // 缓存命中 → 直接返回
-        const cached = this.todoPromptCache.get(sessionId);
-        if (cached !== undefined) return cached;
-
-        // 预置空缓存（防并发重复扫描）
-        this.todoPromptCache.set(sessionId, "");
-
-        const store = await this.readStore(context);
-        if (store.items.length === 0) return "";
-        if (store.items.every((t) => t.status === "completed")) return "";
-
-        // 扫描历史中是否有 todo 工具调用
-        try {
-          const history = await context.session.getHistory();
-          const hasTodoCall = history?.some(
-            (msg) =>
-              msg.role === "assistant" &&
-              msg.content.some(
-                (b) => b.type === "tool-call" && b.name === "todo",
-              ),
-          );
-          if (hasTodoCall) return "";
-        } catch {
-          // getHistory 失败则保守回退 — 不注入
-          return "";
-        }
-
-        const list = this.formatTodoList(store);
-        this.todoPromptCache.set(sessionId, list);
-        return `[Current todo]\n${list}\n[Current todo — end]`;
-      },
-    });
+    // ── 待办状态提醒：user 型固定提示词注入已废弃（envelope/surface 分离改造）──
+    // todo 状态改由 MEMORY_COMPACTED 处理器在压缩后落库注入隐藏消息（见 handleCompacted）。
   }
 
   private async handleTodo(

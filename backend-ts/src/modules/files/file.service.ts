@@ -486,7 +486,6 @@ export class FileService implements OnModuleInit {
     // 创建新的文件记录
     const newFile = await this.fileRepo.create({
       sessionId: message.sessionId,
-      contentId: activeContentId,
       fileName: originalFile.fileName,
       displayName: originalFile.displayName,
       fileSize: originalFile.fileSize,
@@ -619,7 +618,6 @@ export class FileService implements OnModuleInit {
       // 查找所有未关联 content 且修改时间超过保留时长的孤儿文件
       const orphanFiles = await this.prisma.file.findMany({
         where: {
-          contentId: null,
           updatedAt: { lt: cutoffTime },
         },
       });

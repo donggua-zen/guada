@@ -54,7 +54,6 @@ export interface StreamTurnStartEvent {
     type: 'turn_start'
     messageId: string
     turnsId: string
-    contentId: string
     modelName: string
 }
 
@@ -124,7 +123,6 @@ export interface StreamTurnEndEvent {
     finishReason: string
     error?: string
     messageId?: string
-    contentId?: string
     contextStats?: {
         usedTokens: number
         effectiveContextWindow: number

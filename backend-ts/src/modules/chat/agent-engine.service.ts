@@ -301,7 +301,7 @@ export class AgentEngine {
     // 重答删除(turn/delete 入库 + 发布)与历史加载(两者无配对闭合事件,留在此处)。
     // 非 overwrite(resume/regenerate)复用既有回合,不新建 turn/start,不追加用户消息;
     // 回合外壳 id 由前端传入 userMessage.turnId(与消息 id 解耦,不新建回合因此无新 turnId)。
-    const preGenAssistantId = sessionContext.generateId();
+    const preGenAssistantId = sessionContext.generateMessageId();
     let turnId = "";
     if (regenerationMode === "overwrite") {
       // ── 1. 重答:先删除(turn/delete 入库 + 发布),再加载 ──
@@ -407,6 +407,8 @@ export class AgentEngine {
           replaceTurnId: userMessage?.replaceTurnId,
           knowledgeBaseIds: userMessage?.knowledgeBaseIds,
           metadata: userMessage?.metadata,
+          ...(userMessage?.blocks ? { blocks: userMessage.blocks } : {}),
+          ...(userMessage?.source ? { source: userMessage.source } : {}),
         },
       );
       if (userMsgResult?.userMessage) {
@@ -454,15 +456,15 @@ export class AgentEngine {
       }
 
       // 副作用后重读完整请求消息列表（含 system prompt、摘要和历史）——压缩等已生效
-      let historyMessages = await sessionContext.getMessages();
+      let historyMessages = await sessionContext.getHistory();
 
       // 生成本轮助手回复的内容 ID（= 落库消息 id，与 SSE 消息级事件一致）
       // 累积统一走 BlockAssembler（全链路唯一 StreamChunk→ContentBlock 组装实现），
       // 不再存在 MessageRecord 平铺累积对象与双向转换。
-      let messageId = sessionContext.generateId();
+      // 有序消息 id：流式前预分配（SSE 全程携带），落库沿用 → 遮蔽区间按 id 比较可用
+      let messageId = sessionContext.generateMessageId();
       const modelConfig = sessionContext.getModelConfig();
       const assembler = new BlockAssembler();
-      assembler.setContentId(messageId);
 
       // 本轮组装产物（流结束后填充；同一 Message 对象入 parts，便于后续回写元数据）
       let assistantMessage: Message | null = null;
@@ -531,7 +533,7 @@ export class AgentEngine {
           if (action?.kind === "retry") {
             // 压缩改变存储：重载历史并重试本步（messageId/assembler 在循环头部重建，
             // 半截累积不落库，不会产生连续 assistant 消息）
-            historyMessages = await sessionContext.getMessages();
+            historyMessages = await sessionContext.getHistory();
             needToContinue = true;
             continue;
           }
@@ -599,8 +601,9 @@ export class AgentEngine {
             );
             const parts: Message[] = [];
             for (const tc of abortedToolCalls) {
+              const abortedToolResultId = sessionContext.generateMessageId();
               parts.push({
-                id: sessionContext.generateId(),
+                id: abortedToolResultId,
                 role: "tool",
                 kind: "model",
                 source: { kind: "tool", toolCallId: tc.toolCallId },
@@ -608,7 +611,6 @@ export class AgentEngine {
                 content: [
                   {
                     type: "tool-result",
-                    contentId: sessionContext.generateId(),
                     toolCallId: tc.toolCallId,
                     name: tc.name,
                     content:
@@ -685,7 +687,6 @@ export class AgentEngine {
             // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
             const execResult = await this.executeToolsAndBuildParts(
               assistantMessage!,
-              messageId,
               turnId,
               sessionContext,
               abortSignal,
@@ -750,14 +751,17 @@ export class AgentEngine {
 
     await sessionContext.persist();
 
-    // 发送 turn_end 事件:回合级收尾信号,只携带回合级信息(turnId/finishReason/usage/contextStats),
+    // 发送 turn_end 事件:回合级收尾信号,只携带回合级信息(turnId/finishReason/usage/耗时/contextStats),
     // 不携带 Message 内容(content/reasoningContent/messageId 已由 message 级事件承载)。
+    // totalDurationMs 与落库的 turn/finish 事件同值（finalizeTurn 的 loopDuration），
+    // 前端据此写 turn.metadata，使实时与刷新两条路径的耗时展示同源。
     await sessionContext.publishStream({
       type: "turn_end",
       turnId,
       finishReason: finalFinishReason,
       error: finalError,
       usage: finalUsage,
+      totalDurationMs: loopDuration,
       contextStats: {
         usedTokens: await sessionContext.getTokenCount(),
         effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
@@ -790,9 +794,10 @@ export class AgentEngine {
 
     if (messages.length === 0) return false;
 
+    const interceptorMessageId = sessionContext.generateMessageId();
     await sessionContext.appendMessages([
       {
-        id: sessionContext.generateId(),
+        id: interceptorMessageId,
         role: "user",
         kind: "model",
         source: { kind: "plugin", plugin: "interceptor" },
@@ -800,7 +805,6 @@ export class AgentEngine {
         content: [
           {
             type: "text",
-            contentId: sessionContext.generateId(),
             text: messages.join("\n\n"),
           },
         ],
@@ -821,7 +825,6 @@ export class AgentEngine {
    */
   private async executeToolsAndBuildParts(
     assistantMessage: Message,
-    messageId: string,
     turnId: string,
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
@@ -907,25 +910,22 @@ export class AgentEngine {
       return { toolParts: [] };
     }
 
-    // 构建事件
-    const toolEvent: SessionStreamEvent = {
-      type: "tool_calls_response",
-      toolCallsResponse: toolResponses.map((tr: any) => ({
-        name: tr.name,
-        content: tr.content,
-        toolCallId: tr.toolCallId,
-        outcome: tr.outcome,
-      })),
-      messageId,
-      turnId,
-    };
-
-    // 构建 parts（tool 结果消息 + 图片注入消息，三层 Message[]）
+    // 构建 parts（tool 结果消息 + 图片注入消息，三层 Message[]）——
+    // 每个工具结果是独立消息（独立 id），与含调用的 assistant 消息 id 无关（对齐 DSH：独立节点 + callId 关联）。
     const toolParts: Message[] = [];
+    // SSE 事件条目：携带独立 tool 结果消息 id（= 入库 tool/result.messageId），与持久化路径一致
+    const responseEntries: Array<{
+      messageId: string;
+      name: string;
+      content: string;
+      toolCallId: string;
+      outcome?: "success" | "error" | "rejected";
+    }> = [];
 
     for (const res of toolResponses) {
+      const toolResultId = sessionContext.generateMessageId();
       toolParts.push({
-        id: sessionContext.generateId(),
+        id: toolResultId,
         role: "tool",
         kind: "model",
         source: { kind: "tool", toolCallId: res.toolCallId },
@@ -933,7 +933,6 @@ export class AgentEngine {
         content: [
           {
             type: "tool-result",
-            contentId: sessionContext.generateId(),
             toolCallId: res.toolCallId,
             name: res.name,
             content: res.content,
@@ -941,18 +940,23 @@ export class AgentEngine {
           },
         ],
       });
+      responseEntries.push({
+        messageId: toolResultId,
+        name: res.name,
+        content: res.content,
+        toolCallId: res.toolCallId,
+        outcome: res.outcome,
+      });
 
       if (res.images && res.images.length > 0) {
         // 图片注入：user 消息 + image 块（hidden 标记）
         const imageBlocks: ContentBlock[] = [
           {
             type: "text",
-            contentId: sessionContext.generateId(),
             text: res.content || "",
           },
           ...res.images.map((img: any) => ({
             type: "image" as const,
-            contentId: sessionContext.generateId(),
             attachment: {
               attachmentId: sessionContext.generateId(),
               mediaType: img.media_type || "image/png",
@@ -961,8 +965,9 @@ export class AgentEngine {
             },
           })),
         ];
+        const imageMessageId = sessionContext.generateMessageId();
         toolParts.push({
-          id: sessionContext.generateId(),
+          id: imageMessageId,
           role: "user",
           kind: "model",
           source: { kind: "plugin", plugin: "image" },
@@ -971,6 +976,14 @@ export class AgentEngine {
         });
       }
     }
+
+    // 构建 SSE 事件：结果按 toolCallId 关联（对齐回放 tool/result 聚类语义），
+    // 不使用 assistant 消息 id 作关联；每个条目携带独立 tool 结果消息 id。
+    const toolEvent: SessionStreamEvent = {
+      type: "tool_calls_response",
+      turnId,
+      toolCallsResponse: responseEntries,
+    };
 
     return { toolParts, toolEvent };
   }

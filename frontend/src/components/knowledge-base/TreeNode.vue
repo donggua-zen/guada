@@ -19,9 +19,9 @@
             <div v-else class="w-3.5"></div>
             
             <!-- 文件夹/文件图标 -->
-            <el-icon v-if="node.isDirectory" class="text-yellow-500" size="18">
-                <Folder />
-            </el-icon>
+            <span v-if="node.isDirectory" class="kb-folder-icon">
+                <FolderIcon :size="18" />
+            </span>
             <img v-else :src="getFileIcon(node)" class="w-5 h-5 object-contain" alt="file icon" />
             
             <!-- 名称 -->
@@ -37,6 +37,11 @@
             <!-- 状态标签 -->
             <el-tag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
                 <GdTooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
+                    <span>{{ getStatusText(node.processingStatus) }}</span>
+                </GdTooltip>
+                <GdTooltip v-else-if="node.processingStatus === 'failed'"
+                    :content="node.errorMessage || t('knowledge.status.unknownError')"
+                    placement="top">
                     <span>{{ getStatusText(node.processingStatus) }}</span>
                 </GdTooltip>
                 <span v-else>{{ getStatusText(node.processingStatus) }}</span>
@@ -68,17 +73,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowRight, Folder } from '@element-plus/icons-vue'
+import { ArrowRight } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
-
-// 导入文件图标
-import fileCodeIcon from '@/assets/file_code.svg'
-import fileTxtIcon from '@/assets/file_txt.svg'
-import fileWordIcon from '@/assets/file_word.svg'
-import fileExcelIcon from '@/assets/file_excel.svg'
-import filePptIcon from '@/assets/file_ppt.svg'
-import filePdfIcon from '@/assets/file_zip.svg' // 临时使用zip图标代替PDF
+import FolderIcon from '@/components/ui/FolderIcon.vue'
+import { getFileIconByExt } from '@/composables/useFileIcon'
 
 interface Props {
     node: any
@@ -116,26 +115,10 @@ function handleNodeClick() {
 }
 
 /**
- * 获取文件图标
+ * 获取文件图标（统一走 vscode-icons 彩色图标体系，与 workspace 目录树一致）
  */
 function getFileIcon(file: KBFile): string {
-    const ext = file.fileExtension?.toLowerCase() || ''
-    
-    const iconMap: Record<string, string> = {
-        'pdf': filePdfIcon,
-        'docx': fileWordIcon,
-        'xlsx': fileExcelIcon,
-        'ppt': filePptIcon,
-        'pptx': filePptIcon,
-        'txt': fileTxtIcon,
-        'md': fileTxtIcon,
-        'js': fileCodeIcon,
-        'ts': fileCodeIcon,
-        'py': fileCodeIcon,
-        'java': fileCodeIcon,
-    }
-    
-    return iconMap[ext] || fileTxtIcon
+    return getFileIconByExt(file.fileExtension || '')
 }
 
 /**
@@ -179,6 +162,12 @@ function getStatusText(status: string): string {
 <style scoped>
 .tree-node {
     user-select: none;
+}
+
+.kb-folder-icon {
+    display: inline-flex;
+    align-items: center;
+    color: #e6a23c;
 }
 
 .node-content:hover {

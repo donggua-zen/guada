@@ -89,17 +89,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RefreshRight, Delete } from '@element-plus/icons-vue'
 import { KBFile } from '@/stores/knowledgeBase'
-
-// 导入所有文件图标
-import fileCodeIcon from '@/assets/file_code.svg'
-import fileExcelIcon from '@/assets/file_excel.svg'
-import fileHtmlIcon from '@/assets/file_html.svg'
-import fileMusicIcon from '@/assets/file_music.svg'
-import filePptIcon from '@/assets/file_ppt.svg'
-import fileTxtIcon from '@/assets/file_txt.svg'
-import fileVideoIcon from '@/assets/file_video.svg'
-import fileWordIcon from '@/assets/file_word.svg'
-import fileZipIcon from '@/assets/file_zip.svg'
+import { getFileIconByExt } from '@/composables/useFileIcon'
 
 interface Props {
     file: KBFile
@@ -115,62 +105,6 @@ const emit = defineEmits<{
     retry: [file: KBFile]
     delete: [file: KBFile]
 }>()
-
-/**
- * 文件类型到图标的映射
- */
-const fileIconMap: Record<string, string> = {
-    // 代码文件
-    'js': fileCodeIcon,
-    'ts': fileCodeIcon,
-    'vue': fileCodeIcon,
-    'py': fileCodeIcon,
-    'java': fileCodeIcon,
-    'h': fileCodeIcon,
-    'hpp': fileCodeIcon,
-    'cpp': fileCodeIcon,
-    'c': fileCodeIcon,
-    'go': fileCodeIcon,
-    'rs': fileCodeIcon,
-    'php': fileCodeIcon,
-    'rb': fileCodeIcon,
-    'css': fileCodeIcon,
-    'json': fileCodeIcon,
-    'xml': fileCodeIcon,
-    'sh': fileCodeIcon,
-    'yaml': fileCodeIcon,
-    'yml': fileCodeIcon,
-
-    // html
-    'html': fileHtmlIcon,
-    'htm': fileHtmlIcon,
-
-    // 文档文件
-    'docx': fileWordIcon,
-    'xlsx': fileExcelIcon,
-    'csv': fileExcelIcon,
-    'ppt': filePptIcon,
-    'pptx': filePptIcon,
-    'txt': fileTxtIcon,
-    'md': fileTxtIcon,
-    'markdown': fileTxtIcon,
-
-    // 媒体文件
-    'mp3': fileMusicIcon,
-    'wav': fileMusicIcon,
-    'flac': fileMusicIcon,
-    'mp4': fileVideoIcon,
-    'avi': fileVideoIcon,
-    'mkv': fileVideoIcon,
-    'mov': fileVideoIcon,
-
-    // 压缩文件
-    'zip': fileZipIcon,
-    'rar': fileZipIcon,
-    '7z': fileZipIcon,
-    'tar': fileZipIcon,
-    'gz': fileZipIcon,
-}
 
 /**
  * 根据文件扩展名获取图标
@@ -217,7 +151,7 @@ const fileIcon = computed(() => {
         ext = 'txt'
     }
 
-    return fileIconMap[ext] || fileTxtIcon
+    return getFileIconByExt(ext)
 })
 
 /**

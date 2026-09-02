@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { foldEvents, deriveMessages } from '../../src/common/persistence/replayer';
+import { foldEvents } from '../../src/common/persistence/replayer';
 import type { BaseEvent } from '../../src/common/persistence/types';
 
 // ─── 事件构造辅助 ───
@@ -22,7 +22,13 @@ function userMessage(messageId: string, seq: number): BaseEvent {
   return ev({
     type: 'user/message',
     seq,
-    data: { messageId, kind: 'user', content: '你好', metadata: {} },
+    // P6：事件格式统一为 blocks
+    data: {
+      messageId,
+      kind: 'user',
+      blocks: [{ type: 'text', contentId: messageId, text: '你好' }],
+      metadata: {},
+    },
   });
 }
 
@@ -68,7 +74,7 @@ describe('replayer 折叠 - 扁平消息 surface（零 turn 结构，P0-1 回归
 
     const state = foldEvents(events);
     // 扁平 surface：消息平铺在 messages（带归属标签），零回合结构
-    expect(state.messages.map((n) => n.message.id)).toEqual(['u1', 'a1']);
+    expect(state.messages.map((n) => n.id)).toEqual(['u1', 'a1']);
     expect(state.messages.every((n) => n.turnId === 't1')).toBe(true);
     expect('turnMeta' in state).toBe(false);
     expect('turns' in state).toBe(false);
@@ -90,7 +96,7 @@ describe('replayer 折叠 - 扁平消息 surface（零 turn 结构，P0-1 回归
 
     const state = foldEvents(events);
     const byTurn = (tid: string) =>
-      state.messages.filter((n) => n.turnId === tid).map((n) => n.message.id);
+      state.messages.filter((n) => n.turnId === tid).map((n) => n.id);
     expect(byTurn('t1')).toEqual(['u1', 'a1']);
     expect(byTurn('t2')).toEqual(['u2', 'a2']);
   });
@@ -105,19 +111,19 @@ describe('replayer 折叠 - 扁平消息 surface（零 turn 结构，P0-1 回归
     ];
 
     const state = foldEvents(events);
-    expect(state.messages.map((n) => n.message.id)).toEqual(['u1', 'a1']);
+    expect(state.messages.map((n) => n.id)).toEqual(['u1', 'a1']);
     // 不匹配的 finish 不清游标（游标保持 t1，后续消息归属不丢失）
     expect(state.currentTurnId).toBe('t1');
   });
 
-  it('LLM 投影 deriveMessages：纯消息级（turn 无关）', () => {
+  it('折叠态即可视视图：纯消息级（turn 无关）', () => {
     const events = [
       turnStart('t1', 1),
       userMessage('u1', 2),
       assistantMessage('a1', 3),
       turnFinish('t1', 4),
     ];
-    const msgs = deriveMessages(foldEvents(events));
+    const msgs = foldEvents(events).messages;
     expect(msgs.map((m) => m.id)).toEqual(['u1', 'a1']);
   });
 });
@@ -127,7 +133,7 @@ describe('审批与 metadata 补丁事件', () => {
     return { type: 'turn/start' as const, seq, time: seq, data: { turnId: id, kind: 'turn', metadata: {} } };
   }
   function userMessage(id: string, seq: number) {
-    return { type: 'user/message' as const, seq, time: seq, data: { messageId: id, kind: 'user', content: 'q', metadata: {} } };
+    return { type: 'user/message' as const, seq, time: seq, data: { messageId: id, kind: 'user', blocks: [{ type: 'text', contentId: id, text: 'q' }], metadata: {} } };
   }
   function assistantMessage(id: string, seq: number) {
     return { type: 'assistant/message' as const, seq, time: seq, data: { messageId: id, content: [{ type: 'text', contentId: `${id}_c`, text: 'a' }], metadata: {} } };
@@ -152,6 +158,6 @@ describe('审批与 metadata 补丁事件', () => {
       },
     ];
     const state = foldEvents(events);
-    expect(state.messages.map((n) => n.message.id)).toEqual(['u1', 'a1']);
+    expect(state.messages.map((n) => n.id)).toEqual(['u1', 'a1']);
   });
 });

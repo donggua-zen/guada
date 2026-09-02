@@ -5,10 +5,8 @@
  *   user/message + assistant/message + tool/result（消息级三事件，对齐 DSH）
  *   turn/delete（删除本轮对话：按回合 id 移除该回合全部消息节点）
  *   message/prune（内容裁剪）、compaction/*（压缩括号：前缀范围删除 + 头部摘要，消息级）
- * 回放产出**扁平消息 surface**（节点带 seq/turnId），零 turn 树；
- * 消费方经投影派生：
- *   deriveMessages → LLM 消息视图（turn 无关）
- *   deriveTurns → 展示三层 Turn[]（前端契约）
+ * 回放产出**扁平消息 surface**：`MessageNode[]`（IS-A Message，带 seq/turnId 归属标签），
+ * 即可视消息序列本身——command 等事件不再入态，读取无需投影过滤（S0）。
  */
 
 import {
@@ -26,8 +24,6 @@ import {
   TurnDeleteData,
   MessagePruneData,
   CompactionSummaryData,
-  CommandRunData,
-  CommandDoneData,
   MessageFile,
 } from './types';
 import type {
@@ -121,9 +117,9 @@ export function foldEvent(
       const data = (event.data as unknown) as UserMessageData;
       if (!state.currentTurnId) break; // 回合未开（异常），忽略
       state.messages.push({
+        ...userMessageFromData(data, event.time),
         seq: event.seq,
         turnId: state.currentTurnId,
-        message: userMessageFromData(data, event.time),
       });
       break;
     }
@@ -133,9 +129,9 @@ export function foldEvent(
       const data = (event.data as unknown) as AssistantMessageData;
       if (!state.currentTurnId) break; // 回合未开（异常），忽略
       state.messages.push({
+        ...assistantMessageFromData(data, event.time),
         seq: event.seq,
         turnId: state.currentTurnId,
-        message: assistantMessageFromData(data, event.time),
       });
       break;
     }
@@ -145,9 +141,9 @@ export function foldEvent(
       const data = (event.data as unknown) as ToolResultData;
       if (!state.currentTurnId) break; // 回合未开（异常），忽略
       state.messages.push({
+        ...toolResultFromData(data, event.time),
         seq: event.seq,
         turnId: state.currentTurnId,
-        message: toolResultFromData(data, event.time),
       });
       break;
     }
@@ -170,9 +166,9 @@ export function foldEvent(
       // 用户编辑（strategy='user_edit'）：两视图一致，就地改 text 块（编辑所见即所得）；
       // 压缩自动裁剪（head_tail_500 等）：仅 LLM 链路应用，展示链路保留完整原文
       if (data.strategy !== 'user_edit' && !applyCompressionPrune) break;
-      const node = state.messages.find((n) => n.message.id === data.messageId);
+      const node = state.messages.find((n) => n.id === data.messageId);
       if (!node) break;
-      const m = node.message;
+      const m = node;
       if (data.strategy === 'user_edit') {
         const tb = m.content.find(
           (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text',
@@ -215,14 +211,19 @@ export function foldEvent(
 
       const summaryMsgId = data.summaryMessageId || `__compact_${event.seq}`;
 
-      // 压缩范围 = 视图头部开始的连续前缀（压缩引擎 shadowedMessages = messages.slice(0, boundary)），
-      // shadowedMessageIds 即该前缀的 id 清单。定位结束位置 = 最后一个匹配 id 的下标。
-      const shadowSet = new Set(data.shadowedMessageIds ?? []);
+      // 压缩范围 = 视图头部开始的连续前缀（压缩引擎 shadowedMessages = messages.slice(0, boundary)）。
+      // 新格式：shadowedCount 即遮蔽条数 → O(1) 头删除（不再 Set+全扫）；
+      // 旧格式：shadowedMessageIds 离散清单 → 回退 Set+全扫定位末位（防御保留）。
       let endIdx = -1;
-      for (let i = 0; i < state.messages.length; i++) {
-        if (shadowSet.has(state.messages[i].message.id)) endIdx = i;
+      if (data.shadowedCount !== undefined && Number.isFinite(data.shadowedCount)) {
+        endIdx = Math.min(Math.max(0, data.shadowedCount), state.messages.length) - 1;
+      } else if (Array.isArray(data.shadowedMessageIds)) {
+        const shadowSet = new Set(data.shadowedMessageIds);
+        for (let i = 0; i < state.messages.length; i++) {
+          if (shadowSet.has(state.messages[i].id)) endIdx = i;
+        }
       }
-      if (endIdx === -1) {
+      if (endIdx < 0) {
         // 不可达（引擎 id 来自同一折叠视图）；防御告警跳过，不落任何回退分支
         console.warn(
           `[replayer] compaction/summary at seq=${event.seq}: no shadowed message located, skipping`,
@@ -232,17 +233,19 @@ export function foldEvent(
 
       // 幂等：同一 compaction/summary 被再次折叠（防御性重放）→ 摘要已置头部，
       // 仍执行范围删除（移除重放的遮蔽节点），但不重复插入摘要
-      if (state.messages.some((n) => n.message.id === summaryMsgId)) {
+      if (state.messages.some((n) => n.id === summaryMsgId)) {
         state.messages.splice(1, endIdx);
         break;
       }
 
-      // 摘要消息（role='event' kind='model'，与普通消息靠 role/kind 区分：
-      // 二次压缩时旧摘要位于消息头、必然落在新删除范围内 → 自然被替换，不会重复）
+      // 检查点消息（role='user' + source.plugin='compact'，DSH 式可见检查点：
+      // 二次压缩时旧检查点位于消息头、必然落在新删除范围内 → 自然被替换，不会重复）
       const summaryMsg = eventMessageFromData({
         messageId: summaryMsgId,
         eventType: 'compaction',
         compactInfo: {
+          shadowedEndId: data.shadowedEndId,
+          shadowedCount: data.shadowedCount,
           shadowedMessageIds: data.shadowedMessageIds,
           summary: data.summary,
         },
@@ -251,9 +254,9 @@ export function foldEvent(
       const headTurnId = state.messages[0].turnId;
       // 范围删除 [0..endIdx] + 摘要置头部，一步完成
       state.messages.splice(0, endIdx + 1, {
+        ...summaryMsg,
         seq: event.seq,
         turnId: headTurnId,
-        message: summaryMsg,
       } satisfies MessageNode);
       break;
     }
@@ -269,56 +272,15 @@ export function foldEvent(
     case 'ask/answered':
       break;
 
-    // ─── 事件类消息：command/run + command/done（对齐 DSH CommandNode）───
-    // 折叠为 role='event' 节点；命令发生在回合内 → turnId 归属当前回合；
-    // 用户主动触发（无回合）→ turnId=null（展示投影包裹独立事件外壳）。
-    case 'command/run': {
-      const data = (event.data as unknown) as CommandRunData;
-      const shellId = `__cmd_${event.seq}`;
-      state.messages.push({
-        seq: event.seq,
-        turnId: state.currentTurnId,
-        message: eventMessageFromData({
-          messageId: `${shellId}_e`,
-          eventType: 'command',
-          commandId: data.commandId,
-          commandName: data.name,
-          commandArgs: data.args ?? null,
-        }),
-      });
+    // ─── command/run + command/done：不再折叠进 state.messages（S0 移除历史遗留）───
+    // 命令事件服务于前端展示与审计，对 LLM 视图无意义；折叠态即可视消息序列，
+    // command 节点此前被 fold 进来、又在投影时被过滤，属纯粹空转。
+    // 完整事件流仍保留于日志，事件页展示走读盘独立折叠（applyCompressionPrune=false）。
+    case 'command/run':
       break;
-    }
 
-    case 'command/done': {
-      const data = (event.data as unknown) as CommandDoneData;
-      const outcome = {
-        kind: data.kind,
-        ...(data.text === undefined ? {} : { text: data.text }),
-      };
-      // 更新目标命令事件节点（可能在回合内，也可能在独立外壳中）
-      const target = state.messages.find(
-        (n) =>
-          n.message.role === 'event'
-          && n.message.metadata?.eventType === 'command'
-          && n.message.metadata?.commandId === data.commandId,
-      );
-      if (target) {
-        target.message.metadata = { ...target.message.metadata, commandOutcome: outcome };
-      } else {
-        // 事件消息缺失（如 done 先于 run 到达）：兜底独立节点
-        state.messages.push({
-          seq: event.seq,
-          turnId: null,
-          message: eventMessageFromData({
-            messageId: `__cmd_${event.seq}_e`,
-            eventType: 'command',
-            commandId: data.commandId,
-            commandOutcome: outcome,
-          }),
-        });
-      }
+    case 'command/done':
       break;
-    }
 
     default:
       break;
@@ -361,9 +323,9 @@ function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFi
   for (const f of files ?? []) {
     const ref = toFileRef(f);
     if (f.fileType?.toLowerCase().startsWith('image/')) {
-      blocks.push({ type: 'image', contentId: cid, attachment: ref });
+      blocks.push({ type: 'image', attachment: ref });
     } else {
-      blocks.push({ type: 'file', contentId: cid, attachment: ref });
+      blocks.push({ type: 'file', attachment: ref });
     }
   }
 }
@@ -374,21 +336,31 @@ function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFi
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
  */
 function userMessageFromData(data: UserMessageData, time: number): ThreeTierMessage {
-  const blocks: ContentBlock[] = [];
   const cid = data.messageId;
   const meta = data.metadata ?? {};
-  if (data.content) {
-    blocks.push({ type: 'text', contentId: cid, text: data.content });
+  // P6：事件格式统一为 blocks——旧 content/files 平铺格式 fail-fast
+  // （对齐 assistantMessageFromData 的 legacy 检测；存量旧数据由运维侧重建，不对外暴露工具名）
+  if (!Array.isArray(data.blocks)) {
+    throw new Error(
+      `[replayer] user/message ${cid}: legacy content/files format is no longer supported. ` +
+        `Session data must be rebuilt by the maintainer.`,
+    );
   }
-  appendFileBlocks(blocks, cid, data.files);
+  // P6c：contentId 已彻底删除（块定位由 messageId + 块序号承担）
+  const blocks: ContentBlock[] = [...data.blocks];
   const injected = data.kind === 'model';
+  // 显式 source 优先（队列投递的 sub_agent/scheduler/process_monitor 来源），
+  // 缺省由 kind 推导（model → plugin）
+  const source: ThreeTierMessage['source'] =
+    data.source ??
+    (injected
+      ? { kind: 'plugin', plugin: String(meta.plugin ?? 'unknown') }
+      : { kind: 'user' });
   return {
     id: cid,
     role: 'user',
     kind: data.kind,
-    source: injected
-      ? { kind: 'plugin', plugin: String(meta.plugin ?? 'unknown') }
-      : { kind: 'user' },
+    source,
     metadata: { ...meta },
     content: blocks,
     createdAt: time,
@@ -397,7 +369,7 @@ function userMessageFromData(data: UserMessageData, time: number): ThreeTierMess
 
 /**
  * assistant/message → 三层 Message（role='assistant'，kind='model'）。
- * content 原生为 ContentBlock[]（与内存结构同构，直接采用，仅回填消息级 contentId）。
+ * content 原生为 ContentBlock[]（与内存结构同构，直接采用，零转换）。
  * 旧平铺格式（content 字符串 + reasoningContent/toolCalls 并列）已废弃：
  * 检测到即 fail-fast 明确报错（旧数据可从 DB 重新导入）。
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
@@ -413,9 +385,7 @@ function assistantMessageFromData(data: AssistantMessageData, time: number): Thr
     );
   }
 
-  const blocks: ContentBlock[] = data.content.map((b) =>
-    b.contentId ? b : { ...b, contentId: cid },
-  );
+  const blocks: ContentBlock[] = [...data.content];
   appendFileBlocks(blocks, cid, data.files);
   return {
     id: cid,
@@ -444,7 +414,6 @@ function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessag
     content: [
       {
         type: 'tool-result',
-        contentId: cid,
         toolCallId: data.toolCallId,
         name: data.name ?? '',
         content: data.content,
@@ -456,62 +425,36 @@ function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessag
 }
 
 /**
- * 事件类消息 → 三层 Message（role='event'，kind='model'，source.plugin）。
- * ContentBlock 即事件内容（命令文本 / 压缩摘要）。
- * LLM 视图（deriveMessages）只放行 compaction 类事件消息；命令事件由投影过滤。
+ * compaction 摘要 → 三层 Message（role='user'，kind='model'，source.plugin='compact'）。
+ * 对齐 DSH：LLM 消息角色只有 system/user/assistant，无 event——检查点是可见 user 消息
+ * （source.plugin 标记来源；metadata.compactInfo 承载遮蔽范围/摘要）。
  */
 function eventMessageFromData(data: {
   messageId: string;
   eventType: string;
-  commandId?: string;
-  commandName?: string;
-  commandArgs?: unknown;
-  commandOutcome?: { kind: string; text?: string } | null;
-  compactInfo?: { shadowedMessageIds: string[]; summary: string };
+  compactInfo?: {
+    shadowedEndId?: string;
+    shadowedCount?: number;
+    shadowedMessageIds?: string[];
+    summary: string;
+  };
 }): ThreeTierMessage {
   const cid = data.messageId;
-  const text =
-    data.eventType === 'command'
-      ? `/${data.commandName ?? ''}`
-      : data.compactInfo?.summary ?? '';
+  const text = data.compactInfo?.summary ?? '';
   return {
     id: cid,
-    role: 'event',
+    role: 'user',
     kind: 'model',
-    source: {
-      kind: 'plugin',
-      plugin: data.eventType === 'command' ? 'command' : 'compact',
-    },
+    source: { kind: 'plugin', plugin: 'compact' },
     metadata: {
       eventType: data.eventType,
-      ...(data.commandId === undefined ? {} : { commandId: data.commandId }),
-      ...(data.commandName === undefined ? {} : { commandName: data.commandName }),
-      ...(data.commandArgs === undefined ? {} : { commandArgs: data.commandArgs }),
-      ...(data.commandOutcome === undefined ? {} : { commandOutcome: data.commandOutcome }),
       ...(data.compactInfo === undefined ? {} : { compactInfo: data.compactInfo }),
     },
-    content: text
-      ? [{ type: 'text', contentId: cid, text }]
-      : [],
+    // 检查点永远产出有效文本块（DISABLED 空摘要 → 占位标记）：
+    // 空 content 会被 LLM adapter 拒绝（400 missing messages.content），
+    // 而 emptyContentCompatStep 只兜 assistant、不兜 user。
+    content: [
+      { type: 'text', text: text || '[compacted region]' },
+    ],
   };
-}
-
-// ─── LLM 消息视图投影（纯消息级，turn 无关）───
-
-/**
- * LLM 消息视图投影：纯消息级过滤。
- * - 事件类消息：仅 compaction 摘要进入 LLM 上下文（对齐 DSH 摘要节点）
- * - shadowed 防御（LLM 折叠已做范围移除，遮蔽消息不应存在）
- */
-export function deriveMessages(state: ReplayState): ThreeTierMessage[] {
-  const out: ThreeTierMessage[] = [];
-  for (const node of state.messages) {
-    const m = node.message;
-    if (m.role === 'event') {
-      if (m.metadata?.eventType !== 'compaction') continue;
-    }
-    if (m.metadata?.shadowed === true) continue;
-    out.push(m);
-  }
-  return out;
 }

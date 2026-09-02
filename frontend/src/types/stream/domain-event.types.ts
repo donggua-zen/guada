@@ -39,6 +39,10 @@ export type DomainEvent =
         totalDurationMs?: number;
         errorDetail?: unknown;
         modelName?: string;
+        /** 回合后完整请求 token（envelope + 可见视图；前端上下文占用锚点） */
+        usedTokens?: number;
+        /** 有效上下文窗口（与 usedTokens 配套） */
+        effectiveContextWindow?: number;
       };
     }
   | {
@@ -78,13 +82,32 @@ export type DomainEvent =
   | {
       type: "compaction/summary";
       seq: number;
-      data: { shadowedMessageIds: string[]; summary: string; summaryMessageId?: string };
+      data: {
+        /** 遮蔽末位（分界点）消息 id——前端标记"已压缩"的唯一依据 */
+        shadowedEndId?: string;
+        /** 遮蔽消息条数 */
+        shadowedCount?: number;
+        /** 旧格式：被遮蔽消息的离散 id 清单（防御回退） */
+        shadowedMessageIds?: string[];
+        summary: string;
+        summaryMessageId?: string;
+      };
     }
   | { type: "message/prune"; seq: number; data: { messageId: string; newContent: string; strategy?: string; prunedBytes?: number } }
   | { type: "command/run"; seq: number; data: Record<string, unknown> }
   | { type: "command/done"; seq: number; data: Record<string, unknown> }
   | { type: "compaction/start"; seq: number; data: Record<string, unknown> }
-  | { type: "compaction/end"; seq: number; data: Record<string, unknown> }
+  | {
+      type: "compaction/end";
+      seq: number;
+      data: {
+        sourceCommandId?: string;
+        /** 压缩后完整请求 token（compacted 路径由 appendCompact 括号闭携带；prune-only 路径为独立锚点） */
+        usedTokens?: number;
+        /** 有效上下文窗口（与 usedTokens 配套） */
+        effectiveContextWindow?: number;
+      };
+    }
   | { type: "ask/asked"; seq: number; data: Record<string, unknown> }
   | { type: "ask/answered"; seq: number; data: Record<string, unknown> }
   | { type: "session/init"; seq: number; data: Record<string, unknown> }

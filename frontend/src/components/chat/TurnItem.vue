@@ -21,7 +21,21 @@
                 <span v-html="userContent"></span>
               </div>
             </template>
-            <span v-else v-html="renderSkillBadges(userContent)"></span>
+            <!-- P5b：通知类（process_monitor/sub_agent）不显示文本气泡，仅折叠按钮 -->
+            <span v-else-if="!isNotificationUser" v-html="renderSkillBadges(userContent)"></span>
+          </div>
+          <!-- P5b：通知类折叠区（极简显示，可展开看全文；内容为剥离 <system_reminder> 标签后的全文） -->
+          <div v-if="isNotificationUser && notificationText" class="user-reminder">
+            <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
+              <el-icon size="12">
+                <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
+                <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
+              </el-icon>
+              <span class="user-reminder__label">
+                {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
+              </span>
+            </button>
+            <div v-if="reminderExpanded" class="user-reminder__body">{{ notificationText }}</div>
           </div>
         </div>
         <!-- 知识库 -->
@@ -117,7 +131,7 @@
                         :thinking-duration-ms="item.source.thinkingDurationMs"
                         :thinking-started-at="item.source.thinkingStartedAt" />
                       <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
-                        :tool-responses="item.toolResponses" :content-id="item.source.id"
+                        :tool-responses="item.toolResponses"
                         :is-streaming="streamingState.isStreaming" :session-id="props.sessionId" />
                     </template>
                   </div>
@@ -236,7 +250,9 @@ import FileChangesBar from './message-item/FileChangesBar.vue';
 import FileDiffDialog from './message-item/FileDiffDialog.vue';
 import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
+import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { apiService } from '@/services/ApiService';
+import { isHiddenBlock, stripSystemReminder } from '@/utils/messageUtils';
 
 const { toast } = usePopup();
 const { t } = useI18n();
@@ -261,7 +277,11 @@ const emit = defineEmits<{
 
 // 二级结构（turn → block）：直接从 turn.blocks 按 role 拆分。
 // user 锚点块 + 事件块（command/compaction）单独抽离 + 其余块（assistant/tool）作为展示源。
-const user = computed(() => props.turn.blocks?.find((b) => b.role === 'user') ?? null);
+// user 锚点块：必须是人类真实输入（source.kind='user'）。
+// 后端注入的 hidden user 消息（拦截器/图片/待办/压缩检查点）同 role 但非用户输入，须排除。
+const user = computed(
+  () => props.turn.blocks?.find((b) => b.role === 'user' && !isHiddenBlock(b)) ?? null,
+);
 const events = computed(() => props.turn.blocks?.filter((b) => b.role === 'event') ?? []);
 const activeBlocks = computed(() => props.turn.blocks?.filter((b) => b.role !== 'user' && b.role !== 'event') ?? []);
 
@@ -427,6 +447,24 @@ const userContent = computed(() => {
   return user.value?.content || '';
 });
 
+// P5b：通知类消息（process_monitor/sub_agent）——只含 <system_reminder> 块，
+// 前端剥离标签后折叠极简显示（点击展开看全文），不混入用户消息气泡。
+const reminderExpanded = ref(false);
+const isNotificationUser = computed(() => {
+  const kind = user.value?.source?.kind;
+  return kind === 'process_monitor' || kind === 'sub_agent';
+});
+const notificationText = computed(() => {
+  if (!isNotificationUser.value) return '';
+  return stripSystemReminder(user.value?.content ?? '');
+});
+// 折叠按钮文案按来源区分：进程输出 / 子代理结果
+const notificationLabel = computed(() => {
+  return user.value?.source?.kind === 'process_monitor'
+    ? t('chat.turn.viewProcessOutput')
+    : t('chat.turn.viewSubagentResult');
+});
+
 const userTime = computed(() => {
   return {
     firendly: formatTime(user.value?.createdAt || '', 'friendly'),
@@ -534,7 +572,18 @@ const assistantTime = computed(() => {
   };
 });
 
-const totalDurationMs = computed(() => props.turn?.metadata?.totalDurationMs ?? null);
+/**
+ * 工作时长（ms）：单一来源，两态取值由秒表统一切换——
+ * - 流式期间：从 turn.state.startedAt 锚点跳动（本地时钟，纯展示；
+ *   此刻服务端耗时尚未产生，metadata.totalDurationMs 为 undefined）
+ * - 回合结束：自动切到服务端落库真值 turn.metadata.totalDurationMs
+ *   （SSE turn_end 与历史事件页 turn/finish 同源 → 刷新后仍可展示）
+ */
+const { elapsedMs: durationMs } = useElapsedTicker(
+  () => props.turn?.state?.startedAt ?? null,
+  () => streamingState.value.isStreaming,
+  () => props.turn?.metadata?.totalDurationMs ?? null,
+);
 
 const formatDuration = (ms: number): string => {
   const s = ms / 1000;
@@ -545,7 +594,7 @@ const formatDuration = (ms: number): string => {
 };
 
 const durationText = computed(() => {
-  const ms = totalDurationMs.value;
+  const ms = durationMs.value;
   if (ms === null || ms === undefined) return null;
   return formatDuration(ms);
 });
@@ -662,6 +711,51 @@ const handleClick = (event: MouseEvent) => {
 .user-section .message-item__wrapper {
   align-items: flex-end;
   max-width: 80%;
+}
+
+/* P5：process_monitor 通知折叠区（居左、灰色极简） */
+.user-reminder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 4px;
+  max-width: 100%;
+}
+.user-reminder__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-tertiary, #e0e0e0);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-tertiary, #999);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.user-reminder__toggle:hover {
+  color: var(--color-text-secondary, #666);
+  border-color: var(--color-border-secondary, #bbb);
+}
+.user-reminder__arrow {
+  transition: transform 0.2s ease;
+}
+.user-reminder__arrow.is-expanded {
+  transform: rotate(180deg);
+}
+.user-reminder__body {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--gd-color-surface, #f5f5f5);
+  color: var(--color-text-secondary, #666);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 /* 助手消息气泡 */

@@ -192,15 +192,14 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
           const cid = content.id;
           const blocks: Array<Record<string, unknown>> = [];
           if (content.reasoningContent) {
-            blocks.push({ type: "reasoning", contentId: cid, summary: content.reasoningContent });
+            blocks.push({ type: "reasoning", summary: content.reasoningContent });
           }
           if (content.content) {
-            blocks.push({ type: "text", contentId: cid, text: content.content });
+            blocks.push({ type: "text", text: content.content });
           }
           for (const tc of (meta.toolCalls ?? []) as any[]) {
             blocks.push({
               type: "tool-call",
-              contentId: cid,
               toolCallId: tc?.id ?? "",
               name: tc?.name ?? "",
               arguments:
@@ -223,6 +222,27 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
           });
         } else {
           // 用户消息 → user/message（真实用户 kind='user'；注入 kind='model'；归属由当前回合括号界定，不带 turnId）
+          // P6：统一 blocks 格式（text 块 + image/file 附件块），不再平铺 content/files
+          const cid = content.id;
+          const userBlocks: Array<Record<string, unknown>> = [];
+          if (content.content) {
+            userBlocks.push({ type: "text", text: content.content });
+          }
+          for (const f of files) {
+            const isImage = String(f.fileType ?? "")
+              .toLowerCase()
+              .startsWith("image/");
+            userBlocks.push({
+              type: isImage ? "image" : "file",
+              attachment: {
+                attachmentId: f.fileId ?? f.url ?? "",
+                mediaType: f.fileType ?? "application/octet-stream",
+                bytes: f.fileSize || 0,
+                name: f.displayName ?? f.fileName,
+                url: f.url ?? f.previewUrl,
+              },
+            });
+          }
           events.push({
             type: "user/message",
             seq: seq++,
@@ -230,8 +250,7 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
             data: {
               messageId: content.id,
               kind: meta.hidden === true ? "model" : "user",
-              content: content.content || "",
-              files: files.length > 0 ? files : undefined,
+              blocks: userBlocks,
               metadata: meta,
             },
           });

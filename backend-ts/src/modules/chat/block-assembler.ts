@@ -48,8 +48,6 @@ export class BlockAssembler {
   private order: number[] = [];
   /** 断点续传偏移：seed 后新流块的 wire index 映射为 wireIndex + offset */
   private indexOffset = 0;
-  /** 消息级 contentId：为空缺 contentId 的块统一回填 */
-  private messageContentId = "";
   /** 最近一次 push 的到达时间（中断/截断块的收口时间） */
   private lastPushAt?: number;
   /** seed 的既有块快照（reset 时恢复到 seed 后初始态） */
@@ -58,11 +56,6 @@ export class BlockAssembler {
   private finishReason?: string;
   private signature?: string;
   private redactedData?: string;
-
-  /** 设置消息级 contentId（agent 循环建 assembler 时调用），用于回填块的 contentId */
-  setContentId(id: string): void {
-    this.messageContentId = id;
-  }
 
   /**
    * 重试场景：清空当前尝试的累积，恢复到 seed 后的初始态。
@@ -194,15 +187,14 @@ export class BlockAssembler {
 
   /**
    * 采纳 block_end 权威块前的归一化：
-   * - contentId 空缺时回填消息级 contentId
    * - tool-call 参数统一过 repairArguments（正常完成也可能有无效 JSON，与未闭合块同规则）
+   * （P6c：原 contentId 回填逻辑已随 contentId 字段一并删除）
    */
   private normalizeBlock(block: ContentBlock): ContentBlock {
-    const contentId = block.contentId || this.messageContentId;
     if (block.type === "tool-call") {
-      return { ...block, contentId, arguments: this.repairArguments(block.arguments) };
+      return { ...block, arguments: this.repairArguments(block.arguments) };
     }
-    return { ...block, contentId };
+    return block;
   }
 
   /** 是否已有任何可见内容（用于"干净提前断流"检测） */
@@ -235,7 +227,6 @@ export class BlockAssembler {
           this.withTiming(
             {
               type: "tool-call",
-              contentId: this.messageContentId,
               toolCallId: partial.toolCallId || "",
               name: partial.name || "",
               arguments: this.repairArguments(partial.arguments || ""),
@@ -253,8 +244,8 @@ export class BlockAssembler {
       result.push(
         this.withTiming(
           partial.type === "text"
-            ? { type: "text", contentId: this.messageContentId, text: partial.text }
-            : { type: "reasoning", contentId: this.messageContentId, summary: partial.text },
+            ? { type: "text", text: partial.text }
+            : { type: "reasoning", summary: partial.text },
           partial,
         ),
       );
@@ -280,7 +271,7 @@ export class BlockAssembler {
    * 立即报错/中止无任何产出时不应落库空 assistant 消息；业务错误归拢 turn 级（finalizeTurn）。
    * 调用方以 null 判定"无有效消息"，跳过落库与一切消息后处理（工具注入等）。
    *
-   * @param opts.id 消息 id（= 本轮 contentId，与落库/SSE 一致）
+   * @param opts.id 消息 id（与落库/SSE 一致）
    * @param opts.extraMetadata 额外元数据（modelName 等），浅合并
    * @returns 组装后的 Message；无有效内容返回 null
    */

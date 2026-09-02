@@ -9,10 +9,13 @@
  * - 多块消息按 (messageId, index) 寻址为独立块；user 多块（文本+文件）；tool_calls_response 按 toolCallId 挂载
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { ref } from "vue";
+import { setActivePinia, createPinia } from "pinia";
 // 折叠器不调用 ApiService（messageToTurnContent 为纯转换）——mock 掉以切断
 // ApiService → locales → localStorage 的导入链（node 环境无 localStorage）
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 import { foldEvents, applyLiveChunk } from "./streamProjector";
+import { useSessionTokenStats } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
 
 /** 最小 sessionStore mock（plain 数组，不依赖 Vue 响应式） */
@@ -130,14 +133,14 @@ describe("StreamProjector 折叠器", () => {
     ];
     foldEvents(store as any, "s1", events);
     const blocks = store.state.turns[0].blocks.filter((b: any) => b.role === "assistant");
-    // 两个独立块（不再合并单桶），contentId 回填
+    // 两个独立块（不再合并单桶）；块 id = 流式占位（__blk_<messageId>_<index>，P6c 起不再回填 contentId）
     expect(blocks).toHaveLength(2);
     const reasoning = blocks.find((b: any) => b.blockIndex === 0);
     const text = blocks.find((b: any) => b.blockIndex === 1);
-    expect(reasoning.id).toBe("r1");
+    expect(reasoning.id).toBe("__blk_T1_a_0");
     expect(reasoning.reasoningContent).toBe("思考");
     expect(reasoning.thinkingDurationMs).toBe(1000);
-    expect(text.id).toBe("c1");
+    expect(text.id).toBe("__blk_T1_a_1");
     expect(text.content).toBe("回答");
     // usage 为消息级：仅挂最后一块（tokenUsage 逐块求和不重复计数）
     expect(text.metadata.usage?.promptTokens).toBe(5);
@@ -206,10 +209,10 @@ describe("StreamProjector 折叠器", () => {
       } as any,
       {
         type: "tool_calls_response",
-        messageId: "T1_a",
         turnId: "T1",
         toolCallsResponse: [
-          { name: "web_search", content: "结果", toolCallId: "tc1", outcome: "success" },
+          // 条目携带独立 tool 结果消息 id（= 入库 tool/result.messageId），关联键是 toolCallId
+          { messageId: "m_t1", name: "web_search", content: "结果", toolCallId: "tc1", outcome: "success" },
         ],
       } as any,
       { type: "turn_end", turnId: "T1" } as any,
@@ -221,8 +224,92 @@ describe("StreamProjector 折叠器", () => {
     expect(assistant.metadata.toolCallsResponse[0].content).toBe("结果");
   });
 
-  it("compaction_summary in-turn：遮蔽块被移除 + 回合内 event 占位（压缩在 turn_end 前）", () => {
-    // 自动压缩发生在回合内（turn_end 之前）
+  it("compaction_summary in-turn：按分界点 id 标记已压缩（不移除）+ 回合内 event 占位（压缩在 turn_end 前）", () => {
+    // 自动压缩发生在回合内（turn_end 之前）；遮蔽 = 分界点消息 id（有序 ULID）
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      {
+        type: "user_message",
+        messageId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        turnId: "T1",
+        userMessage: {
+          id: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          role: "user",
+          kind: "user",
+          metadata: {},
+          content: [{ type: "text", contentId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAVc", text: "旧" }],
+        },
+      } as any,
+      {
+        type: "compaction_summary",
+        shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        shadowedCount: 1,
+        summary: "已优化对话历史",
+        messageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      } as any,
+      { type: "turn_end", turnId: "T1", finishReason: "stop" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    // 被遮蔽消息不物理移除，仅标记已压缩（messageId <= 分界点）
+    const userBlock = turn.blocks.find(
+      (b: any) => b.messageId === "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    );
+    expect(userBlock).toBeDefined();
+    expect(userBlock.metadata.compacted).toBe(true);
+    // in-turn（当前回合 T1）→ 回合内 event 占位块
+    const placeholder = turn.blocks.find((b: any) => b.role === "event");
+    expect(placeholder).toBeDefined();
+    expect(placeholder.metadata.eventType).toBe("compaction");
+    expect(placeholder.metadata.compactInfo.summary).toBe("已优化对话历史");
+    expect(placeholder.metadata.compactInfo.shadowedCount).toBe(1);
+    expect(placeholder.metadata.compactInfo.shadowedEndId).toBe(
+      "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    );
+    // 无独立 event 回合
+    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
+  });
+
+  it("compaction_summary out-of-turn：按分界点标记 + 独立 kind:event 回合（无宿主回合）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      {
+        type: "user_message",
+        messageId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        turnId: "T1",
+        userMessage: {
+          id: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          role: "user",
+          kind: "user",
+          metadata: {},
+          content: [{ type: "text", contentId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAVc", text: "你好" }],
+        },
+      } as any,
+      ...textChunks("m_01ARZ3NDEKTSV4RRFFQ69G5FAW", "T1", "回答"),
+      { type: "turn_end", turnId: "T1", finishReason: "stop" } as any,
+      // 回合已结束（turn_end 清除 currentTurnId）→ 之后的 compaction 无宿主
+      {
+        type: "compaction_summary",
+        shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        shadowedCount: 2,
+        summary: "已优化对话历史",
+        messageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    // 被遮蔽消息不物理移除，仅标记已压缩
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    expect(turn.blocks.length).toBeGreaterThan(0);
+    expect(turn.blocks.every((b: any) => b.metadata?.compacted === true)).toBe(true);
+    // 独立 event 回合
+    const eventTurn = store.state.turns.find((t: any) => t.kind === "event");
+    expect(eventTurn).toBeDefined();
+    expect(eventTurn.blocks[0].role).toBe("event");
+    expect(eventTurn.blocks[0].metadata.compactInfo.summary).toBe("已优化对话历史");
+    expect(eventTurn.blocks[0].metadata.compactInfo.shadowedCount).toBe(2);
+  });
+
+  it("compaction_summary 旧格式 shadowedMessageIds：按 id 清单标记（防御回退）", () => {
     const events: WireStreamEvent[] = [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
       {
@@ -240,44 +327,15 @@ describe("StreamProjector 折叠器", () => {
       {
         type: "compaction_summary",
         shadowedMessageIds: ["T1_u"],
-        summary: "已优化对话历史",
+        summary: "旧格式摘要",
         messageId: "sum_1",
       } as any,
-      { type: "turn_end", turnId: "T1", finishReason: "stop" } as any,
     ];
     foldEvents(store as any, "s1", events);
     const turn = store.state.turns.find((t: any) => t.id === "T1");
-    // 遮蔽块的 messageId 被移除
-    expect(turn.blocks.some((b: any) => b.messageId === "T1_u")).toBe(false);
-    // in-turn（当前回合 T1）→ 回合内 event 占位块
-    const placeholder = turn.blocks.find((b: any) => b.role === "event");
-    expect(placeholder).toBeDefined();
-    expect(placeholder.metadata.eventType).toBe("compaction");
-    expect(placeholder.metadata.compactInfo.summary).toBe("已优化对话历史");
-    // 无独立 event 回合
-    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
-  });
-
-  it("compaction_summary out-of-turn：独立 kind:event 回合（无宿主回合）", () => {
-    const events: WireStreamEvent[] = [
-      ...turnPage("T1", "你好", "回答"),
-      // 回合已结束（turn_end 清除 currentTurnId）→ 之后的 compaction 无宿主
-      {
-        type: "compaction_summary",
-        shadowedMessageIds: ["T1_u", "T1_a"],
-        summary: "已优化对话历史",
-        messageId: "sum_2",
-      } as any,
-    ];
-    foldEvents(store as any, "s1", events);
-    // 遮蔽块（user + assistant）已从 T1 移除
-    const turn = store.state.turns.find((t: any) => t.id === "T1");
-    expect(turn.blocks).toHaveLength(0);
-    // 独立 event 回合
-    const eventTurn = store.state.turns.find((t: any) => t.kind === "event");
-    expect(eventTurn).toBeDefined();
-    expect(eventTurn.blocks[0].role).toBe("event");
-    expect(eventTurn.blocks[0].metadata.compactInfo.summary).toBe("已优化对话历史");
+    const userBlock = turn.blocks.find((b: any) => b.messageId === "T1_u");
+    expect(userBlock).toBeDefined();
+    expect(userBlock.metadata.compacted).toBe(true);
   });
 
   it("turn_delete：移除回合（重答语义）", () => {
@@ -409,7 +467,7 @@ describe("StreamProjector 折叠器", () => {
   it("领域事件：assistant/message 一条 = 全部块，turn/finish 直接写回合元数据", () => {
     const events: any[] = [
       { type: "turn/start", seq: 1, data: { turnId: "T1" } },
-      { type: "user/message", seq: 2, data: { messageId: "T1_u", kind: "user", content: "你好", metadata: {} } },
+      { type: "user/message", seq: 2, data: { messageId: "T1_u", kind: "user", blocks: [{ type: "text", contentId: "T1_u", text: "你好" }], metadata: {} } },
       {
         type: "assistant/message",
         seq: 3,
@@ -422,7 +480,7 @@ describe("StreamProjector 折叠器", () => {
           metadata: { modelName: "m1", finishReason: "stop", usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 } },
         },
       },
-      { type: "turn/finish", seq: 4, data: { turnId: "T1", promptTokens: 5, completionTokens: 3, totalTokens: 8, finishReason: "stop", modelName: "m1" } },
+      { type: "turn/finish", seq: 4, data: { turnId: "T1", promptTokens: 5, completionTokens: 3, totalTokens: 8, finishReason: "stop", modelName: "m1", totalDurationMs: 1234 } },
     ];
     foldEvents(store as any, "s1", events);
     const turn = store.state.turns[0];
@@ -436,6 +494,8 @@ describe("StreamProjector 折叠器", () => {
     expect(assistants[1].content).toBe("回答");
     // turn/finish → 回合元数据（后端零预扫，直接来自领域事件）
     expect(turn.metadata.modelName).toBe("m1");
+    // turn/finish → 整轮耗时（服务端落库真值，随事件页重放携带；刷新后据此展示）
+    expect(turn.metadata.totalDurationMs).toBe(1234);
     expect(turn.metadata.finishReason).toBe("stop");
     expect(turn.metadata.usage?.promptTokens).toBe(5);
     expect(turn.state.isWorking).toBe(false);
@@ -444,17 +504,17 @@ describe("StreamProjector 折叠器", () => {
   it("领域事件：tool/result 挂 toolCallsResponse，compaction/summary 遮蔽，turn/delete 移除", () => {
     const events: any[] = [
       { type: "turn/start", seq: 1, data: { turnId: "T1" } },
-      { type: "user/message", seq: 2, data: { messageId: "T1_u", kind: "user", content: "q", metadata: {} } },
+      { type: "user/message", seq: 2, data: { messageId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV", kind: "user", blocks: [{ type: "text", contentId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAV", text: "q" }], metadata: {} } },
       {
         type: "assistant/message",
         seq: 3,
         data: {
-          messageId: "T1_a",
+          messageId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
           content: [{ type: "tool-call", contentId: "tc_c", toolCallId: "tc1", name: "shell", arguments: "{}" }],
           metadata: {},
         },
       },
-      { type: "tool/result", seq: 4, data: { messageId: "T1_a", toolCallId: "tc1", name: "shell", content: "结果", isError: false } },
+      { type: "tool/result", seq: 4, data: { messageId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW", toolCallId: "tc1", name: "shell", content: "结果", isError: false } },
       { type: "turn/finish", seq: 5, data: { turnId: "T1", promptTokens: 1, completionTokens: 1, totalTokens: 2 } },
     ];
     foldEvents(store as any, "s1", events);
@@ -464,13 +524,23 @@ describe("StreamProjector 折叠器", () => {
     expect(assistant.metadata.toolCallsResponse[0].content).toBe("结果");
     expect(assistant.metadata.toolCallsResponse[0].outcome).toBe("success");
 
-    // compaction/summary（领域，回合已结束 → out-of-turn）：遮蔽移除 + 独立 event 回合占位
+    // compaction/summary（领域，回合已结束 → out-of-turn）：按分界点 id 标记已压缩（不移除）+ 独立 event 回合占位
     applyLiveChunk(store as any, "s1", {
       type: "compaction/summary",
       seq: 6,
-      data: { shadowedMessageIds: ["T1_u", "T1_a"], summary: "已压缩", summaryMessageId: "sum_1" },
+      data: {
+        shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        shadowedCount: 2,
+        summary: "已压缩",
+        summaryMessageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      },
     } as any);
-    expect(store.state.turns[0].blocks.some((b: any) => b.messageId === "T1_u")).toBe(false);
+    // 被遮蔽消息不物理移除，仅标记已压缩
+    const userBlock = store.state.turns[0].blocks.find(
+      (b: any) => b.messageId === "m_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    );
+    expect(userBlock).toBeDefined();
+    expect(userBlock.metadata.compacted).toBe(true);
     expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(true);
 
     // turn/delete（领域）：移除整回合
@@ -480,5 +550,72 @@ describe("StreamProjector 折叠器", () => {
       data: { turnId: "T1" },
     } as any);
     expect(store.state.turns.some((t: any) => t.id === "T1")).toBe(false);
+  });
+
+  it("live compression_end / compaction_summary 携带 contextStats → 更新环形指示器", () => {
+    setActivePinia(createPinia());
+    const { tokenStats } = useSessionTokenStats(ref("s1"));
+
+    // compression_end（纯裁剪路径）：contextStats → 环形指示器即时更新
+    applyLiveChunk(store as any, "s1", {
+      type: "compression_end",
+      reason: "manual",
+      contextStats: { usedTokens: 400, effectiveContextWindow: 1000 },
+    } as any);
+    expect(tokenStats.value?.usedTokens).toBe(400);
+    expect(tokenStats.value?.percentage).toBe(40);
+
+    // compaction_summary（遮蔽路径）：contextStats 同样更新；占位照常生成
+    applyLiveChunk(store as any, "s1", {
+      type: "compaction_summary",
+      shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      shadowedCount: 2,
+      summary: "已压缩",
+      messageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      contextStats: { usedTokens: 200, effectiveContextWindow: 1000 },
+    } as any);
+    expect(tokenStats.value?.usedTokens).toBe(200);
+    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(true);
+  });
+
+  it("回放 tool/result：独立 messageId（≠ assistant）时按 toolCallId 聚类挂结果", () => {
+    const events: any[] = [
+      { type: "turn/start", seq: 1, data: { turnId: "T1" } },
+      { type: "user/message", seq: 2, data: { messageId: "m_u1", kind: "user", blocks: [{ type: "text", contentId: "m_u1", text: "q" }], metadata: {} } },
+      {
+        type: "assistant/message",
+        seq: 3,
+        data: {
+          messageId: "m_a1",
+          content: [
+            { type: "text", contentId: "c1", text: "分析中" },
+            { type: "tool-call", contentId: "c2", toolCallId: "call_1", name: "shell", arguments: "{}" },
+            { type: "tool-call", contentId: "c3", toolCallId: "call_2", name: "read", arguments: "{}" },
+          ],
+          metadata: {},
+        },
+      },
+      // 工具结果是独立消息（独立 id），与 assistant 消息 id 无关——按 toolCallId 聚类
+      { type: "tool/result", seq: 4, data: { messageId: "m_t1", toolCallId: "call_1", name: "shell", content: "结果A", isError: false } },
+      { type: "tool/result", seq: 5, data: { messageId: "m_t2", toolCallId: "call_2", name: "read", content: "结果B", isError: true } },
+      { type: "turn/finish", seq: 6, data: { turnId: "T1", promptTokens: 1, completionTokens: 1, totalTokens: 2 } },
+    ];
+    foldEvents(store as any, "s1", events);
+    // 多块消息：每个 tool-call 是独立块，结果按 toolCallId 挂到对应块
+    const call1Block = store.state.turns[0].blocks.find((b: any) =>
+      (b.metadata?.toolCalls || []).some((tc: any) => tc.id === "call_1"),
+    );
+    const call2Block = store.state.turns[0].blocks.find((b: any) =>
+      (b.metadata?.toolCalls || []).some((tc: any) => tc.id === "call_2"),
+    );
+    // 两个结果都按 toolCallId 挂上
+    expect(call1Block.metadata.toolCallsResponse).toHaveLength(1);
+    expect(call1Block.metadata.toolCallsResponse[0].content).toBe("结果A");
+    expect(call1Block.metadata.toolCallsResponse[0].outcome).toBe("success");
+    expect(call2Block.metadata.toolCallsResponse[0].content).toBe("结果B");
+    expect(call2Block.metadata.toolCallsResponse[0].outcome).toBe("error");
+    // 调用条目状态同步
+    const tc2 = call2Block.metadata.toolCalls.find((tc: any) => tc.id === "call_2");
+    expect(tc2.outcome).toBe("error");
   });
 });

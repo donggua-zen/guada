@@ -1,10 +1,18 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, Inject } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { ISessionContext } from "../chat/session-context";
 import { safeTruncate } from "../../common/utils/string.utils";
+import {
+  MESSAGE_STORE_TOKEN,
+  IMessageStore,
+} from "../../common/persistence/message-store.interface";
+import type {
+  TextBlock,
+  ReasoningBlock,
+} from "../../common/types/conversation.types";
 
 /**
  * 子 Agent 默认系统提示词
@@ -31,11 +39,55 @@ const SUB_AGENT_DEFAULT_PROMPT = `You are a Sub Agent, delegated by the main Age
 - Do not ask the user questions; make decisions and execute the task independently`;
 
 /**
+ * 子代理停止原因（对齐 DSH SubagentStopReason）
+ *
+ * merge-extensible：新增原因不破坏既有消费者；
+ * 未知/缺失原因一律按 error 处理（DSH 原则：未知原因不误报成功）。
+ */
+type SubAgentStopReason =
+  | "completed"
+  | "aborted"
+  | "error"
+  | "max_tokens"
+  | "refusal"
+  | "closed";
+
+/**
+ * finishReason → 结构化停止原因
+ *
+ * error 场景由调用方显式置位（event.error / onError / abort），不走本映射；
+ * 无显式原因（undefined/空）视为正常完成。
+ */
+function mapFinishReason(reason?: string): SubAgentStopReason {
+  if (!reason) return "completed";
+  switch (reason) {
+    case "stop":
+    case "tool-calls":
+    case "tool_calls":
+      return "completed";
+    case "length":
+    case "max_tokens":
+      return "max_tokens";
+    case "content_filter":
+    case "refusal":
+      return "refusal";
+    case "user_cancel":
+    case "aborted":
+      return "aborted";
+    default:
+      // 未知原因（含 timeout/error 等）→ 保守按 error 处理
+      return "error";
+  }
+}
+
+/**
  * 子 Agent 执行结果
  */
 interface SubAgentResult {
   subSessionId: string;
   status: "completed" | "error" | "running";
+  /** 结构化停止原因（P2；unknown 一律 error） */
+  stopReason?: SubAgentStopReason;
   content: string;
   reasoningContent?: string;
   finishReason?: string;
@@ -65,8 +117,10 @@ interface SubAgentCompleter {
  *
  * 核心设计：
  * 1. spawn：创建子 Agent 并启动，支持前台（阻塞）和后台（非阻塞）两种模式
- * 2. 内部通过 startStream 的 callbacks 监听完成，自动广播 sub_agent_finish
- * 3. waitForComplete：供主 Agent 主动等待子 Agent 完成
+ * 2. 生命周期 lifecycle：one_shot（默认）= 结果交付后自动删除子会话，无需 AI 调用 close；
+ *    persist = 保留会话供 send_message 继续交互，由 AI 主动 close
+ * 3. 内部通过 startStream 的 callbacks 监听完成，自动广播 sub_agent_finish
+ * 4. waitForComplete：供主 Agent 主动等待子 Agent 完成
  */
 @Injectable()
 export class SubAgentManager implements OnModuleInit {
@@ -78,6 +132,7 @@ export class SubAgentManager implements OnModuleInit {
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private characterRepo: CharacterRepository,
+    @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
   ) {}
 
   onModuleInit() {
@@ -89,6 +144,10 @@ export class SubAgentManager implements OnModuleInit {
    *
    * 前台模式（默认）：阻塞直到子 Agent 执行完毕并返回完整结果
    * 后台模式：立即返回 SubAgentResult（status=running），后续通过 waitForComplete 获取结果
+   *
+   * 生命周期（默认 one_shot）：
+   * - one_shot：结果交付后自动删除子会话（前台=结果返回时；后台=信箱消息被消费时）
+   * - persist：保留会话，由 AI 通过 subagent_manager close 释放
    */
   async spawn(
     params: {
@@ -96,6 +155,7 @@ export class SubAgentManager implements OnModuleInit {
       name: string;
       task: string;
       characterId?: string;
+      lifecycle?: "persist" | "one_shot";
     },
     mode: "foreground" | "background" = "foreground",
     abortSignal?: AbortSignal,
@@ -137,6 +197,8 @@ export class SubAgentManager implements OnModuleInit {
     settings.sandboxMode = parentContext.getSandboxMode();
     // 附加连接配置：从父会话继承（如 ssh-connection 远程连接），使子代理可复用主代理绑定的连接
     settings.attachments = parentContext.getSettings("attachments") ?? {};
+    // 生命周期持久化：重启后可通过 session.settings.lifecycle 识别 one_shot 遗留（孤儿清扫）
+    settings.lifecycle = params.lifecycle || "one_shot";
 
     if (params.characterId && params.characterId !== "generic") {
       // ── 数据库角色模式 ──
@@ -164,6 +226,7 @@ export class SubAgentManager implements OnModuleInit {
       parentContext,
       params,
       mode,
+      params.lifecycle || "one_shot",
       abortSignal,
       settings,
       finalModelId,
@@ -184,6 +247,7 @@ export class SubAgentManager implements OnModuleInit {
       characterId?: string;
     },
     mode: "foreground" | "background",
+    lifecycle: "persist" | "one_shot",
     abortSignal: AbortSignal | undefined,
     settings: Record<string, any>,
     modelId: string | null,
@@ -229,6 +293,7 @@ export class SubAgentManager implements OnModuleInit {
       params.task,
       parentSessionId,
       mode,
+      lifecycle,
       abortSignal,
     );
   }
@@ -270,13 +335,14 @@ export class SubAgentManager implements OnModuleInit {
       `向子 Agent 发送消息: ${params.sessionId}, 父会话: ${params.parentSessionId}, 模式: ${mode}`,
     );
 
-    // 3. 复用执行逻辑
+    // 3. 复用执行逻辑（send_message 针对的是仍存在的会话，生命周期必为 persist）
     return this.executeSubAgentStream(
       params.sessionId,
       params.userId,
       params.message,
       params.parentSessionId,
       mode,
+      "persist",
       abortSignal,
     );
   }
@@ -288,6 +354,7 @@ export class SubAgentManager implements OnModuleInit {
    * - 始终 fire-and-forget 启动 runSubAgentStream
    * - 前台模式：Promise.race 等待结果（5min 超时），完成直接返回，超时转后台
    * - 后台模式：不等待，pending 完成后入队通知
+   * - one_shot 生命周期：结果交付后自动删除子会话（前台=结果返回时；后台=信箱消费时）
    */
   private async executeSubAgentStream(
     subSessionId: string,
@@ -295,6 +362,7 @@ export class SubAgentManager implements OnModuleInit {
     content: string,
     parentSessionId: string,
     mode: "foreground" | "background",
+    lifecycle: "persist" | "one_shot",
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     const state = this.getOrCreateState(parentSessionId);
@@ -312,16 +380,29 @@ export class SubAgentManager implements OnModuleInit {
     const onSettled = () => {
       pending
         .then((result) =>
-          this.notifyComplete(subSessionId, result, userId, parentSessionId),
-        )
-        .catch(async (error) => {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          await this.notifyError(
+          this.settle(
             subSessionId,
-            errorMsg,
+            result,
             userId,
             parentSessionId,
+            lifecycle,
+          ),
+        )
+        .catch(async (error) => {
+          // 基建故障（startStream 失败）也编码为一条 error 结果，走同一结算通道
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          await this.settle(
+            subSessionId,
+            {
+              subSessionId,
+              status: "error",
+              stopReason: "error",
+              content: "",
+              error: errorMsg,
+            },
+            userId,
+            parentSessionId,
+            lifecycle,
           );
         });
     };
@@ -360,33 +441,38 @@ export class SubAgentManager implements OnModuleInit {
         // 前台完成（含 abort 导致的 resolve）：直接返回结果
         // abort 时 runSubAgentStream 的监听器已 cancelStream + resolve error result
         state.running.delete(subSessionId);
-        if (
-          state.completed.length === 0 &&
-          state.completers.length === 0 &&
-          state.running.size === 0
-        ) {
-          this.states.delete(parentSessionId);
-        }
+        this.cleanupParentStateIfEmpty(parentSessionId);
+        // one_shot：结果已作为工具结果交付，自动清理子会话（fire-and-forget，清理失败仅告警）
+        this.maybeAutoDispose(
+          subSessionId,
+          parentSessionId,
+          userId,
+          lifecycle,
+          raceResult.result,
+        );
         return raceResult.result;
       }
 
       if (raceResult.kind === "error") {
         // startStream 本身失败（如会话不存在）
         state.running.delete(subSessionId);
-        if (
-          state.completed.length === 0 &&
-          state.completers.length === 0 &&
-          state.running.size === 0
-        ) {
-          this.states.delete(parentSessionId);
-        }
-        return {
+        this.cleanupParentStateIfEmpty(parentSessionId);
+        const errorResult: SubAgentResult = {
           subSessionId,
           status: "error",
+          stopReason: "error",
           content: "",
           error: raceResult.error,
           finishReason: "error",
         };
+        this.maybeAutoDispose(
+          subSessionId,
+          parentSessionId,
+          userId,
+          lifecycle,
+          errorResult,
+        );
+        return errorResult;
       }
 
       // 超时：转后台，pending 完成后入队
@@ -411,6 +497,76 @@ export class SubAgentManager implements OnModuleInit {
       this.states.set(parentSessionId, state);
     }
     return state;
+  }
+
+  /**
+   * 父会话状态为空（无运行中 / 无已完成 / 无等待者）时移除，防止 Map 泄漏
+   */
+  private cleanupParentStateIfEmpty(parentSessionId: string): void {
+    const state = this.states.get(parentSessionId);
+    if (
+      state &&
+      state.completed.length === 0 &&
+      state.completers.length === 0 &&
+      state.running.size === 0
+    ) {
+      this.states.delete(parentSessionId);
+    }
+  }
+
+  /**
+   * one_shot 生命周期：结果交付后自动删除子会话
+   *
+   * fire-and-forget：清理失败仅记录日志，不吞没已交付的业务结果。
+   * result 用于向 subagent.closed 事件携带结束原因与结果摘要。
+   */
+  private maybeAutoDispose(
+    subSessionId: string,
+    parentSessionId: string,
+    userId: string,
+    lifecycle: "persist" | "one_shot",
+    result?: SubAgentResult,
+  ): void {
+    if (lifecycle !== "one_shot") return;
+    this.disposeSession(subSessionId, parentSessionId, userId, {
+      stopReason: result
+        ? result.stopReason ??
+          (result.status === "error" ? "error" : "completed")
+        : undefined,
+      content: result?.content,
+    }).catch((err) => {
+      this.logger.error(
+        `one_shot 子 Agent 自动清理失败: ${subSessionId}`,
+        err instanceof Error ? err.stack : err,
+      );
+    });
+  }
+
+  /**
+   * 删除子会话并广播关闭事件（不含取消流逻辑，供 close 与 one_shot 自动清理共用）
+   */
+  private async disposeSession(
+    subSessionId: string,
+    parentSessionId: string,
+    userId: string,
+    extra?: { stopReason?: string; content?: string },
+  ): Promise<void> {
+    await this.sessionRepo.deleteById(subSessionId);
+
+    this.eventBus.emit("subagent.closed", {
+      userId,
+      sessionId: parentSessionId,
+      timestamp: new Date().toISOString(),
+      payload: {
+        subSessionId,
+        ...(extra?.stopReason ? { stopReason: extra.stopReason } : {}),
+        ...(extra?.content
+          ? { content: safeTruncate(extra.content, 200) }
+          : {}),
+      },
+    });
+
+    this.logger.log(`子 Agent 会话已删除: ${subSessionId}`);
   }
 
   /**
@@ -456,9 +612,7 @@ export class SubAgentManager implements OnModuleInit {
       state.completed = [];
 
       // 清理空状态（运行中也为空时才清理）
-      if (state.completers.length === 0 && state.running.size === 0) {
-        this.states.delete(parentSessionId);
-      }
+      this.cleanupParentStateIfEmpty(parentSessionId);
       // 队列中的消息通过 isValid 检测到 state.completed 已清空，processQueue 自动丢弃
       return items;
     }
@@ -549,7 +703,7 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     // 清理 state 中该子 Agent 的残留（completed 中的条目、completers）
-    // 此时 finalizeSubAgent 已被跳过，notifyComplete 推入的条目需手动清理
+    // 此时 finalizeSubAgent 已被跳过，settle 推入的条目需手动清理
     // 队列中的消息通过 isValid 检测到 state.completed 已清空，processQueue 自动丢弃
     const state = this.states.get(parentSessionId);
     if (state) {
@@ -561,22 +715,12 @@ export class SubAgentManager implements OnModuleInit {
         completer.resolve();
       }
       state.completers = [];
-      if (state.completed.length === 0 && state.running.size === 0) {
-        this.states.delete(parentSessionId);
-      }
+      this.cleanupParentStateIfEmpty(parentSessionId);
     }
 
-    // 删除会话数据
-    await this.sessionRepo.deleteById(subSessionId);
-
-    // 广播关闭事件
-    this.eventBus.emit("subagent.closed", {
-      userId,
-      sessionId: parentSessionId,
-      timestamp: new Date().toISOString(),
-      payload: {
-        subSessionId,
-      },
+    // 删除会话数据并广播关闭事件（手动 close → stopReason=closed）
+    await this.disposeSession(subSessionId, parentSessionId, userId, {
+      stopReason: "closed",
     });
 
     this.logger.log(`子 Agent 已关闭: ${subSessionId}`);
@@ -632,23 +776,21 @@ export class SubAgentManager implements OnModuleInit {
     if (!state) return;
     const index = state.completers.indexOf(completer);
     if (index >= 0) state.completers.splice(index, 1);
-    if (
-      state.completed.length === 0 &&
-      state.completers.length === 0 &&
-      state.running.size === 0
-    ) {
-      this.states.delete(parentSessionId);
-    }
+    this.cleanupParentStateIfEmpty(parentSessionId);
   }
 
   /**
-   * 通知子 Agent 完成
+   * 子 Agent 结算单通道（对齐 DSH run-settlement）
+   *
+   * 完成与失败统一为一条 SubAgentResult（含结构化 stopReason），
+   * 由 finalizeSubAgent 决定交付方式（completer 直传 / 信箱投递）。
    */
-  private async notifyComplete(
+  private async settle(
     subSessionId: string,
     result: SubAgentResult,
     userId: string,
     parentSessionId: string,
+    lifecycle: "persist" | "one_shot" = "persist",
   ): Promise<void> {
     const state = this.states.get(parentSessionId);
     if (!state) return;
@@ -664,38 +806,19 @@ export class SubAgentManager implements OnModuleInit {
       name,
       {
         result,
+        lifecycle,
       },
     );
   }
 
   /**
-   * 通知子 Agent 执行出错
-   */
-  private async notifyError(
-    subSessionId: string,
-    errorMsg: string,
-    userId: string,
-    parentSessionId: string,
-  ): Promise<void> {
-    const state = this.states.get(parentSessionId);
-    if (!state) return;
-
-    const name = await this.getSubAgentName(subSessionId);
-
-    await this.finalizeSubAgent(
-      subSessionId,
-      parentSessionId,
-      userId,
-      state,
-      name,
-      {
-        errorMsg,
-      },
-    );
-  }
-
-  /**
-   * notifyComplete / notifyError 共同的收尾逻辑
+   * settle 共同的收尾逻辑
+   *
+   * one_shot 生命周期（后台路径）的清理时机必须晚于结果交付：
+   * - 有等待者：结果经 completer 直接交付 → resolve 后立即自动清理
+   * - 无等待者（信箱）：主 Agent 消费消息（onConsumed）后才删除子会话。
+   *   不能提前删：isValid 依赖 state.completed 含该条目，提前清理会导致
+   *   信箱消息被 processQueue 当作脏消息丢弃，结果永远无法送达主 Agent
    */
   private async finalizeSubAgent(
     subSessionId: string,
@@ -704,8 +827,8 @@ export class SubAgentManager implements OnModuleInit {
     state: ParentSessionState | undefined,
     name: string,
     options: {
-      result?: SubAgentResult;
-      errorMsg?: string;
+      result: SubAgentResult;
+      lifecycle?: "persist" | "one_shot";
     },
   ): Promise<void> {
     // 如果子 Agent 不在运行中集合（已被 closeSubAgent 移除），说明是主动关闭，跳过所有后续处理
@@ -714,8 +837,12 @@ export class SubAgentManager implements OnModuleInit {
     // 从运行中集合移除
     state.running.delete(subSessionId);
 
-    const isComplete = !!options.result;
-    const isError = !isComplete;
+    const result = options.result;
+    const lifecycle = options.lifecycle || "persist";
+    // 停止原因缺失时按 status 推导（兼容旧结算路径）；aborted/max_tokens/refusal 均视为失败态
+    const isError =
+      result.status === "error" ||
+      (result.stopReason !== undefined && result.stopReason !== "completed");
 
     // 有等待者时直接通传，不投递消息
     if (state.completers.length > 0) {
@@ -724,43 +851,41 @@ export class SubAgentManager implements OnModuleInit {
       }
       state.completers = [];
 
-      if (state.completed.length === 0 && state.running.size === 0) {
-        this.states.delete(parentSessionId);
-      }
+      this.cleanupParentStateIfEmpty(parentSessionId);
+      // one_shot：结果已通过 completer 交付给主 Agent，自动清理
+      this.maybeAutoDispose(
+        subSessionId,
+        parentSessionId,
+        userId,
+        lifecycle,
+        result,
+      );
       return;
     }
 
     // 无等待者 → 投递消息到信箱
-    const content = isComplete
-      ? `${name} has completed its work.`
-      : `Sub-task "${name}" failed. Error: ${options.errorMsg}`;
+    // P5b：只保留 <system_reminder> 包裹的模型面内容（用户文案已移除——文案混入
+    // LLM 上下文会被误判为用户发言；展示全靠前端解析 source.kind 渲染为通知样式）。
+    const reminderDetail = isError
+      ? `Sub-agent "${name}" (${subSessionId}) failed${result.stopReason ? `, stopReason: ${result.stopReason}` : ""}${result.error ? `\nError: ${result.error}` : ""}`
+      : `Sub-agent "${name}" (${subSessionId}) completed${result.stopReason ? `, stopReason: ${result.stopReason}` : ""}${result.finishReason ? `, finishReason: ${result.finishReason}` : ""}`;
 
-    const source: any = { type: "sub_agent" };
-    if (isComplete) {
-      source.systemPayload = [
-        {
-          subSessionId,
-          subAgentName: name,
-          status: options.result!.status,
-          finishReason: options.result!.finishReason,
-          content:
-            safeTruncate(options.result!.content, 1000) +
-            (options.result!.content.length > 1000 ? "..." : ""),
-        },
-      ];
-    } else {
-      source.subSessionId = subSessionId;
-      source.subAgentName = name;
-      source.status = "error";
-      source.error = options.errorMsg;
-    }
+    const resultText = result.content
+      ? `${reminderDetail}\nResult:\n${safeTruncate(result.content, 1000)}${result.content.length > 1000 ? "..." : ""}`
+      : reminderDetail;
 
     await this.chatRunnerService
       .enqueueMessage({
         sessionId: parentSessionId,
         userId,
-        content,
-        source,
+        blocks: [
+          {
+            type: "text",
+            text: `<system_reminder>\n${resultText}\n</system_reminder>`,
+          },
+        ],
+        // 结构化标识进 source（merge-extensible；systemPayload 已移除）
+        source: { kind: "sub_agent", subSessionId, agentName: name },
         isValid: () => {
           const s = this.states.get(parentSessionId);
           return (
@@ -770,15 +895,22 @@ export class SubAgentManager implements OnModuleInit {
         onConsumed: () => {
           const s = this.states.get(parentSessionId);
           if (!s) return;
+          const entry = s.completed.find(
+            (c) => c.subSessionId === subSessionId,
+          );
           s.completed = s.completed.filter(
             (c) => c.subSessionId !== subSessionId,
           );
-          if (
-            s.completed.length === 0 &&
-            s.completers.length === 0 &&
-            s.running.size === 0
-          ) {
-            this.states.delete(parentSessionId);
+          this.cleanupParentStateIfEmpty(parentSessionId);
+          // one_shot：主 Agent 已消费结果，此时才删除子会话
+          if (lifecycle === "one_shot") {
+            this.maybeAutoDispose(
+              subSessionId,
+              parentSessionId,
+              userId,
+              lifecycle,
+              entry?.result,
+            );
           }
         },
       })
@@ -788,10 +920,55 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
+   * P1：子 Agent 结果从会话日志重放推导（对齐 DSH finalAssistantOutput）
+   *
+   * 以子会话 JSONL 为单一事实源：取最后一条非空 assistant 消息的可见文本与推理内容。
+   * - 取消/截断后部分内容仍落库（agent-engine 中断路径照常 appendMessages）→ 部分答案可回传
+   * - 不再依赖流回调的 messageId 时序启发式；结果与落盘历史/前端展示逐字节一致
+   * 失败时返回空内容（调用方回退到流累积文本），绝不抛错中断结算
+   */
+  private async readSubAgentResult(
+    subSessionId: string,
+  ): Promise<{ content: string; reasoningContent?: string }> {
+    try {
+      const messages = await this.messageStore.loadContext({
+        sessionId: subSessionId,
+        keepReasoningContent: true,
+      });
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role !== "assistant") continue;
+        const text = m.content
+          .filter((b): b is TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+        const reasoning = m.content
+          .filter((b): b is ReasoningBlock => b.type === "reasoning")
+          .map((b) => b.summary)
+          .join("");
+        if (text.trim() || reasoning.trim()) {
+          return {
+            content: text,
+            reasoningContent: reasoning.trim() ? reasoning : undefined,
+          };
+        }
+      }
+      return { content: "" };
+    } catch (err) {
+      this.logger.warn(
+        `子 Agent 结果重放失败，回退流累积文本: ${subSessionId}`,
+        err instanceof Error ? err.message : err,
+      );
+      return { content: "" };
+    }
+  }
+
+  /**
    * 运行子 Agent 流式执行（内部方法）
    *
-   * 监听 finish 事件捕获完整输出内容，返回 SubAgentResult。
-   * 注意：Agent 每次工具调用迭代都会产生 finish，只保留最后一次的完整内容。
+   * P1（对齐 DSH）：流回调只负责中止/状态/原因，结果内容由子会话日志重放推导
+   * （readSubAgentResult）。不再依赖 messageId 变化的时序启发式；
+   * 取消/截断后部分内容仍落库，可稳定回传。重放失败时降级到流累积文本。
    */
   private async runSubAgentStream(
     subSessionId: string,
@@ -801,37 +978,49 @@ export class SubAgentManager implements OnModuleInit {
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     return new Promise<SubAgentResult>((resolve, reject) => {
-      let capturedResult: SubAgentResult = {
-        subSessionId,
-        status: "completed",
-        content: "",
+      // 结算态：流回调更新；settle() 统一从日志重放推导内容后 resolve（幂等）
+      let status: "completed" | "error" = "completed";
+      let stopReason: SubAgentStopReason | undefined;
+      let finishReason: string | undefined;
+      let errorMsg: string | undefined;
+      // 兜底文本：重放失败/中止竞态时回退（仅作降级，非主路径）
+      let fallbackContent = "";
+      let settled = false;
+
+      const settle = async (): Promise<void> => {
+        if (settled) return;
+        settled = true;
+        const derived = await this.readSubAgentResult(subSessionId);
+        resolve({
+          subSessionId,
+          status,
+          stopReason,
+          content: derived.content || fallbackContent,
+          reasoningContent: derived.reasoningContent,
+          finishReason,
+          error: errorMsg,
+        });
       };
-      // 当前迭代(一次 LLM 调用)的可见文本累积；messageId 变化 = 新一轮工具调用迭代
-      let iterContentId: string | undefined;
-      let iterContent = "";
 
       // 父 Agent 中止时同步取消子 Agent 流
       if (abortSignal) {
         if (abortSignal.aborted) {
-          resolve({
-            subSessionId,
-            status: "error",
-            content: "",
-            error: "Parent agent was aborted",
-          });
+          status = "error";
+          stopReason = "aborted";
+          errorMsg = "Parent agent was aborted";
+          void settle();
           return;
         }
         abortSignal.addEventListener(
           "abort",
           () => {
+            status = "error";
+            stopReason = "aborted";
+            errorMsg = "Parent agent was aborted";
             this.chatRunnerService.cancelStream(subSessionId);
-            resolve({
-              subSessionId,
-              status: "error",
-              content: capturedResult.content,
-              error: "Parent agent was aborted",
-              finishReason: capturedResult.finishReason,
-            });
+            // 竞态说明：中止后主循环可能仍在落盘最后一条 assistant 消息，
+            // 此时重放可能读不到它 → settle 内回退到 fallbackContent
+            void settle();
           },
           { once: true },
         );
@@ -849,60 +1038,43 @@ export class SubAgentManager implements OnModuleInit {
           },
           {
             onEvent: (event) => {
-              // 消息级事件按 messageId 归属一次 LLM 调用；messageId 变化 = 新一轮
-              // 工具调用迭代，重置累积——子 Agent 结果只保留最后一轮的可见文本
-              const chunkMessageId = (event as { messageId?: string }).messageId;
-              if (chunkMessageId && chunkMessageId !== iterContentId) {
-                iterContentId = chunkMessageId;
-                iterContent = "";
-              }
               if (event.type === "text_delta") {
-                iterContent += event.text;
-                capturedResult.content = iterContent;
+                fallbackContent += event.text;
               }
               if (event.type === "turn_end") {
-                capturedResult = {
-                  ...capturedResult,
-                  subSessionId,
-                  status: event.error ? "error" : "completed",
-                  finishReason: event.finishReason,
-                  error: event.error,
-                };
+                status = event.error ? "error" : "completed";
+                stopReason = event.error
+                  ? "error"
+                  : mapFinishReason(event.finishReason);
+                finishReason = event.finishReason;
+                errorMsg = event.error;
               }
             },
             onComplete: (reason) => {
               // 如果是用户取消或错误，构造对应的错误结果
               if (reason === "user_cancel" || reason === "error") {
-                resolve({
-                  subSessionId,
-                  status: "error",
-                  content: capturedResult.content,
-                  error:
-                    reason === "user_cancel"
-                      ? "User cancelled"
-                      : "Stream ended with error",
-                  finishReason: capturedResult.finishReason || reason,
-                });
-              } else {
-                // onComplete 触发时，最后一个 finish 事件已被捕获
-                resolve(capturedResult);
+                status = "error";
+                stopReason = reason === "user_cancel" ? "aborted" : "error";
+                errorMsg =
+                  reason === "user_cancel"
+                    ? "User cancelled"
+                    : "Stream ended with error";
+                finishReason = finishReason || reason;
               }
+              void settle();
             },
             onError: (err: any) => {
-              const errorMsg = err instanceof Error ? err.message : String(err);
-              resolve({
-                subSessionId,
-                status: "error",
-                content: capturedResult.content,
-                error: errorMsg,
-              });
+              status = "error";
+              stopReason = "error";
+              errorMsg = err instanceof Error ? err.message : String(err);
+              void settle();
             },
           },
         )
         .catch((err) => {
           // startStream 本身抛出异常（如会话不存在）
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          reject(new Error(`Failed to start sub-agent stream: ${errorMsg}`));
+          const errorMsg2 = err instanceof Error ? err.message : String(err);
+          reject(new Error(`Failed to start sub-agent stream: ${errorMsg2}`));
         });
     });
   }

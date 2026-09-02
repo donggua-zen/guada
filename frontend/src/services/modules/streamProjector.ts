@@ -36,6 +36,24 @@ function isDomainEvent(chunk: ProjectorChunk): chunk is DomainEvent {
   return typeof (chunk as any).type === "string" && (chunk as any).type.includes("/");
 }
 
+/**
+ * 有序 id 格式（m_/c_ + 26 字符 ULID；c_ < m_ → 检查点恒排序在所有消息之前）。
+ * 字符串比较 = 时间序比较（ULID 首 10 字符为毫秒时间戳）。
+ */
+const ORDERED_ID_RE = /^[mc]_[0-9A-Z]{26}$/;
+
+/**
+ * 判定 messageId 是否 ≤ 分界点 id（有序 ULID 比较）。
+ * 遮蔽区 = 头部连续前缀，分界点即末位；messageId <= 分界点 → 已压缩。
+ * 仅对有序格式 id 生效；旧格式/占位 id（非 m_/c_<26字符>）一律视为未压缩（防御）。
+ */
+function isAtOrBeforeBoundary(messageId: string, boundaryId: string): boolean {
+  if (!ORDERED_ID_RE.test(messageId) || !ORDERED_ID_RE.test(boundaryId)) {
+    return false;
+  }
+  return messageId <= boundaryId;
+}
+
 /** 模块级暂存:无缓存会话的 finish 后事件(跨 handler/常驻接收共享) */
 const stashBySession = new Map<string, ProjectorChunk[]>();
 
@@ -52,6 +70,23 @@ function setCurrentTurn(sessionId: string, turnId: string | undefined): void {
 
 function getCurrentTurn(sessionId: string): string | undefined {
   return currentTurnBySession.get(sessionId);
+}
+
+/**
+ * 按 toolCallId 定位包含该调用的 tool-call 块（跨回合扫描）。
+ * 关联键是 provider 发出的 callId（一次调用唯一），不依赖 messageId——工具结果是独立消息。
+ * 对齐 DSH 展示折叠：结果按 callId 挂回调用块，而非按消息 id。
+ */
+function findBlockByToolCallId(turns: any[], toolCallId: string): any {
+  for (const t of turns) {
+    if (!Array.isArray(t.blocks)) continue;
+    for (const b of t.blocks) {
+      if ((b.metadata?.toolCalls || []).some((tc: any) => tc.id === toolCallId)) {
+        return b;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -117,10 +152,10 @@ function ensureAssistantBlock(
 
 /**
  * 完整 ContentBlock → TurnContent（live block_end 与领域事件 assistant/message 共用同一转换）。
- * 块级 contentId 回填（领域事件自带稳定 id）。
+ * 块 id 由流式占位（__blk_<messageId>_<index>）或 messageToTurnContent（messageId-index）承担，
+ * 不再依赖块级 contentId。
  */
 function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
-  if (block.contentId) content.id = block.contentId;
   if (block.type === "text" && typeof block.text === "string") {
     content.content = block.text;
   } else if (block.type === "reasoning" && typeof block.summary === "string") {
@@ -194,13 +229,14 @@ function applyDomainEvent(
       } as any);
       return;
     case "turn/finish":
-      // 回合收尾：finishReason/modelName/error/usage 直接来自事件数据（后端零预扫）
+      // 回合收尾：finishReason/modelName/error/usage/整轮耗时 直接来自事件数据（后端零预扫）
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_end",
         turnId: data.turnId,
         modelName: data.modelName,
         finishReason: data.finishReason,
         error: data.errorDetail,
+        totalDurationMs: data.totalDurationMs,
         usage:
           data.promptTokens != null
             ? {
@@ -221,7 +257,9 @@ function applyDomainEvent(
     case "compaction/summary":
       applyChunkToStore(sessionStore, sessionId, {
         type: "compaction_summary",
-        shadowedMessageIds: data.shadowedMessageIds ?? [],
+        shadowedEndId: data.shadowedEndId,
+        shadowedCount: data.shadowedCount,
+        shadowedMessageIds: data.shadowedMessageIds,
         summary: data.summary ?? "",
         messageId: data.summaryMessageId,
       } as any);
@@ -240,23 +278,13 @@ function applyDomainEvent(
         id: data.messageId,
         role: "user",
         kind: data.kind ?? "user",
-        metadata: data.metadata ?? {},
+        // 来源透传：后端 user_message 事件携带完整 userMessage（含 source），
+        // source.kind 是"是否人类输入"的单一真相（事件顶层无 metadata 字段）
+        source: (data as any).userMessage?.source ?? (data as any).source,
+        metadata: (data as any).userMessage?.metadata ?? data.metadata ?? {},
         content: [
-          ...(data.content
-            ? [{ type: "text" as const, contentId: data.messageId, text: data.content }]
-            : []),
-          ...(data.files ?? []).map((f: any) => ({
-            type: (String(f.fileType ?? "").toLowerCase().startsWith("image/")
-              ? "image"
-              : "file") as "image" | "file",
-            contentId: `${data.messageId}_f${f.fileId}`,
-            attachment: {
-              attachmentId: f.fileId,
-              mediaType: f.fileType,
-              name: f.displayName ?? f.fileName,
-              url: f.url ?? f.previewUrl,
-            },
-          })),
+          // P6：事件格式统一为 blocks（后端已废弃 content/files 平铺；旧事件经 rebuild 重建）
+          ...(data.blocks ?? []),
         ],
       };
       turn.blocks.push(...messageToTurnContent(msgLike));
@@ -290,27 +318,31 @@ function applyDomainEvent(
       return;
     }
     case "tool/result": {
-      // 工具结果 → 挂 toolCallsResponse 到对应 tool-call 块（按 toolCallId 定位）
+      // 工具结果 → 挂 toolCallsResponse 到对应 tool-call 块。
+      // 关联键是 toolCallId（provider 发出、唯一标识一次调用；对齐 DSH：结果按 callId 聚类）。
+      // 工具结果是独立消息（独立 messageId），messageId 语义是"消息唯一 id"，不做关联键——
+      // 回放/重建数据的 tool/result.messageId ≠ 含调用的 assistant 消息 id，按 messageId 必然丢结果。
       const turns = sessionStore.getTurns(sessionId) || [];
-      const turn = turns.find((t: any) => t.id === getCurrentTurn(sessionId));
-      if (!turn || !Array.isArray(turn.blocks)) return;
-      const seq = turn.blocks.filter((b: any) => b.messageId === data.messageId);
-      const target =
-        seq.find((b: any) =>
-          (b.metadata?.toolCalls || []).some((tc: any) => tc.id === data.toolCallId),
-        ) ?? seq[seq.length - 1];
+      const target = findBlockByToolCallId(turns, data.toolCallId);
       if (!target) return;
-      target.metadata = {
-        ...(target.metadata || {}),
-        toolCallsResponse: [
-          {
-            name: data.name ?? "",
-            content: data.content ?? "",
-            toolCallId: data.toolCallId,
-            outcome: data.isError ? "error" : "success",
-          },
-        ],
-      };
+      // 同一 assistant 消息可含多个调用，结果逐个到达 → 累加（勿覆盖；按 toolCallId 去重）
+      const existing: any[] = Array.isArray(target.metadata?.toolCallsResponse)
+        ? target.metadata.toolCallsResponse
+        : [];
+      if (!existing.some((r: any) => r.toolCallId === data.toolCallId)) {
+        target.metadata = {
+          ...(target.metadata || {}),
+          toolCallsResponse: [
+            ...existing,
+            {
+              name: data.name ?? "",
+              content: data.content ?? "",
+              toolCallId: data.toolCallId,
+              outcome: data.isError ? "error" : "success",
+            },
+          ],
+        };
+      }
       const tc = (target.metadata.toolCalls || []).find(
         (c: any) => c.id === data.toolCallId,
       );
@@ -344,25 +376,65 @@ export function applyChunkToStore(
     sessionStore.setSessionIsCompressing(sessionId, false);
     return;
   }
-  if (chunk.type === "compaction_summary") {
-    // 压缩完成（live 或事件页）：移除被遮蔽消息 + 生成压缩占位。
-    // in-turn（折叠期有宿主回合）→ 当前回合内一条 event 块；out-of-turn → 独立 kind:'event' 回合。
-    // 与后端 replayer（遮蔽标记 + event 消息/外壳）对齐。
+  if (chunk.type === "compression_end") {
+    // 压缩运行结束（compacted 与纯裁剪都发）：复位压缩中 + 携带压缩后占用 → 环形指示器即时更新
     sessionStore.setSessionIsCompressing(sessionId, false);
+    if ((chunk as any).contextStats) {
+      updateTokenStatsFromSSE((chunk as any).contextStats);
+    }
+    return;
+  }
+  if (chunk.type === "compaction_summary") {
+    // 压缩完成（live 或事件页）：标记"已压缩"消息 + 生成压缩占位（原位渲染，不移除消息块）。
+    // in-turn（折叠期有宿主回合）→ 当前回合内一条 event 块；out-of-turn → 独立 kind:'event' 回合。
+    sessionStore.setSessionIsCompressing(sessionId, false);
+    // 压缩事件自身携带压缩后占用 → 环形指示器即时更新（无需 REST）
+    if ((chunk as any).contextStats) {
+      updateTokenStatsFromSSE((chunk as any).contextStats);
+    }
     const turns = sessionStore.getTurns(sessionId) || [];
 
-    // 1. 移除被遮蔽消息的块（按 messageId，含 user/assistant 块；display 视图由占位概括）
-    for (const tid of chunk.shadowedMessageIds || []) {
-      for (const t of turns) {
-        if (!Array.isArray(t.blocks)) continue;
-        for (let i = t.blocks.length - 1; i >= 0; i--) {
-          if (t.blocks[i].messageId === tid) t.blocks.splice(i, 1);
+    // 1. 移除旧压缩占位（合成节点，随新摘要替换；真实消息块保留仅标记）
+    for (const t of turns) {
+      if (!Array.isArray(t.blocks)) continue;
+      for (let i = t.blocks.length - 1; i >= 0; i--) {
+        if (
+          t.blocks[i].role === "event" &&
+          t.blocks[i].metadata?.eventType === "compaction"
+        ) {
+          t.blocks.splice(i, 1);
         }
       }
     }
 
-    // 2. 生成占位块（role='event'；EventCard 从 metadata.compactInfo 读取）
+    // 2. 标记被遮蔽消息为已压缩（不物理移除）：新格式按分界点 id（messageId <= shadowedEndId，
+    //    有序 ULID 比较，c_ 检查点前缀恒 ≤ m_ 消息）；旧格式按 shadowedMessageIds 清单（防御回退）。
+    const boundaryId = chunk.shadowedEndId;
+    const legacyIds =
+      chunk.shadowedMessageIds && chunk.shadowedMessageIds.length > 0
+        ? new Set(chunk.shadowedMessageIds)
+        : null;
+    for (const t of turns) {
+      if (!Array.isArray(t.blocks)) continue;
+      for (const b of t.blocks) {
+        const mid = b.messageId;
+        const shadowed = legacyIds
+          ? legacyIds.has(mid)
+          : boundaryId
+            ? isAtOrBeforeBoundary(mid, boundaryId)
+            : false;
+        if (shadowed) b.metadata = { ...(b.metadata || {}), compacted: true };
+      }
+    }
+
+    // 3. 生成占位块（role='event'；EventCard 从 metadata.compactInfo 读取）
     const now = new Date().toISOString();
+    const compactInfo = {
+      shadowedEndId: chunk.shadowedEndId,
+      shadowedCount: chunk.shadowedCount,
+      shadowedMessageIds: chunk.shadowedMessageIds,
+      summary: chunk.summary ?? "",
+    };
     const placeholder: TurnContent = {
       id: chunk.messageId || `__compact_${Date.now()}`,
       role: "event",
@@ -372,10 +444,7 @@ export function applyChunkToStore(
       additionalKwargs: [],
       metadata: {
         eventType: "compaction",
-        compactInfo: {
-          shadowedMessageIds: chunk.shadowedMessageIds || [],
-          summary: chunk.summary ?? "",
-        },
+        compactInfo,
       },
       createdAt: now,
       updatedAt: now,
@@ -395,10 +464,7 @@ export function applyChunkToStore(
         kind: "event",
         metadata: {
           eventType: "compaction",
-          compactInfo: {
-            shadowedMessageIds: chunk.shadowedMessageIds || [],
-            summary: chunk.summary ?? "",
-          },
+          compactInfo,
         },
         visible: true,
         blocks: [placeholder],
@@ -428,6 +494,9 @@ export function applyChunkToStore(
     // 回合级工作态：turn_start 开括号 → 进入"工作中"（纯前端瞬态，不落库）
     if (!turn.state) turn.state = {};
     turn.state.isWorking = true;
+    // 工作时长秒表锚点（前端瞬态，与 isWorking 同层）：流式期间由该锚点跳动显示已耗时；
+    // 回合结束以服务端 totalDurationMs 为准覆盖（本地时钟仅用于期间的实时展示）。
+    if (turn.state.startedAt == null) turn.state.startedAt = Date.now();
     // 回合级 modelName（与历史 turn/finish 合并的 modelName 同字段，assistantMetadata 统一读 turn.metadata）
     if (chunk.modelName) {
       if (!turn.metadata) turn.metadata = {};
@@ -450,7 +519,7 @@ export function applyChunkToStore(
       if (!turn.state) turn.state = {};
       turn.state.isWorking = false;
       delete turn.state.retry;
-      // 业务错误归拢回合级：finishReason/errorDetail/usage 只写 turn.metadata + 最后一条 assistant 块 usage
+      // 业务错误归拢回合级：finishReason/errorDetail/usage/耗时 只写 turn.metadata + 最后一条 assistant 块 usage
       turn.metadata = {
         ...(turn.metadata || {}),
         // 领域事件 turn/finish 自带 modelName（live turn_end 无此字段 → undefined 不写）
@@ -458,6 +527,10 @@ export function applyChunkToStore(
         ...(chunk.finishReason ? { finishReason: chunk.finishReason } : {}),
         ...(chunk.error ? { errorDetail: chunk.error } : {}),
         ...(chunk.usage ? { usage: chunk.usage } : {}),
+        // 整轮耗时：SSE 与历史事件页同源（服务端落库真值），刷新后仍可展示
+        ...(chunk.totalDurationMs != null
+          ? { totalDurationMs: chunk.totalDurationMs }
+          : {}),
       };
       if (!Array.isArray(turn.blocks)) turn.blocks = [];
       const lastAssistant = [...turn.blocks]
@@ -539,31 +612,25 @@ export function applyChunkToStore(
   if (chunk.type === "tool_calls_response") {
     // 工具执行结果下发 → 交互已消费，关闭会话级卡（与 ask_resolved 幂等双保险）
     sessionStore.setSessionPendingAsk(sessionId, undefined);
-    // 把执行结果挂到对应 tool-call 块：按 (messageId, toolCallId) 定位（跨块搜 metadata.toolCalls）
+    // 把执行结果挂到对应 tool-call 块：主键 toolCallId（对齐回放 tool/result 的聚类语义；
+    // 工具结果是独立消息，其 messageId 与含调用的 assistant 消息 id 无关，故不依赖 messageId）。
     const turns = sessionStore.getTurns(sessionId) || [];
-    const turn = turns.find((t: any) => t.id === chunk.turnId);
-    const messageId = "messageId" in chunk ? chunk.messageId : undefined;
-    if (messageId && turn && Array.isArray(turn.blocks)) {
-      const seq = turn.blocks.filter((b: any) => b.messageId === messageId);
-      const responseIds = new Set(
-        (chunk.toolCallsResponse || []).map((r: any) => r.toolCallId),
-      );
-      let target = seq.find((b: any) =>
-        (b.metadata?.toolCalls || []).some((tc: any) => responseIds.has(tc.id)),
-      );
-      if (!target && seq.length > 0) target = seq[seq.length - 1];
-      if (!target) target = ensureAssistantBlock(turn, messageId);
-      if (target) {
-        target.metadata = {
-          ...(target.metadata || {}),
-          toolCallsResponse: chunk.toolCallsResponse || [],
-        };
-        for (const r of chunk.toolCallsResponse || []) {
-          const tc = (target.metadata.toolCalls || []).find(
-            (c: any) => c.id === r.toolCallId,
-          );
-          if (tc) tc.outcome = r.outcome;
-        }
+    const responseIds = new Set(
+      (chunk.toolCallsResponse || []).map((r: any) => r.toolCallId),
+    );
+    let target = responseIds.size > 0
+      ? findBlockByToolCallId(turns, [...responseIds][0])
+      : undefined;
+    if (target) {
+      target.metadata = {
+        ...(target.metadata || {}),
+        toolCallsResponse: chunk.toolCallsResponse || [],
+      };
+      for (const r of chunk.toolCallsResponse || []) {
+        const tc = (target.metadata.toolCalls || []).find(
+          (c: any) => c.id === r.toolCallId,
+        );
+        if (tc) tc.outcome = r.outcome;
       }
     }
     return;

@@ -164,7 +164,7 @@ export class MockAdapter implements IProtocolAdapter {
     yield {
       type: "block_end",
       index: 0,
-      block: { type: "text", contentId: "", text },
+      block: { type: "text", text },
     };
     yield { type: "usage", usage };
     yield { type: "finish", finishReason: "stop" };

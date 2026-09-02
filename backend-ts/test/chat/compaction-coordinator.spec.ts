@@ -39,7 +39,6 @@ function createContext(overrides: Partial<CompactionDataSource> = {}): any {
     getEffectiveContextWindow: jest.fn(() => 1000),
     getPrelude: jest.fn(async () => []),
     getTools: jest.fn(() => []),
-    refreshAfterCompaction: jest.fn(async () => [makeMsg('m1')]),
     ...overrides,
   };
 }
@@ -158,14 +157,16 @@ describe('CompactionCoordinatorService', () => {
       expect(hookOpts.hook.sessionContext).toBe(ctx);
     });
 
-    it('压缩完成（compacted）→ 直发 compaction_summary（遮蔽信息）', async () => {
+    it('压缩完成（compacted）→ 直发 compaction_summary（遮蔽区间信息）', async () => {
       const ctx = createContext();
       const compactionService = {
         shouldCompress: jest.fn(async () => true),
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: true,
-          shadowedMessageIds: ['u1', 'a1'],
+          shadowedCount: 2,
+          shadowedEndId: 'a1',
+          summaryMessageId: 'm_sum',
           summary: '已压缩',
         })),
       };
@@ -180,7 +181,10 @@ describe('CompactionCoordinatorService', () => {
       expect(events[0].type).toBe('compression_start');
       const summary = events.find((e: any) => e.type === 'compaction_summary');
       expect(summary).toBeDefined();
-      expect(summary.shadowedMessageIds).toEqual(['u1', 'a1']);
+      // v1.4：遮蔽为有序 messageId 区间 + 条数（不再离散 id 清单）
+      expect(summary.shadowedEndId).toBe('a1');
+      expect(summary.shadowedCount).toBe(2);
+      expect(summary.messageId).toBe('m_sum');
       expect(summary.summary).toBe('已压缩');
     });
 
@@ -200,6 +204,49 @@ describe('CompactionCoordinatorService', () => {
         reason: 'auto',
       });
       const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events.some((e: any) => e.type === 'compaction_summary')).toBe(false);
+    });
+
+    it('压缩完成 → 先发 compression_end（携带 contextStats），compaction_summary 亦携带', async () => {
+      const ctx = createContext();
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => ({
+          messages: [makeMsg('m1')],
+          compacted: true,
+          shadowedCount: 2,
+          shadowedEndId: 'a1',
+          summaryMessageId: 'm_sum',
+          summary: '已压缩',
+          contextStats: { usedTokens: 600, effectiveContextWindow: 1000 },
+        })),
+      };
+      const coordinator = createCoordinator(compactionService);
+      await coordinator.maybeCompress(ctx as any, { force: true, reason: 'manual' });
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      const end = events.find((e: any) => e.type === 'compression_end');
+      expect(end).toBeDefined();
+      expect(end.reason).toBe('manual');
+      expect(end.contextStats).toEqual({ usedTokens: 600, effectiveContextWindow: 1000 });
+      const summary = events.find((e: any) => e.type === 'compaction_summary');
+      expect(summary.contextStats).toEqual({ usedTokens: 600, effectiveContextWindow: 1000 });
+    });
+
+    it('纯裁剪（compacted=false）→ 仍发 compression_end 携带 contextStats，不发 compaction_summary', async () => {
+      const ctx = createContext();
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => ({
+          messages: [makeMsg('m1')],
+          compacted: false,
+          shadowedCount: 0,
+          contextStats: { usedTokens: 500, effectiveContextWindow: 1000 },
+        })),
+      };
+      const coordinator = createCoordinator(compactionService);
+      await coordinator.maybeCompress(ctx as any, { force: true, reason: 'auto' });
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events.some((e: any) => e.type === 'compression_end')).toBe(true);
       expect(events.some((e: any) => e.type === 'compaction_summary')).toBe(false);
     });
 

@@ -24,13 +24,11 @@ function makeMsg(
 
 const text = (t: string): ContentBlock => ({
   type: 'text',
-  contentId: `t-${t.slice(0, 4)}`,
   text: t,
 });
 
 const image = (id: string): ContentBlock => ({
   type: 'image',
-  contentId: `img-${id}`,
   attachment: {
     attachmentId: id,
     mediaType: 'image/png',
@@ -41,7 +39,6 @@ const image = (id: string): ContentBlock => ({
 
 const reasoning = (summary: string): ContentBlock => ({
   type: 'reasoning',
-  contentId: 'r1',
   summary,
 });
 
@@ -56,7 +53,7 @@ describe('image-projection step', () => {
     expect(imageProjectionStep.apply(msgs, baseCtx)).toBe(msgs);
   });
 
-  it('不支持图片输入时 image 块 → 带 attachmentId 的占位文本', () => {
+  it('不支持图片输入时 image 块 → 含文件路径的英文占位文本', () => {
     const msgs = [makeMsg('user', [text('看图'), image('img1')])];
     const out = imageProjectionStep.apply(msgs, {
       ...baseCtx,
@@ -68,23 +65,22 @@ describe('image-projection step', () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[1].type).toBe('text');
     const placeholder = (blocks[1] as { text: string }).text;
-    expect(placeholder).toContain('image_recognize');
-    expect(placeholder).toContain('image_id: img1');
+    expect(placeholder).toContain('Image omitted');
+    expect(placeholder).toContain('Image file path: uploads/images/img1.png');
+    expect(placeholder).not.toContain('image_id');
     // 原消息对象不被修改（副本变换）
     expect(msgs[0].content[1].type).toBe('image');
   });
 
-  it('占位文本不含用户可控内容（文件名等）', () => {
-    const msgs = [
-      makeMsg('user', [image('img2')]),
-    ];
+  it('占位文本含文件路径、不含 image_id', () => {
+    const msgs = [makeMsg('user', [image('img2')])];
     const out = imageProjectionStep.apply(msgs, {
       ...baseCtx,
       supportsImageInput: false,
     });
     const t = (out[0].content[0] as { text: string }).text;
-    expect(t).not.toContain('uploads/images');
-    expect(t).not.toContain('image/png');
+    expect(t).toContain('uploads/images/img2.png');
+    expect(t).not.toContain('image_id');
   });
 });
 
@@ -120,13 +116,19 @@ describe('empty-content-compat step', () => {
   it('assistant 空 content → 单个换行文本块', () => {
     const msgs = [makeMsg('assistant', [])];
     const out = emptyContentCompatStep.apply(msgs, baseCtx);
-    expect(out[0].content).toEqual([{ type: 'text', contentId: '', text: '\n' }]);
+    expect(out[0].content).toEqual([{ type: 'text', text: '\n' }]);
   });
 
-  it('user 空 content 不受影响', () => {
+  it('user 空 content 同样 → 换行文本块（否则 OpenAI 400 missing messages.content）', () => {
     const msgs = [makeMsg('user', [])];
     const out = emptyContentCompatStep.apply(msgs, baseCtx);
-    expect(out[0].content).toHaveLength(0);
+    expect(out[0].content).toEqual([{ type: 'text', text: '\n' }]);
+  });
+
+  it('非空 content 不受影响', () => {
+    const msgs = [makeMsg('user', [text('q')])];
+    const out = emptyContentCompatStep.apply(msgs, baseCtx);
+    expect(out[0].content).toHaveLength(1);
   });
 });
 

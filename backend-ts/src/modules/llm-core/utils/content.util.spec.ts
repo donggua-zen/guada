@@ -12,11 +12,10 @@ function msgWithImage(hasImage: boolean): Message {
       ? [
           {
             type: 'image',
-            contentId: 'i1',
             attachment: { attachmentId: 'a1', mediaType: 'image/png', bytes: 1, url: 'u' },
           },
         ]
-      : [{ type: 'text', contentId: 't1', text: 'hi' }],
+      : [{ type: 'text', text: 'hi' }],
   } as Message;
 }
 

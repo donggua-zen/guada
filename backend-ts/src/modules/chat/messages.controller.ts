@@ -99,19 +99,6 @@ export class MessagesController {
   }
 
   /**
-   * 获取块的工具调用详情（完整参数和结果）
-   */
-  @Get("sessions/:sessionId/message-content/:contentId/tool-details")
-  async getMessageContentToolDetails(
-    @Param("sessionId") sessionId: string,
-    @Param("contentId") contentId: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.ensureSession(sessionId);
-    return this.messageStore.getBlockDetails(sessionId, contentId);
-  }
-
-  /**
    * 批量导入轮次
    */
   @Post("sessions/:sessionId/messages/import")

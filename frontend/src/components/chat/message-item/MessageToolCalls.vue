@@ -81,7 +81,6 @@ const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: any[];
   isStreaming?: boolean;
-  contentId?: string;
   sessionId?: string;
 }>();
 

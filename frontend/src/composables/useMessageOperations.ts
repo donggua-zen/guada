@@ -141,14 +141,14 @@ export function useMessageOperations(
      */
     function enterEditMode(message: any, turnId: string) {
         let knowledgeBaseIds = []
-        const referencedKbs = message.contents[0].metadata?.referencedKbs || []
+        const referencedKbs = message.metadata?.referencedKbs || []
         for (let i = 0; i < referencedKbs.length; i++) {
             knowledgeBaseIds.push(referencedKbs[i].id)
         }
 
         const inputMsg = {
-            content: message.contents[0].content,
-            files: message.contents?.[0]?.files || [],
+            content: message.content,
+            files: message.files || [],
             knowledgeBaseIds: knowledgeBaseIds,
             isWaiting: false
         }

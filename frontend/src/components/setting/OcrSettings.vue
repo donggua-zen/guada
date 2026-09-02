@@ -14,6 +14,19 @@
             <el-select v-model="settingsForm.provider" :placeholder="t('settings.ocr.selectProvider')" style="width: 200px;" class="shrink-0">
               <el-option :label="t('settings.ocr.disabled')" value="none" />
               <el-option :label="t('settings.ocr.umiLocal')" value="umi" />
+              <el-option :label="t('settings.ocr.baiduCloud')" value="baidu" />
+            </el-select>
+          </div>
+
+          <!-- 扫描件识别策略 -->
+          <div v-if="settingsForm.provider !== 'none'" class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.scanStrategy') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.scanStrategyDesc') }}</span>
+            </div>
+            <el-select v-model="settingsForm.ocrMode" style="width: 200px;" class="shrink-0">
+              <el-option :label="t('settings.ocr.strategyAuto')" value="auto" />
+              <el-option :label="t('settings.ocr.strategyForce')" value="force" />
             </el-select>
           </div>
 
@@ -36,8 +49,8 @@
             </div>
           </template>
 
-          <!-- 百度 OCR 配置（暂时隐藏） -->
-          <template v-if="false">
+          <!-- 百度 OCR 配置 -->
+          <template v-if="settingsForm.provider === 'baidu'">
             <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
               <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">API Key</span>
@@ -61,10 +74,15 @@
               <template v-if="settingsForm.provider === 'none'">
                 <div>{{ t('settings.ocr.disabledTip') }}</div>
               </template>
-              <template v-else>
+              <template v-else-if="settingsForm.provider === 'umi'">
                 <div>{{ t('settings.ocr.umiTip1') }}</div>
                 <div>{{ t('settings.ocr.umiTip2') }}</div>
                 <div>{{ t('settings.ocr.umiTip3') }}</div>
+              </template>
+              <template v-else-if="settingsForm.provider === 'baidu'">
+                <div>{{ t('settings.ocr.baiduTip1') }}</div>
+                <div>{{ t('settings.ocr.baiduTip2') }}</div>
+                <div>{{ t('settings.ocr.baiduTip3') }}</div>
               </template>
             </div>
           </div>
@@ -95,6 +113,7 @@ const settingsForm = reactive({
   umiPort: 1224,
   baiduApiKey: '',
   baiduSecretKey: '',
+  ocrMode: 'auto',
 })
 
 // 原始设置备份，用于对比是否有改动
@@ -117,6 +136,7 @@ watch(() => ({
   provider: settingsForm.provider,
   umiHost: settingsForm.umiHost,
   umiPort: settingsForm.umiPort,
+  ocrMode: settingsForm.ocrMode,
 }), () => {
   debouncedSave()
 }, { deep: true })
@@ -137,6 +157,7 @@ const loadSettings = async () => {
     settingsForm.umiPort = response.umiPort || 1224
     settingsForm.baiduApiKey = response.baiduApiKey || ''
     settingsForm.baiduSecretKey = response.baiduSecretKey || ''
+    settingsForm.ocrMode = response.ocrMode === 'force' ? 'force' : 'auto'
 
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
@@ -153,6 +174,7 @@ const handleSave = async () => {
     // 构造保存数据
     const dataToSave: Record<string, any> = {
       provider: settingsForm.provider,
+      ocrMode: settingsForm.ocrMode === 'force' ? 'force' : 'auto',
     }
 
     if (settingsForm.provider === 'umi') {

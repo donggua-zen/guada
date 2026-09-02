@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GuaDa AI 知识库架构分析</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --card: #1d212e;
+    --border: #2a2f3f;
+    --text: #e6e9f0;
+    --muted: #8b92a5;
+    --accent: #5b8cff;
+    --accent2: #37c99e;
+    --warn: #f0a44b;
+    --danger: #e5697a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", -apple-system, sans-serif;
+    line-height: 1.75;
+    padding: 48px 20px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  header h1 { font-size: 30px; font-weight: 700; letter-spacing: 0.5px; }
+  header .sub { color: var(--muted); margin-top: 10px; font-size: 14px; }
+  header .tags { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-size: 12px; padding: 3px 12px; border-radius: 20px;
+    background: rgba(91,140,255,0.12); color: var(--accent);
+    border: 1px solid rgba(91,140,255,0.3);
+  }
+  h2 {
+    font-size: 21px; margin: 44px 0 18px; padding-left: 12px;
+    border-left: 4px solid var(--accent); font-weight: 600;
+  }
+  p { margin-bottom: 14px; color: #cdd3e0; }
+  code {
+    background: rgba(255,255,255,0.07); padding: 1px 7px; border-radius: 5px;
+    font-family: Consolas, monospace; font-size: 13px; color: #a8c7ff;
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px 24px; margin-bottom: 20px;
+  }
+  .panel-title { font-weight: 700; font-size: 15px; margin-bottom: 14px; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .timeline { position: relative; padding-left: 34px; }
+  .timeline::before {
+    content: ""; position: absolute; left: 12px; top: 8px; bottom: 8px;
+    width: 2px; background: linear-gradient(var(--accent), var(--accent2));
+  }
+  .step { position: relative; margin-bottom: 22px; }
+  .step:last-child { margin-bottom: 0; }
+  .step::before {
+    content: attr(data-n); position: absolute; left: -34px; top: 2px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--card); border: 2px solid var(--accent);
+    color: var(--accent); font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-title { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+  .step-text { color: var(--muted); font-size: 13.5px; }
+  .step-text code { color: #a8c7ff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .card-title { font-weight: 700; font-size: 14.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .card p { font-size: 13.5px; color: var(--muted); margin-bottom: 8px; }
+  .card p:last-child { margin-bottom: 0; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue { background: var(--accent); }
+  .dot-green { background: var(--accent2); }
+  .dot-orange { background: var(--warn); }
+  .dot-red { background: var(--danger); }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 720px) { .compare { grid-template-columns: 1fr; } }
+  .compare .card { border-top: 3px solid var(--border); }
+  .compare .card.hl { border-top-color: var(--accent2); }
+  .metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .metric {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; text-align: center;
+  }
+  .metric .num { font-size: 24px; font-weight: 700; color: var(--accent); }
+  .metric .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .note {
+    background: rgba(240,164,75,0.08); border: 1px solid rgba(240,164,75,0.3);
+    border-radius: 10px; padding: 14px 18px; font-size: 13.5px; color: #e8c89a; margin-bottom: 20px;
+  }
+  .flow {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 20px; font-family: Consolas, monospace; font-size: 13px;
+    color: #9fb6dd; overflow-x: auto; white-space: pre; line-height: 1.9;
+  }
+  footer { margin-top: 50px; color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>GuaDa AI 知识库（RAG）架构分析</h1>
+  <div class="sub">基于源码实测分析 · backend-ts/src/modules/knowledge-base · 2026-09-01</div>
+  <div class="tags">
+    <span class="tag">混合检索 RRF</span>
+    <span class="tag">sqlite-vec + FTS5</span>
+    <span class="tag">Agent 自助多轮搜索</span>
+    <span class="tag">40+ 格式 · OCR</span>
+    <span class="tag">断点恢复</span>
+  </div>
+</header>
+
+<h2>一、核心结论</h2>
+<div class="panel">
+  <p>知识库是 GuaDa AI 的核心 RAG 模块，采用<strong>「三层存储 + 双路混合检索 + Agent 自助工具化」</strong>三条主线设计：</p>
+  <p><span class="dot dot-blue"></span> <strong>三层存储</strong>：Prisma/SQLite 管元数据与分块正文，sqlite-vec 管向量，FTS5 管倒排索引，原始文件落文件系统——每张知识库对应独立集合 <code>kb_{kbId}</code>，天然实现分区隔离。</p>
+  <p><span class="dot dot-green"></span> <strong>混合检索</strong>：语义（sqlite-vec）与关键词（FTS5 + jieba 中文分词）双路各召回 top_k×4，可选 Okapi BM25 重排，动态权重降权失效侧，最后 RRF（Reciprocal Rank Fusion）按排名位置融合——不依赖绝对分数，跨引擎可比。</p>
+  <p><span class="dot dot-orange"></span> <strong>Agent 工具化</strong>：与常规"系统自动 RAG 注入"不同，检索策略、轮次、文件组合完全由 Agent 自主决定（kb_search / kb_list_files / kb_get_chunks / kb_add_document 四个工具），写入侧带高危审批。</p>
+</div>
+
+<div class="metric-row">
+  <div class="metric"><div class="num">3</div><div class="lbl">存储引擎（Prisma / vec / FTS5）</div></div>
+  <div class="metric"><div class="num">4</div><div class="lbl">Agent 工具（kb_search 等）</div></div>
+  <div class="metric"><div class="num">4×</div><div class="lbl">双路扩大召回系数</div></div>
+  <div class="metric"><div class="num">10/批</div><div class="lbl">向量化批次 + 降级逐条</div></div>
+  <div class="metric"><div class="num">100%</div><div class="lbl">进度可追踪 + 断点恢复</div></div>
+</div>
+
+<h2>二、模块组成与职责</h2>
+<div class="panel">
+  <table>
+    <tr><th>文件</th><th>职责</th><th>关键点</th></tr>
+    <tr><td><code>knowledge-base.service.ts</code></td><td>知识库 CRUD</td><td>更换 embedding 模型 → 清空分块/向量并全量重建（clearAndReprocess）；删除时级联清向量集合、物理文件、DB 记录</td></tr>
+    <tr><td><code>kb-file.service.ts</code></td><td>文件管理中枢（45KB，最大）</td><td>上传 / addTextDocument / 层级文件夹 / 移动重命名 / 删除 / 重试；启动时 <code>resumePendingFileTasks</code> 恢复中断任务、<code>cleanupOrphanFiles</code> 清孤儿</td></tr>
+    <tr><td><code>file-parser.service.ts</code></td><td>文件解析</td><td>四类：TEXT 集合 / pdf / docx / xlsx（每 Sheet 一页转 Markdown）；图片走 OCR</td></tr>
+    <tr><td><code>chunking.service.ts</code></td><td>Token 智能分块</td><td>句子边界优先（中英文标点）、严格不截断句子；重叠窗口默认 100 token；NFKC 归一化、U+FFFD 清理</td></tr>
+    <tr><td><code>embedding.service.ts</code></td><td>向量化</td><td>OpenAI 兼容协议；批 10 条；retryWithBackoff 指数退避（429/5xx/网络错误）；批量失败降级逐条；60s 超时</td></tr>
+    <tr><td><code>ocr.service.ts</code></td><td>图片文字识别</td><td>图片类文档自动 OCR 后入统一管线</td></tr>
+    <tr><td><code>kb-search.controller.ts</code></td><td>搜索 REST API</td><td><code>POST /knowledge-bases/:kb_id/search</code>；默认权重语义 0.3 / 关键词 0.7，BM25 重排默认开</td></tr>
+    <tr><td><code>plugins/knowledge-base.plugin.ts</code></td><td>Agent 工具包注册</td><td>toolkit <code>knowledge_base</code>：kb_search / kb_list_files / kb_get_chunks / kb_add_document；bot 会话 eager 加载，web 会话 lazy</td></tr>
+    <tr><td><code>plugins/document.plugin.ts</code></td><td>Agent 文档解析工具</td><td>toolkit <code>document</code>：doc_parse / doc_batch_parse，Agent 读取本地文件后自行决定入库</td></tr>
+  </table>
+</div>
+
+<h2>三、入库管线（processFile）</h2>
+<p>所有入库入口（前端上传、Agent 的 kb_add_document）最终汇入同一条后台管线，进度实时写库（0-100%），任何一步失败都会落 <code>failed</code> 状态并支持重试：</p>
+<div class="panel">
+  <div class="timeline">
+    <div class="step" data-n="1"><div class="step-title">文件解析（2% → 80%）</div><div class="step-text">按扩展名路由到 TEXT / PDF / DOCX / XLSX 解析器或 OCR，输出带页码的分页文本 <code>parseResult.pages</code>，解析进度映射到全局 2-80%</div></div>
+    <div class="step" data-n="2"><div class="step-title">Token 分块（82% → 86%）</div><div class="step-text">所有页合并为连续文档后统一分块；按 KB 配置 <code>chunkMaxSize=1000 / overlapSize=100</code>；句子边界优先、跨页重叠保留上下文</div></div>
+    <div class="step" data-n="3"><div class="step-title">清理旧数据</div><div class="step-text">重处理场景：先从向量库按 <code>documentId=fileId</code> 删旧向量，再删 KBChunk 记录——保证幂等，失败不阻塞主流程</div></div>
+    <div class="step" data-n="4"><div class="step-title">批量向量化（88% → 93%）</div><div class="step-text">按 KB 绑定的 <code>embeddingModelId</code> 取模型+Provider 配置；批 10 条带重试，失败降级逐条，进度回调逐批写库</div></div>
+    <div class="step" data-n="5"><div class="step-title">双写存储（95% → 100%）</div><div class="step-text">向量 + 元数据写 sqlite-vec（id 约定 <code>chunk_{idx}_{fileId}</code>）；分块正文 + vectorId + token 统计批量写 KBChunk 表；标记 completed</div></div>
+  </div>
+</div>
+
+<div class="flow">上传/Agent添加 → 保存物理文件(DB: pending)
+     → processFileInBackground
+        → parse(0-80%) → chunk(82-86%) → clean-old → embed(88-93%) → dual-write(95-100%)
+     → completed / failed(可 retry)
+
+启动自愈:  onModuleInit → resumePendingFileTasks(恢复中断) + cleanupOrphanFiles(清孤儿)
+换模型:   update(embeddingModelId变化) → clearAndReprocessKnowledgeBase(清空重建)</div>
+
+<h2>四、混合检索机制</h2>
+<div class="panel">
+  <div class="panel-title">searchChunksHybrid 五步流程</div>
+  <table>
+    <tr><th>步骤</th><th>机制</th><th>说明</th></tr>
+    <tr><td>① 语义召回</td><td><code>sqlite-vec</code> 向量相似</td><td>查询文本先经 embedding 服务向量化，召回 top_k×4 条</td></tr>
+    <tr><td>② 关键词召回</td><td><code>FTS5</code> + <code>jieba</code></td><td>中文用 @node-rs/jieba 精确模式分词，入库与查询分词逻辑一致；<code>bm25()</code> 初排，召回 top_k×4 条</td></tr>
+    <tr><td>③ BM25 重排（可选）</td><td>Okapi BM25 公式</td><td>带 IDF 平滑，在召回集上重算精确分数修正排序；默认开启</td></tr>
+    <tr><td>④ 动态权重</td><td><code>adjustWeights</code></td><td>检测 BM25 失效（如查询分词为空）时自动降权关键词侧，防止空结果拖垮融合</td></tr>
+    <tr><td>⑤ RRF 融合</td><td>Reciprocal Rank Fusion</td><td>只依赖双路的<strong>排名位置</strong>加权融合，不受两套引擎绝对分数量纲差异影响，输出 top_k</td></tr>
+  </table>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="card-title"><span class="dot dot-blue"></span>分区与过滤</div><p>每个知识库独立集合 <code>kb_{kbId}</code>，物理隔离不串库；支持 <code>filter_file_id</code> 把检索范围缩小到单文件（Agent 逐文件深读时用）。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-green"></span>权重默认值</div><p>REST API 默认 <strong>语义 0.3 / 关键词 0.7</strong>（偏关键词精度）；Agent 的 kb_search 默认 <strong>0.6 / 0.4</strong>（偏语义泛化）——两个入口按场景调了不同先验。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-orange"></span>可替换架构</div><p><code>VectorDatabase</code> 是接口（DI 注入 <code>VECTOR_DB</code> token），<code>VectorDbService</code> 是门面；当前实现为 SQLite 系，未来可换 pgvector / Milvus 而不动上层。</p></div>
+</div>
+
+<h2>五、数据模型</h2>
+<div class="panel">
+  <table>
+    <tr><th>模型</th><th>关键字段</th><th>说明</th></tr>
+    <tr><td><code>KnowledgeBase</code></td><td><code>embeddingModelId</code>、<code>chunkMaxSize=1000</code>、<code>chunkOverlapSize=100</code>、<code>chunkMinSize=50</code>、<code>isPublic</code></td><td>绑定一个 embedding 模型；分块参数库级配置，分块时实时读取</td></tr>
+    <tr><td><code>KBFile</code></td><td><code>parentFolderId</code> 自关联、<code>isDirectory</code>、<code>contentHash</code>、<code>processingStatus / progressPercentage / currentStep / errorMessage</code>、<code>totalChunks / totalTokens</code></td><td>层级目录像文件系统（文件夹也是记录）；处理状态机 pending→processing→completed/failed 全程可追踪；KB 级联删除</td></tr>
+    <tr><td><code>KBChunk</code></td><td><code>vectorId</code>、<code>embeddingDimensions</code>、<code>tokenCount</code>、<code>metadata</code>(JSON)</td><td>分块正文留在关系库（kb_get_chunks 直接读，不用走向量库）；vectorId 反查向量库；file 级联删除</td></tr>
+  </table>
+</div>
+<div class="note">注意：<code>KnowledgeBase.embeddingModelId</code> 采用"悬空引用"设计——删除 Model 时不级联清理引用，业务层查询模型配置前必须判空（插件和控制器里都有 <code>if (!model) throw</code> 防护）。</div>
+
+<h2>六、Agent 集成：与常规 RAG 的本质区别</h2>
+<div class="compare">
+  <div class="card">
+    <div class="card-title"><span class="dot dot-orange"></span>常规自动 RAG</div>
+    <p>系统在用户消息后自动检索，把 top-k 片段拼进 prompt——检索时机、轮次、范围全部硬编码，Agent 被动接收结果。</p>
+  </div>
+  <div class="card hl">
+    <div class="card-title"><span class="dot dot-green"></span>GuaDa 的 Agent 自助模式</div>
+    <p>会话消息携带 <code>knowledgeBaseIds</code> 绑定范围，Agent 拿到工具后<strong>自主决定</strong>搜什么、搜几轮、是否深入某文件（search → get_chunks 分页细读）、是否入库新文档。</p>
+  </div>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>工具</th><th>能力</th><th>约束</th></tr>
+    <tr><td><code>kb_search</code></td><td>混合检索，返回片段+文件名+chunkIndex</td><td>需 knowledge_base_id；可 filter_file_id</td></tr>
+    <tr><td><code>kb_list_files</code></td><td>列文件元数据（状态/进度/chunk 数），分页</td><td>Agent 可据此判断文件是否处理完成</td></tr>
+    <tr><td><code>kb_get_chunks</code></td><td>按文件读分块原文，分页（默认 10/页）</td><td>仅 completed 文件可读</td></tr>
+    <tr><td><code>kb_add_document</code></td><td>本地文件 → 自动解析/分块/向量化入库</td><td>dangerLevel=high 走审批；仅 web 会话暴露；bot 会话不开放写入</td></tr>
+  </table>
+  <p style="margin-top:12px">另有 <code>DocumentPlugin</code>（doc_parse / doc_batch_parse）让 Agent 先解析本地文档再决定入库路径；插件自带使用说明 prompt（搜索优先→分页细读的推荐工作流）。IM（bot）会话中 kb 工具包强制 eager 加载保证可用，web 会话 lazy 按需加载省 token。</p>
+</div>
+
+<h2>七、后续围绕知识库展开的开发约定</h2>
+<div class="grid">
+  <div class="card"><div class="card-title"><span class="dot dot-blue"></span>入口收敛</div><p>新增任何入库入口（API、插件、定时任务、IM 通道）必须复用 <code>KbFileService.processFile</code> 管线，保持进度回调与断点恢复语义，不要自建解析→分块→向量化旁路。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-green"></span>检索走门面</div><p>一律经 <code>VectorDbService.searchChunksHybrid / searchChunksSemantic / searchChunksKeyword</code>，不直接操作 sqlite-vec 或 FTS5 表；未来换向量引擎零成本。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-orange"></span>ID 与分词约定</div><p>向量 id 固定 <code>chunk_{idx}_{fileId}</code> 且同步回 KBChunk.vectorId；FTS5 入库与查询必须共用 jieba 同一分词路径，改分词逻辑需全量重建索引。</p></div>
+  <div class="card"><div class="card-title"><span class="dot dot-red"></span>悬空引用防护</div><p>embeddingModelId 允许悬空（Model 删除不级联），所有取模型配置处必须判空抛错；换模型 = 全量重建，重建期间文件状态重置为 pending。</p></div>
+</div>
+
+<footer>GuaDa AI 知识库架构分析 · 生成于 2026-09-01 · 基于源码 backend-ts 实测</footer>
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@
     processing: 'Processing',
     completed: 'Completed',
     failed: 'Failed',
+    unknownError: 'Unknown error, retry processing',
     queuedShort: 'Queued',
     uploadedShort: 'Uploaded',
   },

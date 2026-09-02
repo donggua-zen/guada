@@ -123,7 +123,16 @@ const fileIconMap: Record<string, string> = {
  */
 export function getFileIcon(fileName: string): string {
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
-    return fileIconMap[ext] || vscodeText
+    return getFileIconByExt(ext)
+}
+
+/**
+ * 根据扩展名获取对应的 vscode-icons 图标 URL
+ * 知识库等场景拿到的已是 fileExtension 字段（无点号），直接查表
+ */
+export function getFileIconByExt(ext: string): string {
+    const key = (ext || '').toLowerCase().replace(/^\./, '')
+    return fileIconMap[key] || vscodeText
 }
 
 /**

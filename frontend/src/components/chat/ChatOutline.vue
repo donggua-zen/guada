@@ -36,7 +36,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import dayjs from 'dayjs'
 import type { Message } from '@/utils/messageUtils'
-import { extractMessageTitle } from '@/utils/messageUtils'
+import { extractMessageTitle, isHiddenBlock } from '@/utils/messageUtils'
 
 const props = defineProps<{
   messages: Message[]
@@ -84,7 +84,7 @@ function buildPreview(msg: Message): string {
 
 const outlineItems = computed<OutlineItem[]>(() => {
   return props.messages
-    .filter(msg => msg.role === 'user')
+    .filter(msg => msg.role === 'user' && !isHiddenBlock(msg))
     .map(msg => {
       // 找到该用户消息对应的助手最终回复（parentId 匹配的最后一条 = 最新版本）
       const replies = props.messages.filter(m => m.role === 'assistant' && m.parentId === msg.id)

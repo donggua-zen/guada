@@ -77,12 +77,17 @@ export class FileParserService {
   private readonly PDF_EXTENSIONS = new Set(["pdf"]);
   private readonly WORD_EXTENSIONS = new Set(["docx"]);
   private readonly EXCEL_EXTENSIONS = new Set(["xlsx"]);
+  // 图片走 OCR（百度 general_basic 仅支持 jpg/jpeg/png/bmp，保持双提供商兼容）
+  private readonly IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "bmp"]);
+  /** 页面级扫描页判定阈值：低于该字符数的页视为疑似扫描页（与主流 ocrmypdf 同类口径） */
+  private readonly SCAN_TEXT_THRESHOLD = 50;
 
   // 文件大小限制（字节）
   private readonly MAX_TEXT_SIZE = 1024 * 1024 * 1024; // 1GB
   private readonly MAX_PDF_SIZE = 1024 * 1024 * 1024; // 1GB
   private readonly MAX_WORD_SIZE = 1024 * 1024 * 1024; // 1GB
   private readonly MAX_EXCEL_SIZE = 1024 * 1024 * 1024; // 1GB
+  private readonly MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB
 
   /**
    * 检测文件类型
@@ -98,6 +103,8 @@ export class FileParserService {
       return "word";
     } else if (this.EXCEL_EXTENSIONS.has(ext)) {
       return "excel";
+    } else if (this.IMAGE_EXTENSIONS.has(ext)) {
+      return "image";
     } else if (
       ["py", "js", "ts", "java", "cpp", "c", "go", "rs"].includes(ext)
     ) {
@@ -143,6 +150,20 @@ export class FileParserService {
         const result = await this.parseExcelFile(filePath);
         await onProgress?.(25, "Excel 文件解析完成");
         return result;
+      } else if (fileType === "image") {
+        // 图片文件：OCR 是唯一文本来源，未配置或识别失败直接抛错（避免静默产生空文档）
+        await onProgress?.(5, "正在 OCR 识别图片...");
+        const ocrResult = await this.ocrService.recognizeImage(filePath);
+        if (!ocrResult || !ocrResult.text.trim()) {
+          throw new Error(
+            "图片 OCR 识别失败或结果为空，请先在设置中心配置 OCR 提供商",
+          );
+        }
+        await onProgress?.(25, "图片 OCR 识别完成");
+        return {
+          text: ocrResult.text,
+          pages: [{ pageNum: 1, text: ocrResult.text }],
+        };
       } else {
         // 未知类型，尝试当作文本解析
         this.logger.warn(`未知文件类型：${fileType}，尝试当作文本解析`);
@@ -169,6 +190,7 @@ export class FileParserService {
       pdf: this.MAX_PDF_SIZE,
       word: this.MAX_WORD_SIZE,
       excel: this.MAX_EXCEL_SIZE,
+      image: this.MAX_IMAGE_SIZE,
     };
 
     const limit = limits[fileType] || this.MAX_TEXT_SIZE;
@@ -241,7 +263,14 @@ export class FileParserService {
 
   /**
    * 解析 PDF 文件（返回带页码信息的结果）
-   * 如果解析结果为空（可能是扫描件），则尝试使用 OCR 识别
+   *
+   * 页面级混合路由（主流 ocrmypdf 模型）：
+   * - 文本层完整的页：零成本保留文本层
+   * - 低字符页（疑似扫描页，charCount < SCAN_TEXT_THRESHOLD）：仅这些页渲染+OCR
+   * - force 策略：所有页强制 OCR（等价 ocrmypdf --force-ocr）
+   * - 整本扫描 + 原生 PDF 提供商（umi）：整文件走原生 PDF 管线（mixed 模式内部按页处理）
+   * - 混合 PDF：文本层页与 OCR 页按页码升序合并，不再依赖文件级 isScanPdf 终局判定
+   *
    * @param filePath 文件绝对路径
    * @param onProgress 进度回调
    */
@@ -255,30 +284,69 @@ export class FileParserService {
       await onProgress?.(5, "正在逐页提取 PDF 文本...");
       const pdfResult = await this.parsePdfByPages(content);
 
-      // 检查 OCR 是否支持 PDF（提前判断，避免进入扫描件分支后再回退）
       const caps = await this.ocrService.getCapabilities();
-
-      // 判断是否为扫描件：字符数少于 50 的页面超过一半
+      const strategy = await this.ocrService.getScanOcrStrategy();
       const isScan = this.isScanPdf(pdfResult.pages);
 
-      if (isScan && caps.supportsPdf) {
-        const lowCharCount = pdfResult.pages.filter(
-          (p) => p.charCount < 50,
-        ).length;
-        this.logger.warn(
-          `检测到扫描件 PDF（共 ${pdfResult.totalPages} 页，其中 ${lowCharCount} 页字符数少于 50），尝试 OCR 识别`,
+      // 页面级路由：低字符页 = 疑似扫描页；force 策略 = 全部页
+      const lowTextPages = pdfResult.pages
+        .filter((p) => p.charCount < this.SCAN_TEXT_THRESHOLD)
+        .map((p) => p.pageNum);
+      const ocrPageNums =
+        strategy === "force"
+          ? pdfResult.pages.map((p) => p.pageNum)
+          : lowTextPages;
+
+      const textPath = async (): Promise<ParsedFileResult> => {
+        await onProgress?.(10, "PDF 文本提取完成");
+        if (!pdfResult.fullText || pdfResult.fullText.trim().length === 0) {
+          this.logger.warn(
+            "PDF 解析结果为空，可能是不支持的文件格式、加密文件或扫描件",
+          );
+          return { text: "", pages: [] };
+        }
+        const cleanedText = pdfResult.fullText
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        const pageEntries: PageEntry[] = pdfResult.pages.map((p) => ({
+          pageNum: p.pageNum,
+          text: p.text,
+        }));
+        return { text: cleanedText, pages: pageEntries };
+      };
+
+      // OCR 完全未配置：保持旧行为，仅用文本层
+      if (!caps.supportsPdf && !caps.supportsImage) {
+        this.logger.warn("OCR 未配置，疑似扫描页无法识别，仅使用 PDF 文本层");
+        return await textPath();
+      }
+
+      // 无疑似扫描页（且非 force）：纯文本路径，零 OCR 成本
+      if (ocrPageNums.length === 0) {
+        return await textPath();
+      }
+
+      this.logger.log(
+        `PDF 页面级 OCR 路由：共 ${pdfResult.totalPages} 页，需 OCR ${ocrPageNums.length} 页（strategy=${strategy}, pdfMode=${caps.pdfMode}, 整本扫描=${isScan}）`,
+      );
+      await onProgress?.(10, `检测到 ${ocrPageNums.length} 页需 OCR 识别...`);
+
+      // OCR 进度映射：OCR 内部 0~100% → 全局 10%~80%（与旧扫描件分支一致）
+      const ocrOnProgress: FileProgressCallback | undefined = onProgress
+        ? async (ocrPct, ocrStep) => {
+            const globalPct = 10 + Math.round((ocrPct / 100) * 70);
+            await onProgress(globalPct, ocrStep);
+          }
+        : undefined;
+
+      // 整本扫描（或 force）+ 原生 PDF 提供商（umi）→ 整文件走原生 PDF 管线
+      if (caps.pdfMode === "native" && (isScan || strategy === "force")) {
+        const ocrResult = await this.ocrService.recognizePdf(
+          filePath,
+          ocrOnProgress,
         );
-        await onProgress?.(10, "检测到扫描件，正在准备 OCR 识别...");
-
-        // OCR 已配置，执行识别
-        const ocrOnProgress: FileProgressCallback | undefined = onProgress
-          ? async (ocrPct, ocrStep) => {
-              const globalPct = 10 + Math.round((ocrPct / 100) * 70);
-              await onProgress(globalPct, ocrStep);
-            }
-          : undefined;
-
-        const ocrResult = await this.ocrService.recognizePdf(filePath, ocrOnProgress);
         if (ocrResult && ocrResult.text.trim()) {
           this.logger.log(
             `OCR 识别成功，提取文本长度: ${ocrResult.text.length} 字符`,
@@ -292,31 +360,36 @@ export class FileParserService {
         throw new Error("OCR 识别失败或结果为空");
       }
 
-      await onProgress?.(10, "PDF 文本提取完成");
-
-      if (!pdfResult.fullText || pdfResult.fullText.trim().length === 0) {
-        this.logger.warn(
-          "PDF 解析结果为空，可能是不支持的文件格式、加密文件或扫描件",
-        );
-        return { text: "", pages: [] };
+      // 渲染逐页路径：render 型提供商（百度等）全场景；native 提供商（umi）混合 PDF 局部补页
+      const ocrPages = await this.ocrService.recognizePdfPages(
+        filePath,
+        ocrPageNums,
+        ocrOnProgress,
+      );
+      if (!ocrPages.length || ocrPages.every((p) => !p.text.trim())) {
+        throw new Error("OCR 识别失败或结果为空");
       }
 
-      const cleanedText = pdfResult.fullText
+      // 合并：文本层页 + OCR 页，按页码升序
+      const ocrSet = new Set(ocrPages.map((p) => p.page));
+      const merged: PageEntry[] = [
+        ...pdfResult.pages
+          .filter((p) => !ocrSet.has(p.pageNum))
+          .map((p) => ({ pageNum: p.pageNum, text: p.text })),
+        ...ocrPages.map((p) => ({ pageNum: p.page, text: p.text })),
+      ].sort((a, b) => a.pageNum - b.pageNum);
+
+      const fullText = merged.map((p) => p.text).join("\n\n");
+      const cleanedText = fullText
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
 
-      // 构建 PageEntry 列表
-      const pageEntries: PageEntry[] = pdfResult.pages.map((p) => ({
-        pageNum: p.pageNum,
-        text: p.text,
-      }));
-
-      this.logger.debug(
-        `PDF 解析成功，共 ${pdfResult.totalPages} 页，提取文本长度: ${cleanedText.length} 字符`,
+      this.logger.log(
+        `PDF 解析完成（页面级混合）：文本层 ${merged.length - ocrPages.length} 页 + OCR ${ocrPages.length} 页`,
       );
-      return { text: cleanedText, pages: pageEntries };
+      return { text: cleanedText, pages: merged };
     } catch (error: any) {
       this.logger.error(`PDF 解析失败: ${error.message}`);
       throw new Error(`PDF 文件解析失败: ${error.message}`);
@@ -464,6 +537,7 @@ export class FileParserService {
       pdf: Array.from(this.PDF_EXTENSIONS).sort(),
       word: Array.from(this.WORD_EXTENSIONS).sort(),
       excel: Array.from(this.EXCEL_EXTENSIONS).sort(),
+      image: Array.from(this.IMAGE_EXTENSIONS).sort(),
       code: ["py", "js", "ts", "java", "cpp", "c", "go", "rs"],
     };
   }

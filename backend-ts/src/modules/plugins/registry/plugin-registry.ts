@@ -5,6 +5,7 @@ import {
   AttachmentTypeRegistration,
   UiPageRegistration,
   SlotRegistration,
+  ThemeRegistration,
   RpcHandler,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
@@ -26,6 +27,7 @@ interface PluginRegistration {
   attachmentTypes: AttachmentTypeRegistration[];
   uiPages: UiPageRegistration[];
   slots: SlotRegistration[];
+  themes: ThemeRegistration[];
   rpcHandlers: Record<string, RpcHandler>;
   ctor?: new (...args: any[]) => PluginBase;
 }
@@ -35,7 +37,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], rpcHandlers: {} });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], themes: [], rpcHandlers: {} });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -164,6 +166,29 @@ class PluginRegistryImpl {
     const result: Array<{ pluginId: string; reg: SlotRegistration }> = [];
     for (const [pluginId, reg] of this.registrations) {
       for (const slot of reg.slots) result.push({ pluginId, reg: slot });
+    }
+    return result;
+  }
+
+  /** 注册主题（插件扩展点，幂等：同插件同 id 不重复追加） */
+  registerTheme(pluginId: string, reg: ThemeRegistration) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (!pReg.themes.find((x) => x.id === reg.id)) {
+      pReg.themes.push(reg);
+    }
+  }
+
+  /** 获取插件的所有主题 */
+  getThemes(pluginId: string): ThemeRegistration[] {
+    return this.registrations.get(pluginId)?.themes || [];
+  }
+
+  /** 获取所有插件的主题 */
+  getAllThemes(): Array<{ pluginId: string; reg: ThemeRegistration }> {
+    const result: Array<{ pluginId: string; reg: ThemeRegistration }> = [];
+    for (const [pluginId, reg] of this.registrations) {
+      for (const theme of reg.themes) result.push({ pluginId, reg: theme });
     }
     return result;
   }

@@ -173,7 +173,8 @@ import type { Character } from '@/types/character';
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
 import { useMessageOperations } from '@/composables/useMessageOperations'
-import { useSessionTokenStats } from '@/composables/useSessionTokenStats'
+import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
+import { isHiddenBlock } from '@/utils/messageUtils'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -274,9 +275,9 @@ const currentSessionId = ref<string | null>(null);
 /** 各会话历史快照最后入库 seq(loadSession 返回,作订阅游标用) */
 const lastSeqBySession = new Map<string, number | null>();
 
-// 共享的 Token 统计（useSessionTokenStats 自动监听流状态刷新）
+// 共享的 Token 统计（环形指示器：事件锚点逆向扫描填充；REST 仅记忆弹窗按需拉取）
 const currentSessionIdRef = computed(() => currentSessionId.value);
-const { tokenStats: sharedTokenStats, fetchTokenStats } = useSessionTokenStats(currentSessionIdRef);
+const { tokenStats: sharedTokenStats } = useSessionTokenStats(currentSessionIdRef);
 
 /**
  * 有效的会话 ID
@@ -494,8 +495,10 @@ const activeTurns = computed(() => {
   return sessionId && !isLoading.value ? sessionStore.getTurns(sessionId) || [] : [];
 });
 
-// 从回合中取用户锚点块（role=user），渲染与操作均基于该块（二级结构：turn → block）
-const userOfTurn = (turn: any): any => turn?.blocks?.find((b: any) => b.role === 'user') ?? null;
+// 从回合中取用户锚点块（role=user 且为人类输入），渲染与操作均基于该块（二级结构：turn → block）
+// 后端注入的 hidden user 消息（拦截器/图片/待办/压缩）同 role 但非用户输入，须排除
+const userOfTurn = (turn: any): any =>
+  turn?.blocks?.find((b: any) => b.role === 'user' && !isHiddenBlock(b)) ?? null;
 
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
@@ -651,6 +654,10 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
   */
 async function loadSession(sessionId: string) {
   await loadMessages(sessionId, { isInitial: true });
+  // 上下文占用：逆向扫描事件日志最后一个锚点（turn/finish / compaction/end 等）填充环形指示器。
+  // 无锚点 → 显示 0，绝不访问 token-stats（唯一 REST 入口 = 记忆弹窗打开时按需拉取 breakdown）。
+  const eventLog = sessionStore.getSessionState(sessionId).eventLog || [];
+  applyContextStatsFromEvents(eventLog);
 }
 
 /**
@@ -1028,7 +1035,9 @@ function handleEditQueued(item: QueuedMessage) {
  * enterEditMode 直接用 turn.id 作为被编辑回合外壳 id。
  */
 function generateResponse(turn: any) {
-  const user = (turn?.blocks || []).find((b: any) => b.role === "user");
+  const user = (turn?.blocks || []).find(
+    (b: any) => b.role === "user" && !isHiddenBlock(b),
+  );
   if (!user) return;
   enterEditMode(user, turn.id)
 }
@@ -1039,7 +1048,9 @@ function generateResponse(turn: any) {
  * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
 function regenerateResponse(turn: any) {
-  const userBlocks = (turn?.blocks || []).filter((b: any) => b.role === "user");
+  const userBlocks = (turn?.blocks || []).filter(
+    (b: any) => b.role === "user" && !isHiddenBlock(b),
+  );
   if (userBlocks.length === 0) return;
   // 二级结构：用户文本/文件分散在多个 user 块，跨块聚合
   const userContent = userBlocks.map((b: any) => b.content || "").filter(Boolean).join("\n");

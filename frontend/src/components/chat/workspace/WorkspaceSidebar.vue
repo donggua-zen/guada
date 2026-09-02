@@ -81,8 +81,8 @@
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
                     :session-id="props.sessionId" :active="activeTab?.type === 'git'" class="h-full" />
-                <!-- 终端标签 -->
-                <TerminalPanel v-if="activeTab?.type === 'terminal'" :session-id="sessionId"
+                <!-- 终端标签（v-if 兼作 sessionId 空值收窄：TerminalPanel 的 session-id 必填 string） -->
+                <TerminalPanel v-if="activeTab?.type === 'terminal' && sessionId" :session-id="sessionId"
                     :terminal-id="activeTab.terminalId" @terminal-id="onTerminalIdReady(activeTab, $event)" />
                 <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
                 <BrowserPreviewPlaceholder v-if="isElectron"
@@ -378,6 +378,8 @@ function onNewTabOpenBrowser(): void {
 }
 
 function onNewTabOpenTerminal(): void {
+    // openTerminalTab 要求会话 id（string）；无会话时不建终端标签（守卫与模板 v-if 同语义）
+    if (!props.sessionId) return;
     tabStore.openTerminalTab(props.sessionId);
 }
 

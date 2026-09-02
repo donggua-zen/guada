@@ -99,6 +99,10 @@ export interface SubAgentClosedEvent {
   source?: string;
   payload: {
     subSessionId: string;
+    /** 停止原因（对齐 SubAgentStopReason：completed/aborted/error/max_tokens/refusal/closed） */
+    stopReason?: string;
+    /** 结果摘要（截断 200 字符；仅 one_shot 自动清理时携带） */
+    content?: string;
   };
 }
 

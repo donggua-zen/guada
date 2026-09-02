@@ -28,6 +28,7 @@ import {
 import type {
   CompressionStartEvent,
   CompressionErrorEvent,
+  CompressionEndEvent,
   CompactionSummaryEvent,
 } from "../types/event-chunk.types";
 
@@ -128,13 +129,26 @@ export class CompactionCoordinatorService {
         // （事件通道，替代旧 onBeforeCompaction 回调穿透；协调器不再感知发射细节）
         hook: { sessionContext: context },
       });
-      // 压缩完成：广播遮蔽信息（compaction_summary，与瞬态 compression_start/error 区分）。
-      // 前端折叠据此标记遮蔽消息 + 生成压缩占位（live 路径实时对齐，刷新靠 replay 页重建）。
-      if (outcome.compacted && outcome.shadowedMessageIds.length > 0) {
+      // 压缩运行结束：统一广播 compression_end（compacted 与纯裁剪都发）携带压缩后占用，
+      // 前端据此即时更新上下文使用率环形指示器（无需 REST）。
+      await context.publishStream({
+        type: "compression_end",
+        reason: opts.reason ?? "auto",
+        ...(outcome.contextStats
+          ? { contextStats: outcome.contextStats }
+          : {}),
+      } as CompressionEndEvent);
+      // 压缩完成（仅遮蔽路径）：广播遮蔽信息（compaction_summary，与瞬态 compression_start/error 区分）。
+      // 前端据此标记"已压缩"消息 + 生成压缩占位（live 路径实时对齐，刷新靠 replay 页重建）。
+      // 遮蔽表示为分界点消息 id（shadowedEndId，一个值）+ 条数——前端标记的唯一依据。
+      if (outcome.compacted && (outcome.shadowedCount ?? 0) > 0) {
         await context.publishStream({
           type: "compaction_summary",
-          shadowedMessageIds: outcome.shadowedMessageIds,
+          messageId: outcome.summaryMessageId,
+          shadowedEndId: outcome.shadowedEndId,
+          shadowedCount: outcome.shadowedCount,
           summary: outcome.summary ?? "",
+          ...(outcome.contextStats ? { contextStats: outcome.contextStats } : {}),
         } as CompactionSummaryEvent);
       }
       return { messages: outcome.messages, didRun: true };

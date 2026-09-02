@@ -1,5 +1,4 @@
 import { ref, watch, type Ref } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
 import { useSessionStore } from '@/stores/session'
 import { apiService } from '@/services/ApiService'
 
@@ -25,25 +24,8 @@ const tokenStats = ref<TokenStatsData | null>(null)
 const loading = ref(false)
 let currentSessionId: string | null = null
 
-/**
- * SSE 上下文统计已更新标志
- * 当 finish 事件携带 contextStats 时置为 true，
- * debouncedRefresh 检测到此标志后跳过 REST 刷新。
- */
-let sseUpdated = false
-
-/**
- * 从 SSE finish 事件注入上下文统计
- *
- * 后端在 finish 事件中携带轻量上下文统计（usedTokens / effectiveContextWindow），
- * 前端直接更新环形指示器，无需流式结束后再发起 REST 请求重建上下文。
- * 详细 breakdown 仍由弹窗按需通过 REST 获取。
- */
-export function updateTokenStatsFromSSE(stats: {
-  usedTokens: number
-  effectiveContextWindow: number
-}) {
-  sseUpdated = true
+/** 共享合并：填充环形指示器字段，保留已存在的 modelName/messageCount/breakdown */
+function applyContextStats(stats: { usedTokens: number; effectiveContextWindow: number }) {
   const percentage = Math.min(
     (stats.usedTokens / stats.effectiveContextWindow) * 100,
     100,
@@ -66,6 +48,62 @@ export function updateTokenStatsFromSSE(stats: {
 }
 
 /**
+ * 从 SSE 流事件注入上下文统计（turn_end / compression_end / compaction_summary 携带）
+ *
+ * 后端在事件中携带轻量上下文统计（usedTokens / effectiveContextWindow），
+ * 前端直接更新环形指示器，不发 REST。详细 breakdown 仍由弹窗按需获取。
+ */
+export function updateTokenStatsFromSSE(stats: {
+  usedTokens: number
+  effectiveContextWindow: number
+}) {
+  applyContextStats(stats)
+}
+
+/**
+ * 从会话事件日志逆向扫描最后一个「上下文占用锚点」并填充环形指示器。
+ *
+ * 兼容两种形状（eventLog 是领域事件与 live chunk 的混合数组）：
+ * - live chunk（turn_end / compaction_summary / compression_end）：`e.contextStats`
+ * - 领域事件（turn/finish / compaction/end）：`e.data.usedTokens + e.data.effectiveContextWindow`
+ *
+ * 后端在「占用稳定点」（每轮结束、每次压缩后）把权威 usedTokens/effectiveContextWindow
+ * 落进持久化事件 → 打开/切换会话时无需 REST /token-stats，直接取最后一个锚点。
+ * @returns 是否找到锚点（false → 调用方 fallback REST）
+ */
+export function applyContextStatsFromEvents(events: unknown[]): boolean {
+  if (!Array.isArray(events)) return false
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as Record<string, any> | null | undefined
+    if (!e) continue
+    const live = e.contextStats
+    if (
+      live &&
+      typeof live.usedTokens === 'number' &&
+      typeof live.effectiveContextWindow === 'number' &&
+      live.effectiveContextWindow > 0
+    ) {
+      applyContextStats(live)
+      return true
+    }
+    const domain = e.data
+    if (
+      domain &&
+      typeof domain.usedTokens === 'number' &&
+      typeof domain.effectiveContextWindow === 'number' &&
+      domain.effectiveContextWindow > 0
+    ) {
+      applyContextStats({
+        usedTokens: domain.usedTokens,
+        effectiveContextWindow: domain.effectiveContextWindow,
+      })
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * 会话级 Token 统计共享状态
  *
  * 模块级 ref 确保所有调用方共享同一份数据，
@@ -76,6 +114,10 @@ export function useSessionTokenStats(sessionId: Ref<string | null>) {
 
   /**
    * 从 API 获取 Token 统计
+   *
+   * ⚠️ 唯一允许的 REST 拉取入口：仅记忆管理弹窗（MemoPanel）打开/手动刷新时调用。
+   * 打开/切换会话一律不访问 token-stats——环形指示器由事件日志逆向扫描锚点填充，
+   * 无锚点则显示 0；详细 breakdown 仅弹窗按需获取。
    */
   async function fetchTokenStats() {
     const sid = sessionId.value
@@ -91,40 +133,10 @@ export function useSessionTokenStats(sessionId: Ref<string | null>) {
     }
   }
 
-  /**
-   * 流结束后自动刷新（防抖 1s）
-   * 若 SSE finish 已携带 contextStats，则跳过 REST 刷新
-   */
-  const debouncedRefresh = useDebounceFn(() => {
-    if (!sessionId.value) return
-    if (sseUpdated) {
-      sseUpdated = false
-      return
-    }
-    fetchTokenStats()
-  }, 1000)
-
-  watch(
-    () => (sessionId.value ? sessionStore.sessionIsStreaming(sessionId.value) : false),
-    (isStreaming, wasStreaming) => {
-      if (wasStreaming && !isStreaming) {
-        debouncedRefresh()
-      }
-    },
-  )
-
-  // sessionId 变化时重新获取
+  // sessionId 变化时清空旧数据（不 REST：ChatPanel 在事件页加载后逆向扫描锚点填充）
   watch(sessionId, (newId) => {
-    if (newId) {
-      // 如果已有同 session 的数据不再重复获取（按钮需手动刷新时可用）
-      if (currentSessionId !== newId) {
-        // 立即清除旧数据，避免短暂显示上一个会话的进度
-        tokenStats.value = null
-        fetchTokenStats()
-      }
-    } else {
-      tokenStats.value = null
-    }
+    tokenStats.value = null
+    if (newId) currentSessionId = newId
   })
 
   return {

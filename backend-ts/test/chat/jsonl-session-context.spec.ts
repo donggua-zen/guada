@@ -51,10 +51,10 @@ function makeMsg(id: string, role: 'user' | 'assistant' | 'tool' = 'user', extra
 function createContext(overrides: any = {}) {
   const messageStore = {
     loadContext: jest.fn(async () => [] as Message[]),
-    appendMessages: jest.fn(async () => {}),
-    beginTurn: jest.fn(async () => 't1'),
-    finalizeTurn: jest.fn(async () => {}),
-    addUserMessage: jest.fn(async () => ({ messageId: 'u1', userMessage: {} })),
+    appendMessages: jest.fn(async () => ({ added: [] as Message[], revision: 0 })),
+    beginTurn: jest.fn(async () => ({ turnId: 't1', revision: 1 })),
+    finalizeTurn: jest.fn(async () => 1),
+    addUserMessage: jest.fn(async () => ({ messageId: 'u1', userMessage: {}, revision: 1 })),
     deleteTurn: jest.fn(async () => {}),
     appendCompact: jest.fn(async () => {}),
     getLastProcessedSeq: jest.fn(async () => 0),
@@ -65,8 +65,10 @@ function createContext(overrides: any = {}) {
     estimateMessages: jest.fn(async (_sid: string, _model: string, msgs: Message[]) =>
       (msgs as any[]).reduce((s, m) => s + (m.metadata?._t ?? 0), 0),
     ),
+    estimatePerMessage: jest.fn(async (_sid: string, _model: string, msgs: Message[]) =>
+      (msgs as any[]).map((m) => ({ id: m.id, tokens: m.metadata?._t ?? 0 })),
+    ),
     estimateTextTokens: jest.fn(async () => 0),
-    invalidate: jest.fn(),
     ...(overrides.tokenMeter || {}),
   };
   const streamManager = {
@@ -111,26 +113,36 @@ describe('JsonlSessionContext 读取层直通', () => {
     expect(event).toMatchObject({ type: 'text_delta', messageId: 'm1', prevSeq: 42 });
   });
 
-  it('getMessages 每次直通 store.loadContext，返回最新折叠视图（无会话层缓存）', async () => {
+  it('快照缓存：revision 未变时复用视图（loadContext 只调一次）；写入后重建', async () => {
     const { ctx, messageStore } = createContext();
     await ctx.initialize();
 
-    messageStore.loadContext.mockResolvedValueOnce([
+    let seq = 0;
+    (messageStore.getLastProcessedSeq as jest.Mock).mockImplementation(async () => seq);
+
+    messageStore.loadContext.mockResolvedValue([
       makeMsg('u1', 'user'),
       makeMsg('a1', 'assistant'),
     ]);
-    const first = await ctx.getMessages();
-    // prelude system 在前 + 视图消息
-    expect(first.map((m) => m.id)).toEqual(['system', 'u1', 'a1']);
+    const first = await ctx.getHistory();
+    // surface：纯历史（system 走 getSystemText，envelope 与历史分离）
+    expect(first.map((m) => m.id)).toEqual(['u1', 'a1']);
+    // envelope：system 文本独立可取
+    expect(ctx.getSystemText()).toContain('sys');
 
-    // 模拟 store 状态变化（如 appendCompact 后视图变化）：第二次读到新视图
-    messageStore.loadContext.mockResolvedValueOnce([
+    // 同一 revision：第二次读取命中快照，不重复 loadContext
+    const second = await ctx.getHistory();
+    expect(second.map((m) => m.id)).toEqual(['u1', 'a1']);
+    expect(messageStore.loadContext).toHaveBeenCalledTimes(1);
+
+    // revision 变化（外部写入，如 appendCompact）→ 快照失效重建，读到新视图
+    seq = 5;
+    messageStore.loadContext.mockResolvedValue([
       makeMsg('summary', 'user'),
       makeMsg('a2', 'assistant'),
     ]);
-    const second = await ctx.getMessages();
-    expect(second.map((m) => m.id)).toEqual(['system', 'summary', 'a2']);
-    // 每次都直通，无会话层缓存
+    const third = await ctx.getHistory();
+    expect(third.map((m) => m.id)).toEqual(['summary', 'a2']);
     expect(messageStore.loadContext).toHaveBeenCalledTimes(2);
   });
 
@@ -147,7 +159,7 @@ describe('JsonlSessionContext 读取层直通', () => {
       content: [], // 空 content → KIMI 兼容
     };
     messageStore.loadContext.mockResolvedValueOnce([storeMsg]);
-    const got = await ctx.getMessages();
+    const got = await ctx.getHistory();
     const assistant = got.find((m) => m.id === 'a1')!;
     expect(assistant.content.length).toBe(1);
     expect((assistant.content[0] as any).text).toBe('\n');
@@ -167,18 +179,41 @@ describe('JsonlSessionContext 读取层直通', () => {
     expect(h.map((m) => m.id)).toEqual(['u1', 'a1']);
   });
 
-  it('appendMessages 只写 store，后续 getMessages 直通新视图', async () => {
+  it('appendMessages 增量更新快照：store 返回折叠节点，getHistory 即时反映', async () => {
     const { ctx, messageStore } = createContext();
     await ctx.initialize();
 
     messageStore.loadContext.mockResolvedValueOnce([]);
     expect(await ctx.getHistory()).toHaveLength(0);
 
-    // append 落库后视图变化（store applyToCache 增量折叠）
-    messageStore.loadContext.mockResolvedValueOnce([makeMsg('a1', 'assistant')]);
-    await ctx.appendMessages([makeMsg('a1', 'assistant')]);
+    // store 返回 fold 后的权威节点 + 写入后版本号（S1' 契约）；版本号随写入推进
+    let seq = 0;
+    (messageStore.getLastProcessedSeq as jest.Mock).mockImplementation(async () => seq);
+    const added = [makeMsg('a1', 'assistant')];
+    (messageStore.appendMessages as jest.Mock).mockImplementationOnce(async () => {
+      seq = 1;
+      return { added, revision: seq };
+    });
+    await ctx.appendMessages(added);
     expect(messageStore.appendMessages).toHaveBeenCalledTimes(1);
+    // 增量生效：不重读 store，直接反映新消息
     expect((await ctx.getHistory()).map((m) => m.id)).toEqual(['a1']);
+    expect(messageStore.loadContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('transformKey 变化（思考模式切换）→ 快照强制重建', async () => {
+    const { ctx, messageStore } = createContext(); // 默认 features=['tools'] → 非思考
+    await ctx.initialize();
+
+    messageStore.loadContext.mockResolvedValue([makeMsg('a1', 'assistant')]);
+    await ctx.getHistory();
+    expect(messageStore.loadContext).toHaveBeenCalledTimes(1);
+
+    // 切到思考模式：transformKey（nothink→think）变化，revision 未变也强制重建
+    (ctx as any).thinkingEffortValue = 'medium';
+    messageStore.loadContext.mockResolvedValue([makeMsg('a2', 'assistant')]);
+    await ctx.getHistory();
+    expect(messageStore.loadContext).toHaveBeenCalledTimes(2);
   });
 
   it('写侧原样保存 reasoning；非思考模式读取时剥离（不污染存储）', async () => {
@@ -267,5 +302,51 @@ describe('JsonlSessionContext 读取层直通', () => {
     ]);
     // 无 usage 锚点 → heuristicNow = prelude(0) + 200 = 200
     expect(await ctx.getTokenCount()).toBe(200);
+  });
+});
+
+describe('JsonlSessionContext 上下文占用锚点', () => {
+  it('finalizeTurn 注入回合后占用（usedTokens/effectiveContextWindow）', async () => {
+    const { ctx, messageStore } = createContext();
+    await ctx.initialize();
+    await ctx.finalizeTurn('t1', 100, {
+      usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
+      finishReason: 'stop',
+    } as any);
+    const passed = (messageStore.finalizeTurn as jest.Mock).mock.calls[0][3];
+    expect(typeof passed.usedTokens).toBe('number');
+    expect(passed.effectiveContextWindow).toBe(8000);
+  });
+
+  it('appendCompact：快照就绪时写前模拟压缩后占用并透传 store（compaction/end 锚点）', async () => {
+    const { ctx, messageStore } = createContext();
+    messageStore.appendCompact.mockResolvedValue({
+      summaryMessageId: 'c1',
+      endSeq: 1,
+      summaryNode: null,
+    });
+    await ctx.initialize();
+    await ctx.getHistory(); // 触发快照构建
+    await ctx.appendCompact({
+      shadowedEndId: 'm1',
+      shadowedCount: 1,
+      summary: '检查点',
+      summaryMessageId: 'c1',
+      mode: 'memory_sync',
+    } as any);
+    const passed = (messageStore.appendCompact as jest.Mock).mock.calls[0][1];
+    expect(passed).toMatchObject({ effectiveContextWindow: 8000 });
+    expect(typeof passed.usedTokens).toBe('number');
+  });
+
+  it('recordContextAnchor：写独立 compaction/end 携带当前占用', async () => {
+    const { ctx, messageStore } = createContext();
+    messageStore.recordContextAnchor = jest.fn(async () => 5);
+    await ctx.initialize();
+    await ctx.recordContextAnchor();
+    const [sid, data] = (messageStore.recordContextAnchor as jest.Mock).mock.calls[0];
+    expect(sid).toBe('s1');
+    expect(typeof data.usedTokens).toBe('number');
+    expect(data.effectiveContextWindow).toBe(8000);
   });
 });

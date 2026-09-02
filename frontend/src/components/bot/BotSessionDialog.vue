@@ -52,6 +52,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
 import { foldEvents } from '@/services/modules/streamProjector'
+import { isHiddenBlock } from '@/utils/messageUtils'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
 import type { Turn, TurnContent } from '@/types/message'
@@ -80,8 +81,10 @@ const sessionTitle = computed(() => {
 const loading = ref(false)
 const turns = ref<Turn[]>([])
 
-// 从回合中取用户锚点块（role=user，二级结构：turn → block）
-const userOfTurn = (turn: Turn): any => turn.blocks?.find((b) => b.role === 'user') ?? null
+// 从回合中取用户锚点块（role=user 且为人类输入，二级结构：turn → block）
+// 后端注入的 hidden user 消息同 role 但非用户输入，须排除
+const userOfTurn = (turn: Turn): any =>
+  turn.blocks?.find((b) => b.role === 'user' && !isHiddenBlock(b)) ?? null
 
 // 只保留含 user 锚点块的回合
 const visibleTurns = computed(() => turns.value.filter((t) => userOfTurn(t)))
