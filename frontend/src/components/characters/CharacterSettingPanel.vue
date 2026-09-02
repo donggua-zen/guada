@@ -1112,8 +1112,9 @@ async function loadLocalTools() {
       const response = await apiService.queryPlugins(queryConfig, getLocale());
 
       const plugins = response.plugins || [];
-      // 本地工具列表：后端已过滤 system 插件，此处只排除全局关闭的
-      localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));
+      // 本地工具列表：后端已过滤 system 插件；此处只保留全局启用的插件
+      // （全局关闭的插件其工具包对角色层不可见，二级过滤）
+      localTools.value = plugins.filter(p => p.enabled);
       initKitSettings(stored);
     } else {
       // 全部禁用：仅传 strategy，由后端拒绝所有非受保护插件的能力包
@@ -1122,7 +1123,8 @@ async function loadLocalTools() {
       }, getLocale());
 
       const plugins = response.plugins || [];
-      localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));
+      // 全部禁用模式下仍只展示全局启用的插件（全局关闭的插件工具包不可见）
+      localTools.value = plugins.filter(p => p.enabled);
       initKitSettings(stored);
     }
   } catch (error) {

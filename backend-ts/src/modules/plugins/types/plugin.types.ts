@@ -66,32 +66,54 @@ export type ConditionFn = (
   context: PluginContext,
 ) => boolean | Promise<boolean>;
 /**
- * 插件条目配置
- *
- * 两层开关体系下各字段归属：
- * - enabled: 仅全局层消费（插件装载/生命周期）；角色层不再控制插件启停，旧角色数据中的该字段被忽略
- * - toolkits_*: 仅角色层消费（能力包/工具包裁剪）
+ * 全局层插件条目配置（持久化于 plugins_config / SG_PLUGINS）
+ * 全局层只负责插件启停，不参与工具包过滤。
  */
-export interface PluginEntryConfig {
-  /** 仅全局层：插件启停 */
+export interface GlobalPluginEntryConfig {
+  /** 插件启停 */
   enabled?: boolean;
-  /** 仅角色层：工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单 */
+}
+
+/** 全局层插件配置：{ pluginId: { enabled } } */
+export type GlobalPluginConfig = Record<string, GlobalPluginEntryConfig>;
+
+/**
+ * 角色层插件条目配置（持久化于 character.settings.plugins）
+ * 角色层只负责工具包（能力包）黑白名单过滤，不再控制插件启停，
+ * 因此条目中不包含 enabled 字段；旧角色数据里遗留的 enabled 会被解析器忽略。
+ */
+export interface RolePluginEntryConfig {
+  /** 工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单 */
   toolkits_filter?: "deny" | "allow";
-  /** 仅角色层：黑名单模式下禁用的工具包 ID 列表 */
+  /** 黑名单模式下禁用的工具包 ID 列表 */
   toolkits_deny?: string[];
-  /** 仅角色层：白名单模式下允许的工具包 ID 列表 */
+  /** 白名单模式下允许的工具包 ID 列表 */
   toolkits_allow?: string[];
   params?: Record<string, any>;
 }
 
 /**
- * 插件配置类型
- * 格式：{ pluginId: PluginEntryConfig }
+ * 角色层插件配置
+ * 格式：{ __strategy?, __default?, pluginId: RolePluginEntryConfig }
+ * 与全局层配置（GlobalPluginConfig）完全分离解析。
  */
-export type PluginConfig = {
-  /** 未配置的插件默认值 */
+export type RolePluginConfig = {
+  /** 未显式配置的插件其工具包默认是否放行 */
   __default?: boolean;
-  /** 插件配置策略 */
+  /** 角色配置策略 */
+  __strategy?: string;
+
+  [pluginId: string]: RolePluginEntryConfig | boolean | string;
+};
+
+/** @deprecated 已拆分为 GlobalPluginEntryConfig（全局）与 RolePluginEntryConfig（角色） */
+export interface PluginEntryConfig extends RolePluginEntryConfig {
+  enabled?: boolean;
+}
+
+/** @deprecated 已拆分为 GlobalPluginConfig / RolePluginConfig */
+export type PluginConfig = {
+  __default?: boolean;
   __strategy?: string;
 
   [key: string]: PluginEntryConfig | boolean | string;

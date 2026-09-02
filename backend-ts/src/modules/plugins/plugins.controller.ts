@@ -23,6 +23,7 @@ import { PluginManager } from "./plugin.manager";
 import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { NlsService } from "./i18n/nls.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";import { PluginRegistry } from "./registry/plugin-registry";
+import { RolePluginConfig } from "./types/plugin.types";
 
 @Controller("plugins")
 export class PluginsController {
@@ -44,11 +45,12 @@ export class PluginsController {
 
   /**
    * 查询插件列表（全局/角色通用）
-   * Body: { config?: any, lang?: string } — 角色级插件配置，不传则返回全局状态
+   * Body: { config?: RolePluginConfig, lang?: string } — 角色层工具包配置（character/session settings.plugins），
+   * 不传则仅返回全局状态（不做角色层工具包过滤）。
    */
   @Public()
   @Post("query")
-  async queryPlugins(@Body() body: { config?: any; lang?: string }) {
+  async queryPlugins(@Body() body: { config?: RolePluginConfig; lang?: string }) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, body?.config, true);
     const nlsLocale = this.toNlsLocale(body?.lang);
 
@@ -405,7 +407,23 @@ export class PluginsController {
       return res.status(403).send("Access denied");
     }
     if (!fs.existsSync(filePath)) return res.status(404).send("Asset not found");
-    return res.type(this.assetContentType(assetPath)).sendFile(filePath);
+    // sendFile 异步错误处理：existsSync 通过后仍可能失败（竞态/权限/点目录等），
+    // 统一回 404，避免 500 噪音。
+    // dotfiles: "allow" —— Express send 默认 ignore 点开头段，会拒绝位于点目录
+    //（如用户插件目录 .guada-dev）下的插件资产，必须放行。
+    return res
+      .type(this.assetContentType(assetPath))
+      .sendFile(filePath, { dotfiles: "allow" }, (err) => {
+        if (err && !res.headersSent) {
+          const status = (err as any).status || ((err as any).code === "ENOENT" ? 404 : undefined);
+          if (status === 404) {
+            res.status(404).send("Asset not found");
+          } else {
+            this.logger.error(`sendFile failed: ${filePath}: ${err.message}`);
+            res.status(500).send("Asset read failed");
+          }
+        }
+      });
   }
 
   /** 按扩展名映射 Content-Type */
