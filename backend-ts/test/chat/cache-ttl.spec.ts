@@ -31,8 +31,8 @@ describe("stateCache TTL 超时机制（30 分钟，无 LRU）", () => {
   async function writeRound(service: JsonlMessageService) {
     const { turnId } = await service.beginTurn(sid);
     await service.appendMessages(sid, [
-      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
-      { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", contentId: "a1", text: "ans" }] },
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
+      { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", text: "ans" }] },
     ]);
     await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
   }
@@ -48,7 +48,7 @@ describe("stateCache TTL 超时机制（30 分钟，无 LRU）", () => {
       type: "user/message",
       seq,
       time: Date.now(),
-      data: { messageId: "extra", kind: "user", blocks: [{ type: "text", contentId: "extra", text: "ext" }], metadata: {} },
+      data: { messageId: "extra", kind: "user", blocks: [{ type: "text", text: "ext" }], metadata: {} },
     } as any);
 
     // 缓存命中（未过期）→ 返回缓存旧态（lastProcessedSeq 不含直写事件）
@@ -71,7 +71,7 @@ describe("stateCache TTL 超时机制（30 分钟，无 LRU）", () => {
       type: "user/message",
       seq: seq1 + 1,
       time: Date.now(),
-      data: { messageId: "extra", kind: "user", blocks: [{ type: "text", contentId: "extra", text: "ext" }], metadata: {} },
+      data: { messageId: "extra", kind: "user", blocks: [{ type: "text", text: "ext" }], metadata: {} },
     } as any);
 
     // 过期 → cacheGet 逐出 → 重建（快照+增量/全量）→ 包含直写事件

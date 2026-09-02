@@ -25,8 +25,8 @@ function roundEvents(startSeq: number, roundIdx: number): BaseEvent[] {
   const tid = `t${roundIdx}`;
   return [
     { type: "turn/start", seq: startSeq, time: 1, data: { turnId: tid, kind: "turn", metadata: {} } },
-    { type: "user/message", seq: startSeq + 1, time: 2, data: { messageId: `u${roundIdx}`, kind: "user", blocks: [{ type: "text", contentId: `u${roundIdx}`, text: `q${roundIdx}` }], metadata: {} } },
-    { type: "assistant/message", seq: startSeq + 2, time: 3, data: { messageId: `a${roundIdx}`, content: [{ type: "text", contentId: `a${roundIdx}`, text: `ans${roundIdx}` }], metadata: {} } },
+    { type: "user/message", seq: startSeq + 1, time: 2, data: { messageId: `u${roundIdx}`, kind: "user", blocks: [{ type: "text", text: `q${roundIdx}` }], metadata: {} } },
+    { type: "assistant/message", seq: startSeq + 2, time: 3, data: { messageId: `a${roundIdx}`, content: [{ type: "text", text: `ans${roundIdx}` }], metadata: {} } },
     { type: "turn/finish", seq: startSeq + 3, time: 4, data: { turnId: tid, promptTokens: 1, completionTokens: 1, totalTokens: 2, finishReason: "stop" } },
   ] as BaseEvent[];
 }
@@ -86,8 +86,8 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
     for (let i = 0; i < count; i++) {
       const { turnId } = await service.beginTurn(sid);
       await service.appendMessages(sid, [
-        { id: `u${i}`, role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: `u${i}`, text: `q${i}` }] },
-        { id: `a${i}`, role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", contentId: `a${i}`, text: `ans${i}` }] },
+        { id: `u${i}`, role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: `q${i}` }] },
+        { id: `a${i}`, role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", text: `ans${i}` }] },
       ]);
       await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
       seq = await service.getLastProcessedSeq(sid);
@@ -197,7 +197,7 @@ describe("importTurns 上下文占用锚点（重建路径）", () => {
           kind: "user",
           source: { kind: "user" },
           metadata: {},
-          content: [{ type: "text", contentId: "c1", text: "q" }],
+          content: [{ type: "text", text: "q" }],
         },
         {
           id: "a1",
@@ -205,7 +205,7 @@ describe("importTurns 上下文占用锚点（重建路径）", () => {
           kind: "model",
           source: { kind: "model", provider: "p", model: "m" },
           metadata: usage ? { usage } : {},
-          content: [{ type: "text", contentId: "c2", text: "a" }],
+          content: [{ type: "text", text: "a" }],
         },
       ],
       visible: true,

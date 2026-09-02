@@ -10,7 +10,7 @@ function userMsg(id: string, text: string): Message {
     kind: 'user',
     source: { kind: 'user' },
     metadata: {},
-    content: [{ type: 'text', contentId: `${id}_c`, text }],
+    content: [{ type: 'text', text }],
   };
 }
 

@@ -21,7 +21,7 @@ function makeMsg(id: string): Message {
     kind: 'user',
     source: { kind: 'user' },
     metadata: {},
-    content: [{ type: 'text', contentId: `${id}_c`, text: 'hi' }],
+    content: [{ type: 'text', text: 'hi' }],
   };
 }
 

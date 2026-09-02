@@ -9,10 +9,10 @@ import { PluginBase, type PluginApi } from "../../backend-ts/src/modules/plugins
  * 并将主题 CSS 放在插件 frontend/dist/ 下。
  *
  * 约束（assets 端点契约，见 plugins.controller.ts getPluginAsset）：
- * - cssFile 为相对插件 frontend/dist 的**扁平文件名**（仅 [A-Za-z0-9_-]+\.css，
- *   不支持子目录/路径分隔符；font/图片等资源不被该端点服务）；
- * - 因此主题 CSS 必须**自包含**：url() 只用 data: URI 或绝对 URL——相对路径
- *   会以文档位置为基准解析而失效。本例 famicom 字体已内联为 data: URI。
+ * - cssFile 为**相对插件根**的受约束路径（如 `themes/cyberpunk.css`），可含单层
+ *   子路径；文件扩展名限 css/js/字体/图片（字符白名单，杜绝目录穿越）；
+ * - 资源自包含于插件目录：CSS 内的相对 url() 以 CSS 文件位置为基准解析，可引用
+ *   插件内任意受支持资源（本例 famicom 字体位于 themes/fonts/）；
  * - id 全局唯一（沿用原内置 id，保证用户 localStorage 持久化设置无缝衔接；
  *   第三方建议 `${pluginId}.${name}`）。
  * - category=system：默认启用且不可禁用（plugin.manager.ts:116,341），
@@ -54,7 +54,7 @@ export default class GuadaThemesPlugin extends PluginBase {
         primaryColor: t.primaryColor,
         secondaryColor: t.secondaryColor,
         mode: t.mode,
-        cssFile: `${t.id}.css`,
+        cssFile: `themes/${t.id}.css`,
       });
     }
   }

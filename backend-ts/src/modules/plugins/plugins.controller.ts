@@ -14,7 +14,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from "@nestjs/common";
-import { Response } from "express";
+import { Request, Response } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import { AuthGuard } from "../auth/auth.guard";
@@ -357,31 +357,77 @@ export class PluginsController {
   }
 
   /**
-   * 插件前端产物静态服务（预编译 ESM/IIFE + CSS）
-   * 安全：文件名只允许 [A-Za-z0-9_-]，拒绝路径分隔符/目录穿越
+   * 插件资产静态服务（slot 组件产物 / 插件主题 CSS / 字体等）
+   *
+   * 契约（2026-09-02 修订，方案 A）：
+   * - 基路径 = 插件扫描时记录的真实目录（getPluginPath），不硬编码 frontend/dist；
+   *   assetPath 为「相对插件根」的受约束子路径（如 frontend/dist/x.css、themes/famicom.css）
+   * - 安全：解码后的 assetPath 走字符白名单正则——仅 [A-Za-z0-9_-] 与单层 `/`，
+   *   不含 `.` / `..` / `\` / 空段 → join 后物理上无法目录穿越；
+   *   另加 resolve 后前缀校验作为纵深防御
+   * - 扩展名白名单覆盖 css/js/字体/图片，插件可自包含分发资源
    */
   @Public()
-  @Get(":pluginId/assets/:fileName")
+  @Get(":pluginId/assets/*")
   async getPluginAsset(
     @Param("pluginId") pluginId: string,
-    @Param("fileName") fileName: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    if (!/^[A-Za-z0-9_-]+\.(js|css)$/.test(fileName)) {
-      return res.status(403).send("Invalid asset name");
+    // 手动解析 assets/ 之后的路径：NestJS 11 / Express 5 下命名通配
+    // （assets/*assetPath）对多段路径捕获异常（@Param 得到 "a,b" 逗号拼接），
+    // 故从 originalUrl 截取，绕开路由参数。
+    const marker = `/plugins/${pluginId}/assets/`;
+    const idx = req.originalUrl.indexOf(marker);
+    if (idx < 0) return res.status(404).send("Not found");
+    let assetPath: string;
+    try {
+      assetPath = decodeURIComponent(
+        req.originalUrl.slice(idx + marker.length).split("?")[0] || "",
+      );
+    } catch {
+      return res.status(400).send("Bad path encoding");
+    }
+    // 白名单（解码后执行）：字符集无 '.'，'..' 不可能构造
+    if (
+      !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.(css|js|mjs|json|woff2|woff|ttf|otf|png|jpg|jpeg|gif|svg|webp)$/.test(
+        assetPath,
+      )
+    ) {
+      return res.status(403).send("Invalid asset path");
     }
     const pluginPath = this.externalLoader.getPluginPath(pluginId);
     if (!pluginPath) return res.status(404).send("Plugin directory not found");
-    const distDir = path.join(pluginPath, "frontend", "dist");
-    const filePath = path.join(distDir, fileName);
-    if (!filePath.startsWith(distDir + path.sep)) {
+    // 基路径 = 扫描记录的真实插件目录；纵深防御：解析后必须仍在插件目录内
+    const base = path.resolve(pluginPath);
+    const filePath = path.resolve(base, assetPath);
+    if (filePath !== base && !filePath.startsWith(base + path.sep)) {
       return res.status(403).send("Access denied");
     }
     if (!fs.existsSync(filePath)) return res.status(404).send("Asset not found");
-    const contentType = fileName.endsWith(".css")
-      ? "text/css"
-      : "application/javascript";
-    return res.type(contentType).sendFile(filePath);
+    return res.type(this.assetContentType(assetPath)).sendFile(filePath);
+  }
+
+  /** 按扩展名映射 Content-Type */
+  private assetContentType(file: string): string {
+    const ext = file.slice(file.lastIndexOf("."));
+    const map: Record<string, string> = {
+      ".css": "text/css",
+      ".js": "application/javascript",
+      ".mjs": "application/javascript",
+      ".json": "application/json",
+      ".woff2": "font/woff2",
+      ".woff": "font/woff",
+      ".ttf": "font/ttf",
+      ".otf": "font/otf",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".svg": "image/svg+xml",
+      ".webp": "image/webp",
+    };
+    return map[ext] || "application/octet-stream";
   }
 
   /**
@@ -416,18 +462,24 @@ export class PluginsController {
   }
 
   /**
-   * 插件产物 rev：取 frontend/dist 最新文件 mtime（变化时前端重新加载）
+   * 插件产物 rev：递归取插件目录最新文件 mtime（变化时前端重新加载）。
+   * 覆盖 frontend/dist（slot 产物）与 themes/（主题 CSS/字体）等全部资源目录。
    */
   private assetRev(pluginPath: string): string {
     try {
-      const distDir = path.join(pluginPath, "frontend", "dist");
-      if (!fs.existsSync(distDir)) return "";
-      const files = fs.readdirSync(distDir);
       let latest = 0;
-      for (const f of files) {
-        const st = fs.statSync(path.join(distDir, f));
-        if (st.mtimeMs > latest) latest = st.mtimeMs;
-      }
+      const walk = (dir: string): void => {
+        for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, f.name);
+          if (f.isDirectory()) {
+            walk(p);
+          } else {
+            const st = fs.statSync(p);
+            if (st.mtimeMs > latest) latest = st.mtimeMs;
+          }
+        }
+      };
+      if (fs.existsSync(pluginPath)) walk(pluginPath);
       return latest ? Math.round(latest).toString(36) : "";
     } catch {
       return "";

@@ -30,14 +30,14 @@ describe('BlockAssembler', () => {
         {
           type: 'block_end',
           index: 0,
-          block: { type: 'text', contentId: 'c1', text: '权威终态文本' },
+          block: { type: 'text', text: '权威终态文本' },
         },
         // 迟到 delta 应被忽略（first close wins）
         { type: 'text_delta', index: 0, text: '（迟到）' },
       ]);
 
       expect(stripTiming(assembler.blocks())).toEqual([
-        { type: 'text', contentId: 'c1', text: '权威终态文本' },
+        { type: 'text', text: '权威终态文本' },
       ]);
     });
 
@@ -52,8 +52,8 @@ describe('BlockAssembler', () => {
       ]);
 
       expect(stripTiming(assembler.blocks())).toEqual([
-        { type: 'reasoning', contentId: '', summary: '思考中…继续' },
-        { type: 'text', contentId: '', text: '答案' },
+        { type: 'reasoning', summary: '思考中…继续' },
+        { type: 'text', text: '答案' },
       ]);
     });
 
@@ -67,7 +67,6 @@ describe('BlockAssembler', () => {
       expect(stripTiming(assembler.blocks())).toEqual([
         {
           type: 'tool-call',
-          contentId: '',
           toolCallId: 'call_1',
           name: 'read_file',
           arguments: '{"path":"a.ts"}',
@@ -83,7 +82,7 @@ describe('BlockAssembler', () => {
         { type: 'text_delta', index: 1, text: '有内容' },
       ]);
 
-      expect(stripTiming(assembler.blocks())).toEqual([{ type: 'text', contentId: '', text: '有内容' }]);
+      expect(stripTiming(assembler.blocks())).toEqual([{ type: 'text', text: '有内容' }]);
     });
   });
 
@@ -91,7 +90,7 @@ describe('BlockAssembler', () => {
     it('既有块作为前缀，新流块 index 接续偏移', () => {
       const assembler = new BlockAssembler();
       const history: ContentBlock[] = [
-        { type: 'text', contentId: 'old-c1', text: '截断前半句' },
+        { type: 'text', text: '截断前半句' },
       ];
       assembler.seed(history);
       feed(assembler, [
@@ -100,23 +99,23 @@ describe('BlockAssembler', () => {
       ]);
 
       expect(stripTiming(assembler.blocks())).toEqual([
-        { type: 'text', contentId: 'old-c1', text: '截断前半句' },
-        { type: 'text', contentId: '', text: '后半句' },
+        { type: 'text', text: '截断前半句' },
+        { type: 'text', text: '后半句' },
       ]);
     });
 
     it('seed 后 tool_call 块接续且互不干扰', () => {
       const assembler = new BlockAssembler();
       assembler.seed([
-        { type: 'reasoning', contentId: 'old-r', summary: '旧思考' },
+        { type: 'reasoning', summary: '旧思考' },
       ]);
       feed(assembler, [
         { type: 'tool_call_delta', index: 0, toolCallId: 'call_x', name: 'shell', argumentsDelta: '{"cmd":"ls"}' },
       ]);
 
       expect(stripTiming(assembler.blocks())).toEqual([
-        { type: 'reasoning', contentId: 'old-r', summary: '旧思考' },
-        { type: 'tool-call', contentId: '', toolCallId: 'call_x', name: 'shell', arguments: '{"cmd":"ls"}' },
+        { type: 'reasoning', summary: '旧思考' },
+        { type: 'tool-call', toolCallId: 'call_x', name: 'shell', arguments: '{"cmd":"ls"}' },
       ]);
     });
   });
@@ -188,7 +187,7 @@ describe('BlockAssembler', () => {
         {
           type: 'block_end',
           index: 0,
-          block: { type: 'reasoning', contentId: '', summary: '权威终态思考' },
+          block: { type: 'reasoning', summary: '权威终态思考' },
         },
       ]);
 
@@ -217,7 +216,7 @@ describe('BlockAssembler', () => {
       const assembler = new BlockAssembler();
       const persistedTiming: BlockTiming = { startedAt: 1_000, finishedAt: 1_500 };
       assembler.seed([
-        { type: 'reasoning', contentId: 'old-r', summary: '旧思考', timing: persistedTiming },
+        { type: 'reasoning', summary: '旧思考', timing: persistedTiming },
       ]);
       feed(assembler, [{ type: 'text_delta', index: 0, text: '续传新文本' }]);
 

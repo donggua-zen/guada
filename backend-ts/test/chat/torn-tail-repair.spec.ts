@@ -40,8 +40,8 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
     // 写一个未闭合回合（不开 turn/finish）
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
-      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
-      { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", contentId: "a1", text: "ans" }] },
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
+      { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", text: "ans" }] },
     ]);
 
     // 模拟崩溃：活跃段追加一条不完整 turn/finish
@@ -69,7 +69,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
     const s1 = new JsonlMessageService(backend);
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
-      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
     ]);
     await s1.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
 
@@ -120,7 +120,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
     const s1 = new JsonlMessageService(backend);
     await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
-      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
     ]);
     const before = (await backend.getAllEvents(sid)).length;
 
@@ -142,14 +142,14 @@ describe("torn-tail 修复补未配对 tool-call 错误结果（对齐 DSH inter
     const s1 = new JsonlMessageService(backend);
     await s1.beginTurn(sid);
     await s1.appendMessages(sid, [
-      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", contentId: "u1", text: "q" }] },
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
       {
         id: "a1", role: "assistant", kind: "model",
         source: { kind: "model", provider: "test", model: "m" },
         metadata: {},
         content: [
           {
-            type: "tool-call", contentId: "a1_c", toolCallId: "call_1", name: "shell",
+            type: "tool-call", toolCallId: "call_1", name: "shell",
             arguments: "{}",
           },
         ],
