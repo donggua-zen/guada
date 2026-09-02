@@ -40,8 +40,11 @@ describe("Skill 生命周期（onAdd / onRemove → registry → listSkills）",
       getEnabledSkills: jest.fn().mockReturnValue([]),
     } as any;
     const mockVersionManager = {} as SkillVersionManager;
+    const mockPluginManager = {
+      isPluginEnabled: jest.fn().mockReturnValue(true),
+    } as any;
     loader = new SkillLoaderService();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager, mockPluginManager);
   });
 
   // ================================================================

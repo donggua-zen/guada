@@ -10,6 +10,7 @@ import { SkillRegistry } from "./skill-registry.service";
 import { SkillLoaderService } from "./skill-loader.service";
 import { SkillVersionManager } from "./skill-version-manager.service";
 import { SkillDefinition } from "../interfaces/skill-manifest.interface";
+import { PluginManager } from "../../plugins/plugin.manager";
 
 /**
  * Skill 匹配结果
@@ -29,6 +30,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     private registry: SkillRegistry,
     private loader: SkillLoaderService,
     private versionManager: SkillVersionManager,
+    private pluginManager: PluginManager,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -85,17 +87,16 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   /**
    * 单技能在此会话是否可见（插件启停过滤，对齐工具"插件关闭→搜集跳过"）。
    * 非插件技能（file/workspace）始终可见；插件技能在插件未启用或已卸载时不可见。
+   *
+   * 插件启用状态以 PluginManager 为权威（instance.enabled，与注册/启停同源）。
+   * 不能依赖 session.getResolvedPlugins()：skill 工具包 handler 在 resolvePlugins
+   * 执行期间被调用，此刻 resolvedPlugins 尚未赋值（恒为空数组），会导致插件技能
+   * 被误判不可见（循环依赖）。
    */
-  isPluginSkillVisible(skill: SkillDefinition, session?: any): boolean {
+  isPluginSkillVisible(skill: SkillDefinition): boolean {
     if (!skill.provider || !skill.provider.startsWith("plugin:")) return true;
-    if (!session || typeof session.getResolvedPlugins !== "function") return true;
     const pluginId = skill.provider.slice("plugin:".length);
-    const plugins = session.getResolvedPlugins() as Array<{
-      plugin?: { id?: string };
-      enabled?: boolean;
-    }>;
-    const entry = plugins.find((p) => p.plugin?.id === pluginId);
-    return !!entry && entry.enabled !== false;
+    return this.pluginManager.isPluginEnabled(pluginId);
   }
 
   /** 按会话过滤技能集合 */
@@ -103,10 +104,8 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     skills: SkillDefinition[],
     session?: any,
   ): SkillDefinition[] {
-    if (!session || typeof session.getResolvedPlugins !== "function") {
-      return skills;
-    }
-    return skills.filter((s) => this.isPluginSkillVisible(s, session));
+    if (!session) return skills;
+    return skills.filter((s) => this.isPluginSkillVisible(s));
   }
 
   /**
@@ -169,7 +168,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     const skill = this.registry.get(name.toLowerCase());
     if (!skill) return null;
     // 对齐工具：插件关闭（当前会话岗位/角色配置下未启用）→ 该插件技能等同于不存在
-    if (!this.isPluginSkillVisible(skill, session)) return null;
+    if (!this.isPluginSkillVisible(skill)) return null;
     const content = await this.loader.loadInstructions(skill);
     // 插件注册式技能无 SKILL.md 文件：path 指向资源基目录（供定位 scripts/ 等资源）
     const fullPath =

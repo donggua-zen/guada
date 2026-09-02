@@ -4,22 +4,26 @@ import {
   imageProjectionStep,
   reasoningPolicyStep,
   emptyContentCompatStep,
+  isFullReasoningRelayModel,
   createDefaultMessageTransformPipeline,
 } from './message-transform.pipeline';
 
 function makeMsg(
   role: Message['role'],
   content: ContentBlock[],
-  overrides: Partial<Message> = {},
+  overrides: Partial<Message> & { turnId?: string | null } = {},
 ): Message {
-  return {
-    id: overrides.id ?? `m-${Math.random().toString(36).slice(2, 8)}`,
+  const { turnId, ...rest } = overrides;
+  const msg = {
+    id: rest.id ?? `m-${Math.random().toString(36).slice(2, 8)}`,
     role,
     kind: role === 'user' ? 'user' : 'model',
-    source: overrides.source ?? { kind: 'user' },
-    metadata: overrides.metadata ?? {},
+    source: rest.source ?? { kind: 'user' },
+    metadata: rest.metadata ?? {},
     content,
-  } as Message;
+  };
+  // turnId 是 store 折叠视图（MessageNode）的归属标签，不属于 Message 本体
+  return (turnId !== undefined ? { ...msg, turnId } : msg) as Message;
 }
 
 const text = (t: string): ContentBlock => ({
@@ -112,6 +116,114 @@ describe('reasoning-policy step', () => {
   });
 });
 
+describe('reasoning-policy step — 最后一轮判定（currentTurnId）', () => {
+  const thinkCtx = (overrides: Partial<TransformContext> = {}): TransformContext => ({
+    ...baseCtx,
+    thinkingMode: true,
+    ...overrides,
+  });
+
+  it('思考模式：最后一轮保留原文思考，历史轮次剥离', () => {
+    const msgs = [
+      makeMsg('assistant', [reasoning('old thought'), text('a1')], { turnId: 'T1' }),
+      makeMsg('user', [text('q2')], { turnId: 'T2' }),
+      makeMsg('assistant', [reasoning('fresh thought'), text('a2')], { turnId: 'T2' }),
+    ];
+    const out = reasoningPolicyStep.apply(msgs, thinkCtx({ currentTurnId: 'T2' }));
+    expect(out[0].content).toHaveLength(1); // T1 思考已剥离
+    expect(out[0].content[0].type).toBe('text');
+    expect(out[2].content).toHaveLength(2); // T2 思考保留
+    expect(out[2].content[0]).toMatchObject({ type: 'reasoning', summary: 'fresh thought' });
+  });
+
+  it('思考模式：最后一轮无 reasoning 补占位、空 summary 填空格；同回合多条 assistant 均填充', () => {
+    const msgs = [
+      makeMsg('assistant', [text('tool-call-round')], { turnId: 'T2' }),
+      makeMsg('assistant', [reasoning(''), text('final')], { turnId: 'T2' }),
+    ];
+    const out = reasoningPolicyStep.apply(msgs, thinkCtx({ currentTurnId: 'T2' }));
+    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[1].content[0]).toMatchObject({ type: 'reasoning', summary: ' ' });
+  });
+
+  it('思考模式：currentTurnId 在视图中无消息时历史全部剥离（无位置歧义）', () => {
+    const msgs = [
+      makeMsg('assistant', [reasoning('history thought'), text('a1')], { turnId: 'T1' }),
+      makeMsg('user', [text('q1')], { turnId: 'T1' }),
+    ];
+    const out = reasoningPolicyStep.apply(msgs, thinkCtx({ currentTurnId: 'T2' }));
+    expect(out[0].content).toHaveLength(1);
+    expect(out[0].content[0].type).toBe('text');
+  });
+
+  it('思考模式：currentTurnId 缺省 → 全部视为最后一轮（保守回退 = 现状填充行为）', () => {
+    const msgs = [
+      makeMsg('assistant', [text('a1')], { turnId: 'T1' }),
+      makeMsg('assistant', [reasoning('kept'), text('a2')], { turnId: 'T2' }),
+    ];
+    const out = reasoningPolicyStep.apply(msgs, thinkCtx());
+    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[1].content[0]).toMatchObject({ type: 'reasoning', summary: 'kept' });
+  });
+});
+
+describe('reasoning-policy step — fullReasoningRelay 例外（deepseek-v4 系）', () => {
+  const relayCtx = (overrides: Partial<TransformContext> = {}): TransformContext => ({
+    ...baseCtx,
+    thinkingMode: true,
+    currentTurnId: 'T2',
+    ...overrides,
+  });
+
+  it('思考模式 + relay：全部轮次保留思考，缺失填充', () => {
+    const msgs = [
+      makeMsg('assistant', [reasoning('old thought'), text('a1')], { turnId: 'T1' }),
+      makeMsg('assistant', [text('a2')], { turnId: 'T2' }),
+    ];
+    const out = reasoningPolicyStep.apply(msgs, relayCtx({ fullReasoningRelay: true }));
+    expect(out[0].content[0]).toMatchObject({ type: 'reasoning', summary: 'old thought' });
+    expect(out[1].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+  });
+
+  it('非思考模式 + relay：仍剥离全部 reasoning（relay 仅在思考模式生效）', () => {
+    const msgs = [makeMsg('assistant', [reasoning('t'), text('a')], { turnId: 'T2' })];
+    const out = reasoningPolicyStep.apply(msgs, {
+      ...baseCtx,
+      thinkingMode: false,
+      fullReasoningRelay: true,
+    });
+    expect(out[0].content).toHaveLength(1);
+    expect(out[0].content[0].type).toBe('text');
+  });
+});
+
+describe('isFullReasoningRelayModel', () => {
+  it.each([
+    'deepseek-v4',
+    'DeepSeek-V4-Flash',
+    'deepseek-ai/DeepSeek-V4-0324',
+  ])('命中：%s', (name) => {
+    expect(isFullReasoningRelayModel(name)).toBe(true);
+  });
+
+  it.each([
+    'provider/deepseek_v4-turbo',
+    'deepseek-chat',
+    'deepseek-reasoner',
+    'DeepSeek-V3.2',
+    'deepseek-ai/DeepSeek-R1',
+    'gpt-4o',
+    'claude-sonnet-4',
+    '',
+  ])('不命中：%s', (name) => {
+    expect(isFullReasoningRelayModel(name)).toBe(false);
+  });
+
+  it('空值安全', () => {
+    expect(isFullReasoningRelayModel(undefined)).toBe(false);
+  });
+});
+
 describe('empty-content-compat step', () => {
   it('assistant 空 content → 单个换行文本块', () => {
     const msgs = [makeMsg('assistant', [])];
@@ -149,6 +261,20 @@ describe('default pipeline', () => {
     expect(out[0].content.every((b) => b.type === 'text')).toBe(true);
     // assistant 消息：reasoning 已被剥离
     expect(out[1].content.every((b) => b.type !== 'reasoning')).toBe(true);
+  });
+
+  it('思考模式历史轮次剥离后空 content 由 empty-content-compat 兜底', () => {
+    const pipeline = createDefaultMessageTransformPipeline();
+    const msgs = [
+      makeMsg('assistant', [reasoning('only thought')], { turnId: 'T1' }),
+      makeMsg('user', [text('q')], { turnId: 'T2' }),
+    ];
+    const out = pipeline.run(msgs, {
+      ...baseCtx,
+      thinkingMode: true,
+      currentTurnId: 'T2',
+    });
+    expect(out[0].content).toEqual([{ type: 'text', text: '\n' }]);
   });
 
   it('入参数组不被任何步骤修改', () => {

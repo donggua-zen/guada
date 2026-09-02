@@ -14,6 +14,9 @@ const mockSourceManager = {
 } as any;
 const mockLoader = {} as SkillLoaderService;
 const mockVersionManager = {} as SkillVersionManager;
+const mockPluginManager = {
+  isPluginEnabled: jest.fn().mockReturnValue(true),
+} as any;
 
 function makeSkill(id: string, enabled = true): SkillDefinition {
   return {
@@ -33,7 +36,8 @@ describe("SkillOrchestrator", () => {
 
   beforeEach(() => {
     registry = new SkillRegistry();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager, mockPluginManager);
+    (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(true);
   });
 
   describe("listSkills", () => {
@@ -175,6 +179,43 @@ describe("SkillOrchestrator", () => {
 
     it("should return null for unknown skill", () => {
       expect(orchestrator.getSkillDetail("unknown")).toBeNull();
+    });
+  });
+
+  describe("isPluginSkillVisible（插件技能，循环依赖回归）", () => {
+    // 回归：skill 工具包 handler 在 resolvePlugins 执行期间被调用，此刻
+    // session.getResolvedPlugins() 恒为空数组；插件技能可见性必须依赖
+    // PluginManager 的权威启用状态，而不是 resolve 中途的空快照。
+    const sessionWithEmptyResolved = {
+      getResolvedPlugins: () => [],
+    } as any;
+
+    it("插件启用时，插件技能在 resolvedPlugins 为空的情况下仍可见", () => {
+      const skill = makeSkill("plugin-skill", true);
+      skill.provider = "plugin:skill-bundled";
+      registry.register(skill);
+      (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(true);
+
+      const result = orchestrator.listSkills(true, undefined, sessionWithEmptyResolved);
+      expect(result.map((s) => s.id)).toContain("plugin-skill");
+    });
+
+    it("插件被禁用时，插件技能不可见", () => {
+      const skill = makeSkill("plugin-skill-off", true);
+      skill.provider = "plugin:skill-bundled";
+      registry.register(skill);
+      (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(false);
+
+      const result = orchestrator.listSkills(true, undefined, sessionWithEmptyResolved);
+      expect(result.map((s) => s.id)).not.toContain("plugin-skill-off");
+    });
+
+    it("非插件技能不受插件启停影响", () => {
+      registry.register(makeSkill("file-skill", true));
+      (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(false);
+
+      const result = orchestrator.listSkills(true, undefined, sessionWithEmptyResolved);
+      expect(result.map((s) => s.id)).toContain("file-skill");
     });
   });
 });

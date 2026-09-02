@@ -46,6 +46,7 @@ import {
 } from '../../constants/settings.constants';
 import {
   TransformContext,
+  isFullReasoningRelayModel,
   createDefaultMessageTransformPipeline,
 } from './message-transform.pipeline';
 
@@ -108,6 +109,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /** system 提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system） */
   private systemText = '';
   private thinkingEffortValue!: string | undefined;
+  /** 当前（最后一轮）回合 id：beginTurn 时记录，供 reasoning 策略判定「最后一轮」 */
+  private currentTurnId: string | null = null;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
   private effectiveSettings!: EffectiveSettings;
   /** 合并后的压缩配置（压缩侧经 CompactionDataSource.getCompressionConfig 消费） */
@@ -221,12 +224,16 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       supportsImageInput:
         this.modelConfig.config.inputCapabilities?.includes('image') ?? false,
       thinkingMode: !!shouldLoadReasoning,
+      currentTurnId: this.currentTurnId,
+      fullReasoningRelay: isFullReasoningRelayModel(
+        this.modelConfig.modelName,
+      ),
       providerProtocol: this.modelConfig.provider?.protocol,
       modelName: this.modelConfig.modelName,
     };
   }
 
-  /** 变换上下文指纹：模型能力/思考模式/协议变化即失效重建 */
+  /** 变换上下文指纹：模型能力/思考模式/协议/回传策略/回合变化即失效重建 */
   private transformKey(): string {
     return [
       this.modelConfig.config.inputCapabilities?.includes('image')
@@ -235,6 +242,10 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       this.thinkingEffortValue && this.thinkingEffortValue !== 'none'
         ? 'think'
         : 'nothink',
+      this.currentTurnId ?? '-',
+      isFullReasoningRelayModel(this.modelConfig.modelName)
+        ? 'relay-all'
+        : 'relay-last',
       this.modelConfig.provider?.protocol ?? '-',
     ].join('|');
   }
@@ -305,12 +316,18 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /** 增量更新：新消息已落库（fold 后权威节点），只变换新增部分，O(Δ)。
-   *  revision 由调用方（写入返回值）提供，本方法不查询 store——版本号写入时确定。 */
+   *  revision 由调用方（写入返回值）提供，本方法不查询 store——版本号写入时确定。
+   *  变换指纹（含 currentTurnId：回合切换、能力/模式变化）不一致时增量拼接口径错误
+   *  → 作废快照，下次 getSnapshot 全量重建（正常生命周期内 context 限单回合，此分支不触发）。 */
   private async appendToSnapshot(
     added: Message[],
     revision: number,
   ): Promise<void> {
     if (!this.snapshot || added.length === 0) return;
+    // if (this.snapshot.transformKey !== this.transformKey()) {
+    //   this.snapshot = null;
+    //   return;
+    // }
     const ctx = this.buildTransformCtx();
     const addedView = this.transformPipeline.run(added, ctx);
     const perMsg = await this.tokenMeter.estimatePerMessage(
@@ -400,6 +417,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       replaceTurnId: options?.replaceTurnId,
       preGenTurnId: options?.preGenTurnId,
     });
+    // 记录当前回合 id：reasoning 策略以 turnId 判定「最后一轮」（见 message-transform.pipeline.ts）
+    this.currentTurnId = turnId;
     // turn/start 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供），避免每轮误重建
     this.refreshSnapshotRevision(revision);
     return turnId;

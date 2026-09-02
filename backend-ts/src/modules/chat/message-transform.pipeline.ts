@@ -10,7 +10,9 @@
  * 步骤顺序即注册顺序（run() 按 registration order 执行）：
  *   1. image-projection   — 模型不支持图片输入时，image 块 → 含文件路径的英文占位文本
  *                          （纯信息占位，不内联 base64、不暗示调用工具；模型可凭路径调用 image_recognize）
- *   2. reasoning-policy   — 思考模式填充缺失摘要 / 非思考模式剥离 reasoning 块
+ *   2. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
+ *                          历史轮次剥离；fullReasoningRelay（deepseek-v4 系）例外全量携带；
+ *                          非思考模式剥离全部 reasoning 块
  *   3. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
  */
 
@@ -28,9 +30,20 @@ export interface TransformContext {
   supportsImageInput: boolean;
   /** 是否处于思考模式（thinkingEffort 存在且非 'none'） */
   thinkingMode: boolean;
+  /**
+   * 当前（最后一轮）回合 id：由会话层在 beginTurn 时记录。
+   * 思考模式下仅该回合的 assistant 消息完整携带思考，历史轮次剥离；
+   * 缺省/为 null 时全部视为最后一轮（保守回退 = 历史全量携带行为）。
+   */
+  currentTurnId?: string | null;
+  /**
+   * 该模型家族要求全部轮次完整回传思考（如 deepseek-v4 系端点）：
+   * 思考模式下历史轮次也不剥离（缺失填充）。由会话层依据 modelName 派生。
+   */
+  fullReasoningRelay?: boolean;
   /** 供应商协议（'openai' | 'anthropic' | 'gemini' ...，仅日志/未来分支用） */
   providerProtocol?: string;
-  /** 模型名（仅日志用） */
+  /** 模型名（仅日志用；能力派生由会话层完成，本层不读模型名） */
   modelName?: string;
 }
 
@@ -74,40 +87,59 @@ export const imageProjectionStep: TransformStep = {
 };
 
 /**
+ * 全量思考回传模型族判定（思考模式下历史轮次也不剥离思考）。
+ * 目前仅 deepseek-v4 系：模型名包含 "deepseek-v4" 即命中（不分前后缀，大小写不敏感）。
+ */
+export function isFullReasoningRelayModel(modelName?: string): boolean {
+  if (!modelName) return false;
+  return modelName.toLowerCase().includes('deepseek-v4');
+}
+
+/**
  * 步骤 2：reasoning 策略（存储原样保留，读取时按当前模式过滤）。
- * 思考模式 → 填充缺失摘要 / 补占位块（某些端点要求 reasoning 持续回传，如 DeepSeek）；
- * 非思考模式 → 剥离 reasoning 块。
+ * - 非思考模式 → 剥离全部 reasoning 块；
+ * - 思考模式 + fullReasoningRelay（deepseek-v4 系，端点要求 reasoning 跨轮持续回传）
+ *   → 全部 assistant 消息保留/填充（无块补 `{summary:' '}`、空 summary 填 `' '`）；
+ * - 思考模式（默认）→ 仅最后一轮（turnId === ctx.currentTurnId 的 assistant 消息）
+ *   保留/填充，历史轮次剥离。currentTurnId 缺省时全部视为最后一轮（保守回退）。
  */
 export const reasoningPolicyStep: TransformStep = {
   name: 'reasoning-policy',
   apply(messages, ctx) {
-    return messages.map((msg) => {
-      if (msg.role !== 'assistant') return msg;
+    // 逐消息判定是否走「填充」分支；填充策略与历史行为一致
+    const shouldFill = (msg: Message): boolean => {
+      if (ctx.fullReasoningRelay) return true;
+      if (ctx.currentTurnId == null) return true;
+      const turnId = (msg as { turnId?: string | null }).turnId ?? null;
+      return turnId === ctx.currentTurnId;
+    };
+    const fillReasoning = (msg: Message): Message => {
       const hasReasoning = msg.content.some((b) => b.type === 'reasoning');
-
-      if (ctx.thinkingMode) {
-        if (!hasReasoning) {
-          return {
-            ...msg,
-            content: [
-              ...msg.content,
-              { type: 'reasoning' as const, summary: ' ' },
-            ],
-          };
-        }
+      if (!hasReasoning) {
         return {
           ...msg,
-          content: msg.content.map((b) =>
-            b.type === 'reasoning' ? { ...b, summary: b.summary || ' ' } : b,
-          ),
+          content: [
+            ...msg.content,
+            { type: 'reasoning' as const, summary: ' ' },
+          ],
         };
       }
-
-      if (!hasReasoning) return msg;
       return {
         ...msg,
-        content: msg.content.filter((b) => b.type !== 'reasoning'),
+        content: msg.content.map((b) =>
+          b.type === 'reasoning' ? { ...b, summary: b.summary || ' ' } : b,
+        ),
       };
+    };
+    const stripReasoning = (msg: Message): Message => ({
+      ...msg,
+      content: msg.content.filter((b) => b.type !== 'reasoning'),
+    });
+
+    return messages.map((msg) => {
+      if (msg.role !== 'assistant') return msg;
+      if (!ctx.thinkingMode) return stripReasoning(msg);
+      return shouldFill(msg) ? fillReasoning(msg) : stripReasoning(msg);
     });
   },
 };
