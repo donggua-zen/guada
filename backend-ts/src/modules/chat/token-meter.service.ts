@@ -17,6 +17,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { TokenizerService } from '../../common/utils/tokenizer.service';
+import { kbRefsToText } from '../../common/utils/kb-ref.util';
 import type {
   Message,
   Turn,
@@ -118,6 +119,13 @@ export class TokenMeterService {
         return this.tokenizer.countTextTokens(modelName, block.content, false);
       case 'image':
         return 1500;
+      case 'kb-ref':
+        // 与请求视图投影后的清单文本同口径（kbRefProjectionStep）
+        return this.tokenizer.countTextTokens(
+          modelName,
+          kbRefsToText(block.kbRefs),
+          false,
+        );
       case 'file':
         return this.tokenizer.countTextTokens(
           modelName,

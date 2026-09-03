@@ -4,6 +4,7 @@ import * as path from 'path';
 import type { Message, ContentBlock } from '../../common/types/conversation.types';
 import {
   TransformContext,
+  kbRefProjectionStep,
   imageProjectionStep,
   imagePathAnnotationStep,
   reasoningPolicyStep,
@@ -45,6 +46,12 @@ const image = (id: string): ContentBlock => ({
   },
 } as ContentBlock);
 
+const kbRef = (id: string, name: string): ContentBlock =>
+  ({
+    type: 'kb-ref',
+    kbRefs: [{ id, name }],
+  }) as ContentBlock;
+
 const reasoning = (summary: string): ContentBlock => ({
   type: 'reasoning',
   summary,
@@ -64,6 +71,48 @@ beforeAll(async () => {
 afterAll(async () => {
   delete process.env.UPLOAD_ROOT_DIR;
   await fs.rm(uploadRoot, { recursive: true, force: true });
+});
+
+describe('kb-ref-projection step', () => {
+  it('kb-ref 块 → 引用清单文本（name/id 形状，含 description；原文块在前保留）', () => {
+    const msgs = [
+      makeMsg('user', [
+        text('查资料'),
+        {
+          type: 'kb-ref',
+          kbRefs: [
+            { id: 'kb1', name: '产品手册', description: 'v2 说明' },
+            { id: 'kb2', name: 'FAQ' },
+          ],
+        } as ContentBlock,
+      ]),
+    ];
+    const out = kbRefProjectionStep.apply(msgs, baseCtx);
+
+    expect(out).not.toBe(msgs);
+    const blocks = out[0].content;
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].type).toBe('text'); // 用户原文不受影响
+    expect(blocks[1].type).toBe('text'); // kb-ref 投影为文本
+    const listing = (blocks[1] as { text: string }).text;
+    expect(listing).toContain('[referenced knowledge bases]');
+    expect(listing).toContain('- name: 产品手册, id: kb1, description: v2 说明');
+    expect(listing).toContain('- name: FAQ, id: kb2');
+    // 存储层原样保留（副本变换），前端 chips 仍可读 kbRefs
+    expect(msgs[0].content[1].type).toBe('kb-ref');
+  });
+
+  it('空 kbRefs 兜底为 (none) 清单（与 token-meter/摘要口径一致）', () => {
+    const msgs = [makeMsg('user', [{ type: 'kb-ref', kbRefs: [] } as ContentBlock])];
+    const out = kbRefProjectionStep.apply(msgs, baseCtx);
+    expect((out[0].content[0] as { text: string }).text).toContain('(none)');
+  });
+
+  it('无 kb-ref 的消息原样返回（消息对象同一引用，零拷贝；map 仅重建数组壳）', () => {
+    const msgs = [makeMsg('user', [text('q')])];
+    const out = kbRefProjectionStep.apply(msgs, baseCtx);
+    expect(out[0]).toBe(msgs[0]);
+  });
 });
 
 describe('image-projection step', () => {
@@ -310,6 +359,29 @@ describe('empty-content-compat step', () => {
 });
 
 describe('default pipeline', () => {
+  it('按注册顺序执行：KB 引用投影最先，kb-ref 与 image 同存时全部投影为文本', () => {
+    const pipeline = createDefaultMessageTransformPipeline();
+    const msgs = [
+      makeMsg('user', [text('查资料'), kbRef('kb1', '产品手册'), image('img1')]),
+      makeMsg('assistant', [reasoning('th'), text('ok')]),
+    ];
+    const out = pipeline.run(msgs, {
+      ...baseCtx,
+      supportsImageInput: false,
+      thinkingMode: false,
+    });
+
+    // user 消息：kb-ref 与 image 均已投影为文本
+    expect(out[0].content.every((b) => b.type === 'text')).toBe(true);
+    const joined = out[0].content
+      .map((b) => (b as { text: string }).text)
+      .join('\n');
+    expect(joined).toContain('[referenced knowledge bases]');
+    expect(joined).toContain('Image omitted');
+    // assistant 消息：reasoning 已被剥离
+    expect(out[1].content.every((b) => b.type !== 'reasoning')).toBe(true);
+  });
+
   it('按注册顺序执行：图片投影先于 reasoning/空 content', () => {
     const pipeline = createDefaultMessageTransformPipeline();
     const msgs = [

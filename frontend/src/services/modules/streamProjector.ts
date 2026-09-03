@@ -184,6 +184,11 @@ function ensureBlockInBundle(
 function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
   if (block.type === "text" && typeof block.text === "string") {
     content.content = block.text;
+    // 块级注入标记透传（'system' = 系统注入，渲染层跳过不重建）
+    if (block.origin) content.origin = block.origin;
+  } else if (block.type === "kb-ref") {
+    // KB 引用块：结构化明细挂载（chips 渲染数据源；正文不渲染序列化文本）
+    content.kbRefs = block.kbRefs;
   } else if (block.type === "reasoning" && typeof block.summary === "string") {
     content.reasoningContent = block.summary;
     content.state.isThinking = false;

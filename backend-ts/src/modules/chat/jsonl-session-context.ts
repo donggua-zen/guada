@@ -5,7 +5,7 @@
  * 能力与 persistent-session-context.ts（DB 版）对齐：
  * - 设置合并（会话 > 角色）、模型解析、插件决议、提示词拼接（system/插件/tools）
  * - 细粒度 Token 统计 + provider 真值锚点（dsh 式）
- * - 运行模式切换检测（systemReminder）、reasoning content 策略、KIMI 兼容
+ * - 运行模式切换检测（system 注入块）、reasoning content 策略、KIMI 兼容
  * - 压缩接入统一 CompressionEngine（一级裁剪 prune）
  */
 import { Inject, Logger } from '@nestjs/common';
@@ -39,6 +39,7 @@ import {
 } from './compaction/types';
 import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
+import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import {
   SG_MODELS,
   SK_MOD_CHAT,
@@ -152,6 +153,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly workspaceService: WorkspaceService,
     private readonly tokenMeter: TokenMeterService,
     private readonly streamManager: SessionStreamManager,
+    private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {
     this.sessionId = session.id;
     this.userId = session.userId;
@@ -461,14 +463,32 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     },
   ): Promise<{ messageId: string; userMessage: any }> {
     const replaceTurnId = options?.replaceTurnId;
-    // 检测运行模式变化，将提示文案写入 message 级 metadata.systemReminder
-    const systemReminder = await this.detectModeTransition(replaceTurnId);
+    // 检测 sandbox 模式切换 → system 注入块（origin='system'，前端不渲染；LLM 按 <system_reminder> 文本处理）
+    const modeNarration = await this.detectModeTransition(replaceTurnId);
+    // sandboxMode 保留写入：下一条消息模式切换检测的 prevMode 基准（+审计）
     const enrichedMetadata: Record<string, any> = {
       ...options?.metadata,
       sandboxMode: this.sandboxMode,
     };
-    if (systemReminder) {
-      enrichedMetadata.systemReminder = systemReminder;
+
+    // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）
+    const injectedBlocks: ContentBlock[] = [];
+    if (modeNarration) {
+      injectedBlocks.push({
+        type: 'text',
+        text: `<system_reminder>\n${modeNarration}\n</system_reminder>`,
+        origin: 'system',
+      });
+    }
+    if (options?.knowledgeBaseIds?.length) {
+      // KB 明细展开（不存在的 id 静默跳过）；结构化落库为 KbRefBlock，
+      // LLM 侧由 L1 管线投影为清单文本，前端按 chips 渲染
+      const kbRefs = await this.knowledgeBaseService.findByIds(
+        options.knowledgeBaseIds,
+      );
+      if (kbRefs.length > 0) {
+        injectedBlocks.push({ type: 'kb-ref', kbRefs });
+      }
     }
 
     const { messageId, userMessage, revision } =
@@ -477,9 +497,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         content,
         files || [],
         {
-          knowledgeBaseIds: options?.knowledgeBaseIds,
           metadata: enrichedMetadata,
           blocks: options?.blocks,
+          ...(injectedBlocks.length > 0 ? { injectedBlocks } : {}),
           source: options?.source,
         },
       );
@@ -849,7 +869,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     const history = await this.loadVisibleMessages();
 
     const userMsgs = history.filter(
-      (m) => m.role === 'user' && m.id !== replaceTurnId,
+      (m) =>
+        m.role === 'user' &&
+        // 排除注入消息（图片注入等 hidden user 消息 kind='model'，
+        // 其 metadata.sandboxMode 为空会把 prevMode 错误回退为默认值）
+        m.kind !== 'model' &&
+        m.id !== replaceTurnId,
     );
 
     const prevMode =

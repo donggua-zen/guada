@@ -12,7 +12,8 @@ export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/t
  * 用户消息束 → 编辑/复制视图（兼容旧消费方）。
  * bundle 是消息级聚合单元（消息级字段挂 bundle、块内不复制），但编辑/复制/重发等
  * 旧消费方仍按"单个对象带 content/files/id"访问。此函数聚合跨块文本与附件，
- * 并保留消息级元数据（referencedKbs 等在 bundle.metadata）。
+ * 并保留消息级元数据。注入块不入正文：origin='system'（系统提示，对用户不可见）
+ * 与 kb-ref（KB 引用，TurnItem 按 chips 单独渲染）。
  */
 export function toUserMessageView(
   bundle: MessageBundle | null | undefined,
@@ -22,11 +23,48 @@ export function toUserMessageView(
     ...bundle,
     id: bundle.messageId,
     content: (bundle.blocks || [])
+      .filter((b) => !(b as MessageContent).origin && !(b as MessageContent).kbRefs)
       .map((b) => b.content || "")
       .filter((t) => t.length > 0)
       .join("\n"),
     files: (bundle.blocks || []).flatMap((b) => b.files ?? []),
   };
+}
+
+/** KB 引用条目（块级 kbRefs / 历史 metadata 归一化后的展示形态） */
+export interface KbRefLike {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/**
+ * 收集消息束的 KB 引用（chips 渲染 / 编辑回填 / 重答重发三处共用，保证单一事实源一致）。
+ * 优先取 kb-ref 块明细（新架构落库形态，LLM 面投影、前端 chips 同源）；
+ * 历史数据回退 metadata.referencedKbs（兼容 string[]（旧后端直接存 id 数组）
+ * 与 {id,...}[] 两种形态，统一归一化为 {id, name}）。
+ */
+export function collectReferencedKbs(
+  bundle:
+    | { blocks?: Array<{ kbRefs?: KbRefLike[] }>; metadata?: Record<string, any> | null }
+    | null
+    | undefined,
+): KbRefLike[] {
+  if (!bundle) return [];
+  const fromBlocks = (bundle.blocks ?? []).flatMap((b) => b.kbRefs ?? []);
+  if (fromBlocks.length > 0) return fromBlocks;
+  const legacy = bundle.metadata?.referencedKbs;
+  if (!Array.isArray(legacy)) return [];
+  return legacy
+    .map((kb: any) => {
+      if (typeof kb === "string") return { id: kb, name: kb };
+      return {
+        id: kb?.id,
+        name: kb?.name || kb?.id,
+        ...(kb?.description ? { description: kb.description } : {}),
+      };
+    })
+    .filter((kb: KbRefLike) => !!kb.id);
 }
 
 /**

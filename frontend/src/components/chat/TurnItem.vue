@@ -38,10 +38,10 @@
             <div v-if="reminderExpanded" class="user-reminder__body">{{ notificationText }}</div>
           </div>
         </div>
-        <!-- 知识库 -->
+        <!-- 知识库引用 chips（kb-ref 块明细，历史数据回退 metadata.referencedKbs） -->
         <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
-          v-if="user?.metadata?.referencedKbs?.length > 0">
-          <div v-for="kb in user?.metadata?.referencedKbs" :key="kb.id">
+          v-if="referencedKbs.length > 0">
+          <div v-for="kb in referencedKbs" :key="kb.id">
             <div
               class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
               <MenuBookOutlined class="w-4 h-4" />
@@ -242,7 +242,7 @@ import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
-import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView } from '@/utils/messageUtils';
+import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
@@ -460,11 +460,15 @@ const userContent = computed(() => {
   const bundle = user.value;
   if (!bundle) return '';
   // 跨块聚合文本（用户消息可能含多个 text 块 + image/file 块，文本块 content 拼接）
+  // 注入块不入正文：origin='system'（系统提示，对用户不可见）与 kb-ref（KB 引用，chips 单独渲染）
   return bundle.blocks
+    .filter((b) => !b.origin && !b.kbRefs)
     .map((b) => b.content || '')
     .filter((t) => t.length > 0)
     .join('\n');
 });
+// KB 引用 chips 数据源：kb-ref 块明细优先，历史数据回退 metadata（归一化见 collectReferencedKbs）
+const referencedKbs = computed(() => collectReferencedKbs(user.value));
 // 跨块聚合附件（所有 image/file 块的 files 并集，供文件列表渲染）
 const userFiles = computed(() => {
   const bundle = user.value;

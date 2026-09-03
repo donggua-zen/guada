@@ -415,17 +415,20 @@ export class JsonlMessageService implements IMessageStore {
     content: string,
     files: FileRef[] = [],
     options?: {
-      knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
       /** 原生内容块（结构化入站消息；存在时直接采用，否则由 content/files 合成） */
       blocks?: import('../types/conversation.types').ContentBlock[];
+      /** 注入块（system 提示 / KB 引用等消息伴随信息）：追加在统一 blocks 尾部，
+       *  落库为同一条消息——LLM 按块文本处理，前端按块标记特殊渲染/跳过 */
+      injectedBlocks?: import('../types/conversation.types').ContentBlock[];
       /** 显式消息来源（队列投递写入；缺省折叠时按 kind 推导） */
       source?: import('../types/conversation.types').MessageSource;
     },
   ): Promise<{ messageId: string; userMessage: Message; revision: number }> {
     const seq = await this.getNextSeq(sessionId);
     const messageId = generateOrderedMessageId('m');
-    // 统一 blocks：显式 blocks 优先，否则 content（→text 块）+ files（→image/file 块）合成
+    // 统一 blocks：显式 blocks 优先，否则 content（→text 块）+ files（→image/file 块）合成；
+    // 注入块一律追加在尾部（novel 区，KV 前缀零损失）
     const blocks: import('../types/conversation.types').ContentBlock[] = options?.blocks
       ? [...options.blocks]
       : (() => {
@@ -448,6 +451,9 @@ export class JsonlMessageService implements IMessageStore {
           }
           return out;
         })();
+    if (options?.injectedBlocks?.length) {
+      blocks.push(...options.injectedBlocks);
+    }
     const events: BaseEvent[] = [
       {
         type: 'user/message',
@@ -458,10 +464,7 @@ export class JsonlMessageService implements IMessageStore {
           blocks,
           ...(options?.source ? { source: options.source } : {}),
           kind: 'user',
-          metadata: {
-            ...options?.metadata,
-            ...(options?.knowledgeBaseIds ? { referencedKbs: options.knowledgeBaseIds } : {}),
-          },
+          metadata: { ...options?.metadata },
         },
       },
     ];

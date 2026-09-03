@@ -7,6 +7,8 @@
  * - getHistory 不含 prelude
  * - appendMessages 只写 store，后续读取直通新视图
  * - getTokenCount 用 provider 锚点 + 启发式增量（全量口径）
+ * - addUserMessage 写侧注入块（消息伴随信息）：kb-ref 结构化引用 / sandbox 切换
+ *   <system_reminder>（origin=system）；hidden 注入消息（kind=model）不污染 prevMode
  */
 import { JsonlSessionContext } from '../../src/modules/chat/jsonl-session-context';
 import type { Message } from '../../src/common/types/conversation.types';
@@ -88,6 +90,11 @@ function createContext(overrides: any = {}) {
     { resolveSessionWorkspaceDir: jest.fn(async () => '') } as any,
     tokenMeter as any,
     streamManager as any,
+    {
+      // KnowledgeBaseService：默认空明细（按需在用例内覆盖 findByIds）
+      findByIds: jest.fn(async () => []),
+      ...(overrides.knowledgeBaseService || {}),
+    } as any,
   );
   return { ctx, messageStore, tokenMeter, streamManager };
 }
@@ -348,5 +355,98 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     expect(sid).toBe('s1');
     expect(typeof data.usedTokens).toBe('number');
     expect(data.effectiveContextWindow).toBe(8000);
+  });
+});
+
+describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
+  /** store mock 默认返回空 userMessage（无 content），快照增量管线需要合法消息体 */
+  function makeStoreReturnValidUserMessage(messageStore: any) {
+    messageStore.addUserMessage.mockImplementation(async () => ({
+      messageId: 'u_new',
+      userMessage: makeMsg('u_new', 'user'),
+      revision: 1,
+    }));
+  }
+
+  function storeOptions(messageStore: any): any {
+    return (messageStore.addUserMessage as jest.Mock).mock.calls[0][3];
+  }
+
+  it('普通消息：无注入块，metadata 落 sandboxMode 基准', async () => {
+    const { ctx, messageStore } = createContext();
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    await ctx.addUserMessage('hi');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toBeUndefined();
+    expect(opts.metadata.sandboxMode).toBe('workspace-write');
+  });
+
+  it('knowledgeBaseIds → 结构化 kb-ref 注入块（明细展开，缺失 id 静默跳过）', async () => {
+    const { ctx, messageStore } = createContext({
+      knowledgeBaseService: {
+        findByIds: jest.fn(async (ids: string[]) =>
+          ids
+            .filter((id) => id !== 'missing')
+            .map((id) => ({ id, name: `KB-${id}`, description: 'desc' })),
+        ),
+      },
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    await ctx.addUserMessage('查资料', [], {
+      knowledgeBaseIds: ['kb1', 'missing', 'kb2'],
+    });
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toHaveLength(1);
+    expect(opts.injectedBlocks[0]).toMatchObject({
+      type: 'kb-ref',
+      kbRefs: [
+        { id: 'kb1', name: 'KB-kb1', description: 'desc' },
+        { id: 'kb2', name: 'KB-kb2', description: 'desc' },
+      ],
+    });
+  });
+
+  it('sandbox 模式切换 → <system_reminder> 文本注入块（origin=system）+ 基准刷新', async () => {
+    const { ctx, messageStore } = createContext();
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 视图最后一条真实 user 消息为 read-only，当前 sandboxMode=workspace-write（默认）→ 退出叙事
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sandboxMode: 'read-only' } }),
+    ]);
+    await ctx.addUserMessage('继续');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toHaveLength(1);
+    const block = opts.injectedBlocks[0];
+    expect(block.type).toBe('text');
+    expect(block.origin).toBe('system');
+    expect(block.text).toContain('<system_reminder>');
+    expect(block.text).toContain('read-only');
+    // 基准刷新：本条消息落库为当前模式，下次检测以它为 prevMode
+    expect(opts.metadata.sandboxMode).toBe('workspace-write');
+  });
+
+  it('hidden 注入消息（kind=model）不污染 prevMode 检测', async () => {
+    const { ctx, messageStore } = createContext();
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 真实 user 为 read-only，其后是图片注入等 hidden user 消息（kind=model、无 sandboxMode）
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sandboxMode: 'read-only' } }),
+      makeMsg('inject1', 'user', { kind: 'model', metadata: {} }),
+    ]);
+    // 当前模式同为 read-only：若无 kind!=='model' 过滤，hidden 消息的空 sandboxMode
+    // 会把 prevMode 回退为 workspace-write → 误触发"退出 read-only"叙事
+    (ctx as any).sandboxMode = 'read-only';
+    await ctx.addUserMessage('继续');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toBeUndefined();
+    expect(opts.metadata.sandboxMode).toBe('read-only');
   });
 });

@@ -48,6 +48,20 @@ export interface TextBlock {
   type: 'text';
   text: string;
   timing?: BlockTiming;
+  /** 块级注入标记（与后端 conversation.types.ts 同构）：
+   *  'system' = 系统注入文案（前端不渲染不重建） */
+  origin?: 'system';
+}
+
+/** KB 引用块（结构化引用）：前端按 chips 渲染 kbRefs，不渲染序列化文本 */
+export interface KbRefBlock {
+  type: 'kb-ref';
+  kbRefs: Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>;
+  timing?: BlockTiming;
 }
 
 /** 推理/思考块（与可见文本分离） */
@@ -98,6 +112,7 @@ export type ContentBlock =
   | ToolCallBlock
   | ToolResultBlock
   | ImageBlock
-  | FileBlock;
+  | FileBlock
+  | KbRefBlock;
 
 export type ContentBlockType = ContentBlock['type'];

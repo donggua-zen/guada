@@ -52,6 +52,21 @@ export interface TextBlock {
   type: 'text';
   text: string;
   timing?: BlockTiming;
+  /** 块级注入标记（请求视图保留文本、wire 不携带；前端不渲染不重建）：
+   *  'system' = 系统注入文案（如 sandbox 模式切换提示，<system_reminder> 包裹） */
+  origin?: 'system';
+}
+
+/** KB 引用块（结构化引用，随用户消息落库）：LLM 侧由 L1 管线投影为清单文本
+ *  （kbRefProjectionStep），前端按 chips 渲染 kbRefs（不渲染序列化文本） */
+export interface KbRefBlock {
+  type: 'kb-ref';
+  kbRefs: Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>;
+  timing?: BlockTiming;
 }
 
 /** 推理/思考块（与可见文本分离） */
@@ -106,7 +121,8 @@ export type ContentBlock =
   | ToolCallBlock
   | ToolResultBlock
   | ImageBlock
-  | FileBlock;
+  | FileBlock
+  | KbRefBlock;
 
 export type ContentBlockType = ContentBlock['type'];
 

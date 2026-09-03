@@ -16,6 +16,7 @@ import { FilesModule } from "../files/files.module";
 import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
 import { SettingsModule } from "../settings/settings.module";
+import { KnowledgeBaseModule } from "../knowledge-base/knowledge-base.module";
 
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
@@ -36,7 +37,7 @@ import { SessionReplayService } from "./session-replay.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule, SettingsModule],
+  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     AgentEngine,

@@ -85,6 +85,24 @@ export class KnowledgeBaseService {
   }
 
   /**
+   * 批量获取知识库引用明细（供消息管线构造 KbRefBlock；引用数通常 1-3 个）
+   * 不存在的 id 静默跳过（引用列表可能包含已删除的库）。
+   */
+  async findByIds(ids: string[]): Promise<
+    Array<{ id: string; name: string; description?: string }>
+  > {
+    if (!ids || ids.length === 0) return [];
+    const kbs = await this.kbRepo.findByIds(ids);
+    return kbs
+      .filter((kb) => kb != null)
+      .map((kb) => ({
+        id: kb.id,
+        name: kb.name,
+        ...(kb.description ? { description: kb.description } : {}),
+      }));
+  }
+
+  /**
    * 更新知识库
    * 如果修改了向量模型，自动清空分块和向量数据，重置文件状态并重新处理
    */

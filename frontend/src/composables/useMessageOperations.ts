@@ -3,7 +3,7 @@ import { useSessionStore } from '@/stores/session'
 import { t } from '@/locales'
 import type { InputMessageState } from '@/types/session'
 import { normalizeMediaType } from '@/utils/media-type'
-import { toUserMessageView } from '@/utils/messageUtils'
+import { toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 
 /**
  * 把前端附件对象（上传响应 FileRef / 投影 FileAttachment / ChatFile 混合形态）
@@ -165,11 +165,9 @@ export function useMessageOperations(
      */
     function enterEditMode(message: any, turnId: string) {
         const view = toUserMessageView(message) ?? message
-        let knowledgeBaseIds = []
-        const referencedKbs = view.metadata?.referencedKbs || []
-        for (let i = 0; i < referencedKbs.length; i++) {
-            knowledgeBaseIds.push(referencedKbs[i].id)
-        }
+        // KB 回填：kb-ref 块明细优先（toUserMessageView 保留的 blocks 仍带 kbRefs），
+        // 历史数据回退 metadata（归一化见 collectReferencedKbs）
+        const knowledgeBaseIds = collectReferencedKbs(view).map((kb) => kb.id)
 
         const inputMsg = {
             content: view.content,

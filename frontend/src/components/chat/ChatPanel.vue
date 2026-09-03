@@ -174,7 +174,7 @@ import type { Character } from '@/types/character';
 import { useSessionChat } from '@/composables/useSessionChat'
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
-import { isHiddenBlock, toUserMessageView } from '@/utils/messageUtils'
+import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -1053,10 +1053,14 @@ function regenerateResponse(turn: any) {
     (m: any) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
-  // 一条用户消息 = 一个消息束：文本跨 text 块拼接、附件跨 image/file 块收集（FileRef 契约）
-  const userContent = user.blocks.map((b: any) => b.content || "").filter(Boolean).join("\n");
-  const files = toPayloadFileRefs(user.blocks.flatMap((b: any) => b.files || []));
-  const knowledgeBaseIds = user.metadata?.knowledgeBaseIds;
+  // 用户消息束 → 可见视图：跨块聚合可见正文/附件；注入块（origin='system' 系统提示、
+  // kb-ref KB 引用）不入正文——重答只重发用户原始输入，系统注入由后端按当前模式重新派生
+  const view = toUserMessageView(user);
+  if (!view) return;
+  const userContent = view.content;
+  const files = toPayloadFileRefs(view.files || []);
+  // KB 引用重发：kb-ref 块是唯一事实源（与 chips/编辑回填同源），历史数据回退 metadata
+  const knowledgeBaseIds = collectReferencedKbs(user).map((kb) => kb.id);
 
   const replaceTurnId = turn.id;
 

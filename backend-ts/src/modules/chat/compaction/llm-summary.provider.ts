@@ -22,6 +22,7 @@ import type {
 } from '../../tools/interfaces/tool-provider.interface';
 import type { LLMCompletionParams } from '../../llm-core/types/llm.types';
 import type { SummaryInput, SummaryProvider, SummaryResult } from './compression-engine';
+import { kbRefsToText } from '../../../common/utils/kb-ref.util';
 
 /** 摘要模型引用（模型名 + provider 配置 + 能力配置） */
 export interface SummaryModelRef {
@@ -283,6 +284,10 @@ function serializeMessages(messages: Message[]): string {
           break;
         case 'file':
           parts.push(`[file ${block.attachment.name ?? '(attachment)'}]`);
+          break;
+        case 'kb-ref':
+          // 与请求视图投影口径一致（kbRefProjectionStep）：引用清单进摘要
+          parts.push(kbRefsToText(block.kbRefs));
           break;
       }
     }
