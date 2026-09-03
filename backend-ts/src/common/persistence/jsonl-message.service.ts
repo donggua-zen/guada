@@ -17,7 +17,6 @@ import {
   PersistenceBackend,
   BaseEvent,
   ReplayState,
-  MessageFile,
   SessionMeta,
   SEGMENT_MAX_BYTES,
   AskAskedData,
@@ -436,11 +435,11 @@ export class JsonlMessageService implements IMessageStore {
           }
           for (const f of files) {
             const ref: FileRef = {
-              attachmentId: f.attachmentId,
               mediaType: f.mediaType,
               bytes: f.bytes,
               name: f.name,
               url: f.url,
+              previewUrl: f.previewUrl,
             };
             out.push({
               type: f.mediaType?.toLowerCase().startsWith('image/') ? 'image' : 'file',
@@ -512,9 +511,7 @@ export class JsonlMessageService implements IMessageStore {
       const tr = message.content.find(
         (b): b is Extract<ContentBlock, { type: 'tool-result' }> => b.type === 'tool-result',
       );
-      const files = message.content
-        .filter((b): b is Extract<ContentBlock, { type: 'image' | 'file' }> => b.type === 'image' || b.type === 'file')
-        .map(b => fileRefToMessageFile(b.attachment));
+      // 附件元数据内嵌于 content 块（self-contained），不再平铺 files 字段重复存储
 
       // 工具结果 → tool/result（归属由当前回合括号界定，不带 turnId）
       if (isTool) {
@@ -544,7 +541,6 @@ export class JsonlMessageService implements IMessageStore {
           data: {
             messageId,
             content: message.content,
-            files: files.length > 0 ? files : undefined,
             metadata: message.metadata,
           },
         });
@@ -980,19 +976,6 @@ export class JsonlMessageService implements IMessageStore {
 }
 
 // ─── 工具函数 ───
-
-/** FileRef（三层）→ MessageFile（事件/回放层字段映射） */
-function fileRefToMessageFile(f: FileRef): MessageFile {
-  return {
-    fileId: f.attachmentId,
-    fileName: f.name ?? f.attachmentId,
-    displayName: f.name ?? f.attachmentId,
-    fileSize: f.bytes ?? 0,
-    fileType: f.mediaType ?? 'application/octet-stream',
-    fileExtension: f.mediaType?.split('/')[1] ?? '',
-    url: f.url,
-  };
-}
 
 /**
  * 消息 token 启发式估算（字符/4，与 TokenMeter 文本估算同口径）。

@@ -6,6 +6,7 @@ import {
   attachmentToPart,
   attachmentToDataUrl,
   fileBlockToText,
+  resolveModelVisiblePath,
   resolvePhysicalPath,
 } from './attachment.util';
 
@@ -104,15 +105,44 @@ describe('attachment.util', () => {
     });
   });
 
-  describe('fileBlockToText', () => {
-    it('优先使用 name 与 url', () => {
-      expect(
-        fileBlockToText({ name: 'a.pdf', url: 'uploads/files/a.pdf', attachmentId: 'f1' }),
-      ).toBe('[文件: a.pdf (uploads/files/a.pdf)]');
+  describe('resolveModelVisiblePath', () => {
+    it('相对存储引用 → 绝对物理路径', () => {
+      expect(resolveModelVisiblePath('uploads/images/a.png')).toBe(
+        path.join(path.resolve(tmpDir), 'images/a.png'),
+      );
     });
 
-    it('缺 name/url 时回退 attachmentId', () => {
-      expect(fileBlockToText({ attachmentId: 'f2' })).toBe('[文件: f2 (f2)]');
+    it('本机上传 URL → 反解物理路径', () => {
+      expect(resolveModelVisiblePath('http://localhost:3000/uploads/images/b.jpg')).toBe(
+        path.join(path.resolve(tmpDir), 'images/b.jpg'),
+      );
+    });
+
+    it('data: URL → null（无物理路径）', () => {
+      expect(resolveModelVisiblePath('data:image/png;base64,QUJD')).toBeNull();
+    });
+
+    it('未配置 UPLOAD_ROOT_DIR → null（不给必错的路径）', () => {
+      delete process.env.UPLOAD_ROOT_DIR;
+      try {
+        expect(resolveModelVisiblePath('uploads/images/a.png')).toBeNull();
+      } finally {
+        process.env.UPLOAD_ROOT_DIR = tmpDir;
+      }
+    });
+  });
+
+  describe('fileBlockToText', () => {
+    it('url 桥接为绝对物理路径', () => {
+      expect(
+        fileBlockToText({ name: 'a.pdf', url: 'uploads/files/a.pdf', attachmentId: 'f1' }),
+      ).toBe(`[文件: a.pdf (${path.join(path.resolve(tmpDir), 'files/a.pdf')})]`);
+    });
+
+    it('无 url（旧数据仅 attachmentId）→ file path unavailable（attachmentId 不当路径用）', () => {
+      expect(fileBlockToText({ attachmentId: 'f2' })).toBe(
+        '[文件: f2 (file path unavailable)]',
+      );
     });
   });
 });

@@ -5,8 +5,29 @@
 import { shallowReactive, type ShallowReactive } from "vue";
 import { t } from "@/locales";
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
-import type { Message, MessageContent, FileAttachment } from "@/types/message";
-export type { Message, MessageContent, FileAttachment } from "@/types/message";
+import type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
+export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
+
+/**
+ * 用户消息束 → 编辑/复制视图（兼容旧消费方）。
+ * bundle 是消息级聚合单元（消息级字段挂 bundle、块内不复制），但编辑/复制/重发等
+ * 旧消费方仍按"单个对象带 content/files/id"访问。此函数聚合跨块文本与附件，
+ * 并保留消息级元数据（referencedKbs 等在 bundle.metadata）。
+ */
+export function toUserMessageView(
+  bundle: MessageBundle | null | undefined,
+): (MessageBundle & { content: string; files: FileAttachment[]; id: string }) | null {
+  if (!bundle) return null;
+  return {
+    ...bundle,
+    id: bundle.messageId,
+    content: (bundle.blocks || [])
+      .map((b) => b.content || "")
+      .filter((t) => t.length > 0)
+      .join("\n"),
+    files: (bundle.blocks || []).flatMap((b) => b.files ?? []),
+  };
+}
 
 /**
  * 消息对类型

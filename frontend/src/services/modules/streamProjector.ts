@@ -8,10 +8,10 @@
  *
  * 独立于发送链路(handleSendMessage → apiService.chat),常驻接收(应用启动即建立)。
  *
- * 折叠模型:turn → block 二级结构(跳过 Message 容器级)。
- * 事件天然是块级:assistant 块事件按 (messageId, index) 寻址为独立 TurnContent;
- * user_message 逐块映射;compaction 占位为 role='event' 块。渲染直接消费 turn.blocks,
- * 无需"组装进 Message → 再 flatMap 拆回块"。
+ * 折叠模型:turn → messages(MessageBundle) → blocks 三层(对齐后端 Turn → Message → ContentBlock)。
+ * 事件按消息束折叠:assistant 块事件按 (messageId, index) 寻址为 bundle.blocks 内独立块;
+ * user_message 折叠为一个 user 消息束;compaction 占位为 role='event' 消息束。
+ * 渲染直接消费 turn.messages(消息级字段单点挂载),按需引用收集块。
  *
  * 两种事件输入形态（折叠器同时支持）：
  * - WireStreamEvent：live SSE 块级增量协议（block_start/text_delta/block_end...）
@@ -19,12 +19,12 @@
  */
 
 import { reactive } from "vue";
-import { messageToTurnContent } from "@/services/modules/message.api";
+import { messageToTurnContent, extFromMediaType } from "@/services/modules/message.api";
 import { updateTokenStatsFromSSE } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
-import type { Turn, TurnContent } from "@/types/message";
+import type { Turn, TurnContent, MessageBundle } from "@/types/message";
 
 /**
  * 投影器处理的事件类型 = live 块级事件 ∪ 领域事件（事件页）。
@@ -79,10 +79,13 @@ function getCurrentTurn(sessionId: string): string | undefined {
  */
 function findBlockByToolCallId(turns: any[], toolCallId: string): any {
   for (const t of turns) {
-    if (!Array.isArray(t.blocks)) continue;
-    for (const b of t.blocks) {
-      if ((b.metadata?.toolCalls || []).some((tc: any) => tc.id === toolCallId)) {
-        return b;
+    if (!Array.isArray(t.messages)) continue;
+    for (const m of t.messages) {
+      if (!Array.isArray(m.blocks)) continue;
+      for (const b of m.blocks) {
+        if ((b.metadata?.toolCalls || []).some((tc: any) => tc.id === toolCallId)) {
+          return b;
+        }
       }
     }
   }
@@ -111,17 +114,40 @@ export function takeStash(sessionId: string): ProjectorChunk[] {
 }
 
 /**
- * 回合内定位/创建 assistant 块：按 (messageId, blockIndex) 寻址（协议块级事件带 index）；
- * 无 index（usage/finish 为消息级，不带块序号）→ 定位该 messageId 的最后一块。
- * block.id 为块级 contentId（block_end 回填）；messageId 保留供编辑/审批/继续执行 API 锚点。
+ * 回合内定位/创建消息束（MessageBundle）：按 messageId 寻址（协议块级事件带 messageId；
+ * 无宿主消息的孤儿块场景也会创建 bundle 承接）。消息级字段（role/metadata）在此单点挂载，
+ * 块在 bundle.blocks 内按 index 寻址（对齐后端三层模型：Turn → Message → ContentBlock）。
  */
-function ensureAssistantBlock(
+function ensureBundle(
   turn: Turn,
   messageId: string,
+  role: TurnContent["role"],
+): MessageBundle {
+  if (!Array.isArray(turn.messages)) turn.messages = [];
+  let bundle = turn.messages.find((m) => m.messageId === messageId);
+  if (!bundle) {
+    bundle = reactive<MessageBundle>({
+      messageId,
+      role,
+      metadata: {},
+      blocks: [],
+    });
+    turn.messages.push(bundle);
+  }
+  if (!Array.isArray(bundle.blocks)) bundle.blocks = [];
+  return bundle;
+}
+
+/**
+ * bundle 内定位/创建块：按 blockIndex 寻址（无 index → 该消息最后一块）。
+ * block.id 为块级 contentId（block_end 回填）；messageId/role 为创建时一次性写入的
+ * 不可变戳记（引用收集/展示过滤用，不参与流式更新；消息级可变元数据一律读 bundle）。
+ */
+function ensureBlockInBundle(
+  bundle: MessageBundle,
   index?: number,
 ): TurnContent {
-  if (!Array.isArray(turn.blocks)) turn.blocks = [];
-  const seq = turn.blocks.filter((b) => b.messageId === messageId);
+  const seq = bundle.blocks;
   if (index !== undefined) {
     const found = seq.find((b) => b.blockIndex === index);
     if (found) return found;
@@ -131,10 +157,10 @@ function ensureAssistantBlock(
   const block = reactive<TurnContent>({
     id:
       index !== undefined
-        ? `__blk_${messageId}_${index}`
-        : `__blk_${messageId}_${Date.now()}`,
-    role: "assistant",
-    messageId,
+        ? `__blk_${bundle.messageId}_${index}`
+        : `__blk_${bundle.messageId}_${Date.now()}`,
+    role: bundle.role,
+    messageId: bundle.messageId,
     ...(index !== undefined ? { blockIndex: index } : {}),
     content: null,
     reasoningContent: null,
@@ -146,7 +172,7 @@ function ensureAssistantBlock(
     thinkingDurationMs: null,
     state: { isStreaming: true, isThinking: false },
   });
-  turn.blocks.push(block);
+  bundle.blocks.push(block);
   return block;
 }
 
@@ -190,10 +216,13 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
     const att = (block as any).attachment;
     content.files = [
       {
-        id: att?.attachmentId,
+        id: att?.attachmentId || att?.url || att?.name || "",
         name: att?.name || "附件",
         url: att?.url,
         type: att?.mediaType,
+        ext: att?.fileExtension || extFromMediaType(att?.mediaType),
+        size: att?.bytes,
+        previewUrl: att?.previewUrl,
       },
     ];
   } else if (block.type === "tool-result") {
@@ -206,10 +235,37 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
 }
 
 /**
+ * 从"后端三层 Message 形态"组装 MessageBundle（user 消息入口：live user_message 与
+ * domain user/message 共用）。消息级字段（role/kind/source/metadata）单点挂载于 bundle，
+ * 块由 messageToTurnContent 产出（role/messageId 不可变戳记随块写入）。
+ */
+function messageToBundle(
+  msg: {
+    id: string;
+    role?: string;
+    kind?: string;
+    source?: { kind: string; [k: string]: any };
+    metadata?: Record<string, any>;
+    content?: any[];
+    createdAt?: number;
+  },
+): MessageBundle {
+  const blocks = messageToTurnContent(msg as any);
+  return {
+    messageId: msg.id,
+    role: (msg.role as TurnContent["role"]) || "user",
+    ...(msg.kind ? { kind: msg.kind as "user" | "model" } : {}),
+    ...(msg.source ? { source: msg.source } : {}),
+    metadata: msg.metadata ?? {},
+    blocks,
+  };
+}
+
+/**
  * 领域事件折叠（事件页：JSONL 领域事件原样到达，前端自行折叠——零后端转码）。
  * - turn/start|resume、turn/finish、turn/delete、compaction/summary → 复用对应 live 语义
- * - user/message → 构造 user 块（text + 附件）
- * - assistant/message → 一条 = 全部块（content 数组逐块转为独立 TurnContent，终态）
+ * - user/message → 构造 user 消息束（text + 附件块，消息级字段挂 bundle）
+ * - assistant/message → 一条 = 一个 assistant 消息束（content 数组逐块转为 bundle.blocks，终态）
  * - tool/result → 挂 toolCallsResponse 到对应 tool-call 块
  * - command/*、message/prune、message/meta、approval/*、compaction/start|end、session/*、envelope → 暂不处理（忽略）
  */
@@ -265,56 +321,48 @@ function applyDomainEvent(
       } as any);
       return;
     case "user/message": {
-      // 构造 user 块（复用 messageToTurnContent：text 块 + 附件块）
+      // 构造 user 消息束（复用 messageToBundle：text 块 + 附件块；消息级字段挂 bundle）
       const turns = sessionStore.getTurns(sessionId) || [];
       let turn = turns.find((t: any) => t.id === getCurrentTurn(sessionId));
       if (!turn) {
-        turn = { id: data.messageId, kind: "turn", metadata: {}, visible: true, blocks: [] };
+        turn = { id: data.messageId, kind: "turn", metadata: {}, visible: true, messages: [] };
         turns.push(turn);
       }
-      if (!Array.isArray(turn.blocks)) turn.blocks = [];
-      if (turn.blocks.some((b: any) => b.messageId === data.messageId)) return; // 幂等
-      const msgLike: any = {
+      if (!Array.isArray(turn.messages)) turn.messages = [];
+      if (turn.messages.some((m: any) => m.messageId === data.messageId)) return; // 幂等
+      const bundle = messageToBundle({
         id: data.messageId,
         role: "user",
-        kind: data.kind ?? "user",
         // 来源透传：后端 user_message 事件携带完整 userMessage（含 source），
         // source.kind 是"是否人类输入"的单一真相（事件顶层无 metadata 字段）
         source: (data as any).userMessage?.source ?? (data as any).source,
+        kind: data.kind ?? "user",
         metadata: (data as any).userMessage?.metadata ?? data.metadata ?? {},
         content: [
           // P6：事件格式统一为 blocks（后端已废弃 content/files 平铺；旧事件经 rebuild 重建）
           ...(data.blocks ?? []),
         ],
-      };
-      turn.blocks.push(...messageToTurnContent(msgLike));
+      });
+      turn.messages.push(bundle);
       return;
     }
     case "assistant/message": {
-      // 一条 = 全部块：content 数组逐块转为独立 TurnContent（终态，流式态复位）
+      // 一条 = 一个 assistant 消息束（终态，流式态复位；usage/finishReason 归 bundle.metadata）
       const turns = sessionStore.getTurns(sessionId) || [];
       const turn = turns.find((t: any) => t.id === getCurrentTurn(sessionId));
       if (!turn) return;
-      if (!Array.isArray(turn.blocks)) turn.blocks = [];
+      if (!Array.isArray(turn.messages)) turn.messages = [];
       const msgId = data.messageId;
-      if (turn.blocks.some((b: any) => b.messageId === msgId)) return; // 幂等
-      const blocks: TurnContent[] = (data.content ?? []).map(
-        (block: ContentBlock, index: number) => {
-          const content = ensureAssistantBlock(turn, msgId, index);
-          applyCompleteBlock(content, block);
-          content.state.isStreaming = false;
-          content.state.isThinking = false;
-          return content;
-        },
-      );
-      const meta = data.metadata ?? {};
-      const last = blocks[blocks.length - 1];
-      if (last && meta.usage) {
-        last.metadata = { ...(last.metadata || {}), usage: meta.usage };
-      }
-      if (last && meta.finishReason) {
-        last.metadata = { ...(last.metadata || {}), finishReason: meta.finishReason };
-      }
+      if (turn.messages.some((m: any) => m.messageId === msgId)) return; // 幂等
+      const bundle = ensureBundle(turn, msgId, "assistant");
+      // 消息级元数据（usage/finishReason 等）归 bundle；块不再挂消息级字段
+      bundle.metadata = { ...(data.metadata ?? {}) };
+      (data.content ?? []).forEach((block: ContentBlock, index: number) => {
+        const content = ensureBlockInBundle(bundle, index);
+        applyCompleteBlock(content, block);
+        content.state.isStreaming = false;
+        content.state.isThinking = false;
+      });
       return;
     }
     case "tool/result": {
@@ -396,13 +444,13 @@ export function applyChunkToStore(
 
     // 1. 移除旧压缩占位（合成节点，随新摘要替换；真实消息块保留仅标记）
     for (const t of turns) {
-      if (!Array.isArray(t.blocks)) continue;
-      for (let i = t.blocks.length - 1; i >= 0; i--) {
+      if (!Array.isArray(t.messages)) continue;
+      for (let i = t.messages.length - 1; i >= 0; i--) {
         if (
-          t.blocks[i].role === "event" &&
-          t.blocks[i].metadata?.eventType === "compaction"
+          t.messages[i].role === "event" &&
+          t.messages[i].metadata?.eventType === "compaction"
         ) {
-          t.blocks.splice(i, 1);
+          t.messages.splice(i, 1);
         }
       }
     }
@@ -415,19 +463,19 @@ export function applyChunkToStore(
         ? new Set(chunk.shadowedMessageIds)
         : null;
     for (const t of turns) {
-      if (!Array.isArray(t.blocks)) continue;
-      for (const b of t.blocks) {
-        const mid = b.messageId;
+      if (!Array.isArray(t.messages)) continue;
+      for (const m of t.messages) {
+        const mid = m.messageId;
         const shadowed = legacyIds
           ? legacyIds.has(mid)
           : boundaryId
             ? isAtOrBeforeBoundary(mid, boundaryId)
             : false;
-        if (shadowed) b.metadata = { ...(b.metadata || {}), compacted: true };
+        if (shadowed) m.metadata = { ...(m.metadata || {}), compacted: true };
       }
     }
 
-    // 3. 生成占位块（role='event'；EventCard 从 metadata.compactInfo 读取）
+    // 3. 生成占位事件消息束（role='event'；EventCard 从 bundle.metadata 读取）
     const now = new Date().toISOString();
     const compactInfo = {
       shadowedEndId: chunk.shadowedEndId,
@@ -435,39 +483,49 @@ export function applyChunkToStore(
       shadowedMessageIds: chunk.shadowedMessageIds,
       summary: chunk.summary ?? "",
     };
-    const placeholder: TurnContent = {
-      id: chunk.messageId || `__compact_${Date.now()}`,
-      role: "event",
+    const eventBundle: MessageBundle = {
       messageId: chunk.messageId || `__compact_${Date.now()}`,
-      content: chunk.summary ?? "",
-      reasoningContent: null,
-      additionalKwargs: [],
+      role: "event",
       metadata: {
         eventType: "compaction",
         compactInfo,
       },
-      createdAt: now,
-      updatedAt: now,
-      thinkingStartedAt: null,
-      thinkingDurationMs: null,
-      state: { isStreaming: false, isThinking: false },
+      blocks: [
+        {
+          id: chunk.messageId || `__compact_${Date.now()}`,
+          role: "event",
+          messageId: chunk.messageId || `__compact_${Date.now()}`,
+          content: chunk.summary ?? "",
+          reasoningContent: null,
+          additionalKwargs: [],
+          metadata: {
+            eventType: "compaction",
+            compactInfo,
+          },
+          createdAt: now,
+          updatedAt: now,
+          thinkingStartedAt: null,
+          thinkingDurationMs: null,
+          state: { isStreaming: false, isThinking: false },
+        },
+      ],
     };
     const hostTurn = getCurrentTurn(sessionId)
       ? turns.find((t: any) => t.id === getCurrentTurn(sessionId))
       : undefined;
     if (hostTurn) {
-      if (!Array.isArray(hostTurn.blocks)) hostTurn.blocks = [];
-      hostTurn.blocks.push(placeholder);
+      if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
+      hostTurn.messages.push(eventBundle);
     } else {
       turns.push({
-        id: placeholder.id,
+        id: eventBundle.messageId,
         kind: "event",
         metadata: {
           eventType: "compaction",
           compactInfo,
         },
         visible: true,
-        blocks: [placeholder],
+        messages: [eventBundle],
       });
     }
     return;
@@ -487,7 +545,7 @@ export function applyChunkToStore(
         kind: "turn",
         metadata: {},
         visible: true,
-        blocks: [],
+        messages: [],
       };
       turns.push(turn);
     }
@@ -532,13 +590,13 @@ export function applyChunkToStore(
           ? { totalDurationMs: chunk.totalDurationMs }
           : {}),
       };
-      if (!Array.isArray(turn.blocks)) turn.blocks = [];
-      const lastAssistant = [...turn.blocks]
+      if (!Array.isArray(turn.messages)) turn.messages = [];
+      const lastAssistantBundle = [...turn.messages]
         .reverse()
-        .find((b: any) => b.role === "assistant");
-      if (lastAssistant && chunk.usage) {
-        lastAssistant.metadata = {
-          ...(lastAssistant.metadata || {}),
+        .find((m: any) => m.role === "assistant");
+      if (lastAssistantBundle && chunk.usage) {
+        lastAssistantBundle.metadata = {
+          ...(lastAssistantBundle.metadata || {}),
           usage: chunk.usage,
         };
       }
@@ -579,14 +637,14 @@ export function applyChunkToStore(
           kind: "turn",
           metadata: {},
           visible: true,
-          blocks: [],
+          messages: [],
         };
         turns.push(turn);
       }
-      if (!Array.isArray(turn.blocks)) turn.blocks = [];
+      if (!Array.isArray(turn.messages)) turn.messages = [];
       // 幂等：同 messageId 已折叠则跳过（防御重复广播/重放）
-      if (!turn.blocks.some((b: any) => b.messageId === userMsg.id)) {
-        turn.blocks.push(...messageToTurnContent(userMsg));
+      if (!turn.messages.some((m: any) => m.messageId === userMsg.id)) {
+        turn.messages.push(messageToBundle(userMsg));
       }
     }
     return;
@@ -644,13 +702,13 @@ export function applyChunkToStore(
   const turns = sessionStore.getTurns(sessionId) || [];
   const turn = turns.find((t: any) => t.id === turnId);
   if (!turn) return;
-  if (!Array.isArray(turn.blocks)) turn.blocks = [];
+  const bundle = ensureBundle(turn, messageId, "assistant");
   // 清除回合级重试瞬态（重试成功输出）
   if (turn.state) {
     delete turn.state.retry;
   }
   const index = "index" in chunk ? (chunk as any).index : undefined;
-  const content = ensureAssistantBlock(turn, messageId, index);
+  const content = ensureBlockInBundle(bundle, index);
   if (!content) return;
 
   switch (chunk.type) {
@@ -697,23 +755,21 @@ export function applyChunkToStore(
       }
       break;
     case "usage":
-      // usage 为消息级：仅挂最后一块（tokenUsage 逐块求和，不能多块重复计数）
-      content.metadata = { ...(content.metadata || {}), usage: chunk.usage };
+      // usage 为消息级：挂 bundle.metadata（tokenUsage 按消息束求和，不落块、不重复计数）
+      bundle.metadata = { ...(bundle.metadata || {}), usage: chunk.usage };
       break;
     case "finish":
       // (usage 为协议独立事件，由 case "usage" 承载，finish 不带 usage)
-      content.metadata = {
-        ...content.metadata,
+      bundle.metadata = {
+        ...bundle.metadata,
         ...(chunk.finishReason ? { finishReason: chunk.finishReason } : {}),
       };
       content.state.isStreaming = false;
       content.state.isThinking = false;
-      // 同一消息的其余块也复位流式态（块级 isStreaming 仅展示瞬态）
-      for (const b of turn.blocks) {
-        if (b.messageId === messageId) {
-          b.state.isStreaming = false;
-          b.state.isThinking = false;
-        }
+      // 同一消息束的其余块也复位流式态（块级 isStreaming 仅展示瞬态）
+      for (const b of bundle.blocks) {
+        b.state.isStreaming = false;
+        b.state.isThinking = false;
       }
       break;
     default:

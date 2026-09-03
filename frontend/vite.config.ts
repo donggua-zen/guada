@@ -54,6 +54,11 @@ export default defineConfig({
       '/static': {
         target: 'http://localhost:3000',
         changeOrigin: true
+      },
+      // 后端上传资源（FileRef.url 相对存储路径展示用）
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true
       }
     }
   },

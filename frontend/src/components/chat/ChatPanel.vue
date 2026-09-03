@@ -172,9 +172,9 @@ import type { Character } from '@/types/character';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
-import { useMessageOperations } from '@/composables/useMessageOperations'
+import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
-import { isHiddenBlock } from '@/utils/messageUtils'
+import { isHiddenBlock, toUserMessageView } from '@/utils/messageUtils'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -498,7 +498,7 @@ const activeTurns = computed(() => {
 // 从回合中取用户锚点块（role=user 且为人类输入），渲染与操作均基于该块（二级结构：turn → block）
 // 后端注入的 hidden user 消息（拦截器/图片/待办/压缩）同 role 但非用户输入，须排除
 const userOfTurn = (turn: any): any =>
-  turn?.blocks?.find((b: any) => b.role === 'user' && !isHiddenBlock(b)) ?? null;
+  turn?.messages?.find((m: any) => m.role === 'user' && !isHiddenBlock(m)) ?? null;
 
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
@@ -958,7 +958,7 @@ async function handleSendMessage(payload?: InputMessageState) {
       const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
       sessionStore.enqueueMessage(sid, {
         content: prepared.content,
-        files: prepared.updatedFiles.filter((f: any) => f.id),
+        files: prepared.files,
         knowledgeBaseIds: prepared.knowledgeBaseIds,
       });
       return;
@@ -994,7 +994,7 @@ async function handleSendMessage(payload?: InputMessageState) {
         sessionId: currentSessionId.value,
         userMessage: {
           content: prepared.content,
-          files: prepared.fileIds,
+          files: prepared.files,
           replaceTurnId,
           knowledgeBaseIds: prepared.knowledgeBaseIds,
         },
@@ -1035,11 +1035,12 @@ function handleEditQueued(item: QueuedMessage) {
  * enterEditMode 直接用 turn.id 作为被编辑回合外壳 id。
  */
 function generateResponse(turn: any) {
-  const user = (turn?.blocks || []).find(
-    (b: any) => b.role === "user" && !isHiddenBlock(b),
+  const user = (turn?.messages || []).find(
+    (m: any) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
-  enterEditMode(user, turn.id)
+  // 用户消息束 → 编辑视图（跨块聚合文本/附件），enterEditMode 消费
+  enterEditMode(toUserMessageView(user), turn.id)
 }
 
 /**
@@ -1048,17 +1049,14 @@ function generateResponse(turn: any) {
  * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
 function regenerateResponse(turn: any) {
-  const userBlocks = (turn?.blocks || []).filter(
-    (b: any) => b.role === "user" && !isHiddenBlock(b),
+  const user = (turn?.messages || []).find(
+    (m: any) => m.role === "user" && !isHiddenBlock(m),
   );
-  if (userBlocks.length === 0) return;
-  // 二级结构：用户文本/文件分散在多个 user 块，跨块聚合
-  const userContent = userBlocks.map((b: any) => b.content || "").filter(Boolean).join("\n");
-  const userFileIds = userBlocks
-    .flatMap((b: any) => b.files || [])
-    .filter((f: any) => f.id)
-    .map((f: any) => f.id);
-  const knowledgeBaseIds = userBlocks[0]?.metadata?.knowledgeBaseIds;
+  if (!user) return;
+  // 一条用户消息 = 一个消息束：文本跨 text 块拼接、附件跨 image/file 块收集（FileRef 契约）
+  const userContent = user.blocks.map((b: any) => b.content || "").filter(Boolean).join("\n");
+  const files = toPayloadFileRefs(user.blocks.flatMap((b: any) => b.files || []));
+  const knowledgeBaseIds = user.metadata?.knowledgeBaseIds;
 
   const replaceTurnId = turn.id;
 
@@ -1072,7 +1070,7 @@ function regenerateResponse(turn: any) {
         sessionId: currentSessionId.value,
         userMessage: {
           content: userContent,
-          files: userFileIds,
+          files,
           replaceTurnId,
           knowledgeBaseIds,
         },

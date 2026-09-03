@@ -39,6 +39,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { JsonlBackend } from "../common/persistence/jsonl-backend";
 import { BaseEvent } from "../common/persistence/types";
+import { normalizeMediaType, isImageMediaType } from "../common/utils/media-type.util";
 import { resolve, dirname } from "path";
 
 const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
@@ -208,6 +209,19 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
                   : JSON.stringify(tc?.arguments ?? {}),
             });
           }
+          // 附件内联为 image/file 块（新契约 self-contained；不再写平铺 files 字段）
+          for (const f of files) {
+            const mediaType = normalizeMediaType(f.fileType, f.fileExtension);
+            blocks.push({
+              type: isImageMediaType(mediaType) ? "image" : "file",
+              attachment: {
+                mediaType,
+                bytes: f.fileSize || 0,
+                name: f.displayName ?? f.fileName,
+                url: f.url ?? f.previewUrl,
+              },
+            });
+          }
 
           events.push({
             type: "assistant/message",
@@ -216,7 +230,6 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
             data: {
               messageId: content.id,
               content: blocks,
-              files: files.length > 0 ? files : undefined,
               metadata: meta,
             },
           });
@@ -229,14 +242,12 @@ async function migrateSession(sessionId: string, force: boolean): Promise<number
             userBlocks.push({ type: "text", text: content.content });
           }
           for (const f of files) {
-            const isImage = String(f.fileType ?? "")
-              .toLowerCase()
-              .startsWith("image/");
+            // 旧 DB fileType 为 'image'/'text' 语义值 → 归一为真 MIME（与 replayer 读取路径同口径）
+            const mediaType = normalizeMediaType(f.fileType, f.fileExtension);
             userBlocks.push({
-              type: isImage ? "image" : "file",
+              type: isImageMediaType(mediaType) ? "image" : "file",
               attachment: {
-                attachmentId: f.fileId ?? f.url ?? "",
-                mediaType: f.fileType ?? "application/octet-stream",
+                mediaType,
                 bytes: f.fileSize || 0,
                 name: f.displayName ?? f.fileName,
                 url: f.url ?? f.previewUrl,

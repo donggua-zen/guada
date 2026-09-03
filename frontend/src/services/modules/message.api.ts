@@ -1,6 +1,7 @@
 import type { ApiContext } from "./api-context";
 import type { Message, MessageContent, MessageRole, TurnContent } from "@/types/message";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
+import type { FileRef } from "@/types/stream/content-block.types";
 
 /**
  * 后端三层 Turn（与 backend conversation.types 对齐的轻量镜像）。
@@ -29,10 +30,18 @@ interface TurnLike {
       isError?: boolean;
       /** 块生命周期计时（后端 BlockAssembler 打点，随持久化落库） */
       timing?: { startedAt: number; finishedAt?: number };
-      attachment?: { attachmentId: string; mediaType: string; name?: string; url?: string; bytes?: number };
+      attachment?: Partial<FileRef>;
     }>;
   }>;
   visible: boolean;
+}
+
+/** MIME → 展示扩展名兜底（image/png → png） */
+export function extFromMediaType(mediaType?: string): string | undefined {
+  const subtype = mediaType?.toLowerCase().split("/")[1];
+  if (!subtype) return undefined;
+  if (subtype === "jpeg") return "jpg";
+  return subtype;
 }
 
 /** ContentBlock → 前端 MessageContent 块。
@@ -72,12 +81,17 @@ function blockToContent(
     content.thinkingDurationMs = Math.max(0, segmentMs);
   }
   if (block.type === "image" || block.type === "file") {
+    const att = block.attachment;
     content.files = [
       {
-        id: block.attachment?.attachmentId,
-        name: block.attachment?.name || "附件",
-        url: block.attachment?.url,
-        type: block.attachment?.mediaType,
+        // 展示 key：新数据无 attachmentId，用存储 url 兜底保证 v-for key 稳定
+        id: att?.attachmentId || att?.url || att?.name || "",
+        name: att?.name || "附件",
+        url: att?.url,
+        type: att?.mediaType,
+        ext: att?.fileExtension || extFromMediaType(att?.mediaType),
+        size: att?.bytes,
+        previewUrl: att?.previewUrl,
       },
     ];
   }
@@ -162,7 +176,6 @@ export interface MessageApi {
   /** 删除本轮对话（按回合 id，整轮遮蔽） */
   deleteTurn(sessionId: string, turnId: string): Promise<{ success: boolean }>;
   updateMessage(sessionId: string, messageId: string, data: any): Promise<Message>;
-  copyMessageFile(messageId: string, fileId: string): Promise<any>;
   webSearch(messageId: string): Promise<any>;
   /** 统一交互应答（审批/询问/迭代暂停继续共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
    * 唤醒后端原地阻塞的工具/引擎，无超时） */
@@ -237,13 +250,6 @@ export const messageApi: MessageApi = {
     return await this._request(`/sessions/${sessionId}/messages/${messageId}`, {
       method: "PUT",
       data,
-    });
-  },
-
-  async copyMessageFile(this: ApiContext, messageId: string, fileId: string) {
-    return await this._request(`/files/${fileId}`, {
-      method: "PUT",
-      data: { type: "copy", messageId: messageId },
     });
   },
 

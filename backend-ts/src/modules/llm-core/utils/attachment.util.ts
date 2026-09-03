@@ -62,6 +62,23 @@ export function resolvePhysicalPath(storagePath: string): string {
   return path.join(process.cwd(), 'data', 'uploads', actualPath);
 }
 
+/**
+ * 请求时桥接：把持久层的存储引用翻译为模型工具可读的物理路径（DSH 同款架构，见
+ * DSH ADR 2026-08-21-model-readable-image-paths：引用不当路径用，路径现算现给）。
+ *
+ * - 相对存储引用（uploads/images/xxx.png）→ UPLOAD_ROOT_DIR 下的绝对物理路径
+ * - 本机上传资源的 http(s) URL → 剥 pathname 反解为绝对物理路径
+ * - data: URL（工具内联图）→ null（无物理路径可给，调用方决定呈现方式）
+ * - 未配置 UPLOAD_ROOT_DIR → null（宁可不给路径，不给必错的相对引用/猜测路径）
+ *
+ * 持久层（JSONL 块）始终只存相对引用；此函数仅在组装模型请求的投影/序列化边界调用。
+ */
+export function resolveModelVisiblePath(storageRef?: string | null): string | null {
+  if (!storageRef || storageRef.startsWith('data:')) return null;
+  if (!process.env.UPLOAD_ROOT_DIR) return null;
+  return resolvePhysicalPath(storageRef);
+}
+
 // ─── MIME 猜测 ───
 
 /** 按扩展名猜测 MIME（供缺省 mediaType 使用） */
@@ -134,7 +151,8 @@ function cachePut(key: string, mtimeMs: number, byteSize: number, part: Base64Im
  *
  * - 本地文件 → 现读现转 base64（带 LRU 缓存，mtime 失效）
  * - data URL → 解析为 { mimeType, base64 }（不缓存）
- * - 远程 http(s) URL → 返回 { kind: 'url' }（字节解析交给调用方协议策略）
+ * - 本机上传资源的 http(s) URL → 反解物理路径读盘转 base64（本地服务地址远端模型无法取回）
+ * - 其余远程 http(s) URL → 返回 { kind: 'url' }（字节解析交给调用方协议策略）
  * - 文件不存在/读取失败 → null（调用方决定降级：占位文本 / 跳过 / 报错）
  */
 export async function attachmentToPart(
@@ -147,7 +165,25 @@ export async function attachmentToPart(
     return parseDataUrl(storagePath);
   }
   if (/^https?:\/\//.test(storagePath)) {
-    return { kind: 'url', url: storagePath };
+    // 本机上传资源的绝对 URL（UPLOAD_URL_PREFIX 前缀）→ 反解物理路径读盘；
+    // 反解失败（确为外链/资源缺失）→ 透传 URL 由调用方决定。
+    const physical = resolvePhysicalPath(storagePath);
+    try {
+      const stat = await fs.stat(physical);
+      const mtimeMs = stat.mtimeMs;
+      const cached = cacheGet(physical, mtimeMs);
+      if (cached) return cached;
+      const buf = await fs.readFile(physical);
+      const part: Base64ImagePart = {
+        kind: 'base64',
+        mimeType: mediaType ?? guessMediaType(physical),
+        base64: buf.toString('base64'),
+      };
+      cachePut(physical, mtimeMs, buf.byteLength, part);
+      return part;
+    } catch {
+      return { kind: 'url', url: storagePath };
+    }
   }
 
   const physical = resolvePhysicalPath(storagePath);
@@ -190,18 +226,22 @@ export async function attachmentToDataUrl(
 
 // ─── file 块统一投影 ───
 
-/** file 块附件的最小形状（FileRef / MessageFile 均兼容） */
+/** file 块附件的最小形状（FileRef / MessageFile 均兼容；attachmentId 仅旧数据读取回退） */
 export interface FileLikeAttachment {
   name?: string;
   url?: string;
-  attachmentId: string;
+  attachmentId?: string;
 }
 
 /**
  * file 块的统一文本投影（原四个 adapter 逐字重复的实现收敛于此）。
+ * 路径仅由存储锚点 url 经请求时桥接得到（attachmentId 是旧数据标识，不是路径，
+ * 不参与桥接）；无法桥接（data:/未配置上传目录/旧数据无 url）时明确标注不可用，
+ * 不把存储引用当路径喂给模型（工具按工作目录解析必然报错）。
  * TODO(文件内联)：小文本文件后续直接内联；当前统一走引用（路径贴给模型）。
  */
 export function fileBlockToText(attachment: FileLikeAttachment): string {
-  const url = attachment.url ?? attachment.attachmentId;
-  return `[文件: ${attachment.name ?? attachment.attachmentId} (${url})]`;
+  const name = attachment.name ?? attachment.attachmentId ?? 'attachment';
+  const visiblePath = resolveModelVisiblePath(attachment.url);
+  return `[文件: ${name} (${visiblePath ?? 'file path unavailable'})]`;
 }

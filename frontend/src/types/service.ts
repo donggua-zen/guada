@@ -214,14 +214,31 @@ export interface GlobalSettings {
 // ========== 文件上传类型 ==========
 
 /**
- * 上传文件响应
+ * 头像/壁纸上传响应（仅含展示用绝对 URL）
+ */
+export interface ResourceUploadResponse {
+    /** 完整资源 URL（后端已绝对化） */
+    url: string
+}
+
+/**
+ * 会话文件上传响应（FileRef self-contained 契约）
+ * 与后端 FileService.buildFileMeta / conversation.types.ts FileRef 同构，
+ * 发消息时原样放入 userMessage.files，事件落盘时内嵌进块 attachment。
  */
 export interface UploadResponse {
-    id: string
+    /** MIME 类型（image/png、text/plain 等） */
+    mediaType: string
+    /** 字节数 */
+    bytes: number
+    /** 显示名 */
     name: string
+    /** 相对存储路径（uploads/...，展示时绝对化） */
     url: string
-    size: number
-    type?: string
+    /** 预览路径（图片缩略图） */
+    previewUrl?: string
+    /** 扩展名（不带点） */
+    fileExtension?: string
 }
 
 // ========== 重置密码类型 ==========

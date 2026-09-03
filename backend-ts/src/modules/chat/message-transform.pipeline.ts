@@ -8,12 +8,15 @@
  * - wire 级协议映射留给各 adapter（L3），本层不出现任何协议词汇。
  *
  * 步骤顺序即注册顺序（run() 按 registration order 执行）：
- *   1. image-projection   — 模型不支持图片输入时，image 块 → 含文件路径的英文占位文本
- *                          （纯信息占位，不内联 base64、不暗示调用工具；模型可凭路径调用 image_recognize）
- *   2. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
+ *   1. image-projection   — 模型不支持图片输入时，image 块 → 含文件路径（请求时桥接的
+ *                          绝对物理路径）的英文占位文本（纯信息占位，不内联 base64、
+ *                          不暗示调用工具；模型可凭路径调用 image_recognize）
+ *   2. image-path-annotation — 多模态模型：image 块后追加只读绝对路径注解文本块
+ *                          （DSH 同款 normalized-copy 文案，模型可用工具二次处理图片）
+ *   3. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
  *                          历史轮次剥离；fullReasoningRelay（deepseek-v4 系）例外全量携带；
  *                          非思考模式剥离全部 reasoning 块
- *   3. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
+ *   4. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
  */
 
 import { Logger } from '@nestjs/common';
@@ -21,6 +24,7 @@ import {
   Message,
   ContentBlock,
 } from '../../common/types/conversation.types';
+import { resolveModelVisiblePath } from '../llm-core/utils/attachment.util';
 
 // ═══ 上下文 ═══
 
@@ -59,6 +63,8 @@ export interface TransformStep {
 /**
  * 步骤 1：图片投影。
  * 不支持图片输入的模型：image 块 → 确定性占位文本（含文件路径，英文）。
+ * 路径经请求时桥接为模型工具可读的绝对物理路径（存储层只存相对引用，引用不当路径用）；
+ * 无法桥接（data: 内联图/未配置上传目录）时明确告知无可用文件路径。
  * 纯信息占位，不内联 base64、不暗示调用工具；模型若要识别图片，
  * 可凭此路径调用 image_recognize 工具（由 image-recognition 插件在纯文本模型上自动加载）。
  * 存储层原样保留 image 块，仅在读取视图投影。
@@ -73,16 +79,54 @@ export const imageProjectionStep: TransformStep = {
         ...msg,
         content: msg.content.map((block): ContentBlock => {
           if (block.type !== 'image') return block;
-          const imagePath = block.attachment.url ?? block.attachment.attachmentId;
+          // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
+          const imagePath = resolveModelVisiblePath(block.attachment.url);
+          const pathInfo = imagePath
+            ? `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.`
+            : 'No readable file path is available for this image (it was provided inline).';
           return {
             type: 'text',
             text:
               `[Image omitted: the current model accepts text input only and cannot view images. ` +
-              `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.]`,
+              `${pathInfo}]`,
           };
         }),
       };
     });
+  },
+};
+
+/**
+ * 步骤 1b：多模态路径注解（DSH 同款 normalized-copy 文案）。
+ * 支持图片输入的模型：image 块后追加同消息 text 块，附上桥接后的绝对路径（只读语义），
+ * 使模型能用工具（image_recognize / read / run_command）直接处理图片，不必向用户询问路径。
+ * data: 内联图（工具产出）无物理路径，跳过。存储层不受影响。
+ */
+export const imagePathAnnotationStep: TransformStep = {
+  name: 'image-path-annotation',
+  apply(messages, ctx) {
+    if (!ctx.supportsImageInput) return messages;
+    let changed = false;
+    const out = messages.map((msg) => {
+      if (!msg.content.some((b) => b.type === 'image')) return msg;
+      const content: ContentBlock[] = [];
+      for (const block of msg.content) {
+        content.push(block);
+        if (block.type !== 'image') continue;
+        // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
+        const imagePath = resolveModelVisiblePath(block.attachment.url);
+        if (!imagePath) continue;
+        changed = true;
+        content.push({
+          type: 'text',
+          text:
+            `[Image attachment (read-only): ${imagePath}. ` +
+            `Use this path with tools (e.g. image_recognize, read) if you need to process it.]`,
+        });
+      }
+      return { ...msg, content };
+    });
+    return changed ? out : messages;
   },
 };
 
@@ -191,10 +235,11 @@ export class MessageTransformPipeline {
   }
 }
 
-/** 组装默认管线（顺序即契约：投影 → reasoning → 空 content 兼容） */
+/** 组装默认管线（顺序即契约：投影 → 路径注解 → reasoning → 空 content 兼容） */
 export function createDefaultMessageTransformPipeline(): MessageTransformPipeline {
   return new MessageTransformPipeline()
     .register(imageProjectionStep)
+    .register(imagePathAnnotationStep)
     .register(reasoningPolicyStep)
     .register(emptyContentCompatStep);
 }

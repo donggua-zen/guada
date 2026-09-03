@@ -14,18 +14,26 @@
 
 // ==================== ContentBlock（内容块，判别联合） ====================
 
-/** 附件引用（物理文件在磁盘，前端仅需 url 访问；base64 由 adapter 在边界现转） */
+/**
+ * 附件引用（self-contained 契约）：上传响应、发送 payload、JSONL 块三端共用同一形状。
+ * 物理文件在磁盘，引用与元数据内嵌于事件；base64 由 adapter 在边界现转。
+ * mediaType 一律为真 MIME（归一入口 normalizeMediaType，见 common/utils/media-type.util）。
+ */
 export interface FileRef {
-  /** 附件存储标识（非文件路径） */
-  attachmentId: string;
   /** MIME 类型（image/png、text/plain 等） */
   mediaType: string;
   /** 字节数 */
   bytes: number;
   /** 显示名（去掉本地路径信息） */
   name?: string;
-  /** 相对存储路径（前端静态访问用） */
+  /** 存储锚点：相对存储路径（uploads/...）、data URL 或远程 URL；后端读盘转 base64、前端展示时绝对化 */
   url?: string;
+  /** 预览路径（图片缩略图，前端展示用） */
+  previewUrl?: string;
+  /** 扩展名（不带点，如 png；前端文件展示用） */
+  fileExtension?: string;
+  /** @deprecated 旧数据读取回退（旧 JSONL/迁移数据的附件标识）；新写入不再产出 */
+  attachmentId?: string;
 }
 
 /**

@@ -8,7 +8,6 @@ import {
   StreamStatusChangedEvent,
 } from "../../common/events/stream.events";
 import { ISessionContext } from "./session-context";
-import { MessageFile } from "../../common/persistence/types";
 import type { ContentBlock } from "../../common/types/conversation.types";
 import { EventBusService } from "../../common/events/event-bus.service";
 
@@ -133,7 +132,7 @@ export class ChatRunnerService {
         blocks?: ContentBlock[];
         /** 三层消息来源（P4b：队列投递显式写入；缺省按 kind 推导） */
         source?: import("../../common/types/conversation.types").MessageSource;
-        files?: MessageFile[];
+        files?: import("../../common/types/conversation.types").FileRef[];
         replaceTurnId?: string;
         knowledgeBaseIds?: string[];
         metadata?: Record<string, any>;

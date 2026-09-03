@@ -50,15 +50,18 @@
           </div>
         </div>
         <!-- 文件列表 -->
-        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(user?.files?.length ?? 0) > 0">
-          <FileItem v-for="file, index in user?.files" :key="file.id" :name="file.displayName"
-            :type="file.fileType" :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
-            :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
+        <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(userFiles?.length ?? 0) > 0">
+          <FileItem v-for="file, index in userFiles" :key="file.id || index" :name="file.name"
+            :type="file.type?.startsWith('image') ? 'image' : 'file'"
+            :ext="file.ext" :size="file.size"
+            :preview-url="toResourceUrl(file.previewUrl || file.url)"
+            :clickable="file.type?.startsWith('image') ?? false"
+            @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
         <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
           :time-full="userTime.full" :time-friendly="userTime.firendly"
-          @copy="emit('copy', user)" @generate="emit('generate', props.turn)" @edit="emit('edit', user)"
+          @copy="emit('copy', userView)" @generate="emit('generate', props.turn)" @edit="emit('edit', userView)"
           @delete="emit('delete', props.turn)" />
       </div>
     </div>
@@ -66,7 +69,7 @@
     <!-- ============================================ -->
     <!-- 事件类消息（role='event'：command/compaction 等），位置=消息顺序 -->
     <!-- ============================================ -->
-    <template v-for="evt in events" :key="evt.id">
+    <template v-for="evt in events" :key="evt.messageId">
       <EventCard class="mt-1" :event="evt" />
     </template>
 
@@ -238,7 +241,8 @@ import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Reg
 import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
-import { groupContentsForDisplay, type DisplayGroup, type DisplayItem } from '@/utils/messageUtils';
+import { toResourceUrl } from '../../utils/url';
+import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
@@ -269,21 +273,30 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   delete: [turn: Turn]
-  edit: [block: TurnContent | null]
-  copy: [block: TurnContent | null]
+  /** 用户消息以聚合视图传出（跨块文本+附件，带 id=messageId）；assistant 传块 */
+  edit: [block: TurnContent | ReturnType<typeof toUserMessageView> | null]
+  copy: [block: TurnContent | ReturnType<typeof toUserMessageView> | null]
   generate: [turn: Turn]
   regenerate: [turn: Turn]
 }>();
 
-// 二级结构（turn → block）：直接从 turn.blocks 按 role 拆分。
-// user 锚点块 + 事件块（command/compaction）单独抽离 + 其余块（assistant/tool）作为展示源。
-// user 锚点块：必须是人类真实输入（source.kind='user'）。
+// 三层结构（turn → messages → blocks）：从 turn.messages 按消息束拆分。
+// user 锚点消息束 + 事件消息束（command/compaction）单独抽离 + 其余消息束（assistant/tool）作为展示源。
+// user 锚点：必须是人类真实输入（source.kind='user'）的消息束。
 // 后端注入的 hidden user 消息（拦截器/图片/待办/压缩检查点）同 role 但非用户输入，须排除。
+// 引用收集派生：仅遍历 messages/blocks 数组结构，不复制块、不读块内容字段——流式期间块
+// content 变化不会触发本 computed 重算（text_delta 零额外开销）。
 const user = computed(
-  () => props.turn.blocks?.find((b) => b.role === 'user' && !isHiddenBlock(b)) ?? null,
+  () => props.turn.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null,
 );
-const events = computed(() => props.turn.blocks?.filter((b) => b.role === 'event') ?? []);
-const activeBlocks = computed(() => props.turn.blocks?.filter((b) => b.role !== 'user' && b.role !== 'event') ?? []);
+const events = computed(() => props.turn.messages?.filter((m) => m.role === 'event') ?? []);
+const activeBlocks = computed(() => {
+  const msgs = props.turn.messages?.filter(
+    (m) => m.role !== 'user' && m.role !== 'event',
+  ) ?? [];
+  // 引用收集（flatMap 不复制块），供 displayGroups/useFileChanges 等按块消费的派生层
+  return msgs.flatMap((m) => m.blocks);
+});
 
 // ============================================
 // 内部状态
@@ -444,8 +457,22 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
 };
 // ============================================
 const userContent = computed(() => {
-  return user.value?.content || '';
+  const bundle = user.value;
+  if (!bundle) return '';
+  // 跨块聚合文本（用户消息可能含多个 text 块 + image/file 块，文本块 content 拼接）
+  return bundle.blocks
+    .map((b) => b.content || '')
+    .filter((t) => t.length > 0)
+    .join('\n');
 });
+// 跨块聚合附件（所有 image/file 块的 files 并集，供文件列表渲染）
+const userFiles = computed(() => {
+  const bundle = user.value;
+  if (!bundle) return [];
+  return bundle.blocks.flatMap((b) => b.files ?? []);
+});
+// 用户消息视图（跨块聚合文本+附件，供复制/编辑等旧消费方按单对象访问）
+const userView = computed(() => toUserMessageView(user.value));
 
 // P5b：通知类消息（process_monitor/sub_agent）——只含 <system_reminder> 块，
 // 前端剥离标签后折叠极简显示（点击展开看全文），不混入用户消息气泡。
@@ -456,7 +483,7 @@ const isNotificationUser = computed(() => {
 });
 const notificationText = computed(() => {
   if (!isNotificationUser.value) return '';
-  return stripSystemReminder(user.value?.content ?? '');
+  return stripSystemReminder(userContent.value ?? '');
 });
 // 折叠按钮文案按来源区分：进程输出 / 子代理结果
 const notificationLabel = computed(() => {
@@ -600,12 +627,13 @@ const durationText = computed(() => {
 });
 
 const tokenUsage = computed(() => {
-  if (!activeContents.value || activeContents.value.length === 0) return null;
+  if (!props.turn.messages || props.turn.messages.length === 0) return null;
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
   let totalTokens = 0;
-  for (const content of activeContents.value) {
-    const usage = content?.metadata?.usage;
+  // usage 已在折叠器写入 assistant bundle.metadata（消息级，不再逐块求和）
+  for (const m of props.turn.messages) {
+    const usage = m.metadata?.usage;
     if (usage) {
       totalPromptTokens += usage.promptTokens || 0;
       totalCompletionTokens += usage.completionTokens || 0;
@@ -627,8 +655,11 @@ const formatTokenNumber = (num: number | null): string => {
 // 图片预览
 // ============================================
 const previewList = computed(() => {
-  const files = user.value?.files || [];
-  return files.map((f: any) => f.url || f.previewUrl);
+  const files = userFiles.value || [];
+  // 仅图片进入大图预览，绝对化后取原图 url（无缩略图路径时回退）
+  return files
+    .filter((f: any) => f.type?.startsWith("image"))
+    .map((f: any) => toResourceUrl(f.url || f.previewUrl));
 });
 
 const handleImageClick = (index: number) => {
