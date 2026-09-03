@@ -2,6 +2,29 @@ import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { t } from '@/locales'
 import type { InputMessageState } from '@/types/session'
+import { normalizeMediaType } from '@/utils/media-type'
+import { toUserMessageView } from '@/utils/messageUtils'
+
+/**
+ * 把前端附件对象（上传响应 FileRef / 投影 FileAttachment / ChatFile 混合形态）
+ * 统一映射为发送 payload 的 FileRef 契约对象（self-contained 元数据，不再降维成 id）。
+ * 无存储锚点（url）的对象不进入 payload。
+ */
+export function toPayloadFileRefs(files: any[]): any[] {
+    return (files ?? [])
+        .filter((f: any) => (f.mediaType || f.type) && f.url)
+        .map((f: any) => {
+            const ext = f.fileExtension || f.ext
+            return {
+                mediaType: normalizeMediaType(f.mediaType ?? f.type, ext),
+                bytes: f.bytes ?? f.size ?? 0,
+                name: f.name ?? f.displayName ?? f.fileName,
+                url: f.url,
+                ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
+                ...(ext ? { fileExtension: ext } : {}),
+            }
+        })
+}
 
 export function useMessageOperations(
     sessionStore: ReturnType<typeof useSessionStore>,
@@ -66,10 +89,9 @@ export function useMessageOperations(
         knowledgeBaseIds?: string[]
     ): Promise<{
         content: string;
-        fileIds: string[];
+        files: any[];
         replaceTurnId: string | null;
         knowledgeBaseIds?: string[];
-        updatedFiles: any[];
     }> {
         if (!currentSessionId.value) {
             throw new Error(t('chat.message.noActiveSession'))
@@ -89,7 +111,7 @@ export function useMessageOperations(
 
         const updatedFiles = [...files]
 
-        // 更新新上传的文件信息
+        // 更新新上传的文件信息（上传响应即 FileRef 形状，原样透传）
         uploadResults.forEach((response, index) => {
             const fileIndex = files.indexOf(filesWithContent[index])
             if (fileIndex !== -1) {
@@ -112,10 +134,11 @@ export function useMessageOperations(
             }
         })
 
-        const fileIds = [
-            ...uploadedFiles.map(f => f.id),
-            ...uploadResults.map((result) => result.id)
-        ]
+        // 发送 payload：FileRef 对象数组（self-contained 元数据，不再降维成 id）。
+        // 来源有二：上传响应（mediaType/bytes 原生 FileRef）与编辑重发的投影对象
+        // （type/size/ext），统一映射为 FileRef 契约；Electron 本地路径引用
+        // （无存储 url）不进入 payload，路径已拼进消息文本。
+        const payloadFiles = toPayloadFileRefs(updatedFiles)
 
         // Electron 本地路径文件：拼接路径到消息内容
         let finalContent = text
@@ -129,33 +152,35 @@ export function useMessageOperations(
 
         return {
             content: finalContent,
-            fileIds,
+            files: payloadFiles,
             replaceTurnId,
             knowledgeBaseIds,
-            updatedFiles,
         }
     }
 
     /**
      * 进入编辑模式
+     * 入参可能是用户消息束（bundle，块级内容分散）或旧块形态——统一经
+     * toUserMessageView 聚合为带 content/files 的视图再消费。
      */
     function enterEditMode(message: any, turnId: string) {
+        const view = toUserMessageView(message) ?? message
         let knowledgeBaseIds = []
-        const referencedKbs = message.metadata?.referencedKbs || []
+        const referencedKbs = view.metadata?.referencedKbs || []
         for (let i = 0; i < referencedKbs.length; i++) {
             knowledgeBaseIds.push(referencedKbs[i].id)
         }
 
         const inputMsg = {
-            content: message.content,
-            files: message.files || [],
+            content: view.content,
+            files: view.files || [],
             knowledgeBaseIds: knowledgeBaseIds,
             isWaiting: false
         }
 
         // turnId 由调用方经渲染链路直接传入(整轮 turn 携带),此处零反查。
         editMode.value = {
-            message: message,
+            message: view,
             turnId: turnId,
             inputMessage: inputMsg
         }

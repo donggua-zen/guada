@@ -33,6 +33,7 @@ import type {
   MessageSource,
   FileRef,
 } from '../types/conversation.types';
+import { normalizeMediaType, isImageMediaType } from '../utils/media-type.util';
 
 /**
  * 创建初始回放状态（纯扁平消息 surface——LLM 折叠态，零 turn 结构）。
@@ -307,14 +308,20 @@ export function foldEvents(
 
 // ─── 消息事件 → 三层 Message（按三事件分派）───
 
-/** MessageFile → FileRef（引用为主，前端仅需 url；base64 由 adapter 边界现转） */
+/**
+ * MessageFile → FileRef（旧事件/迁移数据读取路径）。
+ * 旧数据的 fileType 可能是非 MIME 语义值（'image'/'text'），经 normalizeMediaType
+ * 归一为真 MIME，修复历史图片被误判为 file 块（文本投影）的问题。
+ * 旧附件标识 fileId 仅作 url 缺失时的展示回退，不进入新写入。
+ */
 function toFileRef(f: MessageFile): FileRef {
+  const url = f.url ?? f.previewUrl;
   return {
-    attachmentId: f.fileId,
-    mediaType: f.fileType,
+    mediaType: normalizeMediaType(f.fileType, f.fileExtension),
     bytes: f.fileSize,
     name: f.displayName ?? f.fileName,
-    url: f.url ?? f.previewUrl,
+    url,
+    ...(url ? {} : { attachmentId: f.fileId }),
   };
 }
 
@@ -322,7 +329,7 @@ function toFileRef(f: MessageFile): FileRef {
 function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFile[]): void {
   for (const f of files ?? []) {
     const ref = toFileRef(f);
-    if (f.fileType?.toLowerCase().startsWith('image/')) {
+    if (isImageMediaType(ref.mediaType)) {
       blocks.push({ type: 'image', attachment: ref });
     } else {
       blocks.push({ type: 'file', attachment: ref });

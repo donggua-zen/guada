@@ -1,7 +1,11 @@
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 import type { Message, ContentBlock } from '../../common/types/conversation.types';
 import {
   TransformContext,
   imageProjectionStep,
+  imagePathAnnotationStep,
   reasoningPolicyStep,
   emptyContentCompatStep,
   isFullReasoningRelayModel,
@@ -51,13 +55,24 @@ const baseCtx: TransformContext = {
   thinkingMode: false,
 };
 
+// 桥接依赖 UPLOAD_ROOT_DIR（与运行时 Electron/standalone 注入同源），测试内指向临时目录
+let uploadRoot = '';
+beforeAll(async () => {
+  uploadRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pipeline-img-'));
+  process.env.UPLOAD_ROOT_DIR = uploadRoot;
+});
+afterAll(async () => {
+  delete process.env.UPLOAD_ROOT_DIR;
+  await fs.rm(uploadRoot, { recursive: true, force: true });
+});
+
 describe('image-projection step', () => {
   it('支持图片输入时原样透传', () => {
     const msgs = [makeMsg('user', [text('看图'), image('img1')])];
     expect(imageProjectionStep.apply(msgs, baseCtx)).toBe(msgs);
   });
 
-  it('不支持图片输入时 image 块 → 含文件路径的英文占位文本', () => {
+  it('不支持图片输入时 image 块 → 含桥接绝对路径的英文占位文本', () => {
     const msgs = [makeMsg('user', [text('看图'), image('img1')])];
     const out = imageProjectionStep.apply(msgs, {
       ...baseCtx,
@@ -70,21 +85,71 @@ describe('image-projection step', () => {
     expect(blocks[1].type).toBe('text');
     const placeholder = (blocks[1] as { text: string }).text;
     expect(placeholder).toContain('Image omitted');
-    expect(placeholder).toContain('Image file path: uploads/images/img1.png');
+    // 存储引用被请求时桥接为 UPLOAD_ROOT_DIR下的绝对路径，不再出现相对引用
+    expect(placeholder).toContain(
+      `Image file path: ${path.join(path.resolve(uploadRoot), 'images/img1.png')}`,
+    );
+    expect(placeholder).not.toContain('uploads/images/img1.png');
     expect(placeholder).not.toContain('image_id');
     // 原消息对象不被修改（副本变换）
     expect(msgs[0].content[1].type).toBe('image');
   });
 
-  it('占位文本含文件路径、不含 image_id', () => {
-    const msgs = [makeMsg('user', [image('img2')])];
+  it('data: 内联图无法桥接 → 占位文本明确告知无可用文件路径', () => {
+    const msgs = [
+      makeMsg('user', [
+        {
+          type: 'image',
+          attachment: { attachmentId: 'x', mediaType: 'image/png', bytes: 1, url: 'data:image/png;base64,QUJD' },
+        } as ContentBlock,
+      ]),
+    ];
     const out = imageProjectionStep.apply(msgs, {
       ...baseCtx,
       supportsImageInput: false,
     });
     const t = (out[0].content[0] as { text: string }).text;
-    expect(t).toContain('uploads/images/img2.png');
-    expect(t).not.toContain('image_id');
+    expect(t).toContain('No readable file path is available');
+  });
+});
+
+describe('image-path-annotation step', () => {
+  it('多模态模型：image 块后追加只读绝对路径注解文本块', () => {
+    const msgs = [makeMsg('user', [text('看图'), image('img1')])];
+    const out = imagePathAnnotationStep.apply(msgs, baseCtx);
+
+    const blocks = out[0].content;
+    expect(blocks).toHaveLength(3);
+    expect(blocks[1].type).toBe('image'); // image 块原样保留
+    expect(blocks[2].type).toBe('text');
+    const note = (blocks[2] as { text: string }).text;
+    expect(note).toContain('[Image attachment (read-only):');
+    expect(note).toContain(path.join(path.resolve(uploadRoot), 'images/img1.png'));
+    expect(note).toContain('image_recognize');
+  });
+
+  it('data: 内联图无物理路径 → 不追加注解', () => {
+    const msgs = [
+      makeMsg('user', [
+        {
+          type: 'image',
+          attachment: { attachmentId: 'x', mediaType: 'image/png', bytes: 1, url: 'data:image/png;base64,QUJD' },
+        } as ContentBlock,
+      ]),
+    ];
+    const out = imagePathAnnotationStep.apply(msgs, baseCtx);
+    expect(out).toBe(msgs);
+    expect(out[0].content).toHaveLength(1);
+  });
+
+  it('不支持图片输入的模型不做注解（路径由 image-projection 负责）', () => {
+    const msgs = [makeMsg('user', [image('img1')])];
+    expect(imagePathAnnotationStep.apply(msgs, { ...baseCtx, supportsImageInput: false })).toBe(msgs);
+  });
+
+  it('无图片的消息不受影响', () => {
+    const msgs = [makeMsg('user', [text('q')])];
+    expect(imagePathAnnotationStep.apply(msgs, baseCtx)).toBe(msgs);
   });
 });
 

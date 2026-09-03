@@ -15,7 +15,7 @@ import { useStorage } from "@vueuse/core";
 import { getClientId } from "@/utils/clientId";
 import { NetworkError, AuthError, ApiError } from "@/utils/errors";
 import { t } from "@/locales";
-import { ChatStreamService } from "./modules/ChatStreamService";
+import { ChatStreamService, type ChatStreamParams } from "./modules/ChatStreamService";
 import {
   WorkspaceWatcherService,
   type FileChangeEvent,
@@ -247,21 +247,7 @@ class ApiService {
 
   // ========== 流式聊天 ==========
   /** 触发后端流(合并后为 RPC,立即返回;流式事件经全局 SSE → StreamEventHub) */
-  async chat(params: {
-    sessionId: string;
-    regenerationMode?: string | null;
-    assistantMessageId?: string | null;
-    resumeData?: any;
-    userMessage?: {
-      id?: string;
-      content?: string;
-      files?: string[];
-      replaceTurnId?: string;
-      knowledgeBaseIds?: string[];
-      /** 非新建回合模式(resume)复用既有回合时,前端传入回合外壳 id */
-      turnId?: string;
-    };
-  }): Promise<void> {
+  async chat(params: ChatStreamParams): Promise<void> {
     return this.chatStreamService.chat(params);
   }
 

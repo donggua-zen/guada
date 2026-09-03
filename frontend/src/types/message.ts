@@ -18,14 +18,26 @@ export interface MessageState {
 }
 
 /**
- * 文件附件
+ * 文件附件（投影层产物，源自块 attachment FileRef）
+ * name/url/type/size 与 FileRef.name/url/mediaType/bytes 对应；
+ * ext/displayName/previewUrl 为展示便捷字段。
  */
 export interface FileAttachment {
+    /** 展示 key（新数据 = 存储 url；旧数据 = attachmentId） */
     id?: string
     name: string
+    /** 相对存储路径（uploads/...）或绝对 URL */
     url?: string
+    /** MIME 类型（FileRef.mediaType） */
     type?: string
+    /** 扩展名（不带点） */
+    ext?: string
+    /** 字节数 */
     size?: number
+    /** 展示用绝对化后的存储路径 */
+    absoluteUrl?: string
+    /** 预览路径（图片缩略图） */
+    previewUrl?: string
     file?: File
     [key: string]: any
 }
@@ -97,32 +109,53 @@ export interface TurnState {
 }
 
 /**
- * 回合内内容块（二级结构：turn → block，跳过 Message 容器级）。
- * 在 MessageContent（展示基类）基础上补 role/messageId：
- * - role：折叠器按事件源打标（user_message→'user'；assistant 块→'assistant'；tool-result 块→'tool'；compaction 占位→'event'）
- * - messageId：所属后端消息 id（编辑/审批/继续执行 API 锚点）
- * - blockIndex：消息内块序号（assistant 流式寻址 (messageId, index) 用；展示无关）
- * - source/kind：消息来源与逻辑归属（后端 Message.source / Message.kind 透传）
+ * 消息束：回合内一条后端消息（一次输入 / 一次 LLM 调用 / 一次注入）。
+ * 消息级字段（role/kind/source/metadata/usage）只挂在此处一次，不再逐块复制；
+ * 块级只保留块自身内容（展示/流式寻址经 bundle.blocks 内索引）。
+ * 与后端三层模型 Turn → Message → ContentBlock 对齐（前端以 bundle 承载 Message 层）。
  */
-export interface TurnContent extends MessageContent {
-    role: MessageRole
+export interface MessageBundle {
+    /** 后端消息 id（编辑/审批/继续执行/删除 API 锚点） */
     messageId: string
-    blockIndex?: number
+    /** 协议角色（user/assistant/tool/event），消息级单一真相 */
+    role: MessageRole
+    /** 逻辑归属（后端 Message.kind：'user' 真实用户 / 'model' 模型工作流注入） */
+    kind?: 'user' | 'model'
     /**
      * 消息来源（后端 Message.source）——判断"是不是人说的话"的单一真相。
      * kind='user' 才是人类真实输入；其余（plugin/model/tool/sub_agent/...）
      * 为注入或产出，不作为用户消息展示。
-     * 流式投影与历史加载两条路径都需补全，避免前端靠"取第一个 user 块"隐式规避。
      */
     source?: { kind: string; [key: string]: any }
-    /** 逻辑归属（后端 Message.kind：'user' 真实用户 / 'model' 模型工作流） */
+    /** 消息级元数据：usage/finishReason/referencedKbs/hidden/compactInfo 等 */
+    metadata: Record<string, any>
+    createdAt?: ISODateString
+    /** 块级内容（展示派生时引用收集，不复制） */
+    blocks: TurnContent[]
+    /** 流式/折叠期瞬态标记（不落库） */
+    state?: { isStreaming?: boolean; isThinking?: boolean }
+}
+
+/**
+ * 回合内内容块。
+ * role/messageId 为创建时一次性写入的不可变戳记（引用收集/展示过滤用，不参与流式更新）；
+ * 消息级可变元数据（usage/source/kind/hidden）一律读所属 MessageBundle，不落在块上。
+ */
+export interface TurnContent extends MessageContent {
+    /** 消息级戳记（折叠器创建块时从 bundle 写入一次，之后不变） */
+    role: MessageRole
+    messageId: string
+    blockIndex?: number
+    /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
+    source?: { kind: string; [key: string]: any }
+    /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
     kind?: 'user' | 'model'
 }
 
 /**
  * 回合外壳（直接对应后端 Turn：一次输入回合 = user + assistant/tool 消息）
- * 二级结构：contents 直接平铺该回合全部块（role 区分 user/assistant/tool/event），
- * 不再经 Message 容器——折叠器直接产出块，渲染直接消费块（消除组装→拆分）。
+ * 结构：turn → messages（MessageBundle[]）→ blocks（TurnContent[]）。
+ * 折叠器产出 bundle（消息级权威），渲染层按需从 bundle 引用收集块做展示派生。
  */
 export interface Turn {
     id: string
@@ -130,7 +163,8 @@ export interface Turn {
     kind: 'turn' | 'event'
     metadata: Record<string, any>
     visible: boolean
-    blocks: TurnContent[]
+    /** 消息束（取代旧平铺 blocks：一条后端消息 = 一个 bundle） */
+    messages: MessageBundle[]
     /** 回合瞬态视图态（历史加载的回合无此字段 = 非工作态） */
     state?: TurnState
 }

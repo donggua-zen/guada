@@ -15,7 +15,8 @@ import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 import { FileNamingService } from "../../common/services/file-naming.service";
-import { MessageFile } from "../../common/persistence/types";
+import { FileRef } from "../../common/types/conversation.types";
+import { normalizeMediaType } from "../../common/utils/media-type.util";
 
 @Injectable()
 export class FileService implements OnModuleInit {
@@ -124,7 +125,7 @@ export class FileService implements OnModuleInit {
       const fileInfo = this.extractFileInfo(file);
 
       // 3. 根据文件类型分别处理
-      let result: any;
+      let result: FileRef;
       if (this.IMAGE_EXTENSIONS.has(fileInfo.fileExt)) {
         result = await this.uploadImageFile(sessionId, file, fileInfo, userId);
       } else if (this.PDF_EXTENSIONS.has(fileInfo.fileExt)) {
@@ -133,15 +134,8 @@ export class FileService implements OnModuleInit {
         result = await this.uploadTextFile(sessionId, file, fileInfo, userId);
       }
 
-      // 4. 转换 URL 为绝对路径后返回
-      const transformedResult = {
-        ...result,
-        url: this.urlService.toResourceAbsoluteUrl(result.url),
-        previewUrl: result.previewUrl
-          ? this.urlService.toResourceAbsoluteUrl(result.previewUrl)
-          : null,
-      };
-      return transformedResult;
+      // 4. 返回 FileRef（url/previewUrl 保持相对存储路径，由前端展示时绝对化）
+      return result;
     } catch (error: any) {
       this.logger.error(`文件上传失败：${error.message}`);
       throw error;
@@ -242,7 +236,9 @@ export class FileService implements OnModuleInit {
 
   /**
    * 构建文件元数据（不上 DB，直接返回）。
-   * 上传接口返回完整元数据，前端发消息时直接携带。
+   * 响应为 FileRef 形状（self-contained 契约）：前端发消息时原样携带，
+   * 事件落盘时内嵌进 user/message 块的 attachment。url 为相对存储路径
+   * （uploads/...），由前端展示时绝对化；mediaType 为真 MIME。
    */
   private buildFileMeta(params: {
     fileName: string;
@@ -253,19 +249,14 @@ export class FileService implements OnModuleInit {
     url: string;
     previewUrl?: string | null;
     contentHash: string;
-  }): MessageFile & { id: string } {
-    const fileId = `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }): FileRef {
     return {
-      id: fileId,
-      fileId,
-      fileName: params.fileName,
-      displayName: params.displayName,
-      fileSize: params.fileSize,
-      fileType: params.fileType,
-      fileExtension: params.fileExtension,
+      mediaType: normalizeMediaType(params.fileType, params.fileExtension),
+      bytes: params.fileSize,
+      name: params.displayName,
       url: params.url,
       previewUrl: params.previewUrl ?? undefined,
-      contentHash: params.contentHash,
+      fileExtension: params.fileExtension,
     };
   }
 

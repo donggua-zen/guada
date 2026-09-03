@@ -10,10 +10,11 @@ import {
 import type {
   Message,
   ContentBlock,
+  FileRef,
 } from "../../common/types/conversation.types";
+import { normalizeMediaType } from "../../common/utils/media-type.util";
 import { RequestContext } from "../../common/context/request-context";
 import { ISessionContext } from "./session-context";
-import { MessageFile } from "../../common/persistence/types";
 import { SessionStreamEvent } from "./types/event-chunk.types";
 import { BlockAssembler } from "./block-assembler";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
@@ -283,7 +284,7 @@ export class AgentEngine {
     userMessage: {
       id?: string;
       content?: string;
-      files?: MessageFile[];
+      files?: FileRef[];
       replaceTurnId?: string;
       knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
@@ -394,15 +395,29 @@ export class AgentEngine {
       });
 
       // ── 4. 用户消息:user/message 入库 + 发布 user_message(与入库同位置) ──
+      // 前端按 FileRef 契约内嵌完整附件元数据（self-contained），此处仅防御性归一：
+      // mediaType 非法时由扩展名兜底；字符串元素为旧客户端残留，按相对路径占位并告警。
+      const userFileRefs: FileRef[] = (userMessage?.files || []).map(
+        (f: any): FileRef =>
+          typeof f === "string"
+            ? { mediaType: "application/octet-stream", bytes: 0, url: f }
+            : {
+                mediaType: normalizeMediaType(f.mediaType ?? f.fileType, f.fileExtension),
+                bytes: f.bytes ?? f.fileSize ?? 0,
+                name: f.name ?? f.displayName ?? f.fileName,
+                url: f.url ?? f.previewUrl,
+                previewUrl: f.previewUrl,
+                fileExtension: f.fileExtension,
+              },
+      );
+      if (userMessage?.files?.some((f: any) => typeof f === "string")) {
+        this.logger.warn(
+          `会话 ${sessionContext.sessionId} 收到旧格式 files（string[]），请升级客户端到 FileRef 契约`,
+        );
+      }
       const userMsgResult = await sessionContext.addUserMessage(
         userMessage?.content,
-        (userMessage?.files || []).map((f) => ({
-          attachmentId: f.fileId || f.url || "",
-          mediaType: f.fileType || "application/octet-stream",
-          bytes: f.fileSize || 0,
-          name: f.displayName ?? f.fileName,
-          url: f.url ?? f.previewUrl,
-        })),
+        userFileRefs,
         {
           replaceTurnId: userMessage?.replaceTurnId,
           knowledgeBaseIds: userMessage?.knowledgeBaseIds,
@@ -958,7 +973,6 @@ export class AgentEngine {
           ...res.images.map((img: any) => ({
             type: "image" as const,
             attachment: {
-              attachmentId: sessionContext.generateId(),
               mediaType: img.media_type || "image/png",
               bytes: 0,
               url: `data:${img.media_type};base64,${img.data}`,

@@ -1,10 +1,10 @@
 import type { ApiContext } from "./api-context";
-import type { UploadResponse } from "@/types/service";
+import type { UploadResponse, ResourceUploadResponse } from "@/types/service";
 
 export interface FileUploadApi {
-  uploadAvatar(uid: string, file: File, type?: "character" | "session"): Promise<UploadResponse>;
-  uploadUserAvatar(file: File): Promise<UploadResponse>;
-  uploadWallpaper(file: File): Promise<UploadResponse>;
+  uploadAvatar(uid: string, file: File, type?: "character" | "session"): Promise<ResourceUploadResponse>;
+  uploadUserAvatar(file: File): Promise<ResourceUploadResponse>;
+  uploadWallpaper(file: File): Promise<ResourceUploadResponse>;
   deleteWallpaper(): Promise<{ success: boolean }>;
   uploadFile(sessionId: string, file: File): Promise<UploadResponse>;
 }

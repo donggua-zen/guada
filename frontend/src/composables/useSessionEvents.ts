@@ -225,7 +225,7 @@ export function useSessionEvents() {
           regenerationMode: "overwrite",
           userMessage: {
             content: item.content,
-            files: item.files.map((f: any) => f.id),
+            files: item.files,
             knowledgeBaseIds: item.knowledgeBaseIds,
           },
         });

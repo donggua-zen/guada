@@ -9,6 +9,7 @@
 
 import { getClientId } from "@/utils/clientId";
 import { t } from "@/locales";
+import type { FileRef } from "@/types/stream/content-block.types";
 
 /**
  * 流式对话参数
@@ -24,7 +25,8 @@ export interface ChatStreamParams {
   userMessage?: {
     id?: string;
     content?: string;
-    files?: string[];
+    /** 附件元数据（FileRef self-contained 契约，与上传响应同形状） */
+    files?: FileRef[];
     replaceTurnId?: string;
     knowledgeBaseIds?: string[];
     /** 非新建回合模式(resume)复用既有回合时,前端传入回合外壳 id */

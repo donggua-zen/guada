@@ -75,12 +75,12 @@ export class ImageRecognitionPlugin extends PluginBase {
         toolkit.registerTool({
           name: "image_recognize",
           description:
-            "Recognize image content and return a detailed text description. Pass image_path for the image file (absolute path or path relative to the workspace).",
+            "Recognize image content and return a detailed text description. Pass image_path for the image file (absolute path, or a path relative to the session workspace).",
           inputSchema: z.object({
             image_path: z
               .string()
               .describe(
-                "Path to the image file. Can be an absolute path or a path relative to the working directory",
+                "Path to the image file. Can be an absolute path, or a path relative to the session workspace",
               ),
             prompt: z
               .string()
@@ -137,7 +137,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             image_path: z
               .string()
               .describe(
-                "Path to the image file. Can be an absolute path or a path relative to the working directory",
+                "Path to the image file. Can be an absolute path, or a path relative to the session workspace",
               ),
           }),
           execute: async (args, ctx) => {
@@ -237,7 +237,6 @@ export class ImageRecognitionPlugin extends PluginBase {
             {
               type: "image",
               attachment: {
-                attachmentId: "image_attach",
                 mediaType: mimeType,
                 bytes: 0,
                 url: `data:${mimeType};base64,${base64Image}`,

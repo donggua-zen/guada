@@ -19,7 +19,7 @@ import { CurrentUser } from "../auth/current-user.decorator";
 
 import { SessionService } from "./session.service";
 import { MessageRepository } from "../../common/database/message.repository";
-import { MessageFile } from "../../common/persistence/types";
+import { FileRef } from "../../common/types/conversation.types";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { ChatRunnerService } from "./chat-runner.service";
@@ -58,7 +58,7 @@ export class ChatController {
       userMessage?: {
         id?: string;
         content?: string;
-        files?: MessageFile[];
+        files?: FileRef[];
         replaceTurnId?: string;
         knowledgeBaseIds?: string[];
       };

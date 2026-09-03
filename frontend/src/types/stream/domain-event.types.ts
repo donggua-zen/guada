@@ -7,15 +7,30 @@
  */
 import type { ContentBlock } from "./content-block.types";
 
-/** 用户消息附件（MessageFile 前端镜像） */
+/**
+ * 用户消息附件（FileRef 前端镜像，self-contained 契约）。
+ * 新事件 blocks 内嵌完整元数据；files 平铺仅旧数据读取兼容。
+ */
 export interface DomainFile {
-  fileId: string;
-  fileName?: string;
-  displayName?: string;
-  fileSize?: number;
-  fileType?: string;
+  /** MIME 类型 */
+  mediaType: string;
+  /** 字节数 */
+  bytes: number;
+  name?: string;
+  /** 相对存储路径（uploads/...） */
   url?: string;
   previewUrl?: string;
+  fileExtension?: string;
+  /** @deprecated 旧数据标识 */
+  fileId?: string;
+  /** @deprecated 旧数据字段 */
+  fileName?: string;
+  /** @deprecated 旧数据字段 */
+  displayName?: string;
+  /** @deprecated 旧数据字段 */
+  fileSize?: number;
+  /** @deprecated 旧数据字段 */
+  fileType?: string;
 }
 
 /** 领域事件（判别联合；type 为后端 EventType，含 '/'） */
@@ -51,7 +66,17 @@ export type DomainEvent =
       data: {
         messageId: string;
         kind?: "user" | "model";
+        /** P6：事件格式统一为 blocks（content/files 平铺已废弃） */
+        blocks?: ContentBlock[];
+        /** live 广播透传（user_message 事件携带完整三层 userMessage，含 source/metadata） */
+        userMessage?: {
+          source?: { kind: string; [key: string]: unknown };
+          metadata?: Record<string, unknown>;
+        };
+        source?: { kind: string; [key: string]: unknown };
+        /** @deprecated 旧格式平铺字段（读取兼容） */
         content?: string;
+        /** @deprecated 旧格式平铺字段（读取兼容） */
         files?: DomainFile[];
         metadata?: Record<string, unknown>;
       };
@@ -62,6 +87,7 @@ export type DomainEvent =
       data: {
         messageId: string;
         content: ContentBlock[];
+        /** @deprecated 旧格式平铺字段（读取兼容） */
         files?: DomainFile[];
         metadata?: Record<string, unknown>;
       };

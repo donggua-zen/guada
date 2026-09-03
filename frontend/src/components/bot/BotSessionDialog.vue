@@ -81,10 +81,10 @@ const sessionTitle = computed(() => {
 const loading = ref(false)
 const turns = ref<Turn[]>([])
 
-// 从回合中取用户锚点块（role=user 且为人类输入，二级结构：turn → block）
+// 从回合中取用户锚点消息束（role=user 且为人类输入，结构：turn → messages → blocks）
 // 后端注入的 hidden user 消息同 role 但非用户输入，须排除
 const userOfTurn = (turn: Turn): any =>
-  turn.blocks?.find((b) => b.role === 'user' && !isHiddenBlock(b)) ?? null
+  turn.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null
 
 // 只保留含 user 锚点块的回合
 const visibleTurns = computed(() => turns.value.filter((t) => userOfTurn(t)))
@@ -158,13 +158,13 @@ const handleDeleteMessage = async (turn: Turn) => {
 }
 
 // 编辑消息
-const handleEditMessage = async (block: TurnContent | null) => {
+const handleEditMessage = async (block: any) => {
   ElMessage.info(t('bot.sessionDialog.editNotImplemented'))
   // TODO: 实现编辑功能
 }
 
 // 复制消息
-const handleCopyMessage = (block: TurnContent | null) => {
+const handleCopyMessage = (block: any) => {
   // TurnItem 组件内部已经处理了复制逻辑
   // 这里可以添加额外的处理
 }
