@@ -169,6 +169,7 @@ import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
 import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
+import { toResourceUrl } from '@/utils/url';
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
@@ -299,8 +300,27 @@ const showButtons = reactive({
   tokensButton: true,
 });
 
-// 图片预览 URL 字典（与 file 对象解耦）
-const previewUrls = ref(new Map<number, string>());
+// 图片预览 URL 字典（与 file 对象解耦；key = 文件 id，新选文件为 number、编辑回填为 string）
+const previewUrls = ref(new Map<number | string, string>());
+
+/**
+ * 把 props.files 中的两种附件形态统一为 ChatFile 视图对象（模板只认 ChatFile 字段）：
+ * - 新选/粘贴文件：createFileObject 产出的 ChatFile，原样透传
+ * - 编辑回填：消息束聚合出的 FileAttachment 投影 {id, name, url, type(MIME), ext, size, previewUrl}
+ *   → 补齐 displayName/fileType/fileExtension/fileSize 视图字段（fileType 归一为 'image'|'text' 枚举）
+ * 仅映射元数据，不复制 file/File 引用；发送链路（toPayloadFileRefs）本就双形态兼容，不受影响。
+ */
+function toChatFileView(file: any): any {
+  if (file.displayName !== undefined && file.fileType !== undefined) return file;
+  const isImage = !!file.type?.startsWith?.('image/');
+  return {
+    ...file,
+    displayName: file.displayName ?? file.name ?? file.fileName,
+    fileType: file.fileType ?? (isImage ? 'image' : 'text'),
+    fileExtension: file.fileExtension ?? file.ext,
+    fileSize: file.fileSize ?? file.size ?? 0,
+  };
+}
 
 const props = defineProps({
   value: { type: String, default: '' },
@@ -394,7 +414,8 @@ watch(() => props.value, (val) => {
 // 管理上传文件列表，自动处理图片预览 URL 的生命周期
 const uploadFiles = computed({
   get: () => {
-    const files = props.files;
+    // 统一规范化为 ChatFile 视图（编辑回填的 FileAttachment 投影在此补齐旧字段）
+    const files = props.files.map(toChatFileView);
 
     // 为每个图片文件确保有预览 URL（懒加载）
     files.forEach(file => {
@@ -404,8 +425,9 @@ const uploadFiles = computed({
           const previewUrl = URL.createObjectURL(file.file);
           previewUrls.value.set(file.id, previewUrl);
         } else if (file.previewUrl || file.url) {
-          // 已上传文件（如编辑消息回填）：直接用后端返回的资源 URL
-          previewUrls.value.set(file.id, file.previewUrl || file.url || '');
+          // 已上传文件（如编辑消息回填）：相对存储路径绝对化后预览
+          // （Electron 拼动态端口绝对 URL，Web 走 /uploads 同源代理，与 TurnItem 展示同路径）
+          previewUrls.value.set(file.id, toResourceUrl(file.previewUrl || file.url || ''));
         }
       }
     });
@@ -1075,7 +1097,7 @@ const closeFilePreview = () => {
   previewFileName.value = '';
 };
 
-const removeFile = (fileId: number) => {
+const removeFile = (fileId: number | string) => {
   const index = uploadFiles.value.findIndex(file => file.id === fileId);
   if (index !== -1) {
     uploadFiles.value.splice(index, 1); // setter 会自动清理预览 URL
