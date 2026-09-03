@@ -28,6 +28,10 @@ interface TurnLike {
       arguments?: string;
       content?: string;
       isError?: boolean;
+      /** 块级注入标记（'system' = 系统注入，渲染层跳过） */
+      origin?: "system";
+      /** KB 引用明细（kb-ref 块） */
+      kbRefs?: Array<{ id: string; name: string; description?: string }>;
       /** 块生命周期计时（后端 BlockAssembler 打点，随持久化落库） */
       timing?: { startedAt: number; finishedAt?: number };
       attachment?: Partial<FileRef>;
@@ -79,6 +83,14 @@ function blockToContent(
         ? block.timing.finishedAt - block.timing.startedAt
         : 0;
     content.thinkingDurationMs = Math.max(0, segmentMs);
+  }
+  // 块级注入标记透传（'system' = 系统注入，渲染层跳过不重建）
+  if (block.type === "text" && block.origin) {
+    content.origin = block.origin;
+  }
+  // KB 引用块：结构化明细挂载（chips 渲染数据源；正文不渲染序列化文本）
+  if (block.type === "kb-ref") {
+    content.kbRefs = block.kbRefs;
   }
   if (block.type === "image" || block.type === "file") {
     const att = block.attachment;

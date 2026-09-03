@@ -8,6 +8,8 @@
  * - wire 级协议映射留给各 adapter（L3），本层不出现任何协议词汇。
  *
  * 步骤顺序即注册顺序（run() 按 registration order 执行）：
+ *   0. kb-ref-projection  — KB 引用块 → 引用清单文本（结构化块不进协议层；
+ *                          存储原样保留，前端按 chips 渲染 kbRefs）
  *   1. image-projection   — 模型不支持图片输入时，image 块 → 含文件路径（请求时桥接的
  *                          绝对物理路径）的英文占位文本（纯信息占位，不内联 base64、
  *                          不暗示调用工具；模型可凭路径调用 image_recognize）
@@ -25,6 +27,7 @@ import {
   ContentBlock,
 } from '../../common/types/conversation.types';
 import { resolveModelVisiblePath } from '../llm-core/utils/attachment.util';
+import { kbRefsToText } from '../../common/utils/kb-ref.util';
 
 // ═══ 上下文 ═══
 
@@ -59,6 +62,28 @@ export interface TransformStep {
 }
 
 // ═══ 内置步骤（全部纯函数，导出供单测） ═══
+
+/**
+ * 步骤 0：KB 引用投影。
+ * kb-ref 块（结构化引用，随用户消息落库）→ 引用清单文本。所有模型统一投影
+ * （无协议原生支持该块类型，无能力参数）。存储层原样保留 kb-ref 块
+ * （前端按 chips 渲染 kbRefs），仅在读取视图投影——与 image-projection 同构。
+ */
+export const kbRefProjectionStep: TransformStep = {
+  name: 'kb-ref-projection',
+  apply(messages) {
+    return messages.map((msg) => {
+      if (!msg.content.some((b) => b.type === 'kb-ref')) return msg;
+      return {
+        ...msg,
+        content: msg.content.map((block): ContentBlock => {
+          if (block.type !== 'kb-ref') return block;
+          return { type: 'text', text: kbRefsToText(block.kbRefs) };
+        }),
+      };
+    });
+  },
+};
 
 /**
  * 步骤 1：图片投影。
@@ -235,9 +260,10 @@ export class MessageTransformPipeline {
   }
 }
 
-/** 组装默认管线（顺序即契约：投影 → 路径注解 → reasoning → 空 content 兼容） */
+/** 组装默认管线（顺序即契约：KB 引用投影 → 图片投影 → 路径注解 → reasoning → 空 content 兼容） */
 export function createDefaultMessageTransformPipeline(): MessageTransformPipeline {
   return new MessageTransformPipeline()
+    .register(kbRefProjectionStep)
     .register(imageProjectionStep)
     .register(imagePathAnnotationStep)
     .register(reasoningPolicyStep)

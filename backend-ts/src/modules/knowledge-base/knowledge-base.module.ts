@@ -34,7 +34,7 @@ import { DocumentPlugin } from "./plugins/document.plugin";
     PdfToImageService,
     PrismaService, VectorDbService, WorkspaceService,
   ],
-  exports: [EmbeddingService],
+  exports: [EmbeddingService, KnowledgeBaseService],
 })
 export class KnowledgeBaseModule implements OnModuleInit {
   private readonly logger = new Logger(KnowledgeBaseModule.name);

@@ -92,9 +92,10 @@ export interface IMessageStore {
     files?: FileRef[],
     options?: {
       replaceTurnId?: string;
-      knowledgeBaseIds?: string[];
       metadata?: Record<string, any>;
       blocks?: import('../types/conversation.types').ContentBlock[];
+      /** 注入块（system 提示 / KB 引用等）：追加在统一 blocks 尾部，落库为同一条消息 */
+      injectedBlocks?: import('../types/conversation.types').ContentBlock[];
       source?: import('../types/conversation.types').MessageSource;
     },
   ): Promise<{ messageId: string; userMessage: Message; revision: number }>;

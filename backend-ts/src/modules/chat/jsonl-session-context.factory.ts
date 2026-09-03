@@ -17,6 +17,7 @@ import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { TokenMeterService } from './token-meter.service';
 import { SessionStreamManager } from './session-stream.manager';
+import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 
 @Injectable()
 export class JsonlSessionContextFactory {
@@ -29,6 +30,7 @@ export class JsonlSessionContextFactory {
     private readonly workspaceService: WorkspaceService,
     private readonly tokenMeter: TokenMeterService,
     private readonly streamManager: SessionStreamManager,
+    private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {}
 
   async createFromSession(session: any): Promise<JsonlSessionContext> {
@@ -42,6 +44,7 @@ export class JsonlSessionContextFactory {
       this.workspaceService,
       this.tokenMeter,
       this.streamManager,
+      this.knowledgeBaseService,
     );
     await context.initialize();
     return context;

@@ -62,6 +62,10 @@ export interface MessageContent {
     state: MessageState
     isCurrent?: boolean
     files?: FileAttachment[]
+    /** 块级注入标记（与后端 TextBlock.origin 同构）：'system' = 系统注入，渲染层跳过 */
+    origin?: 'system'
+    /** KB 引用明细（kb-ref 块 → chips 渲染数据源；正文不渲染序列化文本） */
+    kbRefs?: Array<{ id: string; name: string; description?: string }>
 }
 
 /**

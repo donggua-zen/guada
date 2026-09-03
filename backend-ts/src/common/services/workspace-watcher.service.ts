@@ -33,6 +33,9 @@ interface WatchEntry {
   subscription: parcelWatcher.AsyncSubscription | null;
   /** .git 目录的独立订阅（外部 git 操作检测，见 subscribeGitEntry） */
   gitSubscription: parcelWatcher.AsyncSubscription | null;
+  /** 订阅在途标记：parcel subscribe 的 Promise resolve 前防重复订阅（scope 快速重入竞态） */
+  fileSubscribing: boolean;
+  gitSubscribing: boolean;
   /** 引用该目录的所有 sessionId，事件广播给这些会话 */
   sessionIds: Set<string>;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -335,6 +338,8 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       absolutePath,
       subscription: null,
       gitSubscription: null,
+      fileSubscribing: false,
+      gitSubscribing: false,
       sessionIds: new Set([sessionId]),
       idleTimer: null,
       pendingEvents: new Map(),
@@ -424,7 +429,8 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     const { file, git } = this.computeEntryScopes(entry);
 
     // 根 watcher（工作区文件事件）
-    if (file && !entry.subscription && !entry.ready) {
+    // 在途标记（fileSubscribing）防止 subscribe Promise resolve 前 scope 重入造成重复订阅
+    if (file && !entry.subscription && !entry.fileSubscribing) {
       this.subscribeRoot(entry);
     } else if (!file && entry.subscription) {
       const sub = entry.subscription;
@@ -438,7 +444,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     }
 
     // .git watcher（git 事件，独立订阅）
-    if (git && !entry.gitSubscription) {
+    if (git && !entry.gitSubscription && !entry.gitSubscribing) {
       this.subscribeGitEntry(entry);
     } else if (!git && entry.gitSubscription) {
       const sub = entry.gitSubscription;
@@ -453,6 +459,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
   /** 订阅工作区根目录（文件事件），激活期间有效 */
   private subscribeRoot(entry: WatchEntry): void {
+    entry.fileSubscribing = true;
     parcelWatcher
       .subscribe(
         entry.absolutePath,
@@ -471,6 +478,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         { ignore: IGNORE_GLOBS },
       )
       .then((subscription) => {
+        entry.fileSubscribing = false;
         // 订阅完成前 scope 可能已撤销 → 撤销后立刻退订
         if (!this.computeEntryScopes(entry).file) {
           subscription.unsubscribe().catch(() => undefined);
@@ -484,6 +492,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         );
       })
       .catch((error: unknown) => {
+        entry.fileSubscribing = false;
         this.logger.error(
           `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
         );
@@ -522,6 +531,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     const gitDir = this.resolveGitDir(entry.absolutePath);
     if (!gitDir) return;
 
+    entry.gitSubscribing = true;
     parcelWatcher
       .subscribe(
         gitDir,
@@ -545,6 +555,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         { ignore: GIT_IGNORE_GLOBS },
       )
       .then((subscription) => {
+        entry.gitSubscribing = false;
         // 订阅完成前 scope 可能已撤销 → 撤销后立刻退订
         if (!this.computeEntryScopes(entry).git) {
           subscription.unsubscribe().catch(() => undefined);
@@ -554,6 +565,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         this.logger.debug(`Started git watcher for ${gitDir}`);
       })
       .catch((error: unknown) => {
+        entry.gitSubscribing = false;
         this.logger.warn(
           `Failed to subscribe git watcher for ${gitDir}: ${String(error)}`,
         );
