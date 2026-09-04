@@ -168,9 +168,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   private gcTimer: NodeJS.Timeout | null = null;
 
-  /** 检测出的 shell：Windows 优先 Git Bash，否则 cmd.exe；Unix 为 sh/bash */
+  /** 检测出的 shell：Windows 统一 PowerShell（找不到回退 cmd.exe）；Unix 为 sh/bash */
   private shellInfo = {
-    kind: "sh" as "bash" | "cmd" | "sh",
+    kind: "sh" as "powershell" | "cmd" | "sh",
     path: "" as string,
   };
 
@@ -199,13 +199,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 启动时检测可用的 shell。
-   * Windows：优先查找 Git Bash，找不到则回退 cmd.exe。
+   * Windows：统一使用 PowerShell（沙盒与直连场景语法一致），找不到则回退 cmd.exe。
    * Unix：使用默认 sh。
    *
-   * Git Bash 查找顺序（全程纯 fs 探测，零子进程，避免任何控制台窗口闪现）：
-   * 1. 环境变量 GIT_BASH（用户手动指定）
-   * 2. PATH 环境变量逐项解析（替代 `where bash`，排除 WSL 的 System32\bash.exe）
-   * 3. 常见安装路径（C:\Program Files\Git 等）
+   * PowerShell 查找顺序（全程纯 fs 探测，零子进程，避免任何控制台窗口闪现）：
+   * 1. 环境变量 POWERSHELL（用户手动指定）
+   * 2. %SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe（Windows 自带）
+   * 3. PATH 环境变量逐项解析
    */
   private detectShell(): void {
     if (process.platform !== "win32") {
@@ -215,54 +215,52 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 1. 环境变量
-    if (process.env.GIT_BASH && fsSync.existsSync(process.env.GIT_BASH)) {
-      this.shellInfo = { kind: "bash", path: process.env.GIT_BASH };
+    if (
+      process.env.POWERSHELL &&
+      fsSync.existsSync(process.env.POWERSHELL)
+    ) {
+      this.shellInfo = { kind: "powershell", path: process.env.POWERSHELL };
       this.logger.log(
-        `Shell detected: bash (GIT_BASH env) at ${process.env.GIT_BASH}`,
+        `Shell detected: powershell (POWERSHELL env) at ${process.env.POWERSHELL}`,
       );
       return;
     }
 
-    // 2. PATH 逐项解析 — 排除 WSL 的 System32\bash.exe
-    const pathBash = this.findBashInPath();
-    if (pathBash && !pathBash.toLowerCase().includes("\\system32\\")) {
-      this.shellInfo = { kind: "bash", path: pathBash };
-      this.logger.log(`Shell detected: bash (PATH) at ${pathBash}`);
+    // 2. Windows 自带 Windows PowerShell
+    const systemPs = path.join(
+      process.env["SystemRoot"] || "C:\\Windows",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    );
+    if (fsSync.existsSync(systemPs)) {
+      this.shellInfo = { kind: "powershell", path: systemPs };
+      this.logger.log(`Shell detected: powershell (system) at ${systemPs}`);
       return;
     }
 
-    // 3. 常见安装路径（兜底）
-    const fallbacks = [
-      path.join(
-        process.env["ProgramFiles"] || "C:\\Program Files",
-        "Git",
-        "bin",
-        "bash.exe",
-      ),
-      path.join(
-        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
-        "Git",
-        "bin",
-        "bash.exe",
-      ),
-    ];
-    const found = fallbacks.find((c) => fsSync.existsSync(c));
-    if (found) {
-      this.shellInfo = { kind: "bash", path: found };
-      this.logger.log(`Shell detected: bash (fallback) at ${found}`);
+    // 3. PATH 逐项解析
+    const pathPs = this.findExecutableInPath("powershell.exe");
+    if (pathPs) {
+      this.shellInfo = { kind: "powershell", path: pathPs };
+      this.logger.log(`Shell detected: powershell (PATH) at ${pathPs}`);
       return;
     }
 
     this.shellInfo = { kind: "cmd", path: "" };
-    this.logger.log("Shell detected: cmd.exe (bash not found)");
+    this.logger.log("Shell detected: cmd.exe (powershell not found)");
   }
 
-  /** 解析 PATH 环境变量查找 bash.exe（纯 fs 检查，不启动子进程） */
-  private findBashInPath(): string | null {
+  /** 解析 PATH 环境变量查找指定可执行文件（纯 fs 检查，不启动子进程） */
+  private findExecutableInPath(name: string): string | null {
     const pathEnv = process.env.PATH || "";
     for (const dir of pathEnv.split(";")) {
       if (!dir) continue;
-      const candidate = path.join(dir.trim().replace(/^"|"$/g, ""), "bash.exe");
+      const candidate = path.join(
+        dir.trim().replace(/^"|"$/g, ""),
+        name,
+      );
       try {
         if (fsSync.existsSync(candidate)) return candidate;
       } catch {
@@ -275,8 +273,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /** 返回检测到的 shell 的人类可读描述（供插件提示 AI） */
   getShellInfo(): string {
     switch (this.shellInfo.kind) {
-      case "bash":
-        return `Git Bash (${this.shellInfo.path})`;
+      case "powershell":
+        return `Windows PowerShell (${this.shellInfo.path})`;
       case "cmd":
         return "cmd.exe";
       default:
@@ -284,8 +282,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 当前 shell 的 kind：bash | cmd | sh */
-  getShellKind(): "bash" | "cmd" | "sh" {
+  /** 当前 shell 的 kind：powershell | cmd | sh */
+  getShellKind(): "powershell" | "cmd" | "sh" {
     return this.shellInfo.kind;
   }
 
@@ -805,7 +803,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
-   * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先，否则 cmd.exe），
+   * 沙盒启用时命令由 sandbox.exe 内部固定 shell（Windows PowerShell）执行；
+   * 无 sandbox 时，Windows 使用启动时检测的 shell（PowerShell 优先，否则 cmd.exe），
    * Unix 使用默认 shell。
    * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
    */
@@ -831,13 +830,18 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // Windows 优先使用 Git Bash（支持多行命令），否则 cmd.exe；Unix 使用默认 shell
-    if (this.shellInfo.kind === "bash" && this.shellInfo.path) {
-      return spawn(this.shellInfo.path, ["-c", command], {
-        cwd,
-        env: { ...process.env, PYTHONUNBUFFERED: "1" },
-        windowsHide: true,
-      });
+    // Windows 统一使用 PowerShell（支持多行命令，与沙盒内 shell 语法一致），
+    // 否则 cmd.exe 兜底；Unix 使用默认 shell
+    if (this.shellInfo.kind === "powershell" && this.shellInfo.path) {
+      return spawn(
+        this.shellInfo.path,
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+        {
+          cwd,
+          env: { ...process.env, PYTHONUNBUFFERED: "1" },
+          windowsHide: true,
+        },
+      );
     }
 
     return spawn(command, [], {
