@@ -458,6 +458,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       metadata?: Record<string, any>;
       /** 原生内容块（S2：结构化入站消息，存在时优先于 content/files 构造） */
       blocks?: ContentBlock[];
+      /**
+       * 外部命令注入块（TagParserPipeline 解析产物，origin='system'）：
+       * 已由管线冻结成形，原样追加在内部注入块之后（background first, material last）
+       */
+      injectedBlocks?: ContentBlock[];
       /** 显式消息来源（P4b：队列投递写入；缺省折叠时按 kind 推导） */
       source?: import('../../common/types/conversation.types').MessageSource;
     },
@@ -471,7 +476,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       sandboxMode: this.sandboxMode,
     };
 
-    // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）
+    // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）。
+    // 顺序即 DSH 注入瀑布语义：背景在前（模式叙事 → KB 引用），材料在后（命令解析产物
+    // ——用户要求做的事的上下文最贴近模型作答位置）
     const injectedBlocks: ContentBlock[] = [];
     if (modeNarration) {
       injectedBlocks.push({
@@ -489,6 +496,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       if (kbRefs.length > 0) {
         injectedBlocks.push({ type: 'kb-ref', kbRefs });
       }
+    }
+    if (options?.injectedBlocks?.length) {
+      injectedBlocks.push(...options.injectedBlocks);
     }
 
     const { messageId, userMessage, revision } =

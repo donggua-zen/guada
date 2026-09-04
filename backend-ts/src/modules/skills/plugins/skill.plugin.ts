@@ -38,25 +38,52 @@ export class SkillPlugin extends PluginBase {
           label: s.manifest?.name || s.id,
         }));
       },
-      parse: (attrs) => {
+      parse: async (attrs, ctx) => {
         const name = attrs.name || "unknown";
 
         const allSkills = this.orchestrator.listSkills(true);
         const skill = allSkills.find(
           (s) => (s.manifest?.name || s.id) === name,
         );
-        if (skill) {
-          const skillName = skill.manifest?.name || skill.id || name;
-          const desc = skill.manifest?.description || "";
-          const replacement = `\`skill:${skillName}\``;
-          if (desc) {
-            return {
-              replacement,
-              appendix: `---skill:${skillName}---\nndescription:${desc}`,
-            };
-          }
-        }
-        return undefined;
+        if (!skill) return undefined;
+
+        const skillName = skill.manifest?.name || skill.id || name;
+        const desc = skill.manifest?.description || "";
+        const replacement = `\`skill:${skillName}\``;
+
+        // 智能注入：唯一技能且全文不超阈值 → 内联完整指令（省一次 skill_learn 往返）；
+        // 多技能或超限 → 轻量提示（名字 + 描述 + 引导 skill_learn 懒加载），
+        // 避免多个大技能把上下文撑爆。产物冻结为注入块，历史不再随插件状态变化。
+        const SKILL_INLINE_LIMIT = 6000;
+        const learned = await this.orchestrator
+          .skillLearn(skill.id)
+          .catch(() => null);
+        const content = learned?.content ?? "";
+        const inlineFull =
+          (ctx?.commandCount ?? 1) === 1 &&
+          content.length > 0 &&
+          content.length <= SKILL_INLINE_LIMIT;
+
+        const appendix = inlineFull
+          ? [
+              `The user invoked skill "${skillName}". Follow its instructions:`,
+              `<skill_content name="${skillName}">`,
+              "<skill_resources>",
+              `Base directory for this skill: ${learned?.path ?? skill.baseDir}. Load referenced resources only as needed.`,
+              "</skill_resources>",
+              "",
+              "<skill_instructions>",
+              content,
+              "</skill_instructions>",
+              "</skill_content>",
+            ].join("\n")
+          : [
+              `---skill:${skillName}---`,
+              `description:${desc}`,
+              `(The user invoked this skill. Use the skill_learn tool with name "${skillName}" to load the full instructions before acting.)`,
+            ].join("\n");
+
+        return { replacement, appendix };
       },
     });
 

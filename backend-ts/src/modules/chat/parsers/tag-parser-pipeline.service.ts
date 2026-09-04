@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { CommandProviderRegistry } from "../../commands/command-provider-registry.service";
 import { ParserResult, CommandContext } from "../../commands/interfaces/command-provider.interface";
+import { ContentBlock } from "../../../common/types/conversation.types";
 
 /** 单个提取的标签 */
 export interface ExtractedTag {
@@ -16,21 +17,24 @@ export interface ExtractedTag {
 
 /** 解析结果（最终产出） */
 export interface PipelineResult {
-  /** 原始文本（不变） */
+  /** 原始文本（不变；正文永不改写，标记保留供前端徽章渲染与历史稳定） */
   originalText: string;
-  /** 最终文本（所有替换 + 所有 appendix 拼接） */
-  content: string;
+  /** 解析产物注入块（origin='system' 文本块，随消息落库；LLM 可见、前端不渲染） */
+  injectionBlocks: ContentBlock[];
 }
 
 /**
  * 标签解析器管道
  *
- * 从原始文本中提取 [/type:name attr="val"] 标签，从 CommandProviderRegistry
- * 查找对应的命令提供者的 parse 方法进行解析，生成替换后的完整文本。
+ * 从原始文本中提取 [/type:name attr="val"] 标签，按 type 派发给命令提供者的
+ * parse 方法，把解析产物冻结为消息伴随注入块（对齐 DSH skill-invocation：
+ * 用户正文原样保留，技能/代理内容以独立注入上下文跟随，写入时一次成形、
+ * 历史不再依赖插件存活）。
  *
  * 使用方式：
- *   由 ChatController 注入并调用 parse("请使用[/skill:coder description="..."]技能")
- *   // result.content = "请使用[技能: coder]技能...\n---coder 技能说明---"
+ *   由 ChatController 注入并调用 parse("请使用[/skill:coder label=\"coder\"]技能")
+ *   // result.originalText === result 原文（含标记）
+ *   // result.injectionBlocks = [{ type:'text', text:'<skill_content>…', origin:'system' }]
  */
 @Injectable()
 export class TagParserPipeline {
@@ -42,78 +46,63 @@ export class TagParserPipeline {
    * 解析完整文本：
    * 1. 提取所有 [/type:name ...] 标签
    * 2. 按 type 派发给对应命令提供者的 parse 方法
-   * 3. 相同标签多次出现：替换全部，appendix 只附加一次
-   * 4. 解析返回 undefined：原样保留，不做替换
+   * 3. 相同标签多次出现：只解析一次，注入文案只生成一份
+   * 4. 解析返回 undefined / 提供者未注册 / 抛错：该标记无注入文案，正文原样保留
    *
    * @param text 原始文本（含标签）
-   * @returns 解析结果（原始文本 + 最终文本）
+   * @returns 原始文本（不变）+ 注入块（所有标记的注入文案合并为单个 system 文本块）
    */
   async parse(text: string, ctx?: CommandContext): Promise<PipelineResult> {
     const tags = this.extractTags(text);
     if (tags.length === 0) {
-      return { originalText: text, content: text };
+      return { originalText: text, injectionBlocks: [] };
     }
 
+    // 标记总数透传给 parse 上下文（供 provider 判断单/多命令的注入策略）
+    const enrichedCtx: CommandContext = { ...ctx, commandCount: tags.length };
+
     // 按 raw 去重，相同标签只解析一次
-    const seen = new Map<string, { replacement: string; appendix?: string }>();
+    const seen = new Map<string, string>();
 
     for (const tag of tags) {
       if (seen.has(tag.raw)) continue;
 
       const parseFn = this.commandRegistry.getParser(tag.type);
       if (!parseFn) {
-        // 未注册的命令提供者：保留原始文本不变
+        // 未注册的命令提供者：无注入文案，正文原样保留
         this.logger.warn(`未注册的命令提供者: [${tag.type}]，保留原始文本`);
-        seen.set(tag.raw, { replacement: tag.raw });
         continue;
       }
 
       let result: ParserResult | undefined;
       try {
-        result = await parseFn(tag.attrs, ctx);
+        result = await parseFn(tag.attrs, enrichedCtx);
       } catch (error) {
         this.logger.error(`标签解析失败: [${tag.type}] ${tag.raw}`, error);
-        seen.set(tag.raw, { replacement: tag.raw });
         continue;
       }
 
-      if (result === undefined) {
-        // 解析器返回 undefined：不支持解析，原样保留
-        seen.set(tag.raw, { replacement: tag.raw });
-        continue;
+      if (result?.appendix) {
+        seen.set(tag.raw, result.appendix);
       }
+    }
 
-      seen.set(tag.raw, {
-        replacement: result.replacement,
-        appendix: result.appendix,
+    // 所有注入文案合并为单个 system 文本块（消息尾部单块追加，KV 前缀零损失）
+    const injectionBlocks: ContentBlock[] = [];
+    const appendixTexts = [...seen.values()];
+    if (appendixTexts.length > 0) {
+      const mergedText = appendixTexts.join("\n\n");
+      injectionBlocks.push({
+        type: "text",
+        text: mergedText,
+        origin: "system",
       });
-    }
-
-    // 执行替换（使用 replaceAll 替换全部匹配项）
-    let processedText = text;
-    const appendixes: string[] = [];
-
-    for (const [raw, { replacement, appendix }] of seen) {
-      // 全局替换所有相同的标签
-      processedText = processedText.replaceAll(raw, replacement);
-      if (appendix) {
-        appendixes.push(appendix);
-      }
-    }
-
-    // 拼接附录
-    let finalContent = processedText;
-    if (appendixes.length > 0) {
-      finalContent += "\n" + appendixes.join("\n");
-    }
-
-    if (finalContent !== text) {
       this.logger.debug(
-        `标签解析完成: ${tags.length} 个标签(去重${seen.size})，原始 ${text.length} 字符 → 最终 ${finalContent.length} 字符`,
+        `标签解析完成: ${tags.length} 个标签(去重${seen.size})，注入文案 ${mergedText.length} 字符`,
       );
     }
 
-    return { originalText: text, content: finalContent };
+    return { originalText: text, injectionBlocks };
   }
 
   /**

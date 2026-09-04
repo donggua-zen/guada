@@ -449,4 +449,37 @@ describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
     expect(opts.injectedBlocks).toBeUndefined();
     expect(opts.metadata.sandboxMode).toBe('read-only');
   });
+
+  it('外部命令注入块（TagParserPipeline 产物）追加在内部注入块之后（background first, material last）', async () => {
+    const { ctx, messageStore } = createContext({
+      knowledgeBaseService: {
+        findByIds: jest.fn(async (ids: string[]) =>
+          ids.map((id) => ({ id, name: `KB-${id}` })),
+        ),
+      },
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 模拟 sandbox 切换叙事 + kb-ref + 外部命令注入块同时存在
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sandboxMode: 'read-only' } }),
+    ]);
+    await ctx.addUserMessage('用技能查资料', [], {
+      knowledgeBaseIds: ['kb1'],
+      injectedBlocks: [
+        { type: 'text', text: '<skill_content name="coder">…</skill_content>', origin: 'system' },
+      ],
+    });
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toHaveLength(3);
+    // 顺序：modeNarration（背景）→ kb-ref（背景）→ 命令注入块（材料，最贴近作答位置）
+    expect(opts.injectedBlocks[0].text).toContain('<system_reminder>');
+    expect(opts.injectedBlocks[1]).toMatchObject({ type: 'kb-ref' });
+    expect(opts.injectedBlocks[2]).toMatchObject({
+      type: 'text',
+      origin: 'system',
+      text: '<skill_content name="coder">…</skill_content>',
+    });
+  });
 });

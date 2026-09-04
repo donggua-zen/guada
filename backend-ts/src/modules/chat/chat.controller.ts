@@ -75,22 +75,22 @@ export class ChatController {
       userMessage,
     } = body;
 
-    // 构建 source 对象（包含客户端 ID 和标签解析结果）
+    // 构建 source 对象（包含客户端 ID 和命令标记解析产物）
     const source: Record<string, any> = { clientId: clientId || null };
 
-    // 如果需要解析标签，对用户消息内容进行解析
+    // 解析命令标记：正文永不改写，解析产物以注入块随消息落库（写入时冻结）
     if (userMessage?.content) {
       try {
         const parsed = await this.tagParserPipeline.parse(userMessage.content, {
           sessionId,
           userId: user.id,
         });
-        if (parsed.content !== parsed.originalText) {
-          source.parseResult = { content: parsed.content };
+        if (parsed.injectionBlocks.length > 0) {
+          source.injectedBlocks = parsed.injectionBlocks;
         }
       } catch (error: any) {
         this.logger.warn(
-          `标签解析失败，使用原始内容: ${error?.message || error}`,
+          `命令标记解析失败，正文原样保留: ${error?.message || error}`,
         );
       }
     }
