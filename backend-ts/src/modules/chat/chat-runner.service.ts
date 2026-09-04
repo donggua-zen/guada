@@ -24,7 +24,7 @@ export interface StreamCallbacks {
  * 队列消息来源（P4a：与 Message.source.kind 同一词汇；kind 为合并分组键）
  *
  * 约定：投递方必须用 kind 而非 type 标记来源，与三层消息的 MessageSource 对齐；
- * 附加业务字段（parseResult 等）经索引签名保留。
+ * 附加业务字段经索引签名保留。
  */
 export type QueueSource =
   | { kind: "sub_agent"; subSessionId?: string; agentName?: string; [key: string]: any }
@@ -130,6 +130,8 @@ export class ChatRunnerService {
         content?: string;
         /** 原生内容块（S2：结构化入站消息，存在时优先于 content 构造） */
         blocks?: ContentBlock[];
+        /** 命令标记解析产物注入块（TagParserPipeline 产出，origin='system'，随消息落库） */
+        injectedBlocks?: ContentBlock[];
         /** 三层消息来源（P4b：队列投递显式写入；缺省按 kind 推导） */
         source?: import("../../common/types/conversation.types").MessageSource;
         files?: import("../../common/types/conversation.types").FileRef[];
@@ -159,6 +161,10 @@ export class ChatRunnerService {
     const clientId = source?.clientId as string | undefined;
     if (userMessage) {
       userMessage.metadata = { ...userMessage?.metadata, ...source };
+      // 命令标记解析产物注入块：显式传递通道（不藏在 metadata），由 agent-engine 透传给 addUserMessage 落库
+      if (source?.injectedBlocks?.length) {
+        userMessage.injectedBlocks = source.injectedBlocks;
+      }
     }
     // 获取会话：优先使用预加载的会话（如 Bot 场景已 enrich），否则从 DB 查询
     const session =
@@ -446,13 +452,9 @@ export class ChatRunnerService {
     );
 
     // 合并 source：其他字段保留第一条（P5：systemPayload 已移除，业务数据统一在 blocks）
-    // 合并 parseResult：取最后一个（最新）有 parseResult 的 source
-    const lastParseResult = [...items]
-      .reverse()
-      .find((item) => item.source?.parseResult)?.source?.parseResult;
+    // 队列消息由后端构造、不含命令标记，无注入块；parseResult 通道已废除
     const mergedSource = {
       ...firstItem.source,
-      parseResult: lastParseResult || undefined,
       queueItemCount: items.length,
       queueItemIds: items.map((item) => item.id),
       queuedAt: firstItem.createdAt.toISOString(),

@@ -3,13 +3,18 @@ export interface CommandContext {
   sessionId?: string;
   characterId?: string | null;
   userId?: string;
+  /** 本次消息中提取到的标记总数（TagParserPipeline 透传，供 parse 判断单/多命令注入策略） */
+  commandCount?: number;
 }
 
 /** 解析器单次产出 */
 export interface ParserResult {
-  /** 原地替换文本（针对单个标签） */
+  /** 原地替换文本（针对单个标签）。当前管线正文不改写，仅作语义占位 */
   replacement: string;
-  /** 可选附录（追加到末尾，多个标签的 appendix 会拼接） */
+  /**
+   * 可选附录：解析产物的注入文案（如技能完整指令或轻量提示）。
+   * 由管线冻结为 origin='system' 注入块随消息落库，不再拼接到正文。
+   */
   appendix?: string;
 }
 

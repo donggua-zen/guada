@@ -423,6 +423,9 @@ export class AgentEngine {
           knowledgeBaseIds: userMessage?.knowledgeBaseIds,
           metadata: userMessage?.metadata,
           ...(userMessage?.blocks ? { blocks: userMessage.blocks } : {}),
+          ...(userMessage?.injectedBlocks
+            ? { injectedBlocks: userMessage.injectedBlocks }
+            : {}),
           ...(userMessage?.source ? { source: userMessage.source } : {}),
         },
       );
