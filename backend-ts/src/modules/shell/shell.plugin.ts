@@ -51,13 +51,13 @@ export class ShellPlugin extends PluginBase {
     super();
   }
 
-  manifest = {
-    id: "shell",
-    name: "%shell.name%",
-    description: "%shell.description%",
-    version: "1.3.0",
-    category: "core" as const,
-  };
+    manifest = {
+      id: "shell",
+      name: "%shell.name%",
+      description: "%shell.description%",
+      version: "1.4.0",
+      category: "core" as const,
+    };
 
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
@@ -72,24 +72,30 @@ export class ShellPlugin extends PluginBase {
     // ── execute 工具 ──
     const shellKind = this.processManager.getShellKind();
     const isCmd = shellKind === "cmd";
+    const isPowerShell = shellKind === "powershell";
     const shellDesc = this.processManager.getShellInfo();
     const cmdWarning = isCmd
       ? `\n- WARNING: cmd.exe only executes the first line of a multi-line command and silently drops the rest. For multi-line or long commands, write them to a script file (.bat) first, then execute the script`
       : "";
+    const psWarning = isPowerShell
+      ? `\n- Use PowerShell syntax: separate statements with \`;\` (\`&&\` is not supported in Windows PowerShell 5.1); bash-only syntax (\`export\`, \`source\`, heredocs, \`ls -la\`) will not work. For complex logic, write a .ps1 script file and run it: \`powershell -ExecutionPolicy Bypass -File script.ps1\``
+      : "";
     shellKit.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
-- **Current Shell**: ${shellDesc}
+- **Current Shell**: ${shellDesc}${psWarning}${cmdWarning}
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- processId is typically the shell process ID, not the command's own process ID${cmdWarning}
+- processId is typically the shell process ID, not the command's own process ID
 - **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.`,
       inputSchema: z.object({
         command: z
           .string()
           .describe(
-            "System command to execute, e.g. ls -la, echo hello, node script.js",
+            isPowerShell
+              ? "PowerShell command to execute, e.g. Get-ChildItem, $env:OS, node script.js"
+              : "System command to execute, e.g. ls -la, echo hello, node script.js",
           ),
         encoding: z
           .string()
@@ -179,10 +185,11 @@ export class ShellPlugin extends PluginBase {
           `Running command: ${command}, working directory: ${cwd}, background: ${background}${sandbox?.enabled ? ", sandbox: enabled" : ""}`,
         );
 
+        const sandboxShell = process.platform === "win32" ? "Windows PowerShell" : "sh";
         const sandboxNote = sandbox?.enabled
           ? sandbox.readOnly
-            ? "Read-only mode: sandbox read-only enabled, all writes blocked"
-            : "Sandbox mode enabled, read-only outside workspace"
+            ? `Read-only mode: sandbox read-only enabled, all writes blocked (commands run in ${sandboxShell})`
+            : `Sandbox mode enabled, read-only outside workspace (commands run in ${sandboxShell})`
           : null;
 
         const execResult = await this.processManager.execute(
