@@ -69,12 +69,12 @@
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
                 <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
                   :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
-                  :aside-width="asideWidth" :aside-bleed="asideBleed" @container-resize="onChatContainerResize"
+                  :aside-width="asideWidth" @container-resize="onChatContainerResize"
                   @switch-agent="switchTab"
                   @save-settings="handleSaveSessionSettings"
                   @select-character="handleSelectCharacter">
-                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧），
-                       不遮对话内容；宽度不足时由 asideWidth=0 自动隐藏 -->
+                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧），可见即实占空间
+                       （避让位列恒占位，消息列在剩余空间内居中）；容器放不下面板+消息列时自动隐藏 -->
                   <template #aside>
                     <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
                       @collapse="overviewVisible = false" />
@@ -170,23 +170,17 @@ const GitCommitDialog = defineAsyncComponent(() => import("./workspace/GitCommit
 const overviewVisible = useStorage('workspaceOverviewVisible', true);
 
 /**
- * 概览三态决策（JS 判断）：
- *   C = 内容宽（决策容器宽 - 两侧 padding 40）；S = 单侧留白 = (C - 消息实际宽)/2
- *   ASIDE_TOTAL = 概览 280 + gap 8 = 288
- * - 单侧能放下（S ≥ 288）        → asideWidth=280, bleed=false（悬浮于留白，不避让）
- * - 单侧放不下、双侧能放（避让后消息仍 744）→ asideWidth=280, bleed=true（padding 让出，消息左移）
- * - 避让后也放不下（C-288 < 744） → asideWidth=0（隐藏，消息照旧）
- *
- * 防动画跳动（方案 A）：工作区展开/收起是分栏动画，宽度逐帧变化会导致三态决策
- * 来回翻转（避让→隐藏→居中抖动）。切换瞬间按「目标 pane1 宽」预知终态并冻结决策，
- * 动画结束（~350ms）后解除冻结、恢复 ResizeObserver 跟随。
+ * 概览显隐决策：可见即实占空间 —— 面板打开时恒走避让占位（消息列左移、
+ * 在剩余空间内居中），不再区分「悬浮于留白 / 挤占」两种模式。
+ * 唯一兜底判断：容器减去面板占位（ASIDE_TOTAL=288）后仍放得下消息列
+ * （MSG_MAX_WIDTH=744），否则自动隐藏（overviewVisible 不变，拉宽后自动恢复）。
  */
 const ASIDE_WIDTH = 280;
 const ASIDE_GAP = 8;
 const ASIDE_TOTAL = ASIDE_WIDTH + ASIDE_GAP;
 const MSG_MAX_WIDTH = 744; // max-w-186
 
-/** 决策用容器宽（flex 权重已让过渡自然，不再冻结 —— ResizeObserver 实时上报） */
+/** 决策用容器宽（ResizeObserver 实时上报） */
 const chatDecisionWidth = ref(0);
 
 function onChatContainerResize(cw: number): void {
@@ -195,22 +189,11 @@ function onChatContainerResize(cw: number): void {
 
 const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40));
 
-/** 三态结果（宽度/是否避让），0 与 false 表示隐藏 */
-const asideMode = computed<{ width: number; bleed: boolean }>(() => {
-  if (!overviewVisible.value) return { width: 0, bleed: false };
-  const c = chatContentWidth.value;
-  const msgW = Math.min(MSG_MAX_WIDTH, c);
-  const singleGap = (c - msgW) / 2;
-  // 1) 单侧留白足够 → 悬浮（不避让）
-  if (singleGap >= ASIDE_TOTAL) return { width: ASIDE_WIDTH, bleed: false };
-  // 2) 双侧让出后消息仍能保持 744 → 避让（只挤位置）
-  if (c - ASIDE_TOTAL >= MSG_MAX_WIDTH) return { width: ASIDE_WIDTH, bleed: true };
-  // 3) 避让后也放不下 → 隐藏
-  return { width: 0, bleed: false };
+/** 概览列宽，0 表示隐藏 */
+const asideWidth = computed(() => {
+  if (!overviewVisible.value) return 0;
+  return chatContentWidth.value - ASIDE_TOTAL >= MSG_MAX_WIDTH ? ASIDE_WIDTH : 0;
 });
-
-const asideWidth = computed(() => asideMode.value.width);
-const asideBleed = computed(() => asideMode.value.bleed);
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
