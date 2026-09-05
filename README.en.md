@@ -120,8 +120,8 @@ docker compose up -d --build
 Download the pre-built installer (see the [QQ Group 1047993501](#-community)), or build from source:
 
 ```bash
-npm install
-npm run build:electron   # Installer output in release/
+pnpm install
+pnpm run build:electron   # Installer output in release/
 ```
 
 ### Option 3: Develop from Source
@@ -129,14 +129,14 @@ npm run build:electron   # Installer output in release/
 ```bash
 # Terminal 1: Start the backend (initialize DB on first run)
 cd backend-ts
-npm install
-npm run db:seed:force
-npm run start:dev
+pnpm install
+pnpm run db:seed:force
+pnpm run start:dev
 
 # Terminal 2: Start the frontend
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 # Visit http://localhost:5173
 ```
 

@@ -1,0 +1,5 @@
+# 根项目 pnpm 配置（frontend/backend-ts 各自有独立的 pnpm-workspace.yaml）
+# allowBuilds：允许执行 install/postinstall 等构建脚本的依赖白名单
+# electron 需要下载二进制；其余根依赖无构建脚本
+allowBuilds:
+  electron: true

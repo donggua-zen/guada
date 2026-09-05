@@ -1,3 +1,5 @@
 allowBuilds:
-  esbuild: set this to true or false
-  vue-demi: set this to true or false
+  # esbuild 的 postinstall 校验/下载平台二进制，必须放行
+  esbuild: true
+  # vue-demi 的 postinstall 按安装的 vue 版本切换 API，必须放行
+  vue-demi: true

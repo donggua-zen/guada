@@ -20,7 +20,7 @@ if exist "node_modules\better-sqlite3" (
 
 echo.
 echo Step 2: Installing better-sqlite3...
-call npm install better-sqlite3@latest
+call pnpm add better-sqlite3@latest
 
 echo.
 echo Step 3: Setting up Visual Studio environment...
@@ -42,7 +42,7 @@ set npm_config_disturl=https://electronjs.org/headers
 set npm_config_runtime=electron
 set npm_config_build_from_source=true
 
-call npm rebuild better-sqlite3
+call pnpm rebuild better-sqlite3
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

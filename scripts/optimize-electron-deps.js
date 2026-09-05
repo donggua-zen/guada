@@ -104,35 +104,63 @@ if (fs.existsSync(optimizedPath)) {
 }
 fs.mkdirSync(optimizedPath, { recursive: true })
 
-// Step 2: 复制 package.json 并移除 devDependencies
-console.log('Step 1: Creating production-only package.json...')
+// Step 2: 复制 pnpm 工程文件（package.json / lockfile / 补丁）
+// 必须用 pnpm 安装：只有 pnpm 会应用 patches/ 下的 node-pty 补丁，
+// npm install 会静默装回未打补丁的原版
+console.log('Step 1: Copying package files (pnpm project files + patches)...')
+
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
 
-// 只保留 dependencies，移除 devDependencies
-const prodPackageJson = {
-  name: packageJson.name,
-  version: packageJson.version,
-  dependencies: packageJson.dependencies,
-  overrides: packageJson.overrides
+// 守卫脚本相对路径按本目录（backend-ts/node_modules_production）重新指向仓库根
+if (packageJson.scripts && packageJson.scripts.preinstall) {
+  packageJson.scripts.preinstall = 'node ../../scripts/ensure-pnpm.js'
 }
 
 fs.writeFileSync(
   path.join(optimizedPath, 'package.json'),
-  JSON.stringify(prodPackageJson, null, 2)
+  JSON.stringify(packageJson, null, 2)
 )
-console.log('✓ Created production package.json')
+
+const pnpmLockPath = path.join(backendPath, 'pnpm-lock.yaml')
+if (fs.existsSync(pnpmLockPath)) {
+  fs.copyFileSync(pnpmLockPath, path.join(optimizedPath, 'pnpm-lock.yaml'))
+} else {
+  console.error('❌ backend-ts/pnpm-lock.yaml 不存在，请先在 backend-ts 执行 pnpm install')
+  process.exit(1)
+}
+
+// 补丁与 allowBuilds 配置必须一起复制，pnpm 才能在该目录应用 patchedDependencies
+const pnpmWorkspacePath = path.join(optimizedPath, 'pnpm-workspace.yaml')
+if (fs.existsSync(path.join(backendPath, 'pnpm-workspace.yaml'))) {
+  fs.copyFileSync(path.join(backendPath, 'pnpm-workspace.yaml'), pnpmWorkspacePath)
+  // hoisted 布局：npm 风格的扁平 node_modules（真实文件、无符号链接），
+  // 兼容 electron-builder 的 extraResources 拷贝和后续裁剪步骤。
+  // 注意 pnpm 11 不再从 .npmrc 读取 node-linker，必须写在 pnpm-workspace.yaml
+  fs.appendFileSync(pnpmWorkspacePath, '\n# 打包目录使用扁平布局（真实文件，无符号链接），兼容 electron-builder\nnodeLinker: hoisted\n')
+}
+const patchesSrc = path.join(backendPath, 'patches')
+if (fs.existsSync(patchesSrc)) {
+  fs.cpSync(patchesSrc, path.join(optimizedPath, 'patches'), { recursive: true })
+}
+
+// hoisted 布局：npm 风格的扁平 node_modules（真实文件、无符号链接），
+// 兼容 electron-builder 的 extraResources 拷贝和后续裁剪步骤
+fs.writeFileSync(path.join(optimizedPath, '.npmrc'), 'node-linker=hoisted\n', 'utf-8')
+
+console.log('✓ Copied package.json / pnpm-lock.yaml / pnpm-workspace.yaml / patches/')
+console.log('✓ Created .npmrc (node-linker=hoisted)')
 
 // Step 3: 安装生产依赖（不包含 devDependencies）
 console.log()
-console.log('Step 2: Installing production dependencies only...')
+console.log('Step 2: Installing production dependencies with pnpm (patches applied)...')
 try {
   // 创建干净的环境变量，移除 electron-builder 特有的配置
   const cleanEnv = { ...process.env }
   delete cleanEnv.ELECTRON_MIRROR
   delete cleanEnv.ELECTRON_BUILDER_BINARIES_MIRROR
   delete cleanEnv.WIN_CSC_IDENTITY_AUTO_DISCOVERY
-  
-  execSync('npm install --omit=dev --include=optional', {
+
+  execSync('pnpm install --prod --frozen-lockfile', {
     cwd: optimizedPath,
     stdio: 'inherit',
     env: cleanEnv
@@ -143,12 +171,25 @@ try {
   process.exit(1)
 }
 
+// Step 3.1: 校验 node-pty 补丁已生效（防止未来工具链变更悄悄回退到未打补丁的包）
+console.log()
+console.log('Verifying node-pty patch...')
+const nodePtyAgentPath = path.join(optimizedPath, 'node_modules', 'node-pty', 'lib', 'conpty_console_list_agent.js')
+if (!fs.existsSync(nodePtyAgentPath)) {
+  console.error('❌ node-pty 未安装到生产目录！终端功能在打包版中将不可用。')
+  console.error('   检查 backend-ts/package.json 的 dependencies 是否包含 node-pty。')
+  process.exit(1)
+}
+if (!fs.readFileSync(nodePtyAgentPath, 'utf-8').includes('GuaDa patch')) {
+  console.error('❌ 生产目录中的 node-pty 未打补丁！打包版关闭终端会触发 "AttachConsole failed"。')
+  console.error('   请确认 backend-ts/pnpm-workspace.yaml 的 patchedDependencies 已复制到安装目录。')
+  process.exit(1)
+}
+console.log('✓ node-pty installed and patched')
+
 // Step 4: 复制 Prisma schema 并生成客户端
 console.log()
 console.log('Step 3: Generating Prisma Client...')
-// Note: schema.prisma and prisma.config are NOT copied to production —
-// they're only needed at build time for `prisma generate`.
-// The generated client (.prisma) is copied below.
 
 // 从原项目复用已有 prisma CLI（devDependency），避免在生产目录临时安装
 console.log('Generating Prisma Client using existing CLI...')
@@ -165,16 +206,32 @@ try {
     console.log('✓ Cleared existing Prisma Client cache')
   }
 
-  execSync('npx prisma generate', {
+  execSync('pnpm exec prisma generate', {
     cwd: backendPath,
     stdio: 'inherit',
     env: cleanEnv
   })
   console.log('✓ Prisma Client generated in source project')
 
-  const srcPrismaClient = path.join(backendPath, 'node_modules', '.prisma')
+  // pnpm 布局下生成物位于 node_modules/.pnpm/@prisma+client@X/node_modules/.prisma
+  // （npm 布局则直接在 node_modules/.prisma），两种都兼容
+  function findGeneratedPrismaClient() {
+    const flatPath = path.join(backendPath, 'node_modules', '.prisma')
+    if (fs.existsSync(flatPath)) return flatPath
+    const virtualRoot = path.join(backendPath, 'node_modules', '.pnpm')
+    if (fs.existsSync(virtualRoot)) {
+      const entry = fs.readdirSync(virtualRoot).find((d) => d.startsWith('@prisma+client@'))
+      if (entry) {
+        const candidate = path.join(virtualRoot, entry, 'node_modules', '.prisma')
+        if (fs.existsSync(candidate)) return candidate
+      }
+    }
+    return null
+  }
+
+  const srcPrismaClient = findGeneratedPrismaClient()
   const destPrismaClient = path.join(optimizedPath, 'node_modules', '.prisma')
-  if (fs.existsSync(srcPrismaClient)) {
+  if (srcPrismaClient) {
     if (fs.existsSync(destPrismaClient)) {
       fs.rmSync(destPrismaClient, { recursive: true, force: true })
     }
@@ -185,7 +242,7 @@ try {
   }
 } catch (error) {
   console.warn('⚠️  Prisma generation warning:', error.message)
-  console.warn('Note: You may need to run "npm run rebuild:backend-native:electron" after optimization')
+  console.warn('Note: You may need to run "pnpm run rebuild:backend-native:electron" after optimization')
 }
 
 // Step 5: 清理不必要的文件
@@ -517,11 +574,11 @@ try {
     console.log('✓ Native modules rebuilt successfully')
   } else {
     console.warn('⚠️  rebuild-native-electron.js not found, skipping rebuild')
-    console.log('Please run "npm run rebuild:backend-native:electron" manually')
+    console.log('Please run "pnpm run rebuild:backend-native:electron" manually')
   }
 } catch (error) {
   console.error('❌ Failed to rebuild native modules:', error.message)
-  console.error('You can rebuild manually by running: npm run rebuild:backend-native:electron')
+  console.error('You can rebuild manually by running: pnpm run rebuild:backend-native:electron')
   // 不中断流程，继续后续步骤
 }
 
@@ -636,7 +693,7 @@ console.log()
 console.log('Output directory:', optimizedPath)
 console.log()
 console.log('Next step:')
-console.log('1. Run "npm run build:electron" to package')
+console.log('1. Run "pnpm run build:electron" to package')
 
 // 保存缓存 hash
 try {

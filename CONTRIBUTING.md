@@ -37,7 +37,7 @@
 | 工具 | 最低版本 | 说明 |
 |------|---------|------|
 | **Node.js** | 20+ | 推荐使用 LTS 版本 |
-| **npm** | 10+ | 随 Node 安装，注意 [npm v11 注意事项](#npm-v11-注意事项) |
+| **pnpm** | 10+ | 本项目统一使用 pnpm（`corepack enable` 即可获得），**禁止用 npm/yarn 安装依赖**（见下） |
 | **Git** | 2.30+ | |
 | **Go** | 1.23+ | 仅在修改 `plugins/remote-ssh/agent/` 时需要 |
 
@@ -46,21 +46,19 @@
 - **VS Code** — 项目内置 `.vscode/` 配置
 - **Electron Rebuild** — 原生模块编译需要 Visual Studio Build Tools（Windows）
 
-### npm v11 注意事项
+### 为什么必须用 pnpm
 
-npm v11+ 默认 `omit=dev`，即 **devDependencies 不会被安装**。如果 `npm install` 后发现 `vite`、`cross-env`、`ts-node-dev` 等工具缺失，请执行：
+本项目 backend-ts 依赖 pnpm 的 `patchedDependencies` 机制给 node-pty 打补丁（修复
+Windows 下关闭终端时后端报 `Error: AttachConsole failed` 并重启的问题）。npm / yarn
+不认识 pnpm 的补丁机制，任何一次 `npm install` 都会把打补丁的包**静默替换回原版**，
+导致补丁失效复发。
 
-```bash
-npm install --include=dev
-```
+为此所有 `package.json` 都配置了：
 
-或全局配置：
+- `packageManager: "pnpm@11.7.0"` 字段（可用 `corepack enable` 自动匹配版本）；
+- `preinstall` 守卫脚本（`scripts/ensure-pnpm.js`），用 npm/yarn 执行 install 会被直接拒绝。
 
-```bash
-npm config set include dev
-```
-
-项目 `.npmrc` 已配置淘宝镜像源，加速依赖下载。
+项目根目录 `.npmrc` 已配置淘宝镜像源，pnpm 同样读取该配置加速依赖下载。
 
 ---
 
@@ -90,13 +88,13 @@ cd guada_ai
 根目录执行（会自动安装 backend-ts 和 frontend 的依赖）：
 
 ```bash
-npm install
+pnpm install
 ```
 
 或分别安装：
 
 ```bash
-cd backend-ts && npm install && cd ../frontend && npm install
+cd backend-ts && pnpm install && cd ../frontend && pnpm install
 ```
 
 ---
@@ -144,14 +142,14 @@ guada_ai/
 ```bash
 # 终端 1：启动后端
 cd backend-ts
-npm install
-npm run db:seed:force    # 仅首次需要初始化数据库
-npm run start:dev
+pnpm install
+pnpm run db:seed:force    # 仅首次需要初始化数据库
+pnpm run start:dev
 
 # 终端 2：启动前端
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 前端访问 `http://localhost:5173`，后端监听 `http://localhost:3000`。
@@ -160,7 +158,7 @@ npm run dev
 
 ```bash
 # 根目录执行
-npm run dev:electron
+pnpm run dev:electron
 ```
 
 此命令会编译 Electron TypeScript、启动前端 Dev Server、并在就绪后启动 Electron。
@@ -249,7 +247,7 @@ refactor/<简短描述>    # 重构
 
    ```bash
    cd backend-ts
-   npm run db:migrate:gen -- --name <迁移名称>
+   pnpm run db:migrate:gen -- --name <迁移名称>
    ```
 
    此命令会同时生成增量迁移文件（供升级用户）和重新生成 `baseline.sql`（供全新安装）。
@@ -345,10 +343,10 @@ cd backend-ts
 npm test
 
 # 监听模式
-npm run test:watch
+pnpm run test:watch
 
 # 覆盖率报告
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 测试使用 Jest + ts-jest，测试文件与源文件同目录，命名为 `*.spec.ts`。
@@ -372,17 +370,17 @@ npm run test:coverage
 
 ```bash
 # 后端
-cd backend-ts && npm run build
+cd backend-ts && pnpm run build
 
 # 前端
-cd frontend && npm run build
+cd frontend && pnpm run build
 ```
 
 ### Electron 打包
 
 ```bash
 # 根目录执行
-npm run build:electron
+pnpm run build:electron
 ```
 
 输出在 `release/` 目录。Windows 打包可能需要 Visual Studio Build Tools。

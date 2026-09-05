@@ -120,8 +120,8 @@ docker compose up -d --build
 下载预编译安装包（见 [QQ 群 1047993501](#-社区)），或从源码构建：
 
 ```bash
-npm install
-npm run build:electron   # 安装包输出在 release/ 目录
+pnpm install
+pnpm run build:electron   # 安装包输出在 release/ 目录
 ```
 
 ### 方式三：源码开发
@@ -129,14 +129,14 @@ npm run build:electron   # 安装包输出在 release/ 目录
 ```bash
 # 终端 1：启动后端（首次需初始化数据库）
 cd backend-ts
-npm install
-npm run db:seed:force
-npm run start:dev
+pnpm install
+pnpm run db:seed:force
+pnpm run start:dev
 
 # 终端 2：启动前端
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 # 访问 http://localhost:5173
 ```
 

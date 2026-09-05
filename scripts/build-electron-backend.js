@@ -8,7 +8,7 @@
  *   3. Electron 原生模块重建（@electron/rebuild）
  *
  * 交叉构建示例（在 Apple Silicon 上构建 x64 包）：
- *   TARGET_ARCH=x64 npm run build:electron:backend
+ *   TARGET_ARCH=x64 pnpm run build:electron:backend
  */
 
 const { execSync } = require('child_process')
@@ -28,7 +28,7 @@ console.log(`[build:electron:backend] Target platform: ${platform}`)
 console.log(`[build:electron:backend] Target arch: ${env.TARGET_ARCH || process.arch}`)
 
 const steps = [
-  ['build backend', 'npm run build:backend'],
+  ['build backend', 'pnpm run build:backend'],
   ['optimize electron deps', 'node scripts/optimize-electron-deps.js'],
   ['rebuild native modules', 'node scripts/rebuild-native-electron.js'],
 ]

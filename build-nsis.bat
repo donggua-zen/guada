@@ -23,7 +23,7 @@ echo.
 
 echo [3/4] 编译后端代码...
 cd backend-ts
-call npm run build
+call pnpm run build
 if errorlevel 1 (
     echo ✗ 后端编译失败
     exit /b 1
@@ -34,7 +34,7 @@ echo.
 
 echo [4/4] 编译前端代码并打包...
 cd frontend
-call npm run build
+call pnpm run build
 if errorlevel 1 (
     echo ✗ 前端编译失败
     exit /b 1

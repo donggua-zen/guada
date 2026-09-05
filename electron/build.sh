@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 # 检查是否安装了 typescript
 if ! command -v tsc &> /dev/null; then
     echo "❌ 未找到 tsc 命令，正在安装 TypeScript..."
-    npm install -g typescript
+    pnpm add -g typescript
 fi
 
 # 编译 TypeScript

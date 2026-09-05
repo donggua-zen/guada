@@ -2,8 +2,7 @@
  * 重建 backend-ts（dev 模式）的原生模块二进制
  *
  * dev 模式后端跑在系统 Node（非 Electron），原生模块要么下载预编译包、
- * 要么随 npm 包自带，仅在缺失时才需要 node-gyp 源码编译。
- *
+ * 要么随包自带，仅在缺失时才需要 node-gyp 源码编译。
  * 背景：国内网络直连 GitHub 不稳定，better-sqlite3 的 prebuild-install
  * 默认从 GitHub Releases 下载，容易失败；这里强制走 npmmirror 二进制镜像。
  * node-pty 的预编译包随 npm 包自带（prebuilds/），缺失时回退 node-gyp 编译
@@ -13,7 +12,7 @@
  * 避免与正在运行的 dev 后端冲突）；只有缺失/损坏的模块才触发重建。
  *
  * 用法：
- *   npm run rebuild:backend-native
+ *   pnpm run rebuild:backend-native
  */
 
 const path = require('path')
@@ -66,7 +65,7 @@ function verifyNativeModules() {
 
 function main() {
   if (!fs.existsSync(modulesPath)) {
-    console.error(`❌ ${modulesPath} 不存在，请先安装依赖（npm install）`)
+    console.error(`❌ ${modulesPath} 不存在，请先安装依赖（pnpm install）`)
     process.exit(1)
   }
 
@@ -104,14 +103,14 @@ function main() {
       }
       console.warn('⚠️  prebuild-install 下载失败，回退 node-gyp 源码编译...')
       console.warn('   需要 VS Build Tools (Windows) / Xcode CLT (macOS) / build-essential (Linux)')
-      run('npm rebuild better-sqlite3', { cwd: backendPath })
+      run('pnpm rebuild better-sqlite3', { cwd: backendPath })
     }
   }
 
-  // 3. node-pty：预编译包随包自带，缺失时 npm rebuild 触发 node-gyp 兜底
+  // 3. node-pty：预编译包随包自带，缺失时 pnpm rebuild 触发 node-gyp 兜底
   if (broken.includes('node-pty')) {
     console.log('\n==== node-pty ====')
-    run('npm rebuild node-pty', { cwd: backendPath })
+    run('pnpm rebuild node-pty', { cwd: backendPath })
     console.log('✓ node-pty 就绪')
   }
 
