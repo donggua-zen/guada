@@ -17,7 +17,9 @@ export class WorkflowPlugin extends PluginBase {
     name: "%workflow.name%",
     description: "%workflow.description%",
     version: "1.0.0",
-    category: "system" as const,
+    // core 级：默认启用但允许用户全局关闭（功能较重且为新功能；
+    // 工具注入仍有 agents 白名单门控 + sub_agent 会话禁递归）
+    category: "core" as const,
   };
 
   constructor(
@@ -35,15 +37,17 @@ export class WorkflowPlugin extends PluginBase {
       id: "workflow",
       name: "%workflow.toolkitName%",
       description: "%workflow.toolkitDescription%",
-      loadMode: "eager",
+      loadMode: "eager", // 注册默认值；实际 loadMode 由 handler 按会话动态决议
+      // 目录行是本工具包唯一常驻的模型面文本，承担使用门槛：
+      // 低频重型编排按需学习（tool_learn），API 规格收敛在工具描述里一次性下发
       activator:
-        "Call this toolkit when you need to orchestrate a multi-step plan with several sub-agents running in parallel or in staged phases",
+        "Use ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration: learn this toolkit to write a JavaScript script that fans work out across many sub-agents with phases and structured results. For one or two delegations, prefer plain subagent calls.",
       handler: async (ctx) => {
         // 子代理会话禁止递归编排（与 sub_agent 工具同一防线）
         if (ctx.session.sessionType === "sub_agent") {
           return { loadMode: "none" as const };
         }
-        // 与 sub_agent 相同的启用条件：agents 白名单非空才注入（避免无意义占用）
+        // agents 白名单非空才提供，且为懒加载：目录行常驻，tool_learn 时才进上下文
         const agentsCfg = ctx.session?.getSettings?.("agents");
         const hasEnabledAgent =
           typeof agentsCfg === "object" &&
@@ -52,15 +56,29 @@ export class WorkflowPlugin extends PluginBase {
             ([k, v]) => !k.startsWith("__") && v === true,
           );
         return {
-          loadMode: hasEnabledAgent ? ("eager" as const) : ("none" as const),
+          loadMode: hasEnabledAgent ? ("lazy" as const) : ("none" as const),
         };
       },
     });
 
     // ── workflow_run：一次调用执行整段编排脚本（前台阻塞）──
+    // 工具描述即脚本 API 的唯一规格（钩子语义/错误纪律/约束都在这里），
+    // 使用指南与参数描述不重复承担 API 教学
     kit.registerTool({
       name: "workflow_run",
-      description: `Run a multi-agent workflow orchestration script. You write a plain JavaScript script body (top-level await allowed, must end with a return of a JSON value); the engine executes it in an isolated sandbox. Inside the script, agent(prompt, opts) spawns a real sub-agent (independent session, full agent loop with tools) and resolves with its final output text (null on failure). parallel()/pipeline() compose concurrency; phase()/log() narrate progress. The tool call blocks until the whole script finishes; the script's return value is returned to you as the tool result. Use this instead of repeated subagent_spawn calls when the plan involves parallelism, staged phases, or data flowing between agents.`,
+      description: `Run a JavaScript workflow script that orchestrates sub-agents at scale. Use this for work that fans out across many independent pieces — an audit over many files, a migration, multi-angle research, adversarial verification of findings — where you write the orchestration as a script instead of delegating turn by turn.
+
+Workflow identity rides the \`name\`, \`description\` and optional \`phases\` parameters as plain JSON (never code). The \`script\` parameter is the plain JavaScript body ONLY (NOT TypeScript), running with top-level await; end with \`return <value>\` — the value must be JSON-serializable and is this tool's result.
+
+Script-body hooks:
+- \`agent(prompt, opts?): Promise<string | null>\` — run one sub-agent to completion (independent session with its own tools); resolves to the child's final output text, or null when the child fails (filter with \`.filter(Boolean)\`). opts: \`agentId\` (persona id from the Available Agents list), \`label\` (display), \`phase\` (progress group). Anything else is rejected loudly.
+- \`pipeline(items, ...stages): Promise<any[]>\` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives \`(prev, item, index)\`. An ordinary stage throw drops that ITEM to null and skips its remaining stages.
+- \`parallel(thunks): Promise<any[]>\` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to null.
+- \`phase(title)\` — start a progress phase; \`log(message)\` — narrate progress; \`args\` — the tool call's \`args\` input, verbatim.
+
+Misused hooks (bad arguments, unknown options, tripped caps) throw errors that ALWAYS kill the script — they never dissolve into a per-item null.
+
+Constraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them. The run executes in the foreground: this call returns when the whole script finishes.`,
       inputSchema: z.object({
         name: z
           .string()
@@ -68,7 +86,7 @@ export class WorkflowPlugin extends PluginBase {
         description: z
           .string()
           .optional()
-          .describe("What this workflow does and when to use it"),
+          .describe("One-line description of what this workflow does"),
         phases: z
           .array(
             z.object({
@@ -78,12 +96,12 @@ export class WorkflowPlugin extends PluginBase {
           )
           .optional()
           .describe(
-            "Declared phases for progress display (pure narration, they do not impose execution structure)",
+            "Optional phase declarations for progress display (pure narration, they do not impose execution structure)",
           ),
         script: z
           .string()
           .describe(
-            'Plain JavaScript function body. Top-level await allowed. Must end with "return <JSON value>". No TypeScript, no imports, no require. Available hooks: agent(prompt, opts?), parallel(thunks), pipeline(items, ...stages), phase(title), log(msg), plus the args variable below.',
+            'The plain-JS workflow script body (top-level await allowed; end with `return <json-value>`). The tool description documents the exact hook semantics.',
           ),
         args: z
           .record(z.string(), z.any())
@@ -176,26 +194,12 @@ export class WorkflowPlugin extends PluginBase {
         const sections: string[] = [
           "# Workflow Orchestration",
           "",
-          "## When to Use workflow_run",
-          "   - The plan involves MULTIPLE sub-agents with parallelism (parallel fan-out / fan-in) or staged phases.",
-          "   - Intermediate results must flow between agents (output of one becomes input of the next).",
-          "   - You can express the whole plan as code up front, without needing user feedback mid-way.",
-          "   For a single independent task, use subagent_spawn instead. If the task can be done with one direct tool call, do not spawn anything.",
+          "Use the workflow_run tool ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration; for one or two delegations, prefer plain subagent_spawn calls. The tool description documents the exact script format and hooks.",
           "",
-          "## Script API (plain JavaScript function body, top-level await allowed, must `return <JSON value>`)",
-          "   - `agent(prompt, opts?)` → spawns a real sub-agent (independent session with tools) and resolves with its final output text. Returns `null` if the agent failed or was stopped. opts: `{ agentId?, label?, phase? }`.",
-          "   - `parallel(thunks)` → runs an array of zero-arg functions concurrently, resolves when all settle; failed entries are `null`.",
-          "   - `pipeline(items, ...stages)` → each item flows through the stage chain independently (stage signature: `(prev, item, index)`), no barrier between stages.",
-          "   - `phase(title)` / `log(message)` → progress narration only (shown to the user, no execution semantics).",
-          "   - `args` → the JSON you passed in the `args` parameter.",
-          "",
-          "## Rules",
-          "   - The script is pure orchestration: no require/import/fs/network. Sub-agents do the real work with their tools.",
-          "   - Agent failures resolve to `null` — handle them (e.g. `results.filter(Boolean)`). Script syntax errors or invalid hook arguments fail the whole run loudly with an error code; fix the script and retry.",
-          "   - Write explicit, self-contained prompts for each agent: they cannot see this conversation. Pass needed context inside the prompt text.",
-          "   - Sub-agents run with the session's sandbox mode and cannot ask the user questions. Do not assign the same file to multiple agents for modification.",
-          "   - The tool call blocks until the whole workflow finishes (user can watch live progress and can stop it). The script's return value is the tool result, so make it a well-organized summary.",
-          "   - Do not `await agent(...)` inside huge sequential loops when parallel(pipeline) would do — parallelism is the point.",
+          "Rules:",
+          "   - Write self-contained prompts: sub-agents cannot see this conversation or each other; pass all needed context in the prompt text.",
+          "   - Never assign the same file to multiple sub-agents for modification.",
+          "   - The tool call blocks until the whole workflow finishes (the user watches live progress and can stop it); make the return value a well-organized summary — it is the tool result you will read.",
         ];
 
         if (agents.length > 0) {

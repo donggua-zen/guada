@@ -115,15 +115,15 @@
             </div>
           </div>
         </div>
-        <!-- 避让占位（常驻，flex-basis 0↔268 过渡；flex-shrink 优先压缩，消息列不先动） -->
+        <!-- 避让占位：aside 可见即实占（flex-basis 0↔268 过渡；flex-shrink 优先压缩，消息列不先动） -->
         <div class="aside-bleed-col"
-          :style="{ flexBasis: (((props.asideWidth || 0) > 0 && props.asideBleed) ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }">
+          :style="{ flexBasis: ((props.asideWidth || 0) > 0 ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }">
         </div>
       </div>
     </ScrollContainer>
 
     <!-- 右侧 aside 槽位（工作区概览）：位于滚动条左侧、不随消息滚动；
-         消息/输入区按 asideWidth 让出宽度（只挤位置、不挤宽度）。
+         aside 可见即实占空间，消息/输入区在剩余宽度内居中（只挤位置、不挤宽度）。
          进出场用 Transition 动画（离散/单次翻转时正常播放） -->
     <Transition name="aside-fade">
       <div v-if="(props.asideWidth || 0) > 0" class="chat-aside"
@@ -246,11 +246,8 @@ const props = defineProps<{
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
   agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
   activeTabId?: string;
-  /** 右侧 aside 预留宽度（px，默认 0 = 不预留不渲染）；消息/输入区自动让出该宽度 */
+  /** 右侧 aside 预留宽度（px，默认 0 = 不预留不渲染）；aside 可见即通过避让占位实占该宽度 */
   asideWidth?: number;
-  /** 是否避让（挤压消息位置）：true = 滚动容器 padding-right 让出 aside 区；
-       false = 消息留白已足够，概览直接悬浮于右侧留白（不避让） */
-  asideBleed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -307,8 +304,8 @@ let lastScrollTop = 0;
 
 // ── 右侧 aside（工作区概览）自适应 ──
 // 滚动条恒定 10px（ScrollContainer ::-webkit-scrollbar + scrollbar-gutter），
-// 概览 absolute 定位在滚动条左侧；概览只挤压消息位置、不挤压宽度：
-// 父级按 asideWidth 让出 padding-right，消息(≤ max-w-186)自动在剩余区内左移。
+// 概览 absolute 定位在滚动条左侧；aside 可见即实占空间（避让占位列恒占位）：
+// 消息(≤ max-w-186)自动在剩余区内居中。
 const SCROLLBAR_W = 10;
 const ASIDE_GAP = 8;
 /** aside 定位：right = 滚动条宽 + 间距（位于滚动条左侧） */
