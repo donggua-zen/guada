@@ -54,7 +54,7 @@
   --gd-color-surface-border: #efefef;
   --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
   --gd-size-surface-radius: 12px;
-  --gd-color-bg: #fff;
+  --gd-color-bg: #f8f8f8;
   --gd-color-border: #e0e0e0;
   --gd-code-block-bg: #f8f8f8;
 
@@ -66,7 +66,7 @@
   --gd-color-bubble-assitant-border: none;
   --gd-color-bubble-assitant-text-strong: #17181a;
 
-  --gd-color-sidebar-bg: #f9f9f9;
+  --gd-color-sidebar-bg: #ececee;
   --gd-color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
   /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
   --gd-color-sidebar-text-active: var(--gd-color-text);

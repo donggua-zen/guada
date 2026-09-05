@@ -52,15 +52,6 @@
                     :session-id="currentSessionId || undefined" />                </template>
                 <!-- <div class="min-h-60"></div> -->
 
-                <!-- 压缩中状态显示 -->
-                <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')"
-                  class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
-                  <el-icon class="is-loading mb-2" size="24">
-                    <LoadingOutlined />
-                  </el-icon>
-                  <span class="text-sm">{{ t('chat.panel.compressing') }}</span>
-                </div>
-
                 <!-- 流式输出状态指示 -->
               </template>
             </template>
@@ -108,7 +99,8 @@
                   <template #right-actions-before>
                     <!-- 上下文使用率：圆形进度条 -->
                     <GdTooltip :content="contextTooltip" placement="top">
-                      <button class="context-ring-btn" @click="memoPanelVisible = true">
+                      <button ref="contextRingRef" class="context-ring-btn"
+                        :class="{ 'is-open': memoPanelVisible }" @click.stop="memoPanelVisible = !memoPanelVisible">
                         <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
                           <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
                           <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
@@ -144,11 +136,20 @@
     <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
       @click="handleScrollToBottomClick" />
   </div>
-  <!-- 记忆管理弹窗 -->
-  <GdDialog v-model="memoPanelVisible" :title="t('chat.panel.memoryManagement')" width="560px"
-    :close-on-click-modal="false" destroy-on-close class="memo-panel-dialog" append-to-body>
-    <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
-  </GdDialog>
+  <!-- 记忆管理弹窗（非模态，锚定上下文使用率圆环） -->
+  <GdPopover :show="memoPanelVisible" @update:show="memoPanelVisible = $event" :anchor-el="contextRingRef"
+    :width="373" max-height="65vh" :pause-auto-close="memoOverlayActive">
+    <template #header>
+      <div class="flex items-center px-1 pb-2 pt-1">
+        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.panel.memoryManagement')
+          }}</span>
+      </div>
+    </template>
+    <div class="p-3 pt-1">
+      <MemoPanel v-if="currentSessionId" :session-id="currentSessionId"
+        @overlay-active="memoOverlayActive = $event" @close="memoPanelVisible = false" />
+    </div>
+  </GdPopover>
 </template>
 
 <script setup lang="ts">
@@ -188,7 +189,7 @@ const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import AgentPanel from './AgentPanel.vue';
 import GdTooltip from '../ui/GdTooltip.vue';
-import GdDialog from '@/components/ui/GdDialog.vue'
+import GdPopover from '@/components/ui/GdPopover.vue'
 
 
 // 弹出层工具
@@ -205,8 +206,11 @@ const animateIds = ref<string[]>([]);
 let expectingNewMessage = false;
 
 
-// 记忆管理弹窗显隐
+// 记忆管理弹窗显隐（非模态 popover，锚定上下文圆环按钮）
 const memoPanelVisible = ref(false);
+const contextRingRef = ref<HTMLElement | null>(null);
+// 面板内子弹窗/确认框打开期间，冻结 popover 的"点击外部/Esc 关闭"
+const memoOverlayActive = ref(false);
 
 // 上下文使用率：圆形进度条
 const ringPercent = computed(() => {
@@ -677,7 +681,9 @@ async function loadMessages(
   // 加载更多仅前插事件数组后 re-fold，与流式的增量应用互不干扰（live 事件已在 eventLog）
   if (isInitial) {
     const sessionState = sessionStore.getSessionState(sessionId);
-    if (sessionState.isStreaming) {
+    // 仅聊天流可跳过拉取（buffer 含回合历史）；维护流（手动压缩伪流）buffer 无历史，
+    // 照常拉取事件页，压缩中状态由 catchup 重放的 compression_start 经 stash 恢复
+    if (sessionState.isStreaming && sessionStore.sessionStreamKind(sessionId) === "chat") {
       // 恢复本会话自己的分页状态(组件级单例 ref 会残留上一个会话的值)
       hasMoreMessages.value = sessionState.turnsHasMore ?? true;
       return;
@@ -1314,7 +1320,8 @@ function scrollToMessage(messageId: string) {
   outline: none;
 }
 
-.context-ring-btn:hover {
+.context-ring-btn:hover,
+.context-ring-btn.is-open {
   background: var(--gd-color-sidebar-bg-hover);
 }
 

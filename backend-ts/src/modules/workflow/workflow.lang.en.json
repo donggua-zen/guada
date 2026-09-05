@@ -1,0 +1,10 @@
+{
+  "workflow.name": "Workflow",
+  "workflow.description": "Orchestrate multiple sub-agents with a scripted plan running in parallel or staged phases",
+  "workflow.toolkitName": "Workflow",
+  "workflow.toolkitDescription": "Orchestrate sub-agents in parallel/staged phases with a JS script",
+  "workflow_run.executing": "Running workflow",
+  "workflow_run.completed": "Workflow completed",
+  "workflow_run.aggregate.executing": "Running {n} workflows",
+  "workflow_run.aggregate.completed": "Completed {n} workflows"
+}

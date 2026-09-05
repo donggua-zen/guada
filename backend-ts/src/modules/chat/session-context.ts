@@ -229,6 +229,13 @@ export interface ISessionContext {
   generateMessageId(): string;
   /** 获取当前 Token 计数（当前视图按需估算，provider 真值锚点 + 启发式增量） */
   getTokenCount(): Promise<number>;
-  /** 获取细粒度 Token 统计（系统提示词/摘要/用户提示/历史/工具定义，按需计算） */
+  /** 获取细粒度 Token 统计（系统提示词/历史/工具定义，按需计算） */
   getTokenBreakdown(): Promise<TokenBreakdown>;
+  /** 会话上下文统计聚合（占用 + 窗口 + 视图消息数 + 细分），流事件与持久化锚点统一取数 */
+  getContextStats(): Promise<{
+    usedTokens: number;
+    effectiveContextWindow: number;
+    messageCount: number;
+    breakdown: TokenBreakdown;
+  }>;
 }

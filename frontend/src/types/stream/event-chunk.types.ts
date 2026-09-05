@@ -212,6 +212,17 @@ export type MessageChunkEvent = StreamChunk & {
   turnId?: string;
 };
 
+// ==================== Workflow 编排进度 ====================
+
+/**
+ * Workflow 编排进度事件（与后端 event-chunk.types.ts 同构）。
+ * 与领域事件 workflow/event（事件页回放）双通道喂 streamProjector 同一 reducer。
+ */
+export interface WorkflowEvent {
+  type: "workflow_event";
+  event: import("./workflow.types").WorkflowEventData;
+}
+
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
@@ -227,6 +238,7 @@ export type SessionStreamEvent =
   | CompactionSummaryEvent
   | AskRequestedEvent
   | AskResolvedEvent
+  | WorkflowEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId） */

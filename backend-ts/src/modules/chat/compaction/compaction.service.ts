@@ -19,12 +19,14 @@ import { SessionContextStateRepository } from "../../../common/database/session-
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { ToolOrchestrator } from "../../tools/tool-orchestrator.service";
 import { buildSessionLlmParams } from "../session-llm-request.builder";
+import type { ContextStatsPayload } from "../types/event-chunk.types";
 import {
   SG_MODELS,
   SK_MOD_COMPRESS_MODEL,
 } from "../../../constants/settings.constants";
 import type { Message } from "../../../common/types/conversation.types";
 import type { CompactionDataSource } from "./types";
+import { CompactionCancelledError } from "./compaction-cancelled.error";
 import type { ISessionContext } from "../session-context";
 import {
   HOOKS,
@@ -55,11 +57,8 @@ export interface CompressOutcome {
   summaryMessageId?: string;
   /** 摘要文本（DISABLED 模式为空串） */
   summary?: string;
-  /** 压缩运行结束后当前完整请求 token + 窗口（live 广播压缩事件时携带，前端即时更新环形指示器） */
-  contextStats?: {
-    usedTokens: number;
-    effectiveContextWindow: number;
-  };
+  /** 压缩运行结束后当前完整请求统计（live 广播压缩事件时携带，前端即时更新环形指示器） */
+  contextStats?: ContextStatsPayload;
 }
 
 @Injectable()
@@ -96,7 +95,9 @@ export class CompactionService {
     ds: CompactionDataSource,
     opts: CompressOptions = {},
   ): Promise<CompressOutcome> {
+    this.throwIfCancelled(opts.abortSignal);
     const currentTokens = await ds.getTokenCount();
+    this.throwIfCancelled(opts.abortSignal);
     const config = ds.getCompressionConfig();
     const window = ds.getEffectiveContextWindow();
     // 触发 = 验收线（对齐 DSH thresholdRatio；force 绕过）
@@ -128,8 +129,11 @@ export class CompactionService {
       summaryMode === SummaryMode.DISABLED
         ? undefined
         : await this.buildSummaryProvider(ds, opts.abortSignal);
+    this.throwIfCancelled(opts.abortSignal);
 
     const result = await this.compressionEngine.execute(ds.sessionId, {
+      // 用户中止信号：阶段边界快速退出（中止后不落任何 compaction 写入）
+      abortSignal: opts.abortSignal,
       // 引擎唯一数据源：请求消息列表（与主请求逐字节一致，含 reasoning 策略处理后）
       messages: await ds.getHistory(),
       // S3：逐消息 token（快照同序），预算循环 O(1) 取值，免逐条估算
@@ -175,10 +179,7 @@ export class CompactionService {
     }
 
     // 压缩后占用（两路径统一）：供 live 广播压缩事件，前端即时更新环形指示器
-    const contextStats = {
-      usedTokens: await ds.getTokenCount(),
-      effectiveContextWindow: ds.getEffectiveContextWindow(),
-    };
+    const contextStats = await ds.getContextStats();
 
     // 持久化压缩历史（DB sessionContextState，供压缩历史 UI 读取）+ 插件缓存失效事件
     await this.persistCompaction(ds, result, currentTokens);
@@ -195,6 +196,13 @@ export class CompactionService {
   }
 
   // ─── 摘要 Provider 工厂 ───
+
+  /** 用户中止检查：压缩各阶段边界快速退出（与引擎内检查点同语义） */
+  private throwIfCancelled(abortSignal?: AbortSignal): void {
+    if (abortSignal?.aborted) {
+      throw new CompactionCancelledError();
+    }
+  }
 
   /**
    * 构建摘要 Provider：

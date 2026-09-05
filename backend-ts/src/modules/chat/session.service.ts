@@ -28,6 +28,8 @@ import {
 import { SessionContextFactory } from "./session-context.factory";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
+import { EventBusService } from "../../common/events/event-bus.service";
+import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import { resolveThinkingEffort } from "../llm-core";
 
 @Injectable()
@@ -48,6 +50,7 @@ export class SessionService {
     private workspaceWatcherService: WorkspaceWatcherService,
     private streamManager: SessionStreamManager,
     private compactionCoordinator: CompactionCoordinatorService,
+    private eventBus: EventBusService,
     private searchIndex: SearchIndexService,
     private prisma: PrismaService,
     private sessionGroupService: SessionGroupService,
@@ -768,40 +771,11 @@ ${diffText}
   }
 
   /**
-   * 获取会话的 Token 使用统计
-   * 使用 SessionContextService 确保与 Agent 对话使用完全一致的参数
-   */
-  async getTokenStats(sessionId: string, userId: string) {
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new Error("Session not found or unauthorized");
-    }
-
-    const context = await this.sessionContextFactory.createFromSession(session);
-    const effectiveContextWindow = context.getEffectiveContextWindow();
-
-    const messages = await context.getHistory();
-    const usedTokens = await context.getTokenCount();
-    const percentage = Math.min(
-      (usedTokens / effectiveContextWindow) * 100,
-      100,
-    );
-    const remainingTokens = Math.max(effectiveContextWindow - usedTokens, 0);
-
-    return {
-      usedTokens,
-      totalTokens: effectiveContextWindow,
-      remainingTokens,
-      percentage: parseFloat(percentage.toFixed(2)),
-      modelName: session.model?.modelName || "gpt-4",
-      messageCount: messages.length,
-      breakdown: await context.getTokenBreakdown(),
-    };
-  }
-
-  /**
-   * 手动触发会话压缩
-   * 使用 SessionContextService 确保与 Agent 对话使用完全一致的参数
+   * 手动触发会话压缩（异步）
+   *
+   * 以 kind='maintenance' 维护伪流占用会话（与对话互斥、防重复压缩、支持取消），
+   * 压缩事件（compression_start/end/summary/error）经现有流管道下发，REST 立即返回。
+   * 使用 SessionContextFactory 确保与 Agent 对话使用完全一致的参数
    */
   async compressSession(sessionId: string, userId: string) {
     const session = await this.sessionRepo.findById(sessionId);
@@ -809,7 +783,7 @@ ${diffText}
       throw new Error("Session not found or unauthorized");
     }
 
-    // 检查会话是否正在流式输出，避免干扰工作流程
+    // 检查会话是否正在流式输出（含压缩维护流），避免干扰工作流程
     if (this.streamManager.hasActiveStream(sessionId)) {
       throw new HttpException(
         {
@@ -822,42 +796,52 @@ ${diffText}
 
     const context = await this.sessionContextFactory.createFromSession(session);
 
-    const beforeTokenCount = await context.getTokenCount();
-    const beforeMessageCount = (await context.getHistory()).length;
+    // 维护伪流：压缩事件经流管道下发；startStream 失败 = 已有任务进行中（含并发压缩）
+    const abortController = new AbortController();
+    if (!this.streamManager.startStream(sessionId, userId, abortController, "maintenance")) {
+      throw new HttpException(
+        { error: "当前会话已有任务进行中", code: "SESSION_BUSY" },
+        HttpStatus.CONFLICT,
+      );
+    }
 
-    this.logger.log(`Manually triggering compression for session ${sessionId}`);
-    // 手动路径走同一事件机制（coordinator.maybeCompress）：
-    // 确认二级压缩后发 compaction.before → MemorySyncService 按 summaryMode 执行影子轮次
-    await this.compactionCoordinator.maybeCompress(context, {
-      force: true,
-      reason: "manual",
-    });
+    this.logger.log(`Manual compression started (async maintenance stream) for session ${sessionId}`);
 
-    const afterTokenCount = await context.getTokenCount();
-    const compressedMessages = await context.getHistory();
-    const afterMessageCount = compressedMessages.length;
-
-    const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);
-    const compressionStrategy = checkpoint?.cleaningStrategy || "none";
-
-    return {
-      success: true,
-      before: {
-        tokenCount: beforeTokenCount,
-        messageCount: beforeMessageCount,
-        contextWindow: (session.model?.config as any)?.contextWindow || 128000,
-      },
-      after: {
-        tokenCount: afterTokenCount,
-        messageCount: afterMessageCount,
-        compressionRatio:
-          beforeTokenCount > 0
-            ? ((1 - afterTokenCount / beforeTokenCount) * 100).toFixed(2) + "%"
-            : "0%",
-      },
-      strategy: compressionStrategy,
-      modelName: session.model?.modelName || "gpt-4",
+    const emitStatus = (
+      status: "running" | "completed" | "error",
+      extra?: Partial<StreamStatusChangedEvent["payload"]>,
+    ) => {
+      const statusEvent: StreamStatusChangedEvent = {
+        userId,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        payload: { status, kind: "maintenance", ...extra },
+      };
+      this.eventBus.emit("stream.status_changed", statusEvent);
     };
+
+    emitStatus("running");
+
+    void this.compactionCoordinator
+      .maybeCompress(context, {
+        force: true,
+        reason: "manual",
+        abortSignal: abortController.signal,
+      })
+      .then(() => {
+        this.streamManager.stopStream(sessionId, "completed");
+        emitStatus("completed");
+      })
+      .catch((error: any) => {
+        // coordinator 内部已捕获压缩错误并广播 compression_error；此处兜底流生命周期
+        this.logger.error(
+          `Manual compression failed for session ${sessionId}: ${error?.message ?? error}`,
+        );
+        this.streamManager.stopStream(sessionId, "error");
+        emitStatus("error", { reason: "error", error: error?.message });
+      });
+
+    return { success: true, started: true };
   }
 
   /**

@@ -53,7 +53,7 @@ function createMockSessionContext(): ISessionContext {
     addAssistantMessageVersion: jest.fn(),
     generateId: () => "id-" + Math.random().toString(36),
     getTokenCount: () => 0,
-    getTokenBreakdown: () => ({ system: 0, summary: 0, user: 0, history: 0, tools: 0, total: 0 }),
+    getTokenBreakdown: () => ({ systemPrompt: 0, history: 0, tools: 0 }),
     shouldCompress: jest.fn(),
     compress: jest.fn(),
   } as any;

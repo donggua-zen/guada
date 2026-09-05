@@ -136,6 +136,7 @@ export type DomainEvent =
     }
   | { type: "ask/asked"; seq: number; data: Record<string, unknown> }
   | { type: "ask/answered"; seq: number; data: Record<string, unknown> }
+  | { type: "workflow/event"; seq: number; data: import("./workflow.types").WorkflowEventData }
   | { type: "session/init"; seq: number; data: Record<string, unknown> }
   | { type: "session/rotate"; seq: number; data: Record<string, unknown> }
   | { type: "envelope"; seq: number; data: Record<string, unknown> };

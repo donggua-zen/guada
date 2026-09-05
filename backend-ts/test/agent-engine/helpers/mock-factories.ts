@@ -174,7 +174,13 @@ export function createMockSessionContext(options?: {
     generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
     generateMessageId: jest.fn(() => 'm_01ARZ3NDEKTSV4RRFFQ69G5FAV'),
     getTokenCount: jest.fn(async () => 0),
-    getTokenBreakdown: jest.fn(async () => ({ systemPrompt: 0, summary: 0, userPrompt: 0, history: 0, tools: 0 })),
+    getTokenBreakdown: jest.fn(async () => ({ systemPrompt: 0, history: 0, tools: 0 })),
+    getContextStats: jest.fn(async () => ({
+      usedTokens: 0,
+      effectiveContextWindow: 128000,
+      messageCount: 0,
+      breakdown: { systemPrompt: 0, history: 0, tools: 0 },
+    })),
     shouldCompress: jest.fn().mockResolvedValue(false),
     compress: jest.fn().mockResolvedValue([]),
   };

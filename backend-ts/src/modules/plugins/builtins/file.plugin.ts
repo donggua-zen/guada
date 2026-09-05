@@ -13,6 +13,11 @@ import {
 import { AskService } from "../../../common/services/ask.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
+import {
+  WorkspaceToolRouter,
+  workspaceParamField,
+  type RemoteToolTarget,
+} from "../../remote-workspace/workspace-router";
 import { z } from "zod";
 import langZh from "./file.lang.zh.json";
 import langEn from "./file.lang.en.json";
@@ -71,13 +76,14 @@ export class FilePlugin extends PluginBase {
     id: "file",
     name: "%file.name%",
     description: "%file.description%",
-    version: "1.0.0",
+    version: "1.1.0",
     category: "core" as const,
   };
 
   constructor(
     private workspaceService: WorkspaceService,
     private askService: AskService,
+    private readonly workspaceRouter: WorkspaceToolRouter,
   ) {
     super();
   }
@@ -129,106 +135,33 @@ export class FilePlugin extends PluginBase {
           .describe(
             "Number to read: when unit=line, max lines to read (default 200); when unit=char, max characters to read (default 20000)",
           ),
+        workspace: workspaceParamField,
       }),
       execute: async (args, ctx) => {
         const { file_path, encoding, unit = "line", offset = 0, limit } = args;
         if (!file_path) throw new Error("File path cannot be empty");
 
-        const resolvedPath = this.resolvePath(file_path, ctx);
-        this.logger.log(
-          `读取文件: ${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
-        );
-
-        const raw = await fs.readFile(resolvedPath, {
-          encoding: (encoding || "utf-8") as BufferEncoding,
-        });
-
-        const totalChars = raw.length;
-        const lines = raw.split("\n");
-        const totalLines = lines.length;
-        const MAX_BYTES = 20 * 1024;
-
-        if (unit === "char") {
-          // 按字符读取
-          const charLimit = limit ?? 20000;
-          const content = safeSubstring(raw, offset, offset + charLimit);
-          const truncated = offset + charLimit < totalChars;
-
-          // 计算起始行号
-          const startLineNumber = safeTruncate(raw, offset).split("\n").length;
-          const contentLines = content.split("\n");
-          const endLineNumber = startLineNumber + contentLines.length - 1;
-          const padWidth = String(endLineNumber).length;
-          const formattedLines = contentLines.map((line, i) => {
-            const num = String(startLineNumber + i).padStart(padWidth, " ");
-            return `${num}\t${line}`;
+        const target = await this.resolveTarget(ctx, args.workspace);
+        let raw: string;
+        if (target) {
+          this.logger.log(
+            `读取远程文件: ${target.connectionName}:${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
+          );
+          const absPath = target.provider.resolvePath(file_path);
+          raw = String(
+            await target.provider.readFile(absPath, { encoding }),
+          );
+        } else {
+          const resolvedPath = this.resolvePath(file_path, ctx);
+          this.logger.log(
+            `读取文件: ${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
+          );
+          raw = await fs.readFile(resolvedPath, {
+            encoding: (encoding || "utf-8") as BufferEncoding,
           });
-          let result = formattedLines.join("\n");
-
-          if (truncated) {
-            result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${offset + charLimit}, limit=${charLimit})`;
-          }
-          return result;
         }
 
-        // 按行读取
-        const lineLimit = limit ?? 200;
-        const effectiveOffset =
-          offset < 0 ? Math.max(0, totalLines + offset) : offset;
-        const startLine = Math.min(effectiveOffset, totalLines);
-
-        // 计算起始行的原始字符位置
-        let nextCharOffset = 0;
-        for (let i = 0; i < startLine; i++) {
-          nextCharOffset += lines[i].length + 1; // +1 换行符
-        }
-
-        let endLine = startLine;
-        let charsRead = 0;
-        let truncatedByBytes = false;
-        let partialLine: string | null = null;
-
-        for (let i = startLine; i < totalLines; i++) {
-          if (i - startLine >= lineLimit) {
-            endLine = i;
-            break;
-          }
-          const line = lines[i];
-          const ln = line + (i < totalLines - 1 ? "\n" : "");
-          if (charsRead + ln.length > MAX_BYTES) {
-            const avail = MAX_BYTES - charsRead;
-            partialLine = safeTruncate(line, avail);
-            endLine = i;
-            truncatedByBytes = true;
-            break;
-          }
-          charsRead += ln.length;
-          endLine = i + 1;
-        }
-        nextCharOffset += charsRead;
-
-        const hasMoreLines = endLine < totalLines;
-
-        // 拼接行号
-        const padWidth = String(Math.max(endLine, 1)).length;
-        const formattedLines: string[] = [];
-        for (let i = startLine; i < endLine; i++) {
-          const num = String(i + 1).padStart(padWidth, " ");
-          formattedLines.push(`${num}\t|${lines[i]}`);
-        }
-        if (partialLine !== null) {
-          const num = String(endLine + 1).padStart(padWidth, " ");
-          formattedLines.push(`${num}\t|${partialLine}`);
-        }
-        let result = formattedLines.join("\n");
-
-        if (truncatedByBytes) {
-          result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${nextCharOffset}, limit=20000)`;
-        } else if (hasMoreLines) {
-          const remaining = totalLines - endLine;
-          result += `\n(${remaining} more lines remain. To continue: unit=line, offset=${endLine}, limit=${lineLimit})`;
-        }
-        return result;
+        return this.formatReadResult(raw, unit, offset, limit);
       },
       display: {
         actionType: "read",
@@ -268,10 +201,35 @@ export class FilePlugin extends PluginBase {
           .describe(
             "Recursion depth: 0=current directory only, omit=unlimited",
           ),
+        workspace: workspaceParamField,
       }),
       execute: async (args, ctx) => {
         const { pattern, directory, limit = 100, depth } = args;
         if (!pattern) throw new Error("pattern 不能为空");
+
+        const target = await this.resolveTarget(ctx, args.workspace);
+        if (target) {
+          // 远端分支：line 数统计不可用（仅返回大小）；limit+1 探测 hasMore
+          const baseDir = directory
+            ? target.provider.resolvePath(directory)
+            : target.basePath;
+          const entries = await target.provider.glob(pattern, {
+            cwd: baseDir,
+            ignore: FilePlugin.IGNORE_PATTERNS,
+            limit: limit + 1,
+            deep: depth !== undefined ? depth + 1 : undefined,
+          });
+          const hasMore = entries.length > limit;
+          const files = entries.slice(0, limit);
+          let output = `${files.length} files found:`;
+          for (const f of files) {
+            output += `\n${f.path} (${this.formatSize(f.size)})`;
+          }
+          if (hasMore) {
+            output += `\n(More results exist. Use a more specific pattern or increase limit to see more.)`;
+          }
+          return output;
+        }
 
         const basePath = directory
           ? this.resolvePath(directory, ctx)
@@ -377,10 +335,22 @@ export class FilePlugin extends PluginBase {
           .describe(
             "Required with sandbox_permissions: one sentence for the user explaining why this exact write needs the wider access.",
           ),
+        workspace: workspaceParamField,
       }),
       execute: async (args, ctx) => {
         const { file_path, content, encoding = "utf-8" } = args;
         if (!file_path) throw new Error("file_path is required");
+
+        const target = await this.resolveTarget(ctx, args.workspace);
+        if (target) {
+          // 远端写：路径级权限由连接 perm 控制；sandbox_permissions 提权仅作用于本地沙盒
+          this.assertWritableSession(ctx);
+          const absPath = target.provider.resolvePath(file_path);
+          this.logger.log(`写入远程文件: ${target.connectionName}:${absPath}`);
+          await target.provider.writeFile(absPath, content, { encoding });
+          return `File written: ${absPath} (${content.length} chars)`;
+        }
+
         const resolvedPath = this.resolvePath(file_path, ctx);
         // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
         // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
@@ -438,12 +408,35 @@ export class FilePlugin extends PluginBase {
           .describe(
             "Required with sandbox_permissions: one sentence for the user explaining why this exact edit needs the wider access.",
           ),
+        workspace: workspaceParamField,
       }),
       execute: async (args, ctx) => {
         const { file_path, old_text, new_text, encoding = "utf-8" } = args;
         if (!file_path) throw new Error("file_path is required");
         if (!old_text) throw new Error("old_text is required");
         if (new_text === undefined) throw new Error("new_text is required");
+
+        const target = await this.resolveTarget(ctx, args.workspace);
+        if (target) {
+          // 远端编辑：read → 与本地一致的替换变换 → write（agent replaceInFile
+          // 原语为全部替换且无行尾归一，不走）；权限控制同 write
+          this.assertWritableSession(ctx);
+          const absPath = target.provider.resolvePath(file_path);
+          this.logger.log(`编辑远程文件: ${target.connectionName}:${absPath}`);
+          if (old_text === new_text) {
+            return `File ${absPath} unchanged`;
+          }
+          const content = String(
+            await target.provider.readFile(absPath, { encoding }),
+          );
+          const modified = FilePlugin.transformEdit(content, old_text, new_text);
+          if (modified === null) {
+            throw new Error(`No match text found: ${old_text}`);
+          }
+          await target.provider.writeFile(absPath, modified, { encoding });
+          return `File ${absPath} modified (1 replacement)`;
+        }
+
         const resolvedPath = this.resolvePath(file_path, ctx);
         // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
         // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
@@ -459,20 +452,10 @@ export class FilePlugin extends PluginBase {
             return `File ${resolvedPath} unchanged`;
           }
 
-          // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
-          const normContent = content.replace(/\r\n/g, "\n");
-          const normOld = old_text.replace(/\r\n/g, "\n");
-          const idx = normContent.indexOf(normOld);
-          if (idx === -1) {
+          const modified = FilePlugin.transformEdit(content, old_text, new_text);
+          if (modified === null) {
             throw new Error(`No match text found: ${old_text}`);
           }
-
-          // 替换后统一恢复原文件的行尾风格
-          const hasCRLF = content.includes("\r\n");
-          const normResult = normContent.replace(normOld, new_text);
-          const modified = hasCRLF
-            ? normResult.replace(/\n/g, "\r\n")
-            : normResult;
 
           await fs.writeFile(resolvedPath, modified, {
             encoding: encoding as BufferEncoding,
@@ -540,6 +523,7 @@ export class FilePlugin extends PluginBase {
           .max(50)
           .optional()
           .describe("Maximum number of matching lines to return, default 50"),
+        workspace: workspaceParamField,
       }),
       execute: async (args, ctx) => {
         const {
@@ -548,6 +532,25 @@ export class FilePlugin extends PluginBase {
           max_results = 50,
         } = args;
         if (!pattern) throw new Error("pattern is required");
+
+        const target = await this.resolveTarget(ctx, args.workspace);
+        if (target) {
+          // 远端分支：POSIX grep 语义（JS 正则的高级语法 \d 等不适用），
+          // 输出为 relPath:line: content（无函数名上下文后缀）
+          const searchPath = targetPath
+            ? target.provider.resolvePath(targetPath)
+            : target.basePath;
+          const lines = await target.provider.grep(pattern, {
+            path: searchPath,
+            maxResults: max_results,
+            ignore: FilePlugin.IGNORE_PATTERNS,
+          });
+          if (lines.length === 0) return "No matches found.";
+          const base = target.basePath.replace(/\/$/, "");
+          return lines
+            .map((l) => (l.startsWith(`${base}/`) ? l.slice(base.length + 1) : l))
+            .join("\n");
+        }
 
         const basePath = targetPath
           ? this.resolvePath(targetPath, ctx)
@@ -621,7 +624,7 @@ export class FilePlugin extends PluginBase {
       description: "当前会话工作目录和安全路径说明",
       content: (ctx: PluginContext) => {
         if (!ctx.session.workspacePath) return "";
-        return [
+        const lines = [
           "# Working Directory:",
           `${ctx.session.workspacePath}`,
           "",
@@ -630,9 +633,160 @@ export class FilePlugin extends PluginBase {
           "2. **Default Path Rule**: All file operation tools automatically use the working directory as the base when handling relative paths.",
           "   Always use relative paths unless the user explicitly specifies an absolute path.",
           "3. .guada is a special directory — only store files specified in prompts here. Project files, scripts, etc. must not be placed under .guada.",
-        ].join("\n");
+        ];
+        // 附加（远程）工作目录提示：仅在会话绑定了远程连接时注入（清单由 ssh-tools 工具包提供）
+        const bound = ctx.session.getSettings?.()?.attachments?.["ssh-connection"];
+        if (Array.isArray(bound) && bound.length > 0) {
+          lines.push(
+            "4. Additional remote workspaces are bound to this session. To operate on them, pass workspace=\"<connection name>\" to the file tools; paths then resolve inside that remote workspace. Omit the parameter for the local working directory above.",
+          );
+        }
+        return lines.join("\n");
       },
     });
+  }
+
+  /**
+   * 解析工具的 workspace 参数 → 附加（远程）工作目录目标。
+   * 返回 null = 主工作目录（本地），工具走本地代码路径。
+   */
+  private async resolveTarget(
+    ctx: PluginContext,
+    workspace?: string,
+  ): Promise<RemoteToolTarget | null> {
+    return this.workspaceRouter.resolveRemoteTarget(
+      workspace,
+      ctx.session.sessionId,
+      ctx.session.getSettings?.()?.attachments,
+    );
+  }
+
+  /**
+   * 会话 read-only 模式拦截（本地与远程一致）：远程写分支在调用前检查，
+   * 远端路径级权限另由连接 perm（readonly/workspace/unrestricted）控制。
+   */
+  private assertWritableSession(ctx: PluginContext): void {
+    const mode = ctx?.session.getSandboxMode?.() ?? "workspace-write";
+    if (mode === "read-only") {
+      throw new Error(
+        "Read-only mode: file writes are denied (including remote workspaces). To modify a file, ask the user to switch modes.",
+      );
+    }
+  }
+
+  /**
+   * read 输出格式化（本地/远程共用）：行/字符分页 + 行号前缀 + 截断续读提示。
+   */
+  private formatReadResult(
+    raw: string,
+    unit: "line" | "char",
+    offset: number,
+    limit?: number,
+  ): string {
+    const totalChars = raw.length;
+    const lines = raw.split("\n");
+    const totalLines = lines.length;
+    const MAX_BYTES = 20 * 1024;
+
+    if (unit === "char") {
+      // 按字符读取
+      const charLimit = limit ?? 20000;
+      const content = safeSubstring(raw, offset, offset + charLimit);
+      const truncated = offset + charLimit < totalChars;
+
+      // 计算起始行号
+      const startLineNumber = safeTruncate(raw, offset).split("\n").length;
+      const contentLines = content.split("\n");
+      const endLineNumber = startLineNumber + contentLines.length - 1;
+      const padWidth = String(endLineNumber).length;
+      const formattedLines = contentLines.map((line, i) => {
+        const num = String(startLineNumber + i).padStart(padWidth, " ");
+        return `${num}\t${line}`;
+      });
+      let result = formattedLines.join("\n");
+
+      if (truncated) {
+        result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${offset + charLimit}, limit=${charLimit})`;
+      }
+      return result;
+    }
+
+    // 按行读取
+    const lineLimit = limit ?? 200;
+    const effectiveOffset =
+      offset < 0 ? Math.max(0, totalLines + offset) : offset;
+    const startLine = Math.min(effectiveOffset, totalLines);
+
+    // 计算起始行的原始字符位置
+    let nextCharOffset = 0;
+    for (let i = 0; i < startLine; i++) {
+      nextCharOffset += lines[i].length + 1; // +1 换行符
+    }
+
+    let endLine = startLine;
+    let charsRead = 0;
+    let truncatedByBytes = false;
+    let partialLine: string | null = null;
+
+    for (let i = startLine; i < totalLines; i++) {
+      if (i - startLine >= lineLimit) {
+        endLine = i;
+        break;
+      }
+      const line = lines[i];
+      const ln = line + (i < totalLines - 1 ? "\n" : "");
+      if (charsRead + ln.length > MAX_BYTES) {
+        const avail = MAX_BYTES - charsRead;
+        partialLine = safeTruncate(line, avail);
+        endLine = i;
+        truncatedByBytes = true;
+        break;
+      }
+      charsRead += ln.length;
+      endLine = i + 1;
+    }
+    nextCharOffset += charsRead;
+
+    const hasMoreLines = endLine < totalLines;
+
+    // 拼接行号
+    const padWidth = String(Math.max(endLine, 1)).length;
+    const formattedLines: string[] = [];
+    for (let i = startLine; i < endLine; i++) {
+      const num = String(i + 1).padStart(padWidth, " ");
+      formattedLines.push(`${num}\t|${lines[i]}`);
+    }
+    if (partialLine !== null) {
+      const num = String(endLine + 1).padStart(padWidth, " ");
+      formattedLines.push(`${num}\t|${partialLine}`);
+    }
+    let result = formattedLines.join("\n");
+
+    if (truncatedByBytes) {
+      result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${nextCharOffset}, limit=20000)`;
+    } else if (hasMoreLines) {
+      const remaining = totalLines - endLine;
+      result += `\n(${remaining} more lines remain. To continue: unit=line, offset=${endLine}, limit=${lineLimit})`;
+    }
+    return result;
+  }
+
+  /**
+   * edit 替换变换（本地/远程共用）：统一换行后匹配、首次替换、还原原文件行尾风格。
+   * 返回 null = 未匹配。
+   */
+  private static transformEdit(
+    content: string,
+    oldText: string,
+    newText: string,
+  ): string | null {
+    const normContent = content.replace(/\r\n/g, "\n");
+    const normOld = oldText.replace(/\r\n/g, "\n");
+    const idx = normContent.indexOf(normOld);
+    if (idx === -1) return null;
+    const hasCRLF = content.includes("\r\n");
+    const normResult = normContent.replace(normOld, newText);
+    return hasCRLF ? normResult.replace(/\n/g, "\r\n") : normResult;
   }
 
   /**

@@ -36,7 +36,8 @@ export type EventType =
   | 'command/done'
   | 'message/meta'
   | 'ask/asked'
-  | 'ask/answered';
+  | 'ask/answered'
+  | 'workflow/event';
 
 // ─── 基础事件 ───
 

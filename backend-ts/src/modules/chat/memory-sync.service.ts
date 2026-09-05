@@ -128,6 +128,12 @@ Scan history. ONLY trigger an update if:
       const MAX_ROUNDS = 5;
 
       for (let round = 1; round <= MAX_ROUNDS; round++) {
+        // 用户中止（手动压缩取消）：立即退出影子轮，不再调度剩余轮次
+        // （不区分取消与普通失败的原因：本钩子 fail-open，取消穿透由引擎阶段检查点兜底）
+        if (abortSignal?.aborted) {
+          this.logger.log(`[memory-sync] shadow turns aborted at round ${round}`);
+          break;
+        }
         try {
           const streamResult = (await this.llmService.completions(
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {

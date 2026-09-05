@@ -15,21 +15,10 @@ export type {
 export { MESSAGE_STORE_TOKEN } from "../../common/persistence/message-store.interface";
 
 // ============================================================================
-// 细粒度 Token 统计：系统提示词 / 摘要 / 用户提示 / 对话消息 / 工具定义
+// 细粒度 Token 统计：系统提示词 / 对话消息 / 工具定义
+// （类型定义在 message-store.interface——持久化锚点与流事件共用同一形状）
 // ============================================================================
 
-/** 细粒度 Token 统计：系统提示词 / 摘要 / 用户提示 / 对话消息 / 工具定义 */
-export interface TokenBreakdown {
-  systemPrompt: number;   // base + plugins tokens
-  summary: number;        // summary 内容（含包裹标记）的 tokens
-  userPrompt: number;     // user 内容（含包裹标记）的 tokens
-  history: number;        // user/assistant 对话消息 tokens
-  tools: number;          // 工具定义（tool definitions）的 tokens
-}
-
-/** 计算 TokenBreakdown 的总和 */
-export function calcTotalTokens(b: TokenBreakdown): number {
-  return b.systemPrompt + b.summary + b.userPrompt + b.history + b.tools;
-}
+export type { TokenBreakdown } from "../../common/persistence/message-store.interface";
 
 export type { Message };

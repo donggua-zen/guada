@@ -1,0 +1,10 @@
+{
+  "workflow.name": "工作流",
+  "workflow.description": "用编排脚本并发调度多个子代理执行多阶段计划",
+  "workflow.toolkitName": "工作流",
+  "workflow.toolkitDescription": "用 JS 编排脚本并行/分阶段调度子代理",
+  "workflow_run.executing": "正在执行工作流",
+  "workflow_run.completed": "工作流已完成",
+  "workflow_run.aggregate.executing": "正在执行{n}个工作流",
+  "workflow_run.aggregate.completed": "已完成{n}个工作流"
+}

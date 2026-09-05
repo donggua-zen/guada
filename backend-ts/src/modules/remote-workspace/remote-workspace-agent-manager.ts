@@ -9,11 +9,13 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { Client as SshClient } from "ssh2";
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import * as iconv from "iconv-lite";
 import { deployAgent } from "./agent-deploy";
-import { RpcClient } from "./rpc";
+import { RpcClient, isUnknownMethodError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
+import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
 
 interface CachedAgent {
   rpc: RpcClient;
@@ -27,7 +29,8 @@ interface CachedAgent {
 /** 分块传输块大小(与 agent 端 chunkSize 一致):1MB,内存恒定 */
 const CHUNK_SIZE = 1024 * 1024;
 
-export class RemoteAgentManager {
+@Injectable()
+export class RemoteAgentManager implements OnModuleDestroy {
   private cache = new Map<string, CachedAgent>();
 
   /** 空闲回收阈值:连接超过该时长未被使用则主动关闭(默认 2 小时) */
@@ -63,7 +66,61 @@ export class RemoteAgentManager {
     }
   }
 
-  /** 停止空闲扫描并关闭所有缓存连接(模块销毁时调用) */
+  /**
+   * 收割某会话所有远程连接上已完成的后台进程输出（turn.stopping 续跑钩子用）。
+   * 只触达活跃连接；单连接失败不阻塞其他连接。
+   * 返回原始 outputB64（未解码），由调用方（WorkspaceToolRouter）按进程登记的
+   * encoding 逐行解码。
+   */
+  async drainSessionProcesses(
+    sessionId: string,
+  ): Promise<
+    { connectionName: string; processId: string; status: string; exitCode: number | null; outputB64: string; truncated: boolean; logFile: string }[]
+  > {
+    const prefix = `${sessionId}::`;
+    const out: {
+      connectionName: string;
+      processId: string;
+      status: string;
+      exitCode: number | null;
+      outputB64: string;
+      truncated: boolean;
+      logFile: string;
+    }[] = [];
+    for (const [key, cached] of this.cache) {
+      if (!key.startsWith(prefix)) continue;
+      if (cached.ws.readyState !== WebSocket.OPEN) continue;
+      const connectionName = key.slice(prefix.length);
+      try {
+        const rows = (await cached.rpc.call("drainCompleted", {
+          outputBase64: true,
+        })) || [];
+        for (const r of rows) {
+          out.push({
+            connectionName,
+            processId: r.processId,
+            status: r.status,
+            exitCode: r.exitCode,
+            outputB64: r.outputB64 || "",
+            truncated: !!r.truncated,
+            logFile: r.logFile || "",
+          });
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `drainCompleted failed for '${connectionName}' (session ${sessionId}): ${err?.message || err}`,
+        );
+      }
+    }
+    return out;
+  }
+
+  /** 停止空闲扫描并关闭所有缓存连接（Nest 模块销毁时自动调用） */
+  onModuleDestroy(): void {
+    this.dispose();
+  }
+
+  /** 停止空闲扫描并关闭所有缓存连接 */
   dispose(): void {
     if (this.scanTimer) {
       clearInterval(this.scanTimer);
@@ -240,7 +297,37 @@ export class RemoteAgentManager {
 }
 
 /**
+ * 解码 agent 输出：agent >= 0.5.0 在 outputBase64 标志下返回 outputB64（原始字节
+ * base64），按 encoding 本地解码——gbk 等非 UTF-8 输出不失真；旧版 agent 忽略该
+ * 标志返回纯文本 output，原样透传。
+ */
+function decodeAgentOutput<T extends Record<string, any>>(
+  result: T,
+  encoding?: string,
+): T & { output: string } {
+  if (result && typeof result.outputB64 === "string") {
+    const buf = Buffer.from(result.outputB64, "base64");
+    const enc = (encoding || "utf-8").toLowerCase();
+    let text: string;
+    try {
+      text = iconv.decode(buf, enc === "utf8" ? "utf-8" : enc);
+    } catch {
+      text = buf.toString("utf-8");
+    }
+    const rest = { ...result } as any;
+    delete rest.outputB64;
+    return { ...rest, output: text };
+  }
+  return result as T & { output: string };
+}
+
+/**
  * RemoteAgent — wraps RPC client, provides high-level methods for tools.
+ *
+ * 两层方法：
+ * - 原语层（*Raw / stat / readdir / ...）：透传 agent RPC，供 SshWorkspaceProvider
+ *   （WorkspaceProvider 实现）与工具远程分支使用；
+ * - 工具层（readFile/execute 等带输出加工）：供 legacy remote_* 工具使用。
  */
 export class RemoteAgent {
   constructor(
@@ -248,32 +335,388 @@ export class RemoteAgent {
     private config: any,
   ) {}
 
-  private get basePath(): string {
+  /** 连接的工作目录基准（相对路径解析用） */
+  get basePath(): string {
     return this.config.path || "/";
   }
 
+  /** 相对路径 → 远端绝对路径（posix 语义；绝对路径原样返回） */
+  resolveRemotePath(p: string): string {
+    return p.startsWith("/") ? p : path.posix.join(this.basePath, p);
+  }
+
+  // ── 原语层 ──
+
   /**
-   * 清洗命令输出:复用 shell 插件的 StreamingSanitizer,
-   * 擦除 ANSI 转义、归一化 \r\r\n/\r\n、折叠 \r 进度条帧(每行保留最后 \r 后内容)
+   * 读取远端文件原始内容。
+   * utf-8 直接文本取回；其他编码按 base64 取回字节后用 iconv 本地解码
+   * （agent 原语只产出 utf-8 文本或 base64 字节）。
    */
+  async readFileRaw(
+    filePath: string,
+    encoding?: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const absPath = this.resolveRemotePath(filePath);
+    const enc = (encoding || "utf-8").toLowerCase();
+    if (enc === "utf-8" || enc === "utf8") {
+      const result = await this.rpc.call<{ data: string | number[] }>(
+        "readFile",
+        { path: absPath, encoding: "utf-8" },
+        signal,
+      );
+      return typeof result.data === "string"
+        ? result.data
+        : Buffer.from(result.data as number[]).toString("utf-8");
+    }
+    const result = await this.rpc.call<{ data: string }>(
+      "readFile",
+      { path: absPath },
+      signal,
+    );
+    const buf = Buffer.from(result.data, "base64");
+    try {
+      return iconv.decode(buf, enc);
+    } catch {
+      return buf.toString("utf-8");
+    }
+  }
+
+  /**
+   * 写入远端文件。utf-8 直接写；其他编码本地编码为字节后走分块上传（二进制安全，
+   * agent 的 writeFile 原语只接受 UTF-8 文本）。
+   */
+  async writeFileRaw(
+    filePath: string,
+    content: string,
+    encoding?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const absPath = this.resolveRemotePath(filePath);
+    const enc = (encoding || "utf-8").toLowerCase();
+    if (enc === "utf-8" || enc === "utf8") {
+      await this.rpc.call("writeFile", { path: absPath, content }, signal);
+      return;
+    }
+    const bytes = iconv.encode(content, enc);
+    await this.uploadBuffer(absPath, bytes, signal);
+  }
+
+  /** 分块上传内存字节（1MB/块，内存恒定）；异常时通知远端清理半成品 */
+  async uploadBuffer(
+    remotePath: string,
+    data: Buffer,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const start = await this.rpc.call<{ uploadId: string }>(
+      "uploadStart",
+      { remotePath, totalBytes: data.length },
+      signal,
+    );
+    try {
+      for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
+        const end = Math.min(offset + CHUNK_SIZE, data.length);
+        await this.rpc.call(
+          "uploadChunk",
+          { uploadId: start.uploadId, data: data.subarray(offset, end).toString("base64") },
+          signal,
+        );
+      }
+      await this.rpc.call("uploadEnd", { uploadId: start.uploadId }, signal);
+    } catch (e) {
+      try {
+        await this.rpc.call("uploadAbort", { uploadId: start.uploadId });
+      } catch {}
+      throw e;
+    }
+  }
+
+  /** 轮询远端后台进程；agent 端进程不存在时返回 null（对齐本地 poll 语义） */
+  async pollRaw(
+    processId: string,
+    timeoutMs: number,
+    signal?: AbortSignal,
+    encoding?: string,
+  ): Promise<{
+    processId: string;
+    status: string;
+    exitCode: number | null;
+    output: string;
+    uptimeMs: number;
+    waitMs?: number;
+    /** 输出超限被截断（完整内容在 logFile） */
+    truncated?: boolean;
+    logFile?: string;
+  } | null> {
+    try {
+      const result = await this.rpc.call(
+        "poll",
+        { processId, timeout: timeoutMs, outputBase64: true },
+        signal,
+        timeoutMs + 10000,
+      );
+      return decodeAgentOutput(result, encoding);
+    } catch (e: any) {
+      if (String(e?.message || e).includes("not found")) return null;
+      throw e;
+    }
+  }
+
+  async writeStdinRaw(processId: string, text: string): Promise<void> {
+    await this.rpc.call("writeStdin", { processId, input: text });
+  }
+
+  async killRaw(processId: string): Promise<{ status: string }> {
+    return this.rpc.call("kill", { processId });
+  }
+
+  /** 收割远端已完成的后台进程（并从 agent 进程表移除）；encoding 用于 outputB64 解码 */
+  async drainCompletedRaw(encoding?: string): Promise<
+    {
+      processId: string;
+      status: string;
+      exitCode: number | null;
+      output: string;
+      uptimeMs: number;
+      truncated?: boolean;
+      logFile?: string;
+    }[]
+  > {
+    const rows = await this.rpc.call<
+      Record<string, any>[] | undefined
+    >("drainCompleted", { outputBase64: true });
+    return (rows || []).map((r) =>
+      decodeAgentOutput(r, encoding),
+    ) as {
+      processId: string;
+      status: string;
+      exitCode: number | null;
+      output: string;
+      uptimeMs: number;
+    }[];
+  }
+
+  /** 读取远端文件字节区间（二进制安全）。主路径 readFileRange RPC；旧版 agent（< 0.5.0）降级 downloadChunk。 */
+  async readFileRangeRaw(
+    filePath: string,
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+  ): Promise<Buffer> {
+    const absPath = this.resolveRemotePath(filePath);
+    try {
+      const r = await this.rpc.call<{ data: string }>(
+        "readFileRange",
+        { path: absPath, offset, length },
+        signal,
+      );
+      return Buffer.from(r.data, "base64");
+    } catch (e: any) {
+      if (!isUnknownMethodError(e)) throw e;
+      // 旧版 agent：经 downloadChunk 变通（downloadStart 定位会话后单块读取）
+      const start = await this.rpc.call<{ downloadId: string }>(
+        "downloadStart",
+        { remotePath: absPath },
+        signal,
+      );
+      try {
+        const chunk = await this.rpc.call<{ data: string }>(
+          "downloadChunk",
+          { downloadId: start.downloadId, offset, size: length },
+          signal,
+        );
+        return Buffer.from(chunk.data, "base64");
+      } finally {
+        try {
+          await this.rpc.call("downloadEnd", { downloadId: start.downloadId });
+        } catch {}
+      }
+    }
+  }
+
+  /**
+   * 原生 glob RPC（agent >= 0.5.0）：服务端模式匹配，返回相对 cwd 的文件清单。
+   * 旧版 agent 抛 unknown method，由 SshWorkspaceProvider 降级到 find|wc 模拟。
+   */
+  async globRaw(
+    pattern: string,
+    cwd: string | undefined,
+    ignore: string[] | undefined,
+    limit: number,
+    deep: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<{ files: { path: string; size: number }[]; hasMore: boolean }> {
+    const r = await this.rpc.call<{
+      files?: { path: string; size: number }[];
+      hasMore?: boolean;
+    }>(
+      "glob",
+      {
+        pattern,
+        cwd: cwd ? this.resolveRemotePath(cwd) : this.basePath,
+        ignore: ignore || [],
+        limit,
+        deep,
+      },
+      signal,
+    );
+    return { files: r?.files ?? [], hasMore: !!r?.hasMore };
+  }
+
+  async stat(filePath: string, signal?: AbortSignal): Promise<FileStat> {
+    const r = await this.rpc.call<{
+      isFile: boolean;
+      isDirectory: boolean;
+      size: number;
+      mtime: number;
+    }>("stat", { path: this.resolveRemotePath(filePath) }, signal);
+    return {
+      isFile: r.isFile,
+      isDirectory: r.isDirectory,
+      size: r.size,
+      mtime: new Date(r.mtime),
+    };
+  }
+
+  async readdir(dirPath: string, signal?: AbortSignal): Promise<DirEntry[]> {
+    const rows = await this.rpc.call<
+      | { name: string; isDirectory: boolean; size: number; mtime: number }[]
+      | undefined
+    >("readdir", { path: this.resolveRemotePath(dirPath) }, signal);
+    return (rows || []).map((e) => ({
+      name: e.name,
+      isDirectory: e.isDirectory,
+      size: e.size,
+      mtime: new Date(e.mtime),
+    }));
+  }
+
+  async mkdir(
+    dirPath: string,
+    opts?: { recursive?: boolean },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.rpc.call(
+      "mkdir",
+      { path: this.resolveRemotePath(dirPath), recursive: !!opts?.recursive },
+      signal,
+    );
+  }
+
+  async unlink(
+    targetPath: string,
+    opts?: { recursive?: boolean },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.rpc.call(
+      "unlink",
+      { path: this.resolveRemotePath(targetPath), recursive: !!opts?.recursive },
+      signal,
+    );
+  }
+
+  async rename(
+    oldPath: string,
+    newPath: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.rpc.call(
+      "rename",
+      {
+        oldPath: this.resolveRemotePath(oldPath),
+        newPath: this.resolveRemotePath(newPath),
+      },
+      signal,
+    );
+  }
+
+  /**
+   * 原始 grep：返回 agent grep RPC 的原始行（`path:line:content`，远端路径形态）。
+   * smart-case 与 agent 端一致（全小写 → -i）。
+   */
+  async grepRaw(
+    pattern: string,
+    searchPath?: string,
+    maxResults = 50,
+    ignore?: string[],
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const absPath = searchPath
+      ? this.resolveRemotePath(searchPath)
+      : this.basePath;
+    const results = await this.rpc.call<string[]>(
+      "grep",
+      { pattern, path: absPath, maxResults, ignore: ignore || [] },
+      signal,
+    );
+    return results || [];
+  }
+
+  /**
+   * 原始命令执行（不加工输出）。超时转后台语义由 agent 端保证（60s 默认）；
+   * RPC 兜底超时 = 命令超时 + 30s。失败（超时/断线/响应丢失）时在错误对象上
+   * 携带 predictedLog（/tmp/guada-logs/<requestId>.out），调用方可据此提示 AI 读日志。
+   */
+  async executeRaw(
+    command: string,
+    opts?: {
+      timeoutMs?: number;
+      signal?: AbortSignal;
+      /** true = 显式后台执行（agent 立即返回 processId，输出落日志文件） */
+      background?: boolean;
+      /** 输出编码（outputB64 原始字节的本地解码目标；缺省 utf-8） */
+      encoding?: string;
+    },
+  ): Promise<{
+    kind: string;
+    output: string;
+    exitCode: number | null;
+    uptimeMs: number;
+    processId?: string;
+    logFile?: string;
+    /** 输出超限被 head+tail 截断（完整内容在 logFile） */
+    truncated?: boolean;
+  }> {
+    const timeoutMs = opts?.timeoutMs ?? 60000;
+    const reqId = `exec-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    try {
+      const result = await this.rpc.call(
+        "execute",
+        {
+          command,
+          cwd: this.basePath,
+          timeout: timeoutMs,
+          background: opts?.background === true,
+          // agent >= 0.5.0 返回 outputB64 原始字节；旧版忽略此标志返回纯文本 output
+          outputBase64: true,
+        },
+        opts?.signal,
+        timeoutMs + 30000,
+        reqId,
+      );
+      return decodeAgentOutput(result, opts?.encoding);
+    } catch (e: any) {
+      if (e?.name === "AbortError") throw e;
+      e.predictedLog = `/tmp/guada-logs/${reqId}.out`;
+      throw e;
+    }
+  }
+
+  // ── 工具层（legacy remote_* 工具）──
+
   private sanitizeOutput(text: string): string {
     if (!text) return "";
     const s = new StreamingSanitizer();
     return s.feed(text) + s.flush();
   }
 
+  /**
+   * 清洗命令输出:复用 shell 插件的 StreamingSanitizer,
+   * 擦除 ANSI 转义、归一化 \r\r\n/\r\n、折叠 \r 进度条帧(每行保留最后 \r 后内容)
+   */
+
   async readFile(filePath: string, offset = 0, limit = 200, signal?: AbortSignal): Promise<string> {
-    const absPath = filePath.startsWith("/")
-      ? filePath
-      : path.posix.join(this.basePath, filePath);
-    const result = await this.rpc.call<{
-      data: string | number[];
-      encoding?: string;
-    }>("readFile", { path: absPath, encoding: "utf-8" }, signal);
-    const content =
-      typeof result.data === "string"
-        ? result.data
-        : Buffer.from(result.data as number[]).toString("utf-8");
+    const content = await this.readFileRaw(filePath, "utf-8", signal);
     const lines = content.split("\n");
     const start = Math.min(offset, lines.length);
     const end = Math.min(start + limit, lines.length);
@@ -328,11 +771,9 @@ export class RemoteAgent {
   }
 
   async execute(command: string, signal?: AbortSignal): Promise<string> {
-    // 90s 超时兜底(> agent 60s 命令超时):即使响应丢失/延迟也不无限挂起。
-    // requestId 可预测:agent 端日志文件按 requestId 命名(/tmp/guada-logs/<requestId>.out),
-    // abort/超时后即使没拿到响应,也能直接给出日志路径供 AI 读取。
-    const reqId = `exec-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    const predictedLog = `/tmp/guada-logs/${reqId}.out`;
+    // 90s 超时兜底(> agent 60s 命令超时):executeRaw 内部已设置,
+    // 失败时错误对象携带可预测的日志路径(/tmp/guada-logs/<requestId>.out),
+    // 即使没拿到响应,也能直接给出日志路径供 AI 读取。
     let result: {
       kind: string;
       output: string;
@@ -341,17 +782,12 @@ export class RemoteAgent {
       logFile?: string;
     };
     try {
-      result = await this.rpc.call(
-        "execute",
-        { command, cwd: this.basePath, timeout: 60000, background: false },
-        signal,
-        90000,
-        reqId,
-      );
+      result = await this.executeRaw(command, { timeoutMs: 60000, signal });
     } catch (e: any) {
       // abort:原样抛出(由上层处理)
       if (e?.name === "AbortError") throw e;
       // 超时/断线/响应丢失:给出可预测的日志路径,AI 可自行读取
+      const predictedLog = e?.predictedLog || "/tmp/guada-logs/";
       return (
         `[Command did not return in time (${e?.message || e}). ` +
         `It may still be running in the background on the remote server. ` +

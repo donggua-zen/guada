@@ -270,21 +270,6 @@ export interface SessionApi {
   fetchSessionSummaries(sessionId: string, limit?: number): Promise<{ items: any[]; total: number }>;
   updateSummary(summaryId: string, data: { summaryContent?: string }): Promise<any>;
   deleteSummary(summaryId: string): Promise<{ success: boolean }>;
-  fetchSessionTokenStats(sessionId: string): Promise<{
-    usedTokens: number;
-    totalTokens: number;
-    remainingTokens: number;
-    percentage: number;
-    modelName: string;
-    messageCount: number;
-    breakdown: {
-      systemPrompt: number;
-      summary: number;
-      userPrompt: number;
-      history: number;
-      tools: number;
-    };
-  }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
 }
@@ -428,10 +413,6 @@ export const sessionApi: SessionApi = {
     return await this._request(`/sessions/summaries/${summaryId}`, {
       method: "DELETE",
     });
-  },
-
-  async fetchSessionTokenStats(this: ApiContext, sessionId: string) {
-    return await this._request(`/sessions/${sessionId}/token-stats`);
   },
 
   async getWorkspacePath(this: ApiContext, sessionId: string) {

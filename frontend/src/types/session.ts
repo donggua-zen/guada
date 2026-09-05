@@ -58,6 +58,8 @@ export interface SessionState {
     isCompressing: boolean
     /** 统一流状态(发送中/运行中/结束),取代分散的 isStreaming + sidebar.working */
     streamStatus: StreamStatus
+    /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩伪流，buffer 无回合历史） */
+    streamKind?: 'chat' | 'maintenance'
     /**
      * 会话级统一交互卡（审批/询问/迭代暂停继续共用，对齐 DSH：sessionId 唯一锚点，不挂回合
      * ——ask_requested 事件标记，ask_resolved / turn_end 清除）。全局卡在输入区上方展示。

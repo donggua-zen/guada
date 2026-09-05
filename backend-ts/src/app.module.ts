@@ -23,6 +23,7 @@ import { SkillsModule } from './modules/skills/skills.module';
 import { LlmCoreModule } from './modules/llm-core/providers.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 import { ShellModule } from './modules/shell/shell.module';
 import { CommandsModule } from './modules/commands/commands.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
@@ -63,6 +64,7 @@ import { PersistenceModule } from './common/persistence/persistence.module';
     BotGatewayModule, // 机器人网关模块
     SchedulerModule,  // 定时任务模块
     SubAgentModule,   // 子 Agent 模块
+    WorkflowModule,   // Workflow 子代理编排模块
     ShellModule,      // Shell 命令行模块
     CommandsModule,   // 命令提供者注册 & 聚合接口
     BridgeModule,     // Electron ↔ Backend 通信桥（全局）

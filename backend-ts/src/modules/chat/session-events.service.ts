@@ -170,6 +170,9 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     // 刷新安全（v1.8）：stream_status_changed 不在 eventBuffer 中、不随 catchup 重放，
     // 刷新后会话级 isStreaming/streamStatus 会丢失。对活跃流补发 running 状态，
     // 恢复"暂停中的循环仍工作中"的会话级视图（审批/迭代暂停卡；阻止新消息撞 SESSION_BUSY）。
+    // kind 随流类型下发：chat 流前端跳过事件页拉取靠 buffer 重放；maintenance 流
+    // （手动压缩伪流）buffer 无回合历史，前端照常拉事件页，压缩中状态由 catchup 的
+    // compression_start 恢复。
     for (const stream of this.streamManager.getActiveStreamsForUser(userId)) {
       subject.next({
         data: JSON.stringify(
@@ -177,7 +180,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
             userId,
             sessionId: stream.sessionId,
             timestamp: new Date().toISOString(),
-            payload: { status: "running" },
+            payload: { status: "running", kind: stream.kind },
           }),
         ),
       } as MessageEvent);
@@ -380,6 +383,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       // 统一交互（审批/询问/迭代暂停共用）
       case "ask_requested": return EVENT_METHOD.STREAM_ASK_REQUESTED;
       case "ask_resolved": return EVENT_METHOD.STREAM_ASK_RESOLVED;
+      // Workflow 编排进度
+      case "workflow_event": return EVENT_METHOD.STREAM_WORKFLOW_EVENT;
       // 消息级:StreamChunk 直通
       case "block_start": return EVENT_METHOD.STREAM_BLOCK_START;
       case "text_delta": return EVENT_METHOD.STREAM_TEXT_DELTA;

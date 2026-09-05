@@ -17,6 +17,7 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { isContextWindowExceeded } from "../../llm-core/utils/retry-on-error.util";
 import { CompactionService } from "./compaction.service";
 import type { CompactionDataSource } from "./types";
+import { CompactionCancelledError } from "./compaction-cancelled.error";
 import type { ISessionContext } from "../session-context";
 import type { Message } from "../../../common/types/conversation.types";
 import {
@@ -153,7 +154,17 @@ export class CompactionCoordinatorService {
       }
       return { messages: outcome.messages, didRun: true };
     } catch (e: any) {
-      this.logger.error(`[compaction] failed: ${e?.message ?? e}`);
+      // 取消（用户中止维护流）与失败区分记录；compression_error 照常广播，
+      // 前端移除"压缩中"占位卡并复位状态
+      const cancelled =
+        e instanceof CompactionCancelledError ||
+        e?.name === "CompactionCancelledError" ||
+        e?.name === "AbortError";
+      if (cancelled) {
+        this.logger.log(`[compaction] cancelled by user: ${e?.message ?? e}`);
+      } else {
+        this.logger.error(`[compaction] failed: ${e?.message ?? e}`);
+      }
       await context.publishStream({
         type: "compression_error",
         error: e?.message ?? String(e),

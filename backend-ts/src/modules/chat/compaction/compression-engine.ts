@@ -24,6 +24,7 @@ import type {
   ContentBlock,
 } from '../../../common/types/conversation.types';
 import type { CompactionDataSource } from './types';
+import { CompactionCancelledError } from './compaction-cancelled.error';
 import { toolPairingBalancedBefore } from './tool-pairing';
 
 // 与压缩策略一致的常量
@@ -101,6 +102,8 @@ export interface CompressionOptions {
   /** 确认需要二级压缩（摘要/丢弃）后触发的钩子（compaction.before 事件的唯一时序来源：
    *  由调用方 CompactionService 注入并发射事件，记忆保存等订阅者须先于摘要完成） */
   onBeforeCompaction?: () => Promise<void>;
+  /** 用户中止信号：阶段边界检查（中止后快速退出，不落任何写入） */
+  abortSignal?: AbortSignal;
   /** 强制压缩（手动/上下文溢出恢复路径）：跳过 triggerRatio 阈值判断；retain 仍按配置比例 */
   force?: boolean;
   /** 一级裁剪（pruner）参数化配置（对齐 DSH modelPolicies 按模型路由裁剪预算） */
@@ -137,6 +140,13 @@ export class CompressionEngine {
 
   constructor(private readonly tokenMeter: TokenMeterService) {}
 
+  /** 用户中止检查：阶段边界快速退出，保证取消后不落任何 compaction 写入 */
+  private throwIfCancelled(options: CompressionOptions): void {
+    if (options.abortSignal?.aborted) {
+      throw new CompactionCancelledError();
+    }
+  }
+
   /**
    * 执行压缩（对齐 DSH compactIfNeeded）：
    * ① 触发（原文测量）→ ② 纯计算 prune 方案 → ③ prune 后 < 触发线则只裁剪；
@@ -151,6 +161,7 @@ export class CompressionEngine {
     const { messages } = options;
     const triggerRatio = options.triggerRatio ?? 0.8;
     const modelName = options.modelName || 'gpt-4o';
+    this.throwIfCancelled(options);
 
     // ① 触发判断（原文测量；force=溢出恢复路径，跳过阈值）
     const historyTokens = await this.tokenMeter.estimateMessages(
@@ -158,6 +169,7 @@ export class CompressionEngine {
       modelName,
       messages,
     );
+    this.throwIfCancelled(options);
     const envelopeDelta =
       options.requestTokens === undefined
         ? 0
@@ -170,6 +182,7 @@ export class CompressionEngine {
 
     // ② 纯计算 prune 方案（全 surface，保护区除外）——不改写消息、不落库
     const plan = await this.buildPrunePlan(sessionId, options, modelName);
+    this.throwIfCancelled(options);
     const prunedTokenDelta = plan.reduce(
       (acc, p) => acc + (p.prunedTokens ?? 0),
       0,
@@ -222,6 +235,9 @@ export class CompressionEngine {
           this.logger.warn(`onBeforeCompaction failed: ${e}`);
         }
       }
+      // 影子轮（记忆同步等订阅者）可能耗时较长且 fail-open 吞错——回调之后复查中止，
+      // 取消必须穿透（不能放进上面的 try，否则被 fail-open 吞掉后继续摘要）
+      this.throwIfCancelled(options);
       const gen = await this.generateSummary(
         sessionId,
         options,
@@ -238,7 +254,9 @@ export class CompressionEngine {
     const tailPlan = plan.filter((p) => p.index >= boundary);
     await this.applyPrunePlan(options, tailPlan);
 
-    // ④c 写 compaction 括号事件（遮蔽 [0..boundary) + 摘要）
+    // ④c 写 compaction 括号事件（遮蔽 [0..boundary) + 摘要）——提交前最后一道中止检查，
+    // 保证取消后不落任何 compaction 写入
+    this.throwIfCancelled(options);
     const { summaryMessageId } = await options.dataSource.appendCompact({
       shadowedEndId,
       shadowedCount,
@@ -330,6 +348,7 @@ export class CompressionEngine {
     options: CompressionOptions,
     plan: PrunePlanEntry[],
   ): Promise<void> {
+    this.throwIfCancelled(options);
     for (const p of plan) {
       await options.dataSource.appendPrune({
         messageId: p.messageId,
@@ -398,6 +417,7 @@ export class CompressionEngine {
     let attempts = 0;
     for (;;) {
       attempts++;
+      this.throwIfCancelled(options);
       const result = await options.summaryProvider!.generate({
         allMessages: messages,
         shadowed: shadowedMessages,

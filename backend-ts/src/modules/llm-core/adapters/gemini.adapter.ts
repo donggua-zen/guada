@@ -103,6 +103,9 @@ export class GeminiAdapter implements IProtocolAdapter {
       throw new Error("Gemini API Key is missing");
     }
 
+    // 中止检查：请求前（legacy Gemini SDK 无原生 signal 支持，显式检查补偿）
+    this.throwIfAborted(params.abortSignal);
+
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // 转换工具格式
@@ -135,8 +138,15 @@ export class GeminiAdapter implements IProtocolAdapter {
       // 单次尝试，重试由 AgentEngine 统一处理
       const result = await chat.sendMessageStream(contentToSend);
 
-      yield* this.handleGeminiStream(result as any);
+      // 等待期间可能已中止：开流后再查一次
+      this.throwIfAborted(params.abortSignal);
+
+      yield* this.handleGeminiStream(result as any, params.abortSignal);
     } catch (err: any) {
+      // 用户中止：直接抛出，不打上游错误日志
+      if (params.abortSignal?.aborted) {
+        throw err;
+      }
       const status = err?.status;
       const msg = `Gemini API Error: ${status} - ${err?.message}`;
       // 429 → UpstreamRateLimitError（可重试）
@@ -162,10 +172,20 @@ export class GeminiAdapter implements IProtocolAdapter {
    * Gemini 无原生块边界事件，由 StreamBlockTracker 合成生命周期；
    * 工具调用通常在流结束时一次性给出（完整 args，作为单个 delta 发出）。
    */
-  private async *handleGeminiStream(result: any): AsyncGenerator<StreamChunk> {
+  /** 用户中止检查：legacy Gemini SDK 无原生 signal 支持，调用前与流式块间显式检查 */
+  private throwIfAborted(abortSignal?: AbortSignal): void {
+    if (abortSignal?.aborted) {
+      throw new DOMException("Request aborted", "AbortError");
+    }
+  }
+
+  private async *handleGeminiStream(result: any, abortSignal?: AbortSignal): AsyncGenerator<StreamChunk> {
     const tracker = new StreamBlockTracker();
 
     for await (const chunk of result.stream) {
+      // 中止检查：SDK 无原生 signal，逐块检查近实时生效（for-await 退出时自动终结底层流）
+      this.throwIfAborted(abortSignal);
+
       // 处理文本内容
       const text = chunk.text();
       if (text) {

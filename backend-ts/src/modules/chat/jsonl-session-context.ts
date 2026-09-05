@@ -134,7 +134,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /** prelude 构建时的分项 token（供 getTokenBreakdown 按需消费；history 每次现算） */
   private preludeTokenStats = {
     systemPrompt: 0,
-    userPrompt: 0,
     tools: 0,
   };
 
@@ -563,11 +562,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     durationMs: number,
     finish: TurnFinish,
   ): Promise<void> {
-    // 上下文占用锚点：回合全部消息已 append（finalizeTurn 时序在流结束后）→ getTokenCount 即回合后占用
-    const anchor: Partial<TurnFinish> = {
-      usedTokens: await this.getTokenCount(),
-      effectiveContextWindow: this.getEffectiveContextWindow(),
-    };
+    // 上下文占用锚点：回合全部消息已 append（finalizeTurn 时序在流结束后）→ 统计即回合后占用
+    // （含视图消息数与细分，供前端重开会话时逆向扫描免 REST）
+    const anchor = await this.getContextStats();
     const revision = await this.messageStore.finalizeTurn(
       this.sessionId,
       turnId,
@@ -730,7 +727,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /** 压缩后完整请求 token 模拟结算（写前计算，供 compaction/end 锚点） */
   private async computePostCompactStats(
     data: CompactWrite,
-  ): Promise<{ usedTokens?: number; effectiveContextWindow?: number }> {
+  ): Promise<{
+    usedTokens?: number;
+    effectiveContextWindow?: number;
+    messageCount?: number;
+    breakdown?: TokenBreakdown;
+  }> {
     const effectiveContextWindow = this.getEffectiveContextWindow();
     const shadowedCount = data.shadowedCount;
     if (!this.snapshot || shadowedCount <= 0) {
@@ -765,9 +767,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
           ],
         )
       : 0;
+    const snap = await this.getSnapshot();
     return {
       usedTokens: Math.max(0, preTotal - shadowedTokens + summaryTokens),
       effectiveContextWindow,
+      messageCount: snap.view.length,
+      breakdown: await this.getTokenBreakdown(),
     };
   }
 
@@ -775,8 +780,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。 */
   async recordContextAnchor(): Promise<void> {
     const revision = await this.messageStore.recordContextAnchor(this.sessionId, {
-      usedTokens: await this.getTokenCount(),
-      effectiveContextWindow: this.getEffectiveContextWindow(),
+      ...(await this.getContextStats()),
     });
     // 不改变消息视图，仅版本号前进 → 续期快照 revision
     this.refreshSnapshotRevision(revision);
@@ -831,6 +835,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   async getTokenBreakdown(): Promise<TokenBreakdown> {
+    // prelude 统计懒构建（压缩等路径的实例可能尚未触发 buildSystemText）
+    await this.ensureConversationStateLoaded();
     const snap = await this.getSnapshot();
     const historyTokens =
       snap.prefixTokens.length > 0
@@ -838,10 +844,28 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         : 0;
     return {
       systemPrompt: this.preludeTokenStats.systemPrompt,
-      summary: 0,
-      userPrompt: this.preludeTokenStats.userPrompt,
       history: historyTokens,
       tools: this.preludeTokenStats.tools,
+    };
+  }
+
+  /** 会话上下文统计聚合：占用 + 窗口 + 视图消息数 + 细分。流事件与持久化锚点统一取数。 */
+  async getContextStats(): Promise<{
+    usedTokens: number;
+    effectiveContextWindow: number;
+    messageCount: number;
+    breakdown: TokenBreakdown;
+  }> {
+    const [usedTokens, breakdown] = await Promise.all([
+      this.getTokenCount(),
+      this.getTokenBreakdown(),
+    ]);
+    const snap = await this.getSnapshot();
+    return {
+      usedTokens,
+      effectiveContextWindow: this.getEffectiveContextWindow(),
+      messageCount: snap.view.length,
+      breakdown,
     };
   }
 

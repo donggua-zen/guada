@@ -154,6 +154,13 @@ export function useSessionEvents() {
         // 导致打开每个会话都显示流式当中):running → true,completed/error → false。
         sessionStore.setSessionIsStreaming(sessionId, status === "running");
 
+        // 流类型（chat=对话回合；maintenance=维护任务如手动压缩伪流）：
+        // loadSession 据此决定是否跳过事件页拉取（maintenance 流 buffer 无回合历史）
+        sessionStore.setSessionStreamKind(
+          sessionId,
+          payload?.kind === "maintenance" ? "maintenance" : "chat",
+        );
+
         // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象
         if (isSubOrBot) return;
 

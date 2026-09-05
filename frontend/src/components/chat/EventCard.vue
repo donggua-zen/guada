@@ -22,21 +22,38 @@
 
     <!-- 压缩摘要事件 -->
     <div v-else-if="eventType === 'compaction'" class="event-card__compaction">
-      <div class="event-card__divider">
+      <!-- 压缩中占位：同款胶囊 + loading（压缩完成后由 compaction_summary 原位替换为结果卡） -->
+      <div v-if="compressing" class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
-        <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
-          <el-icon size="13">
-            <Archive20Regular v-if="!expanded" />
-            <ArrowUp16Regular v-else />
+        <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
+          <el-icon size="13" class="is-loading">
+            <Loading />
           </el-icon>
-          <span class="event-card__compaction-text">{{ compactLabel }}</span>
-        </button>
+          <span class="event-card__compaction-text">{{ t('chat.turn.contextCompacting') }}</span>
+        </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
       </div>
-      <div v-if="expanded && summaryText" class="event-card__summary">
-        {{ summaryText }}
-      </div>
+      <template v-else>
+        <div class="event-card__divider">
+          <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+          <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
+            <el-icon size="13">
+              <Archive20Regular v-if="!expanded" />
+              <ArrowUp16Regular v-else />
+            </el-icon>
+            <span class="event-card__compaction-text">{{ compactLabel }}</span>
+          </button>
+          <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+        </div>
+        <div v-if="expanded && summaryText" class="event-card__summary">
+          {{ summaryText }}
+        </div>
+      </template>
     </div>
+
+    <!-- Workflow 编排进度（run → phase → member 三层卡片） -->
+    <WorkflowRunCard v-else-if="eventType === 'workflow' && event?.metadata?.workflow"
+      class="w-full" :state="event.metadata.workflow" />
 
     <!-- 其他事件类消息：通用兜底 -->
     <div v-else class="text-xs text-gray-400 dark:text-gray-500">
@@ -48,7 +65,9 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { Loading } from "@element-plus/icons-vue";
 import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
+import WorkflowRunCard from "./WorkflowRunCard.vue";
 
 const props = defineProps<{
   /** 事件源：kind='event' 外壳 turn，或 turn 内 role='event' 消息（两者均从 .metadata 读取事件字段） */
@@ -59,6 +78,7 @@ const { t } = useI18n();
 const expanded = ref(false);
 
 const eventType = computed(() => props.event?.metadata?.eventType ?? "");
+const compressing = computed(() => !!props.event?.metadata?.compressing);
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
 const outcome = computed(() => props.event?.metadata?.commandOutcome ?? null);
 const compactInfo = computed(() => props.event?.metadata?.compactInfo ?? null);
@@ -126,6 +146,10 @@ const outcomeClass = computed(() => {
 .event-card__compaction-btn {
   @apply flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-gray-400 dark:text-gray-500
     hover:bg-gray-100/70 dark:hover:bg-gray-800/50 hover:text-gray-500 dark:hover:text-gray-400 transition-colors;
+}
+
+.event-card__compaction-btn--compressing {
+  @apply cursor-default;
 }
 .event-card__compaction-text {
   @apply text-xs tracking-wide;

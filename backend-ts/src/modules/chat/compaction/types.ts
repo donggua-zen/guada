@@ -60,6 +60,13 @@ export interface CompactionDataSource {
   getTokenCount(): Promise<number>;
   /** 有效上下文窗口 */
   getEffectiveContextWindow(): number;
+  /** 会话上下文统计聚合（占用 + 窗口 + 视图消息数 + 细分），压缩后广播事件统一取数 */
+  getContextStats(): Promise<{
+    usedTokens: number;
+    effectiveContextWindow: number;
+    messageCount: number;
+    breakdown: import('../../../common/persistence/message-store.interface').TokenBreakdown;
+  }>;
   /** 合并后的压缩配置 */
   getCompressionConfig(): CompactionConfig;
   /** KV 前缀：system 提示词文本（与主请求 envelope 一致） */

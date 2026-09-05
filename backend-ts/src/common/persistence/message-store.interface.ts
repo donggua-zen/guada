@@ -31,6 +31,16 @@ export interface ContextLoadParams {
   keepReasoningContent?: boolean;
 }
 
+/** 细分 Token 统计（三项真值：压缩摘要折叠进 history；插件 user 型提示词机制已废弃） */
+export interface TokenBreakdown {
+  /** 系统提示词（角色 base + 插件 eager 提示词） */
+  systemPrompt: number;
+  /** user/assistant 对话消息（含被折叠的压缩摘要） */
+  history: number;
+  /** 工具定义（tool definitions） */
+  tools: number;
+}
+
 /** 轮次完成信息（usage/耗时/finishReason/error） */
 export interface TurnFinish {
   usage: TokenUsage;
@@ -42,6 +52,10 @@ export interface TurnFinish {
   usedTokens?: number;
   /** 有效上下文窗口（与 usedTokens 配套） */
   effectiveContextWindow?: number;
+  /** 可见视图消息数（与 usedTokens 配套） */
+  messageCount?: number;
+  /** 细分 token（与 usedTokens 配套；旧数据缺省） */
+  breakdown?: TokenBreakdown;
 }
 
 /** 编辑轮次（版本切换 / 内容编辑） */
@@ -166,6 +180,10 @@ export interface IMessageStore {
       usedTokens?: number;
       /** 有效上下文窗口（与 usedTokens 配套） */
       effectiveContextWindow?: number;
+      /** 可见视图消息数（与 usedTokens 配套） */
+      messageCount?: number;
+      /** 细分 token（与 usedTokens 配套） */
+      breakdown?: TokenBreakdown;
     },
   ): Promise<{
     summaryMessageId: string;
@@ -177,7 +195,12 @@ export interface IMessageStore {
    *  @returns 写入后版本号 */
   recordContextAnchor(
     sessionId: string,
-    data: { usedTokens: number; effectiveContextWindow: number },
+    data: {
+      usedTokens: number;
+      effectiveContextWindow: number;
+      messageCount?: number;
+      breakdown?: TokenBreakdown;
+    },
   ): Promise<number>;
 
   // ─── 统一交互（审批/询问/迭代暂停共用 ask/* 事件溯源；无超时）───
@@ -191,6 +214,17 @@ export interface IMessageStore {
     sessionId: string,
     data: import('./types').AskAnsweredData,
   ): Promise<void>;
+
+  // ─── Workflow 编排进度（workflow/event 领域事件溯源；前端回放重建进度卡片）───
+  /**
+   * 追加一条 workflow 编排进度事件（载荷 = WorkflowEventData 原样，含 runId + run 内 seq）。
+   * 仅作前端回放/审计源：replayer 对未知类型默认忽略，绝不进入 LLM 上下文视图。
+   * @returns 写入后版本号
+   */
+  appendWorkflowEvent(
+    sessionId: string,
+    data: import('../../modules/workflow/workflow.types').WorkflowEventData,
+  ): Promise<number>;
 
   // ─── 会话生命周期 / 内部维护 ───
   /** 懒创建语义：会话不存在则创建存储（新会话/断点恢复前调用） */

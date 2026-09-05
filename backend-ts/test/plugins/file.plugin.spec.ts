@@ -5,6 +5,7 @@ import * as os from "os";
 import { FilePlugin } from "../../src/modules/plugins/builtins/file.plugin";
 import { WorkspaceService } from "../../src/common/services/workspace.service";
 import { WorkspaceProviderResolver } from "../../src/common/workspace/workspace-provider.resolver";
+import { WorkspaceToolRouter } from "../../src/modules/remote-workspace/workspace-router";
 import { LocalWorkspaceProvider } from "../../src/common/workspace/local-workspace-provider";
 import { AskService } from "../../src/common/services/ask.service";
 import { InteractionWaitService } from "../../src/common/services/interaction-wait.service";
@@ -69,6 +70,10 @@ describe("FilePlugin", () => {
           provide: AskService,
           useValue: new AskService(new InteractionWaitService()),
         },
+        {
+          provide: WorkspaceToolRouter,
+          useValue: { resolveRemoteTarget: () => Promise.resolve(null) },
+        },
       ],
     }).compile();
 
@@ -111,7 +116,7 @@ describe("FilePlugin", () => {
       expect(plugin.manifest.id).toBe("file");
       // manifest 使用 NLS key，由 NlsService 按 locale 解析
       expect(plugin.manifest.name).toBe("%file.name%");
-      expect(plugin.manifest.version).toBe("1.0.0");
+      expect(plugin.manifest.version).toBe("1.1.0");
       expect(plugin.manifest.category).toBe("core");
     });
 

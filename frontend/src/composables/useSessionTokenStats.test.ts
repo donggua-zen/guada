@@ -14,7 +14,8 @@ import {
  * 覆盖：
  * - applyContextStatsFromEvents：事件日志逆序取最后一个锚点（领域 turn/finish、live
  *   chunk、compaction/end 混合形状），填充环形指示器
- * - 无锚点 / 非法窗口 → 返回 false（调用方 fallback REST）
+ * - 锚点携带 messageCount/breakdown 时一并写入（新事件）；缺省时保留旧值（旧事件兼容）
+ * - 无锚点 / 非法窗口 → 返回 false（调用方显示空状态）
  */
 describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", () => {
   let tokenStats: ReturnType<typeof useSessionTokenStats>["tokenStats"];
@@ -47,7 +48,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     expect(tokenStats.value?.usedTokens).toBe(500);
   });
 
-  it("保留已有 breakdown（扫描锚点只更新轻量字段）", () => {
+  it("锚点未携带 breakdown/messageCount 时保留已有值（旧事件兼容）", () => {
     tokenStats.value = {
       usedTokens: 0,
       totalTokens: 1000,
@@ -55,16 +56,54 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       percentage: 0,
       modelName: "m",
       messageCount: 9,
-      breakdown: { systemPrompt: 10, summary: 20, userPrompt: 30, history: 40, tools: 50 },
+      breakdown: { systemPrompt: 10, history: 40, tools: 50 },
     };
     const events = [
       { type: "turn/finish", data: { usedTokens: 250, effectiveContextWindow: 1000 } },
     ];
     expect(applyContextStatsFromEvents(events as any)).toBe(true);
     expect(tokenStats.value?.breakdown).toEqual({
-      systemPrompt: 10, summary: 20, userPrompt: 30, history: 40, tools: 50,
+      systemPrompt: 10, history: 40, tools: 50,
     });
     expect(tokenStats.value?.messageCount).toBe(9);
+  });
+
+  it("锚点携带 breakdown/messageCount（live 或领域形状）时一并写入", () => {
+    const events = [
+      { type: "turn/finish", data: { usedTokens: 100, effectiveContextWindow: 1000 } },
+      {
+        type: "turn_end",
+        contextStats: {
+          usedTokens: 400,
+          effectiveContextWindow: 1000,
+          messageCount: 12,
+          breakdown: { systemPrompt: 50, history: 300, tools: 50 },
+        },
+      },
+    ];
+    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(tokenStats.value?.usedTokens).toBe(400);
+    expect(tokenStats.value?.messageCount).toBe(12);
+    expect(tokenStats.value?.breakdown).toEqual({
+      systemPrompt: 50, history: 300, tools: 50,
+    });
+  });
+
+  it("形状非法的 breakdown 被忽略（防御旧数据/脏数据）", () => {
+    const events = [
+      {
+        type: "compaction/end",
+        data: {
+          usedTokens: 200,
+          effectiveContextWindow: 1000,
+          messageCount: 3,
+          breakdown: { systemPrompt: "x", history: 1 },
+        },
+      },
+    ];
+    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(tokenStats.value?.breakdown).toBeUndefined();
+    expect(tokenStats.value?.messageCount).toBe(3);
   });
 
   it("无锚点返回 false", () => {
