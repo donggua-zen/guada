@@ -115,7 +115,7 @@
 
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, type Ref } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, provide, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { apiService } from "@/services/ApiService";
@@ -299,6 +299,26 @@ function handleSubAgentClosed(event: any) {
 async function switchTab(tabId: string) {
   activeTabId.value = tabId;
 }
+
+/**
+ * Workflow 卡片跳转子代理会话（provide 给 WorkflowRunCard）：
+ * Tab 不存在时补建（历史回放/其他端创建的 workflow 子代理），再切换。
+ */
+function openSubAgentSessionById(subSessionId: string) {
+  if (!subSessionId) return;
+  if (!agentTabs.value.some((tab) => tab.id === subSessionId)) {
+    const session = subSessions.value.find((s) => s.id === subSessionId);
+    agentTabs.value.push({
+      id: subSessionId,
+      name: session?.title || t('chat.panel.subTask'),
+      status: 'completed',
+      loaded: false,
+      avatarUrl: session?.avatarUrl || undefined,
+    });
+  }
+  activeTabId.value = subSessionId;
+}
+provide('workflow:openSubAgentSession', openSubAgentSessionById);
 
 /**
  * 关闭子 Agent Tab

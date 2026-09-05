@@ -98,7 +98,6 @@
     cancelled: 'Cancelled',
     rateLimited: 'Too many requests, retrying...',
     timeout: 'Request timed out, retrying...',
-    compressing: 'Optimizing conversation history...',
   },
 
   // ── 消息工具 ──
@@ -113,7 +112,6 @@
   panel: {
     loadingHistory: 'Loading message history...',
     noMoreMessages: 'No more messages',
-    compressing: 'Optimizing conversation history, please wait...',
     editingMessage: 'Editing message',
     memoryManagement: 'Memory Management',
     contextUsage: 'Context Usage',
@@ -201,11 +199,33 @@
     // EventCard.vue compaction placeholder
     contextCompacted: 'Context compacted',
     contextCompactedCount: 'Context compacted · {count} messages folded',
+    contextCompacting: 'Compacting context...',
     collapseSummary: 'Collapse summary',
     // TurnItem.vue notification fold (process_monitor / sub_agent)
     viewProcessOutput: 'View process output',
     viewSubagentResult: 'View sub-agent result',
     collapseOutput: 'Collapse output',
+  },
+
+  // ── WorkflowRunCard.vue workflow orchestration card ──
+  workflow: {
+    defaultName: 'Workflow',
+    memberCount: '{count} members',
+    viewSession: 'View session',
+    collapseLogs: 'Collapse logs',
+    viewLogs: 'View logs ({count})',
+    status: {
+      running: 'Running',
+      completed: 'Completed',
+      failed: 'Failed',
+      cancelled: 'Cancelled',
+    },
+    count: {
+      running: '{count} running',
+      completed: '{count} done',
+      failed: '{count} failed',
+      cancelled: '{count} cancelled',
+    },
   },
 
   // ── 消息操作 ──
@@ -351,8 +371,10 @@
     messages: '{count} messages',
     details: 'Details',
     compressing: 'Compressing...',
+    compressStarted: 'Compression started. The result will appear in the conversation when done.',
+    compressingWarning: 'A compression is already in progress, please wait',
     compress: 'Compress',
-    loading: 'Loading...',
+    noStats: 'No statistics yet',
     latestCompressStatus: 'Latest Compress Status',
     compressedTimes: 'Compressed {count} times',
     token: 'Token',
@@ -379,8 +401,6 @@
     prunedCount: 'Pruned Count:',
     close: 'Close',
     systemPrompt: 'System Prompt',
-    summary: 'Summary',
-    userPrompt: 'User Prompt',
     historyLabel: 'History',
     toolDefs: 'Tool Definitions',
     loadSummaryFailed: 'Failed to load summary',
@@ -393,7 +413,6 @@
     streamingWarning: 'The current session is streaming, please wait until it finishes before compressing',
     compressConfirmTitle: 'Confirm Compression',
     compressConfirmDesc: 'Are you sure you want to compress the current session\'s history? This action will automatically perform compression based on the session and character configuration.',
-    compressSuccess: 'Compression successful! Compression ratio: {ratio}',
     compressNotExecuted: 'Compression not executed',
     compressFailed: 'Compression failed',
   },

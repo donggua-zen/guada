@@ -55,7 +55,7 @@
 
         <!-- 操作按钮 -->
         <div class="flex gap-2 pt-3">
-          <el-button size="small" @click="loadTokenStats" :loading="loadingStats" class="flex-1">
+          <el-button size="small" @click="loadTokenStats" class="flex-1">
             <el-icon class="mr-1">
               <Refresh />
             </el-icon>
@@ -71,7 +71,7 @@
       </div>
     </template>
     <template v-else>
-      <el-empty :description="t('chat.memo.loading')" :image-size="60" />
+      <el-empty :description="t('chat.memo.noStats')" :image-size="60" />
     </template>
 
     <!-- ============ 最新压缩状态 ============ -->
@@ -289,9 +289,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useSessionTokenStats } from '@/composables/useSessionTokenStats';
+import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats';
 import { useDebounceFn } from '@vueuse/core';
 import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
@@ -307,6 +307,8 @@ const sessionStore = useSessionStore();
 
 const emit = defineEmits<{
   close: [];
+  /** 内部子弹窗/确认框打开状态变化，父级据此冻结 popover 的自动关闭 */
+  overlayActive: [active: boolean];
 }>();
 
 const props = defineProps<{
@@ -319,7 +321,14 @@ const editDialogVisible = ref(false);
 const historyDialogVisible = ref(false);
 const editingSummary = ref({ id: '', content: '' });
 const sessionIdRef = computed(() => props.sessionId);
-const { tokenStats, loading: loadingStats, fetchTokenStats } = useSessionTokenStats(sessionIdRef);
+const { tokenStats } = useSessionTokenStats(sessionIdRef);
+
+// 内部子弹窗/确认框是否打开：打开期间父级 popover 冻结"点击外部/Esc 关闭"
+const confirmActive = ref(false);
+const subDialogOpen = computed(() => editDialogVisible.value || historyDialogVisible.value);
+const overlayActive = computed(() => subDialogOpen.value || confirmActive.value);
+watch(overlayActive, (active) => emit('overlayActive', active));
+onBeforeUnmount(() => emit('overlayActive', false));
 
 // 使用 Store 中的会话级压缩状态
 const isCompressing = computed(() => {
@@ -344,15 +353,13 @@ const usageColorClass = computed(() => {
   return 'text-red-600';
 });
 
-// 细分统计项（系统提示词/摘要/用户提示/历史/工具定义）
+// 细分统计项（系统提示词/历史/工具定义；摘要已折叠进 history）
 const breakdownItems = computed(() => {
   if (!tokenStats.value?.breakdown) return [];
   const total = tokenStats.value.totalTokens;
   const b = tokenStats.value.breakdown;
   const items = [
     { key: 'systemPrompt', label: t('chat.memo.systemPrompt'), tokens: b.systemPrompt },
-    { key: 'summary', label: t('chat.memo.summary'), tokens: b.summary },
-    { key: 'userPrompt', label: t('chat.memo.userPrompt'), tokens: b.userPrompt },
     { key: 'history', label: t('chat.memo.historyLabel'), tokens: b.history },
     { key: 'tools', label: t('chat.memo.toolDefs'), tokens: b.tools },
   ];
@@ -378,9 +385,12 @@ async function loadSummaries() {
   }
 }
 
-// 加载 Token 统计（委托到共享 composable）
-async function loadTokenStats() {
-  await fetchTokenStats();
+// 刷新 Token 统计：从事件日志重扫最后一个上下文锚点（统计已统一为事件流投影，不走 REST；
+// 实时更新由 streamProjector 在 turn_end / 压缩事件时喂入共享单例）
+function loadTokenStats() {
+  if (!props.sessionId) return;
+  const eventLog = sessionStore.getSessionState(props.sessionId).eventLog || [];
+  applyContextStatsFromEvents(eventLog);
 }
 
 // 编辑摘要
@@ -409,9 +419,10 @@ async function saveEdit() {
 
 // 删除摘要
 async function handleDelete(summary: any) {
-  if (!(await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc')))) {
-    return;
-  }
+  confirmActive.value = true;
+  const confirmed = await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc'));
+  confirmActive.value = false;
+  if (!confirmed) return;
 
   try {
     await apiService.deleteSummary(summary.id);
@@ -480,42 +491,42 @@ watch(
   }
 );
 
-// 处理压缩历史（弹出确认框）
+// 触发压缩（异步：维护流占用会话，压缩事件经 SSE 下发，触发后关闭弹窗）
 async function handleCompress() {
   if (!props.sessionId) return;
 
-  // 检查会话是否正在流式输出，避免干扰工作流程
+  // 压缩进行中 / 正在流式输出：拒绝重复触发
+  if (isCompressing.value) {
+    toast.warning(t('chat.memo.compressingWarning'));
+    return;
+  }
   if (sessionStore.sessionIsStreaming(props.sessionId)) {
     toast.warning(t('chat.memo.streamingWarning'));
     return;
   }
 
-  if (!(await confirm(t('chat.memo.compressConfirmTitle'), t('chat.memo.compressConfirmDesc')))) {
-    return;
-  }
+  confirmActive.value = true;
+  const compressConfirmed = await confirm(t('chat.memo.compressConfirmTitle'), t('chat.memo.compressConfirmDesc'));
+  confirmActive.value = false;
+  if (!compressConfirmed) return;
 
   try {
-    sessionStore.setSessionIsCompressing(props.sessionId, true);
     const res = await apiService.compressSession(props.sessionId);
-
-    if (res.success) {
-      toast.success(t('chat.memo.compressSuccess', { ratio: res.after?.compressionRatio || 'N/A' }));
-      // 压缩后重新加载统计数据和摘要列表
-      await loadTokenStats();
-      await loadSummaries();
+    if (res?.started) {
+      // 压缩已后台执行：关闭弹窗，进度与结果由对话区事件卡片展示
+      toast.success(t('chat.memo.compressStarted'));
+      emit('close');
     } else {
-      toast.warning(res.message || t('chat.memo.compressNotExecuted'));
+      toast.warning(res?.message || t('chat.memo.compressNotExecuted'));
     }
   } catch (error: any) {
-    console.error('压缩失败:', error);
-    // 处理 409 冲突错误（会话正在流式输出或繁忙）
+    console.error('触发压缩失败:', error);
+    // 409：会话正在流式输出（SESSION_STREAMING）或已有任务进行中（SESSION_BUSY）
     if (error.status === 409 || error.message?.includes('busy') || error.message?.includes('STREAMING')) {
       toast.warning(t('chat.memo.streamingWarning'));
     } else {
       toast.error(error.message || t('chat.memo.compressFailed'));
     }
-  } finally {
-    sessionStore.setSessionIsCompressing(props.sessionId, false);
   }
 }
 
@@ -535,9 +546,10 @@ function handleEditFromHistory(summary: any) {
 
 // 从历史记录中删除摘要
 async function handleDeleteFromHistory(summary: any) {
-  if (!(await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc')))) {
-    return;
-  }
+  confirmActive.value = true;
+  const confirmed = await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc'));
+  confirmActive.value = false;
+  if (!confirmed) return;
 
   try {
     await apiService.deleteSummary(summary.id);

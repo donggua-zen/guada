@@ -48,6 +48,8 @@ export interface ExecuteOptions {
   abortSignal?: AbortSignal;
   sandbox?: import("../../modules/shell/process-manager.service").SandboxOptions;
   background?: boolean;
+  /** 输出编码：本地传给 ProcessManager；远程用于 outputB64 原始字节解码（缺省 utf-8） */
+  encoding?: string;
   /** Session ID for process tracking (listBySession/drainCompleted) */
   sessionId?: string;
   /** User ID for process ownership */

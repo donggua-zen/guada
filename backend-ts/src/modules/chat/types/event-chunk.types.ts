@@ -12,8 +12,22 @@
  */
 
 import type { StreamChunk, StreamUsage } from "../../../common/types/stream-chunk.types";
+import type { TokenBreakdown } from "../../../common/persistence/message-store.interface";
 
 // ==================== 回合级事件 ====================
+
+/** 会话上下文统计（环形指示器 + 视图消息数 + breakdown 细分）。
+ *  由"占用稳定点"（每轮 turn_end / 每次压缩落库）构造，前端免 REST 直接消费。 */
+export interface ContextStatsPayload {
+  /** 当前完整请求 token（provider 真值锚点 + tiktoken 增量） */
+  usedTokens: number;
+  /** 有效上下文窗口 */
+  effectiveContextWindow: number;
+  /** 可见视图消息数 */
+  messageCount?: number;
+  /** 细分 token（三项真值；旧锚点数据缺省） */
+  breakdown?: TokenBreakdown;
+}
 
 /** 回合开始（正常流）：只携带回合外壳信息 */
 export interface TurnStartEvent {
@@ -36,14 +50,10 @@ export interface TurnEndEvent {
    */
   totalDurationMs?: number;
   /**
-   * 会话上下文统计。
-   * 前端用于更新上下文使用率环形指示器，避免流式结束后再发起 REST 请求重建上下文。
-   * 仅包含轻量字段；详细 breakdown 仍由 REST /token-stats 端点按需获取。
+   * 会话上下文统计（占用 + 窗口 + 视图消息数 + breakdown 细分）。
+   * 前端用于更新上下文使用率环形指示器与细分面板，无需发起 REST 请求重建上下文。
    */
-  contextStats?: {
-    usedTokens: number;
-    effectiveContextWindow: number;
-  };
+  contextStats?: ContextStatsPayload;
 }
 
 /** 回合删除（重答）：从视图直接移除该回合 */
@@ -116,10 +126,7 @@ export interface CompressionEndEvent {
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
   reason?: "auto" | "manual" | "overflow";
   /** 压缩后当前完整请求 token + 窗口（envelope + 可见视图；与 turn_end.contextStats 同构） */
-  contextStats?: {
-    usedTokens: number;
-    effectiveContextWindow: number;
-  };
+  contextStats?: ContextStatsPayload;
 }
 
 /**
@@ -144,10 +151,7 @@ export interface CompactionSummaryEvent {
   /** 摘要文本 */
   summary: string;
   /** 压缩后当前完整请求 token + 窗口（前端即时更新环形指示器，无需 REST） */
-  contextStats?: {
-    usedTokens: number;
-    effectiveContextWindow: number;
-  };
+  contextStats?: ContextStatsPayload;
 }
 
 /**
@@ -163,6 +167,17 @@ import type {
   AskRequestedEvent,
   AskResolvedEvent,
 } from "../../../common/types/ask.types";
+
+/**
+ * Workflow 编排进度事件（引擎级直发：workflow_run 工具执行期间的实时进度）。
+ * event 载荷 = WorkflowEventData（runId + run 内 seq 为前端确定性重放的排序/去重键）。
+ * 与领域事件 workflow/event（JSONL 持久化，刷新回放重建）双通道喂前端同一 reducer——
+ * 与压缩事件（compaction_summary 流内 + compaction/* 领域）完全同构的双形态。
+ */
+export interface WorkflowEvent {
+  type: "workflow_event";
+  event: import("../../workflow/workflow.types").WorkflowEventData;
+}
 
 /**
  * 消息级流事件 = 规范 StreamChunk 直通 + 消息关联字段。
@@ -191,6 +206,7 @@ export type SessionStreamEvent =
   | CompactionSummaryEvent
   | AskRequestedEvent
   | AskResolvedEvent
+  | WorkflowEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId） */

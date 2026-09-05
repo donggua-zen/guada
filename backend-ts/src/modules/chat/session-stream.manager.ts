@@ -30,6 +30,8 @@ interface ActiveStream {
   startedAt: Date;
   /** 停止原因，由 stopStream 设置，subscribe 的 complete 回调通过闭包读取 */
   stopReason?: "user_cancel" | "completed" | "error";
+  /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩等伪流，buffer 无回合历史） */
+  kind: "chat" | "maintenance";
 }
 
 /**
@@ -70,12 +72,15 @@ export class SessionStreamManager {
    * @param sessionId 会话 ID
    * @param userId 用户 ID
    * @param abortController 用于中止底层 LLM 请求的控制器
+   * @param kind 流类型：chat=对话回合（默认）；maintenance=维护任务（手动压缩等伪流，
+   *             占用会话互斥但不产生回合内容，buffer 无历史——前端据此决定是否跳过事件页拉取）
    * @returns 是否成功启动（如果同一会话已有活跃流则返回 false）
    */
   startStream(
     sessionId: string,
     userId: string,
     abortController: AbortController,
+    kind: "chat" | "maintenance" = "chat",
   ): boolean {
     if (this.activeStreams.has(sessionId)) {
       const existing = this.activeStreams.get(sessionId)!;
@@ -96,6 +101,7 @@ export class SessionStreamManager {
       maxBufferSize: this.DEFAULT_MAX_BUFFER_SIZE,
       isRunning: true,
       startedAt: new Date(),
+      kind,
     };
 
     this.activeStreams.set(sessionId, stream);

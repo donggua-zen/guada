@@ -780,10 +780,7 @@ export class AgentEngine {
       error: finalError,
       usage: finalUsage,
       totalDurationMs: loopDuration,
-      contextStats: {
-        usedTokens: await sessionContext.getTokenCount(),
-        effectiveContextWindow: sessionContext.getEffectiveContextWindow(),
-      },
+      contextStats: await sessionContext.getContextStats(),
     });
 
     return finalFinishReason;

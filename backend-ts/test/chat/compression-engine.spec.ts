@@ -12,6 +12,7 @@
  * - 4a：一级裁剪后二级摘要输入中被裁剪消息还原原文（前缀缓存命中）
  */
 import { CompressionEngine, SummaryMode } from '../../src/modules/chat/compaction/compression-engine';
+import { CompactionCancelledError } from '../../src/modules/chat/compaction/compaction-cancelled.error';
 import { toolPairingBalancedBefore } from '../../src/modules/chat/compaction/tool-pairing';
 import type { Turn, Message, ContentBlock } from '../../src/common/types/conversation.types';
 
@@ -300,6 +301,49 @@ describe('CompressionEngine', () => {
         dataSource: ds as any,
       });
       expect(onBefore).toHaveBeenCalledTimes(1);
+    });
+
+    it('用户中止：入口即取消，不写任何 prune/compaction', async () => {
+      const { ds, compacted, pruned } = createDataSource();
+      const engine = createEngine();
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        engine.execute('s1', {
+          messages,
+          contextWindow: 8,
+          summaryProvider: { generate: async () => ({ summary: 'sum' }) },
+          summaryMode: SummaryMode.MEMORY_SYNC,
+          abortSignal: controller.signal,
+          dataSource: ds as any,
+        }),
+      ).rejects.toThrow(CompactionCancelledError);
+      expect(compacted.length).toBe(0);
+      expect(pruned.length).toBe(0);
+    });
+
+    it('用户中止：onBeforeCompaction 期间取消 → 摘要前退出，不提交 appendCompact', async () => {
+      const { ds, compacted, pruned } = createDataSource();
+      const engine = createEngine();
+      const controller = new AbortController();
+      const provider = { generate: jest.fn(async () => ({ summary: 'sum' })) };
+      await expect(
+        engine.execute('s1', {
+          messages,
+          contextWindow: 8,
+          summaryProvider: provider,
+          summaryMode: SummaryMode.MEMORY_SYNC,
+          abortSignal: controller.signal,
+          onBeforeCompaction: async () => {
+            // 模拟影子轮期间用户点击停止（fail-open 钩子吞掉中止）
+            controller.abort();
+          },
+          dataSource: ds as any,
+        }),
+      ).rejects.toThrow(CompactionCancelledError);
+      expect(provider.generate).not.toHaveBeenCalled();
+      expect(compacted.length).toBe(0);
+      expect(pruned.length).toBe(0);
     });
 
     it('无 summaryProvider 且非 DISABLED 时不触发 onBeforeCompaction（一级裁剪空跑保护）', async () => {

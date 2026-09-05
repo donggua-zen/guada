@@ -124,6 +124,43 @@ export class PluginsController {
       }
     }
 
+    // legacy：remote_read/write/edit/grep/bash 已合并进标准 file/shell 工具
+    // （workspace 参数路由），不再注册；此处保留展示映射，
+    // 使历史会话中持久化的 remote_* 工具调用块仍按原样渲染。
+    // NLS 键保留在 remote-workspace 语言包中；插件未加载时回退原始 %key% 字符串。
+    const legacyRemoteTools: Record<
+      string,
+      { argsKey: string; icon: string; hasAggregate: boolean }
+    > = {
+      remote_read: { argsKey: "file_path", icon: "read", hasAggregate: false },
+      remote_write: { argsKey: "file_path", icon: "edit", hasAggregate: false },
+      remote_edit: { argsKey: "file_path", icon: "edit", hasAggregate: false },
+      remote_grep: { argsKey: "pattern", icon: "search", hasAggregate: true },
+      remote_bash: { argsKey: "command", icon: "terminal", hasAggregate: true },
+    };
+    for (const [name, meta] of Object.entries(legacyRemoteTools)) {
+      if (result[name]) continue; // 仍在注册（如回滚/过渡期）时以实际注册为准
+      const display: Record<string, any> = {
+        text: {
+          executing: `%${name}.executing%`,
+          completed: `%${name}.completed%`,
+        },
+        argsKey: meta.argsKey,
+        icon: meta.icon,
+      };
+      if (meta.hasAggregate) {
+        display.aggregate = {
+          executing: `%${name}.aggregate.executing%`,
+          completed: `%${name}.aggregate.completed%`,
+        };
+      }
+      result[name] = this.nlsService.resolveDisplay(
+        "remote-workspace",
+        display,
+        nlsLocale,
+      );
+    }
+
     return result;
   }
 

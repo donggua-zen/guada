@@ -32,6 +32,14 @@ export interface HeartbeatOptions {
   deadlineMs?: number;
 }
 
+/**
+ * agent 端不认识该 RPC 方法（远端 agent 版本 < 0.5.0 在线）。
+ * 调用方据此走降级路径（glob→find 模拟、readFileRange→downloadChunk、grep→shell grep）。
+ */
+export function isUnknownMethodError(e: any): boolean {
+  return String(e?.message || e).startsWith("unknown method");
+}
+
 export class RpcClient {
   private ws: WebSocket;
   private pending = new Map<

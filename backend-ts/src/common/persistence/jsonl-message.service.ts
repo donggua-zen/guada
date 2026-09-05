@@ -36,6 +36,7 @@ import {
   ContextLoadParams,
   TurnFinish,
   TurnUpdate,
+  TokenBreakdown,
 } from './message-store.interface';
 
 /** LLM 链路折叠：默认选项即 applyCompressionPrune=true（压缩裁剪就地应用） */
@@ -609,11 +610,13 @@ export class JsonlMessageService implements IMessageStore {
         totalDurationMs: durationMs,
         ...(finish.errorDetail !== undefined ? { errorDetail: finish.errorDetail } : {}),
         ...(finish.modelName !== undefined ? { modelName: finish.modelName } : {}),
-        // 上下文占用锚点（回合后完整请求 token；前端逆向扫描取最后一个）
+        // 上下文占用锚点（回合后完整请求 token + 消息数 + 细分；前端逆向扫描取最后一个）
         ...(finish.usedTokens !== undefined ? { usedTokens: finish.usedTokens } : {}),
         ...(finish.effectiveContextWindow !== undefined
           ? { effectiveContextWindow: finish.effectiveContextWindow }
           : {}),
+        ...(finish.messageCount !== undefined ? { messageCount: finish.messageCount } : {}),
+        ...(finish.breakdown !== undefined ? { breakdown: finish.breakdown } : {}),
       },
     });
 
@@ -898,6 +901,24 @@ export class JsonlMessageService implements IMessageStore {
     });
   }
 
+  /**
+   * 追加 workflow 编排进度事件（workflow/event，载荷原样落库）。
+   * 调用方（WorkflowRun.emit）已按 run 串行化追加，此处不做额外排队。
+   */
+  async appendWorkflowEvent(
+    sessionId: string,
+    data: import('../../modules/workflow/workflow.types').WorkflowEventData,
+  ): Promise<number> {
+    const seq = await this.getNextSeq(sessionId);
+    await this.append(sessionId, {
+      type: 'workflow/event',
+      seq,
+      time: Date.now(),
+      data: data as unknown as Record<string, unknown>,
+    });
+    return seq;
+  }
+
   /** 追加二级压缩（摘要）括号事件 + 分卷（遮蔽为头部连续前缀，按分界点消息 id + 条数记录）。
    *  @returns 摘要消息 id + 写入后版本号 + 折叠后的摘要节点（S1' 模式，供会话层快照播种） */
   async appendCompact(sessionId: string, data: {
@@ -912,6 +933,10 @@ export class JsonlMessageService implements IMessageStore {
     usedTokens?: number;
     /** 有效上下文窗口（与 usedTokens 配套） */
     effectiveContextWindow?: number;
+    /** 可见视图消息数（与 usedTokens 配套） */
+    messageCount?: number;
+    /** 细分 token（与 usedTokens 配套） */
+    breakdown?: TokenBreakdown;
   }): Promise<{ summaryMessageId: string; endSeq: number; summaryNode: Message | null }> {
     const seq = await this.getNextSeq(sessionId);
     const summaryMessageId =
@@ -945,6 +970,8 @@ export class JsonlMessageService implements IMessageStore {
           ...data.effectiveContextWindow === undefined
             ? {}
             : { effectiveContextWindow: data.effectiveContextWindow },
+          ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
+          ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
         },
       },
     ];
@@ -962,7 +989,12 @@ export class JsonlMessageService implements IMessageStore {
    *  @returns 写入后版本号 */
   async recordContextAnchor(
     sessionId: string,
-    data: { usedTokens: number; effectiveContextWindow: number },
+    data: {
+      usedTokens: number;
+      effectiveContextWindow: number;
+      messageCount?: number;
+      breakdown?: TokenBreakdown;
+    },
   ): Promise<number> {
     const seq = await this.getNextSeq(sessionId);
     await this.append(sessionId, {
@@ -972,6 +1004,8 @@ export class JsonlMessageService implements IMessageStore {
       data: {
         usedTokens: data.usedTokens,
         effectiveContextWindow: data.effectiveContextWindow,
+        ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
+        ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
       },
     });
     return seq;

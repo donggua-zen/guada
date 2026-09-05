@@ -83,7 +83,7 @@ function mapFinishReason(reason?: string): SubAgentStopReason {
 /**
  * 子 Agent 执行结果
  */
-interface SubAgentResult {
+export interface SubAgentResult {
   subSessionId: string;
   status: "completed" | "error" | "running";
   /** 结构化停止原因（P2；unknown 一律 error） */
@@ -343,6 +343,107 @@ export class SubAgentManager implements OnModuleInit {
       params.parentSessionId,
       mode,
       "persist",
+      abortSignal,
+    );
+  }
+
+  /**
+   * 为 Workflow 编排引擎创建并执行子代理（对齐 DSH workflow host → subagents.start）
+   *
+   * 与 spawn() 的差异：
+   * - 不走 states Map / completer / 信箱：workflow 引擎自己就是等待者，
+   *   结果直接经返回的 Promise 交付，绝不投递 <system_reminder> 唤醒父循环
+   * - 跳过每父会话 10 个上限（并发由 workflow 引擎的槽位控制）
+   * - lifecycle 固定 persist（子会话保留，供用户在子代理面板回看执行过程）
+   * - settings.workflow 记录来源（runId/label/phase），照常广播 subagent.created
+   */
+  async spawnForWorkflow(
+    params: {
+      parentContext: ISessionContext;
+      name: string;
+      task: string;
+      characterId?: string;
+      workflow: { runId: string; label?: string; phase?: string | null };
+      onCreated?: (subSessionId: string) => void;
+    },
+    abortSignal?: AbortSignal,
+  ): Promise<SubAgentResult> {
+    const { parentContext } = params;
+    const parentSessionId = parentContext.sessionId;
+    const userId = parentContext.userId;
+
+    // 继承策略与 spawn() 一致（PersistentSessionContext.mergeSettings 语义）
+    const settings: Record<string, any> = {
+      thinkingEffort: parentContext.getSettings("thinkingEffort"),
+      // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
+      sandboxMode: parentContext.getSandboxMode(),
+      attachments: parentContext.getSettings("attachments") ?? {},
+      lifecycle: "persist",
+      workflow: {
+        runId: params.workflow.runId,
+        ...(params.workflow.label ? { label: params.workflow.label } : {}),
+        ...(params.workflow.phase ? { phase: params.workflow.phase } : {}),
+      },
+    };
+
+    let finalModelId: string | null = parentContext.getModelConfig().id;
+    let finalCharacterId: string | null = null;
+    let finalAvatarUrl: string | undefined;
+
+    if (params.characterId && params.characterId !== "generic") {
+      const character = await this.characterRepo.findById(params.characterId);
+      if (!character) {
+        throw new Error(
+          `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
+        );
+      }
+      finalModelId = character.modelId || parentContext.getModelConfig().id;
+      finalCharacterId = params.characterId;
+      finalAvatarUrl = character.avatarUrl || undefined;
+    } else {
+      // 通用子代理：显式继承父会话的插件/技能配置
+      settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
+      settings.plugins = parentContext.getSettings("plugins");
+      settings.skills = parentContext.getSettings("skills");
+    }
+
+    const subSession = await this.sessionRepo.create({
+      userId,
+      parentId: parentSessionId,
+      title: params.name,
+      characterId: finalCharacterId,
+      modelId: finalModelId,
+      settings,
+      sessionType: "sub_agent",
+      workspacePath: parentContext.workspacePath,
+      avatarUrl: finalAvatarUrl || null,
+    });
+
+    this.logger.log(
+      `Workflow 子代理会话创建: ${subSession.id}, run: ${params.workflow.runId}, 父会话: ${parentSessionId}`,
+    );
+
+    this.eventBus.emit("subagent.created", {
+      userId,
+      sessionId: parentSessionId,
+      timestamp: new Date().toISOString(),
+      payload: {
+        subSessionId: subSession.id,
+        name: params.name,
+        mode: "foreground",
+        session: subSession,
+      },
+    });
+
+    params.onCreated?.(subSession.id);
+
+    // 直接等待流执行结果：不走 settle/信箱（workflow 引擎是唯一等待者）；
+    // abortSignal 中止时 runSubAgentStream 内部联动 cancelStream 并以 aborted 结算
+    return this.runSubAgentStream(
+      subSession.id,
+      userId,
+      params.task,
+      parentSessionId,
       abortSignal,
     );
   }

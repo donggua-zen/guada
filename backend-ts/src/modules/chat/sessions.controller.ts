@@ -230,11 +230,6 @@ export class SessionsController {
     return { success: true };
   }
 
-  @Get("sessions/:id/token-stats")
-  async getTokenStats(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getTokenStats(id, user.id);
-  }
-
   @Post("sessions/:id/compress")
   async compressSession(
     @Param("id") id: string,

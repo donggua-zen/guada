@@ -377,7 +377,7 @@ export class LocalWorkspaceProvider implements WorkspaceProvider {
     return this.processManager.execute(
       command,
       cwd,
-      "utf-8",
+      opts.encoding || "utf-8",
       opts.sessionId || "",
       opts.userId || "",
       {

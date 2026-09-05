@@ -1,11 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
-import { useSessionStore } from '@/stores/session'
-import { apiService } from '@/services/ApiService'
 
 export interface TokenBreakdown {
   systemPrompt: number
-  summary: number
-  userPrompt: number
   history: number
   tools: number
 }
@@ -17,15 +13,35 @@ export interface TokenStatsData {
   percentage: number
   modelName: string
   messageCount: number
-  breakdown: TokenBreakdown
+  breakdown?: TokenBreakdown
+}
+
+/** 上下文统计事件负载（turn_end / compression_end / compaction_summary 与持久化锚点同构） */
+export interface ContextStatsInput {
+  usedTokens: number
+  effectiveContextWindow: number
+  messageCount?: number
+  breakdown?: TokenBreakdown
 }
 
 const tokenStats = ref<TokenStatsData | null>(null)
-const loading = ref(false)
-let currentSessionId: string | null = null
 
-/** 共享合并：填充环形指示器字段，保留已存在的 modelName/messageCount/breakdown */
-function applyContextStats(stats: { usedTokens: number; effectiveContextWindow: number }) {
+/** breakdown 形状防御校验（旧锚点事件无此字段） */
+function pickBreakdown(b: unknown): TokenBreakdown | undefined {
+  const d = b as TokenBreakdown | undefined
+  if (!d || typeof d !== 'object') return undefined
+  if (
+    typeof d.systemPrompt !== 'number' ||
+    typeof d.history !== 'number' ||
+    typeof d.tools !== 'number'
+  ) {
+    return undefined
+  }
+  return d
+}
+
+/** 共享合并：填充环形指示器字段；messageCount/breakdown 事件携带时才覆盖（旧锚点缺省保留旧值） */
+function applyContextStats(stats: ContextStatsInput) {
   const percentage = Math.min(
     (stats.usedTokens / stats.effectiveContextWindow) * 100,
     100,
@@ -36,27 +52,18 @@ function applyContextStats(stats: { usedTokens: number; effectiveContextWindow: 
     remainingTokens: Math.max(0, stats.effectiveContextWindow - stats.usedTokens),
     percentage,
     modelName: tokenStats.value?.modelName || '',
-    messageCount: tokenStats.value?.messageCount || 0,
-    breakdown: tokenStats.value?.breakdown || {
-      systemPrompt: 0,
-      summary: 0,
-      userPrompt: 0,
-      history: 0,
-      tools: 0,
-    },
+    messageCount: stats.messageCount ?? tokenStats.value?.messageCount ?? 0,
+    breakdown: stats.breakdown ?? tokenStats.value?.breakdown,
   }
 }
 
 /**
  * 从 SSE 流事件注入上下文统计（turn_end / compression_end / compaction_summary 携带）
  *
- * 后端在事件中携带轻量上下文统计（usedTokens / effectiveContextWindow），
- * 前端直接更新环形指示器，不发 REST。详细 breakdown 仍由弹窗按需获取。
+ * 后端在事件中携带上下文统计（usedTokens / effectiveContextWindow / messageCount /
+ * breakdown），前端直接更新环形指示器与细分面板，不发 REST。
  */
-export function updateTokenStatsFromSSE(stats: {
-  usedTokens: number
-  effectiveContextWindow: number
-}) {
+export function updateTokenStatsFromSSE(stats: ContextStatsInput) {
   applyContextStats(stats)
 }
 
@@ -68,8 +75,8 @@ export function updateTokenStatsFromSSE(stats: {
  * - 领域事件（turn/finish / compaction/end）：`e.data.usedTokens + e.data.effectiveContextWindow`
  *
  * 后端在「占用稳定点」（每轮结束、每次压缩后）把权威 usedTokens/effectiveContextWindow
- * 落进持久化事件 → 打开/切换会话时无需 REST /token-stats，直接取最后一个锚点。
- * @returns 是否找到锚点（false → 调用方 fallback REST）
+ * （含 messageCount/breakdown）落进持久化事件 → 打开/切换会话时直接取最后一个锚点。
+ * @returns 是否找到锚点（false → 显示空状态）
  */
 export function applyContextStatsFromEvents(events: unknown[]): boolean {
   if (!Array.isArray(events)) return false
@@ -83,7 +90,12 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
       typeof live.effectiveContextWindow === 'number' &&
       live.effectiveContextWindow > 0
     ) {
-      applyContextStats(live)
+      applyContextStats({
+        usedTokens: live.usedTokens,
+        effectiveContextWindow: live.effectiveContextWindow,
+        messageCount: typeof live.messageCount === 'number' ? live.messageCount : undefined,
+        breakdown: pickBreakdown(live.breakdown),
+      })
       return true
     }
     const domain = e.data
@@ -96,6 +108,8 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
       applyContextStats({
         usedTokens: domain.usedTokens,
         effectiveContextWindow: domain.effectiveContextWindow,
+        messageCount: typeof domain.messageCount === 'number' ? domain.messageCount : undefined,
+        breakdown: pickBreakdown(domain.breakdown),
       })
       return true
     }
@@ -106,42 +120,17 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
 /**
  * 会话级 Token 统计共享状态
  *
- * 模块级 ref 确保所有调用方共享同一份数据，
- * 谁 fetch 了大家都更新，避免按钮和弹窗各管各的。
+ * 模块级 ref 确保所有调用方共享同一份数据（环形指示器与记忆弹窗同源）。
+ * 数据完全来自事件流投影：实时由 streamProjector 喂入，打开/切换会话由
+ * 调用方逆向扫描事件日志锚点填充（见 applyContextStatsFromEvents）。
  */
 export function useSessionTokenStats(sessionId: Ref<string | null>) {
-  const sessionStore = useSessionStore()
-
-  /**
-   * 从 API 获取 Token 统计
-   *
-   * ⚠️ 唯一允许的 REST 拉取入口：仅记忆管理弹窗（MemoPanel）打开/手动刷新时调用。
-   * 打开/切换会话一律不访问 token-stats——环形指示器由事件日志逆向扫描锚点填充，
-   * 无锚点则显示 0；详细 breakdown 仅弹窗按需获取。
-   */
-  async function fetchTokenStats() {
-    const sid = sessionId.value
-    if (!sid) return
-    loading.value = true
-    try {
-      tokenStats.value = await apiService.fetchSessionTokenStats(sid)
-      currentSessionId = sid
-    } catch (error: any) {
-      console.error('[useSessionTokenStats] 加载 Token 统计失败:', error)
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // sessionId 变化时清空旧数据（不 REST：ChatPanel 在事件页加载后逆向扫描锚点填充）
-  watch(sessionId, (newId) => {
+  // sessionId 变化时清空旧数据（新会话由 ChatPanel 事件页加载后逆向扫描锚点填充）
+  watch(sessionId, () => {
     tokenStats.value = null
-    if (newId) currentSessionId = newId
   })
 
   return {
     tokenStats,
-    loading,
-    fetchTokenStats,
   }
 }

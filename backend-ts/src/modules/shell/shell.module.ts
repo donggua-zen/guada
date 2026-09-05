@@ -6,6 +6,7 @@ import { ProcessManagerService } from "./process-manager.service";
 import { SharedModule } from "../../common/services/shared.module";
 import { PluginsModule } from "../plugins";
 import { ChatModule } from "../chat/chat.module";
+import { RemoteWorkspaceModule } from "../remote-workspace/remote-workspace.module";
 
 /**
  * Shell 命令行模块
@@ -15,7 +16,7 @@ import { ChatModule } from "../chat/chat.module";
  * - ProcessManagerService: 管理后台进程的生命周期、文件输出、静默监控
  */
 @Module({
-  imports: [SharedModule, PluginsModule, ChatModule],
+  imports: [SharedModule, PluginsModule, ChatModule, RemoteWorkspaceModule],
   providers: [ShellPlugin, ProcessManagerService],
 })
 export class ShellModule implements OnModuleInit {

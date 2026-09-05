@@ -7,6 +7,7 @@ import {
   ProcessManagerService,
   SandboxOptions,
 } from "./process-manager.service";
+import { StreamingSanitizer } from "./stream-sanitizer";
 import { PluginContext } from "../plugins/types/plugin.types";
 import {
   HOOKS,
@@ -22,6 +23,15 @@ import {
   type SandboxMode,
 } from "../../common/services/sandbox-policy";
 import { AskService } from "../../common/services/ask.service";
+import {
+  WorkspaceToolRouter,
+  workspaceParamField,
+  type RemoteToolTarget,
+} from "../remote-workspace/workspace-router";
+import {
+  buildRemoteProcessId,
+  parseRemoteProcessId,
+} from "../remote-workspace/ssh-workspace-provider";
 import langZh from "./shell.lang.zh.json";
 import langEn from "./shell.lang.en.json";
 
@@ -47,6 +57,7 @@ export class ShellPlugin extends PluginBase {
   constructor(
     private readonly processManager: ProcessManagerService,
     private readonly askService: AskService,
+    private readonly workspaceRouter: WorkspaceToolRouter,
   ) {
     super();
   }
@@ -88,7 +99,8 @@ export class ShellPlugin extends PluginBase {
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
 - processId is typically the shell process ID, not the command's own process ID
-- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.`,
+- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.
+- **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side; \`sandbox_permissions\` does not apply). Foreground timeout (60s) switches to background there too; background processIds carry the "r:" prefix and are managed with the same process tool.`,
       inputSchema: z.object({
         command: z
           .string()
@@ -117,6 +129,7 @@ export class ShellPlugin extends PluginBase {
           .describe(
             "Whether to run in background mode immediately. Defaults to false. When true, returns process ID immediately without waiting.",
           ),
+        workspace: workspaceParamField,
         sandbox_permissions: z
           .enum(ESCALATION_TARGETS)
           .optional()
@@ -136,6 +149,13 @@ export class ShellPlugin extends PluginBase {
           throw new Error("Command cannot be empty");
         const encoding = args.encoding as string | undefined;
         const background = args.background === true;
+
+        // ── 附加（远程）工作目录分支：POSIX sh 语义，远端路径权限由连接 perm 控制 ──
+        const remoteTarget = await this.resolveTarget(ctx, args.workspace);
+        if (remoteTarget) {
+          return this.runRemoteCommand(remoteTarget, args, ctx, abortSignal);
+        }
+
         const cwd = ctx?.session.workspacePath || process.cwd();
         const session = ctx?.session;
 
@@ -293,6 +313,22 @@ export class ShellPlugin extends PluginBase {
 
         switch (action) {
           case "kill": {
+            // 远程进程（r:<连接名>:<pid>）→ 路由到对应连接的 provider
+            const remote = parseRemoteProcessId(processId);
+            if (remote?.connectionName) {
+              const target = await this.resolveTarget(
+                ctx,
+                remote.connectionName,
+              );
+              const status = target!.provider.kill(processId);
+              if (status === null) {
+                throw new Error(
+                  `Process ${processId} does not exist or has already ended`,
+                );
+              }
+              this.workspaceRouter.unregisterRemoteProcess(processId);
+              return `Process ${processId} terminated (status: ${status})`;
+            }
             const status = this.processManager.kill(processId);
             if (status === null) {
               throw new Error(
@@ -307,6 +343,44 @@ export class ShellPlugin extends PluginBase {
             // Agent 调用不允许低于 30 秒
             if (timeoutMs < 30_000) {
               timeoutMs = 30_000;
+            }
+            const remote = parseRemoteProcessId(processId);
+            if (remote?.connectionName) {
+              const target = await this.resolveTarget(
+                ctx,
+                remote.connectionName,
+              );
+              const encoding = this.workspaceRouter.getProcessEncoding(processId);
+              const result = await target!.provider.poll(
+                processId,
+                timeoutMs,
+                abortSignal,
+                encoding,
+              );
+              if (result === null) {
+                throw new Error(`Process ${processId} does not exist`);
+              }
+              const parts: string[] = [];
+              if (result.output) {
+                parts.push(
+                  `Latest output:\n---\n${this.sanitize(result.output)}\n---`,
+                );
+              }
+              if ((result as any).truncated && (result as any).logFilePath) {
+                parts.push(
+                  `[Note: Output was truncated. The complete log is saved on the remote server at: ${(result as any).logFilePath}. Read it with the read tool (workspace="${remote.connectionName}").]`,
+                );
+              }
+              if (result.status === "running") {
+                parts.push(
+                  `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
+                );
+              } else {
+                parts.push(
+                  `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
+                );
+              }
+              return parts.join("\n\n");
             }
             const result = await this.processManager.poll(
               processId,
@@ -363,6 +437,16 @@ export class ShellPlugin extends PluginBase {
             const appendNewline = params.appendNewline !== false;
             const textToWrite = appendNewline ? input + "\n" : input;
 
+            const remote = parseRemoteProcessId(processId);
+            if (remote?.connectionName) {
+              const target = await this.resolveTarget(
+                ctx,
+                remote.connectionName,
+              );
+              target!.provider.writeToStdin(processId, textToWrite);
+              return `Written ${textToWrite.length} characters to process ${processId}`;
+            }
+
             this.processManager.writeToStdin(processId, textToWrite);
 
             return `Written ${textToWrite.length} characters to process ${processId}`;
@@ -407,6 +491,111 @@ export class ShellPlugin extends PluginBase {
     // ── 工具提示词注册完成（回合续跑钩子已迁移为类方法 @OnEvent(HOOKS.TURN_STOPPING)）──
   }
 
+  // ── 附加（远程）工作目录支持 ──
+
+  /** 解析 workspace 参数；null = 主工作目录（本地） */
+  private async resolveTarget(
+    ctx: PluginContext,
+    workspace?: string,
+  ): Promise<RemoteToolTarget | null> {
+    return this.workspaceRouter.resolveRemoteTarget(
+      workspace,
+      ctx?.session.sessionId || "",
+      ctx?.session.getSettings?.()?.attachments,
+    );
+  }
+
+  /** 命令输出清洗（与本地 ProcessManager 输出处理一致）：去 ANSI、折叠 \r 帧 */
+  private sanitize(text: string): string {
+    const s = new StreamingSanitizer();
+    return s.feed(text) + s.flush();
+  }
+
+  /**
+   * run_command 远程分支：经 agent 在远端以 `sh -c` 执行（UTF-8 输出）。
+   * 60s 前台超时自动转后台（agent 端语义，与本地 ProcessManager 对齐），
+   * 转后台后输出写入远端日志文件，processId 带 "r:<连接名>:" 前缀并登记，
+   * 供 process 工具管理与 turn.stopping 续跑钩子收割。
+   */
+  private async runRemoteCommand(
+    target: RemoteToolTarget,
+    args: {
+      command: string;
+      encoding?: string;
+      background?: boolean;
+      sandbox_permissions?: string;
+      justification?: string;
+    },
+    ctx: PluginContext,
+    abortSignal?: AbortSignal,
+  ): Promise<string> {
+    if (args.sandbox_permissions || args.justification) {
+      throw new Error(
+        "sandbox_permissions only applies to the local sandbox; remote command execution is governed by the connection's permission mode.",
+      );
+    }
+    if (abortSignal?.aborted) throw new Error("Request was aborted");
+    this.logger.log(
+      `Running remote command: ${args.command}, workspace: ${target.connectionName}`,
+    );
+
+    let execResult: import("./process-manager.service").ExecuteResult;
+    try {
+      execResult = await target.provider.execute(
+        args.command,
+        target.basePath,
+        {
+          timeout: this.BACKGROUND_THRESHOLD_MS,
+          abortSignal,
+          background: args.background === true,
+          encoding: args.encoding,
+        },
+      );
+    } catch (e: any) {
+      if (e?.name === "AbortError") throw e;
+      // 超时/断线/响应丢失：agent 端日志按 requestId 落盘，路径可预测
+      const log: string | undefined = e?.predictedLog;
+      const readHint = log
+        ? ` Read its log file with the read tool (workspace="${target.connectionName}", file_path: "${log}") or check with run_command (workspace="${target.connectionName}"): tail -f ${log}.`
+        : "";
+      return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server.${readHint}]`;
+    }
+
+    const parts: string[] = [];
+    if (execResult.output) {
+      parts.push(
+        `Latest output:\n---\n${this.sanitize(execResult.output)}\n---`,
+      );
+    }
+    if (execResult.kind === "completed") {
+      parts.push(
+        `[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`,
+      );
+      if (execResult.truncated && execResult.logFilePath) {
+        parts.push(
+          `[Note: Output was truncated. The complete log is saved on the remote server at: ${execResult.logFilePath}. Read it with the read tool (workspace="${target.connectionName}").]`,
+        );
+      }
+    } else {
+      const pid = execResult.processId || "";
+      if (pid && ctx?.session.sessionId) {
+        this.workspaceRouter.registerRemoteProcess(
+          ctx.session.sessionId,
+          pid,
+          target.connectionName,
+          args.encoding,
+        );
+      }
+      const moved = args.background === true
+        ? `[Process moved to background, processId: ${pid}.`
+        : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s on the remote server, switched to background. processId: ${pid}.`;
+      parts.push(
+        `${moved} Output is written to the remote log file: ${execResult.logFilePath || "(unknown)"} — read it with the read tool (workspace="${target.connectionName}") or use the process tool (poll) to check status.]`,
+      );
+    }
+    return parts.join("\n\n");
+  }
+
   /**
    * 回合关闭前续跑钩子（turn.stopping）：收集未接收的 shell 进程输出，子 Agent 额外检查运行状态。
    * 返回 { kind: 'continue', messages } 时 agent-engine 注入 hidden user 消息并触发新一轮 LLM 调用。
@@ -424,16 +613,47 @@ export class ShellPlugin extends PluginBase {
       session.sessionId,
     );
 
-    // 2. 子 Agent 检查是否有运行中的进程
+    // 1.5 远程后台进程：收割该会话所有附加（远程）连接上已完成的进程输出
+    let remoteCompleted: {
+      connectionName: string;
+      processId: string;
+      status: string;
+      exitCode: number | null;
+      output: string;
+      truncated: boolean;
+      logFilePath: string;
+    }[] = [];
+    try {
+      remoteCompleted = await this.workspaceRouter.drainRemoteProcesses(
+        session.sessionId,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `Remote drainCompleted failed (session ${session.sessionId}): ${err?.message || err}`,
+      );
+    }
+
+    // 2. 子 Agent 检查是否有运行中的进程（本地 + 远程登记）
     const stillRunning = isSubAgent
       ? this.processManager
           .listBySession(session.sessionId)
           .filter((p) => p.status === "running")
       : [];
+    const remoteRunningIds = isSubAgent
+      ? await this.checkRemoteRunningProcesses(session.sessionId)
+      : [];
 
     // 3. 无已完成输出且无运行中进程 → 不续跑
-    const hasOutput = completed.some((r) => r.output);
-    if (!hasOutput && stillRunning.length === 0) return undefined;
+    const hasOutput =
+      completed.some((r) => r.output) ||
+      remoteCompleted.some((r) => r.output);
+    if (
+      !hasOutput &&
+      stillRunning.length === 0 &&
+      remoteRunningIds.length === 0
+    ) {
+      return undefined;
+    }
 
     // 4. 组装消息
     const parts: string[] = [];
@@ -453,6 +673,17 @@ export class ShellPlugin extends PluginBase {
       );
     }
 
+    for (const r of remoteCompleted) {
+      if (!r.output) continue;
+      const exitInfo = r.status === "completed" ? ` exitcode:${r.exitCode}` : "";
+const truncNote = r.truncated && r.logFilePath
+        ? `\n[Note: Output was truncated. The complete log is saved on the remote server at: ${r.logFilePath}. Read it with the read tool (workspace="${r.connectionName}").]`
+        : "";
+      parts.push(
+        `[Remote process ${r.processId} (workspace: ${r.connectionName}),status:${r.status}${exitInfo}]:\nnew Output:\n${r.output}${truncNote}`,
+      );
+    }
+
     if (stillRunning.length > 0) {
       const list = stillRunning
         .map((p) => `- \`${p.id}\` (${p.command})`)
@@ -462,12 +693,50 @@ export class ShellPlugin extends PluginBase {
       );
     }
 
+    if (remoteRunningIds.length > 0) {
+      const list = remoteRunningIds
+        .map((id) => `- \`${id}\``)
+        .join("\n");
+      parts.push(
+        `You have ${remoteRunningIds.length} unfinished background processes on remote workspaces:\n${list}\n\nYou must use the process tool (poll) to check their status or terminate them (kill) before ending the current task.`,
+      );
+    }
+
     if (parts.length === 0) return undefined;
 
     return {
       kind: "continue",
       messages: [`<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`],
     };
+  }
+
+  /**
+   * 子 Agent 收尾检查：快速轮询登记的远程后台进程（每进程 ≤1s 等待），
+   * 返回仍在运行的完整进程 ID（"r:<连接名>:<pid>"）。
+   */
+  private async checkRemoteRunningProcesses(
+    sessionId: string,
+  ): Promise<string[]> {
+    const tracked = this.workspaceRouter.getTrackedRemoteProcesses(sessionId);
+    if (tracked.length === 0) return [];
+    const attachments = undefined; // resolveTarget 校验以登记信息为准，无需附件
+    const running: string[] = [];
+    for (const t of tracked) {
+      try {
+        const target = await this.workspaceRouter.resolveRemoteTarget(
+          t.connectionName,
+          sessionId,
+          attachments,
+        );
+        if (!target) continue;
+        const fullId = buildRemoteProcessId(t.connectionName, t.pid);
+        const r = await target.provider.poll(fullId, 1000, undefined, t.encoding);
+        if (r && r.status === "running") running.push(fullId);
+      } catch {
+        // 连接失效/未绑定：进程随连接消亡，不计入运行中
+      }
+    }
+    return running;
   }
 
   /**

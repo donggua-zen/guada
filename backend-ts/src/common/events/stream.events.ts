@@ -23,6 +23,8 @@ export interface StreamStatusChangedEvent {
     workspacePath?: string;
     sessionType?: string;
     error?: string;
+    /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩伪流）。缺省按 chat 处理 */
+    kind?: "chat" | "maintenance";
   };
 }
 

@@ -33,6 +33,8 @@ interface Props {
     anchorEl?: HTMLElement | null
     /** 直接指定 fixed 坐标 { left, top }，跳过自动定位 */
     position?: { left: number; top: number } | null
+    /** 为 true 时暂停"点击外部/Esc 关闭"（面板内有 teleport 到 body 的子弹窗/确认框时使用） */
+    pauseAutoClose?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -42,6 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
     popperClass: '',
     anchorEl: null,
     position: null,
+    pauseAutoClose: false,
 })
 
 const emit = defineEmits<{
@@ -126,6 +129,9 @@ const updatePosition = () => {
 const handleGlobalClick = (e: MouseEvent) => {
     if (!props.show) return
 
+    // 子弹窗/确认框打开期间冻结自动关闭
+    if (props.pauseAutoClose) return
+
     const target = e.target as HTMLElement
 
     // 如果点击在弹窗内部，不关闭
@@ -150,7 +156,7 @@ const handleGlobalClick = (e: MouseEvent) => {
 
 // 处理 Esc 键关闭弹窗
 const handleEscKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && props.show) {
+    if (e.key === 'Escape' && props.show && !props.pauseAutoClose) {
         emit('update:show', false)
     }
 }

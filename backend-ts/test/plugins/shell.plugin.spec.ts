@@ -3,6 +3,7 @@ import { ShellPlugin } from '../../src/modules/shell/shell.plugin';
 import { ProcessManagerService } from '../../src/modules/shell/process-manager.service';
 import { AskService } from '../../src/common/services/ask.service';
 import { InteractionWaitService } from '../../src/common/services/interaction-wait.service';
+import { WorkspaceToolRouter } from '../../src/modules/remote-workspace/workspace-router';
 
 describe('ShellPlugin', () => {
   let plugin: ShellPlugin;
@@ -21,6 +22,16 @@ describe('ShellPlugin', () => {
         {
           provide: AskService,
           useValue: new AskService(new InteractionWaitService()),
+        },
+        {
+          provide: WorkspaceToolRouter,
+          useValue: {
+            resolveRemoteTarget: () => Promise.resolve(null),
+            drainRemoteProcesses: () => Promise.resolve([]),
+            getTrackedRemoteProcesses: () => [],
+            registerRemoteProcess: () => {},
+            unregisterRemoteProcess: () => {},
+          },
         },
       ],
     }).compile();

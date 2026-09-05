@@ -1,8 +1,16 @@
 /**
- * remote-workspace builtin plugin — registers ssh_* tools via registerToolKit.
+ * remote-workspace builtin plugin — 附加（远程）工作目录支持。
  *
- * Tools are lazy-loaded when session has ssh-connection attachments bound.
- * Connection data is resolved via RemoteWorkspaceService (DI-injected).
+ * 职责：
+ * 1. 注册 ssh-connection 附件类型（会话绑定远程连接的入口）；
+ * 2. 注册 ssh-tools 工具包：条件注入连接清单 prompt（说明 workspace 参数用法）
+ *    + remote_transfer 工具（本地 ↔ 远端文件传输）；
+ * 3. 提供 SshWorkspaceProvider / WorkspaceToolRouter（经 file/shell 工具的
+ *    workspace 参数操作远端，见 workspace-router.ts）。
+ *
+ * 历史：本插件曾注册 remote_read/write/edit/grep/bash 五个独立工具，
+ * 已合并进标准文件与命令工具（workspace 参数路由），历史会话中的
+ * remote_* 工具调用块由 plugins.controller 的 legacy display 映射继续渲染。
  */
 import { Injectable } from "@nestjs/common";
 import { z } from "zod";
@@ -16,25 +24,20 @@ import langEn from "./remote-workspace.lang.en.json";
 
 @Injectable()
 export class RemoteWorkspacePlugin extends PluginBase {
-  private manager: RemoteAgentManager;
-
   manifest = {
     id: "remote-workspace",
     name: "%remoteWorkspace.name%",
-    version: "0.3.0",
+    version: "0.4.0",
     description: "%remoteWorkspace.description%",
     category: "system" as const,
     essential: true,
   };
 
-  constructor(private readonly workspaceService: RemoteWorkspaceService) {
+  constructor(
+    private readonly workspaceService: RemoteWorkspaceService,
+    private readonly manager: RemoteAgentManager,
+  ) {
     super();
-    this.manager = new RemoteAgentManager(workspaceService);
-  }
-
-  /** 模块销毁时调用:停止空闲扫描并关闭所有缓存连接 */
-  dispose(): void {
-    this.manager.dispose();
   }
 
   async onLoad(api: PluginApi) {
@@ -58,7 +61,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
       },
     });
 
-    // Prompt: list bound connections by name so AI can identify the target server
+    // Prompt: list bound connections by name so AI can pass workspace="<name>"
     // （随 ssh-tools 工具包注入：角色层禁用该包时一并隐藏）
     const sshKit = api.registerToolKit({
       id: "ssh-tools",
@@ -85,9 +88,9 @@ export class RemoteWorkspacePlugin extends PluginBase {
         const connections = await this.workspaceService.getConnections();
         const bound = connections.filter((c) => connectionIds.includes(c.id));
         if (bound.length === 0) return "";
-        const lines = ["# Remote SSH Connections"];
+        const lines = ["# Remote SSH Connections (Additional Workspaces)"];
         lines.push(
-          "Use the connection name to identify which server to operate on:",
+          "The following remote connections are bound to this session as additional workspaces:",
         );
         for (const c of bound) {
           lines.push(
@@ -96,275 +99,56 @@ export class RemoteWorkspacePlugin extends PluginBase {
         }
         lines.push(
           "",
-          "All ssh_* tools require the 'connection' parameter set to the connection name (must match exactly).",
+          "To operate on a remote workspace, pass workspace=\"<connection name>\" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.",
+          "Paths are then relative to that remote workspace's directory. Omit workspace (or use \"main\") for the primary local workspace.",
+          "remote_transfer keeps its own 'connection' parameter to move files between local and remote.",
         );
         return lines.join("\n");
       },
     });
 
-    // ── 工具注册（直接在工具包句柄上注册）──
-    const tk = sshKit;
-
-    // remote_read
-        tk.registerTool({
-          name: "remote_read",
-          description:
-            "Read a file from a remote SSH server. Supports line pagination. Line numbers are prepended.",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name, must match a bound connection name exactly (e.g. 'my-server')",
-              ),
-            file_path: z
-              .string()
-              .describe("Absolute path on the remote server"),
-            offset: z
-              .number()
-              .int()
-              .optional()
-              .describe("Starting line number (default 0)"),
-            limit: z
-              .number()
-              .int()
-              .min(1)
-              .optional()
-              .describe("Max lines to read (default 200)"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            return agent.readFile(
-              args.file_path,
-              args.offset || 0,
-              args.limit || 200,
-              signal,
-            );
-          },
-          display: {
-            argsKey: "file_path",
-            icon: "read",
-            text: {
-              executing: "%remote_read.executing%",
-              completed: "%remote_read.completed%",
-            },
-          },
-          dangerLevel: "safe",
-        });
-
-        // remote_write
-        tk.registerTool({
-          name: "remote_write",
-          description:
-            "Write content to a file on a remote SSH server. Creates directories if needed.",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            file_path: z
-              .string()
-              .describe("Absolute path on the remote server"),
-            content: z.string().describe("File content to write"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            await agent.writeFile(args.file_path, args.content, signal);
-            return `File written: ${args.file_path} (${args.content.length} chars)`;
-          },
-          display: {
-            argsKey: "file_path",
-            icon: "edit",
-            text: {
-              executing: "%remote_write.executing%",
-              completed: "%remote_write.completed%",
-            },
-          },
-          dangerLevel: "high",
-        });
-
-        // remote_edit
-        tk.registerTool({
-          name: "remote_edit",
-          description:
-            "Find and replace text in a remote file. old_text must exactly match a contiguous segment.",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            file_path: z
-              .string()
-              .describe("Absolute path on the remote server"),
-            old_text: z.string().describe("Text to find (must match exactly)"),
-            new_text: z.string().describe("Replacement text"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            const result = await agent.replaceInFile(
-              args.file_path,
-              args.old_text,
-              args.new_text,
-              signal,
-            );
-            if (!result.matched)
-              throw new Error(`No match found: ${args.old_text}`);
-            return `File ${args.file_path} modified (${result.count} replacement)`;
-          },
-          display: {
-            argsKey: "file_path",
-            icon: "edit",
-            text: {
-              executing: "%remote_edit.executing%",
-              completed: "%remote_edit.completed%",
-            },
-          },
-          dangerLevel: "high",
-        });
-
-        // remote_grep
-        tk.registerTool({
-          name: "remote_grep",
-          description:
-            "Search file contents on a remote server. Case-insensitive when pattern is all lowercase.",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            pattern: z.string().describe("Regex pattern"),
-            path: z
-              .string()
-              .optional()
-              .describe("File or directory path (defaults to base path)"),
-            max_results: z
-              .number()
-              .int()
-              .min(1)
-              .max(50)
-              .optional()
-              .describe("Max matching lines (default 50)"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            return agent.grep(args.pattern, args.path, args.max_results || 50, signal);
-          },
-          display: {
-            argsKey: "pattern",
-            icon: "search",
-            text: {
-              executing: "%remote_grep.executing%",
-              completed: "%remote_grep.completed%",
-            },
-            aggregate: {
-              executing: "%remote_grep.aggregate.executing%",
-              completed: "%remote_grep.aggregate.completed%",
-            },
-          },
-          dangerLevel: "safe",
-        });
-
-        // remote_bash
-        tk.registerTool({
-          name: "remote_bash",
-          description:
-            "Execute a shell command on a remote SSH server. Waits for completion (max 60s).",
-          inputSchema: z.object({
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            command: z.string().describe("Shell command to execute"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            return agent.execute(args.command, signal);
-          },
-          display: {
-            argsKey: "command",
-            icon: "terminal",
-            text: {
-              executing: "%remote_bash.executing%",
-              completed: "%remote_bash.completed%",
-            },
-            aggregate: {
-              executing: "%remote_bash.aggregate.executing%",
-              completed: "%remote_bash.aggregate.completed%",
-            },
-          },
-          dangerLevel: "critical",
-        });
-
-        // remote_transfer
-        tk.registerTool({
-          name: "remote_transfer",
-          description: `Transfer files between local and remote SSH server.
+    // ── remote_transfer：本地 ↔ 远端文件传输（分块，1MB/块）──
+    sshKit.registerTool({
+      name: "remote_transfer",
+      description: `Transfer files between local and remote SSH server.
 - Upload: {"action":"upload","connection":"xxx","local_path":"...","remote_path":"..."}
 - Download: {"action":"download","connection":"xxx","remote_path":"...","local_path":"..."}`,
-          inputSchema: z.object({
-            action: z.enum(["upload", "download"]),
-            connection: z
-              .string()
-              .describe(
-                "Connection name (must match a bound connection exactly)",
-              ),
-            local_path: z.string().describe("Local file path"),
-            remote_path: z.string().describe("Remote file path"),
-          }),
-          execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
-            const attachments = ctx.session.getSettings?.()?.attachments || {};
-            const agent = await this.manager.getAgent(
-              args.connection,
-              ctx.session.sessionId,
-              attachments,
-            );
-            if (args.action === "upload") {
-              return agent.upload(args.local_path, args.remote_path, signal);
-            } else {
-              return agent.download(args.remote_path, args.local_path, signal);
-            }
-          },
-          display: {
-            argsKey: "action",
-            icon: "edit",
-            text: {
-              executing: "%remote_transfer.executing%",
-              completed: "%remote_transfer.completed%",
-            },
-            aggregate: {
-              executing: "%remote_transfer.aggregate.executing%",
-              completed: "%remote_transfer.aggregate.completed%",
-            },
-          },
-          dangerLevel: "high",
-        });
+      inputSchema: z.object({
+        action: z.enum(["upload", "download"]),
+        connection: z
+          .string()
+          .describe(
+            "Connection name (must match a bound connection exactly)",
+          ),
+        local_path: z.string().describe("Local file path"),
+        remote_path: z.string().describe("Remote file path"),
+      }),
+      execute: async (args: any, ctx: PluginContext, signal?: AbortSignal) => {
+        const attachments = ctx.session.getSettings?.()?.attachments || {};
+        const agent = await this.manager.getAgent(
+          args.connection,
+          ctx.session.sessionId,
+          attachments,
+        );
+        if (args.action === "upload") {
+          return agent.upload(args.local_path, args.remote_path, signal);
+        } else {
+          return agent.download(args.remote_path, args.local_path, signal);
+        }
+      },
+      display: {
+        argsKey: "action",
+        icon: "edit",
+        text: {
+          executing: "%remote_transfer.executing%",
+          completed: "%remote_transfer.completed%",
+        },
+        aggregate: {
+          executing: "%remote_transfer.aggregate.executing%",
+          completed: "%remote_transfer.aggregate.completed%",
+        },
+      },
+      dangerLevel: "high",
+    });
   }
 }

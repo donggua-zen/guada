@@ -168,6 +168,50 @@ describe("StreamProjector 折叠器", () => {
     expect(evtTurn.messages[0].metadata.compactInfo.summary).toBe("已优化对话历史");
   });
 
+  it("compression_start：列表末尾生成'压缩中'占位卡且幂等（维护流/无宿主回合）", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    const evtTurns = store.state.turns.filter((t: any) => t.kind === "event");
+    expect(evtTurns.length).toBe(1);
+    expect(evtTurns[0].metadata.eventType).toBe("compaction");
+    expect(evtTurns[0].metadata.compressing).toBe(true);
+    expect(evtTurns[0].messages[0].metadata.compressing).toBe(true);
+  });
+
+  it("compaction_summary 替换'压缩中'占位为结果卡（仅一张压缩卡）", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "compaction_summary",
+      shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      shadowedCount: 1,
+      summary: "已优化对话历史",
+      messageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+    } as any);
+    const evtTurns = store.state.turns.filter((t: any) => t.kind === "event");
+    expect(evtTurns.length).toBe(1);
+    expect(evtTurns[0].metadata.compressing).toBeUndefined();
+    expect(evtTurns[0].messages[0].metadata.compactInfo.summary).toBe("已优化对话历史");
+  });
+
+  it("compression_error：移除'压缩中'占位", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    applyLiveChunk(store as any, "s1", { type: "compression_error", error: "llm failed" } as any);
+    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
+  });
+
+  it("compression_end（纯裁剪无 summary）：移除'压缩中'占位", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "compression_end",
+      contextStats: { usedTokens: 100, effectiveContextWindow: 1000 },
+    } as any);
+    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
+  });
+
   it("compaction_summary 旧格式 shadowedMessageIds", () => {
     foldEvents(store as any, "s1", [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
@@ -248,5 +292,89 @@ describe("StreamProjector 折叠器", () => {
     expect(c1.metadata.toolCallsResponse[0].content).toBe("结果A");
     expect(c2.metadata.toolCallsResponse[0].content).toBe("结果B");
     expect(c2.metadata.toolCalls.find((tc: any) => tc.id === "call_2").outcome).toBe("error");
+  });
+
+  // ── Workflow 编排进度（live workflow_event 与回放 workflow/event 收敛同一状态）──
+
+  const wfEvent = (runId: string, seq: number, kind: string, payload: any) => ({
+    runId, seq, kind, time: 1700000000000 + seq, payload,
+  });
+
+  function wfLiveEvent(event: any): WireStreamEvent {
+    return { type: "workflow_event", event } as any;
+  }
+  function wfDomainEvent(event: any): any {
+    return { type: "workflow/event", seq: event.seq, data: event };
+  }
+
+  it("live workflow_event：in-turn 建 run 卡片束，agent 状态按事件累积", () => {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "user_message", messageId: "T1_u", turnId: "T1", userMessage: { id: "T1_u", role: "user", kind: "user", metadata: {}, content: [{ type: "text", contentId: "c", text: "跑工作流" }] } } as any,
+    ]);
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 1, "run-start", { name: "审查", phases: [{ title: "P1" }] })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 2, "agent-start", { callId: "a1", label: "分析", phase: "P1", subSessionId: "sub_1" })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 3, "agent-end", { callId: "a1", label: "分析", phase: "P1", status: "completed", outputSummary: "完成" })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 4, "run-end", { runStatus: "completed", agentCount: 1, durationMs: 5000 })));
+
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    const card = turn.messages.find((m: any) => m.role === "event" && m.metadata?.eventType === "workflow");
+    expect(card).toBeTruthy();
+    const wf = card.metadata.workflow;
+    expect(wf.name).toBe("审查");
+    expect(wf.status).toBe("completed");
+    expect(wf.agents).toHaveLength(1);
+    expect(wf.agents[0]).toMatchObject({ callId: "a1", label: "分析", phase: "P1", subSessionId: "sub_1", status: "completed", outputSummary: "完成" });
+    expect(wf.durationMs).toBe(5000);
+    // 事件落在宿主回合内（in-turn）
+    expect(turn.kind).toBe("turn");
+  });
+
+  it("回放 workflow/event 与 live 收敛同一状态（seq 幂等去重）", () => {
+    // 先回放完整事件页
+    foldEvents(store as any, "s1", [
+      { type: "turn/start", seq: 1, data: { turnId: "T1" } },
+      { type: "user/message", seq: 2, data: { messageId: "T1_u", kind: "user", blocks: [{ type: "text", text: "q" }], metadata: {} } },
+      wfDomainEvent(wfEvent("wfr_1", 1, "run-start", { name: "审查" })),
+      wfDomainEvent(wfEvent("wfr_1", 2, "agent-start", { callId: "a1", label: "分析", phase: null })),
+      wfDomainEvent(wfEvent("wfr_1", 3, "agent-end", { callId: "a1", label: "分析", phase: null, status: "failed" })),
+      wfDomainEvent(wfEvent("wfr_1", 4, "run-end", { runStatus: "failed", agentCount: 1, errorCode: "AGENT_CAP", errorMessage: "cap" })),
+      { type: "turn/finish", seq: 3, data: { turnId: "T1", promptTokens: 1, completionTokens: 1, totalTokens: 2 } },
+    ]);
+    // 再实时补发重复事件（SSE 重连重放）→ seq 去重，不重复应用
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 2, "agent-start", { callId: "a1", label: "分析", phase: null })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_1", 3, "agent-end", { callId: "a1", label: "分析", phase: null, status: "failed" })));
+
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    const wf = turn.messages.find((m: any) => m.metadata?.eventType === "workflow").metadata.workflow;
+    expect(wf.agents).toHaveLength(1); // 幂等：不重复建条目
+    expect(wf.status).toBe("failed");
+    expect(wf.errorCode).toBe("AGENT_CAP");
+    expect(wf.lastSeq).toBe(4);
+  });
+
+  it("agent-end 先于 agent-start（spawn 失败路径）→ 防御建条目", () => {
+    foldEvents(store as any, "s1", [{ type: "turn/start", seq: 1, data: { turnId: "T1" } }]);
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_2", 1, "run-start", { name: "n" })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_2", 2, "agent-end", { callId: "aX", label: "坏代理", phase: null, status: "failed" })));
+
+    const card = store.state.turns.find((t: any) => t.id === "T1").messages.find((m: any) => m.metadata?.eventType === "workflow");
+    expect(card.metadata.workflow.agents).toHaveLength(1);
+    expect(card.metadata.workflow.agents[0].status).toBe("failed");
+  });
+
+  it("多 run 并存：不同 runId 各自独立卡片；run-log 累积且封顶", () => {
+    foldEvents(store as any, "s1", [{ type: "turn/start", seq: 1, data: { turnId: "T1" } }]);
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_A", 1, "run-start", { name: "A" })));
+    applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_B", 1, "run-start", { name: "B" })));
+    for (let i = 2; i <= 60; i++) {
+      applyLiveChunk(store as any, "s1", wfLiveEvent(wfEvent("wfr_A", i, "run-log", { message: `log ${i}` })));
+    }
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    const cards = turn.messages.filter((m: any) => m.metadata?.eventType === "workflow");
+    expect(cards).toHaveLength(2);
+    const wfA = cards.find((m: any) => m.metadata.workflow.runId === "wfr_A").metadata.workflow;
+    expect(wfA.logs.length).toBeLessThanOrEqual(50);
+    expect(wfA.logs[wfA.logs.length - 1]).toBe("log 60");
   });
 });

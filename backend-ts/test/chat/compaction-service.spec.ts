@@ -38,6 +38,12 @@ function createDataSource(overrides: Partial<CompactionDataSource> = {}): Compac
     getModelConfig: jest.fn(() => ({ modelName: 'gpt-4o' } as any)),
     getTokenCount: jest.fn(async () => 100),
     getEffectiveContextWindow: jest.fn(() => 1000),
+    getContextStats: jest.fn(async () => ({
+      usedTokens: 100,
+      effectiveContextWindow: 1000,
+      messageCount: 2,
+      breakdown: { systemPrompt: 10, history: 80, tools: 10 },
+    })),
     getSystemText: jest.fn(() => 'sys'),
     getTools: jest.fn(() => []),
     appendPrune: jest.fn(async () => {}),
@@ -156,7 +162,12 @@ describe('CompactionService', () => {
       const result = await service.compress(ds, { force: true });
       expect(recordContextAnchor).toHaveBeenCalledTimes(1);
       expect(result.compacted).toBe(false);
-      expect(result.contextStats).toEqual({ usedTokens: 100, effectiveContextWindow: 1000 });
+      expect(result.contextStats).toEqual({
+        usedTokens: 100,
+        effectiveContextWindow: 1000,
+        messageCount: 2,
+        breakdown: { systemPrompt: 10, history: 80, tools: 10 },
+      });
     });
 
     it('compacted 路径不调 recordContextAnchor（锚点已由 appendCompact 的 compaction/end 承载）', async () => {

@@ -1,7 +1,7 @@
 {
   "remoteWorkspace.name": "远程工作区",
-  "remoteWorkspace.description": "通过 SSH 连接远端服务器，提供远端文件操作和命令执行工具",
-  "remoteWorkspace.toolkitName": "SSH 远程工具",
+  "remoteWorkspace.description": "将远程服务器作为附加工作目录绑定到会话；标准文件工具通过 workspace 参数直接操作远端，另有文件传输工具",
+  "remoteWorkspace.toolkitName": "附加工作目录（远程）",
   "remote_read.executing": "正在读取远端文件",
   "remote_read.completed": "已读取远端文件",
   "remote_write.executing": "正在写入远端文件",
@@ -20,6 +20,5 @@
   "remote_transfer.completed": "已传输文件",
   "remote_transfer.aggregate.executing": "正在传输{n}个文件",
   "remote_transfer.aggregate.completed": "已传输{n}个文件",
-  "remoteWorkspace.toolkitDescription": "通过 SSH 远程操作服务器：读写文件与执行命令"
-
+  "remoteWorkspace.toolkitDescription": "将远程服务器作为附加工作目录：绑定后用 read/glob/write/edit/grep/run_command 加 workspace=\"连接名\" 直接操作远端，remote_transfer 在本地与远端间传输文件"
 }

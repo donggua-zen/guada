@@ -98,7 +98,6 @@ export default {
     cancelled: '已取消',
     rateLimited: '请求过于频繁，正在重试...',
     timeout: '请求超时，正在重试...',
-    compressing: '正在优化对话历史...',
   },
 
   // ── 消息工具 ──
@@ -113,7 +112,6 @@ export default {
   panel: {
     loadingHistory: '加载历史消息...',
     noMoreMessages: '没有更多消息了',
-    compressing: '正在优化对话历史，请稍候...',
     editingMessage: '正在编辑消息',
     memoryManagement: '记忆管理',
     contextUsage: '上下文使用率',
@@ -201,11 +199,33 @@ export default {
     // EventCard.vue 压缩占位
     contextCompacted: '上下文已压缩',
     contextCompactedCount: '上下文已压缩 · 折叠 {count} 条消息',
+    contextCompacting: '正在压缩上下文...',
     collapseSummary: '收起摘要',
     // TurnItem.vue 通知类折叠（process_monitor / sub_agent）
     viewProcessOutput: '查看进程输出',
     viewSubagentResult: '查看子代理结果',
     collapseOutput: '收起输出',
+  },
+
+  // ── WorkflowRunCard.vue 工作流编排卡片 ──
+  workflow: {
+    defaultName: '工作流',
+    memberCount: '{count} 个成员',
+    viewSession: '查看会话',
+    collapseLogs: '收起日志',
+    viewLogs: '查看日志（{count} 条）',
+    status: {
+      running: '运行中',
+      completed: '已完成',
+      failed: '失败',
+      cancelled: '已取消',
+    },
+    count: {
+      running: '{count} 运行中',
+      completed: '{count} 完成',
+      failed: '{count} 失败',
+      cancelled: '{count} 取消',
+    },
   },
 
   // ── 消息操作 ──
@@ -351,8 +371,10 @@ export default {
     messages: '{count}条消息',
     details: '详情',
     compressing: '压缩中...',
+    compressStarted: '已开始压缩，完成后将在对话区展示结果',
+    compressingWarning: '已有压缩正在进行，请稍候',
     compress: '压缩',
-    loading: '加载中...',
+    noStats: '暂无统计数据',
     latestCompressStatus: '最新压缩状态',
     compressedTimes: '已压缩 {count} 次',
     token: 'Token',
@@ -379,8 +401,6 @@ export default {
     prunedCount: '裁剪数量：',
     close: '关闭',
     systemPrompt: '系统提示词',
-    summary: '摘要',
-    userPrompt: '用户提示',
     historyLabel: '历史',
     toolDefs: '工具定义',
     loadSummaryFailed: '加载摘要失败',
@@ -393,7 +413,6 @@ export default {
     streamingWarning: '当前会话正在流式输出，请等待结束后再压缩',
     compressConfirmTitle: '确认压缩',
     compressConfirmDesc: '确定要压缩当前会话的历史记录吗？此操作将根据会话和角色的配置自动执行压缩。',
-    compressSuccess: '压缩成功！压缩比例: {ratio}',
     compressNotExecuted: '压缩未执行',
     compressFailed: '压缩失败',
   },
