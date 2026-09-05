@@ -79,28 +79,8 @@ async function initTerminal() {
 
     fitAddon = new FitAddon();
     t.loadAddon(fitAddon);
-    // 只在容器有真实尺寸后 open，避免隐藏/切换标签时 xterm renderer 尺寸为 0
-    const openWhenSized = () => {
-        if (!terminalRef.value || terminalRef.value.clientWidth <= 0 || terminalRef.value.clientHeight <= 0) {
-            requestAnimationFrame(openWhenSized);
-            return;
-        }
-        t.open(terminalRef.value);
-        fitAddon.fit();
-        t.focus();
-    };
-    openWhenSized();
-    term = t;
 
-    // 先注册所有 xterm 监听，再连接 WS；对齐 DSH 的初始化顺序。
-    // 否则切换会话/刷新时 xterm 产生的 DA 应答可能在监听器建立前丢失，
-    // 造成 shell 与终端状态不同步。
-    disposers.push(
-        terminalSocket.onMessage((msg: ServerTerminalMessage) => {
-            handleMessage(msg);
-        }),
-    );
-
+    // 去重缓存：只挡真正的重复 resize
     let lastCols = 0;
     let lastRows = 0;
     const sendResize = (cols: number, rows: number) => {
@@ -111,8 +91,39 @@ async function initTerminal() {
         terminalSocket.resize(cols, rows);
     };
 
-    // DA（Device Attributes）应答是 xterm 生成的合法协议数据，
-    // 必须原样转发给 shell，否则 shell 与终端状态不同步。
+    // 连接 WS：必须在首次 fit 之后调用（URL 携带真实 cols/rows，
+    // 后端 spawn PTY 才能按正确几何创建，而不是 80×24 默认值）
+    const connectSocket = () => {
+        terminalSocket.connect(token.value, props.sessionId, {
+            terminalId: props.terminalId,
+            cols: t.cols,
+            rows: t.rows,
+            onTerminalId: (id) => emit("terminal-id", id),
+        });
+    };
+
+    // 只在容器有真实尺寸后 open，避免隐藏/切换标签时 xterm renderer 尺寸为 0。
+    // WS 连接也放在这里：fit 之后才拿得到真实 cols/rows。
+    const openWhenSized = () => {
+        if (!terminalRef.value || terminalRef.value.clientWidth <= 0 || terminalRef.value.clientHeight <= 0) {
+            requestAnimationFrame(openWhenSized);
+            return;
+        }
+        t.open(terminalRef.value);
+        fitAddon.fit();
+        t.focus();
+        connectSocket();
+    };
+
+    // 先注册所有 xterm 监听，再 open/fit/连接 WS；对齐 DSH 的初始化顺序。
+    // 否则切换会话/刷新时 xterm 产生的 DA 应答可能在监听器建立前丢失，
+    // 造成 shell 与终端状态不同步。
+    disposers.push(
+        terminalSocket.onMessage((msg: ServerTerminalMessage) => {
+            handleMessage(msg);
+        }),
+    );
+
     // DA（Device Attributes）应答是 xterm 生成的合法协议数据，
     // 必须原样转发给 shell，否则 shell 与终端状态不同步。
     t.onData((data: string) => {
@@ -132,9 +143,10 @@ async function initTerminal() {
     ro.observe(terminalRef.value);
     disposers.push(() => ro.disconnect());
 
-    // 对齐 DSH：WS 连接成功（open）后立即 fit + 发送一次尺寸，
-    // 让 shell 拿到正确的 cols/rows，避免几何不一致导致光标错位和
-    // shell 主动发起 DA 查询。
+    // WS 连接成功（open）后立即 fit + 强制发送一次尺寸。
+    // 注意必须清空去重缓存：首次 fit 触发的 resize 发生在 WS 打开前，
+    // 会被 send() 静默丢弃但已写入 lastCols/lastRows，不清零的话这里
+    // 会被误判为重复而跳过，PTY 将停留在错误几何直到手动调整窗口。
     disposers.push(
         terminalSocket.onStatus((s) => {
             if (s === "open" && t.element) {
@@ -143,16 +155,16 @@ async function initTerminal() {
                 } catch {
                     /* ignore */
                 }
+                lastCols = 0;
+                lastRows = 0;
                 sendResize(t.cols, t.rows);
             }
         }),
     );
 
-    // 最后连接 WS：此时 xterm 的输入、resize、消息监听均已就绪。
-    terminalSocket.connect(token.value, props.sessionId, {
-        terminalId: props.terminalId,
-        onTerminalId: (id) => emit("terminal-id", id),
-    });
+    // 最后 open + fit + 连接：此时 xterm 的输入、resize、消息监听均已就绪。
+    openWhenSized();
+    term = t;
 }
 
 function handleMessage(msg: ServerTerminalMessage) {

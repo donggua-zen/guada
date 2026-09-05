@@ -31,7 +31,7 @@ console.log('Check 1: node_modules_production directory exists')
 if (fs.existsSync(productionNodeModulesPath)) {
   console.log('✅ PASS')
 } else {
-  console.log('❌ FAIL: Directory not found (run "npm run optimize:electron-deps" first)')
+  console.log('❌ FAIL: Directory not found (run "pnpm run optimize:electron-deps" first)')
   allPassed = false
 }
 console.log()
@@ -55,7 +55,7 @@ if (fs.existsSync(betterSqlite3NodePath)) {
   console.log(`   File: ${betterSqlite3NodePath}`)
 } else {
   console.log('❌ FAIL: better_sqlite3.node not found')
-  console.log('   Run: npm run rebuild:backend-native:electron')
+  console.log('   Run: pnpm run rebuild:backend-native:electron')
   allPassed = false
 }
 console.log()
@@ -79,7 +79,7 @@ if (fs.existsSync(sqliteVecPlatformPath)) {
   console.log(`   Package: ${sqliteVecPlatformName}`)
 } else {
   console.log(`❌ FAIL: ${sqliteVecPlatformName} not found`)
-  console.log('   Delete node_modules_production and rerun "npm run optimize:electron-deps"')
+  console.log('   Delete node_modules_production and rerun "pnpm run optimize:electron-deps"')
   allPassed = false
 }
 console.log()
@@ -91,14 +91,14 @@ if (allPassed) {
   console.log('========================================')
   console.log()
   console.log('Electron dependency isolation is correctly set up!')
-  console.log('You can now run: npm run dev:electron')
+  console.log('You can now run: pnpm run dev:electron')
   process.exit(0)
 } else {
   console.log('❌ SOME CHECKS FAILED')
   console.log('========================================')
   console.log()
   console.log('Please follow the setup instructions:')
-  console.log('1. npm run optimize:electron-deps')
-  console.log('2. npm run rebuild:backend-native:electron')
+  console.log('1. pnpm run optimize:electron-deps')
+  console.log('2. pnpm run rebuild:backend-native:electron')
   process.exit(1)
 }

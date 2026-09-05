@@ -10,7 +10,7 @@ REM 检查是否安装了 typescript
 where tsc >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo ❌ 未找到 tsc 命令，正在安装 TypeScript...
-    npm install -g typescript
+    pnpm add -g typescript
 )
 
 REM 编译 TypeScript

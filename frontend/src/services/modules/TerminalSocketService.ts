@@ -8,6 +8,10 @@ export type TerminalEventListener = (msg: ServerTerminalMessage) => void;
 
 export interface TerminalSocketOptions {
   terminalId?: string;
+  /** 初始列数：随 URL 传给后端 spawn PTY，避免 PTY 以 80×24 默认值启动导致几何错位 */
+  cols?: number;
+  /** 初始行数：同上 */
+  rows?: number;
   onTerminalId?: (terminalId: string) => void;
 }
 
@@ -51,6 +55,9 @@ export class TerminalSocketService {
     const url = this.getWsUrl();
     const params = new URLSearchParams({ token, sessionId });
     if (this.terminalId) params.set("terminalId", this.terminalId);
+    // 初始几何：后端 spawn 时按此尺寸创建 PTY（仅新建时生效，恢复 orphan 时由 resize 消息同步）
+    if (options.cols && options.cols > 0) params.set("cols", String(Math.floor(options.cols)));
+    if (options.rows && options.rows > 0) params.set("rows", String(Math.floor(options.rows)));
     this.url = `${url}?${params.toString()}`;
     this.open();
   }

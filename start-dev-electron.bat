@@ -29,6 +29,6 @@ echo.
 
 :: 启动调试模式
 echo [2/2] 启动Electron应用...
-npm run dev:electron
+pnpm run dev:electron
 
 pause

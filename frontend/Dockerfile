@@ -5,11 +5,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# 统一使用 pnpm（与仓库其他子项目一致）
+RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
+
 # Copy package files
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -18,7 +21,7 @@ COPY . .
 ARG VITE_API_BASE_URL=/api/v1
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-RUN npm run build
+RUN pnpm run build
 
 # ========================================
 # Stage 2: Serve with Nginx

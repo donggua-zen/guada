@@ -10,21 +10,30 @@ RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debi
     sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null; \
     apt-get update && apt-get install -y python3 make g++ libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
+# 统一使用 pnpm：只有 pnpm 会应用 patches/ 下的 node-pty 补丁（npm ci 会静默冲掉补丁）
+RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
+
 # Copy package files
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches/
 COPY prisma ./prisma/
 
 # Install all dependencies (including devDependencies for build)
-RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci
+RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Generate Prisma Client
-RUN npx prisma generate
+RUN pnpm exec prisma generate
 
 # Build the application (remove tsbuildinfo to force full rebuild)
-RUN rm -f tsconfig.tsbuildinfo && npm run build
+RUN rm -f tsconfig.tsbuildinfo && pnpm run build
+
+# Remove devDependencies, keep production deps only.
+# pnpm 的 .pnpm 布局自包含：prisma 生成客户端（在 @prisma/client 内）、
+# 原生模块及其兄弟依赖（sharp → @img/*）都会随 node_modules 一起保留
+RUN pnpm prune --prod
 
 
 
@@ -44,16 +53,17 @@ RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debi
 RUN groupadd -g 1001 nodejs && \
     useradd -r -u 1001 -g nodejs nestjs
 
-# Copy package files
-COPY package*.json ./
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
 
-# Install production dependencies only
-# --legacy-peer-deps: prevents auto-installing prisma CLI (peer dep of @prisma/client)
-# --ignore-scripts: skip postinstall (prisma generate) — generated client is COPY'd from builder
-RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev --legacy-peer-deps --ignore-scripts && \
-    npm cache clean --force && \
-    # Remove unnecessary files from node_modules to reduce size
-    find node_modules -type f \( \
+# Copy package.json (运行时可能读取版本号等信息)
+COPY package.json ./
+
+# Copy the whole pruned node_modules from builder (自包含 pnpm 布局，含 .pnpm)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Remove unnecessary files from node_modules to reduce size
+RUN find node_modules -type f \( \
         -name "*.d.ts" -o \
         -name "*.map" -o \
         -name "*.md" -o \
@@ -76,18 +86,6 @@ RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci 
         -name "coverage" -o \
         -name ".github" \
     \) -exec rm -rf {} + 2>/dev/null || true
-
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Copy generated Prisma Client from builder (prisma CLI not installed in prod)
-COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
-
-# Copy native modules from builder (better-sqlite3, sharp, etc. — already compiled in builder)
-COPY --from=builder /app/node_modules/better-sqlite3 /app/node_modules/better-sqlite3
-COPY --from=builder /app/node_modules/sharp /app/node_modules/sharp
-COPY --from=builder /app/node_modules/@parcel /app/node_modules/@parcel
-COPY --from=builder /app/node_modules/sqlite-vec /app/node_modules/sqlite-vec
 
 # Create necessary directories
 RUN mkdir -p data/uploads data/compression-states logs static && \
