@@ -184,6 +184,8 @@ export interface IMessageStore {
       messageCount?: number;
       /** 细分 token（与 usedTokens 配套） */
       breakdown?: TokenBreakdown;
+      /** 压缩前实测占用（压缩历史 before/after 对比） */
+      beforeTokens?: number;
     },
   ): Promise<{
     summaryMessageId: string;
@@ -200,6 +202,7 @@ export interface IMessageStore {
       effectiveContextWindow: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
+      beforeTokens?: number;
     },
   ): Promise<number>;
 

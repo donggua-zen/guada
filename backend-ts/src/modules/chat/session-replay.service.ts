@@ -32,6 +32,22 @@ export interface EventPageResult {
 /** 页容量上限（防超大拉取） */
 const MAX_PAGE_TURNS = 100;
 
+/** 压缩历史条目（从 JSONL compaction 事件聚合，替代已移除的 session_context_state 表） */
+export interface CompactionHistoryItem {
+  /** 摘要括号 = summaryMessageId；纯裁剪 = `prune_<seq>` */
+  id: string;
+  createdAt: string;
+  /** 摘要文本；纯裁剪为 null */
+  summaryContent: string | null;
+  shadowedCount: number;
+  cleaningStrategy: "summarized" | "discarded" | "pruned_only";
+  compressionStats: {
+    /** 优先取事件携带的实测 beforeTokens；旧事件回退"上一占用锚点"近似 */
+    beforeTokenCount?: number;
+    afterTokenCount?: number;
+  };
+}
+
 @Injectable()
 export class SessionReplayService {
   constructor(
@@ -99,6 +115,104 @@ export class SessionReplayService {
       endSeq: lastSeq,
       nextBeforeSeq: pageStartIdx > 0 ? firstSeq - 1 : null,
       hasMore: pageStartIdx > 0,
+    };
+  }
+
+  /**
+   * 从 JSONL 事件日志聚合压缩历史（替代已移除的 session_context_state DB 线）。
+   *
+   * 扫描规则：
+   * - 摘要括号（compaction/start → summary → end）→ summarized（有摘要文本）/ discarded（空摘要）
+   * - 孤立 compaction/end（无 start，纯裁剪路径锚点）→ pruned_only 条目
+   * - before/after：end.beforeTokens 实测优先；旧事件无此字段时回退"上一占用锚点"
+   *   （turn/finish.usedTokens 或上一 compaction/end.usedTokens）近似
+   * - 未闭合括号（进行中的压缩）不产出条目
+   *
+   * @param limit 返回最近 N 条（缺省全量）；total 恒为全部条目数
+   */
+  async getCompactionHistory(
+    sessionId: string,
+    limit?: number,
+  ): Promise<{ items: CompactionHistoryItem[]; total: number }> {
+    const events = await this.backend.getAllEvents(sessionId);
+    const items: CompactionHistoryItem[] = [];
+    // 上一占用锚点（before 回退口径）
+    let lastAnchorTokens: number | undefined;
+    // 当前打开的摘要括号（未收口不产出）
+    let openBracket: {
+      summary?: string;
+      summaryMessageId?: string;
+      shadowedCount?: number;
+    } | null = null;
+
+    for (const e of events) {
+      if (e.type === "turn/finish") {
+        const used = (e.data as { usedTokens?: number })?.usedTokens;
+        if (typeof used === "number") lastAnchorTokens = used;
+        continue;
+      }
+      if (e.type === "compaction/start") {
+        openBracket = {};
+        continue;
+      }
+      if (e.type === "compaction/summary") {
+        if (openBracket) {
+          const d = e.data as {
+            summary?: string;
+            summaryMessageId?: string;
+            shadowedCount?: number;
+          };
+          openBracket.summary = d.summary;
+          openBracket.summaryMessageId = d.summaryMessageId;
+          openBracket.shadowedCount = d.shadowedCount ?? 0;
+        }
+        continue;
+      }
+      if (e.type !== "compaction/end") continue;
+
+      const d = e.data as {
+        usedTokens?: number;
+        beforeTokens?: number;
+      };
+      const afterTokenCount =
+        typeof d.usedTokens === "number" ? d.usedTokens : lastAnchorTokens;
+      if (openBracket) {
+        const summary = openBracket.summary ?? "";
+        items.push({
+          id: openBracket.summaryMessageId || `compaction_${e.seq}`,
+          createdAt: new Date(e.time).toISOString(),
+          summaryContent: summary || null,
+          shadowedCount: openBracket.shadowedCount ?? 0,
+          cleaningStrategy: summary ? "summarized" : "discarded",
+          compressionStats: {
+            beforeTokenCount:
+              typeof d.beforeTokens === "number" ? d.beforeTokens : lastAnchorTokens,
+            afterTokenCount,
+          },
+        });
+        openBracket = null;
+      } else {
+        // 孤立 end = 纯裁剪路径（无摘要、无遮蔽）
+        items.push({
+          id: `prune_${e.seq}`,
+          createdAt: new Date(e.time).toISOString(),
+          summaryContent: null,
+          shadowedCount: 0,
+          cleaningStrategy: "pruned_only",
+          compressionStats: {
+            beforeTokenCount:
+              typeof d.beforeTokens === "number" ? d.beforeTokens : lastAnchorTokens,
+            afterTokenCount,
+          },
+        });
+      }
+      if (typeof d.usedTokens === "number") lastAnchorTokens = d.usedTokens;
+    }
+
+    const ordered = items.reverse();
+    return {
+      items: limit !== undefined ? ordered.slice(0, limit) : ordered,
+      total: ordered.length,
     };
   }
 }

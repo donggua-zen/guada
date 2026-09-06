@@ -83,5 +83,5 @@ export interface CompactionDataSource {
   ): Promise<{ summaryMessageId: string; endSeq: number }>;
   /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用
    *  （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）。服务层在 prune-only 后调用。 */
-  recordContextAnchor?(): Promise<void>;
+  recordContextAnchor?(beforeTokens?: number): Promise<void>;
 }

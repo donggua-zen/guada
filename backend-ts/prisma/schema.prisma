@@ -61,7 +61,6 @@ model Session {
   group         SessionGroup?         @relation(fields: [groupId], references: [id])
   // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
   model         Model?                @relation(fields: [modelId], references: [id])
-  contextStates SessionContextState[]
   parent        Session?              @relation("SessionHierarchy", fields: [parentId], references: [id])
   children      Session[]             @relation("SessionHierarchy")
 
@@ -354,23 +353,6 @@ model McpServer {
   @@map("mcp_server")
 }
 
-model SessionContextState {
-  id                     String   @id @default(cuid())
-  sessionId              String   @map("session_id")
-  summaryContent         String?  @map("summary_content")
-  lastCompactedMessageId String?  @map("last_compacted_message_id")
-  lastCompactedContentId String?  @map("last_compacted_content_id")
-  lastPrunedContentId    String?  @map("last_pruned_content_id")
-  cleaningStrategy       String?  @map("cleaning_strategy")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
-  pruningMetadata        Json?    @map("pruning_metadata")
-  compressionStats       Json?    @map("compression_stats")
-  session                Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId, createdAt])
-  @@map("session_context_state")
-}
 
 model UserSetting {
   id        String   @id @default(cuid())

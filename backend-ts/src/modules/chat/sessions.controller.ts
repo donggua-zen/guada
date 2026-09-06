@@ -212,24 +212,6 @@ export class SessionsController {
     return this.sessionService.getSessionSummaries(id, user.id, limit ? parseInt(limit, 10) : undefined);
   }
 
-  @Put("sessions/summaries/:summaryId")
-  async updateSummary(
-    @Param("summaryId") summaryId: string,
-    @Body() body: { summaryContent?: string },
-    @CurrentUser() user: any,
-  ) {
-    return this.sessionService.updateSummary(summaryId, user.id, body);
-  }
-
-  @Delete("sessions/summaries/:summaryId")
-  async deleteSummary(
-    @Param("summaryId") summaryId: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.sessionService.deleteSummary(summaryId, user.id);
-    return { success: true };
-  }
-
   @Post("sessions/:id/compress")
   async compressSession(
     @Param("id") id: string,

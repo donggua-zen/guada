@@ -144,3 +144,55 @@ describe('SessionReplayService 事件页', () => {
     expect(page.hasMore).toBe(false);
   });
 });
+
+describe('SessionReplayService 压缩历史聚合（getCompactionHistory）', () => {
+  const service = (events: BaseEvent[]) => new SessionReplayService({ getAllEvents: async () => events } as any);
+
+  it('摘要括号 → summarized 条目（beforeTokens 实测优先）；纯裁剪孤立 end → pruned_only 条目', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },
+      { type: 'compaction/start', seq: 2, time: 2000, data: {} },
+      { type: 'compaction/summary', seq: 3, time: 3000, data: { shadowedEndId: 'm1', shadowedCount: 3, summary: 'sum1', summaryMessageId: 'sum_1' } },
+      { type: 'compaction/end', seq: 4, time: 4000, data: { usedTokens: 500, effectiveContextWindow: 128000, beforeTokens: 900 } },
+      // 纯裁剪：孤立 end（无 start/summary）
+      { type: 'compaction/end', seq: 5, time: 5000, data: { usedTokens: 480, beforeTokens: 500 } },
+    ];
+    const { items, total } = await service(events).getCompactionHistory('s1');
+    expect(total).toBe(2);
+    // 倒序：最新在前
+    expect(items[0].id).toBe('prune_5');
+    expect(items[0].cleaningStrategy).toBe('pruned_only');
+    expect(items[0].summaryContent).toBeNull();
+    expect(items[0].compressionStats).toEqual({ beforeTokenCount: 500, afterTokenCount: 480 });
+    expect(items[1].id).toBe('sum_1');
+    expect(items[1].cleaningStrategy).toBe('summarized');
+    expect(items[1].summaryContent).toBe('sum1');
+    expect(items[1].shadowedCount).toBe(3);
+    expect(items[1].compressionStats).toEqual({ beforeTokenCount: 900, afterTokenCount: 500 });
+  });
+
+  it('旧事件无 beforeTokens → before 回退上一占用锚点；DISABLED 空摘要 → discarded；limit 截断', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },
+      { type: 'compaction/start', seq: 2, time: 2000, data: {} },
+      { type: 'compaction/summary', seq: 3, time: 3000, data: { shadowedEndId: 'm1', shadowedCount: 2, summary: 'sum1', summaryMessageId: 'sum_1' } },
+      { type: 'compaction/end', seq: 4, time: 4000, data: { usedTokens: 500 } }, // 无 beforeTokens → 回退锚点 900
+      { type: 'compaction/start', seq: 5, time: 5000, data: {} },
+      { type: 'compaction/summary', seq: 6, time: 6000, data: { shadowedEndId: 'm2', shadowedCount: 1, summary: '', summaryMessageId: 'sum_2' } },
+      { type: 'compaction/end', seq: 7, time: 7000, data: { usedTokens: 480 } }, // DISABLED 空摘要 → discarded
+      // 未闭合括号（进行中的压缩）不产出条目
+      { type: 'compaction/start', seq: 8, time: 8000, data: {} },
+      { type: 'compaction/summary', seq: 9, time: 9000, data: { shadowedEndId: 'm3', shadowedCount: 1, summary: 'ing', summaryMessageId: 'sum_3' } },
+    ];
+    const { items, total } = await service(events).getCompactionHistory('s1');
+    expect(total).toBe(2);
+    expect(items[0].cleaningStrategy).toBe('discarded');
+    expect(items[0].compressionStats).toEqual({ beforeTokenCount: 500, afterTokenCount: 480 });
+    expect(items[1].compressionStats.beforeTokenCount).toBe(900); // 锚点回退
+    // limit：最近 1 条
+    const page = await service(events).getCompactionHistory('s1', 1);
+    expect(page.items.length).toBe(1);
+    expect(page.items[0].id).toBe('sum_2');
+    expect(page.total).toBe(2);
+  });
+});

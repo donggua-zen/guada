@@ -268,8 +268,6 @@ export interface SessionApi {
 
   compressSession(sessionId: string): Promise<any>;
   fetchSessionSummaries(sessionId: string, limit?: number): Promise<{ items: any[]; total: number }>;
-  updateSummary(summaryId: string, data: { summaryContent?: string }): Promise<any>;
-  deleteSummary(summaryId: string): Promise<{ success: boolean }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
 }
@@ -399,19 +397,6 @@ export const sessionApi: SessionApi = {
     const params = limit ? `?limit=${limit}` : '';
     return await this._request(`/sessions/${sessionId}/summaries${params}`, {
       method: "GET",
-    });
-  },
-
-  async updateSummary(this: ApiContext, summaryId: string, data: { summaryContent?: string }) {
-    return await this._request(`/sessions/summaries/${summaryId}`, {
-      method: "PUT",
-      data,
-    });
-  },
-
-  async deleteSummary(this: ApiContext, summaryId: string) {
-    return await this._request(`/sessions/summaries/${summaryId}`, {
-      method: "DELETE",
     });
   },
 

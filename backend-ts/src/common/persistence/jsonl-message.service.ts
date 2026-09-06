@@ -937,6 +937,8 @@ export class JsonlMessageService implements IMessageStore {
     messageCount?: number;
     /** 细分 token（与 usedTokens 配套） */
     breakdown?: TokenBreakdown;
+    /** 压缩前实测占用（压缩历史 before/after 对比） */
+    beforeTokens?: number;
   }): Promise<{ summaryMessageId: string; endSeq: number; summaryNode: Message | null }> {
     const seq = await this.getNextSeq(sessionId);
     const summaryMessageId =
@@ -972,6 +974,7 @@ export class JsonlMessageService implements IMessageStore {
             : { effectiveContextWindow: data.effectiveContextWindow },
           ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
           ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
+          ...data.beforeTokens === undefined ? {} : { beforeTokens: data.beforeTokens },
         },
       },
     ];
@@ -994,6 +997,7 @@ export class JsonlMessageService implements IMessageStore {
       effectiveContextWindow: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
+      beforeTokens?: number;
     },
   ): Promise<number> {
     const seq = await this.getNextSeq(sessionId);
@@ -1006,6 +1010,7 @@ export class JsonlMessageService implements IMessageStore {
         effectiveContextWindow: data.effectiveContextWindow,
         ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
         ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
+        ...data.beforeTokens === undefined ? {} : { beforeTokens: data.beforeTokens },
       },
     });
     return seq;
