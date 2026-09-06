@@ -732,6 +732,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     effectiveContextWindow?: number;
     messageCount?: number;
     breakdown?: TokenBreakdown;
+    beforeTokens?: number;
   }> {
     const effectiveContextWindow = this.getEffectiveContextWindow();
     const shadowedCount = data.shadowedCount;
@@ -773,14 +774,19 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       effectiveContextWindow,
       messageCount: snap.view.length,
       breakdown: await this.getTokenBreakdown(),
+      beforeTokens: preTotal,
     };
   }
 
   /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
    *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。 */
-  async recordContextAnchor(): Promise<void> {
+  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
+   *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。
+   *  @param beforeTokens 压缩前实测占用（调用方在裁剪前测得），供压缩历史 before/after 对比 */
+  async recordContextAnchor(beforeTokens?: number): Promise<void> {
     const revision = await this.messageStore.recordContextAnchor(this.sessionId, {
       ...(await this.getContextStats()),
+      ...(beforeTokens !== undefined ? { beforeTokens } : {}),
     });
     // 不改变消息视图，仅版本号前进 → 续期快照 revision
     this.refreshSnapshotRevision(revision);

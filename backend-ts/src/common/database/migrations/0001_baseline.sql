@@ -1,4 +1,4 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "session_group" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
@@ -258,22 +258,6 @@ CREATE TABLE "mcp_server" (
 );
 
 -- CreateTable
-CREATE TABLE "session_context_state" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "session_id" TEXT NOT NULL,
-    "summary_content" TEXT,
-    "last_compacted_message_id" TEXT,
-    "last_compacted_content_id" TEXT,
-    "last_pruned_content_id" TEXT,
-    "cleaning_strategy" TEXT,
-    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL,
-    "pruning_metadata" JSONB,
-    "compression_stats" JSONB,
-    CONSTRAINT "session_context_state_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "session" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-);
-
--- CreateTable
 CREATE TABLE "user_setting" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "user_id" TEXT NOT NULL,
@@ -392,9 +376,6 @@ CREATE INDEX "file_session_id_idx" ON "file"("session_id");
 
 -- CreateIndex
 CREATE INDEX "file_content_id_idx" ON "file"("content_id");
-
--- CreateIndex
-CREATE INDEX "session_context_state_session_id_created_at_idx" ON "session_context_state"("session_id", "created_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_setting_user_id_key" ON "user_setting"("user_id");

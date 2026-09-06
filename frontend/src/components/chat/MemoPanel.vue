@@ -96,7 +96,7 @@
           </div>
 
           <!-- 统计信息区域 -->
-          <div v-if="summaries[0].compressionStats || summaries[0].pruningMetadata" class="space-y-2 mb-3">
+          <div v-if="summaries[0].compressionStats" class="space-y-2 mb-3">
             <div
               v-if="summaries[0].compressionStats?.beforeTokenCount && summaries[0].compressionStats?.afterTokenCount"
               class="flex justify-between items-center text-xs">
@@ -110,22 +110,12 @@
                 </span>
               </span>
             </div>
-            <div
-              v-if="summaries[0].compressionStats?.beforeMessageCount && summaries[0].compressionStats?.afterMessageCount"
-              class="flex justify-between items-center text-xs">
-              <span class="text-gray-600 dark:text-[#a8aab0]">{{ t('chat.memo.message') }}</span>
-              <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
-                {{ summaries[0].compressionStats.beforeMessageCount }} → {{
-                  summaries[0].compressionStats.afterMessageCount }}
-              </span>
-            </div>
             <div class="flex items-center gap-1.5 text-xs pt-1">
-              <el-tag v-if="summaries[0].pruningMetadata" size="small" type="warning">{{ t('chat.memo.prunedOnly')
-                }}</el-tag>
-              <el-tag v-else-if="summaries[0].summaryContent" size="small" type="success">{{
-                t('chat.memo.summaryCompress') }}</el-tag>
-              <span v-if="summaries[0].pruningMetadata" class="text-gray-500 dark:text-[#8b8d95]">
-                {{ Object.keys(summaries[0].pruningMetadata).length }} {{ t('chat.memo.items') }}
+              <el-tag size="small" :type="getStrategyTagType(summaries[0].cleaningStrategy || 'unknown')">
+                {{ getStrategyLabel(summaries[0].cleaningStrategy || 'unknown') }}
+              </el-tag>
+              <span v-if="summaries[0].shadowedCount > 0" class="text-gray-500 dark:text-[#8b8d95]">
+                {{ summaries[0].shadowedCount }} {{ t('chat.memo.items') }}
               </span>
             </div>
           </div>
@@ -148,20 +138,6 @@
                 </el-icon>
                 <span class="ml-1">{{ t('chat.memo.history') }}</span>
               </el-button>
-              <el-button size="small" text @click="handleEdit(summaries[0])"
-                class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                <el-icon>
-                  <Edit />
-                </el-icon>
-                <span class="ml-1">{{ t('chat.memo.edit') }}</span>
-              </el-button>
-              <el-button size="small" text @click="handleDelete(summaries[0])"
-                class="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20">
-                <el-icon>
-                  <Delete />
-                </el-icon>
-                <span class="ml-1">{{ t('chat.memo.delete') }}</span>
-              </el-button>
             </div>
           </div>
         </div>
@@ -170,18 +146,6 @@
         <el-empty :description="t('chat.memo.noCompressRecords')" :image-size="60" />
       </template>
     </div>
-
-    <!-- 编辑摘要对话框 -->
-    <GdDialog v-model="editDialogVisible" :title="t('chat.memo.editSummaryTitle')" width="600px" append-to-body>
-      <el-input v-model="editingSummary.content" type="textarea" :rows="10"
-        :placeholder="t('chat.memo.summaryPlaceholder')" />
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="editDialogVisible = false">{{ t('chat.memo.cancel') }}</el-button>
-          <el-button type="primary" @click="saveEdit">{{ t('chat.memo.save') }}</el-button>
-        </span>
-      </template>
-    </GdDialog>
 
     <!-- 压缩历史记录对话框 -->
     <GdDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
@@ -211,7 +175,7 @@
             </div>
 
             <!-- 统计信息 -->
-            <div v-if="summary.compressionStats || summary.pruningMetadata" class="space-y-2">
+            <div v-if="summary.compressionStats" class="space-y-2">
               <div class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('chat.memo.compressStatsLabel') }}</div>
               <div class="bg-gray-50 dark:bg-[#1e1f23] rounded p-3 space-y-2">
                 <!-- Token 统计 -->
@@ -227,12 +191,11 @@
                   </span>
                 </div>
 
-                <!-- 消息数量统计 -->
-                <div v-if="summary.compressionStats?.beforeMessageCount && summary.compressionStats?.afterMessageCount"
-                  class="flex justify-between items-center text-xs">
+                <!-- 折叠消息条数 -->
+                <div v-if="summary.shadowedCount > 0" class="flex justify-between items-center text-xs">
                   <span class="text-gray-600 dark:text-[#a8aab0]">{{ t('chat.memo.messageCount') }}</span>
                   <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
-                    {{ summary.compressionStats.beforeMessageCount }} → {{ summary.compressionStats.afterMessageCount }}
+                    {{ summary.shadowedCount }}
                   </span>
                 </div>
 
@@ -245,33 +208,7 @@
                     100).toFixed(2) }}%
                   </span>
                 </div>
-
-                <!-- 裁剪数量（只在没有摘要时显示） -->
-                <div v-if="summary.pruningMetadata" class="flex justify-between items-center gap-2 text-xs pt-1">
-                  <span class="text-gray-600 dark:text-[#a8aab0]">{{ t('chat.memo.prunedCount') }}</span>
-                  <span class="text-gray-500 dark:text-[#8b8d95]">{{ Object.keys(summary.pruningMetadata).length }} {{
-                    t('chat.memo.items') }}</span>
-                </div>
               </div>
-            </div>
-
-            <!-- 操作按钮 -->
-            <div v-if="summary.summaryContent"
-              class="flex justify-end gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-[#2a2c30]">
-              <el-button size="small" text @click="handleEditFromHistory(summary)"
-                class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300">
-                <el-icon>
-                  <Edit />
-                </el-icon>
-                <span class="ml-1">{{ t('chat.memo.edit') }}</span>
-              </el-button>
-              <el-button size="small" text @click="handleDeleteFromHistory(summary)"
-                class="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300">
-                <el-icon>
-                  <Delete />
-                </el-icon>
-                <span class="ml-1">{{ t('chat.memo.delete') }}</span>
-              </el-button>
             </div>
           </div>
         </div>
@@ -292,12 +229,11 @@
 import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats';
-import { useDebounceFn } from '@vueuse/core';
 import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
-import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
+import { Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 
@@ -317,15 +253,13 @@ const props = defineProps<{
 const summaries = ref<any[]>([]);
 const summaryTotal = ref(0);
 const showBreakdown = ref(false);
-const editDialogVisible = ref(false);
 const historyDialogVisible = ref(false);
-const editingSummary = ref({ id: '', content: '' });
 const sessionIdRef = computed(() => props.sessionId);
 const { tokenStats } = useSessionTokenStats(sessionIdRef);
 
 // 内部子弹窗/确认框是否打开：打开期间父级 popover 冻结"点击外部/Esc 关闭"
 const confirmActive = ref(false);
-const subDialogOpen = computed(() => editDialogVisible.value || historyDialogVisible.value);
+const subDialogOpen = computed(() => historyDialogVisible.value);
 const overlayActive = computed(() => subDialogOpen.value || confirmActive.value);
 watch(overlayActive, (active) => emit('overlayActive', active));
 onBeforeUnmount(() => emit('overlayActive', false));
@@ -393,49 +327,6 @@ function loadTokenStats() {
   applyContextStatsFromEvents(eventLog);
 }
 
-// 编辑摘要
-function handleEdit(summary: any) {
-  editingSummary.value = {
-    id: summary.id,
-    content: summary.summaryContent,
-  };
-  editDialogVisible.value = true;
-}
-
-// 保存编辑
-async function saveEdit() {
-  try {
-    await apiService.updateSummary(editingSummary.value.id, {
-      summaryContent: editingSummary.value.content,
-    });
-    toast.success(t('chat.memo.summaryUpdateSuccess'));
-    editDialogVisible.value = false;
-    await loadSummaries();
-  } catch (error: any) {
-    console.error('更新摘要失败:', error);
-    toast.error(t('chat.memo.summaryUpdateFailed'));
-  }
-}
-
-// 删除摘要
-async function handleDelete(summary: any) {
-  confirmActive.value = true;
-  const confirmed = await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc'));
-  confirmActive.value = false;
-  if (!confirmed) return;
-
-  try {
-    await apiService.deleteSummary(summary.id);
-    toast.success(t('chat.memo.summaryDeleteSuccess'));
-    await loadSummaries();
-    // 删除摘要后，上下文窗口会释放空间，需要同步刷新 Token 统计
-    await loadTokenStats();
-  } catch (error: any) {
-    console.error('删除摘要失败:', error);
-    toast.error(t('chat.memo.summaryDeleteFailed'));
-  }
-}
-
 // 格式化时间
 function formatTime(dateString: string) {
   return dayjs(dateString).format('YYYY-MM-DD HH:mm:ss');
@@ -491,6 +382,13 @@ watch(
   }
 );
 
+// 压缩结束后刷新压缩历史（同会话下 sessionId watch 不触发；弹窗可能已关，重开即见新条目）
+watch(isCompressing, (now, was) => {
+  if (was && !now) {
+    loadSummaries();
+  }
+});
+
 // 触发压缩（异步：维护流占用会话，压缩事件经 SSE 下发，触发后关闭弹窗）
 async function handleCompress() {
   if (!props.sessionId) return;
@@ -533,34 +431,6 @@ async function handleCompress() {
 // 查看压缩历史
 function handleViewHistory() {
   historyDialogVisible.value = true;
-}
-
-// 从历史记录中编辑摘要
-function handleEditFromHistory(summary: any) {
-  editingSummary.value = {
-    id: summary.id,
-    content: summary.summaryContent,
-  };
-  editDialogVisible.value = true;
-}
-
-// 从历史记录中删除摘要
-async function handleDeleteFromHistory(summary: any) {
-  confirmActive.value = true;
-  const confirmed = await confirm(t('chat.memo.deleteConfirmTitle'), t('chat.memo.deleteConfirmDesc'));
-  confirmActive.value = false;
-  if (!confirmed) return;
-
-  try {
-    await apiService.deleteSummary(summary.id);
-    toast.success(t('chat.memo.summaryDeleteSuccess'));
-    await loadSummaries();
-    // 删除摘要后，上下文窗口会释放空间，需要同步刷新 Token 统计
-    await loadTokenStats();
-  } catch (error: any) {
-    console.error('删除摘要失败:', error);
-    toast.error(t('chat.memo.summaryDeleteFailed'));
-  }
 }
 
 // 监听标签页切换逻辑已移除，因为不再使用 Tab 组件

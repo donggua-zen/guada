@@ -67,7 +67,6 @@ function createService(overrides: any = {}) {
     getSettingValue: jest.fn(async () => null), // 无专用压缩模型 → 回退会话模型
   };
   const modelRepository = { findById: jest.fn() };
-  const contextStateRepo = { create: jest.fn(async () => {}) };
   const eventBus = { emit: jest.fn(), parallel: jest.fn(async () => []) };
   const llmService = { completions: jest.fn() };
 
@@ -76,10 +75,9 @@ function createService(overrides: any = {}) {
     llmService as any,
     settingsStorage as any,
     modelRepository as any,
-    contextStateRepo as any,
     eventBus as any,
   );
-  return { service, engine, settingsStorage, modelRepository, contextStateRepo, eventBus, llmService };
+  return { service, engine, settingsStorage, modelRepository, eventBus, llmService };
 }
 
 describe('CompactionService', () => {
@@ -104,8 +102,8 @@ describe('CompactionService', () => {
       expect(eventBus.emit).not.toHaveBeenCalled();
     });
 
-    it('完整编排：pre_compact → 引擎(messages=history) → refresh → DB 历史 + memory.compacted', async () => {
-      const { service, engine, eventBus, contextStateRepo } = createService();
+    it('完整编排：pre_compact → 引擎(messages=history) → refresh → memory.compacted（无 DB 写入）', async () => {
+      const { service, engine, eventBus } = createService();
       const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) }); // > target 500
       const refreshed = await service.compress(ds);
 
@@ -129,15 +127,6 @@ describe('CompactionService', () => {
       const emits = eventBus.emit.mock.calls.map((c: any[]) => c[0]);
       expect(emits).toContain('memory.pre_compact');
       expect(emits).toContain('memory.compacted');
-      // DB 压缩历史（含统计）
-      expect(contextStateRepo.create).toHaveBeenCalledWith(
-        's1',
-        expect.objectContaining({
-          summaryContent: '检查点',
-          cleaningStrategy: 'summarized',
-          compressionStats: { beforeTokenCount: 900, afterTokenCount: 900 },
-        }),
-      );
     });
 
     it('force 透传：手动/溢出路径 force=true 传给引擎（跳过触发判断；retain 仍按配置比例）', async () => {
@@ -190,7 +179,6 @@ describe('CompactionService', () => {
         { completions: jest.fn() } as any,
         { getSettingValue: jest.fn(async () => null) } as any,
         { findById: jest.fn() } as any,
-        { create: jest.fn(async () => {}) } as any,
         eventBus as any,
       );
       const sessionContext = { sessionId: 's1' } as any;

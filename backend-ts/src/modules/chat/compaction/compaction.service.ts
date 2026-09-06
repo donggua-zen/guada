@@ -15,7 +15,6 @@ import { LLMSummaryProvider } from "./llm-summary.provider";
 import { LLMService } from "../../llm-core/llm.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import { ModelRepository } from "../../../common/database/model.repository";
-import { SessionContextStateRepository } from "../../../common/database/session-context-state.repository";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { ToolOrchestrator } from "../../tools/tool-orchestrator.service";
 import { buildSessionLlmParams } from "../session-llm-request.builder";
@@ -70,7 +69,6 @@ export class CompactionService {
     private readonly llmService: LLMService,
     private readonly settingsStorage: SettingsStorage,
     private readonly modelRepository: ModelRepository,
-    private readonly contextStateRepo: SessionContextStateRepository,
     private readonly eventBus: EventBusService,
   ) {}
 
@@ -174,15 +172,17 @@ export class CompactionService {
 
     // 纯裁剪（无括号）路径无 compaction/end 锚点 → 补写一条独立 compaction/end 携带压缩后占用
     // （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）
+    // beforeTokens = 压缩前实测占用（方法入口 currentTokens），供压缩历史 before/after 对比
     if (result.pruneEvents > 0 && !result.compacted) {
-      await ds.recordContextAnchor?.();
+      await ds.recordContextAnchor?.(currentTokens);
     }
 
     // 压缩后占用（两路径统一）：供 live 广播压缩事件，前端即时更新环形指示器
     const contextStats = await ds.getContextStats();
 
-    // 持久化压缩历史（DB sessionContextState，供压缩历史 UI 读取）+ 插件缓存失效事件
-    await this.persistCompaction(ds, result, currentTokens);
+    // 广播压缩完成（供记忆缓存等模块清除状态；携带 sessionContext 供订阅者
+    // 注入压缩后提醒——如 todo 遗忘防护）。压缩历史由 JSONL compaction 事件聚合，无 DB 写入。
+    this.notifyCompacted(ds, result);
 
     return {
       messages: refreshed,
@@ -274,28 +274,12 @@ export class CompactionService {
   // ─── 持久化与事件 ───
 
   /** 压缩完成后：DB 压缩历史 + 插件缓存失效事件（memory.compacted） */
-  private async persistCompaction(
+  /** 广播压缩完成事件（仅摘要/丢弃路径；纯裁剪无历史条目，不广播） */
+  private notifyCompacted(
     ds: CompactionDataSource,
     result: { compacted: boolean; summary?: string; shadowedEndId?: string },
-    currentTokens: number,
-  ): Promise<void> {
+  ): void {
     if (!result.compacted) return;
-    try {
-      const afterTokens = await ds.getTokenCount();
-      await this.contextStateRepo.create(ds.sessionId, {
-        summaryContent: result.summary || null,
-        lastCompactedMessageId: result.shadowedEndId ?? null,
-        cleaningStrategy: result.summary ? "summarized" : "discarded",
-        compressionStats: {
-          beforeTokenCount: currentTokens,
-          afterTokenCount: afterTokens,
-        },
-      });
-    } catch (e) {
-      this.logger.warn(`persist compression state failed: ${e}`);
-    }
-    // 广播压缩完成事件（供记忆缓存等模块清除状态；携带 sessionContext 供订阅者
-    // 注入压缩后提醒——如 todo 遗忘防护）
     this.eventBus.emit(HOOKS.MEMORY_COMPACTED, {
       sessionId: ds.sessionId,
       sessionContext: ds,

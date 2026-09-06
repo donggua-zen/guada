@@ -4,7 +4,6 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "../llm-core/llm.service";
 import {
   IMessageStore,
@@ -30,6 +29,7 @@ import { WorkspaceWatcherService } from "../../common/services/workspace-watcher
 import { SessionStreamManager } from "./session-stream.manager";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
+import { SessionReplayService } from "./session-replay.service";
 import { resolveThinkingEffort } from "../llm-core";
 
 @Injectable()
@@ -41,7 +41,6 @@ export class SessionService {
     private characterRepo: CharacterRepository,
     private modelRepo: ModelRepository,
     private settingsStorage: SettingsStorage,
-    private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
     @Inject(MESSAGE_STORE_TOKEN) private contextManager: IMessageStore,
     private urlService: UrlService,
@@ -51,6 +50,7 @@ export class SessionService {
     private streamManager: SessionStreamManager,
     private compactionCoordinator: CompactionCoordinatorService,
     private eventBus: EventBusService,
+    private sessionReplayService: SessionReplayService,
     private searchIndex: SearchIndexService,
     private prisma: PrismaService,
     private sessionGroupService: SessionGroupService,
@@ -249,8 +249,8 @@ export class SessionService {
   }
 
   /**
-   * 获取会话的摘要记录（分页）
-   * @param limit 可选，限制返回条数
+   * 获取会话的压缩历史（从 JSONL compaction 事件聚合，替代已移除的 DB 线）
+   * @param limit 可选，限制返回条数（最近 N 条）
    * @returns { items, total }
    */
   async getSessionSummaries(sessionId: string, userId: string, limit?: number) {
@@ -260,45 +260,7 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    const [items, total] = await Promise.all([
-      this.contextStateRepo.findAllBySessionId(sessionId, limit),
-      this.contextStateRepo.countBySessionId(sessionId),
-    ]);
-    return { items, total };
-  }
-
-  /**
-   * 更新摘要内容
-   */
-  async updateSummary(
-    summaryId: string,
-    userId: string,
-    data: { summaryContent?: string },
-  ) {
-    const summary = await this.contextStateRepo.findById(summaryId);
-    if (!summary) {
-      throw new Error("Summary not found");
-    }
-
-    // 验证会话归属权
-    await this.getSessionById(summary.sessionId, userId);
-
-    return this.contextStateRepo.update(summaryId, data);
-  }
-
-  /**
-   * 删除单个摘要记录
-   */
-  async deleteSummary(summaryId: string, userId: string) {
-    const summary = await this.contextStateRepo.findById(summaryId);
-    if (!summary) {
-      throw new Error("Summary not found");
-    }
-
-    // 验证会话归属权
-    await this.getSessionById(summary.sessionId, userId);
-
-    return this.contextStateRepo.delete(summaryId);
+    return this.sessionReplayService.getCompactionHistory(sessionId, limit);
   }
 
   /**

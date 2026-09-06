@@ -42,9 +42,9 @@ function pickBreakdown(b: unknown): TokenBreakdown | undefined {
 
 /** 共享合并：填充环形指示器字段；messageCount/breakdown 事件携带时才覆盖（旧锚点缺省保留旧值） */
 function applyContextStats(stats: ContextStatsInput) {
-  const percentage = Math.min(
-    (stats.usedTokens / stats.effectiveContextWindow) * 100,
-    100,
+  // 百分比约束两位小数（浮点直除会产生 0.24789999999999998 之类的脏值）
+  const percentage = parseFloat(
+    Math.min((stats.usedTokens / stats.effectiveContextWindow) * 100, 100).toFixed(2),
   )
   tokenStats.value = {
     usedTokens: stats.usedTokens,
