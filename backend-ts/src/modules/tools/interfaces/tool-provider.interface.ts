@@ -40,4 +40,9 @@ export interface ToolCallResponse {
   outcome?: "success" | "error" | "rejected";
   /** 工具返回的图片（base64），由 agent-engine 注入为隐藏 user 消息 */
   images?: import("../../plugins/api/plugin-api").ImageContent[];
+  /**
+   * UI 渲染元数据（仅前端消费，不进 LLM 上下文）。
+   * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。
+   */
+  meta?: Record<string, any>;
 }

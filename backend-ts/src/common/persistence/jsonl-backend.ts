@@ -68,9 +68,61 @@ export class JsonlBackend implements PersistenceBackend {
     return path.join(this.getSessionDir(sessionId), 'manifest.json');
   }
 
-  private getActiveSegmentFile(sessionId: string): string {
-    const seg = this.activeSegments.get(sessionId);
-    return seg ? seg.file : 'seg-0000.jsonl';
+  /**
+   * 写路径活跃段解析：内存缓存未命中时从 manifest 懒恢复（重启安全）。
+   *
+   * activeSegments 是纯内存缓存，仅 createSession/splitSegment 写入；进程重启后为空。
+   * 此前写路径在未命中时硬编码回退 'seg-0000.jsonl'——已发生过分卷的会话重启后再追加
+   * 会写进已归档的 seg-0000（seq 远超该段末尾 → getAllEvents 判真缺口，会话永久无法加载）。
+   *
+   * 恢复来源：manifest 中 status='active' 的段（文件名/startSeq 落盘）。
+   * endSeq/bytes 不随活跃段落盘（endSeq 常驻 null），需扫描段文件补齐：
+   * 取最后一个完整行的 seq 为 endSeq（torn 尾由冷加载修复路径截断，此处只读不动），
+   * 文件字节长度为 bytes。compactionCount 无落盘形态，恢复为 0（仅影响分卷节奏，不影响正确性）。
+   *
+   * 调用时序保证：首个 append 前必有 getNextSeq → getState 冷加载（torn 尾已修复），
+   * 故此处的尾部扫描看到的总是完整行。
+   */
+  private async ensureActiveSegment(sessionId: string): Promise<ActiveSegment | null> {
+    const cached = this.activeSegments.get(sessionId);
+    if (cached) return cached;
+
+    const manifest = await this.readManifest(sessionId).catch(() => null);
+    if (!manifest) return null;
+    const active = manifest.segments.find((s) => s.status === 'active');
+    if (!active) return null;
+    const segPath = this.getSegmentPath(sessionId, active.file);
+    if (!existsSync(segPath)) return null;
+
+    let endSeq: number | null = null;
+    const content = await fs.readFile(segPath, 'utf-8');
+    const lines = content.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const ev = JSON.parse(line) as BaseEvent;
+        if (typeof ev.seq === 'number') {
+          endSeq = ev.seq;
+          break;
+        }
+      } catch {
+        // torn 尾/坏行：继续向前找最后一个完整行
+      }
+    }
+
+    const seg: ActiveSegment = {
+      file: active.file,
+      startSeq: active.startSeq,
+      endSeq,
+      compactionCount: 0,
+      bytes: Buffer.byteLength(content, 'utf-8'),
+    };
+    this.activeSegments.set(sessionId, seg);
+    this.logger.debug(
+      `[jsonl] active segment restored from manifest for ${sessionId}: ${seg.file} (endSeq=${seg.endSeq}, bytes=${seg.bytes})`,
+    );
+    return seg;
   }
 
   // ─── 会话 ───
@@ -171,7 +223,8 @@ export class JsonlBackend implements PersistenceBackend {
   // ─── 事件 ───
 
   async appendEvent(sessionId: string, event: BaseEvent): Promise<void> {
-    const file = this.getActiveSegmentFile(sessionId);
+    const seg = await this.ensureActiveSegment(sessionId);
+    const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
     // append-only 写入
@@ -179,7 +232,6 @@ export class JsonlBackend implements PersistenceBackend {
     await fs.appendFile(filePath, line, 'utf-8');
 
     // 更新活跃段
-    const seg = this.activeSegments.get(sessionId);
     if (seg) {
       seg.endSeq = event.seq;
       seg.bytes += Buffer.byteLength(line, 'utf-8');
@@ -188,13 +240,13 @@ export class JsonlBackend implements PersistenceBackend {
 
   async appendEvents(sessionId: string, events: BaseEvent[]): Promise<void> {
     if (events.length === 0) return;
-    const file = this.getActiveSegmentFile(sessionId);
+    const seg = await this.ensureActiveSegment(sessionId);
+    const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
     const lines = events.map(e => JSON.stringify(e) + '\n').join('');
     await fs.appendFile(filePath, lines, 'utf-8');
 
-    const seg = this.activeSegments.get(sessionId);
     if (seg) {
       seg.endSeq = events[events.length - 1].seq;
       seg.bytes += Buffer.byteLength(lines, 'utf-8');
@@ -202,7 +254,8 @@ export class JsonlBackend implements PersistenceBackend {
   }
 
   async readEvents(sessionId: string, fromSeq = 0): Promise<BaseEvent[]> {
-    const file = this.getActiveSegmentFile(sessionId);
+    const seg = await this.ensureActiveSegment(sessionId);
+    const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
     if (!existsSync(filePath)) return [];
@@ -355,7 +408,8 @@ export class JsonlBackend implements PersistenceBackend {
       try {
         const ev = JSON.parse(line) as BaseEvent;
         if (ev.seq !== lastSeq + 1) {
-          // seq 缺口：整消息粒度下中间事件物理丢失，无法安全修复 → 由调用方抛错
+          // seq 不连续 → 由调用方抛错。got < lastSeq+1 为重复/回退（数据未丢，序号冲突）；
+          // got > lastSeq+1 为真缺口（整消息粒度下中间事件物理丢失）。两者均不可静默修复。
           return { events, truncateTo: null, gap: { expected: lastSeq + 1, got: ev.seq } };
         }
         events.push(ev);
@@ -380,9 +434,15 @@ export class JsonlBackend implements PersistenceBackend {
     gap: { expected: number; got: number } | null,
   ): void {
     if (gap) {
+      // 方向区分：got <= expected 侧是重复/回退（事件本体都在，序号撞号或乱序，
+      // 可无损重编号修复）；got > expected 侧是真缺口（中间事件物理丢失）。
+      // 两者同样 fail-fast 拒绝加载，仅报错语义不同，便于诊断。
+      const detail =
+        gap.got < gap.expected
+          ? `存在 seq 重复/回退（期望 ${gap.expected}，实际 ${gap.got}）。事件本体未丢失但序号冲突，可无损重编号修复。`
+          : `存在 seq 缺口（期望 ${gap.expected}，实际 ${gap.got}）。整消息粒度下缺口=数据丢失。`;
       throw new CorruptSessionLogError(
-        `会话日志损坏：${file} 存在 seq 缺口（期望 ${gap.expected}，实际 ${gap.got}）。` +
-          `整消息粒度下缺口=数据丢失，拒绝加载。`,
+        `会话日志损坏：${file} ${detail}拒绝加载。`,
         { sessionId, file, expectedSeq: gap.expected, gotSeq: gap.got },
       );
     }
@@ -397,6 +457,9 @@ export class JsonlBackend implements PersistenceBackend {
   /**
    * 物理截断活跃段到指定字节偏移（修复 torn 尾后调用），并同步内存活跃段状态。
    * 仅允许在无活跃写入的冷加载路径使用。
+   * 文件定位走 ensureActiveSegment（manifest 懒恢复）：重启后内存表为空时
+   * 若回退硬编码 seg-0000，会把已归档段误截断（数据丢失），必须与 scanActiveSegment
+   * （调用方定位文件的方式）解析到同一个文件。
    */
   async truncateActiveSegment(
     sessionId: string,
@@ -404,10 +467,10 @@ export class JsonlBackend implements PersistenceBackend {
     lastSeq: number,
     bytes: number,
   ): Promise<void> {
-    const file = this.getActiveSegmentFile(sessionId);
+    const seg = await this.ensureActiveSegment(sessionId);
+    const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
     await fs.truncate(filePath, truncateTo);
-    const seg = this.activeSegments.get(sessionId);
     if (seg) {
       seg.endSeq = lastSeq;
       seg.bytes = bytes;
@@ -423,7 +486,8 @@ export class JsonlBackend implements PersistenceBackend {
     const manifest = await this.readManifest(sessionId).catch(() => null);
     if (!manifest) return;
 
-    const seg = this.activeSegments.get(sessionId);
+    // 重启后内存表为空 → 从 manifest 懒恢复（endSeq 由段尾扫描补齐，保证新段 startSeq 正确）
+    const seg = await this.ensureActiveSegment(sessionId);
     if (!seg) return;
 
     // 移除原 active 条目（segments 中应只有一条 active；不移除会导致同一文件被记录两次，
@@ -543,12 +607,13 @@ export class JsonlBackend implements PersistenceBackend {
   }
 
   /**
-   * 当前活跃段信息(供分卷判断:bytes 超阈值触发 snapshotThenSplit)
+   * 当前活跃段信息(供分卷判断:bytes 超阈值触发 snapshotThenSplit)。
+   * 内存缓存未命中时经 ensureActiveSegment 从 manifest 懒恢复（重启安全）。
    */
   async getActiveSegmentInfo(
     sessionId: string,
   ): Promise<{ file: string; endSeq: number | null; bytes: number } | null> {
-    const seg = this.activeSegments.get(sessionId);
+    const seg = await this.ensureActiveSegment(sessionId);
     if (!seg) return null;
     return { file: seg.file, endSeq: seg.endSeq, bytes: seg.bytes };
   }
@@ -604,7 +669,8 @@ export class JsonlBackend implements PersistenceBackend {
    * 仅记录边界 seq（compactionBoundaries 只写不读，遮蔽信息由事件流承载，不在此重复）。
    */
   async recordCompaction(sessionId: string): Promise<void> {
-    const seg = this.activeSegments.get(sessionId);
+    // 重启后内存表为空 → 从 manifest 懒恢复，保证 compactionBoundaries 的 seq 与分卷计数有效
+    const seg = await this.ensureActiveSegment(sessionId);
     if (!seg) return;
 
     seg.compactionCount++;

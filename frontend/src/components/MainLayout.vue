@@ -10,7 +10,7 @@
     </template>
     <template #content>
       <div
-        class="relative h-full flex-1 min-w-0 overflow-hidden content-clear-wallpaper border-l border-gray-200 dark:border-[#2f2f2f]">
+        class="relative h-full flex-1 min-w-0 overflow-hidden content-clear-wallpaper dark:border-[#2f2f2f]">
         <RouterView />
       </div>
     </template>

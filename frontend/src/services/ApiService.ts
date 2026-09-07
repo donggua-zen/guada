@@ -47,6 +47,7 @@ import { gitApi, type GitApi } from "./modules/git.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
+export type { UiProcessInfo, UiProcessLog } from "./modules/session.api";
 
 /**
  * 通过 interface 声明合并，让 ApiService 类型包含所有领域方法。

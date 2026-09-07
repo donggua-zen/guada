@@ -44,6 +44,21 @@ export const useTabStore = defineStore('tab', () => {
         selectTab(id)
     }
 
+    /**
+     * 打开后台进程日志标签（同一进程复用同一标签，已存在则直接激活）
+     */
+    function openProcessLogTab(sessionId: string, processId: string, command: string): void {
+        const id = `processlog:${sessionId}:${processId}`
+        const existing = tabs.value.find(t => t.key === id)
+        if (existing) {
+            // 同一进程命令可能已变化（如重启同 PID），同步元数据
+            existing.command = command
+        } else {
+            tabs.value.push({ type: 'processlog', key: id, processId, command })
+        }
+        selectTab(id)
+    }
+
     // ── 标签选中（幂等，不加载内容） ──
 
     function selectTab(key: string | null): void {
@@ -195,6 +210,7 @@ export const useTabStore = defineStore('tab', () => {
         openGitTab,
         openNewTab,
         openTerminalTab,
+        openProcessLogTab,
         selectTab,
         addTab,
         removeTab,

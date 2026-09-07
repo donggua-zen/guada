@@ -80,6 +80,7 @@ export class PluginsController {
                 aggregate: t.displayAggregate,
                 argsKey: t.argsKey,
                 icon: t.icon,
+                renderer: t.displayRenderer,
               },
               nlsLocale,
             ),
@@ -111,16 +112,17 @@ export class PluginsController {
 
     for (const r of resolved) {
       for (const t of r.allTools) {
-        result[t.name] = this.nlsService.resolveDisplay(
-          r.plugin.id,
-          {
-            text: t.displayText,
-            aggregate: t.displayAggregate,
-            argsKey: t.argsKey,
-            icon: t.icon,
-          },
-          nlsLocale,
-        );
+    result[t.name] = this.nlsService.resolveDisplay(
+      r.plugin.id,
+      {
+        text: t.displayText,
+        aggregate: t.displayAggregate,
+        argsKey: t.argsKey,
+        icon: t.icon,
+        renderer: t.displayRenderer,
+      },
+      nlsLocale,
+    );
       }
     }
 
@@ -130,13 +132,28 @@ export class PluginsController {
     // NLS 键保留在 remote-workspace 语言包中；插件未加载时回退原始 %key% 字符串。
     const legacyRemoteTools: Record<
       string,
-      { argsKey: string; icon: string; hasAggregate: boolean }
+      { argsKey: string; icon: string; hasAggregate: boolean; renderer?: any }
     > = {
       remote_read: { argsKey: "file_path", icon: "read", hasAggregate: false },
-      remote_write: { argsKey: "file_path", icon: "edit", hasAggregate: false },
-      remote_edit: { argsKey: "file_path", icon: "edit", hasAggregate: false },
+      remote_write: {
+        argsKey: "file_path",
+        icon: "edit",
+        hasAggregate: false,
+        renderer: { kind: "content", fields: { file: "file_path", content: "content" } },
+      },
+      remote_edit: {
+        argsKey: "file_path",
+        icon: "edit",
+        hasAggregate: false,
+        renderer: { kind: "diff", fields: { file: "file_path", oldValue: "old_text", newValue: "new_text" } },
+      },
       remote_grep: { argsKey: "pattern", icon: "search", hasAggregate: true },
-      remote_bash: { argsKey: "command", icon: "terminal", hasAggregate: true },
+      remote_bash: {
+        argsKey: "command",
+        icon: "terminal",
+        hasAggregate: true,
+        renderer: { kind: "terminal", fields: { command: "command" } },
+      },
     };
     for (const [name, meta] of Object.entries(legacyRemoteTools)) {
       if (result[name]) continue; // 仍在注册（如回滚/过渡期）时以实际注册为准
@@ -153,6 +170,9 @@ export class PluginsController {
           executing: `%${name}.aggregate.executing%`,
           completed: `%${name}.aggregate.completed%`,
         };
+      }
+      if (meta.renderer) {
+        display.renderer = meta.renderer;
       }
       result[name] = this.nlsService.resolveDisplay(
         "remote-workspace",

@@ -35,6 +35,10 @@
                     <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
                         <el-icon :size="13"><Branch20Regular /></el-icon>
                     </span>
+                    <!-- 进程日志图标 -->
+                    <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
+                        <el-icon :size="13"><Pulse20Regular /></el-icon>
+                    </span>
                     <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
@@ -84,6 +88,10 @@
                 <!-- 终端标签（v-if 兼作 sessionId 空值收窄：TerminalPanel 的 session-id 必填 string） -->
                 <TerminalPanel v-if="activeTab?.type === 'terminal' && sessionId" :session-id="sessionId"
                     :terminal-id="activeTab.terminalId" @terminal-id="onTerminalIdReady(activeTab, $event)" />
+                <!-- 进程日志标签（后台进程输出，轮询日志尾部） -->
+                <ProcessLogPanel v-if="activeTab?.type === 'processlog' && sessionId && activeTab.processId"
+                    :session-id="sessionId" :process-id="activeTab.processId"
+                    :command="activeTab.command || activeTab.processId" :tab-key="activeTab.key" />
                 <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
                 <BrowserPreviewPlaceholder v-if="isElectron"
                     v-show="activeTab?.type === 'browser' && !!browserStore.activeWindowId" />
@@ -160,7 +168,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
@@ -172,6 +180,7 @@ import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import GitChangesPanel from './GitChangesPanel.vue';
 import TerminalPanel from './TerminalPanel.vue';
+import ProcessLogPanel from './ProcessLogPanel.vue';
 import NewTabPage from './NewTabPage.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import { useLayoutStore } from '@/stores/layout';
@@ -212,11 +221,12 @@ const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
 // 当前激活标签（内容区按类型渲染 + 目录树显隐）
 const activeTab = computed(() => tabStore.tabs.find(t => t.key === tabStore.activeTabKey) || null);
 
-// 标签标题（file→文件名 / browser→网页标题 / git→Git审阅）
+// 标签标题（file→文件名 / browser→网页标题 / git→Git审阅 / processlog→进程日志）
 function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'file') return tab.name || tab.path || tab.key;
     if (tab.type === 'git') return t('chat.workspace.gitTab');
     if (tab.type === 'terminal') return t('chat.workspace.terminal');
+    if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
     return tab.title || t('chat.workspace.unnamedWindow');
 }
 

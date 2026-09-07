@@ -24,10 +24,25 @@ export interface ToolCall {
   metadata?: { [key: string]: any };
 }
 
-export interface InlineContentConfig {
-  key: string;
-  mode: "text" | "code";
-  language?: string;
+/** 定制渲染器配置（kind → 前端 tool-renderers 通用组件） */
+export interface ToolRendererConfig {
+  kind: "diff" | "content" | "terminal";
+  /** 语义字段 → arguments 字段名映射 */
+  fields: {
+    file?: string;
+    oldValue?: string;
+    newValue?: string;
+    content?: string;
+    command?: string;
+  };
+}
+
+/** 解析后的渲染器信息（getToolRenderer + getRendererArgs 的产物，供 ToolCustomView 分发） */
+export interface ToolRendererInfo {
+  kind: ToolRendererConfig["kind"];
+  args: Record<string, string>;
+  /** diff kind 的增删行数统计（折叠行徽章用） */
+  stat?: { added: number; removed: number };
 }
 
 export interface ToolDisplayConfig {
@@ -37,7 +52,8 @@ export interface ToolDisplayConfig {
   argsKey?: string;
   /** 图标标识（TOOL_ICON_MAP 的 key） */
   icon?: string;
-  inlineContent?: InlineContentConfig;
+  /** 定制渲染器声明（后端插件 display.renderer 下发） */
+  renderer?: ToolRendererConfig;
 }
 
 /**
@@ -192,28 +208,98 @@ export function getArgsText(tool: ToolCall): string | undefined {
   return undefined;
 }
 
-export function getInlineContent(tool: ToolCall): string | undefined {
-  const config = getToolConfig(tool);
-  if (!config.inlineContent) return undefined;
+// ── 定制渲染器声明 ──
 
+/** 各 kind 的语义字段默认映射（args 字段名，与内置工具 zod schema 对齐） */
+const DEFAULT_RENDERER_FIELDS: Record<
+  ToolRendererConfig["kind"],
+  ToolRendererConfig["fields"]
+> = {
+  diff: { file: "file_path", oldValue: "old_text", newValue: "new_text" },
+  content: { file: "file_path", content: "content" },
+  terminal: { command: "command" },
+};
+
+/**
+ * 内置渲染器映射（兜底）
+ *
+ * 后端未升级 / 历史会话（legacy remote_* 工具调用块）时仍按原样定制渲染。
+ */
+const BUILTIN_RENDERERS: Record<string, ToolRendererConfig> = {
+  edit: { kind: "diff", fields: DEFAULT_RENDERER_FIELDS.diff },
+  remote_edit: { kind: "diff", fields: DEFAULT_RENDERER_FIELDS.diff },
+  write: { kind: "content", fields: DEFAULT_RENDERER_FIELDS.content },
+  remote_write: { kind: "content", fields: DEFAULT_RENDERER_FIELDS.content },
+  run_command: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
+  remote_bash: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
+};
+
+/** 校验并归一化后端下发的 renderer 声明（fields 缺省补默认映射） */
+function normalizeRenderer(decl: any): ToolRendererConfig | null {
+  if (!decl || typeof decl !== "object") return null;
+  const kind: ToolRendererConfig["kind"] | undefined = decl.kind;
+  if (kind !== "diff" && kind !== "content" && kind !== "terminal") {
+    return null;
+  }
+  return {
+    kind,
+    fields: {
+      ...DEFAULT_RENDERER_FIELDS[kind],
+      ...(decl.fields && typeof decl.fields === "object" ? decl.fields : {}),
+    },
+  };
+}
+
+/**
+ * 获取工具的定制渲染器配置。
+ * 优先级：后端声明（display.renderer）> 内置映射；均无返回 null（走通用结果渲染）。
+ */
+export function getToolRenderer(tool: ToolCall): ToolRendererConfig | null {
+  const name = resolveToolName(tool);
+  const backendDecl = pluginToolDisplays.value[name]?.renderer;
+  return normalizeRenderer(backendDecl) ?? BUILTIN_RENDERERS[name] ?? null;
+}
+
+/** 各 kind 至少要有一个语义字段可解析才值得定制渲染 */
+const RENDERER_REQUIRED_KEYS: Record<
+  ToolRendererConfig["kind"],
+  string[]
+> = {
+  diff: ["oldValue", "newValue"],
+  content: ["content"],
+  terminal: ["command"],
+};
+
+/**
+ * 从 arguments 中按 renderer.fields 提取语义字段（file/oldValue/newValue/content/command）。
+ * arguments 为流式 JSON 分片，用 partial-json 容错解析；无有效字段返回 null。
+ */
+export function getRendererArgs(
+  tool: ToolCall,
+  renderer: ToolRendererConfig,
+): Record<string, string> | null {
   const params = getToolArgs(tool);
-  if (!params) return undefined;
+  if (!params) return null;
 
-  let parsedParams = params;
+  let parsed = params;
   if (typeof params === "string") {
     try {
-      parsedParams = partialParse(params);
+      parsed = partialParse(params);
     } catch {
-      return undefined;
+      return null;
     }
   }
+  if (!parsed || typeof parsed !== "object") return null;
 
-  if (!parsedParams || typeof parsedParams !== "object") return undefined;
-
-  const value = parsedParams[config.inlineContent.key];
-  if (typeof value !== "string" || value.length === 0) return undefined;
-
-  return value;
+  const out: Record<string, string> = {};
+  for (const [semantic, key] of Object.entries(renderer.fields)) {
+    const value = (parsed as Record<string, any>)[key];
+    if (typeof value === "string") out[semantic] = value;
+  }
+  const hasRequired = RENDERER_REQUIRED_KEYS[renderer.kind].some(
+    (k) => typeof out[k] === "string",
+  );
+  return hasRequired ? out : null;
 }
 
 export function countSteps(items: any[]): number {

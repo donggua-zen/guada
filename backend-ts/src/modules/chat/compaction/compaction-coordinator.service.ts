@@ -154,9 +154,11 @@ export class CompactionCoordinatorService {
       }
       return { messages: outcome.messages, didRun: true };
     } catch (e: any) {
-      // 取消（用户中止维护流）与失败区分记录；compression_error 照常广播，
-      // 前端移除"压缩中"占位卡并复位状态
+      // 取消（用户中止维护流）与失败区分记录并随事件下发；
+      // abortSignal 主判据（覆盖 OpenAI SDK 的 APIUserAbortError 等各类中止错误名），
+      // compression_error 照常广播，前端移除"压缩中"占位卡并按 cancelled 决定提示形态
       const cancelled =
+        opts.abortSignal?.aborted === true ||
         e instanceof CompactionCancelledError ||
         e?.name === "CompactionCancelledError" ||
         e?.name === "AbortError";
@@ -168,6 +170,7 @@ export class CompactionCoordinatorService {
       await context.publishStream({
         type: "compression_error",
         error: e?.message ?? String(e),
+        ...(cancelled ? { cancelled: true } : {}),
       } as CompressionErrorEvent);
       return { messages: null, didRun: true };
     }

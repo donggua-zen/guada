@@ -11,15 +11,18 @@
 
 import { ref, type Ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { t } from "@/locales";
 import { useSessionStore } from "@/stores/session";
 import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
 import { projectChunk } from "@/services/modules/streamProjector";
+import { usePopup } from "@/composables/usePopup";
 
 export function useSessionEvents() {
   const sessionStore = useSessionStore();
   const router = useRouter();
   const route = useRoute();
+  const { toast } = usePopup();
 
   const windowHidden = ref(false);
   const unsubscribers: Array<() => void> = [];
@@ -55,6 +58,18 @@ export function useSessionEvents() {
       streamReceiver.subscribeAll((chunk: any) => {
         const sid = chunk.sessionId;
         if (!sid) return;
+        // 压缩失败/取消：瞬态提示（成功由对话区结果卡承载，不额外打扰）
+        if (chunk.type === "compression_error") {
+          if (chunk.cancelled) {
+            toast.info(t("chat.memo.compressCancelled"));
+          } else {
+            toast.error(
+              t("chat.memo.compressFailedDetail", {
+                message: chunk.error || chunk.message || "",
+              }),
+            );
+          }
+        }
         projectChunk(sessionStore, sid, chunk);
       }),
     );

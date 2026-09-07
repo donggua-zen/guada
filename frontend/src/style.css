@@ -54,8 +54,8 @@
   --gd-color-surface-border: #efefef;
   --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
   --gd-size-surface-radius: 12px;
-  --gd-color-bg: #f8f8f8;
-  --gd-color-border: #e0e0e0;
+  --gd-color-bg: #fff;
+  --gd-color-border: #dbdcdc;
   --gd-code-block-bg: #f8f8f8;
 
   --gd-color-bubble-user-bg: #f0f0f0;
@@ -66,8 +66,8 @@
   --gd-color-bubble-assitant-border: none;
   --gd-color-bubble-assitant-text-strong: #17181a;
 
-  --gd-color-sidebar-bg: #ececee;
-  --gd-color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
+  --gd-color-sidebar-bg: #f9fafb;
+  --gd-color-sidebar-bg-active: #2631480f;
   /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
   --gd-color-sidebar-text-active: var(--gd-color-text);
   --gd-color-sidebar-bg-hover: var(--gd-color-sidebar-bg-active);
@@ -102,7 +102,7 @@
   --gd-color-danger: #f56c6c;
   --gd-color-info: #909399;
 
-  --gd-size-text-base: 15px;
+  --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
   --gd-size-rounded-radius: 18px;
 

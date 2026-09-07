@@ -20,6 +20,11 @@
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>
           <span v-if="getArgsText(tool)" class="text-sm ml-2 truncate">{{ getArgsText(tool) }}</span>
+          <!-- diff 类工具的增删行数徽章 -->
+          <span v-if="rendererStat(toolIndex)" class="ml-2 shrink-0 font-mono text-xs flex items-center gap-1.5">
+            <span v-if="rendererStat(toolIndex)!.added" style="color: var(--el-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
+            <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--el-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
+          </span>
         </div>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
         <el-icon class="shrink-0 ml-2 text-gray-400 transition-opacity duration-200"
@@ -29,9 +34,8 @@
         </el-icon>
       </div>
 
-      <!-- 内联结果区（默认闭合，点击展开后显示结果） -->
-      <div v-if="isExpanded(toolIndex)"
-        class="tool-result-inline border-l ml-1.75 pl-4 border-gray-300 dark:border-gray-700">
+      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容） -->
+      <div v-if="isExpanded(toolIndex)" class="tool-result-inline">
         <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空） -->
         <div v-if="tool.outcome === 'error' || tool.outcome === 'rejected'"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
@@ -41,24 +45,24 @@
           <span class="ml-1.5">{{ t('chat.toolCalls.resultFailed') }}</span>
         </div>
 
-        <!-- 结果内容 -->
-        <div v-if="getToolResponses(toolIndex)">
-          <!-- JSON 解码成功且为简单对象 → 表格展示 -->
-          <div v-if="isSimpleResult(getToolResponses(toolIndex))" class="params-table">
-            <div class="param-header py-1.5 border-b border-gray-200 dark:border-gray-700">
-              <span class="param-key text-xs font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.toolCalls.fieldKey') }}</span>
-              <span class="param-value text-xs font-semibold text-gray-800 dark:text-gray-200 ml-4">{{ t('chat.toolCalls.paramValue') }}</span>
-            </div>
-            <div v-for="(value, key) in parseResult(getToolResponses(toolIndex))" :key="key"
-              class="param-row py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
-              <span class="param-key text-xs font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
-              <span class="param-value text-xs text-gray-600 dark:text-gray-400 ml-4">{{ formatParamValue(value) }}</span>
-            </div>
+        <!-- 定制渲染：按 renderer 声明（后端 display.renderer / 内置映射）优先展示参数 -->
+        <ToolCustomView v-if="rendererInfos[toolIndex]" :info="rendererInfos[toolIndex]!"
+          :response="getToolResponses(toolIndex)" :is-error="tool.outcome === 'error'"
+          :executing="isToolExecuting(tool, toolIndex)" />
+
+        <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
+        <div v-else class="io-layout">
+          <div class="io-section">
+            <span class="io-label">{{ t('chat.toolCalls.inputLabel') }}</span>
+            <pre class="io-content">{{ formatToolArgs(tool) }}</pre>
           </div>
-          <!-- JSON 解码失败或复杂对象 → pre 展示（依赖 pre-wrap + break-all 换行，无需横向滚动） -->
-          <pre v-else class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">{{
-            formatToolResponse(getToolResponses(toolIndex))
-          }}</pre>
+          <template v-if="getToolResponses(toolIndex)">
+            <div class="io-divider" role="separator"></div>
+            <div class="io-section">
+              <span class="io-label">{{ t('chat.toolCalls.outputLabel') }}</span>
+              <pre class="io-content">{{ formatToolResponse(getToolResponses(toolIndex)) }}</pre>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -66,22 +70,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { ErrorCircle16Regular, ChevronDown12Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import {
   type ToolCall,
+  type ToolRendererInfo,
   getToolConfig, getToolIcon,
   getToolArgs, getArgsText,
+  getToolRenderer, getRendererArgs,
 } from '@/utils/toolDisplay';
+import { countDiffLines } from '@/utils/diff';
+import { extractResultContent } from '@/utils/toolResult';
+import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: any[];
   isStreaming?: boolean;
   sessionId?: string;
+  /** 所在分组可见且仅含本步骤时由父级置真：展开分组即展开全部调用（单步骤分组免二次点击） */
+  autoExpand?: boolean;
 }>();
 
 const { t } = useI18n();
@@ -113,9 +124,15 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
   return executing ? config.text.executing : config.text.completed;
 };
 
-// ── 展开/闭合（默认闭合，点击展开）──
+// ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
 
 const expandedIndexes = ref<Set<number>>(new Set());
+
+watch(() => props.autoExpand, (auto) => {
+  expandedIndexes.value = auto
+    ? new Set(props.toolCalls.map((_, i) => i))
+    : new Set();
+}, { immediate: true });
 
 const isExpanded = (index: number): boolean => expandedIndexes.value.has(index);
 
@@ -134,62 +151,45 @@ const getToolResponses = (index: number): any => {
   return props.toolResponses && props.toolResponses[index];
 };
 
+// ── 定制渲染（renderer 声明：后端 display.renderer 优先，内置映射兜底） ──
+
+const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
+  props.toolCalls.map((tool) => {
+    const renderer = getToolRenderer(tool);
+    if (!renderer) return null;
+    const args = getRendererArgs(tool, renderer);
+    if (!args) return null;
+    // diff 两侧均为空无内容可展示，回退通用渲染
+    if (renderer.kind === 'diff' && !args.oldValue && !args.newValue) return null;
+    const info: ToolRendererInfo = { kind: renderer.kind, args };
+    if (renderer.kind === 'diff') {
+      info.stat = countDiffLines(args.oldValue ?? '', args.newValue ?? '');
+    }
+    return info;
+  }),
+);
+
+const rendererStat = (index: number): ToolRendererInfo['stat'] | undefined => {
+  return rendererInfos.value[index]?.stat;
+};
+
 // ── 参数 / 结果格式化 ──
 
-const isSimpleParams = (args: any): boolean => {
-  try {
-    const parsed = typeof args === 'string' ? partialParse(args) : args;
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0;
-  } catch {
-    return false;
+/** 输入段：参数 pretty-print（流式部分 JSON 经 partial-json 容错解析） */
+const formatToolArgs = (tool: ToolCall): string => {
+  const args = getToolArgs(tool);
+  if (args === undefined || args === null) return '';
+  if (typeof args === 'string') {
+    try {
+      return JSON.stringify(partialParse(args), null, 2);
+    } catch {
+      return args;
+    }
   }
-};
-
-const parseParams = (args: any): Record<string, any> => {
   try {
-    return typeof args === 'string' ? partialParse(args) : args;
-  } catch {
-    return {};
-  }
-};
-
-const formatParamValue = (value: any): string => {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'object') return JSON.stringify(value, null, 2);
-  return String(value);
-};
-
-const formatToolArgs = (args: any): string => {
-  if (!args) return '{}';
-  try {
-    const parsed = typeof args === 'string' ? partialParse(args) : args;
-    return JSON.stringify(parsed, null, 2);
+    return JSON.stringify(args, null, 2);
   } catch {
     return String(args);
-  }
-};
-
-const extractResultContent = (response: any): any => {
-  if (!response) return null;
-  try {
-    const parsed = typeof response === 'string' ? partialParse(response) : response;
-    if (parsed.content) {
-      try {
-        const parsedContent = typeof parsed.content === 'string' ? partialParse(parsed.content) : parsed.content;
-        // partialParse 会将 "[ ] step1" 等非 JSON 文本误解析为空数组 []
-        // 此时回退到原始字符串
-        if (Array.isArray(parsedContent) && parsedContent.length === 0) {
-          return parsed.content;
-        }
-        return parsedContent;
-      } catch {
-        return parsed.content;
-      }
-    }
-    return parsed;
-  } catch {
-    return null;
   }
 };
 
@@ -202,26 +202,53 @@ const formatToolResponse = (response: any): string => {
   }
   return String(response);
 };
-
-const isSimpleResult = (response: any): boolean => {
-  const content = extractResultContent(response);
-  if (!content) return false;
-  return typeof content === 'object' && content !== null && !Array.isArray(content) && Object.keys(content).length > 0;
-};
-
-const parseResult = (response: any): Record<string, any> => {
-  const content = extractResultContent(response);
-  return content && typeof content === 'object' ? content : {};
-};
 </script>
 
 <style scoped>
-/* 内联结果区：与思考块一致（缩进线由模板 border-l/ml/pl 提供） */
-/* 展开后限制最大高度 + 内部滚动；overflow-x hidden 防止展开瞬间因内容超宽短暂出现横向滚动条 */
+/* 内联结果区：统一卡片容器（边框 + 圆角 + 表面底色）区分展开内容与正文；
+   限高滚动收在 .result-scroll（通用结果分支），内部渲染视图不再自带边框。 */
+/* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文 */
 .tool-result-inline {
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  /* 微微透明：透出下方正文一点底色，视觉更轻 */
+  background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+}
+
+/* 通用展示：输入 / 输出 两段式 */
+.io-layout {
   max-height: 240px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.io-section {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.io-label {
+  flex-shrink: 0;
+  width: 3em;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  user-select: none;
+}
+
+.io-divider {
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.io-content {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
 }
 
 .tool-result-inline pre {
@@ -230,31 +257,5 @@ const parseResult = (response: any): Record<string, any> => {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   margin: 0;
   line-height: 1.5;
-}
-
-.params-table {
-  display: flex;
-  flex-direction: column;
-}
-
-.param-header {
-  display: flex;
-  align-items: baseline;
-}
-
-.param-row {
-  display: flex;
-  align-items: baseline;
-}
-
-.param-key {
-  min-width: 120px;
-  flex-shrink: 0;
-}
-
-.param-value {
-  flex: 1;
-  word-break: break-word;
-  white-space: pre-wrap;
 }
 </style>

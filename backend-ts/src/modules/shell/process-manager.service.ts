@@ -4,6 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ChildProcess, exec, execSync, spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
@@ -15,6 +16,7 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
 import { safeTruncate, safeTail } from "../../common/utils/string.utils";
 import { SanitizerTransform } from "./stream-sanitizer";
+import type { ProcessChangedEvent } from "../../common/events/stream.events";
 
 // ============================================================================
 // UTF-8 边界修剪工具
@@ -124,6 +126,22 @@ export interface ProcessListEntry {
   finishedAt?: Date;
 }
 
+/** UI 日志查看（readLogTail）返回结构 */
+export interface ProcessLogTail {
+  processId: string;
+  command: string;
+  status: ProcessStatus;
+  exitCode: number | null;
+  startedAt: Date;
+  finishedAt?: Date;
+  /** 日志文件总字节数 */
+  size: number;
+  /** 本次返回是否只是日志尾部（文件大于 maxBytes） */
+  truncated: boolean;
+  /** 日志尾部内容（UTF-8） */
+  content: string;
+}
+
 export interface SandboxOptions {
   enabled: boolean;
   readOnly: boolean;
@@ -174,7 +192,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     path: "" as string,
   };
 
-  constructor(private readonly chatRunnerService: ChatRunnerService) {}
+  constructor(
+    private readonly chatRunnerService: ChatRunnerService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // ── 生命周期 ──
 
@@ -358,7 +379,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       exitCode: null,
       cwd,
       encoding,
-      isBackgrounded: true,
+      // 前台 poll 等待中不算后台；execute() 转后台（超时或 background=true）时置 true
+      isBackgrounded: false,
       logFilePath,
       readOffset: 0,
       writeStream,
@@ -452,6 +474,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     // 后台模式：跳过 poll，立即返回
     if (options.background) {
+      entry.isBackgrounded = true;
+      this.emitProcessChanged(sessionId, userId);
       return {
         kind: "backgrounded",
         processId,
@@ -501,6 +525,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       // 超时，进程仍在运行 → 转入后台
+      entry.isBackgrounded = true;
+      this.emitProcessChanged(sessionId, userId);
       return {
         kind: "backgrounded",
         processId,
@@ -665,6 +691,105 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  // ── UI 侧边栏（OverviewPanel 后台进程区块）──
+
+  /**
+   * UI 用：列出某会话某用户当前运行中的后台进程。
+   * 仅含已转后台的进程（前台 poll 等待中的命令不显示）；
+   * 已结束进程由 poll 消费/系统消息投递后清理，退出即从列表消失。
+   */
+  listRunningForUser(sessionId: string, userId: string): ProcessListEntry[] {
+    const result: ProcessListEntry[] = [];
+    for (const entry of this.processes.values()) {
+      if (
+        entry.sessionId === sessionId &&
+        entry.userId === userId &&
+        entry.status === "running" &&
+        entry.isBackgrounded
+      ) {
+        result.push({
+          id: entry.id,
+          command: entry.command,
+          status: entry.status,
+          sessionId: entry.sessionId,
+          isBackgrounded: entry.isBackgrounded,
+          startedAt: entry.startedAt,
+          finishedAt: entry.finishedAt,
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * UI 用：校验进程归属后终止。返回终止后状态；null = 进程不存在或不属于该用户。
+   */
+  killIfOwned(
+    processId: string,
+    sessionId: string,
+    userId: string,
+  ): ProcessStatus | null {
+    const entry = this.processes.get(processId);
+    if (!entry || entry.sessionId !== sessionId || entry.userId !== userId) {
+      return null;
+    }
+    return this.kill(processId);
+  }
+
+  /**
+   * UI 用：读取运行中后台进程的日志尾部（UTF-8）。
+   * 返回 null = 进程不存在或不属于该用户；文件暂无内容时返回空 content。
+   */
+  async readLogTail(
+    processId: string,
+    sessionId: string,
+    userId: string,
+    maxBytes = 65_536,
+  ): Promise<ProcessLogTail | null> {
+    const entry = this.processes.get(processId);
+    if (!entry || entry.sessionId !== sessionId || entry.userId !== userId) {
+      return null;
+    }
+
+    const base = {
+      processId: entry.id,
+      command: entry.command,
+      status: entry.status,
+      exitCode: entry.exitCode,
+      startedAt: entry.startedAt,
+      finishedAt: entry.finishedAt,
+    };
+
+    const stat = await fs.stat(entry.logFilePath).catch(() => null);
+    if (!stat) {
+      // 日志文件尚未创建或已被清理（如前台完成未截断被删除）
+      return { ...base, size: 0, truncated: false, content: "" };
+    }
+
+    const start = Math.max(0, stat.size - maxBytes);
+    const len = stat.size - start;
+    const buf = Buffer.alloc(len);
+    const fd = await fs.open(entry.logFilePath, "r");
+    try {
+      await fd.read(buf, 0, len, start);
+    } finally {
+      await fd.close();
+    }
+
+    // start > 0 时从文件中间切入，可能切在多字节字符中间 → 修剪开头不完整序列
+    const content = start > 0 ? trimUtf8Tail(buf) : buf.toString("utf-8");
+    return { ...base, size: stat.size, truncated: start > 0, content };
+  }
+
+  /** 通知前端后台进程列表变化（经 SSE process_changed 感知后重拉） */
+  private emitProcessChanged(sessionId: string, userId: string): void {
+    this.eventEmitter.emit("process.changed", {
+      userId,
+      sessionId,
+      timestamp: new Date().toISOString(),
+    } satisfies ProcessChangedEvent);
+  }
+
   /**
   /**
    * 收割已完成进程的输出（不碰运行中进程的 offset）。
@@ -727,12 +852,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /** 从内存中移除进程的所有引用 */
   private cleanupProcess(processId: string, sessionId: string): void {
+    const entry = this.processes.get(processId);
     this.processes.delete(processId);
     const sessionProcs = this.sessionProcesses.get(sessionId);
     if (sessionProcs) {
       sessionProcs.delete(processId);
       if (sessionProcs.size === 0) this.sessionProcesses.delete(sessionId);
     }
+    // kill 等路径不经过 handleProcessEnd，统一在移除时通知 UI 刷新列表
+    if (entry) this.emitProcessChanged(entry.sessionId, entry.userId);
   }
 
   /**
@@ -1007,6 +1135,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     entry.finishedAt = new Date();
 
     this.logger.log(`后台进程 ${entry.id} 已结束, 退出码: ${exitCode}`);
+    this.emitProcessChanged(entry.sessionId, entry.userId);
 
     if (this.pollNotifier.hasWaiters(entry.id)) {
       // 有 poll 等待者 → 通知，poll 会 await finished(writeStream) 后读取

@@ -270,6 +270,33 @@ export interface SessionApi {
   fetchSessionSummaries(sessionId: string, limit?: number): Promise<{ items: any[]; total: number }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
+  getSessionProcesses(sessionId: string): Promise<{ processes: UiProcessInfo[] }>;
+  killSessionProcess(sessionId: string, processId: string): Promise<{ success: boolean; status: string }>;
+  getSessionProcessLog(sessionId: string, processId: string, tailBytes?: number): Promise<UiProcessLog>;
+}
+
+/** 后台进程条目（GET /sessions/:id/processes 返回） */
+export interface UiProcessInfo {
+  id: string;
+  command: string;
+  status: string;
+  sessionId: string;
+  isBackgrounded: boolean;
+  startedAt: string;
+  finishedAt?: string;
+}
+
+/** 后台进程日志尾部（GET /sessions/:id/processes/:pid/log 返回） */
+export interface UiProcessLog {
+  processId: string;
+  command: string;
+  status: string;
+  exitCode: number | null;
+  startedAt: string;
+  finishedAt?: string;
+  size: number;
+  truncated: boolean;
+  content: string;
 }
 
 export const sessionApi: SessionApi = {
@@ -406,5 +433,20 @@ export const sessionApi: SessionApi = {
 
   async getSessionTodo(this: ApiContext, sessionId: string) {
     return await this._request(`/sessions/${sessionId}/todo`);
+  },
+
+  async getSessionProcesses(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/processes`);
+  },
+
+  async killSessionProcess(this: ApiContext, sessionId: string, processId: string) {
+    return await this._request(`/sessions/${sessionId}/processes/${processId}/kill`, {
+      method: "POST",
+    });
+  },
+
+  async getSessionProcessLog(this: ApiContext, sessionId: string, processId: string, tailBytes?: number) {
+    const query = tailBytes ? `?tail=${tailBytes}` : "";
+    return await this._request(`/sessions/${sessionId}/processes/${processId}/log${query}`);
   },
 };

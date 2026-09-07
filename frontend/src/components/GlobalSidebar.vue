@@ -1,5 +1,5 @@
 <template>
-  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden ">
+  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden border-r-1 border-(--gd-color-border)">
     <!-- 标题栏左侧面板 -->
     <!-- macOS：为系统红绿灯按钮预留左侧空间，避免遮挡 logo/菜单 -->
     <div :class="{ 'mac-sidebar-title-padding': isMac }">

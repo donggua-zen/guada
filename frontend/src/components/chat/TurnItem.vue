@@ -120,7 +120,7 @@
               </div>
               <!-- 分组内容 -->
               <div class="process-group__collapsible"
-                :class="{ 'is-expanded': isLastActive(groupIndex) ? isGroupExpanded('last-active') : (!group.isCollapsible || isGroupExpanded(group.id)) }">
+                :class="{ 'is-expanded': isGroupContentVisible(groupIndex, group) }">
                 <div class="process-group__body">
                   <div class="process-group__body-scroll space-y-2"
                     :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
@@ -132,10 +132,12 @@
                         :is-thinking="item.source.state?.isThinking || false"
                         :is-streaming="item.source.state?.isStreaming || false"
                         :thinking-duration-ms="item.source.thinkingDurationMs"
-                        :thinking-started-at="item.source.thinkingStartedAt" />
+                        :thinking-started-at="item.source.thinkingStartedAt"
+                        :auto-expand="isGroupContentVisible(groupIndex, group) && isSingleStepGroup(group)" />
                       <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
                         :tool-responses="item.toolResponses"
-                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId" />
+                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId"
+                        :auto-expand="isGroupContentVisible(groupIndex, group) && isSingleStepGroup(group)" />
                     </template>
                   </div>
                 </div>
@@ -339,6 +341,25 @@ const toggleGroup = (groupId: string) => {
 
 const isGroupExpanded = (groupId: string): boolean => {
   return expandedGroups.value.has(groupId);
+};
+
+/** 分组内容当前是否可见（与模板 collapsible 的 is-expanded 判定保持同一表达式） */
+const isGroupContentVisible = (groupIndex: number, group: DisplayGroup): boolean => {
+  return isLastActive(groupIndex)
+    ? isGroupExpanded('last-active')
+    : (!group.isCollapsible || isGroupExpanded(group.id));
+};
+
+/**
+ * 分组是否只含单个子步骤（单条思考 或 单个工具调用）。
+ * 单步骤分组展开时自动展开子项，省去二次点击。
+ */
+const isSingleStepGroup = (group: DisplayGroup): boolean => {
+  if (group.items.length !== 1) return false;
+  const item = group.items[0];
+  if (item.type === 'think') return true;
+  if (item.type === 'tool') return (item.toolCalls?.length ?? 0) === 1;
+  return false;
 };
 
 // ============================================

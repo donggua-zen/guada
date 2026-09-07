@@ -7,6 +7,10 @@ export type AppLocale = 'zh-CN' | 'en-US'
 const STORAGE_KEY = 'app-language'
 
 function detectInitialLocale(): AppLocale {
+  // 防御：node 测试环境无 localStorage（vitest node 环境模块加载即触发）
+  if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
+    return 'zh-CN'
+  }
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved === 'zh-CN' || saved === 'en-US') return saved
   return 'zh-CN'
@@ -38,8 +42,12 @@ export function t(key: string, named?: Record<string, unknown>): string {
  */
 export function setLocale(locale: AppLocale): void {
   i18n.global.locale.value = locale
-  localStorage.setItem(STORAGE_KEY, locale)
-  document.documentElement.setAttribute('lang', locale)
+  if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+    localStorage.setItem(STORAGE_KEY, locale)
+  }
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('lang', locale)
+  }
 }
 
 /**
