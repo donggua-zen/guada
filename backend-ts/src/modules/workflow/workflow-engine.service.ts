@@ -502,7 +502,13 @@ class WorkflowRun {
     // worker 已终态即回收（result/error/crash 后事件循环不再需要）
     this.worker?.terminate().catch(() => {});
     this.worker = null;
-    this.doneResolve(result);
+    // 排空事件落库链后再 resolve done：run 尾部 workflow/event 必须先于父循环
+    // 恢复后的 tool/result / turn/finish 落盘。否则父循环读到未推进的 seq 游标，
+    // 与在途 workflow 事件分配出重复 seq，JSONL 连续性校验拒绝加载（会话永久损坏）。
+    // deliverEvent 内部已吞错（落库/广播失败仅告警），链不会 reject。
+    this.appendChain.then(() => {
+      this.doneResolve(result);
+    });
   }
 
   get result(): WorkflowRunResult | null {

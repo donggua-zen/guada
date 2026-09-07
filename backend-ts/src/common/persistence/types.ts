@@ -153,6 +153,8 @@ export interface ToolResultData {
   content: string;
   /** 工具结果是否异常 */
   isError?: boolean;
+  /** UI 渲染元数据（不进 LLM 上下文），来自 tool-result 块 */
+  meta?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
 }
 

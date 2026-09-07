@@ -10,6 +10,7 @@ import {
   SubAgentCreatedEvent,
   SubAgentClosedEvent,
   TodoUpdatedEvent,
+  ProcessChangedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
 import {
@@ -34,6 +35,7 @@ export type SessionEventType =
   | "sub_agent_create"
   | "sub_agent_closed"
   | "todo_updated"
+  | "process_changed"
   | "plugins_changed";
 
 /**
@@ -287,6 +289,17 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     this.broadcastToUser(
       event.userId,
       toSessionEvent("todo_updated", event),
+    );
+  }
+
+  /**
+   * 监听内部 process.changed 事件（后台进程转后台/结束/移除），转发给 SSE 客户端
+   */
+  @OnEvent("process.changed")
+  handleProcessChanged(event: ProcessChangedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("process_changed", event),
     );
   }
 

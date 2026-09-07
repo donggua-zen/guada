@@ -1,6 +1,7 @@
 <template>
   <!-- 工作区概览：常驻于聊天内容右侧（占位挤宽），与 WorkspaceSidebar 解耦。
-       数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store、会话待办。 -->
+       数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store、会话待办、后台进程。
+       布局：分组标题 + 下属行（Git 工具 / 待办事项 / 后台进程 / 浏览器），默认平铺展开。 -->
   <aside class="overview-panel">
     <!-- 标题行 -->
     <div class="overview-header">
@@ -18,62 +19,62 @@
     </div>
 
     <div class="overview-rows">
-      <!-- 变更：+N -M → 打开工作区并切到 Git 标签 -->
-      <button class="overview-row" :disabled="!git.isGitRepo" @click="openGit">
-        <el-icon :size="16" class="overview-row-icon"><Branch20Regular /></el-icon>
-        <span class="overview-row-label">{{ t('git.title') }}</span>
-        <span v-if="git.totalStats.add || git.totalStats.del" class="overview-row-value overview-row-value--stats">
-          <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
-          <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
-        </span>
-        <span v-else-if="git.status?.gitUnavailable" class="overview-row-value overview-row-value--empty">{{ t('git.notInstalled') }}</span>
-        <span v-else class="overview-row-value overview-row-value--empty">{{ t('git.noChanges') }}</span>
-      </button>
+      <!-- ── Git 工具 ── -->
+      <section class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.sectionGit') }}</div>
 
-      <!-- 分支：下拉切换（GitStore.checkout）；外层 .overview-dropdown 撑满整行，
-           DropdownMenu 内部 inline-flex 默认收缩为内容宽 → 穿透设为 100% 与其他行一致 -->
-      <div class="overview-dropdown">
-        <DropdownMenu @command="git.checkout">
-          <button class="overview-row" :disabled="!git.isGitRepo">
-            <el-icon :size="16" class="overview-row-icon"><BranchFork16Regular /></el-icon>
-            <span class="overview-row-label">{{ t('git.branch') }}</span>
-            <span class="overview-row-value overview-row-value--branch">{{ git.selectedBranch || '-' }}</span>
-            <el-icon :size="12" class="overview-row-chevron"><ArrowDown /></el-icon>
-          </button>
-          <template #dropdown>
-            <div class="overview-branch-menu">
-              <DropdownMenuItem v-for="b in git.branches" :key="b.name" :command="b.name">
-                <span class="overview-branch-item">
-                  <span class="overview-branch-check">{{ b.current ? '✓' : '' }}</span>
-                  <span class="overview-branch-name">{{ b.name }}</span>
-                </span>
-              </DropdownMenuItem>
-            </div>
-          </template>
-        </DropdownMenu>
-      </div>
-
-      <!-- 提交或推送：打开全局提交弹窗（GitCommitDialog） -->
-      <button class="overview-row" :disabled="!git.isGitRepo" @click="git.openCommitDialog()">
-        <el-icon :size="16" class="overview-row-icon"><ArrowUpload16Regular /></el-icon>
-        <span class="overview-row-label">{{ t('git.commitOrPush') }}</span>
-      </button>
-
-      <!-- 工作目录：打开工作区目录树标签 -->
-      <button class="overview-row" @click="openWorkspaceTree">
-        <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
-        <span class="overview-row-label">{{ t('chat.workspace.workingDir') }}</span>
-      </button>
-
-      <!-- 环境初始化（待办）：有未完成待办才显示；默认折叠只显示当前进行，点击展开全部 -->
-      <div v-if="todoItems.length" class="overview-block">
-        <button class="overview-row" @click="todoExpanded = !todoExpanded">
-          <el-icon :size="16" class="overview-row-icon"><ClipboardTaskListLtr20Regular /></el-icon>
-          <span class="overview-row-label">{{ t('chat.workspace.todoList') }}</span>
-          <span class="overview-row-value">{{ doneCount }}/{{ todoItems.length }}</span>
-          <el-icon :size="12" class="overview-row-chevron" :class="{ expanded: todoExpanded }"><ArrowDown /></el-icon>
+        <!-- 变更：+N -M → 打开工作区并切到 Git 标签 -->
+        <button class="overview-row" :disabled="!git.isGitRepo" @click="openGit">
+          <el-icon :size="16" class="overview-row-icon"><Branch20Regular /></el-icon>
+          <span class="overview-row-label">{{ t('git.title') }}</span>
+          <span v-if="git.totalStats.add || git.totalStats.del" class="overview-row-value overview-row-value--stats">
+            <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
+            <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
+          </span>
+          <span v-else-if="git.status?.gitUnavailable" class="overview-row-value overview-row-value--empty">{{ t('git.notInstalled') }}</span>
+          <span v-else class="overview-row-value overview-row-value--empty">{{ t('git.noChanges') }}</span>
         </button>
-        <div v-if="todoExpanded" class="overview-todo-list">
+
+        <!-- 分支：下拉切换（GitStore.checkout）；外层 .overview-dropdown 撑满整行，
+             DropdownMenu 内部 inline-flex 默认收缩为内容宽 → 穿透设为 100% 与其他行一致 -->
+        <div class="overview-dropdown">
+          <DropdownMenu @command="git.checkout">
+            <button class="overview-row" :disabled="!git.isGitRepo">
+              <el-icon :size="16" class="overview-row-icon"><BranchFork16Regular /></el-icon>
+              <span class="overview-row-label">{{ t('git.branch') }}</span>
+              <span class="overview-row-value overview-row-value--branch">{{ git.selectedBranch || '-' }}</span>
+              <el-icon :size="12" class="overview-row-chevron"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <div class="overview-branch-menu">
+                <DropdownMenuItem v-for="b in git.branches" :key="b.name" :command="b.name">
+                  <span class="overview-branch-item">
+                    <span class="overview-branch-check">{{ b.current ? '✓' : '' }}</span>
+                    <span class="overview-branch-name">{{ b.name }}</span>
+                  </span>
+                </DropdownMenuItem>
+              </div>
+            </template>
+          </DropdownMenu>
+        </div>
+
+        <!-- 提交或推送：打开全局提交弹窗（GitCommitDialog） -->
+        <button class="overview-row" :disabled="!git.isGitRepo" @click="git.openCommitDialog()">
+          <el-icon :size="16" class="overview-row-icon"><ArrowUpload16Regular /></el-icon>
+          <span class="overview-row-label">{{ t('git.commitOrPush') }}</span>
+        </button>
+
+        <!-- 工作目录：打开工作区目录树标签 -->
+        <button class="overview-row" @click="openWorkspaceTree">
+          <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
+          <span class="overview-row-label">{{ t('chat.workspace.workingDir') }}</span>
+        </button>
+      </section>
+
+      <!-- ── 待办事项：无待办不显示，平铺展示全部条目 ── -->
+      <section v-if="todoItems.length" class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.todoList') }}</div>
+        <div class="overview-todo-list">
           <div v-for="(item, i) in todoItems" :key="i" class="overview-todo-item" :class="{ done: item.status === 'completed' }">
             <span class="overview-todo-dot">
               <el-icon v-if="item.status === 'completed'" :size="12"><Check /></el-icon>
@@ -83,17 +84,29 @@
             <span class="overview-todo-text" :title="item.content">{{ item.content }}</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- 浏览器：有标签才显示；点击标签激活（打开工作区预览并切换），可新建窗口 -->
-      <div v-if="browserWindows.length" class="overview-block">
-        <button class="overview-row" @click="browserExpanded = !browserExpanded">
-          <el-icon :size="16" class="overview-row-icon"><Globe16Regular /></el-icon>
-          <span class="overview-row-label">{{ t('chat.workspace.browser') }}</span>
-          <span class="overview-row-value">{{ browserWindows.length }}</span>
-          <el-icon :size="12" class="overview-row-chevron" :class="{ expanded: browserExpanded }"><ArrowDown /></el-icon>
-        </button>
-        <div v-if="browserExpanded" class="overview-browser-list">
+      <!-- ── 后台进程：运行中的后台命令；点击行打开日志标签，行尾关闭按钮终止进程 ── -->
+      <section v-if="processes.length" class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.processes') }}</div>
+        <div class="overview-process-list">
+          <div v-for="p in processes" :key="p.id" class="overview-process-item" :title="p.command"
+            @click="openProcessLog(p)">
+            <span class="overview-process-spinner"></span>
+            <span class="overview-process-cmd">{{ shortCommand(p.command) }}</span>
+            <span class="overview-process-elapsed">{{ elapsedText(p.startedAt) }}</span>
+            <button class="overview-process-kill" :title="t('chat.workspace.killProcess')"
+              @click.stop="killProcess(p)">
+              <el-icon :size="10"><Close /></el-icon>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 浏览器：有窗口才显示；点击窗口激活（打开工作区预览并切换） ── -->
+      <section v-if="browserWindows.length" class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.browser') }}</div>
+        <div class="overview-browser-list">
           <button v-for="w in browserWindows" :key="w.windowId" class="overview-browser-tab"
             @click="activateBrowser(w.windowId)">
             <span class="overview-browser-favicon">{{ (w.title || '?').slice(0, 1) }}</span>
@@ -104,7 +117,7 @@
             <span>{{ t('chat.workspace.newTab') }}</span>
           </button>
         </div>
-      </div>
+      </section>
     </div>
   </aside>
 </template>
@@ -112,10 +125,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowDown, Check } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { ArrowDown, Check, Close } from "@element-plus/icons-vue";
 import {
   Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
-  Globe16Regular, ClipboardTaskListLtr20Regular, Dismiss16Regular, Add16Regular,
+  Dismiss16Regular, Add16Regular,
   ArrowSync20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
@@ -124,7 +138,7 @@ import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
-import { apiService } from "@/services/ApiService";
+import { apiService, type UiProcessInfo } from "@/services/ApiService";
 
 const { t } = useI18n();
 const props = defineProps<{ sessionId: string | null }>();
@@ -141,8 +155,6 @@ interface TodoItem {
   status: string;
 }
 const todoItems = ref<TodoItem[]>([]);
-const todoExpanded = ref(false);
-const doneCount = computed(() => todoItems.value.filter((i) => i.status === "completed").length);
 
 async function loadTodo(): Promise<void> {
   if (!props.sessionId) {
@@ -157,19 +169,72 @@ async function loadTodo(): Promise<void> {
   }
 }
 
+// ClipboardTaskListLtr20Regular 原用于待办折叠头行，分组标题化后暂不使用；保留导入会报 unused，移除。
+
+// ── 后台进程（shell 插件 run_command 转后台的运行中进程）──
+const processes = ref<UiProcessInfo[]>([]);
+/** 时长显示的秒级心跳（仅驱动 elapsedText 重算） */
+const nowTick = ref(Date.now());
+let unsubscribeProcessChanged: (() => void) | null = null;
 let unsubscribeTodoUpdated: (() => void) | null = null;
-onMounted(() => {
-  unsubscribeTodoUpdated = apiService.onSessionEvent("todo_updated", (event) => {
-    if (event.sessionId === props.sessionId) loadTodo();
+let elapsedTimer: number | null = null;
+
+async function loadProcesses(): Promise<void> {
+  if (!props.sessionId) {
+    processes.value = [];
+    return;
+  }
+  try {
+    const res = await apiService.getSessionProcesses(props.sessionId);
+    processes.value = res.processes || [];
+  } catch {
+    processes.value = [];
+  }
+}
+
+function shortCommand(command: string): string {
+  const oneLine = command.replace(/\s+/g, " ").trim();
+  return oneLine.length > 42 ? oneLine.slice(0, 42) + "…" : oneLine;
+}
+
+function formatDuration(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ${String(sec % 60).padStart(2, "0")}s`;
+  const hour = Math.floor(min / 60);
+  return `${hour}h ${String(min % 60).padStart(2, "0")}m`;
+}
+
+function elapsedText(startedAt: string): string {
+  const start = new Date(startedAt).getTime();
+  if (Number.isNaN(start)) return "";
+  return formatDuration(Math.max(0, nowTick.value - start));
+}
+
+async function killProcess(p: UiProcessInfo): Promise<void> {
+  if (!props.sessionId) return;
+  try {
+    await apiService.killSessionProcess(props.sessionId, p.id);
+    ElMessage.success(t("chat.workspace.processKilledToast"));
+  } catch (e: any) {
+    if (e?.response?.status !== 404) {
+      console.error("Failed to kill process:", e);
+      ElMessage.error(t("chat.workspace.processKillFailed"));
+    }
+  }
+  void loadProcesses();
+}
+
+function openProcessLog(p: UiProcessInfo): void {
+  if (!props.sessionId) return;
+  layoutStore.setWorkspaceVisible(true);
+  nextTick(() => {
+    tabStore.openProcessLogTab(props.sessionId!, p.id, p.command);
   });
-});
-onUnmounted(() => {
-  unsubscribeTodoUpdated?.();
-  unsubscribeTodoUpdated = null;
-});
+}
 
 // ── 浏览器（声明需在 session watcher 之前：immediate watcher 同步访问） ──
-const browserExpanded = ref(false);
 /** 当前会话的浏览器窗口列表（browserStore 已按会话过滤） */
 const browserWindows = computed(() => browserStore.sessionWebviews);
 
@@ -183,12 +248,31 @@ watch(
   () => props.sessionId,
   (id) => {
     git.bindSession(id);
-    todoExpanded.value = false;
-    browserExpanded.value = false;
     void loadTodo();
+    void loadProcesses();
   },
   { immediate: true },
 );
+
+onMounted(() => {
+  unsubscribeTodoUpdated = apiService.onSessionEvent("todo_updated", (event) => {
+    if (event.sessionId === props.sessionId) loadTodo();
+  });
+  unsubscribeProcessChanged = apiService.onSessionEvent("process_changed", (event) => {
+    if (event.sessionId === props.sessionId) loadProcesses();
+  });
+  elapsedTimer = window.setInterval(() => { nowTick.value = Date.now(); }, 1000);
+});
+onUnmounted(() => {
+  unsubscribeTodoUpdated?.();
+  unsubscribeTodoUpdated = null;
+  unsubscribeProcessChanged?.();
+  unsubscribeProcessChanged = null;
+  if (elapsedTimer !== null) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+});
 
 function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
@@ -291,7 +375,24 @@ async function createBrowser(): Promise<void> {
   padding: 2px 8px 12px;
   display: flex;
   flex-direction: column;
+}
+
+/* ── 分组：标题 + 下属行，组间留白分隔（首组无额外间距） ── */
+.overview-section {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
+  padding-top: 10px;
+}
+.overview-section + .overview-section {
+  margin-top: 8px;
+}
+.overview-section-title {
+  padding: 0 8px 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gd-color-text);
+  line-height: 1.2;
 }
 
 /* 单行（简约风格：icon + 标签 + 右侧值/chevron） */
@@ -352,10 +453,6 @@ async function createBrowser(): Promise<void> {
 .overview-row-chevron {
   color: var(--gd-color-text-disabled);
   flex-shrink: 0;
-  transition: transform 0.15s ease;
-}
-.overview-row-chevron.expanded {
-  transform: rotate(180deg);
 }
 
 /* 分支下拉行：外层撑满，穿透 DropdownMenu 内部 inline-flex（否则收缩为内容宽） */
@@ -390,11 +487,11 @@ async function createBrowser(): Promise<void> {
   white-space: nowrap;
 }
 
-/* 待办展开区 */
+/* 待办列表（平铺展开） */
 .overview-todo-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px 30px;
+  padding: 2px 4px 4px 8px;
   gap: 1px;
 }
 .overview-todo-item {
@@ -442,11 +539,81 @@ async function createBrowser(): Promise<void> {
   color: var(--gd-color-text-disabled);
 }
 
-/* 浏览器展开区 */
+/* 后台进程列表（平铺展开） */
+.overview-process-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 4px 8px;
+  gap: 1px;
+}
+.overview-process-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.overview-process-item:hover {
+  background: var(--gd-color-sidebar-bg-hover);
+}
+.overview-process-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--gd-color-primary-200);
+  border-top-color: var(--gd-color-primary);
+  border-radius: 50%;
+  animation: overview-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.overview-process-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: 12px;
+  color: var(--gd-color-text-gray);
+}
+.overview-process-item:hover .overview-process-cmd {
+  color: var(--gd-color-text);
+}
+.overview-process-elapsed {
+  flex-shrink: 0;
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: 11px;
+  color: var(--gd-color-text-disabled);
+}
+.overview-process-kill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.overview-process-item:hover .overview-process-kill {
+  opacity: 1;
+}
+.overview-process-kill:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* 浏览器列表（平铺展开） */
 .overview-browser-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px 30px;
+  padding: 2px 4px 4px 8px;
   gap: 1px;
 }
 .overview-browser-tab {

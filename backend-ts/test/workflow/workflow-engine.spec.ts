@@ -423,6 +423,40 @@ describe("WorkflowEngineService 事件双发", () => {
   });
 });
 
+// ── run 收尾排空（settle → appendChain drain）──
+
+describe("WorkflowEngineService run 收尾排空", () => {
+  it("startRun resolve 时 run 尾部事件已全部落库（含 run-end）", async () => {
+    // 落库延迟 15ms（> 微任务调度），模拟 fs.appendFile 真实耗时。
+    // 若 settle 不排空 appendChain 就 resolve done，本用例会在 run-end
+    // 落库前返回 —— 即生产「workflow 尾事件与父循环 tool/result 撞 seq」的竞态窗口。
+    const delivered: WorkflowEventData[] = [];
+    const slowStore: any = {
+      appendWorkflowEvent: jest
+        .fn()
+        .mockImplementation(async (_sid: string, data: WorkflowEventData) => {
+          await new Promise((r) => setTimeout(r, 15));
+          delivered.push(data);
+          return data.seq;
+        }),
+    };
+    const engine = new WorkflowEngineService(
+      createMockSubAgentManager() as any,
+      slowStore,
+    );
+
+    const result = await engine.startRun(createMockSessionContext(), {
+      meta: { name: "drain-test" },
+      script: `return "ok";`,
+    });
+
+    expect(result.status).toBe("completed");
+    const kinds = delivered.map((e) => e.kind);
+    expect(kinds).toContain("run-end");
+    expect(kinds[kinds.length - 1]).toBe("run-end");
+  });
+});
+
 // ── WorkflowError 语义 ──
 
 describe("WorkflowError", () => {

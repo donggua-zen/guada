@@ -396,6 +396,8 @@ function applyDomainEvent(
               content: data.content ?? "",
               toolCallId: data.toolCallId,
               outcome: data.isError ? "error" : "success",
+              // UI 渲染元数据（终端卡片等），随事件透传
+              ...(data.meta ? { meta: data.meta } : {}),
             },
           ],
         };

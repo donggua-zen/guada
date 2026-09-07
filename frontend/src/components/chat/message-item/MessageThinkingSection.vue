@@ -19,8 +19,8 @@
       </el-icon>
     </div>
 
-    <!-- 内容区：折叠时显示最多3行 + 渐变遮罩，展开时全量显示 -->
-    <div class="thinking-section__content-wrapper border-l ml-1.75 pl-4 text-sm border-gray-300 dark:border-gray-700">
+    <!-- 内容区：折叠时显示最多3行 + 渐变遮罩，展开时全量显示；与工具展开区一致的卡片容器 -->
+    <div class="thinking-section__content-wrapper text-sm">
       <div class="thinking-content" :class="{ 'is-collapsed': !isExpanded && !isThinking }">
         <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
           :content="reasoningContent" />
@@ -47,6 +47,8 @@ const props = defineProps<{
   thinkingDurationMs: number | null | undefined;
   /** 思考跳动锚点（epoch ms，流式期间展示层秒表用） */
   thinkingStartedAt?: number | null;
+  /** 所在分组可见且仅含本步骤时由父级置真：跟随分组展开/收起（单步骤分组免二次点击） */
+  autoExpand?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -76,10 +78,13 @@ const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
 });
 
-watch(() => props.isThinking, (isThinking: boolean) => {
-  if (isThinking) {
+// 展开状态：流式思考中恒展开；单步骤分组的 autoExpand 跟随分组；
+// 依赖从真变假才收起（不覆盖用户手动切换的状态）
+watch([() => props.isThinking, () => props.autoExpand], ([thinking, auto], prev) => {
+  const [prevThinking = false, prevAuto = false] = prev ?? [false, false];
+  if (thinking || auto) {
     isExpanded.value = true;
-  } else {
+  } else if (prevThinking || prevAuto) {
     isExpanded.value = false;
   }
 }, { immediate: true });
@@ -96,6 +101,15 @@ watch(() => props.isThinking, (isThinking: boolean) => {
   user-select: none;
 }
 
+/* 与工具展开卡片（tool-result-inline）完全一致的容器样式（微透明表面底色） */
+.thinking-section__content-wrapper {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+}
+
 
 
 .thinking-content {
@@ -103,16 +117,9 @@ watch(() => props.isThinking, (isThinking: boolean) => {
 }
 
 .thinking-content.is-collapsed {
-  max-height: 4.5em;
+  /* 折叠态只预览一行（与工具行一致的"一行摘要"形态），点击标题全量展开 */
+  max-height: 1.5em;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom,
-      black 0,
-      black 2.5em,
-      transparent 4.5em);
-  mask-image: linear-gradient(to bottom,
-      black 0,
-      black 2.5em,
-      transparent 4.5em);
 }
 
 @keyframes fadeIn {

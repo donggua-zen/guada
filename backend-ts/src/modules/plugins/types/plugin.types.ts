@@ -128,6 +128,28 @@ export interface ToolParamSchema {
   properties?: Record<string, ToolParamSchema>;
 }
 
+/**
+ * 工具调用渲染器声明：插件告知前端如何定制渲染该工具的参数/结果
+ *
+ * kind 由前端 tool-renderers 组件实现；fields 为 args 中各语义字段的映射
+ * （如 diff: file=file_path, oldValue=old_text, newValue=new_text）。
+ */
+export interface ToolRendererDecl {
+  kind: "diff" | "content" | "terminal";
+  fields?: {
+    /** 目标文件路径 */
+    file?: string;
+    /** diff：旧文本 */
+    oldValue?: string;
+    /** diff：新文本 */
+    newValue?: string;
+    /** content：写入内容 */
+    content?: string;
+    /** terminal：命令行 */
+    command?: string;
+  };
+}
+
 export interface ToolDisplay {
   /** 执行中/已完成文案 */
   text?: { executing: string; completed: string };
@@ -137,6 +159,8 @@ export interface ToolDisplay {
   argsKey?: string;
   /** 前端图标标识 */
   icon?: string;
+  /** 定制渲染器声明（前端按 kind 选择渲染组件） */
+  renderer?: ToolRendererDecl;
   /** @deprecated 动作类型枚举（前端不再消费，保留兼容） */
   actionType?: string;
 }
@@ -172,6 +196,8 @@ export interface ToolHandlerDef {
   displayText?: { executing: string; completed: string };
   /** 聚合展示文案（{n} 为数量占位符） */
   displayAggregate?: { executing: string; completed: string };
+  /** 定制渲染器声明（前端按 kind 选择渲染组件） */
+  displayRenderer?: ToolRendererDecl;
 }
 
 // ==================== 工具集定义（旧版，已废弃） ====================

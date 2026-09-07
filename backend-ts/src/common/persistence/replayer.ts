@@ -425,6 +425,7 @@ function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessag
         name: data.name ?? '',
         content: data.content,
         isError: data.isError ?? false,
+        ...(data.meta ? { meta: data.meta } : {}),
       },
     ],
     createdAt: time,

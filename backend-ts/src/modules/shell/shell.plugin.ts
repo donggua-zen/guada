@@ -226,47 +226,54 @@ export class ShellPlugin extends PluginBase {
           },
         );
 
-        const parts: string[] = [];
-        if (sandboxNote) parts.push(sandboxNote);
+        // 标记契约（对齐 DSH）：stdout 裸文本 + 行级 [...] 标记；
+        // [exit code: N, uptime: X] 恒为末行且恒输出（uptime 供模型判断命令耗时），
+        // 前端解析器按末行锚定剥离元数据（见 frontend utils/terminalOutput.ts）。
+        const truncatedNote =
+          execResult.truncated && execResult.logFilePath
+            ? `\n[Note: Output was truncated. The complete log is saved at: ${execResult.logFilePath}. You can read it using the read tool if needed.]`
+            : "";
 
-        switch (execResult.kind) {
-          case "completed":
-            if (execResult.output) {
-              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
-            }
-            parts.push(
-              `[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`,
+        let content: string;
+        const meta: Record<string, any> = {
+          card: "terminal",
+          backgrounded: false,
+          truncated: !!execResult.truncated,
+        };
+        if (sandboxNote) meta.sandboxNote = sandboxNote;
+        if (execResult.logFilePath) meta.logFilePath = execResult.logFilePath;
+
+        if (execResult.kind === "completed") {
+          const body = execResult.output || "(no output)";
+          const lines: string[] = [];
+          if (sandbox?.enabled && execResult.exitCode !== 0) {
+            // 沙盒拒绝提示：附提权 hint 供模型带参重试（对齐 DSH，位于末行标记之前）
+            lines.push(
+              `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`,
             );
-            break;
-          case "backgrounded":
-            if (execResult.output) {
-              parts.push(`Latest output:\n---\n${execResult.output}\n---`);
-            }
-            const bgMsg = background
-              ? `[Process moved to background, processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`
-              : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`;
-            parts.push(bgMsg);
-            break;
-        }
-
-        // 沙盒拒绝提示：sandbox 启用且命令失败（非零退出）→ 附提权 hint 供模型带参重试（对齐 DSH）
-        if (
-          sandbox?.enabled &&
-          execResult.kind === "completed" &&
-          execResult.exitCode !== 0
-        ) {
-          parts.push(
-            `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`,
+          }
+          lines.push(
+            `[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`,
           );
+          content = `${body}${truncatedNote}\n${lines.join("\n")}`;
+          meta.exitCode = execResult.exitCode;
+          meta.processStatus = execResult.processStatus;
+          meta.uptimeMs = execResult.uptimeMs;
+        } else {
+          const body = execResult.output || "(no output)";
+          const bgMsg = background
+            ? `[Process moved to background, processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`
+            : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`;
+          content = `${body}${truncatedNote}\n${bgMsg}`;
+          meta.backgrounded = true;
+          meta.processId = execResult.processId;
+          meta.uptimeMs = execResult.uptimeMs;
         }
 
-        if (execResult.truncated && execResult.logFilePath) {
-          parts.push(
-            `[Note: Output was truncated. The complete log is saved at: ${execResult.logFilePath}. You can read it using the read tool if needed.]`,
-          );
+        if (sandboxNote) {
+          return { content: `${sandboxNote}\n\n${content}`, meta };
         }
-
-        return parts.join("\n\n");
+        return { content, meta };
       },
       display: {
         actionType: "shell",
@@ -274,6 +281,7 @@ export class ShellPlugin extends PluginBase {
         aggregate: { executing: "%run_command.aggregate.executing%", completed: "%run_command.aggregate.completed%" },
         argsKey: "command",
         icon: "terminal",
+        renderer: { kind: "terminal", fields: { command: "command" } },
       },
       dangerLevel: "critical",
     });
@@ -360,27 +368,28 @@ export class ShellPlugin extends PluginBase {
               if (result === null) {
                 throw new Error(`Process ${processId} does not exist`);
               }
-              const parts: string[] = [];
-              if (result.output) {
-                parts.push(
-                  `Latest output:\n---\n${this.sanitize(result.output)}\n---`,
-                );
+              const truncatedNote =
+                (result as any).truncated && (result as any).logFilePath
+                  ? `\n[Note: Output was truncated. The complete log is saved on the remote server at: ${(result as any).logFilePath}. Read it with the read tool (workspace="${remote.connectionName}").]`
+                  : "";
+              const statusLine =
+                result.status === "running"
+                  ? `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`
+                  : `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`;
+              const meta: Record<string, any> = {
+                card: "terminal",
+                backgrounded: result.status === "running",
+                processId,
+                processStatus: result.status,
+                uptimeMs: result.uptimeMs,
+                truncated: !!(result as any).truncated,
+              };
+              if ((result as any).logFilePath) {
+                meta.logFilePath = (result as any).logFilePath;
               }
-              if ((result as any).truncated && (result as any).logFilePath) {
-                parts.push(
-                  `[Note: Output was truncated. The complete log is saved on the remote server at: ${(result as any).logFilePath}. Read it with the read tool (workspace="${remote.connectionName}").]`,
-                );
-              }
-              if (result.status === "running") {
-                parts.push(
-                  `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
-                );
-              } else {
-                parts.push(
-                  `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
-                );
-              }
-              return parts.join("\n\n");
+              if (result.status !== "running") meta.exitCode = result.exitCode;
+              const content = `${result.output ? this.sanitize(result.output) : "(no output)"}${truncatedNote}\n${statusLine}`;
+              return { content, meta };
             }
             const result = await this.processManager.poll(
               processId,
@@ -394,38 +403,38 @@ export class ShellPlugin extends PluginBase {
 
             const mode: SandboxMode =
               ctx?.session.getSandboxMode?.() ?? "workspace-write";
-            const parts: string[] = [];
 
             const sandboxForNote = sandboxForMode(mode);
-            if (sandboxForNote?.enabled) {
-              parts.push(
-                sandboxForNote.readOnly
-                  ? "Read-only mode: sandbox read-only enabled, all writes blocked"
-                  : "Sandbox mode enabled, read-only outside workspace",
-              );
-            }
+            const sandboxNote = sandboxForNote?.enabled
+              ? sandboxForNote.readOnly
+                ? "Read-only mode: sandbox read-only enabled, all writes blocked"
+                : "Sandbox mode enabled, read-only outside workspace"
+              : null;
 
-            if (result.output) {
-              parts.push(`Latest output:\n---\n${result.output}\n---`);
-            }
+            const truncatedNote =
+              result.truncated && result.logFilePath
+                ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the read tool if needed.]`
+                : "";
+            const statusLine =
+              result.status === "running"
+                ? `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`
+                : `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`;
+            const meta: Record<string, any> = {
+              card: "terminal",
+              backgrounded: result.status === "running",
+              processId,
+              processStatus: result.status,
+              uptimeMs: result.uptimeMs,
+              truncated: !!result.truncated,
+            };
+            if (result.logFilePath) meta.logFilePath = result.logFilePath;
+            if (result.status !== "running") meta.exitCode = result.exitCode;
+            if (sandboxNote) meta.sandboxNote = sandboxNote;
 
-            if (result.truncated && result.logFilePath) {
-              parts.push(
-                `[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the read tool if needed.]`,
-              );
-            }
-
-            if (result.status === "running") {
-              parts.push(
-                `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
-              );
-            } else {
-              parts.push(
-                `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`,
-              );
-            }
-
-            return parts.join("\n\n");
+            const content = `${result.output || "(no output)"}${truncatedNote}\n${statusLine}`;
+            return sandboxNote
+              ? { content: `${sandboxNote}\n\n${content}`, meta }
+              : { content, meta };
           }
 
           case "write": {
@@ -528,7 +537,7 @@ export class ShellPlugin extends PluginBase {
     },
     ctx: PluginContext,
     abortSignal?: AbortSignal,
-  ): Promise<string> {
+  ): Promise<string | import("../plugins/api/plugin-api").ToolResultObject> {
     if (args.sandbox_permissions || args.justification) {
       throw new Error(
         "sandbox_permissions only applies to the local sandbox; remote command execution is governed by the connection's permission mode.",
@@ -561,39 +570,42 @@ export class ShellPlugin extends PluginBase {
       return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server.${readHint}]`;
     }
 
-    const parts: string[] = [];
-    if (execResult.output) {
-      parts.push(
-        `Latest output:\n---\n${this.sanitize(execResult.output)}\n---`,
-      );
-    }
+    const truncatedNote =
+      execResult.truncated && execResult.logFilePath
+        ? `\n[Note: Output was truncated. The complete log is saved on the remote server at: ${execResult.logFilePath}. Read it with the read tool (workspace="${target.connectionName}").]`
+        : "";
+    const meta: Record<string, any> = {
+      card: "terminal",
+      backgrounded: false,
+      truncated: !!execResult.truncated,
+    };
+    if (execResult.logFilePath) meta.logFilePath = execResult.logFilePath;
+
     if (execResult.kind === "completed") {
-      parts.push(
-        `[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`,
-      );
-      if (execResult.truncated && execResult.logFilePath) {
-        parts.push(
-          `[Note: Output was truncated. The complete log is saved on the remote server at: ${execResult.logFilePath}. Read it with the read tool (workspace="${target.connectionName}").]`,
-        );
-      }
-    } else {
-      const pid = execResult.processId || "";
-      if (pid && ctx?.session.sessionId) {
-        this.workspaceRouter.registerRemoteProcess(
-          ctx.session.sessionId,
-          pid,
-          target.connectionName,
-          args.encoding,
-        );
-      }
-      const moved = args.background === true
-        ? `[Process moved to background, processId: ${pid}.`
-        : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s on the remote server, switched to background. processId: ${pid}.`;
-      parts.push(
-        `${moved} Output is written to the remote log file: ${execResult.logFilePath || "(unknown)"} — read it with the read tool (workspace="${target.connectionName}") or use the process tool (poll) to check status.]`,
+      const content = `${execResult.output ? this.sanitize(execResult.output) : "(no output)"}${truncatedNote}\n[exit code: ${execResult.exitCode}, uptime: ${formatDuration(execResult.uptimeMs)}]`;
+      meta.exitCode = execResult.exitCode;
+      meta.processStatus = execResult.processStatus;
+      meta.uptimeMs = execResult.uptimeMs;
+      return { content, meta };
+    }
+
+    const pid = execResult.processId || "";
+    if (pid && ctx?.session.sessionId) {
+      this.workspaceRouter.registerRemoteProcess(
+        ctx.session.sessionId,
+        pid,
+        target.connectionName,
+        args.encoding,
       );
     }
-    return parts.join("\n\n");
+    const moved = args.background === true
+      ? `[Process moved to background, processId: ${pid}.`
+      : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s on the remote server, switched to background. processId: ${pid}.`;
+    const content = `${execResult.output ? this.sanitize(execResult.output) : "(no output)"}${truncatedNote}\n${moved} Output is written to the remote log file: ${execResult.logFilePath || "(unknown)"} — read it with the read tool (workspace="${target.connectionName}") or use the process tool (poll) to check status.]`;
+    meta.backgrounded = true;
+    meta.processId = pid;
+    meta.uptimeMs = execResult.uptimeMs;
+    return { content, meta };
   }
 
   /**

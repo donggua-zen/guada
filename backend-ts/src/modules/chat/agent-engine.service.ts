@@ -952,6 +952,7 @@ export class AgentEngine {
             name: res.name,
             content: res.content,
             isError: !!res.isError,
+            ...(res.meta ? { meta: res.meta } : {}),
           },
         ],
       });
@@ -961,6 +962,7 @@ export class AgentEngine {
         content: res.content,
         toolCallId: res.toolCallId,
         outcome: res.outcome,
+        ...(res.meta ? { meta: res.meta } : {}),
       });
 
       if (res.images && res.images.length > 0) {

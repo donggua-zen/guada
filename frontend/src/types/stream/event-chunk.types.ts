@@ -93,6 +93,8 @@ export interface ToolCallsResponseEvent {
     content: string;
     toolCallId: string;
     outcome?: "success" | "error" | "rejected";
+    /** UI 渲染元数据（仅前端消费，不进 LLM 上下文），来自工具返回的 meta */
+    meta?: Record<string, any>;
   }>;
 }
 
@@ -109,6 +111,8 @@ export interface CompressionErrorEvent {
   type: "compression_error";
   error?: string;
   message?: string;
+  /** true = 用户中止（维护流 abort）；false/缺省 = 真失败。据此决定提示形态 */
+  cancelled?: boolean;
 }
 
 /** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；compacted 与纯裁剪都发）。

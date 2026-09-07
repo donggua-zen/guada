@@ -196,9 +196,10 @@ export class ToolExecutor {
       );
 
       let images: ImageContent[] | undefined;
+      let meta: Record<string, any> | undefined;
       let content: string;
 
-      // Distinguish ToolResultObject { content, images } from legacy object / string
+      // Distinguish ToolResultObject { content, images, meta } from legacy object / string
       if (typeof result === "string") {
         content = result;
       } else if (typeof result === "object" && result !== null) {
@@ -206,6 +207,7 @@ export class ToolExecutor {
         if (typeof obj["content"] === "string") {
           // ToolResultObject — structured return
           images = (obj as ToolResultObject).images;
+          meta = (obj as ToolResultObject).meta;
           content = obj["content"];
         } else {
           // Legacy: plain object → JSON.stringify
@@ -222,8 +224,17 @@ export class ToolExecutor {
           toolCallId,
           session,
         );
+        // content 已被替换为 spill JSON，meta 与正文的对应关系失效，丢弃
+        meta = undefined;
       }
-      return { toolCallId, name: fullToolName, content, isError: false, images };
+      return {
+        toolCallId,
+        name: fullToolName,
+        content,
+        isError: false,
+        images,
+        meta,
+      };
     } catch (error: any) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error executing tool ${fullToolName}: ${errorMsg}`);

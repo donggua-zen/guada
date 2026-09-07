@@ -5,7 +5,7 @@
  * 按 filePath 聚合，用 diffLines 预计算增删行数。
  */
 import { computed, type Ref } from "vue";
-import { diffLines } from "diff";
+import { countDiffLines } from "@/utils/diff";
 import type { MessageContent } from "@/utils/messageUtils";
 
 export interface FileChangeOperation {
@@ -69,18 +69,7 @@ export function useFileChanges(turnsCache: Ref<MessageContent[]>) {
         const newText: string =
           toolName === "edit" ? (args.new_text ?? "") : (args.content ?? "");
 
-        const parts = diffLines(oldText, newText);
-        let added = 0;
-        let removed = 0;
-        for (const part of parts) {
-          const lineCount = part.value.split("\n").length;
-          // diffLines 末尾常带一个空行分隔，修正
-          const effective = part.value.endsWith("\n")
-            ? part.value.slice(0, -1).split("\n").length
-            : lineCount;
-          if (part.added) added += effective;
-          else if (part.removed) removed += effective;
-        }
+        const { added, removed } = countDiffLines(oldText, newText);
 
         const op: FileChangeOperation = {
           toolCallId: tc.id || "",

@@ -1,15 +1,15 @@
 import { useStorage } from '@vueuse/core'
 
 /**
- * 统一标签（文件 / 浏览器 / Git 审阅）
+ * 统一标签（文件 / 浏览器 / Git 审阅 / 终端 / 进程日志）
  */
 export interface UnifiedTab {
     /**
      * 'newtab' 仅作遗留兼容：起始页不再占用标签栏（openNewTab 只设置哨兵键 activeTabKey='newtab'），
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
-    type: 'file' | 'browser' | 'git' | 'terminal' | 'newtab';
-    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'newtab:<id>'
+    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'newtab';
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;
@@ -25,6 +25,9 @@ export interface UnifiedTab {
     // terminal
     cwd?: string;
     terminalId?: string;
+    // processlog（后台进程日志）
+    processId?: string;   // 后台进程 ID（ProcessManagerService entry.id）
+    command?: string;     // 进程命令（标签标题与日志面板头部展示）
 }
 
 /**

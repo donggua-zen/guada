@@ -372,6 +372,7 @@ export class FilePlugin extends PluginBase {
         aggregate: { executing: "%write.aggregate.executing%", completed: "%write.aggregate.completed%" },
         argsKey: "file_path",
         icon: "edit",
+        renderer: { kind: "content", fields: { file: "file_path", content: "content" } },
       },
       dangerLevel: "high",
     });
@@ -469,6 +470,7 @@ export class FilePlugin extends PluginBase {
         aggregate: { executing: "%edit.aggregate.executing%", completed: "%edit.aggregate.completed%" },
         argsKey: "file_path",
         icon: "edit",
+        renderer: { kind: "diff", fields: { file: "file_path", oldValue: "old_text", newValue: "new_text" } },
       },
       dangerLevel: "high",
     });
