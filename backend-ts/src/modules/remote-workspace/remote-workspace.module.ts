@@ -3,6 +3,7 @@ import { RemoteWorkspaceController } from "./remote-workspace.controller";
 import { RemoteWorkspaceService } from "./remote-workspace.service";
 import { RemoteWorkspacePlugin } from "./remote-workspace.plugin";
 import { RemoteAgentManager } from "./remote-workspace-agent-manager";
+import { RemoteBindingStateService } from "./remote-binding-state.service";
 import { WorkspaceToolRouter } from "./workspace-router";
 import { AuthModule } from "../auth/auth.module";
 import { PluginManager } from "../plugins";
@@ -14,9 +15,15 @@ import { PluginManager } from "../plugins";
     RemoteWorkspaceService,
     RemoteAgentManager,
     RemoteWorkspacePlugin,
+    RemoteBindingStateService,
     WorkspaceToolRouter,
   ],
-  exports: [RemoteWorkspaceService, RemoteAgentManager, WorkspaceToolRouter],
+  exports: [
+    RemoteWorkspaceService,
+    RemoteAgentManager,
+    RemoteBindingStateService,
+    WorkspaceToolRouter,
+  ],
 })
 export class RemoteWorkspaceModule implements OnModuleInit {
   private readonly logger = new Logger(RemoteWorkspaceModule.name);

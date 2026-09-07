@@ -38,12 +38,14 @@ function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
     run: jest.fn(overrides?.runImpl ?? (async () => ({ finishReason: 'stop' }))),
   };
   const eventBus = { emit: jest.fn() };
+  const bindingState = { detectAndBuildInjection: jest.fn(async () => []) };
   const service = new ChatRunnerService(
     streamManager as any,
     sessionService as any,
     agentEngine as any,
     sessionContextFactory as any,
     eventBus as any,
+    bindingState as any,
   );
   // processQueue 为私有方法，测试只关心是否被触发（空队列实现无外部副作用）
   (service as any).processQueue = jest.fn(async () => {});

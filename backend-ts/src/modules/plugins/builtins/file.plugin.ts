@@ -634,13 +634,11 @@ export class FilePlugin extends PluginBase {
           "   Always use relative paths unless the user explicitly specifies an absolute path.",
           "3. .guada is a special directory — only store files specified in prompts here. Project files, scripts, etc. must not be placed under .guada.",
         ];
-        // 附加（远程）工作目录提示：仅在会话绑定了远程连接时注入（清单由 ssh-tools 工具包提供）
-        const bound = ctx.session.getSettings?.()?.attachments?.["ssh-connection"];
-        if (Array.isArray(bound) && bound.length > 0) {
-          lines.push(
-            "4. Additional remote workspaces are bound to this session. To operate on them, pass workspace=\"<connection name>\" to the file tools; paths then resolve inside that remote workspace. Omit the parameter for the local working directory above.",
-          );
-        }
+        // 附加（远程）工作目录说明：静态文案（不随绑定变化——连接清单由 ssh-tools 提示词/
+        // 注入块提供），避免绑定变更打破提示词前缀缓存
+        lines.push(
+          "4. Additional remote workspaces may be bound to this session. To operate on one, pass workspace=\"<connection name>\" to the file tools; paths then resolve inside that remote workspace. Omit the parameter for the local working directory above.",
+        );
         return lines.join("\n");
       },
     });

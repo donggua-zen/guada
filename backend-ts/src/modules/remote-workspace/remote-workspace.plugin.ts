@@ -13,7 +13,10 @@
  * remote_* 工具调用块由 plugins.controller 的 legacy display 映射继续渲染。
  */
 import { Injectable } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import { z } from "zod";
+import { HOOKS } from "../chat/types/hooks.contract";
+import { RemoteBindingStateService } from "./remote-binding-state.service";
 import { PluginBase } from "../plugins/base-plugin";
 import type { PluginApi } from "../plugins/api/plugin-api";
 import type { PluginContext } from "../plugins/types/plugin.types";
@@ -36,8 +39,29 @@ export class RemoteWorkspacePlugin extends PluginBase {
   constructor(
     private readonly workspaceService: RemoteWorkspaceService,
     private readonly manager: RemoteAgentManager,
+    private readonly bindingState: RemoteBindingStateService,
   ) {
     super();
+  }
+
+  /**
+   * 压缩后刷新绑定快照：systemPromptIds 对齐当前绑定，
+   * 下回合系统提示词反映最新绑定（历史已重写，缓存本就重建）。
+   */
+  @OnEvent(HOOKS.MEMORY_COMPACTED)
+  async handleMemoryCompacted(payload: {
+    sessionId: string;
+    sessionContext?: import("../chat/session-context").ISessionContext;
+  }) {
+    try {
+      const liveIds: string[] =
+        payload?.sessionContext?.getSettings?.()?.attachments?.[
+          "ssh-connection"
+        ] || [];
+      await this.bindingState.refreshOnCompaction(payload?.sessionId, liveIds);
+    } catch {
+      // 快照刷新失败不影响压缩流程
+    }
   }
 
   async onLoad(api: PluginApi) {
@@ -61,8 +85,8 @@ export class RemoteWorkspacePlugin extends PluginBase {
       },
     });
 
-    // Prompt: list bound connections by name so AI can pass workspace="<name>"
-    // （随 ssh-tools 工具包注入：角色层禁用该包时一并隐藏）
+    // 恒 eager：工具列表与提示词 piece 恒定（不随绑定出现/消失），
+    // 避免绑定变更引发 LLM 前缀缓存失效；连接清单由提示词按冻结快照渲染。
     const sshKit = api.registerToolKit({
       id: "ssh-tools",
       name: "%remoteWorkspace.toolkitName%",
@@ -70,40 +94,36 @@ export class RemoteWorkspacePlugin extends PluginBase {
       loadMode: "eager",
       activator:
         "Use these tools when the user asks to operate on remote servers via SSH connections.",
-      handler: (ctx: PluginContext) => {
-        const attachments = ctx.session.getSettings?.()?.attachments || {};
-        const sshConns = attachments["ssh-connection"] || [];
-        return sshConns.length > 0
-          ? { loadMode: "eager" as const }
-          : { loadMode: "none" as const };
-      },
     });
+    // 提示词按冻结快照渲染（RemoteBindingStateService 两态状态机）：
+    // 绑定变更以注入块跟随下一条用户消息，系统提示词仅冷启动/压缩后刷新 → 前缀缓存稳定。
     sshKit.registerPrompt({
       frequency: "STATIC",
       description: "Remote SSH connections info",
       content: async (ctx: PluginContext) => {
-        const attachments = ctx.session.getSettings?.()?.attachments || {};
-        const connectionIds: string[] = attachments["ssh-connection"] || [];
-        if (connectionIds.length === 0) return "";
-        const connections = await this.workspaceService.getConnections();
-        const bound = connections.filter((c) => connectionIds.includes(c.id));
-        if (bound.length === 0) return "";
-        const lines = ["# Remote SSH Connections (Additional Workspaces)"];
-        lines.push(
-          "The following remote connections are bound to this session as additional workspaces:",
+        const liveIds: string[] =
+          ctx.session.getSettings?.()?.attachments?.["ssh-connection"] || [];
+        const list = await this.bindingState.renderSnapshotList(
+          ctx.session.sessionId,
+          liveIds,
         );
-        for (const c of bound) {
-          lines.push(
-            `- "${c.name}": ${c.config.username || "root"}@${c.config.host}:${c.config.port || 22}${c.config.path || ""}`,
-          );
+        if (!list) {
+          return [
+            "# Additional Workspaces (Remote)",
+            "No remote workspaces are currently bound to this session.",
+            'If the user binds one, the connection list will be provided via a follow-up reminder; operate on it with workspace="<connection name>" on the standard file tools.',
+          ].join("\n");
         }
-        lines.push(
+        return [
+          "# Remote SSH Connections (Additional Workspaces)",
+          "The following remote connections are bound to this session as additional workspaces:",
+          list,
           "",
-          "To operate on a remote workspace, pass workspace=\"<connection name>\" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.",
-          "Paths are then relative to that remote workspace's directory. Omit workspace (or use \"main\") for the primary local workspace.",
+          'To operate on a remote workspace, pass workspace="<connection name>" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.',
+          'Paths are then relative to that remote workspace\'s directory. Omit workspace (or use "main") for the primary local workspace.',
           "remote_transfer keeps its own 'connection' parameter to move files between local and remote.",
-        );
-        return lines.join("\n");
+          "If bindings change mid-session, an updated list arrives as a follow-up reminder (it supersedes this list).",
+        ].join("\n");
       },
     });
 
@@ -117,9 +137,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
         action: z.enum(["upload", "download"]),
         connection: z
           .string()
-          .describe(
-            "Connection name (must match a bound connection exactly)",
-          ),
+          .describe("Connection name (must match a bound connection exactly)"),
         local_path: z.string().describe("Local file path"),
         remote_path: z.string().describe("Remote file path"),
       }),
