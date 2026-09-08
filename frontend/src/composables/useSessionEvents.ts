@@ -159,7 +159,7 @@ export function useSessionEvents() {
         const sessionType = payload?.sessionType ?? payload?.session?.sessionType;
         const isSubOrBot = sessionType === "sub_agent" || sessionType === "bot";
 
-        // 统一写流状态(子 Agent 也写——ChatPage watch store 派生 agentTabs 状态)
+        // 统一写流状态(子 Agent 也写——概览"子代理"区/侧边栏标签据此派生运行状态)
         sessionStore.setStreamStatus(
           sessionId,
           status === "running" ? "running" : status === "completed" ? "completed" : "error",

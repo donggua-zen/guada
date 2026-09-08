@@ -69,21 +69,9 @@ export class RemoteWorkspacePlugin extends PluginBase {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
 
-    // Register attachment type so AttachmentPopover can list connections
-    api.registerAttachmentType({
-      id: "ssh-connection",
-      label: "%remoteWorkspace.name%",
-      icon: "cloud",
-      list: async () => {
-        const connections = await this.workspaceService.getConnections();
-        return connections.map((c) => ({
-          id: c.id,
-          name: c.name,
-          description: `${c.config.username}@${c.config.host}`,
-          meta: c.config,
-        }));
-      },
-    });
+    // 注：不再注册附件类型（ssh-connection）——附加工作目录的绑定管理已迁移至
+    // 工作区概览面板（直连 /remote-workspace/connections），ChatInput 不再展示附件入口；
+    // 绑定状态本身仍存于 session.settings.attachments["ssh-connection"]。
 
     // 恒 eager：工具列表与提示词 piece 恒定（不随绑定出现/消失），
     // 避免绑定变更引发 LLM 前缀缓存失效；连接清单由提示词按冻结快照渲染。

@@ -117,8 +117,14 @@ async function pipeline(items) {
   }
   return Promise.all(items.map(function (item, index) {
     var acc = Promise.resolve(item);
-    for (var i = 0; i < stages.length; i++) {
-      acc = acc.then(stages[i]);
+    for (var s = 0; s < stages.length; s++) {
+      // stage 签名 (prev, item, index)：Promise.then 只回传 prev，需显式补齐 item/index
+      // （IIFE 固定本轮 stage，防 var 闭包取到末轮值）
+      (function (stage) {
+        acc = acc.then(function (prev) {
+          return stage(prev, item, index);
+        });
+      })(stages[s]);
     }
     return acc.catch(function (e) {
       if (e && e.fatal) throw e;

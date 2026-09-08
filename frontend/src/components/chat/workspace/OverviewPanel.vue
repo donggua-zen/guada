@@ -2,38 +2,42 @@
   <!-- 工作区概览：常驻于聊天内容右侧（占位挤宽），与 WorkspaceSidebar 解耦。
        数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store、会话待办、后台进程。
        布局：分组标题 + 下属行（Git 工具 / 待办事项 / 后台进程 / 浏览器），默认平铺展开。 -->
-  <aside class="overview-panel">
+  <aside class="overview-panel shadow">
     <!-- 标题行 -->
     <div class="overview-header">
       <span class="overview-title">{{ t('git.overviewTitle') }}</span>
       <div class="overview-header-actions">
         <!-- 重新检测：手动刷新 git 状态（覆盖 git init / 仓库状态变化等 watcher 无法感知的场景） -->
-        <button class="overview-collapse-btn" :title="t('git.refresh')" :disabled="git.refreshing"
-          @click="git.refresh()">
-          <el-icon :size="14" :class="{ 'is-loading': git.refreshing }"><ArrowSync20Regular /></el-icon>
-        </button>
-        <button class="overview-collapse-btn" :title="t('chat.workspace.collapseOverview')" @click="emit('collapse')">
-          <el-icon :size="14"><Dismiss16Regular /></el-icon>
-        </button>
+        <GdTooltip :content="t('git.refresh')" placement="bottom">
+          <button class="overview-collapse-btn" :disabled="git.refreshing" @click="git.refresh()">
+            <el-icon :size="14" :class="{ 'is-loading': git.refreshing }"><ArrowSync20Regular /></el-icon>
+          </button>
+        </GdTooltip>
+        <GdTooltip :content="t('chat.workspace.collapseOverview')" placement="bottom">
+          <button class="overview-collapse-btn" @click="emit('collapse')">
+            <el-icon :size="14"><Dismiss16Regular /></el-icon>
+          </button>
+        </GdTooltip>
       </div>
     </div>
 
     <div class="overview-rows">
       <!-- ── Git 工具 ── -->
       <section class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.sectionGit') }}</div>
-
-        <!-- 变更：+N -M → 打开工作区并切到 Git 标签 -->
-        <button class="overview-row" :disabled="!git.isGitRepo" @click="openGit">
-          <el-icon :size="16" class="overview-row-icon"><Branch20Regular /></el-icon>
-          <span class="overview-row-label">{{ t('git.title') }}</span>
-          <span v-if="git.totalStats.add || git.totalStats.del" class="overview-row-value overview-row-value--stats">
-            <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
-            <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
-          </span>
-          <span v-else-if="git.status?.gitUnavailable" class="overview-row-value overview-row-value--empty">{{ t('git.notInstalled') }}</span>
-          <span v-else class="overview-row-value overview-row-value--empty">{{ t('git.noChanges') }}</span>
-        </button>
+        <div class="overview-section-title">
+          <span>{{ t('chat.workspace.sectionGit') }}</span>
+          <!-- 聚合变更数上移标题栏并右对齐；点击打开 Git 审阅标签（替代原“Git 变更”行） -->
+          <GdTooltip v-if="git.totalStats.add || git.totalStats.del" :content="t('git.title')" placement="bottom"
+            class="ml-auto">
+            <button class="flex gap-1 font-mono text-[12px] cursor-pointer bg-transparent border-0 p-0 hover:opacity-70"
+              @click="openGit">
+              <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
+              <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
+            </button>
+          </GdTooltip>
+          <span v-else-if="git.status?.gitUnavailable" class="ml-auto overview-row-value--empty text-[12px]">{{ t('git.notInstalled') }}</span>
+          <span v-else-if="git.isGitRepo" class="ml-auto overview-row-value--empty text-[12px]">{{ t('git.noChanges') }}</span>
+        </div>
 
         <!-- 分支：下拉切换（GitStore.checkout）；外层 .overview-dropdown 撑满整行，
              DropdownMenu 内部 inline-flex 默认收缩为内容宽 → 穿透设为 100% 与其他行一致 -->
@@ -63,28 +67,80 @@
           <el-icon :size="16" class="overview-row-icon"><ArrowUpload16Regular /></el-icon>
           <span class="overview-row-label">{{ t('git.commitOrPush') }}</span>
         </button>
+      </section>
 
-        <!-- 工作目录：打开工作区目录树标签 -->
-        <button class="overview-row" @click="openWorkspaceTree">
-          <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
-          <span class="overview-row-label">{{ t('chat.workspace.workingDir') }}</span>
-        </button>
+      <!-- ── 工作目录：主目录（不可删改，点击打开工作区）+ 附加目录（远程连接绑定，增删走
+           session.settings.attachments["ssh-connection"]，后端下回合 diff 注入生效） ── -->
+      <section class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.workingDir') }}</div>
+
+        <!-- 主目录：展示 basename，tooltip 完整路径；点击打开工作区面板（目录树） -->
+        <GdTooltip :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
+          <button class="overview-row" @click="openWorkspaceTree">
+            <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
+            <span class="overview-row-label">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
+          </button>
+        </GdTooltip>
+
+        <!-- 附加目录：已绑定的远程连接；hover 显示解除按钮（对齐后台进程行的 kill 样式） -->
+        <GdTooltip v-for="conn in attachedConnections" :key="conn.id"
+          :content="conn.description || conn.name" placement="bottom">
+          <div class="overview-row overview-attach-row">
+            <el-icon :size="16" class="overview-row-icon"><Cloud16Regular /></el-icon>
+            <span class="overview-row-label">{{ conn.name }}</span>
+            <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">
+              <button class="overview-attach-remove" @click.stop="removeAttached(conn.id)">
+                <el-icon :size="10"><Close /></el-icon>
+              </button>
+            </GdTooltip>
+          </div>
+        </GdTooltip>
+
+        <!-- 添加附加目录：下拉列出 remote-workspace 全部连接（✓ 为已绑定）；无连接时引导去设置页 -->
+        <div class="overview-dropdown">
+          <DropdownMenu @command="handleAttachedCommand">
+            <button class="overview-row">
+              <el-icon :size="16" class="overview-row-icon"><Add16Regular /></el-icon>
+              <span class="overview-row-label">{{ t('chat.workspace.addAttachedDir') }}</span>
+            </button>
+            <template #dropdown>
+              <div class="overview-branch-menu">
+                <template v-if="availableConnections.length">
+                  <DropdownMenuItem v-for="c in availableConnections" :key="c.id" :command="c.id">
+                    <span class="overview-branch-item">
+                      <span class="overview-branch-check">{{ attachedIds.includes(c.id) ? '✓' : '' }}</span>
+                      <span class="overview-branch-name">{{ c.name }}</span>
+                    </span>
+                  </DropdownMenuItem>
+                </template>
+                <DropdownMenuItem v-else :command="OPEN_SETTINGS_COMMAND">
+                  <span class="overview-branch-item">
+                    <span class="overview-branch-name">{{ t('chat.workspace.noConnections') }}</span>
+                  </span>
+                </DropdownMenuItem>
+              </div>
+            </template>
+          </DropdownMenu>
+        </div>
       </section>
 
       <!-- ── 待办事项：无待办不显示，平铺展示全部条目 ── -->
       <section v-if="todoItems.length" class="overview-section">
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.todoList') }}</span>
-          <span v-if="todoDoneCount" class="overview-section-count">{{ todoDoneCount }}/{{ todoItems.length }}</span>
+          <span v-if="todoDoneCount" class="overview-section-count ml-auto">{{ todoDoneCount }}/{{ todoItems.length }}</span>
         </div>
         <div class="overview-todo-list">
-          <div v-for="(item, i) in todoItems" :key="i" class="overview-todo-item" :class="{ done: item.status === 'completed' }">
+          <div v-for="(item, i) in todoItems" :key="i" class="overview-todo-item py-[3px]"
+            :class="{ done: item.status === 'completed', active: item.status === 'in_progress' }">
             <span class="overview-todo-dot">
-              <el-icon v-if="item.status === 'completed'" :size="12"><Check /></el-icon>
-              <span v-else-if="item.status === 'in_progress'" class="overview-todo-spinner"></span>
+              <el-icon v-if="item.status === 'completed'" class="overview-todo-check"><Check /></el-icon>
+              <el-icon v-else-if="item.status === 'in_progress'" class="overview-todo-arrow"><ArrowRight16Regular /></el-icon>
               <span v-else class="overview-todo-ring"></span>
             </span>
-            <span class="overview-todo-text" :title="item.content">{{ item.content }}</span>
+            <GdTooltip :content="item.content" placement="bottom" class="min-w-0">
+              <span class="overview-todo-text min-w-0">{{ item.content }}</span>
+            </GdTooltip>
           </div>
         </div>
       </section>
@@ -93,19 +149,59 @@
       <section v-if="processes.length" class="overview-section">
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.processes') }}</span>
-          <span class="overview-section-count">{{ processes.length }}</span>
+          <span class="overview-section-count ml-auto">{{ processes.length }}</span>
         </div>
         <div class="overview-process-list">
-          <div v-for="p in processes" :key="p.id" class="overview-process-item" :title="p.command"
-            @click="openProcessLog(p)">
-            <span class="overview-process-spinner"></span>
-            <span class="overview-process-cmd">{{ shortCommand(p.command) }}</span>
-            <span class="overview-process-elapsed">{{ elapsedText(p.startedAt) }}</span>
-            <button class="overview-process-kill" :title="t('chat.workspace.killProcess')"
-              @click.stop="killProcess(p)">
-              <el-icon :size="10"><Close /></el-icon>
-            </button>
+          <GdTooltip v-for="p in processes" :key="p.id" :content="p.command" placement="bottom">
+            <div class="overview-process-item w-full" @click="openProcessLog(p)">
+              <span class="overview-process-spinner"></span>
+              <span class="overview-process-cmd">{{ shortCommand(p.command) }}</span>
+              <span class="overview-process-elapsed">{{ elapsedText(p.startedAt) }}</span>
+              <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
+                <button class="overview-process-kill" @click.stop="killProcess(p)">
+                  <el-icon :size="10"><Close /></el-icon>
+                </button>
+              </GdTooltip>
+            </div>
+          </GdTooltip>
+        </div>
+      </section>
+
+      <!-- ── 子代理：活跃行平铺；已冻结（close / one_shot 结束，仅供回放）收进"已结束"折叠组。
+           数据源为 ChatPage 维护的 subSessions（SSE 增改 + fetchSession 基线）props 下传，
+           运行状态直接读 sessionStore.streamStatus（与侧边栏标签运行点同源） ── -->
+      <section v-if="subagentItems.length" class="overview-section">
+        <div class="overview-section-title">
+          <span>{{ t('chat.workspace.subagents') }}</span>
+          <span v-if="runningSubagentCount" class="overview-section-count">{{ runningSubagentCount }}</span>
+        </div>
+        <div class="overview-subagent-list">
+          <div v-for="item in activeSubagents" :key="item.id" class="overview-subagent" :title="item.title"
+            @click="openSubAgent(item.id)">
+            <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)">
+              <span v-if="item.status === 'running'" class="wf-dot-pulse"></span>
+            </span>
+            <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
+            <span class="overview-subagent-name">{{ item.title }}</span>
+            <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
           </div>
+          <!-- 已结束（冻结）折叠组：默认收起，展开后点击行回放只读会话 -->
+          <template v-if="frozenSubagents.length">
+            <button class="overview-subagent-ended" @click="endedExpanded = !endedExpanded">
+              <el-icon :size="10" class="overview-subagent-chevron" :class="{ 'is-open': endedExpanded }"><ArrowDown /></el-icon>
+              <span>{{ t('chat.workspace.subagentsEnded', { count: frozenSubagents.length }) }}</span>
+            </button>
+            <template v-if="endedExpanded">
+              <div v-for="item in frozenSubagents" :key="item.id"
+                class="overview-subagent overview-subagent--frozen" :title="item.title"
+                @click="openSubAgent(item.id)">
+                <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)"></span>
+                <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
+                <span class="overview-subagent-name">{{ item.title }}</span>
+                <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
+              </div>
+            </template>
+          </template>
         </div>
       </section>
 
@@ -161,15 +257,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ArrowDown, Check, Close } from "@element-plus/icons-vue";
 import {
-  Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
+  BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
   Dismiss16Regular, Add16Regular,
-  ArrowSync20Regular,
+  ArrowSync20Regular, ArrowRight16Regular, Cloud16Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
+import GdTooltip from "../../ui/GdTooltip.vue";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
@@ -177,16 +275,30 @@ import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { apiService, type UiProcessInfo } from "@/services/ApiService";
 import { applyWorkflowEvent, sortWorkflowRuns } from "@/services/modules/workflowRuns";
 import { streamEventHub, type HubStreamEvent } from "@/services/modules/StreamEventHub";
+import { useSessionStore } from "@/stores/session";
+import type { Session } from "@/types/session";
 import type { WorkflowRunState, WorkflowAgentState, WorkflowMemberStatus } from "@/types/stream/workflow.types";
 
 const { t } = useI18n();
-const props = defineProps<{ sessionId: string | null }>();
-const emit = defineEmits<{ collapse: [] }>();
+const router = useRouter();
+const props = defineProps<{
+  sessionId: string | null;
+  /** 子会话列表（ChatPage 维护：SSE sub_agent_create/closed 增改 + fetchSession 基线，含已冻结的） */
+  subSessions?: Session[];
+  /** 主会话的附件绑定（mainSession.settings.attachments，ChatPage 单向下传；增删经事件上行） */
+  attachments?: Record<string, string[]>;
+}>();
+const emit = defineEmits<{
+  collapse: [];
+  /** 附加工作目录绑定变更（ChatPage 写回 mainSession.settings 并 PUT 持久化） */
+  attachmentsChange: [attachments: Record<string, string[]>];
+}>();
 
 const git = useGitStore();
 const tabStore = useTabStore();
 const layoutStore = useLayoutStore();
 const browserStore = useBrowserWebviewStore();
+const sessionStore = useSessionStore();
 
 // ── 待办（环境初始化）：复用 SessionTodoList 的数据源与事件订阅 ──
 interface TodoItem {
@@ -208,6 +320,80 @@ async function loadTodo(): Promise<void> {
   } catch {
     todoItems.value = [];
   }
+}
+
+// ── 工作目录分组：主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
+const REMOTE_WS_ATTACHMENT_TYPE = "ssh-connection";
+/** 下拉空态命令：跳转设置页“远程工作区”创建连接 */
+const OPEN_SETTINGS_COMMAND = "__open_settings";
+
+/** 主工作目录（后端解析：自定义 workspacePath 或会话默认目录），仅展示 */
+const mainWorkspacePath = ref("");
+const mainWorkspaceBasename = computed(() => {
+  if (!mainWorkspacePath.value) return "";
+  const normalized = mainWorkspacePath.value.replace(/[\\/]+$/, "");
+  return normalized.split(/[\\/]/).pop() || normalized;
+});
+
+interface AttachableConnection { id: string; name: string; description?: string; }
+/** remote-workspace 插件提供的全部连接（设置页创建，与会话无关的全局清单） */
+const availableConnections = ref<AttachableConnection[]>([]);
+
+/** 当前会话已绑定的附加目录 ID（props.attachments 单向下传，增删经 attachmentsChange 上行） */
+const attachedIds = computed<string[]>(() => props.attachments?.[REMOTE_WS_ATTACHMENT_TYPE] ?? []);
+/** 已绑定连接的展示信息（连接清单缺失时回退显示 ID） */
+const attachedConnections = computed<AttachableConnection[]>(() =>
+  attachedIds.value.map((id) => availableConnections.value.find((c) => c.id === id) ?? { id, name: id }),
+);
+
+async function loadWorkspacePath(): Promise<void> {
+  if (!props.sessionId) {
+    mainWorkspacePath.value = "";
+    return;
+  }
+  try {
+    const res = await apiService.getWorkspacePath(props.sessionId);
+    mainWorkspacePath.value = res.workspacePath || "";
+  } catch {
+    mainWorkspacePath.value = "";
+  }
+}
+
+async function loadConnections(): Promise<void> {
+  try {
+    // 直连 remote-workspace REST 清单（与设置页同源）；不经附件类型端点（该类型已注销）
+    const connections = await apiService.getConnections();
+    availableConnections.value = connections.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: `${c.config.username}@${c.config.host}`,
+    }));
+  } catch {
+    availableConnections.value = [];
+  }
+}
+
+/** 解绑附加目录（主目录不可删；后端下回合 diff 后注入解绑提醒） */
+function removeAttached(connectionId: string): void {
+  writeAttachments(attachedIds.value.filter((id) => id !== connectionId));
+}
+
+/** 下拉命令分发：连接 ID 切换绑定；空态命令跳设置页 */
+function handleAttachedCommand(command: string): void {
+  if (command === OPEN_SETTINGS_COMMAND) {
+    void router.replace({ name: "SystemSettings", params: { tab: "connections" } });
+    return;
+  }
+  writeAttachments(
+    attachedIds.value.includes(command)
+      ? attachedIds.value.filter((id) => id !== command)
+      : [...attachedIds.value, command],
+  );
+}
+
+/** 写回附件绑定并上行（ChatPage 写 mainSession.settings 后 PUT /sessions/:id 持久化） */
+function writeAttachments(ids: string[]): void {
+  emit("attachmentsChange", { ...props.attachments, [REMOTE_WS_ATTACHMENT_TYPE]: ids });
 }
 
 // ClipboardTaskListLtr20Regular 原用于待办折叠头行，分组标题化后暂不使用；保留导入会报 unused，移除。
@@ -310,9 +496,63 @@ function handleStreamChunk(chunk: HubStreamEvent): void {
 
 /** 成员行点击 → 跳转子代理会话（复用 ChatPage provide；运行中/已知 subSessionId 才可点） */
 const openSubAgent = inject<(subSessionId: string) => void>(
-  "workflow:openSubAgentSession",
+  "workspace:openSubAgentSession",
   () => {},
 );
+
+// ── 子代理（props.subSessions 驱动；运行状态读 streamStatus，与侧边栏标签运行点同源）──
+interface SubagentItem {
+  id: string;
+  title: string;
+  avatarUrl?: string | null;
+  /** 已冻结（close / one_shot 结束，后端 closedAt 标记）：收进"已结束"折叠组，仅供回放 */
+  frozen: boolean;
+  status: "running" | "completed" | "error";
+}
+
+/** 已结束折叠组展开态（默认收起，避免列表无限增长挤占概览） */
+const endedExpanded = ref(false);
+
+const subagentItems = computed<SubagentItem[]>(() =>
+  (props.subSessions ?? [])
+    // workflow 成员子代理不进本区：其进度/状态/跳转由下方"工作流运行"区按 run 组织展示，
+    // 且该类子代理为 persist 生命周期永不 close，不过滤会让列表无限增长
+    .filter((s) => !s.settings?.workflow?.runId)
+    .map((s) => {
+      const streamStatus = sessionStore.peekStreamStatus(s.id);
+      return {
+        id: s.id,
+        title: s.title || t("chat.workspace.subagentTab"),
+        avatarUrl: s.avatarUrl || s.character?.avatarUrl || null,
+        frozen: !!s.closedAt,
+        status:
+          streamStatus === "running"
+            ? ("running" as const)
+            : streamStatus === "error"
+              ? ("error" as const)
+              : ("completed" as const),
+      };
+    }),
+);
+
+/** 活跃在前、冻结在后（各自保持创建顺序） */
+const activeSubagents = computed(() => subagentItems.value.filter((i) => !i.frozen));
+const frozenSubagents = computed(() => subagentItems.value.filter((i) => i.frozen));
+const runningSubagentCount = computed(
+  () => subagentItems.value.filter((i) => !i.frozen && i.status === "running").length,
+);
+
+function subagentDotClass(item: SubagentItem): string {
+  if (item.status === "running") return "wf-dot--running";
+  if (item.status === "error") return "wf-dot--failed";
+  return "wf-dot--completed";
+}
+
+function subagentStatusText(item: SubagentItem): string {
+  if (item.status === "error") return t("chat.workspace.wfFailed");
+  if (item.status === "running") return t("chat.workspace.wfRunning");
+  return t("chat.workspace.wfCompleted");
+}
 
 function statusText(status: WorkflowMemberStatus): string {
   const map: Record<WorkflowMemberStatus, string> = {
@@ -352,14 +592,17 @@ watch(
   () => props.sessionId,
   (id) => {
     git.bindSession(id);
+    endedExpanded.value = false;
     void loadTodo();
     void loadProcesses();
     void loadWorkflowRuns();
+    void loadWorkspacePath();
   },
   { immediate: true },
 );
 
 onMounted(() => {
+  void loadConnections();
   unsubscribeTodoUpdated = apiService.onSessionEvent("todo_updated", (event) => {
     if (event.sessionId === props.sessionId) loadTodo();
   });
@@ -429,7 +672,6 @@ async function createBrowser(): Promise<void> {
   background: var(--gd-color-dialog-bg, var(--gd-color-surface));
   border: 1px solid var(--gd-color-surface-border);
   border-radius: 12px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 
@@ -511,14 +753,14 @@ async function createBrowser(): Promise<void> {
   align-items: center;
   gap: 6px;
   padding: 0 8px 5px;
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   font-weight: 400;
   color: var(--gd-color-text-disabled);
   line-height: 1.2;
 }
 .overview-section-count {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gd-color-success);
 }
@@ -561,12 +803,8 @@ async function createBrowser(): Promise<void> {
 .overview-row-value {
   flex-shrink: 0;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--gd-size-text-sm);
   color: var(--gd-color-text);
-}
-.overview-row-value--stats {
-  display: flex;
-  gap: 4px;
 }
 .overview-row-value--branch {
   max-width: 110px;
@@ -581,6 +819,34 @@ async function createBrowser(): Promise<void> {
 .overview-row-chevron {
   color: var(--gd-color-text-disabled);
   flex-shrink: 0;
+}
+
+/* 附加目录行：div 行 + hover 显示解除按钮（对齐后台进程行的 kill 样式） */
+.overview-attach-row {
+  cursor: default;
+}
+.overview-attach-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.overview-attach-row:hover .overview-attach-remove {
+  opacity: 1;
+}
+.overview-attach-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 /* 分支下拉行：外层撑满，穿透 DropdownMenu 内部 inline-flex（否则收缩为内容宽） */
@@ -615,52 +881,53 @@ async function createBrowser(): Promise<void> {
   white-space: nowrap;
 }
 
-/* 待办列表（平铺展开） */
+/* 待办列表（平铺展开，对齐参考图：✓完成 / →进行中 / ○待处理） */
 .overview-todo-list {
   display: flex;
   flex-direction: column;
   padding: 2px 4px 4px 8px;
-  gap: 1px;
+  gap: 2px;
 }
 .overview-todo-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
+  gap: 8px;
   border-radius: 4px;
 }
 .overview-todo-dot {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+}
+.overview-todo-check {
+  font-size: 15px;
   color: var(--gd-color-success);
 }
-.overview-todo-ring {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1px solid var(--gd-color-text-disabled);
+.overview-todo-arrow {
+  font-size: 15px;
+  color: var(--gd-color-text);
 }
-.overview-todo-spinner {
+.overview-todo-ring {
   width: 9px;
   height: 9px;
-  border: 1.5px solid var(--gd-color-primary-200);
-  border-top-color: var(--gd-color-primary);
   border-radius: 50%;
-  animation: overview-spin 0.8s linear infinite;
+  border: 1.5px solid var(--gd-color-text-disabled);
 }
 @keyframes overview-spin {
   to { transform: rotate(360deg); }
 }
 .overview-todo-text {
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   color: var(--gd-color-text-gray);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.overview-todo-item.active .overview-todo-text {
+  color: var(--gd-color-text);
 }
 .overview-todo-item.done .overview-todo-text {
   text-decoration: line-through;
@@ -701,7 +968,7 @@ async function createBrowser(): Promise<void> {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   color: var(--gd-color-text-gray);
 }
 .overview-process-item:hover .overview-process-cmd {
@@ -710,7 +977,7 @@ async function createBrowser(): Promise<void> {
 .overview-process-elapsed {
   flex-shrink: 0;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gd-color-text-disabled);
 }
 .overview-process-kill {
@@ -798,27 +1065,57 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   font-weight: 500;
   color: var(--gd-color-text);
 }
 .wf-run-meta {
   flex-shrink: 0;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gd-color-text-disabled);
 }
 .wf-agents {
+  position: relative;
   margin: 2px 0 0 7px;
-  padding-left: 10px;
-  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
+  padding-left: 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+}
+/* 树形连接线（对齐 DSH 任务管理配方）：竖干自 run 行下垂，
+   每个成员节点一条水平横肘线，竖线贯穿节点、末节点止于横肘 */
+.wf-agents::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: -14px;
+  height: 14px;
+  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
 }
 .wf-agent {
-  padding: 2px 4px;
+  position: relative;
+  padding: 3px 4px;
   border-radius: 4px;
+}
+.wf-agent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -12px;
+  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
+}
+.wf-agent:last-child::before {
+  bottom: auto;
+  height: 12px;
+}
+.wf-agent::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: -12px;
+  width: 14px;
+  border-top: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
 }
 .wf-agent--clickable {
   cursor: pointer;
@@ -838,7 +1135,7 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   color: var(--gd-color-text);
 }
 .wf-agent-sub {
@@ -846,8 +1143,76 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gd-color-text-gray);
+}
+
+/* 子代理列表（平铺行；已冻结行收进"已结束"折叠组内缩进展示） */
+.overview-subagent-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 4px;
+}
+.overview-subagent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 0;
+}
+.overview-subagent:hover {
+  background: var(--gd-color-sidebar-bg-hover);
+}
+.overview-subagent-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.overview-subagent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--gd-size-text-base);
+  color: var(--gd-color-text);
+}
+.overview-subagent--frozen .overview-subagent-name {
+  color: var(--gd-color-text-gray);
+}
+.overview-subagent-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--gd-color-text-disabled);
+}
+.overview-subagent-ended {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 1px;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--gd-color-text-gray);
+  text-align: left;
+}
+.overview-subagent-ended:hover {
+  color: var(--gd-color-text);
+}
+.overview-subagent-chevron {
+  transition: transform 0.15s;
+}
+.overview-subagent-chevron.is-open {
+  transform: rotate(180deg);
+}
+.overview-subagent--frozen {
+  margin-left: 14px;
 }
 
 /* 浏览器列表（平铺展开） */
@@ -866,7 +1231,7 @@ async function createBrowser(): Promise<void> {
   border-radius: 4px;
   background: transparent;
   color: var(--gd-color-text-gray);
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   cursor: pointer;
   text-align: left;
 }
@@ -903,7 +1268,7 @@ async function createBrowser(): Promise<void> {
   border-radius: 4px;
   background: transparent;
   color: var(--gd-color-text-disabled);
-  font-size: 12px;
+  font-size: var(--gd-size-text-base);
   cursor: pointer;
 }
 .overview-browser-new:hover {

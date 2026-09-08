@@ -1,5 +1,6 @@
 import type { Migration } from "../migration.interface";
 import { baselineMigration } from "./0001_baseline";
+import { addSessionClosedFieldsMigration } from "./0002_add_session_closed_fields";
 
 /**
  * 迁移注册表
@@ -17,5 +18,5 @@ import { baselineMigration } from "./0001_baseline";
  */
 export const allMigrations: Migration[] = [
   baselineMigration,
-  // 在此追加新迁移...
+  addSessionClosedFieldsMigration,
 ];

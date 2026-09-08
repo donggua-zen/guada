@@ -117,7 +117,7 @@ interface SubAgentCompleter {
  *
  * 核心设计：
  * 1. spawn：创建子 Agent 并启动，支持前台（阻塞）和后台（非阻塞）两种模式
- * 2. 生命周期 lifecycle：one_shot（默认）= 结果交付后自动删除子会话，无需 AI 调用 close；
+ * 2. 生命周期 lifecycle：one_shot（默认）= 结果交付后自动冻结子会话（保留供回放），无需 AI 调用 close；
  *    persist = 保留会话供 send_message 继续交互，由 AI 主动 close
  * 3. 内部通过 startStream 的 callbacks 监听完成，自动广播 sub_agent_finish
  * 4. waitForComplete：供主 Agent 主动等待子 Agent 完成
@@ -146,7 +146,7 @@ export class SubAgentManager implements OnModuleInit {
    * 后台模式：立即返回 SubAgentResult（status=running），后续通过 waitForComplete 获取结果
    *
    * 生命周期（默认 one_shot）：
-   * - one_shot：结果交付后自动删除子会话（前台=结果返回时；后台=信箱消息被消费时）
+   * - one_shot：结果交付后自动冻结子会话（保留供回放；前台=结果返回时；后台=信箱消息被消费时）
    * - persist：保留会话，由 AI 通过 subagent_manager close 释放
    */
   async spawn(
@@ -323,6 +323,10 @@ export class SubAgentManager implements OnModuleInit {
     if (subSession.parentId !== params.parentSessionId) {
       throw new Error("Sub-agent does not belong to this parent session.");
     }
+    // 已冻结（closedAt 非空）的子会话仅供回放，不再接收消息
+    if (subSession.closedAt) {
+      throw new Error("Sub-agent is closed (frozen for replay only).");
+    }
 
     // 2. 检查子 Agent 是否正在运行
     if (this.isSubAgentRunning(params.sessionId)) {
@@ -354,7 +358,7 @@ export class SubAgentManager implements OnModuleInit {
    * - 不走 states Map / completer / 信箱：workflow 引擎自己就是等待者，
    *   结果直接经返回的 Promise 交付，绝不投递 <system_reminder> 唤醒父循环
    * - 跳过每父会话 10 个上限（并发由 workflow 引擎的槽位控制）
-   * - lifecycle 固定 persist（子会话保留，供用户在子代理面板回看执行过程）
+   * - lifecycle 固定 persist（子会话保留，供用户在概览面板工作流运行区回看执行过程）
    * - settings.workflow 记录来源（runId/label/phase），照常广播 subagent.created
    */
   async spawnForWorkflow(
@@ -455,7 +459,7 @@ export class SubAgentManager implements OnModuleInit {
    * - 始终 fire-and-forget 启动 runSubAgentStream
    * - 前台模式：Promise.race 等待结果（5min 超时），完成直接返回，超时转后台
    * - 后台模式：不等待，pending 完成后入队通知
-   * - one_shot 生命周期：结果交付后自动删除子会话（前台=结果返回时；后台=信箱消费时）
+   * - one_shot 生命周期：结果交付后自动冻结子会话（前台=结果返回时；后台=信箱消费时）
    */
   private async executeSubAgentStream(
     subSessionId: string,
@@ -543,7 +547,7 @@ export class SubAgentManager implements OnModuleInit {
         // abort 时 runSubAgentStream 的监听器已 cancelStream + resolve error result
         state.running.delete(subSessionId);
         this.cleanupParentStateIfEmpty(parentSessionId);
-        // one_shot：结果已作为工具结果交付，自动清理子会话（fire-and-forget，清理失败仅告警）
+        // one_shot：结果已作为工具结果交付，自动冻结子会话（fire-and-forget，失败仅告警）
         this.maybeAutoDispose(
           subSessionId,
           parentSessionId,
@@ -616,7 +620,7 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
-   * one_shot 生命周期：结果交付后自动删除子会话
+   * one_shot 生命周期：结果交付后自动冻结子会话
    *
    * fire-and-forget：清理失败仅记录日志，不吞没已交付的业务结果。
    * result 用于向 subagent.closed 事件携带结束原因与结果摘要。
@@ -637,14 +641,17 @@ export class SubAgentManager implements OnModuleInit {
       content: result?.content,
     }).catch((err) => {
       this.logger.error(
-        `one_shot 子 Agent 自动清理失败: ${subSessionId}`,
+        `one_shot 子 Agent 自动冻结失败: ${subSessionId}`,
         err instanceof Error ? err.stack : err,
       );
     });
   }
 
   /**
-   * 删除子会话并广播关闭事件（不含取消流逻辑，供 close 与 one_shot 自动清理共用）
+   * 冻结子会话并广播关闭事件（不含取消流逻辑，供 close 与 one_shot 自动清理共用）
+   *
+   * 冻结而非删除：closedAt 非空标记已结束，子会话保留供用户回放；
+   * countByParentId 排除已冻结会话，close 仍会释放每父会话的子代理名额。
    */
   private async disposeSession(
     subSessionId: string,
@@ -652,7 +659,10 @@ export class SubAgentManager implements OnModuleInit {
     userId: string,
     extra?: { stopReason?: string; content?: string },
   ): Promise<void> {
-    await this.sessionRepo.deleteById(subSessionId);
+    await this.sessionRepo.update(subSessionId, {
+      closedAt: new Date(),
+      closeReason: extra?.stopReason ?? null,
+    });
 
     this.eventBus.emit("subagent.closed", {
       userId,
@@ -667,7 +677,7 @@ export class SubAgentManager implements OnModuleInit {
       },
     });
 
-    this.logger.log(`子 Agent 会话已删除: ${subSessionId}`);
+    this.logger.log(`子 Agent 会话已冻结: ${subSessionId}`);
   }
 
   /**
@@ -767,7 +777,7 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
-   * 关闭子 Agent：删除会话数据、清理导出的历史文件并广播关闭事件。
+   * 关闭子 Agent：冻结会话数据、清理导出的历史文件并广播关闭事件。
    *
    * 如果子 Agent 仍在运行中，则拒绝关闭并返回错误。
    *
@@ -819,7 +829,7 @@ export class SubAgentManager implements OnModuleInit {
       this.cleanupParentStateIfEmpty(parentSessionId);
     }
 
-    // 删除会话数据并广播关闭事件（手动 close → stopReason=closed）
+    // 冻结会话数据并广播关闭事件（手动 close → stopReason=closed）
     await this.disposeSession(subSessionId, parentSessionId, userId, {
       stopReason: "closed",
     });
@@ -831,7 +841,7 @@ export class SubAgentManager implements OnModuleInit {
    * 获取当前父会话下的子 Agent 列表。
    *
    * 从数据库查询所有子 Agent 会话，结合内存状态判断是否正在运行。
-   * 系统重启后内存状态丢失，但仍能从数据库获取子 Agent 列表（状态均为 completed）。
+   * 系统重启后内存状态丢失，但仍能从数据库获取子 Agent 列表（已结束的为 completed，已冻结的为 closed）。
    *
    * @param parentSessionId 父会话 ID
    * @returns 子 Agent 列表，包含 subSessionId、名称、状态
@@ -851,6 +861,9 @@ export class SubAgentManager implements OnModuleInit {
       let status = "completed";
       if (this.isSubAgentRunning(session.id)) {
         status = "running";
+      } else if (session.closedAt) {
+        // 已冻结（close / one_shot 清理后保留供回放）
+        status = "closed";
       } else if (state) {
         const completed = state.completed.find(
           (c) => c.subSessionId === session.id,
@@ -917,7 +930,7 @@ export class SubAgentManager implements OnModuleInit {
    *
    * one_shot 生命周期（后台路径）的清理时机必须晚于结果交付：
    * - 有等待者：结果经 completer 直接交付 → resolve 后立即自动清理
-   * - 无等待者（信箱）：主 Agent 消费消息（onConsumed）后才删除子会话。
+   * - 无等待者（信箱）：主 Agent 消费消息（onConsumed）后才冻结子会话。
    *   不能提前删：isValid 依赖 state.completed 含该条目，提前清理会导致
    *   信箱消息被 processQueue 当作脏消息丢弃，结果永远无法送达主 Agent
    */
@@ -953,7 +966,7 @@ export class SubAgentManager implements OnModuleInit {
       state.completers = [];
 
       this.cleanupParentStateIfEmpty(parentSessionId);
-      // one_shot：结果已通过 completer 交付给主 Agent，自动清理
+      // one_shot：结果已通过 completer 交付给主 Agent，自动冻结
       this.maybeAutoDispose(
         subSessionId,
         parentSessionId,
@@ -1003,7 +1016,7 @@ export class SubAgentManager implements OnModuleInit {
             (c) => c.subSessionId !== subSessionId,
           );
           this.cleanupParentStateIfEmpty(parentSessionId);
-          // one_shot：主 Agent 已消费结果，此时才删除子会话
+          // one_shot：主 Agent 已消费结果，此时才冻结子会话
           if (lifecycle === "one_shot") {
             this.maybeAutoDispose(
               subSessionId,

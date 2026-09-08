@@ -18,6 +18,7 @@
  *   3. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
  *                          历史轮次剥离；fullReasoningRelay（deepseek-v4 系）例外全量携带；
  *                          非思考模式剥离全部 reasoning 块
+ *                          （剥离含 metadata 中的 signature/redactedData 思考私有元数据）
  *   4. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
  */
 
@@ -171,6 +172,10 @@ export function isFullReasoningRelayModel(modelName?: string): boolean {
  *   → 全部 assistant 消息保留/填充（无块补 `{summary:' '}`、空 summary 填 `' '`）；
  * - 思考模式（默认）→ 仅最后一轮（turnId === ctx.currentTurnId 的 assistant 消息）
  *   保留/填充，历史轮次剥离。currentTurnId 缺省时全部视为最后一轮（保守回退）。
+ * 剥离时同步清理消息 metadata 中的思考私有元数据（signature/redactedData）：
+ * 二者是产生该思考的模型私有凭证，仅对其来源模型有效；若残留，
+ * anthropic.adapter 会依据 metadata 仍注入 thinking/redacted_thinking，
+ * 导致已被策略剥离的消息继续向（可能已切换的）新模型回传。
  */
 export const reasoningPolicyStep: TransformStep = {
   name: 'reasoning-policy',
@@ -200,10 +205,18 @@ export const reasoningPolicyStep: TransformStep = {
         ),
       };
     };
-    const stripReasoning = (msg: Message): Message => ({
-      ...msg,
-      content: msg.content.filter((b) => b.type !== 'reasoning'),
-    });
+    // 剥离 = content 块 + 思考私有元数据一并清理；无思考元数据时不复制 metadata
+    const stripReasoning = (msg: Message): Message => {
+      const { signature, redactedData, ...restMetadata } = msg.metadata ?? {};
+      return {
+        ...msg,
+        metadata:
+          signature === undefined && redactedData === undefined
+            ? msg.metadata
+            : restMetadata,
+        content: msg.content.filter((b) => b.type !== 'reasoning'),
+      };
+    };
 
     return messages.map((msg) => {
       if (msg.role !== 'assistant') return msg;

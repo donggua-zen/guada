@@ -59,6 +59,22 @@ export const useTabStore = defineStore('tab', () => {
         selectTab(id)
     }
 
+    /**
+     * 打开子代理会话标签（同一子代理复用同一标签，已存在则直接激活）。
+     * 子代理与主会话同屏并存：中央面板恒显主会话，子代理在侧边栏标签内查看。
+     */
+    function openSubAgentTab(subSessionId: string, name: string): void {
+        const id = `subagent:${subSessionId}`
+        const existing = tabs.value.find(t => t.key === id)
+        if (existing) {
+            // 同一子代理名称可能变化（重命名），同步元数据
+            existing.name = name
+        } else {
+            tabs.value.push({ type: 'subagent', key: id, name })
+        }
+        selectTab(id)
+    }
+
     // ── 标签选中（幂等，不加载内容） ──
 
     function selectTab(key: string | null): void {
@@ -211,6 +227,7 @@ export const useTabStore = defineStore('tab', () => {
         openNewTab,
         openTerminalTab,
         openProcessLogTab,
+        openSubAgentTab,
         selectTab,
         addTab,
         removeTab,

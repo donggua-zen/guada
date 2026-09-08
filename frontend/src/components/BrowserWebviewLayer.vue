@@ -20,6 +20,7 @@ import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance }
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
+import { loadDefaultViewport } from '@/utils/browserViewport'
 import { getAutoShowSidebar } from '@/utils/workspacePreview'
 import { t } from '@/locales'
 
@@ -107,30 +108,37 @@ function syncNavState(el: HTMLElement): void {
   }
 }
 
-/** 非活跃 webview 的默认后台渲染尺寸，确保 agent 创建的窗口即使未被用户打开也能正常渲染 */
-const DEFAULT_BG_WIDTH = 1280
-const DEFAULT_BG_HEIGHT = 720
-
 /**
  * 计算 webview wrapper 的样式
- * 活跃 webview：跟随预览占位区域位置，visibility: visible
- * 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度），使用默认分辨率确保后台渲染
- * 拖拽中：pointer-events: none（防止 webview 截获鼠标事件导致拖拽中断）
+ *
+ * 所有 webview 恒定使用固定渲染视口（按网页覆盖，否则全局默认，见
+ * store.getViewportSize），前台/后台/截图三态的 webview 布局盒尺寸完全一致：
+ * - 活跃 webview：按预览占位区域等比缩放显示（留白居中），transform 是
+ *   合成器层面的显示变换，不改变 webview 布局盒——页面 innerWidth/innerHeight、
+ *   截图尺寸、CDP 坐标均不随面板拖拽/可见性跳变
+ * - 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度）
+ * - 拖拽中：pointer-events: none（防止 webview 截获鼠标事件导致拖拽中断）
  */
 function getWebviewStyle(windowId: string): Record<string, string> {
   const isActive = windowId === store.activeWindowId
   const rect: PreviewRect | null = store.previewRect
   const isRenderable = store.renderableOverrides.has(windowId)
+  const { width: vw, height: vh } = store.getViewportSize(windowId)
 
-  // 活跃且可见的 webview：正常显示（截图也走这个路径，已可见无需离屏）
+  // 活跃且可见的 webview：固定视口 + 等比缩放留白居中（截图也走这个路径，已可见无需离屏）
   if (isActive && rect) {
+    const scale = Math.min(rect.width / vw, rect.height / vh)
+    const offsetX = (rect.width - vw * scale) / 2
+    const offsetY = (rect.height - vh * scale) / 2
     return {
       visibility: 'visible',
       zIndex: '40',
-      left: `${rect.x}px`,
-      top: `${rect.y}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
+      left: `${rect.x + offsetX}px`,
+      top: `${rect.y + offsetY}px`,
+      width: `${vw}px`,
+      height: `${vh}px`,
+      transform: `scale(${scale})`,
+      transformOrigin: '0 0',
       pointerEvents: store.isDragging ? 'none' : 'auto',
     }
   }
@@ -143,8 +151,8 @@ function getWebviewStyle(windowId: string): Record<string, string> {
       zIndex: '-1',
       left: '0px',
       top: '0px',
-      width: `${DEFAULT_BG_WIDTH}px`,
-      height: `${DEFAULT_BG_HEIGHT}px`,
+      width: `${vw}px`,
+      height: `${vh}px`,
       opacity: '0',
       pointerEvents: 'none',
     }
@@ -156,8 +164,8 @@ function getWebviewStyle(windowId: string): Record<string, string> {
     zIndex: '-1',
     left: '0px',
     top: '0px',
-    width: `${DEFAULT_BG_WIDTH}px`,
-    height: `${DEFAULT_BG_HEIGHT}px`,
+    width: `${vw}px`,
+    height: `${vh}px`,
     pointerEvents: 'none',
   }
 }
@@ -309,6 +317,9 @@ function handleSetRenderable(_event: any, data: { windowId: string; renderable: 
 }
 
 onMounted(() => {
+  // 加载默认渲染视口设置（后端为 source of truth，失败保持内置默认值）
+  void loadDefaultViewport()
+
   const api = window.electronAPI
   if (!api) return
 

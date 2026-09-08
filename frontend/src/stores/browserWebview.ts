@@ -27,6 +27,14 @@ export interface PreviewRect {
 }
 
 /**
+ * 渲染视口尺寸
+ */
+export interface ViewportSize {
+  width: number
+  height: number
+}
+
+/**
  * 浏览器 Webview 全局状态 Store
  *
  * 管理 webview 元素生命周期、活跃窗口、预览坐标。
@@ -52,6 +60,22 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   /** 截图等操作临时需要渲染的 webview（visibility:visible 但离屏定位），不改变 activeWindowId */
   const renderableOverrides = ref<Set<string>>(new Set())
 
+  /**
+   * 全局默认渲染视口（默认 1280×720，来源：设置中心，utils/browserViewport.ts）。
+   * 所有 webview 恒定使用固定视口渲染，保证 window.innerWidth/innerHeight
+   * 与截图输出不随预览面板尺寸、可见性跳变；前台显示由 BrowserWebviewLayer
+   * 做合成器层面的等比缩放。
+   */
+  const viewportWidth = ref(1280)
+  const viewportHeight = ref(720)
+
+  /**
+   * 按网页（windowId）单独覆盖的渲染视口（预览工具栏入口，DevTools 风格）。
+   * 仅内存保存、按网页隔离：关闭标签即失效，不持久化；
+   * 未覆盖的网页跟随全局默认（viewportWidth/Height）。
+   */
+  const viewportOverrides = ref<Map<string, ViewportSize>>(new Map())
+
   /** 活跃 webview 的导航状态（由 BrowserWebviewLayer 从 webview 事件同步） */
   const canGoBack = ref(false)
   const canGoForward = ref(false)
@@ -71,6 +95,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
 
   function removeWebview(windowId: string): void {
     webviews.value.delete(windowId)
+    // 清理该网页的视口覆盖（仅内存数据，随标签关闭失效）
+    if (viewportOverrides.value.has(windowId)) {
+      const next = new Map(viewportOverrides.value)
+      next.delete(windowId)
+      viewportOverrides.value = next
+    }
     // 不自动清除 activeWindowId —— 由调用方通过 setActive 控制切换，
     // 避免关闭标签时中间态 null → preview-close → 再 setActive → preview-open 造成闪烁
     if (activeWindowId.value === windowId) {
@@ -128,6 +158,33 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     renderableOverrides.value = new Set(renderableOverrides.value)
   }
 
+  /** 设置渲染视口尺寸（所有 webview 立即按新尺寸重排，来源见 utils/browserViewport.ts） */
+  function setViewportSize(width: number, height: number): void {
+    viewportWidth.value = width
+    viewportHeight.value = height
+  }
+
+  /** 获取某网页的生效渲染视口：优先按网页覆盖，否则用全局默认 */
+  function getViewportSize(windowId: string): ViewportSize {
+    const override = viewportOverrides.value.get(windowId)
+    if (override) return { ...override }
+    return { width: viewportWidth.value, height: viewportHeight.value }
+  }
+
+  /**
+   * 设置某网页的渲染视口覆盖（预览工具栏入口，仅当前网页生效、不持久化）。
+   * 与全局默认一致时不落覆盖项，保持"跟随默认"语义（默认值后续变更时自动跟随）。
+   */
+  function setWebviewViewport(windowId: string, width: number, height: number): void {
+    const next = new Map(viewportOverrides.value)
+    if (width === viewportWidth.value && height === viewportHeight.value) {
+      next.delete(windowId)
+    } else {
+      next.set(windowId, { width, height })
+    }
+    viewportOverrides.value = next
+  }
+
   function setActiveWebviewEl(el: HTMLElement | null): void {
     activeWebviewEl.value = el
   }
@@ -154,6 +211,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     activeWebviewEl.value = null
     renderableOverrides.value.clear()
     renderableOverrides.value = new Set()
+    viewportOverrides.value = new Map()
   }
 
   // ── Getters ──
@@ -195,6 +253,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     currentSessionId,
     isDragging,
     renderableOverrides,
+    viewportWidth,
+    viewportHeight,
+    viewportOverrides,
     canGoBack,
     canGoForward,
     isLoading,
@@ -214,6 +275,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     setCurrentSession,
     setDragging,
     setRenderableOverride,
+    setViewportSize,
+    getViewportSize,
+    setWebviewViewport,
     setActiveWebviewEl,
     setNavState,
     toggleMuted,

@@ -295,3 +295,69 @@ describe("StreamProjector 折叠器", () => {
   });
 
 });
+
+// ── 思考态跨块复位（OpenAI 系 adapter block_end 延迟防御） ──
+// OpenAI 兼容流（DeepSeek/Gemini 等）的 block_end[reasoning] 可能延迟到流收尾；
+// text/tool 通道首见即代表思考已让位，投影器需跨块复位 reasoning 块的 isThinking，
+// 保证 UI 在正文输出开始时立即切换为"已深度思考"。
+describe("思考态跨块复位", () => {
+  let store: ReturnType<typeof createStore>;
+  beforeEach(() => { store = createStore(); });
+
+  function seedLiveTurn(tid: string) {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: tid, modelName: "m1" } as any,
+    ]);
+  }
+
+  function applyThinkStart(mid: string, tid: string) {
+    applyLiveChunk(store as any, "s1", { type: "block_start", messageId: mid, turnId: tid, index: 0, blockType: "reasoning" } as any);
+    applyLiveChunk(store as any, "s1", { type: "reasoning_delta", messageId: mid, turnId: tid, index: 0, text: "思考中" } as any);
+  }
+
+  function thinkBlockOf(mid: string): any {
+    return bundleOf(store.state.turns[0], mid).blocks[0];
+  }
+
+  it("block_start[text] 到达时复位 reasoning 块的 isThinking", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(true);
+
+    applyLiveChunk(store as any, "s1", { type: "block_start", messageId: "T1_a", turnId: "T1", index: 1, blockType: "text" } as any);
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(false);
+  });
+
+  it("text_delta 到达时复位 reasoning 块的 isThinking", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+
+    applyLiveChunk(store as any, "s1", { type: "text_delta", messageId: "T1_a", turnId: "T1", index: 1, text: "正文" } as any);
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(false);
+  });
+
+  it("tool_call_delta 到达时复位 reasoning 块的 isThinking", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+
+    applyLiveChunk(store as any, "s1", {
+      type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 1,
+      toolCallId: "call_1", name: "run_command", argumentsDelta: "{}",
+    } as any);
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(false);
+  });
+
+  it("block_end[reasoning] 权威路径不受影响：复位 + timing 派生时长", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+
+    applyLiveChunk(store as any, "s1", {
+      type: "block_end", messageId: "T1_a", turnId: "T1", index: 0,
+      block: { type: "reasoning", contentId: "r1", summary: "思考中", timing: { startedAt: 1000, finishedAt: 3500 } },
+    } as any);
+    const b = thinkBlockOf("T1_a");
+    expect(b.state.isThinking).toBe(false);
+    expect(b.reasoningContent).toBe("思考中");
+    expect(b.thinkingDurationMs).toBe(2500);
+  });
+});

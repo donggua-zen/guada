@@ -39,6 +39,13 @@
                     <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
                         <el-icon :size="13"><Pulse20Regular /></el-icon>
                     </span>
+                    <!-- 子代理会话图标（运行中带状态点） -->
+                    <template v-else-if="tab.type === 'subagent'">
+                        <span class="tab-favicon tab-git">
+                            <el-icon :size="13"><Bot20Regular /></el-icon>
+                        </span>
+                        <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
+                    </template>
                     <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
@@ -92,6 +99,10 @@
                 <ProcessLogPanel v-if="activeTab?.type === 'processlog' && sessionId && activeTab.processId"
                     :session-id="sessionId" :process-id="activeTab.processId"
                     :command="activeTab.command || activeTab.processId" :tab-key="activeTab.key" />
+                <!-- 子代理会话标签（只读查看，与中央主会话同屏并存） -->
+                <SubagentChatTab v-if="activeTab?.type === 'subagent'" class="h-full"
+                    :sub-session-id="subSessionIdOf(activeTab.key)"
+                    :session="resolveSubSession(subSessionIdOf(activeTab.key))" />
                 <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
                 <BrowserPreviewPlaceholder v-if="isElectron"
                     v-show="activeTab?.type === 'browser' && !!browserStore.activeWindowId" />
@@ -168,13 +179,13 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
-import SessionAgentList from './SessionAgentList.vue';
+import SubagentChatTab from './SubagentChatTab.vue';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
 import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
@@ -184,6 +195,7 @@ import ProcessLogPanel from './ProcessLogPanel.vue';
 import NewTabPage from './NewTabPage.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import { useLayoutStore } from '@/stores/layout';
+import { useSessionStore } from '@/stores/session';
 import { useTabStore } from '@/stores/tab';
 import { usePreviewTabCache, type UnifiedTab } from '@/composables/usePreviewTabCache';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
@@ -191,6 +203,8 @@ import WindowControls from '@/components/WindowControls.vue';
 
 const props = defineProps<{
     sessionId: string | null;
+    /** 子代理会话元数据（ChatPage 维护；侧边栏 subagent 标签解析名称与状态用） */
+    subSessions?: import('@/types/session').Session[];
 }>();
 
 const { t } = useI18n();
@@ -221,13 +235,31 @@ const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
 // 当前激活标签（内容区按类型渲染 + 目录树显隐）
 const activeTab = computed(() => tabStore.tabs.find(t => t.key === tabStore.activeTabKey) || null);
 
-// 标签标题（file→文件名 / browser→网页标题 / git→Git审阅 / processlog→进程日志）
+// 标签标题（file→文件名 / browser→网页标题 / git→Git审阅 / processlog→进程日志 / subagent→子代理名）
 function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'file') return tab.name || tab.path || tab.key;
     if (tab.type === 'git') return t('chat.workspace.gitTab');
     if (tab.type === 'terminal') return t('chat.workspace.terminal');
     if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
+    if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
     return tab.title || t('chat.workspace.unnamedWindow');
+}
+
+// ── 子代理标签（与主会话同屏并存：中央恒显主会话，子代理在侧边栏查看） ──
+
+/** 从标签 key（`subagent:<id>`）提取子代理会话 ID */
+function subSessionIdOf(key: string): string {
+    return key.slice('subagent:'.length);
+}
+
+/** 解析子代理会话元数据（ChatPage 的 subSessions；历史回放场景可能暂缺） */
+function resolveSubSession(id: string): import('@/types/session').Session | null {
+    return props.subSessions?.find(s => s.id === id) || null;
+}
+
+/** 子代理是否正在流式运行（驱动标签条状态点；渲染路径必须用纯读，getSessionState 会写缓存 → 递归更新） */
+function isSubAgentRunning(tabKey: string): boolean {
+    return sessionStore.peekStreamStatus(subSessionIdOf(tabKey)) === 'running';
 }
 
 // 正在加载子节点的目录路径集合
@@ -295,6 +327,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI !== undef
 const browserStore = useBrowserWebviewStore();
 const layoutStore = useLayoutStore();
 const tabStore = useTabStore();
+const sessionStore = useSessionStore();
 const previewTabCache = usePreviewTabCache();
 
 // ── 原生 HTML5 拖拽排序 ──
@@ -1534,6 +1567,21 @@ onUnmounted(() => {
     min-width: 0;
     /* 撑满剩余空间，让关闭按钮始终右对齐 */
     flex: 1 1 auto;
+}
+
+/* 子代理标签运行状态点（流式进行中显示，绿色呼吸） */
+.tab-run-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--gd-color-success, #22c55e);
+    animation: tab-run-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tab-run-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
 }
 
 .browser-tab.active .tab-title {

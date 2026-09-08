@@ -3,7 +3,10 @@
  *
  * Provider quirks（本协议私有的兼容细节，新增兼容时在此登记）：
  * 1. thinking 块回传必须携带 signature（metadata.signature），无签名不回传；
- *    redacted_thinking（metadata.redactedData）原样回传。
+ *    redacted_thinking（metadata.redactedData）原样回传。二者均以 L1 管线
+ *    reasoning 策略保留该消息思考为前提——被剥离的消息其 metadata 中的
+ *    signature/redactedData 已由管线清理（message-transform.pipeline.ts stripReasoning），
+ *    本文件不做二次判断（reasoning 块是否存在即管线决策的结果）。
  * 2. 连续多条 tool 结果消息必须合并为单条 user 消息内的多个 tool_result block；
  *    assistant 的 tool_use 缺失对应 tool_result 时需注入空结果（patchMissingToolResults），
  *    否则 API 报 400。
@@ -487,6 +490,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
       }
 
       // 处理 assistant 消息：text + thinking（有签名时）+ tool_use
+      // thinking/redacted_thinking 能否回传由 L1 reasoning 管线决定：
+      // 被剥离的消息此处理应已无 reasoning 块、metadata 中也无 signature/redactedData
       if (msg.role === "assistant") {
         const blocks: any[] = [];
 

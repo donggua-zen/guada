@@ -130,7 +130,6 @@
                       <MessageThinkingSection v-if="item.type === 'think'"
                         :reasoning-content="item.reasoningContent || ''"
                         :is-thinking="item.source.state?.isThinking || false"
-                        :is-streaming="item.source.state?.isStreaming || false"
                         :thinking-duration-ms="item.source.thinkingDurationMs"
                         :thinking-started-at="item.source.thinkingStartedAt"
                         :auto-expand="isGroupContentVisible(groupIndex, group) && isSingleStepGroup(group)" />
@@ -258,7 +257,7 @@ import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { apiService } from '@/services/ApiService';
-import { isHiddenBlock, stripSystemReminder } from '@/utils/messageUtils';
+import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
 
 const { toast } = usePopup();
 const { t } = useI18n();
@@ -443,17 +442,15 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
   const toolItems = items.filter(i => i.type === 'tool');
   const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
 
-  // 纯思考（无工具）
+  // 纯思考（无工具）：摘要为思考内容最后一行，思考中实时跟随、结束后保留
   if (allToolCalls.length === 0) {
     const thinkItem = items.find(i => i.type === 'think');
     const isThinking = thinkItem?.source.state?.isThinking;
-    if (isThinking) {
-      const lines = (thinkItem?.reasoningContent || '').split('\n').map(l => l.trim()).filter(Boolean);
-      const lastLine = lines[lines.length - 1] || '';
-      const preview = lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
-      return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingActive'), args: preview };
-    }
-    return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingDone'), args: '' };
+    return {
+      icon: BrainCircuit20Regular,
+      action: isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone'),
+      args: getThinkingPreview(thinkItem?.reasoningContent),
+    };
   }
 
   // 判断是否所有工具同类型

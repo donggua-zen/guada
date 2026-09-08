@@ -62,6 +62,57 @@
         <span v-if="store.isLoading" class="loading-spinner"></span>
       </div>
 
+      <!-- 渲染视口选择（仅当前网页，DevTools 风格） -->
+      <div class="viewport-control">
+        <button
+          ref="viewportBtnRef"
+          class="viewport-btn"
+          :title="t('chat.workspace.viewportSize')"
+          @click="viewportMenuVisible = !viewportMenuVisible"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="18" x2="12" y2="21"/>
+          </svg>
+          <span class="viewport-label">{{ viewportLabel }}</span>
+        </button>
+        <GdPopover v-model:show="viewportMenuVisible" :anchor-el="viewportBtnRef" :width="210">
+          <div class="viewport-menu">
+            <button
+              v-for="p in VIEWPORT_PRESETS"
+              :key="`${p.width}x${p.height}`"
+              class="viewport-option"
+              :class="{ active: isViewportActive(p) }"
+              @click="applyViewport(p.width, p.height, true)"
+            >
+              <span>{{ p.width }} × {{ p.height }}</span>
+              <svg v-if="isViewportActive(p)" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <div class="viewport-custom">
+              <span class="viewport-custom-label">{{ t('chat.workspace.viewportCustom') }}</span>
+              <div class="viewport-custom-inputs">
+                <el-input-number
+                  v-model="customWidth"
+                  :min="VIEWPORT_MIN.width" :max="VIEWPORT_MAX.width" :step="10"
+                  :controls="false" size="small" style="width: 60px"
+                  @change="applyCustomViewport"
+                />
+                <span>×</span>
+                <el-input-number
+                  v-model="customHeight"
+                  :min="VIEWPORT_MIN.height" :max="VIEWPORT_MAX.height" :step="10"
+                  :controls="false" size="small" style="width: 60px"
+                  @change="applyCustomViewport"
+                />
+              </div>
+            </div>
+          </div>
+        </GdPopover>
+      </div>
+
       <!-- 静音切换按钮 -->
       <button class="nav-btn" :title="store.isMuted ? t('chat.workspace.unmute') : t('chat.workspace.mute')" @click="store.toggleMuted()">
         <!-- 静音状态：喇叭带斜线 -->
@@ -84,9 +135,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
+import {
+  VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX, isValidViewportSize,
+} from '@/utils/browserViewport'
 
 const { t } = useI18n()
 const store = useBrowserWebviewStore()
@@ -95,6 +149,50 @@ const placeholderRef = ref<HTMLElement>()
 const addressBarRef = ref<HTMLInputElement>()
 const addressInput = ref('')
 const addressFocused = ref(false)
+
+// ── 渲染视口选择（仅当前网页生效，内存保存不持久化） ──
+const viewportMenuVisible = ref(false)
+const viewportBtnRef = ref<HTMLElement>()
+const customWidth = ref(1280)
+const customHeight = ref(720)
+
+/** 当前网页的生效渲染视口（按钮上的尺寸标签） */
+const viewportLabel = computed(() => {
+  const windowId = store.activeWindowId
+  if (!windowId) return ''
+  const { width, height } = store.getViewportSize(windowId)
+  return `${width} × ${height}`
+})
+
+// 打开菜单时把输入框同步为当前生效值
+watch(viewportMenuVisible, (visible) => {
+  if (!visible || !store.activeWindowId) return
+  const { width, height } = store.getViewportSize(store.activeWindowId)
+  customWidth.value = width
+  customHeight.value = height
+})
+
+function isViewportActive(preset: { width: number; height: number }): boolean {
+  const windowId = store.activeWindowId
+  if (!windowId) return false
+  const current = store.getViewportSize(windowId)
+  return current.width === preset.width && current.height === preset.height
+}
+
+/** 应用视口到当前网页（覆盖仅对 windowId 生效，不影响其他网页） */
+function applyViewport(width: number, height: number, closeMenu: boolean): void {
+  const windowId = store.activeWindowId
+  if (!windowId || !isValidViewportSize(width, height)) return
+  store.setWebviewViewport(windowId, width, height)
+  if (closeMenu) viewportMenuVisible.value = false
+}
+
+function applyCustomViewport(): void {
+  const w = Math.round(Number(customWidth.value) || 0)
+  const h = Math.round(Number(customHeight.value) || 0)
+  if (!isValidViewportSize(w, h)) return
+  applyViewport(w, h, false)
+}
 
 let resizeObserver: ResizeObserver | null = null
 let rafId: number | null = null
@@ -347,6 +445,94 @@ onUnmounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── 渲染视口选择器 ── */
+.viewport-control {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.viewport-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--gd-color-border, #c0d0d0);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--gd-color-text-secondary, #555);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.viewport-btn:hover {
+  border-color: var(--gd-color-primary, #4a90d9);
+  color: var(--gd-color-primary, #4a90d9);
+}
+
+.viewport-label {
+  font-variant-numeric: tabular-nums;
+}
+
+/* GdPopover 内容（teleport 到 body，但 slot 编译于本组件作用域，scoped 样式生效） */
+.viewport-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewport-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewport-option:hover {
+  background: var(--gd-color-hover-bg, #e0e0e0);
+}
+
+.viewport-option.active {
+  color: var(--gd-color-primary, #4a90d9);
+  font-weight: 600;
+}
+
+.viewport-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 7px 10px 4px;
+  border-top: 1px solid var(--gd-color-border, #d0d0d0);
+}
+
+.viewport-custom-label {
+  font-size: 12px;
+  color: var(--gd-color-text-secondary, #555);
+  white-space: nowrap;
+}
+
+.viewport-custom-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--gd-color-text-secondary, #555);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 占位主体 */

@@ -417,13 +417,21 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
+    // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
+    // Prisma 自关联未配置 onDelete，若只删主会话，子会话会被 ON DELETE SET NULL 孤儿化
+    const children = await this.sessionRepo.findByParentId(sessionId);
+    await this.sessionRepo.deleteByParentId(sessionId);
+
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
 
-    // 同步删除 JSONL 事件存储目录，避免遗留孤儿目录（此前只删 DB，目录会永久泄漏）。
+    // 同步删除 JSONL 事件存储目录（含子会话），避免遗留孤儿目录（此前只删 DB，目录会永久泄漏）。
     // 失败不影响会话删除本身：DB 行已删，目录可稍后手工清理。
     try {
       await this.contextManager.clearSessionTurns(sessionId);
+      for (const child of children) {
+        await this.contextManager.clearSessionTurns(child.id);
+      }
     } catch (err: any) {
       this.logger.error(
         `Failed to delete session storage for ${sessionId}: ${err?.message ?? err}`,

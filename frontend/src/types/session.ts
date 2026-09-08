@@ -137,6 +137,11 @@ export interface Session {
     isStreaming?: boolean     // 是否正在流式响应（后端注入）
     // ==================================
 
+    // === 子代理冻结标记（仅子会话使用；非空 = 已结束仅供回放） ===
+    closedAt?: string | null  // 冻结时间（ISO 字符串）
+    closeReason?: string | null  // 结束原因：completed / error / closed
+    // ==================================
+
     // === 子会话列表（后端注入） ===
     subSessions?: Session[]
     // ==================================
