@@ -73,7 +73,10 @@
 
       <!-- ── 待办事项：无待办不显示，平铺展示全部条目 ── -->
       <section v-if="todoItems.length" class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.todoList') }}</div>
+        <div class="overview-section-title">
+          <span>{{ t('chat.workspace.todoList') }}</span>
+          <span v-if="todoDoneCount" class="overview-section-count">{{ todoDoneCount }}/{{ todoItems.length }}</span>
+        </div>
         <div class="overview-todo-list">
           <div v-for="(item, i) in todoItems" :key="i" class="overview-todo-item" :class="{ done: item.status === 'completed' }">
             <span class="overview-todo-dot">
@@ -88,7 +91,10 @@
 
       <!-- ── 后台进程：运行中的后台命令；点击行打开日志标签，行尾关闭按钮终止进程 ── -->
       <section v-if="processes.length" class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.processes') }}</div>
+        <div class="overview-section-title">
+          <span>{{ t('chat.workspace.processes') }}</span>
+          <span class="overview-section-count">{{ processes.length }}</span>
+        </div>
         <div class="overview-process-list">
           <div v-for="p in processes" :key="p.id" class="overview-process-item" :title="p.command"
             @click="openProcessLog(p)">
@@ -99,6 +105,36 @@
               @click.stop="killProcess(p)">
               <el-icon :size="10"><Close /></el-icon>
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 工作流运行：引擎内存快照 + workflow_event SSE 实时推进（进度不落 JSONL）。
+           紧凑树形列表（对齐 DSH 任务管理风格）：run 行 = 状态点 + 名称 + 进度/耗时；
+           成员行 = 状态点 + 标签，次行摘要 · 状态；点击成员跳转子会话 ── -->
+      <section v-if="workflowRuns.length" class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.workflowRuns') }}</div>
+        <div class="overview-workflow-list">
+          <div v-for="run in sortedWorkflowRuns" :key="run.runId" class="wf-run">
+            <div class="wf-run-row" :title="run.name || run.runId">
+              <span class="wf-dot" :class="`wf-dot--${run.status}`">
+                <span v-if="run.status === 'running'" class="wf-dot-pulse"></span>
+              </span>
+              <span class="wf-run-name">{{ run.name || run.runId }}</span>
+              <span class="wf-run-meta">{{ runMetaText(run) }}</span>
+            </div>
+            <div v-if="run.agents.length" class="wf-agents">
+              <div v-for="agent in run.agents" :key="agent.callId" class="wf-agent"
+                :class="{ 'wf-agent--clickable': !!agent.subSessionId }"
+                :title="agent.label"
+                @click="agent.subSessionId && openSubAgent(agent.subSessionId)">
+                <div class="wf-agent-row">
+                  <span class="wf-dot wf-dot--sm" :class="`wf-dot--${agent.status}`"></span>
+                  <span class="wf-agent-label">{{ agent.label }}</span>
+                </div>
+                <div class="wf-agent-sub">{{ agentSubText(agent) }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -123,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { ArrowDown, Check, Close } from "@element-plus/icons-vue";
@@ -139,6 +175,9 @@ import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { apiService, type UiProcessInfo } from "@/services/ApiService";
+import { applyWorkflowEvent, sortWorkflowRuns } from "@/services/modules/workflowRuns";
+import { streamEventHub, type HubStreamEvent } from "@/services/modules/StreamEventHub";
+import type { WorkflowRunState, WorkflowAgentState, WorkflowMemberStatus } from "@/types/stream/workflow.types";
 
 const { t } = useI18n();
 const props = defineProps<{ sessionId: string | null }>();
@@ -155,6 +194,8 @@ interface TodoItem {
   status: string;
 }
 const todoItems = ref<TodoItem[]>([]);
+/** 已完成待办数量（用于分组标题的绿色计数徽标，对齐参考图 “进程 4/4”） */
+const todoDoneCount = computed(() => todoItems.value.filter((it) => it.status === "completed").length);
 
 async function loadTodo(): Promise<void> {
   if (!props.sessionId) {
@@ -176,6 +217,7 @@ const processes = ref<UiProcessInfo[]>([]);
 /** 时长显示的秒级心跳（仅驱动 elapsedText 重算） */
 const nowTick = ref(Date.now());
 let unsubscribeProcessChanged: (() => void) | null = null;
+let unsubscribeWorkflowStream: (() => void) | null = null;
 let unsubscribeTodoUpdated: (() => void) | null = null;
 let elapsedTimer: number | null = null;
 
@@ -238,6 +280,68 @@ function openProcessLog(p: UiProcessInfo): void {
 /** 当前会话的浏览器窗口列表（browserStore 已按会话过滤） */
 const browserWindows = computed(() => browserStore.sessionWebviews);
 
+// ── 工作流运行（方案 B：进度不落 JSONL；REST 快照为基线，workflow_event SSE 为增量，
+//    两源喂 workflowRuns.ts 的同一 reducer，按 run 内 seq 幂等收敛） ──
+const workflowRuns = ref<WorkflowRunState[]>([]);
+/** 运行中在前，完成后按结束时间倒序 */
+const sortedWorkflowRuns = computed(() => sortWorkflowRuns(workflowRuns.value));
+
+async function loadWorkflowRuns(): Promise<void> {
+  if (!props.sessionId) {
+    workflowRuns.value = [];
+    return;
+  }
+  try {
+    const res = await apiService.getWorkflowRuns(props.sessionId);
+    workflowRuns.value = res.runs || [];
+  } catch {
+    // 端点不可用（旧后端/无运行记录）→ 静默置空
+    workflowRuns.value = [];
+  }
+}
+
+function handleStreamChunk(chunk: HubStreamEvent): void {
+  if (chunk.type !== "workflow_event") return;
+  const sid = (chunk as any).sessionId;
+  if (!props.sessionId || sid !== props.sessionId) return;
+  // 原位应用（响应式 mutation 驱动 computed 重排）
+  applyWorkflowEvent(workflowRuns.value, (chunk as any).event);
+}
+
+/** 成员行点击 → 跳转子代理会话（复用 ChatPage provide；运行中/已知 subSessionId 才可点） */
+const openSubAgent = inject<(subSessionId: string) => void>(
+  "workflow:openSubAgentSession",
+  () => {},
+);
+
+function statusText(status: WorkflowMemberStatus): string {
+  const map: Record<WorkflowMemberStatus, string> = {
+    running: t("chat.workspace.wfRunning"),
+    completed: t("chat.workspace.wfCompleted"),
+    failed: t("chat.workspace.wfFailed"),
+    cancelled: t("chat.workspace.wfCancelled"),
+  };
+  return map[status] ?? status;
+}
+
+/** run 行右侧：运行中显示成员进度 x/y，结束后显示耗时 */
+function runMetaText(run: WorkflowRunState): string {
+  if (run.status === "running") {
+    if (run.agents.length === 0) return t("chat.workspace.wfStarting");
+    const active = run.agents.filter((a) => a.status === "running").length;
+    return `${run.agents.length - active}/${run.agents.length}`;
+  }
+  if (run.durationMs !== undefined) return formatDuration(run.durationMs);
+  return statusText(run.status);
+}
+
+/** 成员次行：摘要（截断）· 状态 */
+function agentSubText(agent: WorkflowAgentState): string {
+  const summary = (agent.outputSummary || "").replace(/\s+/g, " ").trim();
+  const truncated = summary.length > 40 ? summary.slice(0, 40) + "…" : summary;
+  return truncated ? `${truncated} · ${statusText(agent.status)}` : statusText(agent.status);
+}
+
 // 浏览器 store → tabStore 同步已迁移至 BrowserWebviewLayer（MainLayout 常驻层）：
 // 概览面板是条件渲染（asideWidth>0 才挂载），概览折叠/宽度不足时此处 watch 失效，
 // 会导致浏览器标签不出现；BrowserWebviewLayer 常驻，同步不会断。
@@ -250,6 +354,7 @@ watch(
     git.bindSession(id);
     void loadTodo();
     void loadProcesses();
+    void loadWorkflowRuns();
   },
   { immediate: true },
 );
@@ -261,6 +366,7 @@ onMounted(() => {
   unsubscribeProcessChanged = apiService.onSessionEvent("process_changed", (event) => {
     if (event.sessionId === props.sessionId) loadProcesses();
   });
+  unsubscribeWorkflowStream = streamEventHub.subscribeAll(handleStreamChunk);
   elapsedTimer = window.setInterval(() => { nowTick.value = Date.now(); }, 1000);
 });
 onUnmounted(() => {
@@ -268,6 +374,8 @@ onUnmounted(() => {
   unsubscribeTodoUpdated = null;
   unsubscribeProcessChanged?.();
   unsubscribeProcessChanged = null;
+  unsubscribeWorkflowStream?.();
+  unsubscribeWorkflowStream = null;
   if (elapsedTimer !== null) {
     clearInterval(elapsedTimer);
     elapsedTimer = null;
@@ -320,8 +428,8 @@ async function createBrowser(): Promise<void> {
   min-width: 0;
   background: var(--gd-color-dialog-bg, var(--gd-color-surface));
   border: 1px solid var(--gd-color-surface-border);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 
@@ -377,7 +485,7 @@ async function createBrowser(): Promise<void> {
   flex-direction: column;
 }
 
-/* ── 分组：标题 + 下属行，组间留白分隔（首组无额外间距） ── */
+/* ── 分组：标题 + 下属行；分组间以细分割线分隔（首组紧随头部分割线，无额外线） ── */
 .overview-section {
   display: flex;
   flex-direction: column;
@@ -385,14 +493,34 @@ async function createBrowser(): Promise<void> {
   padding-top: 10px;
 }
 .overview-section + .overview-section {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding-top: 14px;
+  position: relative;
+}
+.overview-section + .overview-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--gd-color-surface-border);
 }
 .overview-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 0 8px 5px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--gd-color-text);
+  font-weight: 400;
+  color: var(--gd-color-text-disabled);
   line-height: 1.2;
+}
+.overview-section-count {
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gd-color-success);
 }
 
 /* 单行（简约风格：icon + 标签 + 右侧值/chevron） */
@@ -607,6 +735,119 @@ async function createBrowser(): Promise<void> {
 .overview-process-kill:hover {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
+}
+
+/* 工作流运行：紧凑树形列表（run 行 + 缩进成员行，对齐 DSH 任务管理风格） */
+.overview-workflow-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 4px;
+}
+.wf-run + .wf-run {
+  margin-top: 6px;
+}
+.wf-run-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  min-width: 0;
+}
+.wf-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--gd-color-text-disabled);
+  position: relative;
+}
+.wf-dot--sm {
+  width: 6px;
+  height: 6px;
+}
+.wf-dot--running {
+  background: var(--gd-color-success, #22c55e);
+}
+.wf-dot--running .wf-dot-pulse {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gd-color-success, #22c55e);
+  opacity: 0;
+  animation: wf-pulse 1.6s ease-out infinite;
+}
+.wf-dot--completed {
+  background: var(--gd-color-text-disabled);
+}
+.wf-dot--failed {
+  background: #ef4444;
+}
+.wf-dot--cancelled {
+  background: var(--gd-color-text-disabled);
+}
+@keyframes wf-pulse {
+  0% { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.wf-run-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gd-color-text);
+}
+.wf-run-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: 11px;
+  color: var(--gd-color-text-disabled);
+}
+.wf-agents {
+  margin: 2px 0 0 7px;
+  padding-left: 10px;
+  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wf-agent {
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.wf-agent--clickable {
+  cursor: pointer;
+}
+.wf-agent--clickable:hover {
+  background: var(--gd-color-sidebar-bg-hover);
+}
+.wf-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.wf-agent-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--gd-color-text);
+}
+.wf-agent-sub {
+  margin: 1px 0 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--gd-color-text-gray);
 }
 
 /* 浏览器列表（平铺展开） */

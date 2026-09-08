@@ -51,11 +51,7 @@
       </template>
     </div>
 
-    <!-- Workflow 编排进度（run → phase → member 三层卡片） -->
-    <WorkflowRunCard v-else-if="eventType === 'workflow' && event?.metadata?.workflow"
-      class="w-full" :state="event.metadata.workflow" />
-
-    <!-- 其他事件类消息：通用兜底 -->
+    <!-- 其他事件类消息：通用兜底（workflow 进度已迁移至概览面板，历史事件不再渲染卡片） -->
     <div v-else class="text-xs text-gray-400 dark:text-gray-500">
       {{ commandName || '事件' }}
     </div>
@@ -67,7 +63,6 @@ import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { Loading } from "@element-plus/icons-vue";
 import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
-import WorkflowRunCard from "./WorkflowRunCard.vue";
 
 const props = defineProps<{
   /** 事件源：kind='event' 外壳 turn，或 turn 内 role='event' 消息（两者均从 .metadata 读取事件字段） */

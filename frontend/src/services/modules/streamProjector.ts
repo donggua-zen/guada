@@ -25,10 +25,6 @@ import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
 import type { Turn, TurnContent, MessageBundle } from "@/types/message";
-import type {
-  WorkflowEventData,
-  WorkflowRunState,
-} from "@/types/stream/workflow.types";
 
 /**
  * 投影器处理的事件类型 = live 块级事件 ∪ 领域事件（事件页）。
@@ -409,8 +405,7 @@ function applyDomainEvent(
       return;
     }
     case "workflow/event":
-      // Workflow 编排进度（载荷 = WorkflowEventData 原样；与 live 同一 reducer 收敛）
-      applyWorkflowEvent(sessionStore, sessionId, data as WorkflowEventData);
+      // Workflow 编排进度已迁移至概览面板（方案 B，不落 JSONL）——回放流中忽略历史事件
       return;
     default:
       // command/*、message/prune、message/meta、approval/*、compaction/start|end、session/*、envelope → 暂不处理
@@ -500,178 +495,6 @@ function upsertCompressingPlaceholder(sessionStore: any, sessionId: string): voi
   }
 }
 
-// ==================== Workflow 编排进度（live + 回放同一 reducer） ====================
-
-/** 单 run 保留的最大 log 条数（防失控脚本刷屏） */
-const WORKFLOW_LOG_CAP = 50;
-
-/** 跨回合定位 workflow run 卡片束（role='event' + metadata.eventType='workflow'） */
-function findWorkflowRunBundle(turns: any[], runId: string): any {
-  for (const t of turns) {
-    if (!Array.isArray(t.messages)) continue;
-    for (const m of t.messages) {
-      if (
-        m.role === "event" &&
-        m.metadata?.eventType === "workflow" &&
-        m.metadata?.workflow?.runId === runId
-      ) {
-        return m;
-      }
-    }
-  }
-  return undefined;
-}
-
-/**
- * 创建 workflow run 事件束：与压缩占位同构（role='event' + 单 event 块），
- * 落位：有宿主回合（in-turn，workflow 总在工具调用内执行）→ 宿主回合末尾；
- * 防御兜底（无宿主回合）→ 独立 kind:'event' 回合。
- */
-function createWorkflowRunBundle(
-  sessionStore: any,
-  sessionId: string,
-  turns: any[],
-  runId: string,
-): any {
-  const now = new Date().toISOString();
-  const messageId = `__workflow_${runId}`;
-  const state: WorkflowRunState = {
-    runId,
-    name: "",
-    status: "running",
-    agents: [],
-    logs: [],
-    startedAt: Date.now(),
-    lastSeq: 0,
-  };
-  const bundle: MessageBundle = {
-    messageId,
-    role: "event",
-    metadata: { eventType: "workflow", workflow: state },
-    blocks: [
-      {
-        id: messageId,
-        role: "event",
-        messageId,
-        content: "",
-        reasoningContent: null,
-        additionalKwargs: [],
-        metadata: { eventType: "workflow" },
-        createdAt: now,
-        updatedAt: now,
-        thinkingStartedAt: null,
-        thinkingDurationMs: null,
-        state: { isStreaming: false, isThinking: false },
-      },
-    ],
-  };
-  const hostTurn = getCurrentTurn(sessionId)
-    ? turns.find((t: any) => t.id === getCurrentTurn(sessionId))
-    : undefined;
-  if (hostTurn) {
-    if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
-    hostTurn.messages.push(bundle);
-  } else {
-    turns.push({
-      id: messageId,
-      kind: "event",
-      metadata: { eventType: "workflow" },
-      visible: true,
-      messages: [bundle],
-    });
-  }
-  return bundle;
-}
-
-/**
- * 应用一条 workflow 进度事件到 run 卡片状态（live workflow_event 与回放
- * workflow/event 双通道唯一入口；seq 幂等去重保证双源收敛同一状态）。
- */
-function applyWorkflowEvent(
-  sessionStore: any,
-  sessionId: string,
-  data: WorkflowEventData,
-): void {
-  if (!data || typeof data.runId !== "string" || typeof data.seq !== "number") return;
-  const turns = sessionStore.getTurns(sessionId) || [];
-
-  let bundle = findWorkflowRunBundle(turns, data.runId);
-  if (!bundle) {
-    bundle = createWorkflowRunBundle(sessionStore, sessionId, turns, data.runId);
-  }
-  const state = bundle.metadata.workflow as WorkflowRunState;
-  // 幂等：run 内 seq 单调，重放/实时双源按 seq 去重
-  if (data.seq <= state.lastSeq) return;
-  state.lastSeq = data.seq;
-
-  switch (data.kind) {
-    case "run-start": {
-      const p = data.payload as Extract<WorkflowEventData["payload"], { name: string }>;
-      state.name = p.name;
-      if (p.description) state.description = p.description;
-      if (p.phases) state.phases = p.phases;
-      state.status = "running";
-      state.startedAt = data.time;
-      break;
-    }
-    case "run-phase":
-      // 阶段纯展示：成员按自身 phase 字段分组，无需存储
-      break;
-    case "run-log": {
-      const p = data.payload as Extract<WorkflowEventData["payload"], { message: string }>;
-      state.logs.push(p.message);
-      if (state.logs.length > WORKFLOW_LOG_CAP) state.logs.shift();
-      break;
-    }
-    case "agent-start": {
-      const p = data.payload as Extract<WorkflowEventData["payload"], { callId: string }>;
-      const existing = state.agents.find((a) => a.callId === p.callId);
-      if (existing) {
-        existing.status = "running";
-        if (p.subSessionId) existing.subSessionId = p.subSessionId;
-      } else {
-        state.agents.push({
-          callId: p.callId,
-          label: p.label,
-          phase: p.phase ?? null,
-          ...(p.subSessionId ? { subSessionId: p.subSessionId } : {}),
-          status: "running",
-        });
-      }
-      break;
-    }
-    case "agent-end": {
-      const p = data.payload as Extract<WorkflowEventData["payload"], { callId: string }>;
-      let agent = state.agents.find((a) => a.callId === p.callId);
-      // 防御：end 先于 start 到达（spawn 失败路径）→ 就地建条目
-      if (!agent) {
-        agent = {
-          callId: p.callId,
-          label: p.label,
-          phase: p.phase ?? null,
-          status: p.status ?? "failed",
-        };
-        state.agents.push(agent);
-      }
-      if (p.status) agent.status = p.status;
-      if (p.subSessionId) agent.subSessionId = p.subSessionId;
-      if (p.outputSummary) agent.outputSummary = p.outputSummary;
-      break;
-    }
-    case "run-end": {
-      const p = data.payload as Extract<
-        WorkflowEventData["payload"],
-        { runStatus: WorkflowRunState["status"] }
-      >;
-      state.status = p.runStatus;
-      state.endedAt = data.time;
-      if (p.errorCode) state.errorCode = p.errorCode;
-      if (p.errorMessage) state.errorMessage = p.errorMessage;
-      if (p.durationMs != null) state.durationMs = p.durationMs;
-      break;
-    }
-  }
-}
 
 /** 按事件类型定位更新 store(无闭包,直接改响应式 store) */
 export function applyChunkToStore(
@@ -799,11 +622,7 @@ export function applyChunkToStore(
     sessionStore.setSessionIsCompressing(sessionId, false);
   }
 
-  // Workflow 编排进度（引擎级直发；runId+seq 幂等）
-  if (chunk.type === "workflow_event") {
-    applyWorkflowEvent(sessionStore, sessionId, (chunk as any).event);
-    return;
-  }
+  // workflow_event 流块已迁移至概览面板消费（方案 B）——投影器不再处理
 
   // 回合级
   if (chunk.type === "turn_start") {

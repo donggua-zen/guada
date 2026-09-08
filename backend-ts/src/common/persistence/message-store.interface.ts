@@ -218,17 +218,6 @@ export interface IMessageStore {
     data: import('./types').AskAnsweredData,
   ): Promise<void>;
 
-  // ─── Workflow 编排进度（workflow/event 领域事件溯源；前端回放重建进度卡片）───
-  /**
-   * 追加一条 workflow 编排进度事件（载荷 = WorkflowEventData 原样，含 runId + run 内 seq）。
-   * 仅作前端回放/审计源：replayer 对未知类型默认忽略，绝不进入 LLM 上下文视图。
-   * @returns 写入后版本号
-   */
-  appendWorkflowEvent(
-    sessionId: string,
-    data: import('../../modules/workflow/workflow.types').WorkflowEventData,
-  ): Promise<number>;
-
   // ─── 会话生命周期 / 内部维护 ───
   /** 懒创建语义：会话不存在则创建存储（新会话/断点恢复前调用） */
   ensureSession(sessionId: string, meta?: Partial<SessionMeta>): Promise<void>;

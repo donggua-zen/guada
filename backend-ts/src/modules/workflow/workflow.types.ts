@@ -4,11 +4,11 @@
  * 对齐 DSH（deepseek-harness）workflow seam：
  * - WorkflowMeta 是纯 JSON 数据（绝不求值），随 workflow_run 工具调用传入
  * - 脚本是模型现场生成的 JS 函数体（顶层 await + return <JSON>），由引擎在
- *   worker thread + vm 沙箱中执行，经 agent()/parallel()/pipeline()/phase()/log()
+ *   worker thread + vm 沙箱中执行，经 agent()/parallel()/phase()/log()
  *   钩子编排子代理（对齐 DSH dynamic workflows）
- * - WorkflowEventData 是进度事件的统一载荷：同时作为流事件（workflow_event，实时 SSE）
- *   与领域事件（workflow/event，JSONL 持久化 + 前端回放重建）的 body，
- *   双通道喂前端同一个 reducer（对齐压缩事件的 live + replay 双形态先例）
+ * - WorkflowEventData 是进度事件的统一载荷：经 workflow_event SSE 实时广播，
+ *   引擎同步折叠进内存快照（WorkflowRunSnapshot）——进度不落 JSONL，
+ *   前端概览面板以 REST 快照为基线、SSE 为增量（方案 B）
  */
 
 // ─── Workflow 元信息（纯 JSON，永不求值）───
@@ -151,4 +151,39 @@ export interface WorkflowRunResult {
 export interface WorkflowEngineOptions {
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
+}
+
+/** 快照成员行（WorkflowRun 内存折叠态） */
+export interface WorkflowAgentSnapshot {
+  callId: string;
+  label: string;
+  phase: string | null;
+  /** 子代理会话 id（概览面板点击跳转子会话） */
+  subSessionId?: string;
+  status: WorkflowMemberStatus;
+  outputSummary?: string;
+}
+
+/**
+ * 运行状态快照（引擎内存折叠，不落 JSONL）。
+ * 与前端 frontend/src/types/stream/workflow.types.ts 的 WorkflowRunState 逐字段同构：
+ * REST 快照（GET sessions/:id/workflow/runs）直接返回本形态，live 增量由
+ * workflow_event SSE 喂同一 reducer 收敛。
+ */
+export interface WorkflowRunSnapshot {
+  runId: string;
+  name: string;
+  description?: string;
+  phases?: WorkflowPhaseMeta[];
+  status: WorkflowRunStatus;
+  /** 按启动顺序排列的成员 */
+  agents: WorkflowAgentSnapshot[];
+  logs: string[];
+  startedAt: number;
+  endedAt?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  durationMs?: number;
+  /** 已应用的最高事件 seq（幂等去重） */
+  lastSeq: number;
 }

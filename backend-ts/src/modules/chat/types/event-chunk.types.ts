@@ -174,9 +174,9 @@ import type {
 
 /**
  * Workflow 编排进度事件（引擎级直发：workflow_run 工具执行期间的实时进度）。
- * event 载荷 = WorkflowEventData（runId + run 内 seq 为前端确定性重放的排序/去重键）。
- * 与领域事件 workflow/event（JSONL 持久化，刷新回放重建）双通道喂前端同一 reducer——
- * 与压缩事件（compaction_summary 流内 + compaction/* 领域）完全同构的双形态。
+ * event 载荷 = WorkflowEventData（runId + run 内 seq 为前端幂等去重的排序键）。
+ * 进度不落 JSONL：前端概览面板以 REST 快照（sessions/:id/workflow/runs）为基线、
+ * 本流事件为实时增量，喂同一 reducer 收敛。
  */
 export interface WorkflowEvent {
   type: "workflow_event";

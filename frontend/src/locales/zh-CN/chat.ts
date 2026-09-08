@@ -207,26 +207,6 @@ export default {
     collapseOutput: '收起输出',
   },
 
-  // ── WorkflowRunCard.vue 工作流编排卡片 ──
-  workflow: {
-    defaultName: '工作流',
-    memberCount: '{count} 个成员',
-    viewSession: '查看会话',
-    collapseLogs: '收起日志',
-    viewLogs: '查看日志（{count} 条）',
-    status: {
-      running: '运行中',
-      completed: '已完成',
-      failed: '失败',
-      cancelled: '已取消',
-    },
-    count: {
-      running: '{count} 运行中',
-      completed: '{count} 完成',
-      failed: '{count} 失败',
-      cancelled: '{count} 取消',
-    },
-  },
 
   // ── 消息操作 ──
   messageActions: {
@@ -340,6 +320,12 @@ export default {
     unsaved: '未保存',
     terminal: '终端',
     sectionGit: 'Git 工具',
+    workflowRuns: '工作流',
+    wfRunning: '运行中',
+    wfCompleted: '已完成',
+    wfFailed: '失败',
+    wfCancelled: '已取消',
+    wfStarting: '启动中',
     processes: '后台进程',
     processLogTab: '进程日志',
     processRunning: '运行中',
