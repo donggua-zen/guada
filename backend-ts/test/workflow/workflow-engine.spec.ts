@@ -12,7 +12,11 @@
  * - RESULT_UNSERIALIZABLE（return 函数等不可序列化值）
  * - 事件双发：JSONL appendWorkflowEvent（run 内 seq 严格递增）+ publishStream
  */
+import * as os from "os";
+import * as path from "path";
+import * as fs from "fs/promises";
 import { WorkflowEngineService } from "../../src/modules/workflow/workflow-engine.service";
+import { WorkflowFileStore } from "../../src/modules/workflow/workflow-file-store.service";
 import { WorkflowError } from "../../src/modules/workflow/workflow.types";
 import type { WorkflowEventData } from "../../src/modules/workflow/workflow.types";
 import type { ISessionContext } from "../../src/modules/chat/session-context";
@@ -69,14 +73,27 @@ function createEngine(opts?: {
       if (chunk?.type === "workflow_event") broadcasted.push(chunk.event);
     }),
   });
-  const engine = new WorkflowEngineService(subAgentManager as any);
-  return { engine, subAgentManager, ctx, broadcasted };
+  // 真实文件 store（SESSION_DATA_DIR 指向 tmp，settle 落盘走真实路径）
+  const fileStore = new WorkflowFileStore();
+  const engine = new WorkflowEngineService(subAgentManager as any, fileStore);
+  return { engine, subAgentManager, ctx, broadcasted, fileStore };
 }
 
 /** 从广播流提取 run 内 seq 序列 */
 function seqList(broadcasted: WorkflowEventData[]): number[] {
   return broadcasted.map((e) => e.seq);
 }
+
+// ── 落盘环境：SESSION_DATA_DIR 指向 tmp（resolveSessionsBasePath 按调用读 env）──
+
+const TMP_DATA_DIR = path.join(os.tmpdir(), `wf-engine-spec-${Date.now()}`);
+beforeAll(() => {
+  process.env.SESSION_DATA_DIR = TMP_DATA_DIR;
+});
+afterAll(async () => {
+  delete process.env.SESSION_DATA_DIR;
+  await fs.rm(TMP_DATA_DIR, { recursive: true, force: true }).catch(() => {});
+});
 
 // ── 同步校验错误 ──
 
@@ -298,6 +315,33 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 });
 
+// ── 终态归档（sessions/<sid>/workflows/<runId>.json）──
+
+describe("WorkflowEngineService 终态归档", () => {
+  it("settle 后快照落盘：status/result/endedAt 可回读（历史审阅数据源）", async () => {
+    const { engine, ctx, fileStore } = createEngine();
+    const result = await engine.startRun(ctx, {
+      meta: { name: "归档" },
+      script: "return { ok: 42 };",
+    });
+    expect(result.status).toBe("completed");
+    // 落盘是 fire-and-forget 且 fs 走线程池（mkdir+write+rename 多步）：轮询至出现
+    let mine: Awaited<ReturnType<WorkflowFileStore["listRunSnapshots"]>>[number] | undefined;
+    for (let i = 0; i < 100 && !mine; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      const snapshots = await fileStore.listRunSnapshots("s_parent");
+      mine = snapshots.find((s) => s.runId === result.runId);
+    }
+    expect(mine).toMatchObject({
+      runId: result.runId,
+      name: "归档",
+      status: "completed",
+      result: { ok: 42 },
+    });
+    expect(mine!.endedAt).toBeGreaterThan(0);
+  });
+});
+
 // ── 上限与安全 ──
 
 describe("WorkflowEngineService 上限与安全", () => {
@@ -418,7 +462,10 @@ describe("WorkflowEngineService 事件广播与快照", () => {
   });
 
   it("publishStream 失败不中断 run（仅告警）", async () => {
-    const engine = new WorkflowEngineService(createMockSubAgentManager() as any);
+    const engine = new WorkflowEngineService(
+      createMockSubAgentManager() as any,
+      new WorkflowFileStore(),
+    );
     const ctx = createMockSessionContext({
       publishStream: jest.fn().mockRejectedValue(new Error("sse down")),
     });
@@ -473,7 +520,10 @@ describe("WorkflowEngineService 事件广播与快照", () => {
 
 describe("WorkflowEngineService 快照注册表", () => {
   it("已完成 run 超上限按注册顺序淘汰，运行中永不淘汰", () => {
-    const engine = new WorkflowEngineService(createMockSubAgentManager() as any);
+    const engine = new WorkflowEngineService(
+      createMockSubAgentManager() as any,
+      new WorkflowFileStore(),
+    );
     const registry: Map<string, any> = (engine as any).runStatesBySession;
     const byRun = new Map<string, any>();
     registry.set("s_prune", byRun);

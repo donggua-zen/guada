@@ -11,13 +11,13 @@
     </div>
 
     <!-- 搜索结果 -->
-    <div ref="resultsScrollRef" class="max-h-80 overflow-y-auto py-1" @scroll="handleScroll">
-      <!-- 加载状态 -->
+    <div ref="resultsScrollRef" class="max-h-80 overflow-y-auto py-1">
+      <!-- 扫描中（尚无结果） -->
       <div v-if="isSearching && searchResults.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <el-icon class="animate-spin text-2xl mb-2">
           <Loading />
         </el-icon>
-        <span class="text-xs">{{ t('session.search.searching') }}</span>
+        <span class="text-xs">{{ scanningText }}</span>
       </div>
 
       <!-- 结果列表 -->
@@ -46,24 +46,21 @@
           </div>
         </div>
 
-        <!-- 加载更多 -->
-        <div v-if="isLoadingMore" class="flex items-center justify-center py-3 text-gray-400">
+        <!-- 扫描进度（已有部分结果，继续扫描中） -->
+        <div v-if="isSearching" class="flex items-center justify-center py-3 text-gray-400">
           <el-icon class="animate-spin text-sm mr-1"><Loading /></el-icon>
-          <span class="text-xs">{{ t('session.search.loadingMore') }}</span>
-        </div>
-        <div v-else-if="hasMore" class="flex items-center justify-center py-3 text-gray-400">
-          <button class="text-xs hover:text-(--gd-color-text) transition-colors" @click="loadMore">{{ t('session.search.loadMore') }}</button>
+          <span class="text-xs">{{ scanningText }}</span>
         </div>
       </template>
 
       <!-- 空状态 -->
-      <div v-else-if="hasSearched" class="flex flex-col items-center justify-center py-10 text-gray-400">
+      <div v-else-if="hasSearched && !isSearching" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <Search16Regular class="w-8 h-8 mb-2 opacity-40" />
         <span class="text-xs">{{ t('session.search.noResults') }}</span>
       </div>
 
       <!-- 初始状态 -->
-      <div v-else class="flex flex-col items-center justify-center py-10 text-gray-400">
+      <div v-else-if="!isSearching" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <Search16Regular class="w-8 h-8 mb-2 opacity-30" />
         <span class="text-xs">{{ t('session.search.initial') }}</span>
       </div>
@@ -91,20 +88,27 @@ const { t } = useI18n()
 const router = useRouter()
 const sessionGroupStore = useSessionGroupStore()
 
+/** 渐进扫描轮次间隔（ms）：让出渲染，逐批出结果 */
+const SCAN_LOOP_INTERVAL_MS = 50
+
 const dialogVisible = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val),
 })
 
 const inputRef = ref<HTMLInputElement | null>(null)
-const resultsScrollRef = ref<HTMLElement | null>(null)
 const keyword = ref('')
 const isSearching = ref(false)
 const hasSearched = ref(false)
 const searchResults = ref<SearchSessionResult[]>([])
 const nextCursor = ref<string | null>(null)
 const hasMore = ref(false)
-const isLoadingMore = ref(false)
+const progress = ref<{ scanned: number; total: number } | null>(null)
+/**
+ * 搜索代次：每次新搜索/清空/关闭弹窗自增，
+ * 在途扫描循环据此作废（快速连续输入时旧结果不追加、旧循环终止）
+ */
+let searchGen = 0
 
 /** 搜索结果按分组归类，仅展示有结果的分组 */
 const groupedResults = computed(() => {
@@ -129,30 +133,67 @@ const groupedResults = computed(() => {
   return result
 })
 
+const scanningText = computed(() => {
+  const p = progress.value
+  if (p && p.total > 0) return t('session.search.scanning', { scanned: p.scanned, total: p.total })
+  return t('session.search.searching')
+})
+
+const resetResults = () => {
+  searchResults.value = []
+  hasSearched.value = false
+  nextCursor.value = null
+  hasMore.value = false
+  progress.value = null
+}
+
+const appendResults = (items: SearchSessionResult[]) => {
+  if (!items?.length) return
+  const seen = new Set(searchResults.value.map(s => s.id))
+  for (const item of items) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id)
+      searchResults.value.push(item)
+    }
+  }
+}
+
 const doSearch = async () => {
   const trimmed = keyword.value.trim()
+  const gen = ++searchGen
+  resetResults()
   if (!trimmed) {
-    searchResults.value = []
-    hasSearched.value = false
-    nextCursor.value = null
-    hasMore.value = false
+    isSearching.value = false
     return
   }
 
   isSearching.value = true
-  hasSearched.value = false
   try {
+    // 首批：标题命中先行 + 扫描清单规模（progress.total）
     const data = await apiService.searchSessions(trimmed)
-    searchResults.value = data.items || []
+    if (gen !== searchGen) return
+    appendResults(data.items || [])
     nextCursor.value = data.nextCursor
     hasMore.value = data.hasMore
+    if (data.progress) progress.value = data.progress
     hasSearched.value = true
+
+    // 渐进扫描：自动连续拉批直到扫完 / 关键词变化 / 弹窗关闭（VSCode 式逐会话出结果）
+    while (hasMore.value && nextCursor.value && gen === searchGen && dialogVisible.value) {
+      await new Promise(resolve => setTimeout(resolve, SCAN_LOOP_INTERVAL_MS))
+      if (gen !== searchGen || !dialogVisible.value) return
+      const batch = await apiService.searchSessions(trimmed, nextCursor.value)
+      if (gen !== searchGen) return
+      appendResults(batch.items || [])
+      nextCursor.value = batch.nextCursor
+      hasMore.value = batch.hasMore
+      if (batch.progress) progress.value = batch.progress
+    }
   } catch (error) {
     console.error('搜索会话失败:', error)
-    searchResults.value = []
     hasSearched.value = true
   } finally {
-    isSearching.value = false
+    if (gen === searchGen) isSearching.value = false
   }
 }
 
@@ -162,37 +203,11 @@ watch(keyword, () => {
   if (keyword.value.trim()) {
     debouncedSearch()
   } else {
-    searchResults.value = []
-    hasSearched.value = false
-    nextCursor.value = null
-    hasMore.value = false
+    searchGen++
+    resetResults()
+    isSearching.value = false
   }
 })
-
-const loadMore = async () => {
-  if (!hasMore.value || !nextCursor.value || isLoadingMore.value) return
-
-  isLoadingMore.value = true
-  try {
-    const data = await apiService.searchSessions(keyword.value.trim(), nextCursor.value)
-    searchResults.value = [...searchResults.value, ...(data.items || [])]
-    nextCursor.value = data.nextCursor
-    hasMore.value = data.hasMore
-  } catch (error) {
-    console.error('加载更多失败:', error)
-  } finally {
-    isLoadingMore.value = false
-  }
-}
-
-/** 滚动到底部自动加载 */
-const handleScroll = () => {
-  const el = resultsScrollRef.value
-  if (!el || !hasMore.value || isLoadingMore.value) return
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 30) {
-    loadMore()
-  }
-}
 
 const handleSelectSession = (session: SearchSessionResult) => {
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
@@ -207,11 +222,10 @@ const handleOpen = () => {
 
 watch(dialogVisible, (visible) => {
   if (!visible) {
+    searchGen++
     keyword.value = ''
-    searchResults.value = []
-    hasSearched.value = false
-    nextCursor.value = null
-    hasMore.value = false
+    resetResults()
+    isSearching.value = false
   }
 })
 
@@ -231,7 +245,7 @@ function highlightText(text: string, query: string): string {
   }
 }
 
-/** 格式化 snippet — 将 FTS5 的 【】 标记转为高亮 */
+/** 格式化 snippet — 将后端搜索的 【】 标记转为高亮 */
 function formatSnippet(snippet: string): string {
   if (!snippet) return ''
   const escaped = snippet

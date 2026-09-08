@@ -27,13 +27,19 @@
         </span>
         <span class="start-item-label">{{ t('chat.workspace.gitTab') }}</span>
       </button>
+      <button class="start-item" @click="emit('open-workflow')">
+        <span class="start-item-icon">
+          <el-icon :size="20"><Flowchart20Regular /></el-icon>
+        </span>
+        <span class="start-item-label">{{ t('chat.workspace.workflowTab') }}</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular } from "@vicons/fluent";
+import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Flowchart20Regular } from "@vicons/fluent";
 
 const { t } = useI18n();
 
@@ -42,6 +48,7 @@ const emit = defineEmits<{
   "open-terminal": [];
   "open-browser": [];
   "open-git": [];
+  "open-workflow": [];
 }>();
 </script>
 

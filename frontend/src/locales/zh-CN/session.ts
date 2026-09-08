@@ -74,12 +74,11 @@ export default {
   search: {
     placeholder: '搜索会话标题或内容...',
     searching: '搜索中...',
+    scanning: '正在扫描 {scanned}/{total} 条会话',
     searchFailed: '搜索会话失败',
     contentMatch: '内容',
     noResults: '未找到匹配的会话',
     initial: '输入关键词搜索会话',
-    loadMore: '加载更多',
-    loadingMore: '加载中...',
     ungrouped: '任务列表',
     timeNow: 'now',
     timeMin: '{n}min',

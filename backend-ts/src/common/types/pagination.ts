@@ -31,6 +31,8 @@ export interface CursorPaginatedResponse<T> {
   hasMore: boolean;
   /** 下一页游标（hasMore 为 false 时为 null） */
   nextCursor: string | null;
+  /** 扫描进度（仅会话搜索的渐进扫描使用；可选，向后兼容） */
+  progress?: { scanned: number; total: number };
 }
 
 /**

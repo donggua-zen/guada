@@ -26,6 +26,30 @@ interface ActiveSegment {
   bytes: number;
 }
 
+/**
+ * 会话数据根目录解析（sessions/ 目录的父级选择，供 JsonlBackend 与
+ * WorkflowFileStore 等会话伴生存储共用，保证归类在同一会话目录下）：
+ * 1. 显式 SESSION_DATA_DIR 环境变量
+ * 2. USERDATA_DIR（Electron 数据根目录，如 ~/.guada/）→ 存 <USERDATA_DIR>/sessions
+ * 3. 由 UPLOAD_ROOT_DIR 的父目录派生（Electron 为 <dataHome>/file_stores → <dataHome>）
+ * 4. 默认 ./data/sessions
+ */
+export function resolveSessionsBasePath(): string {
+  const explicit = process.env.SESSION_DATA_DIR;
+  const userData = process.env.USERDATA_DIR;
+  const uploadRoot = process.env.UPLOAD_ROOT_DIR;
+  if (explicit) {
+    return path.join(explicit, 'sessions');
+  }
+  if (userData) {
+    return path.join(userData, 'sessions');
+  }
+  if (uploadRoot) {
+    return path.join(path.dirname(uploadRoot), 'sessions');
+  }
+  return path.join(process.cwd(), 'data', 'sessions');
+}
+
 @Injectable()
 export class JsonlBackend implements PersistenceBackend {
   private readonly logger = new Logger(JsonlBackend.name);
@@ -35,23 +59,7 @@ export class JsonlBackend implements PersistenceBackend {
   private activeSegments = new Map<string, ActiveSegment>();
 
   constructor() {
-    // 会话数据根目录解析：
-    // 1. 显式 SESSION_DATA_DIR 环境变量
-    // 2. USERDATA_DIR（Electron 数据根目录，如 ~/.guada/）→ 存 <USERDATA_DIR>/sessions
-    // 3. 由 UPLOAD_ROOT_DIR 的父目录派生（Electron 为 <dataHome>/file_stores → <dataHome>）
-    // 4. 默认 ./data/sessions
-    const explicit = process.env.SESSION_DATA_DIR;
-    const userData = process.env.USERDATA_DIR;
-    const uploadRoot = process.env.UPLOAD_ROOT_DIR;
-    if (explicit) {
-      this.basePath = path.join(explicit, 'sessions');
-    } else if (userData) {
-      this.basePath = path.join(userData, 'sessions');
-    } else if (uploadRoot) {
-      this.basePath = path.join(path.dirname(uploadRoot), 'sessions');
-    } else {
-      this.basePath = path.join(process.cwd(), 'data', 'sessions');
-    }
+    this.basePath = resolveSessionsBasePath();
   }
 
   // ─── 路径工具 ───

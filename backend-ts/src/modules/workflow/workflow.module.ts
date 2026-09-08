@@ -5,6 +5,7 @@ import { ChatModule } from "../chat/chat.module";
 import { PluginManager } from "../plugins";
 import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import { WorkflowEngineService } from "./workflow-engine.service";
+import { WorkflowFileStore } from "./workflow-file-store.service";
 import { WorkflowController } from "./workflow.controller";
 import { WorkflowPlugin } from "./workflow.plugin";
 
@@ -18,7 +19,7 @@ import { WorkflowPlugin } from "./workflow.plugin";
 @Module({
   imports: [SubAgentModule, AuthModule, ChatModule],
   controllers: [WorkflowController],
-  providers: [WorkflowEngineService, WorkflowPlugin],
+  providers: [WorkflowEngineService, WorkflowFileStore, WorkflowPlugin],
   exports: [WorkflowEngineService],
 })
 export class WorkflowModule implements OnModuleInit {

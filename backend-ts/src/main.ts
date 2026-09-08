@@ -10,6 +10,34 @@ import * as express from "express";
 import * as path from "path";
 import * as fs from "fs";
 
+// 日志目录基于 __dirname 解析（backend-ts/logs），不依赖 cwd：全局异常处理器
+// 在 bootstrap 的 chdir 之前注册，必须现在就能拿到日志目录
+const logsDir = process.env.LOGS_DIR || path.join(__dirname, "..", "logs");
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+const logger = WinstonModule.createLogger(createWinstonConfig(logsDir));
+
+/**
+ * 进程级致命错误兜底。
+ * 不兜底的后果：进程级异常只打 stderr，而 ts-node-dev --respawn 不会重启已退出的
+ * 子进程（静默无输出），Electron 又只监控 npx 包装进程（不触发崩溃弹窗/backend-crash.log），
+ * 现场即丢失。这里落盘 winston error 日志后保持 Node 默认的退出语义。
+ */
+function logFatal(kind: string, err: unknown): void {
+  const error = err instanceof Error ? err : new Error(String(err));
+  console.error(`[FATAL] ${kind}: ${error.stack || error.message}`);
+  try {
+    logger.error(`进程级 ${kind}: ${error.message}`, { stack: error.stack });
+  } catch {
+    // 日志系统自身异常时以 stderr 为准
+  }
+  process.exit(1);
+}
+
+process.on("uncaughtException", (err) => logFatal("uncaughtException", err));
+process.on("unhandledRejection", (reason) => logFatal("unhandledRejection", reason));
+
 async function bootstrap() {
   // 修正工作目录到 backend-ts 根目录，确保 bundled-skills/、skills/ 等路径可预测
   const backendRoot = path.resolve(__dirname, '..');
@@ -18,18 +46,8 @@ async function bootstrap() {
     console.log(`工作目录已修正: ${backendRoot}`);
   }
 
-  // 确定日志目录（优先使用环境变量 LOGS_DIR）
-  const logsDir = process.env.LOGS_DIR || path.join(process.cwd(), 'logs');
-  
-  // 确保日志目录存在
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-  }
-
   // 创建应用实例并配置 Winston 日志
-  const app = await NestFactory.create(AppModule, {
-    logger: WinstonModule.createLogger(createWinstonConfig(logsDir)),
-  });
+  const app = await NestFactory.create(AppModule, { logger });
 
   // 设置全局 API 前缀
   app.setGlobalPrefix("api/v1");
@@ -148,4 +166,4 @@ async function bootstrap() {
     console.log("非 Electron 环境，跳过端口上报");
   }
 }
-bootstrap();
+bootstrap().catch((err) => logFatal("bootstrap", err));

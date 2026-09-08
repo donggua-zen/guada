@@ -46,6 +46,10 @@
                         </span>
                         <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
                     </template>
+                    <!-- 工作流审阅图标 -->
+                    <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
+                        <el-icon :size="13"><Flowchart20Regular /></el-icon>
+                    </span>
                     <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                     <span class="tab-close"
                         @click.stop="closeTab(tab)">
@@ -87,7 +91,7 @@
             <div class="flex-1 min-w-0 relative">
                 <!-- 起始页：无任何标签 或 点击 + 号时显示（不占用标签栏） -->
                 <WorkspaceStartPage v-if="showStartPage" @open-file="onNewTabOpenFile" @open-terminal="onNewTabOpenTerminal"
-                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" />
+                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-workflow="onNewTabOpenWorkflow" />
 
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
@@ -103,6 +107,9 @@
                 <SubagentChatTab v-if="activeTab?.type === 'subagent'" class="h-full"
                     :sub-session-id="subSessionIdOf(activeTab.key)"
                     :session="resolveSubSession(subSessionIdOf(activeTab.key))" />
+                <!-- 工作流审阅标签（终态归档 + 运行中快照合并，行展开看成员/日志/结果） -->
+                <WorkflowHistoryPanel v-if="activeTab?.type === 'workflow' && sessionId" class="h-full"
+                    :session-id="sessionId" />
                 <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
                 <BrowserPreviewPlaceholder v-if="isElectron"
                     v-show="activeTab?.type === 'browser' && !!browserStore.activeWindowId" />
@@ -179,13 +186,14 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SubagentChatTab from './SubagentChatTab.vue';
+import WorkflowHistoryPanel from './WorkflowHistoryPanel.vue';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
 import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
@@ -242,6 +250,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'terminal') return t('chat.workspace.terminal');
     if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
     if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
+    if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
     return tab.title || t('chat.workspace.unnamedWindow');
 }
 
@@ -414,6 +423,11 @@ function onNewTabOpenFile(): void {
 
 function onNewTabOpenGit(): void {
     tabStore.openGitTab();
+}
+
+function onNewTabOpenWorkflow(): void {
+    if (!props.sessionId) return;
+    tabStore.openWorkflowTab(props.sessionId);
 }
 
 function onNewTabOpenBrowser(): void {

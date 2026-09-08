@@ -74,12 +74,11 @@
   search: {
     placeholder: 'Search session titles or content...',
     searching: 'Searching...',
+    scanning: 'Scanning {scanned}/{total} sessions',
     searchFailed: 'Failed to search sessions',
     contentMatch: 'Content',
     noResults: 'No matching sessions found',
     initial: 'Enter keywords to search sessions',
-    loadMore: 'Load More',
-    loadingMore: 'Loading...',
     ungrouped: 'Task List',
     timeNow: 'now',
     timeMin: '{n}min',

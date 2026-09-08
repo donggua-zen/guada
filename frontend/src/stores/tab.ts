@@ -37,6 +37,25 @@ export const useTabStore = defineStore('tab', () => {
         selectTab('newtab')
     }
 
+    /**
+     * 打开工作目录浏览（概览面板"工作目录"入口）：
+     * 激活的已是文件标签 → 保持不动（目录树已可见）；
+     * 否则存在文件标签 → 选中标签栏最末一个；
+     * 一个都没有 → 新建空文件标签（path 为空，右侧目录树可选文件）。
+     */
+    function openWorkspaceBrowseTab(name: string): void {
+        const active = tabs.value.find(t => t.key === activeTabKey.value)
+        if (active?.type === 'file') return
+        const lastFile = tabs.value.filter(t => t.type === 'file').pop()
+        if (lastFile) {
+            selectTab(lastFile.key)
+            return
+        }
+        const key = `file:new-${Date.now()}`
+        addTab({ type: 'file', key, name, path: '' })
+        selectTab(key)
+    }
+
     /** 打开终端标签（UI 终端，每会话限 3，由后端校验配额） */
     function openTerminalTab(sessionId: string): void {
         const id = `terminal:${sessionId}:${Date.now().toString(36)}`
@@ -71,6 +90,18 @@ export const useTabStore = defineStore('tab', () => {
             existing.name = name
         } else {
             tabs.value.push({ type: 'subagent', key: id, name })
+        }
+        selectTab(id)
+    }
+
+    /**
+     * 打开工作流审阅标签（每会话唯一）：审阅该会话全部 workflow run
+     * （终态快照归档于 sessions/<sid>/workflows/，运行中 run 由引擎内存快照合并）。
+     */
+    function openWorkflowTab(sessionId: string): void {
+        const id = `workflow:${sessionId}`
+        if (!tabs.value.some(t => t.key === id)) {
+            tabs.value.push({ type: 'workflow', key: id })
         }
         selectTab(id)
     }
@@ -225,9 +256,11 @@ export const useTabStore = defineStore('tab', () => {
         activeTabKey,
         openGitTab,
         openNewTab,
+        openWorkspaceBrowseTab,
         openTerminalTab,
         openProcessLogTab,
         openSubAgentTab,
+        openWorkflowTab,
         selectTab,
         addTab,
         removeTab,

@@ -86,12 +86,15 @@ export interface IMessageStore {
   /**
    * 开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
    * @param options.replaceTurnId 整轮次重答:先遮蔽旧轮次,再开新回合
+   * @param options.modelName 回合模型名（随 turn/start 落库，使在途回合被历史页重建时
+   *   即携带模型名——否则流式中打开会话只能等 turn/finish 才能显示模型）
    */
   beginTurn(
     sessionId: string,
     options?: {
       replaceTurnId?: string;
       preGenTurnId?: string;
+      modelName?: string;
     },
   ): Promise<{ turnId: string; revision: number }>;
   /**

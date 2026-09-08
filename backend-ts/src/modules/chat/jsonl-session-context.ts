@@ -417,6 +417,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     const { turnId, revision } = await this.messageStore.beginTurn(this.sessionId, {
       replaceTurnId: options?.replaceTurnId,
       preGenTurnId: options?.preGenTurnId,
+      // 模型名随 turn/start 落库：与实时 turn_start 广播字段对齐，
+      // 保证流式中打开会话（历史页重建在途回合）也能立即显示模型
+      modelName: this.modelConfig?.modelName,
     });
     // 记录当前回合 id：reasoning 策略以 turnId 判定「最后一轮」（见 message-transform.pipeline.ts）
     this.currentTurnId = turnId;
