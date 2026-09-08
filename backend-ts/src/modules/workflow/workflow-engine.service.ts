@@ -5,10 +5,6 @@ import { Worker } from "worker_threads";
 import { ISessionContext } from "../chat/session-context";
 import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import type { SubAgentResult } from "../sub-agent/sub-agent.manager";
-import {
-  MESSAGE_STORE_TOKEN,
-  IMessageStore,
-} from "../../common/persistence/message-store.interface";
 import { safeTruncate } from "../../common/utils/string.utils";
 import {
   WorkflowError,
@@ -18,6 +14,7 @@ import {
   WorkflowMeta,
   WorkflowPhaseMeta,
   WorkflowRunResult,
+  WorkflowRunSnapshot,
   WorkflowEngineOptions,
 } from "./workflow.types";
 import {
@@ -39,6 +36,10 @@ const DEFAULT_MAX_TOTAL_AGENTS = 100;
 const CANCEL_GRACE_MS = 5000;
 /** 工具结果里 return 值的最大序列化长度 */
 export const WORKFLOW_RESULT_MAX_CHARS = 30000;
+/** 内存快照中单 run 保留的最大 log 条数（防失控脚本刷屏；与前端概览一致） */
+const WORKFLOW_LOG_CAP = 50;
+/** 每会话内存注册表保留的已完成 run 上限（超出按注册顺序淘汰） */
+const MAX_FINISHED_RUNS_PER_SESSION = 20;
 
 // ─── 校验 ───
 
@@ -109,14 +110,17 @@ interface LiveAgent {
 
 /**
  * 一次 workflow run 的宿主侧生命周期：
- * worker 管理、消息路由、并发槽 FIFO、事件双发（流 + JSONL）、取消收敛。
+ * worker 管理、消息路由、并发槽 FIFO、事件广播（SSE + 内存快照折叠）、取消收敛。
+ *
+ * 状态持久化策略（方案 B）：run 进度不落 JSONL——引擎维护内存折叠快照
+ * （snapshot()），REST 快照端点 + workflow_event SSE 实时增量喂前端概览面板；
+ * 对话流只保留原生 workflow_run 工具调用行。
  */
 class WorkflowRun {
   private readonly logger = new Logger("WorkflowRun");
   readonly runId: string;
   private readonly parentContext: ISessionContext;
   private readonly subAgentManager: SubAgentManager;
-  private readonly messageStore: IMessageStore;
   private readonly maxConcurrent: number;
   private readonly maxTotal: number;
 
@@ -142,32 +146,43 @@ class WorkflowRun {
   private doneResolve!: (r: WorkflowRunResult) => void;
   readonly done: Promise<WorkflowRunResult>;
 
-  /** JSONL 追加串行链（getNextSeq 读改写非原子，run 内严格串行防 seq 重复） */
-  private appendChain: Promise<void> = Promise.resolve();
+  /** 内存折叠快照（事件广播前同步更新，快照永不落后于已广播事件） */
+  private readonly snapshot: WorkflowRunSnapshot;
 
   constructor(params: {
     runId: string;
     parentContext: ISessionContext;
     subAgentManager: SubAgentManager;
-    messageStore: IMessageStore;
     options: WorkflowEngineOptions;
   }) {
     this.runId = params.runId;
     this.parentContext = params.parentContext;
     this.subAgentManager = params.subAgentManager;
-    this.messageStore = params.messageStore;
     this.maxConcurrent = Math.min(
       MAX_CONCURRENT_CLAMP,
       Math.max(1, params.options.maxConcurrentAgents ?? DEFAULT_MAX_CONCURRENT),
     );
     this.maxTotal = params.options.maxTotalAgents ?? DEFAULT_MAX_TOTAL_AGENTS;
+    this.snapshot = {
+      runId: params.runId,
+      name: "",
+      status: "running",
+      agents: [],
+      logs: [],
+      startedAt: this.startedAt,
+      lastSeq: 0,
+    };
     this.done = new Promise<WorkflowRunResult>((resolve) => {
       this.doneResolve = resolve;
     });
   }
 
-  // ── 事件双发（先入库后发事件的契约内串行；失败仅告警不打断 run）──
-  // appendChain 严格串行：getNextSeq 读改写非原子，并发 append 会写重复 seq 破坏 JSONL 连续性
+  /** 只读快照（引擎注册表直接引用此对象；字段更新是原地 mutation） */
+  getSnapshot(): WorkflowRunSnapshot {
+    return this.snapshot;
+  }
+
+  // ── 事件广播（SSE + 同步折叠进内存快照；广播失败仅告警不打断 run）──
 
   emit(kind: WorkflowEventKind, payload: WorkflowEventData["payload"]): void {
     const data: WorkflowEventData = {
@@ -177,26 +192,86 @@ class WorkflowRun {
       time: Date.now(),
       payload,
     };
-    this.appendChain = this.appendChain.then(() => this.deliverEvent(data));
+    this.applyToSnapshot(data);
+    // 广播走宿主流通道（SSE→前端概览实时增量）；失败仅告警
+    this.parentContext
+      .publishStream({ type: "workflow_event", event: data })
+      .catch((err) => {
+        this.logger.warn(
+          `workflow 事件广播失败 run=${data.runId} seq=${data.seq}: ${err instanceof Error ? err.message : err}`,
+        );
+      });
   }
 
-  private async deliverEvent(data: WorkflowEventData): Promise<void> {
-    try {
-      await this.messageStore.appendWorkflowEvent(
-        this.parentContext.sessionId,
-        data,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `workflow 事件落库失败 run=${data.runId} seq=${data.seq}: ${err instanceof Error ? err.message : err}`,
-      );
-    }
-    try {
-      await this.parentContext.publishStream({ type: "workflow_event", event: data });
-    } catch (err) {
-      this.logger.warn(
-        `workflow 事件广播失败 run=${data.runId} seq=${data.seq}: ${err instanceof Error ? err.message : err}`,
-      );
+  /** 单一 reducer：与前端概览面板 reducer 同构，按 kind 折叠进快照 */
+  private applyToSnapshot(data: WorkflowEventData): void {
+    const state = this.snapshot;
+    if (data.seq <= state.lastSeq) return;
+    state.lastSeq = data.seq;
+    switch (data.kind) {
+      case "run-start": {
+        const p = data.payload as Extract<WorkflowEventData["payload"], { name: string }>;
+        state.name = p.name;
+        if (p.description) state.description = p.description;
+        if (p.phases) state.phases = p.phases;
+        state.status = "running";
+        state.startedAt = data.time;
+        break;
+      }
+      case "run-phase":
+        break; // 阶段纯展示：成员按自身 phase 字段分组
+      case "run-log": {
+        const p = data.payload as Extract<WorkflowEventData["payload"], { message: string }>;
+        state.logs.push(p.message);
+        if (state.logs.length > WORKFLOW_LOG_CAP) state.logs.shift();
+        break;
+      }
+      case "agent-start": {
+        const p = data.payload as Extract<WorkflowEventData["payload"], { callId: string }>;
+        const existing = state.agents.find((a) => a.callId === p.callId);
+        if (existing) {
+          existing.status = "running";
+          if (p.subSessionId) existing.subSessionId = p.subSessionId;
+        } else {
+          state.agents.push({
+            callId: p.callId,
+            label: p.label,
+            phase: p.phase,
+            ...(p.subSessionId ? { subSessionId: p.subSessionId } : {}),
+            status: "running",
+          });
+        }
+        break;
+      }
+      case "agent-end": {
+        const p = data.payload as Extract<WorkflowEventData["payload"], { callId: string }>;
+        const agent = state.agents.find((a) => a.callId === p.callId);
+        if (!agent) {
+          // end 先于 start（防御）：建条目再落终态
+          state.agents.push({
+            callId: p.callId,
+            label: p.label,
+            phase: p.phase,
+            ...(p.subSessionId ? { subSessionId: p.subSessionId } : {}),
+            status: p.status ?? "completed",
+            ...(p.outputSummary ? { outputSummary: p.outputSummary } : {}),
+          });
+        } else {
+          agent.status = p.status ?? "completed";
+          if (p.outputSummary !== undefined) agent.outputSummary = p.outputSummary;
+          if (p.subSessionId && !agent.subSessionId) agent.subSessionId = p.subSessionId;
+        }
+        break;
+      }
+      case "run-end": {
+        const p = data.payload as Extract<WorkflowEventData["payload"], { runStatus: string }>;
+        state.status = p.runStatus as WorkflowRunSnapshot["status"];
+        if (p.errorCode) state.errorCode = p.errorCode;
+        if (p.errorMessage) state.errorMessage = p.errorMessage;
+        if (p.durationMs !== undefined) state.durationMs = p.durationMs;
+        state.endedAt = data.time;
+        break;
+      }
     }
   }
 
@@ -502,13 +577,7 @@ class WorkflowRun {
     // worker 已终态即回收（result/error/crash 后事件循环不再需要）
     this.worker?.terminate().catch(() => {});
     this.worker = null;
-    // 排空事件落库链后再 resolve done：run 尾部 workflow/event 必须先于父循环
-    // 恢复后的 tool/result / turn/finish 落盘。否则父循环读到未推进的 seq 游标，
-    // 与在途 workflow 事件分配出重复 seq，JSONL 连续性校验拒绝加载（会话永久损坏）。
-    // deliverEvent 内部已吞错（落库/广播失败仅告警），链不会 reject。
-    this.appendChain.then(() => {
-      this.doneResolve(result);
-    });
+    this.doneResolve(result);
   }
 
   get result(): WorkflowRunResult | null {
@@ -531,11 +600,35 @@ function toMemberStatus(result: SubAgentResult): WorkflowMemberStatus {
 export class WorkflowEngineService {
   private readonly logger = new Logger(WorkflowEngineService.name);
   private readonly runs = new Map<string, WorkflowRun>();
+  /** 每会话运行快照注册表（runId → 快照；运行中永不淘汰，完成态超上限按注册顺序裁剪） */
+  private readonly runStatesBySession = new Map<string, Map<string, WorkflowRunSnapshot>>();
 
-  constructor(
-    private readonly subAgentManager: SubAgentManager,
-    @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
-  ) {}
+  constructor(private readonly subAgentManager: SubAgentManager) {}
+
+  /** 概览面板数据源：某会话的全部已知 run 快照（运行中 + 近期完成） */
+  getSessionRunStates(sessionId: string): WorkflowRunSnapshot[] {
+    const byRun = this.runStatesBySession.get(sessionId);
+    return byRun ? [...byRun.values()] : [];
+  }
+
+  /** 注册运行快照并裁剪：每会话最多保留 MAX_FINISHED_RUNS_PER_SESSION 个已完成 run */
+  private registerRunState(sessionId: string, state: WorkflowRunSnapshot): void {
+    let byRun = this.runStatesBySession.get(sessionId);
+    if (!byRun) {
+      byRun = new Map();
+      this.runStatesBySession.set(sessionId, byRun);
+    }
+    byRun.set(state.runId, state);
+    const finished: string[] = [];
+    for (const [runId, st] of byRun) {
+      if (st.status !== "running") finished.push(runId);
+    }
+    while (finished.length > MAX_FINISHED_RUNS_PER_SESSION) {
+      const oldest = finished.shift();
+      if (oldest === undefined) break;
+      byRun.delete(oldest);
+    }
+  }
 
   /**
    * 启动一次前台 workflow run（阻塞到脚本完成）。
@@ -568,10 +661,10 @@ export class WorkflowEngineService {
       runId,
       parentContext,
       subAgentManager: this.subAgentManager,
-      messageStore: this.messageStore,
       options,
     });
     this.runs.set(runId, run);
+    this.registerRunState(parentContext.sessionId, run.getSnapshot());
 
     run.emit("run-start", {
       name: meta.name,

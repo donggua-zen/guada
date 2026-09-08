@@ -284,7 +284,7 @@ async function switchTab(tabId: string) {
 }
 
 /**
- * Workflow 卡片跳转子代理会话（provide 给 WorkflowRunCard）：
+ * 子代理会话跳转（概览面板工作流成员行消费）：
  * Tab 不存在时补建（历史回放/其他端创建的 workflow 子代理），再切换。
  */
 function openSubAgentSessionById(subSessionId: string) {

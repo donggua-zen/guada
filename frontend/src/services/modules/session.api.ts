@@ -273,6 +273,7 @@ export interface SessionApi {
   getSessionProcesses(sessionId: string): Promise<{ processes: UiProcessInfo[] }>;
   killSessionProcess(sessionId: string, processId: string): Promise<{ success: boolean; status: string }>;
   getSessionProcessLog(sessionId: string, processId: string, tailBytes?: number): Promise<UiProcessLog>;
+  getWorkflowRuns(sessionId: string): Promise<{ runs: import("@/types/stream/workflow.types").WorkflowRunState[] }>;
 }
 
 /** 后台进程条目（GET /sessions/:id/processes 返回） */
@@ -448,5 +449,9 @@ export const sessionApi: SessionApi = {
   async getSessionProcessLog(this: ApiContext, sessionId: string, processId: string, tailBytes?: number) {
     const query = tailBytes ? `?tail=${tailBytes}` : "";
     return await this._request(`/sessions/${sessionId}/processes/${processId}/log${query}`);
+  },
+
+  async getWorkflowRuns(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/workflow/runs`);
   },
 };

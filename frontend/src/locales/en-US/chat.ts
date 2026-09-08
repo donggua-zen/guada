@@ -207,26 +207,6 @@
     collapseOutput: 'Collapse output',
   },
 
-  // ── WorkflowRunCard.vue workflow orchestration card ──
-  workflow: {
-    defaultName: 'Workflow',
-    memberCount: '{count} members',
-    viewSession: 'View session',
-    collapseLogs: 'Collapse logs',
-    viewLogs: 'View logs ({count})',
-    status: {
-      running: 'Running',
-      completed: 'Completed',
-      failed: 'Failed',
-      cancelled: 'Cancelled',
-    },
-    count: {
-      running: '{count} running',
-      completed: '{count} done',
-      failed: '{count} failed',
-      cancelled: '{count} cancelled',
-    },
-  },
 
   // ── 消息操作 ──
   messageActions: {
@@ -340,6 +320,12 @@
     unsaved: 'Unsaved',
     terminal: 'Terminal',
     sectionGit: 'Git Tools',
+    workflowRuns: 'Workflows',
+    wfRunning: 'Running',
+    wfCompleted: 'Completed',
+    wfFailed: 'Failed',
+    wfCancelled: 'Cancelled',
+    wfStarting: 'Starting',
     processes: 'Background Processes',
     processLogTab: 'Process Log',
     processRunning: 'Running',

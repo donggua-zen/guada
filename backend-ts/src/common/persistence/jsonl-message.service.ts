@@ -1036,32 +1036,6 @@ export class JsonlMessageService implements IMessageStore {
     });
   }
 
-  /**
-   * 追加 workflow 编排进度事件（workflow/event，载荷原样落库）。
-   * 与父会话其他写入方共享同一把每会话写互斥——WorkflowRun 的 run 内串行链
-   * 只保证 workflow 事件彼此有序，跨写入方的 seq 原子性由此处的锁保证。
-   */
-  async appendWorkflowEvent(
-    sessionId: string,
-    data: import('../../modules/workflow/workflow.types').WorkflowEventData,
-  ): Promise<number> {
-    return this.runExclusive(sessionId, () => this.appendWorkflowEventInternal(sessionId, data));
-  }
-
-  private async appendWorkflowEventInternal(
-    sessionId: string,
-    data: import('../../modules/workflow/workflow.types').WorkflowEventData,
-  ): Promise<number> {
-    const seq = await this.getNextSeq(sessionId);
-    await this.append(sessionId, {
-      type: 'workflow/event',
-      seq,
-      time: Date.now(),
-      data: data as unknown as Record<string, unknown>,
-    });
-    return seq;
-  }
-
   /** 追加二级压缩（摘要）括号事件 + 分卷（遮蔽为头部连续前缀，按分界点消息 id + 条数记录）。
    *  @returns 摘要消息 id + 写入后版本号 + 折叠后的摘要节点（S1' 模式，供会话层快照播种） */
   async appendCompact(sessionId: string, data: {

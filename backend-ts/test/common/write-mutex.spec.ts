@@ -18,7 +18,6 @@ import * as fs from "fs";
 import { JsonlBackend } from "../../src/common/persistence/jsonl-backend";
 import { JsonlMessageService } from "../../src/common/persistence/jsonl-message.service";
 import { CorruptSessionLogError } from "../../src/common/persistence/errors";
-import type { WorkflowEventData } from "../../src/modules/workflow/workflow.types";
 import type { Message } from "../../src/common/types/conversation.types";
 
 let tmpDir: string;
@@ -64,17 +63,17 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
   const sid = "mutex-test";
   let backend: JsonlBackend;
   let store: JsonlMessageService;
-  let workflowSeq = 0;
+
 
   beforeEach(async () => {
     backend = new JsonlBackend();
     if (await backend.hasSession(sid)) await backend.deleteSession(sid);
     await backend.createSession(sid, { title: "t" });
     store = new JsonlMessageService(backend);
-    workflowSeq = 0;
+
   });
 
-  it("并发 appendWorkflowEvent + appendMessages：落盘 seq 严格连续无重复", async () => {
+  it("并发 appendAskAsked + appendMessages：落盘 seq 严格连续无重复", async () => {
     await store.beginTurn(sid);
     await store.appendMessages(sid, [
       {
@@ -87,17 +86,16 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
       },
     ]);
 
-    // 模拟事故时序：workflow 引擎尾事件与父循环 tool/result 同时写
+    // 模拟并发写入：审批事件族（ask 钩子）与父循环 tool/result 同时写
     const writes: Promise<unknown>[] = [];
     for (let i = 0; i < 20; i++) {
-      const data: WorkflowEventData = {
-        runId: "wfr_test",
-        seq: ++workflowSeq,
-        kind: "run-log",
-        time: Date.now(),
-        payload: { message: `log ${i}` },
-      };
-      writes.push(store.appendWorkflowEvent(sid, data));
+      writes.push(
+        store.appendAskAsked(sid, {
+          requestId: `ask_${i}`,
+          kind: "ask",
+          questions: [],
+        }),
+      );
       writes.push(store.appendMessages(sid, [toolMessage(`call_${i}`)]));
     }
     await Promise.all(writes);
@@ -107,21 +105,19 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     for (let i = 1; i < seqs.length; i++) {
       expect(seqs[i]).toBe(seqs[i - 1] + 1);
     }
-    // 40 条写入（20×workflow + 20×tool）+ init + turn/start + user = 43 行
+    // 40 条写入（20×ask + 20×tool）+ init + turn/start + user = 43 行
     expect(seqs).toHaveLength(43);
     // 无重复
     expect(new Set(seqs).size).toBe(seqs.length);
   });
 
-  it("并发混合写路径（turn 生命周期 + workflow + ask）：seq 连续", async () => {
+  it("并发混合写路径（turn 生命周期 + command + ask）：seq 连续", async () => {
     const writes: Promise<unknown>[] = [
       store.beginTurn(sid).then((r) => r.turnId),
-      store.appendWorkflowEvent(sid, {
-        runId: "wfr_x",
-        seq: 1,
-        kind: "run-start",
-        time: Date.now(),
-        payload: { name: "flow" },
+      store.appendCommand(sid, {
+        commandId: "cmd_1",
+        name: "deploy",
+        args: { target: "staging" },
       }),
       store.appendAskAsked(sid, {
         requestId: "ask_1",
@@ -131,18 +127,15 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     ];
     const turnId = (await Promise.all(writes))[0] as string;
 
-    // turnId 拿到后并发收尾 + 更多 workflow 事件
+    // turnId 拿到后并发收尾 + 命令完成事件
     await Promise.all([
       store.finalizeTurn(sid, turnId, 10, {
         finishReason: "stop",
         usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
       }),
-      store.appendWorkflowEvent(sid, {
-        runId: "wfr_x",
-        seq: 2,
-        kind: "run-end",
-        time: Date.now(),
-        payload: { runStatus: "completed", agentCount: 1 },
+      store.appendAskAnswered(sid, {
+        requestId: "ask_1",
+        answers: [],
       }),
     ]);
 
@@ -157,9 +150,6 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     // 先建立会话游标
     await store.beginTurn(sid);
 
-    // 一次性追加（backend.appendEvents 收单条数组）——构造一个失败的写入：
-    // 直接调用内部路径绕过锁，写一条 seq 冲突行让本次 scan 校验失败？不行——
-    // 简化为：向 appendWorkflowEvent 传非法载荷结构不影响 append；改用
     // backend 层故障注入：临时替换 appendEvent 使其第一次调用抛错
     const originalAppendEvent = (backend as any).appendEvent.bind(backend);
     let failFirst = true;
@@ -171,12 +161,10 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
       return originalAppendEvent(...args);
     };
 
-    const failing = store.appendWorkflowEvent(sid, {
-      runId: "wfr_e",
-      seq: 1,
-      kind: "run-log",
-      time: Date.now(),
-      payload: { message: "will fail" },
+    const failing = store.appendAskAsked(sid, {
+      requestId: "ask_fail",
+      kind: "ask",
+      questions: [],
     });
     const following = store.appendMessages(sid, [toolMessage("call_ok")]);
     await expect(failing).rejects.toThrow("disk full");

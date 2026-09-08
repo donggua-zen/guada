@@ -17,7 +17,7 @@ import { WorkflowError } from "../../src/modules/workflow/workflow.types";
 import type { WorkflowEventData } from "../../src/modules/workflow/workflow.types";
 import type { ISessionContext } from "../../src/modules/chat/session-context";
 import type { SubAgentManager, SubAgentResult } from "../../src/modules/sub-agent/sub-agent.manager";
-import type { IMessageStore } from "../../src/common/persistence/message-store.interface";
+
 
 // ── Mocks ──
 
@@ -58,30 +58,24 @@ function createMockSubAgentManager(
   return mock as SubAgentManager;
 }
 
-function createMockMessageStore(): IMessageStore & { events: WorkflowEventData[] } {
-  const events: WorkflowEventData[] = [];
-  const mock: any = {
-    events,
-    appendWorkflowEvent: jest.fn().mockImplementation(async (_sid: string, data: WorkflowEventData) => {
-      events.push(data);
-      return events.length;
-    }),
-  };
-  return mock as any;
-}
-
 function createEngine(opts?: {
   spawnImpl?: (params: any, signal?: AbortSignal) => Promise<SubAgentResult>;
 }) {
   const subAgentManager = createMockSubAgentManager(opts?.spawnImpl);
-  const messageStore = createMockMessageStore();
-  const engine = new WorkflowEngineService(subAgentManager as any, messageStore as any);
-  return { engine, subAgentManager, messageStore };
+  // publishStream 采集器：workflow_event 广播的观测点（进度不再落 JSONL）
+  const broadcasted: WorkflowEventData[] = [];
+  const ctx = createMockSessionContext({
+    publishStream: jest.fn().mockImplementation(async (chunk: any) => {
+      if (chunk?.type === "workflow_event") broadcasted.push(chunk.event);
+    }),
+  });
+  const engine = new WorkflowEngineService(subAgentManager as any);
+  return { engine, subAgentManager, ctx, broadcasted };
 }
 
-/** 从 mock 事件流提取 run 内 seq 序列 */
-function seqList(store: { events: WorkflowEventData[] }): number[] {
-  return store.events.map((e) => e.seq);
+/** 从广播流提取 run 内 seq 序列 */
+function seqList(broadcasted: WorkflowEventData[]): number[] {
+  return broadcasted.map((e) => e.seq);
 }
 
 // ── 同步校验错误 ──
@@ -141,8 +135,8 @@ describe("WorkflowEngineService 同步校验", () => {
 
 describe("WorkflowEngineService 正常运行", () => {
   it("串行两个 agent → completed + return 值 + 完整事件序列", async () => {
-    const { engine, messageStore } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx, broadcasted } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "test-flow", phases: [{ title: "P1" }] },
       args: { k: "v" },
       script: `
@@ -161,36 +155,36 @@ describe("WorkflowEngineService 正常运行", () => {
     });
 
     // 事件序列：run-start / agent-start / agent-end / agent-start / agent-end / run-end
-    const kinds = messageStore.events.map((e) => e.kind);
+    const kinds = broadcasted.map((e) => e.kind);
     expect(kinds[0]).toBe("run-start");
     expect(kinds[kinds.length - 1]).toBe("run-end");
     expect(kinds.filter((k) => k === "agent-start")).toHaveLength(2);
     expect(kinds.filter((k) => k === "agent-end")).toHaveLength(2);
 
     // seq 严格递增
-    const seqs = seqList(messageStore);
+    const seqs = seqList(broadcasted);
     for (let i = 1; i < seqs.length; i++) {
       expect(seqs[i]).toBe(seqs[i - 1] + 1);
     }
 
     // agent-start 携带 subSessionId（跳转锚点）与 phase/label
-    const firstStart = messageStore.events.find((e) => e.kind === "agent-start")!;
+    const firstStart = broadcasted.find((e) => e.kind === "agent-start")!;
     expect(firstStart.payload).toMatchObject({ label: "task one" });
     expect((firstStart.payload as any).subSessionId).toBe("sub_1");
 
     // agent-end 携带 status=completed + 输出摘要
-    const firstEnd = messageStore.events.find((e) => e.kind === "agent-end")!;
+    const firstEnd = broadcasted.find((e) => e.kind === "agent-end")!;
     expect((firstEnd.payload as any).status).toBe("completed");
     expect((firstEnd.payload as any).outputSummary).toBe("result of task one");
 
     // run-end completed
-    const runEnd = messageStore.events.find((e) => e.kind === "run-end")!;
+    const runEnd = broadcasted.find((e) => e.kind === "run-end")!;
     expect((runEnd.payload as any).runStatus).toBe("completed");
   });
 
   it("args 注入脚本全局变量；args 缺省为 undefined", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "return { hasArgs: typeof args !== 'undefined' };",
     });
@@ -198,7 +192,7 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 
   it("agent() 失败 → resolve null（脚本容错）", async () => {
-    const { engine } = createEngine({
+    const { engine, ctx } = createEngine({
       spawnImpl: async () => ({
         subSessionId: "sub_x",
         status: "error",
@@ -207,7 +201,7 @@ describe("WorkflowEngineService 正常运行", () => {
         error: "boom",
       }),
     });
-    const result = await engine.startRun(createMockSessionContext(), {
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "const r = await agent('will fail'); return r === null;",
     });
@@ -216,7 +210,7 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 
   it("stopReason=aborted 的 agent → member 状态 cancelled", async () => {
-    const { engine, messageStore } = createEngine({
+    const { engine, ctx, broadcasted } = createEngine({
       spawnImpl: async (params) => {
         params.onCreated?.("sub_x");
         return {
@@ -227,17 +221,17 @@ describe("WorkflowEngineService 正常运行", () => {
         };
       },
     });
-    await engine.startRun(createMockSessionContext(), {
+    await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "await agent('x');",
     });
-    const end = messageStore.events.find((e) => e.kind === "agent-end")!;
+    const end = broadcasted.find((e) => e.kind === "agent-end")!;
     expect((end.payload as any).status).toBe("cancelled");
   });
 
   it("parallel 并行扇出 → 全部完成 + 结果数组", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: `
         const rs = await parallel([1, 2, 3].map(i => () => agent('task ' + i)));
@@ -253,8 +247,8 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 
   it("pipeline 每 item 独立穿 stage 链", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: `
         const rs = await pipeline(
@@ -273,13 +267,13 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 
   it("phase() + log() → run-phase / run-log 事件", async () => {
-    const { engine, messageStore } = createEngine();
-    await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx, broadcasted } = createEngine();
+    await engine.startRun(ctx, {
       meta: { name: "n" },
       script: `phase("扫描"); log("开始"); return 1;`,
     });
-    expect(messageStore.events.some((e) => e.kind === "run-phase")).toBe(true);
-    expect(messageStore.events.some((e) => e.kind === "run-log")).toBe(true);
+    expect(broadcasted.some((e) => e.kind === "run-phase")).toBe(true);
+    expect(broadcasted.some((e) => e.kind === "run-log")).toBe(true);
   });
 });
 
@@ -290,21 +284,21 @@ describe("WorkflowEngineService 上限与安全", () => {
     // 用 105 个快速 agent 突破默认上限不现实——直接验证 AGENT_CAP 路径：
     // 白名单外的 agentId 走 spawnForWorkflow 抛错 → agent-failed AGENT_START。
     // maxTotal 路径通过多次调用验证（此处用白名单拒绝覆盖同一 fatal 语义）。
-    const { engine, messageStore } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx, broadcasted } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "await agent('x', { agentId: 'not-allowed' }); return 'unreached';",
     });
     expect(result.status).toBe("failed");
     expect(result.errorCode).toBe("AGENT_START");
     // fatal 杀死脚本：run-end failed 事件
-    const runEnd = messageStore.events.find((e) => e.kind === "run-end")!;
+    const runEnd = broadcasted.find((e) => e.kind === "run-end")!;
     expect((runEnd.payload as any).runStatus).toBe("failed");
   });
 
   it("agent() 参数非法（prompt 非字符串）→ INVALID_ARGUMENT", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "await agent(42); return 1;",
     });
@@ -313,8 +307,8 @@ describe("WorkflowEngineService 上限与安全", () => {
   });
 
   it("agent() opts 混入未知键 → INVALID_ARGUMENT", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "await agent('x', { evil: 1 }); return 1;",
     });
@@ -323,8 +317,8 @@ describe("WorkflowEngineService 上限与安全", () => {
   });
 
   it("return 函数（不可结构化克隆）→ RESULT_UNSERIALIZABLE", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "return { fn: () => 1 };",
     });
@@ -333,8 +327,8 @@ describe("WorkflowEngineService 上限与安全", () => {
   });
 
   it("parallel 内普通异常 → null（不杀死脚本）", async () => {
-    const { engine } = createEngine();
-    const result = await engine.startRun(createMockSessionContext(), {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: `
         const rs = await parallel([
@@ -354,7 +348,7 @@ describe("WorkflowEngineService 上限与安全", () => {
 describe("WorkflowEngineService 取消", () => {
   it("运行中 abort → 在途子代理中止 + run cancelled + 未配对 agent 合成终态", async () => {
     // spawn 挂起直到收到 abort
-    const { engine, messageStore } = createEngine({
+    const { engine, ctx, broadcasted } = createEngine({
       spawnImpl: (params, signal) =>
         new Promise<SubAgentResult>((resolve) => {
           params.onCreated?.("sub_hang");
@@ -370,7 +364,7 @@ describe("WorkflowEngineService 取消", () => {
     });
     const controller = new AbortController();
     const runPromise = engine.startRun(
-      createMockSessionContext(),
+      ctx,
       { meta: { name: "n" }, script: "await agent('hangs'); return 'unreached';" },
       controller.signal,
     );
@@ -381,79 +375,112 @@ describe("WorkflowEngineService 取消", () => {
 
     expect(result.status).toBe("cancelled");
     // agent-start 有配对终态（恰好一次配对）
-    const starts = messageStore.events.filter((e) => e.kind === "agent-start");
-    const ends = messageStore.events.filter((e) => e.kind === "agent-end");
+    const starts = broadcasted.filter((e) => e.kind === "agent-start");
+    const ends = broadcasted.filter((e) => e.kind === "agent-end");
     expect(starts.length).toBe(ends.length);
   });
 });
 
 // ── 事件双发 ──
 
-describe("WorkflowEngineService 事件双发", () => {
-  it("每条事件同时 appendWorkflowEvent + publishStream", async () => {
-    const { engine, messageStore } = createEngine();
-    const publishStream = jest.fn().mockResolvedValue(undefined);
-    await engine.startRun(createMockSessionContext({ publishStream }), {
+describe("WorkflowEngineService 事件广播与快照", () => {
+  it("每条事件经 publishStream 广播（workflow_event 流通道，不落 JSONL）", async () => {
+    const { engine, ctx, broadcasted } = createEngine();
+    await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "return 1;",
     });
-    // JSONL 事件与流事件一一对应（run-start + run-end）
-    expect(messageStore.appendWorkflowEvent).toHaveBeenCalled();
-    expect(publishStream).toHaveBeenCalled();
-    expect(publishStream.mock.calls.length).toBeGreaterThanOrEqual(
-      messageStore.events.length,
-    );
+    // run-start + run-end 全部经流通道广播
+    const kinds = broadcasted.map((e) => e.kind);
+    expect(kinds[0]).toBe("run-start");
+    expect(kinds[kinds.length - 1]).toBe("run-end");
   });
 
-  it("appendWorkflowEvent 落库失败不中断 run（仅告警）", async () => {
-    const messageStore = createMockMessageStore();
-    (messageStore.appendWorkflowEvent as jest.Mock).mockRejectedValue(
-      new Error("disk full"),
-    );
-    const engine = new WorkflowEngineService(
-      createMockSubAgentManager() as any,
-      messageStore as any,
-    );
-    const result = await engine.startRun(createMockSessionContext(), {
+  it("publishStream 失败不中断 run（仅告警）", async () => {
+    const engine = new WorkflowEngineService(createMockSubAgentManager() as any);
+    const ctx = createMockSessionContext({
+      publishStream: jest.fn().mockRejectedValue(new Error("sse down")),
+    });
+    const result = await engine.startRun(ctx, {
       meta: { name: "n" },
       script: "return 42;",
     });
     expect(result.status).toBe("completed");
     expect(result.value).toBe(42);
   });
-});
 
-// ── run 收尾排空（settle → appendChain drain）──
-
-describe("WorkflowEngineService run 收尾排空", () => {
-  it("startRun resolve 时 run 尾部事件已全部落库（含 run-end）", async () => {
-    // 落库延迟 15ms（> 微任务调度），模拟 fs.appendFile 真实耗时。
-    // 若 settle 不排空 appendChain 就 resolve done，本用例会在 run-end
-    // 落库前返回 —— 即生产「workflow 尾事件与父循环 tool/result 撞 seq」的竞态窗口。
-    const delivered: WorkflowEventData[] = [];
-    const slowStore: any = {
-      appendWorkflowEvent: jest
-        .fn()
-        .mockImplementation(async (_sid: string, data: WorkflowEventData) => {
-          await new Promise((r) => setTimeout(r, 15));
-          delivered.push(data);
-          return data.seq;
-        }),
-    };
-    const engine = new WorkflowEngineService(
-      createMockSubAgentManager() as any,
-      slowStore,
-    );
-
-    const result = await engine.startRun(createMockSessionContext(), {
-      meta: { name: "drain-test" },
-      script: `return "ok";`,
+  it("内存快照与广播事件收敛：run 终态 + 成员行 + 日志（概览面板数据源）", async () => {
+    const { engine, ctx } = createEngine();
+    await engine.startRun(ctx, {
+      meta: { name: "snap-flow", phases: [{ title: "P1" }] },
+      script: `
+        phase("P1 标题");
+        log("阶段开始");
+        const a = await agent("task one");
+        const b = await agent("task two", { label: "二号", phase: "P1" });
+        return { a, b };
+      `,
     });
 
-    expect(result.status).toBe("completed");
-    const kinds = delivered.map((e) => e.kind);
-    expect(kinds).toContain("run-end");
-    expect(kinds[kinds.length - 1]).toBe("run-end");
+    const states = engine.getSessionRunStates(ctx.sessionId);
+    expect(states).toHaveLength(1);
+    const state = states[0]!;
+    expect(state.runId).toMatch(/^wfr_/);
+    expect(state.name).toBe("snap-flow");
+    expect(state.phases).toEqual([{ title: "P1" }]);
+    expect(state.status).toBe("completed");
+    expect(state.endedAt).toBeGreaterThan(0);
+    expect(state.durationMs).toBeGreaterThanOrEqual(0);
+    expect(state.agents).toHaveLength(2);
+    expect(state.agents[0]).toMatchObject({
+      label: "task one",
+      status: "completed",
+      subSessionId: "sub_1",
+    });
+    expect(state.agents[1]).toMatchObject({
+      label: "二号",
+      phase: "P1",
+      status: "completed",
+    });
+    expect(state.logs).toContain("阶段开始");
+    // 快照独立于活跃 run 表（run 结束后仍可查询，供概览展示近期完成）
+    expect(engine.getActiveRunIds()).toHaveLength(0);
+  });
+});
+
+// ── 快照注册表裁剪 ──
+
+describe("WorkflowEngineService 快照注册表", () => {
+  it("已完成 run 超上限按注册顺序淘汰，运行中永不淘汰", () => {
+    const engine = new WorkflowEngineService(createMockSubAgentManager() as any);
+    const registry: Map<string, any> = (engine as any).runStatesBySession;
+    const byRun = new Map<string, any>();
+    registry.set("s_prune", byRun);
+    const mk = (runId: string, status: any) => ({
+      runId,
+      name: runId,
+      status,
+      agents: [],
+      logs: [],
+      startedAt: 0,
+      lastSeq: 0,
+    });
+    // 3 个完成 + 1 个运行中，再塞满 20 个完成 → 最早的完成态被淘汰，运行中保留
+    byRun.set("done-1", mk("done-1", "completed"));
+    byRun.set("done-2", mk("done-2", "completed"));
+    byRun.set("done-3", mk("done-3", "completed"));
+    byRun.set("live", mk("live", "running"));
+    for (let i = 4; i <= 21; i++) {
+      byRun.set(`done-${i}`, mk(`done-${i}`, "completed"));
+    }
+    (engine as any).registerRunState("s_prune", mk("done-new", "completed"));
+
+    const ids = [...byRun.keys()];
+    expect(byRun.size).toBe(21); // 20 完成 + 1 运行中
+    expect(ids).not.toContain("done-1");
+    expect(ids).not.toContain("done-2");
+    expect(ids).toContain("done-3");
+    expect(ids).toContain("live");
   });
 });
 

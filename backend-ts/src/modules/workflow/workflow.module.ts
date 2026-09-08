@@ -1,18 +1,23 @@
 import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { SubAgentModule } from "../sub-agent/sub-agent.module";
+import { AuthModule } from "../auth/auth.module";
+import { ChatModule } from "../chat/chat.module";
 import { PluginManager } from "../plugins";
 import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import { WorkflowEngineService } from "./workflow-engine.service";
+import { WorkflowController } from "./workflow.controller";
 import { WorkflowPlugin } from "./workflow.plugin";
 
 /**
  * Workflow 子代理编排模块
  *
- * 引擎复用 SubAgentManager 创建独立会话子代理（同一 AgentEngine 完整循环），
- * MESSAGE_STORE_TOKEN 由全局 PersistenceModule 提供。
+ * 引擎复用 SubAgentManager 创建独立会话子代理（同一 AgentEngine 完整循环）。
+ * 运行进度不落 JSONL：引擎维护内存折叠快照，WorkflowController 提供快照端点
+ * （概览面板数据源），实时增量走 workflow_event SSE 流通道。
  */
 @Module({
-  imports: [SubAgentModule],
+  imports: [SubAgentModule, AuthModule, ChatModule],
+  controllers: [WorkflowController],
   providers: [WorkflowEngineService, WorkflowPlugin],
   exports: [WorkflowEngineService],
 })
