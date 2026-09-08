@@ -54,6 +54,9 @@ model Session {
   externalId    String?               @map("external_id")
   workspacePath String?               @map("workspace_path")
   parentId      String?               @map("parent_id")
+  // 子代理冻结标记（sub_agent_closed 语义修复）：NULL=活跃；非空=已结束仅供回放
+  closedAt      DateTime?             @map("closed_at")
+  closeReason   String?               @map("close_reason")
   memories      Memory[]
   messages      Message[]
   character     Character?            @relation(fields: [characterId], references: [id])

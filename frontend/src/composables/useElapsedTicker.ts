@@ -20,6 +20,8 @@ export function useElapsedTicker(
   intervalMs = 200,
 ) {
   const now = ref(Date.now())
+  /** 结束瞬间冻结的最后跳动值（权威时长未到时的兜底显示） */
+  const lastElapsed = ref<number | null>(null)
 
   // 仅在 active 期间持有定时器；watchEffect 随组件作用域自动清理
   watchEffect((onCleanup) => {
@@ -28,13 +30,18 @@ export function useElapsedTicker(
     const timer = setInterval(() => {
       now.value = Date.now()
     }, intervalMs)
-    onCleanup(() => clearInterval(timer))
+    onCleanup(() => {
+      clearInterval(timer)
+      // 结束时刻冻结锚点：后端权威 timing 未到时（如 block_end 延迟）显示该值而非闪空
+      const start = toValue(startedAt)
+      if (start != null) lastElapsed.value = Math.max(0, Date.now() - start)
+    })
   })
 
-  /** 展示值（ms）：进行中 → 锚点起跳动；结束 → 权威时长 */
+  /** 展示值（ms）：进行中 → 锚点起跳动；结束 → 权威时长（未到则用冻结值兜底） */
   const elapsedMs = computed<number | null>(() => {
     if (!toValue(active)) {
-      return toValue(finalDurationMs) ?? null
+      return toValue(finalDurationMs) ?? lastElapsed.value
     }
     const start = toValue(startedAt)
     if (start == null) return null

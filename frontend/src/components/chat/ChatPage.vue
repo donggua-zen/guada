@@ -64,26 +64,26 @@
                 </template>
               </PageHeader>
 
-              <!-- 主体：会话面板（主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换） -->
+              <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存） -->
               <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器（aside 槽位随之） -->
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
-                <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
-                  :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+                <ChatPanel ref="chatPanelRef" :session="mainSession"
                   :aside-width="asideWidth" @container-resize="onChatContainerResize"
-                  @switch-agent="switchTab"
                   @save-settings="handleSaveSessionSettings"
                   @select-character="handleSelectCharacter">
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧），可见即实占空间
                        （避让位列恒占位，消息列在剩余空间内居中）；容器放不下面板+消息列时自动隐藏 -->
                   <template #aside>
                     <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                      :sub-sessions="subSessions" :attachments="mainSession?.settings?.attachments"
+                      @attachments-change="handleAttachmentsChange"
                       @collapse="overviewVisible = false" />
                   </template>
                 </ChatPanel>
               </Teleport>
 
               <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
+              <ChatOutline v-if="mainSession" :messages="chatPanelRef?.activeMessages || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
 
               <!-- 概览折叠后的恢复小按钮（悬浮于右上） -->
@@ -96,6 +96,7 @@
 
           <template #pane2>
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
+              :sub-sessions="subSessions"
               @insert-to-input="handleInsertToInput" @insert-snip="handleInsertSnip" />
           </template>
         </GdSplitpanes>
@@ -132,17 +133,6 @@ import type { Character } from '@/types/character';
 import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
-/**
- * 子代理 Tab 数据接口
- */
-interface AgentTab {
-  id: string;
-  name: string;
-  status: 'running' | 'completed' | 'error';
-  loaded?: boolean;
-  avatarUrl?: string;  // 角色/团队子Agent的头像
-}
-
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
@@ -198,32 +188,14 @@ const asideWidth = computed(() => {
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 
-// 子 Agent Tab 状态
-const agentTabs = ref<AgentTab[]>([
-  { id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true }
-]);
-const activeTabId = ref('main');
-
-// 子会话列表（从主会话同步，支持动态增删）
+// 子会话列表（概览"子代理"区与侧边栏标签解析元数据的数据源，支持动态增改）
+// 含已冻结（closedAt 非空）的子代理 —— 结束后保留仅供回看，与刷新后 fetchSession 的表现一致
 const subSessions = ref<Session[]>([]);
-
-/**
- * 面板当前展示的会话对象
- * - main Tab：使用 mainSession（主会话）
- * - 子 Agent Tab：从 subSessions 中查找对应的子会话
- */
-const panelSession = computed(() => {
-  if (activeTabId.value === 'main') {
-    return mainSession.value;
-  }
-  // 从子会话列表中查找
-  return subSessions.value.find((s) => s.id === activeTabId.value) || null;
-});
 
 /**
  * 处理子 Agent 创建事件（来自 SSE 全局广播）
  *
- * 仅负责新增 Tab，不管理状态。状态由 stream_started/stream_finished 统一处理。
+ * 仅负责在 subSessions 中登记，不管理状态。状态由 stream_started/stream_finished 统一处理。
  */
 function handleSubAgentCreate(event: any) {
   const payload = event.payload || {};
@@ -232,95 +204,49 @@ function handleSubAgentCreate(event: any) {
   const session = payload.session;
   if (!subSessionId) return;
 
-  const exists = agentTabs.value.find(t => t.id === subSessionId);
-  if (!exists) {
-    agentTabs.value.push({
-      id: subSessionId,
-      name,
-      status: 'completed',
-      loaded: false,
-      avatarUrl: session?.avatarUrl || session?.character?.avatarUrl || undefined,
-    });
-  }
-
-  // 同步加入 subSessions，确保 stream_started 能识别该子 Agent
-  const subExists = subSessions.value.find(s => s.id === subSessionId);
-  if (!subExists && session) {
-    subSessions.value.push(session);
+  if (!subSessions.value.some(s => s.id === subSessionId)) {
+    // 事件未携带会话元数据时构造最小存根（保证概览区行立即可见），完整数据由 fetchSession 兜底
+    subSessions.value.push(
+      session || ({ id: subSessionId, title: name, isStreaming: true } as Session),
+    );
   }
 }
 
 /**
  * 处理子 Agent 关闭事件（来自 SSE 全局广播）
+ *
+ * 后端已将子会话冻结（closedAt 标记，仅供回放），此处就地标记而非移除：
+ * 概览"子代理"区把该行折叠进"已结束"组，与刷新后 fetchSession 返回的表现一致。
  */
 function handleSubAgentClosed(event: any) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   if (!subSessionId) return;
 
-  // 从 agentTabs 中移除对应的子 Agent
-  const index = agentTabs.value.findIndex(t => t.id === subSessionId);
-  if (index > -1) {
-    agentTabs.value.splice(index, 1);
+  const sub = subSessions.value.find(s => s.id === subSessionId);
+  if (sub && !sub.closedAt) {
+    sub.closedAt = new Date().toISOString();
+    sub.closeReason = payload.stopReason || null;
+    sub.isStreaming = false;
   }
 
-  // 如果当前激活的是被关闭的子 Agent，切回主线程
-  if (activeTabId.value === subSessionId) {
-    activeTabId.value = 'main';
-  }
-
-  // 从 subSessions 中移除
-  const subIndex = subSessions.value.findIndex(s => s.id === subSessionId);
-  if (subIndex > -1) {
-    subSessions.value.splice(subIndex, 1);
-  }
+  // 侧边栏子代理标签同步关闭（冻结的子代理可随时从概览"已结束"组重开回放）
+  tabStore.removeTab(`subagent:${subSessionId}`);
 }
 
 /**
- * 切换 Tab
- */
-async function switchTab(tabId: string) {
-  activeTabId.value = tabId;
-}
-
-/**
- * 子代理会话跳转（概览面板工作流成员行消费）：
- * Tab 不存在时补建（历史回放/其他端创建的 workflow 子代理），再切换。
+ * 打开子代理会话（概览面板子代理行 / 工作流成员行消费）：
+ * 在侧边栏工作区打开 subagent 标签，与中央主会话同屏并存。
+ * Tab 状态不存在时补建（历史回放/其他端创建的 workflow 子代理）。
  */
 function openSubAgentSessionById(subSessionId: string) {
   if (!subSessionId) return;
-  if (!agentTabs.value.some((tab) => tab.id === subSessionId)) {
-    const session = subSessions.value.find((s) => s.id === subSessionId);
-    agentTabs.value.push({
-      id: subSessionId,
-      name: session?.title || t('chat.panel.subTask'),
-      status: 'completed',
-      loaded: false,
-      avatarUrl: session?.avatarUrl || undefined,
-    });
-  }
-  activeTabId.value = subSessionId;
+  const session = subSessions.value.find((s) => s.id === subSessionId);
+  // 工作区隐藏时先展开，再打开/激活子代理标签（对齐概览面板打开 Git 标签的模式）
+  layoutStore.setWorkspaceVisible(true);
+  tabStore.openSubAgentTab(subSessionId, session?.title || t('chat.panel.subTask'));
 }
-provide('workflow:openSubAgentSession', openSubAgentSessionById);
-
-/**
- * 关闭子 Agent Tab
- */
-function closeSubAgentTab(tabId: string) {
-  const index = agentTabs.value.findIndex(t => t.id === tabId);
-  if (index > -1 && tabId !== 'main') {
-    agentTabs.value.splice(index, 1);
-    if (activeTabId.value === tabId) {
-      activeTabId.value = 'main';
-    }
-  }
-
-  // 同步从 subSessions 中移除
-  const subIndex = subSessions.value.findIndex(s => s.id === tabId);
-  if (subIndex > -1) {
-    subSessions.value.splice(subIndex, 1);
-  }
-}
+provide('workspace:openSubAgentSession', openSubAgentSessionById);
 
 // 组合式函数
 const { toast, confirm } = usePopup();
@@ -373,29 +299,25 @@ const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 
 // 统一流状态派生:useSessionEvents(MainLayout 常驻)统一订阅 stream_status_changed 并写入
-// sessionStore.streamStatus,本组件 watch 派生:
-// - 更新 agentTabs 状态(running/completed/error)
-// - 主会话 running → 触发 ChatPanel 订阅(自身发起的流 isStreaming 已 true,subscribeToActiveStream 守卫自动挡住)
+// sessionStore.streamStatus。主会话 running → 触发 ChatPanel 订阅
+// (自身发起的流 isStreaming 已 true,subscribeToActiveStream 守卫自动挡住)。
+// 子代理的运行状态由概览"子代理"区直接读 store 派生,此处不再维护 agentTabs。
+// 注意 source 必须用纯读 peekStreamStatus:getSessionState 的 miss 分支会创建缓存+清扫
+// (写响应式 Map),source 里读写相间会自我触发 → 递归更新白屏
 watch(
   () =>
-    agentTabs.value
-      .map((t) => (t.id === "main" ? mainSession.value?.id : t.id))
-      .map((id) => (id ? sessionStore.getSessionState(id)?.streamStatus : undefined)),
-  (statuses) => {
-    agentTabs.value.forEach((tab, i) => {
-      const status = statuses[i];
-      if (!status || status === "idle") return;
-      tab.status = status === "running" ? "running" : status === "error" ? "error" : "completed";
-    });
+    mainSession.value?.id
+      ? sessionStore.peekStreamStatus(mainSession.value.id)
+      : undefined,
+  () => {
     const mainId = mainSession.value?.id;
-    if (mainId && sessionStore.getSessionState(mainId)?.streamStatus === "running") {
+    if (mainId && sessionStore.peekStreamStatus(mainId) === "running") {
       const chatPanel = chatPanelRef.value;
       if (chatPanel && chatPanel.subscribeToActiveStream) {
         chatPanel.subscribeToActiveStream();
       }
     }
   },
-  { deep: true },
 );
 
 // SSE 事件监听取消函数(stream_status_changed 已由 useSessionEvents 统一订阅,此处不再重复监听)
@@ -413,21 +335,9 @@ const fetchSession = async (sessionId: string) => {
     const session = await apiService.fetchSession(sessionId);
     mainSession.value = session;
 
-    // 恢复子会话 Tab 状态（页面刷新后从 subSessions 重建，isStreaming 由后端注入）
+    // 子会话列表（含已冻结的，供概览"子代理"区与侧边栏标签解析元数据；
+    // isStreaming 由后端注入）
     subSessions.value = session.subSessions || [];
-    if (subSessions.value.length > 0) {
-      // 保留 main Tab，重建子 Agent Tabs（状态以 isStreaming 为准）
-      const mainTab = agentTabs.value.find(t => t.id === 'main');
-      agentTabs.value = [
-        mainTab || { id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true },
-        ...subSessions.value.map((sub) => ({
-          id: sub.id,
-          name: sub.title || t('chat.panel.subTask'),
-          status: (sub.isStreaming ? 'running' : 'completed') as 'running' | 'completed' | 'error',
-          loaded: true,
-        })),
-      ];
-    }
   } catch (error) {
     console.error('获取会话详情失败:', error);
     toast.error(t('common.error.loadFailed'));
@@ -557,9 +467,7 @@ const updateSelectedSession = async (sessionId: string) => {
   }
   sessionStore.activeSessionId = sessionId;
   if (sessionId !== mainSession.value?.id) {
-    // 切换会话时重置子代理状态到主线程
-    activeTabId.value = 'main';
-    agentTabs.value = [{ id: 'main', name: t('chat.panel.mainSession'), status: 'completed', loaded: true }];
+    // 切换会话时重置子会话列表（侧边栏 subagent 标签由 WorkspaceSidebar 的会话切换 watch 统一清空）
     subSessions.value = [];
     await fetchSession(sessionId);
   }
@@ -590,7 +498,7 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
  */
 const handleSaveSessionSettings = async () => {
   try {
-    const targetSession = panelSession.value;
+    const targetSession = mainSession.value;
     if (targetSession) {
       await apiService.updateSession(targetSession.id, {
         modelId: targetSession.modelId,
@@ -601,6 +509,18 @@ const handleSaveSessionSettings = async () => {
   } catch (error: any) {
     console.error('保存对话设置失败:', error);
   }
+};
+
+/**
+ * 概览面板的附加工作目录（远程连接）绑定变更：
+ * 写回 mainSession.settings.attachments 后复用既有保存链路（PUT /sessions/:id）；
+ * 后端在下回合开始时 diff 绑定快照并注入增量提醒
+ */
+const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
+  const targetSession = mainSession.value;
+  if (!targetSession) return;
+  targetSession.settings.attachments = attachments;
+  void handleSaveSessionSettings();
 };
 
 /**

@@ -23,6 +23,18 @@ export class SessionRepository {
   }
 
   /**
+   * 轻量查询会话类型（web/bot/sub_agent），仅取 sessionType 单列。
+   * 供 SSE 补发 stream_status_changed 携带 sessionType 使用，避免 findById 的重 include。
+   */
+  async getSessionType(id: string): Promise<string | null> {
+    const row = await this.prisma.session.findUnique({
+      where: { id },
+      select: { sessionType: true },
+    });
+    return row?.sessionType ?? null;
+  }
+
+  /**
    * 获取用户会话列表，支持按分组筛选
    * 默认排除已归档会话
    * @param groupId undefined-全部, null-未分组, string-指定分组
@@ -149,11 +161,13 @@ export class SessionRepository {
   }
 
   /**
-   * 统计指定父会话下的子会话数量
+   * 统计指定父会话下的活跃子会话数量（排除已冻结的）
+   *
+   * 子代理每父会话数量上限以此为依据：close/one_shot 冻结子会话后名额即释放。
    */
   async countByParentId(parentSessionId: string) {
     return this.prisma.session.count({
-      where: { parentId: parentSessionId },
+      where: { parentId: parentSessionId, closedAt: null },
     });
   }
 

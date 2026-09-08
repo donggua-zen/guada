@@ -228,7 +228,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats';
+import { useSessionTokenStats, applyContextStatsFromEvents, clearTokenStats } from '@/composables/useSessionTokenStats';
 import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
@@ -320,11 +320,11 @@ async function loadSummaries() {
 }
 
 // 刷新 Token 统计：从事件日志重扫最后一个上下文锚点（统计已统一为事件流投影，不走 REST；
-// 实时更新由 streamProjector 在 turn_end / 压缩事件时喂入共享单例）
+// 实时更新由 streamProjector 在 turn_end / 压缩事件时按会话喂入切片）
 function loadTokenStats() {
   if (!props.sessionId) return;
   const eventLog = sessionStore.getSessionState(props.sessionId).eventLog || [];
-  applyContextStatsFromEvents(eventLog);
+  applyContextStatsFromEvents(props.sessionId, eventLog);
 }
 
 // 格式化时间
@@ -366,7 +366,7 @@ watch(
     } else {
       summaries.value = [];
       summaryTotal.value = 0;
-      tokenStats.value = null;
+      clearTokenStats();
     }
   },
   { immediate: true }

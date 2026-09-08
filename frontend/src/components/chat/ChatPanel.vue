@@ -85,10 +85,6 @@
                 </div>
               </div>
 
-              <!-- 子代理面板（编辑模式时隐藏） -->
-              <AgentPanel v-if="!editMode" :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
-                @switch="emit('switch-agent', $event)" />
-
               <div class="w-full flex items-center relative">
 
                 <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
@@ -187,7 +183,6 @@ import QueuedMessages from './QueuedMessages.vue';
 import SessionCards from './SessionCards.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
-import AgentPanel from './AgentPanel.vue';
 import GdTooltip from '../ui/GdTooltip.vue';
 import GdPopover from '@/components/ui/GdPopover.vue'
 
@@ -244,8 +239,6 @@ const props = defineProps<{
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
-  agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
-  activeTabId?: string;
   /** 右侧 aside 预留宽度（px，默认 0 = 不预留不渲染）；aside 可见即通过避让占位实占该宽度 */
   asideWidth?: number;
 }>();
@@ -255,7 +248,6 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'select-character': [character: Character]  // 切换角色
-  'switch-agent': [tabId: string]
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
 }>();
@@ -658,7 +650,7 @@ async function loadSession(sessionId: string) {
   // 上下文占用：逆向扫描事件日志最后一个锚点（turn/finish / compaction/end 等）填充环形指示器。
   // 无锚点 → 显示 0，绝不访问 token-stats（唯一 REST 入口 = 记忆弹窗打开时按需拉取 breakdown）。
   const eventLog = sessionStore.getSessionState(sessionId).eventLog || [];
-  applyContextStatsFromEvents(eventLog);
+  applyContextStatsFromEvents(sessionId, eventLog);
 }
 
 /**
@@ -674,20 +666,13 @@ async function loadMessages(
 ) {
   const isInitial = options.isInitial ?? true;
 
-  // 初始加载会替换整个消息数组（foldEvents 清树重建），流式输出期间执行会丢失正在输出的消息
-  // 加载更多仅前插事件数组后 re-fold，与流式的增量应用互不干扰（live 事件已在 eventLog）
+  // 缓存门禁:有缓存(loaded)直接用——live 事件本就直接应用到缓存,无缓存一律拉历史
+  // (与是否流式无关;树为空时 fold 重建无物可丢),拉取后按 seq 补齐本地暂存再建缓存。
+  // (旧版曾按 isStreaming 短路不拉历史,导致"流式中打开无缓存会话"永远空白,已移除)
   if (isInitial) {
     const sessionState = sessionStore.getSessionState(sessionId);
-    // 仅聊天流可跳过拉取（buffer 含回合历史）；维护流（手动压缩伪流）buffer 无历史，
-    // 照常拉取事件页，压缩中状态由 catchup 重放的 compression_start 经 stash 恢复
-    if (sessionState.isStreaming && sessionStore.sessionStreamKind(sessionId) === "chat") {
-      // 恢复本会话自己的分页状态(组件级单例 ref 会残留上一个会话的值)
-      hasMoreMessages.value = sessionState.turnsHasMore ?? true;
-      return;
-    }
-    // 二次打开:该会话内容已缓存(loaded)且非流式 → 不重新向后端拉取,
-    // 直接用缓存,增量由订阅补新(前端会话级内容缓存 + eventLog 重建)。
     if (sessionState.loaded === true) {
+      // 恢复本会话自己的分页状态(组件级单例 ref 会残留上一个会话的值)
       hasMoreMessages.value = sessionState.turnsHasMore ?? true;
       return;
     }
@@ -728,13 +713,16 @@ async function loadMessages(
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
     sessionState.eventCursor = page.nextBeforeSeq;
 
-    // 消费暂存:打开会话时把"无缓存期间暂存的 finish 后事件"应用进 store
-    // （加载期间 SSE 事件先于历史到达被 streamProjector 暂存；先折叠历史再应用增量）
+    // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
+    // prevSeq 是"先入库后发事件"的入库游标:prevSeq <= endSeq 的事件必已包含在历史页内
+    // (跳过,防 deltas 重复应用导致文本翻倍);prevSeq > endSeq 的才是拉取未覆盖的增量
+    // (无缓存期间/拉取期间新到的事件)。prevSeq 缺失时照旧应用(fail-open)。
+    const endSeq = page.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
-    if (projectorStash.length > 0) {
-      for (const chunk of projectorStash) {
-        applyLiveChunk(sessionStore, sessionId, chunk);
-      }
+    for (const chunk of projectorStash) {
+      const prevSeq = (chunk as { prevSeq?: number }).prevSeq;
+      if (typeof prevSeq === "number" && prevSeq <= endSeq) continue;
+      applyLiveChunk(sessionStore, sessionId, chunk);
     }
 
     hasMoreMessages.value = page.hasMore;
@@ -827,8 +815,8 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   if (newSessionId === oldSessionId) return;
 
   resetTitleFlag();
-  // 方案A 会话级:切换会话时通知唯一 receiver(当前会话处理,切换时注销上一会话订阅)
-  streamReceiver.setActiveSession(newSessionId);
+  // 接收唯一链路是 useSessionEvents 的 streamReceiver.subscribeAll（常驻、按 sessionId 路由），
+  // 本组件不再触碰 receiver 的 activeSession 指针——多实例（中央 + 侧边栏子代理）并存时互不干扰。
   if (newSessionId === null) {
     currentSessionId.value = null;
     return;

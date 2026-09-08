@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 
 export interface TokenBreakdown {
   systemPrompt: number
@@ -24,7 +24,17 @@ export interface ContextStatsInput {
   breakdown?: TokenBreakdown
 }
 
-const tokenStats = ref<TokenStatsData | null>(null)
+/**
+ * 每会话一份的 Token 统计（按 sessionId 键控）
+ *
+ * 事件流投影为所有会话（含后台子代理）喂入锚点：若用共享单例，后台会话的
+ * turn_end 会覆盖前台会话的环形指示器（主会话与子代理同屏并存时必然互染），
+ * 因此按会话隔离；读取方经 useSessionTokenStats(sessionId) 取本会话切片。
+ */
+const tokenStatsBySession = ref(new Map<string, TokenStatsData>())
+
+/** 缓存上限：超限按插入序淘汰最旧（单条数据极小，上限仅防长期运行膨胀） */
+const MAX_CACHED_SESSIONS = 32
 
 /** breakdown 形状防御校验（旧锚点事件无此字段） */
 function pickBreakdown(b: unknown): TokenBreakdown | undefined {
@@ -40,20 +50,27 @@ function pickBreakdown(b: unknown): TokenBreakdown | undefined {
   return d
 }
 
-/** 共享合并：填充环形指示器字段；messageCount/breakdown 事件携带时才覆盖（旧锚点缺省保留旧值） */
-function applyContextStats(stats: ContextStatsInput) {
+/** 会话内共享合并：填充环形指示器字段；messageCount/breakdown 事件携带时才覆盖（旧锚点缺省保留旧值） */
+function applyContextStats(sessionId: string, stats: ContextStatsInput) {
+  const prev = tokenStatsBySession.value.get(sessionId)
   // 百分比约束两位小数（浮点直除会产生 0.24789999999999998 之类的脏值）
   const percentage = parseFloat(
     Math.min((stats.usedTokens / stats.effectiveContextWindow) * 100, 100).toFixed(2),
   )
-  tokenStats.value = {
+  tokenStatsBySession.value.set(sessionId, {
     usedTokens: stats.usedTokens,
     totalTokens: stats.effectiveContextWindow,
     remainingTokens: Math.max(0, stats.effectiveContextWindow - stats.usedTokens),
     percentage,
-    modelName: tokenStats.value?.modelName || '',
-    messageCount: stats.messageCount ?? tokenStats.value?.messageCount ?? 0,
-    breakdown: stats.breakdown ?? tokenStats.value?.breakdown,
+    modelName: prev?.modelName || '',
+    messageCount: stats.messageCount ?? prev?.messageCount ?? 0,
+    breakdown: stats.breakdown ?? prev?.breakdown,
+  })
+  if (tokenStatsBySession.value.size > MAX_CACHED_SESSIONS) {
+    const oldest = tokenStatsBySession.value.keys().next().value
+    if (oldest !== undefined && oldest !== sessionId) {
+      tokenStatsBySession.value.delete(oldest)
+    }
   }
 }
 
@@ -61,14 +78,14 @@ function applyContextStats(stats: ContextStatsInput) {
  * 从 SSE 流事件注入上下文统计（turn_end / compression_end / compaction_summary 携带）
  *
  * 后端在事件中携带上下文统计（usedTokens / effectiveContextWindow / messageCount /
- * breakdown），前端直接更新环形指示器与细分面板，不发 REST。
+ * breakdown），前端按事件所属会话写入切片，不发 REST。
  */
-export function updateTokenStatsFromSSE(stats: ContextStatsInput) {
-  applyContextStats(stats)
+export function updateTokenStatsFromSSE(sessionId: string, stats: ContextStatsInput) {
+  applyContextStats(sessionId, stats)
 }
 
 /**
- * 从会话事件日志逆向扫描最后一个「上下文占用锚点」并填充环形指示器。
+ * 从会话事件日志逆向扫描最后一个「上下文占用锚点」并填充该会话的环形指示器切片。
  *
  * 兼容两种形状（eventLog 是领域事件与 live chunk 的混合数组）：
  * - live chunk（turn_end / compaction_summary / compression_end）：`e.contextStats`
@@ -78,8 +95,11 @@ export function updateTokenStatsFromSSE(stats: ContextStatsInput) {
  * （含 messageCount/breakdown）落进持久化事件 → 打开/切换会话时直接取最后一个锚点。
  * @returns 是否找到锚点（false → 显示空状态）
  */
-export function applyContextStatsFromEvents(events: unknown[]): boolean {
-  if (!Array.isArray(events)) return false
+export function applyContextStatsFromEvents(
+  sessionId: string | null | undefined,
+  events: unknown[],
+): boolean {
+  if (!sessionId || !Array.isArray(events)) return false
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i] as Record<string, any> | null | undefined
     if (!e) continue
@@ -90,7 +110,7 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
       typeof live.effectiveContextWindow === 'number' &&
       live.effectiveContextWindow > 0
     ) {
-      applyContextStats({
+      applyContextStats(sessionId, {
         usedTokens: live.usedTokens,
         effectiveContextWindow: live.effectiveContextWindow,
         messageCount: typeof live.messageCount === 'number' ? live.messageCount : undefined,
@@ -105,7 +125,7 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
       typeof domain.effectiveContextWindow === 'number' &&
       domain.effectiveContextWindow > 0
     ) {
-      applyContextStats({
+      applyContextStats(sessionId, {
         usedTokens: domain.usedTokens,
         effectiveContextWindow: domain.effectiveContextWindow,
         messageCount: typeof domain.messageCount === 'number' ? domain.messageCount : undefined,
@@ -117,17 +137,22 @@ export function applyContextStatsFromEvents(events: unknown[]): boolean {
   return false
 }
 
+/** 清空统计切片（测试/会话数据清理用；不传则清全部） */
+export function clearTokenStats(sessionId?: string) {
+  if (sessionId) tokenStatsBySession.value.delete(sessionId)
+  else tokenStatsBySession.value.clear()
+}
+
 /**
- * 会话级 Token 统计共享状态
+ * 会话级 Token 统计切片（环形指示器与记忆弹窗同源）
  *
- * 模块级 ref 确保所有调用方共享同一份数据（环形指示器与记忆弹窗同源）。
- * 数据完全来自事件流投影：实时由 streamProjector 喂入，打开/切换会话由
+ * 数据完全来自事件流投影：实时由 streamProjector 按会话喂入，打开/切换会话由
  * 调用方逆向扫描事件日志锚点填充（见 applyContextStatsFromEvents）。
  */
-export function useSessionTokenStats(sessionId: Ref<string | null>) {
-  // sessionId 变化时清空旧数据（新会话由 ChatPanel 事件页加载后逆向扫描锚点填充）
-  watch(sessionId, () => {
-    tokenStats.value = null
+export function useSessionTokenStats(sessionId: Ref<string | null | undefined>) {
+  const tokenStats = computed<TokenStatsData | null>(() => {
+    const id = sessionId.value
+    return id ? tokenStatsBySession.value.get(id) ?? null : null
   })
 
   return {

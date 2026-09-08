@@ -6,6 +6,8 @@ vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 import {
   useSessionTokenStats,
   applyContextStatsFromEvents,
+  updateTokenStatsFromSSE,
+  clearTokenStats,
 } from "./useSessionTokenStats";
 
 /**
@@ -13,17 +15,18 @@ import {
  *
  * 覆盖：
  * - applyContextStatsFromEvents：事件日志逆序取最后一个锚点（领域 turn/finish、live
- *   chunk、compaction/end 混合形状），填充环形指示器
+ *   chunk、compaction/end 混合形状），按会话填充环形指示器切片
  * - 锚点携带 messageCount/breakdown 时一并写入（新事件）；缺省时保留旧值（旧事件兼容）
  * - 无锚点 / 非法窗口 → 返回 false（调用方显示空状态）
+ * - 会话隔离：后台会话的锚点不污染其他会话切片（主会话 × 子代理同屏并存）
  */
 describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", () => {
   let tokenStats: ReturnType<typeof useSessionTokenStats>["tokenStats"];
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    clearTokenStats();
     tokenStats = useSessionTokenStats(ref("s1")).tokenStats;
-    tokenStats.value = null;
   });
 
   it("取最后一个有效锚点（领域 turn/finish、live turn_end、compaction/end 混合，逆序）", () => {
@@ -33,7 +36,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       { type: "compaction/end", data: { usedTokens: 150, effectiveContextWindow: 1000 } },
       { type: "user/message", data: { messageId: "u1" } },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.usedTokens).toBe(150);
     expect(tokenStats.value?.totalTokens).toBe(1000);
     expect(tokenStats.value?.percentage).toBe(15);
@@ -44,24 +47,21 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       { type: "turn/finish", data: { usedTokens: 800, effectiveContextWindow: 1000 } },
       { type: "compression_end", contextStats: { usedTokens: 500, effectiveContextWindow: 1000 } },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.usedTokens).toBe(500);
   });
 
   it("锚点未携带 breakdown/messageCount 时保留已有值（旧事件兼容）", () => {
-    tokenStats.value = {
+    updateTokenStatsFromSSE("s1", {
       usedTokens: 0,
-      totalTokens: 1000,
-      remainingTokens: 1000,
-      percentage: 0,
-      modelName: "m",
+      effectiveContextWindow: 1000,
       messageCount: 9,
       breakdown: { systemPrompt: 10, history: 40, tools: 50 },
-    };
+    });
     const events = [
       { type: "turn/finish", data: { usedTokens: 250, effectiveContextWindow: 1000 } },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.breakdown).toEqual({
       systemPrompt: 10, history: 40, tools: 50,
     });
@@ -81,7 +81,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
         },
       },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.usedTokens).toBe(400);
     expect(tokenStats.value?.messageCount).toBe(12);
     expect(tokenStats.value?.breakdown).toEqual({
@@ -101,7 +101,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
         },
       },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(true);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.breakdown).toBeUndefined();
     expect(tokenStats.value?.messageCount).toBe(3);
   });
@@ -111,22 +111,43 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       { type: "user/message", data: { messageId: "u1" } },
       { type: "assistant/message", data: { messageId: "a1" } },
     ];
-    expect(applyContextStatsFromEvents(events as any)).toBe(false);
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(false);
     expect(tokenStats.value).toBeNull();
   });
 
   it("非数组 / 非法窗口 / 缺字段 → false", () => {
-    expect(applyContextStatsFromEvents(null as any)).toBe(false);
-    expect(applyContextStatsFromEvents(undefined as any)).toBe(false);
+    expect(applyContextStatsFromEvents("s1", null as any)).toBe(false);
+    expect(applyContextStatsFromEvents("s1", undefined as any)).toBe(false);
+    expect(applyContextStatsFromEvents(null, [])).toBe(false);
     expect(
-      applyContextStatsFromEvents([
+      applyContextStatsFromEvents("s1", [
         { type: "turn/finish", data: { usedTokens: 5, effectiveContextWindow: 0 } },
       ] as any),
     ).toBe(false);
     expect(
-      applyContextStatsFromEvents([
+      applyContextStatsFromEvents("s1", [
         { type: "turn/finish", data: { usedTokens: 5 } },
       ] as any),
     ).toBe(false);
+  });
+
+  it("会话隔离：SSE 锚点按 sessionId 写入，后台会话不污染前台切片", () => {
+    const mainStats = useSessionTokenStats(ref("main")).tokenStats;
+    const subStats = useSessionTokenStats(ref("sub")).tokenStats;
+
+    applyContextStatsFromEvents("main", [
+      { type: "turn/finish", data: { usedTokens: 100, effectiveContextWindow: 1000 } },
+    ]);
+    // 后台子代理回合结束（真实互染路径：projector 对所有会话喂 updateTokenStatsFromSSE）
+    updateTokenStatsFromSSE("sub", {
+      usedTokens: 900,
+      effectiveContextWindow: 2000,
+      messageCount: 4,
+    });
+
+    expect(mainStats.value?.usedTokens).toBe(100);
+    expect(mainStats.value?.totalTokens).toBe(1000);
+    expect(subStats.value?.usedTokens).toBe(900);
+    expect(subStats.value?.percentage).toBe(45);
   });
 });

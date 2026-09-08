@@ -266,6 +266,27 @@ describe("WorkflowEngineService 正常运行", () => {
     ]);
   });
 
+  it("pipeline stage 收到完整 (prev, item, index) 三参（回归：Promise.then 只回传 prev）", async () => {
+    const { engine, ctx } = createEngine();
+    const result = await engine.startRun(ctx, {
+      meta: { name: "n" },
+      script: `
+        const rs = await pipeline(
+          ['a', 'b'],
+          (prev, item, index) => prev + '>' + item + '#' + index,
+          (prev, item, index) => prev + '|' + item + '#' + index
+        );
+        return rs;
+      `,
+    });
+    expect(result.status).toBe("completed");
+    // 首阶段 prev = 原始 item；item/index 在各阶段均正确传递
+    expect(result.value).toEqual([
+      "a>a#0|a#0",
+      "b>b#1|b#1",
+    ]);
+  });
+
   it("phase() + log() → run-phase / run-log 事件", async () => {
     const { engine, ctx, broadcasted } = createEngine();
     await engine.startRun(ctx, {

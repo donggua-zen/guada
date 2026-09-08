@@ -94,7 +94,7 @@ describe("useSessionEvents 统一订阅器", () => {
 
     emitStreamStatus({ sessionId: "sub-1", status: "running", sessionType: "sub_agent" });
 
-    // streamStatus 写入(供 ChatPage watch 派生 agentTabs)
+    // streamStatus 写入(供概览"子代理"区等消费方派生运行状态)
     expect(store.getSessionState("sub-1").streamStatus).toBe("running");
     // 侧边栏 working 不被改(子 Agent 不出现在侧边栏)
     expect(store.getSidebarState("sub-1").working).toBe(false);

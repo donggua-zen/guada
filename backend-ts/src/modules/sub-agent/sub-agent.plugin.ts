@@ -133,8 +133,8 @@ The sub-agent has its own independent conversation context and tool capabilities
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
-        // one_shot 模式下会话已在结果交付后自动删除，不再返回 Session ID，
-        // 避免 AI 对已删除的会话调用 close / send_message
+        // one_shot 模式下会话已在结果交付后自动冻结（仅供回放），不再返回 Session ID，
+        // 避免 AI 对已冻结的会话调用 close / send_message
         const tag =
           result.status === "error"
             ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}${lifecycle === "one_shot" ? ". One-shot sub-agent auto-closed." : `. Session ID: ${result.subSessionId}`}]`

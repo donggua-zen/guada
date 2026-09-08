@@ -240,6 +240,20 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
 }
 
 /**
+ * 复位消息束内所有仍处于思考中的块。
+ *
+ * OpenAI 兼容系 adapter（DeepSeek/Gemini 等）的 block_end[reasoning] 曾延迟到
+ * 流收尾才补发；text/tool 通道首见即代表思考已让位，此处跨块复位保证 UI 在
+ * 正文输出开始时立即切换为"已深度思考"。不写近似时长——权威值由 block_end
+ * 的 timing 派生，避免与其累加逻辑冲突。
+ */
+function resetThinkingInBundle(bundle: MessageBundle): void {
+  for (const b of bundle.blocks) {
+    if (b.state?.isThinking) b.state.isThinking = false;
+  }
+}
+
+/**
  * 从"后端三层 Message 形态"组装 MessageBundle（user 消息入口：live user_message 与
  * domain user/message 共用）。消息级字段（role/kind/source/metadata）单点挂载于 bundle，
  * 块由 messageToTurnContent 产出（role/messageId 不可变戳记随块写入）。
@@ -524,7 +538,7 @@ export function applyChunkToStore(
     // 摘要路径随后 compaction_summary 原位放结果卡）+ 压缩后占用 → 环形指示器即时更新
     sessionStore.setSessionIsCompressing(sessionId, false);
     if ((chunk as any).contextStats) {
-      updateTokenStatsFromSSE((chunk as any).contextStats);
+      updateTokenStatsFromSSE(sessionId, (chunk as any).contextStats);
     }
     removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
     return;
@@ -535,7 +549,7 @@ export function applyChunkToStore(
     sessionStore.setSessionIsCompressing(sessionId, false);
     // 压缩事件自身携带压缩后占用 → 环形指示器即时更新（无需 REST）
     if ((chunk as any).contextStats) {
-      updateTokenStatsFromSSE((chunk as any).contextStats);
+      updateTokenStatsFromSSE(sessionId, (chunk as any).contextStats);
     }
     const turns = sessionStore.getTurns(sessionId) || [];
 
@@ -691,9 +705,9 @@ export function applyChunkToStore(
       }
     }
     setCurrentTurn(sessionId, undefined);
-    // 上下文统计 → 环形指示器（合并自 useStreamResponse.handleTurnEnd）
+    // 上下文统计 → 环形指示器（合并自 useStreamResponse.handleTurnEnd；按会话切片防互染）
     if (chunk.contextStats) {
-      updateTokenStatsFromSSE(chunk.contextStats);
+      updateTokenStatsFromSSE(sessionId, chunk.contextStats);
     }
     return;
   }
@@ -805,6 +819,9 @@ export function applyChunkToStore(
       if (chunk.blockType === "reasoning") {
         content.state.isThinking = true;
         content.thinkingStartedAt = Date.now();
+      } else {
+        // 正文/工具通道开块即代表思考通道已让位
+        resetThinkingInBundle(bundle);
       }
       break;
     case "reasoning_delta":
@@ -812,10 +829,12 @@ export function applyChunkToStore(
         (content.reasoningContent || "") + (chunk.text || "");
       break;
     case "text_delta":
+      resetThinkingInBundle(bundle);
       content.state.isThinking = false;
       content.content = (content.content || "") + (chunk.text || "");
       break;
     case "tool_call_delta": {
+      resetThinkingInBundle(bundle);
       if (!content.metadata) content.metadata = {};
       if (!Array.isArray(content.metadata.toolCalls)) content.metadata.toolCalls = [];
       const list = content.metadata.toolCalls;

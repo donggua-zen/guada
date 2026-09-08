@@ -20,6 +20,7 @@ import {
 } from "../../common/events/unified-event.types";
 import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
+import { SessionRepository } from "../../common/database/session.repository";
 import { HOOKS } from "./types/hooks.contract";
 /**
  * 会话事件类型
@@ -87,7 +88,10 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     Map<string, UserEventSubscriber>
   >();
 
-  constructor(private readonly streamManager: SessionStreamManager) {}
+  constructor(
+    private readonly streamManager: SessionStreamManager,
+    private readonly sessionRepository: SessionRepository,
+  ) {}
 
   /**
    * 注册 SSE 直投回调（唯一发布入口的消费者侧）
@@ -146,26 +150,79 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       `User ${userId} client ${clientId} subscribed, total clients: ${subscribers.size}`,
     );
 
+    // 连接建立时的补发（connected + eventBuffer 重放 + running 状态）必须延迟到 NestJS
+    // 订阅返回的 observable 之后。此前用普通 Subject 在 subscribe() 同步栈内直接 next，
+    // 而框架是在拿到 asObservable() 返回值后才订阅——同步 emit 早于订阅者附加，全部被
+    // 无重放缓冲的 Subject 静默丢弃（表现为刷新后会话级 isStreaming/streamStatus 丢失）。
+    // 用 queueMicrotask 推迟到当前同步栈之后（订阅已建立），并在回调内做三重防护：
+    //   1) 重新取 subscriber 确认连接仍在（快速刷新/断连时已被 unsubscribe 删除则跳过）
+    //   2) running 补发重新取当下活跃流快照，避免闭包捕获旧列表发出 stale running
+    //   3) 每次 next 包 try/catch，与 broadcastToUser/pushStreamToUser 一致
+    queueMicrotask(() => {
+      void this.emitCatchup(userId, clientId, subject);
+    });
+
+    return subject.asObservable();
+  }
+
+  /**
+   * 连接建立后的补发：connected 事件、活跃流 eventBuffer 重放、running 状态补发。
+   * 在 queueMicrotask 中执行，确保晚于 NestJS 对返回 observable 的订阅。
+   */
+  private async emitCatchup(
+    userId: string,
+    clientId: string,
+    subject: Subject<MessageEvent>,
+  ): Promise<void> {
+    // 防护 1：连接可能在微任务前已断开（req close → unsubscribe → subject.complete + map 删除）
+    const stillSubscribed = () =>
+      this.userSubscribers.get(userId)?.get(clientId)?.subject === subject &&
+      !subject.closed;
+
+    const safeNext = (event: MessageEvent): boolean => {
+      if (!stillSubscribed()) return false;
+      try {
+        subject.next(event);
+        return true;
+      } catch (error) {
+        this.logger.debug(
+          `emitCatchup next failed for ${userId}/${clientId}: ${String(error)}`,
+        );
+        return false;
+      }
+    };
+
     // 发送连接成功事件
-    subject.next({
-      data: JSON.stringify({
-        type: "connected",
-        timestamp: new Date().toISOString(),
-      }),
-    } as MessageEvent);
+    if (
+      !safeNext({
+        data: JSON.stringify({
+          type: "connected",
+          timestamp: new Date().toISOString(),
+        }),
+      } as MessageEvent)
+    ) {
+      return;
+    }
+
+    // 防护 2：重新取当下活跃流快照（微任务窗口内流可能已 stop）
+    const activeStreams = this.streamManager.getActiveStreamsForUser(userId);
 
     // 统一 SSE:连接建立时按 userId 补发该用户全部活跃流的 eventBuffer 增量。
     // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
     // 前端按 payload.sessionId 归会话、按 prevSeq >= lastSeq 去重后消费。
-    for (const stream of this.streamManager.getActiveStreamsForUser(userId)) {
+    for (const stream of activeStreams) {
       for (const chunk of stream.eventBuffer) {
         const unified = createUnifiedEvent(
           this.mapStreamMethod(chunk.type),
           { sessionId: stream.sessionId, ...chunk } as Record<string, any>,
         );
-        subject.next({
-          data: JSON.stringify(unified),
-        } as MessageEvent);
+        if (
+          !safeNext({
+            data: JSON.stringify(unified),
+          } as MessageEvent)
+        ) {
+          return;
+        }
       }
     }
 
@@ -175,20 +232,29 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     // kind 随流类型下发：chat 流前端跳过事件页拉取靠 buffer 重放；maintenance 流
     // （手动压缩伪流）buffer 无回合历史，前端照常拉事件页，压缩中状态由 catchup 的
     // compression_start 恢复。
-    for (const stream of this.streamManager.getActiveStreamsForUser(userId)) {
-      subject.next({
-        data: JSON.stringify(
-          toSessionEvent("stream_status_changed", {
-            userId,
-            sessionId: stream.sessionId,
-            timestamp: new Date().toISOString(),
-            payload: { status: "running", kind: stream.kind },
-          }),
-        ),
-      } as MessageEvent);
+    // sessionType 随流下发：子会话（sub_agent/bot）补发需带上，否则前端
+    // useSessionEvents 的 isSubOrBot 判定失效，子会话状态会误穿主会话分支
+    // （污染主会话 isStreaming / 侧边栏 working）。ActiveStream 不含 sessionType，按 sessionId 查。
+    for (const stream of activeStreams) {
+      const sessionType =
+        (await this.sessionRepository
+          .getSessionType(stream.sessionId)
+          .catch(() => null)) ?? "web";
+      if (
+        !safeNext({
+          data: JSON.stringify(
+            toSessionEvent("stream_status_changed", {
+              userId,
+              sessionId: stream.sessionId,
+              timestamp: new Date().toISOString(),
+              payload: { status: "running", kind: stream.kind, sessionType },
+            }),
+          ),
+        } as MessageEvent)
+      ) {
+        return;
+      }
     }
-
-    return subject.asObservable();
   }
 
   /**

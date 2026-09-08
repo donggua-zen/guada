@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useSessionStore } from "./session";
 
@@ -87,5 +87,79 @@ describe("sessionStore 流状态机", () => {
     expect(store.getSessionState("s1").isStreaming).toBe(true);
     // streamStatus 保持 running,不被 setSessionIsStreaming 改动
     expect(store.getSessionState("s1").streamStatus).toBe("running");
+  });
+
+  it("peekStreamStatus 返回已缓存会话的实时状态,未缓存返回 undefined", () => {
+    const store = useSessionStore();
+    store.setStreamStatus("s1", "running");
+    expect(store.peekStreamStatus("s1")).toBe("running");
+
+    store.setStreamStatus("s1", "completed");
+    expect(store.peekStreamStatus("s1")).toBe("completed");
+
+    // 未缓存:undefined(调用方按 idle 处理),绝不静默创建
+    expect(store.peekStreamStatus("unknown")).toBeUndefined();
+  });
+
+  it("peekStreamStatus 纯读约束:不创建缓存、不触发 LRU 淘汰(递归更新白屏回归)", () => {
+    const store = useSessionStore();
+    // 预置一批缓存并给探针会话打标
+    for (let i = 0; i < 8; i++) {
+      store.getSessionState(`fill_${i}`);
+    }
+    store.setStreamStatus("probe", "running");
+    store.getSessionState("probe");
+
+    // 渲染/watcher 路径高频 peek 一个未知会话:若 peek 有副作用(创建+清扫),
+    // probe 会被挤出缓存,状态读取退回 idle
+    for (let i = 0; i < 50; i++) {
+      expect(store.peekStreamStatus(`unknown_${i}`)).toBeUndefined();
+    }
+    expect(store.getSessionState("probe").streamStatus).toBe("running");
+  });
+
+  it("TTL 淘汰:超过 2h 无续期的缓存被清除,running 中的流保留", () => {
+    const store = useSessionStore();
+    store.getSessionState("stale_1");
+    store.setStreamStatus("runner_1", "running");
+    store.getSessionState("runner_1");
+
+    // 快进 3 小时清扫:stale 过期;runner 虽同样无续期但受 running 保护
+    store.evictSessionStates(undefined, Date.now() + 3 * 60 * 60 * 1000);
+
+    expect(store.peekStreamStatus("stale_1")).toBeUndefined();
+    expect(store.peekStreamStatus("runner_1")).toBe("running");
+  });
+
+  it("活跃续期:2h 内有访问续期的缓存不被误删", () => {
+    vi.useFakeTimers();
+    try {
+      const store = useSessionStore();
+      vi.setSystemTime(0);
+      store.getSessionState("s1");
+      // 1h 后再次访问续期(模拟事件/读取不断到来)
+      vi.setSystemTime(60 * 60 * 1000);
+      store.getSessionState("s1");
+      // 2h+1min 时清扫:距上次续期仅 1h+1min,不应被删
+      vi.setSystemTime(2 * 60 * 60 * 1000 + 60 * 1000);
+      store.evictSessionStates();
+      expect(store.peekStreamStatus("s1")).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("硬上限兜底:灌入超过 32 个会话,running 不被淘汰,最旧非 running 被踢", () => {
+    const store = useSessionStore();
+    store.setStreamStatus("runner", "running");
+    store.getSessionState("runner");
+    for (let i = 0; i < 40; i++) {
+      store.getSessionState(`flood_${i}`);
+    }
+    // running 保护:无论灌入多少,运行中的会话不被淘汰
+    expect(store.peekStreamStatus("runner")).toBe("running");
+    // 最旧的非 running 被踢,最新的保留(尺寸收敛到硬上限)
+    expect(store.peekStreamStatus("flood_0")).toBeUndefined();
+    expect(store.peekStreamStatus("flood_39")).toBe("idle");
   });
 });

@@ -29,6 +29,8 @@ CREATE TABLE "session" (
     "external_id" TEXT,
     "workspace_path" TEXT,
     "parent_id" TEXT,
+    "closed_at" DATETIME,
+    "close_reason" TEXT,
     CONSTRAINT "session_character_id_fkey" FOREIGN KEY ("character_id") REFERENCES "character" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "session_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "session_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "session_group" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
@@ -388,4 +390,3 @@ CREATE INDEX "bot_instance_platform_idx" ON "bot_instance"("platform");
 
 -- CreateIndex
 CREATE INDEX "bot_instance_status_idx" ON "bot_instance"("status");
-

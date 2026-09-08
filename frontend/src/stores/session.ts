@@ -52,15 +52,58 @@ export const useSessionStore = defineStore('session', () => {
     // 会话侧边栏状态（未读 / 工作中）
     const sessionSidebarStates: Ref<Map<string, { unread: boolean; working: boolean }>> = ref(new Map())
 
-    /** 会话内容缓存上限(LRU):超过则淘汰最久未用的会话缓存 */
-    const MAX_CACHED_SESSIONS = 8
+    /** 会话状态过期时长:超过该时长无访问/事件续期的缓存可被淘汰(活跃会话永不淘汰) */
+    const SESSION_STATE_TTL_MS = 2 * 60 * 60 * 1000
+    /** 硬上限兜底:过期清扫后仍超限时按最近访问淘汰非活跃会话(仅防内存膨胀,正常使用不可达) */
+    const MAX_CACHED_SESSIONS = 32
 
     /** 每会话消息轮次上限:单会话 turns 超过自动移除最旧 */
     const MAX_TURNS_PER_SESSION = 200
 
     /**
-     * 获取或初始化会话状态(LRU 缓存:命中续期,超限淘汰最久未用)
-     * 续期只更新非响应式访问时间戳,绝不 delete/set sessions.value(响应式 Map)——
+     * 淘汰过期/超限的会话内容缓存（写路径调用：新建缓存后；导出供测试）。
+     *
+     * 淘汰策略（活跃优先）：
+     * ① TTL：超过 SESSION_STATE_TTL_MS 无任何访问/事件续期 → 淘汰
+     *    （projector 每个流事件都经 getSessionState 续期，即"有新事件 → 重置最后活跃时间"，
+     *    活跃会话永不过期）；
+     * ② running 保护：streamStatus === 'running' 的会话一律不淘汰（双保险）；
+     * ③ 硬上限兜底：清扫后仍超过 MAX_CACHED_SESSIONS → 按最近访问淘汰非 running 最旧者。
+     */
+    const evictSessionStates = (exceptId?: string, now: number = Date.now()): void => {
+        for (const [sid, state] of sessions.value) {
+            if (sid === exceptId) continue
+            if (state.streamStatus === 'running') continue
+            if (now - (sessionLastAccess.get(sid) ?? 0) > SESSION_STATE_TTL_MS) {
+                sessions.value.delete(sid)
+                sessionLastAccess.delete(sid)
+            }
+        }
+        while (sessions.value.size > MAX_CACHED_SESSIONS) {
+            let oldest: string | null = null
+            let oldestTime = Infinity
+            for (const [sid] of sessions.value) {
+                if (sid === exceptId) continue
+                if (sessions.value.get(sid)!.streamStatus === 'running') continue
+                const t = sessionLastAccess.get(sid) ?? 0
+                if (t < oldestTime) {
+                    oldestTime = t
+                    oldest = sid
+                }
+            }
+            if (oldest === null) break
+            sessions.value.delete(oldest)
+            sessionLastAccess.delete(oldest)
+        }
+    }
+
+    /**
+     * 获取或初始化会话状态（活跃 TTL 缓存）
+     *
+     * 续期：每次调用（命中或新建）刷新非响应式访问时间戳——projector 每个流事件都经此
+     * 读状态，即"有新事件 → 重置最后活跃时间"；超过 SESSION_STATE_TTL_MS 无续期的缓存
+     * 在下次新建缓存时被清扫（running 中的流绝不淘汰）。
+     * 续期只更新非响应式访问时间戳，读路径绝不 delete/set sessions.value（响应式 Map）——
      * 否则渲染路径每次 getSessionState 都会改响应式状态 → 无限递归(Maximum recursive updates)。
      * @param sessionId - 会话 ID
      */
@@ -84,25 +127,24 @@ export const useSessionStore = defineStore('session', () => {
                 messageQueue: [],
             })
             sessionLastAccess.set(sessionId, Date.now())
-            // LRU:超限淘汰最久未用(按非响应式访问时间,不淘汰刚插入的当前会话)
-            while (sessions.value.size > MAX_CACHED_SESSIONS) {
-                let oldest: string | null = null
-                let oldestTime = Infinity
-                for (const [sid, t] of sessionLastAccess) {
-                    if (sessions.value.has(sid) && t < oldestTime) {
-                        oldestTime = t
-                        oldest = sid
-                    }
-                }
-                if (oldest === null || oldest === sessionId) break
-                sessions.value.delete(oldest)
-                sessionLastAccess.delete(oldest)
-            }
+            // 新建缓存后清扫过期/超限（写路径；读路径 peekStreamStatus 零写入）
+            evictSessionStates(sessionId)
         } else {
             // LRU 续期:只更新非响应式访问时间戳,不修改响应式 Map(避免渲染递归)
             sessionLastAccess.set(sessionId, Date.now())
         }
         return sessions.value.get(sessionId)!
+    }
+
+    /**
+     * 纯读流状态（不创建缓存、不续期、绝不写响应式 Map）——渲染路径 / watcher source 专用。
+     *
+     * getSessionState 的 miss 分支会创建缓存并触发清扫（写响应式 Map）：在 watcher
+     * source / 渲染里调用会造成"读路径自我触发"→ Maximum recursive updates 白屏。
+     * 状态只读场景一律用本方法（未缓存返回 undefined，语义等同 idle）。
+     */
+    const peekStreamStatus = (sessionId: string): StreamStatus | undefined => {
+        return sessions.value.get(sessionId)?.streamStatus
     }
 
     /**
@@ -591,13 +633,15 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 同步后端流式状态到侧边栏状态
-     * 用于页面加载时初始化 working 状态
+     * 同步后端流式状态到侧边栏状态 + 会话级 isStreaming
+     * 用于页面加载时初始化：侧边栏"工作中"圆点与发送按钮统一走这条不受 SSE 时序影响的快照恢复线
+     * （后端 session.isStreaming 由 hasActiveStream 逐会话现算，刷新时经 fetchSessions 注入）。
      * @param sessionId - 会话 ID
      * @param isStreaming - 后端返回的流式状态
      */
     const syncStreamingState = (sessionId: string, isStreaming: boolean): void => {
         getSidebarState(sessionId).working = isStreaming
+        getSessionState(sessionId).isStreaming = isStreaming
     }
 
     /**
@@ -652,6 +696,7 @@ export const useSessionStore = defineStore('session', () => {
 
         // actions
         getSessionState,
+        evictSessionStates,
         getMessages,
         addMessage,
         setMessages,
@@ -669,6 +714,7 @@ export const useSessionStore = defineStore('session', () => {
         setSessionStreamKind,
         sessionStreamKind,
         setStreamStatus,
+        peekStreamStatus,
         sessionIsCompressing,
         setSessionIsCompressing,
         sessionPendingAsk,

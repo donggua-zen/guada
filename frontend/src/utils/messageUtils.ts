@@ -154,6 +154,18 @@ export function countSteps(items: DisplayItem[]): number {
 }
 
 /**
+ * 思考内容预览：按行拆分取最后一行（从行首显示、超长结尾截断）。
+ * 思考中实时跟随最新一行变化，结束后保留——作为思考步骤行与
+ * 分组标题的摘要文字（与工具行的 args 摘要同位）。
+ */
+export function getThinkingPreview(reasoningContent: string | null | undefined): string {
+  if (!reasoningContent) return '';
+  const lines = reasoningContent.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lastLine = lines[lines.length - 1] || '';
+  return lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
+}
+
+/**
  * 将单个大 content 拆分为 DisplayItem 列表
  */
 function flattenSingleContent(content: MessageContent): DisplayItem[] {
