@@ -69,11 +69,12 @@ export class SessionsController {
     @Query("includeArchived") includeArchived: string | undefined,
     @CurrentUser() user: any,
   ) {
+    // limit = 每批扫描的会话数（渐进扫描，前端循环拉取直到 hasMore=false）
     return this.sessionService.searchSessions(
       user.id,
       keyword?.trim() || "",
       cursor,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 25,
       includeArchived === "true",
     );
   }

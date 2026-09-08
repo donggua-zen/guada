@@ -37,6 +37,12 @@ export class RequestTimingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const method = request.method;
     const url = request.originalUrl || request.url;
+
+    // /health 是 Electron 看门狗的 15s 一次的存活探测，记录会刷屏 combined 日志
+    if (url.startsWith("/api/v1/health")) {
+      return next.handle();
+    }
+
     const startTime = Date.now();
 
     return next.handle().pipe(

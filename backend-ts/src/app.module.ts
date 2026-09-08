@@ -30,6 +30,7 @@ import { BridgeModule } from './modules/bridge/bridge.module';
 import { GitModule } from './modules/git/git.module';
 import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -48,7 +49,7 @@ import { PersistenceModule } from './common/persistence/persistence.module';
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块
-    SearchModule, // 全文搜索索引模块（FTS5，独立 DB）
+    SearchModule, // 会话内容搜索（JSONL 实时批扫描，无索引库）
     McpClientModule, // MCP 客户端模块（全局）
     SkillsModule, // Skills 集成框架模块
     ChatModule,
@@ -71,6 +72,7 @@ import { PersistenceModule } from './common/persistence/persistence.module';
     GitModule,        // Git 源码管理模块
     TerminalModule,   // 终端模块（后端 PTY + WebSocket）
     PersistenceModule, // 持久化存储模块（全局：PersistenceBackend + IMessageStore 抽象）
+    HealthModule,      // 健康检查端点（Electron 看门狗探测用）
   ],
 })
 export class AppModule {}

@@ -184,6 +184,8 @@ export interface WorkflowRunSnapshot {
   errorCode?: string;
   errorMessage?: string;
   durationMs?: number;
+  /** 脚本返回值（仅 completed；历史审阅用，协议保证 JSON 可序列化） */
+  result?: unknown;
   /** 已应用的最高事件 seq（幂等去重） */
   lastSeq: number;
 }

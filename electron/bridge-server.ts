@@ -51,6 +51,7 @@ export class BridgeServer {
   private defaultHandler: MethodHandler | null = null;
   private eventListeners = new Map<string, Set<EventCallback>>();
   private connections = new Set<net.Socket>();
+  private clientAuthenticatedAt = 0;
 
   constructor(pipePath: string, token: string) {
     this.pipePath = pipePath;
@@ -136,6 +137,13 @@ export class BridgeServer {
   }
 
   /**
+   * 是否存在已鉴权的后端连接（供看门狗判定后端进程生死）
+   */
+  hasAuthenticatedClient(): boolean {
+    return this.connections.size > 0;
+  }
+
+  /**
    * 向所有已鉴权连接广播事件
    */
   broadcast(event: string, data: any): void {
@@ -177,6 +185,7 @@ export class BridgeServer {
             if (msg.type === "auth" && msg.token === this.token) {
               authenticated = true;
               this.connections.add(socket);
+              this.clientAuthenticatedAt = Date.now();
               log.info("BridgeServer: client authenticated");
             } else {
               log.warn("BridgeServer: auth failed, closing connection");
@@ -195,7 +204,12 @@ export class BridgeServer {
     socket.on("close", () => {
       this.connections.delete(socket);
       if (authenticated) {
-        log.info("BridgeServer: client disconnected");
+        // 连接时长用于区分热重载（秒级断开重连）与后端进程异常死亡（永不重连）
+        const connectedSec = this.clientAuthenticatedAt
+          ? Math.round((Date.now() - this.clientAuthenticatedAt) / 1000)
+          : 0;
+        log.info(`BridgeServer: client disconnected (连接时长 ${connectedSec}s)`);
+        this.clientAuthenticatedAt = 0;
       }
     });
 

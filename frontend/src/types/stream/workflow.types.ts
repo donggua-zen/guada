@@ -73,6 +73,8 @@ export interface WorkflowRunState {
   errorCode?: string;
   errorMessage?: string;
   durationMs?: number;
+  /** 脚本返回值（仅 completed；终态快照归档携带，历史审阅用） */
+  result?: unknown;
   /** 已应用的最高事件 seq（幂等去重：重放 + 实时双源不重复应用） */
   lastSeq: number;
 }

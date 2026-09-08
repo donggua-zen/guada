@@ -297,10 +297,12 @@ function applyDomainEvent(
   switch (ev.type) {
     case "turn/start":
     case "turn/resume":
-      // 开括号：建回合（幂等）+ 游标；modelName 由 turn/finish 随后写入
+      // 开括号：建回合（幂等）+ 游标；modelName 优先取事件自带字段（turn/start 已随库
+      // 自包含），旧事件缺失时由 turn/finish 随后补写
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_start",
         turnId: data.turnId,
+        modelName: data.modelName,
       } as any);
       return;
     case "turn/finish":

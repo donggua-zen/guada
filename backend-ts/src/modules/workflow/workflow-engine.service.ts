@@ -5,6 +5,7 @@ import { Worker } from "worker_threads";
 import { ISessionContext } from "../chat/session-context";
 import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import type { SubAgentResult } from "../sub-agent/sub-agent.manager";
+import { WorkflowFileStore } from "./workflow-file-store.service";
 import { safeTruncate } from "../../common/utils/string.utils";
 import {
   WorkflowError,
@@ -145,6 +146,7 @@ class WorkflowRun {
   private settledResult: WorkflowRunResult | null = null;
   private doneResolve!: (r: WorkflowRunResult) => void;
   readonly done: Promise<WorkflowRunResult>;
+  private readonly fileStore: WorkflowFileStore;
 
   /** 内存折叠快照（事件广播前同步更新，快照永不落后于已广播事件） */
   private readonly snapshot: WorkflowRunSnapshot;
@@ -153,11 +155,13 @@ class WorkflowRun {
     runId: string;
     parentContext: ISessionContext;
     subAgentManager: SubAgentManager;
+    fileStore: WorkflowFileStore;
     options: WorkflowEngineOptions;
   }) {
     this.runId = params.runId;
     this.parentContext = params.parentContext;
     this.subAgentManager = params.subAgentManager;
+    this.fileStore = params.fileStore;
     this.maxConcurrent = Math.min(
       MAX_CONCURRENT_CLAMP,
       Math.max(1, params.options.maxConcurrentAgents ?? DEFAULT_MAX_CONCURRENT),
@@ -577,6 +581,17 @@ class WorkflowRun {
     // worker 已终态即回收（result/error/crash 后事件循环不再需要）
     this.worker?.terminate().catch(() => {});
     this.worker = null;
+    // 终态归档：快照写 sessions/<sid>/workflows/<runId>.json（历史审阅；
+    // 所有终态路径在此汇聚，覆盖 completed/failed/cancelled/worker 崩溃）
+    if (!this.snapshot.endedAt) this.snapshot.endedAt = Date.now();
+    if (result.value !== undefined) this.snapshot.result = result.value;
+    this.fileStore
+      .saveRunSnapshot(this.parentContext.sessionId, this.getSnapshot())
+      .catch((err) => {
+        this.logger.warn(
+          `workflow 快照落盘失败 run=${this.runId}: ${err instanceof Error ? err.message : err}`,
+        );
+      });
     this.doneResolve(result);
   }
 
@@ -603,7 +618,10 @@ export class WorkflowEngineService {
   /** 每会话运行快照注册表（runId → 快照；运行中永不淘汰，完成态超上限按注册顺序裁剪） */
   private readonly runStatesBySession = new Map<string, Map<string, WorkflowRunSnapshot>>();
 
-  constructor(private readonly subAgentManager: SubAgentManager) {}
+  constructor(
+    private readonly subAgentManager: SubAgentManager,
+    private readonly fileStore: WorkflowFileStore,
+  ) {}
 
   /** 概览面板数据源：某会话的全部已知 run 快照（运行中 + 近期完成） */
   getSessionRunStates(sessionId: string): WorkflowRunSnapshot[] {
@@ -661,6 +679,7 @@ export class WorkflowEngineService {
       runId,
       parentContext,
       subAgentManager: this.subAgentManager,
+      fileStore: this.fileStore,
       options,
     });
     this.runs.set(runId, run);

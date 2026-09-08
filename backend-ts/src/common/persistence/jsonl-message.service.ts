@@ -417,6 +417,7 @@ export class JsonlMessageService implements IMessageStore {
     options?: {
       replaceTurnId?: string;
       preGenTurnId?: string;
+      modelName?: string;
     },
   ): Promise<{ turnId: string; revision: number }> {
     return this.runExclusive(sessionId, () => this.beginTurnInternal(sessionId, options));
@@ -427,6 +428,7 @@ export class JsonlMessageService implements IMessageStore {
     options?: {
       replaceTurnId?: string;
       preGenTurnId?: string;
+      modelName?: string;
     },
   ): Promise<{ turnId: string; revision: number }> {
     const seq = await this.getNextSeq(sessionId);
@@ -453,6 +455,9 @@ export class JsonlMessageService implements IMessageStore {
       data: {
         turnId,
         kind: 'turn',
+        // 随事件自包含的回合模型名：历史页重建在途回合时即可显示模型，
+        // 不必等 turn/finish（旧事件无此字段，折叠逻辑按需读取，向后兼容）
+        ...(options?.modelName ? { modelName: options.modelName } : {}),
       },
     });
 

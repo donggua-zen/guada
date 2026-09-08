@@ -44,6 +44,17 @@ let trayStats = { running: 0, unread: 0 };
 let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 
+// —— 后端健康看门狗状态（仅记录日志，不自动重启）——
+// 背景：ts-node-dev --respawn 不会重启退出的子进程，Electron 只监控 npx 包装进程，
+// 真正的 NestJS 子进程死亡时全链路静默。看门狗用于留下死亡时间线供规律分析。
+let backendStartedAt = 0; // 后端子进程 spawn 时刻
+let backendHealthFailures = 0;
+let backendHealthAlerted = false;
+let lastBackendHealthOkAt = 0;
+let backendWatchdogTimer: NodeJS.Timeout | null = null;
+const BACKEND_WATCHDOG_INTERVAL_MS = 15000;
+const BACKEND_HEALTH_ALERT_THRESHOLD = 3;
+
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
 async function doCheckForUpdates() {
   try {
@@ -434,6 +445,58 @@ async function handleMigration(): Promise<void> {
   console.log(`迁移标记已写入: ${MIGRATED_FLAG}`);
 }
 
+// 后端健康看门狗：HTTP 探测 /api/v1/health，仅记录日志不做恢复动作。
+// 连接被拒 => 后端进程死亡；请求超时 => 进程在但事件循环阻塞。
+// 与 bridge 断开事件（bridge-server.ts 的 client disconnected）交叉验证可区分三种故障：
+// 进程死亡 / 事件循环挂死 / ts-node-dev 子进程与包装进程状态不一致。
+async function pingBackendHealth(): Promise<boolean> {
+  if (!backendPort) return false;
+  try {
+    const res = await fetch(`http://127.0.0.1:${backendPort}/api/v1/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function startBackendWatchdog(): void {
+  if (backendWatchdogTimer) return;
+  backendWatchdogTimer = setInterval(() => {
+    // 启动期与主动停机期不判定失败
+    if (isBackendStarting || isBackendStopping) return;
+    void pingBackendHealth().then((ok) => {
+      if (ok) {
+        lastBackendHealthOkAt = Date.now();
+        if (backendHealthAlerted) {
+          log.info("[BackendWatchdog] 后端恢复响应");
+        }
+        backendHealthFailures = 0;
+        backendHealthAlerted = false;
+        return;
+      }
+      backendHealthFailures += 1;
+      if (backendHealthFailures === BACKEND_HEALTH_ALERT_THRESHOLD && !backendHealthAlerted) {
+        backendHealthAlerted = true;
+        const bridgeConnected = bridgeServer?.hasAuthenticatedClient() ?? false;
+        const uptimeMin = backendStartedAt
+          ? Math.round((Date.now() - backendStartedAt) / 60000)
+          : -1;
+        log.error(
+          `[BackendWatchdog] 后端健康检查连续 ${BACKEND_HEALTH_ALERT_THRESHOLD} 次失败，` +
+            `bridge 已连接=${bridgeConnected}，后端进程存活 ${uptimeMin} 分钟，` +
+            `最后正常响应=${lastBackendHealthOkAt ? new Date(lastBackendHealthOkAt).toLocaleTimeString() : "无记录"}。` +
+            `判读：连接被拒+bridge断开=进程死亡；超时=事件循环阻塞。` +
+            `若 logs/diagnostic-reports/ 无新报告且无 WER 事件，指向外部强杀（杀软等）`,
+        );
+      } else if (backendHealthAlerted && backendHealthFailures % 20 === 0) {
+        log.error(`[BackendWatchdog] 后端仍无响应（连续失败 ${backendHealthFailures} 次）`);
+      }
+    });
+  }, BACKEND_WATCHDOG_INTERVAL_MS);
+}
+
 // 启动 NestJS 后端服务
 async function startBackend(): Promise<void> {
   // 防止重复启动
@@ -505,7 +568,15 @@ async function startBackend(): Promise<void> {
           NODE_ENV: "development",
           PORT: String(backendPort),
           BASE_URL: "__auto__", // 与生产一致：动态设置 BASE_URL，后端返回的资源 URL 指向实际端口
-          NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
+          // 致命错误诊断报告：原生崩溃/内存耗尽时生成完整现场（native 栈、模块列表）。
+          // 外部强杀（如杀软 TerminateProcess）不产生报告——报告缺失本身就是证据
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS,
+            "--max-old-space-size=4096",
+            "--report-on-fatalerror",
+            "--report-uncaught-exception",
+            `--report-dir=${path.join(paths.logsDir, "diagnostic-reports")}`,
+          ].filter(Boolean).join(" "),
           DATABASE_URL: `file:${paths.dbPath}`,
           VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
@@ -530,6 +601,7 @@ async function startBackend(): Promise<void> {
       };
 
       backendProcess = spawn(nodePath, args, spawnOptions);
+      backendStartedAt = Date.now();
     } else {
       // 生产模式：使用 0 让系统自动分配端口，通过 IPC 获取
       backendPort = 0;
@@ -574,7 +646,15 @@ async function startBackend(): Promise<void> {
           NODE_ENV: "production",
           ELECTRON_RUN_AS_NODE: "1", // 关键：以纯 Node 模式运行
           NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
-          NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
+          // 致命错误诊断报告：原生崩溃/内存耗尽时生成完整现场（native 栈、模块列表）。
+          // 外部强杀（如杀软 TerminateProcess）不产生报告——报告缺失本身就是证据
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS,
+            "--max-old-space-size=4096",
+            "--report-on-fatalerror",
+            "--report-uncaught-exception",
+            `--report-dir=${path.join(paths.logsDir, "diagnostic-reports")}`,
+          ].filter(Boolean).join(" "),
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
           DATABASE_URL: `file:${paths.dbPath}`,
@@ -597,6 +677,7 @@ async function startBackend(): Promise<void> {
       };
 
       backendProcess = spawn(nodePath, [scriptPath], spawnOptions);
+      backendStartedAt = Date.now();
     }
 
     if (!backendProcess) {
@@ -2170,6 +2251,9 @@ app.whenReady().then(async () => {
     // 窗口创建后，初始化 Browser Bridge（等后端就绪后再初始化）
     await backendReadyPromise;
 
+    // 后端就绪后启动健康看门狗（仅记录日志）
+    startBackendWatchdog();
+
     // 注册浏览器自动化服务为 Bridge 默认 handler
     if (windowManager && bridgeServer) {
       automationService = new BrowserAutomationService();
@@ -2247,6 +2331,12 @@ app.on("before-quit", async (event) => {
   if (isCleaningUp) return;
   isCleaningUp = true;
   event.preventDefault();
+
+  // 停掉健康看门狗，避免退出流程中误报
+  if (backendWatchdogTimer) {
+    clearInterval(backendWatchdogTimer);
+    backendWatchdogTimer = null;
+  }
 
   // 0. 显示退出画面，浏览器导航会断开前端 keep-alive HTTP 连接
   if (mainWindow && !mainWindow.isDestroyed()) {

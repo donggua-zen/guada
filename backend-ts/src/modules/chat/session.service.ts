@@ -16,7 +16,7 @@ import {
   PaginatedResponse,
   CursorPaginatedResponse,
 } from "../../common/types/pagination";
-import { SearchIndexService } from "../../common/search/search-index.service";
+import { SessionContentSearchService } from "../../common/search/session-content-search.service";
 import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import {
@@ -51,7 +51,7 @@ export class SessionService {
     private compactionCoordinator: CompactionCoordinatorService,
     private eventBus: EventBusService,
     private sessionReplayService: SessionReplayService,
-    private searchIndex: SearchIndexService,
+    private contentSearch: SessionContentSearchService,
     private prisma: PrismaService,
     private sessionGroupService: SessionGroupService,
   ) {}
@@ -824,116 +824,120 @@ ${diffText}
   // ── 会话搜索 ──
 
   /**
-   * 搜索会话 — 标题匹配 + 消息内容匹配（FTS5）
+   * 搜索会话 — 标题匹配（Prisma contains）+ 消息内容匹配（JSONL 实时批扫描）
    *
-   * 合并两种来源的匹配结果，按 lastActiveAt DESC 游标分页。
-   * 内容匹配附带 snippet（匹配上下文片段）。
+   * 游标协议（base64 JSON，前端不透明透传）：
+   * - 无 cursor：title 阶段 —— 标题命中先行返回，并携带扫描清单规模（progress.total）
+   * - { phase: "content", offset }：content 阶段 —— 每次扫描 limit 个会话，
+   *   前端自动循环拉取直到 hasMore=false，结果边扫边出（VSCode 式渐进）
    *
-   * @param cursor base64("lastActiveAt_iso|session_id")
+   * 内容扫描零索引零缓存：每批读 JSONL → 展示链路折叠 → 文本匹配 → 即弃，
+   * 不存在索引断供/同步延迟问题（替代已移除的 FTS5 旁路索引）。
+   * 扫描顺序 = lastActiveAt DESC，结果大致按新旧程度陆续出现。
+   *
+   * @param limit 每批扫描的会话数（钳制 1..100）
    */
   async searchSessions(
     userId: string,
     keyword: string,
     cursor?: string,
-    limit: number = 20,
+    limit: number = 25,
     includeArchived: boolean = false,
   ): Promise<CursorPaginatedResponse<any>> {
+    const batchSize = Math.min(Math.max(limit, 1), 100);
     if (!keyword.trim()) {
-      return { items: [], hasMore: false, nextCursor: null };
+      return {
+        items: [],
+        hasMore: false,
+        nextCursor: null,
+        progress: { scanned: 0, total: 0 },
+      };
     }
 
-    // 1. FTS5 内容搜索
-    const ftsResults = this.searchIndex.search(keyword, 200);
-    const snippetMap = new Map<string, string>(); // sessionId → snippet
-    const contentMatchSessionIds = new Set<string>();
-    for (const r of ftsResults) {
-      if (!contentMatchSessionIds.has(r.sessionId)) {
-        contentMatchSessionIds.add(r.sessionId);
-        snippetMap.set(r.sessionId, r.snippet);
-      }
-    }
-
-    // 2. 标题搜索（Prisma contains）
+    // 标题匹配（两个阶段都查：title 阶段直接返回，content 阶段用于去重）
     const titleMatches = await this.sessionRepo.findByUserId(
       userId, 0, 200, undefined, keyword, includeArchived,
     );
-    const titleMatchSessionIds = new Set(titleMatches.items.map((s: any) => s.id));
+    const titleIds = new Set<string>(titleMatches.items.map((s: any) => s.id));
 
-    // 3. 合并所有匹配的 session_id
-    const allMatchedIds = new Set<string>([
-      ...contentMatchSessionIds,
-      ...titleMatchSessionIds,
-    ]);
-
-    if (allMatchedIds.size === 0) {
-      return { items: [], hasMore: false, nextCursor: null };
-    }
-
-    // 4. 解析游标
-    let cursorTime: string | null = null;
-    let cursorId: string | null = null;
+    // 解析游标（旧版时间游标/base64("time|id") 解析失败时视为首扫，自然降级）
+    let phase: "title" | "content" = "title";
+    let offset = 0;
     if (cursor) {
       try {
-        const decoded = Buffer.from(cursor, "base64").toString("utf-8");
-        const sep = decoded.lastIndexOf("|");
-        if (sep > 0) {
-          cursorTime = decoded.substring(0, sep);
-          cursorId = decoded.substring(sep + 1);
+        const decoded = JSON.parse(Buffer.from(cursor, "base64").toString("utf-8"));
+        if (decoded?.phase === "content") {
+          phase = "content";
+          offset = Math.max(0, Number(decoded.offset) || 0);
         }
       } catch { /* invalid cursor — ignore */ }
     }
 
-    // 5. Prisma 查询：按 session_id + userId + 游标条件
-    const where: any = {
-      userId,
-      sessionType: "web",
-      id: { in: Array.from(allMatchedIds) },
-    };
-    if (!includeArchived) where.archived = false;
-
-    if (cursorTime && cursorId) {
-      where.OR = [
-        { lastActiveAt: { lt: new Date(cursorTime) } },
-        {
-          lastActiveAt: { equals: new Date(cursorTime) },
-          id: { lt: cursorId },
-        },
-      ];
-    }
-
-    // 多取一条判断 hasMore
-    const sessions = await this.prisma.session.findMany({
-      where,
+    // 全量会话 id 清单（扫描顺序 = lastActiveAt DESC；bot/子代理会话被 sessionType 排除）
+    const scopeWhere: any = { userId, sessionType: "web" };
+    if (!includeArchived) scopeWhere.archived = false;
+    const allSessions = await this.prisma.session.findMany({
+      where: scopeWhere,
+      select: { id: true },
       orderBy: [{ lastActiveAt: "desc" }, { id: "desc" }],
-      take: limit + 1,
-      include: { character: true },
     });
+    const scanIds = allSessions.map((s: any) => s.id);
+    const total = scanIds.length;
 
-    const hasMore = sessions.length > limit;
-    const items = hasMore ? sessions.slice(0, limit) : sessions;
-
-    // 6. 组装结果
-    const transformedItems = items.map((item: any) => {
-      const isTitleMatch = titleMatchSessionIds.has(item.id);
-      const isContentMatch = contentMatchSessionIds.has(item.id);
-      return {
+    if (phase === "title") {
+      const items = titleMatches.items.map((item: any) => ({
         ...item,
         isStreaming: this.streamManager.hasActiveStream(item.id),
-        matchType: isTitleMatch ? "title" : "content",
-        matchSnippet: isContentMatch ? (snippetMap.get(item.id) ?? undefined) : undefined,
+        matchType: "title" as const,
+      }));
+      return {
+        items,
+        hasMore: total > 0,
+        nextCursor: total > 0 ? encodeScanCursor(0) : null,
+        progress: { scanned: 0, total },
       };
-    });
-
-    // 7. 生成 nextCursor
-    let nextCursor: string | null = null;
-    if (hasMore && items.length > 0) {
-      const last = items[items.length - 1];
-      const lastActiveAt = last.lastActiveAt
-        ? last.lastActiveAt.toISOString()
-        : last.updatedAt.toISOString();
-      nextCursor = Buffer.from(`${lastActiveAt}|${last.id}`, "utf-8").toString("base64");
     }
 
-    return { items: transformedItems, hasMore, nextCursor };
+    // content 阶段：扫描一批会话
+    const { matches, scanned } = await this.contentSearch.scanBatch(
+      keyword, scanIds, offset, batchSize,
+    );
+    const nextOffset = offset + scanned;
+    const contentIds = [...matches.keys()].filter((id) => !titleIds.has(id));
+
+    let items: any[] = [];
+    if (contentIds.length > 0) {
+      const rows = await this.prisma.session.findMany({
+        where: { userId, sessionType: "web", id: { in: contentIds } },
+        include: { character: true },
+      });
+      const rowMap = new Map(rows.map((r: any) => [r.id, r]));
+      // 保持扫描顺序（lastActiveAt DESC）
+      items = contentIds
+        .map((id) => rowMap.get(id))
+        .filter(Boolean)
+        .map((item: any) => ({
+          ...item,
+          isStreaming: this.streamManager.hasActiveStream(item.id),
+          matchType: "content" as const,
+          matchSnippet: matches.get(item.id),
+        }));
+    }
+
+    const hasMore = nextOffset < total;
+    return {
+      items,
+      hasMore,
+      nextCursor: hasMore ? encodeScanCursor(nextOffset) : null,
+      progress: { scanned: nextOffset, total },
+    };
   }
+}
+
+/** 搜索游标编码：base64(JSON { phase, offset })，前端不透明透传 */
+function encodeScanCursor(offset: number): string {
+  return Buffer.from(
+    JSON.stringify({ phase: "content", offset }),
+    "utf-8",
+  ).toString("base64");
 }

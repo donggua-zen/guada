@@ -56,11 +56,15 @@ export function createInitialState(): ReplayState {
  * - LLM 链路（缓存）：压缩裁剪就地应用省 token；压缩前缀范围直接移除
  * - 前端展示链路（applyCompressionPrune=false）：压缩裁剪不应用（tool-result 保持完整原文）；
  *   用户编辑（strategy='user_edit'）无论哪条链路都应用（所见即所得，必须回显）
- * 压缩（compaction/summary）两链路一致：前缀范围删除 + 摘要置消息头（不再保留遮蔽消息）。
+ * 压缩（compaction/summary）两链路一致：前缀范围删除 + 摘要置消息头（不再保留遮蔽消息）；
+ * 搜索链路（ignoreCompaction=true）例外：整段忽略压缩括号（对齐前端"标记不物理移除"
+ * 的重建方式），被压缩消息保留参与内容检索。
  */
 export interface FoldOptions {
   /** 压缩自动裁剪（head_tail_500 等）是否就地改块；默认 true（LLM 链路）。false 时保留原文 */
   applyCompressionPrune?: boolean;
+  /** 忽略 compaction/* 括号事件（不删除前缀、不插摘要）；搜索重建等全量内容消费用 */
+  ignoreCompaction?: boolean;
 }
 
 /**
@@ -195,11 +199,14 @@ export function foldEvent(
 
     // ─── 压缩括号（对齐 DSH compaction/*）───
     case 'compaction/start':
+      // 搜索等全量内容链路：整段忽略压缩括号（被压缩消息保留参与检索）
+      if (opts?.ignoreCompaction) break;
       // 开括号：记录未闭合 seq（锁语义审计；原子批量写入下正常必有 end 收口）
       state.openCompactionSeq = event.seq;
       break;
 
     case 'compaction/summary': {
+      if (opts?.ignoreCompaction) break;
       const data = (event.data as unknown) as CompactionSummaryData;
       // 孤儿括号审计（不阻断）：start 缺失/未闭合的 summary 只记警告，仍按已提交数据应用
       if (state.openCompactionSeq === null || state.openCompactionSeq === undefined) {
@@ -264,6 +271,7 @@ export function foldEvent(
 
     case 'compaction/end':
       // 闭括号：清除未闭合 seq（正常批量写入下 start→end 配对）
+      if (opts?.ignoreCompaction) break;
       state.openCompactionSeq = null;
       break;
 

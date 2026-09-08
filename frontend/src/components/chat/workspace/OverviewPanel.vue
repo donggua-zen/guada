@@ -72,7 +72,34 @@
       <!-- ── 工作目录：主目录（不可删改，点击打开工作区）+ 附加目录（远程连接绑定，增删走
            session.settings.attachments["ssh-connection"]，后端下回合 diff 注入生效） ── -->
       <section class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.workingDir') }}</div>
+        <div class="overview-section-title overview-title-row">
+          <span>{{ t('chat.workspace.workingDir') }}</span>
+          <!-- 添加附加目录（标题行右对齐，图标按钮）：下拉列出 remote-workspace 全部连接（✓ 为已绑定）；无连接时引导去设置页 -->
+          <DropdownMenu @command="handleAttachedCommand">
+            <GdTooltip :content="t('chat.workspace.addAttachedDir')" placement="bottom">
+              <button class="overview-title-icon-btn">
+                <el-icon :size="14"><Add16Regular /></el-icon>
+              </button>
+            </GdTooltip>
+            <template #dropdown>
+              <div class="overview-branch-menu">
+                <template v-if="availableConnections.length">
+                  <DropdownMenuItem v-for="c in availableConnections" :key="c.id" :command="c.id">
+                    <span class="overview-branch-item">
+                      <span class="overview-branch-check">{{ attachedIds.includes(c.id) ? '✓' : '' }}</span>
+                      <span class="overview-branch-name">{{ c.name }}</span>
+                    </span>
+                  </DropdownMenuItem>
+                </template>
+                <DropdownMenuItem v-else :command="OPEN_SETTINGS_COMMAND">
+                  <span class="overview-branch-item">
+                    <span class="overview-branch-name">{{ t('chat.workspace.noConnections') }}</span>
+                  </span>
+                </DropdownMenuItem>
+              </div>
+            </template>
+          </DropdownMenu>
+        </div>
 
         <!-- 主目录：展示 basename，tooltip 完整路径；点击打开工作区面板（目录树） -->
         <GdTooltip :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
@@ -95,33 +122,6 @@
             </GdTooltip>
           </div>
         </GdTooltip>
-
-        <!-- 添加附加目录：下拉列出 remote-workspace 全部连接（✓ 为已绑定）；无连接时引导去设置页 -->
-        <div class="overview-dropdown">
-          <DropdownMenu @command="handleAttachedCommand">
-            <button class="overview-row">
-              <el-icon :size="16" class="overview-row-icon"><Add16Regular /></el-icon>
-              <span class="overview-row-label">{{ t('chat.workspace.addAttachedDir') }}</span>
-            </button>
-            <template #dropdown>
-              <div class="overview-branch-menu">
-                <template v-if="availableConnections.length">
-                  <DropdownMenuItem v-for="c in availableConnections" :key="c.id" :command="c.id">
-                    <span class="overview-branch-item">
-                      <span class="overview-branch-check">{{ attachedIds.includes(c.id) ? '✓' : '' }}</span>
-                      <span class="overview-branch-name">{{ c.name }}</span>
-                    </span>
-                  </DropdownMenuItem>
-                </template>
-                <DropdownMenuItem v-else :command="OPEN_SETTINGS_COMMAND">
-                  <span class="overview-branch-item">
-                    <span class="overview-branch-name">{{ t('chat.workspace.noConnections') }}</span>
-                  </span>
-                </DropdownMenuItem>
-              </div>
-            </template>
-          </DropdownMenu>
-        </div>
       </section>
 
       <!-- ── 待办事项：无待办不显示，平铺展示全部条目 ── -->
@@ -176,15 +176,16 @@
           <span v-if="runningSubagentCount" class="overview-section-count">{{ runningSubagentCount }}</span>
         </div>
         <div class="overview-subagent-list">
-          <div v-for="item in activeSubagents" :key="item.id" class="overview-subagent" :title="item.title"
-            @click="openSubAgent(item.id)">
-            <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)">
-              <span v-if="item.status === 'running'" class="wf-dot-pulse"></span>
-            </span>
-            <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
-            <span class="overview-subagent-name">{{ item.title }}</span>
-            <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
-          </div>
+          <GdTooltip v-for="item in activeSubagents" :key="item.id" :content="item.title" placement="bottom">
+            <div class="overview-subagent w-full" @click="openSubAgent(item.id)">
+              <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)">
+                <span v-if="item.status === 'running'" class="wf-dot-pulse"></span>
+              </span>
+              <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
+              <span class="overview-subagent-name">{{ item.title }}</span>
+              <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
+            </div>
+          </GdTooltip>
           <!-- 已结束（冻结）折叠组：默认收起，展开后点击行回放只读会话 -->
           <template v-if="frozenSubagents.length">
             <button class="overview-subagent-ended" @click="endedExpanded = !endedExpanded">
@@ -192,14 +193,14 @@
               <span>{{ t('chat.workspace.subagentsEnded', { count: frozenSubagents.length }) }}</span>
             </button>
             <template v-if="endedExpanded">
-              <div v-for="item in frozenSubagents" :key="item.id"
-                class="overview-subagent overview-subagent--frozen" :title="item.title"
-                @click="openSubAgent(item.id)">
-                <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)"></span>
-                <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
-                <span class="overview-subagent-name">{{ item.title }}</span>
-                <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
-              </div>
+              <GdTooltip v-for="item in frozenSubagents" :key="item.id" :content="item.title" placement="bottom">
+                <div class="overview-subagent overview-subagent--frozen w-full" @click="openSubAgent(item.id)">
+                  <span class="wf-dot wf-dot--sm" :class="subagentDotClass(item)"></span>
+                  <img v-if="item.avatarUrl" :src="item.avatarUrl" class="overview-subagent-avatar" alt="" />
+                  <span class="overview-subagent-name">{{ item.title }}</span>
+                  <span class="overview-subagent-status">{{ subagentStatusText(item) }}</span>
+                </div>
+              </GdTooltip>
             </template>
           </template>
         </div>
@@ -209,30 +210,49 @@
            紧凑树形列表（对齐 DSH 任务管理风格）：run 行 = 状态点 + 名称 + 进度/耗时；
            成员行 = 状态点 + 标签，次行摘要 · 状态；点击成员跳转子会话 ── -->
       <section v-if="workflowRuns.length" class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.workflowRuns') }}</div>
+        <div class="overview-section-title overview-title-row">
+          <span>{{ t('chat.workspace.workflowRuns') }}</span>
+          <!-- 常驻入口：工作流审阅标签（历史成员/日志/返回值详览） -->
+          <button class="overview-title-icon-btn" :title="t('chat.workspace.workflowTab')" @click="openWorkflowReview">
+            <el-icon :size="14"><Flowchart20Regular /></el-icon>
+          </button>
+        </div>
         <div class="overview-workflow-list">
-          <div v-for="run in sortedWorkflowRuns" :key="run.runId" class="wf-run">
-            <div class="wf-run-row" :title="run.name || run.runId">
-              <span class="wf-dot" :class="`wf-dot--${run.status}`">
-                <span v-if="run.status === 'running'" class="wf-dot-pulse"></span>
-              </span>
-              <span class="wf-run-name">{{ run.name || run.runId }}</span>
-              <span class="wf-run-meta">{{ runMetaText(run) }}</span>
-            </div>
-            <div v-if="run.agents.length" class="wf-agents">
-              <div v-for="agent in run.agents" :key="agent.callId" class="wf-agent"
-                :class="{ 'wf-agent--clickable': !!agent.subSessionId }"
-                :title="agent.label"
-                @click="agent.subSessionId && openSubAgent(agent.subSessionId)">
-                <div class="wf-agent-row">
-                  <span class="wf-dot wf-dot--sm" :class="`wf-dot--${agent.status}`"></span>
-                  <span class="wf-agent-label">{{ agent.label }}</span>
-                </div>
-                <div class="wf-agent-sub">{{ agentSubText(agent) }}</div>
+          <div v-for="run in visibleWorkflowRuns" :key="run.runId" class="wf-run">
+            <GdTooltip :content="run.name || run.runId" placement="bottom">
+              <div class="wf-run-row w-full" @click="toggleRunExpand(run.runId)">
+                <span class="wf-dot" :class="`wf-dot--${run.status}`">
+                  <span v-if="run.status === 'running'" class="wf-dot-pulse"></span>
+                </span>
+                <svg class="wf-chevron" :class="{ 'is-open': isRunExpanded(run) }" width="11" height="11"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+                <span class="wf-run-name">{{ run.name || run.runId }}</span>
+                <span class="wf-run-meta">{{ runMetaText(run) }}</span>
               </div>
+            </GdTooltip>
+            <div v-if="isRunExpanded(run) && run.agents.length" class="wf-agents">
+              <GdTooltip v-for="agent in run.agents" :key="agent.callId" :content="agent.label" placement="bottom">
+                <div class="wf-agent w-full"
+                  :class="{ 'wf-agent--clickable': !!agent.subSessionId }"
+                  @click="agent.subSessionId && openSubAgent(agent.subSessionId)">
+                  <div class="wf-agent-row">
+                    <span class="wf-dot wf-dot--sm" :class="`wf-dot--${agent.status}`"></span>
+                    <span class="wf-agent-label">{{ agent.label }}</span>
+                  </div>
+                  <div class="wf-agent-sub">{{ agentSubText(agent) }}</div>
+                </div>
+              </GdTooltip>
             </div>
           </div>
         </div>
+        <!-- 历史收敛：概览只显示最近 N 条，完整审阅（成员/日志/结果）进工作流标签 -->
+        <button v-if="sortedWorkflowRuns.length > visibleWorkflowRuns.length" class="wf-view-all"
+          @click="openWorkflowReview">
+          {{ t('chat.workspace.workflowViewAll', { count: sortedWorkflowRuns.length }) }}
+        </button>
       </section>
 
       <!-- ── 浏览器：有窗口才显示；点击窗口激活（打开工作区预览并切换） ── -->
@@ -245,7 +265,7 @@
             <span class="overview-browser-title">{{ w.title || t('chat.workspace.unnamedWindow') }}</span>
           </button>
           <button class="overview-browser-new" @click="createBrowser">
-            <el-icon :size="12"><Add16Regular /></el-icon>
+            <el-icon :size="14"><Add16Regular /></el-icon>
             <span>{{ t('chat.workspace.newTab') }}</span>
           </button>
         </div>
@@ -264,6 +284,7 @@ import {
   BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
   Dismiss16Regular, Add16Regular,
   ArrowSync20Regular, ArrowRight16Regular, Cloud16Regular,
+  Flowchart20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
@@ -471,6 +492,31 @@ const browserWindows = computed(() => browserStore.sessionWebviews);
 const workflowRuns = ref<WorkflowRunState[]>([]);
 /** 运行中在前，完成后按结束时间倒序 */
 const sortedWorkflowRuns = computed(() => sortWorkflowRuns(workflowRuns.value));
+/** 概览只显示最近 5 条；完整历史进工作流审阅标签 */
+const OVERVIEW_WORKFLOW_LIMIT = 5;
+const visibleWorkflowRuns = computed(() => sortedWorkflowRuns.value.slice(0, OVERVIEW_WORKFLOW_LIMIT));
+
+/** run 行展开态：undefined = 自动（仅运行中展开，完成/失败/取消一律收起），手动切换后以手动为准 */
+const runExpandOverrides = ref<Record<string, boolean>>({});
+
+function isRunExpanded(run: WorkflowRunState): boolean {
+  const override = runExpandOverrides.value[run.runId];
+  return override !== undefined ? override : run.status === "running";
+}
+
+function toggleRunExpand(runId: string): void {
+  const run = workflowRuns.value.find((r) => r.runId === runId);
+  if (!run) return;
+  runExpandOverrides.value[runId] = !isRunExpanded(run);
+}
+
+/** 概览「查看全部」→ 打开工作流审阅标签（侧边栏，per-session） */
+function openWorkflowReview(): void {
+  const sessionId = props.sessionId;
+  if (!sessionId) return;
+  layoutStore.setWorkspaceVisible(true);
+  nextTick(() => tabStore.openWorkflowTab(sessionId));
+}
 
 async function loadWorkflowRuns(): Promise<void> {
   if (!props.sessionId) {
@@ -633,8 +679,8 @@ function openGit(): void {
 
 function openWorkspaceTree(): void {
   layoutStore.setWorkspaceVisible(true);
-  // 显示完全由激活标签驱动：回到起始页（无激活标签时展示，可再打开文件）
-  nextTick(() => tabStore.openNewTab());
+  // 文件标签激活中→保持；否则选标签栏末个文件标签；无→新建空浏览标签（目录树随之显示）
+  nextTick(() => tabStore.openWorkspaceBrowseTab(t('chat.workspace.newTab')));
 }
 
 function activateBrowser(windowId: string): void {
@@ -1019,6 +1065,19 @@ async function createBrowser(): Promise<void> {
   gap: 6px;
   padding: 2px 4px;
   min-width: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.wf-run-row:hover {
+  background: var(--gd-color-sidebar-bg-hover);
+}
+.wf-chevron {
+  flex-shrink: 0;
+  color: var(--gd-color-text-disabled);
+  transition: transform 0.15s ease;
+}
+.wf-chevron.is-open {
+  transform: rotate(90deg);
 }
 .wf-dot {
   display: flex;
@@ -1076,36 +1135,34 @@ async function createBrowser(): Promise<void> {
   color: var(--gd-color-text-disabled);
 }
 .wf-agents {
-  position: relative;
-  margin: 2px 0 0 7px;
-  padding-left: 12px;
+  margin: 2px 0 0 0;
   display: flex;
   flex-direction: column;
 }
-/* 树形连接线（对齐 DSH 任务管理配方）：竖干自 run 行下垂，
-   每个成员节点一条水平横肘线，竖线贯穿节点、末节点止于横肘 */
-.wf-agents::before {
-  content: '';
-  position: absolute;
-  left: -12px;
-  top: -14px;
-  height: 14px;
-  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
-}
 .wf-agent {
   position: relative;
-  padding: 3px 4px;
+  /* 与标题行同宽同起点；左内边距容纳树形线列（线对齐标题行圆点下方） */
+  padding: 3px 4px 3px 24px;
   border-radius: 4px;
 }
+/* GdTooltip 渲染 inline trigger 包装器：撑满行宽，hover 背景才铺满而非仅包内容 */
+.wf-run > .l-tooltip__trigger,
+.wf-agents > .l-tooltip__trigger {
+  display: block;
+  width: 100%;
+}
+/* 成员行树形线（对齐 DSH 任务管理）：竖线画在行盒内部（hover 含线列），
+   横肘线连到圆点；run 标题行无线；末成员竖线止于横肘。
+   注意 :last-child 须取在 GdTooltip 包装层上（每个 .wf-agent 都是其包装器的唯一子元素） */
 .wf-agent::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -12px;
-  border-left: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
+  left: 8px;
+  border-left: 1px solid var(--gd-color-border, #e5e7eb);
 }
-.wf-agent:last-child::before {
+.wf-agents > :last-child .wf-agent::before {
   bottom: auto;
   height: 12px;
 }
@@ -1113,9 +1170,9 @@ async function createBrowser(): Promise<void> {
   content: '';
   position: absolute;
   top: 12px;
-  left: -12px;
-  width: 14px;
-  border-top: 1px solid var(--gd-color-surface-border, rgba(128, 128, 128, 0.2));
+  left: 8px;
+  width: 13px;
+  border-top: 1px solid var(--gd-color-border, #e5e7eb);
 }
 .wf-agent--clickable {
   cursor: pointer;
@@ -1143,8 +1200,46 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--gd-color-text-gray);
+}
+/* 查看全部（进工作流审阅标签） */
+.wf-view-all {
+  margin: 4px 4px 0;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  color: var(--gd-color-primary, var(--gd-color-text-gray));
+  cursor: pointer;
+  text-align: left;
+}
+.wf-view-all:hover {
+  text-decoration: underline;
+}
+/* 标题行 + 常驻审阅入口按钮 */
+.overview-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* 分区标题行右对齐图标按钮（工作流审阅入口 / 添加附加目录等共享） */
+.overview-title-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-disabled);
+  cursor: pointer;
+}
+.overview-title-icon-btn:hover {
+  color: var(--gd-color-text);
+  background: var(--gd-color-sidebar-bg-hover);
 }
 
 /* 子代理列表（平铺行；已冻结行收进"已结束"折叠组内缩进展示） */

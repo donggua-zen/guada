@@ -213,10 +213,13 @@ export interface SearchSessionResult extends Session {
 }
 
 /**
- * 搜索响应（游标分页）
+ * 搜索响应（渐进扫描游标分页）
+ * cursor 为后端扫描进度游标（不透明透传）；前端自动循环拉取直到 hasMore=false
  */
 export interface SearchSessionResponse {
     items: SearchSessionResult[]
     hasMore: boolean
     nextCursor: string | null
+    /** 扫描进度（已扫描 / 总会话数，驱动"正在扫描 x/y"文案） */
+    progress?: { scanned: number; total: number }
 }

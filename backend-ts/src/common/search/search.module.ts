@@ -1,17 +1,16 @@
 /**
  * 搜索模块
  *
- * 管理独立的搜索索引数据库（FTS5），与主业务库隔离。
- * SearchIndexService 对外暴露搜索能力，SearchSyncService 内部驱动同步。
+ * 会话内容搜索（JSONL 实时批扫描）：无索引库、无同步 worker，
+ * SessionContentSearchService 按批扫描 JSONL 折叠后实时匹配。
  */
 
 import { Module, Global } from "@nestjs/common";
-import { SearchIndexService } from "./search-index.service";
-import { SearchSyncService } from "./search-sync.service";
+import { SessionContentSearchService } from "./session-content-search.service";
 
 @Global()
 @Module({
-  providers: [SearchIndexService, SearchSyncService],
-  exports: [SearchIndexService],
+  providers: [SessionContentSearchService],
+  exports: [SessionContentSearchService],
 })
 export class SearchModule {}
