@@ -13,7 +13,6 @@ import {
   PersistenceBackend,
   SessionMeta,
   SegmentMeta,
-  SEGMENT_COMPACTION_COUNT,
 } from './types';
 import { CorruptSessionLogError } from './errors';
 
@@ -21,7 +20,6 @@ interface ActiveSegment {
   file: string;
   startSeq: number;
   endSeq: number | null;
-  compactionCount: number;
   /** 段累计写入字节(append 时累加,分卷判断依据) */
   bytes: number;
 }
@@ -86,7 +84,7 @@ export class JsonlBackend implements PersistenceBackend {
    * 恢复来源：manifest 中 status='active' 的段（文件名/startSeq 落盘）。
    * endSeq/bytes 不随活跃段落盘（endSeq 常驻 null），需扫描段文件补齐：
    * 取最后一个完整行的 seq 为 endSeq（torn 尾由冷加载修复路径截断，此处只读不动），
-   * 文件字节长度为 bytes。compactionCount 无落盘形态，恢复为 0（仅影响分卷节奏，不影响正确性）。
+   * 文件字节长度为 bytes。
    *
    * 调用时序保证：首个 append 前必有 getNextSeq → getState 冷加载（torn 尾已修复），
    * 故此处的尾部扫描看到的总是完整行。
@@ -123,7 +121,6 @@ export class JsonlBackend implements PersistenceBackend {
       file: active.file,
       startSeq: active.startSeq,
       endSeq,
-      compactionCount: 0,
       bytes: Buffer.byteLength(content, 'utf-8'),
     };
     this.activeSegments.set(sessionId, seg);
@@ -144,7 +141,6 @@ export class JsonlBackend implements PersistenceBackend {
       file: 'seg-0000.jsonl',
       startSeq: 0,
       endSeq: null,
-      compactionCount: 0,
       bytes: 0,
     });
 
@@ -181,7 +177,6 @@ export class JsonlBackend implements PersistenceBackend {
       version: 1,
       createdAt: new Date().toISOString(),
       segments: [initialSeg],
-      compactionBoundaries: [],
     };
     await this.writeManifest(sessionId, manifest);
   }
@@ -522,7 +517,6 @@ export class JsonlBackend implements PersistenceBackend {
       file: newFile,
       startSeq: newStartSeq,
       endSeq: null,
-      compactionCount: 0,
       bytes: 0,
     };
     this.activeSegments.set(sessionId, newSeg);
@@ -670,30 +664,5 @@ export class JsonlBackend implements PersistenceBackend {
     const seg = this.activeSegments.get(sessionId);
     if (!seg) return 0;
     return (seg.endSeq ?? 0) + 1;
-  }
-
-  /**
-   * 记录一次 compaction（达到阈值后自动分卷）。
-   * 仅记录边界 seq（compactionBoundaries 只写不读，遮蔽信息由事件流承载，不在此重复）。
-   */
-  async recordCompaction(sessionId: string): Promise<void> {
-    // 重启后内存表为空 → 从 manifest 懒恢复，保证 compactionBoundaries 的 seq 与分卷计数有效
-    const seg = await this.ensureActiveSegment(sessionId);
-    if (!seg) return;
-
-    seg.compactionCount++;
-
-    const manifest = await this.readManifest(sessionId).catch(() => null);
-    if (manifest) {
-      manifest.compactionBoundaries.push({
-        seq: await this.getNextSeq(sessionId),
-      });
-      await this.writeManifest(sessionId, manifest);
-    }
-
-    // 达到阈值 → 分卷
-    if (seg.compactionCount >= SEGMENT_COMPACTION_COUNT) {
-      await this.splitSegment(sessionId);
-    }
   }
 }

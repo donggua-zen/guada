@@ -10,6 +10,7 @@ import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.re
 import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { KbFileService } from "./kb-file.service";
+import { KbChunkFileStore } from "./kb-chunk-file.store";
 
 @Injectable()
 export class KnowledgeBaseService {
@@ -20,6 +21,7 @@ export class KnowledgeBaseService {
     private kbRepo: KnowledgeBaseRepository,
     @Inject("VECTOR_DB") private vectorDb: VectorDatabase,
     private kbFileService: KbFileService,
+    private chunkFileStore: KbChunkFileStore,
   ) {}
 
   /**
@@ -176,6 +178,13 @@ export class KnowledgeBaseService {
           this.logger.warn(`删除向量集合失败: ${error.message}`);
         });
 
+      // 1.1 删除分块 JSONL 目录（异步，容错）
+      const chunkDirDeletePromise = this.chunkFileStore
+        .deleteKbDir(kbId)
+        .catch((error: any) => {
+          this.logger.warn(`删除分块目录失败: ${error.message}`);
+        });
+
       // 2. 获取知识库下的所有文件路径（只查询必要字段）
       const files = await this.prisma.kBFile.findMany({
         where: { 
@@ -204,10 +213,11 @@ export class KnowledgeBaseService {
         });
 
       // 并行执行所有删除操作
-      const [vectorResult, fileResults] = await Promise.all([
+      await Promise.all([
         vectorDeletePromise,
-        Promise.allSettled(fileDeletePromises),  // 使用 allSettled 确保单个失败不影响其他
+        chunkDirDeletePromise,
       ]);
+      const fileResults = await Promise.allSettled(fileDeletePromises);  // 使用 allSettled 确保单个失败不影响其他
 
       // 统计删除结果
       const successCount = fileResults.filter(

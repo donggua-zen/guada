@@ -8,7 +8,7 @@
  *
  * 修复：写路径统一走 ensureActiveSegment——内存未命中时从 manifest 恢复活跃段
  * （endSeq/bytes 由段尾扫描补齐），覆盖 appendEvent/appendEvents/readEvents/
- * getActiveSegmentInfo/splitSegment/recordCompaction/truncateActiveSegment。
+ * getActiveSegmentInfo/splitSegment/truncateActiveSegment。
  */
 /// <reference types="jest" />
 import * as os from "os";

@@ -22,8 +22,8 @@
     </div>
 
     <div class="overview-rows">
-      <!-- ── Git 工具 ── -->
-      <section class="overview-section">
+      <!-- ── Git 工具：默认隐藏，后端确认是 git 仓库才出现（非仓库/未装 git 不占位） ── -->
+      <section v-if="git.isGitRepo" class="overview-section">
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.sectionGit') }}</span>
           <!-- 聚合变更数上移标题栏并右对齐；点击打开 Git 审阅标签（替代原“Git 变更”行） -->
@@ -101,13 +101,11 @@
           </DropdownMenu>
         </div>
 
-        <!-- 主目录：展示 basename，tooltip 完整路径；点击打开工作区面板（目录树） -->
-        <GdTooltip :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
-          <button class="overview-row" @click="openWorkspaceTree">
-            <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
-            <span class="overview-row-label">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
-          </button>
-        </GdTooltip>
+        <!-- 主目录：展示 basename；点击打开工作区面板（目录树） -->
+        <button class="overview-row" @click="openWorkspaceTree">
+          <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
+          <span class="overview-row-label">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
+        </button>
 
         <!-- 附加目录：已绑定的远程连接；hover 显示解除按钮（对齐后台进程行的 kill 样式） -->
         <GdTooltip v-for="conn in attachedConnections" :key="conn.id"
@@ -138,9 +136,7 @@
               <el-icon v-else-if="item.status === 'in_progress'" class="overview-todo-arrow"><ArrowRight16Regular /></el-icon>
               <span v-else class="overview-todo-ring"></span>
             </span>
-            <GdTooltip :content="item.content" placement="bottom" class="min-w-0">
-              <span class="overview-todo-text min-w-0">{{ item.content }}</span>
-            </GdTooltip>
+            <span class="overview-todo-text min-w-0">{{ item.content }}</span>
           </div>
         </div>
       </section>
@@ -289,6 +285,7 @@ import {
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
+import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
@@ -344,7 +341,6 @@ async function loadTodo(): Promise<void> {
 }
 
 // ── 工作目录分组：主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
-const REMOTE_WS_ATTACHMENT_TYPE = "ssh-connection";
 /** 下拉空态命令：跳转设置页“远程工作区”创建连接 */
 const OPEN_SETTINGS_COMMAND = "__open_settings";
 
@@ -361,7 +357,7 @@ interface AttachableConnection { id: string; name: string; description?: string;
 const availableConnections = ref<AttachableConnection[]>([]);
 
 /** 当前会话已绑定的附加目录 ID（props.attachments 单向下传，增删经 attachmentsChange 上行） */
-const attachedIds = computed<string[]>(() => props.attachments?.[REMOTE_WS_ATTACHMENT_TYPE] ?? []);
+const attachedIds = computed<string[]>(() => props.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE] ?? []);
 /** 已绑定连接的展示信息（连接清单缺失时回退显示 ID） */
 const attachedConnections = computed<AttachableConnection[]>(() =>
   attachedIds.value.map((id) => availableConnections.value.find((c) => c.id === id) ?? { id, name: id }),
@@ -414,7 +410,7 @@ function handleAttachedCommand(command: string): void {
 
 /** 写回附件绑定并上行（ChatPage 写 mainSession.settings 后 PUT /sessions/:id 持久化） */
 function writeAttachments(ids: string[]): void {
-  emit("attachmentsChange", { ...props.attachments, [REMOTE_WS_ATTACHMENT_TYPE]: ids });
+  emit("attachmentsChange", { ...props.attachments, [SSH_CONNECTION_ATTACHMENT_TYPE]: ids });
 }
 
 // ClipboardTaskListLtr20Regular 原用于待办折叠头行，分组标题化后暂不使用；保留导入会报 unused，移除。
@@ -936,7 +932,8 @@ async function createBrowser(): Promise<void> {
 }
 .overview-todo-item {
   display: flex;
-  align-items: center;
+  /* 多行文本时状态点顶部对齐 */
+  align-items: flex-start;
   gap: 8px;
   border-radius: 4px;
 }
@@ -944,6 +941,7 @@ async function createBrowser(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
@@ -966,11 +964,13 @@ async function createBrowser(): Promise<void> {
   to { transform: rotate(360deg); }
 }
 .overview-todo-text {
+  flex: 1;
+  min-width: 0;
   font-size: var(--gd-size-text-base);
   color: var(--gd-color-text-gray);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 超长换行（不截断），行内长词断词 */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .overview-todo-item.active .overview-todo-text {
   color: var(--gd-color-text);

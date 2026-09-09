@@ -1124,7 +1124,6 @@ export class JsonlMessageService implements IMessageStore {
     ];
     await this.backend.appendEvents(sessionId, events);
     this.applyToCache(sessionId, events);
-    await this.backend.recordCompaction(sessionId);
     // 返回折叠后的摘要节点（与 appendMessages 返回权威节点一致），供会话层快照播种
     const state = await this.getState(sessionId);
     const summaryNode = state.messages.find((n) => n.id === summaryMessageId) ?? null;

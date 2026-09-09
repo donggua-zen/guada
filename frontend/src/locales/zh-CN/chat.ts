@@ -70,12 +70,14 @@ export default {
     autoCreateDesc: '创建随机名称的工作目录',
     selectLocalFolder: '选择本地文件夹',
     selectFolderFailed: '选择文件夹失败',
+    attachedDir: '附加工作目录',
   },
 
   // ── 工具栏 ──
   toolbar: {
     // ChatInputToolbar.vue
     workspace: '工作目录：{path}',
+    attachedSuffix: ' +{count} 附加',
     group: '分组：{name}',
     autoCreate: '自动创建',
     publicDir: '公共目录',

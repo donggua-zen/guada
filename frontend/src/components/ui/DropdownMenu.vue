@@ -5,10 +5,10 @@
       <slot></slot>
     </div>
   </div>
-  <!-- 下拉菜单使用 Teleport 避免被父元素裁剪 -->
+  <!-- 下拉菜单使用 Teleport 避免被父元素裁剪；data-dropdown-menu 供"点击外部收起"类逻辑豁免菜单内点击 -->
   <Teleport to="body">
     <Transition name="dropdown-fade">
-      <div v-if="visible" ref="menuRef" class="fixed z-50 bg-(--gd-color-surface) rounded-(--gd-size-dialog-rounded-radius) shadow-lg border border-(--gd-color-surface-border) py-1 min-w-30 overflow-clip" :style="menuStyle" @click.stop>
+      <div v-if="visible" ref="menuRef" data-dropdown-menu class="fixed z-50 bg-(--gd-color-surface) rounded-(--gd-size-dialog-rounded-radius) shadow-lg border border-(--gd-color-surface-border) py-1 min-w-30 overflow-clip" :style="menuStyle" @click.stop>
         <slot name="dropdown"></slot>
       </div>
     </Transition>

@@ -70,12 +70,14 @@
     autoCreateDesc: 'Create a working directory with a random name',
     selectLocalFolder: 'Select Local Folder',
     selectFolderFailed: 'Failed to select folder',
+    attachedDir: 'Attached Directories (Remote)',
   },
 
   // ── 工具栏 ──
   toolbar: {
     // ChatInputToolbar.vue
     workspace: 'Working Directory: {path}',
+    attachedSuffix: ' +{count} attached',
     group: 'Group: {name}',
     autoCreate: 'Auto Create',
     publicDir: 'Public Directory',
