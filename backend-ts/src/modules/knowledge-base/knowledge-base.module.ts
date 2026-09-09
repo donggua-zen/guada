@@ -6,6 +6,7 @@ import { KbFilesController } from "./kb-files.controller";
 import { KbSearchController } from "./kb-search.controller";
 import { KnowledgeBaseService } from "./knowledge-base.service";
 import { KbFileService } from "./kb-file.service";
+import { KbChunkFileStore } from "./kb-chunk-file.store";
 import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
@@ -28,7 +29,7 @@ import { DocumentPlugin } from "./plugins/document.plugin";
   imports: [HttpModule, AuthModule, VectorDbModule, SettingsModule, ToolsModule],
   controllers: [KnowledgeBasesController, KbFilesController, KbSearchController],
   providers: [
-    KnowledgeBaseService, KbFileService, FileParserService,
+    KnowledgeBaseService, KbFileService, KbChunkFileStore, FileParserService,
     EmbeddingService, ChunkingService, OcrService,
     KnowledgeBaseRepository, KBFileRepository, KBChunkRepository,
     PdfToImageService,
@@ -45,6 +46,7 @@ export class KnowledgeBaseModule implements OnModuleInit {
     private readonly kbRepo: KnowledgeBaseRepository,
     private readonly fileRepo: KBFileRepository,
     private readonly chunkRepo: KBChunkRepository,
+    private readonly chunkFileStore: KbChunkFileStore,
     private readonly vectorDbService: VectorDbService,
     private readonly embeddingService: EmbeddingService,
     private readonly kbFileService: KbFileService,
@@ -54,7 +56,7 @@ export class KnowledgeBaseModule implements OnModuleInit {
 
   async onModuleInit() {
     await this.pluginManager.registerPlugin(new KnowledgeBasePlugin(
-      this.prisma, this.kbRepo, this.fileRepo, this.chunkRepo,
+      this.prisma, this.kbRepo, this.fileRepo, this.chunkFileStore,
       this.vectorDbService, this.embeddingService, this.kbFileService,
     ));
     await this.pluginManager.registerPlugin(new DocumentPlugin(this.fileParserService, this.workspaceService));

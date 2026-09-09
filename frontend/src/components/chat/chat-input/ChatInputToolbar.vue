@@ -6,7 +6,7 @@
         <FolderOpen24Regular />
       </el-icon>
       <span class="text-xs font-medium">
-        {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}
+        {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}{{ attachedSuffix }}
       </span>
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
@@ -31,7 +31,9 @@
 
   <!-- 工作目录选择弹窗 -->
   <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
-    :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
+    :current-workspace-path="config?.workspacePath || null" :public-path="publicPath"
+    :current-attachments="config?.attachments" @select="handleWorkspaceSelect"
+    @toggle-attachment="handleToggleAttachment" />
 
   <!-- 分组选择弹窗 -->
   <GdPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
@@ -64,6 +66,7 @@ import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import GdPopover from '../../ui/GdPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
 
 const { t } = useI18n()
 
@@ -160,6 +163,27 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
     workspaceStore.addRecent(workspacePath)
   }
   emit('config-change', { workspacePath })
+}
+
+// ── 附加工作目录（远程连接绑定，多选）：toggle 后整体写回 attachments ──
+const attachedCount = computed(() => {
+  const ids = props.config?.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
+  return Array.isArray(ids) ? ids.length : 0
+})
+
+const attachedSuffix = computed(() =>
+  attachedCount.value > 0 ? t('chat.toolbar.attachedSuffix', { count: attachedCount.value }) : ''
+)
+
+const handleToggleAttachment = (connectionId: string) => {
+  const current = props.config?.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
+  const ids = Array.isArray(current) ? current : []
+  const nextIds = ids.includes(connectionId)
+    ? ids.filter((id: string) => id !== connectionId)
+    : [...ids, connectionId]
+  emit('config-change', {
+    attachments: { ...(props.config?.attachments || {}), [SSH_CONNECTION_ATTACHMENT_TYPE]: nextIds },
+  })
 }
 </script>
 

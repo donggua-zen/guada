@@ -105,11 +105,11 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
     const s1 = new JsonlMessageService(new JsonlBackend());
     await appendRounds(s1, 5); // 5 轮 → 每轮末写快照
 
-    // 制造跨卷：压缩分卷路径（recordCompaction×5 触发 splitSegment），再写 2 轮。
-    // recordCompaction 必须走与写手同一个 backend 单例（生产形态）：
+    // 制造跨卷：直接分卷一次（按字节分卷的产物等价），再写 2 轮。
+    // splitSegment 必须走与写手同一个 backend 单例（生产形态）：
     // 分卷后 s1 的后续追加才落进新活跃段 seg-0001，与 manifest 保持一致。
     const backend = (s1 as any).backend as JsonlBackend;
-    for (let i = 0; i < 5; i++) await backend.recordCompaction(sid);
+    await backend.splitSegment(sid);
     await appendRounds(s1, 2);
 
     // 冷加载：全新实例（无缓存）→ rebuildState = 快照 + 跨卷增量

@@ -68,27 +68,29 @@
               <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器（aside 槽位随之） -->
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
                 <ChatPanel ref="chatPanelRef" :session="mainSession"
-                  :aside-width="asideWidth" @container-resize="onChatContainerResize"
+                  :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
+                  @container-resize="onChatContainerResize"
                   @save-settings="handleSaveSessionSettings"
                   @select-character="handleSelectCharacter">
-                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧），可见即实占空间
-                       （避让位列恒占位，消息列在剩余空间内居中）；容器放不下面板+消息列时自动隐藏 -->
+                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
+                       overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
                   <template #aside>
-                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
-                      :sub-sessions="subSessions" :attachments="mainSession?.settings?.attachments"
-                      @attachments-change="handleAttachmentsChange"
-                      @collapse="overviewVisible = false" />
-                  </template>
-                </ChatPanel>
+                    <div ref="asideSlotRef" class="h-full w-full">
+                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                        :sub-sessions="subSessions" :attachments="mainSession?.settings?.attachments"
+                        @attachments-change="handleAttachmentsChange"
+                        @collapse="handleOverviewCollapse" />
+                    </div>
+                  </template>                </ChatPanel>
               </Teleport>
 
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession" :messages="chatPanelRef?.activeMessages || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
 
-              <!-- 概览折叠后的恢复小按钮（悬浮于右上） -->
-              <button v-if="mainSession && !overviewVisible" class="overview-restore-bar"
-                :title="t('chat.workspace.openOverview')" @click="overviewVisible = true">
+              <!-- 概览不可见时的恢复小按钮（悬浮于右上）：空间足够=恢复还原状态；不足=临时展开 -->
+              <button v-if="mainSession && !overviewPanelShown" class="overview-restore-bar"
+                data-overview-pin :title="t('chat.workspace.openOverview')" @click="handleOverviewRestore">
                 <el-icon :size="14"><PanelLeftExpand16Filled /></el-icon>
               </button>
             </div>
@@ -158,12 +160,17 @@ const GitCommitDialog = defineAsyncComponent(() => import("./workspace/GitCommit
 
 /** 工作区概览列显隐（持久化；折叠为窄条后点按钮恢复） */
 const overviewVisible = useStorage('workspaceOverviewVisible', true);
+/** 空间不足时的临时展开：不计入还原状态（overviewVisible），点击面板外自动收起 */
+const overviewTempExpanded = ref(false);
 
 /**
- * 概览显隐决策：可见即实占空间 —— 面板打开时恒走避让占位（消息列左移、
- * 在剩余空间内居中），不再区分「悬浮于留白 / 挤占」两种模式。
- * 唯一兜底判断：容器减去面板占位（ASIDE_TOTAL=288）后仍放得下消息列
- * （MSG_MAX_WIDTH=744），否则自动隐藏（overviewVisible 不变，拉宽后自动恢复）。
+ * 概览折叠状态机（三变量）：
+ * - overviewVisible：用户持久意图（还原状态）——头栏/面板折叠按钮/恢复按钮在"空间足够"时
+ *   才写它；自动逻辑绝不触碰，空间拉宽后按它还原（折叠前是关的就保持关）。
+ * - asideFit：容器减去面板占位（ASIDE_TOTAL=288）后仍放得下消息列（MSG_MAX_WIDTH=744）。
+ * - overviewTempExpanded：空间不足时的临时展开——可看但不落状态，点击面板外/空间变化即收起。
+ * 面板可见 = overviewVisible && (asideFit || overviewTempExpanded)；
+ * 空间不足时面板自动"折叠"（不渲染，恢复小按钮常显供临时展开），overviewVisible 冻结不变。
  */
 const ASIDE_WIDTH = 280;
 const ASIDE_GAP = 8;
@@ -179,11 +186,51 @@ function onChatContainerResize(cw: number): void {
 
 const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40));
 
-/** 概览列宽，0 表示隐藏 */
-const asideWidth = computed(() => {
-  if (!overviewVisible.value) return 0;
-  return chatContentWidth.value - ASIDE_TOTAL >= MSG_MAX_WIDTH ? ASIDE_WIDTH : 0;
+/** 空间是否容得下概览面板 */
+const asideFit = computed(() => chatContentWidth.value - ASIDE_TOTAL >= MSG_MAX_WIDTH);
+
+/** 面板实际可见：用户意图开 &&（空间足够 || 空间不足时的临时展开） */
+const overviewPanelShown = computed(() =>
+  overviewVisible.value && (asideFit.value || overviewTempExpanded.value),
+);
+
+/** 避让占位宽：仅"用户意图开 && 空间足够"时占位（撑开避让列让消息列让位）——与浮层面板各管各的 */
+const asideReserveWidth = computed(() => (overviewVisible.value && asideFit.value ? ASIDE_WIDTH : 0));
+
+/** 浮层面板宽：面板可见即恒为浮层渲染（占位归占位、浮层归浮层） */
+const asideWidth = computed(() => (overviewPanelShown.value ? ASIDE_WIDTH : 0));
+
+// 空间变化即清临时展开：变不足 → 自动折叠；变足够 → 按 overviewVisible 还原
+watch(asideFit, () => {
+  overviewTempExpanded.value = false;
 });
+
+/** 面板折叠按钮：空间足够 → 写还原状态；不足（临时展开中）→ 仅收起临时展开 */
+function handleOverviewCollapse(): void {
+  if (asideFit.value) overviewVisible.value = false;
+  else overviewTempExpanded.value = false;
+}
+
+/** 恢复小按钮：空间足够 → 恢复还原状态；不足 → 临时展开 */
+function handleOverviewRestore(): void {
+  if (asideFit.value) overviewVisible.value = true;
+  else overviewTempExpanded.value = true;
+}
+
+/** 空间不足 + 临时展开时：点击面板外自动收起（面板内/下拉菜单/恢复按钮除外） */
+const asideSlotRef = ref<HTMLElement | null>(null);
+
+function onDocPointerDown(e: PointerEvent): void {
+  if (asideFit.value || !overviewTempExpanded.value) return;
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+  if (asideSlotRef.value?.contains(target)) return;
+  if (target.closest('[data-dropdown-menu], [data-overview-pin]')) return;
+  overviewTempExpanded.value = false;
+}
+
+onMounted(() => document.addEventListener('pointerdown', onDocPointerDown));
+onUnmounted(() => document.removeEventListener('pointerdown', onDocPointerDown));
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));

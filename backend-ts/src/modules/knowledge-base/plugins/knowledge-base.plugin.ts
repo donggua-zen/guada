@@ -6,7 +6,7 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../../common/database/kb-file.repository";
-import { KBChunkRepository } from "../../../common/database/kb-chunk.repository";
+import { KbChunkFileStore } from "../kb-chunk-file.store";
 import { VectorDbService } from "../../../common/vector-db/vector-db.service";
 import { EmbeddingService } from "../embedding.service";
 import { KbFileService } from "../kb-file.service";
@@ -29,7 +29,7 @@ export class KnowledgeBasePlugin extends PluginBase {
     private prisma: PrismaService,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
-    private chunkRepo: KBChunkRepository,
+    private chunkFileStore: KbChunkFileStore,
     private vectorDbService: VectorDbService,
     private embeddingService: EmbeddingService,
     private kbFileService: KbFileService,
@@ -201,7 +201,12 @@ export class KnowledgeBasePlugin extends PluginBase {
           throw new Error(`File is not ready, current status: ${file.processingStatus}`);
         }
 
-        const chunks = await this.chunkRepo.findByFileId(file_id, skip, limit);
+        const chunks = await this.chunkFileStore.readChunks(
+          file.knowledgeBaseId,
+          file_id,
+          skip,
+          limit,
+        );
         if (chunks.length === 0) {
           return `No chunks found for file: ${file_id}`;
         }

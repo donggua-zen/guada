@@ -111,16 +111,16 @@
             </div>
           </div>
         </div>
-        <!-- 避让占位：aside 可见即实占（flex-basis 0↔268 过渡；flex-shrink 优先压缩，消息列不先动） -->
+        <!-- 避让占位（asideReserve）：消息列让位的唯一来源——占位归占位；
+             面板本体恒为浮层（chat-aside absolute），与此处无关 -->
         <div class="aside-bleed-col"
-          :style="{ flexBasis: ((props.asideWidth || 0) > 0 ? ((props.asideWidth || 0) + ASIDE_GAP - 20) : 0) + 'px' }">
+          :style="{ flexBasis: ((props.asideReserve || 0) > 0 ? ((props.asideReserve || 0) + ASIDE_GAP - 20) : 0) + 'px' }">
         </div>
       </div>
     </ScrollContainer>
 
-    <!-- 右侧 aside 槽位（工作区概览）：位于滚动条左侧、不随消息滚动；
-         aside 可见即实占空间，消息/输入区在剩余宽度内居中（只挤位置、不挤宽度）。
-         进出场用 Transition 动画（离散/单次翻转时正常播放） -->
+    <!-- 右侧 aside 槽位（工作区概览）：恒为浮层（absolute、自带底色/描边/投影），不随消息滚动；
+         有占位时恰好落在避让空位上（视觉上像停靠），无占位（临时展开）时悬浮于消息上方 -->
     <Transition name="aside-fade">
       <div v-if="(props.asideWidth || 0) > 0" class="chat-aside"
         :style="{ width: (props.asideWidth || 0) + 'px', right: asideRight + 'px' }">
@@ -239,8 +239,10 @@ const props = defineProps<{
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
-  /** 右侧 aside 预留宽度（px，默认 0 = 不预留不渲染）；aside 可见即通过避让占位实占该宽度 */
+  /** 浮层面板视觉宽（px，0 = 不渲染）；恒为浮层渲染，与占位解耦 */
   asideWidth?: number;
+  /** 避让占位宽（px，0 = 不占位）：消息列让位的唯一来源，与浮层面板各管各的 */
+  asideReserve?: number;
 }>();
 
 const emit = defineEmits<{
@@ -1191,7 +1193,10 @@ function scrollToMessage(messageId: string) {
   transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-/* 右侧 aside（工作区概览）：位于滚动条左侧、固定不随消息滚动；
+/* 右侧 aside（工作区概览）：恒为浮层——absolute 定位、不随消息滚动；
+   有占位时恰好落在避让空位上（视觉像停靠），无占位时悬浮于消息上方 */
+/* 右侧 aside（工作区概览）：恒为浮层——absolute 定位，不随消息滚动；
+   卡片观感（底色/描边/圆角/投影）由面板自身（.overview-panel）提供，宿主只管定位。
    高度随内容自适应（不撑满槽位）；top 与消息区顶部对齐 */
 .chat-aside {
   position: absolute;

@@ -12,6 +12,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
+import { KbChunkFileStore, KbChunkFileRow } from "./kb-chunk-file.store";
 import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
@@ -34,6 +35,7 @@ export class KbFileService implements OnModuleInit {
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
     private chunkRepo: KBChunkRepository,
+    private chunkFileStore: KbChunkFileStore,
     private parserService: FileParserService,
     private embeddingService: EmbeddingService,
     private chunkingService: ChunkingService,
@@ -46,6 +48,7 @@ export class KbFileService implements OnModuleInit {
   async onModuleInit() {
     await this.resumePendingFileTasks();
     await this.cleanupOrphanFiles();
+    await this.cleanupOrphanChunkDirs();
   }
 
   /**
@@ -163,6 +166,43 @@ export class KbFileService implements OnModuleInit {
       }
     } catch (error: any) {
       this.logger.error(`孤儿文件清理失败：${error.message}`);
+    }
+  }
+
+  /**
+   * 清理孤儿分块目录（启动时执行）
+   * 删除分块 JSONL 目录中不存在对应文件记录的 kbId/fileId 目录
+   */
+  private async cleanupOrphanChunkDirs() {
+    try {
+      const kbIds = await this.chunkFileStore.listKbIds();
+      if (kbIds.length === 0) return;
+
+      let orphanCount = 0;
+      for (const kbId of kbIds) {
+        const kb = await this.kbRepo.findById(kbId);
+        if (!kb) {
+          // 整个知识库已不存在
+          orphanCount++;
+          await this.chunkFileStore.deleteKbDir(kbId);
+          this.logger.log(`已清理孤儿知识库分块目录: ${kbId}`);
+          continue;
+        }
+        const fileIds = await this.chunkFileStore.listFileIds(kbId);
+        for (const fileId of fileIds) {
+          const file = await this.fileRepo.findById(fileId);
+          if (!file) {
+            orphanCount++;
+            await this.chunkFileStore.deleteChunks(kbId, fileId);
+            this.logger.log(`已清理孤儿文件分块目录: kb=${kbId}, file=${fileId}`);
+          }
+        }
+      }
+      if (orphanCount > 0) {
+        this.logger.log(`孤儿分块目录清理完成：共 ${orphanCount} 个`);
+      }
+    } catch (error: any) {
+      this.logger.error(`孤儿分块目录清理失败：${error.message}`);
     }
   }
 
@@ -593,11 +633,14 @@ export class KbFileService implements OnModuleInit {
         const tableId = `kb_${knowledgeBaseId}`;
         await this.vectorDb.deleteDocuments(tableId, { documentId: fileId });
 
-        // 从数据库删除旧分块记录
+        // 从数据库删除旧分块记录（旧版存量，JSONL 为正本）
         const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
         if (deletedCount > 0) {
           this.logger.log(`删除 ${deletedCount} 个旧分块记录`);
         }
+
+        // 删除旧分块 JSONL 正本
+        await this.chunkFileStore.deleteChunks(knowledgeBaseId, fileId);
       } catch (error: any) {
         this.logger.warn(
           `清理旧数据失败，但继续执行后续流程：${error.message}`,
@@ -649,18 +692,18 @@ export class KbFileService implements OnModuleInit {
       await this.vectorDb.addDocuments(tableId, documents);
       this.logger.log(`成功存储 ${documents.length} 个向量文档`);
 
-      await updateProgress(95, "正在保存分块到数据库...");
+      await updateProgress(95, "正在保存分块到文件...");
 
-      // 保存分块到数据库（批量写入，减少 I/O 次数）
-      // 构造插入数据，将可能为空的字段转为 null 以符合 Prisma 要求
-      const chunkInsertData = chunksData.map((chunkData, idx) => ({
-        fileId: fileId,
-        knowledgeBaseId: knowledgeBaseId,
-        content: chunkData.content,
-        chunkIndex: idx,
+      // 保存分块正本到 JSONL 文件（脱离主库；向量库为可重建的派生索引）
+      // 构造分块行，将可能为空的字段转为 null 以符合存储要求
+      const chunkRows: KbChunkFileRow[] = chunksData.map((chunkData, idx) => ({
+        id: `chunk_${idx}_${fileId}`,
         vectorId: `chunk_${idx}_${fileId}`,
-        embeddingDimensions: allEmbeddings[idx]?.length ?? null,
+        chunkIndex: idx,
+        content: chunkData.content,
         tokenCount: chunkData.metadata.tokenCount,
+        embeddingDimensions: allEmbeddings[idx]?.length ?? null,
+        createdAt: new Date().toISOString(),
         metadata: {
           fileId: fileId,
           knowledgeBaseId: knowledgeBaseId,
@@ -670,8 +713,12 @@ export class KbFileService implements OnModuleInit {
         },
       }));
 
-      const insertedCount = await this.chunkRepo.createMany(chunkInsertData);
-      this.logger.log(`批量写入 ${insertedCount} 个分块到数据库`);
+      const insertedCount = await this.chunkFileStore.writeChunks(
+        knowledgeBaseId,
+        fileId,
+        chunkRows,
+      );
+      this.logger.log(`批量写入 ${insertedCount} 个分块到 JSONL 文件`);
 
       // 标记为完成
       const totalTokens = chunksData.reduce(
@@ -920,8 +967,11 @@ export class KbFileService implements OnModuleInit {
         );
       }
 
-      // 2. 从数据库删除分块（容错：分块可能不存在）
+      // 2. 删除分块（容错：分块可能不存在）
       try {
+        // 删除 JSONL 分块正本
+        await this.chunkFileStore.deleteChunks(kbId, fileId);
+        // 兼容清理主库存量分块记录
         const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
         this.logger.log(`删除 ${deletedCount} 个分块`);
       } catch (chunkError: any) {
@@ -990,8 +1040,9 @@ export class KbFileService implements OnModuleInit {
           this.logger.warn(`删除子文件向量失败 ${item.id}: ${e.message}`);
         }
 
-        // 容错删除分块
+        // 容错删除分块（JSONL 正本 + 主库存量记录）
         try {
+          await this.chunkFileStore.deleteChunks(kbId, item.id);
           await this.chunkRepo.deleteByFileId(item.id);
         } catch (e: any) {
           this.logger.warn(`删除子文件分块失败 ${item.id}: ${e.message}`);
@@ -1089,9 +1140,10 @@ export class KbFileService implements OnModuleInit {
       return;
     }
 
-    // 3. 逐文件删除分块记录
+    // 3. 逐文件删除分块（JSONL 正本 + 主库存量记录）
     let totalChunks = 0;
     for (const file of allFiles) {
+      await this.chunkFileStore.deleteChunks(kbId, file.id);
       const deleted = await this.chunkRepo.deleteByFileId(file.id);
       totalChunks += deleted;
     }
@@ -1484,21 +1536,7 @@ export class KbFileService implements OnModuleInit {
       throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
     }
 
-    // 获取文件的分块列表
-    const chunks = await this.chunkRepo.findByFileId(fileId, skip, limit);
-
-    // 转换为字典格式并返回
-    return chunks.map((chunk) => ({
-      id: chunk.id,
-      fileId: chunk.fileId,
-      knowledgeBaseId: chunk.knowledgeBaseId,
-      content: chunk.content,
-      chunkIndex: chunk.chunkIndex,
-      vectorId: chunk.vectorId,
-      embeddingDimensions: chunk.embeddingDimensions,
-      tokenCount: chunk.tokenCount,
-      metadata: chunk.metadata || null,
-      createdAt: chunk.createdAt.toISOString(),
-    }));
+    // 获取文件的分块列表（JSONL 正本，缺失时 fallback 主库存量），字段结构与原 KBChunk API 一致
+    return await this.chunkFileStore.readChunks(kbId, fileId, skip, limit);
   }
 }

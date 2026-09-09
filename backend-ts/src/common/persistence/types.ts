@@ -347,7 +347,6 @@ export interface Manifest {
   version: number;
   createdAt: string;
   segments: SegmentMeta[];
-  compactionBoundaries: Array<{ seq: number }>;
   /** 最近状态快照引用(恢复基准;seq 仅用于校验衔接,不用于跳读) */
   snapshot?: {
     file: string;
@@ -419,8 +418,6 @@ export interface PersistenceBackend {
   getActiveSegmentInfo(
     sessionId: string,
   ): Promise<{ file: string; endSeq: number | null; bytes: number } | null>;
-  /** 记录一次连接压实（达到阈值后自动分卷） */
-  recordCompaction(sessionId: string): Promise<void>;
 }
 
 /** PersistenceBackend 注入 token（接口无法按类型注入，必须显式 token） */
@@ -433,8 +430,6 @@ export interface SessionMeta {
 }
 
 // ─── 常量 ───
-
-export const SEGMENT_COMPACTION_COUNT = 5; // 每 5 次压缩分新卷
 
 /** 活跃段最大字节数:累计写入超过后分卷(新日志写新文件) */
 export const SEGMENT_MAX_BYTES = 20 * 1024 * 1024; // 20MB
