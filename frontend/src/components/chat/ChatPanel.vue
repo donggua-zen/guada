@@ -555,7 +555,8 @@ const currentModelId = computed({
  */
 const chatInputConfig = computed(() => ({
   modelId: currentModelId.value,
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'none',
+  // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
   maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
   workspacePath: currentSession.value?.workspacePath || null,

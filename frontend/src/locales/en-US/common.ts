@@ -71,6 +71,17 @@
   noData: 'No data',
   noResults: 'No results found',
 
+  // ── Weekdays ──
+  weekday: {
+    sunday: 'Sun',
+    monday: 'Mon',
+    tuesday: 'Tue',
+    wednesday: 'Wed',
+    thursday: 'Thu',
+    friday: 'Fri',
+    saturday: 'Sat',
+  },
+
   // ── Status ──
   status: 'Status',
   type: 'Type',
@@ -188,8 +199,8 @@
     low: 'Low',
     medium: 'Medium',
     high: 'High',
+    xhigh: 'Extra High',
     max: 'Max',
-    xhigh: 'Max',
     minimal: 'Minimal',
     minimum: 'Minimum',
   },

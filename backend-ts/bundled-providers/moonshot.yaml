@@ -1,0 +1,28 @@
+# Moonshot AI 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。
+# API Key 获取: https://platform.moonshot.cn/console/api-keys
+type: moonshot
+name: Moonshot AI
+description: 月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。
+apiKeyUrl: https://platform.moonshot.cn/console/api-keys
+avatarUrl: moonshotai_new.png
+protocol: openai
+defaultApiUrl: https://api.moonshot.cn/v1/
+compat:
+  thinkingFormat: deepseek
+models:
+  - modelName: kimi-k2.5
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000

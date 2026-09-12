@@ -34,12 +34,16 @@ describe("技能热更新集成测试 (Watcher + SourceManager + Registry)", () 
     registerSafeWritePath: jest.fn(),
   } as any;
 
-  /** 从 watcher 内部获取 global 来源的 handler（按 pattern 名后缀匹配） */
+  /** 从 watcher 内部获取 global 来源的 handler（限定为本测试的临时 skillsDir） */
   function getGlobalWatcherHandler(): FileEventHandlers | undefined {
     const handlers: Map<string, FileEventHandlers> = (watcher as any).handlers;
+    const expectedBase = path.resolve(skillsDir);
     for (const [pattern, h] of handlers) {
-      // global 来源的 pattern 以 skills/*/SKILL.md 结尾（不含 .system）
-      if (pattern.endsWith("/*/SKILL.md") && !pattern.includes(".system")) {
+      // pattern 形如 <dir>/*/SKILL.md；取基准目录与测试 skillsDir 比对。
+      // 本机存在真实 ~/.agents/skills 时会多注册一个 agents 源，
+      // 仅按后缀匹配会误选 agents 而非 global。
+      const base = path.resolve(pattern.replace(/\*.*$/, ""));
+      if (base === expectedBase) {
         return h;
       }
     }

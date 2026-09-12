@@ -1,0 +1,41 @@
+# DeepSeek 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 深度求索，以高性价比和强大的代码生成能力著称，支持深度思考模式。
+# API Key 获取: https://platform.deepseek.com/api_keys
+type: deepseek
+name: DeepSeek
+description: 深度求索，以高性价比和强大的代码生成能力著称，支持深度思考模式。
+apiKeyUrl: https://platform.deepseek.com/api_keys
+avatarUrl: deepseek.svg
+protocol: openai
+defaultApiUrl: https://api.deepseek.com/v1/
+compat:
+  thinkingFormat: deepseek
+models:
+  - modelName: deepseek-v4-flash
+    supportsThinking: true
+    thinkingEfforts: [none, high, max]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 384000
+  - modelName: deepseek-v4-pro
+    supportsThinking: true
+    thinkingEfforts: [none, high, max]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 384000

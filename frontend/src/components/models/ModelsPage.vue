@@ -20,6 +20,7 @@
           <div class="px-4 pb-4 w-full md:max-w-260 md:mx-auto">
             <ModelsProviderList :items="providers" :templates="availableTemplates"
               @item-click="handleItemClick"
+              @item-toggle="handleToggleProvider"
               @item-edit="handleEditProvider"
               @item-delete="handleDeleteProviderFromList"
               @template-click="handleTemplateClick">
@@ -133,11 +134,8 @@ const providerTemplates = ref<any[]>([])
 // 模型预设库
 const modelPresets = ref<any[]>([])
 
-// 计算可用的模板（过滤掉已添加的）
-const availableTemplates = computed(() => {
-  const addedProviderTypes = new Set(providers.value.map(p => p.provider))
-  return providerTemplates.value.filter(t => !addedProviderTypes.has(t.id))
-})
+// 模板全量展示（同类型可添加多实例；内置类型即预置配置文件，不再限制一个）
+const availableTemplates = computed(() => providerTemplates.value)
 
 // 添加用于编辑的临时数据
 const currentProviderEdit = ref<{
@@ -163,20 +161,10 @@ const currentProviderEdit = ref<{
 })
 
 // 判断是否为自定义供应商（只有 custom 类型才可编辑 name、protocol、apiUrl）
-const isCustomProvider = computed(() => {
-  if (!isProviderEditMode.value) {
-    return true
-  }
-  return currentProviderEdit.value.provider === 'custom'
-})
-
-const isNameEditable = computed(() => {
-  return currentProviderEdit.value.provider === 'custom'
-})
-
-const isProtocolEditable = computed(() => {
-  return currentProviderEdit.value.provider === 'custom'
-})
+// 文件化后所有实例都是普通配置文件：name/apiUrl/protocol 全部可编辑（id=文件名除外）
+const isCustomProvider = computed(() => true)
+const isNameEditable = computed(() => true)
+const isProtocolEditable = computed(() => true)
 
 // 动态获取弹窗标题
 const getProviderModalTitle = computed(() => {
@@ -331,7 +319,7 @@ const handleSaveProvider = async () => {
 
       showProviderModal.value = false
     } else {
-      const payload = {
+      const payload: any = {
         name: currentProviderEdit.value.name,
         apiUrl: currentProviderEdit.value.apiUrl,
         apiKey: currentProviderEdit.value.apiKey,
@@ -341,7 +329,6 @@ const handleSaveProvider = async () => {
           headers
         }
       }
-
       const provider = await apiService.createProvider(payload)
 
       await reloadProvidersAndModels()
@@ -459,11 +446,6 @@ const validateHeadersText = (text: string): string[] => {
   return errors
 }
 
-// 删除供应商的API调用
-const deleteProvider = async (providerId: string) => {
-  await apiService.deleteProvider(providerId)
-  providers.value = providers.value.filter(p => p.id !== providerId)
-}
 
 const handleItemClick = (provider: any) => {
   showDetail.value = true
@@ -515,25 +497,46 @@ const handleTemplateClick = (template: any) => {
   showProviderModal.value = true
 }
 
-// 添加从列表中删除供应商的方法
+// 启用/禁用开关
+const handleToggleProvider = async (provider: any, enabled: boolean) => {
+  try {
+    await apiService.setProviderEnabled(provider.id, enabled)
+    provider.enabled = enabled
+    notify.success(
+      enabled ? t('settings.models.providerEnabled') : t('settings.models.providerDisabled'),
+      enabled ? t('settings.models.providerEnabledMsg', { name: provider.name }) : t('settings.models.providerDisabledMsg', { name: provider.name }),
+      { duration: 2000 }
+    )
+  } catch (error) {
+    console.error('切换供应商启用状态失败:', error)
+  }
+}
+
+// 从列表移除供应商：内置类型禁用（预置文件不可真删），自定义类型真删
+const deleteProviderInstance = async (providerId: string) => {
+  await apiService.deleteProvider(providerId)
+}
+
+// 删除供应商实例（真删文件）：
+// 内置类型实例删掉后不会自动补种，可从「可添加的供应商」随时重新添加；
+// 停用请用卡片开关（enabled: false），删除是不可逆的移除。
 const handleDeleteProviderFromList = async (provider: any) => {
-  const result = await confirm(t('settings.models.deleteProvider'), t('settings.models.deleteProviderConfirm', { name: provider.name }))
+  const isBuiltinType = provider.provider && provider.provider !== 'custom'
+  const result = await confirm(
+    t('settings.models.deleteProvider'),
+    isBuiltinType
+      ? t('settings.models.builtinDeleteConfirm', { name: provider.name })
+      : t('settings.models.deleteProviderConfirm', { name: provider.name }),
+  )
 
   if (!result) {
     return
   }
 
   try {
-    await deleteProvider(provider.id)
-    models.value = models.value.filter(m => m.provider_id !== provider.id)
-
-    if (providers.value.length > 0) {
-      currentProviderId.value = providers.value[0].id
-    } else {
-      currentProviderId.value = ""
-    }
-
+    await deleteProviderInstance(provider.id)
     notify.success(t('common.deleteSuccess'), t('settings.models.providerDeleted', { name: provider.name }), { duration: 2000 })
+    await reloadProvidersAndModels()
   } catch (error) {
     notify.error(t('common.deleteFailed'), t('settings.models.deleteProviderError'), { duration: 2000 })
   }

@@ -144,11 +144,16 @@
                                                 <GdTooltip :content="getFeatureLabel(feature)" placement="top">
                                                     <el-icon class="hover:text-primary transition-colors" :size="14">
                                                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                                        <LightbulbFilament24Regular
-                                                            v-else-if="feature === 'thinking'" />
                                                     </el-icon>
                                                 </GdTooltip>
                                             </template>
+                                            <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
+                                            <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0"
+                                                :content="getFeatureLabel('thinking')" placement="top">
+                                                <el-icon class="hover:text-primary transition-colors" :size="14">
+                                                    <LightbulbFilament24Regular />
+                                                </el-icon>
+                                            </GdTooltip>
                                         </div>
                                     </div>
                                     <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1"
@@ -232,7 +237,6 @@ const settingsForm = reactive({
     defaultTranslationModelId: null,
     defaultTranslationPrompt: '',
     defaultHistoryCompressionModelId: null,
-    defaultHistoryCompressionPrompt: '',
     defaultVisualAssistantModelId: null,
 })
 
@@ -245,12 +249,6 @@ const titleSummaryRules = computed(() => ({
 
 const translationRules = computed(() => ({
     defaultTranslationPrompt: [
-        { max: 8000, message: t('settings.defaultModel.promptLengthError'), trigger: ['input', 'blur'] }
-    ]
-}))
-
-const historyCompressionRules = computed(() => ({
-    defaultHistoryCompressionPrompt: [
         { max: 8000, message: t('settings.defaultModel.promptLengthError'), trigger: ['input', 'blur'] }
     ]
 }))
@@ -463,7 +461,6 @@ const loadGlobalSettings = async () => {
         settingsForm.defaultTranslationModelId = response.defaultTranslationModelId ?? null
         settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt || ''
         settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId ?? null
-        settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt || ''
         settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId ?? null
 
         // 备份原始数据
@@ -507,7 +504,6 @@ const handleSave = async () => {
             defaultTranslationModelId: settingsForm.defaultTranslationModelId ?? null,
             defaultTranslationPrompt: settingsForm.defaultTranslationPrompt || '',
             defaultHistoryCompressionModelId: settingsForm.defaultHistoryCompressionModelId ?? null,
-            defaultHistoryCompressionPrompt: settingsForm.defaultHistoryCompressionPrompt || '',
             defaultVisualAssistantModelId: settingsForm.defaultVisualAssistantModelId ?? null,
         }
 

@@ -29,8 +29,9 @@ function createDataSource(overrides: Partial<CompactionDataSource> = {}): Compac
   return {
     sessionId: 's1',
     getCompressionConfig: jest.fn(() => ({
+      enabled: true,
       compressionTriggerRatio: 0.8,
-      compressionTargetRatio: 0.5,
+      compressionRetainRatio: 0.4,
       summaryMode: SummaryMode.MEMORY_SYNC,
     })),
     getHistory: jest.fn(async () => [makeMsg('m0'), makeMsg('m1')]),
@@ -66,7 +67,7 @@ function createService(overrides: any = {}) {
   const settingsStorage = {
     getSettingValue: jest.fn(async () => null), // 无专用压缩模型 → 回退会话模型
   };
-  const modelRepository = { findById: jest.fn() };
+  const modelRepository = { findModel: jest.fn() };
   const eventBus = { emit: jest.fn(), parallel: jest.fn(async () => []) };
   const llmService = { completions: jest.fn() };
 
@@ -178,7 +179,7 @@ describe('CompactionService', () => {
         engine as any,
         { completions: jest.fn() } as any,
         { getSettingValue: jest.fn(async () => null) } as any,
-        { findById: jest.fn() } as any,
+        { findModel: jest.fn() } as any,
         eventBus as any,
       );
       const sessionContext = { sessionId: 's1' } as any;
@@ -199,8 +200,9 @@ describe('CompactionService', () => {
       const ds = createDataSource({
         getTokenCount: jest.fn(async () => 900),
         getCompressionConfig: jest.fn(() => ({
+          enabled: true,
           compressionTriggerRatio: 0.8,
-          compressionTargetRatio: 0.5,
+          compressionRetainRatio: 0.4,
           summaryMode: SummaryMode.DISABLED,
         })),
       });
@@ -208,21 +210,45 @@ describe('CompactionService', () => {
       expect(llmService.completions).not.toHaveBeenCalled();
     });
 
+    it('档位关闭（enabled=false）：非 force 直接旁路（不触引擎/不发事件）；force 仍可压缩', async () => {
+      const { service, engine, eventBus } = createService();
+      const ds = createDataSource({
+        getTokenCount: jest.fn(async () => 900),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: false,
+          compressionTriggerRatio: 0.9,
+          compressionRetainRatio: 0.4,
+          summaryMode: SummaryMode.MEMORY_SYNC,
+        })),
+      });
+
+      const bypassed = await service.compress(ds);
+      expect(bypassed.compacted).toBe(false);
+      expect(engine.execute).not.toHaveBeenCalled();
+      expect(eventBus.emit).not.toHaveBeenCalled();
+
+      // 手动压缩（force）不受关闭档门控
+      const forced = await service.compress(ds, { force: true });
+      expect(forced.compacted).toBe(true);
+      expect(engine.execute).toHaveBeenCalledTimes(1);
+    });
+
     it('压缩模型解析：配置专用模型优先，回退会话模型', async () => {
       const { service, settingsStorage, modelRepository, llmService } = createService();
       const customModel = { modelName: 'deepseek-compress', provider: { provider: 'deepseek' }, config: {} };
       settingsStorage.getSettingValue.mockResolvedValueOnce('custom_id');
-      modelRepository.findById.mockResolvedValueOnce(customModel);
+      modelRepository.findModel.mockReturnValueOnce(customModel);
       const ds = createDataSource({
         getTokenCount: jest.fn(async () => 900),
         getCompressionConfig: jest.fn(() => ({
+          enabled: true,
           compressionTriggerRatio: 0.8,
-          compressionTargetRatio: 0.5,
+          compressionRetainRatio: 0.4,
           summaryMode: SummaryMode.FAST,
         })),
       });
       await service.compress(ds);
-      expect(modelRepository.findById).toHaveBeenCalledWith('custom_id');
+      expect(modelRepository.findModel).toHaveBeenCalledWith('custom_id');
       expect(llmService.completions).not.toHaveBeenCalled(); // 引擎 mock 不真正调 provider
       // Provider 已用专用模型构建（llmService.completions 未被引擎 mock 调，验证 resolve 发生）
       expect(settingsStorage.getSettingValue).toHaveBeenCalled();

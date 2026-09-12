@@ -74,17 +74,23 @@
                           </GdTooltip>
                         </template>
                       </div>
-                      <template v-if="(model.config?.features || []).length > 0">
+                      <template v-if="(model.config?.features || []).length > 0 || (model.thinkingEfforts?.length ?? 0) > 0">
                         <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                         <template v-for="feature in (model.config?.features || [])" :key="feature">
                           <GdTooltip :content="getLableName(feature)" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                              <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                               <ScienceOutlined v-else />
                             </el-icon>
                           </GdTooltip>
                         </template>
+                        <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
+                        <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
+                          placement="top">
+                          <el-icon class="hover:text-primary transition-colors" :size="16">
+                            <LightbulbFilament24Regular />
+                          </el-icon>
+                        </GdTooltip>
                       </template>
                     </div>
                   </div>
@@ -189,12 +195,29 @@
                       <WrenchScrewdriver24Regular />
                     </el-icon> {{ t('settings.providerDetail.toolCalling') }}</span>
                 </el-checkbox-button>
-                <el-checkbox-button value="thinking">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <LightbulbFilament24Regular />
-                    </el-icon> {{ t('settings.providerDetail.mixedThinking') }}</span>
-                </el-checkbox-button>
               </el-checkbox-group>
+            </el-form-item>
+
+            <!-- 思考调节：自动判断（跟随继承链）/ 不支持 / 支持。
+                 只声明能力，不勾档位——档位由类型卡 / preset / 通用兜底决定 -->
+            <el-form-item :label="t('settings.providerDetail.thinkingTuning')" class="mb-4">
+              <div class="w-full">
+                <el-radio-group v-model="editModelForm.thinkingMode">
+                  <el-radio-button value="auto">{{ t('settings.providerDetail.thinkingAuto') }}</el-radio-button>
+                  <el-radio-button value="false">{{ t('settings.providerDetail.thinkingUnsupported') }}</el-radio-button>
+                  <el-radio-button value="true">{{ t('settings.providerDetail.thinkingSupported') }}</el-radio-button>
+                </el-radio-group>
+
+                <div class="mt-2 text-xs text-gray-400">
+                  <template v-if="editModelForm.thinkingMode === 'auto'">
+                    {{ t('settings.providerDetail.thinkingAutoHint') }}
+                  </template>
+                  <template v-else-if="editModelForm.thinkingMode === 'true'">
+                    {{ t('settings.providerDetail.thinkingSupportedHint') }}
+                  </template>
+                  <template v-else>{{ t('settings.providerDetail.thinkingUnsupportedHint') }}</template>
+                </div>
+              </div>
             </el-form-item>
 
             <el-form-item :label="t('settings.providerDetail.contextWindow')" prop="config.contextWindow">
@@ -287,11 +310,16 @@
                     <GdTooltip :content="getLableName(feature)" placement="top">
                       <el-icon class="hover:text-primary transition-colors" :size="14">
                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                        <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                         <ScienceOutlined v-else />
                       </el-icon>
                     </GdTooltip>
                   </template>
+                  <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
+                    placement="top">
+                    <el-icon class="hover:text-primary transition-colors" :size="14">
+                      <LightbulbFilament24Regular />
+                    </el-icon>
+                  </GdTooltip>
                 </div>
                 <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
                   {{ t('settings.providerDetail.select') }}
@@ -352,9 +380,33 @@ const editFormRef = ref<any>(null)
 const currentEditModelId = ref<string | null>(null)
 const isEditMode = ref(false)
 
-const editModelForm = ref<any>({
-  modelName: '',
+// ========== 思考调节（能力声明三态，不含档位）==========
+/** 条目级覆盖 → 表单三态；无覆盖 = 跟随继承链 */
+const thinkingModeFromModel = (model: any): 'auto' | 'true' | 'false' => {
+  const override = model?.supportsThinkingOverride
+  if (override === true) return 'true'
+  if (override === false) return 'false'
+  return 'auto'
+}
+
+/** 组思考能力 payload：
+ * - auto：条目有覆盖时发 null 清除（回退继承链），否则不提交
+ * - true/false：显式声明（覆盖类型卡）
+ * 档位与拼法不在 UI 设置，故此处不涉及 thinkingEfforts / compat
+ */
+const buildThinkingPayload = (): Record<string, any> => {
+  const mode = editModelForm.value.thinkingMode
+  if (mode === 'true') return { supportsThinking: true }
+  if (mode === 'false') return { supportsThinking: false }
+  const model = props.models?.find((x) => x.id === currentEditModelId.value)
+  return model?.supportsThinkingOverride !== undefined
+    ? { supportsThinking: null }
+    : {}
+}
+
+const editModelForm = ref<any>({  modelName: '',
   modelType: 'text',
+  thinkingMode: 'auto',
   config: {
     inputCapabilities: ['text'],
     outputCapabilities: ['text'],
@@ -462,6 +514,7 @@ const handleSelectFromFetch = (model: any) => {
   editModelForm.value = {
     modelName: model.modelName || '',
     modelType: model.modelType || 'text',
+    thinkingMode: 'auto',
     config: {
       inputCapabilities: model.config?.inputCapabilities || ['text'],
       outputCapabilities: model.config?.outputCapabilities || ['text'],
@@ -485,6 +538,7 @@ const handleAddModel = () => {
   editModelForm.value = {
     modelName: '',
     modelType: 'text',
+    thinkingMode: 'auto',
     config: {
       inputCapabilities: ['text'],
       outputCapabilities: ['text'],
@@ -509,6 +563,7 @@ const handleEditClick = (model: any) => {
   editModelForm.value = {
     modelName: model.modelName || '',
     modelType: model.modelType || 'text',
+    thinkingMode: thinkingModeFromModel(model),
     config: {
       inputCapabilities: config.inputCapabilities || ['text'],
       outputCapabilities: config.outputCapabilities || ['text'],
@@ -530,14 +585,18 @@ const handleSaveModel = async () => {
   try {
     await editFormRef.value?.validate()
 
+    // 表单态字段（thinkingMode）不进 payload；思考能力按三态+null清除语义组装
+    const { thinkingMode, ...formRest } = editModelForm.value
+    const body = { ...formRest, ...buildThinkingPayload() }
+
     if (isEditMode.value) {
       if (currentEditModelId.value) {
-        await apiService.updateModel(currentEditModelId.value, editModelForm.value)
+        await apiService.updateModel(currentEditModelId.value, body)
       }
       notify.success(t('common.saveSuccess'), t('settings.providerDetail.modelUpdated'))
     } else {
       await apiService.createModel({
-        ...editModelForm.value,
+        ...body,
         providerId: props.provider.id
       })
       notify.success(t('common.createSuccess'), t('settings.providerDetail.modelAdded'))

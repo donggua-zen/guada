@@ -5,63 +5,65 @@
             class="flex items-center h-10 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 所有类型标签统一一行（文件 / 浏览器 / Git 审阅） -->
 
-            <!-- 标签 + 新建按钮容器（预览模式且有标签时显示） -->
-            <div ref="tabBarRef" v-if="props.sessionId"
-                class="flex items-center min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
-                @wheel="onTabBarWheel">
-                <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
-                <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
-                    :class="{ active: activeTabKey === tab.key }"
-                    :title="tabTitle(tab)" draggable="true"
-                    @click="onTabClick(tab)"
-                    @dragstart="onTabDragStart(index, $event)"
-                    @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
-                    <!-- 文件图标 -->
-                    <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
-                    <!-- 浏览器图标 -->
-                    <template v-else-if="tab.type === 'browser'">
-                        <img v-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt=""
-                            @error="onFaviconImageError($event, tab)" />
-                        <span v-else class="tab-globe">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <path
-                                    d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                            </svg>
+            <!-- 标签栏（可横向滚动）+ 新建按钮（固定，不随标签滚出视野） -->
+            <div v-if="props.sessionId" class="flex items-center min-w-0">
+                <div ref="tabBarRef"
+                    class="flex items-center min-w-0 overflow-x-auto no-drag browser-tabs-scroll"
+                    @wheel="onTabBarWheel">
+                    <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
+                    <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
+                        :class="{ active: activeTabKey === tab.key }"
+                        :title="tabTitle(tab)" draggable="true"
+                        @click="onTabClick(tab)"
+                        @dragstart="onTabDragStart(index, $event)"
+                        @dragover.prevent="onTabDragOver(index)" @drop.prevent="onTabDrop(index)" @dragend="onTabDragEnd">
+                        <!-- 文件图标 -->
+                        <img v-if="tab.type === 'file'" :src="getFileIcon(tab.name!)" class="tab-favicon" alt="" />
+                        <!-- 浏览器图标 -->
+                        <template v-else-if="tab.type === 'browser'">
+                            <img v-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt=""
+                                @error="onFaviconImageError($event, tab)" />
+                            <span v-else class="tab-globe">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path
+                                        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                </svg>
+                            </span>
+                        </template>
+                        <!-- Git 审阅图标 -->
+                        <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
+                            <el-icon :size="13"><Branch20Regular /></el-icon>
                         </span>
-                    </template>
-                    <!-- Git 审阅图标 -->
-                    <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
-                        <el-icon :size="13"><Branch20Regular /></el-icon>
-                    </span>
-                    <!-- 进程日志图标 -->
-                    <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
-                        <el-icon :size="13"><Pulse20Regular /></el-icon>
-                    </span>
-                    <!-- 子代理会话图标（运行中带状态点） -->
-                    <template v-else-if="tab.type === 'subagent'">
-                        <span class="tab-favicon tab-git">
-                            <el-icon :size="13"><Bot20Regular /></el-icon>
+                        <!-- 进程日志图标 -->
+                        <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
+                            <el-icon :size="13"><Pulse20Regular /></el-icon>
                         </span>
-                        <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
-                    </template>
-                    <!-- 工作流审阅图标 -->
-                    <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
-                        <el-icon :size="13"><Flowchart20Regular /></el-icon>
-                    </span>
-                    <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
-                    <span class="tab-close"
-                        @click.stop="closeTab(tab)">
-                        <el-icon size="10">
-                            <Close />
-                        </el-icon>
-                    </span>
+                        <!-- 子代理会话图标（运行中带状态点） -->
+                        <template v-else-if="tab.type === 'subagent'">
+                            <span class="tab-favicon tab-git">
+                                <el-icon :size="13"><Bot20Regular /></el-icon>
+                            </span>
+                            <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
+                        </template>
+                        <!-- 工作流审阅图标 -->
+                        <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
+                            <el-icon :size="13"><Flowchart20Regular /></el-icon>
+                        </span>
+                        <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
+                        <span class="tab-close"
+                            @click.stop="closeTab(tab)">
+                            <el-icon size="10">
+                                <Close />
+                            </el-icon>
+                        </span>
+                    </div>
                 </div>
 
                 <!-- 起始页按钮：打开起始页（无任何标签时同样显示该页） -->
                 <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
-                    <button class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="tabStore.openNewTab()">
+                    <button class="sidebar-tool-btn no-drag" @click="tabStore.openNewTab()">
                         <el-icon size="14">
                             <Plus />
                         </el-icon>
@@ -149,7 +151,7 @@
                 <!-- 目录树内容 -->
                 <TreeView ref="treeViewRef" :rows="treeRows" :selected-key="selectedNodePath"
                     :collapsed-keys="collapsedTreeKeys" class="flex-1 min-h-0"
-                    @select="onTreeSelect" @toggle="onTreeToggle" @contextmenu="onTreeContextMenu">
+                    @select="onTreeSelect" @dblclick="onTreeDblClick" @toggle="onTreeToggle" @contextmenu="onTreeContextMenu">
                     <template #row="{ row }">
                         <!-- 文件图标（目录行与 diff 树一致：仅 chevron + 名称，无文件夹图标） -->
                         <span v-if="!row.isDir" class="node-icon file-icon">
@@ -200,7 +202,6 @@ import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
 import GitChangesPanel from './GitChangesPanel.vue';
 import TerminalPanel from './TerminalPanel.vue';
 import ProcessLogPanel from './ProcessLogPanel.vue';
-import NewTabPage from './NewTabPage.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import { useLayoutStore } from '@/stores/layout';
 import { useSessionStore } from '@/stores/session';
@@ -378,8 +379,8 @@ const gitPanelRef = ref<InstanceType<typeof GitChangesPanel> | null>(null);
 const tabs = computed(() => tabStore.tabs);
 const activeTabKey = computed(() => tabStore.activeTabKey);
 const tabBarRef = ref<HTMLElement | null>(null);
-// 起始页显示条件：无任何激活标签（空态）或点击 + 号后的哨兵键 'newtab'
-const showStartPage = computed(() => !activeTabKey.value || activeTabKey.value === 'newtab');
+// 起始页显示条件：无激活标签（空态或点击 + 号）
+const showStartPage = computed(() => !activeTabKey.value);
 
 // ── 浏览器标签操作 ──
 
@@ -410,13 +411,15 @@ function onTabBarWheel(e: WheelEvent): void {
 
 // 起始页选项：打开文件 / 审阅 / 网页
 function onNewTabOpenFile(): void {
-    // 起始页不占用标签：直接创建空文件标签并激活（path 为空，右侧目录树可选文件）
+    // 起始页不占用标签：创建空文件标签（预览态）并激活（path 为空，右侧目录树可选文件）。
+    // 选中的文件会在这个预览标签内打开；双击则固定为持久标签。
     const key = `file:new-${Date.now()}`;
     tabStore.addTab({
         type: 'file',
         key,
         name: t('chat.workspace.newTab'),
         path: '',
+        isPreview: true,
     });
     tabStore.selectTab(key);
 }
@@ -497,6 +500,25 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             return true;
         });
 
+        // 规范化历史缓存：旧版"当前标签页打开"原地改 path 会留下 key 与 path 脱钩的条目，
+        // 按 path 重建规范 key 并按 path 去重（保留先出现者）；空标签原样保留。
+        const rawActive = tabStore.tabs.find(t => t.key === cached.activeTabKey);
+        const normalized: UnifiedTab[] = [];
+        const seenPaths = new Set<string>();
+        for (const tab of tabStore.tabs) {
+            if (tab.type !== 'file' || !tab.path) {
+                normalized.push(tab);
+                continue;
+            }
+            if (seenPaths.has(tab.path)) continue;
+            seenPaths.add(tab.path);
+            normalized.push({ ...tab, key: `file:${tab.path}` });
+        }
+        tabStore.tabs = normalized;
+        const restoredActiveKey = rawActive?.type === 'file' && rawActive.path
+            ? `file:${rawActive.path}`
+            : cached.activeTabKey;
+
         // 补充 store 中存在但缓存中没有的浏览器标签
         for (const wv of browserStore.sessionWebviews) {
             const key = `browser:${wv.windowId}`;
@@ -506,12 +528,13 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
         }
 
         // 恢复激活标签（显示完全由激活标签驱动）
-        if (cached.activeTabKey === 'newtab') {
-            // 起始页不占用标签：恢复为无激活标签，显示起始页
+        // null = 起始页；'newtab' 为旧缓存哨兵键，一并归一到起始页
+        if (cached.activeTabKey === null || cached.activeTabKey === 'newtab') {
+            // 起始页不占用标签：恢复为无激活标签
             tabStore.selectTab(null)
-        } else if (cached.activeTabKey && tabStore.tabs.some(t => t.key === cached.activeTabKey)) {
+        } else if (restoredActiveKey && tabStore.tabs.some(t => t.key === restoredActiveKey)) {
             await nextTick()
-            tabStore.selectTab(cached.activeTabKey)
+            tabStore.selectTab(restoredActiveKey)
         } else if (tabStore.tabs.length > 0) {
             await nextTick()
             tabStore.selectTab(tabStore.tabs[0].key)
@@ -643,6 +666,13 @@ const collapsedTreeKeys = computed<Set<string>>(() => {
 /** TreeView 行事件 → WorkspaceNode 事件适配 */
 function onTreeSelect(row: TreeViewRow): void {
     handleTreeNodeSelect(row.node as WorkspaceNode);
+}
+
+/** 双击文件行：在当前文件标签内打开并固定为持久 */
+function onTreeDblClick(row: TreeViewRow): void {
+    const node = row.node as WorkspaceNode;
+    if (node.isDirectory) return;
+    void handleFileSelect(node, { persistent: true });
 }
 
 function onTreeToggle(row: TreeViewRow, expanded: boolean): void {
@@ -1129,6 +1159,7 @@ async function handleRename() {
                 tabStore.addTab({
                     type: 'file', key: newKey, name: newName.trim(),
                     path: result.newPath || oldPath, extension: newExt, size: oldTab.size || 0,
+                    isPreview: oldTab.isPreview,
                 });
                 if (wasActive) tabStore.selectTab(newKey);
             }
@@ -1200,41 +1231,23 @@ async function handleDelete() {
 }
 
 /**
- * 处理文件选择
+ * 处理文件选择（目录树单击/双击；树仅在文件标签激活时可见）
  *
- * 所有文件都打开预览面板，按类型决定显示内容：
- * - 文本文件 → 通过 API 加载内容（后端限制 5MB）
- * - 图片文件（Electron）→ 拼接本地 file:// 路径，无大小限制
- * - 图片文件（非 Electron）→ 使用 rawfile URL（后端限制 20MB）
- * - 不支持格式 → 显示"此文件暂不支持预览" + Electron 打开按钮
+ * 单击：在当前激活的文件标签内原位打开，保持该标签的预览/持久属性。
+ * 双击：同上，并把该标签固定为持久（persistent: true）。
  */
-async function handleFileSelect(node: WorkspaceNode) {
+async function handleFileSelect(node: WorkspaceNode, opts: { persistent?: boolean } = {}) {
     if (node.isDirectory) return;
     if (!props.sessionId) return;
 
     const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
+    const file = { path: node.path, name: node.name, extension: ext, size: node.size || 0 };
 
-    // 在"当前标签页"打开：若当前激活的是文件标签（含空态），直接更新路径，不新建标签
-    const activeTab = tabStore.tabs.find(t => t.key === tabStore.activeTabKey);
-    if (activeTab?.type === 'file') {
-        activeTab.path = node.path;
-        activeTab.name = node.name;
-        activeTab.extension = ext;
-        activeTab.size = node.size || 0;
-        return;
-    }
+    // 正常路径：树可见 ⇒ 必有激活文件标签。返回 false 仅为防御（如激活态刚被清空）
+    if (tabStore.openFileInActiveTab(file, opts)) return;
 
-    // 无激活文件标签（如激活 git/browser 或空态）：新建文件标签
-    const tabKey = `file:${node.path}`;
-    tabStore.addTab({
-        type: 'file',
-        key: tabKey,
-        name: node.name,
-        path: node.path,
-        extension: ext,
-        size: node.size || 0,
-    });
-    tabStore.selectTab(tabKey)
+    // 兜底：打开到唯一的预览标签（不会改动持久标签）
+    tabStore.openFilePreview(file);
 }
 
 /**

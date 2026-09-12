@@ -253,13 +253,13 @@ const intervalConfig = ref({ hours: 1, days: [0, 1, 2, 3, 4, 5, 6] as number[] }
 const onceConfig = ref({ datetime: '' })
 
 const weekDays = computed(() => [
-  t('common.time.sunday'),
-  t('common.time.monday'),
-  t('common.time.tuesday'),
-  t('common.time.wednesday'),
-  t('common.time.thursday'),
-  t('common.time.friday'),
-  t('common.time.saturday')
+  t('common.weekday.sunday'),
+  t('common.weekday.monday'),
+  t('common.weekday.tuesday'),
+  t('common.weekday.wednesday'),
+  t('common.weekday.thursday'),
+  t('common.weekday.friday'),
+  t('common.weekday.saturday')
 ])
 
 // 角色列表

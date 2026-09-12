@@ -1,0 +1,118 @@
+# 硅基流动 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 提供高性价比的开源模型 API 服务，支持多种主流大语言模型。
+# API Key 获取: https://cloud.siliconflow.cn/me/account/ak
+type: siliconflow
+name: 硅基流动
+description: 提供高性价比的开源模型 API 服务，支持多种主流大语言模型。
+apiKeyUrl: https://cloud.siliconflow.cn/me/account/ak
+avatarUrl: siliconflow.svg
+protocol: openai
+defaultApiUrl: https://api.siliconflow.cn/v1/
+compat:
+  thinkingFormat: qwen
+models:
+  - modelName: deepseek-ai/DeepSeek-V3.2
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 160000
+  - modelName: deepseek-ai/DeepSeek-V3.1-Terminus
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 160000
+  - modelName: deepseek-ai/DeepSeek-R1
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 160000
+  - modelName: Qwen/Qwen3.5-397B-A17B
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: Qwen/Qwen3.5-122B-A10B
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: Qwen/Qwen3-VL-32B-Instruct
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: Qwen/Qwen3-VL-235B-A22B-Thinking
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: moonshotai/Kimi-K2-Thinking
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: Qwen/Qwen3-Embedding-8B
+    modelType: embedding
+    supportsThinking: false
+    config:
+      contextWindow: 32000
+      vectorDimensions: 4096

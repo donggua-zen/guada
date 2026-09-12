@@ -1,0 +1,14 @@
+# 百度智能云 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 百度千帆大模型平台，提供文心一言系列模型及完整的 AI 开发生态。
+# API Key 获取: https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application
+type: baidu-qianfan
+name: 百度智能云
+description: 百度千帆大模型平台，提供文心一言系列模型及完整的 AI 开发生态。
+apiKeyUrl: https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application
+avatarUrl: baidu-qianfan.svg
+protocol: openai
+defaultApiUrl: https://qianfan.baidubce.com/v2/
+compat:
+  thinkingFormat: qwen

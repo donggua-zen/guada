@@ -71,13 +71,13 @@ export default {
     selectLocalFolder: '选择本地文件夹',
     selectFolderFailed: '选择文件夹失败',
     attachedDir: '附加工作目录',
+    addRemoteAttachedDir: '添加远程工作目录',
   },
 
   // ── 工具栏 ──
   toolbar: {
     // ChatInputToolbar.vue
     workspace: '工作目录：{path}',
-    attachedSuffix: ' +{count} 附加',
     group: '分组：{name}',
     autoCreate: '自动创建',
     publicDir: '公共目录',
@@ -301,6 +301,8 @@ export default {
     previewArea: '预览区',
     newWindow: '新窗口',
     newTab: '新建',
+    startPageTitle: '打开标签页',
+    startPageSubtitle: '选择要在侧边面板中打开的标签。',
     exitFullscreen: '退出全屏',
     fullscreen: '全屏',
     workingDir: '工作目录',

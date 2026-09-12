@@ -235,6 +235,7 @@ interface DataPaths {
   uploadDir: string; // 上传文件目录
   logsDir: string; // 日志目录
   skillsDir: string; // 技能目录
+  providersDir: string; // 供应商配置文件目录（YAML）
   workspaceDir: string; // 工作目录
   pluginsDir: string; // 插件目录
   isNewLayout: boolean; // 是否使用新目录结构（data/ 子目录）
@@ -257,6 +258,7 @@ function computeDataPaths(dataHome: string): DataPaths {
       uploadDir: path.join(dataHome, "file_stores"),
       logsDir: path.join(dataHome, "logs"),
       skillsDir: path.join(dataHome, "skills"),
+      providersDir: path.join(dataHome, "providers"),
       workspaceDir: path.join(dataHome, "workspaces"),
       pluginsDir: path.join(dataHome, "plugins"),
       isNewLayout: true,
@@ -271,6 +273,7 @@ function computeDataPaths(dataHome: string): DataPaths {
     uploadDir: path.join(dataHome, "file_stores"),
     logsDir: path.join(dataHome, "logs"),
     skillsDir: path.join(dataHome, "skills"),
+    providersDir: path.join(dataHome, "providers"),
     workspaceDir: path.join(dataHome, "workspace"),
     pluginsDir: path.join(dataHome, "plugins"),
     isNewLayout: false,
@@ -586,6 +589,7 @@ async function startBackend(): Promise<void> {
           USERDATA_DIR: dataHome, // 传递用户数据目录
           LOGS_DIR: paths.logsDir, // 传递后端日志目录
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
+          PROVIDERS_DIR: paths.providersDir, // 供应商配置文件目录（YAML）
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
           PLUGINS_DEV_DIR: devPluginsDir, // 开发模式外部插件目录

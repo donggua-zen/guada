@@ -80,7 +80,7 @@ function createContext(overrides: any = {}) {
   const ctx = new JsonlSessionContext(
     makeSession(overrides.session),
     messageStore as any,
-    { getSettingValue: jest.fn(async () => true) } as any, // summaryMode → enabled
+    { getSettingValue: jest.fn(async () => true) } as any, // 模型解析兜底（SK_MOD_CHAT）
     { findById: jest.fn() } as any,
     { resolvePlugins: jest.fn(async () => []) } as any,
     {
@@ -253,7 +253,9 @@ describe('JsonlSessionContext 读取层直通', () => {
       session: {
         model: {
           ...makeSession().model,
-          config: { contextWindow: 8000, features: ['tools', 'thinking'], inputCapabilities: [] },
+          // 能力 = 档位菜单（非空即能思考），不再用 features 标记
+          thinkingEfforts: ['none', 'low', 'medium', 'high'],
+          config: { contextWindow: 8000, features: ['tools'], inputCapabilities: [] },
         },
         settings: { systemPrompt: 'sys', thinkingEffort: 'medium' },
       },
@@ -355,6 +357,42 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     expect(sid).toBe('s1');
     expect(typeof data.usedTokens).toBe('number');
     expect(data.effectiveContextWindow).toBe(8000);
+  });
+});
+
+describe('JsonlSessionContext 压缩配置档位', () => {
+  // 注意：压缩配置只取角色 settings.memory（buildEffectiveSettings 不合并会话级 memory）
+  function sessionWithMemory(memory: any) {
+    return { session: { character: { settings: { memory } } } };
+  }
+
+  it('compressionTier 合法 → 折算为档位预设（enabled/trigger/retain/summaryMode）', async () => {
+    const { ctx } = createContext(sessionWithMemory({ compressionTier: 'aggressive' }));
+    await ctx.initialize();
+    expect(ctx.getCompressionConfig()).toEqual({
+      enabled: true,
+      compressionTriggerRatio: 0.9,
+      compressionRetainRatio: 0.2,
+      summaryMode: 'memory_sync',
+    });
+  });
+
+  it('旧 summaryMode=disabled → OFF 档（enabled=false）；无配置 → 默认档（保守）', async () => {
+    const legacy = createContext(sessionWithMemory({ summaryMode: 'disabled' }));
+    await legacy.ctx.initialize();
+    expect(legacy.ctx.getCompressionConfig()).toMatchObject({
+      enabled: false,
+      summaryMode: 'disabled',
+    });
+
+    const fallback = createContext();
+    await fallback.ctx.initialize();
+    expect(fallback.ctx.getCompressionConfig()).toMatchObject({
+      enabled: true,
+      compressionTriggerRatio: 0.9,
+      compressionRetainRatio: 0.4,
+      summaryMode: 'memory_sync',
+    });
   });
 });
 

@@ -12,7 +12,7 @@
         'is-active': activeKey === row.key,
       }"
       :style="{ paddingLeft: 8 + row.depth * indent + 'px', '--indent': row.depth * indent + 'px' }"
-      @click="onRowClick(row)" @contextmenu.prevent="(e) => emit('contextmenu', e, row)">
+      @click="onRowClick(row)" @dblclick="onRowDblClick(row)" @contextmenu.prevent="(e) => emit('contextmenu', e, row)">
       <!-- 组头行：纯标题，无 chevron / 无选中 -->
       <template v-if="row.isGroup">
         <slot name="row" :row="row" :collapsed="false" />
@@ -77,6 +77,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   select: [row: TreeViewRow];
+  /** 文件行双击（目录/组头不触发）：调用方用于"固定为持久标签"等语义 */
+  dblclick: [row: TreeViewRow];
   toggle: [row: TreeViewRow, expanded: boolean];
   contextmenu: [event: MouseEvent, row: TreeViewRow];
 }>();
@@ -95,6 +97,12 @@ function onRowClick(row: TreeViewRow): void {
     return;
   }
   emit("select", row);
+}
+
+/** 双击仅对文件行生效（目录行由单击展开/折叠） */
+function onRowDblClick(row: TreeViewRow): void {
+  if (row.isGroup || row.isDir) return;
+  emit("dblclick", row);
 }
 
 function onToggle(row: TreeViewRow): void {

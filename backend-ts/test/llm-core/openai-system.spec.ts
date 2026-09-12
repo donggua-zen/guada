@@ -3,6 +3,17 @@
 import { OpenAIAdapter } from '../../src/modules/llm-core/adapters/openai.adapter';
 import type { Message } from '../../src/common/types/conversation.types';
 
+/** 测试 stub：能力服务按显式 map 提供 wire 值（真实实现从 store 查表） */
+function makeCapabilityStub(map?: Record<string, string> | ((model: string, level: string) => string | undefined)) {
+  return {
+    resolveThinkingWireValue: (_pid: string | undefined, model: string | undefined, level: string | undefined) => {
+      if (!level) return undefined;
+      if (typeof map === 'function') return map(model || '', level);
+      return map?.[level];
+    },
+  } as any;
+}
+
 function userMsg(id: string, text: string): Message {
   return {
     id,
@@ -16,7 +27,7 @@ function userMsg(id: string, text: string): Message {
 
 describe('OpenAIAdapter system 映射（envelope 独立字段）', () => {
   it('有 system 时：作为消息数组首条 {role:system}', async () => {
-    const adapter = new OpenAIAdapter();
+    const adapter = new OpenAIAdapter(makeCapabilityStub());
     const out = await (adapter as any).formatMessages(
       [userMsg('u1', 'hi')],
       'sys prompt',
@@ -27,7 +38,7 @@ describe('OpenAIAdapter system 映射（envelope 独立字段）', () => {
   });
 
   it('无 system 时：不插入 system 首条', async () => {
-    const adapter = new OpenAIAdapter();
+    const adapter = new OpenAIAdapter(makeCapabilityStub());
     const out = await (adapter as any).formatMessages(
       [userMsg('u1', 'hi')],
       undefined,
@@ -37,7 +48,7 @@ describe('OpenAIAdapter system 映射（envelope 独立字段）', () => {
   });
 
   it('空 system 字符串按无 system 处理', async () => {
-    const adapter = new OpenAIAdapter();
+    const adapter = new OpenAIAdapter(makeCapabilityStub());
     const out = await (adapter as any).formatMessages(
       [userMsg('u1', 'hi')],
       '',

@@ -1,5 +1,5 @@
 <template>
-  <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="340" :anchor-el="anchorEl"
+  <GdPopover :show="visible" @update:show="onMainShowChange" :width="340" :anchor-el="anchorEl"
     :max-height="480">
     <div class="flex flex-col gap-0.5">
       <!-- 最近选择 -->
@@ -75,33 +75,66 @@
         </div>
       </template>
 
-      <!-- 附加工作目录（远程连接绑定，多选 toggle；与主目录单选语义不同，点击不关闭弹层） -->
+      <!-- 附加工作目录（远程连接绑定）：一级仅显示已绑定连接（hover 解除，概览窗同款）；
+           "添加"触发行 hover 打开二级级联清单（交互对齐 ModelSelectorPanel） -->
       <div class="h-px bg-[#eee] dark:bg-white/8 mx-2 my-1.5"></div>
       <div class="text-[11px] font-medium text-[#999] dark:text-[#6b7280] px-2 py-1 select-none">{{ t('chat.input.attachedDir') }}</div>
-      <template v-if="connections.length > 0">
-        <div v-for="conn in connections" :key="conn.id"
-          class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
-          @click="emit('toggle-attachment', conn.id)">
+      <template v-if="attachedConnections.length > 0">
+        <div v-for="conn in attachedConnections" :key="conn.id" class="attached-row flex items-center gap-1.25 px-2 py-1 rounded-md transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)">
           <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
             <Cloud16Regular />
           </el-icon>
           <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
             <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ conn.name }}</span>
-            <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
+            <span v-if="conn.description" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
           </div>
-          <el-icon v-if="attachedIds.includes(conn.id)" size="14" class="shrink-0 text-(--el-color-primary)">
-            <Checkmark16Filled />
-          </el-icon>
+          <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">
+            <button class="attached-remove" @click="emit('toggle-attachment', conn.id)">
+              <el-icon :size="10"><Dismiss16Regular /></el-icon>
+            </button>
+          </GdTooltip>
         </div>
       </template>
-      <div v-else
+      <div ref="addTriggerRef"
         class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
-        @click="goToConnectionSettings">
+        @mouseenter="openCascade" @mouseleave="scheduleCloseCascade">
+        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
+          <Add16Regular />
+        </el-icon>
+        <span class="flex-1 text-sm text-(--gd-color-text) dark:text-[#e5e7eb]">{{ t('chat.input.addRemoteAttachedDir') }}</span>
+        <el-icon size="14" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
+          <ChevronRight24Regular />
+        </el-icon>
+      </div>
+    </div>
+  </GdPopover>
+
+  <!-- 级联：远程连接清单（点击 toggle 绑定，不关闭；已绑定显示 ✓） -->
+  <GdPopover :show="cascadeVisible" @update:show="onCascadeShowChange" :width="260" :max-height="300"
+    :position="cascadePosition" @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
+    <template v-if="connections.length > 0">
+      <div v-for="conn in connections" :key="conn.id"
+        class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
+        @click="emit('toggle-attachment', conn.id)">
         <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
           <Cloud16Regular />
         </el-icon>
-        <div class="flex-1 text-sm text-(--gd-color-text-gray) dark:text-[#6b7280]">{{ t('chat.workspace.noConnections') }}</div>
+        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ conn.name }}</span>
+          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
+        </div>
+        <el-icon v-if="attachedIds.includes(conn.id)" size="14" class="shrink-0 text-(--el-color-primary)">
+          <Checkmark16Filled />
+        </el-icon>
       </div>
+    </template>
+    <div v-else
+      class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
+      @click="goToConnectionSettings">
+      <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
+        <Cloud16Regular />
+      </el-icon>
+      <div class="flex-1 text-sm text-(--gd-color-text-gray) dark:text-[#6b7280]">{{ t('chat.workspace.noConnections') }}</div>
     </div>
   </GdPopover>
 </template>
@@ -111,8 +144,9 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular, Add16Regular, ChevronRight24Regular, Dismiss16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
+import GdTooltip from '../../ui/GdTooltip.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { apiService } from '@/services/ApiService'
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
@@ -160,10 +194,72 @@ async function loadConnections(): Promise<void> {
 
 watch(() => props.visible, (visible) => {
   if (visible) void loadConnections()
+  else cascadeVisible.value = false
 })
 
 /** 当前已绑定的附加目录 ID（勾选态渲染源） */
 const attachedIds = computed<string[]>(() => props.currentAttachments?.[SSH_CONNECTION_ATTACHMENT_TYPE] ?? [])
+
+/** 已绑定连接的展示信息（连接清单未加载/已删连接时回退显示 ID） */
+const attachedConnections = computed<RemoteConnectionOption[]>(() =>
+  attachedIds.value.map((id) =>
+    connections.value.find((c) => c.id === id) ?? { id, name: id, description: '' },
+  ),
+)
+
+// ── 二级级联（"添加远程附加工作目录"触发行 hover 弹出，交互对齐 ModelSelectorPanel）──
+const addTriggerRef = ref<HTMLElement | null>(null)
+const cascadeVisible = ref(false)
+const cascadePosition = ref<{ left: number; top: number } | null>(null)
+let cascadeCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+function openCascade(): void {
+  if (cascadeCloseTimer) {
+    clearTimeout(cascadeCloseTimer)
+    cascadeCloseTimer = null
+  }
+  if (cascadeVisible.value) return
+  // 先按触发行坐标计算位置再显示（右侧优先，空间不足放左侧），避免先出现在默认位置再跳变
+  if (addTriggerRef.value) {
+    const rect = addTriggerRef.value.getBoundingClientRect()
+    const menuWidth = 260
+    const menuHeight = 240
+    const gap = 5
+    const spaceRight = window.innerWidth - rect.right
+    const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= rect.left
+    const left = showOnRight ? rect.right + gap : rect.left - menuWidth - gap
+    let top = rect.top
+    if (top + menuHeight > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - menuHeight - 8)
+    }
+    cascadePosition.value = { left, top }
+  }
+  cascadeVisible.value = true
+}
+
+function onCascadeShowChange(val: boolean): void {
+  if (!val) cascadeVisible.value = false
+}
+
+function scheduleCloseCascade(): void {
+  if (cascadeCloseTimer) clearTimeout(cascadeCloseTimer)
+  cascadeCloseTimer = setTimeout(() => {
+    cascadeVisible.value = false
+  }, 200)
+}
+
+function cancelCloseCascade(): void {
+  if (cascadeCloseTimer) {
+    clearTimeout(cascadeCloseTimer)
+    cascadeCloseTimer = null
+  }
+}
+
+/** 主弹窗关闭保护：级联可见时不响应外部点击关闭（先收级联） */
+function onMainShowChange(val: boolean): void {
+  if (!val && cascadeVisible.value) return
+  emit('update:visible', val)
+}
 
 /** 空态行：跳转设置页"远程工作区"创建连接 */
 function goToConnectionSettings(): void {
@@ -207,3 +303,30 @@ async function handleOpenFolder() {
   }
 }
 </script>
+
+<style scoped>
+/* 已绑定附加目录行的解除按钮：hover 行时显现（对齐概览窗附加目录行样式） */
+.attached-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.attached-row:hover .attached-remove {
+  opacity: 1;
+}
+.attached-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+</style>
