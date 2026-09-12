@@ -71,6 +71,17 @@ export default {
   noData: '暂无数据',
   noResults: '无搜索结果',
 
+  // ── 星期 ──
+  weekday: {
+    sunday: '周日',
+    monday: '周一',
+    tuesday: '周二',
+    wednesday: '周三',
+    thursday: '周四',
+    friday: '周五',
+    saturday: '周六',
+  },
+
   // ── 状态 ──
   status: '状态',
   type: '类型',
@@ -188,8 +199,8 @@ export default {
     low: '低强度',
     medium: '中等强度',
     high: '高强度',
+    xhigh: '超高',
     max: '极致',
-    xhigh: '极致',
     minimal: '最小',
     minimum: '最小',
   },

@@ -9,6 +9,7 @@
  *   在确认二级压缩后发射）
  */
 import { CompactionCoordinatorService } from '../../src/modules/chat/compaction/compaction-coordinator.service';
+import { SummaryMode } from '../../src/modules/chat/compaction/compression-engine';
 import type { CompactionDataSource } from '../../src/modules/chat/compaction/types';
 import type { Message } from '../../src/common/types/conversation.types';
 import type { PreStepPayload, RequestErrorPayload } from '../../src/modules/chat/types/hooks.contract';
@@ -31,7 +32,7 @@ function createContext(overrides: Partial<CompactionDataSource> = {}): any {
   return {
     sessionId: 's1',
     publishStream: jest.fn(async () => {}),
-    getCompressionConfig: jest.fn(() => ({ summaryMode: 'memory_sync' })),
+    getCompressionConfig: jest.fn(() => ({ enabled: true, summaryMode: 'memory_sync' })),
     getHistory: jest.fn(async () => [makeMsg('m1')]),
     getMessages: jest.fn(async () => [makeMsg('m1')]),
     getModelConfig: jest.fn(() => ({ modelName: 'gpt-4o' } as any)),
@@ -258,6 +259,33 @@ describe('CompactionCoordinatorService', () => {
       });
       const outcome = await coordinator.maybeCompress(ctx as any);
       expect(outcome.didRun).toBe(false);
+    });
+
+    it('档位关闭（enabled=false）→ 非 force 旁路（不发流事件）；force（手动）仍执行', async () => {
+      const ctx = createContext({
+        getCompressionConfig: jest.fn(() => ({ enabled: false, summaryMode: SummaryMode.MEMORY_SYNC })),
+      });
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => ({
+          messages: [makeMsg('m1')],
+          compacted: true,
+          shadowedCount: 1,
+          shadowedEndId: 'a1',
+          summaryMessageId: 'm_sum',
+          summary: '已压缩',
+        })),
+      };
+      const coordinator = createCoordinator(compactionService);
+
+      const bypassed = await coordinator.maybeCompress(ctx as any);
+      expect(bypassed).toEqual({ messages: null, didRun: false });
+      expect(compactionService.compress).not.toHaveBeenCalled();
+      expect((ctx.publishStream as jest.Mock).mock.calls.length).toBe(0);
+
+      const forced = await coordinator.maybeCompress(ctx as any, { force: true, reason: 'manual' });
+      expect(forced.didRun).toBe(true);
+      expect(compactionService.compress).toHaveBeenCalledTimes(1);
     });
   });
 });

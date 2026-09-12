@@ -1,0 +1,183 @@
+# 阿里云百炼 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 阿里云推出的大模型服务平台，提供通义千问等自研模型及第三方模型接入。
+# API Key 获取: https://bailian.console.aliyun.com/cn-beijing?tab=model#/api-key
+type: aliyun-bailian
+name: 阿里云百炼
+description: 阿里云推出的大模型服务平台，提供通义千问等自研模型及第三方模型接入。
+apiKeyUrl: https://bailian.console.aliyun.com/cn-beijing?tab=model#/api-key
+avatarUrl: aliyun-bailian.svg
+protocol: openai
+defaultApiUrl: https://dashscope.aliyuncs.com/compatible-mode/v1/
+compat:
+  thinkingFormat: qwen
+models:
+  - modelName: qwen3.6-plus
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+  - modelName: qwen3.6-plus-2026-04-02
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+  - modelName: qwen3.5-397b-a17b
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: qwen3.5-122b-a10b
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: qwen3.5-27b
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: qwen3.5-35b-a3b
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: deepseek-v3.2
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: deepseek-v3.1
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: deepseek-r1-0528
+    # R1 强制思考：无法关闭、无档位 → 空档（不发参数、不回传推理，与官方建议一致）
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: deepseek-v3
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 64000
+  - modelName: kimi-k2.5
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: glm-5
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high, xhigh]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 198000
+  - modelName: minimax-m2.5
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: text-embedding-v4
+    modelType: embedding
+    supportsThinking: false
+    config:
+      contextWindow: 32000
+      vectorDimensions: 1024

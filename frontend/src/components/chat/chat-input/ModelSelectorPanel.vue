@@ -18,12 +18,13 @@
               </div>
               <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 <span class="truncate">{{ currentModelProviderName }}</span>
-                <template v-for="feature in (currentModel?.config?.features || [])" :key="feature">
-                  <el-icon :size="12">
-                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                  </el-icon>
-                </template>
+                <el-icon v-if="currentModel?.config?.features?.includes('tools')" :size="12">
+                  <WrenchScrewdriver24Regular />
+                </el-icon>
+                <!-- 思考能力判据是档位菜单（空 = 不能思考），不再是 features 标记 -->
+                <el-icon v-if="(currentModel?.thinkingEfforts?.length ?? 0) > 0" :size="12">
+                  <LightbulbFilament24Regular />
+                </el-icon>
               </div>
             </div>
           </template>
@@ -71,12 +72,12 @@
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <span class="truncate">{{ getModelProviderName(model) }}</span>
-                <template v-for="feature in (model.config?.features || [])" :key="feature">
-                  <el-icon :size="12">
-                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                  </el-icon>
-                </template>
+                <el-icon v-if="model.config?.features?.includes('tools')" :size="12">
+                  <WrenchScrewdriver24Regular />
+                </el-icon>
+                <el-icon v-if="(model.thinkingEfforts?.length ?? 0) > 0" :size="12">
+                  <LightbulbFilament24Regular />
+                </el-icon>
               </div>
             </div>
           </div>
@@ -110,12 +111,12 @@
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <!-- <span class="truncate">{{ provider.name }}</span> -->
-                <template v-for="feature in (model.config?.features || [])" :key="feature">
-                  <el-icon :size="12">
-                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                  </el-icon>
-                </template>
+                <el-icon v-if="model.config?.features?.includes('tools')" :size="12">
+                  <WrenchScrewdriver24Regular />
+                </el-icon>
+                <el-icon v-if="(model.thinkingEfforts?.length ?? 0) > 0" :size="12">
+                  <LightbulbFilament24Regular />
+                </el-icon>
               </div>
             </div>
             <el-icon class="favorite-icon cursor-pointer transition-all shrink-0" :size="16"

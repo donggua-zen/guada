@@ -1,0 +1,145 @@
+# OpenAI (Responses API) 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 使用 OpenAI 最新 Responses API（beta），专为 o 系列推理模型和高级智能体场景设计。
+# API Key 获取: https://platform.openai.com/api-keys
+type: openai-response
+name: OpenAI (Responses API)
+description: 使用 OpenAI 最新 Responses API（beta），专为 o 系列推理模型和高级智能体场景设计。
+apiKeyUrl: https://platform.openai.com/api-keys
+avatarUrl: openai.svg
+protocol: openai-response
+defaultApiUrl: https://api.openai.com/v1/
+compat:
+  includeEncryptedReasoning: true
+models:
+  - modelName: gpt-5-codex
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000
+  - modelName: computer-use-preview
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: o4-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: o3-pro
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: o3-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: o1
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: gpt-5.4
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000
+  - modelName: gpt-5-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 400000
+  - modelName: gpt-5-pro
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000
+  - modelName: gpt-5
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000

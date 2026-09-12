@@ -1,0 +1,83 @@
+# Google 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 谷歌提供的 Gemini 大模型服务，具备强大的多模态理解与生成能力。
+# API Key 获取: https://aistudio.google.com/app/apikey
+type: google
+name: Google
+description: 谷歌提供的 Gemini 大模型服务，具备强大的多模态理解与生成能力。
+apiKeyUrl: https://aistudio.google.com/app/apikey
+avatarUrl: google.svg
+protocol: gemini
+defaultApiUrl: https://generativelanguage.googleapis.com/
+models:
+  - modelName: gemini-3.1-pro-preview
+    modelType: text
+    thinkingEfforts:
+      - low
+      - medium
+      - high
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 66000
+    supportsThinking: true
+  - modelName: gemini-3-flash-preview
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 66000
+  - modelName: gemini-2.5-flash
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 66000
+  - modelName: gemini-2.5-pro
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 66000
+  - modelName: gemini-2.5-flash-image
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+        - image
+      features:
+        - tools
+      contextWindow: 33000
+      maxOutputTokens: 33000

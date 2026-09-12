@@ -41,7 +41,7 @@
         <div class="att-section-header">{{ attType.label }}</div>
         <div class="att-kb-list">
           <div v-if="!attType._items || attType._items.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
-            {{ t('common.empty') }}
+            {{ t('common.noData') }}
           </div>
           <div v-for="item in (attType._items || [])" :key="item.id"
             class="att-kb-item" @click="toggleAttachment(attType.id, item.id)">

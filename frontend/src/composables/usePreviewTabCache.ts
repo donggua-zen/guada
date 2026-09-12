@@ -5,7 +5,7 @@ import { useStorage } from '@vueuse/core'
  */
 export interface UnifiedTab {
     /**
-     * 'newtab' 仅作遗留兼容：起始页不再占用标签栏（openNewTab 只设置哨兵键 activeTabKey='newtab'），
+     * 'newtab' 仅作遗留兼容：起始页不占用标签栏（openNewTab 只清空 activeTabKey），
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
     type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'workflow' | 'newtab';

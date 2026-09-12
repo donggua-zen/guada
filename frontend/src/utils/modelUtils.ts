@@ -202,6 +202,20 @@ export function isThinkingSupported(model: any, providers: any[]): boolean {
 }
 
 /**
+ * 菜单的默认档位（用户从未显式选过时的取值）
+ *
+ * 取非关闭档的中位数（向下取整）——即"默认开启思考"、取中等强度，
+ * 而不是默认关闭。规则与后端 `defaultThinkingEffort` 一致，避免
+ * "UI 显示关闭、实际发了强度值"这类分叉。
+ */
+export function getDefaultThinkingEffort(options: string[] | undefined): string {
+  if (!options || options.length === 0) return 'none';
+  const nonOff = options.filter((e) => e !== 'none');
+  if (nonOff.length === 0) return 'none';
+  return nonOff[Math.floor((nonOff.length - 1) / 2)];
+}
+
+/**
  * 获取思考强度的显示标签
  */
 export function getThinkingEffortLabel(effort: string): string {

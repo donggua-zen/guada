@@ -123,7 +123,7 @@
             </div>
 
             <!-- 文件列表内容区 -->
-            <div class="w-full m-4  min-h-0 rounded-lg p-2 bg-white dark:bg-[#232428]">
+            <div class="w-full min-h-0 rounded-lg p-2 bg-white dark:bg-[#232428]">
               <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!" @view="handleViewFile"
                 @retry="handleRetryFile" @delete="handleDeleteFile" @folder-change="handleFolderChange"
                 @files-loaded="handleFilesLoaded" />

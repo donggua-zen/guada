@@ -1,0 +1,65 @@
+# MiniMax 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 专注于通用人工智能，提供高质量的语言模型和语音合成服务。
+# API Key 获取: https://platform.minimaxi.com/user-center/basic-information/interface-key
+#
+# M2 系列走 MiniMax 的 Anthropic 兼容端点（对齐 DSH/pi-ai：api.minimax.io/anthropic）。
+# 思考声明：M2 无思考档位（默认始终思考）→ thinkingEfforts: false；
+# Anthropic 适配器对无档位模型不发 thinking 参数，模型按默认行为思考。
+type: minimax
+name: MiniMax
+description: 专注于通用人工智能，提供高质量的语言模型和语音合成服务。
+apiKeyUrl: https://platform.minimaxi.com/user-center/basic-information/interface-key
+avatarUrl: minimax.svg
+protocol: anthropic
+defaultApiUrl: https://api.minimax.io/anthropic
+models:
+  - modelName: MiniMax-M2.5
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 205000
+      maxOutputTokens: 131000
+  - modelName: MiniMax-M2.5-highspeed
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 205000
+      maxOutputTokens: 131000
+  - modelName: MiniMax-M2.1
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 205000
+      maxOutputTokens: 131000
+  - modelName: MiniMax-M2
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 197000
+      maxOutputTokens: 128000

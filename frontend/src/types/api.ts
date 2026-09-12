@@ -8,6 +8,22 @@ import type { Session, SessionListResponse } from './session'
 import type { Message } from './message'
 
 /**
+ * wire 兼容开关（对齐 DSH 的 compat 块；与后端 ThinkingCompatConfig 同构）
+ */
+export interface ThinkingCompatConfig {
+    /** 开关字段的 wire 拼法；缺省 = openai */
+    thinkingFormat?: string
+    /** 强度值是否上 wire；缺省 = 该 format 的默认 */
+    supportsReasoningEffort?: boolean
+    /** 助手消息必须携带 reasoning_content（DeepSeek 系跨轮回传） */
+    requiresReasoningContentOnAssistantMessages?: boolean
+    chatTemplateArgs?: Record<string, unknown>
+    chatTemplateKwargs?: Record<string, unknown>
+    /** Responses 协议是否请求加密推理内容回传 */
+    includeEncryptedReasoning?: boolean
+}
+
+/**
  * 模型对象
  */
 export interface Model {
@@ -23,6 +39,22 @@ export interface Model {
     isFavorite?: boolean
     createdAt?: string
     updatedAt?: string
+    /** 思考档位菜单（能力与档位是同一份数据；空数组 = 不能思考） */
+    thinkingEfforts?: string[]
+    /** 档位 → wire 值映射（仅在有映射时返回） */
+    thinkingEffortsMap?: Record<string, string>
+    /** 生效的思考请求拼法（模型条目 > 实例级 > 类型卡；必有值，缺省 openai） */
+    thinkingFormat?: string
+    /** 生效的"强度值是否上 wire"（必有值） */
+    supportsReasoningEffort?: boolean
+    /** 生效的思考能力（supportsThinking 解析值；菜单空 = 不能思考） */
+    supportsThinking?: boolean
+    /** 条目级档位覆盖（false = 显式无档位；缺省 = 档位来自继承链） */
+    thinkingEffortsOverride?: false | string[]
+    /** 条目级思考能力覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */
+    supportsThinkingOverride?: boolean
+    /** 条目级 compat 覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */
+    compatOverride?: ThinkingCompatConfig
     config?: {
         inputCapabilities?: string[]
         outputCapabilities?: string[]
@@ -48,6 +80,8 @@ export interface ModelProvider {
     isActive: boolean
     avatarUrl?: string
     attributes?: any
+    /** 实例级 wire 兼容开关覆盖（缺省 = 继承类型卡） */
+    compat?: ThinkingCompatConfig
     createdAt?: string
     updatedAt?: string
     models?: Model[]

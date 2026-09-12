@@ -1,0 +1,83 @@
+# 测试供应商 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 用于测试超时重试、429 限流、网络错误等异常场景的虚拟供应商。
+type: mock
+name: 测试供应商
+description: 用于测试超时重试、429 限流、网络错误等异常场景的虚拟供应商。
+avatarUrl: mock.svg
+protocol: mock
+defaultApiUrl: http://localhost:0
+models:
+  - modelName: mock-normal
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: mock-normal-slow
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: mock-timeout
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: mock-429
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: mock-network-error
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: mock-error-500
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000

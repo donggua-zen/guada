@@ -520,7 +520,7 @@ describe('LLMSummaryProvider', () => {
     } as any;
     const provider = new LLMSummaryProvider(llmService, {
       modelName: 'gpt-4o',
-      provider: { provider: 'openai' },
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
     });
     const oldCheckpoint: Message = {
       id: 'evt_1',
@@ -560,7 +560,7 @@ describe('LLMSummaryProvider', () => {
     };
     const provider = new LLMSummaryProvider(llmService, {
       modelName: 'gpt-4o',
-      provider: { provider: 'openai' },
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
     }, {
       prefix: { system: 'system prompt', tools: [{ name: 'shell', description: 'run', parameters: {} }] as any },
     });
@@ -587,7 +587,7 @@ describe('LLMSummaryProvider', () => {
     const llmService = { completions: jest.fn(async () => streamMock('x')) } as any;
     const provider = new LLMSummaryProvider(llmService, {
       modelName: 'gpt-4o',
-    provider: { provider: 'openai' },
+    provider: { id: 'test', type: 'openai', protocol: 'openai' },
   }, {
     prefix: { system: 'sys' },
   });
@@ -621,7 +621,7 @@ it('buildParams 复用：摘要请求参数与主请求同源，system/tools/max
   };
   const provider = new LLMSummaryProvider(llmService, {
     modelName: 'gpt-4o',
-    provider: { provider: 'openai' },
+    provider: { id: 'test', type: 'openai', protocol: 'openai' },
   }, {
     prefix: { system: 'sys', tools: [{ name: 'shell', description: 'run', parameters: {} }] as any },
     buildParams,

@@ -100,57 +100,18 @@
 
               <!-- 记忆与压缩 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                <!-- 触发阈值 -->
-                <el-form-item prop="compressionTriggerRatio" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.triggerThreshold') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.triggerHint') }}</span>
-                    </div>
-                    <div class="w-1/2">
-                      <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05"
-                        show-input :format-tooltip="formatSliderTooltip" class="w-full" />
-                    </div>
-                  </div>
-                </el-form-item>
-                <!-- 保留目标 -->
-                <el-form-item prop="compressionTargetRatio" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.targetRatio') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.targetHint') }}</span>
-                    </div>
-                    <div class="w-1/2">
-                      <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05"
-                        show-input :format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full" />
-                    </div>
-                  </div>
-                </el-form-item>
-                <!-- 摘要模式 -->
-                <el-form-item prop="summaryMode" class="mb-0!">
+                <!-- 压缩策略档位（档位同时决定触发时机/保留比例/摘要方式） -->
+                <el-form-item prop="compressionTier" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.summaryMode') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.summaryHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.compressionTier') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.compressionTierHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.summaryMode" :placeholder="t('characters.setting.summaryPlaceholder')" class="w-full">
-                        <el-option :label="t('characters.setting.summaryDisabled')" value="disabled">
+                      <el-select v-model="characterForm.compressionTier" :placeholder="t('characters.setting.compressionTierPlaceholder')" class="w-full">
+                        <el-option v-for="opt in COMPRESSION_TIER_OPTIONS" :key="opt.value" :label="t(opt.labelKey)" :value="opt.value">
                           <span class="flex items-center gap-2">
-                            <el-icon><CloseOutlined /></el-icon>
-                            <span>{{ t('characters.setting.summaryDisabledDesc') }}</span>
-                          </span>
-                        </el-option>
-                        <el-option :label="t('characters.setting.summaryFast')" value="fast">
-                          <span class="flex items-center gap-2">
-                            <el-icon><ThunderboltOutlined /></el-icon>
-                            <span>{{ t('characters.setting.summaryFastDesc') }}</span>
-                          </span>
-                        </el-option>
-                        <el-option :label="t('characters.setting.summaryMemorySync')" value="memory_sync">
-                          <span class="flex items-center gap-2">
-                            <el-icon><FolderOutlined /></el-icon>
-                            <span>{{ t('characters.setting.summaryMemorySyncDesc') }}</span>
+                            <span>{{ t(opt.descKey) }}</span>
                           </span>
                         </el-option>
                       </el-select>
@@ -439,7 +400,6 @@ import {
   ElFormItem,
   ElInput,
   ElSelect,
-  ElSlider,
   ElInputNumber,
   ElTooltip,
   ElCheckbox,
@@ -456,10 +416,7 @@ import {
   UserOutlined,
   MessageOutlined,
   ToolOutlined,
-  ApiOutlined,
-  CloseOutlined,
-  FolderOutlined,
-  ThunderboltOutlined
+  ApiOutlined
 } from '@vicons/antd'
 
 import { Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular } from '@vicons/fluent'
@@ -470,7 +427,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
 import SegmentedToggle from '../ui/SegmentedToggle.vue'
-import { DEFAULT_SUMMARY_MODE } from '@/constants'
+import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'
 
 const { toast, notify } = usePopup()
 const { t } = useI18n()
@@ -480,11 +437,6 @@ const autoEnableOptions = computed(() => [
   { label: t('characters.setting.autoEnable'), value: false },
   { label: t('characters.setting.keepDisabled'), value: true }
 ])
-
-// Slider 百分比格式化函数
-const formatSliderTooltip = (val: number): string => {
-  return `${Math.round(val * 100)}%`;
-};
 
 // Props
 const props = defineProps({
@@ -591,9 +543,7 @@ const characterForm = reactive({
   modelId: null,
   memoryType: '',
   enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
-  compressionTriggerRatio: 0.8, // 触发阈值
-  compressionTargetRatio: 0.5, // 保留目标
-  summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
+  compressionTier: DEFAULT_COMPRESSION_TIER, // 压缩策略档位：'off' | 'conservative' | 'aggressive'
 })
 
 // 验证规则
@@ -813,11 +763,11 @@ watch(() => props.data, (newVal, oldVal) => {
   characterForm.systemPrompt = newVal.settings?.systemPrompt || '';
   characterForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
 
-  // 从 memory 分组加载记忆与压缩配置
+  // 从 memory 分组加载压缩档位（旧自由比例/摘要模式读时映射：disabled→off，其余→默认档）
   const memoryConfig = newVal.settings?.memory || {};
-  characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
-  characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
-  characterForm.summaryMode = memoryConfig.summaryMode ?? DEFAULT_SUMMARY_MODE;
+  characterForm.compressionTier = memoryConfig.compressionTier
+    ?? (memoryConfig.summaryMode === 'disabled' ? 'off' : undefined)
+    ?? DEFAULT_COMPRESSION_TIER;
   // 加载角色插件设置（新格式：工具包粒度，仅消费 __strategy/__default/toolkits_*）
   // 旧版插件级开关条目（{ pluginId: { enabled } } / 裸布尔）直接忽略
   const pluginsConfig = newVal.settings?.plugins;
@@ -1232,11 +1182,9 @@ const getFormData = () => {
       'assistantIdentity': characterForm.assistantIdentity,
       'systemPrompt': characterForm.systemPrompt,
       'memoryType': characterForm.memoryType,
-      // 记忆与压缩配置分组
+      // 记忆与压缩配置分组（档位）
       'memory': {
-        'compressionTriggerRatio': characterForm.compressionTriggerRatio,
-        'compressionTargetRatio': characterForm.compressionTargetRatio,
-        'summaryMode': characterForm.summaryMode,
+        'compressionTier': characterForm.compressionTier,
       },
       // 插件配置（工具包/能力包粒度）
       'plugins': (() => {

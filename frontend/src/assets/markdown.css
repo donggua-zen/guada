@@ -192,8 +192,8 @@ ol > *:not(li) {
   display: flex;
   align-items: center;
   justify-items: center;
-  border: 1px solid var(--gd-color-border);
-  border-radius: var(--gd-size-surface-radius);
+  /* border: 1px solid var(--gd-color-border); */
+  /* border-radius: var(--gd-size-surface-radius); */
   
 }
 
@@ -208,7 +208,7 @@ ol > *:not(li) {
 .markdown-text table td {
   border-bottom: 1px solid var(--gd-color-border);
   vertical-align: top;
-  padding: 8px 16px 8px 16px;
+  padding: 12px 16px 12px 16px;
   min-width: 100px;
   /* max-width: 220px; */
 }
@@ -216,6 +216,11 @@ ol > *:not(li) {
 .markdown-text table th:last-child,
 .markdown-text table td:last-child {
     padding-right: 0;
+}
+
+.markdown-text table th:first-child,
+.markdown-text table td:first-child {
+    padding-left: 0;
 }
 
 .dark .markdown-text table th,

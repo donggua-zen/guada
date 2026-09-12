@@ -1,0 +1,121 @@
+# OpenAI 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 全球领先的 AI 研究机构，ChatGPT 和 GPT 系列模型的创造者。
+# API Key 获取: https://platform.openai.com/api-keys
+type: openai
+name: OpenAI
+description: 全球领先的 AI 研究机构，ChatGPT 和 GPT 系列模型的创造者。
+apiKeyUrl: https://platform.openai.com/api-keys
+avatarUrl: openai.svg
+protocol: openai
+defaultApiUrl: https://api.openai.com/v1/
+models:
+  - modelName: gpt-4o
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: gpt-4o-mini
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000
+  - modelName: gpt-5.4
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000
+  - modelName: gpt-5-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 400000
+  - modelName: gpt-5
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1100000
+  - modelName: o4-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: o3-mini
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: o1
+    supportsThinking: true
+    thinkingEfforts: [low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 200000
+  - modelName: text-embedding-3-small
+    modelType: embedding
+    supportsThinking: false
+    config:
+      contextWindow: 8000
+      vectorDimensions: 2000

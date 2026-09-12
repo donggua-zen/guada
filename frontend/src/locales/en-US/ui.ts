@@ -30,6 +30,7 @@
     noPermission: 'You do not have permission to reset the password',
     inputUsername: 'Enter your username',
     inputPassword: 'Enter your password',
+    password: 'Password',
     confirmPassword: 'Confirm Password',
     inputPasswordAgain: 'Enter the password again',
     permissionTitle: 'Permission Notice',

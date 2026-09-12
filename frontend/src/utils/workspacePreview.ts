@@ -151,18 +151,9 @@ export async function previewFile(filePath: string): Promise<void> {
     const tabStore = useTabStore()
     const name = filePath.replace(/\\/g, '/').split('/').pop() || filePath
     const ext = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : ''
-    const tabKey = `file:${filePath}`
 
-    tabStore.addTab({
-        type: 'file',
-        key: tabKey,
-        name,
-        path: filePath,
-        extension: ext,
-        size: 0,
-        isPreview: true,
-    })
-    tabStore.selectTab(tabKey)
+    // 打开到唯一的预览标签（复用已有预览标签，不新建/改动持久标签）
+    tabStore.openFilePreview({ path: filePath, name, extension: ext, size: 0 })
 }
 
 /**

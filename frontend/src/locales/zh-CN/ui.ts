@@ -30,6 +30,7 @@ export default {
     noPermission: '您当前没有权限重置密码',
     inputUsername: '请输入用户名',
     inputPassword: '请输入密码',
+    password: '密码',
     confirmPassword: '确认密码',
     inputPasswordAgain: '请再次输入密码',
     permissionTitle: '权限说明',

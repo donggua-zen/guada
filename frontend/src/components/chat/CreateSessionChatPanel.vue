@@ -109,8 +109,8 @@ const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
-// 新增：用户上次选择的思考强度（刷新页面后从 localStorage 恢复）
-const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffort', 'none');
+// 用户上次选择的思考强度（'' = 从未选择 → 由档位菜单决定默认中间档）
+const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffort2', '');
 
 // 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
@@ -170,7 +170,8 @@ const currentSession = ref<any>({
   settings: {
     referencedKbs: userSelectedKnowledgeBaseIds.value,
     modelName: null,
-    thinkingEffort: userSelectedThinkingEffort.value,
+    // 未选择过（''）不写入：让会话保持"未设置"，由档位菜单决定默认中间档
+    thinkingEffort: userSelectedThinkingEffort.value || null,
     sandboxMode: 'workspace-write',
     maxTokensLimit: null
   }
@@ -416,8 +417,8 @@ const chatInputConfig = computed(() => ({
   // 模型 ID
   modelId: currentModelId.value,
 
-  // 思考强度
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'none',
+  // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
 
   // Token 上限（会话级别独立配置）
   maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
@@ -451,8 +452,8 @@ const handleConfigChange = (config: any): void => {
     userSelectedModelId.value = config.modelId;
   }
 
-  // 处理思考强度变更
-  if (typeof config.thinkingEffort !== 'undefined') {
+  // 处理思考强度变更（只有真实选择才落库/持久化，空值不覆盖已存值）
+  if (config.thinkingEffort) {
     currentSession.value.settings.thinkingEffort = config.thinkingEffort;
     // 保存到 localStorage，实现持久化
     userSelectedThinkingEffort.value = config.thinkingEffort;

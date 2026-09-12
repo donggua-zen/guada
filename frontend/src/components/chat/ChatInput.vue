@@ -168,7 +168,7 @@ import SandboxModePopover from './chat-input/SandboxModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
-import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
+import { getDefaultThinkingEffort, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { toResourceUrl } from '@/utils/url';
 import {
 
@@ -338,7 +338,7 @@ const props = defineProps({
     type: Object as PropType<ChatConfig>,
     default: () => ({
       modelId: null,
-      thinkingEffort: 'none',
+      thinkingEffort: undefined,
       workspacePath: null,
       maxTokensLimit: null,
       knowledgeBaseIds: [],
@@ -460,14 +460,15 @@ const currentModel = computed(() => {
   return null;
 });
 
-// 根据模型特性动态控制按钮显示
-watch(() => currentModel.value?.config, (config) => {
-  // 思考按钮：当模型支持 thinking 时显示
-  showButtons.thinkingButton = config?.features?.includes('thinking') || false;
+// 思考档位标签显示：能力 = 档位菜单（空 = 不能思考）
+watch(() => currentModel.value?.thinkingEfforts, (efforts) => {
+  showButtons.thinkingButton = (efforts?.length ?? 0) > 0;
 }, { immediate: true });
 
 // 思考强度相关
-const localThinkingEffort = ref<string>('none'); // 'none' | 'low' | 'medium' | 'high' | 'max' | ...
+// 用户是否显式选过档位：false = 跟随菜单默认（中间档），换模型时重新取默认
+const thinkingEffortChosen = ref(false);
+const localThinkingEffort = ref<string>('none');
 
 // 运行模式相关
 const sandboxModeButtonRef = ref<any>(null);
@@ -499,13 +500,35 @@ const thinkingEffortOptions = computed(() => {
   return getModelThinkingEfforts(currentModel.value, providers.value);
 });
 
-// 初始化思考强度（从 config 中读取保存的值）
-const initThinkingEffort = () => {
-  if (props.config?.thinkingEffort) {
-    localThinkingEffort.value = props.config.thinkingEffort;
-  } else {
-    localThinkingEffort.value = 'none';
+/**
+ * 把「显式选择 + 当前菜单」收敛为合法档位：
+ * - 用户未选过 → 菜单的默认中间档（后端 defaultThinkingEffort 同规则）
+ * - 选过的值不在菜单里（换模型后失效）→ 按后端 clampThinkingEffort 的规则调整
+ */
+const syncThinkingEffort = () => {
+  const options = thinkingEffortOptions.value;
+  if (options.length === 0) return;
+  const current = localThinkingEffort.value;
+  if (!thinkingEffortChosen.value) {
+    localThinkingEffort.value = getDefaultThinkingEffort(options);
+    return;
   }
+  if (options.includes(current)) return;
+  const nonOff = options.filter((e) => e !== 'none');
+  localThinkingEffort.value =
+    (current === 'none' ? nonOff[0] : nonOff[Math.floor(nonOff.length / 2)]) ?? 'none';
+};
+
+watch(thinkingEffortOptions, syncThinkingEffort, { immediate: true });
+
+// 初始化思考强度（读会话里保存的值；从未保存过 → 跟随菜单默认中间档）
+const initThinkingEffort = () => {
+  const saved = props.config?.thinkingEffort;
+  if (saved) {
+    thinkingEffortChosen.value = true;
+    localThinkingEffort.value = saved;
+  }
+  syncThinkingEffort();
 };
 
 // 获取思考强度的标签（用于按钮显示）
@@ -515,8 +538,11 @@ const getThinkingEffortShortLabel = (effort: string) => {
 
 // 处理思考强度变更
 const handleThinkingEffortChange = (effort: string) => {
+  if (!effort) return;
   // 更新本地状态
   localThinkingEffort.value = effort;
+  // 这是用户的显式选择：之后换模型时按"迁移"而非"跟随默认"处理
+  thinkingEffortChosen.value = true;
 
   // 构建配置变更对象
   const configChanges = {
@@ -757,7 +783,10 @@ const handleModelSelect = (modelId: string) => {
   // 智能迁移逻辑：
   let newThinkingEffort: string;
 
-  if (options.includes(currentEffort)) {
+  if (!currentEffort) {
+    // 规则0：从未显式选择 → 取新菜单的默认中间档（与后端 defaultThinkingEffort 一致）
+    newThinkingEffort = getDefaultThinkingEffort(options);
+  } else if (options.includes(currentEffort)) {
     // 规则1：如果当前值在新选项中仍然有效，保持不变
     newThinkingEffort = currentEffort;
   } else {
@@ -777,10 +806,14 @@ const handleModelSelect = (modelId: string) => {
   localThinkingEffort.value = newThinkingEffort;
 
   // 构建配置变更对象
-  const configChanges = {
+  const configChanges: Record<string, any> = {
     modelId: modelId,
-    thinkingEffort: newThinkingEffort,
   };
+  // 未显式选过档位时不落库：让会话保持"未设置"，由后端 defaultThinkingEffort 决定，
+  // 否则会把跟随默认的中间档固化成一次"用户选择"，之后换模型不再跟随
+  if (thinkingEffortChosen.value) {
+    configChanges.thinkingEffort = newThinkingEffort;
+  }
 
   emit('config-change', configChanges);
 };
@@ -1324,11 +1357,14 @@ watch(editorContent, () => {
   });
 });
 
-// 监听思考强度配置变化，同步到本地状态
+// 监听思考强度配置变化，同步到本地状态（undefined = 会话从未选过 → 走菜单默认中间档）
 watch(() => props.config?.thinkingEffort, (newEffort) => {
-  if (newEffort !== undefined && newEffort !== localThinkingEffort.value) {
+  if (newEffort === undefined) return;
+  thinkingEffortChosen.value = true;
+  if (newEffort !== localThinkingEffort.value) {
     localThinkingEffort.value = newEffort;
   }
+  syncThinkingEffort();
 }, { immediate: true });
 
 watch(() => props.buttons, (value) => {

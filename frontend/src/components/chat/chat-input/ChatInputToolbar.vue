@@ -6,7 +6,7 @@
         <FolderOpen24Regular />
       </el-icon>
       <span class="text-xs font-medium">
-        {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}{{ attachedSuffix }}
+        {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}
       </span>
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
@@ -165,16 +165,8 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
   emit('config-change', { workspacePath })
 }
 
-// ── 附加工作目录（远程连接绑定，多选）：toggle 后整体写回 attachments ──
-const attachedCount = computed(() => {
-  const ids = props.config?.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
-  return Array.isArray(ids) ? ids.length : 0
-})
-
-const attachedSuffix = computed(() =>
-  attachedCount.value > 0 ? t('chat.toolbar.attachedSuffix', { count: attachedCount.value }) : ''
-)
-
+// ── 附加工作目录（远程连接绑定，多选）：toggle 后整体写回 attachments。
+//    绑定数不体现在按钮文案上——按钮宽度变化会让弹层重新锚定，产生跳变 ──
 const handleToggleAttachment = (connectionId: string) => {
   const current = props.config?.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
   const ids = Array.isArray(current) ? current : []

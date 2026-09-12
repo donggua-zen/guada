@@ -1,0 +1,9 @@
+# Custom 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 自定义供应商，支持所有协议，直接使用基础适配器。
+type: custom
+name: Custom
+description: 自定义供应商，支持所有协议，直接使用基础适配器。
+protocol: openai
+defaultApiUrl: ''

@@ -11,6 +11,14 @@ import type { UnifiedTab } from '@/composables/usePreviewTabCache'
  */
 const MAX_FILE_TABS = 10
 
+/** 打开文件标签的输入（key 由 store 统一生成为 file:<path>） */
+interface FileTabInput {
+    path: string
+    name: string
+    extension?: string
+    size?: number
+}
+
 export const useTabStore = defineStore('tab', () => {
     const browserStore = useBrowserWebviewStore()
 
@@ -30,11 +38,11 @@ export const useTabStore = defineStore('tab', () => {
 
     /**
      * 打开"起始页"（无任何标签 或 点击 + 号时显示）。
-     * 起始页不占用标签栏：仅设置哨兵键 'newtab' 作为激活态，不向 tabs 数组 push，
-     * 因此标签栏不会出现对应标签；模板按 activeTabKey === 'newtab' 渲染起始页。
+     * 起始页不占用标签栏：清空激活标签即可（activeTabKey = null），
+     * 不向 tabs 数组 push，因此标签栏不会出现对应标签。
      */
     function openNewTab(): void {
-        selectTab('newtab')
+        selectTab(null)
     }
 
     /**
@@ -52,8 +60,85 @@ export const useTabStore = defineStore('tab', () => {
             return
         }
         const key = `file:new-${Date.now()}`
-        addTab({ type: 'file', key, name, path: '' })
+        addTab({ type: 'file', key, name, path: '', isPreview: true })
         selectTab(key)
+    }
+
+    /**
+     * 在激活的文件标签中打开文件（目录树单击/双击：树仅在文件标签激活时可见，
+     * 所以永远只作用于当前激活的文件标签，不会新开标签）。
+     * 目标已打开 → 直接激活；否则把激活标签原位改键为 file:<path>，
+     * 确保非空文件标签的 key 恒等于 file:<path>（删除/重命名/去重均按此 key 查找）。
+     * options.persistent 为 true 时（双击）把目标标签固定为持久（isPreview = false）。
+     * 返回 true 表示已消费该操作；false 表示当前没有文件标签（调用方可回退到预览标签）。
+     */
+    function openFileInActiveTab(file: FileTabInput, options: { persistent?: boolean } = {}): boolean {
+        const active = tabs.value.find(t => t.key === activeTabKey.value)
+        if (active?.type !== 'file') return false
+
+        const nextKey = `file:${file.path}`
+        if (nextKey === active.key) {
+            if (options.persistent) active.isPreview = false
+            return true
+        }
+
+        const existing = tabs.value.find(t => t.key === nextKey)
+        if (existing) {
+            // 目标文件已开在别的标签：丢弃当前空/旧标签，聚焦已有标签
+            if (options.persistent) existing.isPreview = false
+            removeTab(active.key)
+            selectTab(nextKey)
+            return true
+        }
+
+        const idx = tabs.value.indexOf(active)
+        tabs.value.splice(idx, 1, {
+            ...active,
+            key: nextKey,
+            path: file.path,
+            name: file.name,
+            extension: file.extension ?? active.extension,
+            size: file.size ?? 0,
+            isPreview: options.persistent ? false : active.isPreview,
+        })
+        selectTab(nextKey)
+        return true
+    }
+
+    /**
+     * 打开文件到唯一的预览标签（聊天文件变更条 / 文件引用；不依赖当前激活标签）。
+     * 目标已打开 → 直接激活；已有预览文件标签（含空占位）→ 原位改键复用；
+     * 否则新建预览标签。不会改动当前激活的持久标签。
+     */
+    function openFilePreview(file: FileTabInput): void {
+        const nextKey = `file:${file.path}`
+        const existing = tabs.value.find(t => t.key === nextKey)
+        if (existing) {
+            selectTab(nextKey)
+            return
+        }
+
+        const previewTab = tabs.value.find(t => t.type === 'file' && t.isPreview)
+        if (previewTab) {
+            const idx = tabs.value.indexOf(previewTab)
+            tabs.value.splice(idx, 1, {
+                ...previewTab,
+                key: nextKey,
+                path: file.path,
+                name: file.name,
+                extension: file.extension ?? previewTab.extension,
+                size: file.size ?? 0,
+                isPreview: true,
+            })
+            selectTab(nextKey)
+            return
+        }
+
+        addTab({
+            type: 'file', key: nextKey, path: file.path, name: file.name,
+            extension: file.extension, size: file.size ?? 0, isPreview: true,
+        })
+        selectTab(nextKey)
     }
 
     /** 打开终端标签（UI 终端，每会话限 3，由后端校验配额） */
@@ -178,14 +263,6 @@ export const useTabStore = defineStore('tab', () => {
         if (oldest) removeTab(oldest.key)
     }
 
-    /** 临时标签提升为持久 */
-    function promoteTab(key: string): void {
-        const tab = tabs.value.find(t => t.key === key)
-        if (tab && tab.isPreview) {
-            tab.isPreview = false
-        }
-    }
-
     function removeTab(key: string): void {
         const idx = tabs.value.findIndex(t => t.key === key)
         if (idx === -1) return
@@ -257,6 +334,8 @@ export const useTabStore = defineStore('tab', () => {
         openGitTab,
         openNewTab,
         openWorkspaceBrowseTab,
+        openFileInActiveTab,
+        openFilePreview,
         openTerminalTab,
         openProcessLogTab,
         openSubAgentTab,
@@ -265,7 +344,6 @@ export const useTabStore = defineStore('tab', () => {
         addTab,
         removeTab,
         reorderTab,
-        promoteTab,
         syncActiveWindowId,
         syncBrowserTabs,
         clearAll,

@@ -1,0 +1,79 @@
+# 火山引擎 类型目录（bundled 预置，随应用版本分发）
+# 此文件是「可添加供应商」模板与模型目录的权威数据；
+# 实例文件按 modelName 条目级继承并覆盖，目录更新自动流到未覆盖的实例
+# 字节跳动旗下云平台，提供豆包大模型及企业级 AI 解决方案。
+# API Key 获取: https://console.volcengine.com/ark/region:ark+cn-beijing/apikey
+type: volcengine
+name: 火山引擎
+description: 字节跳动旗下云平台，提供豆包大模型及企业级 AI 解决方案。
+apiKeyUrl: https://console.volcengine.com/ark/region:ark+cn-beijing/apikey
+avatarUrl: volcengine.svg
+protocol: openai-response
+defaultApiUrl: https://ark.cn-beijing.volces.com/api/v3/
+models:
+  - modelName: doubao-seed-1.8
+    modelType: text
+    supportsThinking: true
+    thinkingEfforts:
+      - none
+      - minimal
+      - low
+      - medium
+      - high
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: doubao-seed-1.6-flash
+    modelType: text
+    supportsThinking: true
+    thinkingEfforts:
+      - none
+      - minimal
+      - low
+      - medium
+      - high
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: doubao-seed-1.6
+    modelType: text
+    supportsThinking: true
+    thinkingEfforts:
+      - none
+      - minimal
+      - low
+      - medium
+      - high
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 256000
+  - modelName: doubao-pro-250820
+    supportsThinking: true
+    thinkingEfforts: [none, high]
+    modelType: text
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 128000

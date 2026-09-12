@@ -71,13 +71,13 @@
     selectLocalFolder: 'Select Local Folder',
     selectFolderFailed: 'Failed to select folder',
     attachedDir: 'Attached Directories (Remote)',
+    addRemoteAttachedDir: 'Add Remote Directory',
   },
 
   // ── 工具栏 ──
   toolbar: {
     // ChatInputToolbar.vue
     workspace: 'Working Directory: {path}',
-    attachedSuffix: ' +{count} attached',
     group: 'Group: {name}',
     autoCreate: 'Auto Create',
     publicDir: 'Public Directory',
@@ -301,6 +301,8 @@
     previewArea: 'Preview Area',
     newWindow: 'New Window',
     newTab: 'New Tab',
+    startPageTitle: 'Open a Tab',
+    startPageSubtitle: 'Choose a tab to open in the side panel.',
     exitFullscreen: 'Exit Fullscreen',
     fullscreen: 'Fullscreen',
     workingDir: 'Working Directory',

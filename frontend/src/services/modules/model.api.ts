@@ -15,9 +15,14 @@ export interface ModelApi {
   createProvider(data: any): Promise<any>;
   testProviderConnection(data: any): Promise<{ success: boolean; message: string }>;
   deleteProvider(providerId: string): Promise<boolean>;
+  setProviderEnabled(providerId: string, enabled: boolean): Promise<any>;
   updateProvider(providerId: string, data: any): Promise<any>;
   getProviderTemplates(): Promise<any[]>;
   getModelPresets(): Promise<any[]>;
+  /** 按 apiUrl 推荐思考格式（仅供提示，用户确认后才写入 compat） */
+  getThinkingFormatSuggestion(
+    apiUrl: string,
+  ): Promise<{ suggestion?: { format: string; vendor: string } }>;
 }
 
 export const modelApi: ModelApi = {
@@ -68,6 +73,10 @@ export const modelApi: ModelApi = {
     });
   },
 
+  async setProviderEnabled(this: ApiContext, providerId: string, enabled: boolean) {
+    return await this._request(`/providers/${providerId}/enabled`, { method: "PUT", data: { enabled } });
+  },
+
   async deleteProvider(this: ApiContext, providerId: string) {
     return await this._request(`/providers/${encodeURIComponent(providerId)}`, {
       method: "DELETE",
@@ -87,5 +96,11 @@ export const modelApi: ModelApi = {
 
   async getModelPresets(this: ApiContext) {
     return await this._request("/models/presets");
+  },
+
+  async getThinkingFormatSuggestion(this: ApiContext, apiUrl: string) {
+    return await this._request(
+      `/models/thinking-format-suggestion?apiUrl=${encodeURIComponent(apiUrl)}`,
+    );
   },
 };
