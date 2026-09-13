@@ -1,78 +1,40 @@
 import { FileService } from "./file.service";
 
-describe("FileService ownership checks", () => {
-  let fileRepo: any;
-  let prisma: any;
+/**
+ * 附件上传的守卫测试
+ *
+ * 附件只落盘、不写 DB：上传返回内联 FileRef，随消息事件写进 JSONL。
+ * 因此这里只校验「会话必须存在」这一条前置条件（单账户模型下无归属校验，
+ * 也没有配套的复制/删除动作可测）。
+ */
+describe("FileService checks (single-account)", () => {
+  let sessionStore: any;
   let service: FileService;
 
   beforeEach(() => {
-    fileRepo = {
-      create: jest.fn(),
-      findById: jest.fn(),
-    };
-    prisma = {
-      session: {
-        findFirst: jest.fn(),
-      },
-      message: {
-        findUnique: jest.fn(),
-      },
+    // 会话元信息权威来源：sessions/<id>/meta.json（SessionFileStore）
+    sessionStore = {
+      get: jest.fn().mockReturnValue(undefined),
     };
 
     service = new FileService(
       {} as any,
       {} as any,
-      fileRepo,
-      prisma,
+      sessionStore,
       {} as any,
       { toResourceAbsoluteUrl: (url: string) => url } as any,
     );
   });
 
-  it("does not upload to another user's session", async () => {
-    prisma.session.findFirst.mockResolvedValue(null);
+  it("rejects upload when the session does not exist", async () => {
+    sessionStore.get.mockReturnValue(undefined);
 
     await expect(
-      service.uploadFile(
-        "session-1",
-        { originalname: "note.txt", size: 1, buffer: Buffer.from("a") },
-        "user-1",
-      ),
+      service.uploadFile("session-1", {
+        originalname: "note.txt",
+        size: 1,
+        buffer: Buffer.from("a"),
+      }),
     ).rejects.toThrow("Session not found");
-
-    expect(fileRepo.create).not.toHaveBeenCalled();
-  });
-
-  it("does not copy into another user's message", async () => {
-    prisma.message.findUnique.mockResolvedValue({
-      id: "message-1",
-      session: { userId: "user-2" },
-    });
-
-    await expect(
-      service.copyFile("file-1", "message-1", "user-1"),
-    ).rejects.toThrow("Message not found");
-
-    expect(fileRepo.findById).not.toHaveBeenCalled();
-    expect(fileRepo.create).not.toHaveBeenCalled();
-  });
-
-  it("does not copy a file from another session", async () => {
-    prisma.message.findUnique.mockResolvedValue({
-      id: "message-1",
-      sessionId: "session-1",
-      session: { userId: "user-1" },
-    });
-    fileRepo.findById.mockResolvedValue({
-      id: "file-1",
-      sessionId: "session-2",
-      uploadUserId: "user-2",
-    });
-
-    await expect(
-      service.copyFile("file-1", "message-1", "user-1"),
-    ).rejects.toThrow("File does not belong to this session");
-
-    expect(fileRepo.create).not.toHaveBeenCalled();
   });
 });

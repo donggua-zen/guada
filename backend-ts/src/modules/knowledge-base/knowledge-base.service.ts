@@ -5,23 +5,26 @@ import {
   Inject,
 } from "@nestjs/common";
 import * as fs from "fs";
-import { PrismaService } from "../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { KbFileService } from "./kb-file.service";
 import { KbChunkFileStore } from "./kb-chunk-file.store";
+import { KbFileStore } from "./kb-file.store";
+import { ProviderFileStore } from "../llm-core/provider-file.store";
+import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
 
 @Injectable()
 export class KnowledgeBaseService {
   private readonly logger = new Logger(KnowledgeBaseService.name);
 
   constructor(
-    private prisma: PrismaService,
     private kbRepo: KnowledgeBaseRepository,
     @Inject("VECTOR_DB") private vectorDb: VectorDatabase,
     private kbFileService: KbFileService,
+    private kbFileStore: KbFileStore,
     private chunkFileStore: KbChunkFileStore,
+    private modelStore: ProviderFileStore,
   ) {}
 
   /**
@@ -35,6 +38,7 @@ export class KnowledgeBaseService {
     if (!data.embeddingModelId) {
       throw new Error("向量模型 ID 不能为空");
     }
+    assertResolvableModelRef(this.modelStore, data.embeddingModelId, 'embeddingModelId');
 
     try {
       const kb = await this.kbRepo.create({
@@ -120,6 +124,9 @@ export class KnowledgeBaseService {
       const newModelId = data.embeddingModelId !== undefined
         ? data.embeddingModelId
         : null;
+      if (newModelId) {
+        assertResolvableModelRef(this.modelStore, newModelId, 'embeddingModelId');
+      }
       const modelChanged = newModelId !== null && newModelId !== kb.embeddingModelId;
 
       const updateData: any = {};
@@ -185,16 +192,11 @@ export class KnowledgeBaseService {
           this.logger.warn(`删除分块目录失败: ${error.message}`);
         });
 
-      // 2. 获取知识库下的所有文件路径（只查询必要字段）
-      const files = await this.prisma.kBFile.findMany({
-        where: { 
-          knowledgeBaseId: kbId,
-          isDirectory: false,  // 只查询文件，排除文件夹
-        },
-        select: {
-          filePath: true,  // 只选择 filePath 字段，减少数据传输
-        },
-      });
+      // 2. 获取知识库下的所有文件路径（权威来源是 kb 文件存储的 file.json，
+      //    主库 kb_file 已冻结停写；用主库会漏删迁移后新上传的物理文件）
+      const files = this.kbFileStore
+        .queryFiles((m) => m.knowledgeBaseId === kbId && !m.isDirectory)
+        .map((m) => ({ filePath: m.filePath }));
 
       // 3. 异步并行删除所有本地物理文件
       const fileDeletePromises = files

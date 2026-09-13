@@ -7,7 +7,7 @@ import { IncomingMessage } from "node:http";
 import { TerminalService } from "./terminal.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SessionService } from "../chat/session.service";
-import { UserRepository } from "../../common/database/user.repository";
+import { AccountFileStore } from "../auth/account-file.store";
 import { ClientTerminalMessage, ServerTerminalMessage, PtyHandle } from "./types";
 
 interface WsSession {
@@ -21,7 +21,7 @@ interface WsSession {
  * 终端 WebSocket 网关
  *
  * 挂载到同一 HTTP server（同端口升级），路径 /api/v1/terminal/ws。
- * 鉴权：query.token (JWT) → 用户；sessionId → 会话归属校验。
+ * 鉴权：query.token (JWT) 校验通过即放行（单账户，无归属校验）。
  *
  * 关键设计：
  *  - WS 断连（页面刷新/会话切换）不调 dispose → PTY 保留为 orphan
@@ -41,7 +41,7 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
     private workspaceService: WorkspaceService,
     private sessionService: SessionService,
     private jwtService: JwtService,
-    private userRepo: UserRepository,
+    private accountStore: AccountFileStore,
     private configService: ConfigService,
   ) {}
 
@@ -75,17 +75,15 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
       if (!token) throw new Error("Missing token");
       if (!sessionIdRaw) throw new Error("Missing sessionId");
 
-      const payload = await this.jwtService.verifyAsync(token, {
-        secret: this.configService.get<string>("JWT_SECRET"),
+      await this.jwtService.verifyAsync(token, {
+        secret: process.env.JWT_SECRET,
       });
-      const found = await this.userRepo.findById(payload.sub);
-      if (!found) throw new Error("User not found");
-      const { passwordHash, ...safeUser } = found;
-      user = safeUser;
+      // 单账户：token 有效即代表本机唯一账户，无需再查库
+      user = this.accountStore.getView();
 
       sessionId = sessionIdRaw;
-      const session = await this.sessionService.getSessionById(sessionId, user.id);
-      if (!session) throw new Error("Session not found or unauthorized");
+      const session = await this.sessionService.getSessionById(sessionId);
+      if (!session) throw new Error("Session not found");
 
       cwd = await this.workspaceService.resolveSessionWorkspaceDir(session);
 

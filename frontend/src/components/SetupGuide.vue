@@ -6,21 +6,11 @@
     </div>
     
     <div class="guide-content">
-      <!-- Step 1: 默认账户提示 -->
+      <!-- Step 1: 免登录说明（默认无密码） -->
       <div v-if="currentStep === 1" class="step-panel">
         <h3>{{ t('ui.setupGuide.step1Title') }}</h3>
         <p class="desc">{{ t('ui.setupGuide.step1Desc') }}</p>
-        <div class="account-info">
-          <div class="info-item">
-            <span class="label">{{ t('ui.setupGuide.account') }}</span>
-            <span class="value">GuaDa</span>
-          </div>
-          <div class="info-item">
-            <span class="label">{{ t('ui.setupGuide.password') }}</span>
-            <span class="value">GuaDa</span>
-          </div>
-        </div>
-        <el-alert type="warning" :closable="false" show-icon>
+        <el-alert type="info" :closable="false" show-icon>
           {{ t('ui.setupGuide.tip') }}
         </el-alert>
       </div>

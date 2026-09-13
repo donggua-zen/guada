@@ -3,8 +3,6 @@ import { MulterModule } from "@nestjs/platform-express";
 import { HttpModule } from "@nestjs/axios";
 import { FilesController } from "./files.controller";
 import { FileService } from "./file.service";
-import { FileRepository } from "../../common/database/file.repository";
-import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 import { OcrService } from "../knowledge-base/ocr.service";
@@ -32,7 +30,7 @@ import * as multer from "multer";
     }),
   ],
   controllers: [FilesController],
-  providers: [FileService, FileRepository, PrismaService, FileParserService, OcrService, SettingsService],
-  exports: [FileService, FileRepository], // 导出供其他模块使用
+  providers: [FileService, FileParserService, OcrService, SettingsService],
+  exports: [FileService], // 导出供其他模块使用
 })
 export class FilesModule { }

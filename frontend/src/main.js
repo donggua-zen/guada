@@ -130,12 +130,6 @@ const routes = [
     component: () => import("./components/LoginPage.vue"),
   },
   {
-    path: "/password",
-    name: "Password",
-    meta: { titleKey: "common.route.password" },
-    component: () => import("./components/PasswordPage.vue"),
-  },
-  {
     path: "/test",
     name: "Test",
     meta: { title: "UI 测试" },
@@ -203,10 +197,10 @@ router.beforeEach(async (to, from, next) => {
 
   // 3. 正常的鉴权逻辑
   if (to.meta.requiresAuth) {
-    // 页面加载后的首次导航：先尝试自动登录（如果开启了免登录模式）
+    // 页面加载后的首次导航：未设密码则免登录直通
     if (!authStore.isAuthenticated) {
-      await authStore.checkAutoLoginStatus();
-      if (authStore.autoLoginEnabled) {
+      const passwordSet = await authStore.checkAuthStatus();
+      if (!passwordSet) {
         const success = await authStore.tryAutoLogin();
         if (success) {
           isInitialPageLoad = false;

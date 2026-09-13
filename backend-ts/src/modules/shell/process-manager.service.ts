@@ -1166,7 +1166,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(`投递进程完成通知: ${entry.id}`);
     this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
-      userId: entry.userId,
       // P5b：只保留 <system_reminder> 包裹的模型面内容（用户文案已移除——
       // 展示全靠前端解析 source.kind='process_monitor' 渲染为"进程完成"通知样式）。
       // 输出长度由 readIncrementalOutput 截断 + 日志文件路径兜底。

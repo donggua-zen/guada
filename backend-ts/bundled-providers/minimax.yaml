@@ -15,6 +15,43 @@ avatarUrl: minimax.svg
 protocol: anthropic
 defaultApiUrl: https://api.minimax.io/anthropic
 models:
+  - modelName: MiniMax-M3
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+        - image
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 1000000
+      maxOutputTokens: 128000
+  - modelName: MiniMax-M2.7
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 204800
+      maxOutputTokens: 131072
+  - modelName: MiniMax-M2.7-highspeed
+    modelType: text
+    supportsThinking: false
+    config:
+      inputCapabilities:
+        - text
+      outputCapabilities:
+        - text
+      features:
+        - tools
+      contextWindow: 204800
+      maxOutputTokens: 131072
   - modelName: MiniMax-M2.5
     modelType: text
     supportsThinking: false

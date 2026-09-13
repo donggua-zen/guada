@@ -22,6 +22,7 @@ datasource db {
 }
 
 model SessionGroup {
+  // 已冻结：会话分组权威来源改为 sessions/_groups.json，本表仅供一次性导出与回滚
   id        String    @id @default(cuid())
   name      String
   userId    String    @map("user_id")
@@ -35,6 +36,8 @@ model SessionGroup {
 }
 
 model Session {
+  // 已冻结：会话元信息权威来源改为 <sessions根>/<sessionId>/meta.json（分组走 _groups.json），
+  // 本表仅供一次性导出与回滚，运行时不读写，上线前删除
   id            String                @id @default(cuid())
   title         String?
   userId        String                @map("user_id")
@@ -59,11 +62,12 @@ model Session {
   closeReason   String?               @map("close_reason")
   memories      Memory[]
   messages      Message[]
-  character     Character?            @relation(fields: [characterId], references: [id])
   user          User                  @relation(fields: [userId], references: [id])
   group         SessionGroup?         @relation(fields: [groupId], references: [id])
-  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
-  model         Model?                @relation(fields: [modelId], references: [id])
+  // characterId 是文件侧角色 id（= agents/<id> 目录名），权威来源 agents/<id>/AGENT.md；
+  // 不建 DB 关系——character 表仅为还原快照，上线前删除
+  // modelId 是文件侧模型 id（`{实例id}:{模型名}`），权威来源 providers/*.yaml；
+  // 不建 DB 关系——model/model_provider 表仅为还原快照，上线前删除
   parent        Session?              @relation("SessionHierarchy", fields: [parentId], references: [id])
   children      Session[]             @relation("SessionHierarchy")
 
@@ -149,16 +153,16 @@ model Model {
   isActive       Boolean         @default(true) @map("is_active")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
-  characters     Character[]
-  knowledgeBases KnowledgeBase[]
-  // 注意：删除 ModelProvider 时，关联的 Model 被级联删除，但 Session/Character/KnowledgeBase 中的引用ID保留（悬空引用设计）
+  // 注意：删除 ModelProvider 时，关联的 Model 被级联删除
   provider       ModelProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  sessions       Session[]
 
   @@map("model")
 }
 
 model User {
+  // 已冻结：账户权威来源改为 <SETTINGS_DIR>/account.json（含可选密码），
+  // 本表仅供回滚快照，运行时不读写，上线前删除。
+  // 注意：单账户模型下 role/parentId 已无意义（多账户体系已移除）
   id             String          @id @default(cuid())
   role           String?
   avatarUrl      String?         @map("avatar_url")
@@ -172,13 +176,13 @@ model User {
   botInstances   BotInstance[]
   characters     Character[]
   knowledgeBases KnowledgeBase[]
-  mcpServers     McpServer[]
   sessions       Session[]
   settings       UserSetting?
 
   @@map("user")
 }
 
+/// 已冻结（死模型）：全代码库零引用、无文件存储对应物；仅保留表结构作迁移期存档，不删表
 model CharacterGroup {
   id         String      @id @default(cuid())
   name       String
@@ -188,6 +192,7 @@ model CharacterGroup {
   updatedAt  DateTime    @updatedAt @map("updated_at")
   characters Character[]
 
+  // 已冻结：角色分组功能已移除（角色不再有分组概念），本表仅供回滚，上线前删除
   @@map("character_group")
 }
 
@@ -204,15 +209,16 @@ model Character {
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   group       CharacterGroup? @relation(fields: [groupId], references: [id])
-  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
-  model       Model?          @relation(fields: [modelId], references: [id])
+  // modelId 是文件侧模型 id，权威来源 providers/*.yaml（同 Session.modelId）
   user        User            @relation(fields: [userId], references: [id])
-  sessions    Session[]
 
+  // 已冻结：角色/智能体定义的权威来源改为 agents/<id>/AGENT.md（含名称/提示词/设置），
+  // 本表仅供一次性导出读取与回滚，运行时不读写，上线前删除
   @@map("character")
 }
 
 model KnowledgeBase {
+  // 已冻结：知识库配置权威来源改为 <KB根>/<kbId>/kb.json，本表仅供一次性导出与回滚
   id               String   @id @default(cuid())
   name             String
   description      String?
@@ -227,14 +233,14 @@ model KnowledgeBase {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   files            KBFile[]
-  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
-  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
+  // embeddingModelId 是文件侧模型 id，权威来源 providers/*.yaml（同 Session.modelId）
   user             User     @relation(fields: [userId], references: [id])
 
   @@map("knowledge_base")
 }
 
 model KBFile {
+  // 已冻结：文件元信息权威来源改为 <KB根>/<kbId>/<itemId>/file.json，本表仅供导出与回滚
   id                 String        @id @default(cuid())
   knowledgeBaseId    String        @map("knowledge_base_id")
   fileName           String        @map("file_name")
@@ -270,6 +276,7 @@ model KBFile {
 }
 
 model KBChunk {
+  // 已冻结：分块正本改为 <KB根>/<kbId>/<fileId>/chunks.jsonl；本表仅 JSONL 缺失时兼容期 fallback
   id                  String   @id @default(cuid())
   fileId              String   @map("file_id")
   knowledgeBaseId     String   @map("knowledge_base_id")
@@ -289,6 +296,7 @@ model KBChunk {
 }
 
 model Memory {
+  // 已冻结：运行时记忆走 <workspace>/.guada/memory/*.md，本表全代码库零访问（历史遗留）
   id         String    @id @default(cuid())
   sessionId  String    @map("session_id")
   content    String
@@ -319,7 +327,6 @@ model File {
   url           String?
   previewUrl    String?  @map("preview_url")
   contentHash   String   @map("content_hash")
-  uploadUserId  String?  @map("upload_user_id")
   sessionId     String?  @map("session_id")
   contentId     String?  @map("content_id")
   isPublic      Boolean  @default(false) @map("is_public")
@@ -329,13 +336,15 @@ model File {
   messageContent MessageContent? @relation(fields: [contentId], references: [id], onDelete: SetNull)
 
   @@index([contentHash])
-  @@index([uploadUserId])
   @@index([sessionId])
   @@index([contentId])
   @@map("file")
 }
 
 model McpServer {
+  // 已冻结：MCP 服务器配置权威来源改为 <MCP根>/<id>.yaml（工具缓存 <id>.tools.json），
+  // 本表仅供一次性导出读取与回滚（安装/升级时仍要读它做数据迁移），运行时不读写。
+  // 注意：id 被角色设置里的 `mcp_<id>` 工具包过滤引用，导出时不可重键。
   id          String   @id @default(cuid())
   name        String
   url         String?
@@ -348,16 +357,15 @@ model McpServer {
   cwd         String?
   tools       Json?
   enabled     Boolean  @default(true)
-  userId      String   @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  user        User     @relation(fields: [userId], references: [id])
 
   @@map("mcp_server")
 }
 
 
 model UserSetting {
+  // 已冻结：全局设置走 <SETTINGS_DIR>/<group>.json，本表全代码库零访问（历史遗留）
   id        String   @id @default(cuid())
   userId    String   @unique @map("user_id")
   settings  Json
@@ -369,6 +377,7 @@ model UserSetting {
 }
 
 model BotInstance {
+  // 已冻结：机器人实例权威来源改为 bots/<botId>.yaml，本表仅供一次性导出与回滚
   id                 String    @id @default(cuid())
   userId             String    @map("user_id")
   platform           String

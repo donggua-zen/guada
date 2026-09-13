@@ -31,10 +31,8 @@ CREATE TABLE "session" (
     "parent_id" TEXT,
     "closed_at" DATETIME,
     "close_reason" TEXT,
-    CONSTRAINT "session_character_id_fkey" FOREIGN KEY ("character_id") REFERENCES "character" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "session_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "session_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "session_group" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "session_model_id_fkey" FOREIGN KEY ("model_id") REFERENCES "model" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "session_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "session" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
@@ -136,7 +134,6 @@ CREATE TABLE "character" (
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL,
     CONSTRAINT "character_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "character_group" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "character_model_id_fkey" FOREIGN KEY ("model_id") REFERENCES "model" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "character_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
@@ -155,7 +152,6 @@ CREATE TABLE "knowledge_base" (
     "metadata_config" JSONB,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL,
-    CONSTRAINT "knowledge_base_embedding_model_id_fkey" FOREIGN KEY ("embedding_model_id") REFERENCES "model" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "knowledge_base_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
@@ -229,7 +225,6 @@ CREATE TABLE "file" (
     "url" TEXT,
     "preview_url" TEXT,
     "content_hash" TEXT NOT NULL,
-    "upload_user_id" TEXT,
     "session_id" TEXT,
     "content_id" TEXT,
     "is_public" BOOLEAN NOT NULL DEFAULT false,
@@ -253,10 +248,8 @@ CREATE TABLE "mcp_server" (
     "cwd" TEXT,
     "tools" JSONB,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
-    "user_id" TEXT NOT NULL,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL,
-    CONSTRAINT "mcp_server_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    "updated_at" DATETIME NOT NULL
 );
 
 -- CreateTable
@@ -371,9 +364,6 @@ CREATE INDEX "memory_memory_type_idx" ON "memory"("memory_type");
 CREATE INDEX "file_content_hash_idx" ON "file"("content_hash");
 
 -- CreateIndex
-CREATE INDEX "file_upload_user_id_idx" ON "file"("upload_user_id");
-
--- CreateIndex
 CREATE INDEX "file_session_id_idx" ON "file"("session_id");
 
 -- CreateIndex
@@ -390,3 +380,4 @@ CREATE INDEX "bot_instance_platform_idx" ON "bot_instance"("platform");
 
 -- CreateIndex
 CREATE INDEX "bot_instance_status_idx" ON "bot_instance"("status");
+

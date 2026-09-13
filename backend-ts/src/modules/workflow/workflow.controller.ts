@@ -26,7 +26,7 @@ export class WorkflowController {
   /** 某会话的全部 workflow run 快照（磁盘历史 ∪ 内存，按开始时间倒序） */
   @Get("sessions/:id/workflow/runs")
   async listRuns(@Param("id") id: string, @CurrentUser() user: any) {
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new NotFoundException("Session not found");
     }

@@ -1,6 +1,9 @@
 import type { Migration } from "../migration.interface";
 import { baselineMigration } from "./0001_baseline";
 import { addSessionClosedFieldsMigration } from "./0002_add_session_closed_fields";
+import { detachModelReferencesMigration } from "./0003_detach_model_references";
+import { detachCharacterReferencesMigration } from "./0004_detach_character_references";
+import { dropUserDimensionMigration } from "./0005_drop_user_dimension";
 
 /**
  * 迁移注册表
@@ -19,4 +22,7 @@ import { addSessionClosedFieldsMigration } from "./0002_add_session_closed_field
 export const allMigrations: Migration[] = [
   baselineMigration,
   addSessionClosedFieldsMigration,
+  detachModelReferencesMigration,
+  detachCharacterReferencesMigration,
+  dropUserDimensionMigration,
 ];

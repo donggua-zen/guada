@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ProviderHub } from "./provider-hub.service";
-import { IProtocolAdapter } from "./adapters/base.adapter";
+import { AdapterRegistry } from "./adapter-registry.service";
+import { ModelCapabilityService } from "./model-capability.service";
 import { LLMCompletionParams } from "./types/llm.types";
 import type { Message } from "../../common/types/conversation.types";
 import { RequestContext } from "../../common/context/request-context";
@@ -30,8 +30,9 @@ export class LLMService {
   private readonly logger = new Logger(LLMService.name);
 
   constructor(
-    private providerHub: ProviderHub,
+    private adapterRegistry: AdapterRegistry,
     private settingsService: SettingsService,
+    private capability: ModelCapabilityService,
   ) {}
 
   /**
@@ -82,52 +83,50 @@ export class LLMService {
   async completions(
     params: LLMCompletionParams,
   ): Promise<AsyncGenerator<any, void, unknown> | any> {
-    const providerId = params.providerConfig?.provider;
+    const providerType = params.providerConfig?.type;
     const protocol = params.providerConfig?.protocol || "openai";
 
-    if (!providerId) {
-      throw new Error("Provider ID is required in providerConfig");
+    if (!providerType) {
+      throw new Error("Provider type is required in providerConfig");
     }
 
     const userSignal = params.abortSignal || RequestContext.abortSignal();
 
-    let provider = this.providerHub.getProvider(providerId);
-    let adapter = provider.getAdapter(protocol);
+    // 按 wire 协议取适配器（供应商差异经 providerConfig.thinking 传入，
+    // 对齐 DSH thinkingFormat；供应商类型仅用于 custom 转发判定与日志）
+    let adapter = this.adapterRegistry.getAdapter(protocol);
 
-    if (!adapter && providerId === 'custom') {
-      this.logger.log(`Custom provider doesn't support ${protocol}, forwarding to official provider`);
+    if (!adapter && providerType === 'custom') {
+      // custom 网关声明了协议但网关本身只讲另一种 wire：协议转发（非故障切换）
+      this.logger.log(`Custom provider doesn't support ${protocol}, forwarding to official protocol adapter`);
       if (protocol === 'gemini') {
-        provider = this.providerHub.getProvider('google');
-        adapter = provider.getAdapter(protocol);
+        adapter = this.adapterRegistry.getAdapter('gemini');
       }
       if (protocol === 'anthropic') {
-        provider = this.providerHub.getProvider('anthropic');
-        adapter = provider.getAdapter(protocol);
+        adapter = this.adapterRegistry.getAdapter('anthropic');
       }
     }
 
-    this.logger.log(`Using ${protocol} adapter from provider ${provider.id}`);
+    this.logger.log(
+      `Using ${protocol} adapter for provider ${params.providerConfig?.id || providerType}`,
+    );
 
     if (!adapter) {
-      throw new Error(`Provider ${providerId} does not support protocol: ${protocol}`);
+      throw new Error(`Unsupported protocol: ${protocol} (provider ${providerType})`);
     }
 
-    // ===== 思考参数二次校验 =====
-    let thinkingEffort = params.thinkingEffort;
-    if (thinkingEffort !== undefined) {
-      const validEfforts = provider.getModelThinkingEfforts(params.model);
-      if (validEfforts.length > 0 && !validEfforts.includes(thinkingEffort)) {
-        const nonOffOptions = validEfforts.filter(e => e !== 'none');
-        if (thinkingEffort === 'none') {
-          thinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : undefined;
-          this.logger.log(`thinkingEffort adjusted: 'none' → '${thinkingEffort}' (not supported by model)`);
-        } else {
-          thinkingEffort = nonOffOptions.length > 0
-            ? nonOffOptions[Math.floor(nonOffOptions.length / 2)]
-            : undefined;
-          this.logger.log(`thinkingEffort adjusted: '${params.thinkingEffort}' → '${thinkingEffort}' (invalid for model)`);
-        }
-      }
+    // ===== 思考选择校验（能力向 ModelCapabilityService 要，不由调用方搬运） =====
+    // 折中语义：模型无思考能力却请求非 none → fail-loud；
+    //           档位不受支持（换模型后的存量设置）→ 静默调整到合法档。
+    const thinkingEffort = this.capability.resolveThinkingEffort(
+      params.providerConfig?.id,
+      params.model,
+      params.thinkingEffort,
+    );
+    if (thinkingEffort !== params.thinkingEffort) {
+      this.logger.log(
+        `thinkingEffort adjusted: '${params.thinkingEffort}' → '${thinkingEffort}' (invalid for model)`,
+      );
     }
 
     // 清洗消息（三层 Message[]：清洗各 text/reasoning 块中的孤儿代理字符）

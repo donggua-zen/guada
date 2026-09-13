@@ -2,7 +2,7 @@ import { Logger, Injectable } from "@nestjs/common";
 import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
-import { PrismaService } from "../../../common/database/prisma.service";
+import { SessionFileStore } from "../../chat/session-file.store";
 import { appendResetMarker } from "../utils/external-id";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./session-management.lang.zh.json";
@@ -20,7 +20,9 @@ export class SessionManagementPlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private sessionStore: SessionFileStore,
+  ) {
     super();
   }
 
@@ -54,9 +56,7 @@ export class SessionManagementPlugin extends PluginBase {
         if (!args.confirm)
           throw new Error("需要设置 confirm: true 来确认清空操作");
 
-        const session = await this.prisma.session.findUnique({
-          where: { id: sessionId },
-        });
+        const session = this.sessionStore.get(sessionId);
         if (!session) throw new Error(`会话不存在: ${sessionId}`);
         if (session.sessionType !== "bot")
           throw new Error("此工具仅在机器人会话中可用");
@@ -67,12 +67,9 @@ export class SessionManagementPlugin extends PluginBase {
           `清空会话 ${sessionId}: ${oldExternalId} -> ${newExternalId}`,
         );
 
-        await this.prisma.session.update({
-          where: { id: sessionId },
-          data: {
-            externalId: newExternalId,
-            title: `${session.title || "会话"} (已清空)`,
-          },
+        await this.sessionStore.update(sessionId, {
+          externalId: newExternalId,
+          title: `${session.title || "会话"} (已清空)`,
         });
 
         return JSON.stringify({

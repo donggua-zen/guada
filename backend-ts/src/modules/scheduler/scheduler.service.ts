@@ -22,19 +22,15 @@ export class SchedulerService {
     private executor: TaskExecutorService,
   ) {}
 
-  /**
-   * 获取用户的所有任务
-   */
-  async getTasks(userId: string): Promise<ScheduledTask[]> {
-    return this.storage.getTasksByUserId(userId);
+  /** 获取所有任务 */
+  async getTasks(): Promise<ScheduledTask[]> {
+    return this.storage.getAllTasks();
   }
 
-  /**
-   * 获取单个任务详情
-   */
-  async getTask(id: string, userId: string): Promise<ScheduledTask> {
+  /** 获取单个任务详情 */
+  async getTask(id: string): Promise<ScheduledTask> {
     const task = await this.storage.getTaskById(id);
-    if (!task || task.userId !== userId) {
+    if (!task) {
       throw new NotFoundException("任务不存在");
     }
     return task;
@@ -43,7 +39,7 @@ export class SchedulerService {
   /**
    * 创建任务
    */
-  async createTask(userId: string, dto: CreateTaskDto): Promise<ScheduledTask> {
+  async createTask(dto: CreateTaskDto): Promise<ScheduledTask> {
     // 根据调度类型验证参数
     if (dto.scheduleType === "cron") {
       if (!dto.cronExpression || !this.taskScheduler.validateCron(dto.cronExpression)) {
@@ -64,7 +60,6 @@ export class SchedulerService {
     const now = new Date().toISOString();
     const task: ScheduledTask = {
       id: randomUUID(),
-      userId,
       name: dto.name,
       prompt: dto.prompt,
       scheduleType: dto.scheduleType,
@@ -93,15 +88,15 @@ export class SchedulerService {
       this.taskScheduler.scheduleTask(task);
     }
 
-    this.logger.log(`用户 ${userId} 创建定时任务: ${task.name} (${task.scheduleType})`);
+    this.logger.log(`创建定时任务: ${task.name} (${task.scheduleType})`);
     return task;
   }
 
   /**
    * 更新任务
    */
-  async updateTask(id: string, userId: string, dto: UpdateTaskDto): Promise<ScheduledTask> {
-    const task = await this.getTask(id, userId);
+  async updateTask(id: string, dto: UpdateTaskDto): Promise<ScheduledTask> {
+    const task = await this.getTask(id);
 
     // 如果更新了调度类型或相关参数，验证有效性
     if (dto.scheduleType !== undefined || dto.cronExpression !== undefined || dto.executeAt !== undefined) {
@@ -147,15 +142,15 @@ export class SchedulerService {
     // 重新调度任务
     this.taskScheduler.rescheduleTask(updated);
 
-    this.logger.log(`用户 ${userId} 更新定时任务: ${updated.name}`);
+    this.logger.log(`更新定时任务: ${updated.name}`);
     return updated;
   }
 
   /**
    * 删除任务
    */
-  async deleteTask(id: string, userId: string): Promise<void> {
-    const task = await this.getTask(id, userId);
+  async deleteTask(id: string): Promise<void> {
+    const task = await this.getTask(id);
 
     // 先取消调度
     this.taskScheduler.unscheduleTask(id);
@@ -163,14 +158,14 @@ export class SchedulerService {
     // 再删除数据
     await this.storage.deleteTask(id);
 
-    this.logger.log(`用户 ${userId} 删除定时任务: ${task.name}`);
+    this.logger.log(`删除定时任务: ${task.name}`);
   }
 
   /**
    * 切换任务启用状态
    */
-  async toggleTask(id: string, userId: string): Promise<ScheduledTask> {
-    const task = await this.getTask(id, userId);
+  async toggleTask(id: string): Promise<ScheduledTask> {
+    const task = await this.getTask(id);
     const updated = await this.storage.updateTask(id, {
       enabled: !task.enabled,
     });
@@ -181,7 +176,7 @@ export class SchedulerService {
     // 重新调度
     this.taskScheduler.rescheduleTask(updated);
 
-    this.logger.log(`用户 ${userId} ${updated.enabled ? "启用" : "禁用"}定时任务: ${updated.name}`);
+    this.logger.log(`${updated.enabled ? "启用" : "禁用"}定时任务: ${updated.name}`);
     return updated;
   }
 
@@ -190,32 +185,30 @@ export class SchedulerService {
    *
    * 失败不重试、不自动禁用、不记录日志、不更新执行次数
    */
-  async testTask(id: string, userId: string): Promise<void> {
-    const task = await this.getTask(id, userId);
-    this.logger.log(`用户 ${userId} 测试触发任务: ${task.name}`);
+  async testTask(id: string): Promise<void> {
+    const task = await this.getTask(id);
+    this.logger.log(`测试触发任务: ${task.name}`);
     await this.executor.dryRun(task);
   }
 
   /**
    * 获取任务执行日志
    */
-  async getTaskLogs(taskId: string, userId: string): Promise<any[]> {
-    // 验证任务归属权
-    await this.getTask(taskId, userId);
+  async getTaskLogs(taskId: string): Promise<any[]> {
+    await this.getTask(taskId);
     return this.storage.getLogsByTaskId(taskId);
   }
 
   /**
-   * 获取当前用户所有任务的执行日志（游标分页）
+   * 获取所有任务的执行日志（游标分页）
    *
    * 游标格式：base64("startedAt_iso|log_id")，排序 startedAt DESC, id DESC
    */
   async getAllLogs(
-    userId: string,
     cursor?: string,
     limit: number = 30,
   ): Promise<{ items: any[]; hasMore: boolean; nextCursor: string | null }> {
-    const tasks = await this.storage.getTasksByUserId(userId);
+    const tasks = await this.storage.getAllTasks();
     const taskIds = new Set(tasks.map((t) => t.id));
     let allLogs = (await this.storage.getAllLogs()).filter((l) =>
       taskIds.has(l.taskId),

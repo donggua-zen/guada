@@ -47,10 +47,7 @@ export class TaskStorageService {
   /**
    * 根据用户 ID 获取任务列表
    */
-  async getTasksByUserId(userId: string): Promise<ScheduledTask[]> {
-    const tasks = await this.getAllTasks();
-    return tasks.filter((t) => t.userId === userId);
-  }
+
 
   /**
    * 根据 ID 获取任务

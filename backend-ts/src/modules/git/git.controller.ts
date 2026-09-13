@@ -37,7 +37,7 @@ export class GitController {
     sessionId: string,
     userId: string,
   ): Promise<string> {
-    const session = await this.sessionService.getSessionById(sessionId, userId);
+    const session = await this.sessionService.getSessionById(sessionId);
     if (!session) {
       throw new HttpException(
         "Session not found or unauthorized",

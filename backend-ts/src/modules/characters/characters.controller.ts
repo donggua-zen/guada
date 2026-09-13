@@ -12,51 +12,18 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { CharacterService } from "./character.service";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { PluginManager } from "../plugins/plugin.manager";
 
 @Controller()
 @UseGuards(AuthGuard)
 export class CharactersController {
-  constructor(
-    private readonly characterService: CharacterService,
-    private readonly toolOrchestrator: ToolOrchestrator,
-    private readonly pluginManager: PluginManager,
-  ) {}
+  constructor(private readonly characterService: CharacterService) {}
 
   @Get("characters")
   async getCharacters(@Query() query: any) {
-    const { groupId, skip = 0, limit = 20 } = query;
-    return this.characterService.getCharacters(
-      Number(skip),
-      Number(limit),
-      groupId,
-    );
-  }
-
-  // --- Character Group Endpoints ---
-  @Get("character-groups")
-  async getCharacterGroups() {
-    return this.characterService.getGroups();
-  }
-
-  @Post("character-groups")
-  async createCharacterGroup(@Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.createGroup(user.id, data);
-  }
-
-  @Put("character-groups/:id")
-  async updateCharacterGroup(@Param("id") id: string, @Body() data: any) {
-    return this.characterService.updateGroup(id, data);
-  }
-
-  @Delete("character-groups/:id")
-  async deleteCharacterGroup(@Param("id") id: string) {
-    await this.characterService.deleteGroup(id);
-    return { success: true };
+    const { skip = 0, limit = 20 } = query;
+    return this.characterService.getCharacters(Number(skip), Number(limit));
   }
 
   @Get("characters/:id")
@@ -65,8 +32,8 @@ export class CharactersController {
   }
 
   @Post("characters")
-  async createCharacter(@Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.createCharacter(user.id, data);
+  async createCharacter(@Body() data: any) {
+    return this.characterService.createCharacter(data);
   }
 
   @Put("characters/:id")
@@ -87,7 +54,9 @@ export class CharactersController {
   }
 
   @Post("characters/import")
-  async importCharacters(@Body() data: { files: { content: string; filename: string }[] }, @CurrentUser() user: any) {
-    return this.characterService.importCharacters(user.id, data.files || []);
+  async importCharacters(
+    @Body() data: { files: { content: string; filename: string }[] },
+  ) {
+    return this.characterService.importCharacters(data.files || []);
   }
 }

@@ -30,8 +30,8 @@ export const useAuthStore = defineStore('auth', () => {
     const user: Ref<User | null> = ref(getStoredUser())
     const token: Ref<string | null> = ref(getStoredToken())
 
-    // 免登录状态
-    const autoLoginEnabled: Ref<boolean> = ref(false)
+    // 是否已设密码（未设则免登录直通；取代原 autoLoginEnabled 开关）
+    const passwordSet: Ref<boolean> = ref(false)
 
     // 计算属性
     const isAuthenticated: ComputedRef<boolean> = computed(() => !!token.value)
@@ -195,29 +195,24 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
-    async function checkAutoLoginStatus(): Promise<boolean> {
+    /**
+     * 查询认证状态：passwordSet=false 表示免登录模式。
+     * 取代原先独立的免登录开关（密码存在与否即开关）。
+     */
+    async function checkAuthStatus(): Promise<boolean> {
         try {
-            // 使用新的分组设置接口
-            const result = await apiService.fetchGroupSettings('system')
-            autoLoginEnabled.value = result.autoLoginEnabled || false
-            return autoLoginEnabled.value
+            const result = await apiService.getAuthStatus()
+            passwordSet.value = result?.passwordSet === true
+            return passwordSet.value
         } catch (error) {
-            console.error("获取免登录状态失败:", error)
-            return false
+            console.error("获取认证状态失败:", error)
+            // 查询失败时保守按"需要登录"处理，避免误放行
+            passwordSet.value = true
+            return true
         }
     }
 
-    async function setAutoLoginEnabled(enabled: boolean): Promise<void> {
-        try {
-            // 使用新的分组设置接口
-            await apiService.updateGroupSettings('system', { autoLoginEnabled: enabled })
-            autoLoginEnabled.value = enabled
-        } catch (error) {
-            console.error("设置免登录状态失败:", error)
-            throw error
-        }
-    }
-
+    /** 未设密码时的免登录（已设密码则后端返回 400，此处返回 false） */
     async function tryAutoLogin(): Promise<boolean> {
         try {
             const result = await apiService.autoLogin()
@@ -249,15 +244,14 @@ export const useAuthStore = defineStore('auth', () => {
         // 状态
         user,
         token,
-        autoLoginEnabled,
+        passwordSet,
         isAuthenticated,
         // Actions
         login,
         logout,
         initializeAuth,
         checkAuth,
-        checkAutoLoginStatus,
-        setAutoLoginEnabled,
+        checkAuthStatus,
         tryAutoLogin
     }
 })

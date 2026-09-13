@@ -13,9 +13,8 @@ import { ChunkingService } from "./chunking.service";
 import { OcrService } from "./ocr.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
-import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
 import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
-import { PrismaService } from "../../common/database/prisma.service";
+import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { AuthModule } from "../auth/auth.module";
 import { SettingsModule } from "../settings/settings.module";
 import { ToolsModule } from "../tools/tools.module";
@@ -31,9 +30,9 @@ import { DocumentPlugin } from "./plugins/document.plugin";
   providers: [
     KnowledgeBaseService, KbFileService, KbChunkFileStore, FileParserService,
     EmbeddingService, ChunkingService, OcrService,
-    KnowledgeBaseRepository, KBFileRepository, KBChunkRepository,
+    KnowledgeBaseRepository, KBFileRepository,
     PdfToImageService,
-    PrismaService, VectorDbService, WorkspaceService,
+    VectorDbService, WorkspaceService,
   ],
   exports: [EmbeddingService, KnowledgeBaseService],
 })
@@ -42,10 +41,9 @@ export class KnowledgeBaseModule implements OnModuleInit {
 
   constructor(
     private readonly pluginManager: PluginManager,
-    private readonly prisma: PrismaService,
+    private readonly providerStore: ProviderFileStore,
     private readonly kbRepo: KnowledgeBaseRepository,
     private readonly fileRepo: KBFileRepository,
-    private readonly chunkRepo: KBChunkRepository,
     private readonly chunkFileStore: KbChunkFileStore,
     private readonly vectorDbService: VectorDbService,
     private readonly embeddingService: EmbeddingService,
@@ -56,7 +54,7 @@ export class KnowledgeBaseModule implements OnModuleInit {
 
   async onModuleInit() {
     await this.pluginManager.registerPlugin(new KnowledgeBasePlugin(
-      this.prisma, this.kbRepo, this.fileRepo, this.chunkFileStore,
+      this.providerStore, this.kbRepo, this.fileRepo, this.chunkFileStore,
       this.vectorDbService, this.embeddingService, this.kbFileService,
     ));
     await this.pluginManager.registerPlugin(new DocumentPlugin(this.fileParserService, this.workspaceService));

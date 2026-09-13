@@ -7,7 +7,11 @@
 
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import * as fsp from "fs/promises";
+import * as path from "path";
 import "dotenv/config";
+import { AGENT_FILE, resolveAgentsDir } from "../modules/characters/character-file.store";
+import { parseAgentMarkdown } from "../modules/characters/character-file.mapper";
 
 // 从环境变量读取数据库 URL
 const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
@@ -35,19 +39,25 @@ async function fixBotInstances() {
       console.log(`  - ID: ${bot.id}, Name: ${bot.name}, Platform: ${bot.platform}`);
     });
 
-    // 2. 获取一个可用的 character ID
-    const firstCharacter = await prisma.character.findFirst({
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
-
-    if (!firstCharacter) {
-      console.error("错误: 数据库中没有任何角色，请先创建至少一个角色");
+    // 2. 取一个可用的角色目录（权威来源 agents/<id>/AGENT.md）
+    const agentsDir = resolveAgentsDir();
+    const dirs = (await fsp.readdir(agentsDir, { withFileTypes: true }))
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .map((e) => e.name)
+      .sort();
+    if (dirs.length === 0) {
+      console.error("错误: 没有找到任何角色，请先创建至少一个角色");
       process.exit(1);
     }
+    const firstCharacterId = dirs[0];
+    const firstCharacter = await fsp.readFile(
+      path.join(agentsDir, firstCharacterId, AGENT_FILE),
+      "utf8",
+    );
+    const firstCharacterName =
+      parseAgentMarkdown(firstCharacter, firstCharacterId).name;
 
-    console.log(`\n使用角色 ID: ${firstCharacter.id} (${firstCharacter.title})\n`);
+    console.log(`\n使用角色 ID: ${firstCharacterId} (${firstCharacterName})\n`);
 
     // 3. 更新所有记录
     let updatedCount = 0;
@@ -55,7 +65,7 @@ async function fixBotInstances() {
       await prisma.botInstance.update({
         where: { id: bot.id },
         data: {
-          defaultCharacterId: firstCharacter.id,
+          defaultCharacterId: firstCharacterId,
         },
       });
       updatedCount++;

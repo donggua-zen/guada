@@ -30,7 +30,7 @@ import {
  * 模型名可带后缀控制行为变体，如 mock-normal-slow 表示慢速流式输出
  */
 export class MockAdapter implements IProtocolAdapter {
-  readonly protocol = "openai";
+  readonly protocol = "mock";
   private readonly logger = new Logger(MockAdapter.name);
 
   /** 记录每个模型名当前的尝试次数，用于 mock-429-N 行为 */

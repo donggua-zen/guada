@@ -1,13 +1,14 @@
 import { Module } from "@nestjs/common";
 import { ModelsController } from "./models.controller";
 import { ModelService } from "./model.service";
-import { ModelRepository } from "../../common/database/model.repository";
-import { PrismaService } from "../../common/database/prisma.service";
+import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { AuthModule } from "../auth/auth.module";
+import { LlmCoreModule } from "../llm-core/providers.module";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, LlmCoreModule],
   controllers: [ModelsController],
-  providers: [ModelService, ModelRepository, PrismaService],
+  providers: [ModelService],
+  exports: [],
 })
 export class ModelsModule {}

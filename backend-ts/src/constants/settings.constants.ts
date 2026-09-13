@@ -9,7 +9,6 @@ export const SG_PLUGINS = 'plugins_config';
 /**
  * 系统级设置键名 (SK_SYS = Setting Key System)
  */
-export const SK_SYS_AUTO_LOGIN = 'autoLoginEnabled';
 export const SK_SYS_WORKSPACE_BASE_DIR = 'workspaceBaseDir';
 export const SK_SYS_MAX_TOOL_ITERATIONS = 'maxToolIterations';
 export const SK_SYS_LLM_REQUEST_TIMEOUT_MS = 'llmRequestTimeoutMs';
@@ -27,8 +26,6 @@ export const SK_MOD_TITLE_PROMPT = 'defaultTitleSummaryPrompt';
 export const SK_MOD_TRANS_MODEL = 'defaultTranslationModelId';
 export const SK_MOD_TRANS_PROMPT = 'defaultTranslationPrompt';
 export const SK_MOD_COMPRESS_MODEL = 'defaultHistoryCompressionModelId';
-export const SK_MOD_COMPRESS_PROMPT = 'defaultHistoryCompressionPrompt';
-export const SK_MOD_COMPRESS_ENABLE_SUMMARY = 'enableHistoryCompressionSummary'; // 是否启用历史压缩摘要功能
 export const SK_MOD_VISUAL = 'defaultVisualAssistantModelId';
 
 /**

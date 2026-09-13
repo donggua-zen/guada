@@ -1,95 +1,40 @@
-import { Module, Global, OnModuleInit } from '@nestjs/common';
-import { ProviderHub } from './provider-hub.service';
+import { Module, Global } from '@nestjs/common';
+import { AdapterRegistry } from './adapter-registry.service';
+import { BundledCatalogService } from './bundled-catalog.service';
+import { ProviderFileStore } from './provider-file.store';
+import { ModelCapabilityService } from './model-capability.service';
 import { LLMService } from './llm.service';
 import { SettingsModule } from '../settings/settings.module';
-import { CustomProvider } from './providers/custom/custom.provider';
-import { SiliconFlowProvider } from './providers/siliconflow/siliconflow.provider';
-import { VolcEngineProvider } from './providers/volcengine/volcengine.provider';
-import { AliyunBailianProvider } from './providers/aliyun-bailian/aliyun-bailian.provider';
-import { DeepSeekProvider } from './providers/deepseek/deepseek.provider';
-import { OpenAIProvider } from './providers/openai/openai.provider';
-import { OpenAIResponseProvider } from './providers/openai-response/openai-response.provider';
-import { MinimaxProvider } from './providers/minimax/minimax.provider';
-import { BaiduQianfanProvider } from './providers/baidu-qianfan/baidu-qianfan.provider';
-import { ZhipuProvider } from './providers/zhipu/zhipu.provider';
-import { MoonshotProvider } from './providers/moonshot/moonshot.provider';
-import { AzureOpenAIProvider } from './providers/azure-openai/azure-openai.provider';
-import { GroqProvider } from './providers/groq/groq.provider';
-import { GoogleProvider } from './providers/google/google.provider';
-import { AnthropicProvider } from './providers/anthropic/anthropic.provider';
-import { XQApiProvider } from './providers/xqapi/xqapi.provider';
-import { MockProvider } from './providers/mock/mock.provider';
+import { OpenAIAdapter } from './adapters/openai.adapter';
+import { OpenAIResponseAdapter } from './adapters/openai-response.adapter';
+import { AnthropicAdapter } from './adapters/anthropic.adapter';
+import { GeminiAdapter } from './adapters/gemini.adapter';
+import { MockAdapter } from './adapters/mock.adapter';
 
 /**
  * LLM 核心模块
- * 提供统一的供应商注册、发现和管理功能，以及 LLM 调用抽象服务
+ *
+ * 供应商配置文件化后（providers/*.yaml，供应商就是数据），本模块只保留
+ * 代码层职责：wire 协议适配器（AdapterRegistry 单例，thinking 差异经
+ * thinkingStyle 枚举收敛）、bundled 类型目录（BundledCatalogService，数据）、
+ * LLM 调用服务。实例与模型的权威来源是 ProviderFileStore +
+ * bundled-providers/*.yaml。
  */
 @Global()
 @Module({
   imports: [SettingsModule],
   providers: [
-    ProviderHub,
+    OpenAIAdapter,
+    OpenAIResponseAdapter,
+    AnthropicAdapter,
+    GeminiAdapter,
+    MockAdapter,
+    AdapterRegistry,
+    BundledCatalogService,
     LLMService,
-    CustomProvider,
-    SiliconFlowProvider,
-    VolcEngineProvider,
-    DeepSeekProvider,
-    AliyunBailianProvider,
-    OpenAIProvider,
-    OpenAIResponseProvider,
-    MinimaxProvider,
-    BaiduQianfanProvider,
-    ZhipuProvider,
-    MoonshotProvider,
-    AzureOpenAIProvider,
-    GroqProvider,
-    GoogleProvider,
-    AnthropicProvider,
-    XQApiProvider,
-    MockProvider,
+    ProviderFileStore,
+    ModelCapabilityService,
   ],
-  exports: [ProviderHub, LLMService],
+  exports: [AdapterRegistry, BundledCatalogService, LLMService, ProviderFileStore, ModelCapabilityService],
 })
-export class LlmCoreModule implements OnModuleInit {
-  constructor(
-    private readonly providerHub: ProviderHub,
-    private readonly customProvider: CustomProvider,
-    private readonly siliconFlowProvider: SiliconFlowProvider,
-    private readonly volcEngineProvider: VolcEngineProvider,
-    private readonly deepSeekProvider: DeepSeekProvider,
-    private readonly aliyunBailianProvider: AliyunBailianProvider,
-    private readonly openAIProvider: OpenAIProvider,
-    private readonly openAIResponseProvider: OpenAIResponseProvider,
-    private readonly minimaxProvider: MinimaxProvider,
-    private readonly baiduQianfanProvider: BaiduQianfanProvider,
-    private readonly zhipuProvider: ZhipuProvider,
-    private readonly moonshotProvider: MoonshotProvider,
-    private readonly azureOpenAIProvider: AzureOpenAIProvider,
-    private readonly groqProvider: GroqProvider,
-    private readonly googleProvider: GoogleProvider,
-    private readonly anthropicProvider: AnthropicProvider,
-    private readonly xqApiProvider: XQApiProvider,
-    private readonly mockProvider: MockProvider,
-  ) { }
-
-  onModuleInit() {
-    // 自动注册自定义供应商
-    this.providerHub.register(this.customProvider);
-    this.providerHub.register(this.siliconFlowProvider);
-    this.providerHub.register(this.volcEngineProvider);
-    this.providerHub.register(this.deepSeekProvider);
-    this.providerHub.register(this.aliyunBailianProvider);
-    this.providerHub.register(this.openAIProvider);
-    this.providerHub.register(this.openAIResponseProvider);
-    this.providerHub.register(this.minimaxProvider);
-    this.providerHub.register(this.baiduQianfanProvider);
-    this.providerHub.register(this.zhipuProvider);
-    this.providerHub.register(this.moonshotProvider);
-    this.providerHub.register(this.azureOpenAIProvider);
-    this.providerHub.register(this.groqProvider);
-    this.providerHub.register(this.googleProvider);
-    this.providerHub.register(this.anthropicProvider);
-    this.providerHub.register(this.xqApiProvider);
-    this.providerHub.register(this.mockProvider);
-  }
-}
+export class LlmCoreModule {}

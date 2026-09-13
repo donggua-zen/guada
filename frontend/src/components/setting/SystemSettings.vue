@@ -174,7 +174,6 @@ const pluginSidebarItems = computed(() =>
       label: item.meta.label,
       path: `plugin:${item.pluginId}:${item.component}`,
       icon: PuzzleCube20Regular,
-      roles: ['primary', 'subaccount'],
       _item: item,
     })),
 )
@@ -185,88 +184,74 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.general'),
         path: 'general',
         icon: Settings16Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.defaultModels'),
         path: 'default-models',
         icon: Grid16Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.ocr'),
         path: 'ocr',
         icon: ScanText24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.appearance'),
         path: 'appearance',
         icon: Image24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.search'),
         path: 'search',
         icon: Search16Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.browser'),
         path: 'browser',
         icon: Globe24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.about'),
         path: 'about',
         icon: Info24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.community'),
         path: 'community',
         icon: Chat24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.connections'),
         path: 'connections',
         icon: Cloud24Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.sessionGroups'),
         path: 'session-groups',
         icon: Folder20Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.sessionArchived'),
         path: 'session-archived',
         icon: Archive20Regular,
-        roles: ['primary'],
     },
     {
         label: t('settings.system.tabs.profile'),
         path: 'profile',
         icon: PersonOutlineOutlined,
-        roles: ['primary', 'subaccount'],
     },
     {
         label: t('settings.system.tabs.security'),
         path: 'security',
         icon: VerifiedUserOutlined,
-        roles: ['primary', 'subaccount'],
     },
 ])
 
-// 根据用户角色过滤菜单项
-const filteredSidebarItems = computed(() => {
-    const userRole = authStore.user?.role || 'primary'
-    const all = [...sidebarItems.value, ...pluginSidebarItems.value]
-    return all.filter(item => !item.roles || item.roles.includes(userRole))
-})
+// 单账户：菜单全量显示（原按 role 过滤已移除）
+const filteredSidebarItems = computed(() => [
+    ...sidebarItems.value,
+    ...pluginSidebarItems.value,
+])
 
 // 按分组组织侧边栏项
 const groupedSidebarItems = computed(() => {
@@ -292,14 +277,7 @@ const groupedSidebarItems = computed(() => {
 
 // 获取默认标签页
 const getDefaultTabPath = () => {
-    const userRole = authStore.user?.role || 'primary'
-    const firstValidItem = filteredSidebarItems.value.find(item => {
-        if (!item.roles || item.roles.includes(userRole)) {
-            return item.path
-        }
-        return false
-    })
-    return firstValidItem?.path || 'general'
+    return filteredSidebarItems.value[0]?.path || 'general'
 }
 
 const currentTabValue = ref(getDefaultTabPath())

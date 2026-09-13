@@ -13,7 +13,6 @@ function buildController(overrides?: { resolveAnswers?: boolean }) {
   const interactionWait = new InteractionWaitService();
   const controller = new ChatController(
     {} as any, // sessionService
-    {} as any, // messageRepo
     {} as any, // streamManager
     {} as any, // chatRunner
     {} as any, // tagParserPipeline

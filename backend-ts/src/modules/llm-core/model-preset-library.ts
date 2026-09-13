@@ -13,6 +13,12 @@ export interface ModelPreset {
   patterns: RegExp[];
   modeType: 'text' | 'embedding';
   config: ModelConfig;
+  /**
+   * 能力声明：能不能思考（缺省 = 未声明，fail-safe 不能思考）。
+   * true 且未声明 thinkingEfforts 时默认菜单 [none, on]（最小诚实开关）。
+   */
+  supportsThinking?: boolean;
+  /** 强度档位菜单（仅 supportsThinking: true 时有意义；可含 on，可不含 none=不可关） */
   thinkingEfforts?: string[];
 }
 
@@ -21,13 +27,25 @@ const C16K = { contextWindow: 16000 };
 const C200K = ConfigFragments.ContextWindow._200K;
 const C256K = ConfigFragments.ContextWindow._256K;
 const C1M = ConfigFragments.ContextWindow._1M;
+const C8K = { contextWindow: 8000 };
 const Out4K = { maxOutputTokens: 4096 };
 const Out8K = { maxOutputTokens: 8192 };
 const Out16K = { maxOutputTokens: 16384 };
 const Out32K = { maxOutputTokens: 32000 };
 const Out64K = { maxOutputTokens: 65536 };
 const Out128K = ConfigFragments.MaxOutput._128K;
+const Out131K = ConfigFragments.MaxOutput._131K;
 const Out384K = ConfigFragments.MaxOutput._384K;
+const C131K = { contextWindow: 131072 };
+const C204K = { contextWindow: 204800 };
+const C262K = { contextWindow: 262144 };
+const C300K = { contextWindow: 300000 };
+const C500K = { contextWindow: 500000 };
+const C128K = ConfigFragments.ContextWindow._128K;
+const Out65K = { maxOutputTokens: 65536 };
+const Out80K = { maxOutputTokens: 80000 };
+const Out256K = { maxOutputTokens: 256000 };
+const Out500K = { maxOutputTokens: 500000 };
 const Dim3072 = { vectorDimensions: 3072 };
 
 /**
@@ -40,10 +58,11 @@ const Dim3072 = { vectorDimensions: 3072 };
  * 匹配策略：按数组顺序遍历，第一个匹配即返回。
  * 因此更具体的模式应排在前面。
  *
- * thinking 标记规则：
- *   thinking feature = 混合思考，即用户可调节思考强度或开关思考。
- *   如果模型推理固定不可调节（如 DeepSeek-R1 始终推理、Kimi K3 always-on），
- *   则不标记 thinking，否则前端会错误显示思考强度选择器。
+ * 思考声明规则（能力与档位分离，对齐 DSH reasoning + thinkingLevelMap）：
+ *   supportsThinking: true = 能思考；未声明 thinkingEfforts 时默认菜单
+ *   [none, on]（最小诚实开关）；强度可调的模型显式声明档位数组；
+ *   强制思考模型（不可关）声明不含 none 的菜单（如 ['on']、['low','high','max']）；
+ *   supportsThinking: false = 不能思考（无需档位字段）。
  *
  * 数据截至 2026-08，覆盖各供应商最新在售模型系列。
  */
@@ -61,8 +80,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -72,8 +92,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -83,8 +104,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -94,9 +116,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._400K, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -106,8 +129,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -117,8 +141,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C200K, Out128K,
+      ConfigFragments.WithTools, C200K, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -128,9 +153,34 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, ConfigFragments.ContextWindow._128K, Out16K,
+      ConfigFragments.WithTools, ConfigFragments.ContextWindow._128K, Out16K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
+  },
+  {
+    id: 'gpt-4.1',
+    label: 'GPT-4.1',
+    patterns: [/gpt-4\.1/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out32K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'gpt-realtime',
+    label: 'GPT Realtime',
+    patterns: [/gpt-realtime/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools,
+      ConfigFragments.ContextWindow._128K, Out32K,
+    ),
+    // 官方档位含 minimal / xhigh，且不支持关闭；此处按本库 gpt-5 系惯例取主档
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
     id: 'gpt-4-turbo',
@@ -139,9 +189,20 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, ConfigFragments.ContextWindow._128K, Out4K,
+      ConfigFragments.WithTools, ConfigFragments.ContextWindow._128K, Out4K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
+  },
+  {
+    id: 'gpt-4-general',
+    label: 'GPT-4 (other)',
+    patterns: [/^gpt-4/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C8K, Out8K,
+    ),
+    supportsThinking: false,
   },
   {
     id: 'gpt-3.5',
@@ -150,9 +211,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C16K, Out4K,
+      ConfigFragments.WithTools, C16K, Out4K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
   },
 
   // ════════════════════════════════════════════════════════
@@ -169,8 +230,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
   },
   {
@@ -180,8 +242,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
   },
   {
@@ -191,8 +254,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
   },
   {
@@ -202,8 +266,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out64K,
+      ConfigFragments.WithTools, C1M, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh'],
   },
   {
@@ -213,8 +278,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out128K,
+      ConfigFragments.WithTools, C1M, Out128K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
   },
   {
@@ -224,8 +290,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out64K,
+      ConfigFragments.WithTools, C1M, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high', 'xhigh'],
   },
   {
@@ -235,8 +302,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C200K, Out64K,
+      ConfigFragments.WithTools, C200K, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -246,9 +314,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C200K, Out8K,
+      ConfigFragments.WithTools, C200K, Out8K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
   },
   {
     id: 'claude-general',
@@ -257,8 +325,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C200K, Out8K,
+      ConfigFragments.WithTools, C200K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
 
@@ -274,8 +343,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out64K,
+      ConfigFragments.WithTools, C1M, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
@@ -285,8 +355,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out64K,
+      ConfigFragments.WithTools, C1M, Out64K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['minimal', 'low', 'medium', 'high'],
   },
   {
@@ -296,9 +367,34 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C1M, Out64K,
+      ConfigFragments.WithTools, C1M, Out64K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
+  },
+  {
+    id: 'gemma-4',
+    label: 'Gemma 4',
+    patterns: [/gemma-?4/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out32K,
+    ),
+    // 官方档位仅 minimal / high（低档与中档显式不支持），不可关闭
+    supportsThinking: true,
+    thinkingEfforts: ['minimal', 'high'],
+  },
+  {
+    id: 'gemini-deep-research',
+    label: 'Gemini Deep Research',
+    patterns: [/deep-research/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C131K, Out65K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
   },
   {
     id: 'gemini-general',
@@ -307,9 +403,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C1M, Out8K,
+      ConfigFragments.WithTools, C1M, Out8K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
   },
 
   // ════════════════════════════════════════════════════════
@@ -325,8 +421,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out384K,
+      ConfigFragments.WithTools, C1M, Out384K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'high', 'max'],
   },
   {
@@ -336,10 +433,11 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K, Out128K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: true,
+    thinkingEfforts: ['on'],
   },
   {
     id: 'deepseek-chat',
@@ -348,9 +446,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'high', 'max'],
   },
   {
@@ -360,10 +459,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
   },
 
   // ════════════════════════════════════════════════════════
@@ -379,8 +478,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C256K, Out8K,
+      ConfigFragments.WithTools, C256K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -390,8 +490,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C1M, Out8K,
+      ConfigFragments.WithTools, C1M, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -401,9 +502,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C1M, Out8K,
+      ConfigFragments.WithTools, C1M, Out8K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
   },
   {
     id: 'qwen-vl',
@@ -412,8 +513,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C256K, Out8K,
+      ConfigFragments.WithTools, C256K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -423,10 +525,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: true,
   },
 
   // ════════════════════════════════════════════════════════
@@ -436,26 +538,55 @@ export const MODEL_PRESETS: ModelPreset[] = [
   //  K2 系列已于 2026-05 退役
   // ════════════════════════════════════════════════════════
   {
-    id: 'kimi-k3',
-    label: 'Kimi K3',
-    patterns: [/kimi.*k3/, /kimi-k3/],
+    id: 'kimi-k3-256k',
+    label: 'Kimi K3 (256K)',
+    patterns: [/^k3-256k/],
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C1M, Out8K,
+      ConfigFragments.WithTools, C256K, Out128K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high', 'max'],
+  },
+  {
+    id: 'kimi-k3',
+    label: 'Kimi K3',
+    patterns: [/kimi.*k3/, /kimi-k3/, /^k3/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high', 'max'],
+  },
+  {
+    id: 'kimi-for-coding',
+    label: 'Kimi for Coding',
+    // 已升级为 K3 级（1M 上下文）。必须排在 kimi-code 之前——否则被
+    // `/kimi.*cod/` 吃掉而降级成 256K（kimi-coding 端点现售版本）。
+    patterns: [/for-coding/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high', 'max'],
   },
   {
     id: 'kimi-code',
     label: 'Kimi Code',
+    // K2.7-Code 等编码专用（256K）；更长的名字（for-coding / k3）由上面条目先接住
     patterns: [/kimi.*code/, /kimi.*cod/],
     modeType: 'text',
     config: mergeConfig(
-      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking, C256K, Out8K,
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out256K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high', 'xhigh'],
   },
   {
     id: 'kimi-general',
@@ -464,9 +595,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.TextOnly, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
 
@@ -482,8 +614,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C200K, Out8K,
+      ConfigFragments.WithTools, C200K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -493,8 +626,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking, C200K, Out8K,
+      ConfigFragments.WithTools, C200K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -504,9 +638,10 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithToolsAndThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K, Out8K,
     ),
+    supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'medium', 'high'],
   },
   {
@@ -516,10 +651,394 @@ export const MODEL_PRESETS: ModelPreset[] = [
     modeType: 'text',
     config: mergeConfig(
       ConfigFragments.Multimodal, ConfigFragments.TextOutput,
-      ConfigFragments.WithoutThinking,
+      ConfigFragments.WithTools,
       ConfigFragments.ContextWindow._128K, Out8K,
     ),
-    thinkingEfforts: [],
+    supportsThinking: false,
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  xAI Grok
+  //  grok-4.5 / 4.6 (2026) → grok-4.3 → grok-build
+  //  grok-4.5 走 Responses 协议并声明低/中/高三档；4.3/4.6 为纯开关型
+  //  （supportsReasoningEffort: false），本库统一按开关型处理
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'grok-4.5',
+    label: 'Grok 4.5',
+    patterns: [/grok-?4\.5/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C500K, Out500K,
+    ),
+    // 官方声明低/中/高三档且不可关闭（off: null）
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
+  },
+  {
+    id: 'grok-general',
+    label: 'Grok (other)',
+    patterns: [/grok/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out32K,
+    ),
+    // 4.3 / 4.6 / build 系列官方未声明分档（supportsReasoningEffort: false），
+    // 强度值上不了 wire → 按纯开关编码，仅决定是否回传推理内容
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  MiniMax
+  //  M3 (1M, 多模态) → M2.7 (205K, 纯文本) → M2.5/M2.1/M2
+  //  走 Anthropic 协议。思考声明沿用卡片既有约定：M 系默认始终思考、
+  //  无档位可调 → supportsThinking: false（不发参数、不回传推理）。
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'minimax-m3',
+    label: 'MiniMax M3',
+    patterns: [/minimax.*m3/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out128K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'minimax-m2.7',
+    label: 'MiniMax M2.7',
+    patterns: [/minimax.*m2\.7/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C204K, Out131K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'minimax-general',
+    label: 'MiniMax (other)',
+    patterns: [/minimax/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C204K, Out131K,
+    ),
+    supportsThinking: false,
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  小米 MiMo
+  //  v2.5 (1M, 多模态) → v2 (262K；omni 多模态)
+  //  compat 走 deepseek 拼法（requiresReasoningContentOnAssistantMessages）
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'mimo-v2.5',
+    label: 'MiMo v2.5',
+    patterns: [/mimo.*v2\.5/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out131K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'mimo-v2',
+    label: 'MiMo v2',
+    patterns: [/mimo/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out131K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  Ant Ling（蚂蚁）
+  //  Ring = 推理系（官方仅 high / xhigh，不可关闭）
+  //  Ling = 非推理系
+  //  拼法为 ant-ling（仅映射值才发），与本库 supportsReasoningEffort 门控一致
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'ant-ring',
+    label: 'Ant Ring',
+    patterns: [/^ring-/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out65K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['high', 'xhigh'],
+  },
+  {
+    id: 'ant-ling',
+    label: 'Ant Ling',
+    patterns: [/^ling-/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out65K,
+    ),
+    supportsThinking: false,
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  Mistral AI
+  //  mistral-medium/large (2026) 支持思考；devstral 为编码系（不思考）
+  //  magistral 为推理系；ministral / pixtral / open-* / voxtral 不思考
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'mistral-medium',
+    label: 'Mistral Medium',
+    patterns: [/mistral-medium/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, ConfigFragments.MaxOutput._128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'mistral-small',
+    label: 'Mistral Small',
+    patterns: [/mistral-small/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out256K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'magistral',
+    label: 'Magistral（推理系）',
+    patterns: [/magistral/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, ConfigFragments.ContextWindow._128K, Out32K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'devstral',
+    label: 'Devstral（编码系）',
+    patterns: [/devstral/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out32K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'mistral-large',
+    label: 'Mistral Large',
+    patterns: [/mistral-large/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C262K, Out32K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'mistral-general',
+    label: 'Mistral (other)',
+    patterns: [/mistral/, /mixtral/, /ministral/, /pixtral/, /codestral/, /voxtral/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C131K, Out32K,
+    ),
+    supportsThinking: false,
+  },
+
+  // ════════════════════════════════════════════════════════
+  //  开源权重模型（聚合站 / 自建推理常见）
+  //  按家族取代表规格；同为网关场景，档位统一按开关型（none/on）编码，
+  //  官方未声明分档时不下发强度值，避免被推理后端拒绝
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'gpt-oss',
+    label: 'GPT-OSS（开源权重）',
+    patterns: [/gpt-oss/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C131K, Out65K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'low', 'medium', 'high'],
+  },
+  {
+    id: 'gemma',
+    label: 'Gemma（开源权重）',
+    patterns: [/gemma-?\d/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C131K, Out32K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'llama',
+    label: 'Llama / Muse（开源权重）',
+    patterns: [/llama/, /muse-(spark|glimmer)/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C128K, Out8K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'seed-doubao',
+    label: 'Seed / Doubao（字节）',
+    // 聚合站会带命名空间前缀（bytedance/seed-1.8），故允许前缀存在
+    patterns: [/(^|\/)seed-?\d/, /doubao/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out32K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'hunyuan',
+    label: 'Hunyuan（腾讯）',
+    patterns: [/(^|\/)hy\d/, /hunyuan/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out64K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'low', 'high'],
+  },
+  {
+    id: 'stepfun',
+    label: 'Step（阶跃星辰）',
+    patterns: [/^step-?\d/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out32K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'nemotron',
+    label: 'Nemotron（NVIDIA）',
+    patterns: [/nemotron/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'nova-amazon',
+    label: 'Nova（Amazon）',
+    patterns: [/nova-/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C300K, Out8K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'longcat',
+    label: 'LongCat（美团）',
+    patterns: [/longcat/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'solar-upstage',
+    label: 'Solar（Upstage）',
+    patterns: [/solar-/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C131K, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'inkling',
+    label: 'Inkling（Thinking Machines）',
+    patterns: [/inkling/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out32K,
+    ),
+    // 官方档位含 minimal / xhigh，此处按本库惯例取主档
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
+  },
+  {
+    id: 'laguna',
+    label: 'Laguna（Poolside）',
+    patterns: [/laguna/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out32K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'on'],
+  },
+  {
+    id: 'kat-coder',
+    label: 'KAT Coder（Kwaipilot）',
+    patterns: [/kat-coder/, /kwaipilot/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out80K,
+    ),
+    supportsThinking: false,
+  },
+  {
+    id: 'general-open-weight',
+    label: '其它开源权重（兜底）',
+    patterns: [
+      /command/, /granite/, /jamba/, /mercury/, /trinity/, /virtuoso/,
+      /lfm/, /euryale/, /unslopnemo/, /sakana/, /fugu/, /namazu/,
+      /kat-coder|interfaze|arcee|aion|reka|nex-|relace|upstage|meituan/,
+    ],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C128K, Out16K,
+    ),
+    supportsThinking: false,
   },
 
   // ════════════════════════════════════════════════════════
@@ -592,7 +1111,16 @@ export const MODEL_PRESETS: ModelPreset[] = [
 
 /**
  * 根据模型名查找预设配置
- * @param modelName 模型名（如 'gpt-4o', 'deepseek-chat'）
+ *
+ * 两级匹配，逐 preset 顺序进行（更具体的模式排在前面，首个命中即返回）：
+ * 1. 完整名（含命名空间前缀，如 `openai/gpt-5.4`）
+ * 2. 去除命名空间后的裸名（`gpt-5.4`）
+ *
+ * 裸名兜底是必要的：聚合站/网关会返回 `vendor/model` 形式，而带 `^` 锚定的
+ * 模式（如 `/^gpt-5\.5/`）在前缀存在时永远匹配不上。逐 preset 先全名后裸名，
+ * 保证不破坏既有的"具体优先"顺序。
+ *
+ * @param modelName 模型名（如 'gpt-4o'、'openai/gpt-5.4'）
  * @param ownedBy 远程 API 返回的 owned_by 字段（可选，当前未使用，预留）
  * @returns 匹配的预设，无匹配返回 null
  */
@@ -601,8 +1129,12 @@ export function findModelPreset(
   ownedBy?: string,
 ): ModelPreset | null {
   const lower = modelName.toLowerCase();
+  const bare = lower.split('/').pop() || lower;
   for (const preset of MODEL_PRESETS) {
     if (preset.patterns.some((p) => p.test(lower))) {
+      return preset;
+    }
+    if (bare !== lower && preset.patterns.some((p) => p.test(bare))) {
       return preset;
     }
   }
@@ -620,6 +1152,7 @@ export function getAllPresets() {
     patterns: p.patterns.map((r) => r.source),
     modeType: p.modeType,
     config: p.config,
+    supportsThinking: p.supportsThinking,
     thinkingEfforts: p.thinkingEfforts ?? [],
   }));
 }

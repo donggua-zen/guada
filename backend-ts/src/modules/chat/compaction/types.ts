@@ -16,8 +16,10 @@ import type { ToolDefinition } from '../../tools/interfaces/tool-provider.interf
 import type { ModelConfig } from '../session-context';
 import type { SummaryMode } from './compression-engine';
 
-/** 合并后的压缩配置（trigger/retain/summaryMode；对齐 DSH thresholdRatio + retainRatio） */
+/** 合并后的压缩配置（档位折算产物；对齐 DSH thresholdRatio + retainRatio） */
 export interface CompactionConfig {
+  /** 压缩总开关（关闭档=false：自动/溢出路径旁路；缺省视为启用，向后兼容） */
+  enabled?: boolean;
   /** 触发 = 验收线（默认 0.8；prune 后 < 0.8 即达标，不触发 LLM） */
   compressionTriggerRatio?: number;
   /** 压缩保留尾预算（默认 0.2；遮蔽区之外原样保留） */

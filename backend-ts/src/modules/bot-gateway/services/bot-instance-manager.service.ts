@@ -14,7 +14,7 @@ import {
 } from '../interfaces/bot-platform.interface';
 import { BotAdapterFactory } from './bot-adapter.factory';
 import { BotOrchestrator } from './bot-orchestrator.service';
-import { PrismaService } from '../../../common/database/prisma.service';
+import { BotFileStore } from '../bot-file.store';
 
 interface ManagedBotInstance {
   adapter: IBotPlatform;
@@ -31,10 +31,10 @@ interface ManagedBotInstance {
  * 机器人实例管理器
  *
  * 职责:
- * 1. 从数据库加载机器人配置
+ * 1. 从文件存储加载机器人配置（权威来源 bots/<id>.yaml）
  * 2. 创建和管理适配器实例
  * 3. 统一管理重连策略
- * 4. 同步状态到数据库
+ * 4. 持久化生命周期状态（status/lastStartedAt/lastError/enabled）
  * 5. 提供 CRUD API 供前端调用
  */
 @Injectable()
@@ -49,9 +49,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   private readonly RECONNECT_TIMEOUT_MS = 90000;
 
   constructor(
-    private prisma: PrismaService,
     private adapterFactory: BotAdapterFactory,
     private orchestrator: BotOrchestrator,
+    private botStore: BotFileStore,
   ) { }
 
   /**
@@ -59,6 +59,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
    */
   async onModuleInit(): Promise<void> {
     this.logger.log('Initializing bot instances...');
+    // 先确保文件存储索引就绪（含启动期迁移导出），否则 listEnabled 会读到空缓存
+    await this.botStore.initialize();
     await this.loadAndStartBots();
   }
 
@@ -76,16 +78,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * 从数据库加载并启动所有启用的机器人
+   * 加载并启动所有启用的机器人（权威来源 bots/<id>.yaml）
    */
   async loadAndStartBots(): Promise<void> {
-    this.logger.log('Loading bot instances from database...');
+    this.logger.log('Loading bot instances from file store...');
 
     try {
-      // 从数据库读取所有启用的机器人配置
-      const bots = await this.prisma.botInstance.findMany({
-        where: { enabled: true },
-      });
+      const bots = this.botStore.listEnabled();
 
       this.logger.log(`Found ${bots.length} enabled bot(s)`);
 
@@ -371,13 +370,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
-    // 从数据库读取最新配置
-    const botData = await this.prisma.botInstance.findUnique({
-      where: { id: botId },
-    });
+    // 读取最新配置（权威来源 bots/<id>.yaml）
+    const botData = this.botStore.findById(botId);
 
     if (!botData) {
-      this.logger.error(`Bot instance not found in database: ${botId}`);
+      this.logger.error(`Bot instance not found in file store: ${botId}`);
       return;
     }
 
@@ -684,21 +681,18 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * 禁用机器人并更新数据库
+   * 禁用机器人并持久化（重连耗尽路径）
    */
   private async disableBot(botId: string, errorMessage: string): Promise<void> {
     try {
-      await this.prisma.botInstance.update({
-        where: { id: botId },
-        data: {
-          enabled: false,
-          status: 'error',
-          lastError: errorMessage,
-        },
+      await this.botStore.update(botId, {
+        enabled: false,
+        status: 'error',
+        lastError: errorMessage,
       });
-      this.logger.log(`Bot ${botId} has been disabled in database`);
+      this.logger.log(`Bot ${botId} has been disabled`);
     } catch (error: any) {
-      this.logger.error(`Failed to disable bot ${botId} in database: ${error.message}`);
+      this.logger.error(`Failed to disable bot ${botId}: ${error.message}`);
       throw error;
     }
   }

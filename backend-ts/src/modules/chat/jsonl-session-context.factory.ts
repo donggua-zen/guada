@@ -11,7 +11,7 @@ import {
   MESSAGE_STORE_TOKEN,
 } from '../../common/persistence/message-store.interface';
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
-import { ModelRepository } from '../../common/database/model.repository';
+import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { PluginManager } from '../plugins/plugin.manager';
 import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
@@ -24,7 +24,7 @@ export class JsonlSessionContextFactory {
   constructor(
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
     private readonly settingsStorage: SettingsStorage,
-    private readonly modelRepository: ModelRepository,
+    private readonly modelStore: ProviderFileStore,
     private readonly pluginManager: PluginManager,
     private readonly promptCollector: PromptCollector,
     private readonly workspaceService: WorkspaceService,
@@ -38,7 +38,7 @@ export class JsonlSessionContextFactory {
       session,
       this.messageStore,
       this.settingsStorage,
-      this.modelRepository,
+      this.modelStore,
       this.pluginManager,
       this.promptCollector,
       this.workspaceService,

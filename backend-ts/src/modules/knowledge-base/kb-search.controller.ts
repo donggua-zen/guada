@@ -9,7 +9,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
-import { PrismaService } from "../../common/database/prisma.service";
+import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { VectorDbService } from "../../common/vector-db/vector-db.service";
 import { EmbeddingService } from "./embedding.service";
@@ -19,7 +19,7 @@ import { SearchResult } from "../../common/vector-db";
 @UseGuards(AuthGuard)
 export class KbSearchController {
   constructor(
-    private prisma: PrismaService,
+    private providerStore: ProviderFileStore,
     private kbRepo: KnowledgeBaseRepository,
     private vectorDbService: VectorDbService,
     private embeddingService: EmbeddingService,
@@ -41,10 +41,7 @@ export class KbSearchController {
     }
 
     // 获取向量模型配置
-    const model = await this.prisma.model.findUnique({
-      where: { id: kb.embeddingModelId },
-      include: { provider: true },
-    });
+    const model = this.providerStore.findModel(kb.embeddingModelId);
 
     if (!model) {
       throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
@@ -110,10 +107,7 @@ export class KbSearchController {
     }
 
     // 获取向量模型配置
-    const model = await this.prisma.model.findUnique({
-      where: { id: kb.embeddingModelId },
-      include: { provider: true },
-    });
+    const model = this.providerStore.findModel(kb.embeddingModelId);
 
     if (!model) {
       throw new Error(`向量模型不存在：${kb.embeddingModelId}`);

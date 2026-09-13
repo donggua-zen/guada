@@ -28,10 +28,10 @@
       <!-- 默认角色选择（必填） -->
       <el-form-item :label="t('bot.modal.characterLabel')" prop="defaultCharacterId">
         <el-select v-model="formData.defaultCharacterId" :placeholder="t('bot.modal.characterPlaceholder')" style="width: 100%" filterable>
-          <el-option v-for="character in characters" :key="character.id" :label="character.title" :value="character.id">
+          <el-option v-for="character in characters" :key="character.id" :label="character.name" :value="character.id">
             <div class="flex items-center gap-2">
               <img v-if="character.avatarUrl" :src="character.avatarUrl" class="w-6 h-6 rounded object-cover" />
-              <span>{{ character.title }}</span>
+              <span>{{ character.name }}</span>
             </div>
           </el-option>
         </el-select>

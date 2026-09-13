@@ -11,9 +11,10 @@ import { AuthModule } from '../auth/auth.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
-import { PrismaService } from '../../common/database/prisma.service';
 import { SessionManagementPlugin } from './plugins/session-management.plugin';
 import { BotFileSenderPlugin } from './plugins/bot-file-sender.plugin';
+import { SessionFileStore } from '../chat/session-file.store';
+import { BotFileStore } from './bot-file.store';
 
 @Module({
   imports: [ChatModule, AuthModule, SharedModule, ToolsModule],
@@ -21,19 +22,20 @@ import { BotFileSenderPlugin } from './plugins/bot-file-sender.plugin';
   providers: [
     BotInstanceManager, BotAdapterFactory, BotOrchestrator,
     SessionMapperService, BotAdminService, PlatformUtilsService,
-    PrismaService,
   ],
   exports: [BotInstanceManager],
 })
 export class BotGatewayModule implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
-    private readonly prisma: PrismaService,
     private readonly botInstanceManager: BotInstanceManager,
+    private readonly sessionStore: SessionFileStore,
   ) {}
 
   async onModuleInit() {
-    await this.pluginManager.registerPlugin(new SessionManagementPlugin(this.prisma));
+    await this.pluginManager.registerPlugin(
+      new SessionManagementPlugin(this.sessionStore),
+    );
     await this.pluginManager.registerPlugin(new BotFileSenderPlugin(this.botInstanceManager));
   }
 }

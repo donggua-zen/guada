@@ -1,7 +1,7 @@
 import {
   buildModelIdMap,
   planModelRefRewrite,
-} from '../../src/modules/models/model-reference-migration';
+} from '../../src/common/database/bootstrap/model-reference-migration';
 
 /**
  * 存量模型引用改写（纯决策层）

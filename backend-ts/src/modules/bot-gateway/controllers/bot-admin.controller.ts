@@ -9,14 +9,18 @@ import {
   Query,
   Logger,
   UseGuards,
-  Request,
 } from '@nestjs/common';
 import { AuthGuard } from '../../auth/auth.guard';
 import { BotAdminService } from '../services/bot-admin.service';
 import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
 
+/**
+ * 机器人管理（单账户）
+ *
+ * 鉴权仅由 AuthGuard 承担（能否访问本服务）；单账户下无归属校验。
+ */
 @Controller('bot-admin')
-@UseGuards(AuthGuard)  // 所有接口都需要登录
+@UseGuards(AuthGuard)
 export class BotAdminController {
   private readonly logger = new Logger(BotAdminController.name);
 
@@ -42,24 +46,15 @@ export class BotAdminController {
    * 获取当前用户的所有机器人实例列表
    */
   @Get('instances')
-  async getInstances(@Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    return this.botService.getAllInstances(userId);
+  async getInstances() {
+    return this.botService.getAllInstances();
   }
 
   /**
    * 获取机器人登录二维码状态（必须在 instances/:id 之前定义）
    */
   @Get('instances/:id/qr')
-  async getQrCode(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-
+  async getQrCode(@Param('id') id: string) {
     return this.botService.getQrCodeStatus(id);
   }
 
@@ -67,15 +62,7 @@ export class BotAdminController {
    * 退出机器人登录
    */
   @Post('instances/:id/logout')
-  async logoutBot(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-
+  async logoutBot(@Param('id') id: string) {
     return this.botService.logout(id);
   }
 
@@ -83,48 +70,23 @@ export class BotAdminController {
    * 获取单个机器人详情
    */
   @Get('instances/:id')
-  async getInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    const bot = await this.botService.getInstance(id);
-
-    // 验证是否属于当前用户
-    if (bot.userId !== userId) {
-      throw new Error('无权访问此机器人');
-    }
-
-    return bot;
+  async getInstance(@Param('id') id: string) {
+    return this.botService.getInstance(id);
   }
 
   /**
-   * 创建新机器人(自动关联当前用户)
+   * 创建新机器人
    */
   @Post('instances')
-  async createInstance(
-    @Body() dto: CreateBotDto,
-    @Request() req,
-  ) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    this.logger.log(`Creating bot instance for user: ${userId}`);
-    return this.botService.createInstance(userId, dto);
+  async createInstance(@Body() dto: CreateBotDto) {
+    return this.botService.createInstance(dto);
   }
 
   /**
    * 更新机器人配置
    */
   @Put('instances/:id')
-  async updateInstance(
-    @Param('id') id: string,
-    @Body() dto: UpdateBotDto,
-    @Request() req,
-  ) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权修改此机器人');
-    }
-
+  async updateInstance(@Param('id') id: string, @Body() dto: UpdateBotDto) {
     return this.botService.updateInstance(id, dto);
   }
 
@@ -132,15 +94,7 @@ export class BotAdminController {
    * 启动机器人
    */
   @Post('instances/:id/start')
-  async startInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-
+  async startInstance(@Param('id') id: string) {
     return this.botService.startInstance(id);
   }
 
@@ -148,15 +102,7 @@ export class BotAdminController {
    * 停止机器人
    */
   @Post('instances/:id/stop')
-  async stopInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-
+  async stopInstance(@Param('id') id: string) {
     return this.botService.stopInstance(id);
   }
 
@@ -164,15 +110,7 @@ export class BotAdminController {
    * 重启机器人
    */
   @Post('instances/:id/restart')
-  async restartInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-
+  async restartInstance(@Param('id') id: string) {
     return this.botService.restartInstance(id);
   }
 
@@ -180,15 +118,7 @@ export class BotAdminController {
    * 删除机器人
    */
   @Delete('instances/:id')
-  async deleteInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权删除此机器人');
-    }
-
+  async deleteInstance(@Param('id') id: string) {
     return this.botService.deleteInstance(id);
   }
 
@@ -197,16 +127,10 @@ export class BotAdminController {
    */
   @Get('sessions')
   async getBotSessions(
-    @Request() req,
-    @Query('skip') skip = 0,
-    @Query('limit') limit = 20,
+    @Query('skip') skip: string = '0',
+    @Query('limit') limit: string = '20',
     @Query('botId') botId?: string,
   ) {
-    return this.botService.getBotSessions(
-      req.user.id,
-      Number(skip),
-      Number(limit),
-      botId,
-    );
+    return this.botService.getBotSessions(Number(skip), Number(limit), botId);
   }
 }

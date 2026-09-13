@@ -97,6 +97,30 @@ async function bootstrap() {
     console.warn("⚠️  上传目录配置未设置（UPLOAD_ROOT_DIR 或 UPLOAD_URL_PREFIX），跳过挂载");
   }
 
+  // 智能体目录（角色定义与头像的权威来源）：只暴露目录内资源（头像等），
+  // AGENT.md 由 API 提供，无需静态直出
+  const agentsPhysicalRoot =
+    process.env.AGENTS_DATA_DIR ||
+    (process.env.USERDATA_DIR
+      ? path.join(process.env.USERDATA_DIR, "agents")
+      : path.join(process.cwd(), "data", "agents"));
+  const agentsPublicPrefix = process.env.AGENTS_URL_PREFIX || "/agents";
+  try {
+    fs.mkdirSync(agentsPhysicalRoot, { recursive: true });
+    console.log(`智能体目录: ${agentsPhysicalRoot} -> ${agentsPublicPrefix}`);
+    app.use(
+      agentsPublicPrefix,
+      express.static(path.resolve(agentsPhysicalRoot), {
+        index: false,
+        setHeaders: (res) => {
+          res.setHeader("Content-Disposition", "inline; charset=utf-8");
+        },
+      }),
+    );
+  } catch (err) {
+    console.warn(`⚠️  智能体目录挂载失败: ${String(err)}`);
+  }
+
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new RequestTimingInterceptor());
 

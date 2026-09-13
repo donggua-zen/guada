@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { OpenAI } from "openai";
 import { IProtocolAdapter } from "./base.adapter";
+import { ModelCapabilityService } from '../model-capability.service';
 import {
   LLMCompletionParams,
   StreamChunk,
@@ -26,6 +27,7 @@ import {
   ConnectionTestResult,
   RemoteModel,
 } from "../types/provider.types";
+import { resolveEffectiveThinkingCompat } from "./openai.adapter";
 
 /**
  * OpenAI Responses API 适配器
@@ -46,6 +48,9 @@ import {
  */
 export class OpenAIResponseAdapter implements IProtocolAdapter {
   readonly protocol = "openai-response";
+
+  constructor(private readonly capability: ModelCapabilityService) {}
+
   private readonly logger = new Logger(OpenAIResponseAdapter.name);
 
   /**
@@ -290,15 +295,37 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       requestParams.tool_choice = "auto";
     }
 
-    // 处理思考强度（OpenAI Responses API 使用 reasoning 对象）
-    if (
+    // 处理思考强度（对齐 DSH/pi-ai 的 openai-responses 分派）：
+    // - 强度档（非 none/on）→ reasoning:{effort: 映射值 ?? 档位名}
+    // - 关闭（none，且模型声明可关）→ reasoning:{effort: off 映射值 ?? 'none'}
+    //   Responses 协议没有独立开关字段，"关闭"就是一个 effort 值；
+    //   不提供 thinkingFormat（DSH 的 responses 门控不含它）。
+    const compat = resolveEffectiveThinkingCompat(params.providerConfig);
+    if (params.thinkingEffort === 'none') {
+      const off = this.capability.resolveThinkingOff(
+        params.providerConfig?.id,
+        params.model,
+      );
+      if (off.supported) {
+        requestParams.reasoning = { effort: off.wire ?? 'none' };
+      }
+    } else if (
       params.thinkingEffort &&
-      !["on", "none"].includes(params.thinkingEffort)
+      params.thinkingEffort !== 'on'
     ) {
-      // OpenAI Responses API 使用 reasoning.effort 参数
+      // OpenAI Responses API 使用 reasoning.effort 参数；
+      // wire 值向能力服务查（缺省=档位名）
       requestParams.reasoning = {
-        effort: params.thinkingEffort,
+        effort:
+          this.capability.resolveThinkingWireValue(
+            params.providerConfig?.id,
+            params.model,
+            params.thinkingEffort,
+          ) ?? params.thinkingEffort,
       };
+    }
+    if (compat.includeEncryptedReasoning) {
+      requestParams.include = ["reasoning.encrypted_content"];
     }
 
     return requestParams;

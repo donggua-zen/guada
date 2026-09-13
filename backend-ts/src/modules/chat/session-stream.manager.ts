@@ -21,7 +21,6 @@ interface StreamSubscriber {
  */
 interface ActiveStream {
   sessionId: string;
-  userId: string;
   abortController: AbortController;
   subscribers: Map<string, StreamSubscriber>;
   eventBuffer: StreamEvent[];
@@ -57,12 +56,12 @@ export class SessionStreamManager {
    * 经回调而非构造器注入：SessionEventsService 已依赖本服务（连接补发读 eventBuffer），
    * 反向构造器注入会成环；回调保持 publish 同步调用链，事件顺序不因 relay 而变。
    */
-  private streamRelay?: (userId: string, sessionId: string, event: StreamEvent) => void;
+  private streamRelay?: (sessionId: string, event: StreamEvent) => void;
 
   /**
    * 注册 SSE 直投回调
    */
-  setStreamRelay(fn: (userId: string, sessionId: string, event: StreamEvent) => void): void {
+  setStreamRelay(fn: (sessionId: string, event: StreamEvent) => void): void {
     this.streamRelay = fn;
   }
 
@@ -70,7 +69,6 @@ export class SessionStreamManager {
    * 启动新的流式任务
    *
    * @param sessionId 会话 ID
-   * @param userId 用户 ID
    * @param abortController 用于中止底层 LLM 请求的控制器
    * @param kind 流类型：chat=对话回合（默认）；maintenance=维护任务（手动压缩等伪流，
    *             占用会话互斥但不产生回合内容，buffer 无历史——前端据此决定是否跳过事件页拉取）
@@ -78,7 +76,6 @@ export class SessionStreamManager {
    */
   startStream(
     sessionId: string,
-    userId: string,
     abortController: AbortController,
     kind: "chat" | "maintenance" = "chat",
   ): boolean {
@@ -94,7 +91,6 @@ export class SessionStreamManager {
 
     const stream: ActiveStream = {
       sessionId,
-      userId,
       abortController,
       subscribers: new Map(),
       eventBuffer: [],
@@ -200,8 +196,8 @@ export class SessionStreamManager {
       }
     }
 
-    // SSE 直投：该用户所有在线客户端（多窗口），userId 取自活跃流
-    this.streamRelay?.(stream.userId, sessionId, event);
+    // SSE 直投：所有在线客户端（单账户，多窗口）
+    this.streamRelay?.(sessionId, event);
   }
 
   /**
@@ -344,18 +340,15 @@ export class SessionStreamManager {
   }
 
   /**
-   * 获取某用户的所有活跃流(SSE 订阅建立时按 userId 补发 eventBuffer 用)。
+   * 获取所有活跃流（SSE 订阅建立时补发 eventBuffer 用；单账户故无用户维度）。
    *
-   * activeStreams 是 Map<sessionId, ActiveStream>,ActiveStream 携带 userId;
-   * 遍历过滤出该用户的活跃流,由 SessionEventsService.subscribe 逐条补发缓存事件,
-   * 替代前端 catchup HTTP 拉取——统一走全局 SSE 通道。
+   * activeStreams 是 Map<sessionId, ActiveStream>；由 SessionEventsService.subscribe
+   * 逐条补发缓存事件，替代前端 catchup HTTP 拉取——统一走全局 SSE 通道。
    */
-  getActiveStreamsForUser(userId: string): ActiveStream[] {
+  getActiveStreams(): ActiveStream[] {
     const result: ActiveStream[] = [];
     for (const stream of this.activeStreams.values()) {
-      if (stream.userId === userId && stream.isRunning) {
-        result.push(stream);
-      }
+      if (stream.isRunning) result.push(stream);
     }
     return result;
   }

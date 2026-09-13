@@ -1,0 +1,730 @@
+import * as fs from "fs";
+import * as fsp from "fs/promises";
+import * as path from "path";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import * as chokidar from "chokidar";
+import { resolveSessionsBasePath } from "../../common/persistence/jsonl-backend";
+import {
+  META_DOMAIN_SESSIONS,
+  MetadataBootstrapGate,
+} from "../../common/database/metadata-bootstrap.gate";
+
+/**
+ * 会话元信息文件存储
+ *
+ * 权威来源 = `<sessions根>/<sessionId>/meta.json`（与 JSONL 事件日志、workflows 同目录）。
+ * - 目录名即 id（cuid，与原 DB 主键一致）→ 无需重键，引用零改写
+ * - 会话增删 = 目录增删；删除会话即 `rm -rf <sessionId>/`（meta 与消息、工作流一起走）
+ * - 目录内 JSONL 缺失时仍可是合法会话（bot 会话在首条消息前只有 meta.json）
+ *
+ * 顺序保证（见 plan）：
+ * - 排序键（lastActiveAt/createdAt/updatedAt）是业务数据，落 meta.json 而非文件系统时间
+ *   （Electron 数据目录迁移整目录拷贝不保留 mtime，用文件时间会让列表顺序错乱）
+ * - 查询时内存过滤 + `sort(...)` + 确定性 id tiebreak；磁盘文件顺序无意义
+ * - 内存索引是盘的缓存，不是独立真相；重启全量重扫自愈
+ *
+ * 设计参考：CharacterFileStore/ProviderFileStore（chokidar + 原子写 + 非法隔离），
+ * 以及 DSH 的 projcache 模式（派生数据坏了就丢弃，权威永远是文件本身）。
+ */
+
+export const META_FILE = "meta.json";
+export const GROUPS_FILE = "_groups.json";
+/** 分域迁移标记（由 MetadataFileBootstrapService 落盘） */
+export const SESSIONS_MIGRATED_MARKER = ".migrated-sessions";
+
+/**
+ * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
+ *
+ * 时间字段用 ISO 字符串（JSON 可读、可手改；读取时按需转 Date 供 Prisma 形状兼容）。
+ */
+export interface SessionMeta {
+  id: string;
+  title: string | null;
+  avatarUrl: string | null;
+  description: string | null;
+  modelId: string | null;
+  characterId: string | null;
+  groupId: string | null;
+  settings: Record<string, any> | null;
+  sessionType: string;
+  archived: boolean;
+  botId: string | null;
+  platform: string | null;
+  externalId: string | null;
+  workspacePath: string | null;
+  parentId: string | null;
+  closedAt: string | null;
+  closeReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastActiveAt: string | null;
+}
+
+/** 会话分组（原 session_group 表；整表一份文件） */
+export interface SessionGroupMeta {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionLoadError {
+  file: string;
+  message: string;
+}
+
+/** 外层用 Date 形状（对齐 Prisma 返回，避免调用方处理字符串） */
+function toRow(meta: SessionMeta): Record<string, any> {
+  return {
+    ...meta,
+    createdAt: new Date(meta.createdAt),
+    updatedAt: new Date(meta.updatedAt),
+    lastActiveAt: meta.lastActiveAt ? new Date(meta.lastActiveAt) : null,
+    closedAt: meta.closedAt ? new Date(meta.closedAt) : null,
+  };
+}
+
+function toISO(value: any): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+@Injectable()
+export class SessionFileStore implements OnModuleDestroy {
+  private readonly logger = new Logger(SessionFileStore.name);
+  private readonly baseDir: string;
+
+  /** id → meta（内存索引；盘为权威，此处只是缓存） */
+  private index = new Map<string, SessionMeta>();
+  private loadErrors = new Map<string, SessionLoadError>();
+  private changeListeners = new Set<() => void>();
+
+  private watcher: chokidar.FSWatcher | null = null;
+  private debounceTimer: NodeJS.Timeout | null = null;
+  private ready: Promise<void> | null = null;
+
+  /** 每会话写互斥：meta.json 是整文件重写（RMW），并发写会丢更新 */
+  private writeChains = new Map<string, Promise<unknown>>();
+
+  constructor(private readonly gate: MetadataBootstrapGate) {
+    this.baseDir = resolveSessionsBasePath();
+  }
+
+  getDirectory(): string {
+    return this.baseDir;
+  }
+
+  /** 会话目录（meta.json 与 JSONL/workflows 同目录） */
+  getSessionDir(sessionId: string): string {
+    return path.join(this.baseDir, sessionId);
+  }
+
+  getMetaPath(sessionId: string): string {
+    return path.join(this.getSessionDir(sessionId), META_FILE);
+  }
+
+  /** 幂等初始化：等导出引导放行 → 全量扫描建索引 → 启动监听 */
+  async initialize(): Promise<void> {
+    this.ready ??= this.doInitialize();
+    return this.ready;
+  }
+
+  private async doInitialize(): Promise<void> {
+    // 迁移导出未完成时不得读索引（否则读到空目录会把会话"变没"）
+    await this.gate.wait(META_DOMAIN_SESSIONS);
+    await fsp.mkdir(this.baseDir, { recursive: true });
+    await this.loadAll();
+    const healed = await this.healOrphanSessions();
+    if (healed > 0) await this.loadAll();
+    this.startWatcher();
+  }
+
+  /**
+   * 孤儿自愈：目录内有 JSONL 事件日志但缺 meta.json（用户手删 / 导出中断）时，
+   * 从 manifest.json + `session/init` 事件重建骨架 meta，避免会话从列表里"消失"。
+   *
+   * 只救含真实往来消息的会话：仅 `session/init` 的空壳目录是历史遗留产物
+   * （例如建了目录但从未对话），复活它们会在侧边栏产生幽灵会话，故跳过。
+   */
+  private async healOrphanSessions(): Promise<number> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(this.baseDir, { withFileTypes: true });
+    } catch {
+      return 0;
+    }
+    let healed = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const id = entry.name;
+      if (fs.existsSync(path.join(this.baseDir, id, META_FILE))) continue;
+
+      const segment = path.join(this.baseDir, id, "seg-0000.jsonl");
+      let content: string;
+      try {
+        content = await fsp.readFile(segment, "utf8");
+      } catch {
+        continue; // 无事件日志 → 不是会话
+      }
+
+      const parsed = this.inspectOrphanLog(content);
+      if (!parsed) continue;
+
+      const meta: SessionMeta = {
+        id,
+        title: parsed.title || null,
+        avatarUrl: null,
+        description: null,
+        modelId: null,
+        characterId: null,
+        groupId: null,
+        settings: null,
+        sessionType: "web",
+        archived: false,
+        botId: null,
+        platform: null,
+        externalId: null,
+        workspacePath: null,
+        parentId: null,
+        closedAt: null,
+        closeReason: null,
+        createdAt: parsed.createdAt,
+        updatedAt: parsed.createdAt,
+        lastActiveAt: parsed.createdAt,
+      };
+      await this.writeMeta(meta);
+      this.index.set(id, meta);
+      healed += 1;
+      this.logger.warn(
+        `Recovered session "${id}" from event log (missing meta.json)`,
+      );
+    }
+
+    if (healed > 0) {
+      this.logger.log(`Recovered ${healed} session(s) from orphan directories`);
+    }
+    return healed;
+  }
+
+  /** 解析孤儿日志：取首个 init 的标题/时间，跳过纯空壳 */
+  private inspectOrphanLog(content: string): {
+    title: string;
+    createdAt: string;
+  } | null {
+    const lines = content.split("\n").filter((l) => l.trim());
+    let title = "";
+    let createdAt: string | null = null;
+    let hasRealMessage = false;
+
+    for (const line of lines) {
+      let evt: any;
+      try {
+        evt = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (evt?.type === "session/init") {
+        if (!title && typeof evt.data?.title === "string") {
+          title = evt.data.title;
+        }
+        if (!createdAt && typeof evt.time === "number") {
+          createdAt = new Date(evt.time).toISOString();
+        }
+      } else if (typeof evt?.type === "string") {
+        // 除 init 外任何事件都说明会话真实发生过（user/message、assistant/message…）
+        hasRealMessage = true;
+      }
+    }
+
+    if (!hasRealMessage) return null;
+    return {
+      title,
+      createdAt: createdAt ?? new Date().toISOString(),
+    };
+  }
+
+  /**
+   * 外部批量写入（迁移导出）后强制重载。
+   *
+   * **不经过 initialize()**：导出引导自身在门控放行前调用本方法，
+   * 若在此等待门控会自锁（等待一个只有导出完成后才会被 complete 的信号）。
+   */
+  async reload(): Promise<void> {
+    await this.loadAll();
+  }
+
+  // ============ 索引加载（可插拔点） ============
+
+  /**
+   * 全量重扫。
+   *
+   * 索引来源隔离在此方法内：当前实现直接读每个会话目录的 meta.json。
+   * 将来若会话数增长到冷扫成为瓶颈，可在此加派生缓存（权威仍是文件，缓存可丢可重建）。
+   */
+  private async loadAll(): Promise<void> {
+    const started = Date.now();
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(this.baseDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    const next = new Map<string, SessionMeta>();
+    const nextErrors = new Map<string, SessionLoadError>();
+    let skipped = 0;
+
+    const dirs = entries.filter(
+      (e) => e.isDirectory() && !e.name.startsWith("."),
+    );
+    // 限量并发读：串行读在 200+ 会话时约 250ms，并发后约 75ms（上限 32 防句柄耗尽）
+    const queue = [...dirs];
+    const workers = Array.from(
+      { length: Math.min(32, queue.length) },
+      async () => {
+        while (queue.length > 0) {
+          const entry = queue.shift();
+          if (!entry) break;
+          const id = entry.name;
+          const metaPath = path.join(this.baseDir, id, META_FILE);
+          try {
+            const raw = await fsp.readFile(metaPath, "utf8");
+            next.set(id, this.parseMeta(raw, id));
+          } catch (err: any) {
+            if (err?.code === "ENOENT") {
+              // 恰在原子写窗口内的重扫：跳过而非视为已删
+              skipped += 1;
+              continue;
+            }
+            nextErrors.set(id, {
+              file: `${id}/${META_FILE}`,
+              message: err?.message || String(err),
+            });
+            this.logger.warn(
+              `Invalid session meta "${id}" (isolated): ${err?.message || err}`,
+            );
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
+
+    this.index = next;
+    this.loadErrors = nextErrors;
+
+    const elapsed = Date.now() - started;
+    this.logger.log(
+      `Session index built: ${next.size} session(s) in ${elapsed}ms` +
+        (nextErrors.size ? `, ${nextErrors.size} invalid` : "") +
+        (skipped ? `, ${skipped} skipped (write in flight)` : ""),
+    );
+  }
+
+  private parseMeta(raw: string, fallbackId: string): SessionMeta {
+    const doc = JSON.parse(raw);
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+      throw new Error("meta.json 必须是对象");
+    }
+    const r = doc as Record<string, any>;
+    const id = typeof r.id === "string" && r.id.trim() ? r.id.trim() : fallbackId;
+    if (id !== fallbackId) {
+      // 目录名即 id 是唯一性来源，文件内 id 不一致时以目录名为准
+      this.logger.warn(
+        `Session meta "${fallbackId}" declares id "${id}", using dir name instead`,
+      );
+    }
+    const now = new Date().toISOString();
+    return {
+      id: fallbackId,
+      title: typeof r.title === "string" ? r.title : null,
+      avatarUrl: typeof r.avatarUrl === "string" ? r.avatarUrl : null,
+      description: typeof r.description === "string" ? r.description : null,
+      modelId: typeof r.modelId === "string" ? r.modelId : null,
+      characterId: typeof r.characterId === "string" ? r.characterId : null,
+      groupId: typeof r.groupId === "string" ? r.groupId : null,
+      settings:
+        r.settings && typeof r.settings === "object" && !Array.isArray(r.settings)
+          ? r.settings
+          : null,
+      sessionType: typeof r.sessionType === "string" ? r.sessionType : "web",
+      archived: r.archived === true,
+      botId: typeof r.botId === "string" ? r.botId : null,
+      platform: typeof r.platform === "string" ? r.platform : null,
+      externalId: typeof r.externalId === "string" ? r.externalId : null,
+      workspacePath:
+        typeof r.workspacePath === "string" ? r.workspacePath : null,
+      parentId: typeof r.parentId === "string" ? r.parentId : null,
+      closedAt: toISO(r.closedAt),
+      closeReason: typeof r.closeReason === "string" ? r.closeReason : null,
+      createdAt: toISO(r.createdAt) ?? now,
+      updatedAt: toISO(r.updatedAt) ?? now,
+      lastActiveAt: toISO(r.lastActiveAt),
+    };
+  }
+
+  private startWatcher(): void {
+    if (this.watcher) return;
+    try {
+      this.watcher = chokidar.watch(this.baseDir, {
+        ignoreInitial: true,
+        ignorePermissionErrors: true,
+        persistent: true,
+        depth: 1,
+        // 只关心 meta.json：seg-*.jsonl 在流式输出期间持续追加，监听整目录会造成事件风暴；
+        // 点开头条目（.trash/.migrated-* 等）也排除
+        ignored: (target: string) => {
+          const name = path.basename(target);
+          if (name.startsWith(".")) return true;
+          if (name === "manifest.json" || name === "snapshot.json") return true;
+          if (name.endsWith(".jsonl") || name.endsWith(".tmp")) return true;
+          return false;
+        },
+      });
+      const reload = () => this.scheduleReload();
+      this.watcher.on("add", reload);
+      this.watcher.on("change", reload);
+      this.watcher.on("unlink", reload);
+      this.watcher.on("addDir", reload);
+      this.watcher.on("unlinkDir", reload);
+      this.watcher.on("error", (err) =>
+        this.logger.error(`Session watcher error: ${String(err)}`),
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to start session watcher: ${String(err)}`);
+    }
+  }
+
+  private scheduleReload(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      this.loadAll()
+        .then(() => {
+          for (const listener of this.changeListeners) {
+            try {
+              listener();
+            } catch (err) {
+              this.logger.warn(`Session change listener failed: ${String(err)}`);
+            }
+          }
+        })
+        .catch((err) =>
+          this.logger.error(`Session reload failed: ${String(err)}`),
+        );
+    }, 300);
+  }
+
+  onDidChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  // ============ 查询 API（同步，走内存索引） ============
+
+  listLoadErrors(): SessionLoadError[] {
+    return Array.from(this.loadErrors.values());
+  }
+
+  count(): number {
+    return this.index.size;
+  }
+
+  /** 原始 meta（含 ISO 字符串时间） */
+  getMeta(id: string): SessionMeta | undefined {
+    return this.index.get(id);
+  }
+
+  /** 行视图（Date 形状，对齐原 Prisma 返回） */
+  get(id: string): Record<string, any> | undefined {
+    const meta = this.index.get(id);
+    return meta ? toRow(meta) : undefined;
+  }
+
+  /**
+   * 过滤查询。predicate 在内存中执行，返回按 `sort` 排序后的全量结果，
+   * 由调用方分页——保证 total 与分页来自同一份快照。
+   */
+  query(
+    predicate: (meta: SessionMeta) => boolean,
+    sort: (a: SessionMeta, b: SessionMeta) => number = byLastActiveDesc,
+  ): SessionMeta[] {
+    const out: SessionMeta[] = [];
+    for (const meta of this.index.values()) {
+      if (predicate(meta)) out.push(meta);
+    }
+    out.sort(sort);
+    return out;
+  }
+
+  /** 由 id 取子会话（升序，用于 findById 的 children） */
+  childrenOf(parentId: string): Record<string, any>[] {
+    return this.query((m) => m.parentId === parentId, byCreatedAsc).map(toRow);
+  }
+
+  // ============ 写入 API ============
+
+  /** 是否存在（内存索引；目录存在但 meta 非法时视为不存在） */
+  has(id: string): boolean {
+    return this.index.has(id);
+  }
+
+  /**
+   * 创建会话元信息（写 meta.json；目录不存在则创建）。
+   * 原 create 语义：lastActiveAt 默认置为当前时间。
+   */
+  async create(data: Record<string, any>): Promise<Record<string, any>> {
+    await this.initialize();
+    const id = String(data.id);
+    const now = new Date().toISOString();
+    const meta: SessionMeta = {
+      id,
+      title: data.title ?? null,
+      avatarUrl: data.avatarUrl ?? null,
+      description: data.description ?? null,
+      modelId: data.modelId ?? null,
+      characterId: data.characterId ?? null,
+      groupId: data.groupId ?? null,
+      settings: data.settings ?? null,
+      sessionType: data.sessionType ?? "web",
+      archived: data.archived === true,
+      botId: data.botId ?? null,
+      platform: data.platform ?? null,
+      externalId: data.externalId ?? null,
+      workspacePath: data.workspacePath ?? null,
+      parentId: data.parentId ?? null,
+      closedAt: toISO(data.closedAt),
+      closeReason: data.closeReason ?? null,
+      createdAt: toISO(data.createdAt) ?? now,
+      updatedAt: now,
+      lastActiveAt: toISO(data.lastActiveAt) ?? now,
+    };
+    await this.withLock(id, async () => {
+      await this.writeMeta(meta);
+      this.index.set(id, meta);
+    });
+    return toRow(meta);
+  }
+
+  /**
+   * 更新会话元信息（部分字段；undefined 保持原值，`null` 显式置空）。
+   * 未命中索引时返回 undefined（对齐 Prisma update 抛 P2025 前的调用方预期）。
+   */
+  async update(
+    id: string,
+    data: Record<string, any>,
+  ): Promise<Record<string, any> | undefined> {
+    await this.initialize();
+    const current = this.index.get(id);
+    if (!current) return undefined;
+
+    const next = await this.withLock(id, async () => {
+      const merged: SessionMeta = { ...this.index.get(id)! };
+      for (const [key, value] of Object.entries(data)) {
+        if (value === undefined) continue;
+        if (key === "createdAt") {
+          merged.createdAt = toISO(value) ?? merged.createdAt;
+        } else if (
+          key === "updatedAt" ||
+          key === "lastActiveAt" ||
+          key === "closedAt"
+        ) {
+          (merged as any)[key] = toISO(value);
+        } else if (key in merged) {
+          (merged as any)[key] = value;
+        }
+      }
+      merged.updatedAt = new Date().toISOString();
+      await this.writeMeta(merged);
+      this.index.set(id, merged);
+      return merged;
+    });
+    return toRow(next);
+  }
+
+  /** 仅刷新最后活跃时间（每条消息一次；带退避重试） */
+  async updateLastActiveAt(id: string): Promise<void> {
+    await this.initialize();
+    if (!this.index.has(id)) return;
+    await this.withLock(id, async () => {
+      const current = this.index.get(id);
+      if (!current) return;
+      const merged: SessionMeta = {
+        ...current,
+        updatedAt: new Date().toISOString(),
+        lastActiveAt: new Date().toISOString(),
+      };
+      await this.writeMeta(merged);
+      this.index.set(id, merged);
+    });
+  }
+
+  /** 删除会话元信息（整目录，含 JSONL/workflows） */
+  async deleteSession(id: string): Promise<boolean> {
+    await this.initialize();
+    const existed = this.index.has(id);
+    await this.withLock(id, async () => {
+      await this.removeDir(this.getSessionDir(id));
+      this.index.delete(id);
+    });
+    return existed;
+  }
+
+  /** 级联删除多个会话（子会话） */
+  async deleteMany(ids: string[]): Promise<number> {
+    let n = 0;
+    for (const id of ids) {
+      if (await this.deleteSession(id)) n += 1;
+    }
+    return n;
+  }
+
+  /** 批量把某分组的会话置为未分组（替代 FK onDelete SetNull） */
+  async clearGroup(groupId: string): Promise<number> {
+    await this.initialize();
+    const targets = this.query((m) => m.groupId === groupId);
+    let n = 0;
+    for (const meta of targets) {
+      await this.update(meta.id, { groupId: null });
+      n += 1;
+    }
+    return n;
+  }
+
+  /** 由外部（迁移导出）直接写入 meta.json 并刷新索引 */
+  async writeMetaDirect(meta: SessionMeta): Promise<void> {
+    await this.withLock(meta.id, async () => {
+      await this.writeMeta(meta);
+      this.index.set(meta.id, meta);
+    });
+  }
+
+  // ============ 分组（_groups.json） ============
+
+  private get groupsPath(): string {
+    return path.join(this.baseDir, GROUPS_FILE);
+  }
+
+  async readGroups(): Promise<SessionGroupMeta[]> {
+    try {
+      const raw = await fsp.readFile(this.groupsPath, "utf8");
+      const parsed = JSON.parse(raw);
+      const list = Array.isArray(parsed) ? parsed : parsed?.groups;
+      if (!Array.isArray(list)) return [];
+      return list.filter(
+        (g: any) => g && typeof g === "object" && typeof g.id === "string",
+      ) as SessionGroupMeta[];
+    } catch {
+      return [];
+    }
+  }
+
+  async writeGroups(groups: SessionGroupMeta[]): Promise<void> {
+    await fsp.mkdir(this.baseDir, { recursive: true });
+    await this.atomicWrite(this.groupsPath, JSON.stringify(groups, null, 2));
+  }
+
+  // ============ 内部：写入与锁 ============
+
+  private async writeMeta(meta: SessionMeta): Promise<void> {
+    const dir = this.getSessionDir(meta.id);
+    await fsp.mkdir(dir, { recursive: true });
+    await this.atomicWrite(
+      path.join(dir, META_FILE),
+      JSON.stringify(meta, null, 2),
+    );
+  }
+
+  /** 每会话串行化，保证读-改-写不丢更新 */
+  private async withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.writeChains.get(id) ?? Promise.resolve();
+    const run = previous.then(fn, fn);
+    // 存归一化后的 promise（吞掉异常），保证 finally 里的身份比较成立、条目能被清理
+    const tracked = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.writeChains.set(id, tracked);
+    try {
+      return await run;
+    } finally {
+      if (this.writeChains.get(id) === tracked) this.writeChains.delete(id);
+    }
+  }
+
+  /**
+   * 原子写：tmp + rename。
+   *
+   * Windows 下 rename 不能覆盖已存在文件，且目标被杀毒/索引服务短暂持有时会
+   * EPERM/EBUSY——因此先 unlink 再 rename，并对失败做退避重试。
+   * updateLastActiveAt 是每条消息一次的最高频写，静默失败会让会话在侧边栏不跳顶。
+   */
+  private async atomicWrite(filePath: string, content: string): Promise<void> {
+    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    await fsp.writeFile(tmpPath, content, "utf8");
+    let lastErr: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        try {
+          await fsp.unlink(filePath);
+        } catch {
+          /* 目标不存在，正常 */
+        }
+        await fsp.rename(tmpPath, filePath);
+        return;
+      } catch (err: any) {
+        lastErr = err;
+        if (err?.code !== "EPERM" && err?.code !== "EBUSY" && err?.code !== "EACCES") {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+      }
+    }
+    await fsp.unlink(tmpPath).catch(() => undefined);
+    throw lastErr;
+  }
+
+  /** 删除目录（Windows 上 watcher 句柄可能短暂占用，重试） */
+  private async removeDir(dir: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await fsp.rm(dir, { recursive: true, force: true });
+        return;
+      } catch (err: any) {
+        if (attempt === 2) throw err;
+        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      }
+    }
+  }
+
+  onModuleDestroy(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    void this.watcher?.close();
+  }
+}
+
+// ============ 排序（确定性 tiebreak 保证同查询同顺序） ============
+
+function timeOf(value: string | null | undefined): number {
+  if (!value) return 0;
+  const t = new Date(value).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+export function byLastActiveDesc(a: SessionMeta, b: SessionMeta): number {
+  const diff = timeOf(b.lastActiveAt) - timeOf(a.lastActiveAt);
+  return diff !== 0 ? diff : a.id.localeCompare(b.id);
+}
+
+export function byUpdatedDesc(a: SessionMeta, b: SessionMeta): number {
+  const diff = timeOf(b.updatedAt) - timeOf(a.updatedAt);
+  return diff !== 0 ? diff : a.id.localeCompare(b.id);
+}
+
+export function byCreatedAsc(a: SessionMeta, b: SessionMeta): number {
+  const diff = timeOf(a.createdAt) - timeOf(b.createdAt);
+  return diff !== 0 ? diff : a.id.localeCompare(b.id);
+}

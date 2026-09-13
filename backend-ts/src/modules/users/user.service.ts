@@ -3,17 +3,18 @@ import * as fs from "fs";
 import * as path from "path";
 import sharp from "sharp";
 import * as crypto from "crypto";
-import { UserRepository } from "../../common/database/user.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
-import { PasswordHashUtil } from "../../common/utils/password-hash.util";
+import { AccountFileStore } from "../auth/account-file.store";
 
+/**
+ * 账户服务（单账户）
+ *
+ * 账户权威来源是 account.json（见 AccountFileStore）。
+ * 头像/壁纸仍走既有 uploads 上传管线与静态挂载，只把引用路径写回账户文件。
+ */
 @Injectable()
 export class UserService {
-  private resetPasswordFlagPath = path.join(
-    process.cwd(),
-    "password_is_set.txt",
-  );
   private readonly ALLOWED_MIME_TYPES = [
     "image/jpeg",
     "image/png",
@@ -23,234 +24,153 @@ export class UserService {
 
   constructor(
     private uploadPathService: UploadPathService,
-    private userRepo: UserRepository,
+    private accountStore: AccountFileStore,
     private urlService: UrlService,
-  ) { }
+  ) {}
 
-  async getProfile(userId: string, cachedUser?: any) {
-    // 如果提供了缓存的用户对象，直接使用；否则从数据库查询
-    const user = cachedUser || (await this.userRepo.findById(userId));
-
-    if (!user) {
-      throw new Error("用户不存在");
-    }
-
-    const { passwordHash, ...result } = user;
-    // 转换 URL（avatarUrl 是上传文件）
+  getProfile() {
+    const view = this.accountStore.getView();
     return {
-      ...result,
-      avatarUrl: result.avatarUrl
-        ? this.urlService.toResourceAbsoluteUrl(result.avatarUrl)
+      ...view,
+      avatarUrl: view.avatarUrl
+        ? this.urlService.toResourceAbsoluteUrl(view.avatarUrl)
+        : null,
+      wallpaperUrl: view.wallpaperUrl
+        ? this.urlService.toResourceAbsoluteUrl(view.wallpaperUrl)
         : null,
     };
   }
 
-  async updateProfile(userId: string, data: any) {
-    if (data.username) {
-      const existing = await this.userRepo.findByUsername(data.username);
-      if (existing && existing.id !== userId) {
-        throw new Error("用户名已存在");
-      }
+  /** 更新展示性资料（用户名/昵称） */
+  async updateProfile(data: {
+    username?: string;
+    nickname?: string;
+    avatarUrl?: string;
+    wallpaperUrl?: string | null;
+  }) {
+    const patch: Record<string, any> = {};
+    if (data.username !== undefined) {
+      if (!data.username.trim()) throw new Error("用户名不能为空");
+      patch.username = data.username.trim();
     }
-    return this.userRepo.update(userId, data);
-  }
+    if (data.nickname !== undefined) patch.nickname = data.nickname;
+    if (data.avatarUrl !== undefined) patch.avatarUrl = data.avatarUrl;
+    if (data.wallpaperUrl !== undefined) patch.wallpaperUrl = data.wallpaperUrl;
 
-  async checkUsernameAvailable(username: string, excludeUserId: string) {
-    const existing = await this.userRepo.findByUsername(username);
-    return { available: !existing || existing.id === excludeUserId };
-  }
-
-  async changePassword(
-    userId: string,
-    oldPassword: string,
-    newPassword: string,
-  ) {
-    const user = await this.userRepo.findById(userId);
-    if (!user || !(await PasswordHashUtil.compare(oldPassword, user.passwordHash))) {
-      throw new Error("旧密码不正确");
-    }
-    const normalizedNewPassword = newPassword.toLowerCase();
-    const hashedPassword = await PasswordHashUtil.hash(normalizedNewPassword);
-    return this.userRepo.update(userId, { passwordHash: hashedPassword });
-  }
-
-  async createSubAccount(parentId: string, data: any) {
-    const normalizedPassword = data.password.toLowerCase();
-    const hashedPassword = await PasswordHashUtil.hash(normalizedPassword);
-    return this.userRepo.create({
-      ...data,
-      parentId,
-      role: "subaccount",
-      passwordHash: hashedPassword,
-    });
-  }
-
-  async getSubAccounts(parentId: string) {
-    return this.userRepo.findSubAccounts(parentId);
-  }
-
-  async deleteSubAccount(accountId: string, parentId: string) {
-    const account = await this.userRepo.findById(accountId);
-    if (!account || account.parentId !== parentId) {
-      throw new Error("无权删除该子账户");
-    }
-    return this.userRepo.update(accountId, { deletedAt: new Date() }); // 软删除或根据需求物理删除
+    const updated = await this.accountStore.updateProfile(patch);
+    const { passwordHash, ...safe } = updated;
+    return { ...safe, passwordSet: !!passwordHash };
   }
 
   /**
-   * 上传并处理用户头像
+   * 设置/修改密码。
+   * 已设密码时需提供正确的旧密码；未设密码时（免登录模式）可直接设置。
    */
-  async uploadAvatar(userId: string, file: any) {
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new Error("用户不存在");
+  async setPassword(oldPassword: string | undefined, newPassword: string) {
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error("新密码长度至少 6 位");
     }
-
-    // 1. 验证文件类型
-    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new Error(
-        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
-      );
+    if (this.accountStore.isPasswordSet()) {
+      if (!oldPassword) throw new Error("请输入当前密码");
+      const ok = await this.accountStore.verifyPassword(oldPassword);
+      if (!ok) throw new Error("当前密码不正确");
     }
+    await this.accountStore.setPassword(newPassword);
+    return { success: true, passwordSet: true };
+  }
 
-    // 2. 获取物理路径（自动创建目录）
+  /** 清除密码 → 回到免登录模式 */
+  async clearPassword() {
+    await this.accountStore.clearPassword();
+    return { success: true, passwordSet: false };
+  }
+
+  /**
+   * 上传并处理账户头像
+   */
+  async uploadAvatar(file: any) {
+    this.assertImage(file);
+
     const avatarDir = this.uploadPathService.getPhysicalPath("avatars");
-
-    // 3. 生成唯一文件名
     const uniqueFilename = `${crypto.randomUUID()}.jpg`;
     const filePath = path.join(avatarDir, uniqueFilename);
 
     try {
-      // 4. 使用 sharp 缩放并转换为 JPEG
       await sharp(file.buffer)
         .resize(128, 128, { fit: "cover" })
         .jpeg({ quality: 95 })
         .toFile(filePath);
 
-      // 5. 清理旧头像
-      if (user.avatarUrl) {
-        const oldFilePath = this.uploadPathService.toPhysicalPath(user.avatarUrl);
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
-      }
+      await this.removeOldUpload(this.accountStore.get()?.avatarUrl);
 
-      // 6. 更新数据库（存储相对路径）
       const relativePath = this.uploadPathService.getStoragePath(
         "avatars",
         uniqueFilename,
       );
-      await this.userRepo.update(userId, { avatarUrl: relativePath });
+      await this.accountStore.updateProfile({ avatarUrl: relativePath });
 
-      // 转换为绝对 URL 后返回
       return { url: this.urlService.toResourceAbsoluteUrl(relativePath) };
     } catch (error: any) {
-      // 如果处理失败，删除可能已生成的临时文件
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       throw new Error(`头像上传失败: ${error.message}`);
     }
   }
 
   /**
-   * 上传并处理用户壁纸
+   * 上传并处理账户壁纸
    */
-  async uploadWallpaper(userId: string, file: any) {
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new Error("用户不存在");
-    }
+  async uploadWallpaper(file: any) {
+    this.assertImage(file);
 
-    // 1. 验证文件类型
-    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new Error(
-        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
-      );
-    }
-
-    // 2. 获取物理路径（自动创建目录）
     const wallpaperDir = this.uploadPathService.getPhysicalPath("wallpapers");
-
-    // 3. 生成唯一文件名
     const uniqueFilename = `${crypto.randomUUID()}.jpg`;
     const filePath = path.join(wallpaperDir, uniqueFilename);
 
     try {
-      // 4. 使用 sharp 缩放并转换为 JPEG（限制最大宽度 1920px）
       await sharp(file.buffer)
         .resize(1920, null, { fit: "inside", withoutEnlargement: true })
         .jpeg({ quality: 90 })
         .toFile(filePath);
 
-        // 5. 清理旧壁纸（避免删除刚上传的新文件，先检查旧壁纸）
-      const existingUser = await this.userRepo.findById(userId);
-      const oldWallpaperUrl = (existingUser as any)?.wallpaperUrl;
-      if (oldWallpaperUrl) {
-        const oldFilePath = this.uploadPathService.toPhysicalPath(oldWallpaperUrl);
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
-      }
+      await this.removeOldUpload(this.accountStore.get()?.wallpaperUrl);
 
-      // 6. 更新数据库（存储相对路径）
       const relativePath = this.uploadPathService.getStoragePath(
         "wallpapers",
         uniqueFilename,
       );
-      await this.userRepo.update(userId, { wallpaperUrl: relativePath });
+      await this.accountStore.updateProfile({ wallpaperUrl: relativePath });
 
-      // 转换为绝对 URL 后返回
       return { url: this.urlService.toResourceAbsoluteUrl(relativePath) };
     } catch (error: any) {
-      // 如果处理失败，删除可能已生成的临时文件
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       throw new Error(`壁纸上传失败: ${error.message}`);
     }
   }
 
-  /**
-   * 删除用户壁纸
-   */
-  async deleteWallpaper(userId: string) {
-    const user = await this.userRepo.findById(userId);
-    const wallpaperUrl = (user as any)?.wallpaperUrl;
-    if (!user || !wallpaperUrl) {
-      return;
-    }
-
-    // 删除物理文件
-    const oldFilePath = this.uploadPathService.toPhysicalPath(wallpaperUrl);
-    if (fs.existsSync(oldFilePath)) {
-      fs.unlinkSync(oldFilePath);
-    }
-
-    // 清空数据库字段
-    await this.userRepo.update(userId, { wallpaperUrl: null });
+  /** 删除账户壁纸 */
+  async deleteWallpaper() {
+    const url = this.accountStore.get()?.wallpaperUrl;
+    if (!url) return;
+    await this.removeOldUpload(url);
+    await this.accountStore.updateProfile({ wallpaperUrl: null });
   }
 
-  isPasswordResetAllowed(): boolean {
-    return !fs.existsSync(this.resetPasswordFlagPath);
+  private assertImage(file: any): void {
+    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new Error(
+        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
+      );
+    }
   }
 
-  markPasswordAsSet() {
-    fs.writeFileSync(this.resetPasswordFlagPath, "password has been set");
-  }
-
-  async resetPrimaryPassword(password: string, username?: string) {
-    if (!username) {
-      throw new Error("用户名不能为空");
+  /** 清理被替换掉的旧上传文件（物理删除，失败不阻断主流程） */
+  private async removeOldUpload(storedPath: string | null | undefined) {
+    if (!storedPath) return;
+    try {
+      const oldFilePath = this.uploadPathService.toPhysicalPath(storedPath);
+      if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
+    } catch {
+      /* 旧文件清理失败不影响新文件写入 */
     }
-
-    const user = await this.userRepo.findByUsername(username);
-
-    if (!user) {
-      throw new Error("用户不存在");
-    }
-
-    const hashedPassword = await PasswordHashUtil.hash(password);
-    return this.userRepo.update(user.id, { passwordHash: hashedPassword });
   }
 }
