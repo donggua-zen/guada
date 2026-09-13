@@ -364,7 +364,6 @@ export class BotOrchestrator {
           .startStream(
             {
               sessionId: session.id,
-              userId: session.userId,
               userMessage: {
                 content: mergedContent,
                 knowledgeBaseIds: config.knowledgeBaseIds,

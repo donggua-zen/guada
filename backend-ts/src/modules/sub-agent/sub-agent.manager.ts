@@ -201,7 +201,7 @@ export class SubAgentManager implements OnModuleInit {
     settings.lifecycle = params.lifecycle || "one_shot";
 
     if (params.characterId && params.characterId !== "generic") {
-      // ── 数据库角色模式 ──
+      // ── 角色模式（定义来自 agents/<id>/AGENT.md） ──
       const character = await this.characterRepo.findById(params.characterId);
       if (!character) {
         throw new Error(
@@ -212,7 +212,7 @@ export class SubAgentManager implements OnModuleInit {
       finalCharacterId = params.characterId;
       finalAvatarUrl = character.avatarUrl || undefined;
       this.logger.log(
-        `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
+        `子 Agent 将继承角色设定: ${character.name} (${params.characterId})`,
       );
     } else {
       // ── 通用子 Agent ──
@@ -991,7 +991,6 @@ export class SubAgentManager implements OnModuleInit {
     await this.chatRunnerService
       .enqueueMessage({
         sessionId: parentSessionId,
-        userId,
         blocks: [
           {
             type: "text",
@@ -1144,7 +1143,6 @@ export class SubAgentManager implements OnModuleInit {
         .startStream(
           {
             sessionId: subSessionId,
-            userId: userId,
             userMessage: {
               content: task,
             },

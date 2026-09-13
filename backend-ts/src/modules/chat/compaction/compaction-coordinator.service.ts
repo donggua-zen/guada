@@ -112,6 +112,12 @@ export class CompactionCoordinatorService {
     // 会话经 CompactionDataSource 窄接口操作（JsonlSessionContext 同时实现两接口）
     const ds = context as unknown as CompactionDataSource;
 
+    // 0. 档位关闭（enabled=false）：非 force 直接旁路，不发 compression_start；
+    //    force（手动/溢出恢复）不受门控，保留逃生口
+    if (!opts.force && ds.getCompressionConfig().enabled === false) {
+      return { messages: null, didRun: false };
+    }
+
     // 1. 决策（force=溢出恢复路径，跳过阈值）——委托 CompactionService
     if (!opts.force && !(await this.compactionService.shouldCompress(ds))) {
       return { messages: null, didRun: false };

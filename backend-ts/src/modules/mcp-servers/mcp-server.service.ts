@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { McpClientService } from "../../common/mcp/mcp-client.service";
-import { McpServerRepository } from "../../common/database/mcp-server.repository";
+import { McpFileStore } from "./mcp-file.store";
 import { PluginManager } from "../plugins/plugin.manager";
 
 @Injectable()
@@ -8,7 +8,7 @@ export class McpServerService {
   private readonly logger = new Logger(McpServerService.name);
 
   constructor(
-    private mcpRepo: McpServerRepository,
+    private mcpStore: McpFileStore,
     private mcpClient: McpClientService,
     private pluginManager: PluginManager,
   ) {}
@@ -138,21 +138,23 @@ export class McpServerService {
     }
   }
 
-  async getAllServers(userId: string) {
-    const servers = await this.mcpRepo.findAll(userId);
+  async getAllServers() {
+    await this.mcpStore.initialize();
+    const servers = this.mcpStore.list();
     return {
       items: servers,
       size: servers.length,
     };
   }
 
-  async getServerById(id: string, userId: string) {
-    const server = await this.mcpRepo.findById(id, userId);
+  async getServerById(id: string) {
+    await this.mcpStore.initialize();
+    const server = this.mcpStore.getRow(id);
     if (!server) throw new Error("MCP Server not found");
     return server;
   }
 
-  async createServer(data: any, userId: string) {
+  async createServer(data: any) {
     // 推断传输类型：当 type 未设置但 command 存在时，推断为 stdio
     const effectiveType = data.type || (data.command ? "stdio" : undefined);
 
@@ -163,18 +165,17 @@ export class McpServerService {
     }
 
     // 1. 先创建服务器记录
-    const server = await this.mcpRepo.create({
+    const server = await this.mcpStore.create({
       name: data.name,
       url: data.url || null,
       type: effectiveType || null, // 保存协议类型（含推断结果）
-      description: data.description,
+      description: data.description ?? null,
       headers: data.headers || null,
       command: data.command || null,
       args: data.args || null,
       env: data.env || null,
       cwd: data.cwd || null,
       enabled: data.enabled !== undefined ? data.enabled : true,
-      userId: userId,
     });
 
     // 2. 尝试获取工具列表（不阻塞创建流程）
@@ -191,7 +192,7 @@ export class McpServerService {
           data.cwd,
         );
         if (Object.keys(toolsDict).length > 0) {
-          await this.mcpRepo.updateTools(server.id, toolsDict);
+          await this.mcpStore.writeTools(server.id, toolsDict);
           this.logger.log(
             `Fetched ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
           );
@@ -201,7 +202,7 @@ export class McpServerService {
         const headers = (data.headers as Record<string, any>) || {};
         const toolsDict = await this.fetchToolsFromServer(data.url, headers, data.type);
         if (Object.keys(toolsDict).length > 0) {
-          await this.mcpRepo.updateTools(server.id, toolsDict);
+          await this.mcpStore.writeTools(server.id, toolsDict);
           this.logger.log(
             `Fetched ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
           );
@@ -217,12 +218,13 @@ export class McpServerService {
     // 3. 刷新插件注册，使新工具立即可用
     await this.pluginManager.reloadPlugin("mcp");
 
-    return server;
+    return this.mcpStore.getRow(server.id) ?? server;
   }
 
-  async updateServer(id: string, data: any, userId: string) {
+  async updateServer(id: string, data: any) {
+    await this.mcpStore.initialize();
     // 获取当前服务器信息并验证归属权
-    const currentServer = await this.mcpRepo.findById(id, userId);
+    const currentServer = this.mcpStore.getRow(id);
     if (!currentServer) {
       throw new Error("MCP Server not found or unauthorized");
     }
@@ -295,7 +297,10 @@ export class McpServerService {
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
 
     // 执行更新（带权限校验）
-    const server = await this.mcpRepo.update(id, updateData, userId);
+    const server = await this.mcpStore.update(id, updateData);
+    if (!server) {
+      throw new Error("MCP Server not found or unauthorized");
+    }
 
     // 如果需要且提供了必要的信息，重新获取工具列表
     if (needRefreshTools) {
@@ -321,7 +326,7 @@ export class McpServerService {
         }
 
         if (Object.keys(toolsDict).length > 0) {
-          await this.mcpRepo.updateTools(id, toolsDict);
+          await this.mcpStore.writeTools(id, toolsDict);
           this.logger.log(
             `Refreshed ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
           );
@@ -336,11 +341,11 @@ export class McpServerService {
     // 刷新插件注册，使变更立即可用（始终执行，包括名称/启用等变更）
     await this.pluginManager.reloadPlugin("mcp");
 
-    return server;
+    return this.mcpStore.getRow(id) ?? server;
   }
 
-  async deleteServer(id: string, userId: string) {
-    const success = await this.mcpRepo.delete(id, userId);
+  async deleteServer(id: string) {
+    const success = await this.mcpStore.delete(id);
     if (!success) {
       throw new Error("MCP Server not found or unauthorized");
     }
@@ -352,8 +357,8 @@ export class McpServerService {
     return true;
   }
 
-  async toggleServerStatus(id: string, enabled: boolean, userId: string) {
-    const server = await this.mcpRepo.update(id, { enabled }, userId);
+  async toggleServerStatus(id: string, enabled: boolean) {
+    const server = await this.mcpStore.update(id, { enabled });
     if (!server) {
       throw new Error("MCP Server not found or unauthorized");
     }
@@ -367,8 +372,9 @@ export class McpServerService {
     return server;
   }
 
-  async refreshTools(id: string, userId: string) {
-    const server = await this.mcpRepo.findById(id, userId);
+  async refreshTools(id: string) {
+    await this.mcpStore.initialize();
+    const server = this.mcpStore.getRow(id);
     if (!server) {
       throw new Error("MCP Server not found or unauthorized");
     }
@@ -408,7 +414,7 @@ export class McpServerService {
         throw new Error(errorMsg);
       }
 
-      await this.mcpRepo.updateTools(id, toolsDict);
+      await this.mcpStore.writeTools(id, toolsDict);
       this.logger.log(
         `Manually refreshed ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
       );
@@ -416,7 +422,7 @@ export class McpServerService {
       // 返回更新后的服务器信息前，刷新插件注册
       await this.pluginManager.reloadPlugin("mcp");
 
-      return this.mcpRepo.findById(id);
+      return this.mcpStore.getRow(id);
     } catch (error: any) {
       // 如果是自定义的错误消息，直接抛出
       if (error.message.includes("Failed to fetch tools from server")) {

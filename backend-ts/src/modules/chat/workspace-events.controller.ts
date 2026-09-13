@@ -49,7 +49,7 @@ export class WorkspaceEventsController {
     @Body() body: { scope?: string; enabled?: boolean },
     @CurrentUser() user: any,
   ) {
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -79,7 +79,7 @@ export class WorkspaceEventsController {
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }

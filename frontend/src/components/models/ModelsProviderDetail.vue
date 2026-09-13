@@ -143,14 +143,18 @@
             <el-form-item :label="t('settings.providerDetail.modelType')" prop="modelType">
               <el-radio-group v-model="editModelForm.modelType">
                 <el-radio-button value="text">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <TextT24Regular />
-                    </el-icon> {{ t('settings.providerDetail.chatModel') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark gd-option__mark--radio"></span>
+                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.chatModel') }}</span>
+                  </span>
                 </el-radio-button>
                 <el-radio-button value="embedding">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <Group24Regular />
-                    </el-icon> {{ t('settings.providerDetail.embeddingModel') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark gd-option__mark--radio"></span>
+                    <el-icon class="gd-option__icon"><Group24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.embeddingModel') }}</span>
+                  </span>
                 </el-radio-button>
               </el-radio-group>
             </el-form-item>
@@ -161,14 +165,21 @@
             <el-form-item :label="t('settings.providerDetail.inputCapabilities')" prop="config.inputCapabilities" class="mb-3">
               <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
                 <el-checkbox-button value="text" disabled>
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <TextT24Regular />
-                    </el-icon> {{ t('settings.providerDetail.text') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark"></span>
+                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.text') }}</span>
+                    <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
+                      <el-icon class="gd-option__lock"><LockClosed16Regular /></el-icon>
+                    </GdTooltip>
+                  </span>
                 </el-checkbox-button>
                 <el-checkbox-button value="image">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <Image24Regular />
-                    </el-icon> {{ t('settings.providerDetail.image') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark"></span>
+                    <el-icon class="gd-option__icon"><Image24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.image') }}</span>
+                  </span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
@@ -176,14 +187,21 @@
             <el-form-item :label="t('settings.providerDetail.outputCapabilities')" prop="config.outputCapabilities" class="mb-3">
               <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
                 <el-checkbox-button value="text" disabled>
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <TextT24Regular />
-                    </el-icon> {{ t('settings.providerDetail.text') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark"></span>
+                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.text') }}</span>
+                    <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
+                      <el-icon class="gd-option__lock"><LockClosed16Regular /></el-icon>
+                    </GdTooltip>
+                  </span>
                 </el-checkbox-button>
                 <el-checkbox-button value="image">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <Image24Regular />
-                    </el-icon> {{ t('settings.providerDetail.image') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark"></span>
+                    <el-icon class="gd-option__icon"><Image24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.image') }}</span>
+                  </span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
@@ -191,9 +209,11 @@
             <el-form-item :label="t('settings.providerDetail.advancedFeatures')" prop="config.features" class="mb-4">
               <el-checkbox-group v-model="editModelForm.config.features">
                 <el-checkbox-button value="tools">
-                  <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                      <WrenchScrewdriver24Regular />
-                    </el-icon> {{ t('settings.providerDetail.toolCalling') }}</span>
+                  <span class="gd-option">
+                    <span class="gd-option__mark"></span>
+                    <el-icon class="gd-option__icon"><WrenchScrewdriver24Regular /></el-icon>
+                    <span class="gd-option__label">{{ t('settings.providerDetail.toolCalling') }}</span>
+                  </span>
                 </el-checkbox-button>
               </el-checkbox-group>
             </el-form-item>
@@ -203,9 +223,24 @@
             <el-form-item :label="t('settings.providerDetail.thinkingTuning')" class="mb-4">
               <div class="w-full">
                 <el-radio-group v-model="editModelForm.thinkingMode">
-                  <el-radio-button value="auto">{{ t('settings.providerDetail.thinkingAuto') }}</el-radio-button>
-                  <el-radio-button value="false">{{ t('settings.providerDetail.thinkingUnsupported') }}</el-radio-button>
-                  <el-radio-button value="true">{{ t('settings.providerDetail.thinkingSupported') }}</el-radio-button>
+                  <el-radio-button value="auto">
+                    <span class="gd-option">
+                      <span class="gd-option__mark gd-option__mark--radio"></span>
+                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingAuto') }}</span>
+                    </span>
+                  </el-radio-button>
+                  <el-radio-button value="false">
+                    <span class="gd-option">
+                      <span class="gd-option__mark gd-option__mark--radio"></span>
+                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingUnsupported') }}</span>
+                    </span>
+                  </el-radio-button>
+                  <el-radio-button value="true">
+                    <span class="gd-option">
+                      <span class="gd-option__mark gd-option__mark--radio"></span>
+                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingSupported') }}</span>
+                    </span>
+                  </el-radio-button>
                 </el-radio-group>
 
                 <div class="mt-2 text-xs text-gray-400">
@@ -351,7 +386,7 @@ import {
   AutoFixHighOutlined
 } from '@vicons/material'
 import {
-  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular
+  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular
 } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
 import { apiService } from '../../services/ApiService'
@@ -444,11 +479,15 @@ const customParamsStr = computed({
 })
 
 // 检测当前输入的模型名是否匹配预设库
+// 与后端 findModelPreset 同规则：逐 preset 先匹配完整名，再回退裸名
+// （聚合站的 `vendor/model` 形式带前缀，`^` 锚定的模式否则永远匹配不上）
 const matchedPreset = computed(() => {
   if (!editModelForm.value.modelName) return null
   const lower = editModelForm.value.modelName.toLowerCase()
+  const bare = lower.split('/').pop() || lower
   return props.modelPresets.find((p: any) =>
-    p.patterns.some((src: string) => new RegExp(src).test(lower))
+    p.patterns.some((src: string) => new RegExp(src).test(lower)) ||
+    (bare !== lower && p.patterns.some((src: string) => new RegExp(src).test(bare)))
   ) || null
 })
 
@@ -704,17 +743,168 @@ const handleFetchModels = async () => {
   text-align: left !important;
 }
 
-/* 优化 Button 组样式，使其更简约 */
-:deep(.el-checkbox-button__inner),
-:deep(.el-radio-button__inner) {
-  padding: 6px 12px;
-  border-radius: 4px !important;
-}
+/* ── 选项胶囊（模型类型 / 能力 / 思考调节）──────────────────────
+   不用 Element 默认的"主色实心块"选中态：改为中性描边胶囊 + 前置指示器。
+   克制原则：**主色只出现在指示器上**，胶囊本体（描边/底色）始终保持中性，
+   选中仅表现为指示器填充 + 文字加深。这样一排选项不会出现大面积色块，
+   也与"高亮色不要用黑色"的反馈一致（主色既做了强调，又不喧宾夺主）。
+   固定项（必选的"文本"）外观与其它选中项一致，约束另由锁图标表达。 */
 
-/* 调整相邻按钮的间距 */
+/* 相邻胶囊间距（Element 靠 font-size:0 消除空白，需显式补间距） */
 :deep(.el-checkbox-button + .el-checkbox-button),
 :deep(.el-radio-button + .el-radio-button) {
   margin-left: 8px;
+}
+
+/* 中和 Element 的选中态变量：它的 is-checked / is-active 规则会据此上色，
+   改写变量比用 !important 对抗基础规则更稳（后续加状态不会漏）。
+   这里全部落成中性色——主色只在下面指示器规则里出现。 */
+:deep(.el-checkbox-button) {
+  --el-checkbox-button-checked-bg-color: var(--gd-color-input-bg);
+  --el-checkbox-button-checked-text-color: var(--gd-color-text);
+  --el-checkbox-button-checked-border-color: var(--gd-color-input-border);
+  --el-checkbox-button-disabled-checked-fill: var(--gd-color-input-bg);
+}
+
+:deep(.el-radio-button) {
+  --el-radio-button-checked-bg-color: var(--gd-color-input-bg);
+  --el-radio-button-checked-text-color: var(--gd-color-text);
+  --el-radio-button-checked-border-color: var(--gd-color-input-border);
+}
+
+:deep(.el-checkbox-button__inner),
+:deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  /* 覆盖组内首尾元素的方角拼接 */
+  border-radius: 8px !important;
+  /* 不加 !important：Element 的选中态规则特异性更高，要让上面那组
+     --el-*-button-checked-* 变量能覆盖到这里（现全为中性色） */
+  background: var(--gd-color-input-bg);
+  border: 1px solid var(--gd-color-input-border);
+  outline: none;
+  /* 未选中为次级灰，选中由 is-checked 规则加深 */
+  color: var(--gd-color-text-gray);
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 400;
+  /* Element 选中态会加 -1px 左投影（拼接按钮组的残留），这里统一抹掉 */
+  box-shadow: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+/* 悬停：仅未选中项转深描边；选中项排除在外（选中态本就中性，
+   压回灰也无妨，但保持一致便于后续调整） */
+:deep(.el-checkbox-button:not(.is-checked) .el-checkbox-button__inner:hover),
+:deep(.el-radio-button:not(.is-active) .el-radio-button__inner:hover) {
+  color: var(--gd-color-text) !important;
+  border-color: var(--gd-color-text-disabled);
+}
+
+:deep(.el-checkbox-button.is-checked .gd-option__label),
+:deep(.el-radio-button.is-active .gd-option__label) {
+  font-weight: 500;
+}
+
+/* 固定项（必选的"文本"）：它不是"禁用"而是"必选不可改"，所以外观与
+   普通选中项一致（中性胶囊 + 主色指示器），仅去掉可点击手势；
+   约束交给右侧锁图标表达。
+   只覆盖 is-disabled.is-checked——将来若出现真正需要置灰的禁用项，
+   它没有 is-checked，会保留 Element 的置灰样式。 */
+:deep(.el-checkbox-button.is-disabled.is-checked .el-checkbox-button__inner) {
+  color: var(--gd-color-text) !important;
+  background: var(--gd-color-input-bg) !important;
+  border-color: var(--gd-color-input-border) !important;
+  cursor: default;
+}
+
+/* 禁用且未选中：压掉 Element 的 hover 变主色，明确"不可点" */
+:deep(.el-checkbox-button.is-disabled:not(.is-checked) .el-checkbox-button__inner),
+:deep(.el-checkbox-button.is-disabled:not(.is-checked) .el-checkbox-button__inner:hover) {
+  cursor: default;
+  color: var(--gd-color-text-disabled) !important;
+  border-color: var(--gd-color-input-border) !important;
+}
+
+:deep(.el-checkbox-button.is-focus .el-checkbox-button__inner),
+:deep(.el-radio-button__original-radio:focus-visible + .el-radio-button__inner) {
+  border-color: var(--gd-color-primary) !important;
+  box-shadow: 0 0 0 2px var(--gd-color-primary-100) !important;
+}
+
+.gd-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gd-option__icon {
+  font-size: 15px;
+  color: var(--gd-color-text-gray);
+  transition: color 0.15s ease;
+}
+
+/* 指示器：未选中 = 空心描边（勾/点透明）；选中 = 主色填充 + 白色对勾/圆点。
+   勾色用 --el-color-white 而非 --gd-color-primary-text：后者暗色下是
+   #d3d3d3，压在粉色上几乎看不清；前者亮暗色都是 #fff，与 Element
+   原生 checkbox 的选中样式（primary 底 + color-white 勾）一致。
+   未选中必须显式 transparent——不能靠"勾色=底色"取巧，那样暗色下会露出来。 */
+.gd-option__mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--gd-color-input-bg);
+  box-shadow: inset 0 0 0 1px var(--gd-color-input-border);
+  color: transparent;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.gd-option__mark::after {
+  content: '';
+  width: 4px;
+  height: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.gd-option__mark--radio {
+  border-radius: 50%;
+}
+
+.gd-option__mark--radio::after {
+  width: 6px;
+  height: 6px;
+  border: none;
+  border-radius: 50%;
+  background: currentColor;
+  transform: none;
+}
+
+/* 选中态由 Element 的状态类驱动（整段包进 deep，匹配 slot 内的子元素） */
+:deep(.el-checkbox-button.is-checked .gd-option__mark),
+:deep(.el-radio-button.is-active .gd-option__mark) {
+  background: var(--gd-color-primary);
+  box-shadow: none;
+  color: var(--el-color-white);
+}
+
+/* 选中项图标随文字一起加深为中性色——主色只留给指示器，
+   避免一个选项里出现两处强调色 */
+:deep(.el-checkbox-button.is-checked .gd-option__icon),
+:deep(.el-radio-button.is-active .gd-option__icon) {
+  color: var(--gd-color-text);
+}
+
+.gd-option__lock {
+  font-size: 14px;
+  color: var(--gd-color-text-disabled);
 }
 
 /* API Key 输入框和按钮布局 */

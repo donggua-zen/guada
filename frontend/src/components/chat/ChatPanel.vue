@@ -44,7 +44,7 @@
                   <EventCard v-if="turn.kind === 'event'" :event="turn" />
                   <TurnItem v-else :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
                     :turn="turn" :avatar="userAvater"
-                    :character-name="currentSession?.character?.title"
+                    :character-name="currentSession?.character?.name"
                     :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
                     :allow-generate="!isStreaming && index === lastUserMessageIndex"
                     :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"

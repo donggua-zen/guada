@@ -266,8 +266,8 @@ const props = defineProps<{
   turn: Turn;
   isLast: boolean;
   allowGenerate: boolean;
-  characterName?: string;
-  characterAvatar?: string;
+  characterName?: string | null;
+  characterAvatar?: string | null;
   animateIn?: boolean;
   sessionId?: string;
 }>();

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as path from 'path';
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
+import { ProviderFileStore } from '../llm-core/provider-file.store';
+import { assertResolvableModelRef } from '../llm-core/utils/model-reference.util';
+import { MODEL_ID_KEYS } from '../../common/database/bootstrap/model-reference-migration';
 import {
   SG_SYSTEM,
   SG_MODELS,
@@ -14,7 +17,10 @@ import {
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
 
-  constructor(private readonly storage: SettingsStorage) {}
+  constructor(
+    private readonly storage: SettingsStorage,
+    private readonly modelStore: ProviderFileStore,
+  ) {}
 
   /**
    * 获取分组内所有设置
@@ -25,8 +31,18 @@ export class SettingsService {
 
   /**
    * 更新分组内的一个或多个设置项，并自动保存
+   *
+   * models 组的模型引用键先过文件目录校验——前端表单会把整组设置原样回写，
+   * 若不校验，一个失效的旧 id（空白选项）会被反复持久化。
    */
   async updateGroupSettings(group: string, data: Record<string, any>): Promise<void> {
+    if (group === SG_MODELS) {
+      for (const [key, value] of Object.entries(data)) {
+        if (MODEL_ID_KEYS.has(key)) {
+          assertResolvableModelRef(this.modelStore, value as string | null, key);
+        }
+      }
+    }
     await this.storage.updateSettings(group, data);
   }
 
@@ -57,21 +73,6 @@ export class SettingsService {
       }
     }
     return result;
-  }
-
-  /**
-   * 获取免登录配置状态
-   */
-  async getAutoLoginEnabled(): Promise<boolean> {
-    const val = await this.getSettingValue(SG_SYSTEM, 'autoLoginEnabled', false);
-    return val === true || val === 'true';
-  }
-
-  /**
-   * 设置免登录配置状态
-   */
-  async setAutoLoginEnabled(enabled: boolean): Promise<void> {
-    await this.updateGroupSettings(SG_SYSTEM, { autoLoginEnabled: enabled });
   }
 
   /**

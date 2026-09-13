@@ -2,20 +2,14 @@ import { IsOptional, IsString, IsBoolean, IsNumber, IsIn, ValidateNested, IsArra
 import { Type } from "class-transformer";
 
 /**
- * 记忆配置
+ * 记忆配置（压缩档位；与后端 compression-tiers.ts 的 CompressionTier 值一致。
+ * 注意：运行时压缩配置取自角色 settings.memory，会话级 memory 不参与合并——
+ * 此 DTO 仅作为会话设置写入的声明式契约）
  */
 class MemorySettingsDto {
   @IsOptional()
-  @IsNumber()
-  compressionTriggerRatio?: number;
-
-  @IsOptional()
-  @IsNumber()
-  compressionTargetRatio?: number;
-
-  @IsOptional()
-  @IsString()
-  summaryMode?: string;
+  @IsIn(["off", "conservative", "aggressive"])
+  compressionTier?: string;
 }
 
 /**

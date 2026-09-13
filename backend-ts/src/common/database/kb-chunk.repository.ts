@@ -1,6 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/database/prisma.service";
 
+/**
+ * 知识库分块仓储（仅保留未迁移存量的兼容读取）
+ *
+ * 分块正本已改为 `<KB根>/<kbId>/<fileId>/chunks.jsonl`（KbChunkFileStore）。
+ * 主库 `kb_chunk` 表已冻结停写，本类只剩一个用途：当某文件的 JSONL 缺失时
+ * 兜底读出老数据（见 kb-chunk-file.store.ts 的 readChunksFromDb）——
+ * 尚未跑过 migrate-kb-chunks 的安装仍依赖它，因此不能删。
+ */
 @Injectable()
 export class KBChunkRepository {
   constructor(private prisma: PrismaService) {}
@@ -11,41 +19,6 @@ export class KBChunkRepository {
       orderBy: { chunkIndex: "asc" },
       skip,
       take: limit,
-    });
-  }
-
-  async create(data: any) {
-    return this.prisma.kBChunk.create({
-      data,
-    });
-  }
-
-  /**
-   * 批量创建分块记录（单次 INSERT，避免逐条写入的性能开销）
-   *
-   * @param items 分块数据列表
-   * @returns 实际创建的数量
-   */
-  async createMany(items: any[]): Promise<number> {
-    if (!items || items.length === 0) {
-      return 0;
-    }
-    const result = await this.prisma.kBChunk.createMany({
-      data: items,
-    });
-    return result.count;
-  }
-
-  async deleteByFileId(fileId: string) {
-    const result = await this.prisma.kBChunk.deleteMany({
-      where: { fileId },
-    });
-    return result.count;
-  }
-
-  async countByFileId(fileId: string) {
-    return this.prisma.kBChunk.count({
-      where: { fileId },
     });
   }
 }

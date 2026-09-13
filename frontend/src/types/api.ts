@@ -135,16 +135,12 @@ export interface McpServer {
  * 用户信息
  */
 export interface User {
-    id: string
     username: string
-    nickname?: string
-    email?: string
-    phone?: string
-    avatarUrl?: string
-    role?: 'primary' | 'subaccount'  // 用户角色：主账户或子账户
-    isActive: boolean
-    createdAt?: string
-    updatedAt?: string
+    nickname?: string | null
+    avatarUrl?: string | null
+    wallpaperUrl?: string | null
+    /** 是否已设密码（未设则免登录） */
+    passwordSet?: boolean
 }
 
 /**
@@ -160,7 +156,6 @@ export interface AuthToken {
  * 登录请求
  */
 export interface LoginRequest {
-    type: 'phone' | 'email'
     username: string
     password: string
 }

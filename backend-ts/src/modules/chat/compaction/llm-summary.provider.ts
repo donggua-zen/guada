@@ -14,6 +14,7 @@
 import { Logger } from '@nestjs/common';
 import { LLMService } from '../../llm-core/llm.service';
 import { resolveThinkingEffort } from '../../llm-core/utils/model-config.helper';
+import type { RuntimeProviderConfig } from '../../llm-core/utils/provider-runtime.util';
 import { BlockAssembler } from '../block-assembler';
 import type { Message } from '../../../common/types/conversation.types';
 import type { StreamChunk } from '../../../common/types/stream-chunk.types';
@@ -24,11 +25,14 @@ import type { LLMCompletionParams } from '../../llm-core/types/llm.types';
 import type { SummaryInput, SummaryProvider, SummaryResult } from './compression-engine';
 import { kbRefsToText } from '../../../common/utils/kb-ref.util';
 
-/** 摘要模型引用（模型名 + provider 配置 + 能力配置） */
+/** 摘要模型引用（模型名 + provider 运行时配置 + 能力配置 + 档位菜单） */
 export interface SummaryModelRef {
   modelName: string;
-  provider?: any;
+  /** 运行时供应商配置（normalize 后的形态，见 toRuntimeProviderConfig） */
+  provider?: RuntimeProviderConfig;
   config?: any;
+  /** 档位菜单（能力判据；空 = 不能思考，回退路径不发思考参数） */
+  thinkingEfforts?: string[];
 }
 
 export interface LLMSummaryProviderOptions {

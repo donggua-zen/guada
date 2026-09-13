@@ -4,12 +4,13 @@ import * as path from "path";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { LLMService } from "../../llm-core/llm.service";
-import { PrismaService } from "../../../common/database/prisma.service";
+import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import type { Message } from "../../../common/types/conversation.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
+import { toRuntimeProviderConfig } from "../../llm-core/utils/provider-runtime.util";
 import { PluginApi, ImageContent } from "../api/plugin-api";
 import { z } from "zod";
 import {
@@ -46,7 +47,7 @@ export class ImageRecognitionPlugin extends PluginBase {
 
   constructor(
     private llmService: LLMService,
-    private prisma: PrismaService,
+    private providerStore: ProviderFileStore,
     private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
   ) {
@@ -204,10 +205,7 @@ export class ImageRecognitionPlugin extends PluginBase {
         );
       }
 
-      const visualModelConfig = await this.prisma.model.findUnique({
-        where: { id: visualModelId },
-        include: { provider: true },
-      });
+      const visualModelConfig = this.providerStore.findModel(visualModelId);
       if (!visualModelConfig) {
         throw new Error(
           `The configured visual assistant model (ID: ${visualModelId}) does not exist, please check system settings`,
@@ -251,7 +249,7 @@ export class ImageRecognitionPlugin extends PluginBase {
         model,
         messages,
         stream: true,
-        providerConfig: visualModelConfig.provider,
+        providerConfig: toRuntimeProviderConfig(visualModelConfig.provider),
         thinkingEffort,
         abortSignal,
       })) as AsyncGenerator<any, void, unknown>;

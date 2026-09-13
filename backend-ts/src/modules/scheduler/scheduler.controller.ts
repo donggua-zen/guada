@@ -12,7 +12,6 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SchedulerService } from "./scheduler.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
@@ -28,11 +27,11 @@ export class SchedulerController {
   constructor(private schedulerService: SchedulerService) {}
 
   /**
-   * 获取当前用户的所有定时任务
+   * 获取所有定时任务
    */
   @Get("tasks")
-  async getTasks(@CurrentUser() user: any) {
-    const tasks = await this.schedulerService.getTasks(user.id);
+  async getTasks() {
+    const tasks = await this.schedulerService.getTasks();
     return { items: tasks, total: tasks.length };
   }
 
@@ -48,8 +47,8 @@ export class SchedulerController {
    * 创建定时任务
    */
   @Post("tasks")
-  async createTask(@Body() dto: CreateTaskDto, @CurrentUser() user: any) {
-    const task = await this.schedulerService.createTask(user.id, dto);
+  async createTask(@Body() dto: CreateTaskDto) {
+    const task = await this.schedulerService.createTask(dto);
     return task;
   }
 
@@ -57,20 +56,16 @@ export class SchedulerController {
    * 获取单个任务详情
    */
   @Get("tasks/:id")
-  async getTask(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.schedulerService.getTask(id, user.id);
+  async getTask(@Param("id") id: string) {
+    return this.schedulerService.getTask(id);
   }
 
   /**
    * 更新定时任务
    */
   @Put("tasks/:id")
-  async updateTask(
-    @Param("id") id: string,
-    @Body() dto: UpdateTaskDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.schedulerService.updateTask(id, user.id, dto);
+  async updateTask(@Param("id") id: string, @Body() dto: UpdateTaskDto) {
+    return this.schedulerService.updateTask(id, dto);
   }
 
   /**
@@ -78,16 +73,16 @@ export class SchedulerController {
    */
   @Delete("tasks/:id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteTask(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.schedulerService.deleteTask(id, user.id);
+  async deleteTask(@Param("id") id: string) {
+    await this.schedulerService.deleteTask(id);
   }
 
   /**
    * 切换任务启用/禁用状态
    */
   @Post("tasks/:id/toggle")
-  async toggleTask(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.schedulerService.toggleTask(id, user.id);
+  async toggleTask(@Param("id") id: string) {
+    return this.schedulerService.toggleTask(id);
   }
 
   /**
@@ -102,8 +97,8 @@ export class SchedulerController {
    */
   @Post("tasks/:id/test")
   @HttpCode(HttpStatus.OK)
-  async testTask(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.schedulerService.testTask(id, user.id);
+  async testTask(@Param("id") id: string) {
+    await this.schedulerService.testTask(id);
     return { success: true, message: "测试执行完成" };
   }
 
@@ -111,8 +106,8 @@ export class SchedulerController {
    * 获取任务执行日志
    */
   @Get("tasks/:id/logs")
-  async getTaskLogs(@Param("id") id: string, @CurrentUser() user: any) {
-    const logs = await this.schedulerService.getTaskLogs(id, user.id);
+  async getTaskLogs(@Param("id") id: string) {
+    const logs = await this.schedulerService.getTaskLogs(id);
     return { items: logs, total: logs.length };
   }
 
@@ -121,11 +116,10 @@ export class SchedulerController {
    */
   @Get("logs")
   async getAllLogs(
-    @CurrentUser() user: any,
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
   ) {
     const parsedLimit = limit ? parseInt(limit, 10) : 30;
-    return this.schedulerService.getAllLogs(user.id, cursor, parsedLimit);
+    return this.schedulerService.getAllLogs(cursor, parsedLimit);
   }
 }

@@ -276,7 +276,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         // ── 构建可用角色列表 ──
         const genericAgent = {
           id: "generic",
-          title: "Generic Sub-Agent",
+          name: "Generic Sub-Agent",
           description:
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
@@ -337,7 +337,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         if (agents.length > 0) {
           const agentXml = agents
             .map((a: any) => {
-              return `   - name: ${a.title}\nid: ${a.id}\ndescription: ${a.description || ""}`;
+              return `   - name: ${a.name}\nid: ${a.id}\ndescription: ${a.description || ""}`;
             })
             .join("\n");
 

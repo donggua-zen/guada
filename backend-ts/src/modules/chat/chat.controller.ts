@@ -18,7 +18,6 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
 import { SessionService } from "./session.service";
-import { MessageRepository } from "../../common/database/message.repository";
 import { FileRef } from "../../common/types/conversation.types";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
@@ -33,7 +32,6 @@ export class ChatController {
 
   constructor(
     private sessionService: SessionService,
-    private messageRepo: MessageRepository,
     private streamManager: SessionStreamManager,
     private chatRunner: ChatRunnerService,
     private tagParserPipeline: TagParserPipeline,
@@ -101,7 +99,6 @@ export class ChatController {
       await this.chatRunner.startStream(
         {
           sessionId,
-          userId: user.id,
           userMessage,
           regenerationMode: regenerationMode || "overwrite",
           resumeData,
@@ -165,7 +162,7 @@ export class ChatController {
     @Param("sessionId") sessionId: string,
     @CurrentUser() user: any,
   ) {
-    await this.sessionService.getSessionById(sessionId, user.id);
+    await this.sessionService.getSessionById(sessionId);
     return (
       this.streamManager.getStreamStatus(sessionId) || {
         isRunning: false,

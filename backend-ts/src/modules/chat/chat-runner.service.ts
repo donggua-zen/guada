@@ -64,7 +64,6 @@ export function toMessageSource(
 export interface QueueItem {
   id: string;
   sessionId: string;
-  userId: string;
   /** 原生内容块（S2：结构化入站消息统一载体；文本即 text 块） */
   blocks: ContentBlock[];
   source: QueueSource;
@@ -126,7 +125,6 @@ export class ChatRunnerService {
   async startStream(
     params: {
       sessionId: string;
-      userId: string;
       userMessage?: {
         id?: string;
         content?: string;
@@ -151,7 +149,6 @@ export class ChatRunnerService {
   ): Promise<() => void> {
     const {
       sessionId,
-      userId,
       userMessage,
       regenerationMode = "overwrite",
       resumeData,
@@ -171,7 +168,7 @@ export class ChatRunnerService {
     // 获取会话：优先使用预加载的会话（如 Bot 场景已 enrich），否则从 DB 查询
     const session =
       preloadedSession ??
-      (await this.sessionService.getSessionById(sessionId, userId));
+      (await this.sessionService.getSessionById(sessionId));
     if (!session) {
       throw new HttpException(
         { error: "会话不存在", code: "SESSION_NOT_FOUND" },
@@ -216,16 +213,12 @@ export class ChatRunnerService {
       );
     }
 
-    const subscriberId = `${userId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const subscriberId = `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     // 启动新流
     const abortController = new AbortController();
 
-    const started = this.streamManager.startStream(
-      sessionId,
-      userId,
-      abortController,
-    );
+    const started = this.streamManager.startStream(sessionId, abortController);
     if (!started) {
       throw new HttpException(
         { error: "Session is busy", code: "STREAM_START_FAILED" },
@@ -261,7 +254,6 @@ export class ChatRunnerService {
       sessionContext,
       userMessage,
       abortController,
-      userId,
       regenerationMode,
       resumeData,
       clientId,
@@ -285,7 +277,6 @@ export class ChatRunnerService {
    */
   async enqueueMessage(params: {
     sessionId: string;
-    userId: string;
     /** 原生内容块（S2：结构化入站消息统一载体；文本即 [{type:'text',text}]） */
     blocks: ContentBlock[];
     /** 队列消息来源（P4a：kind 风格，与 Message.source.kind 同一词汇） */
@@ -294,12 +285,11 @@ export class ChatRunnerService {
     isValid?: () => boolean;
     onConsumed?: () => void;
   }): Promise<void> {
-    const { sessionId, userId, blocks, source, callbacks, isValid, onConsumed } = params;
+    const { sessionId, blocks, source, callbacks, isValid, onConsumed } = params;
 
     const queueItem: QueueItem = {
       id: `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       sessionId,
-      userId,
       blocks,
       source,
       createdAt: new Date(),
@@ -459,7 +449,6 @@ export class ChatRunnerService {
   private async executeQueueItem(items: QueueItem[]): Promise<void> {
     const firstItem = items[0];
     const sessionId = firstItem.sessionId;
-    const userId = firstItem.userId;
     const sourceKind = firstItem.source.kind;
 
     if (items.length === 1) {
@@ -495,7 +484,6 @@ export class ChatRunnerService {
       await this.startStream(
         {
           sessionId,
-          userId,
           userMessage: {
             blocks: mergedBlocks,
             ...(messageSource ? { source: messageSource } : {}),
@@ -550,7 +538,6 @@ export class ChatRunnerService {
     sessionContext: ISessionContext,
     userMessage: any,
     abortController: AbortController,
-    userId: string,
     regenerationMode: string = "overwrite",
     resumeData?: any,
     clientId?: string,
@@ -560,7 +547,6 @@ export class ChatRunnerService {
     try {
       // 流开始:广播会话"工作中"状态(统一状态改变事件,running)
       const startEvent: StreamStatusChangedEvent = {
-        userId,
         sessionId,
         timestamp: new Date().toISOString(),
         source: clientId,
@@ -590,7 +576,6 @@ export class ChatRunnerService {
       this.streamManager.stopStream(sessionId, reason);
 
       const statusEvent: StreamStatusChangedEvent = {
-        userId,
         sessionId,
         timestamp: new Date().toISOString(),
         source: clientId,
@@ -608,7 +593,6 @@ export class ChatRunnerService {
         this.streamManager.stopStream(sessionId, "user_cancel");
 
         const statusEvent: StreamStatusChangedEvent = {
-          userId,
           sessionId,
           timestamp: new Date().toISOString(),
           source: clientId,
@@ -624,7 +608,6 @@ export class ChatRunnerService {
         this.streamManager.stopStream(sessionId, "error");
 
         const statusEvent: StreamStatusChangedEvent = {
-          userId,
           sessionId,
           timestamp: new Date().toISOString(),
           source: clientId,

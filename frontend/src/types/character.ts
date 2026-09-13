@@ -5,45 +5,30 @@
 import type { ISODateString } from './common'
 
 /**
- * 角色类型（私有/共享）
- */
-export type CharacterType = 'private' | 'public' | 'system'
-
-/**
- * 角色分组对象
- */
-export interface CharacterGroup {
-    id: string
-    name: string
-    userId: string
-    sortOrder: number
-    createdAt: ISODateString
-    updatedAt: ISODateString
-}
-
-/**
  * 角色对象
+ *
+ * id 即 `agents/<id>` 目录名，由 name 派生并保持稳定（改 name 不改 id）。
+ * 定义权威来源为 `AGENT.md`（YAML frontmatter + Markdown 正文）。
  */
 export interface Character {
     id: string
-    title: string
-    description?: string
-    systemPrompt?: string
-    avatarUrl?: string
-    userId: string
-    type: CharacterType
-    isActive: boolean
-    groupId?: string | null
-    group?: CharacterGroup | null
+    name: string
+    description?: string | null
+    avatarUrl?: string | null
+    userId?: string | null
+    modelId?: string | null
     createdAt: ISODateString
     updatedAt: ISODateString
     settings?: CharacterSettings
+    /** 是否来自随包内置模板 */
+    bundled?: boolean
 }
 
 /**
  * 角色设置
  */
 export interface CharacterSettings {
+    systemPrompt?: string
     temperature?: number
     max_tokens?: number
     top_p?: number
@@ -56,11 +41,9 @@ export interface CharacterSettings {
  * 创建角色请求数据
  */
 export interface CreateCharacterRequest {
-    title: string
+    name: string
     description?: string
-    systemPrompt?: string
-    avatar?: string
-    type?: CharacterType
+    modelId?: string
     settings?: Partial<CharacterSettings>
 }
 
@@ -68,11 +51,9 @@ export interface CreateCharacterRequest {
  * 更新角色请求数据
  */
 export interface UpdateCharacterRequest {
-    title?: string
+    name?: string
     description?: string
-    systemPrompt?: string
-    avatar?: string
-    isActive?: boolean
+    modelId?: string
     settings?: Partial<CharacterSettings>
 }
 

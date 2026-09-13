@@ -3,14 +3,12 @@ import {
   HttpStatus,
   Injectable,
   Logger,
-  OnModuleInit,
 } from "@nestjs/common";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import sharp from "sharp";
-import { FileRepository } from "../../common/database/file.repository";
-import { PrismaService } from "../../common/database/prisma.service";
+import { SessionFileStore } from "../chat/session-file.store";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
@@ -19,7 +17,7 @@ import { FileRef } from "../../common/types/conversation.types";
 import { normalizeMediaType } from "../../common/utils/media-type.util";
 
 @Injectable()
-export class FileService implements OnModuleInit {
+export class FileService {
   private readonly logger = new Logger(FileService.name);
 
   // 文件类型定义
@@ -48,75 +46,27 @@ export class FileService implements OnModuleInit {
   private readonly MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB
   private readonly MAX_PDF_SIZE = 1024 * 1024 * 1024; // 1GB
 
-  // 孤儿文件保留时长：成为孤儿超过此时间的文件才会被清理，
-  // 避免刚解绑消息的文件被立即删除（部分场景下仍可能被复用）
-  private readonly ORPHAN_FILE_RETENTION_MS = 2 * 60 * 60 * 1000; // 2 小时
-
   constructor(
     private uploadPathService: UploadPathService,
     private fileNamingService: FileNamingService,
-    private fileRepo: FileRepository,
-    private prisma: PrismaService,
+    private sessionStore: SessionFileStore,
     private fileParserService: FileParserService,
     private urlService: UrlService,
   ) { }
 
-  private async assertSessionOwner(sessionId: string, userId: string) {
-    const session = await this.prisma.session.findFirst({
-      where: { id: sessionId, userId },
-      select: { id: true },
-    });
-    if (!session) {
+  /** 会话存在性校验（单账户：无归属校验） */
+  private async assertSessionExists(sessionId: string) {
+    if (!this.sessionStore.get(sessionId)) {
       throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
-  }
-
-
-  async onModuleInit() {
-    // 启动时清理所有未关联消息的孤儿文件
-    await this.cleanupOrphanFiles();
-
-    // 之后每 30 分钟定时清理一次，处理消息编辑等场景产生的孤儿文件
-    setInterval(() => {
-      this.cleanupOrphanFiles().catch((error) => {
-        this.logger.error(`定时清理孤儿文件失败: ${error.message}`);
-      });
-    }, 30 * 60 * 1000);
-
-    // 启动时清理过期的工具图片（base64 content 已过期）
-    await this.cleanupExpiredToolImages();
-
-    // 之后每 30 分钟清理一次
-    setInterval(() => {
-      this.cleanupExpiredToolImages().catch((error) => {
-        this.logger.error(`定时清理过期工具图片失败: ${error.message}`);
-      });
-    }, 30 * 60 * 1000);
-
-    this.logger.log(
-      `孤儿文件定时清理已启动，间隔 30 分钟`,
-    );
-  }
-
-  /**
-   * 清理过期的工具图片：base64 存储在 File.content 中，超过 TTL 后清空 content 字段。
-   * File 记录本身不删除，transformContentStructure 检测到 content 为 null 时返回"图片已过期"。
-   */
-  private async cleanupExpiredToolImages(): Promise<void> {
-    const TOOL_IMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-    const cutoff = new Date(Date.now() - TOOL_IMAGE_TTL_MS);
-    const count = await this.fileRepo.clearExpiredToolImages(cutoff);
-    if (count > 0) {
-      this.logger.log(`已清理 ${count} 条过期工具图片的 base64 数据`);
     }
   }
 
   /**
    * 上传文件的统一入口方法
    */
-  async uploadFile(sessionId: string, file: any, userId: string) {
+  async uploadFile(sessionId: string, file: any) {
     try {
-      await this.assertSessionOwner(sessionId, userId);
+      await this.assertSessionExists(sessionId);
 
       // 1. 验证文件
       this.validateFile(file);
@@ -127,11 +77,11 @@ export class FileService implements OnModuleInit {
       // 3. 根据文件类型分别处理
       let result: FileRef;
       if (this.IMAGE_EXTENSIONS.has(fileInfo.fileExt)) {
-        result = await this.uploadImageFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadImageFile(sessionId, file, fileInfo);
       } else if (this.PDF_EXTENSIONS.has(fileInfo.fileExt)) {
-        result = await this.uploadPdfFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadPdfFile(sessionId, file, fileInfo);
       } else {
-        result = await this.uploadTextFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadTextFile(sessionId, file, fileInfo);
       }
 
       // 4. 返回 FileRef（url/previewUrl 保持相对存储路径，由前端展示时绝对化）
@@ -263,12 +213,7 @@ export class FileService implements OnModuleInit {
   /**
    * 上传图片文件
    */
-  async uploadImageFile(
-    sessionId: string,
-    file: any,
-    fileInfo: any,
-    userId: string,
-  ) {
+  async uploadImageFile(sessionId: string, file: any, fileInfo: any) {
     try {
       // 保存图片（传入已修复编码的文件名）
       const { url, previewUrl, metadata } =
@@ -296,12 +241,7 @@ export class FileService implements OnModuleInit {
   /**
    * 上传 PDF 文件
    */
-  async uploadPdfFile(
-    sessionId: string,
-    file: any,
-    fileInfo: any,
-    userId: string,
-  ) {
+  async uploadPdfFile(sessionId: string, file: any, fileInfo: any) {
     try {
       // 保存 PDF 文件
       const url = await this.saveFile(file, fileInfo.fileExt);
@@ -339,12 +279,7 @@ export class FileService implements OnModuleInit {
   /**
    * 上传文本文件
    */
-  async uploadTextFile(
-    sessionId: string,
-    file: any,
-    fileInfo: any,
-    userId: string,
-  ) {
+  async uploadTextFile(sessionId: string, file: any, fileInfo: any) {
     try {
       // 读取文件内容
       const fileContent = file.buffer.toString("utf-8");
@@ -446,202 +381,9 @@ export class FileService implements OnModuleInit {
   }
 
   /**
-   * 复制文件
-   */
-  async copyFile(fileId: string, messageId: string, userId: string) {
-    // 从消息中获取目标会话 ID + 活跃 content
-    const message = await this.prisma.message.findUnique({
-      where: { id: messageId },
-      include: {
-        session: { select: { userId: true } },
-        contents: { orderBy: { createdAt: "desc" }, take: 1 },
-      },
-    });
-
-    if (!message || message.session.userId !== userId) {
-      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-    }
-
-    const originalFile = await this.fileRepo.findById(fileId);
-    if (!originalFile) {
-      throw new HttpException("File not found", HttpStatus.NOT_FOUND);
-    }
-
-    // 简化校验：只要文件属于该消息所在的会话，即视为拥有操作权限
-    if (originalFile.sessionId !== message.sessionId) {
-      throw new HttpException("File does not belong to this session", HttpStatus.FORBIDDEN);
-    }
-
-    const activeContentId = message.contents[0]?.id || null;
-
-    // 创建新的文件记录
-    const newFile = await this.fileRepo.create({
-      sessionId: message.sessionId,
-      fileName: originalFile.fileName,
-      displayName: originalFile.displayName,
-      fileSize: originalFile.fileSize,
-      fileType: originalFile.fileType,
-      fileExtension: originalFile.fileExtension,
-      url: originalFile.url,
-      previewUrl: originalFile.previewUrl,
-      contentHash: originalFile.contentHash,
-      uploadUserId: userId,
-      content: originalFile.content,
-      fileMetadata: originalFile.fileMetadata,
-    });
-
-    // 转换 URL 为绝对路径后返回
-    return {
-      ...newFile,
-      url: this.urlService.toResourceAbsoluteUrl(newFile.url),
-      previewUrl: newFile.previewUrl
-        ? this.urlService.toResourceAbsoluteUrl(newFile.previewUrl)
-        : null,
-    };
-  }
-
-  /**
    * 计算文件哈希
    */
   private calculateContentHash(buffer: Buffer): string {
     return crypto.createHash("md5").update(buffer).digest("hex");
-  }
-
-  /**
-   * 删除文件(物理删除)
-   */
-  async deleteFile(fileId: string): Promise<boolean> {
-    try {
-      const file = await this.fileRepo.findById(fileId);
-      if (!file) {
-        return false;
-      }
-  
-      // 异步删除物理文件(如果有 URL)
-      const deletePromises: Promise<void>[] = [];
-        
-      if (file.url) {
-        const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-        if (fs.existsSync(physicalPath)) {
-          deletePromises.push(
-            fs.promises.unlink(physicalPath).then(() => {
-              this.logger.log(`已删除文件: ${physicalPath}`);
-            }).catch(err => {
-              this.logger.warn(`删除物理文件失败: ${physicalPath}, ${err.message}`);
-            })
-          );
-        }
-      }
-  
-      // 异步删除预览图(如果有)
-      if (file.previewUrl) {
-        const previewPath = this.uploadPathService.toPhysicalPath(file.previewUrl);
-        if (fs.existsSync(previewPath)) {
-          deletePromises.push(
-            fs.promises.unlink(previewPath).then(() => {
-              this.logger.log(`已删除预览图: ${previewPath}`);
-            }).catch(err => {
-              this.logger.warn(`删除预览图失败: ${previewPath}, ${err.message}`);
-            })
-          );
-        }
-      }
-  
-      // 等待所有文件删除完成(最多等待 10 秒)
-      if (deletePromises.length > 0) {
-        await Promise.race([
-          Promise.all(deletePromises),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('文件删除超时')), 10000)
-          )
-        ]);
-      }
-  
-      // 删除数据库记录
-      await this.prisma.file.delete({ where: { id: fileId } });
-      this.logger.log(`已删除文件记录: ${fileId}`);
-  
-      return true;
-    } catch (error: any) {
-      this.logger.error(`删除文件失败: ${error.message}`, error.stack);
-      return false;
-    }
-  }
-
-  /**
-   * 批量删除文件
-   */
-  async deleteFilesByMessageId(messageId: string): Promise<number> {
-    try {
-      // 查找该消息所有 content 关联的文件
-      const files = await this.prisma.file.findMany({
-        where: { messageContent: { messageId } },
-      });
-
-      let deletedCount = 0;
-      for (const file of files) {
-        const success = await this.deleteFile(file.id);
-        if (success) {
-          deletedCount++;
-        }
-      }
-
-      this.logger.log(`删除消息 ${messageId} 的 ${deletedCount} 个附件`);
-      return deletedCount;
-    } catch (error: any) {
-      this.logger.error(`批量删除文件失败: ${error.message}`);
-      return 0;
-    }
-  }
-
-  /**
-   * 清理所有未关联消息的孤儿文件
-   * 仅删除成为孤儿超过 2 小时的文件（updatedAt 早于截止时间），
-   * 避免刚解绑消息的文件被立即删除（部分场景下仍可能被复用）
-   */
-  async cleanupOrphanFiles(): Promise<void> {
-    try {
-      const retentionHours = this.ORPHAN_FILE_RETENTION_MS / (60 * 60 * 1000);
-      this.logger.log(`开始扫描孤儿文件（未关联消息且超过 ${retentionHours} 小时）...`);
-
-      const cutoffTime = new Date(Date.now() - this.ORPHAN_FILE_RETENTION_MS);
-
-      // 查找所有未关联 content 且修改时间超过保留时长的孤儿文件
-      const orphanFiles = await this.prisma.file.findMany({
-        where: {
-          updatedAt: { lt: cutoffTime },
-        },
-      });
-
-      if (orphanFiles.length === 0) {
-        this.logger.log("未发现需要清理的孤儿文件");
-        return;
-      }
-
-      this.logger.log(
-        `发现 ${orphanFiles.length} 个孤儿文件（修改时间超过 ${retentionHours} 小时），开始清理...`,
-      );
-
-      let cleanedCount = 0;
-      let failedCount = 0;
-      
-      for (const file of orphanFiles) {
-        try {
-          const success = await this.deleteFile(file.id);
-          if (success) {
-            cleanedCount++;
-          } else {
-            failedCount++;
-          }
-        } catch (error: any) {
-          failedCount++;
-          this.logger.error(`清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`);
-        }
-      }
-
-      this.logger.log(`孤儿文件清理完成：成功 ${cleanedCount} 个，失败 ${failedCount} 个`);
-    } catch (error: any) {
-      this.logger.error(`孤儿文件清理失败：${error.message}`);
-    }
   }
 }

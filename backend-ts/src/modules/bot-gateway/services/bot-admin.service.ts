@@ -1,17 +1,27 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../../common/database/prisma.service';
+import { CharacterRepository } from '../../../common/database/character.repository';
+import {
+  byLastActiveDesc,
+  SessionFileStore,
+} from '../../chat/session-file.store';
+import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from './bot-instance-manager.service';
 import { PLATFORM_METADATA } from '../constants/platform-metadata';
 import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
 import { BotConfig, BotStatus } from '../interfaces/bot-platform.interface';
+import { ProviderFileStore } from '../../llm-core/provider-file.store';
+import { assertResolvableModelRef } from '../../llm-core/utils/model-reference.util';
 
 @Injectable()
 export class BotAdminService {
   private readonly logger = new Logger(BotAdminService.name);
 
   constructor(
-    private prisma: PrismaService,
     private instanceManager: BotInstanceManager,
+    private modelStore: ProviderFileStore,
+    private characterRepo: CharacterRepository,
+    private sessionStore: SessionFileStore,
+    private botStore: BotFileStore,
   ) {}
 
   /**
@@ -36,13 +46,14 @@ export class BotAdminService {
   /**
    * 获取所有机器人实例
    */
-  async getAllInstances(userId?: string) {
-    const where = userId ? { userId } : {};
-    
-    const instances = await this.prisma.botInstance.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    });
+  async getAllInstances() {
+    const instances = this.botStore
+      .list()
+      .sort((a, b) =>
+        b.createdAt === a.createdAt
+          ? a.id.localeCompare(b.id)
+          : b.createdAt.localeCompare(a.createdAt),
+      );
 
     // 附加运行时状态
     return instances.map(instance => ({
@@ -54,31 +65,27 @@ export class BotAdminService {
   /**
    * 获取 Bot 会话列表
    */
-  async getBotSessions(
-    userId: string,
-    skip: number,
-    limit: number,
-    botId?: string,
-  ) {
-    const where: any = {
-      userId,
-      sessionType: 'bot',
-    };
-    if (botId) where.botId = botId;
+  async getBotSessions(skip: number, limit: number, botId?: string) {
+    const rows = this.sessionStore.query(
+      (m) => m.sessionType === "bot" && (botId ? m.botId === botId : true),
+      byLastActiveDesc,
+    );
+    const items = rows
+      .slice(skip, skip + limit)
+      .map((m) => this.sessionStore.get(m.id)!);
+    const total = rows.length;
 
-    const [items, total] = await Promise.all([
-      this.prisma.session.findMany({
-        where,
-        orderBy: { lastActiveAt: 'desc' },
-        skip,
-        take: limit,
-        include: { character: true },
-      }),
-      this.prisma.session.count({ where }),
-    ]);
+    const charMap = await this.characterRepo.findManyByIds(
+      items
+        .map((s: any) => s.characterId)
+        .filter((id: any): id is string => typeof id === 'string' && id.length > 0),
+    );
 
     return {
-      items,
+      items: items.map((s: any) => ({
+        ...s,
+        character: s.characterId ? charMap.get(s.characterId) ?? null : null,
+      })),
       total,
       page: Math.floor(skip / limit) + 1,
       pageSize: limit,
@@ -89,9 +96,7 @@ export class BotAdminService {
    * 获取单个机器人实例
    */
   async getInstance(id: string) {
-    const instance = await this.prisma.botInstance.findUnique({
-      where: { id },
-    });
+    const instance = this.botStore.findById(id);
 
     if (!instance) {
       throw new NotFoundException(`Bot instance ${id} not found`);
@@ -106,7 +111,7 @@ export class BotAdminService {
   /**
    * 创建新机器人
    */
-  async createInstance(userId: string, dto: CreateBotDto) {
+  async createInstance(dto: CreateBotDto) {
     // 验证平台是否支持
     if (!PLATFORM_METADATA[dto.platform]) {
       throw new BadRequestException(`Unsupported platform: ${dto.platform}`);
@@ -129,23 +134,21 @@ export class BotAdminService {
       throw new BadRequestException('defaultCharacterId is required for bot instance');
     }
 
-    // 保存到数据库
-    const instance = await this.prisma.botInstance.create({
-      data: {
-        userId,
-        platform: dto.platform,
-        name: dto.name,
-        platformConfig: dto.platformConfig,
-        reconnectEnabled: dto.reconnectConfig?.enabled ?? true,
-        maxRetries: dto.reconnectConfig?.maxRetries ?? 5,
-        retryInterval: dto.reconnectConfig?.retryInterval ?? 5000,
-        defaultCharacterId: dto.defaultCharacterId,
-        defaultModelId: dto.defaultModelId,
-        defaultThinkingEffort: dto.defaultThinkingEffort,
-        additionalKwargs: dto.additionalKwargs || null,
-        enabled: true,
-        status: 'stopped',
-      },
+    // 保存到文件（权威来源 bots/<id>.yaml）
+    assertResolvableModelRef(this.modelStore, dto.defaultModelId, 'defaultModelId');
+    const instance = await this.botStore.create({
+      platform: dto.platform,
+      name: dto.name,
+      platformConfig: dto.platformConfig,
+      reconnectEnabled: dto.reconnectConfig?.enabled ?? true,
+      maxRetries: dto.reconnectConfig?.maxRetries ?? 5,
+      retryInterval: dto.reconnectConfig?.retryInterval ?? 5000,
+      defaultCharacterId: dto.defaultCharacterId,
+      defaultModelId: dto.defaultModelId ?? null,
+      defaultThinkingEffort: dto.defaultThinkingEffort ?? null,
+      additionalKwargs: dto.additionalKwargs || null,
+      enabled: true,
+      status: 'stopped',
     });
 
     // 如果启用了自动启动,则立即启动
@@ -160,9 +163,7 @@ export class BotAdminService {
    * 更新机器人配置
    */
   async updateInstance(id: string, dto: UpdateBotDto) {
-    const instance = await this.prisma.botInstance.findUnique({
-      where: { id },
-    });
+    const instance = this.botStore.findById(id);
 
     if (!instance) {
       throw new NotFoundException(`Bot instance ${id} not found`);
@@ -177,6 +178,9 @@ export class BotAdminService {
     if (dto.defaultModelId !== undefined) updateData.defaultModelId = dto.defaultModelId;
     if (dto.defaultThinkingEffort !== undefined) updateData.defaultThinkingEffort = dto.defaultThinkingEffort;
     if (dto.additionalKwargs !== undefined) updateData.additionalKwargs = dto.additionalKwargs;
+    if (updateData.defaultModelId !== undefined) {
+      assertResolvableModelRef(this.modelStore, updateData.defaultModelId, 'defaultModelId');
+    }
     
     if (dto.reconnectConfig) {
       if (dto.reconnectConfig.enabled !== undefined) {
@@ -190,10 +194,10 @@ export class BotAdminService {
       }
     }
 
-    const updated = await this.prisma.botInstance.update({
-      where: { id },
-      data: updateData,
-    });
+    const updated = await this.botStore.update(id, updateData);
+    if (!updated) {
+      throw new NotFoundException(`Bot instance ${id} not found`);
+    }
 
     // 处理启用状态变更
     if (dto.enabled !== undefined) {
@@ -233,9 +237,7 @@ export class BotAdminService {
    * 启动机器人
    */
   async startInstance(id: string) {
-    const instance = await this.prisma.botInstance.findUnique({
-      where: { id },
-    });
+    const instance = this.botStore.findById(id);
 
     if (!instance) {
       throw new NotFoundException(`Bot instance ${id} not found`);
@@ -244,10 +246,7 @@ export class BotAdminService {
     // 如果机器人被禁用，先启用它
     if (!instance.enabled) {
       this.logger.log(`Bot ${id} is disabled, enabling it first...`);
-      await this.prisma.botInstance.update({
-        where: { id },
-        data: { enabled: true },
-      });
+      await this.botStore.update(id, { enabled: true });
     }
 
     // 构建 BotConfig
@@ -273,13 +272,10 @@ export class BotAdminService {
     await this.instanceManager.startBot(config);
 
     // 更新状态
-    await this.prisma.botInstance.update({
-      where: { id },
-      data: {
-        status: 'running',
-        lastStartedAt: new Date(),
-        lastError: null,
-      },
+    await this.botStore.update(id, {
+      status: 'running',
+      lastStartedAt: new Date().toISOString(),
+      lastError: null,
     });
 
     return { success: true };
@@ -291,11 +287,8 @@ export class BotAdminService {
   async stopInstance(id: string) {
     await this.instanceManager.stopBot(id);
 
-    await this.prisma.botInstance.update({
-      where: { id },
-      data: {
-        status: 'stopped',
-      },
+    await this.botStore.update(id, {
+      status: 'stopped',
     });
 
     return { success: true };
@@ -305,9 +298,7 @@ export class BotAdminService {
    * 重启机器人
    */
   async restartInstance(id: string) {
-    const instance = await this.prisma.botInstance.findUnique({
-      where: { id },
-    });
+    const instance = this.botStore.findById(id);
 
     if (!instance) {
       throw new NotFoundException(`Bot instance ${id} not found`);
@@ -330,9 +321,7 @@ export class BotAdminService {
     await this.instanceManager.stopBot(id).catch(() => {});
 
     // 再删除
-    await this.prisma.botInstance.delete({
-      where: { id },
-    });
+    await this.botStore.delete(id);
 
     return { success: true };
   }

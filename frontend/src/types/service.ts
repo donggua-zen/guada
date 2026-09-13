@@ -179,27 +179,12 @@ export interface LoginResponse {
  * 用户信息
  */
 export interface User {
-    id: string
     username: string
-    nickname?: string
-    avatarUrl?: string
-    isActive: boolean
-    createdAt?: string
-    updatedAt?: string
-}
-
-// ========== 子账户管理类型 ==========
-
-/**
- * 子账户信息
- */
-export interface Subaccount {
-    id: string
-    username: string
-    email?: string
-    isActive: boolean
-    createdAt?: string
-    updatedAt?: string
+    nickname?: string | null
+    avatarUrl?: string | null
+    wallpaperUrl?: string | null
+    /** 是否已设密码（未设则免登录） */
+    passwordSet?: boolean
 }
 
 // ========== 设置管理类型 ==========
@@ -242,20 +227,5 @@ export interface UploadResponse {
 }
 
 // ========== 重置密码类型 ==========
-
-/**
- * 重置密码检查响应
- */
-export interface ResetPasswordCheckResponse {
-    needs_reset: boolean
-}
-
-/**
- * 重置密码请求
- */
-export interface ResetPasswordRequest {
-    username?: string
-    password: string
-}
 
 

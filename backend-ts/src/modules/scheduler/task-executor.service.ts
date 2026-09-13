@@ -4,7 +4,8 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { PrismaService } from "../../common/database/prisma.service";
+import { CharacterRepository } from "../../common/database/character.repository";
+import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { randomUUID } from "crypto";
@@ -52,7 +53,8 @@ export class TaskExecutorService {
     private eventBus: EventBusService,
     private storage: TaskStorageService,
     private settingsStorage: SettingsStorage,
-    private prisma: PrismaService,
+    private characterRepo: CharacterRepository,
+    private providerStore: ProviderFileStore,
   ) {}
 
   /**
@@ -166,7 +168,6 @@ export class TaskExecutorService {
     // 投递到 ChatRunnerService 队列（S2：结构化入站消息统一载体，文本即 text 块）
     await this.chatRunner.enqueueMessage({
       sessionId,
-      userId: task.userId,
       blocks: [
         {
           type: "text",
@@ -214,7 +215,6 @@ export class TaskExecutorService {
     // 投递到 ChatRunnerService 队列
     await this.chatRunner.enqueueMessage({
       sessionId,
-      userId: task.userId,
       blocks: [
         {
           type: "text",
@@ -257,9 +257,7 @@ export class TaskExecutorService {
 
     // 第二优先级：角色的 modelId
     if (!modelId && task.characterId) {
-      const character = await this.prisma.character.findUnique({
-        where: { id: task.characterId },
-      });
+      const character = await this.characterRepo.findById(task.characterId);
       if (!character) {
         throw new Error(`角色不存在：${task.characterId}`);
       }
@@ -285,9 +283,7 @@ export class TaskExecutorService {
     }
 
     // 验证模型是否存在
-    const model = await this.prisma.model.findUnique({
-      where: { id: modelId },
-    });
+    const model = this.providerStore.findModel(modelId);
     if (!model) {
       throw new Error(`模型不存在：${modelId}，请检查模型配置`);
     }
@@ -307,7 +303,7 @@ export class TaskExecutorService {
       // 解析模型ID（三级回退）
       const finalModelId = await this.resolveModelId(task);
 
-      const session = await this.sessionService.createSession(task.userId, {
+      const session = await this.sessionService.createSession({
         characterId: task.characterId,
         modelId: finalModelId,
         title: `[定时] ${task.name}`,
@@ -317,7 +313,6 @@ export class TaskExecutorService {
 
       // 广播会话创建事件，让前端会话列表刷新
       this.eventBus.emit("session.created", {
-        userId: task.userId,
         sessionId: session.id,
         timestamp: new Date().toISOString(),
         payload: { session },
@@ -331,7 +326,6 @@ export class TaskExecutorService {
       }
       const session = await this.sessionService.getSessionById(
         task.targetSessionId,
-        task.userId,
       );
       if (!session) {
         throw new Error(`目标会话不存在: ${task.targetSessionId}`);

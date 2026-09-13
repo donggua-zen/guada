@@ -1,3 +1,6 @@
+import { clampThinkingEffort } from '../thinking/thinking-effort-policy';
+import type { ThinkingEffort } from '../thinking/thinking-vocabulary';
+
 /**
  * 模型配置片段类型
  */
@@ -22,11 +25,9 @@ export const ConfigFragments = {
   TextOutput: { outputCapabilities: ['text'] },
   ImageOutput: { outputCapabilities: ['text', 'image'] },
 
-  // 功能特性
+  // 功能特性（只表达独立能力；"能不能思考"由 preset 的 thinkingEfforts 表达，
+  // 不再用 features 里的 thinking 标记——能力与档位只允许一份数据）
   WithTools: { features: ['tools'] },
-  WithThinking: { features: ['thinking'] },
-  WithToolsAndThinking: { features: ['tools', 'thinking'] },
-  WithoutThinking: { features: ['tools'] }, // 仅支持工具，不支持 thinking（用于覆盖默认值）
 
   // 上下文窗口预设（单位：K）
   ContextWindow: {
@@ -84,7 +85,7 @@ export function createTextModel(
     // 默认配置
     ConfigFragments.TextOnly,
     ConfigFragments.TextOutput,
-    ConfigFragments.WithToolsAndThinking,
+    ConfigFragments.WithTools,
     ConfigFragments.ContextWindow._128K,
     // 用户提供的配置片段（覆盖默认值）
     ...fragments
@@ -108,7 +109,7 @@ export function createMultimodalModel(
     // 默认配置
     ConfigFragments.Multimodal,
     ConfigFragments.TextOutput,
-    ConfigFragments.WithToolsAndThinking,
+    ConfigFragments.WithTools,
     ConfigFragments.ContextWindow._128K,
     // 用户提供的配置片段
     ...fragments
@@ -144,42 +145,27 @@ export function createEmbeddingModel(
 }
 
 /**
- * 根据模型配置和期望的 thinkingEffort 值，返回实际应使用的值
+ * 按模型能力收敛思考档位：与会话侧/请求侧共用同一套 clamp 策略
+ * （thinking-effort-policy），消除第三份并行判定。
  *
- * 只有当模型配置中包含 'thinking' 特性时，才返回传入的 effort 值。
- * 否则返回 undefined，让 LLM 服务使用默认的 thinking 行为。
+ * 调用方（标题生成 / 图片识别 / 摘要回退）传 'none' 以关闭思考：
+ * - 菜单含 none → 原样（不发思考参数或发显式关闭）
+ * - 菜单不含 none（强制思考模型）→ 调整到首个非 off 档（如 'on'）
+ * - 空菜单（不能思考）→ clamp 返回 unsupported 语义档位，此处退化为 undefined
+ *   （不发思考参数）
  *
- * @param modelConfig - 模型配置对象，包含 config.features 字段
- * @param effort - 期望的 thinkingEffort 值（如 'none', 'low', 'medium', 'high' 等）
- * @returns effort 原值（如果模型支持 thinking）或 undefined（如果不支持）
- *
- * @example
- * ```typescript
- * // 禁用思考功能
- * const thinkingEffort = resolveThinkingEffort(visualModelConfig, 'none');
- *
- * // 设置低强度思考
- * const thinkingEffort = resolveThinkingEffort(modelConfig, 'low');
- *
- * const result = await llmService.completions({
- *   model: modelConfig.modelName,
- *   messages,
- *   thinkingEffort, // 仅在模型支持 thinking 时才生效
- * });
- * ```
+ * @param model - 运行时模型视图（含解析后的档位菜单）
+ * @param effort - 期望的 thinkingEffort 值（调用方目前都传 'none' 以关闭思考）
  */
 export function resolveThinkingEffort(
-  modelConfig: { config?: any },
-  effort?: string
+  model: { thinkingEfforts?: string[] } | undefined,
+  effort?: string,
 ): string | undefined {
-  if (!modelConfig.config || typeof modelConfig.config !== 'object' || Array.isArray(modelConfig.config)) {
-    return undefined;
-  }
-
-  const configObj = modelConfig.config as Record<string, any>;
-  if (Array.isArray(configObj.features) && configObj.features.includes('thinking')) {
-    return effort;
-  }
-
-  return undefined;
+  const menu = model?.thinkingEfforts;
+  const resolution = clampThinkingEffort(
+    menu as ThinkingEffort[] | undefined,
+    effort,
+  );
+  if (resolution.unsupported) return undefined;
+  return resolution.effort;
 }

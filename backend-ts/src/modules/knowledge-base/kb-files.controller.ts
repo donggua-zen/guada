@@ -31,7 +31,7 @@ export class KbFilesController {
     @CurrentUser() user: any,
     @Body("relativePath") relativePath?: string,
   ) {
-    return await this.kbFileService.uploadFile(kbId, user.id, file, relativePath);
+    return await this.kbFileService.uploadFile(kbId, file, relativePath);
   }
 
   @Get()
@@ -41,12 +41,7 @@ export class KbFilesController {
     @Query("limit") limit = 50,
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.listFiles(
-      kbId,
-      user.id,
-      Number(skip),
-      Number(limit),
-    );
+    return await this.kbFileService.listFiles(kbId, Number(skip), Number(limit));
   }
 
   @Get("by-parent")
@@ -62,7 +57,6 @@ export class KbFilesController {
     
     return await this.kbFileService.getFilesByParent(
       kbId,
-      user.id,
       parentId,
       Number(skip),
       Number(limit),
@@ -82,7 +76,6 @@ export class KbFilesController {
     
     return await this.kbFileService.getFilesByRelativePath(
       kbId,
-      user.id,
       relativePath,
       Number(skip),
       Number(limit),
@@ -95,7 +88,7 @@ export class KbFilesController {
     @Param("file_id") fileId: string,
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.getFile(fileId, kbId, user.id);
+    return await this.kbFileService.getFile(fileId, kbId);
   }
 
   @Get(":file_id/status")
@@ -104,7 +97,7 @@ export class KbFilesController {
     @Param("file_id") fileId: string,
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.getFileStatus(fileId, kbId, user.id);
+    return await this.kbFileService.getFileStatus(fileId, kbId);
   }
 
   @Post("status/batch")
@@ -113,7 +106,7 @@ export class KbFilesController {
     @Body("fileIds") fileIds: string[],
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.batchGetFileStatus(fileIds, kbId, user.id);
+    return await this.kbFileService.batchGetFileStatus(fileIds, kbId);
   }
 
   @Delete(":file_id")
@@ -122,11 +115,7 @@ export class KbFilesController {
     @Param("file_id") fileId: string,
     @CurrentUser() user: any,
   ) {
-    const success = await this.kbFileService.deleteFileAndChunks(
-      fileId,
-      kbId,
-      user.id,
-    );
+    const success = await this.kbFileService.deleteFileAndChunks(fileId, kbId);
     if (success) {
       return { message: "文件已删除", success: true };
     } else {
@@ -140,7 +129,7 @@ export class KbFilesController {
     @Param("file_id") fileId: string,
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.retryFileProcessing(fileId, kbId, user.id);
+    return await this.kbFileService.retryFileProcessing(fileId, kbId);
   }
 
   @Get(":file_id/chunks")
@@ -154,7 +143,6 @@ export class KbFilesController {
     return await this.kbFileService.getFileChunks(
       fileId,
       kbId,
-      user.id,
       Number(skip),
       Number(limit),
     );
@@ -167,12 +155,7 @@ export class KbFilesController {
     @Body() dto: RenameFileDto,
     @CurrentUser() user: any,
   ) {
-    return await this.kbFileService.renameFile(
-      fileId,
-      kbId,
-      user.id,
-      dto.newName,
-    );
+    return await this.kbFileService.renameFile(fileId, kbId, dto.newName);
   }
 
   @Post(":file_id/move")
@@ -185,7 +168,6 @@ export class KbFilesController {
     return await this.kbFileService.moveFile(
       fileId,
       kbId,
-      user.id,
       dto.targetParentFolderId,
     );
   }
@@ -198,7 +180,6 @@ export class KbFilesController {
   ) {
     return await this.kbFileService.createFolder(
       kbId,
-      user.id,
       dto.folderName,
       dto.parentFolderId || null,
     );

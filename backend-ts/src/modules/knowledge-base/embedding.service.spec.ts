@@ -38,11 +38,20 @@ jest.mock("openai", () => {
     }
   }
 
+  // EmbeddingService 在 getEmbeddings 内部才 new OpenAI，测试必须在调用前布置
+  // create 的返回值，因此所有实例共享同一个 create mock。
+  const mockEmbeddingsCreate = jest.fn();
   const mockOpenAI = jest.fn().mockImplementation(() => ({
     embeddings: {
-      create: jest.fn(),
+      create: mockEmbeddingsCreate,
     },
   }));
+
+  // 源码经默认导出的静态属性访问错误类（OpenAI.APIConnectionError），
+  // 因此除了命名导出，还要挂到 default 上。
+  (mockOpenAI as any).APIConnectionError = MockAPIConnectionError;
+  (mockOpenAI as any).APIConnectionTimeoutError = MockAPIConnectionTimeoutError;
+  (mockOpenAI as any).embeddingsCreate = mockEmbeddingsCreate;
 
   return {
     __esModule: true,
@@ -52,7 +61,9 @@ jest.mock("openai", () => {
   };
 });
 
-const mockOpenAIClient = OpenAI as unknown as jest.Mock;
+const mockOpenAIClient = OpenAI as unknown as jest.Mock & {
+  embeddingsCreate: jest.Mock;
+};
 
 /** 构造 OpenAI 响应对象 */
 function makeResponse(embeddings: number[][]) {
@@ -61,12 +72,9 @@ function makeResponse(embeddings: number[][]) {
   };
 }
 
-/** 获取当前 OpenAI 实例的 embeddings.create mock */
-function createMock() {
-  const instance = mockOpenAIClient.mock.instances[
-    mockOpenAIClient.mock.instances.length - 1
-  ] as any;
-  return instance?.embeddings?.create as jest.Mock | undefined;
+/** 获取共享的 embeddings.create mock（不依赖实例创建时机） */
+function createMock(): jest.Mock {
+  return mockOpenAIClient.embeddingsCreate;
 }
 
 describe("EmbeddingService", () => {
@@ -74,6 +82,8 @@ describe("EmbeddingService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // 共享 mock 的实现与一次性队列需显式重置，避免跨用例泄漏
+    mockOpenAIClient.embeddingsCreate.mockReset();
     const module: TestingModule = await Test.createTestingModule({
       providers: [EmbeddingService],
     }).compile();
@@ -124,17 +134,20 @@ describe("EmbeddingService", () => {
 
   it("进度回调按批次触发", async () => {
     createMock()!
-      .mockResolvedValueOnce(makeResponse([[1], [2]]))
-      .mockResolvedValueOnce(makeResponse([[3]]));
+      .mockResolvedValueOnce(
+        makeResponse(Array.from({ length: 10 }, (_, i) => [i])),
+      )
+      .mockResolvedValueOnce(makeResponse([[10], [11]]));
 
     const events: Array<[number, number]> = [];
-    await service.getEmbeddings(["a", "b", "c"], "u", "k", "m", (c, t) => {
+    const texts = Array.from({ length: 12 }, (_, i) => `t${i}`);
+    await service.getEmbeddings(texts, "u", "k", "m", (c, t) => {
       events.push([c, t]);
     });
 
     expect(events).toEqual([
-      [2, 3],
-      [3, 3],
+      [10, 12],
+      [12, 12],
     ]);
   });
 

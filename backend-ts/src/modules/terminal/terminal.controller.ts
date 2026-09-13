@@ -19,7 +19,7 @@ export class TerminalController {
     @CurrentUser() user: any,
   ) {
     const handle = this.terminalService.get(terminalId);
-    const session = await this.sessionService.getSessionById(handle.sessionId, user.id);
+    const session = await this.sessionService.getSessionById(handle.sessionId);
     if (!session) throw new Error("Terminal not found or unauthorized");
     this.terminalService.disposeForSession(terminalId, handle.sessionId);
     return { success: true, terminalId };

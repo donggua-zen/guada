@@ -20,21 +20,19 @@
         </div>
       </div>
 
-      <!-- 登录设置分组 -->
+      <!-- 访问密码分组：密码存在与否即免登录开关 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.login') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
-          <!-- 免登录模式 -->
           <div
             class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
             <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.autoLoginMode') }}</span>
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.accessPassword') }}</span>
               <span
-                class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.autoLoginDesc') }}</span>
+                class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.accessPasswordDesc') }}</span>
             </div>
-            <el-switch v-model="settingsForm.autoLoginEnabled" size="large" />
+            <el-switch :model-value="authStore.passwordSet" size="large" @change="handlePasswordToggle" />
           </div>
-
         </div>
       </div>
 
@@ -106,7 +104,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
@@ -125,7 +123,6 @@ function handleLanguageChange(val: string) {
 
 // 表单数据
 const settingsForm = reactive({
-  autoLoginEnabled: false,
   workspaceBaseDir: '',
   maxToolIterations: 100,
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
@@ -148,7 +145,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ autoLoginEnabled: settingsForm.autoLoginEnabled, workspaceBaseDir: settingsForm.workspaceBaseDir, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -158,7 +155,6 @@ const loadSettings = async () => {
     const response = await apiService.fetchGroupSettings('system')
 
     // 填充表单
-    settingsForm.autoLoginEnabled = response.autoLoginEnabled === true || response.autoLoginEnabled === 'true'
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
     settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
@@ -189,6 +185,47 @@ const selectFolder = async () => {
   }
 }
 
+/**
+ * 访问密码开关：
+ * - 打开 → 提示输入新密码（调 /user/password/change，未设密码时无需旧密码）
+ * - 关闭 → 清除密码（DELETE /user/password），回到免登录模式
+ */
+const handlePasswordToggle = async (enabled: boolean | string | number) => {
+  const wantSet = enabled === true
+  try {
+    if (wantSet) {
+      const { value } = await ElMessageBox.prompt(
+        t('settings.general.setPasswordPrompt'),
+        t('settings.general.setPasswordTitle'),
+        {
+          inputType: 'password',
+          inputPattern: /.{6,}/,
+          inputErrorMessage: t('settings.general.passwordTooShort'),
+          confirmButtonText: t('common.ok'),
+          cancelButtonText: t('common.cancel'),
+        },
+      )
+      await apiService.changePassword(undefined, value)
+      authStore.passwordSet = true
+      notify.success(t('settings.general.passwordSetSuccess'))
+    } else {
+      await ElMessageBox.confirm(
+        t('settings.general.clearPasswordConfirm'),
+        t('settings.general.clearPasswordTitle'),
+        { type: 'warning' },
+      )
+      await apiService.clearPassword()
+      authStore.passwordSet = false
+      notify.success(t('settings.general.passwordClearedSuccess'))
+    }
+  } catch (e: any) {
+    // 用户取消：开关状态由 authStore.passwordSet 决定，无需回滚
+    if (e !== 'cancel' && e !== 'close') {
+      notify.error(e?.message || t('settings.general.passwordOpFailed'))
+    }
+  }
+}
+
 // 保存设置
 const handleSave = async () => {
   try {
@@ -204,7 +241,6 @@ const handleSave = async () => {
 
     // 构造保存数据
     const dataToSave = {
-      autoLoginEnabled: settingsForm.autoLoginEnabled,
       workspaceBaseDir: path || null,
       maxToolIterations: settingsForm.maxToolIterations,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
@@ -216,9 +252,6 @@ const handleSave = async () => {
 
     // 保存成功后更新原始数据备份
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
-
-    // 同步更新 authStore 中的免登录状态
-    authStore.autoLoginEnabled = settingsForm.autoLoginEnabled
 
     notify.success(t('common.saveSuccess'), t('settings.general.updated'))
   } catch (error: any) {

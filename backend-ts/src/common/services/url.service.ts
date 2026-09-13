@@ -10,6 +10,7 @@ export class UrlService {
   private autoMode: boolean = false;
   private staticPrefix: string;
   private uploadPrefix: string;
+  private agentsPrefix: string;
 
   constructor() {
     const configuredUrl = process.env.BASE_URL || "";
@@ -25,6 +26,7 @@ export class UrlService {
     // 读取静态资源前缀配置
     this.staticPrefix = process.env.STATIC_URL || "/static";
     this.uploadPrefix = process.env.UPLOAD_URL_PREFIX || "/uploads";
+    this.agentsPrefix = process.env.AGENTS_URL_PREFIX || "/agents";
   }
 
   /**
@@ -101,6 +103,10 @@ export class UrlService {
     if (normalizedPath.startsWith("static/")) {
       // 静态资源
       const fullPath = `${this.staticPrefix}/${normalizedPath.substring("static/".length)}`;
+      return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
+    } else if (normalizedPath.startsWith("agents/")) {
+      // 智能体目录内资源（头像等）
+      const fullPath = `${this.agentsPrefix}/${normalizedPath.substring("agents/".length)}`;
       return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
     } else if (normalizedPath.startsWith("uploads/")) {
       // 上传文件

@@ -36,13 +36,13 @@ export class CharacterPlugin extends PluginBase {
         if (!ctx?.characterId) {
           return candidates.map((c: any) => ({
             name: c.id,
-            description: c.title || c.name || "",
-            label: c.title || c.id,
+            description: c.name || c.id,
+            label: c.name || c.id,
           }));
         }
 
         // 从角色 settings 读取 agents 配置进行过滤
-        const character = await this.characterRepo.findById(ctx.characterId, false);
+        const character = await this.characterRepo.findById(ctx.characterId);
         const agentCfg = (character?.settings as any)?.agents;
 
         let filtered: any[];
@@ -59,18 +59,18 @@ export class CharacterPlugin extends PluginBase {
 
         return filtered.map((c: any) => ({
           name: c.id,
-          description: c.title || c.name || "",
-          label: c.title || c.id,
+          description: c.name || c.id,
+          label: c.name || c.id,
         }));
       },
       parse: async (attrs) => {
         const characterId = attrs.name || "";
         if (!characterId) return undefined;
 
-        const character = await this.characterRepo.findById(characterId, false);
+        const character = await this.characterRepo.findById(characterId);
         if (!character) return undefined;
 
-        const displayName = character.title || characterId;
+        const displayName = character.name || characterId;
         return {
           replacement: `\`@subagent: ${displayName} (id:${characterId})\``,
           appendix: character.description

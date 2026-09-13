@@ -1,8 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { BotAdminService } from '../services/bot-admin.service';
-import { PrismaService } from '../../../common/database/prisma.service';
+import { CharacterRepository } from '../../../common/database/character.repository';
+import { SessionFileStore } from '../../chat/session-file.store';
+import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from '../services/bot-instance-manager.service';
+import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { CreateBotDto } from './bot-admin.dto';
 
 describe('CreateBotDto validation', () => {
@@ -28,25 +31,30 @@ describe('CreateBotDto validation', () => {
 
 describe('BotAdminService.createInstance platform validation', () => {
   let service: BotAdminService;
-  let prisma: any;
   let instanceManager: any;
+  let botStore: any;
 
   beforeEach(async () => {
-    prisma = {
-      botInstance: {
-        create: jest.fn().mockResolvedValue({ id: 'bot-1' }),
-      },
-    };
     instanceManager = {
       getStatus: jest.fn().mockReturnValue(null),
       startInstance: jest.fn(),
+    };
+    // 机器人配置权威来源改为 bots/<id>.yaml（BotFileStore）
+    botStore = {
+      create: jest.fn().mockResolvedValue({ id: 'bot-1' }),
+      findById: jest.fn(),
+      update: jest.fn(),
+      list: jest.fn().mockReturnValue([]),
     };
 
     const module = await Test.createTestingModule({
       providers: [
         BotAdminService,
-        { provide: PrismaService, useValue: prisma },
         { provide: BotInstanceManager, useValue: instanceManager },
+        { provide: ProviderFileStore, useValue: { findModel: () => undefined } },
+        { provide: CharacterRepository, useValue: { findById: jest.fn().mockResolvedValue(null) } },
+        { provide: SessionFileStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
+        { provide: BotFileStore, useValue: botStore },
       ],
     }).compile();
 
@@ -61,7 +69,7 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.defaultCharacterId = 'char-1';
 
     await expect(
-      service.createInstance('user-1', dto),
+      service.createInstance(dto),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -73,7 +81,7 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.defaultCharacterId = 'char-1';
 
     await expect(
-      service.createInstance('user-1', dto),
+      service.createInstance(dto),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -84,8 +92,8 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.platformConfig = { appId: '123', appSecret: 'secret' };
     dto.defaultCharacterId = 'char-1';
 
-    const result = await service.createInstance('user-1', dto);
+    const result = await service.createInstance(dto);
     expect(result).toBeDefined();
-    expect(prisma.botInstance.create).toHaveBeenCalled();
+    expect(botStore.create).toHaveBeenCalled();
   });
 });

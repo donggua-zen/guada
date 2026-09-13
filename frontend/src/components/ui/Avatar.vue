@@ -26,11 +26,11 @@ import { OpenAI } from '@/components/icons'
 
 // Props 类型化
 const props = defineProps<{
-    src?: string;
+    src?: string | null;
     round?: boolean;
     type?: 'user' | 'assistant';
     full?: boolean;
-    name?: string;  // 用于生成首字头像的名称
+    name?: string | null;  // 用于生成首字头像的名称
 }>();
 
 // 添加时间戳避免缓存 - 类型化

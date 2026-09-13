@@ -1,46 +1,35 @@
 import type { ApiContext } from "./api-context";
-import type {
-  LoginRequest,
-  LoginResponse,
-  User,
-  ResetPasswordCheckResponse,
-  ResetPasswordRequest,
-  Subaccount,
-} from "@/types/service";
+import type { LoginRequest, LoginResponse, User } from "@/types/service";
 
+/**
+ * 认证与账户 API（单账户）
+ *
+ * 密码可选：未设密码时 `/auth/auto-login` 直接签发凭据（免登录），
+ * 设了密码则必须走 `/auth/login`。`/auth/status` 供前端判断是否需要强制登录。
+ */
 export interface AuthApi {
+  getAuthStatus(): Promise<{ passwordSet: boolean }>;
   login(credentials: LoginRequest): Promise<LoginResponse>;
-  getAutoLoginStatus(): Promise<{ enabled: boolean }>;
-  setAutoLoginStatus(enabled: boolean): Promise<void>;
   autoLogin(): Promise<{ accessToken: string; user: User }>;
   getProfile(): Promise<User>;
   updateProfile(data: any): Promise<User>;
   checkUsername(username: string): Promise<{ available: boolean }>;
-  changePassword(oldPassword: string, newPassword: string): Promise<any>;
-  checkResetPassword(): Promise<ResetPasswordCheckResponse>;
-  resetPrimayPassword(data: ResetPasswordRequest): Promise<any>;
-  createSubaccount(data: any): Promise<Subaccount>;
-  updateSubaccount(subaccountId: string, data: any): Promise<Subaccount>;
-  deleteSubaccount(subaccountId: string): Promise<boolean>;
-  fetchSubaccounts(): Promise<Subaccount[]>;
+  changePassword(
+    oldPassword: string | undefined,
+    newPassword: string,
+  ): Promise<any>;
+  clearPassword(): Promise<any>;
 }
 
 export const authApi: AuthApi = {
+  async getAuthStatus(this: ApiContext) {
+    return await this._request("/auth/status");
+  },
+
   async login(this: ApiContext, credentials: LoginRequest) {
     return await this._request("/auth/login", {
       method: "POST",
       data: credentials,
-    });
-  },
-
-  async getAutoLoginStatus(this: ApiContext) {
-    return await this._request("/settings/auto-login");
-  },
-
-  async setAutoLoginStatus(this: ApiContext, enabled: boolean) {
-    return await this._request("/settings/auto-login", {
-      method: "POST",
-      data: { enabled },
     });
   },
 
@@ -62,42 +51,19 @@ export const authApi: AuthApi = {
     });
   },
 
-  async changePassword(this: ApiContext, oldPassword: string, newPassword: string) {
+  async changePassword(
+    this: ApiContext,
+    oldPassword: string | undefined,
+    newPassword: string,
+  ) {
     return await this._request("/user/password/change", {
       method: "POST",
-      data: { oldPassword: oldPassword, newPassword: newPassword },
+      data: { oldPassword, newPassword },
     });
   },
 
-  async checkResetPassword(this: ApiContext) {
-    return await this._request("/user/password/reset/check");
-  },
-
-  async resetPrimayPassword(this: ApiContext, data: ResetPasswordRequest) {
-    return await this._request("/user/password/reset", {
-      method: "POST",
-      data,
-    });
-  },
-
-  async createSubaccount(this: ApiContext, data: any) {
-    return await this._request("/subaccounts", { method: "POST", data });
-  },
-
-  async updateSubaccount(this: ApiContext, subaccountId: string, data: any) {
-    return await this._request(`/subaccounts/${subaccountId}`, {
-      method: "PUT",
-      data,
-    });
-  },
-
-  async deleteSubaccount(this: ApiContext, subaccountId: string) {
-    return await this._request(`/subaccounts/${subaccountId}`, {
-      method: "DELETE",
-    });
-  },
-
-  async fetchSubaccounts(this: ApiContext) {
-    return await this._request("/subaccounts");
+  /** 清除密码 → 回到免登录模式 */
+  async clearPassword(this: ApiContext) {
+    return await this._request("/user/password", { method: "DELETE" });
   },
 };

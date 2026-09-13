@@ -1,14 +1,37 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../common/database/prisma.service";
+import { KbFileStore, KbFileMeta } from "../../modules/knowledge-base/kb-file.store";
 
+/**
+ * KB 文件/文件夹仓储（文件实现）
+ *
+ * 元信息权威来源 = `<KB根>/<kbId>/<itemId>/file.json`（见 KbFileStore）。
+ * 保留原 Prisma 版本的方法签名与排序语义，调用方零改动：
+ * - `findByParentFolderId` / `findChildren` / `findRootItems`：文件夹优先 + 名称升序
+ * - `findByKnowledgeBaseId`：uploadedAt 降序
+ */
 @Injectable()
 export class KBFileRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private store: KbFileStore) {}
+
+  private toRow(meta: KbFileMeta): Record<string, any> {
+    return this.store.getFile(meta.id)!;
+  }
+
+  private toRows(metas: KbFileMeta[]): Record<string, any>[] {
+    return metas.map((m) => this.toRow(m));
+  }
+
+  /** 目录优先 + 名称升序（对齐原 orderBy [isDirectory desc, displayName asc]） */
+  private sortTree(items: KbFileMeta[]): KbFileMeta[] {
+    return [...items].sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      const byName = (a.displayName ?? "").localeCompare(b.displayName ?? "");
+      return byName !== 0 ? byName : a.id.localeCompare(b.id);
+    });
+  }
 
   async findById(id: string) {
-    return this.prisma.kBFile.findUnique({
-      where: { id },
-    });
+    return this.store.getFile(id);
   }
 
   async findByKnowledgeBaseId(
@@ -16,18 +39,17 @@ export class KBFileRepository {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const [items, total] = await Promise.all([
-      this.prisma.kBFile.findMany({
-        where: { knowledgeBaseId: kbId },
-        orderBy: { uploadedAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      this.prisma.kBFile.count({
-        where: { knowledgeBaseId: kbId },
-      }),
-    ]);
-    return { items, total };
+    const rows = this.store
+      .queryFiles((m) => m.knowledgeBaseId === kbId)
+      .sort((a, b) =>
+        a.uploadedAt === b.uploadedAt
+          ? a.id.localeCompare(b.id)
+          : b.uploadedAt.localeCompare(a.uploadedAt),
+      );
+    return {
+      items: this.toRows(rows.slice(skip, skip + limit)),
+      total: rows.length,
+    };
   }
 
   /**
@@ -39,40 +61,23 @@ export class KBFileRepository {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const [items, total] = await Promise.all([
-      this.prisma.kBFile.findMany({
-        where: {
-          knowledgeBaseId: kbId,
-          parentFolderId: parentFolderId,  // null表示根目录
-        },
-        orderBy: [
-          { isDirectory: "desc" },  // 文件夹优先
-          { displayName: "asc" },   // 按名称排序
-        ],
-        skip,
-        take: limit,
-      }),
-      this.prisma.kBFile.count({
-        where: {
-          knowledgeBaseId: kbId,
-          parentFolderId: parentFolderId,
-        },
-      }),
-    ]);
-    return { items, total };
+    const rows = this.sortTree(
+      this.store.queryFiles(
+        (m) => m.knowledgeBaseId === kbId && m.parentFolderId === parentFolderId,
+      ),
+    );
+    return {
+      items: this.toRows(rows.slice(skip, skip + limit)),
+      total: rows.length,
+    };
   }
 
   async create(data: any) {
-    return this.prisma.kBFile.create({
-      data,
-    });
+    return this.store.createFile(data);
   }
 
   async update(id: string, data: any) {
-    return this.prisma.kBFile.update({
-      where: { id },
-      data,
-    });
+    return this.store.updateFile(id, data);
   }
 
   async updateProcessingStatus(
@@ -84,9 +89,7 @@ export class KBFileRepository {
     totalChunks?: number,
     totalTokens?: number,
   ) {
-    const updateData: any = {
-      processingStatus: status,
-    };
+    const updateData: any = { processingStatus: status };
 
     if (progress !== undefined) updateData.progressPercentage = progress;
     if (currentStep !== undefined) updateData.currentStep = currentStep;
@@ -95,41 +98,58 @@ export class KBFileRepository {
     if (totalTokens !== undefined) updateData.totalTokens = totalTokens;
 
     if (status === "completed") {
-      updateData.processedAt = new Date();
+      updateData.processedAt = new Date().toISOString();
     }
 
-    return this.prisma.kBFile.update({
-      where: { id },
-      data: updateData,
-    });
+    return this.store.updateFile(id, updateData);
   }
 
   async delete(id: string) {
-    return this.prisma.kBFile.delete({
-      where: { id },
-    });
+    return this.store.deleteFile(id);
+  }
+
+  /**
+   * 前缀级联重写子项 relativePath（文件夹改名/移动用）。
+   * 只改路径、不动 parentFolderId —— 子项与父文件夹的指向关系不变。
+   */
+  async rewriteRelativePathPrefix(
+    kbId: string,
+    prefix: string,
+    nextPrefix: string,
+  ) {
+    return this.store.rewriteRelativePathPrefix(kbId, prefix, nextPrefix);
   }
 
   async findByIds(ids: string[]) {
-    return this.prisma.kBFile.findMany({
-      where: {
-        id: { in: ids },
-      },
-    });
+    const out: Record<string, any>[] = [];
+    for (const id of ids) {
+      const row = this.store.getFile(id);
+      if (row) out.push(row);
+    }
+    return out;
   }
 
   async countByKnowledgeBaseId(kbId: string) {
-    return this.prisma.kBFile.count({
-      where: { knowledgeBaseId: kbId },
-    });
+    return this.store.queryFiles((m) => m.knowledgeBaseId === kbId).length;
   }
 
   async findByStatus(statuses: string[]) {
-    return this.prisma.kBFile.findMany({
-      where: {
-        processingStatus: { in: statuses },
-      },
-    });
+    return this.toRows(
+      this.store.queryFiles((m) => statuses.includes(m.processingStatus)),
+    );
+  }
+
+  /**
+   * 列出条目元信息。
+   * @param kbId 限定知识库；省略则跨全部知识库（孤儿扫描用）
+   * @param isDirectory true=只查文件夹, false=只查文件, undefined=都查（默认）
+   */
+  listFileMetas(kbId?: string, isDirectory?: boolean) {
+    return this.store.queryFiles(
+      (m) =>
+        (kbId === undefined || m.knowledgeBaseId === kbId) &&
+        (isDirectory === undefined || m.isDirectory === isDirectory),
+    );
   }
 
   /**
@@ -142,19 +162,14 @@ export class KBFileRepository {
     parentFolderId: string | null,
     isDirectory?: boolean,
   ) {
-    const where: any = {
-      knowledgeBaseId: kbId,
-      displayName: name,
-      parentFolderId: parentFolderId,
-    };
-
-    if (isDirectory !== undefined) {
-      where.isDirectory = isDirectory;
-    }
-
-    return this.prisma.kBFile.findFirst({
-      where,
-    });
+    const meta = this.store.queryFiles(
+      (m) =>
+        m.knowledgeBaseId === kbId &&
+        m.displayName === name &&
+        m.parentFolderId === parentFolderId &&
+        (isDirectory === undefined ? true : m.isDirectory === isDirectory),
+    )[0];
+    return meta ? this.toRow(meta) : null;
   }
 
   /**
@@ -165,21 +180,13 @@ export class KBFileRepository {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const [items, total] = await Promise.all([
-      this.prisma.kBFile.findMany({
-        where: { parentFolderId },
-        orderBy: [
-          { isDirectory: "desc" }, // 文件夹优先
-          { displayName: "asc" },
-        ],
-        skip,
-        take: limit,
-      }),
-      this.prisma.kBFile.count({
-        where: { parentFolderId },
-      }),
-    ]);
-    return { items, total };
+    const rows = this.sortTree(
+      this.store.queryFiles((m) => m.parentFolderId === parentFolderId),
+    );
+    return {
+      items: this.toRows(rows.slice(skip, skip + limit)),
+      total: rows.length,
+    };
   }
 
   /**
@@ -190,52 +197,32 @@ export class KBFileRepository {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const [items, total] = await Promise.all([
-      this.prisma.kBFile.findMany({
-        where: {
-          knowledgeBaseId: kbId,
-          parentFolderId: null,
-        },
-        orderBy: [
-          { isDirectory: "desc" },
-          { displayName: "asc" },
-        ],
-        skip,
-        take: limit,
-      }),
-      this.prisma.kBFile.count({
-        where: {
-          knowledgeBaseId: kbId,
-          parentFolderId: null,
-        },
-      }),
-    ]);
-    return { items, total };
+    const rows = this.sortTree(
+      this.store.queryFiles(
+        (m) => m.knowledgeBaseId === kbId && m.parentFolderId === null,
+      ),
+    );
+    return {
+      items: this.toRows(rows.slice(skip, skip + limit)),
+      total: rows.length,
+    };
   }
 
   /**
    * 通过相对路径查找文件或文件夹
-   * @param kbId 知识库ID
-   * @param relativePath 相对路径 (例如: "docs/api")
-   * @param isDirectory 是否只查找目录
    */
   async findByRelativePath(
     kbId: string,
     relativePath: string,
     isDirectory: boolean = false,
   ) {
-    const where: any = {
-      knowledgeBaseId: kbId,
-      relativePath: relativePath,
-    };
-    
-    if (isDirectory) {
-      where.isDirectory = true;
-    }
-    
-    return this.prisma.kBFile.findFirst({
-      where,
-    });
+    const meta = this.store.queryFiles(
+      (m) =>
+        m.knowledgeBaseId === kbId &&
+        m.relativePath === relativePath &&
+        (isDirectory ? m.isDirectory : true),
+    )[0];
+    return meta ? this.toRow(meta) : null;
   }
 
   /**
@@ -245,11 +232,10 @@ export class KBFileRepository {
     knowledgeBaseId: string,
     contentHash: string,
   ): Promise<any | null> {
-    return this.prisma.kBFile.findFirst({
-      where: {
-        knowledgeBaseId,
-        contentHash,
-      },
-    });
+    const meta = this.store.queryFiles(
+      (m) =>
+        m.knowledgeBaseId === knowledgeBaseId && m.contentHash === contentHash,
+    )[0];
+    return meta ? this.toRow(meta) : null;
   }
 }

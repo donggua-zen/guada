@@ -172,7 +172,7 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
 
         const genericAgent = {
           id: "generic",
-          title: "Generic Sub-Agent",
+          name: "Generic Sub-Agent",
           description:
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
@@ -204,7 +204,7 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
 
         if (agents.length > 0) {
           const agentXml = agents
-            .map((a: any) => `   - name: ${a.title}\nid: ${a.id}\ndescription: ${a.description || ""}`)
+            .map((a: any) => `   - name: ${a.name}\nid: ${a.id}\ndescription: ${a.description || ""}`)
             .join("\n");
           sections.push(
             "",

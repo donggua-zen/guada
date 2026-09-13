@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
-import { PrismaService } from "../../../common/database/prisma.service";
 import { McpClientService } from "../../../common/mcp/mcp-client.service";
+import { McpFileStore } from "../mcp-file.store";
 import { PluginApi } from "../../plugins/api/plugin-api";
 
 @Injectable()
@@ -20,15 +20,15 @@ export class McpPlugin extends PluginBase {
 
   constructor(
     private mcpClient: McpClientService,
-    private prisma: PrismaService,
+    private mcpStore: McpFileStore,
   ) {
     super();
   }
 
   async onLoad(api: PluginApi) {
-    const servers = await this.prisma.mcpServer.findMany({
-      where: { enabled: true },
-    });
+    // onLoad 可能早于启动期导出完成：先等门控放行，避免读到空索引导致工具全丢
+    await this.mcpStore.initialize();
+    const servers = this.mcpStore.listEnabled();
 
     for (const server of servers) {
       if (!server.tools) continue;

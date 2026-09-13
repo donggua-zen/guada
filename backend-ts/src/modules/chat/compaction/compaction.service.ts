@@ -14,7 +14,8 @@ import { CompressionEngine, SummaryMode } from "./compression-engine";
 import { LLMSummaryProvider } from "./llm-summary.provider";
 import { LLMService } from "../../llm-core/llm.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
-import { ModelRepository } from "../../../common/database/model.repository";
+import { ProviderFileStore } from "../../llm-core/provider-file.store";
+import { toRuntimeProviderConfig } from "../../llm-core/utils/provider-runtime.util";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { ToolOrchestrator } from "../../tools/tool-orchestrator.service";
 import { buildSessionLlmParams } from "../session-llm-request.builder";
@@ -68,7 +69,7 @@ export class CompactionService {
     private readonly compressionEngine: CompressionEngine,
     private readonly llmService: LLMService,
     private readonly settingsStorage: SettingsStorage,
-    private readonly modelRepository: ModelRepository,
+    private readonly modelStore: ProviderFileStore,
     private readonly eventBus: EventBusService,
   ) {}
 
@@ -94,9 +95,18 @@ export class CompactionService {
     opts: CompressOptions = {},
   ): Promise<CompressOutcome> {
     this.throwIfCancelled(opts.abortSignal);
+    const config = ds.getCompressionConfig();
+    // 档位关闭（enabled=false）：非 force 直接旁路（协调器已门控，此处防御）
+    if (!opts.force && config.enabled === false) {
+      this.logger.log('Skipping compression: disabled by compression tier');
+      return {
+        messages: await ds.getHistory(),
+        compacted: false,
+        shadowedCount: 0,
+      };
+    }
     const currentTokens = await ds.getTokenCount();
     this.throwIfCancelled(opts.abortSignal);
-    const config = ds.getCompressionConfig();
     const window = ds.getEffectiveContextWindow();
     // 触发 = 验收线（对齐 DSH thresholdRatio；force 绕过）
     const thresholdTokens = Math.floor(
@@ -224,8 +234,9 @@ export class CompactionService {
       this.llmService,
       {
         modelName: model.modelName,
-        provider: model.provider,
+        provider: toRuntimeProviderConfig(model.provider),
         config: model.config,
+        thinkingEfforts: model.thinkingEfforts,
       },
       {
         maxSummaryTokens: 2000,
@@ -258,7 +269,7 @@ export class CompactionService {
     );
     if (!compressionModelId) return fallbackModel;
     try {
-      const model = await this.modelRepository.findById(compressionModelId);
+      const model = this.modelStore.findModel(compressionModelId);
       if (model) {
         this.logger.debug(
           `Using dedicated compression model: ${model.modelName}`,

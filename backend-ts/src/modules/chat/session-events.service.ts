@@ -44,7 +44,8 @@ export type SessionEventType =
  */
 export interface SessionEvent {
   type: SessionEventType;
-  userId: string;
+  /** @deprecated 单账户模型下无意义（路由不再按用户分区） */
+  userId?: string;
   sessionId: string;
   timestamp: string;
   // 事件负载，根据 type 不同而变化
@@ -57,7 +58,6 @@ export interface SessionEvent {
  * 用户事件订阅者
  */
 interface UserEventSubscriber {
-  userId: string;
   subject: Subject<MessageEvent>;
   connectedAt: Date;
   clientId: string;
@@ -83,10 +83,8 @@ interface InternalEventListener {
 @Injectable()
 export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
-  private readonly userSubscribers = new Map<
-    string,
-    Map<string, UserEventSubscriber>
-  >();
+  /** 单账户：所有客户端订阅同一张表（原按 userId 分区） */
+  private readonly subscribers = new Map<string, UserEventSubscriber>();
 
   constructor(
     private readonly streamManager: SessionStreamManager,
@@ -100,31 +98,24 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    * 本服务经此回调接收并推给该用户全部在线客户端——发布点唯一，无生产者双写。
    */
   onModuleInit() {
-    this.streamManager.setStreamRelay((userId, sessionId, chunk) =>
-      this.pushStreamToUser(userId, sessionId, chunk),
+    this.streamManager.setStreamRelay((sessionId, chunk) =>
+      this.pushStreamEvent(sessionId, chunk),
     );
   }
 
   /**
-   * 订阅用户事件流
-   * @param userId 用户 ID
+   * 订阅事件流（单账户：所有客户端平级）
    * @param clientId 客户端唯一标识（如 tabId）
    * @returns Observable<MessageEvent>
    */
-  subscribe(userId: string, clientId: string): Observable<MessageEvent> {
+  subscribe(clientId: string): Observable<MessageEvent> {
     const subject = new Subject<MessageEvent>();
-
-    if (!this.userSubscribers.has(userId)) {
-      this.userSubscribers.set(userId, new Map());
-    }
-
-    const subscribers = this.userSubscribers.get(userId)!;
 
     // 每 90 秒发送一次心跳，防止前端超时断开
     const heartbeatSubscription = new Subscription();
     const heartbeatTimer = setInterval(() => {
       try {
-        this.logger.debug(`Sending heartbeat to ${userId}/${clientId}`);
+        this.logger.debug(`Sending heartbeat to ${clientId}`);
         subject.next({
           data: JSON.stringify({
             type: "heartbeat",
@@ -138,8 +129,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     }, 90000);
     heartbeatSubscription.add(() => clearInterval(heartbeatTimer));
 
-    subscribers.set(clientId, {
-      userId,
+    this.subscribers.set(clientId, {
       subject,
       connectedAt: new Date(),
       clientId,
@@ -147,7 +137,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.logger.debug(
-      `User ${userId} client ${clientId} subscribed, total clients: ${subscribers.size}`,
+      `Client ${clientId} subscribed, total clients: ${this.subscribers.size}`,
     );
 
     // 连接建立时的补发（connected + eventBuffer 重放 + running 状态）必须延迟到 NestJS
@@ -159,7 +149,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     //   2) running 补发重新取当下活跃流快照，避免闭包捕获旧列表发出 stale running
     //   3) 每次 next 包 try/catch，与 broadcastToUser/pushStreamToUser 一致
     queueMicrotask(() => {
-      void this.emitCatchup(userId, clientId, subject);
+      void this.emitCatchup(clientId, subject);
     });
 
     return subject.asObservable();
@@ -170,14 +160,12 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    * 在 queueMicrotask 中执行，确保晚于 NestJS 对返回 observable 的订阅。
    */
   private async emitCatchup(
-    userId: string,
     clientId: string,
     subject: Subject<MessageEvent>,
   ): Promise<void> {
     // 防护 1：连接可能在微任务前已断开（req close → unsubscribe → subject.complete + map 删除）
     const stillSubscribed = () =>
-      this.userSubscribers.get(userId)?.get(clientId)?.subject === subject &&
-      !subject.closed;
+      this.subscribers.get(clientId)?.subject === subject && !subject.closed;
 
     const safeNext = (event: MessageEvent): boolean => {
       if (!stillSubscribed()) return false;
@@ -186,7 +174,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
         return true;
       } catch (error) {
         this.logger.debug(
-          `emitCatchup next failed for ${userId}/${clientId}: ${String(error)}`,
+          `emitCatchup next failed for ${clientId}: ${String(error)}`,
         );
         return false;
       }
@@ -205,9 +193,9 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 防护 2：重新取当下活跃流快照（微任务窗口内流可能已 stop）
-    const activeStreams = this.streamManager.getActiveStreamsForUser(userId);
+    const activeStreams = this.streamManager.getActiveStreams();
 
-    // 统一 SSE:连接建立时按 userId 补发该用户全部活跃流的 eventBuffer 增量。
+    // 统一 SSE:连接建立时补发全部活跃流的 eventBuffer 增量。
     // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
     // 前端按 payload.sessionId 归会话、按 prevSeq >= lastSeq 去重后消费。
     for (const stream of activeStreams) {
@@ -244,7 +232,6 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
         !safeNext({
           data: JSON.stringify(
             toSessionEvent("stream_status_changed", {
-              userId,
               sessionId: stream.sessionId,
               timestamp: new Date().toISOString(),
               payload: { status: "running", kind: stream.kind, sessionType },
@@ -260,23 +247,15 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   /**
    * 取消订阅
    */
-  unsubscribe(userId: string, clientId: string): void {
-    const subscribers = this.userSubscribers.get(userId);
-    if (!subscribers) return;
-
-    const subscriber = subscribers.get(clientId);
-    if (subscriber) {
-      subscriber.heartbeatSubscription?.unsubscribe();
-      subscriber.subject.complete();
-      subscribers.delete(clientId);
-      this.logger.debug(
-        `User ${userId} client ${clientId} unsubscribed, remaining: ${subscribers.size}`,
-      );
-    }
-
-    if (subscribers.size === 0) {
-      this.userSubscribers.delete(userId);
-    }
+  unsubscribe(clientId: string): void {
+    const subscriber = this.subscribers.get(clientId);
+    if (!subscriber) return;
+    subscriber.heartbeatSubscription?.unsubscribe();
+    subscriber.subject.complete();
+    this.subscribers.delete(clientId);
+    this.logger.debug(
+      `Client ${clientId} unsubscribed, remaining: ${this.subscribers.size}`,
+    );
   }
 
   /**
@@ -286,8 +265,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("stream.status_changed")
   handleStreamStatusChanged(event: StreamStatusChangedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("stream_status_changed", event),
     );
   }
@@ -297,8 +275,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("session.created")
   handleSessionCreated(event: SessionCreatedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("session_created", event),
     );
   }
@@ -308,8 +285,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("session.updated")
   handleSessionUpdated(event: SessionUpdatedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("session_updated", event),
     );
   }
@@ -319,8 +295,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("session.deleted")
   handleSessionDeleted(event: SessionDeletedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("session_deleted", event),
     );
   }
@@ -330,8 +305,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("subagent.created")
   handleSubAgentCreated(event: SubAgentCreatedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("sub_agent_create", event),
     );
   }
@@ -341,8 +315,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("subagent.closed")
   handleSubAgentClosed(event: SubAgentClosedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("sub_agent_closed", event),
     );
   }
@@ -352,8 +325,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent(HOOKS.TODO_UPDATED)
   handleTodoUpdated(event: TodoUpdatedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("todo_updated", event),
     );
   }
@@ -363,8 +335,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("process.changed")
   handleProcessChanged(event: ProcessChangedEvent) {
-    this.broadcastToUser(
-      event.userId,
+    this.broadcastToAllClients(
       toSessionEvent("process_changed", event),
     );
   }
@@ -381,30 +352,27 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       timestamp: new Date().toISOString(),
       payload: event,
     };
-    this.broadcastToAll(sessionEvent);
+    this.broadcastToAllClients(sessionEvent);
   }
 
   /**
    * 向指定用户的所有客户端广播事件
    */
-  private broadcastToUser(userId: string, event: SessionEvent): void {
-    const subscribers = this.userSubscribers.get(userId);
-    if (!subscribers || subscribers.size === 0) {
-      return;
-    }
+  private broadcastToAllClients(event: SessionEvent): void {
+    if (this.subscribers.size === 0) return;
 
     const messageEvent: MessageEvent = {
       data: JSON.stringify(event),
     } as MessageEvent;
 
-    for (const subscriber of subscribers.values()) {
+    for (const subscriber of this.subscribers.values()) {
       try {
         subscriber.subject.next(messageEvent);
-      } catch (error) {
+      } catch {
         this.logger.warn(
-          `Failed to send event to ${userId}/${subscriber.clientId}, removing`,
+          `Failed to send event to ${subscriber.clientId}, removing`,
         );
-        this.unsubscribe(userId, subscriber.clientId);
+        this.unsubscribe(subscriber.clientId);
       }
     }
   }
@@ -415,15 +383,11 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    * 构造统一事件信封(UnifiedEvent),method = stream/*,payload 保留原始 EventChunk 字段 + sessionId。
    * 该用户的所有在线客户端(多窗口)都会收到,前端按 method 路由、按 payload.sessionId 归会话。
    *
-   * @param userId 用户 ID
    * @param sessionId 会话 ID
    * @param chunk 流式事件块(EventChunk)
    */
-  private pushStreamToUser(userId: string, sessionId: string, chunk: SessionStreamEvent): void {
-    const subscribers = this.userSubscribers.get(userId);
-    if (!subscribers || subscribers.size === 0) {
-      return;
-    }
+  private pushStreamEvent(sessionId: string, chunk: SessionStreamEvent): void {
+    if (this.subscribers.size === 0) return;
 
     const unified = createUnifiedEvent(
       this.mapStreamMethod(chunk.type),
@@ -433,14 +397,14 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       data: JSON.stringify(unified),
     } as MessageEvent;
 
-    for (const subscriber of subscribers.values()) {
+    for (const subscriber of this.subscribers.values()) {
       try {
         subscriber.subject.next(messageEvent);
-      } catch (error) {
+      } catch {
         this.logger.warn(
-          `Failed to send stream event to ${userId}/${subscriber.clientId}, removing`,
+          `Failed to send stream event to ${subscriber.clientId}, removing`,
         );
-        this.unsubscribe(userId, subscriber.clientId);
+        this.unsubscribe(subscriber.clientId);
       }
     }
   }
@@ -480,43 +444,16 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * 向所有在线用户广播事件（用于系统级变更，如插件启停）
-   */
-  private broadcastToAll(event: SessionEvent): void {
-    for (const [userId, subscribers] of this.userSubscribers) {
-      if (subscribers.size === 0) continue;
-      const messageEvent: MessageEvent = {
-        data: JSON.stringify(event),
-      } as MessageEvent;
-      for (const subscriber of subscribers.values()) {
-        try {
-          subscriber.subject.next(messageEvent);
-        } catch (error) {
-          this.logger.warn(
-            `Failed to send event to ${userId}/${subscriber.clientId}, removing`,
-          );
-          this.unsubscribe(userId, subscriber.clientId);
-        }
-      }
-    }
-  }
-
-  /**
-   * 获取用户在线客户端数量
-   */
-  getUserClientCount(userId: string): number {
-    return this.userSubscribers.get(userId)?.size || 0;
+  /** 在线客户端数量 */
+  getClientCount(): number {
+    return this.subscribers.size;
   }
 
   onModuleDestroy() {
-    for (const [userId, subscribers] of this.userSubscribers) {
-      for (const [clientId, subscriber] of subscribers) {
-        subscriber.heartbeatSubscription?.unsubscribe();
-        subscriber.subject.complete();
-      }
-      subscribers.clear();
+    for (const subscriber of this.subscribers.values()) {
+      subscriber.heartbeatSubscription?.unsubscribe();
+      subscriber.subject.complete();
     }
-    this.userSubscribers.clear();
+    this.subscribers.clear();
   }
 }

@@ -15,6 +15,23 @@ describe('ProcessManagerService UI methods', () => {
   /** 测试期间创建的后台进程（sessionId/userId/processId），供 afterEach 清理 */
   const created: Array<{ sessionId: string; userId: string; processId: string }> = [];
 
+  /** 轮询等待日志内容出现（固定 sleep 在并发负载下会 flake：子进程刷盘时机不定） */
+  async function waitForLog(
+    processId: string,
+    sessionId: string,
+    userId: string,
+    expected: string,
+    timeoutMs = 10_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const log = await svc.readLogTail(processId, sessionId, userId);
+      if (log?.content?.includes(expected)) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`log content "${expected}" not found within ${timeoutMs}ms`);
+  }
+
   beforeAll(async () => {
     enqueueMessage = jest.fn();
     emitted = [];
@@ -73,8 +90,8 @@ describe('ProcessManagerService UI methods', () => {
       'node -e "console.log(\'log-line-1\'); console.log(\'log-line-2\'); setTimeout(()=>{}, 30000)"',
     );
 
-    // 等日志落盘
-    await new Promise((r) => setTimeout(r, 500));
+    // 等日志落盘（轮询，避免固定 sleep 在并发负载下 flake）
+    await waitForLog(processId, 'sess-log', 'user-a', 'log-line-1');
     const log = await svc.readLogTail(processId, 'sess-log', 'user-a');
     expect(log).not.toBeNull();
     expect(log!.status).toBe('running');

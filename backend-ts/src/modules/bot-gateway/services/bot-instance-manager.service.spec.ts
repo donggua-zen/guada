@@ -146,21 +146,14 @@ async function settleMicrotasks(): Promise<void> {
 
 describe('BotInstanceManager lifecycle', () => {
   let manager: BotInstanceManager;
-  let prisma: any;
   let adapterFactory: any;
   let orchestrator: any;
+  let botStore: any;
   let adapters: ControlledBotAdapter[];
 
   beforeEach(() => {
     jest.useFakeTimers();
     adapters = [];
-    prisma = {
-      botInstance: {
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn(),
-        update: jest.fn().mockResolvedValue({}),
-      },
-    };
     adapterFactory = {
       createAdapter: jest.fn(() => {
         const adapter = new ControlledBotAdapter();
@@ -173,7 +166,15 @@ describe('BotInstanceManager lifecycle', () => {
       cleanupBot: jest.fn(),
       cleanup: jest.fn(),
     };
-    manager = new BotInstanceManager(prisma, adapterFactory, orchestrator);
+    // 机器人配置权威来源改为 bots/<id>.yaml（BotFileStore）
+    botStore = {
+      initialize: jest.fn().mockResolvedValue(undefined),
+      listEnabled: jest.fn().mockReturnValue([]),
+      list: jest.fn().mockReturnValue([]),
+      findById: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    manager = new BotInstanceManager(adapterFactory, orchestrator, botStore);
     (manager as any).logger = {
       log: jest.fn(),
       warn: jest.fn(),
@@ -482,13 +483,10 @@ describe('BotInstanceManager lifecycle', () => {
     expect(adapter.reconnectCalls).toBe(2);
     expect(adapter.shutdownCalls).toBe(1);
     expect(currentInstance()).toBeUndefined();
-    expect(prisma.botInstance.update).toHaveBeenCalledWith({
-      where: { id: BOT_ID },
-      data: {
-        enabled: false,
-        status: 'error',
-        lastError: 'retry-2',
-      },
+    expect(botStore.update).toHaveBeenCalledWith(BOT_ID, {
+      enabled: false,
+      status: 'error',
+      lastError: 'retry-2',
     });
     expect(adapter.shutdownCalls).toBe(1);
     expect(adapter.observerCounts()).toEqual({ message: 0, connect: 0, disconnect: 0 });

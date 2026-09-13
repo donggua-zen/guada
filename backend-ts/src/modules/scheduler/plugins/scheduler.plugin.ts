@@ -109,7 +109,7 @@ export class SchedulerPlugin extends PluginBase {
           enabled: true,
         };
 
-        const task = await this.schedulerService.createTask(userId, dto as any);
+        const task = await this.schedulerService.createTask(dto as any);
         return JSON.stringify({
           success: true,
           message: `定时任务 "${task.name}" 创建成功`,
@@ -131,12 +131,10 @@ export class SchedulerPlugin extends PluginBase {
 
     schedKit.registerTool({
       name: "scheduler_list_tasks",
-      description: "获取当前用户的所有定时任务列表",
+      description: "获取所有定时任务列表",
       inputSchema: z.object({}),
       execute: async (_args, ctx) => {
-        const userId = ctx?.session.userId;
-        if (!userId) throw new Error("无法获取用户ID");
-        const tasks = await this.schedulerService.getTasks(userId);
+        const tasks = await this.schedulerService.getTasks();
         return JSON.stringify({
           total: tasks.length,
           items: tasks.map((t) => ({
@@ -170,10 +168,8 @@ export class SchedulerPlugin extends PluginBase {
         task_id: z.string().describe("要删除的定时任务 ID"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.session.userId;
-        if (!userId) throw new Error("无法获取用户ID");
         if (!args.task_id) throw new Error("需要提供 task_id");
-        await this.schedulerService.deleteTask(args.task_id, userId);
+        await this.schedulerService.deleteTask(args.task_id);
         return JSON.stringify({ success: true, message: "任务已删除" });
       },
       display: {
@@ -191,13 +187,8 @@ export class SchedulerPlugin extends PluginBase {
         task_id: z.string().describe("要启用或禁用的定时任务 ID"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.session.userId;
-        if (!userId) throw new Error("无法获取用户ID");
         if (!args.task_id) throw new Error("需要提供 task_id");
-        const task = await this.schedulerService.toggleTask(
-          args.task_id,
-          userId,
-        );
+        const task = await this.schedulerService.toggleTask(args.task_id);
         return JSON.stringify({
           success: true,
           message: `任务已${task.enabled ? "启用" : "禁用"}`,

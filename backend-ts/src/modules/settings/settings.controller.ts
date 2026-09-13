@@ -17,28 +17,6 @@ export class SettingsController {
   ) { }
 
   /**
-   * 获取免登录状态 - 公开访问
-   * 注意：必须放在 /settings/:group 之前，避免路由冲突
-   */
-  @Public()
-  @Get("settings/auto-login")
-  async getAutoLoginStatus() {
-    const enabled = await this.settingsService.getAutoLoginEnabled();
-    return { enabled };
-  }
-
-  /**
-   * 设置免登录状态 - 需要认证
-   * 注意：必须放在 /settings/:group 之前，避免路由冲突
-   */
-  @UseGuards(AuthGuard)
-  @Post("settings/auto-login")
-  async setAutoLoginStatus(@Body() body: { enabled: boolean }) {
-    await this.settingsService.setAutoLoginEnabled(body.enabled);
-    return { success: true };
-  }
-
-  /**
    * 获取全局工作目录基路径
    * 注意：必须放在 /settings/:group 之前，避免路由冲突
    */

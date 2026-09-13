@@ -1,16 +1,13 @@
 import {
   Controller,
   Post,
-  Put,
   Param,
-  Body,
   UseInterceptors,
   UploadedFile,
   UseGuards,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { FileService } from "./file.service";
 
 @Controller()
@@ -20,36 +17,20 @@ export class FilesController {
 
   /**
    * 上传会话文件（支持图片、PDF、文本）
+   *
+   * 只做上传：落盘后返回内联 FileRef（`url` 为相对存储路径），由前端
+   * 发消息时原样携带、随事件写进 JSONL。不再有 DB 记录，故也没有配套的
+   * 「复制/删除」路由。
    */
   @Post("sessions/:sessionId/files")
   @UseInterceptors(FileInterceptor("file"))
   async uploadMessageFile(
     @Param("sessionId") sessionId: string,
     @UploadedFile() file: any,
-    @CurrentUser() user: any,
   ) {
     if (!file) {
       throw new Error("No file provided");
     }
-    return this.fileService.uploadFile(sessionId, file, user.id);
-  }
-
-  /**
-   * 更新/复制文件
-   */
-  @Put("files/:fileId")
-  async updateMessageFile(
-    @Param("fileId") fileId: string,
-    @Body() body: { message_id?: string; type?: string },
-    @CurrentUser() user: any,
-  ) {
-    if (body.type === "copy") {
-      if (!body.message_id) {
-        throw new Error("message_id is required for copy operation");
-      }
-      // 从消息中获取目标会话 ID
-      return this.fileService.copyFile(fileId, body.message_id, user.id);
-    }
-    throw new Error("Unsupported operation type");
+    return this.fileService.uploadFile(sessionId, file);
   }
 }

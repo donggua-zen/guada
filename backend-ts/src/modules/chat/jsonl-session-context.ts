@@ -23,27 +23,36 @@ import {
 import type { Message, FileRef, ContentBlock } from '../../common/types/conversation.types';
 import { TokenBreakdown, TurnFinish } from './interfaces';
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
-import { ModelRepository } from '../../common/database/model.repository';
+import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { PluginManager } from '../plugins/plugin.manager';
 import { SessionStreamManager } from './session-stream.manager';
 import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { TokenMeterService } from './token-meter.service';
 import { generateOrderedMessageId } from '../../common/utils/ordered-id.util';
-import { SummaryMode } from './compaction/compression-engine';
 import {
   CompactionConfig,
   CompactionDataSource,
   CompactWrite,
   PruneWrite,
 } from './compaction/types';
+import {
+  COMPRESSION_TIER_PRESETS,
+  resolveCompressionTier,
+} from './compaction/compression-tiers';
 import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
+import { toRuntimeProviderConfig } from '../llm-core/utils/provider-runtime.util';
+import { ModelNotResolvedError } from '../llm-core/model-not-resolved.error';
+import {
+  clampThinkingEffort,
+  defaultThinkingEffort,
+} from '../llm-core/thinking/thinking-effort-policy';
+import type { ThinkingEffort } from '../llm-core/thinking/thinking-vocabulary';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import {
   SG_MODELS,
   SK_MOD_CHAT,
-  SK_MOD_COMPRESS_ENABLE_SUMMARY,
 } from '../../constants/settings.constants';
 import {
   TransformContext,
@@ -146,7 +155,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly session: any,
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
     private readonly settingsStorage: SettingsStorage,
-    private readonly modelRepository: ModelRepository,
+    private readonly modelStore: ProviderFileStore,
     private readonly pluginManager: PluginManager,
     private readonly promptCollector: PromptCollector,
     private readonly workspaceService: WorkspaceService,
@@ -177,9 +186,18 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
     // 3. 构建 DTO
     this.modelConfig = this.buildModelConfig(model, merged);
-    this.thinkingEffortValue = features.includes('thinking')
-      ? merged.thinkingEffort || 'none'
-      : undefined;
+    // 能力 = 档位菜单（唯一信号）：菜单为空即不能思考，不发参数也不回传 reasoning。
+    // 存量设置与当前模型不匹配时（换模型后档位不在菜单里）用请求侧同一套策略调整，
+    // 使「回传判定」与「实际发出的档位」始终一致。
+    const menu = this.modelConfig.thinkingEfforts as ThinkingEffort[];
+    this.thinkingEffortValue =
+      menu.length > 0
+        ? clampThinkingEffort(
+            menu,
+            // 会话从未选过档位 → 默认中间档（不是 none）：默认开启思考
+            merged.thinkingEffort ?? defaultThinkingEffort(menu),
+          ).effort
+        : undefined;
     this.effectiveSettings = merged;
     this.compactionConfig = await this.buildCompactionConfig(merged.memory);
     this.effectiveContextWindow = this.calcEffectiveContextWindow(
@@ -226,12 +244,20 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         this.modelConfig.config.inputCapabilities?.includes('image') ?? false,
       thinkingMode: !!shouldLoadReasoning,
       currentTurnId: this.currentTurnId,
-      fullReasoningRelay: isFullReasoningRelayModel(
-        this.modelConfig.modelName,
-      ),
+      fullReasoningRelay: this.resolveFullReasoningRelay(),
       providerProtocol: this.modelConfig.provider?.protocol,
       modelName: this.modelConfig.modelName,
     };
+  }
+
+  /**
+   * 全量思考回传判定：声明式 compat（requiresReasoningContentOnAssistantMessages）
+   * 优先，未声明回退 deepseek-v4 名字启发式（存量行为兜底）。
+   */
+  private resolveFullReasoningRelay(): boolean {
+    const declared = this.modelConfig.requiresReasoningRelay;
+    if (declared !== undefined) return declared;
+    return isFullReasoningRelayModel(this.modelConfig.modelName);
   }
 
   /** 变换上下文指纹：模型能力/思考模式/协议/回传策略/回合变化即失效重建 */
@@ -244,9 +270,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         ? 'think'
         : 'nothink',
       this.currentTurnId ?? '-',
-      isFullReasoningRelayModel(this.modelConfig.modelName)
-        ? 'relay-all'
-        : 'relay-last',
+      this.resolveFullReasoningRelay() ? 'relay-all' : 'relay-last',
       this.modelConfig.provider?.protocol ?? '-',
     ].join('|');
   }
@@ -964,16 +988,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       id: model.id,
       modelName: model.modelName,
       name: model.name,
-      provider: {
-        id: model.provider?.id || '',
-        provider: model.provider?.provider || '',
-        protocol: model.provider?.protocol,
-        apiUrl: model.provider?.apiUrl,
-        apiKey: model.provider?.apiKey,
-        headers: model.provider?.attributes?.headers,
-        config: model.provider?.config,
-      },
+      provider: toRuntimeProviderConfig(model.provider),
       modelType: model.modelType,
+      thinkingEfforts: model.thinkingEfforts || [],
+      requiresReasoningRelay:
+        model.thinkingCompat?.requiresReasoningContentOnAssistantMessages,
       config: {
         contextWindow: model.config?.contextWindow,
         maxOutputTokens: model.config?.maxOutputTokens,
@@ -987,35 +1006,20 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     };
   }
 
+  /**
+   * 合并压缩配置（档位折算）：角色 settings.memory.compressionTier 决定
+   * enabled/trigger/retain/summaryMode 四元组（见 compression-tiers.ts）；
+   * 旧自由比例/摘要模式配置读时映射到档位，不写库。
+   */
   private async buildCompactionConfig(memory: any): Promise<CompactionConfig> {
-    const summaryMode = await this.resolveSummaryMode(memory);
+    const preset = COMPRESSION_TIER_PRESETS[resolveCompressionTier(memory)];
 
     return {
-      compressionTriggerRatio: memory?.compressionTriggerRatio,
-      compressionRetainRatio: memory?.compressionRetainRatio,
-      // 兼容遗留（不再承担验收/保留语义）
-      compressionTargetRatio: memory?.compressionTargetRatio,
-      summaryMode,
+      enabled: preset.enabled,
+      compressionTriggerRatio: preset.triggerRatio,
+      compressionRetainRatio: preset.retainRatio,
+      summaryMode: preset.summaryMode,
     };
-  }
-
-  private async resolveSummaryMode(memory: any): Promise<SummaryMode> {
-    if (memory?.summaryMode) {
-      this.logger.debug(`Using role-level summaryMode: ${memory.summaryMode}`);
-      return memory.summaryMode as SummaryMode;
-    }
-
-    const globalEnableSummary = await this.settingsStorage.getSettingValue(
-      SG_MODELS,
-      SK_MOD_COMPRESS_ENABLE_SUMMARY,
-      true,
-    );
-    const enabled =
-      globalEnableSummary === true ||
-      globalEnableSummary === 'true' ||
-      globalEnableSummary === 1;
-    const summaryMode = enabled ? SummaryMode.DEFAULT : SummaryMode.DISABLED;
-    return summaryMode;
   }
 
 
@@ -1063,18 +1067,32 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       : modelContextWindow;
   }
 
+  /**
+   * 解析会话使用的模型：内存挂载（bot 路径已 enrich）→ 会话自选 modelId → 全局默认。
+   *
+   * 三级都解析不到即抛 ModelNotResolvedError（fail-loud）——静默换用另一个模型
+   * 会让模型、成本与行为在用户不知情时改变，比直接报错危险得多。
+   */
   private async resolveModel(): Promise<any> {
-    let model = this.session.model;
-    if (!model) {
-      const modelId = await this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-      );
-      if (modelId) {
-        model = await this.modelRepository.findById(modelId);
-      }
+    if (this.session.model) return this.session.model;
+
+    const sessionModelId = this.session.modelId as string | undefined;
+    if (sessionModelId) {
+      const model = this.modelStore.findModel(sessionModelId);
+      if (model) return model;
+      throw new ModelNotResolvedError(this.sessionId, sessionModelId);
     }
-    return model;
+
+    const defaultModelId = await this.settingsStorage.getSettingValue(
+      SG_MODELS,
+      SK_MOD_CHAT,
+    );
+    const fallback = defaultModelId
+      ? this.modelStore.findModel(defaultModelId)
+      : undefined;
+    if (fallback) return fallback;
+
+    throw new ModelNotResolvedError(this.sessionId, defaultModelId || null);
   }
 
   /**

@@ -22,7 +22,6 @@ import { Public } from "../auth/public.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { EventBusService } from "../../common/events/event-bus.service";
-import { UserRepository } from "../../common/database/user.repository";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import * as path from 'path';
@@ -37,7 +36,6 @@ export class SessionsController {
     private readonly workspaceService: WorkspaceService,
     private readonly eventBus: EventBusService,
     private readonly jwtService: JwtService,
-    private readonly userRepo: UserRepository,
   ) { }
 
   @Get("sessions")
@@ -51,8 +49,7 @@ export class SessionsController {
   ) {
     // groupId 特殊值处理："null"字符串表示查询未分组会话
     const parsedGroupId = groupId === "null" ? null : groupId;
-    return this.sessionService.getSessionsByUser(
-      user.id,
+    return this.sessionService.getSessions(
       Number(skip),
       Number(limit),
       parsedGroupId,
@@ -71,7 +68,6 @@ export class SessionsController {
   ) {
     // limit = 每批扫描的会话数（渐进扫描，前端循环拉取直到 hasMore=false）
     return this.sessionService.searchSessions(
-      user.id,
       keyword?.trim() || "",
       cursor,
       limit ? parseInt(limit, 10) : 25,
@@ -88,7 +84,6 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     return this.sessionService.getArchivedSessions(
-      user.id,
       Number(skip),
       Number(limit),
       keyword?.trim() || undefined,
@@ -104,7 +99,7 @@ export class SessionsController {
     @Query("limit") limit: string = "10",
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.getSidebarSessions(user.id, Number(limit));
+    return this.sessionService.getSidebarSessions(Number(limit));
   }
 
   @Put("sessions/:id/archive")
@@ -113,11 +108,7 @@ export class SessionsController {
     @Body() data: { archived: boolean },
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.archiveSession(
-      id,
-      user.id,
-      data.archived,
-    );
+    return this.sessionService.archiveSession(id, data.archived);
   }
 
   @Post("sessions/batch-archive")
@@ -125,11 +116,7 @@ export class SessionsController {
     @Body() data: { sessionIds: string[]; archived: boolean },
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.batchArchiveSessions(
-      data.sessionIds,
-      user.id,
-      data.archived,
-    );
+    return this.sessionService.batchArchiveSessions(data.sessionIds, data.archived);
   }
 
   @Post("sessions")
@@ -138,7 +125,7 @@ export class SessionsController {
     @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {
-    const session = await this.sessionService.createSession(user.id, data);
+    const session = await this.sessionService.createSession(data);
 
     // 广播会话创建事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.created", {
@@ -154,7 +141,7 @@ export class SessionsController {
 
   @Get("sessions/:id")
   async getSession(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getSessionById(id, user.id);
+    return this.sessionService.getSessionById(id);
   }
 
   @Put("sessions/:id")
@@ -164,7 +151,7 @@ export class SessionsController {
     @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {
-    const session = await this.sessionService.updateSession(id, user.id, data);
+    const session = await this.sessionService.updateSession(id, data);
 
     // 广播会话更新事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.updated", {
@@ -186,7 +173,7 @@ export class SessionsController {
     @Headers("x-client-id") clientId: string,
   ) {
     const shouldDeleteWorkspace = deleteWorkspace === 'true';
-    await this.sessionService.deleteSession(id, user.id, shouldDeleteWorkspace);
+    await this.sessionService.deleteSession(id, shouldDeleteWorkspace);
 
     // 广播会话删除事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.deleted", {
@@ -201,7 +188,7 @@ export class SessionsController {
 
   @Post("sessions/:id/generate-title")
   async generateTitle(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.generateTitle(id, user.id);
+    return this.sessionService.generateTitle(id);
   }
 
   @Get("sessions/:id/summaries")
@@ -210,7 +197,7 @@ export class SessionsController {
     @CurrentUser() user: any,
     @Query("limit") limit?: string,
   ) {
-    return this.sessionService.getSessionSummaries(id, user.id, limit ? parseInt(limit, 10) : undefined);
+    return this.sessionService.getSessionSummaries(id, limit ? parseInt(limit, 10) : undefined);
   }
 
   @Post("sessions/:id/compress")
@@ -218,13 +205,13 @@ export class SessionsController {
     @Param("id") id: string,
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.compressSession(id, user.id);
+    return this.sessionService.compressSession(id);
   }
 
   @Get("sessions/:id/workspace-path")
   async getWorkspacePath(@Param("id") id: string, @CurrentUser() user: any) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -237,7 +224,7 @@ export class SessionsController {
 
   @Get("sessions/:id/todo")
   async getSessionTodo(@Param("id") id: string, @CurrentUser() user: any) {
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
@@ -260,7 +247,7 @@ export class SessionsController {
   @Get("sessions/:id/workspace/tree")
   async getWorkspaceTree(@Param("id") id: string, @CurrentUser() user: any) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -280,7 +267,7 @@ export class SessionsController {
     @Res() res: Response,
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -352,7 +339,7 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.FORBIDDEN);
     }
@@ -396,7 +383,7 @@ export class SessionsController {
     @CurrentUser() user: any
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -501,7 +488,7 @@ export class SessionsController {
     @CurrentUser() user: any
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -580,26 +567,18 @@ export class SessionsController {
       throw new HttpException("Missing authentication token", HttpStatus.UNAUTHORIZED);
     }
 
-    let userId: string;
     try {
-      const payload = await this.jwtService.verifyAsync(jwtToken, {
+      await this.jwtService.verifyAsync(jwtToken, {
         secret: process.env.JWT_SECRET,
       });
-      userId = payload.sub;
     } catch {
       throw new HttpException("Invalid or expired token", HttpStatus.UNAUTHORIZED);
     }
 
-    // 验证用户存在
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new HttpException("User no longer exists", HttpStatus.UNAUTHORIZED);
-    }
-
-    // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, userId);
+    // 单账户：token 有效即放行，无归属校验
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
+      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }
 
     // 设置 Cookie（仅首次请求需要，后续子资源请求自动携带）
@@ -649,7 +628,7 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
@@ -694,7 +673,7 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     // 验证会话归属权
-    const session = await this.sessionService.getSessionById(id, user.id);
+    const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }

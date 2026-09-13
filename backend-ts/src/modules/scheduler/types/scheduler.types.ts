@@ -18,7 +18,6 @@ export type TaskStatus = "pending" | "running" | "completed" | "failed";
  */
 export interface ScheduledTask {
   id: string;
-  userId: string;
   name: string;
   prompt: string;
   /**

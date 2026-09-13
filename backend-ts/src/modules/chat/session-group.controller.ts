@@ -9,7 +9,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionGroupService } from "./session-group.service";
 
 @Controller("session-groups")
@@ -17,46 +16,34 @@ import { SessionGroupService } from "./session-group.service";
 export class SessionGroupController {
   constructor(private readonly sessionGroupService: SessionGroupService) { }
 
-  /**
-   * 获取当前用户的所有会话分组
-   */
+  /** 获取所有会话分组 */
   @Get()
-  async getGroups(@CurrentUser() user: any) {
-    return this.sessionGroupService.getGroupsByUser(user.id);
+  async getGroups() {
+    return this.sessionGroupService.getGroups();
   }
 
   /**
    * 创建新分组
    */
   @Post()
-  async createGroup(
-    @Body() data: { name: string },
-    @CurrentUser() user: any,
-  ) {
-    return this.sessionGroupService.createGroup(user.id, data);
+  async createGroup(@Body() data: { name: string }) {
+    return this.sessionGroupService.createGroup(data);
   }
 
   /**
    * 更新分组名称
    */
   @Put(":id")
-  async updateGroup(
-    @Param("id") id: string,
-    @Body() data: { name: string },
-    @CurrentUser() user: any,
-  ) {
-    return this.sessionGroupService.updateGroup(id, user.id, data);
+  async updateGroup(@Param("id") id: string, @Body() data: { name: string }) {
+    return this.sessionGroupService.updateGroup(id, data);
   }
 
   /**
    * 删除分组
    */
   @Delete(":id")
-  async deleteGroup(
-    @Param("id") id: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.sessionGroupService.deleteGroup(id, user.id);
+  async deleteGroup(@Param("id") id: string) {
+    await this.sessionGroupService.deleteGroup(id);
     return { success: true };
   }
 
@@ -65,11 +52,8 @@ export class SessionGroupController {
    * @param data.groupIds 按新顺序排列的分组ID数组
    */
   @Post("reorder")
-  async reorderGroups(
-    @Body() data: { groupIds: string[] },
-    @CurrentUser() user: any,
-  ) {
-    await this.sessionGroupService.reorderGroups(user.id, data.groupIds);
+  async reorderGroups(@Body() data: { groupIds: string[] }) {
+    await this.sessionGroupService.reorderGroups(data.groupIds);
     return { success: true };
   }
 }

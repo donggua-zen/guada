@@ -36,18 +36,18 @@
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.avatarHint') }}</span>
                     </div>
                     <AvatarPreview :src="characterForm.avatarUrl" type="assistant" class="w-10"
-                      :name="characterForm.title" @avatar-changed="handleAvatarChanged" />
+                      :name="characterForm.name" @avatar-changed="handleAvatarChanged" />
                   </div>
                 </el-form-item>
-                <!-- 角色标题 -->
-                <el-form-item prop="title" class="mb-0!">
+                <!-- 角色名称 -->
+                <el-form-item prop="name" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.titleLabel') }}</span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.titleHint') }}</span>
                     </div>
                     <div class="w-1/2 flex justify-end">
-                      <el-input v-model="characterForm.title" :placeholder="t('characters.setting.titlePlaceholder')" class="w-full" />
+                      <el-input v-model="characterForm.name" :placeholder="t('characters.setting.titlePlaceholder')" class="w-full" />
                     </div>
                   </div>
                 </el-form-item>
@@ -64,19 +64,15 @@
                     </div>
                   </div>
                 </el-form-item>
-                <!-- 分组设置 -->
-                <el-form-item prop="groupId" class="mb-0!">
+                <!-- 存储位置（只读提示：目录名即 id） -->
+                <el-form-item v-if="characterForm.id" prop="id" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.groupLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.groupOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.groupHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.idLabel') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.idHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.groupId" :placeholder="t('characters.setting.groupPlaceholder')" clearable class="w-full">
-                        <el-option :label="t('characters.setting.groupUngrouped')" value="" />
-                        <el-option v-for="group in characterGroups" :key="group.id" :label="group.name"
-                          :value="group.id ?? ''" />
-                      </el-select>
+                      <el-input :model-value="characterForm.id" readonly class="w-full font-mono" />
                     </div>
                   </div>
                 </el-form-item>
@@ -371,7 +367,7 @@
                     class="agent-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
                     :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
                     <div class="flex items-start justify-between gap-2 mb-1">
-                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ char.title }}</div>
+                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ char.name }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
                         <el-switch :model-value="getAgentEffectiveEnabled(char)"
                           @update:model-value="(val) => handleAgentToggle(char.id, val)" :disabled="allAgentsDisabled"
@@ -448,7 +444,7 @@ const props = defineProps({
     type: Object,
     default: () => ({
       id: '',
-      title: '',
+      name: '',
       description: '',
       avatarUrl: '',
       settings: {
@@ -532,11 +528,10 @@ const sidebarGroups = computed(() => [
 // 表单数据
 const characterForm = reactive({
   id: '',
-  title: '',
+  name: '',
   description: '',
   avatarUrl: '',
   avatarFile: null,
-  groupId: null,  // 新增：分组 ID
   assistantName: '',
   assistantIdentity: '',
   systemPrompt: '',
@@ -548,7 +543,7 @@ const characterForm = reactive({
 
 // 验证规则
 const basicRules = computed(() => ({
-  title: [
+  name: [
     { required: true, message: t('characters.setting.titleRequired'), trigger: ['input', 'blur'] },
     { min: 2, max: 20, message: t('characters.setting.titleLength'), trigger: ['input', 'blur'] }
   ]
@@ -624,9 +619,6 @@ const skillsList = ref([]);
 const loadingSkills = ref(false);
 const updatingSkills = ref(new Set());
 
-// 角色分组数据
-const characterGroups = ref([]);
-
 // 本地工具数据
 const localTools = ref([]);
 
@@ -672,7 +664,7 @@ const skillsAllowlistMode = ref(false);
 // 通用子代理（虚拟角色，不出现在角色列表中）
 const GENERIC_AGENT = computed(() => ({
   id: 'generic',
-  title: t('characters.setting.genericAgentTitle'),
+  name: t('characters.setting.genericAgentTitle'),
   description: t('characters.setting.genericAgentDesc'),
 }));
 // 是否全部禁用子代理
@@ -751,11 +743,9 @@ watch(() => props.data, (newVal, oldVal) => {
   }
 
   characterForm.id = newVal.id || '';
-  characterForm.title = newVal.title || '';
+  characterForm.name = newVal.name || '';
   characterForm.description = newVal.description || '';
   characterForm.avatarUrl = newVal.avatarUrl || '';
-  // groupId: null 或 undefined 转换为空字符串，以便 el-select 正确显示
-  characterForm.groupId = newVal.groupId || '';  // 加载分组 ID
   characterForm.modelId = newVal.modelId || '';
 
   characterForm.assistantName = newVal.settings?.assistantName || '';
@@ -914,11 +904,10 @@ const loadPresetCharacters = async () => {
 async function loadAllData() {
   pageLoading.value = true
   try {
-    const [modelsResp, mcpsResp, skillsResp, groupsResp, charsResp] = await Promise.all([
+    const [modelsResp, mcpsResp, skillsResp, charsResp] = await Promise.all([
       apiService.fetchModels(),
       apiService.getMcpServers(),
       apiService.fetchSkills(),
-      apiService.fetchCharacterGroups(),
       apiService.fetchCharacters(),
       loadLocalTools(),
     ])
@@ -946,9 +935,6 @@ async function loadAllData() {
         }
       }
     }
-
-    // 角色分组
-    characterGroups.value = groupsResp
 
     // 子代理列表（排除当前角色 + 通用虚拟子代理）
     const allChars = charsResp.items || []
@@ -1169,12 +1155,10 @@ const handleSave = async () => {
 // 获取表单数据
 const getFormData = () => {
   let finalData = {
-    'title': characterForm.title,
-    'description': characterForm.description,
     'name': characterForm.name,
+    'description': characterForm.description,
     'avatarUrl': characterForm.avatarUrl,
     'avatarFile': characterForm.avatarFile,
-    'groupId': characterForm.groupId === '' ? null : characterForm.groupId,
     'identity': characterForm.identity,
     'modelId': characterForm.modelId === '' ? null : characterForm.modelId,
     'settings': {

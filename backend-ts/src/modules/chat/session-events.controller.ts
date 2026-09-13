@@ -9,7 +9,6 @@ import {
 import { Observable } from "rxjs";
 import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionEventsService } from "./session-events.service";
 
 /**
@@ -38,17 +37,15 @@ export class SessionEventsController {
   @Sse("sessions")
   async subscribeSessionEvents(
     @Headers("x-client-id") clientId: string,
-    @CurrentUser() user: any,
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
-    const userId = user.id;
     const finalClientId = clientId || `default_${Date.now()}`;
 
-    const observable = this.sessionEventsService.subscribe(userId, finalClientId);
+    const observable = this.sessionEventsService.subscribe(finalClientId);
 
     // 监听连接关闭，清理订阅
     req.on("close", () => {
-      this.sessionEventsService.unsubscribe(userId, finalClientId);
+      this.sessionEventsService.unsubscribe(finalClientId);
     });
 
     return observable;

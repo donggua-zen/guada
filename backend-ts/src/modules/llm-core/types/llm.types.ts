@@ -30,7 +30,7 @@ export interface LLMCompletionParams {
   frequencyPenalty?: number; // 原 frequency_penalty
   maxTokens?: number; // 原 max_tokens
   tools?: ToolDefinition[];
-  thinkingEffort?: string; // 思考强度级别：'none' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
+  thinkingEffort?: string; // 思考强度级别（中立词表：none/minimal/low/medium/high/xhigh/max，legacy 'on'）
   /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据（如摘要调用标记） */
   purpose?: string;
   extraBody?: Record<string, any>;

@@ -8,8 +8,8 @@ function chunkEvent(partial: Partial<StreamEvent> & { type: StreamEvent['type'] 
   return { prevSeq: 0, ...partial } as StreamEvent;
 }
 
-function startStream(mgr: SessionStreamManager, sessionId = 's1', userId = 'u1'): void {
-  expect(mgr.startStream(sessionId, userId, new AbortController())).toBe(true);
+function startStream(mgr: SessionStreamManager, sessionId = 's1'): void {
+  expect(mgr.startStream(sessionId, new AbortController())).toBe(true);
 }
 
 // ─── 用例 ───
@@ -21,8 +21,8 @@ describe('SessionStreamManager publish（唯一发布入口）', () => {
     mgr = new SessionStreamManager();
   });
 
-  it('publish：eventBuffer 入缓存 + relay 按 ActiveStream.userId 直投', () => {
-    startStream(mgr, 's1', 'u1');
+  it('publish：eventBuffer 入缓存 + relay 直投', () => {
+    startStream(mgr, 's1');
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
 
@@ -30,9 +30,9 @@ describe('SessionStreamManager publish（唯一发布入口）', () => {
 
     // 进程内可见状态：缓冲 + 状态查询
     expect(mgr.getStreamStatus('s1')?.bufferedEventCount).toBe(1);
-    // 直投：userId 取自活跃流，调用方无需传
+    // 直投：单账户，无需用户维度
     expect(relay).toHaveBeenCalledTimes(1);
-    expect(relay).toHaveBeenCalledWith('u1', 's1', expect.objectContaining({ type: 'text_delta' }));
+    expect(relay).toHaveBeenCalledWith('s1', expect.objectContaining({ type: 'text_delta' }));
   });
 
   it('publish：扇出到进程内订阅者（bot/子 Agent 回调路径）', () => {

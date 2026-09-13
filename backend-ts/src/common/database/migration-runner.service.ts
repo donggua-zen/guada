@@ -39,6 +39,8 @@ export class MigrationRunner implements OnModuleInit {
   private readonly logger = new Logger("MigrationRunner");
   private readonly dbPath: string;
   private readonly dataDir: string;
+  /** 进程内单次执行（见 run() 的并发安全说明） */
+  private runPromise: Promise<void> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -54,7 +56,26 @@ export class MigrationRunner implements OnModuleInit {
     await this.run();
   }
 
-  private async run(): Promise<void> {
+  /**
+   * 执行待应用迁移（幂等：无 pending 时仅打日志返回）。
+   *
+   * 公开给需要在「结构就绪之后」再做数据迁移的启动步骤显式调用——
+   * 不要依赖 onModuleInit 的跨模块执行顺序。
+   *
+   * 并发安全：多个服务会在各自 onModuleInit 里显式调用，共享同一 promise
+   * 串行化——否则全新安装时两个调用者会同时判定为「待迁移」并重复插入
+   * baseline 记录，撞 `_app_migrations.id` 唯一约束导致启动失败。
+   */
+  async run(): Promise<void> {
+    this.runPromise ??= this.doRun().catch((err) => {
+      // 失败不缓存：允许后续调用重试
+      this.runPromise = null;
+      throw err;
+    });
+    return this.runPromise;
+  }
+
+  private async doRun(): Promise<void> {
     // 1. 确保数据目录存在
     if (!fs.existsSync(this.dataDir)) {
       fs.mkdirSync(this.dataDir, { recursive: true });

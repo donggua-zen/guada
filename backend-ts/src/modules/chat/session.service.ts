@@ -1,8 +1,9 @@
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
-import { PrismaService } from "../../common/database/prisma.service";
 import { CharacterRepository } from "../../common/database/character.repository";
-import { ModelRepository } from "../../common/database/model.repository";
+import { ProviderFileStore } from "../llm-core/provider-file.store";
+import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util";
+import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { LLMService } from "../llm-core/llm.service";
 import {
@@ -39,7 +40,7 @@ export class SessionService {
   constructor(
     private sessionRepo: SessionRepository,
     private characterRepo: CharacterRepository,
-    private modelRepo: ModelRepository,
+    private modelStore: ProviderFileStore,
     private settingsStorage: SettingsStorage,
     private llmService: LLMService,
     @Inject(MESSAGE_STORE_TOKEN) private contextManager: IMessageStore,
@@ -52,7 +53,6 @@ export class SessionService {
     private eventBus: EventBusService,
     private sessionReplayService: SessionReplayService,
     private contentSearch: SessionContentSearchService,
-    private prisma: PrismaService,
     private sessionGroupService: SessionGroupService,
   ) {}
 
@@ -63,16 +63,14 @@ export class SessionService {
    * 获取用户会话列表，支持按分组查询
    * @param groupId 分组ID，null表示未分组，undefined表示全部
    */
-  async getSessionsByUser(
-    userId: string,
+  async getSessions(
     skip: number = 0,
     limit: number = 20,
     groupId?: string | null,
     keyword?: string,
     includeArchived: boolean = false,
   ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.sessionRepo.findByUserId(
-      userId,
+    const { items, total } = await this.sessionRepo.findAll(
       skip,
       limit,
       groupId,
@@ -100,14 +98,14 @@ export class SessionService {
    * 侧边栏批量获取：一次请求返回所有分组 + 各分组的前 N 条会话
    * 替代前端 N+2 次串行 HTTP 请求
    */
-  async getSidebarSessions(userId: string, limit: number = 10) {
-    const groups = await this.sessionGroupService.getGroupsByUser(userId);
+  async getSidebarSessions(limit: number = 10) {
+    const groups = await this.sessionGroupService.getGroups();
 
     // 所有分组 ID + null（未分组），并行查询
     const groupIds: (string | null)[] = [...groups.map((g) => g.id), null];
     const results = await Promise.all(
       groupIds.map((gid) =>
-        this.sessionRepo.findByUserId(userId, 0, limit, gid, undefined, false),
+        this.sessionRepo.findAll(0, limit, gid, undefined, false),
       ),
     );
 
@@ -134,11 +132,10 @@ export class SessionService {
    */
   async archiveSession(
     sessionId: string,
-    userId: string,
     archived: boolean,
   ): Promise<{ success: boolean; session?: any }> {
     const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
+    if (!session) {
       throw new HttpException("会话不存在", HttpStatus.NOT_FOUND);
     }
 
@@ -162,14 +159,13 @@ export class SessionService {
    */
   async batchArchiveSessions(
     sessionIds: string[],
-    userId: string,
     archived: boolean,
   ): Promise<{ success: boolean; skipped: string[] }> {
     const skipped: string[] = [];
 
     for (const id of sessionIds) {
       const session = await this.sessionRepo.findById(id);
-      if (!session || session.userId !== userId) {
+      if (!session) {
         skipped.push(id);
         continue;
       }
@@ -193,15 +189,13 @@ export class SessionService {
    * 获取用户已归档的会话列表
    */
   async getArchivedSessions(
-    userId: string,
     skip: number = 0,
     limit: number = 50,
     keyword?: string,
     groupId?: string | null,
   ): Promise<PaginatedResponse<any>> {
     const parsedGroupId = groupId === "null" ? null : groupId;
-    const { items, total } = await this.sessionRepo.findArchivedByUserId(
-      userId,
+    const { items, total } = await this.sessionRepo.findArchived(
       skip,
       limit,
       keyword,
@@ -216,17 +210,10 @@ export class SessionService {
   }
 
   /**
-   * 根据 ID 获取单个会话详情，验证归属权
+   * 根据 ID 获取单个会话详情
    */
-  async getSessionById(sessionId: string, userId?: string) {
+  async getSessionById(sessionId: string) {
     const session = await this.sessionRepo.findById(sessionId);
-
-    // 如果提供了 userId，验证归属权
-    if (userId && (!session || session.userId !== userId)) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
-
-    // 转换 URL（使用 character 的 avatarUrl）并注入子会话
     if (!session) return null;
 
     return {
@@ -253,11 +240,10 @@ export class SessionService {
    * @param limit 可选，限制返回条数（最近 N 条）
    * @returns { items, total }
    */
-  async getSessionSummaries(sessionId: string, userId: string, limit?: number) {
-    // 验证会话归属权
-    const session = await this.getSessionById(sessionId, userId);
+  async getSessionSummaries(sessionId: string, limit?: number) {
+    const session = await this.getSessionById(sessionId);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new Error("Session not found");
     }
 
     return this.sessionReplayService.getCompactionHistory(sessionId, limit);
@@ -266,7 +252,7 @@ export class SessionService {
   /**
    * 创建新会话，支持从角色继承配置
    */
-  async createSession(userId: string, data: any) {
+  async createSession(data: any) {
     const { modelId, characterId, title, settings, workspacePath } = data;
 
     let mainCharacterId = characterId;
@@ -276,7 +262,7 @@ export class SessionService {
     }
 
     // 获取角色信息
-    const character = await this.characterRepo.findById(mainCharacterId, false);
+    const character = await this.characterRepo.findById(mainCharacterId);
     if (!character) {
       throw new Error(`Character with ID ${mainCharacterId} not found`);
     }
@@ -300,7 +286,7 @@ export class SessionService {
 
     // 验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
     if (finalModelId) {
-      const model = await this.modelRepo.findById(finalModelId);
+      const model = await this.modelStore.findModel(finalModelId);
       if (!model) {
         throw new Error(`模型不存在：${finalModelId}，请检查模型配置`);
       }
@@ -317,9 +303,8 @@ export class SessionService {
 
     // 继承角色配置
     const sessionData = {
-      userId,
       characterId: mainCharacterId,
-      title: title || character.title,
+      title: title || character.name,
       avatarUrl: character.avatarUrl,
       description: character.description,
       modelId: finalModelId,
@@ -380,10 +365,10 @@ export class SessionService {
    * 更新会话配置
    * @param data UpdateSessionDto，仅允许更新白名单字段
    */
-  async updateSession(sessionId: string, userId: string, data: any) {
+  async updateSession(sessionId: string, data: any) {
     const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new Error("Session not found or unauthorized");
+    if (!session) {
+      throw new Error("Session not found");
     }
 
     // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
@@ -396,6 +381,11 @@ export class SessionService {
       }
     }
 
+    // 模型引用写入边界校验：拒绝解析不到的 id（权威来源是 providers/*.yaml）
+    if (updateData.modelId !== undefined) {
+      assertResolvableModelRef(this.modelStore, updateData.modelId, 'modelId');
+    }
+
     const updatedSession = await this.sessionRepo.update(sessionId, updateData);
 
     return updatedSession;
@@ -404,17 +394,12 @@ export class SessionService {
   /**
    * 删除会话及其关联的消息
    * @param sessionId 会话 ID
-   * @param userId 用户 ID
    * @param deleteWorkspace 是否同时删除工作目录（默认 false）
    */
-  async deleteSession(
-    sessionId: string,
-    userId: string,
-    deleteWorkspace: boolean = false,
-  ) {
+  async deleteSession(sessionId: string, deleteWorkspace: boolean = false) {
     const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new Error("Session not found or unauthorized");
+    if (!session) {
+      throw new Error("Session not found");
     }
 
     // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
@@ -462,11 +447,11 @@ export class SessionService {
   /**
    * 生成会话标题
    */
-  async generateTitle(sessionId: string, userId: string) {
+  async generateTitle(sessionId: string) {
     let session: any = null;
     try {
       // 验证会话归属权
-      session = await this.getSessionById(sessionId, userId);
+      session = await this.getSessionById(sessionId);
       if (!session) {
         throw new Error("Session not found");
       }
@@ -511,7 +496,7 @@ export class SessionService {
       // );
 
       // 验证模型是否存在
-      const model = await this.modelRepo.findById(titleModelId);
+      const model = await this.modelStore.findModel(titleModelId);
       if (!model) {
         this.logger.error(`Title model ${titleModelId} not found in settings`);
         return {
@@ -574,7 +559,7 @@ export class SessionService {
         maxTokens: 50, // 限制输出长度
         thinkingEffort: resolveThinkingEffort(model, "none"), // 禁用思考功能
         stream: false,
-        providerConfig: model.provider,
+        providerConfig: toRuntimeProviderConfig(model.provider),
       });
 
       this.logger.log(
@@ -662,7 +647,7 @@ export class SessionService {
         return;
       }
 
-      const model = await this.modelRepo.findById(modelId);
+      const model = await this.modelStore.findModel(modelId);
       if (!model) {
         yield { type: "skipped", reason: "model_not_found" };
         return;
@@ -703,7 +688,7 @@ ${diffText}
         thinkingEffort: resolveThinkingEffort(model, "none"),
         stream: true,
         abortSignal,
-        providerConfig: model.provider,
+        providerConfig: toRuntimeProviderConfig(model.provider),
       });
 
       let fullText = "";
@@ -747,9 +732,9 @@ ${diffText}
    * 压缩事件（compression_start/end/summary/error）经现有流管道下发，REST 立即返回。
    * 使用 SessionContextFactory 确保与 Agent 对话使用完全一致的参数
    */
-  async compressSession(sessionId: string, userId: string) {
+  async compressSession(sessionId: string) {
     const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
+    if (!session) {
       throw new Error("Session not found or unauthorized");
     }
 
@@ -768,7 +753,7 @@ ${diffText}
 
     // 维护伪流：压缩事件经流管道下发；startStream 失败 = 已有任务进行中（含并发压缩）
     const abortController = new AbortController();
-    if (!this.streamManager.startStream(sessionId, userId, abortController, "maintenance")) {
+    if (!this.streamManager.startStream(sessionId, abortController, "maintenance")) {
       throw new HttpException(
         { error: "当前会话已有任务进行中", code: "SESSION_BUSY" },
         HttpStatus.CONFLICT,
@@ -782,7 +767,6 @@ ${diffText}
       extra?: Partial<StreamStatusChangedEvent["payload"]>,
     ) => {
       const statusEvent: StreamStatusChangedEvent = {
-        userId,
         sessionId,
         timestamp: new Date().toISOString(),
         payload: { status, kind: "maintenance", ...extra },
@@ -838,7 +822,6 @@ ${diffText}
    * @param limit 每批扫描的会话数（钳制 1..100）
    */
   async searchSessions(
-    userId: string,
     keyword: string,
     cursor?: string,
     limit: number = 25,
@@ -855,8 +838,8 @@ ${diffText}
     }
 
     // 标题匹配（两个阶段都查：title 阶段直接返回，content 阶段用于去重）
-    const titleMatches = await this.sessionRepo.findByUserId(
-      userId, 0, 200, undefined, keyword, includeArchived,
+    const titleMatches = await this.sessionRepo.findAll(
+      0, 200, undefined, keyword, includeArchived,
     );
     const titleIds = new Set<string>(titleMatches.items.map((s: any) => s.id));
 
@@ -874,14 +857,7 @@ ${diffText}
     }
 
     // 全量会话 id 清单（扫描顺序 = lastActiveAt DESC；bot/子代理会话被 sessionType 排除）
-    const scopeWhere: any = { userId, sessionType: "web" };
-    if (!includeArchived) scopeWhere.archived = false;
-    const allSessions = await this.prisma.session.findMany({
-      where: scopeWhere,
-      select: { id: true },
-      orderBy: [{ lastActiveAt: "desc" }, { id: "desc" }],
-    });
-    const scanIds = allSessions.map((s: any) => s.id);
+    const scanIds = this.sessionRepo.listWebSessionIds(includeArchived);
     const total = scanIds.length;
 
     if (phase === "title") {
@@ -907,11 +883,21 @@ ${diffText}
 
     let items: any[] = [];
     if (contentIds.length > 0) {
-      const rows = await this.prisma.session.findMany({
-        where: { userId, sessionType: "web", id: { in: contentIds } },
-        include: { character: true },
-      });
-      const rowMap = new Map(rows.map((r: any) => [r.id, r]));
+      const rows = this.sessionRepo.getManyByIds(contentIds);
+      const charMap = await this.characterRepo.findManyByIds(
+        rows
+          .map((r: any) => r.characterId)
+          .filter((id: any): id is string => typeof id === "string" && id.length > 0),
+      );
+      const rowMap = new Map(
+        rows.map((r: any) => [
+          r.id,
+          {
+            ...r,
+            character: r.characterId ? charMap.get(r.characterId) ?? null : null,
+          },
+        ]),
+      );
       // 保持扫描顺序（lastActiveAt DESC）
       items = contentIds
         .map((id) => rowMap.get(id))

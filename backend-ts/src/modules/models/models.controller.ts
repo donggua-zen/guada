@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
@@ -35,7 +36,17 @@ export class ModelsController {
 
   @Get("models/all")
   async getAllModels() {
-    return this.modelService.getAllModelsAndProviders();
+    return this.modelService.getModelsAndProviders(true);
+  }
+
+  @Put("providers/:id/enabled")
+  async setProviderEnabled(@Param("id") id: string, @Body() body: any) {
+    return this.modelService.setProviderEnabled(id, body.enabled !== false);
+  }
+
+  @Get("providers/load-errors")
+  async getLoadErrors() {
+    return { items: this.modelService.getProviderLoadErrors() };
   }
 
   @Post("models")
@@ -63,6 +74,12 @@ export class ModelsController {
     return this.modelService.getProviderTemplates();
   }
 
+  /** 按 apiUrl 推荐思考格式（前端提示用；用户确认后才写入 compat） */
+  @Get("models/thinking-format-suggestion")
+  async thinkingFormatSuggestion(@Query("apiUrl") apiUrl?: string) {
+    return this.modelService.getThinkingFormatSuggestion(apiUrl);
+  }
+
   @Public()
   @Post("providers/test-connection")
   async testConnection(@Body() data: any) {
@@ -79,6 +96,7 @@ export class ModelsController {
       body.protocol,
       body.avatarUrl || body.avatar_url,
       body.attributes,
+      body.compat,
     );
   }
 

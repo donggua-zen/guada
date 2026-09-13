@@ -1,108 +1,89 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { UserRepository } from "../../common/database/user.repository";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { AccountFileStore, AccountView } from "./account-file.store";
 import { UrlService } from "../../common/services/url.service";
-import { SG_SYSTEM, SK_SYS_AUTO_LOGIN } from "../../constants/settings.constants";
-import { PasswordHashUtil } from "../../common/utils/password-hash.util";
 
+/**
+ * 认证服务（单账户）
+ *
+ * 账户权威来源是 account.json（见 AccountFileStore）。
+ * 密码可选：未设密码时无需登录（autoLogin 直通），设了密码则必须登录。
+ */
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
     private jwtService: JwtService,
-    private userRepo: UserRepository,
-    private settingsStorage: SettingsStorage,
+    private accountStore: AccountFileStore,
     private urlService: UrlService,
   ) {}
 
-  async validateUserByUsername(username: string, password: string): Promise<any> {
-    // 将用户名统一转换为小写，实现不区分大小写的登录
-    const normalizedUsername = username.toLowerCase();
-    const normalizedPassword = password.toLowerCase();
-    const user = await this.userRepo.findByUsername(normalizedUsername);
-    
-    if (!user) {
-      this.logger.warn(`登录失败：用户不存在 - ${username}`);
-      return null;
+  /** 校验用户名 + 密码（用户名与密码均大小写不敏感，沿用既有行为） */
+  async validateCredentials(
+    username: string,
+    password: string,
+  ): Promise<boolean> {
+    const account = this.accountStore.get();
+    if (!account) {
+      this.logger.warn("登录失败：账户未初始化");
+      return false;
     }
-    
-    const isPasswordValid = await PasswordHashUtil.compare(normalizedPassword, user.passwordHash);
-    if (!isPasswordValid) {
-      this.logger.warn(`登录失败：密码错误 - ${username}`);
-      return null;
+    if (account.username.toLowerCase() !== username.toLowerCase()) {
+      this.logger.warn(`登录失败：用户名不匹配 - ${username}`);
+      return false;
     }
-    
-    const { passwordHash, ...result } = user;
-    return result;
+    const ok = await this.accountStore.verifyPassword(password);
+    if (!ok) this.logger.warn(`登录失败：密码错误 - ${username}`);
+    return ok;
   }
 
-  async login(user: any) {
-    const payload = { username: user.username, sub: user.id };
+  /** 签发登录凭据 */
+  login(): { accessToken: string; user: AccountView } {
+    const account = this.accountStore.get();
+    const payload = { username: account?.username ?? "guada" };
     return {
       accessToken: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        username: user.username,
-        nickname: user.nickname,
-        avatarUrl: user.avatarUrl
-          ? this.urlService.toResourceAbsoluteUrl(user.avatarUrl)
-          : null,
-        role: user.role,
-      },
+      user: this.withAbsoluteAvatar(this.accountStore.getView()),
     };
   }
 
   /**
-   * 自动登录 - 当免登录模式开启时，使用 primary 用户自动登录
+   * 未设密码时的自动登录（取代原先独立的 autoLoginEnabled 开关）。
+   * @returns 凭据；已设密码时返回 null（此时必须显式登录）
    */
-  async autoLogin(): Promise<{ accessToken: string; user: any } | null> {
-    try {
-      // 检查是否开启免登录模式
-      const autoLoginEnabled = await this.settingsStorage.getSettingValue(
-        SG_SYSTEM,
-        SK_SYS_AUTO_LOGIN,
-        false,
-      );
-      
-      this.logger.debug(`免登录配置: ${autoLoginEnabled}`);
-      
-      if (!autoLoginEnabled) {
-        this.logger.log("免登录模式未开启");
-        return null;
-      }
-
-      // 查询 role='primary' 的用户
-      const primaryUser = await this.userRepo.findPrimaryUser();
-      this.logger.debug(`查找 primary 用户: ${primaryUser ? `找到 (ID: ${primaryUser.id})` : "未找到"}`);
-      
-      if (!primaryUser) {
-        this.logger.warn("未找到 primary 用户，无法自动登录");
-        return null;
-      }
-
-      // 生成 JWT token
-      const payload = { username: primaryUser.username, sub: primaryUser.id };
-      const accessToken = this.jwtService.sign(payload);
-
-      this.logger.log(`自动登录成功，用户ID: ${primaryUser.id}, Username: ${primaryUser.username}`);
-
-      return {
-        accessToken,
-        user: {
-          id: primaryUser.id,
-          username: primaryUser.username,
-          nickname: primaryUser.nickname,
-          avatarUrl: primaryUser.avatarUrl
-            ? this.urlService.toResourceAbsoluteUrl(primaryUser.avatarUrl)
-            : null,
-          role: primaryUser.role,
-        },
-      };
-    } catch (error) {
-      this.logger.error("自动登录失败", error instanceof Error ? error.stack : String(error));
+  autoLoginIfPasswordless(): { accessToken: string; user: AccountView } | null {
+    if (this.accountStore.isPasswordSet()) {
+      this.logger.debug("已设置密码，跳过自动登录");
       return null;
     }
+    return this.login();
+  }
+
+  /** 前端据此决定是否需要强制登录 */
+  getStatus(): { passwordSet: boolean } {
+    return { passwordSet: this.accountStore.isPasswordSet() };
+  }
+
+  /** 供控制器在调用前确保账户已加载（避免预热前误判免登录） */
+  async ensureReady(): Promise<void> {
+    await this.accountStore.ensureReady();
+  }
+
+  /** 账户视图（含头像绝对 URL） */
+  getProfile(): AccountView {
+    return this.withAbsoluteAvatar(this.accountStore.getView());
+  }
+
+  private withAbsoluteAvatar(view: AccountView): AccountView {
+    return {
+      ...view,
+      avatarUrl: view.avatarUrl
+        ? this.urlService.toResourceAbsoluteUrl(view.avatarUrl)
+        : null,
+      wallpaperUrl: view.wallpaperUrl
+        ? this.urlService.toResourceAbsoluteUrl(view.wallpaperUrl)
+        : null,
+    };
   }
 }

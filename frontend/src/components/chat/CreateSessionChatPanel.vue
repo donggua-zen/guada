@@ -19,9 +19,9 @@
         <span v-if="currentCharacter"
           class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
           @click="goToCharacters">
-          <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.title"
+          <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.name"
             class="w-4 h-4 shrink-0 rounded overflow-hidden" />
-          <span class="text-sm font-medium text-(--gd-color-text)">{{ currentCharacter.title }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text)">{{ currentCharacter.name }}</span>
           <el-icon size="12"
             class="shrink-0 text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
             <ChevronRight24Regular />
@@ -203,8 +203,8 @@ const currentModelId = computed(() => {
   }
 
   // 第二优先级：使用角色的默认模型
-  if (currentCharacter.value?.model_id) {
-    return currentCharacter.value.model_id;
+  if (currentCharacter.value?.modelId) {
+    return currentCharacter.value.modelId;
   }
 
   // 第三优先级：使用模型列表的第一个模型
@@ -233,8 +233,8 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
       let selectedModelId: string | null = null;
 
       // 第一优先级：角色的默认模型
-      if (newCharacter.model_id) {
-        selectedModelId = newCharacter.model_id;
+      if (newCharacter.modelId) {
+        selectedModelId = newCharacter.modelId;
         // 清空用户手动选择的模型 ID（因为角色有推荐模型）
         userSelectedModelId.value = null;
       }
@@ -326,8 +326,8 @@ const loadCharacters = async (): Promise<void> => {
           selectedModelId = userSelectedModelId.value;
         }
         // 第二优先级：角色的默认模型
-        else if (targetCharacter.model_id) {
-          selectedModelId = targetCharacter.model_id;
+        else if (targetCharacter.modelId) {
+          selectedModelId = targetCharacter.modelId;
         }
         // 第三优先级：模型列表的第一个模型
         else if (models.value.length > 0) {
@@ -372,8 +372,8 @@ const handleCharacterSelect = (character: any): void => {
   // 切换角色时的模型选择逻辑
   let selectedModelId: string | null = null;
 
-  if (character.model_id) {
-    selectedModelId = character.model_id;
+  if (character.modelId) {
+    selectedModelId = character.modelId;
     userSelectedModelId.value = null;
   } else if (userSelectedModelId.value) {
     selectedModelId = userSelectedModelId.value;

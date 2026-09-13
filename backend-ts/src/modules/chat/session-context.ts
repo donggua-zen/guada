@@ -1,5 +1,6 @@
 import { TokenBreakdown, TurnFinish } from "./interfaces";
 import type { Message, FileRef } from "../../common/types/conversation.types";
+import type { RuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util";
 
 // ============================================================================
 // DTO: 模型配置
@@ -7,8 +8,11 @@ import type { Message, FileRef } from "../../common/types/conversation.types";
 
 /**
  * 模型特性标识
+ *
+ * 注意：没有 `thinking`——"能不能思考"由 `ModelConfig.thinkingEfforts`（档位菜单）
+ * 唯一表达，不再用 features 里的布尔标记（两份信号必然漂移）。
  */
-export type ModelFeature = "tools" | "thinking" | "vision" | "image";
+export type ModelFeature = "tools" | "vision" | "image";
 
 /**
  * 模型调用参数
@@ -22,18 +26,21 @@ export interface ModelConfig {
   modelName: string;
   /** 显示名称 */
   name: string;
-  /** 供应商配置 */
-  provider: {
-    id: string;
-    provider: string;
-    protocol: string;
-    apiUrl?: string;
-    apiKey?: string;
-    headers?: Record<string, string>;
-    config?: Record<string, any>;
-  };
+  /** 供应商运行时配置（由 ProviderFileStore 的实例+类型卡合并视图派生） */
+  provider: RuntimeProviderConfig;
   /** 模型类型 */
   modelType: string;
+  /**
+   * 思考档位菜单（能力与档位是同一份数据）：
+   * 空数组 = 不能思考（不发思考参数、不回传 reasoning、UI 不显示控件）。
+   */
+  thinkingEfforts: string[];
+  /**
+   * 全量思考回传声明（对齐 DSH requiresReasoningContentOnAssistantMessages）：
+   * true = 思考模式下历史轮次 reasoning 也回传；false = 仅最后一轮；
+   * undefined = 未声明，回退 deepseek-v4 名字启发式。
+   */
+  requiresReasoningRelay?: boolean;
   /** 完整模型参数（含原生配置和运行时调用参数） */
   config: {
     contextWindow?: number;

@@ -1,6 +1,5 @@
 jest.mock("./chat-runner.service", () => ({ ChatRunnerService: class {} }));
 jest.mock("./session.service", () => ({ SessionService: class {} }));
-jest.mock("../../common/database/message.repository", () => ({ MessageRepository: class {} }));
 jest.mock("./session-stream.manager", () => ({ SessionStreamManager: class {} }));
 jest.mock("./session-events.service", () => ({ SessionEventsService: class {} }));
 jest.mock("./parsers/tag-parser-pipeline.service", () => ({ TagParserPipeline: class {} }));
@@ -23,9 +22,9 @@ describe("ChatController", () => {
     controller = new ChatController(
       sessionService as any,
       {} as any,
-      {} as any,
       chatRunner as any,
       tagParserPipeline as any,
+      {} as any,
     );
   });
 

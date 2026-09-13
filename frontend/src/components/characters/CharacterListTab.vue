@@ -27,36 +27,8 @@
       </el-button>
     </div>
 
-    <!-- 分组筛选标签区域 -->
-    <div class="flex flex-wrap gap-1">
-      <div class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm" :class="currentGroupId === null
-        ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--gd-color-text-primary) font-medium'
-        : 'text-(--gd-color-text-secondary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
-        @click="$emit('selectGroup', null)">
-        {{ t('characters.list.all') }}
-      </div>
-
-      <div v-for="group in groups" :key="group.id"
-        class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center gap-1"
-        :class="currentGroupId === group.id
-          ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--gd-color-text-primary) font-medium'
-          : 'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
-        @click="$emit('selectGroup', group.id)" @contextmenu.prevent="$emit('renameGroup', group)">
-        <span>{{ group.name }}</span>
-      </div>
-
-      <div
-        class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center text-gray-500 dark:text-[#8b8d95] hover:text-(--gd-color-primary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50"
-        @click="$emit('createGroup')">
-        <el-icon :size="14" class="mr-1">
-          <PlusOutlined />
-        </el-icon>
-        {{ t('characters.list.newGroup') }}
-      </div>
-    </div>
-
     <!-- 助手列表 -->
-    <div class="flex-1 overflow-y-auto pt-4">
+    <div class="flex-1 overflow-y-auto">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
         <div v-for="character in characters" :key="character.id"
           class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--gd-color-primary) transition-all duration-200 overflow-hidden">
@@ -73,11 +45,11 @@
 
           <div class="relative z-10 flex flex-col h-full">
             <div class="flex items-start gap-3">
-              <Avatar class="w-11 h-11" :src="character.avatarUrl" :name="character.title" type="assistant" />
+              <Avatar class="w-11 h-11" :src="character.avatarUrl" :name="character.name" type="assistant" />
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between">
-                  <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="character.title">
-                    {{ character.title }}
+                  <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="character.name">
+                    {{ character.name }}
                   </div>
                   <el-button link size="small" type="danger"
                     class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
@@ -87,8 +59,8 @@
                     </el-icon>
                   </el-button>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">
-                  {{ character.isPublic ? t('characters.list.sharedTemplate') : t('characters.list.myTemplate') }}
+                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" :title="character.id">
+                  {{ character.id }}
                 </div>
               </div>
             </div>
@@ -132,12 +104,9 @@ import { PlusOutlined, DeleteOutlineOutlined, UploadOutlined } from '@vicons/mat
 import { QuestionCircleOutlined } from '@vicons/antd'
 import { Avatar } from '../ui'
 import { apiService } from '../../services/ApiService'
-import type { CharacterGroup } from '@/types/character'
 
 defineProps<{
   characters: any[]
-  groups: CharacterGroup[]
-  currentGroupId: string | null
   loading: boolean
 }>()
 
@@ -146,10 +115,6 @@ const emit = defineEmits<{
   editCharacter: [character: any]
   deleteCharacter: [character: any]
   startNewChat: [character: any]
-  selectGroup: [groupId: string | null]
-  createGroup: []
-  renameGroup: [group: CharacterGroup]
-  deleteGroup: [group: CharacterGroup]
   openDocs: []
   imported: []
 }>()

@@ -3,7 +3,7 @@ import { Logger, Injectable } from "@nestjs/common";
 import * as path from "path";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
-import { PrismaService } from "../../../common/database/prisma.service";
+import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../../common/database/kb-file.repository";
 import { KbChunkFileStore } from "../kb-chunk-file.store";
@@ -26,7 +26,7 @@ export class KnowledgeBasePlugin extends PluginBase {
   };
 
   constructor(
-    private prisma: PrismaService,
+    private providerStore: ProviderFileStore,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
     private chunkFileStore: KbChunkFileStore,
@@ -74,10 +74,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         if (!kb) throw new Error("Knowledge base not found");
 
         // 获取向量模型配置
-        const model = await this.prisma.model.findUnique({
-          where: { id: kb.embeddingModelId },
-          include: { provider: true },
-        });
+        const model = this.providerStore.findModel(kb.embeddingModelId);
         if (!model) {
           throw new Error(`Embedding model not found: ${kb.embeddingModelId}`);
         }
@@ -252,7 +249,6 @@ export class KnowledgeBasePlugin extends PluginBase {
         try {
           const fileRecord = await this.kbFileService.addTextDocument(
             knowledge_base_id,
-            userId,
             resolvedSourcePath,
             target_path,
           );

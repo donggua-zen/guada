@@ -80,7 +80,6 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
 
     expect(streamManager.startStream).toHaveBeenCalledWith(
       's1',
-      'u1',
       expect.any(AbortController),
     );
     expect(streamManager.stopStream).toHaveBeenCalledWith('s1', 'completed');
