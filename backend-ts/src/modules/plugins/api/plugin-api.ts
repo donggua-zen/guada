@@ -1,12 +1,8 @@
 import {
   PluginContext,
   ToolHandlerDef,
-  PromptPiece,
-  ToolLoadMode,
-  ToolSetRuntime,
   ToolKitDef,
   ToolKitHandle,
-  ToolKitRegistration,
   AttachmentTypeRegistration,
   UiPageRegistration,
   SlotRegistration,
@@ -81,17 +77,9 @@ export interface PluginApi {
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void;
 
-  registerToolSet(def: {
-    name: string;
-    loadMode?: ToolLoadMode;
-    activator?: string;
-    handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
-  }): void;
-
   registerPrompt(def: {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
-    type?: "system" | "user";
     toolSet?: string;
     description?: string;
   }): void;
@@ -206,7 +194,6 @@ export class PluginApiImpl implements PluginApi {
   private _promptMetas: Array<{
     methodName: string;
     frequency: string;
-    type?: "system" | "user";
     toolSet?: string;
     description: string;
     handler: (context: any) => string | Promise<string>;
@@ -220,17 +207,6 @@ export class PluginApiImpl implements PluginApi {
     private nlsService?: NlsService,
     private settingsStorage?: SettingsStorage,
   ) {}
-
-  registerToolSet(def: {
-    name: string;
-    loadMode?: ToolLoadMode;
-    activator?: string;
-    handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
-  }): void {
-    throw new Error(
-      "registerToolSet 已废弃，请使用 registerToolKit 替代。插件: " + this.pluginId,
-    );
-  }
 
   registerTool(def: any): void {
     if (def.inputSchema) {
@@ -339,14 +315,12 @@ export class PluginApiImpl implements PluginApi {
   registerPrompt(def: {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
-    type?: "system" | "user";
     toolSet?: string;
     description?: string;
   }): void {
     const meta = {
       methodName: "",
       frequency: def.frequency || "REGULAR",
-      type: def.type,
       toolSet: def.toolSet,
       description: def.description || "",
       handler: (typeof def.content === "function"
@@ -589,15 +563,6 @@ export class PluginApiImpl implements PluginApi {
     for (const page of this._uiPages) {
       PluginRegistry.registerUiPage(this.pluginId, page);
     }
-  }
-
-  /** 获取 prompts 供 PluginManager 消费 */
-  getPrompts(): Array<{
-    frequency: string;
-    description: string;
-    handler: (ctx: any) => string | Promise<string>;
-  }> {
-    return this._promptMetas;
   }
 
   /** 获取命令提供者 供 PluginManager 消费 */

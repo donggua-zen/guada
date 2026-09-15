@@ -8,8 +8,6 @@ import { SessionEvent } from "../../modules/chat/session-events.service";
  * status=running 表示流开始;completed/user_cancel/error 表示流结束。
  */
 export interface StreamStatusChangedEvent {
-  /** @deprecated 单账户模型下无意义；保留字段仅为兼容既有订阅方 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -35,8 +33,6 @@ export interface StreamStatusChangedEvent {
  * 事件名：session.created
  */
 export interface SessionCreatedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -51,8 +47,6 @@ export interface SessionCreatedEvent {
  * 事件名：session.updated
  */
 export interface SessionUpdatedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -67,8 +61,6 @@ export interface SessionUpdatedEvent {
  * 事件名：session.deleted
  */
 export interface SessionDeletedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -81,8 +73,6 @@ export interface SessionDeletedEvent {
  * 事件名：subagent.created
  */
 export interface SubAgentCreatedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -100,8 +90,6 @@ export interface SubAgentCreatedEvent {
  * 事件名：subagent.closed
  */
 export interface SubAgentClosedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -122,8 +110,6 @@ export interface SubAgentClosedEvent {
  */
 export interface EnqueueMessageEvent {
   sessionId: string;
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   content: string;
   source: Record<string, any>;
 }
@@ -134,8 +120,6 @@ export interface EnqueueMessageEvent {
  * 事件名：todo.updated
  */
 export interface TodoUpdatedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -149,8 +133,6 @@ export interface TodoUpdatedEvent {
  * 前端 OverviewPanel 收到后重新拉取运行中进程列表。
  */
 export interface ProcessChangedEvent {
-  /** @deprecated 单账户模型下无意义 */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   source?: string;
@@ -173,7 +155,6 @@ export function toSessionEvent(
 ): SessionEvent {
   return {
     type,
-    userId: event.userId,
     sessionId: event.sessionId,
     timestamp: event.timestamp,
     source: event.source,

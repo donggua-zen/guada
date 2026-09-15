@@ -486,7 +486,6 @@ const displayGroups = computed(() => {
   groups.push({
     id: UNGROUPED_ID,
     name: t('ui.sidebar.taskList'),
-    userId: '',
     sortOrder: groups.length,
     createdAt: '',
     updatedAt: ''

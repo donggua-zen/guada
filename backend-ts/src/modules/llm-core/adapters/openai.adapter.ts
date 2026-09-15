@@ -13,7 +13,7 @@
  * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
  * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
  */
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
 import * as path from "path";
 import * as fs from "fs";
@@ -91,6 +91,9 @@ class BodyPreservingOpenAI extends OpenAI {
   }
 }
 
+// @Injectable() 不可省：emitDecoratorMetadata 只在类上有装饰器时才产出
+// design:paramtypes，否则 Nest 会以零参数构造，capability 静默为 undefined
+@Injectable()
 export class OpenAIAdapter implements IProtocolAdapter {
   readonly protocol = "openai";
   private readonly logger = new Logger(OpenAIAdapter.name);

@@ -1,5 +1,4 @@
 import { Controller, Delete, Param, UseGuards } from "@nestjs/common";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { AuthGuard } from "../auth/auth.guard";
 import { SessionService } from "../chat/session.service";
 import { TerminalService } from "./terminal.service";
@@ -16,7 +15,6 @@ export class TerminalController {
   @Delete(":terminalId")
   async dispose(
     @Param("terminalId") terminalId: string,
-    @CurrentUser() user: any,
   ) {
     const handle = this.terminalService.get(terminalId);
     const session = await this.sessionService.getSessionById(handle.sessionId);

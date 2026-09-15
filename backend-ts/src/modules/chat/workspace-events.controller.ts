@@ -13,7 +13,6 @@ import {
 import { Observable } from "rxjs";
 import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
 import {
   WorkspaceWatcherService,
@@ -47,7 +46,6 @@ export class WorkspaceEventsController {
     @Param("id") id: string,
     @Headers("x-client-id") clientId: string,
     @Body() body: { scope?: string; enabled?: boolean },
-    @CurrentUser() user: any,
   ) {
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
@@ -75,7 +73,6 @@ export class WorkspaceEventsController {
   async subscribeWorkspaceEvents(
     @Param("id") id: string,
     @Headers("x-client-id") clientId: string,
-    @CurrentUser() user: any,
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
     // 验证会话归属权

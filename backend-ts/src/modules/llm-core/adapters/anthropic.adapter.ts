@@ -16,7 +16,7 @@
  * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
  * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
  */
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import Anthropic from "@anthropic-ai/sdk";
 import { IProtocolAdapter } from "./base.adapter";
 import {
@@ -45,6 +45,10 @@ import { getRetryAfterFromError } from "../utils/retry.util";
  * 当前为基础版本，支持纯文本对话、工具调用（流式 + 非流式）。
  * TODO: Thinking Extended Thinking、多模态图片输入、错误详情提取
  */
+// @Injectable() 不可省：emitDecoratorMetadata 只在类上有装饰器时才产出
+// design:paramtypes。当前无构造参数故暂无实害，但缺装饰器会让"将来加依赖"
+// 变成静默失败（Nest 零参构造），故一并补上。
+@Injectable()
 export class AnthropicAdapter implements IProtocolAdapter {
   readonly protocol = "anthropic";
   private readonly logger = new Logger(AnthropicAdapter.name);

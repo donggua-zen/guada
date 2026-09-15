@@ -15,6 +15,7 @@ function createPlugin(bridgeResponses: Record<string, any>) {
   const plugin = new BrowserPlugin(workspaceService as any, bridgeClient as any);
   let toolkitDef: any;
   plugin.onLoad({
+    registerNls: () => {},
     registerToolKit: (def: any) => {
       toolkitDef = def;
     },
@@ -78,6 +79,7 @@ describe("BrowserPlugin snapshot contract", () => {
     expect(bridgeClient.request).toHaveBeenCalledWith(
       "browser_snapshot",
       expect.objectContaining({ type: "simple" }),
+      undefined,
     );
     expect(output).toContain("Tabs:");
     expect(output).toContain("role: document");
@@ -102,7 +104,7 @@ describe("BrowserPlugin snapshot contract", () => {
     });
     const snapshot = tools.find((tool) => tool.name === "browser_snapshot")!;
     const output = await snapshot.handler({ type: "struct" }, context());
-    const parsed = JSON.parse(output);
+    const parsed = JSON.parse(output as string);
 
     expect(parsed.role).toBe("document");
     expect(parsed.children[0].text).toBe("Submit");
@@ -152,6 +154,6 @@ describe("BrowserPlugin snapshot contract", () => {
     });
     const snapshot = tools.find((tool) => tool.name === "browser_snapshot")!;
     const output = await snapshot.handler({}, context());
-    expect(yaml.load(output)).toEqual({ role: "document", ref: "root" });
+    expect(yaml.load(output as string)).toEqual({ role: "document", ref: "root" });
   });
 });

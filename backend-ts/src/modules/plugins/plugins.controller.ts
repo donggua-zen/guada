@@ -528,7 +528,6 @@ export class PluginsController {
       return await handler(body?.args, {
         sessionId: body?.sessionId,
         workspaceId: body?.workspaceId,
-        userId: req?.user?.id,
       });
     } catch (e: any) {
       this.logger.error(`Plugin rpc ${pluginId}.${method} failed: ${e.message}`);

@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
+import { randomUUID } from "crypto";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as chokidar from "chokidar";
 import { resolveSessionsBasePath } from "../../common/persistence/jsonl-backend";
@@ -13,7 +14,9 @@ import {
  * 会话元信息文件存储
  *
  * 权威来源 = `<sessions根>/<sessionId>/meta.json`（与 JSONL 事件日志、workflows 同目录）。
- * - 目录名即 id（cuid，与原 DB 主键一致）→ 无需重键，引用零改写
+ * - 目录名即 id，两种来源：
+ *   · 存量迁移 = 原 DB 主键（cuid，25 字符）→ 无需重键，引用零改写
+ *   · 新建 = `${SESSION_ID_PREFIX}${randomUUID()}`（DSH 同款，44 字符）
  * - 会话增删 = 目录增删；删除会话即 `rm -rf <sessionId>/`（meta 与消息、工作流一起走）
  * - 目录内 JSONL 缺失时仍可是合法会话（bot 会话在首条消息前只有 meta.json）
  *
@@ -31,6 +34,28 @@ export const META_FILE = "meta.json";
 export const GROUPS_FILE = "_groups.json";
 /** 分域迁移标记（由 MetadataFileBootstrapService 落盘） */
 export const SESSIONS_MIGRATED_MARKER = ".migrated-sessions";
+
+/** 新建会话 id 前缀（改这一行即可切换命名风格，如 `sess_`） */
+export const SESSION_ID_PREFIX = "session-";
+
+/**
+ * id 合法性校验（对齐 McpFileStore.assertValidId / ProviderFileStore.saveProvider）。
+ *
+ * id 会直接进 `path.join(baseDir, id)`（建目录/整目录删除），因此必须挡住路径分隔符与
+ * `..`；`"undefined"`/`"null"` 是历史缺陷产物（曾因 `String(data.id)` 落到
+ * `sessions/undefined/`），一并显式拒绝。
+ */
+function assertValidId(id: string): void {
+  if (
+    !id ||
+    /[\\/:*?"<>|]/.test(id) ||
+    id.startsWith(".") ||
+    id === "undefined" ||
+    id === "null"
+  ) {
+    throw new Error(`Invalid session id: "${id}"`);
+  }
+}
 
 /**
  * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
@@ -478,7 +503,16 @@ export class SessionFileStore implements OnModuleDestroy {
    */
   async create(data: Record<string, any>): Promise<Record<string, any>> {
     await this.initialize();
-    const id = String(data.id);
+    // 缺 id 时本地铸造（原 DB 的 @default(cuid()) 职责迁到这里）；
+    // 生成 id 需避开既有条目，显式传入的 id 保持原值（覆盖语义不变）。
+    let id: string;
+    if (data.id === undefined || data.id === null || String(data.id) === "") {
+      id = this.generateId();
+      while (this.index.has(id)) id = this.generateId();
+    } else {
+      id = String(data.id);
+      assertValidId(id);
+    }
     const now = new Date().toISOString();
     const meta: SessionMeta = {
       id,
@@ -565,6 +599,8 @@ export class SessionFileStore implements OnModuleDestroy {
   /** 删除会话元信息（整目录，含 JSONL/workflows） */
   async deleteSession(id: string): Promise<boolean> {
     await this.initialize();
+    // 先校验：下面是无条件的整目录 rm，非法 id（`..`／分隔符）必须挡在这里
+    assertValidId(id);
     const existed = this.index.has(id);
     await this.withLock(id, async () => {
       await this.removeDir(this.getSessionDir(id));
@@ -628,6 +664,11 @@ export class SessionFileStore implements OnModuleDestroy {
   }
 
   // ============ 内部：写入与锁 ============
+
+  /** 新建会话 id（DSH 同款：前缀 + UUID v4；前缀见 SESSION_ID_PREFIX） */
+  private generateId(): string {
+    return `${SESSION_ID_PREFIX}${randomUUID()}`;
+  }
 
   private async writeMeta(meta: SessionMeta): Promise<void> {
     const dir = this.getSessionDir(meta.id);

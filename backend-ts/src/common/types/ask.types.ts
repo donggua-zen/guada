@@ -96,7 +96,6 @@ export class AskDeniedError extends Error {
 
 export interface AskSession {
   sessionId: string;
-  userId: string;
   /** 审计 ask/asked（持久事件，发起时写） */
   appendAskAsked(data: {
     requestId: string;

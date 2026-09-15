@@ -51,7 +51,6 @@ function createContext(opts: {
   const ctx = new JsonlSessionContext(
     {
       id: 's1',
-      userId: 'u1',
       sessionType: 'web',
       modelId: undefined,
       settings: { systemPrompt: 'sys' },

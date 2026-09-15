@@ -1,0 +1,55 @@
+/**
+ * 会话元信息映射（DB session 行 → SessionMeta 文件形态）
+ *
+ * 从 MetadataFileBootstrapService 提取的共享纯函数：元数据映射单一来源，
+ * 元信息导出（metadata-file-bootstrap）与会话消息迁移（session-message-db-migrator）
+ * 共用，保证两条迁移线写出的 meta.json 字段口径逐字段一致。
+ */
+import type { SessionMeta } from "../../../modules/chat/session-file.store";
+
+/** DB 日期值（Date | 字符串 | null）→ ISO 字符串，不可解析返回 null */
+export function toISO(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value as string);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** DB session 行 → SessionMeta（全字段保留；id 即 cuid 目录名，无需重键） */
+export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
+  const now = new Date().toISOString();
+  return {
+    id: String(row.id),
+    title: row.title ?? null,
+    avatarUrl: row.avatarUrl ?? null,
+    description: row.description ?? null,
+    modelId: row.modelId ?? null,
+    characterId: row.characterId ?? null,
+    groupId: row.groupId ?? null,
+    settings:
+      row.settings && typeof row.settings === "object" ? row.settings : null,
+    sessionType: row.sessionType ?? "web",
+    archived: row.archived === true,
+    botId: row.botId ?? null,
+    platform: row.platform ?? null,
+    externalId: row.externalId ?? null,
+    workspacePath: row.workspacePath ?? null,
+    parentId: row.parentId ?? null,
+    closedAt: toISO(row.closedAt),
+    closeReason: row.closeReason ?? null,
+    createdAt: toISO(row.createdAt) ?? now,
+    updatedAt: toISO(row.updatedAt) ?? now,
+    lastActiveAt: toISO(row.lastActiveAt),
+  };
+}
+
+/**
+ * heal 骨架判定：meta.json 由 SessionFileStore.healOrphanSessions 自动重建的
+ * 最小骨架（title/characterId/groupId 全空）——可安全地用 DB 行全量覆盖修复。
+ * 用户实际使用过的 meta（任一字段有值）不触碰。
+ */
+export function isHealSkeletonMeta(meta: unknown): boolean {
+  if (!meta || typeof meta !== "object") return true;
+  const m = meta as Record<string, any>;
+  return !m.title && !m.characterId && !m.groupId;
+}

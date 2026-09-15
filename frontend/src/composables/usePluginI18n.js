@@ -31,7 +31,7 @@ export function usePluginI18n(pluginId) {
  *
  * 使用：
  *   const { user, session, locale } = usePluginRuntime()
- *   computed(() => user.value?.role)
+ *   computed(() => user.value?.nickname)
  */
 export function usePluginRuntime() {
   const runtime = window.__GuaDaShared__?.runtime ?? {}

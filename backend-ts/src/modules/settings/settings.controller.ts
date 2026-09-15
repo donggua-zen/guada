@@ -3,7 +3,6 @@ import * as path from 'path';
 import { SettingsService } from "./settings.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
 import { WorkspaceService } from "../../common/services/workspace.service";
 
@@ -11,7 +10,6 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
-    private readonly toolOrchestrator: ToolOrchestrator,
     private readonly pluginManager: PluginManager,
     private readonly workspaceService: WorkspaceService,
   ) { }

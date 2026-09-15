@@ -38,44 +38,6 @@ export class PromptCollector {
   }
 
   /**
-   * 获取指定插件的所有 eager 提示词
-   */
-  async collectPluginPrompts(
-    pluginId: string,
-    resolvedPlugins: ResolvedPluginInfo[],
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(resolvedPlugins, context, "eager");
-    return all.filter((p) => p.pluginId === pluginId);
-  }
-
-  /**
-   * 获取指定插件的所有 lazy 提示词
-   */
-  async collectPluginLazyPrompts(
-    pluginId: string,
-    resolvedPlugins: ResolvedPluginInfo[],
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(resolvedPlugins, context, "lazy");
-    return all.filter((p) => p.pluginId === pluginId);
-  }
-
-  /**
-   * 收集所有启用插件的 type=user 提示词（注入到 user 消息，而非 system prompt）。
-   *
-   * ⚠️ 已废弃（envelope/surface 分离改造，2026-08-30）：type="user" 提示词机制整体移除——
-   * 唯一使用者 todo 插件改由 MEMORY_COMPACTED 处理器压缩后落库注入（hidden user 消息）。
-   * 保留方法签名以兼容仍注册 type="user" 的第三方插件（行为：返回空，不注入）。
-   */
-  async collectUserPrompts(
-    resolvedPlugins: ResolvedPluginInfo[],
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    return [];
-  }
-
-  /**
    * 从已决议的插件信息中，按 loadMode 收集提示词
    *
    * 提示词来源：
@@ -104,7 +66,6 @@ export class PromptCollector {
         if (!kitReg) continue;
 
         for (const pm of kitReg.prompts) {
-          if (pm.type === "user") continue; // user 型由 collectUserPrompts 收集
           try {
             const content = await pm.handler(context);
             if (content) {
@@ -120,12 +81,11 @@ export class PromptCollector {
         }
       }
 
-      // 插件级 prompts（始终 eager，跳过 type=user 的）
+      // 插件级 prompts（始终 eager）
       if (loadMode === "eager") {
         const { prompts: pluginPrompts } =
           PluginRegistry.getPromptMetas(pluginId);
         for (const meta of pluginPrompts) {
-          if (meta.type === "user") continue;
           try {
             const content = await meta.handler(context);
             if (content) {

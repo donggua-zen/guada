@@ -80,20 +80,12 @@ export function createMockLLMService(
 }
 
 /**
- * ToolOrchestrator Mock 工厂
+ * ToolExecutor Mock 工厂
  */
-export function createMockToolOrchestrator(options?: {
+export function createMockToolExecutor(options?: {
   toolCallsResponse?: any[];
 }) {
   return {
-    getAllTools: jest.fn().mockResolvedValue([]),
-    getAllToolPrompts: jest.fn().mockResolvedValue(''),
-    generateDisplayMessage: jest.fn((req: any, isStreaming: boolean) => ({
-      action: isStreaming ? `正在调用 ${req.name}` : `已调用 ${req.name}`,
-      toolName: req.name,
-      toolType: 'generic',
-      arguments: req.arguments || {},
-    })),
     executeBatch: jest.fn().mockResolvedValue(
       options?.toolCallsResponse || [
         { 
@@ -116,7 +108,6 @@ export function createMockSessionContext(options?: {
 }) {
   return {
     sessionId: 'test-session-001',
-    userId: 'test-user',
     sessionType: 'web' as const,
     parentSessionId: null,
     characterId: null,
@@ -197,7 +188,7 @@ export function createMockSessionContextService(options?: {
   return {
     buildContext: jest.fn().mockResolvedValue({
       context: mockCtx,
-      toolContext: { sessionId: 'test-session-001', userId: 'test-user' },
+      toolContext: { sessionId: 'test-session-001' },
       effectiveContextWindow: options?.contextWindow || 8000,
       thinkingEffort: options?.thinkingEffort || 'medium',
     }),
@@ -255,7 +246,7 @@ export function createAllMocks(options?: {
         })();
       } : undefined)
     ),
-    toolOrchestrator: createMockToolOrchestrator({
+    toolExecutor: createMockToolExecutor({
       toolCallsResponse: options?.toolCallsResponse,
     }),
     sessionContext,

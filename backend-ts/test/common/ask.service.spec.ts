@@ -8,7 +8,6 @@ import type { AskSession } from '../../src/common/types/ask.types';
 function makeSession(): AskSession & { appendAskAsked: jest.Mock; appendAskAnswered: jest.Mock; publishStream: jest.Mock } {
   return {
     sessionId: 's1',
-    userId: 'u1',
     appendAskAsked: jest.fn(async () => {}),
     appendAskAnswered: jest.fn(async () => {}),
     publishStream: jest.fn(async () => {}),

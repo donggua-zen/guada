@@ -36,10 +36,8 @@ export interface PromptPiece {
   content: string;
   /** 排序优先级：STATIC 在前，VOLATILE 在后 */
   frequency: PromptFrequency;
-  /** 加载模式：eager=始终注入, lazy=tool_load时注入, none=不注入 */
-  loadMode?: ToolLoadMode;
-  /** 注入位置：system=system prompt, user=user消息（插件级提示词专用） */
-  type?: "system" | "user";
+  /** 加载模式：eager=始终注入, lazy=经 tool_learn 学习后随工具包注入, none=不注入 */
+  loadMode?: ToolKitLoadMode;
   /** 所属插件 ID */
   pluginId: string;
   /** 描述（用于调试和 UI） */
@@ -60,7 +58,6 @@ export type PromptContext = PluginContext;
 
 // ==================== 工具（沿用现有定义） ====================
 
-export type ToolLoadMode = "eager" | "lazy" | "user" | "none";
 export type ToolProviderType = "core" | "extended";
 export type ConditionFn = (
   context: PluginContext,
@@ -200,26 +197,6 @@ export interface ToolHandlerDef {
   displayRenderer?: ToolRendererDecl;
 }
 
-// ==================== 工具集定义（旧版，已废弃） ====================
-
-/** @deprecated 使用 ToolKitDef / ToolKit */
-export interface ToolSetDef {
-  id: string;
-  name: string;
-  tools: string[];
-  loadMode?: ToolLoadMode;
-  activator?: string;
-  handler?: (
-    context: PluginContext,
-  ) => Promise<ToolSetRuntime> | ToolSetRuntime;
-}
-
-/** @deprecated */
-export interface ToolSetRuntime {
-  loadMode?: ToolLoadMode;
-  activator?: string;
-}
-
 // ==================== 工具包定义（ToolKit，新版） ====================
 
 /** 工具包加载模式 */
@@ -233,7 +210,7 @@ export interface ToolKitDef {
   name?: string;
   /** 显示描述（支持 %key% NLS 引用） */
   description?: string;
-  /** 加载模式（默认 lazy） */
+  /** 加载模式（默认 eager） */
   loadMode?: ToolKitLoadMode;
   /** 是否默认启用（默认 true） */
   enabled?: boolean;
@@ -274,8 +251,6 @@ export interface ToolKitHandle {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     description?: string;
-    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
-    type?: "system" | "user";
   }): void;
 }
 
@@ -286,8 +261,6 @@ export interface ToolKitRegistration {
   prompts: Array<{
     frequency: string;
     description: string;
-    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
-    type?: "system" | "user";
     handler: (ctx: any) => string | Promise<string>;
   }>;
 }
@@ -301,8 +274,6 @@ export interface ToolUsingEvent {
   pluginId: string;
   /** 当前用户是否为管理员 */
   isAdmin: boolean;
-  /** 用户 ID */
-  userId?: string;
   /** 会话 ID */
   sessionId: string;
   /** 阻止执行（在钩子中设为 true） */
@@ -396,7 +367,7 @@ export interface ThemeRegistration {
 /** RPC 方法 handler：参数与返回值为可序列化 JSON */
 export type RpcHandler = (
   args: any,
-  ctx: { sessionId?: string; workspaceId?: string; userId?: string },
+  ctx: { sessionId?: string; workspaceId?: string },
 ) => unknown | Promise<unknown>;
 
 /**
@@ -422,7 +393,7 @@ export interface ResolvedPluginInfo {
     id: string;
     name: string;
     description?: string;
-    loadMode: ToolLoadMode;
+    loadMode: ToolKitLoadMode;
     activator?: string;
     enabled: boolean;
     /** 该工具包注册的工具数量 */

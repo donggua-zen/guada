@@ -217,7 +217,6 @@ export class ShellPlugin extends PluginBase {
           cwd,
           encoding,
           ctx?.session.sessionId || "",
-          ctx?.session.userId || "",
           {
             timeout: this.BACKGROUND_THRESHOLD_MS,
             abortSignal,

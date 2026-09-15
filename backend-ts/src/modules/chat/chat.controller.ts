@@ -15,7 +15,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 
 import { SessionService } from "./session.service";
 import { FileRef } from "../../common/types/conversation.types";
@@ -61,7 +60,6 @@ export class ChatController {
         knowledgeBaseIds?: string[];
       };
     },
-    @CurrentUser() user: any,
     @Res() res: Response,
     @Req() req: Request,
     @Headers("x-client-id") clientId: string,
@@ -81,7 +79,6 @@ export class ChatController {
       try {
         const parsed = await this.tagParserPipeline.parse(userMessage.content, {
           sessionId,
-          userId: user.id,
         });
         if (parsed.injectionBlocks.length > 0) {
           source.injectedBlocks = parsed.injectionBlocks;
@@ -160,7 +157,6 @@ export class ChatController {
   @Get("stream/:sessionId/status")
   async getStreamStatus(
     @Param("sessionId") sessionId: string,
-    @CurrentUser() user: any,
   ) {
     await this.sessionService.getSessionById(sessionId);
     return (

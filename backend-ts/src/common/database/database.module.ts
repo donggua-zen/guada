@@ -5,7 +5,9 @@ import { CharacterRepository } from "./character.repository";
 import { CharacterFileStore } from "../../modules/characters/character-file.store";
 import { SessionFileStore } from "../../modules/chat/session-file.store";
 import { BotFileStore } from "../../modules/bot-gateway/bot-file.store";
-import { KbFileStore } from "../../modules/knowledge-base/kb-file.store";
+import { KbMetaStore } from "../../modules/knowledge-base/kb-meta.store";
+import { KbDatabaseService } from "../../modules/knowledge-base/kb-database.service";
+import { KbSearchService } from "../../modules/knowledge-base/kb-search.service";
 import { McpFileStore } from "../../modules/mcp-servers/mcp-file.store";
 import { KBChunkRepository } from "./kb-chunk.repository";
 import { KBFileRepository } from "./kb-file.repository";
@@ -19,6 +21,9 @@ import { CharacterFileBootstrapService } from "./bootstrap/character-file-bootst
 import { ProviderBootstrapService } from "./bootstrap/provider-bootstrap.service";
 import { MetadataFileBootstrapService } from "./bootstrap/metadata-file-bootstrap.service";
 import { MigrationBootstrapService } from "./bootstrap/migration-bootstrap.service";
+import { KbMigrationBootstrapService } from "./bootstrap/kb-migration-bootstrap.service";
+import { SessionMessageDbMigratorService } from "./bootstrap/session-message-db-migrator.service";
+import { SessionMessageMigrationBootstrapService } from "./bootstrap/session-message-migration-bootstrap.service";
 
 const REPOSITORIES = [
   PrismaService,
@@ -33,10 +38,16 @@ const REPOSITORIES = [
   ProviderBootstrapService,
   AccountBootstrapService,
   MetadataFileBootstrapService,
+  KbMigrationBootstrapService,
+  // 会话消息 DB → JSONL（含 meta 骨架修复；编排顺序见 MigrationBootstrapService）
+  SessionMessageDbMigratorService,
+  SessionMessageMigrationBootstrapService,
   CharacterFileStore,
   SessionFileStore,
   BotFileStore,
-  KbFileStore,
+  KbMetaStore,
+  KbDatabaseService,
+  KbSearchService,
   McpFileStore,
   CharacterRepository,
   KBChunkRepository,

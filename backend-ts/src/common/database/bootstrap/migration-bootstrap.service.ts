@@ -5,9 +5,11 @@ import { CharacterFileBootstrapService } from "./character-file-bootstrap.servic
 import { ProviderBootstrapService } from "./provider-bootstrap.service";
 import { AccountBootstrapService } from "./account-bootstrap.service";
 import { MetadataFileBootstrapService } from "./metadata-file-bootstrap.service";
+import { KbMigrationBootstrapService } from "./kb-migration-bootstrap.service";
+import { SessionMessageMigrationBootstrapService } from "./session-message-migration-bootstrap.service";
 import { SessionFileStore } from "../../../modules/chat/session-file.store";
 import { BotFileStore } from "../../../modules/bot-gateway/bot-file.store";
-import { KbFileStore } from "../../../modules/knowledge-base/kb-file.store";
+import { KbDatabaseService } from "../../../modules/knowledge-base/kb-database.service";
 import { McpFileStore } from "../../../modules/mcp-servers/mcp-file.store";
 
 /**
@@ -37,7 +39,9 @@ export class MigrationBootstrapService implements OnModuleInit {
     private readonly metadataBootstrap: MetadataFileBootstrapService,
     private readonly sessionStore: SessionFileStore,
     private readonly botStore: BotFileStore,
-    private readonly kbStore: KbFileStore,
+    private readonly kbBootstrap: KbMigrationBootstrapService,
+    private readonly sessionMessageBootstrap: SessionMessageMigrationBootstrapService,
+    private readonly kbDatabases: KbDatabaseService,
     private readonly mcpStore: McpFileStore,
   ) {}
 
@@ -55,14 +59,24 @@ export class MigrationBootstrapService implements OnModuleInit {
     // 3. 账户导入（保留密码）
     await this.step("account", () => this.accountBootstrap.run());
 
-    // 4. 元信息导出（sessions/bots/kb/mcp）：此刻 DB 引用已全部归一化，导出即正确
+    // 4. 会话/机器人/MCP 元信息导出：此刻 DB 引用已全部归一化，导出即正确
     await this.step("metadata", () => this.metadataBootstrap.run());
+
+    // 4.1 知识库：三源（冻结主库 / 旧 file.json 形态 / 旧全局向量库）→ 每库 kb.db。
+    //     独立成步是因为它要合并多源并搬原件，且必须晚于 rekey（embeddingModelId 是复合引用）。
+    await this.step("kb", () => this.kbBootstrap.run());
+
+    // 4.2 会话消息：DB message/message_content/session_context_state → JSONL 事件
+    //     （占用锚点 + 压缩括号 + meta 骨架修复）。必须先于 sessionStore.initialize()——
+    //     索引预热/heal 抢先跑会给无 meta 的目录补 title=null 骨架（侧栏空行 + 丢绑定）。
+    await this.step("session-messages", () => this.sessionMessageBootstrap.run());
 
     // 5. 门控已放行，主动预热索引：把冷启动的文件扫描成本放在启动期，
     //    既避免首个用户请求承担，也让冷加载耗时在启动日志里可见
     await this.sessionStore.initialize();
     await this.botStore.initialize();
-    await this.kbStore.initialize();
+    // KB：不做全量预热（按需懒开该库的 kb.db，列表只读 kb.json）
+    this.kbDatabases.invalidateKbList();
     await this.mcpStore.initialize();
   }
 

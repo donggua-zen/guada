@@ -17,7 +17,6 @@ import {
 import type { Request, Response } from "express";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { Public } from "../auth/public.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
@@ -45,7 +44,6 @@ export class SessionsController {
     @Query("groupId") groupId: string | undefined,
     @Query("keyword") keyword: string | undefined,
     @Query("includeArchived") includeArchived: string | undefined,
-    @CurrentUser() user: any,
   ) {
     // groupId 特殊值处理："null"字符串表示查询未分组会话
     const parsedGroupId = groupId === "null" ? null : groupId;
@@ -64,7 +62,6 @@ export class SessionsController {
     @Query("cursor") cursor: string | undefined,
     @Query("limit") limit: string | undefined,
     @Query("includeArchived") includeArchived: string | undefined,
-    @CurrentUser() user: any,
   ) {
     // limit = 每批扫描的会话数（渐进扫描，前端循环拉取直到 hasMore=false）
     return this.sessionService.searchSessions(
@@ -81,7 +78,6 @@ export class SessionsController {
     @Query("limit") limit = 50,
     @Query("keyword") keyword: string | undefined,
     @Query("groupId") groupId: string | undefined,
-    @CurrentUser() user: any,
   ) {
     return this.sessionService.getArchivedSessions(
       Number(skip),
@@ -97,7 +93,6 @@ export class SessionsController {
   @Get("sessions/sidebar")
   async getSidebarSessions(
     @Query("limit") limit: string = "10",
-    @CurrentUser() user: any,
   ) {
     return this.sessionService.getSidebarSessions(Number(limit));
   }
@@ -106,7 +101,6 @@ export class SessionsController {
   async archiveSession(
     @Param("id") id: string,
     @Body() data: { archived: boolean },
-    @CurrentUser() user: any,
   ) {
     return this.sessionService.archiveSession(id, data.archived);
   }
@@ -114,7 +108,6 @@ export class SessionsController {
   @Post("sessions/batch-archive")
   async batchArchiveSessions(
     @Body() data: { sessionIds: string[]; archived: boolean },
-    @CurrentUser() user: any,
   ) {
     return this.sessionService.batchArchiveSessions(data.sessionIds, data.archived);
   }
@@ -122,14 +115,12 @@ export class SessionsController {
   @Post("sessions")
   async createSession(
     @Body() data: CreateSessionDto,
-    @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {
     const session = await this.sessionService.createSession(data);
 
     // 广播会话创建事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.created", {
-      userId: user.id,
       sessionId: session.id,
       timestamp: new Date().toISOString(),
       source: clientId || undefined,
@@ -140,7 +131,7 @@ export class SessionsController {
   }
 
   @Get("sessions/:id")
-  async getSession(@Param("id") id: string, @CurrentUser() user: any) {
+  async getSession(@Param("id") id: string) {
     return this.sessionService.getSessionById(id);
   }
 
@@ -148,14 +139,12 @@ export class SessionsController {
   async updateSession(
     @Param("id") id: string,
     @Body() data: UpdateSessionDto,
-    @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {
     const session = await this.sessionService.updateSession(id, data);
 
     // 广播会话更新事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.updated", {
-      userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),
       source: clientId || undefined,
@@ -169,7 +158,6 @@ export class SessionsController {
   async deleteSession(
     @Param("id") id: string,
     @Query("deleteWorkspace") deleteWorkspace: string,
-    @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {
     const shouldDeleteWorkspace = deleteWorkspace === 'true';
@@ -177,7 +165,6 @@ export class SessionsController {
 
     // 广播会话删除事件，携带 source 使前端能过滤自身事件
     this.eventBus.emit("session.deleted", {
-      userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),
       source: clientId || undefined,
@@ -187,14 +174,13 @@ export class SessionsController {
   }
 
   @Post("sessions/:id/generate-title")
-  async generateTitle(@Param("id") id: string, @CurrentUser() user: any) {
+  async generateTitle(@Param("id") id: string) {
     return this.sessionService.generateTitle(id);
   }
 
   @Get("sessions/:id/summaries")
   async getSessionSummaries(
     @Param("id") id: string,
-    @CurrentUser() user: any,
     @Query("limit") limit?: string,
   ) {
     return this.sessionService.getSessionSummaries(id, limit ? parseInt(limit, 10) : undefined);
@@ -203,13 +189,12 @@ export class SessionsController {
   @Post("sessions/:id/compress")
   async compressSession(
     @Param("id") id: string,
-    @CurrentUser() user: any,
   ) {
     return this.sessionService.compressSession(id);
   }
 
   @Get("sessions/:id/workspace-path")
-  async getWorkspacePath(@Param("id") id: string, @CurrentUser() user: any) {
+  async getWorkspacePath(@Param("id") id: string) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
@@ -223,7 +208,7 @@ export class SessionsController {
   }
 
   @Get("sessions/:id/todo")
-  async getSessionTodo(@Param("id") id: string, @CurrentUser() user: any) {
+  async getSessionTodo(@Param("id") id: string) {
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
@@ -245,7 +230,7 @@ export class SessionsController {
   }
 
   @Get("sessions/:id/workspace/tree")
-  async getWorkspaceTree(@Param("id") id: string, @CurrentUser() user: any) {
+  async getWorkspaceTree(@Param("id") id: string) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
@@ -262,7 +247,6 @@ export class SessionsController {
   async getWorkspaceFile(
     @Param("id") id: string,
     @Query("path") filePath: string,
-    @CurrentUser() user: any,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -336,7 +320,6 @@ export class SessionsController {
     @Param("id") id: string,
     @Query("path") filePath: string,
     @Body() body: { content: string },
-    @CurrentUser() user: any,
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
@@ -380,7 +363,6 @@ export class SessionsController {
   async getWorkspaceChildren(
     @Param("id") id: string,
     @Query("path") dirPath: string,
-    @CurrentUser() user: any
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
@@ -485,7 +467,6 @@ export class SessionsController {
     @Param("id") id: string,
     @Query("path") filePath: string,
     @Res() res: Response,
-    @CurrentUser() user: any
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
@@ -625,7 +606,6 @@ export class SessionsController {
   async deleteWorkspaceFile(
     @Param("id") id: string,
     @Query("path") filePath: string,
-    @CurrentUser() user: any,
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
@@ -670,7 +650,6 @@ export class SessionsController {
   async renameWorkspaceFile(
     @Param("id") id: string,
     @Body() body: { path: string; newName: string },
-    @CurrentUser() user: any,
   ) {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);

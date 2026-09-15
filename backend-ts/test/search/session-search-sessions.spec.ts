@@ -15,14 +15,14 @@ function decodeCursor(cursor: string): { phase: string; offset: number } {
 }
 
 function buildService(overrides: {
-  findByUserId?: jest.Mock;
+  findAllMock?: jest.Mock;
   scanIds?: string[];
   rows?: Record<string, any>[];
   scanBatch?: jest.Mock;
   hasActiveStream?: jest.Mock;
 }) {
   const sessionRepo = {
-    findAll: overrides.findByUserId ?? jest.fn().mockResolvedValue({ items: [], total: 0 }),
+    findAll: overrides.findAllMock ?? jest.fn().mockResolvedValue({ items: [], total: 0 }),
     listWebSessionIds: jest.fn().mockReturnValue(overrides.scanIds ?? []),
     getManyByIds: jest.fn().mockImplementation((ids: string[]) => {
       const byId = new Map((overrides.rows ?? []).map((r) => [r.id, r]));
@@ -65,12 +65,12 @@ describe("SessionService.searchSessions（渐进扫描游标协议）", () => {
   });
 
   it("title 阶段：标题命中先行返回，游标指向 content offset=0，携带 progress.total", async () => {
-    const findByUserId = jest.fn().mockResolvedValue({
+    const findAllMock = jest.fn().mockResolvedValue({
       items: [{ id: "s_title", title: "测试会话", sessionType: "web" }],
       total: 1,
     });
     const { service } = buildService({
-      findByUserId,
+      findAllMock,
       scanIds: ["s_title", "s_a", "s_b"],
     });
 
@@ -83,7 +83,7 @@ describe("SessionService.searchSessions（渐进扫描游标协议）", () => {
   });
 
   it("content 阶段：命中组装保持扫描顺序、排除标题命中，游标推进", async () => {
-    const findByUserId = jest.fn().mockResolvedValue({
+    const findAllMock = jest.fn().mockResolvedValue({
       items: [{ id: "s_title", title: "测试", sessionType: "web" }],
       total: 1,
     });
@@ -96,7 +96,7 @@ describe("SessionService.searchSessions（渐进扫描游标协议）", () => {
       scanned: 3,
     });
     const { service } = buildService({
-      findByUserId,
+      findAllMock,
       scanIds: ["s_title", "s_a", "s_b"],
       rows: [
         { id: "s_b", title: "B", sessionType: "web" },

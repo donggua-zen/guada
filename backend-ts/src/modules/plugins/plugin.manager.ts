@@ -2,11 +2,9 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PluginBase } from "./base-plugin";
 import { PluginRegistry } from "./registry/plugin-registry";
 import {
-  PromptPiece,
   PluginContext,
   ToolHandlerDef,
   PluginManifest,
-  ToolLoadMode,
   GlobalPluginConfig,
   GlobalPluginEntryConfig,
   RolePluginConfig,
@@ -22,37 +20,6 @@ import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
 import { NlsService } from "./i18n/nls.service";
-
-// ── 新 registerTools API 类型 ──
-
-export interface ToolDef {
-  name: string;
-  description: string;
-  parameters?: Record<string, any>;
-  action?: string;
-  argsKey?: string;
-  icon?: string;
-  execute: (
-    args: any,
-    ctx?: PluginContext,
-    signal?: AbortSignal,
-  ) => string | Promise<string>;
-}
-
-export interface PromptDef {
-  content: string | ((ctx: PluginContext) => string);
-  frequency?: "STATIC" | "REGULAR" | "VOLATILE";
-  description?: string;
-}
-
-export interface ToolPluginDef {
-  id: string;
-  name: string;
-  description: string;
-  category?: "core" | "extended" | "user";
-  tools: ToolDef[];
-  prompts?: PromptDef[];
-}
 
 // ──
 
@@ -176,105 +143,6 @@ export class PluginManager {
 
     // 插件集合变化 → 通知前端刷新 slot 清单
     this.eventBus.emit("plugins.changed", { pluginId: id, action: "registered" });
-  }
-
-  /**
-   * 以纯对象方式注册工具插件
-   */
-  async registerTools(def: ToolPluginDef): Promise<void> {
-    const id = def.id;
-    if (this.instances.has(id)) {
-      this.logger.warn(`Plugin ${id} already registered, skipping`);
-      return;
-    }
-
-    const manifest: PluginManifest = {
-      id,
-      name: def.name,
-      description: def.description,
-      version: "1.0.0",
-      category: def.category || "core",
-    };
-
-    if (!PluginRegistry.has(id)) {
-      PluginRegistry.registerManifest(manifest);
-    }
-
-    const toolDefs: ToolHandlerDef[] = def.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: "object" as const,
-        properties: (() => {
-          const props: Record<string, any> = {};
-          for (const [key, val] of Object.entries(t.parameters || {})) {
-            const { required: _r, ...rest } = val as any;
-            props[key] = rest;
-          }
-          return props;
-        })(),
-        required: (() => {
-          const r = Object.entries(t.parameters || {})
-            .filter(([_, v]) => (v as any).required !== false)
-            .map(([k]) => k);
-          return r.length > 0 ? r : undefined;
-        })(),
-      },
-      handler: (args, ctx, signal) => t.execute(args, ctx, signal),
-      toolSet: "__plugin_level",
-      action: t.action,
-      argsKey: t.argsKey,
-      icon: t.icon,
-    }));
-
-    const reg = (PluginRegistry as any).registrations.get(id);
-    if (reg) {
-      for (const td of toolDefs) {
-        if (!reg.tools.find((x: any) => x.name === td.name)) {
-          reg.tools.push(td);
-        }
-      }
-    }
-
-    const promptMetas: any[] = (def.prompts || []).map((p) => ({
-      methodName: "",
-      frequency: p.frequency || "REGULAR",
-      loadMode: "eager",
-      description: p.description || "",
-      handler:
-        typeof p.content === "function" ? p.content : async () => p.content,
-    }));
-
-    const instance: PluginInstance = {
-      plugin: {
-        manifest,
-        _enabled: true,
-        getPrompts: async (ctx: PluginContext) => {
-          const pieces: PromptPiece[] = [];
-          for (const p of promptMetas) {
-            try {
-              const content = await p.handler(ctx);
-              if (content)
-                pieces.push({
-                  content,
-                  frequency: p.frequency,
-                  loadMode: "eager",
-                  pluginId: id,
-                  description: p.description,
-                });
-            } catch {}
-          }
-          return pieces;
-        },
-      } as any,
-      manifest,
-      enabled: true,
-    };
-
-    this.instances.set(id, instance);
-    this.logger.log(
-      `Plugin registered (tools): ${def.name} (${id}), tools=${toolDefs.length}`,
-    );
   }
 
   /**
@@ -641,7 +509,7 @@ export class PluginManager {
 
     for (const kitReg of PluginRegistry.getToolKits(manifest.id)) {
       const denied = state.deniedToolkits.has(kitReg.def.id);
-      let loadMode: ToolLoadMode = kitReg.def.loadMode || "eager";
+      let loadMode: ToolKitLoadMode = kitReg.def.loadMode || "eager";
       let activator = kitReg.def.activator;
 
       if (!denied) {
@@ -651,7 +519,7 @@ export class PluginManager {
               session,
             } as PluginContext);
             if (runtime) {
-              loadMode = (runtime.loadMode as ToolLoadMode) ?? loadMode;
+              loadMode = (runtime.loadMode as ToolKitLoadMode) ?? loadMode;
               activator = runtime.activator ?? activator;
             }
           }
@@ -688,16 +556,5 @@ export class PluginManager {
       source: manifest.source,
       pluginPath: manifest.pluginPath,
     };
-  }
-
-  /** 获取所有已注册的工具包（供外部汇总） */
-  getPluginToolKits(
-    pluginId: string,
-  ): Array<{ id: string; name: string; loadMode: ToolKitLoadMode }> {
-    return PluginRegistry.getToolKits(pluginId).map((k) => ({
-      id: k.def.id,
-      name: k.def.name || k.def.id,
-      loadMode: k.def.loadMode || "lazy",
-    }));
   }
 }

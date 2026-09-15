@@ -25,7 +25,7 @@ describe("WorkflowController.listRuns 合并", () => {
   }
 
   it("内存覆盖同 runId 磁盘快照，按 startedAt 倒序", async () => {
-    const { runs } = await createController().listRuns("s1", { id: "u1" });
+    const { runs } = await createController().listRuns("s1");
     expect(runs.map((r: any) => r.runId)).toEqual(["wfr_new", "wfr_live", "wfr_old"]);
     const merged = runs.find((r: any) => r.runId === "wfr_live");
     expect(merged.status).toBe("running");
@@ -34,7 +34,7 @@ describe("WorkflowController.listRuns 合并", () => {
 
   it("会话不存在 → 404", async () => {
     await expect(
-      createController(false).listRuns("nope", { id: "u1" }),
+      createController(false).listRuns("nope"),
     ).rejects.toMatchObject({ status: 404 });
   });
 });

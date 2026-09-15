@@ -6,13 +6,13 @@
  * 再执行 LLM 摘要。整个交互不入库、不 yield SSE 事件（fail-open，失败不阻断压缩）。
  *
  * 依赖 LLMService（单次请求不重试——失败容忍的辅助调用，重试退避会拖慢压缩，对齐 DSH 辅助调用单次）
- * + ToolOrchestrator。
+ * + ToolExecutor。
  */
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import * as fs from "fs";
 import * as path from "path";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { ToolExecutor } from "../tools/tool-executor.service";
 import { LLMService } from "../llm-core/llm.service";
 import { BlockAssembler } from "./block-assembler";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
@@ -30,7 +30,7 @@ export class MemorySyncService {
 
   constructor(
     private readonly llmService: LLMService,
-    private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly toolExecutor: ToolExecutor,
   ) {}
 
   /** 订阅压缩前钩子：仅 MEMORY_SYNC 模式执行记忆保存影子轮次 */
@@ -163,7 +163,7 @@ Scan history. ONLY trigger an update if:
           );
           if (shadowToolCalls.length === 0) break;
 
-          const responses = await this.toolOrchestrator.executeBatch(
+          const responses = await this.toolExecutor.executeBatch(
             shadowToolCalls.map((tc) => ({
               id: tc.toolCallId,
               name: tc.name,

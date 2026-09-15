@@ -20,7 +20,6 @@ export type SessionEventType =
  */
 export interface SessionEvent {
   type: SessionEventType;
-  userId: string;
   sessionId: string;
   timestamp: string;
   payload?: Record<string, any>;
@@ -61,7 +60,7 @@ export class SessionEventsService {
 
   /**
    * 连接到事件流
-   * 后端通过 token 解析 userId，前端无需传递
+   * 后端通过 token 鉴权，前端无需传递身份信息
    */
   connect(): void {
     if (this.eventSource?.readyState === EventSource.OPEN) {

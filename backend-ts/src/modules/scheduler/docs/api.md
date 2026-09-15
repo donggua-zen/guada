@@ -26,7 +26,6 @@
 ```typescript
 interface ScheduledTask {
   id: string;
-  userId: string;
   name: string;
   prompt: string;
   scheduleType: "cron" | "once";     // 调度类型

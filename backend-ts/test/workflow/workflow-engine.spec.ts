@@ -28,7 +28,6 @@ import type { SubAgentManager, SubAgentResult } from "../../src/modules/sub-agen
 function createMockSessionContext(overrides?: Partial<Record<string, any>>): ISessionContext {
   const base: any = {
     sessionId: "s_parent",
-    userId: "u1",
     sessionType: "web",
     workspacePath: "/tmp/ws",
     getSettings: (field?: string) => {

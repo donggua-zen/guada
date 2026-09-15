@@ -40,7 +40,7 @@ import {
   COMPRESSION_TIER_PRESETS,
   resolveCompressionTier,
 } from './compaction/compression-tiers';
-import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
+import { ToolExecutor } from '../tools/tool-executor.service';
 import { toRuntimeProviderConfig } from '../llm-core/utils/provider-runtime.util';
 import { ModelNotResolvedError } from '../llm-core/model-not-resolved.error';
 import {
@@ -105,7 +105,6 @@ export interface ContextSnapshot {
 
 export class JsonlSessionContext implements ISessionContext, CompactionDataSource {
   readonly sessionId: string;
-  readonly userId: string;
   readonly sessionType: 'web' | 'bot' | 'sub_agent';
   readonly parentSessionId?: string | null;
   readonly characterId?: string | null;
@@ -164,7 +163,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {
     this.sessionId = session.id;
-    this.userId = session.userId;
     this.sessionType = session.sessionType || 'web';
     this.parentSessionId = session.parentId || null;
     this.characterId = session.characterId || null;
@@ -716,7 +714,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   getTools(): import('../tools/interfaces/tool-provider.interface').ToolDefinition[] {
     return this.resolvedPlugins.length > 0
-      ? ToolOrchestrator.toFlatToolDefs(this.resolvedPlugins)
+      ? ToolExecutor.toFlatToolDefs(this.resolvedPlugins)
       : [];
   }
 
@@ -1097,8 +1095,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 构建系统提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system）。
-   * 含：角色 systemPrompt + 插件 eager 提示词。插件 user 型提示（type="user"）已废弃——
-   * todo 状态改由压缩后落库注入（见 todo.plugin MEMORY_COMPACTED 处理器）。
+   * 含：角色 systemPrompt + 插件 eager 提示词。
    */
   private async buildSystemText(): Promise<string> {
     const systemPrompts: string[] = [this.effectiveSettings.systemPrompt];
@@ -1125,7 +1122,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       await this.tokenMeter.estimateTextTokens(modelName, systemText);
 
     // 工具定义 token（最详细格式，确保不低估）
-    const toolDefs = ToolOrchestrator.toFlatToolDefs(this.resolvedPlugins);
+    const toolDefs = ToolExecutor.toFlatToolDefs(this.resolvedPlugins);
     if (toolDefs.length > 0) {
       const toolsJson = JSON.stringify(
         toolDefs.map((t) => ({

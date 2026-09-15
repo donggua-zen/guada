@@ -272,13 +272,30 @@ export class BotFileStore implements OnModuleDestroy {
       lastStartedAt: this.str(raw.lastStartedAt),
       lastError: this.str(raw.lastError),
       additionalKwargs: this.obj(raw.additionalKwargs),
-      createdAt: this.str(raw.createdAt) ?? now,
-      updatedAt: this.str(raw.updatedAt) ?? now,
+      createdAt: this.iso(raw.createdAt) ?? now,
+      updatedAt: this.iso(raw.updatedAt) ?? now,
     };
   }
 
   private str(value: any): string | null {
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  /**
+   * 时间戳收敛为 ISO 字符串。
+   * 手改 YAML 时未加引号的 ISO 时间会被 js-yaml 解析成 Date 对象，
+   * 只认字符串会让该字段静默回落到「当前时间」。
+   */
+  private iso(value: any): string | null {
+    if (value === null || value === undefined || value === "") return null;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value.toISOString();
+    }
+    if (typeof value === "number" || typeof value === "string") {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    }
+    return null;
   }
 
   private num(value: any, fallback: number): number {

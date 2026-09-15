@@ -9,7 +9,7 @@
 import type { LLMCompletionParams } from "../llm-core/types/llm.types";
 import type { Message } from "../../common/types/conversation.types";
 import type { ISessionContext } from "./session-context";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { ToolExecutor } from "../tools/tool-executor.service";
 
 export interface BuildCompletionParamsOptions {
   messages: Message[];
@@ -33,7 +33,7 @@ export function buildSessionLlmParams(
     system: ctx.getSystemText(),
     // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）
     messages: opts.messages,
-    tools: ToolOrchestrator.toFlatToolDefs(ctx.getResolvedPlugins()),
+    tools: ToolExecutor.toFlatToolDefs(ctx.getResolvedPlugins()),
     temperature: modelConfig.config.temperature,
     topP: modelConfig.config.topP,
     frequencyPenalty: modelConfig.config.frequencyPenalty,

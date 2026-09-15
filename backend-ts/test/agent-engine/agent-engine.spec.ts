@@ -20,7 +20,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -55,7 +55,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -89,7 +89,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -154,7 +154,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -198,7 +198,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -245,7 +245,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -312,7 +312,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -352,7 +352,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -398,7 +398,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,
@@ -436,7 +436,7 @@ describe('AgentEngine - completions', () => {
         event === 'turn.stopping' ? [undefined] : [],
       );
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,
@@ -468,7 +468,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -505,7 +505,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -545,7 +545,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -590,7 +590,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -623,7 +623,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -652,7 +652,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -683,7 +683,7 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
@@ -730,7 +730,7 @@ describe('AgentEngine - completions', () => {
 
     function buildEngine(mocks: any, settingsMock: any) {
       return new AgentEngine(
-        mocks.toolOrchestrator as any,
+        mocks.toolExecutor as any,
         settingsMock as any,
         mocks.llmService as any,
         {
@@ -792,7 +792,7 @@ describe('AgentEngine - completions', () => {
       expect(pauseEvt?.questions[0].options.map((o) => o.label)).toEqual(['继续执行', '停止']);
       expect(callCount).toBe(2);
       // 继续后执行了 pending 工具（第一轮被暂停的工具）
-      expect((mocks.toolOrchestrator.executeBatch as jest.Mock).mock.calls.length).toBe(1);
+      expect((mocks.toolExecutor.executeBatch as jest.Mock).mock.calls.length).toBe(1);
       // 回合最终正常结束（stop，而非 max_iterations_reached / user_cancel）
       const turnEnd = events.find((e) => e.type === 'turn_end');
       expect(turnEnd?.finishReason).toBe('stop');
@@ -825,7 +825,7 @@ describe('AgentEngine - completions', () => {
 
       expect(events.some((e) => e.type === 'ask_requested')).toBe(true);
       // 暂停在工具执行前：中止后工具从未执行
-      expect((mocks.toolOrchestrator.executeBatch as jest.Mock).mock.calls.length).toBe(0);
+      expect((mocks.toolExecutor.executeBatch as jest.Mock).mock.calls.length).toBe(0);
       // 等待表已撤回（abort → AskService.cancel）
       const reqEvt = events.find(
         (e): e is Extract<SessionStreamEvent, { type: 'ask_requested' }> => e.type === 'ask_requested',

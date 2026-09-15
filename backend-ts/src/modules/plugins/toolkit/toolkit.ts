@@ -23,8 +23,6 @@ export class Toolkit implements ToolKitHandle {
   private _prompts: Array<{
     frequency: string;
     description: string;
-    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
-    type?: "system" | "user";
     handler: (ctx: any) => string | Promise<string>;
   }> = [];
 
@@ -187,13 +185,10 @@ export class Toolkit implements ToolKitHandle {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     description?: string;
-    /** 注入位置：system=system prompt（默认）/ user=user 消息 */
-    type?: "system" | "user";
   }): void {
     this._prompts.push({
       frequency: def.frequency || "REGULAR",
       description: def.description || "",
-      type: def.type,
       handler: (
         typeof def.content === "function"
           ? def.content
@@ -207,15 +202,6 @@ export class Toolkit implements ToolKitHandle {
   /** 获取注册的工具列表 */
   getTools(): ToolHandlerDef[] {
     return this._tools;
-  }
-
-  /** 获取注册的提示词列表 */
-  getPrompts(): Array<{
-    frequency: string;
-    description: string;
-    handler: (ctx: any) => string | Promise<string>;
-  }> {
-    return this._prompts;
   }
 
   /** 导出为注册存储结构 */

@@ -52,8 +52,6 @@ export interface ExecuteOptions {
   encoding?: string;
   /** Session ID for process tracking (listBySession/drainCompleted) */
   sessionId?: string;
-  /** User ID for process ownership */
-  userId?: string;
 }
 
 // ── Plugin config schema (UI-driven) ──

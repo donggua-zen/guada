@@ -116,7 +116,6 @@ const groupedResults = computed(() => {
   groups.push({
     id: UNGROUPED_ID,
     name: t('session.search.ungrouped'),
-    userId: '',
     sortOrder: groups.length,
     createdAt: '',
     updatedAt: '',

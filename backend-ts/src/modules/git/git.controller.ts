@@ -15,7 +15,6 @@ import {
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "../chat/session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { GitService, GitFileChange } from "./git.service";
@@ -35,7 +34,6 @@ export class GitController {
 
   private async resolveWorkspacePath(
     sessionId: string,
-    userId: string,
   ): Promise<string> {
     const session = await this.sessionService.getSessionById(sessionId);
     if (!session) {
@@ -91,8 +89,8 @@ export class GitController {
   }
 
   @Get("sessions/:id/git/status")
-  async getStatus(@Param("id") id: string, @CurrentUser() user: any) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+  async getStatus(@Param("id") id: string) {
+    const workspacePath = await this.resolveWorkspacePath(id);
     // 未安装 git：优雅降级（不弹错，前端展示「未安装 Git」提示）
     if (!this.gitService.isGitAvailable()) {
       return {
@@ -114,8 +112,8 @@ export class GitController {
   }
 
   @Get("sessions/:id/git/branches")
-  async getBranches(@Param("id") id: string, @CurrentUser() user: any) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+  async getBranches(@Param("id") id: string) {
+    const workspacePath = await this.resolveWorkspacePath(id);
     if (!this.gitService.isGitAvailable()) {
       return { branches: [] };
     }
@@ -130,12 +128,11 @@ export class GitController {
   async checkout(
     @Param("id") id: string,
     @Body() body: { branch: string },
-    @CurrentUser() user: any,
   ) {
     if (!body?.branch || typeof body.branch !== "string") {
       throw new HttpException("branch is required", HttpStatus.BAD_REQUEST);
     }
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     return await this.gitService.checkout(workspacePath, body.branch);
@@ -145,7 +142,6 @@ export class GitController {
   async commit(
     @Param("id") id: string,
     @Body() body: { message: string; files?: string[] },
-    @CurrentUser() user: any,
   ) {
     const message = body?.message?.trim();
     if (!message) {
@@ -154,7 +150,7 @@ export class GitController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
@@ -165,9 +161,8 @@ export class GitController {
   async stage(
     @Param("id") id: string,
     @Body() body: { files?: string[] },
-    @CurrentUser() user: any,
   ) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
@@ -178,9 +173,8 @@ export class GitController {
   async unstage(
     @Param("id") id: string,
     @Body() body: { files?: string[] },
-    @CurrentUser() user: any,
   ) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const files = this.validateFilePaths(body.files, workspacePath);
@@ -188,8 +182,8 @@ export class GitController {
   }
 
   @Post("sessions/:id/git/push")
-  async push(@Param("id") id: string, @CurrentUser() user: any) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+  async push(@Param("id") id: string) {
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     return await this.gitService.push(workspacePath);
@@ -200,12 +194,11 @@ export class GitController {
     @Param("id") id: string,
     @Query("file") file: string,
     @Query("cached") cached: string,
-    @CurrentUser() user: any,
   ) {
     if (!file) {
       throw new HttpException("file is required", HttpStatus.BAD_REQUEST);
     }
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const [validatedFile] = this.validateFilePaths([file], workspacePath)!;
@@ -226,11 +219,10 @@ export class GitController {
   async generateCommitMessage(
     @Param("id") id: string,
     @Body() body: { includeUnstaged?: boolean },
-    @CurrentUser() user: any,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
 
@@ -345,7 +337,6 @@ export class GitController {
     @Query("cached") cached: string,
     @Query("from") from: string,
     @Query("to") to: string,
-    @CurrentUser() user: any,
   ) {
     if (!file) {
       throw new HttpException("file is required", HttpStatus.BAD_REQUEST);
@@ -355,7 +346,7 @@ export class GitController {
     if (!Number.isInteger(fromNum) || !Number.isInteger(toNum) || fromNum < 1 || toNum < fromNum) {
       throw new HttpException("Invalid line range", HttpStatus.BAD_REQUEST);
     }
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     this.assertGitAvailable();
     this.assertGitRepo(workspacePath);
     const [validatedFile] = this.validateFilePaths([file], workspacePath)!;
@@ -379,9 +370,8 @@ export class GitController {
   @Get("sessions/:id/git/commit-constraint")
   async getCommitConstraint(
     @Param("id") id: string,
-    @CurrentUser() user: any,
   ) {
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     const constraintPath = this.resolveConstraintPath(workspacePath);
     try {
       const content = await fsPromises.readFile(constraintPath, "utf-8");
@@ -401,7 +391,6 @@ export class GitController {
   async saveCommitConstraint(
     @Param("id") id: string,
     @Body() body: { content?: string },
-    @CurrentUser() user: any,
   ) {
     if (typeof body?.content !== "string") {
       throw new HttpException(
@@ -409,7 +398,7 @@ export class GitController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const workspacePath = await this.resolveWorkspacePath(id, user.id);
+    const workspacePath = await this.resolveWorkspacePath(id);
     const constraintPath = this.resolveConstraintPath(workspacePath);
     await fsPromises.mkdir(path.dirname(constraintPath), { recursive: true });
     await fsPromises.writeFile(constraintPath, body.content, "utf-8");

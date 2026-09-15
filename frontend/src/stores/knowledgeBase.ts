@@ -10,7 +10,6 @@ export interface KnowledgeBase {
     id: string
     name: string
     description: string | null
-    userId: string
     embeddingModelId: string
     chunkMaxSize: number
     chunkOverlapSize: number

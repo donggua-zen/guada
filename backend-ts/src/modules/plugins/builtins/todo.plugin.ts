@@ -177,8 +177,7 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       },
     });
 
-    // ── 待办状态提醒：user 型固定提示词注入已废弃（envelope/surface 分离改造）──
-    // todo 状态改由 MEMORY_COMPACTED 处理器在压缩后落库注入隐藏消息（见 handleCompacted）。
+    // ── 待办状态提醒：由 MEMORY_COMPACTED 处理器在压缩后落库注入隐藏消息（见 handleCompacted）──
   }
 
   private async handleTodo(
@@ -245,7 +244,6 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
   /** 发射 todo.updated 事件，通知前端刷新 */
   private emitTodoUpdated(ctx: PluginContext) {
     const event: TodoUpdatedEvent = {
-      userId: ctx.session.userId,
       sessionId: ctx.session.sessionId,
       timestamp: new Date().toISOString(),
     };

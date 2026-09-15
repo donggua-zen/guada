@@ -12,7 +12,6 @@ import {
   Inject,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import {
   IMessageStore,
   MESSAGE_STORE_TOKEN,
@@ -48,7 +47,6 @@ export class MessagesController {
   @Get("sessions/:sessionId/events")
   async getEvents(
     @Param("sessionId") sessionId: string,
-    @CurrentUser() user: any,
     @Query("beforeSeq") beforeSeq?: string,
     @Query("turns") turns?: string,
   ) {
@@ -67,7 +65,6 @@ export class MessagesController {
     @Param("sessionId") sessionId: string,
     @Param("messageId") messageId: string,
     @Body() body: any,
-    @CurrentUser() user: any,
   ) {
     await this.ensureSession(sessionId);
     return this.messageStore.updateTurn(sessionId, messageId, body);
@@ -80,7 +77,6 @@ export class MessagesController {
   async deleteTurn(
     @Param("sessionId") sessionId: string,
     @Param("turnId") turnId: string,
-    @CurrentUser() user: any,
   ) {
     await this.ensureSession(sessionId);
     return this.messageStore.deleteTurn(sessionId, turnId);
@@ -92,7 +88,6 @@ export class MessagesController {
   @Delete("sessions/:sessionId/messages")
   async clearSessionMessages(
     @Param("sessionId") sessionId: string,
-    @CurrentUser() user: any,
   ) {
     await this.ensureSession(sessionId);
     return this.messageStore.clearSessionTurns(sessionId);
@@ -105,7 +100,6 @@ export class MessagesController {
   async importMessages(
     @Param("sessionId") sessionId: string,
     @Body() messages: any[],
-    @CurrentUser() user: any,
   ) {
     await this.ensureSession(sessionId);
     return this.messageStore.importTurns(sessionId, messages as any);

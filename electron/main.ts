@@ -230,7 +230,9 @@ function detectDataPath(): string {
 interface DataPaths {
   dataHome: string; // 数据根目录
   dbPath: string; // 数据库文件
-  vectorDbPath: string; // 向量数据库
+  // 旧全局向量库路径。知识库已改为「每库一个 kb.db」，本路径**只用于兼容**：
+  // 启动迁移时若它存在，会改名保留为 .pre-sqlite 并把向量搬进各库。
+  vectorDbPath: string;
   versionFile: string; // 数据库版本标记
   uploadDir: string; // 上传文件目录
   logsDir: string; // 日志目录
@@ -554,7 +556,7 @@ async function startBackend(): Promise<void> {
       const staticDir = path.join(backendPath, "static");
 
       console.log("Database path:", paths.dbPath);
-      console.log("Vector database path:", paths.vectorDbPath);
+      console.log("Legacy vector database path (compat only):", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
       console.log("Upload directory:", paths.uploadDir);
       console.log("Backend logs directory:", paths.logsDir);
@@ -634,7 +636,7 @@ async function startBackend(): Promise<void> {
       const staticDir = path.join(backendPath, "static");
 
       console.log("Database path:", paths.dbPath);
-      console.log("Vector database path:", paths.vectorDbPath);
+      console.log("Legacy vector database path (compat only):", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
       console.log("Upload directory:", paths.uploadDir);
       console.log("Backend logs directory:", paths.logsDir);

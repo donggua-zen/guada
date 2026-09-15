@@ -6,8 +6,8 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../../common/database/kb-file.repository";
-import { KbChunkFileStore } from "../kb-chunk-file.store";
-import { VectorDbService } from "../../../common/vector-db/vector-db.service";
+import { KBChunkRepository } from "../../../common/database/kb-chunk.repository";
+import { KbSearchService } from "../kb-search.service";
 import { EmbeddingService } from "../embedding.service";
 import { KbFileService } from "../kb-file.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
@@ -29,8 +29,8 @@ export class KnowledgeBasePlugin extends PluginBase {
     private providerStore: ProviderFileStore,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
-    private chunkFileStore: KbChunkFileStore,
-    private vectorDbService: VectorDbService,
+    private chunkRepo: KBChunkRepository,
+    private searchService: KbSearchService,
     private embeddingService: EmbeddingService,
     private kbFileService: KbFileService,
   ) {
@@ -81,7 +81,7 @@ export class KnowledgeBasePlugin extends PluginBase {
 
         // 构建过滤条件
         const filterOptions = filter_file_id
-          ? { documentId: filter_file_id }
+          ? { itemId: filter_file_id }
           : undefined;
 
         // 获取查询文本的向量
@@ -92,10 +92,9 @@ export class KnowledgeBasePlugin extends PluginBase {
           model.modelName,
         );
 
-        // 执行混合搜索
-        const tableId = `kb_${knowledge_base_id}`;
-        const results = await this.vectorDbService.searchChunksHybrid(
-          tableId,
+        // 执行混合搜索（当前库内检索，库即作用域）
+        const results = await this.searchService.hybridSearch(
+          knowledge_base_id,
           queryEmbedding,
           query,
           top_k,
@@ -179,6 +178,7 @@ export class KnowledgeBasePlugin extends PluginBase {
 
       description: "Get the chunked content of a file",
       inputSchema: z.object({
+        knowledge_base_id: z.string().describe("Knowledge base ID"),
         file_id: z.string().describe("File ID"),
         skip: z.number().int().min(0).optional().describe("Number of chunks to skip, default 0"),
         limit: z
@@ -190,7 +190,14 @@ export class KnowledgeBasePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { file_id, skip = 0, limit = 10 } = args;
-        const file = await this.fileRepo.findById(file_id);
+        // 条目在哪个库由调用方给出（每库一个 kb.db，点查询需要 kbId）
+        const knowledgeBaseId = (args as any).knowledge_base_id as
+          | string
+          | undefined;
+        if (!knowledgeBaseId) {
+          throw new Error("knowledge_base_id is required");
+        }
+        const file = await this.fileRepo.findById(knowledgeBaseId, file_id);
         if (!file) throw new Error("File not found");
 
         // 检查文件处理状态
@@ -198,8 +205,8 @@ export class KnowledgeBasePlugin extends PluginBase {
           throw new Error(`File is not ready, current status: ${file.processingStatus}`);
         }
 
-        const chunks = await this.chunkFileStore.readChunks(
-          file.knowledgeBaseId,
+        const chunks = await this.chunkRepo.findByItemId(
+          knowledgeBaseId,
           file_id,
           skip,
           limit,
@@ -237,8 +244,6 @@ export class KnowledgeBasePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, source_file_path, target_path } = args;
-        const userId = ctx?.session.userId;
-        if (!userId) throw new Error("Unable to get user identity, operation denied");
 
         // 解析源文件路径（支持相对路径和绝对路径）
         let resolvedSourcePath = source_file_path;

@@ -2,52 +2,114 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  Inject,
   OnModuleInit,
 } from "@nestjs/common";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { ProviderFileStore } from '../llm-core/provider-file.store';
+import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
-import { KbChunkFileStore, KbChunkFileRow } from "./kb-chunk-file.store";
+import {
+  KBChunkRepository,
+  KbChunkFileRow,
+} from "../../common/database/kb-chunk.repository";
+import { KbDatabaseService } from "./kb-database.service";
 import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
-import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
 import { createPaginatedResponse } from "../../common/types/pagination";
-import { UploadPathService } from "../../common/services/upload-path.service";
-import { FileNamingService } from "../../common/services/file-naming.service";
 import type { FileProgressCallback } from "../../common/types/file-progress.types";
 
+/**
+ * 知识库文件服务
+ *
+ * 存储形态（每库一个自包含目录）：
+ *   `<KB根>/<kbId>/kb.json`                KB 配置
+ *   `<KB根>/<kbId>/kb.db`                  条目元信息 + 分块正文 + 向量 + FTS
+ *   `<KB根>/<kbId>/raw/<itemId>/<文件名>`   原件副本（上传时写入）
+ *
+ * 与原实现的三点差异（都是刻意的）：
+ * 1. **原件复制进库**，不再散落在共享上传目录。删条目/删库即真正释放空间，
+ *    库目录可整体拷走，且不再通过无鉴权的 `/uploads` 静态挂载暴露。
+ * 2. **原件目录用 itemId 命名**，所以改名/移动只改数据库行、不搬字节
+ *    （数千条目下改名由 N+1 次整文件重写降到 1 条 UPDATE）。
+ * 3. 分块与向量写入**同一个事务**（replaceChunks），不再有"向量写成功、
+ *    正本写失败"的跨存储不一致。
+ */
 @Injectable()
 export class KbFileService implements OnModuleInit {
   private readonly logger = new Logger(KbFileService.name);
   private static processingSemaphore: Promise<void> = Promise.resolve();
-  private kbUploadDir: string;
 
   constructor(
-    private uploadPathService: UploadPathService,
-    private fileNamingService: FileNamingService,
     private providerStore: ProviderFileStore,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
-    private chunkFileStore: KbChunkFileStore,
+    private chunkRepo: KBChunkRepository,
+    private databases: KbDatabaseService,
     private parserService: FileParserService,
     private embeddingService: EmbeddingService,
     private chunkingService: ChunkingService,
-    @Inject("VECTOR_DB") private vectorDb: VectorDatabase,
-  ) {
-    // 获取物理路径（自动创建目录）
-    this.kbUploadDir = this.uploadPathService.getPhysicalPath("knowledge-base");
-  }
+  ) {}
 
   async onModuleInit() {
+    // 迁移导入完成前不得读写库（门控超时兜底在 gate 内）
+    await this.databases.ready();
     await this.resumePendingFileTasks();
     await this.cleanupOrphanFiles();
-    await this.cleanupOrphanChunkDirs();
+    await this.reportOrphanRawDirs();
   }
+
+  // ============ 原件落盘 ============
+
+  /**
+   * 把原件写进 `<kbId>/raw/<itemId>/`，返回落盘文件名。
+   *
+   * 文件名保留原件的可读性（用户在文件管理器里看得懂），因为 itemId 目录已经
+   * 保证唯一性，所以不需要再做"加时间戳防冲突"那套。
+   */
+  private async writeRawFile(
+    kbId: string,
+    itemId: string,
+    originalName: string,
+    content: Buffer | string,
+  ): Promise<string> {
+    const dir = this.databases.getItemRawDir(kbId, itemId);
+    await fs.promises.mkdir(dir, { recursive: true });
+    const safeName = this.safeRawName(originalName);
+    await fs.promises.writeFile(path.join(dir, safeName), content);
+    return safeName;
+  }
+
+  /** 原件文件名净化：去掉路径分隔符/控制字符，兜底给个名字 */
+  private safeRawName(name: string): string {
+    const base = path.basename(name || "").replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, "_");
+    const trimmed = base.replace(/^[.\s]+|[.\s]+$/g, "");
+    return trimmed || "file";
+  }
+
+  /** 原件绝对路径（raw/<itemId>/<rawName>）；无原件返回 null */
+  private rawFilePath(
+    kbId: string,
+    itemId: string,
+    rawName: string | null,
+  ): string | null {
+    if (!rawName) return null;
+    return path.join(this.databases.getItemRawDir(kbId, itemId), rawName);
+  }
+
+  /** 删除条目的原件目录（容错） */
+  private async removeRawDir(kbId: string, itemId: string): Promise<void> {
+    const dir = this.databases.getItemRawDir(kbId, itemId);
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    } catch (error: any) {
+      this.logger.warn(`删除原件目录失败 ${dir}: ${error.message}`);
+    }
+  }
+
+  // ============ 启动期对账 ============
 
   /**
    * 恢复未完成的文件处理任务
@@ -55,7 +117,6 @@ export class KbFileService implements OnModuleInit {
   private async resumePendingFileTasks() {
     try {
       this.logger.log("开始扫描未完成的知识库文件任务...");
-
       const pendingFiles = await this.fileRepo.findByStatus([
         "pending",
         "processing",
@@ -63,23 +124,27 @@ export class KbFileService implements OnModuleInit {
       this.logger.log(`发现 ${pendingFiles.length} 个未完成任务`);
 
       for (const file of pendingFiles) {
-        // 检查物理文件是否存在
-        if (!file.filePath || !fs.existsSync(file.filePath)) {
+        const rawPath = this.rawFilePath(
+          file.knowledgeBaseId,
+          file.id,
+          file.rawName,
+        );
+        if (!rawPath || !fs.existsSync(rawPath)) {
           this.logger.error(
-            `文件不存在，标记为失败：${file.displayName} (${file.filePath})`,
+            `原件缺失，标记为失败：${file.displayName} (${rawPath ?? "无原件记录"})`,
           );
           await this.fileRepo.updateProcessingStatus(
+            file.knowledgeBaseId,
             file.id,
             "failed",
             undefined,
             undefined,
-            "文件丢失，无法恢复",
+            "原件丢失，无法恢复",
           );
           continue;
         }
-
         this.logger.log(`恢复任务：${file.displayName}`);
-        this.processFileInBackground(file.id);
+        this.processFileInBackground(file.knowledgeBaseId, file.id);
       }
     } catch (error: any) {
       this.logger.error(`恢复任务失败：${error.message}`);
@@ -87,62 +152,45 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
-   * 清理孤儿文件（启动时执行）
-   * 删除所有关联知识库不存在或 filePath 指向无效位置的记录
+   * 清理孤儿条目（启动时执行）
+   *
+   * 方向是**元信息 → 磁盘**：条目行还在但原件已被用户手动删除 → 标记失败。
+   * 条目行还在但库目录已被删除 → 删掉条目行（与旧实现一致）。
    */
   private async cleanupOrphanFiles() {
     try {
-      this.logger.log("开始扫描孤儿文件...");
-
-      // 1. 查找所有 filePath 不为空的文件（权威来源是 kb 文件存储的 file.json，
-      //    主库 kb_file 已冻结停写；用主库扫不到迁移后新上传的文件）
-      const allFiles = this.fileRepo
-        .listFileMetas(undefined, undefined)
-        .filter((m) => m.filePath);
-
+      const allFiles = (await this.fileRepo.listItems(undefined, false)).filter(
+        (m) => m.rawName,
+      );
       let orphanCount = 0;
       let cleanedCount = 0;
 
       for (const file of allFiles) {
         let isOrphan = false;
-
-        // 检查关联的知识库是否存在
         const kb = await this.kbRepo.findById(file.knowledgeBaseId);
         if (!kb) {
           isOrphan = true;
-          this.logger.log(`发现孤儿文件（知识库已删除）: ${file.displayName}`);
+          this.logger.log(`发现孤儿条目（知识库已不存在）: ${file.displayName}`);
         }
-
-        // 检查物理文件是否存在
-        if (file.filePath && !fs.existsSync(file.filePath)) {
+        const rawPath = this.rawFilePath(
+          file.knowledgeBaseId,
+          file.id,
+          file.rawName,
+        );
+        if (rawPath && !fs.existsSync(rawPath)) {
           isOrphan = true;
-          this.logger.log(
-            `发现孤儿文件（物理文件不存在）: ${file.displayName}`,
-          );
+          this.logger.log(`发现孤儿条目（原件不存在）: ${file.displayName}`);
         }
 
-        // 如果是孤儿，删除数据库记录
         if (isOrphan) {
           orphanCount++;
           try {
-            // 如果物理文件还存在，先删除（异步）
-            if (file.filePath && fs.existsSync(file.filePath)) {
-              await fs.promises.unlink(file.filePath);
-              this.logger.log(`已删除孤儿物理文件: ${file.filePath}`);
-
-              // 尝试清理空日期目录（向上递归最多2层）
-              await this.fileNamingService.cleanupEmptyDirectories(
-                path.dirname(file.filePath),
-                this.kbUploadDir,
-                2,
-              );
-            }
-            // 删除元信息（分块目录由上层一并删除）
-            await this.fileRepo.delete(file.id);
+            await this.fileRepo.delete(file.knowledgeBaseId, file.id);
+            await this.removeRawDir(file.knowledgeBaseId, file.id);
             cleanedCount++;
           } catch (error: any) {
             this.logger.error(
-              `清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`,
+              `清理孤儿条目失败: ${file.displayName}, 错误: ${error.message}`,
             );
           }
         }
@@ -150,52 +198,56 @@ export class KbFileService implements OnModuleInit {
 
       if (orphanCount > 0) {
         this.logger.log(
-          `孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`,
+          `孤儿条目清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`,
         );
-      } else {
-        this.logger.log("未发现孤儿文件");
       }
     } catch (error: any) {
-      this.logger.error(`孤儿文件清理失败：${error.message}`);
+      this.logger.error(`孤儿条目清理失败：${error.message}`);
     }
   }
 
   /**
-   * 清理孤儿分块目录（启动时执行）
-   * 删除分块 JSONL 目录中不存在对应文件记录的 kbId/fileId 目录
+   * 报告 `raw/` 下没有对应条目行的目录（**只报告，不删**）
+   *
+   * 崩溃可能停在"原件已写入、条目行还没插"之间，于是 raw 目录成为孤儿。
+   * 这是本设计唯一的固有失败模式，且目录里是**用户的字节**，所以只报告交由用户决定。
    */
-  private async cleanupOrphanChunkDirs() {
+  private async reportOrphanRawDirs(): Promise<string[]> {
+    const orphans: string[] = [];
     try {
-      const kbIds = await this.chunkFileStore.listKbIds();
-      if (kbIds.length === 0) return;
-
-      let orphanCount = 0;
+      const kbIds = await this.fileRepo.listKbIds();
       for (const kbId of kbIds) {
-        const kb = await this.kbRepo.findById(kbId);
-        if (!kb) {
-          // 整个知识库已不存在
-          orphanCount++;
-          await this.chunkFileStore.deleteKbDir(kbId);
-          this.logger.log(`已清理孤儿知识库分块目录: ${kbId}`);
-          continue;
+        const rawDir = this.databases.getRawDir(kbId);
+        let entries: import("fs").Dirent[];
+        try {
+          entries = await fs.promises.readdir(rawDir, { withFileTypes: true });
+        } catch {
+          continue; // 该库还没有原件
         }
-        const fileIds = await this.chunkFileStore.listFileIds(kbId);
-        for (const fileId of fileIds) {
-          const file = await this.fileRepo.findById(fileId);
-          if (!file) {
-            orphanCount++;
-            await this.chunkFileStore.deleteChunks(kbId, fileId);
-            this.logger.log(`已清理孤儿文件分块目录: kb=${kbId}, file=${fileId}`);
+        const known = new Set(await this.fileRepo.listItemIds(kbId));
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          if (!known.has(entry.name)) {
+            const full = path.join(rawDir, entry.name);
+            orphans.push(full);
+            this.logger.warn(
+              `发现无人认领的原件目录（不自动删除，请人工确认后处理）: ${full}`,
+            );
           }
         }
       }
-      if (orphanCount > 0) {
-        this.logger.log(`孤儿分块目录清理完成：共 ${orphanCount} 个`);
+      if (orphans.length > 0) {
+        this.logger.warn(
+          `共 ${orphans.length} 个无人认领的原件目录；这些文件不会自动清理。`,
+        );
       }
     } catch (error: any) {
-      this.logger.error(`孤儿分块目录清理失败：${error.message}`);
+      this.logger.warn(`原件目录对账失败：${error.message}`);
     }
+    return orphans;
   }
+
+  // ============ 工具 ============
 
   /**
    * 修复中文文件名乱码 (Windows + Node.js 常见兼容性问题)
@@ -203,10 +255,8 @@ export class KbFileService implements OnModuleInit {
   private fixFilenameEncoding(fileName: string): string {
     if (/[\u0080-\uffff]/.test(fileName)) {
       try {
-        // 尝试将 latin1 编码的字符串还原为 utf-8
-        const fixedName = Buffer.from(fileName, "latin1").toString("utf-8");
-        return fixedName;
-      } catch (e) {
+        return Buffer.from(fileName, "latin1").toString("utf-8");
+      } catch {
         this.logger.warn(`Failed to fix filename encoding for: ${fileName}`);
       }
     }
@@ -221,7 +271,6 @@ export class KbFileService implements OnModuleInit {
     folderPath: string,
   ): Promise<string | null> {
     if (!folderPath) return null;
-
     const parts = folderPath.split("/");
     let currentParentId: string | null = null;
 
@@ -229,200 +278,166 @@ export class KbFileService implements OnModuleInit {
       const part = parts[i];
       const currentPath = parts.slice(0, i + 1).join("/");
 
-      // 检查该层级文件夹是否已存在
       let folder = await this.fileRepo.findByPathAndParent(
         kbId,
         part,
         currentParentId,
-        true, // 只查找文件夹
+        true,
       );
 
       if (!folder) {
-        // 创建文件夹节点
-        folder = await this.fileRepo.create({
-          knowledgeBaseId: kbId,
+        folder = await this.fileRepo.create(kbId, {
           displayName: part,
-          fileName: crypto.randomUUID(), // 文件夹也用UUID
+          fileName: crypto.randomUUID(),
           fileSize: 0,
           fileType: "directory",
           fileExtension: "",
           contentHash: "",
-          processingStatus: "completed", // 文件夹无需处理
+          processingStatus: "completed",
           progressPercentage: 100,
           currentStep: "文件夹节点",
           totalChunks: 0,
           totalTokens: 0,
-          // 关键字段
           relativePath: currentPath,
           parentFolderId: currentParentId,
           isDirectory: true,
         });
-
         this.logger.log(`创建文件夹节点: ${currentPath}`);
       }
-
       currentParentId = folder.id;
     }
-
     return currentParentId;
   }
 
+  // ============ 上传 / 添加 ============
+
   /**
-   * 上传文件到知识库
+   * 上传文件到知识库（原件复制进库内 raw/）
    */
   async uploadFile(
     kbId: string,
-    file: any, // Express.Multer.File
-    relativePath?: string, // 可选的相对路径参数
+    file: any,
+    relativePath?: string,
   ) {
-    // 验证知识库存在且有权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
 
-    // 修复原始文件名编码
     const originalName = this.fixFilenameEncoding(file.originalname);
-
-    // 保存文件到带日期结构的目录（异步写入）
-    const pathResult = await this.fileNamingService.generateFilePathWithDate(
-      this.kbUploadDir,
-      originalName,
-    );
-    await fs.promises.writeFile(pathResult.filePath, file.buffer);
-
-    // 提取文件扩展名
     const fileExtension = path.extname(originalName).toLowerCase();
-
-    // 检测文件类型
     const fileType = await this.parserService.detectFileType(
       fileExtension.replace(/^\./, ""),
     );
-
-    // 计算文件哈希
     const contentHash = crypto
       .createHash("md5")
       .update(file.buffer)
       .digest("hex");
 
-    const fileSize = file.buffer.length;
-
     // 解析相对路径,提取父文件夹信息
     let parentFolderId: string | null = null;
     if (relativePath) {
-      const pathParts = relativePath.split("/");
-      const folderPath = pathParts.slice(0, -1).join("/"); // 去掉文件名
-
+      const folderPath = relativePath.split("/").slice(0, -1).join("/");
       if (folderPath) {
-        // 确保文件夹结构存在(递归创建)
         parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
       }
     }
 
-    // 创建文件记录
-    const fileRecord = await this.fileRepo.create({
-      knowledgeBaseId: kbId,
-      fileName: pathResult.fileName,
+    // 先建条目行（拿到 itemId），再把原件写进 raw/<itemId>/
+    const fileRecord = await this.fileRepo.create(kbId, {
+      fileName: originalName,
       displayName: originalName,
-      fileSize: fileSize, // 使用 number 类型（避免 BigInt 序列化问题）
-      fileType: fileType,
+      fileSize: file.buffer.length,
+      fileType,
       fileExtension: fileExtension.replace(/^\./, ""),
-      contentHash: contentHash,
-      filePath: pathResult.filePath,
+      contentHash,
       processingStatus: "pending",
       progressPercentage: 0,
       currentStep: "等待处理...",
       relativePath: relativePath || null,
-      parentFolderId: parentFolderId,
+      parentFolderId,
       isDirectory: false,
     });
+
+    const rawName = await this.writeRawFile(
+      kbId,
+      fileRecord.id,
+      originalName,
+      file.buffer,
+    );
+    await this.fileRepo.update(kbId, fileRecord.id, { rawName });
 
     this.logger.log(
       `文件记录已创建：${originalName}, 相对路径:${relativePath || "无"}, KB=${kbId}, File ID=${fileRecord.id}`,
     );
 
-    // 启动后台处理任务
-    this.processFileInBackground(fileRecord.id);
-
-    return fileRecord;
+    this.processFileInBackground(kbId, fileRecord.id);
+    return { ...fileRecord, rawName };
   }
 
   /**
    * 添加文本文档到知识库（供 AI Agent 工具调用）
    *
-   * @param kbId 知识库 ID
-   * @param sourceFilePath 源文件的绝对路径（包含文件名）
-   * @param targetPath 目标知识库中的相对路径（包含文件名，例如："docs/api/guide.md"）
-   * @returns 创建的文件记录
+   * @param sourceFilePath 源文件绝对路径；会被**复制**进库内 raw/
+   * @param targetPath 知识库内相对路径（如 "docs/api/guide.md"）
    */
   async addTextDocument(
     kbId: string,
     sourceFilePath: string,
     targetPath: string,
   ) {
-    // 验证知识库存在且有权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
-
-    // 检查源文件是否存在
     if (!fs.existsSync(sourceFilePath)) {
       throw new Error(`源文件不存在：${sourceFilePath}`);
     }
 
-    // 读取文件内容（异步）
     const content = await fs.promises.readFile(sourceFilePath, "utf-8");
-
-    // 从目标路径提取显示名称
     const displayName = path.basename(targetPath);
+    const contentHash = crypto
+      .createHash("md5")
+      .update(content)
+      .digest("hex");
 
-    // 保存文件到带日期结构的目录（异步写入）
-    const pathResult = await this.fileNamingService.generateFilePathWithDate(
-      this.kbUploadDir,
-      displayName + ".txt", // addTextDocument 始终保存为 .txt
-    );
-    await fs.promises.writeFile(pathResult.filePath, content, "utf-8");
-
-    const fileSize = Buffer.byteLength(content, "utf-8");
-
-    // 计算内容哈希（用于后续可能的去重或统计）
-    const contentHash = crypto.createHash("md5").update(content).digest("hex");
-
-    // 解析目标路径，提取父文件夹信息
     let parentFolderId: string | null = null;
     const folderPath = path.dirname(targetPath);
     if (folderPath && folderPath !== ".") {
-      // 确保文件夹结构存在（递归创建）
       parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
     }
 
-    // 创建文件记录
-    const fileRecord = await this.fileRepo.create({
-      knowledgeBaseId: kbId,
-      fileName: pathResult.fileName,
-      displayName: displayName,
-      fileSize: fileSize,
+    const fileRecord = await this.fileRepo.create(kbId, {
+      fileName: displayName,
+      displayName,
+      fileSize: Buffer.byteLength(content, "utf-8"),
       fileType: "text",
-      fileExtension: "txt",
-      contentHash: contentHash,
-      filePath: pathResult.filePath,
+      fileExtension: path.extname(displayName).replace(/^\./, "") || "txt",
+      contentHash,
       processingStatus: "pending",
       progressPercentage: 0,
       currentStep: "等待处理...",
       relativePath: targetPath || null,
-      parentFolderId: parentFolderId,
+      parentFolderId,
       isDirectory: false,
+      // 记下来源，便于日后「重新摄取」时优先用原始文件
+      sourcePath: sourceFilePath,
     });
+
+    const rawName = await this.writeRawFile(
+      kbId,
+      fileRecord.id,
+      displayName,
+      content,
+    );
+    await this.fileRepo.update(kbId, fileRecord.id, { rawName });
 
     this.logger.log(
       `文本文档记录已创建：${displayName}, KB=${kbId}, File ID=${fileRecord.id}`,
     );
 
-    // 启动后台处理任务（与 uploadFile 保持一致）
-    this.processFileInBackground(fileRecord.id);
-
-    return fileRecord;
+    this.processFileInBackground(kbId, fileRecord.id);
+    return { ...fileRecord, rawName };
   }
 
   /**
@@ -433,37 +448,27 @@ export class KbFileService implements OnModuleInit {
     folderName: string,
     parentFolderId: string | null = null,
   ) {
-    // 1. 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
-
-    // 2. 验证文件夹名称
     this.validateFileName(folderName, true);
 
-    // 3. 冲突检测：检查同父目录下是否已存在同名文件或文件夹
     const existingItem = await this.fileRepo.findByPathAndParent(
       kbId,
       folderName,
       parentFolderId,
     );
-
     if (existingItem) {
       const existingType = existingItem.isDirectory ? "文件夹" : "文件";
       throw new Error(`已存在同名${existingType}「${folderName}」`);
     }
 
-    // 4. 计算 relativePath
     let relativePath: string;
     if (parentFolderId) {
-      const parent = await this.fileRepo.findById(parentFolderId);
-      if (!parent) {
-        throw new NotFoundException("父文件夹不存在");
-      }
-      if (!parent.isDirectory) {
-        throw new Error("父节点不是文件夹");
-      }
+      const parent = await this.fileRepo.findById(kbId, parentFolderId);
+      if (!parent) throw new NotFoundException("父文件夹不存在");
+      if (!parent.isDirectory) throw new Error("父节点不是文件夹");
       relativePath = parent.relativePath
         ? `${parent.relativePath}/${folderName}`
         : folderName;
@@ -471,22 +476,20 @@ export class KbFileService implements OnModuleInit {
       relativePath = folderName;
     }
 
-    // 5. 创建文件夹记录
-    const folder = await this.fileRepo.create({
-      knowledgeBaseId: kbId,
+    const folder = await this.fileRepo.create(kbId, {
       displayName: folderName,
-      fileName: crypto.randomUUID(), // 文件夹也用 UUID
+      fileName: crypto.randomUUID(),
       fileSize: 0,
       fileType: "directory",
       fileExtension: "",
       contentHash: "",
-      processingStatus: "completed", // 文件夹无需处理
+      processingStatus: "completed",
       progressPercentage: 100,
       currentStep: "文件夹节点",
       totalChunks: 0,
       totalTokens: 0,
-      relativePath: relativePath,
-      parentFolderId: parentFolderId,
+      relativePath,
+      parentFolderId,
       isDirectory: true,
     });
 
@@ -503,91 +506,88 @@ export class KbFileService implements OnModuleInit {
     };
   }
 
+  // ============ 处理流程 ============
+
   /**
-   * 后台异步处理文件
+   * 后台异步处理文件（信号量串行，避免多文件同时跑 OCR/嵌入压垮机器）
    */
-  private async processFileInBackground(fileId: string): Promise<void> {
-    // 使用信号量控制并发（依次处理）
+  private async processFileInBackground(
+    kbId: string,
+    fileId: string,
+  ): Promise<void> {
     KbFileService.processingSemaphore = KbFileService.processingSemaphore
       .then(async () => {
-        await this.processFile(fileId);
+        await this.processFile(kbId, fileId);
       })
       .catch((error) => {
         this.logger.error(
-          `后台任务执行失败：fileId=${fileId}, error=${error.message}`,
+          `后台任务执行失败：kbId=${kbId}, fileId=${fileId}, error=${error.message}`,
         );
-        // processFile 的 catch 块已经处理了状态更新，这里只记录日志
       });
   }
 
   /**
    * 处理文件（主流程）
+   *
+   * 顺序：解析 → 分块 → 嵌入 → **一个事务写入分块+向量+FTS** → 标记完成。
+   * 旧实现是「先写向量库、再写 JSONL」，中间崩溃会留下不可自愈的不一致。
    */
-  async processFile(fileId: string): Promise<void> {
-    // 创建带频率限制的进度回调
+  async processFile(kbId: string, fileId: string): Promise<void> {
     let lastPct = -1;
     const updateProgress: FileProgressCallback = async (pct, step) => {
-      // 相同百分比不重复写库（但允许从高到低的合理变化）
       if (pct === lastPct) return;
       lastPct = pct;
       try {
         await this.fileRepo.updateProcessingStatus(
+          kbId,
           fileId,
           "processing",
           pct,
           step,
         );
       } catch {
-        // 忽略进度更新失败（不中断主流程）
+        /* 进度更新失败不中断主流程 */
       }
     };
 
     try {
-      // 1. 查询文件记录
-      const fileRecord = await this.fileRepo.findById(fileId);
+      const fileRecord = await this.fileRepo.findById(kbId, fileId);
       if (!fileRecord) {
-        this.logger.error(`文件记录不存在：${fileId}`);
+        this.logger.error(`文件记录不存在：${kbId}/${fileId}`);
         return;
       }
 
-      const knowledgeBaseId = fileRecord.knowledgeBaseId;
       const displayName = fileRecord.displayName;
-      const filePath = fileRecord.filePath;
-
       this.logger.log(
-        `开始处理文件：${displayName} (KB: ${knowledgeBaseId}, ID: ${fileId})`,
+        `开始处理文件：${displayName} (KB: ${kbId}, ID: ${fileId})`,
       );
 
-      // 2. 获取知识库配置
-      const kb = await this.kbRepo.findById(knowledgeBaseId);
+      const kb = await this.kbRepo.findById(kbId);
       if (!kb) {
-        throw new Error(`知识库不存在：${knowledgeBaseId}`);
+        throw new Error(`知识库不存在：${kbId}`);
       }
 
-      // 3. 更新状态为处理中
-      await this.fileRepo.updateProcessingStatus(
-        fileId,
-        "processing",
-        1,
-        "正在准备处理...",
-      );
+      await updateProgress(1, "正在准备处理...");
 
-      // 4. 解析文件内容（带进度回调，覆盖 0%~80% 范围）
-      if (!filePath) {
-        throw new Error("文件路径不存在，无法解析");
+      const rawPath = this.rawFilePath(kbId, fileId, fileRecord.rawName);
+      if (!rawPath || !fs.existsSync(rawPath)) {
+        throw new Error("原件不存在，无法解析");
       }
 
-      // 解析阶段的回调：映射解析器内部 0%~100% 到全局 2%~80%
-      const parseOnProgress: FileProgressCallback | undefined = async (pct, step) => {
-        const globalPct = 2 + Math.round((pct / 100) * 78);
-        await updateProgress(globalPct, step);
+      const parseOnProgress: FileProgressCallback | undefined = async (
+        pct,
+        step,
+      ) => {
+        // 解析器内部 0%~100% 映射到全局 2%~80%
+        await updateProgress(2 + Math.round((pct / 100) * 78), step);
       };
 
-      const parseResult = await this.parserService.parseFile(filePath, parseOnProgress);
-
+      const parseResult = await this.parserService.parseFile(
+        rawPath,
+        parseOnProgress,
+      );
       await updateProgress(82, "文件解析完成，正在分块...");
 
-      // 5. 文本分块（合并所有页面为连续文档后统一分块，不再按页边界切割）
       const chunksData = await this.chunkingService.chunkPages(
         parseResult.pages,
         {
@@ -595,123 +595,83 @@ export class KbFileService implements OnModuleInit {
           overlapSize: kb.chunkOverlapSize,
         },
       );
-
       const chunks = chunksData.map((chunk) => chunk.content);
       const totalChunks = chunks.length;
-
       this.logger.log(`文本分块完成：共${totalChunks}个分块`);
 
       await updateProgress(86, `分块完成（${totalChunks}个），正在向量化...`);
 
-      // 6. 清理旧数据（重新处理场景）
-      try {
-        this.logger.log(`检测到文件 ${fileId}，开始清理旧数据...`);
-
-        // 从向量库删除旧向量
-        const tableId = `kb_${knowledgeBaseId}`;
-        await this.vectorDb.deleteDocuments(tableId, { documentId: fileId });
-
-        // 删除旧分块 JSONL 正本（主库分块表已冻结停写，无需再清）
-        await this.chunkFileStore.deleteChunks(knowledgeBaseId, fileId);
-      } catch (error: any) {
-        this.logger.warn(
-          `清理旧数据失败，但继续执行后续流程：${error.message}`,
-        );
-      }
-
-      // 7. 批量向量化
-      let allEmbeddings: number[][] = [];
-
-      const modelWithProvider = this.providerStore.findModel(kb.embeddingModelId);
-
+      const modelWithProvider = this.providerStore.findModel(
+        kb.embeddingModelId,
+      );
       if (!modelWithProvider) {
         throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
       }
 
-      this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
-      await updateProgress(88, `正在批量向量化 (${chunks.length} 个分块)...`);
-
-      // 向量化进度映射：每条完成 → 全局百分比 88%~93%
-      allEmbeddings = await this.embeddingService.getEmbeddings(
+      const allEmbeddings = await this.embeddingService.getEmbeddings(
         chunks,
         modelWithProvider.provider.apiUrl || "",
         modelWithProvider.provider.apiKey || "",
         modelWithProvider.modelName,
         async (current, total) => {
-          const pct = 88 + Math.round((current / total) * 5);
-          await updateProgress(pct, `向量化进度：${current}/${total}`);
+          // 向量化进度映射：88%~93%
+          await updateProgress(
+            88 + Math.round((current / total) * 5),
+            `向量化进度：${current}/${total}`,
+          );
         },
       );
 
-      await updateProgress(93, "向量化完成，正在存储...");
+      await updateProgress(95, "正在保存分块与向量...");
 
-      // 存储到向量数据库
-      const tableId = `kb_${knowledgeBaseId}`;
-      const documents = chunks.map((content, idx) => ({
-        id: `chunk_${idx}_${fileId}`,
-        documentId: fileId,
-        content,
-        embedding: allEmbeddings[idx],
-        metadata: {
-          knowledgeBaseId: knowledgeBaseId,
-          fileName: displayName,
-          chunkIndex: idx,
-        },
-      }));
-      await this.vectorDb.addDocuments(tableId, documents);
-      this.logger.log(`成功存储 ${documents.length} 个向量文档`);
-
-      await updateProgress(95, "正在保存分块到文件...");
-
-      // 保存分块正本到 JSONL 文件（脱离主库；向量库为可重建的派生索引）
-      // 构造分块行，将可能为空的字段转为 null 以符合存储要求
       const chunkRows: KbChunkFileRow[] = chunksData.map((chunkData, idx) => ({
         id: `chunk_${idx}_${fileId}`,
         vectorId: `chunk_${idx}_${fileId}`,
         chunkIndex: idx,
         content: chunkData.content,
         tokenCount: chunkData.metadata.tokenCount,
+        embedding: allEmbeddings[idx] ?? null,
         embeddingDimensions: allEmbeddings[idx]?.length ?? null,
         createdAt: new Date().toISOString(),
         metadata: {
-          fileId: fileId,
-          knowledgeBaseId: knowledgeBaseId,
+          fileId,
+          knowledgeBaseId: kbId,
           fileName: displayName,
           overlapLength: chunkData.metadata.overlapLength,
           strategy: chunkData.metadata.strategy,
         },
       }));
 
-      const insertedCount = await this.chunkFileStore.writeChunks(
-        knowledgeBaseId,
+      // 单事务：旧分块、旧 FTS、新分块、新向量一起替换
+      const insertedCount = await this.chunkRepo.replaceChunks(
+        kbId,
         fileId,
         chunkRows,
       );
-      this.logger.log(`批量写入 ${insertedCount} 个分块到 JSONL 文件`);
 
-      // 标记为完成
       const totalTokens = chunksData.reduce(
         (sum, chunk) => sum + chunk.metadata.tokenCount,
         0,
       );
-      const completeMessage = "处理完成";
       await this.fileRepo.updateProcessingStatus(
+        kbId,
         fileId,
         "completed",
         100,
-        completeMessage,
+        "处理完成",
         undefined,
         totalChunks,
         totalTokens,
       );
 
-      this.logger.log(`文件处理完成：${displayName}, 分块数=${totalChunks}`);
+      this.logger.log(
+        `文件处理完成：${displayName}, 分块数=${insertedCount}`,
+      );
     } catch (error: any) {
       this.logger.error(`文件处理失败：${error.message}`);
-
-      // 更新状态为失败
       try {
         await this.fileRepo.updateProcessingStatus(
+          kbId,
           fileId,
           "failed",
           0,
@@ -720,25 +680,15 @@ export class KbFileService implements OnModuleInit {
         );
       } catch (dbError: any) {
         this.logger.error(`标记文件失败状态失败：${dbError.message}`);
-        // 不抛异常，避免触发外层 catch 重复设置状态
       }
     }
   }
 
-  /**
-   * 列出知识库中的所有文件
-   */
-  async listFiles(
-    kbId: string,
-    skip: number = 0,
-    limit: number = 50,
-  ) {
-    // 验证知识库权限
-    const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+  // ============ 查询 ============
 
+  async listFiles(kbId: string, skip: number = 0, limit: number = 50) {
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) throw new NotFoundException("知识库不存在");
     const { items, total } = await this.fileRepo.findByKnowledgeBaseId(
       kbId,
       skip,
@@ -747,21 +697,14 @@ export class KbFileService implements OnModuleInit {
     return createPaginatedResponse(items, total, { skip, limit });
   }
 
-  /**
-   * 按父文件夹ID获取文件列表(支持懒加载)
-   */
   async getFilesByParent(
     kbId: string,
     parentFolderId: string | null,
     skip: number = 0,
     limit: number = 50,
   ) {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
-
+    if (!kb) throw new NotFoundException("知识库不存在");
     const { items, total } = await this.fileRepo.findByParentFolderId(
       kbId,
       parentFolderId,
@@ -771,39 +714,27 @@ export class KbFileService implements OnModuleInit {
     return createPaginatedResponse(items, total, { skip, limit });
   }
 
-  /**
-   * 通过相对路径获取文件夹内容
-   */
   async getFilesByRelativePath(
     kbId: string,
     relativePath: string | null,
     skip: number = 0,
     limit: number = 50,
   ) {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
     let parentFolderId: string | null = null;
-
     if (relativePath) {
-      // 查找该路径对应的目录ID
       const targetFolder = await this.fileRepo.findByRelativePath(
         kbId,
         relativePath,
         true,
       );
-
       if (!targetFolder) {
-        // 路径不存在，返回空列表
         return createPaginatedResponse([], 0, { skip, limit });
       }
-
       parentFolderId = targetFolder.id;
     }
-    // else: relativePath 为 null，表示根目录，parentFolderId 保持为 null
 
     const { items, total } = await this.fileRepo.findByParentFolderId(
       kbId,
@@ -811,34 +742,30 @@ export class KbFileService implements OnModuleInit {
       skip,
       limit,
     );
-
     return createPaginatedResponse(items, total, { skip, limit });
   }
 
-  /**
-   * 获取文件详情
-   */
   async getFile(fileId: string, kbId: string) {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
-
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      throw new NotFoundException("文件不存在");
-    }
-
+    if (!kb) throw new NotFoundException("知识库不存在");
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
     return file;
   }
 
-  /**
-   * 获取文件处理状态
-   */
   async getFileStatus(fileId: string, kbId: string) {
     const file = await this.getFile(fileId, kbId);
+    return this.toStatusView(file);
+  }
 
+  async batchGetFileStatus(fileIds: string[], kbId: string) {
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) throw new NotFoundException("知识库不存在");
+    const files = await this.fileRepo.findByIds(kbId, fileIds);
+    return files.map((file) => this.toStatusView(file));
+  }
+
+  private toStatusView(file: Record<string, any>) {
     return {
       id: file.id,
       fileName: file.displayName,
@@ -852,90 +779,31 @@ export class KbFileService implements OnModuleInit {
     };
   }
 
-  /**
-   * 批量获取文件处理状态
-   */
-  async batchGetFileStatus(fileIds: string[], kbId: string) {
-    // 验证知识库权限
-    const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
-
-    const files = await this.fileRepo.findByIds(fileIds);
-    return files.map((file) => ({
-      id: file.id,
-      fileName: file.displayName,
-      processingStatus: file.processingStatus,
-      progressPercentage: file.progressPercentage,
-      currentStep: file.currentStep,
-      errorMessage: file.errorMessage,
-      totalChunks: file.totalChunks,
-      uploadedAt: file.uploadedAt.toISOString(),
-      processedAt: file.processedAt ? file.processedAt.toISOString() : null,
-    }));
-  }
+  // ============ 删除 ============
 
   /**
    * 删除文件及其所有分块(支持递归删除文件夹)
+   *
+   * 因为分块/向量/元信息都在同一个库里，这里是「一个事务 + 一次目录删除」，
+   * 不再是旧实现的「向量库删一次 + JSONL 删一次 + 元信息删一次」。
    */
   async deleteFileAndChunks(fileId: string, kbId: string): Promise<boolean> {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      return false;
-    }
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) return false;
 
     try {
-      // 如果是文件夹，递归删除所有子文件和子文件夹
       if (file.isDirectory) {
-        await this.deleteFolderRecursive(fileId, kbId);
+        await this.deleteFolderRecursive(kbId, fileId);
         return true;
       }
 
-      // 1. 从向量库删除向量（容错：向量可能不存在）
-      const tableId = `kb_${kbId}`;
-      try {
-        await this.vectorDb.deleteDocuments(tableId, {
-          documentId: fileId,
-        });
-        this.logger.log(`从向量库删除文件 ${fileId} 的所有向量`);
-      } catch (vectorError: any) {
-        this.logger.warn(
-          `从向量库删除文件 ${fileId} 向量失败（可能不存在）: ${vectorError.message}`,
-        );
-      }
-
-      // 2. 删除分块（容错：分块可能不存在）
-      try {
-        // 删除 JSONL 分块正本（主库分块表已冻结停写，无需再清）
-        await this.chunkFileStore.deleteChunks(kbId, fileId);
-      } catch (chunkError: any) {
-        this.logger.warn(
-          `删除文件 ${fileId} 分块失败（可能不存在）: ${chunkError.message}`,
-        );
-      }
-
-      // 3. 删除本地物理文件（容错：文件可能不存在）
-      if (file.filePath && fs.existsSync(file.filePath)) {
-        try {
-          await fs.promises.unlink(file.filePath);
-          this.logger.log(`已删除本地文件: ${file.filePath}`);
-        } catch (fileError: any) {
-          this.logger.warn(
-            `删除本地文件 ${file.filePath} 失败: ${fileError.message}`,
-          );
-        }
-      }
-
-      // 4. 删除文件记录
-      await this.fileRepo.delete(fileId);
-
+      await this.chunkRepo.deleteByItemId(kbId, fileId);
+      await this.fileRepo.delete(kbId, fileId);
+      await this.removeRawDir(kbId, fileId);
+      this.logger.log(`已删除文件：${file.displayName} (${fileId})`);
       return true;
     } catch (error: any) {
       this.logger.error(`删除文件失败：${error.message}`);
@@ -944,104 +812,79 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
-   * 递归删除文件夹及其所有内容
+   * 递归删除文件夹及其所有内容。
+   *
+   * 子项一次性收齐（不再分页 1000 递归），分块一批删，条目行一批删，
+   * 原件目录逐个删。
    */
   private async deleteFolderRecursive(
-    folderId: string,
     kbId: string,
+    folderId: string,
   ): Promise<void> {
-    // 分页查找该文件夹下的所有子项（避免子项过多时漏删）
-    let allItems: any[] = [];
-    let skip = 0;
-    const pageLimit = 1000;
-    while (true) {
-      const { items } = await this.fileRepo.findChildren(folderId, skip, pageLimit);
-      allItems = allItems.concat(items);
-      if (items.length < pageLimit) break;
-      skip += pageLimit;
+    const allItems = await this.collectSubtree(kbId, folderId);
+    const itemIds = [folderId, ...allItems.map((i) => i.id)];
+
+    try {
+      await this.chunkRepo.deleteMany(kbId, itemIds);
+      for (const itemId of itemIds) {
+        await this.fileRepo.delete(kbId, itemId);
+        await this.removeRawDir(kbId, itemId);
+      }
+      this.logger.log(
+        `已递归删除文件夹 ${folderId}（含 ${allItems.length} 个子项）`,
+      );
+    } catch (error: any) {
+      this.logger.error(`递归删除文件夹失败 ${folderId}: ${error.message}`);
+      throw error;
     }
+  }
 
-    this.logger.log(`文件夹 ${folderId} 下有 ${allItems.length} 个子项`);
+  /** 收集文件夹的全部后代（不含自身） */
+  private async collectSubtree(
+    kbId: string,
+    folderId: string,
+  ): Promise<Array<Record<string, any>>> {
+    const out: Array<Record<string, any>> = [];
+    const queue: string[] = [folderId];
+    const visited = new Set<string>(queue);
 
-    // 递归处理每个子项
-    for (const item of allItems) {
-      if (item.isDirectory) {
-        // 如果是子文件夹，递归删除
-        await this.deleteFolderRecursive(item.id, kbId);
-      } else {
-        // 如果是文件，删除文件及其分块
-        const tableId = `kb_${kbId}`;
-
-        // 容错删除向量
-        try {
-          await this.vectorDb.deleteDocuments(tableId, {
-            documentId: item.id,
-          });
-        } catch (e: any) {
-          this.logger.warn(`删除子文件向量失败 ${item.id}: ${e.message}`);
-        }
-
-        // 容错删除分块 JSONL 正本（主库分块表已冻结停写）
-        try {
-          await this.chunkFileStore.deleteChunks(kbId, item.id);
-        } catch (e: any) {
-          this.logger.warn(`删除子文件分块失败 ${item.id}: ${e.message}`);
-        }
-
-        // 容错删除物理文件
-        if (item.filePath && fs.existsSync(item.filePath)) {
-          try {
-            await fs.promises.unlink(item.filePath);
-            this.logger.log(`已删除本地文件: ${item.filePath}`);
-          } catch (e: any) {
-            this.logger.warn(
-              `删除子文件物理文件失败 ${item.filePath}: ${e.message}`,
-            );
-          }
-        }
-
-        await this.fileRepo.delete(item.id);
-        this.logger.log(`删除子文件: ${item.displayName}`);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = await this.fileRepo.findChildren(kbId, current, 0, 10000);
+      for (const child of children.items) {
+        if (visited.has(child.id)) continue;
+        visited.add(child.id);
+        out.push(child);
+        if (child.isDirectory) queue.push(child.id);
       }
     }
-
-    // 删除文件夹节点本身
-    await this.fileRepo.delete(folderId);
-    this.logger.log(`删除文件夹节点: ${folderId}`);
+    return out;
   }
 
   /**
    * 重新处理文件
    */
   async retryFileProcessing(fileId: string, kbId: string) {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      throw new NotFoundException("文件不存在");
-    }
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
 
-    // 检查文件状态，只允许 failed 或 completed 状态的文件重新处理
     if (!["failed", "completed"].includes(file.processingStatus)) {
       throw new Error(
         `当前状态不允许重新处理（当前状态：${file.processingStatus}）`,
       );
     }
 
-    // 重置文件状态为 pending
     await this.fileRepo.updateProcessingStatus(
+      kbId,
       fileId,
       "pending",
       0,
       "等待重新处理...",
     );
-
-    // 启动后台处理任务
-    this.processFileInBackground(fileId);
+    this.processFileInBackground(kbId, fileId);
 
     this.logger.log(`重新开始处理文件：${file.displayName}, KB=${kbId}`);
     return { message: "文件已开始重新处理", success: true };
@@ -1049,41 +892,24 @@ export class KbFileService implements OnModuleInit {
 
   /**
    * 清空知识库所有分块和向量数据，重置文件状态为待处理
-   * 在向量模型变更时调用
+   * 在向量模型变更时调用（维度变了，旧向量无法复用）
    */
   async clearAndReprocessKnowledgeBase(kbId: string): Promise<void> {
     this.logger.log(`开始清空知识库分块和向量数据: ${kbId}`);
 
-    // 1. 删除向量集合
-    const tableId = `kb_${kbId}`;
-    try {
-      await this.vectorDb.deleteCollection(tableId);
-      this.logger.log(`已删除向量集合: ${tableId}`);
-    } catch (error: any) {
-      this.logger.warn(`删除向量集合失败（可能不存在）: ${error.message}`);
-    }
+    // 一次性清空全部条目→分块→FTS
+    await this.chunkRepo.deleteAll(kbId);
 
-    // 2. 获取所有非目录文件（权威来源是 kb 文件存储的 file.json，主库已冻结停写）
-    const allFiles = this.fileRepo.listFileMetas(kbId, false);
-
+    const allFiles = await this.fileRepo.listItems(kbId, false);
     if (allFiles.length === 0) {
       this.logger.log(`知识库 ${kbId} 没有需要重新处理的文件`);
       return;
     }
 
-    // 3. 逐文件删除分块 JSONL 正本
-    let totalChunks = 0;
     for (const file of allFiles) {
-      await this.chunkFileStore.deleteChunks(kbId, file.id);
-      totalChunks += file.totalChunks;
-    }
-    this.logger.log(`已删除 ${totalChunks} 条分块记录`);
-
-    // 4. 重置所有文件状态为 pending
-    const fileIds = allFiles.map(f => f.id);
-    for (const fileId of fileIds) {
       await this.fileRepo.updateProcessingStatus(
-        fileId,
+        kbId,
+        file.id,
         "pending",
         0,
         "等待重新处理...",
@@ -1092,15 +918,15 @@ export class KbFileService implements OnModuleInit {
         0,
       );
     }
-    this.logger.log(`已重置 ${fileIds.length} 个文件状态为 pending`);
+    this.logger.log(`已重置 ${allFiles.length} 个文件状态为 pending`);
 
-    // 5. 逐个启动后台处理
-    for (const fileId of fileIds) {
-      this.processFileInBackground(fileId);
+    for (const file of allFiles) {
+      this.processFileInBackground(kbId, file.id);
     }
-
     this.logger.log(`知识库 ${kbId} 已开始全部重新处理`);
   }
+
+  // ============ 重命名 / 移动 ============
 
   /**
    * 验证文件或文件夹名称
@@ -1109,51 +935,23 @@ export class KbFileService implements OnModuleInit {
     if (!name || name.trim() === "") {
       throw new Error("名称不能为空");
     }
-
-    // 长度限制
     if (name.length > 255) {
       throw new Error("名称不能超过 255 个字符");
     }
-
-    // 不允许的字符：/ \ : * ? " < > | 以及控制字符
     const invalidChars = /[\\/:*?"<>|\x00-\x1f\x7f]/;
     if (invalidChars.test(name)) {
       throw new Error(
         '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符',
       );
     }
-
-    // Windows 保留名称检查（不区分大小写）
     const reservedNames = [
-      "CON",
-      "PRN",
-      "AUX",
-      "NUL",
-      "COM1",
-      "COM2",
-      "COM3",
-      "COM4",
-      "COM5",
-      "COM6",
-      "COM7",
-      "COM8",
-      "COM9",
-      "LPT1",
-      "LPT2",
-      "LPT3",
-      "LPT4",
-      "LPT5",
-      "LPT6",
-      "LPT7",
-      "LPT8",
-      "LPT9",
+      "CON", "PRN", "AUX", "NUL",
+      "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+      "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
-    const upperName = name.toUpperCase();
-    if (reservedNames.includes(upperName)) {
+    if (reservedNames.includes(name.toUpperCase())) {
       throw new Error(`名称「${name}」是系统保留名称，不能使用`);
     }
-
-    // 不允许以空格或点号开头/结尾
     if (
       name.startsWith(" ") ||
       name.endsWith(" ") ||
@@ -1166,33 +964,18 @@ export class KbFileService implements OnModuleInit {
 
   /**
    * 重命名文件或文件夹
+   *
+   * 改名只动数据库行：原件目录以 itemId 命名，不随显示名变化。
    */
-  async renameFile(
-    fileId: string,
-    kbId: string,
-    newName: string,
-  ) {
-    // 1. 验证知识库权限
+  async renameFile(fileId: string, kbId: string, newName: string) {
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
-    // 2. 验证新名称
     this.validateFileName(newName);
 
-    // 2. 查询文件
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      throw new NotFoundException("文件不存在");
-    }
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
 
-    // 3. 验证名称合法性
-    if (!newName || newName.trim() === "") {
-      throw new Error("名称不能为空");
-    }
-
-    // 4. 检查同名冲突（在同一父目录下）
     const existingItem = await this.fileRepo.findByPathAndParent(
       kbId,
       newName,
@@ -1202,51 +985,28 @@ export class KbFileService implements OnModuleInit {
       throw new Error("该名称已存在");
     }
 
-    // 5. 计算新的 relativePath
-    let newRelativePath: string;
-    if (file.isDirectory) {
-      // 文件夹：需要级联更新所有子项
-      const parentPath = file.parentFolderId
-        ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
-        : "";
-      newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
+    const parentPath = file.parentFolderId
+      ? (await this.fileRepo.findById(kbId, file.parentFolderId))?.relativePath
+      : "";
+    const newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
 
-      // 6. 级联重写子项 relativePath（逐文件写 file.json，可重入）。
-      // 改名不改父级，故不传 reparent。
+    if (file.isDirectory) {
+      // 级联重写子项路径：单条 UPDATE（旧实现是逐个子项重写 file.json）
       const changed = await this.fileRepo.rewriteRelativePathPrefix(
         kbId,
         file.relativePath + "/",
         newRelativePath + "/",
       );
       this.logger.log(`文件夹重命名：级联更新了 ${changed} 个子项的路径`);
-
-      // 6.1 更新文件夹本身
-      await this.fileRepo.update(fileId, {
-        displayName: newName,
-        relativePath: newRelativePath,
-      });
-
-      this.logger.log(`文件夹重命名成功：${file.displayName} -> ${newName}`);
-    } else {
-      // 单文件：简单更新
-      const parentPath = file.parentFolderId
-        ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
-        : "";
-      newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
-
-      await this.fileRepo.update(fileId, {
-        displayName: newName,
-        relativePath: newRelativePath,
-      });
-
-      this.logger.log(`文件重命名成功：${file.displayName} -> ${newName}`);
     }
 
-    return {
-      id: fileId,
+    await this.fileRepo.update(kbId, fileId, {
       displayName: newName,
       relativePath: newRelativePath,
-    };
+    });
+
+    this.logger.log(`重命名成功：${file.displayName} -> ${newName}`);
+    return { id: fileId, displayName: newName, relativePath: newRelativePath };
   }
 
   /**
@@ -1257,30 +1017,19 @@ export class KbFileService implements OnModuleInit {
     kbId: string,
     targetParentFolderId: string | null,
   ) {
-    // 1. 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
-    // 2. 查询文件
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      throw new NotFoundException("文件不存在");
-    }
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
 
-    // 3. 如果目标位置与当前位置相同，直接返回
     if (file.parentFolderId === targetParentFolderId) {
-      return {
-        success: true,
-        message: "文件已在目标位置",
-        data: file,
-      };
+      return { success: true, message: "文件已在目标位置", data: file };
     }
 
-    // 4. 循环引用检测（仅针对文件夹）
     if (file.isDirectory && targetParentFolderId) {
       const isDescendant = await this.isDescendant(
+        kbId,
         targetParentFolderId,
         fileId,
       );
@@ -1289,18 +1038,15 @@ export class KbFileService implements OnModuleInit {
       }
     }
 
-    // 5. 验证目标文件夹存在
     if (targetParentFolderId) {
-      const targetParent = await this.fileRepo.findById(targetParentFolderId);
-      if (!targetParent) {
-        throw new NotFoundException("目标文件夹不存在");
-      }
-      if (!targetParent.isDirectory) {
-        throw new Error("目标不是文件夹");
-      }
+      const targetParent = await this.fileRepo.findById(
+        kbId,
+        targetParentFolderId,
+      );
+      if (!targetParent) throw new NotFoundException("目标文件夹不存在");
+      if (!targetParent.isDirectory) throw new Error("目标不是文件夹");
     }
 
-    // 6. 冲突检测：检查目标位置是否已存在同名文件或文件夹
     const fileName = file.isDirectory
       ? file.displayName
       : file.relativePath?.split("/").pop() || file.displayName;
@@ -1310,31 +1056,26 @@ export class KbFileService implements OnModuleInit {
       fileName,
       targetParentFolderId,
     );
-
     if (existingItem && existingItem.id !== fileId) {
-      // 检查类型是否一致（文件vs文件夹）
-      const itemType = file.isDirectory ? "文件夹" : "文件";
       const existingType = existingItem.isDirectory ? "文件夹" : "文件";
       throw new Error(
         `目标位置已存在同名${existingType}「${fileName}」，无法移动`,
       );
     }
 
-    // 7. 计算新的 relativePath
     let targetParentPath = "";
     if (targetParentFolderId) {
-      const targetParent = await this.fileRepo.findById(targetParentFolderId);
+      const targetParent = await this.fileRepo.findById(
+        kbId,
+        targetParentFolderId,
+      );
       targetParentPath = targetParent?.relativePath || "";
     }
-
     const newRelativePath = targetParentPath
       ? `${targetParentPath}/${fileName}`
       : fileName;
-
     const oldRelativePath = file.relativePath;
 
-    // 7. 级联重写子项 relativePath。直接子项的 parentFolderId 仍指向被移动的
-    // 文件夹自身，不随移动改变 → 不传 reparent。
     if (file.isDirectory && oldRelativePath) {
       const changed = await this.fileRepo.rewriteRelativePathPrefix(
         kbId,
@@ -1344,8 +1085,7 @@ export class KbFileService implements OnModuleInit {
       this.logger.log(`文件夹移动：级联更新了 ${changed} 个子项的路径`);
     }
 
-    // 7.1 更新文件/文件夹本身
-    await this.fileRepo.update(fileId, {
+    await this.fileRepo.update(kbId, fileId, {
       parentFolderId: targetParentFolderId,
       relativePath: newRelativePath,
     });
@@ -1353,7 +1093,6 @@ export class KbFileService implements OnModuleInit {
     this.logger.log(
       `文件移动成功：${file.displayName}, 新路径: ${newRelativePath}`,
     );
-
     return {
       id: fileId,
       displayName: file.displayName,
@@ -1366,28 +1105,21 @@ export class KbFileService implements OnModuleInit {
    * 检测是否为后代节点（防止循环引用）
    */
   private async isDescendant(
+    kbId: string,
     potentialDescendantId: string,
     ancestorId: string,
   ): Promise<boolean> {
-    let currentId = potentialDescendantId;
+    let currentId: string | null = potentialDescendantId;
     const visited = new Set<string>();
 
     while (currentId) {
-      if (currentId === ancestorId) {
-        return true;
-      }
-      if (visited.has(currentId)) {
-        break; // 检测到循环
-      }
+      if (currentId === ancestorId) return true;
+      if (visited.has(currentId)) break;
       visited.add(currentId);
-
-      const node = await this.fileRepo.findById(currentId);
-      if (!node || !node.parentFolderId) {
-        break;
-      }
+      const node = await this.fileRepo.findById(kbId, currentId);
+      if (!node || !node.parentFolderId) break;
       currentId = node.parentFolderId;
     }
-
     return false;
   }
 
@@ -1400,19 +1132,12 @@ export class KbFileService implements OnModuleInit {
     skip: number = 0,
     limit: number = 10,
   ) {
-    // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
-    if (!kb) {
-      throw new NotFoundException("知识库不存在");
-    }
+    if (!kb) throw new NotFoundException("知识库不存在");
 
-    // 验证文件是否存在
-    const file = await this.fileRepo.findById(fileId);
-    if (!file) {
-      throw new NotFoundException("文件不存在");
-    }
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
 
-    // 检查文件处理状态，允许 completed 和 failed 状态的文件查看分块
     if (
       file.processingStatus !== "completed" &&
       file.processingStatus !== "failed"
@@ -1420,7 +1145,6 @@ export class KbFileService implements OnModuleInit {
       throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
     }
 
-    // 获取文件的分块列表（JSONL 正本，缺失时 fallback 主库存量），字段结构与原 KBChunk API 一致
-    return await this.chunkFileStore.readChunks(kbId, fileId, skip, limit);
+    return await this.chunkRepo.findByItemId(kbId, fileId, skip, limit);
   }
 }
