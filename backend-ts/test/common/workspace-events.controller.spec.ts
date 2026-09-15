@@ -8,7 +8,6 @@ describe("WorkspaceEventsController", () => {
     const sessionService = {
       getSessionById: jest.fn().mockResolvedValue({
         id: "session",
-        userId: "user",
       }),
     };
     const fileWatcherService = {
@@ -31,7 +30,6 @@ describe("WorkspaceEventsController", () => {
     const events = await controller.subscribeWorkspaceEvents(
       "session",
       "client",
-      { id: "user" },
       request as any,
     );
     const subscription = events.subscribe();

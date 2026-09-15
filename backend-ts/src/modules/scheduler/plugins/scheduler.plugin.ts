@@ -78,8 +78,6 @@ export class SchedulerPlugin extends PluginBase {
           .describe("重试间隔（秒），默认 60"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.session.userId;
-        if (!userId) throw new Error("无法获取用户ID，无法创建定时任务");
         const sessionId = ctx?.session.sessionId;
         if (!sessionId) throw new Error("无法获取会话ID，无法创建定时任务");
 

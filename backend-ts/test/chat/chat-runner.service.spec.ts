@@ -22,12 +22,11 @@ function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
     abortStream: jest.fn(),
   };
   const sessionService = {
-    getSessionById: jest.fn(async () => ({ id: 's1', userId: 'u1' })),
+    getSessionById: jest.fn(async () => ({ id: 's1' })),
     updateLastActiveAt: jest.fn(async () => {}),
   };
   const sessionContext = {
     sessionId: 's1',
-    userId: 'u1',
     sessionType: 'web',
     workspacePath: '/tmp/ws',
   };
@@ -54,7 +53,6 @@ function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
 
 const startParams = {
   sessionId: 's1',
-  userId: 'u1',
   userMessage: { id: 'm1', content: 'hi' } as any,
 };
 

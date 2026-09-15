@@ -214,7 +214,6 @@ The sub-agent has its own independent conversation context and tool capabilities
               await this.subAgentManager.closeSubAgent(
                 sessionId,
                 ctx?.session.sessionId,
-                ctx?.session.userId,
                 ctx?.session.workspacePath,
               );
               return "Sub-agent closed and deleted successfully.";
@@ -230,7 +229,6 @@ The sub-agent has its own independent conversation context and tool capabilities
               const result = await this.subAgentManager.sendMessage(
                 {
                   parentSessionId: ctx?.session.sessionId,
-                  userId: ctx?.session.userId,
                   sessionId,
                   message,
                 },

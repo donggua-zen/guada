@@ -379,7 +379,6 @@ export class LocalWorkspaceProvider implements WorkspaceProvider {
       cwd,
       opts.encoding || "utf-8",
       opts.sessionId || "",
-      opts.userId || "",
       {
         timeout: opts.timeout,
         abortSignal: opts.abortSignal,

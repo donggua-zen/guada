@@ -116,7 +116,6 @@ export interface Session {
     characterId: string
     modelId: string
     model?: SessionModel
-    userId: string
     settings: SessionSettings
     createdAt: ISODateString
     updatedAt: ISODateString
@@ -172,7 +171,6 @@ export interface UpdateSessionRequest {
 export interface SessionGroup {
     id: string
     name: string
-    userId: string
     sortOrder: number
     createdAt: ISODateString
     updatedAt: ISODateString

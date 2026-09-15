@@ -17,7 +17,6 @@ import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import { ProviderFileStore } from "../../llm-core/provider-file.store";
 import { toRuntimeProviderConfig } from "../../llm-core/utils/provider-runtime.util";
 import { EventBusService } from "../../../common/events/event-bus.service";
-import { ToolOrchestrator } from "../../tools/tool-orchestrator.service";
 import { buildSessionLlmParams } from "../session-llm-request.builder";
 import type { ContextStatsPayload } from "../types/event-chunk.types";
 import {

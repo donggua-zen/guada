@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { ToolExecutor } from "../tools/tool-executor.service";
 import { SettingsService } from "../settings/settings.service";
 import {
   SG_SYSTEM,
@@ -69,7 +69,7 @@ export class AgentEngine {
   private readonly logger = new Logger(AgentEngine.name);
 
   constructor(
-    private toolOrchestrator: ToolOrchestrator,
+    private toolExecutor: ToolExecutor,
     private settingsService: SettingsService,
     private llmService: LLMService,
     private eventBus: EventBusService,
@@ -370,7 +370,7 @@ export class AgentEngine {
     const resolved = sessionContext.getResolvedPlugins();
     const tools =
       resolved.length > 0
-        ? ToolOrchestrator.toFlatToolDefs(resolved)
+        ? ToolExecutor.toFlatToolDefs(resolved)
         : undefined;
 
     // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
@@ -877,7 +877,7 @@ export class AgentEngine {
 
     // 2. 直接执行全部合法工具调用（同一消息内多工具按 executeBatch 并发）
     if (validToolCalls.length > 0) {
-      const results = await this.toolOrchestrator.executeBatch(
+      const results = await this.toolExecutor.executeBatch(
         validToolCalls.map((tc: any) => ({
           id: tc.toolCallId,
           name: tc.name,

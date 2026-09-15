@@ -12,7 +12,6 @@ export type {
   ToolParamSchema,
   ToolUsingEvent,
   PromptFrequency,
-  ToolLoadMode,
   ToolKitDef,
   ToolKitHandle,
   ToolKitLoadMode,

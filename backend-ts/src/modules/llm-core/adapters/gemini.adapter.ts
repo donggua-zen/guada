@@ -11,7 +11,7 @@
  * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
  * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
  */
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   GoogleGenerativeAI,
   HarmCategory,
@@ -38,6 +38,10 @@ import {
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 
+// @Injectable() 不可省：emitDecoratorMetadata 只在类上有装饰器时才产出
+// design:paramtypes。当前无构造参数故暂无实害，但缺装饰器会让"将来加依赖"
+// 变成静默失败（Nest 零参构造），故一并补上。
+@Injectable()
 export class GeminiAdapter implements IProtocolAdapter {
   readonly protocol = "gemini";
   private readonly logger = new Logger(GeminiAdapter.name);

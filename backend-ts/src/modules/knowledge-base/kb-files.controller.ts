@@ -12,7 +12,6 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { KbFileService } from "./kb-file.service";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
@@ -28,7 +27,6 @@ export class KbFilesController {
   async uploadFile(
     @Param("kb_id") kbId: string,
     @UploadedFile() file: any,
-    @CurrentUser() user: any,
     @Body("relativePath") relativePath?: string,
   ) {
     return await this.kbFileService.uploadFile(kbId, file, relativePath);
@@ -39,7 +37,6 @@ export class KbFilesController {
     @Param("kb_id") kbId: string,
     @Query("skip") skip = 0,
     @Query("limit") limit = 50,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.listFiles(kbId, Number(skip), Number(limit));
   }
@@ -47,7 +44,6 @@ export class KbFilesController {
   @Get("by-parent")
   async getFilesByParent(
     @Param("kb_id") kbId: string,
-    @CurrentUser() user: any,
     @Query("parentFolderId") parentFolderId?: string,  // null或undefined表示根目录
     @Query("skip") skip = 0,
     @Query("limit") limit = 50,
@@ -66,7 +62,6 @@ export class KbFilesController {
   @Get("by-path")
   async getFilesByPath(
     @Param("kb_id") kbId: string,
-    @CurrentUser() user: any,
     @Query("path") path?: string,  // 相对路径，为空表示根目录
     @Query("skip") skip = 0,
     @Query("limit") limit = 50,
@@ -86,7 +81,6 @@ export class KbFilesController {
   async getFile(
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.getFile(fileId, kbId);
   }
@@ -95,7 +89,6 @@ export class KbFilesController {
   async getFileStatus(
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.getFileStatus(fileId, kbId);
   }
@@ -104,7 +97,6 @@ export class KbFilesController {
   async batchGetFileStatus(
     @Param("kb_id") kbId: string,
     @Body("fileIds") fileIds: string[],
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.batchGetFileStatus(fileIds, kbId);
   }
@@ -113,7 +105,6 @@ export class KbFilesController {
   async deleteFile(
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
-    @CurrentUser() user: any,
   ) {
     const success = await this.kbFileService.deleteFileAndChunks(fileId, kbId);
     if (success) {
@@ -127,7 +118,6 @@ export class KbFilesController {
   async retryFileProcessing(
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.retryFileProcessing(fileId, kbId);
   }
@@ -138,7 +128,6 @@ export class KbFilesController {
     @Param("file_id") fileId: string,
     @Query("skip") skip = 0,
     @Query("limit") limit = 10,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.getFileChunks(
       fileId,
@@ -153,7 +142,6 @@ export class KbFilesController {
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
     @Body() dto: RenameFileDto,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.renameFile(fileId, kbId, dto.newName);
   }
@@ -163,7 +151,6 @@ export class KbFilesController {
     @Param("kb_id") kbId: string,
     @Param("file_id") fileId: string,
     @Body() dto: MoveFileDto,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.moveFile(
       fileId,
@@ -176,7 +163,6 @@ export class KbFilesController {
   async createFolder(
     @Param("kb_id") kbId: string,
     @Body() dto: CreateFolderDto,
-    @CurrentUser() user: any,
   ) {
     return await this.kbFileService.createFolder(
       kbId,

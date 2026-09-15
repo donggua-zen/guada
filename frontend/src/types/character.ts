@@ -15,7 +15,6 @@ export interface Character {
     name: string
     description?: string | null
     avatarUrl?: string | null
-    userId?: string | null
     modelId?: string | null
     createdAt: ISODateString
     updatedAt: ISODateString

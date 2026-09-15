@@ -49,10 +49,34 @@
             </div>
             <div class="flex gap-2 shrink-0 max-w-md w-full">
               <el-input v-model="settingsForm.workspaceBaseDir" :placeholder="t('settings.general.workspaceBaseDirPlaceholder')" clearable />
-              <el-button @click="selectFolder" type="primary" plain>
+              <el-button @click="selectFolder()" type="primary" plain>
                 {{ t('settings.general.selectFolder') }}
               </el-button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 知识库分组 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.knowledgeBase') }}</h3>
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
+          <!-- 知识库存储根 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.kbStorageRoot') }}</span>
+              <span
+                class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.kbStorageRootDesc') }}</span>
+            </div>
+            <div class="flex gap-2 shrink-0 max-w-md w-full">
+              <el-input v-model="settingsForm.kbStorageRoot" :placeholder="t('settings.general.kbStorageRootPlaceholder')" clearable />
+              <el-button @click="selectFolder('kbStorageRoot')" type="primary" plain>
+                {{ t('settings.general.selectFolder') }}
+              </el-button>
+            </div>
+          </div>
+          <div class="px-4 pb-3.5">
+            <span class="text-xs text-amber-600 dark:text-amber-500">{{ t('settings.general.kbStorageRootRestartHint') }}</span>
           </div>
         </div>
       </div>
@@ -124,6 +148,7 @@ function handleLanguageChange(val: string) {
 // 表单数据
 const settingsForm = reactive({
   workspaceBaseDir: '',
+  kbStorageRoot: '',
   maxToolIterations: 100,
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
@@ -145,7 +170,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, kbStorageRoot: settingsForm.kbStorageRoot, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -156,6 +181,7 @@ const loadSettings = async () => {
 
     // 填充表单
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
+    settingsForm.kbStorageRoot = response.kbStorageRoot || ''
     settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
@@ -167,14 +193,14 @@ const loadSettings = async () => {
   }
 }
 
-// 选择文件夹
-const selectFolder = async () => {
+// 选择文件夹（target 决定写入哪个设置项）
+const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'workspaceBaseDir') => {
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI
   if (isElectron && window.electronAPI?.selectFolder) {
     try {
       const selectedPath = await window.electronAPI.selectFolder()
       if (selectedPath) {
-        settingsForm.workspaceBaseDir = selectedPath
+        settingsForm[target] = selectedPath
         ElMessage.success(t('settings.general.folderSelected'))
       }
     } catch (error) {
@@ -239,9 +265,22 @@ const handleSave = async () => {
       }
     }
 
+    // 验证知识库存储根（后端也会校验，这里先给即时反馈）
+    const kbRoot = settingsForm.kbStorageRoot.trim()
+    if (kbRoot) {
+      const isAbsolute = /^[a-zA-Z]:\\/.test(kbRoot) || kbRoot.startsWith('/')
+      // UNC 网络路径必须挡掉：SQLite WAL 在网络共享上锁不可靠
+      const isUnc = /^[\\/]{2}[^\\/]/.test(kbRoot)
+      if (!isAbsolute || isUnc) {
+        ElMessage.error(t('settings.general.kbStorageRootMustBeAbsolute'))
+        return
+      }
+    }
+
     // 构造保存数据
     const dataToSave = {
       workspaceBaseDir: path || null,
+      kbStorageRoot: kbRoot || null,
       maxToolIterations: settingsForm.maxToolIterations,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,

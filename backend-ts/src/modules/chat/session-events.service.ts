@@ -44,8 +44,6 @@ export type SessionEventType =
  */
 export interface SessionEvent {
   type: SessionEventType;
-  /** @deprecated 单账户模型下无意义（路由不再按用户分区） */
-  userId?: string;
   sessionId: string;
   timestamp: string;
   // 事件负载，根据 type 不同而变化
@@ -83,7 +81,7 @@ interface InternalEventListener {
 @Injectable()
 export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
-  /** 单账户：所有客户端订阅同一张表（原按 userId 分区） */
+  /** 单账户：所有客户端订阅同一张表 */
   private readonly subscribers = new Map<string, UserEventSubscriber>();
 
   constructor(
@@ -347,7 +345,6 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   handlePluginsChanged(event: { pluginId: string; action: string }) {
     const sessionEvent: SessionEvent = {
       type: "plugins_changed",
-      userId: "*",
       sessionId: "*",
       timestamp: new Date().toISOString(),
       payload: event,

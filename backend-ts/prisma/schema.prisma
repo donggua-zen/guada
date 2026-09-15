@@ -124,6 +124,7 @@ model MessageContent {
   @@map("message_content")
 }
 
+/// 已冻结：供应商/模型权威来源已是 providers/*.yaml；此表仅作安装期迁移源与回滚快照，不删表（user_id 列属多租户遗留，随主库整体移除）
 model ModelProvider {
   id         String   @id @default(cuid())
   userId     String   @map("user_id")
@@ -240,7 +241,8 @@ model KnowledgeBase {
 }
 
 model KBFile {
-  // 已冻结：文件元信息权威来源改为 <KB根>/<kbId>/<itemId>/file.json，本表仅供导出与回滚
+  // 已冻结：条目元信息权威来源改为 <KB根>/<kbId>/kb.db 的 item 表（每库一个 SQLite），
+  // 本表仅作安装期迁移源与回滚快照
   id                 String        @id @default(cuid())
   knowledgeBaseId    String        @map("knowledge_base_id")
   fileName           String        @map("file_name")
@@ -276,7 +278,8 @@ model KBFile {
 }
 
 model KBChunk {
-  // 已冻结：分块正本改为 <KB根>/<kbId>/<fileId>/chunks.jsonl；本表仅 JSONL 缺失时兼容期 fallback
+  // 已冻结：分块正本改为 <KB根>/<kbId>/kb.db 的 chunk 表（含向量与 FTS）。
+  // 本表仅作安装期迁移源；原先"JSONL 缺失时回读本表"的 fallback 已删除
   id                  String   @id @default(cuid())
   fileId              String   @map("file_id")
   knowledgeBaseId     String   @map("knowledge_base_id")

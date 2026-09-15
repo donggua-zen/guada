@@ -162,7 +162,6 @@ export class SubAgentManager implements OnModuleInit {
   ): Promise<SubAgentResult> {
     const { parentContext } = params;
     const parentSessionId = parentContext.sessionId;
-    const userId = parentContext.userId;
 
     // 限制子代理数量：一个会话最多创建 10 个
     const subAgentCount =
@@ -255,10 +254,8 @@ export class SubAgentManager implements OnModuleInit {
     avatarUrl: string | undefined,
   ): Promise<SubAgentResult> {
     const parentSessionId = parentContext.sessionId;
-    const userId = parentContext.userId;
 
     const subSession = await this.sessionRepo.create({
-      userId,
       parentId: parentSessionId,
       title: params.name,
       characterId,
@@ -274,7 +271,6 @@ export class SubAgentManager implements OnModuleInit {
     );
 
     this.eventBus.emit("subagent.created", {
-      userId,
       sessionId: parentSessionId,
       timestamp: new Date().toISOString(),
       payload: {
@@ -289,7 +285,6 @@ export class SubAgentManager implements OnModuleInit {
 
     return this.executeSubAgentStream(
       subSession.id,
-      userId,
       params.task,
       parentSessionId,
       mode,
@@ -308,7 +303,6 @@ export class SubAgentManager implements OnModuleInit {
   async sendMessage(
     params: {
       parentSessionId: string;
-      userId: string;
       sessionId: string;
       message: string;
     },
@@ -342,7 +336,6 @@ export class SubAgentManager implements OnModuleInit {
     // 3. 复用执行逻辑（send_message 针对的是仍存在的会话，生命周期必为 persist）
     return this.executeSubAgentStream(
       params.sessionId,
-      params.userId,
       params.message,
       params.parentSessionId,
       mode,
@@ -374,7 +367,6 @@ export class SubAgentManager implements OnModuleInit {
   ): Promise<SubAgentResult> {
     const { parentContext } = params;
     const parentSessionId = parentContext.sessionId;
-    const userId = parentContext.userId;
 
     // 继承策略与 spawn() 一致（PersistentSessionContext.mergeSettings 语义）
     const settings: Record<string, any> = {
@@ -412,7 +404,6 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     const subSession = await this.sessionRepo.create({
-      userId,
       parentId: parentSessionId,
       title: params.name,
       characterId: finalCharacterId,
@@ -428,7 +419,6 @@ export class SubAgentManager implements OnModuleInit {
     );
 
     this.eventBus.emit("subagent.created", {
-      userId,
       sessionId: parentSessionId,
       timestamp: new Date().toISOString(),
       payload: {
@@ -445,7 +435,6 @@ export class SubAgentManager implements OnModuleInit {
     // abortSignal 中止时 runSubAgentStream 内部联动 cancelStream 并以 aborted 结算
     return this.runSubAgentStream(
       subSession.id,
-      userId,
       params.task,
       parentSessionId,
       abortSignal,
@@ -463,7 +452,6 @@ export class SubAgentManager implements OnModuleInit {
    */
   private async executeSubAgentStream(
     subSessionId: string,
-    userId: string,
     content: string,
     parentSessionId: string,
     mode: "foreground" | "background",
@@ -475,7 +463,6 @@ export class SubAgentManager implements OnModuleInit {
 
     const pending = this.runSubAgentStream(
       subSessionId,
-      userId,
       content,
       parentSessionId,
       mode === "foreground" ? abortSignal : undefined,
@@ -488,7 +475,6 @@ export class SubAgentManager implements OnModuleInit {
           this.settle(
             subSessionId,
             result,
-            userId,
             parentSessionId,
             lifecycle,
           ),
@@ -505,7 +491,6 @@ export class SubAgentManager implements OnModuleInit {
               content: "",
               error: errorMsg,
             },
-            userId,
             parentSessionId,
             lifecycle,
           );
@@ -551,7 +536,6 @@ export class SubAgentManager implements OnModuleInit {
         this.maybeAutoDispose(
           subSessionId,
           parentSessionId,
-          userId,
           lifecycle,
           raceResult.result,
         );
@@ -573,7 +557,6 @@ export class SubAgentManager implements OnModuleInit {
         this.maybeAutoDispose(
           subSessionId,
           parentSessionId,
-          userId,
           lifecycle,
           errorResult,
         );
@@ -628,12 +611,11 @@ export class SubAgentManager implements OnModuleInit {
   private maybeAutoDispose(
     subSessionId: string,
     parentSessionId: string,
-    userId: string,
     lifecycle: "persist" | "one_shot",
     result?: SubAgentResult,
   ): void {
     if (lifecycle !== "one_shot") return;
-    this.disposeSession(subSessionId, parentSessionId, userId, {
+    this.disposeSession(subSessionId, parentSessionId, {
       stopReason: result
         ? result.stopReason ??
           (result.status === "error" ? "error" : "completed")
@@ -656,7 +638,6 @@ export class SubAgentManager implements OnModuleInit {
   private async disposeSession(
     subSessionId: string,
     parentSessionId: string,
-    userId: string,
     extra?: { stopReason?: string; content?: string },
   ): Promise<void> {
     await this.sessionRepo.update(subSessionId, {
@@ -665,7 +646,6 @@ export class SubAgentManager implements OnModuleInit {
     });
 
     this.eventBus.emit("subagent.closed", {
-      userId,
       sessionId: parentSessionId,
       timestamp: new Date().toISOString(),
       payload: {
@@ -783,13 +763,11 @@ export class SubAgentManager implements OnModuleInit {
    *
    * @param subSessionId 子 Agent 会话 ID
    * @param parentSessionId 父会话 ID
-   * @param userId 用户 ID
    * @param workspacePath 工作目录路径（子 Agent 与父 Agent 共用）
    */
   async closeSubAgent(
     subSessionId: string,
     parentSessionId: string,
-    userId: string,
     workspacePath: string,
   ): Promise<void> {
     // 如果子 Agent 正在运行，取消流并从运行中集合移除
@@ -830,7 +808,7 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     // 冻结会话数据并广播关闭事件（手动 close → stopReason=closed）
-    await this.disposeSession(subSessionId, parentSessionId, userId, {
+    await this.disposeSession(subSessionId, parentSessionId, {
       stopReason: "closed",
     });
 
@@ -902,7 +880,6 @@ export class SubAgentManager implements OnModuleInit {
   private async settle(
     subSessionId: string,
     result: SubAgentResult,
-    userId: string,
     parentSessionId: string,
     lifecycle: "persist" | "one_shot" = "persist",
   ): Promise<void> {
@@ -915,7 +892,6 @@ export class SubAgentManager implements OnModuleInit {
     await this.finalizeSubAgent(
       subSessionId,
       parentSessionId,
-      userId,
       state,
       name,
       {
@@ -937,7 +913,6 @@ export class SubAgentManager implements OnModuleInit {
   private async finalizeSubAgent(
     subSessionId: string,
     parentSessionId: string,
-    userId: string,
     state: ParentSessionState | undefined,
     name: string,
     options: {
@@ -970,7 +945,6 @@ export class SubAgentManager implements OnModuleInit {
       this.maybeAutoDispose(
         subSessionId,
         parentSessionId,
-        userId,
         lifecycle,
         result,
       );
@@ -1020,7 +994,6 @@ export class SubAgentManager implements OnModuleInit {
             this.maybeAutoDispose(
               subSessionId,
               parentSessionId,
-              userId,
               lifecycle,
               entry?.result,
             );
@@ -1085,7 +1058,6 @@ export class SubAgentManager implements OnModuleInit {
    */
   private async runSubAgentStream(
     subSessionId: string,
-    userId: string,
     task: string,
     parentSessionId: string,
     abortSignal?: AbortSignal,

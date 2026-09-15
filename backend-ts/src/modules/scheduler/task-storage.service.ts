@@ -4,6 +4,45 @@ import * as path from "path";
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 
 /**
+ * ScheduledTask 的字段白名单（与 types/scheduler.types.ts 保持一致）。
+ * 加载/保存时据此剔除存量文件里的历史字段（如多租户时代的 userId），
+ * 保证 tasks.json 只含现行 schema 字段。
+ */
+const TASK_FIELDS = new Set<keyof ScheduledTask>([
+  "id",
+  "name",
+  "prompt",
+  "scheduleType",
+  "cronExpression",
+  "executeAt",
+  "targetMode",
+  "targetSessionId",
+  "characterId",
+  "modelId",
+  "settings",
+  "enabled",
+  "lastRunAt",
+  "nextRunAt",
+  "createdAt",
+  "updatedAt",
+  "maxExecutions",
+  "executionCount",
+  "maxRetries",
+  "retryInterval",
+]);
+
+/** 剔除白名单外的历史字段；返回 [归一化对象, 是否发生剔除] */
+function normalizeTask(raw: any): [ScheduledTask, boolean] {
+  const out: Record<string, any> = {};
+  let stripped = false;
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    if (TASK_FIELDS.has(key as keyof ScheduledTask)) out[key] = value;
+    else stripped = true;
+  }
+  return [out as ScheduledTask, stripped];
+}
+
+/**
  * 定时任务文件存储服务
  *
  * 使用 JSON 文件持久化定时任务及其执行日志，替代数据库存储。
@@ -168,9 +207,17 @@ export class TaskStorageService {
     try {
       if (fs.existsSync(this.tasksFile)) {
         const content = await fs.promises.readFile(this.tasksFile, "utf-8");
-        const tasks: ScheduledTask[] = JSON.parse(content);
-        for (const task of tasks) {
+        const tasks: any[] = JSON.parse(content);
+        let strippedCount = 0;
+        for (const raw of tasks) {
+          const [task, stripped] = normalizeTask(raw);
+          if (stripped) strippedCount += 1;
           this.tasksCache.set(task.id, task);
+        }
+        if (strippedCount > 0) {
+          this.logger.log(
+            `已剔除 ${strippedCount} 个任务的历史字段（下次保存落盘为现行 schema）`,
+          );
         }
         this.logger.log(`Loaded ${tasks.length} tasks from ${this.tasksFile}`);
       }
@@ -199,7 +246,10 @@ export class TaskStorageService {
   }
 
   private async saveTasks(): Promise<void> {
-    const tasks = Array.from(this.tasksCache.values());
+    // 保存前再归一化一次：任何写入都会把存量历史字段从磁盘清掉
+    const tasks = Array.from(this.tasksCache.values()).map(
+      (task) => normalizeTask(task)[0],
+    );
     await fs.promises.writeFile(this.tasksFile, JSON.stringify(tasks, null, 2), "utf-8");
   }
 

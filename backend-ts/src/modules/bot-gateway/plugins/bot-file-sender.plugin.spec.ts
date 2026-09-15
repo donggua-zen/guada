@@ -11,7 +11,6 @@ import * as path from 'node:path';
 function createMockSession(overrides: Record<string, any> = {}) {
   return {
     sessionId: 'session-1',
-    userId: 'user-1',
     sessionType: 'bot',
     botId: 'bot-1',
     externalId: 'wechat-personal:private:chat123',

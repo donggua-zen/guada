@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { IProtocolAdapter } from "./base.adapter";
 import {
   ProviderConfig,
@@ -29,6 +29,10 @@ import {
  *
  * 模型名可带后缀控制行为变体，如 mock-normal-slow 表示慢速流式输出
  */
+// @Injectable() 不可省：emitDecoratorMetadata 只在类上有装饰器时才产出
+// design:paramtypes。当前无构造参数故暂无实害，但缺装饰器会让"将来加依赖"
+// 变成静默失败（Nest 零参构造），故一并补上。
+@Injectable()
 export class MockAdapter implements IProtocolAdapter {
   readonly protocol = "mock";
   private readonly logger = new Logger(MockAdapter.name);

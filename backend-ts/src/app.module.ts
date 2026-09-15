@@ -15,7 +15,6 @@ import { SettingsModule } from "./modules/settings/settings.module";
 import { UsersModule } from "./modules/users/users.module";
 import { ToolsModule } from "./modules/tools/tools.module";
 import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
-import { VectorDbModule } from "./common/vector-db";
 import { SearchModule } from "./common/search/search.module";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
 import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
@@ -48,7 +47,6 @@ import { HealthModule } from './modules/health/health.module';
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块
-    VectorDbModule, // 向量数据库模块
     SearchModule, // 会话内容搜索（JSONL 实时批扫描，无索引库）
     McpClientModule, // MCP 客户端模块（全局）
     SkillsModule, // Skills 集成框架模块

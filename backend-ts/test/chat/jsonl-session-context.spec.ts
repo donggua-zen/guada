@@ -18,7 +18,6 @@ import type { Message } from '../../src/common/types/conversation.types';
 function makeSession(overrides: any = {}): any {
   return {
     id: 's1',
-    userId: 'u1',
     sessionType: 'web',
     parentId: null,
     characterId: null,
@@ -85,7 +84,6 @@ function createContext(overrides: any = {}) {
     { resolvePlugins: jest.fn(async () => []) } as any,
     {
       collectPrompts: jest.fn(async () => []),
-      collectUserPrompts: jest.fn(async () => []),
     } as any,
     { resolveSessionWorkspaceDir: jest.fn(async () => '') } as any,
     tokenMeter as any,

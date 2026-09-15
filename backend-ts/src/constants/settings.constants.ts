@@ -10,6 +10,8 @@ export const SG_PLUGINS = 'plugins_config';
  * 系统级设置键名 (SK_SYS = Setting Key System)
  */
 export const SK_SYS_WORKSPACE_BASE_DIR = 'workspaceBaseDir';
+/** 知识库存储根（空 = 用默认位置；必须本地绝对路径，不接受 UNC） */
+export const SK_SYS_KB_STORAGE_ROOT = 'kbStorageRoot';
 export const SK_SYS_MAX_TOOL_ITERATIONS = 'maxToolIterations';
 export const SK_SYS_LLM_REQUEST_TIMEOUT_MS = 'llmRequestTimeoutMs';
 export const SK_SYS_LLM_IDLE_TIMEOUT_MS = 'llmIdleTimeoutMs';

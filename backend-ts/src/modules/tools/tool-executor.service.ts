@@ -41,17 +41,22 @@ export class ToolExecutor {
 
   /**
    * 从已决议的插件信息中查找指定名称的工具 handler
+   *
+   * @param allowLazy 是否允许命中 lazy 工具包的工具。lazy 工具不广告给 LLM，
+   *   只能经 tool_use 通道执行；LLM 直接派发（executeBatch）不传此项，故不可达。
    */
   static findTool(
     resolved: ResolvedPluginInfo[],
     toolName: string,
+    allowLazy = false,
   ): ToolHandlerDef | undefined {
     for (const rp of resolved) {
       if (!rp.enabled) continue;
       // 第 1 遍：enabledTools（plugin 级 + eager 工具包工具，已通过权限过滤）
       const found = rp.enabledTools.find((t) => t.name === toolName);
       if (found) return found;
-      // 第 2 遍：已启用(lazy)工具包的工具
+      // 第 2 遍：lazy 工具包的工具——仅 tool_use 通道放行
+      if (!allowLazy) continue;
       const lazyTool = rp.allTools.find((t) => t.name === toolName);
       if (lazyTool) {
         const inLazyKit = rp.enabledToolKits.some(
@@ -68,10 +73,7 @@ export class ToolExecutor {
   /**
    * 获取扁平化的工具定义列表（供 LLM 使用，不含 handler）
    */
-  static toFlatToolDefs(
-    resolved: ResolvedPluginInfo[],
-    includeLazy = false,
-  ): ToolDefinition[] {
+  static toFlatToolDefs(resolved: ResolvedPluginInfo[]): ToolDefinition[] {
     const toDef = (t: ToolHandlerDef) => {
       const params = t.parameters as any;
       // 临时调试：tool_use 的 arguments 显式标记 additionalProperties: true
@@ -150,11 +152,23 @@ export class ToolExecutor {
     toolCallId: string,
     session: ISessionContext,
     abortSignal?: AbortSignal,
+    opts?: { allowLazy?: boolean },
   ): Promise<ToolCallResponse> {
     const resolved = session.getResolvedPlugins();
-    const toolEntry = ToolExecutor.findTool(resolved, fullToolName);
-    if (!toolEntry)
+    const allowLazy = opts?.allowLazy === true;
+    const toolEntry = ToolExecutor.findTool(resolved, fullToolName, allowLazy);
+    if (!toolEntry) {
+      if (!allowLazy) {
+        // 工具存在但仅可经 tool_use 触达：给出换通道的提示，避免模型重试同名工具
+        const lazyEntry = ToolExecutor.findTool(resolved, fullToolName, true);
+        if (lazyEntry) {
+          throw new Error(
+            `Tool ${fullToolName} is a lazy-loaded tool. Call tool_learn("${lazyEntry.toolSet}") to learn its usage, then invoke it via tool_use.`,
+          );
+        }
+      }
       throw new Error(`Tool ${fullToolName} is not available or disabled`);
+    }
 
     // 工具范围锁定（影子轮次等瞬态机制）：仅允许锁定插件的工具
     const toolScope = session.getToolScope?.();

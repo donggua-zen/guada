@@ -105,7 +105,6 @@ export interface GetMessagesOptions {
 export interface ISessionContext {
   // === 身份标识 ===
   readonly sessionId: string;
-  readonly userId: string;
   readonly sessionType: "web" | "bot" | "sub_agent";
   /** 父会话 ID（子代理场景下为主会话 ID，主会话场景下为 null） */
   readonly parentSessionId?: string | null;

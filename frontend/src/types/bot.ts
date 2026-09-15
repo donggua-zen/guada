@@ -28,7 +28,6 @@ export interface PlatformMetadata {
  */
 export interface BotInstance {
   id: string;
-  userId: string;
   platform: string;
   name: string;
   enabled: boolean;

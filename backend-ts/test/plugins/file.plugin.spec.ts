@@ -28,7 +28,6 @@ function capturePluginApi(): PluginApi & {
     registerTool: (def: any) => tools.push(def),
     registerRawTool: (def: any) => tools.push(def),
     registerPrompt: (def: any) => prompts.push(def),
-    registerToolSet: () => {},
     registerNls: () => {},
     // 工具包化后，插件把工具/提示词注册到 kit 句柄上 —— 捕获进同一集合
     registerToolKit: () => ({

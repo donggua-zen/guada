@@ -8,12 +8,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
-import { VectorDbService } from "../../common/vector-db/vector-db.service";
+import { KbSearchService, SearchResult } from "./kb-search.service";
 import { EmbeddingService } from "./embedding.service";
-import { SearchResult } from "../../common/vector-db";
 
 @Controller("knowledge-bases/:kb_id/search")
 @UseGuards(AuthGuard)
@@ -21,7 +19,7 @@ export class KbSearchController {
   constructor(
     private providerStore: ProviderFileStore,
     private kbRepo: KnowledgeBaseRepository,
-    private vectorDbService: VectorDbService,
+    private searchService: KbSearchService,
     private embeddingService: EmbeddingService,
   ) {}
 
@@ -29,15 +27,11 @@ export class KbSearchController {
   async searchKnowledgeBase(
     @Param("kb_id") kbId: string,
     @Body() searchRequest: any,
-    @CurrentUser() user: any,
   ) {
-    // 验证知识库权限
+    // 验证知识库存在
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
       throw new Error("知识库不存在");
-    }
-    if (kb.userId !== user.id) {
-      throw new Error("无权访问该知识库");
     }
 
     // 获取向量模型配置
@@ -47,9 +41,9 @@ export class KbSearchController {
       throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
     }
 
-    // 构建过滤条件
+    // 构建过滤条件（库内检索，按条目过滤）
     const filterOptions = searchRequest.filter_file_id
-      ? { documentId: searchRequest.filter_file_id }
+      ? { itemId: searchRequest.filter_file_id }
       : undefined;
 
     // 获取查询文本的向量
@@ -61,9 +55,8 @@ export class KbSearchController {
     );
 
     // 执行混合搜索
-    const tableId = `kb_${kbId}`;
-    const results = await this.vectorDbService.searchChunksHybrid(
-      tableId,
+    const results = await this.searchService.hybridSearch(
+      kbId,
       queryEmbedding,
       searchRequest.query,
       searchRequest.topK || 5,
@@ -95,15 +88,11 @@ export class KbSearchController {
   async testSearch(
     @Param("kb_id") kbId: string,
     @Query("query") query: string,
-    @CurrentUser() user: any,
   ) {
     // 验证知识库
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
       throw new Error("知识库不存在");
-    }
-    if (kb.userId !== user.id) {
-      throw new Error("无权访问");
     }
 
     // 获取向量模型配置
@@ -122,9 +111,8 @@ export class KbSearchController {
     );
 
     // 执行语义搜索
-    const tableId = `kb_${kbId}`;
-    const results = await this.vectorDbService.searchChunksSemantic(
-      tableId,
+    const results = await this.searchService.semanticSearch(
+      kbId,
       queryEmbedding,
       5,
     );

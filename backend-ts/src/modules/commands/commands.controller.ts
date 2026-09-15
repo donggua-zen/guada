@@ -2,7 +2,6 @@ import { Controller, Get, Query, Logger, UseGuards } from "@nestjs/common";
 import { CommandProviderRegistry, AggregatedItem } from "./command-provider-registry.service";
 import { CommandContext } from "./interfaces/command-provider.interface";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 
 @Controller("commands")
 @UseGuards(AuthGuard)
@@ -22,10 +21,9 @@ export class CommandsController {
   async listCommands(
     @Query("trigger") trigger?: string,
     @Query("characterId") characterId?: string,
-    @CurrentUser() user?: any,
   ): Promise<{ items: AggregatedItem[]; total: number }> {
     const t = trigger === "mention" ? "mention" : "slash";
-    const ctx: CommandContext = { characterId, userId: user?.id };
+    const ctx: CommandContext = { characterId };
     const items = await this.registry.getItems(t, ctx);
     return { items, total: items.length };
   }

@@ -31,7 +31,7 @@ export interface ContextLoadParams {
   keepReasoningContent?: boolean;
 }
 
-/** 细分 Token 统计（三项真值：压缩摘要折叠进 history；插件 user 型提示词机制已废弃） */
+/** 细分 Token 统计（三项真值：压缩摘要折叠进 history） */
 export interface TokenBreakdown {
   /** 系统提示词（角色 base + 插件 eager 提示词） */
   systemPrompt: number;

@@ -1,9 +1,4 @@
-import {
-  PluginManifest,
-  PromptPiece,
-  PluginContext,
-  ToolHandlerDef,
-} from "./types/plugin.types";
+import { PluginManifest } from "./types/plugin.types";
 import { PluginApi } from "./api/plugin-api";
 
 export abstract class PluginBase {
@@ -23,7 +18,4 @@ export abstract class PluginBase {
 
   /** 卸载阶段：插件从系统中移除时调用 */
   onUnload?(): Promise<void>;
-
-  /** 获取插件的所有提示词（旧适配器兼容，新插件通过 onLoad(api).registerPrompt() 注册） */
-  getPrompts?(context: PluginContext): Promise<PromptPiece[]>;
 }

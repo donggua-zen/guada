@@ -7,7 +7,6 @@ jest.mock("./parsers/tag-parser-pipeline.service", () => ({ TagParserPipeline: c
 const { ChatController } = require("./chat.controller");
 
 describe("ChatController", () => {
-  const user = { id: "user-1" };
   const body = { sessionId: "session-1", messageId: "message-1" };
 
   let chatRunner: { startStream: jest.Mock; enqueueMessage: jest.Mock };
@@ -44,7 +43,7 @@ describe("ChatController", () => {
       writableEnded: false,
     };
 
-    await controller.streamMessage(body, user, res as any, { on: jest.fn() } as any);
+    await controller.streamMessage(body, res as any, { on: jest.fn() } as any, "");
 
     // /chat/stream 已降级为 RPC:startStream 应被调用,错误以 HTTP 响应返回(不 re-throw)
     expect(chatRunner.startStream).toHaveBeenCalled();
@@ -65,7 +64,7 @@ describe("ChatController", () => {
       writableEnded: false,
     };
 
-    await controller.streamMessage(body, user, res as any, { on: jest.fn() } as any);
+    await controller.streamMessage(body, res as any, { on: jest.fn() } as any, "");
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(
@@ -86,7 +85,7 @@ describe("ChatController", () => {
       writableEnded: false,
     };
 
-    await controller.streamMessage(body, user, res as any, { on: jest.fn() } as any);
+    await controller.streamMessage(body, res as any, { on: jest.fn() } as any, "");
 
     expect(chatRunner.startStream).toHaveBeenCalled();
     // RPC 模式:触发后立即返回 ok,不再阻塞到流结束

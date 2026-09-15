@@ -10,7 +10,7 @@ import {
   ToolHandlerDef,
   ResolvedPluginInfo,
 } from "../../plugins/types/plugin.types";
-import { ToolOrchestrator } from "../tool-orchestrator.service";
+import { ToolExecutor } from "../tool-executor.service";
 import type { ContentBlock } from "../../../common/types/conversation.types";
 import { HOOKS } from "../../chat/types/hooks.contract";
 import langZh from "./universal-tools.lang.zh.json";
@@ -33,7 +33,7 @@ export class UniversalToolsPlugin extends PluginBase {
   };
 
   constructor(
-    private orchestrator: ToolOrchestrator,
+    private orchestrator: ToolExecutor,
     private pluginManager: PluginManager,
     private promptCollector: PromptCollector,
   ) {
@@ -116,9 +116,11 @@ export class UniversalToolsPlugin extends PluginBase {
         const result = await this.orchestrator.executeTool(
           args.tool_name,
           args.arguments,
-          "tool_use",
+          // 用外层真实 callId：常量 id 会让大结果落盘文件名在同轮多次 tool_use 时互相覆盖
+          ctx?.toolCallId ?? "tool_use",
           session,
           signal,
+          { allowLazy: true },
         );
         // 透传 images，让 ToolExecutor 注入为隐藏 user 消息（多模态图片返回）
         if (result.images && result.images.length > 0) {
@@ -135,10 +137,9 @@ export class UniversalToolsPlugin extends PluginBase {
       },
     });
 
-    // 工具包记忆提示词：注入到 user 消息（压缩后自动恢复 AI 正在使用的工具包定义）
+    // 工具包记忆提示词：注入到 system prompt（压缩后自动恢复 AI 正在使用的工具包定义）
     api.registerPrompt({
       frequency: "VOLATILE",
-      type: "system",
       description: "已加载工具包的工具定义（压缩后自动恢复）",
       content: async (context: PluginContext) => {
         return this.buildToolkitMemoryPrompt(context);

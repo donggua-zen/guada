@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { ToolOrchestrator } from "../../src/modules/tools/tool-orchestrator.service";
+import { ToolExecutor } from "../../src/modules/tools/tool-executor.service";
 import { PluginManager } from "../../src/modules/plugins/plugin.manager";
 import { SettingsStorage } from "../../src/common/utils/settings-storage.util";
 import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
@@ -28,7 +28,6 @@ jest.mock("../../src/common/utils/settings-storage.util", () => ({
 function createMockSessionContext(): ISessionContext {
   return {
     sessionId: "s1",
-    userId: "u1",
     sessionType: "web",
     workspacePath: "/tmp",
     getSandboxMode: () => "workspace-write",
@@ -59,8 +58,8 @@ function createMockSessionContext(): ISessionContext {
   } as any;
 }
 
-describe("ToolOrchestrator", () => {
-  let orchestrator: ToolOrchestrator;
+describe("ToolExecutor", () => {
+  let orchestrator: ToolExecutor;
   let pluginManager: PluginManager;
 
   beforeEach(async () => {
@@ -70,7 +69,7 @@ describe("ToolOrchestrator", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ToolOrchestrator,
+        ToolExecutor,
         PluginManager,
         { provide: SettingsStorage, useFactory: () => ({ getSettings: jest.fn().mockResolvedValue(true) }) },
         { provide: PromptCollector, useValue: { addPrompt: jest.fn() } },
@@ -81,7 +80,7 @@ describe("ToolOrchestrator", () => {
       ],
     }).compile();
 
-    orchestrator = module.get<ToolOrchestrator>(ToolOrchestrator);
+    orchestrator = module.get<ToolExecutor>(ToolExecutor);
     pluginManager = module.get<PluginManager>(PluginManager);
   });
 
@@ -174,6 +173,89 @@ describe("ToolOrchestrator", () => {
       const zodKit = allToolKits.find((k) => k.kit.def.id === "myset2");
       expect(zodKit).toBeDefined();
       expect(zodKit!.kit.tools[0].name).toBe("greet");
+    });
+  });
+
+  // ── lazy 工具包执行门禁 ──
+
+  describe("lazy toolkit execution gate", () => {
+    class LazyKitPlugin extends PluginBase {
+      manifest = { id: "lazy_gate", name: "Lazy Gate", description: "test", version: "1.0.0", category: "core" as const };
+      async onLoad(api: PluginApi) {
+        const tk = api.registerToolKit({
+          id: "lazy_kit",
+          name: "lazy_kit",
+          loadMode: "lazy",
+          activator: "test",
+        });
+        tk.registerTool({
+          name: "lazy_echo",
+          description: "回声",
+          inputSchema: z.object({ text: z.string() }),
+          execute: async (args: { text: string }) => `echo:${args.text}`,
+        });
+      }
+    }
+
+    /** 注册 lazy 工具包插件并让 session 返回决议结果 */
+    async function setupLazySession(): Promise<ISessionContext> {
+      await pluginManager.registerPlugin(new LazyKitPlugin());
+      const session = createMockSessionContext();
+      const resolved = await pluginManager.resolvePlugins(session);
+      (session.getResolvedPlugins as jest.Mock).mockReturnValue(resolved);
+      return session;
+    }
+
+    it("拒绝 LLM 直接调用 lazy 工具，并提示改用 tool_use", async () => {
+      const session = await setupLazySession();
+      await expect(
+        orchestrator.executeTool("lazy_echo", { text: "hi" }, "c1", session, undefined),
+      ).rejects.toThrow(/lazy-loaded tool[\s\S]*tool_use/);
+    });
+
+    it("经 tool_use 通道（allowLazy）可执行 lazy 工具", async () => {
+      const session = await setupLazySession();
+      const result = await orchestrator.executeTool(
+        "lazy_echo",
+        { text: "hi" },
+        "c2",
+        session,
+        undefined,
+        { allowLazy: true },
+      );
+      expect(result.isError).toBe(false);
+      expect(result.content).toBe("echo:hi");
+    });
+
+    it("eager 工具在两条路径下均可执行（门禁不误伤）", async () => {
+      const tools: ToolHandlerDef[] = [
+        {
+          name: "eager_echo",
+          description: "Eager",
+          parameters: { type: "object", properties: {} },
+          handler: async () => "eager ok",
+        },
+      ];
+      await pluginManager.registerPlugin(createMockPluginBase("eager_gate", "Eager Gate", tools));
+
+      const session = createMockSessionContext();
+      const resolved = await pluginManager.resolvePlugins(session);
+      (session.getResolvedPlugins as jest.Mock).mockReturnValue(resolved);
+
+      const direct = await orchestrator.executeTool("eager_echo", {}, "c3", session, undefined);
+      expect(direct.isError).toBe(false);
+      expect(direct.content).toBe("eager ok");
+
+      const viaToolUse = await orchestrator.executeTool(
+        "eager_echo",
+        {},
+        "c4",
+        session,
+        undefined,
+        { allowLazy: true },
+      );
+      expect(viaToolUse.isError).toBe(false);
+      expect(viaToolUse.content).toBe("eager ok");
     });
   });
 });

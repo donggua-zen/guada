@@ -91,31 +91,76 @@ for (const b of botRows) {
   ok(!b.default_model_id || (cfg.defaultModelId || "").includes(":"), `bot ${b.name} defaultModelId 复合: ${cfg.defaultModelId}`);
 }
 
-// ── kb ──
+// ── kb（每库一个自包含目录：kb.json + kb.db + raw/） ──
 const kbRows = db.prepare("SELECT id, name, embedding_model_id FROM knowledge_base").all();
 const fRows = db.prepare("SELECT id, knowledge_base_id FROM kb_file").all();
+const kbHasSqliteForm = (kbId) => fs.existsSync(path.join(ROOT, "data/kb", kbId, "kb.db"));
+
 for (const k of kbRows) {
-  const kb = JSON.parse(fs.readFileSync(path.join(ROOT, "data/kb", k.id, "kb.json"), "utf8"));
+  const configPath = path.join(ROOT, "data/kb", k.id, "kb.json");
+  if (!fs.existsSync(configPath)) {
+    ok(false, `kb ${k.name} 缺 kb.json`);
+    continue;
+  }
+  const kb = JSON.parse(fs.readFileSync(configPath, "utf8"));
   ok(kb.name === k.name, `kb ${k.name} 名称一致`);
   ok(kb.embeddingModelId === k.embedding_model_id && kb.embeddingModelId.includes(":"), `kb ${k.name} embeddingModelId 复合且一致`);
-}
-let fileJsonCount = 0, staleRows = 0;
-for (const f of fRows) {
-  const p = path.join(ROOT, "data/kb", f.knowledge_base_id, f.id, "file.json");
-  if (fs.existsSync(p)) { fileJsonCount++; continue; }
-  // file.json 缺失只允许一种情况：物理文件也不存在的 DB 残留行（历史上文件侧已删）
-  const row = db.prepare("SELECT file_path, is_directory FROM kb_file WHERE id = ?").get(f.id);
-  let physMissing = true;
-  if (row && row.is_directory !== 1 && row.file_path) {
-    const phys = path.isAbsolute(row.file_path)
-      ? row.file_path
-      : path.join(ROOT, "data", row.file_path);
-    physMissing = !fs.existsSync(phys);
+
+  // kb.db 存在时逐条比对条目行（权威来源已迁到库内 item 表）
+  if (!kbHasSqliteForm(k.id)) continue;
+  const kbDb = new Database(path.join(ROOT, "data/kb", k.id, "kb.db"), { readonly: true });
+  const items = kbDb.prepare("SELECT id, display_name, processing_status, raw_name FROM item").all();
+  const expected = fRows.filter((f) => f.knowledge_base_id === k.id);
+  ok(items.length === expected.length, `kb ${k.name} 条目数 ${items.length} === ${expected.length}`);
+  for (const f of expected) {
+    const item = items.find((i) => i.id === f.id);
+    if (!item) {
+      // 允许的唯一情况：原件已不在（物理文件与元信息都消失的 DB 残留行）
+      const row = db.prepare("SELECT file_path, is_directory FROM kb_file WHERE id = ?").get(f.id);
+      let physMissing = true;
+      if (row && row.is_directory !== 1 && row.file_path) {
+        physMissing = !fs.existsSync(
+          path.isAbsolute(row.file_path) ? row.file_path : path.join(ROOT, "data", row.file_path),
+        );
+      }
+      ok(physMissing, `kb_file ${f.id} 不在 kb.db 且原件仍在——迁移丢失！`);
+      continue;
+    }
+    // 有原件的条目：raw/<itemId>/ 下必须真有文件
+    if (item.raw_name) {
+      const rawPath = path.join(ROOT, "data/kb", k.id, "raw", f.id, item.raw_name);
+      ok(fs.existsSync(rawPath), `kb ${k.name} 条目 ${item.display_name} 原件入库: ${item.raw_name}`);
+    }
   }
-  if (physMissing) { staleRows++; console.log(`NOTE: kb_file ${f.id} 无 file.json 且物理文件不在（DB 残留行，孤儿清理按设计收敛）`); }
-  else ok(false, `kb_file ${f.id} 既无 file.json 物理文件又在——迁移丢失！`);
+  const chunkCount = kbDb.prepare("SELECT COUNT(*) c FROM chunk").get().c;
+  const ftsCount = kbDb.prepare("SELECT COUNT(*) c FROM chunk_fts").get().c;
+  ok(chunkCount === ftsCount, `kb ${k.name} chunk 与 FTS 行数一致 (${chunkCount})`);
+  kbDb.close();
 }
-ok(fileJsonCount + staleRows === fRows.length, `kb_file 覆盖 ${fileJsonCount} 存在 + ${staleRows} 残留 === ${fRows.length}`);
+
+// 旧形态残留检查：迁移完成后不应再有 file.json / chunks.jsonl
+const legacyLeftovers = [];
+const kbRoot = path.join(ROOT, "data/kb");
+if (fs.existsSync(kbRoot)) {
+  for (const kbEntry of fs.readdirSync(kbRoot, { withFileTypes: true })) {
+    if (!kbEntry.isDirectory() || kbEntry.name.startsWith(".")) continue;
+    const kbDir = path.join(kbRoot, kbEntry.name);
+    for (const itemEntry of fs.readdirSync(kbDir, { withFileTypes: true })) {
+      if (!itemEntry.isDirectory()) continue;
+      if (itemEntry.name === "raw") continue;
+      if (fs.existsSync(path.join(kbDir, itemEntry.name, "file.json"))) {
+        legacyLeftovers.push(path.join(kbDir, itemEntry.name, "file.json"));
+      }
+      if (fs.existsSync(path.join(kbDir, itemEntry.name, "chunks.jsonl"))) {
+        legacyLeftovers.push(path.join(kbDir, itemEntry.name, "chunks.jsonl"));
+      }
+    }
+  }
+}
+ok(
+  legacyLeftovers.length === 0,
+  `无旧形态残留（file.json/chunks.jsonl）：发现 ${legacyLeftovers.length} 处 ${legacyLeftovers.slice(0, 3).join(", ")}`,
+);
 
 // ── mcp ──
 const mcpRows = db.prepare("SELECT id, name, enabled FROM mcp_server").all();

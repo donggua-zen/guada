@@ -9,7 +9,6 @@
  */
 import { Controller, Get, Param, UseGuards, NotFoundException } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "../chat/session.service";
 import { WorkflowEngineService } from "./workflow-engine.service";
 import { WorkflowFileStore } from "./workflow-file-store.service";
@@ -25,7 +24,7 @@ export class WorkflowController {
 
   /** 某会话的全部 workflow run 快照（磁盘历史 ∪ 内存，按开始时间倒序） */
   @Get("sessions/:id/workflow/runs")
-  async listRuns(@Param("id") id: string, @CurrentUser() user: any) {
+  async listRuns(@Param("id") id: string) {
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
       throw new NotFoundException("Session not found");

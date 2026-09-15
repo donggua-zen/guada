@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { McpServerService } from "./mcp-server.service";
 
 @Controller("mcp-servers")
@@ -19,17 +18,17 @@ export class McpServersController {
   constructor(private readonly mcpService: McpServerService) {}
 
   @Get()
-  async getAllServers(@CurrentUser() user: any) {
+  async getAllServers() {
     return this.mcpService.getAllServers();
   }
 
   @Get(":id")
-  async getServer(@Param("id") id: string, @CurrentUser() user: any) {
+  async getServer(@Param("id") id: string) {
     return this.mcpService.getServerById(id);
   }
 
   @Post()
-  async createServer(@Body() data: any, @CurrentUser() user: any) {
+  async createServer(@Body() data: any) {
     return this.mcpService.createServer(data);
   }
 
@@ -37,13 +36,12 @@ export class McpServersController {
   async updateServer(
     @Param("id") id: string,
     @Body() data: any,
-    @CurrentUser() user: any,
   ) {
     return this.mcpService.updateServer(id, data);
   }
 
   @Delete(":id")
-  async deleteServer(@Param("id") id: string, @CurrentUser() user: any) {
+  async deleteServer(@Param("id") id: string) {
     await this.mcpService.deleteServer(id);
     return { success: true };
   }

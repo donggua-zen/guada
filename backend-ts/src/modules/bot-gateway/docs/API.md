@@ -166,17 +166,13 @@ GET /platforms/:platform/fields
 GET /instances
 ```
 
-**认证**: 需要登录 (自动过滤为当前用户的机器人)
-
-**查询参数**:
-- `userId` (可选): 管理员可查看指定用户的机器人
+**认证**: 需要登录
 
 **响应示例**:
 ```json
 [
   {
     "id": "cuid-1",
-    "userId": "user-cuid-123",
     "platform": "qq",
     "name": "客服机器人A",
     "enabled": true,
@@ -227,13 +223,12 @@ GET /instances
 GET /instances/:id
 ```
 
-**认证**: 需要登录 (只能查看自己创建的机器人)
+**认证**: 需要登录
 
 **响应示例**:
 ```json
 {
   "id": "cuid-1",
-  "userId": "user-cuid-123",
   "platform": "qq",
   "name": "客服机器人A",
   "enabled": true,
@@ -316,7 +311,6 @@ POST /instances
 ```json
 {
   "id": "cuid-new",
-  "userId": "user-cuid-123",
   "platform": "qq",
   "name": "我的QQ机器人",
   "enabled": true,
@@ -382,7 +376,6 @@ PUT /instances/:id
 ```json
 {
   "id": "cuid-1",
-  "userId": "user-cuid-123",
   "platform": "qq",
   "name": "新的机器人名称",
   "enabled": true,
@@ -515,9 +508,8 @@ DELETE /instances/:id
 所有接口都通过 NestJS 的 `@UseGuards(AuthGuard)` 装饰器保护,确保:
 
 1. ✅ **必须登录**: 未登录用户访问会返回 401 Unauthorized
-2. ✅ **用户隔离**: 每个用户只能操作自己创建的机器人
 3. ✅ **Token 验证**: JWT Token 过期或无效会被拒绝
-4. ✅ **自动获取用户ID**: 从 JWT Token 中解析 `req.user.id`
+4. ✅ **单账户**: 机器人不再按用户隔离，鉴权只决定「能不能访问」
 
 ### 实现细节
 
@@ -527,22 +519,14 @@ DELETE /instances/:id
 export class BotAdminController {
   
   @Get('instances')
-  async getInstances(@Request() req) {
-    const userId = req.user.id;  // 从 JWT Token 中获取
-    return this.botService.getAllInstances(userId);
+  async getInstances() {
+    return this.botService.getAllInstances();
   }
   
   @Post('instances/:id/start')
-  async startInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.id;
-    
-    // 验证是否属于当前用户
-    const bot = await this.botService.getInstance(id);
-    if (bot.userId !== userId) {
-      throw new Error('无权操作此机器人');
-    }
-    
+  async startInstance(@Param('id') id: string) {
     return this.botService.startInstance(id);
+  }
   }
 }
 ```

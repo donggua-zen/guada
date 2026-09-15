@@ -32,7 +32,6 @@ function createMockDeps() {
   const sessionMapper = {
     getOrCreateBotSession: jest.fn().mockResolvedValue({
       id: 'session-1',
-      userId: 'user-1',
     }),
   };
 

@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { CurrentUser } from "../auth/current-user.decorator";
 import { KnowledgeBaseService } from "./knowledge-base.service";
 
 @Controller("knowledge-bases")
@@ -27,8 +26,8 @@ export class KnowledgeBasesController {
   }
 
   @Post()
-  async create(@Body() data: any, @CurrentUser() user: any) {
-    return await this.kbService.create(user.id, data);
+  async create(@Body() data: any) {
+    return await this.kbService.create(data);
   }
 
   @Get(":id")

@@ -48,7 +48,6 @@ export class CharacterRepository {
       name?: string;
       description?: string | null;
       modelId?: string | null;
-      userId?: string | null;
       settings?: Record<string, any> | null;
     },
   ): Promise<CharacterDefinition | undefined> {
