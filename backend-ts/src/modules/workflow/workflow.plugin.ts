@@ -3,7 +3,7 @@ import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext } from "../plugins/types/plugin.types";
-import { CharacterRepository } from "../../common/database/character.repository";
+import { CharacterFileStore } from "../characters/character-file.store";
 import { WorkflowEngineService, WORKFLOW_RESULT_MAX_CHARS } from "./workflow-engine.service";
 import type { WorkflowMeta } from "./workflow.types";
 import langZh from "./workflow.lang.zh.json";
@@ -24,7 +24,7 @@ export class WorkflowPlugin extends PluginBase {
 
   constructor(
     private workflowEngine: WorkflowEngineService,
-    private characterRepo: CharacterRepository,
+    private characterStore: CharacterFileStore,
   ) {
     super();
   }
@@ -176,7 +176,7 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
           description:
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
-        const { items } = await this.characterRepo.findAll(0, 200);
+        const items = (await this.characterStore.listCharacters()).slice(0, 200);
         const currentCharacterId = context?.session?.characterId;
         const dbCandidates = currentCharacterId
           ? items.filter((c: any) => c.id !== currentCharacterId)

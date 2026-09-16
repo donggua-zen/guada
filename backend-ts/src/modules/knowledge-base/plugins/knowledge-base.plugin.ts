@@ -4,9 +4,9 @@ import * as path from "path";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
-import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base.repository";
-import { KBFileRepository } from "../../../common/database/kb-file.repository";
-import { KBChunkRepository } from "../../../common/database/kb-chunk.repository";
+import { KbMetaStore } from "../kb-meta.store";
+import { KBFileRepository } from "../kb-file.repository";
+import { KBChunkRepository } from "../kb-chunk.repository";
 import { KbSearchService } from "../kb-search.service";
 import { EmbeddingService } from "../embedding.service";
 import { KbFileService } from "../kb-file.service";
@@ -27,7 +27,7 @@ export class KnowledgeBasePlugin extends PluginBase {
 
   constructor(
     private providerStore: ProviderFileStore,
-    private kbRepo: KnowledgeBaseRepository,
+    private kbMetaStore: KbMetaStore,
     private fileRepo: KBFileRepository,
     private chunkRepo: KBChunkRepository,
     private searchService: KbSearchService,
@@ -70,7 +70,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
-        const kb = await this.kbRepo.findById(knowledge_base_id);
+        const kb = await this.kbMetaStore.getKb(knowledge_base_id);
         if (!kb) throw new Error("Knowledge base not found");
 
         // 获取向量模型配置
@@ -137,7 +137,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, skip = 0, limit = 50 } = args;
-        const kb = await this.kbRepo.findById(knowledge_base_id);
+        const kb = await this.kbMetaStore.getKb(knowledge_base_id);
         if (!kb) throw new Error("Knowledge base not found");
         const { items: files, total } = await this.fileRepo.findByKnowledgeBaseId(
           knowledge_base_id,

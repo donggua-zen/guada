@@ -8,6 +8,7 @@ import type { Model, ModelProvider, McpServer } from './api'
 import type { Character, CharacterListResponse } from './character'
 import type { Session, SessionListResponse } from './session'
 import type { Message } from './message'
+import type { FileRefType } from './stream/content-block.types'
 
 // ========== 流式响应类型 ==========
 
@@ -216,14 +217,16 @@ export interface UploadResponse {
     mediaType: string
     /** 字节数 */
     bytes: number
-    /** 显示名 */
+    /** 显示名（完整文件名，含扩展名） */
     name: string
-    /** 相对存储路径（uploads/...，展示时绝对化） */
+    /** 引用锚点：按 refType 解释（store → 全局附件目录；workspace → 会话工作目录） */
     url: string
-    /** 预览路径（图片缩略图） */
+    /** 预览路径（图片缩略图），仅图片有值 */
     previewUrl?: string
     /** 扩展名（不带点） */
     fileExtension?: string
+    /** 引用形态（见 content-block.types.ts FileRefType） */
+    refType?: FileRefType
 }
 
 // ========== 重置密码类型 ==========

@@ -4,14 +4,12 @@ import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins";
 import { SubAgentManager } from "./sub-agent.manager";
 import { SubAgentPlugin } from "./sub-agent.plugin";
-import { CharacterRepository } from "../../common/database/character.repository";
 
 @Module({
   imports: [ChatModule, ToolsModule],
   providers: [
     SubAgentManager,
     SubAgentPlugin,
-    CharacterRepository,
   ],
   exports: [SubAgentManager],
 })

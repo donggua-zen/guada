@@ -7,17 +7,17 @@
 
 ## 一、需求(定稿)
 
-1. **无超时**:彻底废弃 fail-closed 自动拒绝。交互只有三种终结——用户应答、用户停止(abort)、重启丢表(应答端点 404,不做兜底)。
-2. **工具自主发起两个动作**:`ask()`(询问:多问题、单选/多选、自定义回复)与 `requestApproval()`(审批便捷方法)。
-3. **审批是 ask 的特例**:预置单问题(同意/拒绝)+ 支持自定义回复(语义=拒绝+用户文本反馈给模型)。
+1. **无超时**彻底废弃 fail-closed 自动拒绝。交互只有三种终结——用户应答、用户停止(abort)、重启丢表(应答端点 404,不做兜底)。
+2. **工具自主发起两个动作**`ask`(询问:多问题、单选/多选、自定义回复)与 `requestApproval`(审批便捷方法)。
+3. **审批是 ask 的特例**预置单问题(同意/拒绝)+ 支持自定义回复(语义=拒绝+用户文本反馈给模型)。
 4. **迭代暂停统一进 Ask**(决策确认):max_iterations 卡 = 系统发起的 ask(kind='continue'),删除 iteration_paused 事件与 /continue 端点。
 
-## 二、核心数据模型(对齐 DSH user-questions)
+## 二、核心数据模型
 
 ```ts
 interface AskOption { label: string; description?: string }
 interface AskQuestion { id: string; question: string; detail?: string;
-                        options: AskOption[]; multiSelect?: boolean }  // 缺省单选
+                        options: AskOption[]; multiSelect?: boolean } // 缺省单选
 interface AskAnswerItem { id: string; selected: string[]; custom?: string }
 type AskKind = 'approval' | 'ask' | 'continue';
 interface AskRequest { kind; title?; toolCallId?; toolName?; questions: AskQuestion[] }
@@ -30,22 +30,22 @@ DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异
 ```
 工具 handler / 引擎(深层,经 DI 注入 AskService)
   └─ askService.ask(session, request, abortSignal?)
-       ├─ appendAskAsked      → JSONL ask/asked(审计,先入库后发事件)
-       ├─ publishStream       → ask_requested 帧(eventBuffer 可重放 + SSE 直投,prevSeq 组装)
-       ├─ InteractionWaitService.waitForAnswers(requestId)   ←─┐
-       │    (无超时,仅与 abortSignal 竞速;abort → cancel + cancelled 审计/帧 + AskDeniedError)
-       └─ appendAskAnswered   → JSONL ask/answered(每次 asked 必有 answered,cancelled 标记)
-         publishStream       → ask_resolved 帧(多窗口同步收卡;答案不广播) ──┘
+       ├─ appendAskAsked → JSONL ask/asked(审计,先入库后发事件)
+       ├─ publishStream → ask_requested 帧(eventBuffer 可重放 + SSE 直投,prevSeq 组装)
+       ├─ InteractionWaitService.waitForAnswers(requestId) ←─┐
+       │ (无超时,仅与 abortSignal 竞速;abort → cancel + cancelled 审计/帧 + AskDeniedError)
+       └─ appendAskAnswered → JSONL ask/answered(每次 asked 必有 answered,cancelled 标记)
+         publishStream → ask_resolved 帧(多窗口同步收卡;答案不广播) ──┘
                                                     │
-前端卡片(输入区上方,SessionCards.vue)                 │
-  └─ 点击选项/填写自定义回复 → POST /chat/respond      │
+前端卡片(输入区上方,SessionCards.vue) │
+  └─ 点击选项/填写自定义回复 → POST /chat/respond │
        { sessionId, requestId, answers } ─────────────┘
          (无等待者 404;answers 与 questions 校验不符 400)
 ```
 
-- **拒绝/取消反馈模型**:`AskDeniedError { outcome:'rejected'|'cancelled', feedback? }` 由
+- **拒绝/取消反馈模型**`AskDeniedError { outcome:'rejected'|'cancelled', feedback? }` 由
   ToolExecutor catch 特判——isError tool-result content = `feedback || message`,自定义回复直达模型。
-- **审批 = ask 特例**:`requestApproval(session, {toolCallId, toolName, detail, abortSignal})`
+- **审批 = ask 特例**`requestApproval(session, {toolCallId, toolName, detail, abortSignal})`
   = 预置问题「是否同意?」(同意/拒绝)+ 解释器:同意→返回;拒绝→抛 AskDeniedError('rejected');
   自定义→抛 AskDeniedError('rejected', feedback=用户文本)。
 - **沙盒提权** = 插件侧组合:parseEscalationArgs/modeOfRunMode/assertStrictlyWider

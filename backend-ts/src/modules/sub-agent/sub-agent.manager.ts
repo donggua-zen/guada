@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Inject } from "@nestjs/common";
-import { SessionRepository } from "../../common/database/session.repository";
-import { CharacterRepository } from "../../common/database/character.repository";
+import { SessionFileStore } from "../chat/session-file.store";
+import { CharacterFileStore } from "../characters/character-file.store";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { ISessionContext } from "../chat/session-context";
@@ -128,10 +128,10 @@ export class SubAgentManager implements OnModuleInit {
   private readonly states = new Map<string, ParentSessionState>();
 
   constructor(
-    private sessionRepo: SessionRepository,
+    private sessionStore: SessionFileStore,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
-    private characterRepo: CharacterRepository,
+    private characterStore: CharacterFileStore,
     @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
   ) {}
 
@@ -165,7 +165,7 @@ export class SubAgentManager implements OnModuleInit {
 
     // 限制子代理数量：一个会话最多创建 10 个
     const subAgentCount =
-      await this.sessionRepo.countByParentId(parentSessionId);
+      this.sessionStore.countByParentId(parentSessionId);
     if (subAgentCount >= 10) {
       throw new Error(
         "The maximum number of sub-agents (10) for this session has been reached. Please close some sub-agents before creating new ones.",
@@ -201,7 +201,7 @@ export class SubAgentManager implements OnModuleInit {
 
     if (params.characterId && params.characterId !== "generic") {
       // ── 角色模式（定义来自 agents/<id>/AGENT.md） ──
-      const character = await this.characterRepo.findById(params.characterId);
+      const character = await this.characterStore.findById(params.characterId);
       if (!character) {
         throw new Error(
           `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
@@ -255,7 +255,7 @@ export class SubAgentManager implements OnModuleInit {
   ): Promise<SubAgentResult> {
     const parentSessionId = parentContext.sessionId;
 
-    const subSession = await this.sessionRepo.create({
+    const subSession = await this.sessionStore.create({
       parentId: parentSessionId,
       title: params.name,
       characterId,
@@ -310,7 +310,7 @@ export class SubAgentManager implements OnModuleInit {
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     // 1. 验证子会话存在且属于该父会话
-    const subSession = await this.sessionRepo.findById(params.sessionId);
+    const subSession = this.sessionStore.get(params.sessionId);
     if (!subSession) {
       throw new Error("Sub-agent session does not exist.");
     }
@@ -387,7 +387,7 @@ export class SubAgentManager implements OnModuleInit {
     let finalAvatarUrl: string | undefined;
 
     if (params.characterId && params.characterId !== "generic") {
-      const character = await this.characterRepo.findById(params.characterId);
+      const character = await this.characterStore.findById(params.characterId);
       if (!character) {
         throw new Error(
           `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
@@ -403,7 +403,7 @@ export class SubAgentManager implements OnModuleInit {
       settings.skills = parentContext.getSettings("skills");
     }
 
-    const subSession = await this.sessionRepo.create({
+    const subSession = await this.sessionStore.create({
       parentId: parentSessionId,
       title: params.name,
       characterId: finalCharacterId,
@@ -640,7 +640,7 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
     extra?: { stopReason?: string; content?: string },
   ): Promise<void> {
-    await this.sessionRepo.update(subSessionId, {
+    await this.sessionStore.update(subSessionId, {
       closedAt: new Date(),
       closeReason: extra?.stopReason ?? null,
     });
@@ -674,7 +674,7 @@ export class SubAgentManager implements OnModuleInit {
    * 从数据库获取子 Agent 名称
    */
   private async getSubAgentName(subSessionId: string): Promise<string> {
-    const session = await this.sessionRepo.findById(subSessionId);
+    const session = this.sessionStore.get(subSessionId);
     return session?.title || "Unknown Sub-Agent";
   }
 
@@ -828,7 +828,7 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
   ): Promise<{ subSessionId: string; name: string; status: string }[]> {
     // 从数据库查询所有子 Agent 会话
-    const dbSessions = await this.sessionRepo.findByParentId(parentSessionId);
+    const dbSessions = this.sessionStore.childrenOf(parentSessionId);
 
     // 从内存状态获取已完成的子 Agent
     const state = this.states.get(parentSessionId);

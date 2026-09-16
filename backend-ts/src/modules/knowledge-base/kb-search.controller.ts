@@ -9,7 +9,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
-import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
+import { KbMetaStore } from "./kb-meta.store";
 import { KbSearchService, SearchResult } from "./kb-search.service";
 import { EmbeddingService } from "./embedding.service";
 
@@ -18,7 +18,7 @@ import { EmbeddingService } from "./embedding.service";
 export class KbSearchController {
   constructor(
     private providerStore: ProviderFileStore,
-    private kbRepo: KnowledgeBaseRepository,
+    private kbMetaStore: KbMetaStore,
     private searchService: KbSearchService,
     private embeddingService: EmbeddingService,
   ) {}
@@ -29,7 +29,7 @@ export class KbSearchController {
     @Body() searchRequest: any,
   ) {
     // 验证知识库存在
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new Error("知识库不存在");
     }
@@ -90,7 +90,7 @@ export class KbSearchController {
     @Query("query") query: string,
   ) {
     // 验证知识库
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new Error("知识库不存在");
     }

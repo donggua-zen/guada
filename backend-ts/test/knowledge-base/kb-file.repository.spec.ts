@@ -12,8 +12,8 @@ import {
 import {
   KBFileRepository,
   KB_ITEM_ID_PREFIX,
-} from '../../src/common/database/kb-file.repository';
-import { KBChunkRepository } from '../../src/common/database/kb-chunk.repository';
+} from '../../src/modules/knowledge-base/kb-file.repository';
+import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
 import { KbSearchService } from '../../src/modules/knowledge-base/kb-search.service';
 
 /**

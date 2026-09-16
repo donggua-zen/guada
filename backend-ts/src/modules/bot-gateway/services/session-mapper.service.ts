@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
-import { SessionRepository } from '../../../common/database/session.repository';
-import { CharacterRepository } from '../../../common/database/character.repository';
+import { SessionFileStore } from '../../chat/session-file.store';
+import { CharacterFileStore } from '../../characters/character-file.store';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { WorkspaceService } from '../../../common/services/workspace.service';
@@ -19,8 +19,8 @@ export class SessionMapperService {
 
   constructor(
     private providerStore: ProviderFileStore,
-    private sessionRepo: SessionRepository,
-    private characterRepo: CharacterRepository,
+    private sessionStore: SessionFileStore,
+    private characterStore: CharacterFileStore,
     private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
     private botStore: BotFileStore,
@@ -47,7 +47,7 @@ export class SessionMapperService {
     title?: string,
   ): Promise<any> {
     // 尝试查找已存在的会话（Bot 会话的 characterId 为 null）
-    let session = await this.sessionRepo.findByBotAndExternalId(
+    let session = this.sessionStore.findByBotAndExternalId(
       botId,
       externalId,
     );
@@ -61,7 +61,7 @@ export class SessionMapperService {
       // 注意：不设置 characterId 和 modelId，都由下游动态解析
       // Bot 会话工作目录使用 BOT 前缀，与 Web 会话的 WORK 前缀区分
       const workspacePath = await this.workspaceService.generateWorkspaceDir('BOT');
-      session = await this.sessionRepo.create({
+      session = await this.sessionStore.create({
         sessionType: 'bot',
         botId,
         platform,
@@ -98,7 +98,7 @@ export class SessionMapperService {
     }
 
     // 查询角色信息（权威来源 agents/<id>/AGENT.md）
-    const character = await this.characterRepo.findById(defaultCharacterId);
+    const character = await this.characterStore.findById(defaultCharacterId);
 
     if (!character) {
       throw new Error(`角色不存在：${defaultCharacterId}，请检查 Bot 实例的角色配置`);

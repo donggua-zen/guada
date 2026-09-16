@@ -12,7 +12,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs/promises";
-import { resolveSessionsBasePath } from "../../common/persistence/jsonl-backend";
+import { resolveSessionsBasePath } from "../../common/utils/session-path.util";
 import { WorkflowRunSnapshot } from "./workflow.types";
 
 /** runId 文件名白名单（引擎生成 wfr_<ts>_<rand>；防未来格式变化引入路径穿越） */

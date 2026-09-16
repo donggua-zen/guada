@@ -19,7 +19,7 @@
 命令：
 
 ```powershell
-npm run test:browser-snapshot:unit
+pnpm run test:browser-snapshot:unit
 ```
 
 覆盖项：
@@ -40,7 +40,7 @@ npm run test:browser-snapshot:unit
 命令：
 
 ```powershell
-npm run test:browser-snapshot:fixture
+pnpm run test:browser-snapshot:fixture
 ```
 
 fixture 包含多层 `div`、导航链接、标题、正文、按钮、textarea、select/options、ARIA checkbox、Shadow DOM 按钮和隐藏按钮。测试通过真实 Electron `WebContents.debugger` 获取 AX 树，并验证 ref 被写回 DOM。
@@ -120,7 +120,7 @@ children:
 命令：
 
 ```powershell
-npm run test:browser-snapshot:bilibili
+pnpm run test:browser-snapshot:bilibili
 ```
 
 页面：`https://www.bilibili.com/`  

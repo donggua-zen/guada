@@ -6,7 +6,11 @@ export interface FileUploadApi {
   uploadUserAvatar(file: File): Promise<ResourceUploadResponse>;
   uploadWallpaper(file: File): Promise<ResourceUploadResponse>;
   deleteWallpaper(): Promise<{ success: boolean }>;
-  uploadFile(sessionId: string, file: File): Promise<UploadResponse>;
+  uploadFile(
+    sessionId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<UploadResponse>;
 }
 
 export const fileUploadApi: FileUploadApi = {
@@ -68,7 +72,12 @@ export const fileUploadApi: FileUploadApi = {
     }
   },
 
-  async uploadFile(this: ApiContext, sessionId: string, file: File) {
+  async uploadFile(
+    this: ApiContext,
+    sessionId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ) {
     const formData = new FormData();
     formData.append("file", file, file.name);
 
@@ -80,6 +89,13 @@ export const fileUploadApi: FileUploadApi = {
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          // 附件卡片的上传进度由此驱动（无回调时行为与之前一致）
+          onUploadProgress: onProgress
+            ? (event) => {
+                if (!event.total) return;
+                onProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+              }
+            : undefined,
         },
       );
     } catch (error) {

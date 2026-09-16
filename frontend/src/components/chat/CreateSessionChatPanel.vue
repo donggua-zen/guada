@@ -41,9 +41,11 @@
       <!-- 附加内容胶囊已并入 ChatInput 内部(与知识库标签同排),此处不再外置 -->
       <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
       <div class="w-full relative z-30">
+        <!-- files 必须双向绑定：单向 :files 会让 ChatInput 里选好的附件全部丢失
+             （ChatInput 只 emit('update:files')，父组件不接就没人保存） -->
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
           :character-id="currentSession.characterId || ''" @config-change="handleConfigChange"
-          :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage" />
+          :buttons="chatInputButtons" v-model:files="inputMessage.files" :streaming="false" @send="sendMessage" />
       </div>
 
     </div>
@@ -603,7 +605,11 @@ const autoTitle = (): string => {
   return t('chat.welcome.newSession')
 }
 
-const sendMessage = async (): Promise<void> => {
+/**
+ * @param payload ChatInput 的 send 载荷。附件以载荷为准——它带的是 ChatInput 内部
+ *   归一后的列表；直接读 inputMessage.files 在双向绑定之外的场景（粘贴等）可能还是旧的。
+ */
+const sendMessage = async (payload?: { content?: string; files?: any[]; knowledgeBaseIds?: string[] }): Promise<void> => {
   if (!currentSession.value.characterId) {
     notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoCharacter'));
     return;
@@ -617,9 +623,9 @@ const sendMessage = async (): Promise<void> => {
     workspacePath: currentSession.value.workspacePath || null,
     groupId: currentSession.value.groupId || null
   }, {
-    content: inputMessage.value.content,      // 使用 content 字段
-    files: inputMessage.value.files || [],    // 使用 files 字段
-    knowledgeBaseIds: currentSession.value.settings?.referencedKbs || []  // 新增：传递知识库 ID
+    content: payload?.content ?? inputMessage.value.content,
+    files: payload?.files ?? inputMessage.value.files ?? [],
+    knowledgeBaseIds: payload?.knowledgeBaseIds ?? currentSession.value.settings?.referencedKbs ?? []
   });
 }
 

@@ -26,6 +26,8 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
+import { resolveSessionAttachmentPath } from '../../common/utils/session-path.util';
+import { resolveAttachmentResponseHeaders } from '../../common/utils/attachment-serving.util';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -511,6 +513,54 @@ export class SessionsController {
     res.setHeader('Content-Length', stat.size);
 
     // 流式返回文件内容
+    const stream = fs.createReadStream(resolvedPath);
+    stream.pipe(res);
+  }
+
+  /**
+   * 会话附件取图端点（sessions/<id>/images|previews/... 的字节）。
+   *
+   * 图片随会话数据目录存储（refType='session'，url 自包含），不再经过 /uploads
+   * 静态挂载（那个挂载点也绝不能覆盖 sessions 根——里面是 JSONL 对话记录）。
+   * 本端点受 controller 级 AuthGuard 保护；`<img>` 无法带 Authorization 头，
+   * 走 query `?token=` 通道（auth.guard 已支持，workspace raw-file 同款）。
+   *
+   * 安全：路径解析全部收敛在 resolveSessionAttachmentPath（id 合法性 + 会话目录
+   * 前缀校验），越界/穿越一律拒绝；大小上限与 workspace raw-file 一致（10MB）。
+   */
+  @Get("sessions/:id/attachments/raw-file")
+  async getSessionAttachmentRawFile(
+    @Param("id") id: string,
+    @Query("path") filePath: string,
+    @Res() res: Response,
+  ) {
+    const resolvedPath = resolveSessionAttachmentPath(id, filePath);
+    if (!resolvedPath) {
+      throw new Error("Access denied: invalid attachment path");
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error("File not found");
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      throw new Error("Cannot read directory as file");
+    }
+
+    // 图片原图/缩略图都 ≤1024px JPEG（上传时已压），10MB 上限纯属防御
+    const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+    if (stat.size > MAX_ATTACHMENT_SIZE) {
+      throw new Error("File too large (max 10MB)");
+    }
+
+    // 位图 inline（<img> 需要渲染），其余类型一律强制下载（复用附件静态服务策略）
+    const headers = resolveAttachmentResponseHeaders(resolvedPath);
+    for (const [key, value] of Object.entries(headers)) {
+      res.setHeader(key, value);
+    }
+    res.setHeader('Content-Length', stat.size);
+
     const stream = fs.createReadStream(resolvedPath);
     stream.pipe(res);
   }

@@ -324,7 +324,8 @@ electron/preload.ts                                         (+getThemeBootstrap 
 - **slot 组件**：产物仍在 `frontend/dist`，前端 `prepareExternal` URL 补 `frontend/dist/` 前缀（相对插件根语义）
 - **guada-themes**：CSS 移至插件根 `themes/`（cssFile = `themes/xxx.css`）；famicom 字体**去内联**恢复为 `themes/fonts/press-start-2p.woff2`（12512B 与原始一致），CSS 改回相对引用 `url('fonts/press-start-2p.woff2')`
 - **assetRev** 改递归扫描插件全目录（主题移出 frontend/dist 后 rev 仍能感知变化）
-- **验证**：`assets/themes/cyberpunk.css` → 200 text/css；`assets/themes/fonts/*.woff2` → 200 font/woff2；编码穿越 `themes/..%2f..%2fwin.ini` → 403；`%2e%2e` 段 → 404（路由层归一化）；契约测试 5/5；前端 vite build 通过
+- **dotfiles 坑（2026-09-02 修复）**：`res.sendFile` 默认 `dotfiles: 'ignore'`，拒绝路径中点开头段——用户插件目录（如 `C:\Users\22071\.guada-dev\plugins`）下的插件资产 sendFile 一律 404（文件存在也 404）。`sendFile(filePath, { dotfiles: "allow" }, cb)` 放行（插件资产服务场景必须显式设置）
+- **验证**：`assets/themes/cyberpunk.css` → 200 text/css；`assets/themes/fonts/*.woff2` → 200 font/woff2；编码穿越 `themes/..%2f..%2fwin.ini` → 403；`%2e%2e` 段 → 404（路由层归一化）；**点目录插件资产（example_plugin @ .guada-dev）→ 200**；契约测试 5/5；前端 vite build 通过
 - **生产部署缺口不变**（plugins/ 需打包 + 插件入口 .ts 需编译），见下节
 
 ### 生产部署缺口（2026-09-02 识别，待修复）

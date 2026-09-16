@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { CommandContext } from "../commands/interfaces/command-provider.interface";
-import { CharacterRepository } from "../../common/database/character.repository";
+import { CharacterFileStore } from "./character-file.store";
 
 @Injectable()
 export class CharacterPlugin extends PluginBase {
@@ -15,7 +15,7 @@ export class CharacterPlugin extends PluginBase {
     category: "system" as const,
   };
 
-  constructor(private characterRepo: CharacterRepository) {
+  constructor(private characterStore: CharacterFileStore) {
     super();
   }
 
@@ -25,7 +25,7 @@ export class CharacterPlugin extends PluginBase {
       id: "agent",
       trigger: "mention",
       fetchItems: async (ctx?: CommandContext) => {
-        const { items } = await this.characterRepo.findAll(0, 200);
+        const items = (await this.characterStore.listCharacters()).slice(0, 200);
 
         // 排除当前会话自身的角色
         const candidates = ctx?.characterId
@@ -42,7 +42,7 @@ export class CharacterPlugin extends PluginBase {
         }
 
         // 从角色 settings 读取 agents 配置进行过滤
-        const character = await this.characterRepo.findById(ctx.characterId);
+        const character = await this.characterStore.findById(ctx.characterId);
         const agentCfg = (character?.settings as any)?.agents;
 
         let filtered: any[];
@@ -67,7 +67,7 @@ export class CharacterPlugin extends PluginBase {
         const characterId = attrs.name || "";
         if (!characterId) return undefined;
 
-        const character = await this.characterRepo.findById(characterId);
+        const character = await this.characterStore.findById(characterId);
         if (!character) return undefined;
 
         const displayName = character.name || characterId;

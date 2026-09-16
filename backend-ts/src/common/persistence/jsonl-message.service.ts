@@ -23,6 +23,7 @@ import {
   AskAnsweredData,
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
+import { isVisionImageMediaType } from '../utils/media-type.util';
 import { CorruptSessionLogError } from './errors';
 import type {
   Turn,
@@ -522,9 +523,13 @@ export class JsonlMessageService implements IMessageStore {
               name: f.name,
               url: f.url,
               previewUrl: f.previewUrl,
+              // fileExtension / refType 是附件契约的一部分：丢了它们，重放后的历史消息
+              // 既无法回显格式，也无法把工作目录相对引用桥接回绝对路径。
+              ...(f.fileExtension ? { fileExtension: f.fileExtension } : {}),
+              ...(f.refType ? { refType: f.refType } : {}),
             };
             out.push({
-              type: f.mediaType?.toLowerCase().startsWith('image/') ? 'image' : 'file',
+              type: isVisionImageMediaType(f.mediaType) ? 'image' : 'file',
               attachment: ref,
             });
           }

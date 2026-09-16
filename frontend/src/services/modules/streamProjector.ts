@@ -228,6 +228,8 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
         ext: att?.fileExtension || extFromMediaType(att?.mediaType),
         size: att?.bytes,
         previewUrl: att?.previewUrl,
+        // refType 必须带下去：编辑重发要按它决定 url 是存储引用、工作目录相对引用还是本机路径
+        refType: att?.refType,
       },
     ];
   } else if (block.type === "tool-result") {

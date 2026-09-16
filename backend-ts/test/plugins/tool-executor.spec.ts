@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ToolExecutor } from "../../src/modules/tools/tool-executor.service";
+import { UniversalToolsPlugin } from "../../src/modules/tools/plugins/universal-tools.plugin";
 import { PluginManager } from "../../src/modules/plugins/plugin.manager";
 import { SettingsStorage } from "../../src/common/utils/settings-storage.util";
 import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
@@ -74,7 +75,7 @@ describe("ToolExecutor", () => {
         { provide: SettingsStorage, useFactory: () => ({ getSettings: jest.fn().mockResolvedValue(true) }) },
         { provide: PromptCollector, useValue: { addPrompt: jest.fn() } },
         { provide: CommandProviderRegistry, useValue: { register: jest.fn() } },
-        { provide: NlsService, useValue: { resolveString: (_p: string, v: any) => v, resolveDisplay: (_p: string, d: any) => d } },
+        { provide: NlsService, useValue: { registerBundle: jest.fn(), resolveString: (_p: string, v: any) => v, resolveDisplay: (_p: string, d: any) => d } },
         { provide: EventBusService, useValue: { emit: jest.fn() } },
         { provide: TokenizerService, useValue: { countTextTokens: jest.fn().mockResolvedValue(1), encode: jest.fn().mockResolvedValue([]), decode: jest.fn().mockResolvedValue("") } },
       ],
@@ -256,6 +257,80 @@ describe("ToolExecutor", () => {
       );
       expect(viaToolUse.isError).toBe(false);
       expect(viaToolUse.content).toBe("eager ok");
+    });
+  });
+
+  // ── loadMode=none 是真门禁 ──
+  //
+  // none 表示"压根不加载"：既不广告，也不可经 tool_use 触达、不可被 tool_learn 学出。
+
+  describe("loadMode=none 是真门禁", () => {
+    class NoneKitPlugin extends PluginBase {
+      manifest = { id: "none_kit_owner", name: "None Kit Owner", description: "test", version: "1.0.0", category: "core" as const };
+      async onLoad(api: PluginApi) {
+        const tk = api.registerToolKit({
+          id: "none_kit",
+          name: "none_kit",
+          loadMode: "none",
+        });
+        tk.registerTool({
+          name: "none_echo",
+          description: "不应可达",
+          inputSchema: z.object({ text: z.string().optional() }),
+          execute: async () => "SHOULD NOT REACH",
+        });
+      }
+    }
+
+    async function setupNoneSession(): Promise<ISessionContext> {
+      await pluginManager.registerPlugin(new NoneKitPlugin());
+      const session = createMockSessionContext();
+      const resolved = await pluginManager.resolvePlugins(session);
+      (session.getResolvedPlugins as jest.Mock).mockReturnValue(resolved);
+      return session;
+    }
+
+    it("不进 tools 数组，也不可经 tool_use 调用", async () => {
+      const session = await setupNoneSession();
+      const resolved = session.getResolvedPlugins();
+
+      expect(
+        ToolExecutor.toFlatToolDefs(resolved).map((t) => t.name),
+      ).not.toContain("none_echo");
+      expect(
+        ToolExecutor.findTool(resolved, "none_echo", true),
+      ).toBeUndefined();
+
+      await expect(
+        orchestrator.executeTool(
+          "none_echo",
+          {},
+          "c1",
+          session,
+          undefined,
+          { allowLazy: true },
+        ),
+      ).rejects.toThrow(/not available or disabled/);
+    });
+
+    it("tool_learn 学不出来", async () => {
+      const session = await setupNoneSession();
+
+      const ut = new UniversalToolsPlugin(orchestrator, pluginManager, {
+        collectLazyPrompts: async () => [],
+      } as any);
+      await pluginManager.registerPlugin(ut);
+
+      const lazyKit = PluginRegistry.getToolKits("universal_tools").find(
+        (k) => k.def.id === "lazy_tools",
+      )!;
+      const learn = lazyKit.tools.find((t) => t.name === "tool_learn")!;
+      const out = await learn.handler(
+        { name: "none_kit" },
+        { session, toolCallId: "t1" } as any,
+      );
+
+      expect(String(out)).toMatch(/unknown toolkit/);
     });
   });
 });

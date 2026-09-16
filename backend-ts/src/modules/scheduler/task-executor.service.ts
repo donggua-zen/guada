@@ -4,7 +4,7 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { CharacterRepository } from "../../common/database/character.repository";
+import { CharacterFileStore } from "../characters/character-file.store";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
@@ -53,7 +53,7 @@ export class TaskExecutorService {
     private eventBus: EventBusService,
     private storage: TaskStorageService,
     private settingsStorage: SettingsStorage,
-    private characterRepo: CharacterRepository,
+    private characterStore: CharacterFileStore,
     private providerStore: ProviderFileStore,
   ) {}
 
@@ -257,7 +257,7 @@ export class TaskExecutorService {
 
     // 第二优先级：角色的 modelId
     if (!modelId && task.characterId) {
-      const character = await this.characterRepo.findById(task.characterId);
+      const character = await this.characterStore.findById(task.characterId);
       if (!character) {
         throw new Error(`角色不存在：${task.characterId}`);
       }

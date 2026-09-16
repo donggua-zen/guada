@@ -54,6 +54,16 @@
               </el-button>
             </div>
           </div>
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-t border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.chatUploadSubdir') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.chatUploadSubdirDesc') }}</span>
+            </div>
+            <div class="shrink-0 max-w-md w-full">
+              <el-input v-model="settingsForm.chatUploadSubdir"
+                :placeholder="t('settings.general.chatUploadSubdirPlaceholder')" clearable />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -148,6 +158,8 @@ function handleLanguageChange(val: string) {
 // 表单数据
 const settingsForm = reactive({
   workspaceBaseDir: '',
+  // 会话工作目录下的聊天附件子目录名（空 = 用默认 uploads）
+  chatUploadSubdir: '',
   kbStorageRoot: '',
   maxToolIterations: 100,
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
@@ -170,7 +182,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, kbStorageRoot: settingsForm.kbStorageRoot, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -181,6 +193,7 @@ const loadSettings = async () => {
 
     // 填充表单
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
+    settingsForm.chatUploadSubdir = response.chatUploadSubdir || ''
     settingsForm.kbStorageRoot = response.kbStorageRoot || ''
     settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
@@ -277,9 +290,17 @@ const handleSave = async () => {
       }
     }
 
+    // 验证附件子目录名：只能是单层目录名（后端也会拒，这里先给即时反馈）
+    const subdir = settingsForm.chatUploadSubdir.trim()
+    if (subdir && (/[\\/:]/.test(subdir) || subdir === '.' || subdir === '..')) {
+      ElMessage.error(t('settings.general.chatUploadSubdirInvalid'))
+      return
+    }
+
     // 构造保存数据
     const dataToSave = {
       workspaceBaseDir: path || null,
+      chatUploadSubdir: subdir || null,
       kbStorageRoot: kbRoot || null,
       maxToolIterations: settingsForm.maxToolIterations,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,

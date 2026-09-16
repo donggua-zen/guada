@@ -90,6 +90,7 @@
                 <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
                   :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
                   :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+                  :uploader="chatAttachmentUploader"
                   :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
                   @abort="abortResponse">
                   <template #right-actions-before>
@@ -553,6 +554,16 @@ const currentModelId = computed({
  * ChatInput 组件的配置对象（计算属性）
  * 与 handleConfigChange 中的处理逻辑一一对应，方便对照维护
  */
+/**
+ * 聊天附件上传器：注入给 ChatInput，让「点发送」时的上传能带上真实进度、
+ * 并在失败时把状态留在附件卡片上（而不是上传了却看不见、失败就整条消息没了）。
+ * 实现只有一处——ApiService.uploadFile（axios onUploadProgress）。
+ */
+const chatAttachmentUploader = {
+  upload: (sessionId: string, file: File, onProgress?: (percent: number) => void) =>
+    apiService.uploadFile(sessionId, file, onProgress),
+};
+
 const chatInputConfig = computed(() => ({
   modelId: currentModelId.value,
   // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）

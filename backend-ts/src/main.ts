@@ -4,6 +4,7 @@ import { WinstonModule } from 'nest-winston';
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UrlService } from "./common/services/url.service";
+import { resolveAttachmentResponseHeaders } from "./common/utils/attachment-serving.util";
 import { createWinstonConfig } from './common/logger/winston.config';
 import { RequestTimingInterceptor } from "./common/interceptors/request-timing.interceptor";
 import * as express from "express";
@@ -89,7 +90,11 @@ async function bootstrap() {
       uploadPublicPrefix,
       express.static(resolvedPath, {
         setHeaders: (res, filePath) => {
-          res.setHeader("Content-Disposition", "inline; charset=utf-8");
+          // 只有位图 inline，其余强制下载（见 attachment-serving.util 的说明）
+          const headers = resolveAttachmentResponseHeaders(filePath);
+          for (const [key, value] of Object.entries(headers)) {
+            res.setHeader(key, value);
+          }
         },
       }),
     );

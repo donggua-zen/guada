@@ -20,7 +20,7 @@ import {
 } from "../../common/events/unified-event.types";
 import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
-import { SessionRepository } from "../../common/database/session.repository";
+import { SessionFileStore } from "./session-file.store";
 import { HOOKS } from "./types/hooks.contract";
 /**
  * 会话事件类型
@@ -86,7 +86,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly streamManager: SessionStreamManager,
-    private readonly sessionRepository: SessionRepository,
+    private readonly sessionStore: SessionFileStore,
   ) {}
 
   /**
@@ -223,9 +223,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     // （污染主会话 isStreaming / 侧边栏 working）。ActiveStream 不含 sessionType，按 sessionId 查。
     for (const stream of activeStreams) {
       const sessionType =
-        (await this.sessionRepository
-          .getSessionType(stream.sessionId)
-          .catch(() => null)) ?? "web";
+        this.sessionStore.getSessionType(stream.sessionId) ?? "web";
       if (
         !safeNext({
           data: JSON.stringify(

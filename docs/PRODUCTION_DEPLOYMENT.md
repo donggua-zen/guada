@@ -37,7 +37,7 @@ git clone <repository-url> .
 cd backend-ts
 
 # 安装依赖（会自动执行 prisma generate）
-npm install
+pnpm install
 ```
 
 ### 2. 配置环境变量
@@ -80,13 +80,13 @@ BASE_URL=https://api.yourdomain.com
 npx prisma generate
 
 # 初始化种子数据
-npm run db:seed:force
+pnpm run db:seed:force
 ```
 
 ### 4. 构建生产版本
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 构建完成后，产物位于 `dist/` 目录。
@@ -95,14 +95,14 @@ npm run build
 
 #### 方式一：直接启动（测试用）
 ```bash
-npm run start:prod
+pnpm run start:prod
 ```
 
 #### 方式二：使用 PM2 进程守护（推荐）
 
 ```bash
 # 全局安装 PM2
-npm install -g pm2
+pnpm add -g pm2
 
 # 启动应用
 pm2 start dist/main.js --name guada-backend
@@ -153,7 +153,7 @@ pm2 start ecosystem.config.js
 cd frontend
 
 # 安装依赖
-npm install
+pnpm install
 
 # 配置 API 地址（可选）
 # 方法一：修改 vite.config.ts 中的 base 选项
@@ -161,7 +161,7 @@ npm install
 export VITE_API_BASE_URL=https://api.yourdomain.com
 
 # 构建
-npm run build
+pnpm run build
 ```
 
 构建完成后，产物位于 `dist/` 目录。
@@ -477,7 +477,7 @@ crontab -e
 ```bash
 cd backend-ts
 npx prisma generate
-npm run db:seed:force
+pnpm run db:seed:force
 ```
 
 ### 2. Prisma Client 未生成
@@ -589,8 +589,8 @@ cd /opt/guada-ai
 git pull origin main
 
 cd backend-ts
-npm install
-npm run build
+pnpm install
+pnpm run build
 pm2 restart guada-backend
 ```
 
@@ -616,21 +616,21 @@ echo "=== GuaDa AI 生产环境部署 ==="
 # 1. 安装依赖
 echo "安装后端依赖..."
 cd backend-ts
-npm install
+pnpm install
 
 # 2. 初始化数据库
 echo "初始化数据库..."
-npm run db:seed:force
+pnpm run db:seed:force
 
 # 3. 构建后端
 echo "构建后端..."
-npm run build
+pnpm run build
 
 # 4. 构建前端
 echo "构建前端..."
 cd ../frontend
-npm install
-npm run build
+pnpm install
+pnpm run build
 
 # 5. 部署前端
 echo "部署前端..."

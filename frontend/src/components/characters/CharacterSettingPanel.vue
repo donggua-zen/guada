@@ -21,11 +21,11 @@
           </div>
         </div>
       </div>
-      <!-- 内容区 -->
-      <div class="flex-1 overflow-hidden flex flex-col px-4">
+      <!-- 内容区：横向内边距放在各 tab 的滚动容器上，滚动条才会贴外边界 -->
+      <div class="flex-1 overflow-hidden flex flex-col">
         <!-- 基础设置 -->
         <div v-show="tabsValue === 'basic'" class="flex-1 overflow-hidden">
-          <div class="h-full overflow-y-auto py-4">
+          <div class="h-full overflow-y-auto px-4 py-4">
             <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="top">
               <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 头像设置 -->
@@ -125,9 +125,10 @@
           </div>
         </div>
 
-        <!-- 提示词 -->
-        <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full flex flex-col flex-1">
+        <!-- 提示词：外层负责滚动，内层至少铺满高度（内容超出时改为滚动而非裁切）；
+             顶部内边距按左导航的首行对齐收窄，避免上方大片留白 -->
+        <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-y-auto">
+          <div class="px-4 pt-2 pb-6 min-h-full flex flex-col">
             <div class="px-0 flex-1 flex flex-col min-h-0">
               <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
                 label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
@@ -150,7 +151,7 @@
 
         <!-- 本地工具 -->
         <div v-show="tabsValue === 'local_tools'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
               <el-form label-position="top">
                 <!-- 全部禁用与白名单模式 同一行左对齐 + 右对齐 -->
@@ -213,7 +214,7 @@
 
         <!-- MCP 工具 -->
         <div v-show="tabsValue === 'mcp_tools'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
               <el-form label-position="top">
                 <!-- MCP 全部禁用与白名单模式 同一行 -->
@@ -225,7 +226,8 @@
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allMcpDisabled }]">
                       <span class="text-sm text-gray-500">{{ t('characters.setting.newMcpLabel') }}</span>
-                      <SegmentedToggle v-model="mcpAllowlistMode" :options="autoEnableOptions" />
+                      <SegmentedToggle :model-value="mcpAllowlistMode" :options="autoEnableOptions"
+                        @update:model-value="handleMcpAllowlistModeChange" />
                     </div>
                   </div>
                 </el-form-item>
@@ -275,7 +277,7 @@
 
         <!-- Skills 技能 -->
         <div v-show="tabsValue === 'skills'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
               <el-form label-position="top">
                 <!-- Skills 全部禁用与白名单模式 同一行 -->
@@ -334,7 +336,7 @@
 
         <!-- 子代理 -->
         <div v-show="tabsValue === 'agent_presets'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
               <el-form label-position="top">
                 <!-- 全部禁用与白名单模式 同一行 -->
@@ -424,6 +426,17 @@ import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
 import SegmentedToggle from '../ui/SegmentedToggle.vue'
 import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'
+import {
+  buildPluginConfig,
+  effectiveKitEnabled,
+  parseAllAgentsDisabled,
+  parseAllSkillsDisabled,
+  parseMcpGate,
+  parsePluginConfig,
+  splitUnrendered,
+  type ParsedPluginConfig,
+  type UnrenderedRefs,
+} from '../../utils/characterPluginConfig'
 
 const { toast, notify } = usePopup()
 const { t } = useI18n()
@@ -642,10 +655,14 @@ const visibleKitCards = computed(() =>
 // 角色能力包设置（key = `${pluginId}::${kitId}` -> boolean）
 const characterToolSettings = ref<Record<string, boolean>>({});
 
-// 从角色配置回填的工具包偏好（新格式，工具包粒度）
-// savedKitDeny: 黑名单模式下各插件的拒绝列表；savedKitAllow: 白名单下的允许列表
-const savedKitDeny = ref<Record<string, string[]>>({});
-const savedKitAllow = ref<Record<string, string[]>>({});
+// 已保存的角色插件配置（解析后），作为工具包开关的默认来源
+const parsedPluginConfig = ref<ParsedPluginConfig>({
+  allDisabled: false,
+  allowlistMode: false,
+  perPlugin: {},
+});
+// 当前工具列表中渲染不到的已保存条目：保存时原样透传，避免一次保存丢配置
+const unrenderedRefs = ref<UnrenderedRefs>({ whole: {}, partial: {} });
 
 // 是否全部禁用本地工具
 const allDisabled = ref(false);
@@ -760,50 +777,21 @@ watch(() => props.data, (newVal, oldVal) => {
     ?? DEFAULT_COMPRESSION_TIER;
   // 加载角色插件设置（新格式：工具包粒度，仅消费 __strategy/__default/toolkits_*）
   // 旧版插件级开关条目（{ pluginId: { enabled } } / 裸布尔）直接忽略
-  const pluginsConfig = newVal.settings?.plugins;
-  if (typeof pluginsConfig === 'object' && pluginsConfig !== null && !Array.isArray(pluginsConfig)) {
-    allDisabled.value = pluginsConfig.__strategy === 'deny_nonsystem';
-    allowlistMode.value = pluginsConfig.__default === false;
-    savedKitDeny.value = {};
-    savedKitAllow.value = {};
-    for (const [pluginId, cfg] of Object.entries(pluginsConfig)) {
-      if (pluginId.startsWith('__')) continue;
-      if (typeof cfg === 'object' && cfg !== null) {
-        if ((cfg as Record<string, unknown>).toolkits_filter === 'allow') {
-          savedKitAllow.value[pluginId] = ((cfg as Record<string, any>).toolkits_allow || []) as string[];
-        } else if (Array.isArray((cfg as Record<string, any>).toolkits_deny) && (cfg as Record<string, any>).toolkits_deny.length) {
-          savedKitDeny.value[pluginId] = (cfg as Record<string, any>).toolkits_deny;
-        }
-      }
-    }
-  } else {
-    allDisabled.value = false;
-    allowlistMode.value = false;
-    savedKitDeny.value = {};
-    savedKitAllow.value = {};
-  }
+  parsedPluginConfig.value = parsePluginConfig(newVal.settings?.plugins);
+  allDisabled.value = parsedPluginConfig.value.allDisabled;
+  allowlistMode.value = parsedPluginConfig.value.allowlistMode;
+
   // 加载 MCP 配置（工具包粒度：每个 server 即 mcp 插件的一个能力包）
-  const mcpPluginsCfg = newVal.settings?.plugins?.mcp;
-  const mcpDeny = mcpPluginsCfg?.toolkits_deny;
-  mcpDeniedServers.value = mcpDeny
-    ? mcpDeny.map((id: string) => id.replace(/^mcp_/, ''))
-    : [];
-  const mcpAllow = mcpPluginsCfg?.toolkits_allow;
-  mcpAllowlistServers.value = mcpAllow
-    ? mcpAllow.map((id: string) => id.replace(/^mcp_/, ''))
-    : [];
-  mcpAllowlistMode.value = mcpPluginsCfg?.toolkits_filter === 'allow';
+  const mcpGate = parseMcpGate(newVal.settings?.plugins);
+  mcpDeniedServers.value = mcpGate.deniedServers;
+  mcpAllowlistServers.value = mcpGate.allowlistServers;
+  mcpAllowlistMode.value = mcpGate.allowlistMode;
   // 全部禁用标记：白名单过滤但允许列表为空（拒绝全部 MCP 能力包）
-  allMcpDisabled.value =
-    mcpPluginsCfg?.toolkits_filter === 'allow' &&
-    !(mcpPluginsCfg?.toolkits_allow?.length > 0);
+  allMcpDisabled.value = mcpGate.allDisabled;
 
   // 加载角色技能偏好
   // 全部禁用：skill 插件的能力包被整体拒绝（allow 过滤 + 空允许列表）
-  const skillKitCfg = newVal.settings?.plugins?.skill;
-  allSkillsDisabled.value =
-    skillKitCfg?.toolkits_filter === 'allow' &&
-    !(skillKitCfg?.toolkits_allow?.length > 0);
+  allSkillsDisabled.value = parseAllSkillsDisabled(newVal.settings?.plugins);
   // 白名单模式：从 skills.__default 读取
   const skillsConfig = newVal.settings?.skills;
   skillsAllowlistMode.value = skillsConfig?.__default === false;
@@ -820,11 +808,7 @@ watch(() => props.data, (newVal, oldVal) => {
 
   // 加载子代理偏好（固定白名单语义：仅显式允许 subagent 能力包时启用）
   // 默认禁用：无配置时 allAgentsDisabled = true
-  const subAgentCfg = newVal.settings?.plugins?.sub_agent;
-  allAgentsDisabled.value = !(
-    subAgentCfg?.toolkits_filter === 'allow' &&
-    subAgentCfg?.toolkits_allow?.includes('subagent')
-  );
+  allAgentsDisabled.value = parseAllAgentsDisabled(newVal.settings?.plugins);
   const agentsConfig = newVal.settings?.agents;
   // 重建 enabledAgents
   for (const key of Object.keys(enabledAgents)) delete enabledAgents[key];
@@ -1016,15 +1000,29 @@ function buildKitEntries() {
 }
 
 // 根据查询结果初始化各能力包开关的显示状态（保留已有偏好）
+//
+// 默认来源是**已保存的角色配置**（parsedPluginConfig），而不是查询返回的 tk.enabled：
+// 后者的 query 载荷是由当前 UI 状态构造的，拿它当默认值会形成循环依赖，
+// 导致首屏永远显示"全开"、已保存的关闭项被忽略。
+// 同时把当前列表里渲染不到的已保存条目收进 unrenderedRefs，供保存时原样透传。
 function initKitSettings(stored: Record<string, boolean> = {}) {
   const next: Record<string, boolean> = {};
+  const renderableKitsByPlugin: Record<string, string[]> = {};
   for (const p of localTools.value) {
+    renderableKitsByPlugin[p.pluginId] ||= [];
     for (const tk of p.toolkits || []) {
       const key = kitKey(p.pluginId, tk.id);
-      next[key] = key in stored ? stored[key] : !!tk.enabled;
+      renderableKitsByPlugin[p.pluginId].push(tk.id);
+      next[key] = key in stored
+        ? stored[key]
+        : effectiveKitEnabled(parsedPluginConfig.value, p.pluginId, tk.id);
     }
   }
   characterToolSettings.value = next;
+  unrenderedRefs.value = splitUnrendered(
+    parsedPluginConfig.value,
+    renderableKitsByPlugin,
+  );
 }
 
 // 加载本地工具列表
@@ -1095,25 +1093,28 @@ const loadMCPServers = async () => {
   }
 }
 
-// 监听 MCP 白名单模式切换 → 迁移当前状态，保持 UI 不变
-watch(mcpAllowlistMode, (newMode) => {
+// MCP 白名单模式切换（仅由用户点击触发）
+//
+// 迁移逻辑刻意放在显式 handler 而非 watch：watch 会被回读赋值（props.data 变化时
+// 从配置重建 mcpAllowlistMode）触发，从而把刚解析出的 toolkits_allow 放大成"全部服务器"，
+// 切黑名单方向则会被改写成"拒绝全部"。
+const handleMcpAllowlistModeChange = (newMode) => {
+  mcpAllowlistMode.value = !!newMode;
   if (mcpServers.value.length === 0) return;
   if (newMode) {
     // 切换为白名单：当前启用中的服务器变为允许列表
-    const enabledServers = mcpServers.value
+    mcpAllowlistServers.value = mcpServers.value
       .filter(s => !mcpDeniedServers.value.includes(s.id))
       .map(s => s.id);
-    mcpAllowlistServers.value = enabledServers;
     mcpDeniedServers.value = [];
   } else {
     // 切换为黑名单：当前禁用中的服务器变为拒绝列表
-    const disabledServers = mcpServers.value
+    mcpDeniedServers.value = mcpServers.value
       .filter(s => !mcpAllowlistServers.value.includes(s.id))
       .map(s => s.id);
-    mcpDeniedServers.value = disabledServers;
     mcpAllowlistServers.value = [];
   }
-});
+};
 
 const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
@@ -1171,56 +1172,33 @@ const getFormData = () => {
         'compressionTier': characterForm.compressionTier,
       },
       // 插件配置（工具包/能力包粒度）
-      'plugins': (() => {
-        const buildCustom = () => {
-          const result: Record<string, any> = {};
-          // 本地工具：按当前模式写入能力包过滤条目
-          const { denyByPlugin, allowByPlugin } = buildKitEntries();
-          if (allowlistMode.value) {
-            // 白名单：只存显式开启的能力包（未列出的默认禁用）
-            for (const [pid, list] of Object.entries(allowByPlugin)) {
-              result[pid] = { toolkits_filter: 'allow', toolkits_allow: list };
+      // 组装抽到纯函数（utils/characterPluginConfig）里：往返等价性必须可单测，
+      // 一次保存丢条目就等于角色层门控静默变化
+      'plugins': buildPluginConfig({
+        allDisabled: allDisabled.value,
+        allowlistMode: allowlistMode.value,
+        renderableKits: (() => {
+          const byPlugin: Record<string, Array<{ kitId: string; enabled: boolean }>> = {};
+          for (const p of localTools.value) {
+            for (const tk of p.toolkits || []) {
+              (byPlugin[p.pluginId] ||= []).push({
+                kitId: tk.id,
+                enabled: !!characterToolSettings.value[kitKey(p.pluginId, tk.id)],
+              });
             }
-          } else {
-            // 黑名单：只存显式关闭的能力包（未列出的默认启用）
-            for (const [pid, list] of Object.entries(denyByPlugin)) {
-              result[pid] = { toolkits_deny: list };
-            }
           }
-          // MCP：每个 server 即 mcp 插件的一个能力包（黑白名单兼容）
-          const mcpAllow = mcpAllowlistServers.value.map((id: string) => `mcp_${id}`);
-          if (allMcpDisabled.value || mcpAllowlistMode.value) {
-            // 全部禁用 → 空允许列表；白名单 → 允许列表中的 server
-            result.mcp = mcpAllow.length > 0
-              ? { toolkits_filter: 'allow', toolkits_allow: mcpAllow }
-              : { toolkits_filter: 'allow' };
-          } else if (mcpDeniedServers.value.length > 0) {
-            result.mcp = { toolkits_deny: mcpDeniedServers.value.map((id: string) => `mcp_${id}`) };
-          }
-          // Skills / 子代理：统一为能力包条目（禁用=空允许列表，启用=允许对应包）
-          result.skill = allSkillsDisabled.value
-            ? { toolkits_filter: 'allow' }
-            : { toolkits_filter: 'allow', toolkits_allow: ['skill'] };
-          result.sub_agent = allAgentsDisabled.value
-            ? { toolkits_filter: 'allow' }
-            : { toolkits_filter: 'allow', toolkits_allow: ['subagent'] };
-          return result;
-        };
-        // 全部禁用：保留原有配置值，追加 __default 以便切回时恢复白名单模式
-        if (allDisabled.value) {
-          const denyOutput: any = { __strategy: 'deny_nonsystem', ...buildCustom() };
-          if (allowlistMode.value) {
-            denyOutput.__default = false;
-          }
-          return denyOutput;
-        }
-        // 正常（自定义）
-        const output: any = { __strategy: 'custom' };
-        if (allowlistMode.value) {
-          output.__default = false;
-        }
-        return { ...output, ...buildCustom() };
-      })(),
+          return byPlugin;
+        })(),
+        unrendered: unrenderedRefs.value,
+        mcp: {
+          allDisabled: allMcpDisabled.value,
+          allowlistMode: mcpAllowlistMode.value,
+          deniedServers: mcpDeniedServers.value,
+          allowlistServers: mcpAllowlistServers.value,
+        },
+        allSkillsDisabled: allSkillsDisabled.value,
+        allAgentsDisabled: allAgentsDisabled.value,
+      }),
       // Skills 单项偏好（按模式保存）
       'skills': (() => {
         // 遍历所有技能，按当前显示状态保存
@@ -1408,27 +1386,16 @@ defineExpose({
   border: 1px solid var(--el-color-primary);
 }
 
-/* 内容区域 flex 布局 */
-.character-setting-panel-root > div > div:last-child {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 /* 表单区域优化 */
 :deep(.el-form) {
   height: 100%;
 }
 
 
-/* 提示词输入框样式 - 禁止resize并占满flex空间 */
+/* 提示词输入框样式 - 禁止resize并占满flex空间（高度下限由模板的 min-h-40 提供） */
 .prompt-form-item {
   display: flex;
   flex-direction: column;
-  min-height: 400px;
 }
 
 .prompt-form-item :deep(.el-form-item__content) {

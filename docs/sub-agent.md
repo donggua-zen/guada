@@ -23,7 +23,7 @@ SubAgentManager
 ### 创建子 Agent `spawn()`
 
 ```
-spawn({ parentSessionId, userId, name, task, characterId? }, mode)
+spawn({ parentSessionId, name, task, characterId? }, mode)
     │
     ├─ 1. 获取父会话信息（继承配置）
     ├─ 2. 限制检查（最多 10 个子 Agent）

@@ -24,17 +24,29 @@ export interface FileRef {
   mediaType: string;
   /** 字节数 */
   bytes: number;
-  /** 显示名（去掉本地路径信息） */
+  /** 显示名（完整文件名，含扩展名） */
   name?: string;
-  /** 存储锚点：相对存储路径（uploads/...）、data URL 或远程 URL；后端读盘转 base64、前端展示时绝对化 */
+  /** 引用锚点：按 refType 解释为存储引用 / 工作目录相对引用 / 本机绝对路径 */
   url?: string;
-  /** 预览路径（图片缩略图，前端展示用） */
+  /** 预览路径（图片缩略图，前端展示用），仅 store 形态的图片有值 */
   previewUrl?: string;
   /** 扩展名（不带点，如 png；前端文件展示用） */
   fileExtension?: string;
+  /**
+   * 引用形态 —— 决定 url 如何解析为物理路径。缺省视为 'store'（历史 JSONL 零迁移）：
+   * - 'store'     ：UPLOAD_ROOT_DIR 下的存储引用（头像、壁纸、旧版聊天图片）
+   * - 'workspace' ：会话工作目录内的相对引用（Web 非图片附件）
+   * - 'session'   ：会话数据目录内的引用（Web/Electron 图片，url 内嵌 sessionId，
+   *                 自包含：sessions/<id>/images|previews/...，随会话删除免费）
+   * - 'local'     ：宿主本机绝对路径（Electron 非图片附件，不经上传）
+   */
+  refType?: FileRefType;
   /** @deprecated 旧数据读取回退（旧 JSONL/迁移数据的附件标识）；新写入不再产出 */
   attachmentId?: string;
 }
+
+/** 附件引用形态（见 FileRef.refType） */
+export type FileRefType = 'store' | 'workspace' | 'session' | 'local';
 
 /**
  * 块生命周期计时（epoch ms）：由 BlockAssembler 在块首见/闭合时统一打点，

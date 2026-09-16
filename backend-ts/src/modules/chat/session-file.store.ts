@@ -4,7 +4,10 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as chokidar from "chokidar";
-import { resolveSessionsBasePath } from "../../common/persistence/jsonl-backend";
+import {
+  resolveSessionsBasePath,
+  assertValidId,
+} from "../../common/utils/session-path.util";
 import {
   META_DOMAIN_SESSIONS,
   MetadataBootstrapGate,
@@ -38,24 +41,8 @@ export const SESSIONS_MIGRATED_MARKER = ".migrated-sessions";
 /** 新建会话 id 前缀（改这一行即可切换命名风格，如 `sess_`） */
 export const SESSION_ID_PREFIX = "session-";
 
-/**
- * id 合法性校验（对齐 McpFileStore.assertValidId / ProviderFileStore.saveProvider）。
- *
- * id 会直接进 `path.join(baseDir, id)`（建目录/整目录删除），因此必须挡住路径分隔符与
- * `..`；`"undefined"`/`"null"` 是历史缺陷产物（曾因 `String(data.id)` 落到
- * `sessions/undefined/`），一并显式拒绝。
- */
-function assertValidId(id: string): void {
-  if (
-    !id ||
-    /[\\/:*?"<>|]/.test(id) ||
-    id.startsWith(".") ||
-    id === "undefined" ||
-    id === "null"
-  ) {
-    throw new Error(`Invalid session id: "${id}"`);
-  }
-}
+// id 合法性校验见 common/utils/session-path.util.ts 的 assertValidId（单一真相，
+// 供会话存储与取图路由共用——id 会进 path.join，挡住分隔符与 `..` 是硬约束）。
 
 /**
  * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
@@ -490,6 +477,59 @@ export class SessionFileStore implements OnModuleDestroy {
     return this.query((m) => m.parentId === parentId, byCreatedAsc).map(toRow);
   }
 
+  /** 某父会话下活跃子会话数（排除已冻结 closedAt）——子代理名额上限依据 */
+  countByParentId(parentId: string): number {
+    return this.query((m) => m.parentId === parentId && !m.closedAt).length;
+  }
+
+  /** 按 botId + externalId 查 bot 会话（幂等映射；无需独立索引文件） */
+  findByBotAndExternalId(
+    botId: string,
+    externalId: string,
+  ): Record<string, any> | null {
+    const meta = this.query(
+      (m) =>
+        m.botId === botId &&
+        m.externalId === externalId &&
+        m.sessionType === "bot",
+    )[0];
+    if (!meta) return null;
+    return this.get(meta.id) ?? null;
+  }
+
+  /** sessionType='web' 的 id 清单（lastActiveAt desc）——供内容搜索两阶段协议 */
+  listWebSessionIds(includeArchived = false): string[] {
+    return this.query(
+      (m) => m.sessionType === "web" && (includeArchived || !m.archived),
+      byLastActiveDesc,
+    ).map((m) => m.id);
+  }
+
+  /** 按 id 批量取行（保持入参顺序，缺失项忽略） */
+  getManyByIds(ids: string[]): Record<string, any>[] {
+    const out: Record<string, any>[] = [];
+    for (const id of ids) {
+      const row = this.get(id);
+      if (row) out.push(row);
+    }
+    return out;
+  }
+
+  /** 会话类型（web/bot/sub_agent） */
+  getSessionType(id: string): string | null {
+    return this.index.get(id)?.sessionType ?? null;
+  }
+
+  /** 级联删除某父会话下的全部子会话（原 deleteByParentId） */
+  async deleteChildrenOf(parentId: string): Promise<number> {
+    const children = this.query((m) => m.parentId === parentId, byCreatedAsc);
+    let n = 0;
+    for (const meta of children) {
+      if (await this.deleteSession(meta.id)) n += 1;
+    }
+    return n;
+  }
+
   // ============ 写入 API ============
 
   /** 是否存在（内存索引；目录存在但 meta 非法时视为不存在） */
@@ -661,6 +701,88 @@ export class SessionFileStore implements OnModuleDestroy {
   async writeGroups(groups: SessionGroupMeta[]): Promise<void> {
     await fsp.mkdir(this.baseDir, { recursive: true });
     await this.atomicWrite(this.groupsPath, JSON.stringify(groups, null, 2));
+  }
+
+  /** 分组列表（按 sortOrder 升序；与旧 repo.findAll 同序） */
+  async listGroups(): Promise<SessionGroupMeta[]> {
+    const groups = await this.readGroups();
+    return groups.sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async findGroupById(id: string): Promise<SessionGroupMeta | undefined> {
+    return (await this.readGroups()).find((g) => g.id === id);
+  }
+
+  /** 新建分组（id 为 cuid 风格，与存量分组 id 形态一致） */
+  async createGroup(data: {
+    name: string;
+    sortOrder?: number;
+  }): Promise<SessionGroupMeta> {
+    const groups = await this.readGroups();
+    const now = new Date().toISOString();
+    const group: SessionGroupMeta = {
+      id: this.generateGroupId(),
+      name: data.name,
+      sortOrder: data.sortOrder ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    groups.push(group);
+    await this.writeGroups(groups);
+    return group;
+  }
+
+  async updateGroup(
+    id: string,
+    data: { name?: string; sortOrder?: number },
+  ): Promise<SessionGroupMeta | undefined> {
+    const groups = await this.readGroups();
+    const target = groups.find((g) => g.id === id);
+    if (!target) return undefined;
+    if (data.name !== undefined) target.name = data.name;
+    if (data.sortOrder !== undefined) target.sortOrder = data.sortOrder;
+    target.updatedAt = new Date().toISOString();
+    await this.writeGroups(groups);
+    return target;
+  }
+
+  /** 删除分组：连同该组会话解绑（groupId 置 null，替代 FK onDelete SetNull） */
+  async deleteGroup(id: string): Promise<{ id: string }> {
+    const groups = await this.readGroups();
+    await this.writeGroups(groups.filter((g) => g.id !== id));
+    await this.clearGroup(id);
+    return { id };
+  }
+
+  /** 当前最大 sortOrder（新建分组排在最后） */
+  async getMaxGroupSortOrder(): Promise<number> {
+    const groups = await this.readGroups();
+    return groups.reduce((max, g) => Math.max(max, g.sortOrder ?? 0), 0);
+  }
+
+  /** 批量更新分组排序（整表一次重写，替代旧 $transaction） */
+  async batchUpdateGroupSortOrder(
+    updates: { id: string; sortOrder: number }[],
+  ): Promise<SessionGroupMeta[]> {
+    const groups = await this.readGroups();
+    const map = new Map(updates.map((u) => [u.id, u.sortOrder]));
+    const now = new Date().toISOString();
+    for (const g of groups) {
+      const next = map.get(g.id);
+      if (next !== undefined) {
+        g.sortOrder = next;
+        g.updatedAt = now;
+      }
+    }
+    await this.writeGroups(groups);
+    return groups.filter((g) => map.has(g.id));
+  }
+
+  /** cuid 风格分组 id（与存量分组 id 形态一致，便于混用） */
+  private generateGroupId(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).slice(2, 10);
+    return `c${timestamp}${random}`;
   }
 
   // ============ 内部：写入与锁 ============

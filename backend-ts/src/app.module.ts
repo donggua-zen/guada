@@ -43,7 +43,7 @@ import { HealthModule } from './modules/health/health.module';
       maxListeners: 20,
     }),
     LlmCoreModule, // LLM 核心模块（全局）
-    DatabaseModule, // 全局数据库模块（包含 PrismaService 和 Repositories）
+    DatabaseModule, // 全局持久化装配（各域 FileStore + KB 数据层 + 迁移脚手架）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块

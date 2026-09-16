@@ -10,9 +10,9 @@ import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
 import { OcrService } from "./ocr.service";
-import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
-import { KBFileRepository } from "../../common/database/kb-file.repository";
-import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
+import { KbMetaStore } from "./kb-meta.store";
+import { KBFileRepository } from "./kb-file.repository";
+import { KBChunkRepository } from "./kb-chunk.repository";
 import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { AuthModule } from "../auth/auth.module";
@@ -43,7 +43,7 @@ export class KnowledgeBaseModule implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly providerStore: ProviderFileStore,
-    private readonly kbRepo: KnowledgeBaseRepository,
+    private readonly kbRepo: KbMetaStore,
     private readonly fileRepo: KBFileRepository,
     private readonly chunkRepo: KBChunkRepository,
     private readonly searchService: KbSearchService,

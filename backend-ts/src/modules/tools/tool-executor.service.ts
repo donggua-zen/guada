@@ -59,8 +59,10 @@ export class ToolExecutor {
       if (!allowLazy) continue;
       const lazyTool = rp.allTools.find((t) => t.name === toolName);
       if (lazyTool) {
+        // loadMode=none 表示"压根不加载"：其工具不可达，不因 kit.enabled 而为真
         const inLazyKit = rp.enabledToolKits.some(
-          (tk) => tk.enabled && tk.id === lazyTool.toolSet,
+          (tk) =>
+            tk.enabled && tk.loadMode !== "none" && tk.id === lazyTool.toolSet,
         );
         if (inLazyKit) {
           return lazyTool;

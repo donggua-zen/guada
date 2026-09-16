@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import {
   KbDatabaseService,
   assertValidKbId,
-} from "../../modules/knowledge-base/kb-database.service";
+} from "./kb-database.service";
 
 /**
  * 条目 id 前缀（与 DB 时代 cuid 并存：存量 id 保持原值不动）

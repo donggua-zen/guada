@@ -21,14 +21,18 @@
         </template>
         <template v-else>
             <div
-                class="flex items-center px-2 py-1.5  bg-gray-50 border border-gray-200 rounded-lg transition-all duration-200 hover:bg-gray-100 hover:border-gray-300">
+                class="flex items-center px-2 py-1.5  bg-gray-50 border rounded-lg transition-all duration-200 hover:bg-gray-100 hover:border-gray-300"
+                :class="isFailed ? 'border-red-300 bg-red-50/60' : 'border-gray-200'">
                 <div class="file-icon mr-2 text-gray-500 flex items-center w-8 h-8">
                     <img :src="fileIcon" class="w-full h-full">
                 </div>
                 <div class="file-info flex-1 min-w-32 max-w-40 ">
-                    <div class="file-name text-sm font-medium text-gray-700 truncate">{{ name }}</div>
-                    <div class="file-details text-xs text-gray-500">{{ ext }} · {{
-                        formatFileSize(size) }}</div>
+                    <div class="file-name text-sm font-medium truncate"
+                        :class="isFailed ? 'text-red-600' : 'text-gray-700'">{{ name }}</div>
+                    <div class="file-details text-xs" :class="isFailed ? 'text-red-500' : 'text-gray-500'">
+                        <template v-if="isFailed">{{ uploadError || t('chat.input.uploadFailed') }}</template>
+                        <template v-else>{{ detailsText }}</template>
+                    </div>
                 </div>
             </div>
         </template>
@@ -59,6 +63,7 @@ const props = defineProps<{
     clickable?: boolean;
     uploadProgress?: number; // 上传进度 0-100
     uploadStatus?: 'queued' | 'uploading' | 'uploaded' | 'failed'; // 上传状态
+    uploadError?: string; // 上传失败原因（uploadStatus='failed' 时展示）
 }>()
 
 // Emits 类型化
@@ -73,6 +78,9 @@ const { t } = useI18n()
 const isUploading = computed(() => {
     return props.uploadStatus === 'uploading' || props.uploadStatus === 'queued'
 })
+
+// 计算属性：是否上传失败（失败项保留在列表里，可再次发送以重试）
+const isFailed = computed(() => props.uploadStatus === 'failed')
 
 // 计算属性：是否显示进度遮罩
 const showProgressOverlay = computed(() => {
@@ -106,6 +114,12 @@ const formatFileSize = (bytes: number | undefined): string => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
+// 副标题：扩展名 + 大小。无扩展名的文件（Makefile 之类）只显示大小，不留悬空分隔符
+const detailsText = computed(() => {
+    const size = formatFileSize(props.size);
+    return props.ext ? `${props.ext} · ${size}` : size;
+});
 
 // 移除文件 - 类型化
 const removeFile = (): void => {

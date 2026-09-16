@@ -93,7 +93,13 @@ export class PluginManager {
     }
 
     // 创建 api 并调用 onLoad
-    const api = new PluginApiImpl(id, plugin.manifest.name, this.nlsService, this.settingsStorage);
+    const api = new PluginApiImpl(
+      id,
+      plugin.manifest.name,
+      this.nlsService,
+      this.settingsStorage,
+      plugin.manifest.source,
+    );
     if (plugin.onLoad) {
       await plugin.onLoad(api).catch((err) => {
         this.logger.error(`Plugin ${id} onLoad failed: ${err.message}`);
@@ -346,7 +352,9 @@ export class PluginManager {
 
     const result: ResolvedPluginInfo[] = [];
     for (const [, state] of stateMap) {
-      result.push(await this.buildPluginResult(state, skipHandler, session));
+      result.push(
+        await this.buildPluginResult(state, skipHandler, session, roleCfg),
+      );
     }
     return result;
   }
@@ -445,7 +453,10 @@ export class PluginManager {
       }
 
       const e = entry as RolePluginEntryConfig;
-      if ((e.toolkits_filter ?? "deny") === "allow") {
+      if (e.toolkits_filter === "deny_all") {
+        // 全部禁用：压过两个列表（列表原样保留在配置里，供解除时恢复）
+        denyAllOfPlugin();
+      } else if (e.toolkits_filter === "allow") {
         // 白名单：先全拒，再放行显式允许的
         denyAllOfPlugin();
         for (const a of e.toolkits_allow || []) {
@@ -471,6 +482,7 @@ export class PluginManager {
     state: PluginResolutionState,
     skipHandler: boolean,
     session?: ISessionContext,
+    roleCfg?: RolePluginConfig,
   ): Promise<ResolvedPluginInfo> {
     const manifest = state.manifest;
     const allTools = [
@@ -508,7 +520,11 @@ export class PluginManager {
     const enabledToolKits: ResolvedPluginInfo["enabledToolKits"] = [];
 
     for (const kitReg of PluginRegistry.getToolKits(manifest.id)) {
-      const denied = state.deniedToolkits.has(kitReg.def.id);
+      // 自治理工具包不参与角色层过滤：applyRoleLayer 写入的 deniedToolkits 对其无效。
+      // 这是 handler 必然被执行的前提——被 deny 的工具包会跳过 handler 直接取静态默认值。
+      const isSelfGoverned = kitReg.def.governance === "self";
+      const denied =
+        !isSelfGoverned && state.deniedToolkits.has(kitReg.def.id);
       let loadMode: ToolKitLoadMode = kitReg.def.loadMode || "eager";
       let activator = kitReg.def.activator;
 
@@ -517,6 +533,7 @@ export class PluginManager {
           if (kitReg.def.handler && !skipHandler && session) {
             const runtime = await kitReg.def.handler({
               session,
+              pluginsConfig: roleCfg,
             } as PluginContext);
             if (runtime) {
               loadMode = (runtime.loadMode as ToolKitLoadMode) ?? loadMode;

@@ -13,6 +13,7 @@ import type {
   FileRef,
 } from "../../common/types/conversation.types";
 import { normalizeMediaType } from "../../common/utils/media-type.util";
+import { normalizeRefType } from "../llm-core/utils/attachment.util";
 import { RequestContext } from "../../common/context/request-context";
 import { ISessionContext } from "./session-context";
 import { SessionStreamEvent } from "./types/event-chunk.types";
@@ -396,18 +397,22 @@ export class AgentEngine {
 
       // ── 4. 用户消息:user/message 入库 + 发布 user_message(与入库同位置) ──
       // 前端按 FileRef 契约内嵌完整附件元数据（self-contained），此处仅防御性归一：
-      // mediaType 非法时由扩展名兜底；字符串元素为旧客户端残留，按相对路径占位并告警。
+      // mediaType 非法时由扩展名兜底；refType 缺省按 'store'（历史客户端）；
+      // 字符串元素为旧客户端残留，按相对路径占位并告警。
       const userFileRefs: FileRef[] = (userMessage?.files || []).map(
         (f: any): FileRef =>
           typeof f === "string"
-            ? { mediaType: "application/octet-stream", bytes: 0, url: f }
+            ? { mediaType: "application/octet-stream", bytes: 0, url: f, refType: "store" }
             : {
                 mediaType: normalizeMediaType(f.mediaType ?? f.fileType, f.fileExtension),
                 bytes: f.bytes ?? f.fileSize ?? 0,
                 name: f.name ?? f.displayName ?? f.fileName,
-                url: f.url ?? f.previewUrl,
-                previewUrl: f.previewUrl,
-                fileExtension: f.fileExtension,
+                // 不拿 previewUrl 冒充实体锚点：缩略图只是展示用的小图，
+                // 当 url 用会让模型读到一张 256px 的图而不是原图。
+                url: f.url,
+                ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
+                ...(f.fileExtension ? { fileExtension: f.fileExtension } : {}),
+                refType: normalizeRefType(f.refType),
               },
       );
       if (userMessage?.files?.some((f: any) => typeof f === "string")) {

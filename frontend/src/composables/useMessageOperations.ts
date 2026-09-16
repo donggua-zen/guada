@@ -6,24 +6,46 @@ import { normalizeMediaType } from '@/utils/media-type'
 import { toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 
 /**
- * 把前端附件对象（上传响应 FileRef / 投影 FileAttachment / ChatFile 混合形态）
- * 统一映射为发送 payload 的 FileRef 契约对象（self-contained 元数据，不再降维成 id）。
- * 无存储锚点（url）的对象不进入 payload。
+ * 单个附件对象 → 发送 payload 的 FileRef 契约对象；不可用时返回 null。
+ *
+ * 入参是三种前端形态的混合体，按「有没有引用锚点」分派：
+ * - 上传响应 / 编辑回填的投影：有 url（+ refType），原样透传
+ * - Electron 非图片附件：有 localPath 无 url → refType='local'，本机绝对路径
+ * - 新选未上传的：两者都没有 → null（调用方先上传）
+ *
+ * refType 缺省按引用来源推断：带 localPath 的是本机路径，其余按 store 解释
+ * ——历史数据（编辑重发）没有 refType，其 url 是 uploads/... 存储引用，store 语义正确；
+ * 'workspace' 引用一定由上传响应带回来，不会走到缺省分支。
+ */
+export function toPayloadFileRef(f: any): any | null {
+    const ext = f.fileExtension || f.ext
+    const localPath = typeof f.localPath === 'string' && f.localPath ? f.localPath : undefined
+    const url = f.url || localPath
+    if (!url) return null
+
+    const name = f.name ?? f.fileName ?? f.displayName
+    return {
+        mediaType: normalizeMediaType(f.mediaType ?? f.type, ext),
+        bytes: f.bytes ?? f.fileSize ?? f.size ?? 0,
+        ...(name ? { name } : {}),
+        url,
+        ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
+        ...(ext ? { fileExtension: ext } : {}),
+        refType: f.refType || (localPath && !f.url ? 'local' : 'store'),
+    }
+}
+
+/**
+ * 把前端附件对象数组统一映射为发送 payload 的 FileRef 契约对象。
+ * 无引用锚点（既未上传、也无本机路径）的对象不进入 payload。
  */
 export function toPayloadFileRefs(files: any[]): any[] {
-    return (files ?? [])
-        .filter((f: any) => (f.mediaType || f.type) && f.url)
-        .map((f: any) => {
-            const ext = f.fileExtension || f.ext
-            return {
-                mediaType: normalizeMediaType(f.mediaType ?? f.type, ext),
-                bytes: f.bytes ?? f.size ?? 0,
-                name: f.name ?? f.displayName ?? f.fileName,
-                url: f.url,
-                ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
-                ...(ext ? { fileExtension: ext } : {}),
-            }
-        })
+    const refs: any[] = []
+    for (const f of files ?? []) {
+        const ref = toPayloadFileRef(f)
+        if (ref) refs.push(ref)
+    }
+    return refs
 }
 
 export function useMessageOperations(
@@ -97,61 +119,32 @@ export function useMessageOperations(
             throw new Error(t('chat.message.noActiveSession'))
         }
 
-        // 分离三类文件：已上传的、需上传的、Electron本地路径引用的
-        const uploadedFiles = files.filter(file => file.id && typeof file.id === 'string' && file.id.length > 10)
-        const localPathFiles = files.filter(file => file.localPath && !file.file)
-        const filesWithContent = files.filter(file => file.file && !uploadedFiles.includes(file) && !localPathFiles.includes(file))
+        const payloadFiles: any[] = []
 
-        // 串行上传未上传的文件，确保 createdAt 顺序与用户选择顺序一致
-        const uploadResults = []
-        for (const file of filesWithContent) {
-            const result = await apiService.uploadFile(currentSessionId.value, file.file)
-            uploadResults.push(result)
-        }
-
-        const updatedFiles = [...files]
-
-        // 更新新上传的文件信息（上传响应即 FileRef 形状，原样透传）
-        uploadResults.forEach((response, index) => {
-            const fileIndex = files.indexOf(filesWithContent[index])
-            if (fileIndex !== -1) {
-                updatedFiles[fileIndex] = { ...updatedFiles[fileIndex], ...response }
-                delete updatedFiles[fileIndex].file
-                delete updatedFiles[fileIndex].content
-                delete updatedFiles[fileIndex].uploadProgress
-                delete updatedFiles[fileIndex].uploadStatus
+        // 串行上传未上传的文件，确保服务端 createdAt 顺序与用户选择顺序一致。
+        // 已带引用锚点的（上传响应 / 编辑回填 / Electron 本机路径）直接透传，不再上传。
+        for (const file of files ?? []) {
+            const existing = toPayloadFileRef(file)
+            if (existing) {
+                payloadFiles.push(existing)
+                continue
             }
-        })
-
-        // 清理已上传文件的临时字段
-        uploadedFiles.forEach(file => {
-            const fileIndex = files.indexOf(file)
-            if (fileIndex !== -1) {
-                updatedFiles[fileIndex] = { ...updatedFiles[fileIndex] }
-                delete updatedFiles[fileIndex].file
-                delete updatedFiles[fileIndex].uploadProgress
-                delete updatedFiles[fileIndex].uploadStatus
+            if (!file?.file) {
+                // 既无引用锚点也无原始 File：无法还原这个附件（如持久化后丢失 File 的历史残留）。
+                // 明确丢弃并告警——旧实现把 Electron 路径拼进消息正文，等于把附件混进用户的话里。
+                console.warn('[prepareNewMessage] 跳过无法解析的附件：', file)
+                continue
             }
-        })
-
-        // 发送 payload：FileRef 对象数组（self-contained 元数据，不再降维成 id）。
-        // 来源有二：上传响应（mediaType/bytes 原生 FileRef）与编辑重发的投影对象
-        // （type/size/ext），统一映射为 FileRef 契约；Electron 本地路径引用
-        // （无存储 url）不进入 payload，路径已拼进消息文本。
-        const payloadFiles = toPayloadFileRefs(updatedFiles)
-
-        // Electron 本地路径文件：拼接路径到消息内容
-        let finalContent = text
-        if (localPathFiles.length > 0) {
-            const pathLines = localPathFiles.map(f => `\n\n[文件: ${f.fileName}]\n路径: ${f.localPath}`)
-            finalContent = text + pathLines.join('')
+            const response = await apiService.uploadFile(currentSessionId.value, file.file)
+            const ref = toPayloadFileRef({ ...file, ...response })
+            if (ref) payloadFiles.push(ref)
         }
 
         // 清空输入框
         inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
 
         return {
-            content: finalContent,
+            content: text,
             files: payloadFiles,
             replaceTurnId,
             knowledgeBaseIds,

@@ -18,8 +18,8 @@ import {
   KbMetaStore,
   KnowledgeBaseMeta,
 } from "../../../modules/knowledge-base/kb-meta.store";
-import { KBFileRepository, KbDbAccess } from "./../kb-file.repository";
-import { KBChunkRepository } from "./../kb-chunk.repository";
+import { KBFileRepository, KbDbAccess } from "../../../modules/knowledge-base/kb-file.repository";
+import { KBChunkRepository } from "../../../modules/knowledge-base/kb-chunk.repository";
 
 /** 迁移标记（放在 KB 根下；沿用旧标记名则已迁移的安装会被跳过，故换新名） */
 export const KB_SQLITE_MIGRATED_MARKER = ".migrated-kb-sqlite";

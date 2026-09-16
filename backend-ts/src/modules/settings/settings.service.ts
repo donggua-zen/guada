@@ -1,5 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, BadRequestException } from "@nestjs/common";
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
+import { isValidChatUploadSubdir, normalizeChatUploadSubdir } from '../../common/utils/attachment-subdir.util';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { assertResolvableModelRef } from '../llm-core/utils/model-reference.util';
 import { MODEL_ID_KEYS } from '../../common/database/bootstrap/model-reference-migration';
@@ -11,6 +12,8 @@ import {
   SG_OCR,
   SG_APPEARANCE,
   SK_SYS_WORKSPACE_BASE_DIR,
+  SK_SYS_CHAT_UPLOAD_SUBDIR,
+  DEFAULT_CHAT_UPLOAD_SUBDIR,
   SK_SYS_KB_STORAGE_ROOT,
 } from '../../constants/settings.constants';
 
@@ -58,6 +61,17 @@ export class SettingsService {
           next
             ? `知识库存储根已改为 ${next}，重启后生效；原位置的库目录需要你手动移动过去（知识库不会自动搬迁）。`
             : `知识库存储根已清空，重启后回到默认位置（数据目录下的 data/kb）。`,
+        );
+      }
+    }
+    if (group === SG_SYSTEM && SK_SYS_CHAT_UPLOAD_SUBDIR in data) {
+      // 附件子目录会被拼进会话工作目录路径，拒绝含分隔符/盘符/上跳的值。
+      // 这里用「抛错」而不是像运行时那样静默回退：设置页需要立刻知道这个值不接受，
+      // 否则用户以为改了子目录、实际还在写默认目录。
+      const incoming = data[SK_SYS_CHAT_UPLOAD_SUBDIR];
+      if (typeof incoming === "string" && incoming.trim() && !isValidChatUploadSubdir(incoming)) {
+        throw new BadRequestException(
+          "附件子目录名只能是单层目录名（不能包含路径分隔符、盘符或 ..）",
         );
       }
     }
@@ -111,5 +125,22 @@ export class SettingsService {
   async getKbStorageRoot(): Promise<string | null> {
     const value = await this.getSettingValue(SG_SYSTEM, SK_SYS_KB_STORAGE_ROOT, null);
     return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  /**
+   * 聊天附件子目录名（会话工作目录下，非图片附件的落点）。
+   * 单层目录名；空/非法值回退默认 'uploads'（运行时容错，见 attachment-subdir.util）。
+   */
+  async getChatUploadSubdir(): Promise<string> {
+    const value = await this.getSettingValue(SG_SYSTEM, SK_SYS_CHAT_UPLOAD_SUBDIR, null);
+    return normalizeChatUploadSubdir(typeof value === "string" ? value : null);
+  }
+
+  /** 更新聊天附件子目录名（传空则清除，恢复默认 'uploads'） */
+  async setChatUploadSubdir(subdir: string | null): Promise<void> {
+    const normalized = typeof subdir === "string" && subdir.trim() ? subdir.trim() : null;
+    await this.updateGroupSettings(SG_SYSTEM, {
+      [SK_SYS_CHAT_UPLOAD_SUBDIR]: normalized,
+    });
   }
 }

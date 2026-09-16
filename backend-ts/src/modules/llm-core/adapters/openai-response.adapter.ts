@@ -201,9 +201,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         if (block.type === "text") {
           if (block.text) contentParts.push({ type: "input_text", text: block.text });
         } else if (block.type === "image") {
-          // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射
+          // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射；
+          // 传整个附件对象：attachmentToPart 按 refType 分派物理路径。
           const part = await attachmentToPart(
-            block.attachment.url ?? block.attachment.attachmentId,
+            block.attachment,
             block.attachment.mediaType,
           );
           if (part?.kind === "base64") {

@@ -204,6 +204,7 @@ NODE_ENV=production
 
 # 数据库路径（容器内路径）
 DATABASE_URL=file:/app/data/ai_chat.db
+# 旧的全局向量库路径（已退役，仅迁移期需要）
 VECTOR_DB_PATH=/app/data/vector_db.sqlite
 
 # 基础 URL（部署时留空，使用相对路径）

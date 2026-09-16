@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { KbDatabaseService } from "../../modules/knowledge-base/kb-database.service";
+import { KbDatabaseService } from "./kb-database.service";
 import { KbDbAccess } from "./kb-file.repository";
-import { tokenizeForSearch } from "../../modules/knowledge-base/kb-tokenizer";
+import { tokenizeForSearch } from "./kb-tokenizer";
 
 /**
  * 分块写入行（字段名与原 KbChunkFileRow 对齐，调用方零改动）

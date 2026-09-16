@@ -7,11 +7,13 @@ import {
   kbRefProjectionStep,
   imageProjectionStep,
   imagePathAnnotationStep,
+  filePathBridgeStep,
   reasoningPolicyStep,
   emptyContentCompatStep,
   isFullReasoningRelayModel,
   createDefaultMessageTransformPipeline,
 } from './message-transform.pipeline';
+import { fileBlockToText } from '../llm-core/utils/attachment.util';
 
 function makeMsg(
   role: Message['role'],
@@ -420,5 +422,69 @@ describe('default pipeline', () => {
     const snapshot = JSON.stringify(msgs);
     pipeline.run(msgs, { ...baseCtx, supportsImageInput: false });
     expect(JSON.stringify(msgs)).toBe(snapshot);
+  });
+});
+
+/**
+ * file-path-bridge：把 'workspace' 形态的 file 块引用改写成绝对路径副本，
+ * 使 adapter 侧的 fileBlockToText（拿不到会话上下文）也能打印真实可读路径。
+ */
+describe('file-path-bridge step', () => {
+  const workspaceRef = (name: string, url = `uploads/20260915/${name}`): ContentBlock =>
+    ({
+      type: 'file',
+      attachment: { name, url, mediaType: 'application/pdf', bytes: 1, refType: 'workspace' },
+    }) as ContentBlock;
+
+  const storeRef = (name: string): ContentBlock =>
+    ({
+      type: 'file',
+      attachment: { name, url: `uploads/files/${name}`, mediaType: 'text/plain', bytes: 1 },
+    }) as ContentBlock;
+
+  const ctx: TransformContext = { ...baseCtx, workspaceDir: '/ws' };
+
+  it("'workspace' 引用被改写为绝对路径副本，形态标记为 local", () => {
+    const out = filePathBridgeStep.apply([makeMsg('user', [workspaceRef('a.pdf')])], ctx);
+    const block: any = out[0].content[0];
+    expect(block.type).toBe('file');
+    expect(block.attachment.refType).toBe('local');
+    expect(block.attachment.url).toBe(
+      path.join(path.resolve('/ws'), 'uploads/20260915/a.pdf'),
+    );
+  });
+
+  it("'store' 引用不被改写", () => {
+    const msgs = [makeMsg('user', [storeRef('a.txt')])];
+    expect(filePathBridgeStep.apply(msgs, ctx)).toBe(msgs);
+  });
+
+  it('无 workspaceDir 时整体原样返回（下游退化为只给文件名）', () => {
+    const msgs = [makeMsg('user', [workspaceRef('a.pdf')])];
+    expect(
+      filePathBridgeStep.apply(msgs, { ...baseCtx, workspaceDir: null }),
+    ).toBe(msgs);
+  });
+
+  it('引用越出工作目录时不改写（不给可疑路径）', () => {
+    const msgs = [makeMsg('user', [workspaceRef('a.pdf', '../../../etc/passwd')])];
+    expect(filePathBridgeStep.apply(msgs, ctx)).toBe(msgs);
+  });
+
+  it('改写的是副本，入参数组保持原状', () => {
+    const msgs = [makeMsg('user', [workspaceRef('a.pdf')])];
+    const snapshot = JSON.stringify(msgs);
+    filePathBridgeStep.apply(msgs, ctx);
+    expect(JSON.stringify(msgs)).toBe(snapshot);
+  });
+
+  it('接入默认管线后路径文案只由 fileBlockToText 输出一次（不追加文本块）', () => {
+    const pipeline = createDefaultMessageTransformPipeline();
+    const out = pipeline.run([makeMsg('user', [workspaceRef('a.pdf')])], ctx);
+    expect(out[0].content).toHaveLength(1);
+    const expectedUrl = path.join(path.resolve('/ws'), 'uploads/20260915/a.pdf');
+    expect(fileBlockToText((out[0].content[0] as any).attachment)).toBe(
+      `[文件: a.pdf (${expectedUrl})]。解析内容请调用 document.doc_parse（file_path 传上面的绝对路径）`,
+    );
   });
 });
