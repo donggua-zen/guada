@@ -3,7 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SettingsStorage } from '../utils/settings-storage.util';
-import { SG_SYSTEM, SK_SYS_WORKSPACE_BASE_DIR } from '../../constants/settings.constants';
+import {
+  SG_SYSTEM,
+  SK_SYS_WORKSPACE_BASE_DIR,
+  SK_SYS_CHAT_UPLOAD_SUBDIR,
+  DEFAULT_CHAT_UPLOAD_SUBDIR,
+} from '../../constants/settings.constants';
+import { normalizeChatUploadSubdir } from '../utils/attachment-subdir.util';
 
 @Injectable()
 export class WorkspaceService {
@@ -306,6 +312,78 @@ export class WorkspaceService {
 
     // 基于工作目录解析相对路径
     return path.join(workspaceDir, filePath);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 会话附件目录（非图片聊天附件的落点，见 FileRef.refType = 'workspace'）
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * 归一附件子目录名：只接受单层安全目录名（判定与回退见 attachment-subdir.util）。
+   * 该值来自用户设置并被拼进工作目录路径，必须挡掉分隔符、盘符与上跳。
+   */
+  private normalizeAttachmentSubdir(raw?: string | null): string {
+    const normalized = normalizeChatUploadSubdir(raw);
+    if (normalized !== (raw ?? '').trim()) {
+      this.logger.warn(
+        `附件子目录名非法（${raw}），回退默认值 ${DEFAULT_CHAT_UPLOAD_SUBDIR}`,
+      );
+    }
+    return normalized;
+  }
+
+  /**
+   * 获取聊天附件子目录名（运行时设置 > 默认 'uploads'）。
+   * 实时读取，设置变更立即生效（不缓存）。
+   */
+  async getAttachmentSubdir(): Promise<string> {
+    const configured = await this.settingsStorage.getSettingValue(
+      SG_SYSTEM, SK_SYS_CHAT_UPLOAD_SUBDIR, null,
+    );
+    return this.normalizeAttachmentSubdir(
+      typeof configured === 'string' ? configured : null,
+    );
+  }
+
+  /**
+   * 解析会话附件目录的绝对路径并确保存在。
+   * @param session 会话对象（用它解析工作目录）
+   * @returns 附件目录绝对路径（<workspaceDir>/<subdir>）
+   */
+  async resolveAttachmentDir(session: any): Promise<string> {
+    const workspaceDir = await this.resolveSessionWorkspaceDir(session);
+    const subdir = await this.getAttachmentSubdir();
+    const dir = path.join(workspaceDir, subdir);
+    await this.ensureDirectoryExists(dir);
+    return dir;
+  }
+
+  /**
+   * 绝对路径 → 工作目录相对引用（FileRef.url，正斜杠、不含前导分隔符）。
+   * 落盘只存这个相对引用，模型请求组装时再桥接回绝对路径，
+   * 使工作目录改名/迁移后历史附件仍然可用。
+   */
+  toWorkspaceRelativeRef(absPath: string, workspaceDir: string): string {
+    return path
+      .relative(path.resolve(workspaceDir), path.resolve(absPath))
+      .split(path.sep)
+      .join('/');
+  }
+
+  /**
+   * 工作目录相对引用 → 绝对路径（FileRef.refType = 'workspace' 的桥接入口）。
+   * 越出工作目录的引用（上跳）返回 null，不把可疑路径喂给模型或工具。
+   */
+  resolveWorkspaceRef(relRef: string, workspaceDir: string): string | null {
+    if (!relRef) return null;
+    if (path.isAbsolute(relRef)) return path.normalize(relRef);
+    const resolvedWorkspace = path.resolve(workspaceDir);
+    const resolved = path.resolve(resolvedWorkspace, relRef);
+    if (resolved !== resolvedWorkspace && !resolved.startsWith(resolvedWorkspace + path.sep)) {
+      this.logger.warn(`附件引用越出工作目录，已拒绝：${relRef}`);
+      return null;
+    }
+    return resolved;
   }
 
 }

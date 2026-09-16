@@ -9,8 +9,8 @@ import {
   META_DOMAIN_KB,
   MetadataBootstrapGate,
 } from '../../src/common/database/metadata-bootstrap.gate';
-import { KBChunkRepository } from '../../src/common/database/kb-chunk.repository';
-import { KBFileRepository } from '../../src/common/database/kb-file.repository';
+import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
+import { KBFileRepository } from '../../src/modules/knowledge-base/kb-file.repository';
 import { KbSearchService } from '../../src/modules/knowledge-base/kb-search.service';
 
 /**

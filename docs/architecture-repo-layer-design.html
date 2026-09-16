@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Repo 层的去留 · 文件存储时代的持久化架构</title>
+<style>
+  :root{
+    --bg:#fafafa; --ink:#16181a; --muted:#5c636b; --faint:#8a9099;
+    --hair:#e3e5e8; --hair-strong:#c9cdd2;
+    --accent:#2e5e7e; --accent-wash:#eef3f6;
+    --bad:#a13c3c; --good:#3d7a50; --warn:#9a6b2f;
+    --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+    --sans:"Segoe UI","PingFang SC","Microsoft YaHei",-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.68;-webkit-font-smoothing:antialiased}
+  .canvas{max-width:1120px;margin:0 auto;padding:56px 40px 80px}
+
+  .masthead{border-bottom:1px solid var(--ink);padding-bottom:28px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+          text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.18;font-weight:600;letter-spacing:-.02em;max-width:800px}
+  .lede{font-size:16.5px;color:var(--muted);max-width:740px;margin-top:14px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:28px;margin-top:22px;
+            font-family:var(--mono);font-size:12px;color:var(--faint)}
+  .meta-row b{display:block;color:var(--ink);font-weight:600;font-size:13px;margin-top:2px}
+
+  .verdict{margin:34px 0 0;padding:20px 24px;border:1px solid var(--ink);background:#fff;max-width:900px}
+  .verdict .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--accent)}
+  .verdict p{font-size:15px;margin-top:6px;max-width:none}
+  .verdict b{font-weight:600}
+
+  section{margin-top:60px}
+  .sec-head{display:flex;align-items:baseline;gap:16px;border-bottom:1px solid var(--ink);
+            padding-bottom:11px;margin-bottom:24px}
+  .sec-head .no{font-family:var(--mono);font-size:13px;color:var(--accent)}
+  .sec-head h2{font-size:23px;font-weight:600}
+  .sec-head .aside{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.08em}
+  h3{font-size:16px;font-weight:600;margin:26px 0 8px}
+  p{margin:9px 0;max-width:720px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--accent-wash);
+       padding:1px 5px;border-radius:2px}
+  strong{font-weight:600}
+  p.note{font-size:13px;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+     color:var(--muted);text-align:left;padding:9px 12px;border-bottom:1px solid var(--ink);font-weight:600}
+  td{padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.55}
+  tr:last-child td{border-bottom:1px solid var(--hair-strong)}
+  .tbl-wrap{max-width:960px}
+  td code{white-space:nowrap}
+
+  /* layer compare */
+  .stack{display:grid;grid-template-columns:1fr 56px 1fr;max-width:960px;margin:22px 0;border:1px solid var(--hair-strong);background:#fff}
+  .stack .side{padding:0}
+  .stack .side-title{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:12px 18px;
+                     border-bottom:1px solid var(--hair);color:var(--muted)}
+  .stack .rows{padding:8px 0 14px}
+  .stack .r{padding:8px 18px;font-size:13.5px;line-height:1.5}
+  .stack .r b{font-weight:600}
+  .stack .r .d{display:block;font-size:11.5px;color:var(--faint)}
+  .stack .r.hot{background:#fdf1f0;border-left:2px solid var(--bad);margin:0 12px;padding:8px 6px}
+  .stack .r.ok{background:#f0f6f1;border-left:2px solid var(--good);margin:0 12px;padding:8px 6px}
+  .stack .mid{display:flex;align-items:center;justify-content:center;
+              border-left:1px solid var(--hair);border-right:1px solid var(--hair);
+              font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+  /* mismatch cards */
+  .mis{border:1px solid var(--hair-strong);background:#fff;max-width:960px;margin:16px 0;padding:18px 24px}
+  .mis .h{display:flex;gap:12px;align-items:baseline;margin-bottom:6px}
+  .mis .h .n{font-family:var(--mono);font-size:12px;color:var(--bad)}
+  .mis .h b{font-size:15px;font-weight:600}
+  .mis p{font-size:13.5px;color:var(--muted);max-width:860px;margin:4px 0}
+  .mis p b{color:var(--ink)}
+  .mis .code{margin-top:8px;padding:8px 12px;background:var(--bg);border-left:2px solid var(--hair-strong);
+             font-family:var(--mono);font-size:11.5px;color:var(--muted);overflow-x:auto;white-space:pre;line-height:1.7}
+
+  /* principle grid */
+  .principles{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--hair-strong);max-width:960px;margin:20px 0;background:#fff}
+  .pr{padding:16px 20px;border-bottom:1px solid var(--hair)}
+  .pr:nth-child(odd){border-right:1px solid var(--hair)}
+  .pr:nth-last-child(-n+2){border-bottom:0}
+  .pr b{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+  .pr span{font-size:12.5px;color:var(--muted);line-height:1.55;display:block}
+
+  /* insight block */
+  .insight{max-width:900px;margin:24px 0;padding:22px 26px;border-left:3px solid var(--accent);
+           background:var(--accent-wash)}
+  .insight .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--accent)}
+  .insight p{max-width:none;font-size:14.5px;margin-top:6px}
+
+  /* timeline */
+  .road{max-width:960px;margin:20px 0;border-left:1px solid var(--ink)}
+  .road .step{display:grid;grid-template-columns:70px 240px 1fr;border-bottom:1px solid var(--hair)}
+  .road .step:last-child{border-bottom:0}
+  .road .ph{font-family:var(--mono);font-size:12px;color:var(--accent);padding:16px 0 0 16px}
+  .road .what{padding:14px 18px;font-weight:600;font-size:14px}
+  .road .what .sub{display:block;font-family:var(--mono);font-size:11px;color:var(--faint);font-weight:400;margin-top:3px}
+  .road .why{padding:14px 18px 14px 0;font-size:13.5px;color:var(--muted);line-height:1.6}
+  .road .why b{color:var(--ink)}
+
+  .colophon{margin-top:70px;border-top:1px solid var(--ink);padding-top:18px;
+            font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.9}
+
+  @media (max-width:900px){
+    .canvas{padding:36px 20px 60px}
+    h1{font-size:28px}
+    .stack{grid-template-columns:1fr}
+    .stack .mid{border:0;padding:4px 0}
+    .principles{grid-template-columns:1fr}
+    .pr:nth-child(odd){border-right:0}
+    .pr:nth-last-child(-n+2){border-bottom:1px solid var(--hair)}
+    .pr:last-child{border-bottom:0}
+    .road .step{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <header class="masthead">
+    <div class="kicker">Architecture Design Note · guada · 2026-09-16</div>
+    <h1>Repo 层的去留<br>文件存储时代的持久化架构</h1>
+    <p class="lede">回应一个具体质疑：DB→文件迁移后，"Repo 壳 + 文件芯"——保留数据库形状的方法签名、内部替换为文件操作——到底合不合理？如果从零设计，还会这样画持久化边界吗？</p>
+    <div class="meta-row">
+      <div>对象<b>common/database/ 下 6 个 Repository 兼容层</b></div>
+      <div>方法<b>代码走读 + 调用方分析 + 范式对比</b></div>
+      <div>关联<b>architecture-audit-2026-09-16.html（体检报告）</b></div>
+    </div>
+
+    <div class="verdict">
+      <span class="tag">VERDICT</span>
+      <p><b>迁移期合理（教科书策略），长期不合理（五处真实错配）；从零设计不设这一层——每个域的 FileStore 直接充当持久化 API。</b>Repo 模式本身不是数据库专属，但它的接口形状（分页、{items,total}、JOIN 水合、CRUD）全部来自 SQL 世界，套在文件存储上是形状错配。它是迁移的脚手架，不是建筑的承重墙——完成使命后应随主库一起退场（已在既定计划内）。</p>
+    </div>
+  </header>
+
+  <!-- ============ 01 ============ -->
+  <section>
+    <div class="sec-head"><span class="no">01</span><h2>"DB 写法"的精确画像</h2><span class="aside">WHAT THE SHELL LOOKS LIKE</span></div>
+    <p>现行链路是 <code>Service → Repository（DB 形状接口）→ FileStore（文件实现）</code>。Repository 模式在定义上是"持久化无关"的抽象（PoEAA），但实践中它的方法形状几乎全部从 ORM/SQL 世界继承。这个项目的兼容层带着五个真实痕迹：</p>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>症状</th><th>代码证据</th><th>来源范式</th></tr></thead>
+      <tbody>
+        <tr><td><b>OFFSET 分页</b>：findAll(skip, limit) → {items, total}</td><td><code>character.repository.ts</code>：listCharacters() 全量读后 .slice() 内存切</td><td>SQL OFFSET/LIMIT + COUNT(*)</td></tr>
+        <tr><td><b>JOIN 水合</b>：hydrate() 补 relation</td><td><code>session.repository.ts</code> 补 session.character，注释明言"保持原 Prisma include 形状，调用方零改动"</td><td>SQL include / JOIN</td></tr>
+        <tr><td><b>CRUD 动词</b>：create / update(id, patch) / delete</td><td>全部 6 个 Repo 的接口面</td><td>关系表："一行"语义</td></tr>
+        <tr><td><b>DB 命名空间</b></td><td><code>common/database/</code>、<code>database.module.ts</code> 提供文件存储类</td><td>DB 时代目录遗存</td></tr>
+        <tr><td><b>形状泄漏到 HTTP</b></td><td><code>sessions.controller.ts</code> @Query skip/limit 翻页；前端分页类型同形状</td><td>REST-on-SQL 惯例</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>所以这个直觉有坚实的依据：文件实现只是被塞进了为数据库设计的接口里。"把 repo 换成文件操作"描述的正是这种<b>换芯不换壳</b>的状态。</p>
+  </section>
+
+  <!-- ============ 02 ============ -->
+  <section>
+    <div class="sec-head"><span class="no">02</span><h2>为什么迁移期这样做是对的</h2><span class="aside">SEAM FIRST, SWAP LATER</span></div>
+    <p>迁移重构的第一目标不是架构美，是<b>行为等价可验证</b>。保持 Repo 形状换芯，买到三样东西：</p>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>收益</th><th>机制</th><th>在本项目中的体现</th></tr></thead>
+      <tbody>
+        <tr><td><b>现成的回归网</b></td><td>18 个调用方零改动 → 原有测试、HTTP 契约、前端行为全部成为新旧实现的对比基准</td><td>存储切换的语义变化被限制在 Repo 内部；diff 可 review、出错可二分</td></tr>
+        <tr><td><b>介质感知唯一收口</b></td><td>"权威来源在哪"只在一个层有答案</td><td>审计结论能干净到"运行期零 Prisma"——收口让 DB 快照与文件并存期不失控</td></tr>
+        <tr><td><b>真实可用的逃生通道</b></td><td>表冻结不删 + 接口形状不变</td><td>上线出大问题时"接回 DB"是把 Store 换回去的事，不是重写</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>这是标准的 seam-first 重构策略，选择本身没有问题——<b>问题只在于"择机清理"是否真的发生</b>。兼容层的危险从来不是它的存在，而是它悄悄从脚手架变成永久结构。</p>
+  </section>
+
+  <!-- ============ 03 ============ -->
+  <section>
+    <div class="sec-head"><span class="no">03</span><h2>为什么长期留它是错的：五处错配</h2><span class="aside">WHERE THE SHAPE FIGHTS THE MEDIUM</span></div>
+
+    <div class="mis">
+      <div class="h"><span class="n">01</span><b>分页形状隐藏真实成本</b></div>
+      <p>SQL 里 OFFSET 是索引扫描、O(page)；文件实现里每次 findAll 都是<b>全量 list 再内存切，O(N)</b>。接口形状让调用方以为翻页便宜。现成案例：侧边栏渐进扫描每轮 limit=25 循环拉，233 个会话下每轮都是全量重排——量级再上一个数量级，这个形状开始疼。</p>
+    </div>
+
+    <div class="mis">
+      <div class="h"><span class="n">02</span><b>total 是 COUNT 的遗迹</b></div>
+      <p>{items, total} 的唯一消费者是前端算"有没有下一页"。文件范式用游标语义（hasMore + nextCursor）就能以 O(page) 替代 O(N) 的精确计数。</p>
+    </div>
+
+    <div class="mis">
+      <div class="h"><span class="n">03</span><b>hydrate 是 JOIN 的遗迹</b></div>
+      <p>文件范式下没有"关系"，只有字符串 id。解析时机应归消费者（按需、懒解析），而不是 Repo 每次列表都统一水合——每次 findAll 全量 hydrate 是把 N 次缓存查询做在调用方不需要的时机。</p>
+    </div>
+
+    <div class="mis">
+      <div class="h"><span class="n">04</span><b>CRUD 掩蔽领域操作</b></div>
+      <p>FileStore 真正贴合文件的 API 是领域动词：<code>writeMetaDirect</code> / <code>rewriteRelativePathPrefix</code> / <code>seedBundledDefaults</code> / <code>childrenOf</code>。Repo 把它们压回 update(id, patch) 再给 Service 用——Service → Repo（压扁）→ Store（还原）绕一圈，还丢了写入语义的精确性（改 title 与 touch 排序键的原子性边界本不相同）。</p>
+      <div class="code">// 实际调用链：
+sessionService.update(id, {title})
+  → sessionRepo.update(id, patch)        // CRUD 形状
+    → sessionStore.writeMetaDirect(meta) // 领域形状（内部再还原出精确写语义）</div>
+    </div>
+
+    <div class="mis">
+      <div class="h"><span class="n">05</span><b>双层零增量价值</b></div>
+      <p>FileStore 已有缓存、原子写（tmp+rename）、排序键；Repo 是无状态翻译层，唯一功能是"形状兼容 DB 时代调用方"——这件事只该存在到迁移结束。</p>
+    </div>
+  </section>
+
+  <!-- ============ 04 ============ -->
+  <section>
+    <div class="sec-head"><span class="no">04</span><h2>从零设计：不设 Repo 层</h2><span class="aside">GREENFIELD LAYOUT</span></div>
+
+    <div class="stack">
+      <div class="side">
+        <div class="side-title">从零设计的分层</div>
+        <div class="rows">
+          <div class="r"><b>Controller</b><span class="d">HTTP 形状 · 游标分页</span></div>
+          <div class="r"><b>Service / UseCase</b><span class="d">业务语义</span></div>
+          <div class="r ok"><b>Store（每域一个）</b><span class="d">目录布局 + 缓存 + 原子写 + 领域动词</span></div>
+          <div class="r"><b>磁盘</b><span class="d">meta.json / JSONL / yaml / kb.db</span></div>
+        </div>
+      </div>
+      <div class="mid">vs</div>
+      <div class="side">
+        <div class="side-title">现行分层</div>
+        <div class="rows">
+          <div class="r"><b>Controller</b><span class="d">skip/limit 分页</span></div>
+          <div class="r"><b>Service</b><span class="d">业务语义</span></div>
+          <div class="r hot"><b>Repo（翻译层）</b><span class="d">DB 形状 ↔ 文件实现的形状税</span></div>
+          <div class="r"><b>Store</b><span class="d">已经是正确的持久化边界</span></div>
+          <div class="r"><b>磁盘</b></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>不设 Repo 的三条理由</h3>
+    <p><b>其一，可替换性是伪需求。</b>Repo 抽象的价值在于换后端，而你刚做完 SQL→文件的一次性替换，产品语义（目录名即 id、删目录即删会话）已经长进文件布局——换回 SQL 的概率趋近于零，为不存在的需求养一层是纯开销。</p>
+    <p><b>其二，领域动词无法泛化。</b>rekey、补种、改路径前缀、childrenOf——这些方法没有"通用接口"可抽象，强行泛化只能得到又一层 CRUD。</p>
+    <p><b>其三，Store 本身就是正确形态的 Repository。</b>按聚合根（=目录）组织、领域动词命名、持有缓存与原子写——它已经履行了持久化边界的全部职责，中间再夹一层只有形状税。</p>
+
+    <h3>与介质无关、依然要守的原则</h3>
+    <div class="principles">
+      <div class="pr"><b>持久化细节不上浮</b><span>Service 不知道 meta.json 的存在——这条现有 FileStore 已满足。</span></div>
+      <div class="pr"><b>排序过滤分页在内存做</b><span>个人工具量级 &lt;1 万条/域，全量内存排序是对的；别模仿 DB 做查询下推。</span></div>
+      <div class="pr"><b>写路径全原子 + 单写者</b><span>tmp+rename 与 mutex 是文件范式的"事务"，缺了它们才有真正的数据丢失风险。</span></div>
+      <div class="pr"><b>id 语义在 Store 层强制</b><span>不可改名（改名断引用）与路径安全校验（assertValidId）不是调用方义务。</span></div>
+    </div>
+
+    <div class="insight">
+      <span class="tag">DESIGN INSIGHT · 布局即语义</span>
+      <p>文件范式特有的优势：DB 时代"一行会话"对用户不可见，文件时代"一个会话 = 一个目录 = meta + JSONL + workflows"是<b>用户可感知、可利用的领域事实</b>——备份、迁移、排障都是整目录操作。所以从零设计时持久化边界应该<b>故意更薄</b>：允许一部分"实现细节"上升为领域概念（目录名即 id、删库 = rm -rf、改名 = 一条 UPDATE）。这种语义丰富度是 DB 抽象给不了的，也正是硬套 Repo 会把它压扁的原因。</p>
+    </div>
+  </section>
+
+  <!-- ============ 05 ============ -->
+  <section>
+    <div class="sec-head"><span class="no">05</span><h2>落到本项目：按既定节奏收，不推翻</h2><span class="aside">CONVERGENCE PATH</span></div>
+    <div class="road">
+      <div class="step">
+        <div class="ph">NOW</div>
+        <div class="what">Repo 冻结<span class="sub">不加方法</span></div>
+        <div class="why">新功能直接调 FileStore 领域 API。防止这个迁移要拆的层继续长厚——层越厚，删除日的 diff 越大。</div>
+      </div>
+      <div class="step">
+        <div class="ph">+2 版本</div>
+        <div class="what">Repo 层整体删除<span class="sub">已在既定计划内</span></div>
+        <div class="why">随 bootstrap 脚手架一起清，调用方改调 Store 领域方法；hydrate 消灭，角色/id 解析上浮给消费者按需做。</div>
+      </div>
+      <div class="step">
+        <div class="ph">顺带</div>
+        <div class="what">HTTP 分页 skip/limit → 游标<span class="sub">sessions 优先</span></div>
+        <div class="why">sessions 已按 lastActiveAt + 确定性 id 排序，天然支持游标；前端类型同步改。其余域量级小，保留现状记账即可。</div>
+      </div>
+      <div class="step">
+        <div class="ph">收尾</div>
+        <div class="what">名字归位<span class="sub">database → file-store</span></div>
+        <div class="why">Repo 删除后 common/database/ 目录自然消失；database.module 按域注册或改名，让目录结构与存储现实一致。</div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:20px">一句话收束：兼容层已经完成历史使命——运行期零 DB、行为等价验证通过、tsc 干净。它的价值在于"删除时调用方怎么改"路径清晰，而不在于它自己继续存在。</p>
+  </section>
+
+  <footer class="colophon">
+    <b>guada · Repo 层去留设计笔记</b> — 2026-09-16 · 姊妹篇：architecture-audit-2026-09-16.html（架构体检）
+  </footer>
+
+</div>
+</body>
+</html>

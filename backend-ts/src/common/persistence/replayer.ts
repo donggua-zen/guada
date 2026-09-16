@@ -33,7 +33,7 @@ import type {
   MessageSource,
   FileRef,
 } from '../types/conversation.types';
-import { normalizeMediaType, isImageMediaType } from '../utils/media-type.util';
+import { normalizeMediaType, isVisionImageMediaType } from '../utils/media-type.util';
 
 /**
  * 创建初始回放状态（纯扁平消息 surface——LLM 折叠态，零 turn 结构）。
@@ -329,15 +329,16 @@ function toFileRef(f: MessageFile): FileRef {
     bytes: f.fileSize,
     name: f.displayName ?? f.fileName,
     url,
+    ...(f.fileExtension ? { fileExtension: f.fileExtension } : {}),
     ...(url ? {} : { attachmentId: f.fileId }),
   };
 }
 
-/** 平铺 files → image/file 块 */
+/** 平铺 files → image/file 块（块形态判定见 isVisionImageMediaType） */
 function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFile[]): void {
   for (const f of files ?? []) {
     const ref = toFileRef(f);
-    if (isImageMediaType(ref.mediaType)) {
+    if (isVisionImageMediaType(ref.mediaType)) {
       blocks.push({ type: 'image', attachment: ref });
     } else {
       blocks.push({ type: 'file', attachment: ref });

@@ -52,11 +52,11 @@
         <!-- 文件列表 -->
         <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="(userFiles?.length ?? 0) > 0">
           <FileItem v-for="file, index in userFiles" :key="file.id || index" :name="file.name"
-            :type="file.type?.startsWith('image') ? 'image' : 'file'"
+            :type="isVisionImageMediaType(file.type) ? 'image' : 'file'"
             :ext="file.ext" :size="file.size"
             :preview-url="toResourceUrl(file.previewUrl || file.url)"
-            :clickable="file.type?.startsWith('image') ?? false"
-            @click="handleImageClick(Number(index))"></FileItem>
+            :clickable="isVisionImageMediaType(file.type)"
+            @click="handleImageClick(file)"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
         <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
@@ -243,6 +243,7 @@ import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
+import { isVisionImageMediaType } from '@/utils/media-type';
 import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
@@ -678,13 +679,23 @@ const formatTokenNumber = (num: number | null): string => {
 // ============================================
 const previewList = computed(() => {
   const files = userFiles.value || [];
-  // 仅图片进入大图预览，绝对化后取原图 url（无缩略图路径时回退）
+  // 仅可内联的位图进入大图预览（svg/ico 等 image/* 前缀但不渲染的类型排除），
+  // 绝对化后取原图 url（无缩略图路径时回退）
   return files
-    .filter((f: any) => f.type?.startsWith("image"))
+    .filter((f: any) => isVisionImageMediaType(f.type))
     .map((f: any) => toResourceUrl(f.url || f.previewUrl));
 });
 
-const handleImageClick = (index: number) => {
+/**
+ * 打开大图预览。
+ * 按附件对象在「图片子集」里的位置取索引——不能直接用列表下标：
+ * 同一条消息现在可以同时有图片和普通文件（类型限制已取消），
+ * 用外层下标会让预览取错图、甚至越界。
+ */
+const handleImageClick = (file: any) => {
+  const images = (userFiles.value || []).filter((f: any) => isVisionImageMediaType(f.type));
+  const index = images.indexOf(file);
+  if (index < 0) return;
   currentPreViewIndex.value = index;
   showImageViewer.value = true;
 };

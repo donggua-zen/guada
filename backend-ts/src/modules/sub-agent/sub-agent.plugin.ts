@@ -3,8 +3,9 @@ import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { SubAgentManager } from "./sub-agent.manager";
 import { PluginApi } from "../plugins/api/plugin-api";
-import { PluginContext } from "../plugins/types/plugin.types";
-import { CharacterRepository } from "../../common/database/character.repository";
+import { PluginContext, RolePluginConfig } from "../plugins/types/plugin.types";
+import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
+import { CharacterFileStore } from "../characters/character-file.store";
 import langZh from "./sub-agent.lang.zh.json";
 import langEn from "./sub-agent.lang.en.json";
 
@@ -21,7 +22,7 @@ export class SubAgentPlugin extends PluginBase {
 
   constructor(
     private subAgentManager: SubAgentManager,
-    private characterRepo: CharacterRepository,
+    private characterStore: CharacterFileStore,
   ) {
     super();
   }
@@ -54,11 +55,20 @@ export class SubAgentPlugin extends PluginBase {
       name: "%subAgent.toolkitName%",
       description: "%subAgent.toolkitDescription%",
       loadMode: "eager",
+      // 子代理有自己的管理页：总开关由子代理 tab 写入 settings.plugins.sub_agent，
+      // 逐项偏好在 settings.agents
+      governance: "self",
       activator:
         "Call this toolkit when you need to create a sub-agent to execute an independent task",
       handler: async (ctx) => {
         // sub_agent 会话禁止递归加载子代理工具
         if (ctx.session.sessionType === "sub_agent") {
+          return { loadMode: "none" as const };
+        }
+        // 自有管理页的总开关（配置键为 sub_agent，工具包 id 为 subagent）
+        const entry = (ctx.pluginsConfig as RolePluginConfig | undefined)
+          ?.sub_agent;
+        if (!isToolkitAllowedByRoleConfig(entry, "subagent")) {
           return { loadMode: "none" as const };
         }
         // 无已启用子代理时不注入工具（避免无意义占用）
@@ -279,7 +289,7 @@ The sub-agent has its own independent conversation context and tool capabilities
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
 
-        const { items } = await this.characterRepo.findAll(0, 200);
+        const items = (await this.characterStore.listCharacters()).slice(0, 200);
 
         // 排除当前会话自身的角色
         const currentCharacterId = context?.session?.characterId;

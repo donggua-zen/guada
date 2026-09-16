@@ -41,7 +41,13 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
   function registerPlugin(
     id: string,
     category: "system" | "core" | "extended",
-    kits: Array<{ id: string; loadMode?: "eager" | "lazy"; tool?: string }>,
+    kits: Array<{
+      id: string;
+      loadMode?: "eager" | "lazy";
+      tool?: string;
+      governance?: "self";
+      handler?: (ctx: any) => any;
+    }>,
     opts: { essential?: boolean } = {},
   ) {
     const manifest: any = {
@@ -55,7 +61,13 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     PluginRegistry.registerManifest(manifest);
     for (const k of kits) {
       PluginRegistry.registerToolKit(id, {
-        def: { id: k.id, name: k.id, loadMode: k.loadMode ?? "eager" },
+        def: {
+          id: k.id,
+          name: k.id,
+          loadMode: k.loadMode ?? "eager",
+          ...(k.governance ? { governance: k.governance } : {}),
+          ...(k.handler ? { handler: k.handler } : {}),
+        },
         tools: [
           {
             name: k.tool ?? `${k.id}_tool`,
@@ -287,5 +299,145 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(p.enabled).toBe(true); // enabled 被忽略，插件不被禁用
     expect(p.enabledToolKits.find((k) => k.id === "la")!.enabled).toBe(false);
     expect(p.enabledToolKits.find((k) => k.id === "lb")!.enabled).toBe(true);
+  });
+
+  // ── toolkits_filter: "deny_all"（全部禁用）──
+  //
+  // "关掉整个能力包但不改配置"：压过两个列表，列表原样保留供解除时恢复。
+  // 与 __strategy: "deny_nonsystem" 的区别：后者是跨插件的批量姿态，前者是单插件条目。
+
+  it("deny_all：该插件的全部工具包被拒，且插件本身不被禁用", async () => {
+    registerPlugin("t_deny_all", "core", [
+      { id: "da1", tool: "da1_tool" },
+      { id: "da2", tool: "da2_tool" },
+    ]);
+
+    const res = await manager.resolvePlugins(
+      undefined,
+      {
+        t_deny_all: { toolkits_filter: "deny_all", toolkits_allow: ["da1"] },
+      } as any,
+      true,
+    );
+    const p = find(res, "t_deny_all");
+    expect(p.enabled).toBe(true);
+    // 记住的允许列表被压过：da1 也被拒
+    expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
+    expect(p.enabledTools).toHaveLength(0);
+  });
+
+  it("deny_all 只作用于该插件，不影响其它插件的条目", async () => {
+    registerPlugin("t_da_on", "core", [{ id: "on_k", tool: "on_tool" }]);
+    registerPlugin("t_da_off", "core", [{ id: "off_k", tool: "off_tool" }]);
+
+    const res = await manager.resolvePlugins(
+      undefined,
+      { t_da_off: { toolkits_filter: "deny_all" } } as any,
+      true,
+    );
+    expect(find(res, "t_da_on").enabledToolKits[0].enabled).toBe(true);
+    expect(find(res, "t_da_off").enabledToolKits[0].enabled).toBe(false);
+  });
+
+  // ── 自治理工具包（governance: "self"）──
+  // 语义：不参与角色层过滤（__strategy / __default / 显式 deny 均无效），
+  // 由自己的 handler 依据 pluginsConfig 决定 loadMode。
+  // handler 只在 !denied 时被调用，所以"永不被 denied"是自治理成立的前提。
+
+  const fakeSession = {
+    sessionId: "s1",
+    sessionType: "web",
+    getSettings: () => ({}),
+  } as any;
+
+  it("自治理工具包在 deny_nonsystem 下不被拒绝，且 handler 被调用并由其裁决", async () => {
+    const handler = jest.fn(async () => ({ loadMode: "none" as const }));
+    registerPlugin("t_self_dn", "system", [
+      { id: "self_k", tool: "self_tool", governance: "self", handler },
+    ]);
+    // 同一插件再放一个普通工具包作为对照
+    PluginRegistry.registerToolKit("t_self_dn", {
+      def: { id: "plain_k", name: "plain_k", loadMode: "eager" },
+      tools: [
+        {
+          name: "plain_tool",
+          description: "",
+          parameters: { type: "object", properties: {} },
+          handler: async () => ({ content: "" }),
+          toolSet: "plain_k",
+        },
+      ],
+      prompts: [],
+    } as any);
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { __strategy: "deny_nonsystem" } as any,
+      false,
+    );
+    const p = find(res, "t_self_dn");
+    const selfKit = p.enabledToolKits.find((k) => k.id === "self_k")!;
+    const plainKit = p.enabledToolKits.find((k) => k.id === "plain_k")!;
+
+    // 自治理：不被批量开关扫，handler 执行，loadMode 由 handler 决定
+    expect(selfKit.enabled).toBe(true);
+    expect(handler).toHaveBeenCalled();
+    expect(selfKit.loadMode).toBe("none");
+    expect(p.enabledTools.map((t) => t.name)).not.toContain("self_tool");
+
+    // 对照：普通工具包照旧被 deny_nonsystem 全拒
+    expect(plainKit.enabled).toBe(false);
+    expect(p.enabledTools.map((t) => t.name)).not.toContain("plain_tool");
+  });
+
+  it("自治理工具包不受 __default:false 与显式 deny 影响", async () => {
+    const handler = jest.fn(async () => ({ loadMode: "eager" as const }));
+    registerPlugin("t_self_wl", "core", [
+      { id: "s2", tool: "s2_tool", governance: "self", handler },
+    ]);
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { __default: false, t_self_wl: { toolkits_deny: ["s2"] } } as any,
+      false,
+    );
+    const kit = find(res, "t_self_wl").enabledToolKits.find(
+      (k) => k.id === "s2",
+    )!;
+    expect(kit.enabled).toBe(true);
+    expect(kit.loadMode).toBe("eager");
+    expect(handler).toHaveBeenCalled();
+    expect(find(res, "t_self_wl").enabledTools.map((t) => t.name)).toContain(
+      "s2_tool",
+    );
+  });
+
+  it("handler 收到 pluginsConfig（角色配置透传）", async () => {
+    const handler = jest.fn(async () => ({ loadMode: "eager" as const }));
+    registerPlugin("t_self_cfg", "core", [
+      { id: "s3", tool: "s3_tool", governance: "self", handler },
+    ]);
+
+    const roleCfg = { t_self_cfg: { toolkits_deny: ["nope"] } } as any;
+    await manager.resolvePlugins(fakeSession, roleCfg, false);
+
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ pluginsConfig: roleCfg }),
+    );
+  });
+
+  it("未声明 self 的工具包行为不变：仍被 deny_nonsystem 裁剪", async () => {
+    registerPlugin("t_plain_reg", "core", [
+      { id: "plain_reg_k", tool: "plain_reg_tool" },
+    ]);
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { __strategy: "deny_nonsystem" } as any,
+      true,
+    );
+    const p = find(res, "t_plain_reg");
+    expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
+    expect(p.enabledTools).toHaveLength(0);
   });
 });

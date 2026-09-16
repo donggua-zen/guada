@@ -8,6 +8,11 @@ GuaDa 的知识库模块实现了完整的 **检索增强生成 (RAG)** 流程�
 知识库模块
 ├── knowledge-base.service.ts     → 知识库 CRUD
 ├── kb-file.service.ts            → 文件管理（上传、删除、移动、重命名）
+├── kb-meta.store.ts              → KB 配置（kb.json）
+├── kb-database.service.ts        → 每库一个 kb.db 的连接注册表（懒开 + LRU + schema 迁移）
+├── kb-search.service.ts          → 语义 / FTS / BM25 / RRF 融合检索
+├── kb-tokenizer.ts               → 分词（写入与查询同口径）
+├── kb-schema.ts                  → kb.db 表结构与版本迁移
 ├── kb-files.controller.ts        → 文件 REST API
 ├── kb-search.controller.ts       → 搜索 REST API
 ├── knowledge-bases.controller.ts → 知识库 REST API
@@ -19,6 +24,27 @@ GuaDa 的知识库模块实现了完整的 **检索增强生成 (RAG)** 流程�
     ├── knowledge-base-tool.provider.ts  → Agent 搜索工具
     └── document-tool.provider.ts         → Agent 文档管理工具
 ```
+
+## 存储分层
+
+一个知识库 = **一个自包含目录**（原件 + 元信息 + 分块 + 向量都在里面）：
+
+```
+<知识库根>/<kbId>/
+  kb.json                   KB 配置
+  kb.db                     条目 + 分块正文 + 向量 + FTS
+  raw/<itemId>/<文件名>      原件副本（上传时写入）
+```
+
+处理链：`raw/` 原件 → 解析 → 分块 → 写入 `kb.db`（正文与向量**同一个事务**）→ FTS 由正文派生。
+
+- **知识库根**：`kbStorageRoot` 设置 → `KB_DATA_DIR` → `USERDATA_DIR/data/kb`（Electron）→ `./data/kb`。启动日志会打印实际生效的根。
+- **原件复制进库**：上传即写入 `raw/<itemId>/`（`<itemId>` 是条目 id，所以改名只改数据库行、不搬字节）。库目录可整体拷走，删库即删目录、真正释放空间。
+- **向量可重建**：`chunk.embedding` 是派生数据，正文正本在 `chunk.content` 与 `raw/` 原件。缺向量或向量损坏时用 `pnpm kb:reembed` 从正文重算，**不必**重新解析/OCR。
+- **删条目/删库**：分块与向量在同一个事务里删除，再删 `raw/<itemId>/`；删库是 `关闭连接 → rm -rf <kbId>/`（Windows 上不先关句柄会删不掉）。
+- **孤儿处理**：`raw/` 下无人认领的目录、以及共享上传目录里没有元信息引用的历史文件，启动时**只报告不自动删**（那是用户的数据）。
+
+完整设计（不变式、连接管理、迁移与回滚、备份注意）见 [design/kb-storage.md](design/kb-storage.md)。
 
 ## 核心能力
 
@@ -49,9 +75,9 @@ Token 智能分块 → chunking.service
     ├─ 按 Token 数切割（可配置）
     └─ 重叠窗口保留上下文连贯性
     ↓
-向量嵌入 → embedding.service
-    ├─ 生成向量
-    └─ 存入 sqlite-vec 索引
+向量嵌入 → embedding.service（生成向量）
+    ↓
+写入 kb.db → KBChunkRepository.replaceChunks（正文 + 向量 + FTS 单事务）
 ```
 
 支持 40+ 文件格式，异步处理自动恢复中断。

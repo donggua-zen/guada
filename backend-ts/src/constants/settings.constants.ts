@@ -10,6 +10,10 @@ export const SG_PLUGINS = 'plugins_config';
  * 系统级设置键名 (SK_SYS = Setting Key System)
  */
 export const SK_SYS_WORKSPACE_BASE_DIR = 'workspaceBaseDir';
+/** 会话工作目录下的聊天附件子目录名（默认 uploads；单层目录名，不含分隔符） */
+export const SK_SYS_CHAT_UPLOAD_SUBDIR = 'chatUploadSubdir';
+/** 聊天附件子目录的默认名（Web 非图片附件的落点） */
+export const DEFAULT_CHAT_UPLOAD_SUBDIR = 'uploads';
 /** 知识库存储根（空 = 用默认位置；必须本地绝对路径，不接受 UNC） */
 export const SK_SYS_KB_STORAGE_ROOT = 'kbStorageRoot';
 export const SK_SYS_MAX_TOOL_ITERATIONS = 'maxToolIterations';

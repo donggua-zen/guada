@@ -488,8 +488,10 @@ export class OpenAIAdapter implements IProtocolAdapter {
       if (block.type === "text") {
         if (block.text) parts.push({ type: "text", text: block.text });
       } else if (block.type === "image") {
+        // 传整个附件对象：attachmentToPart 按 refType 分派物理路径
+        // （'session' 图片的 url 是自包含引用，只传字符串无法反推会话目录）
         const part = await attachmentToPart(
-          block.attachment.url ?? block.attachment.attachmentId,
+          block.attachment,
           block.attachment.mediaType,
         );
         if (part) {

@@ -14,6 +14,7 @@
 - [构建与启动问题](#构建与启动问题)
 - [SSE 流式传输问题](#sse-流式传输问题)
 - [日志查看与调试](#日志查看与调试)
+- [后端进程静默死亡（dev 环境）](#后端进程静默死亡dev-环境)
 
 ---
 
@@ -36,13 +37,13 @@ Error: Table 'User' does not exist in the database
 cd backend-ts
 
 # 方法一：重新初始化（会清空数据）
-npm run db:seed:force
+pnpm run db:seed:force
 
 # 方法二：仅同步表结构（保留数据）
 npx prisma db push
 
 # 验证数据库
-npm run db:verify
+pnpm run db:verify
 ```
 
 **预防措施**：
@@ -150,7 +151,7 @@ ls node_modules/@prisma/client
 }
 ```
 
-这样每次执行 `npm install` 时会自动生成客户端。
+这样每次执行 `pnpm install` 时会自动生成客户端。
 
 ---
 
@@ -201,7 +202,7 @@ taskkill /PID <PID> /F
 
 # 方法二：更换端口
 export PORT=3001
-npm run start:dev
+pnpm run start:dev
 ```
 
 **预防措施**：
@@ -375,10 +376,10 @@ cd backend-ts
 
 # 清理并重新安装
 rm -rf node_modules package-lock.json
-npm install
+pnpm install
 
 # 重新构建
-npm run build
+pnpm run build
 ```
 
 ---
@@ -407,7 +408,7 @@ npm rebuild
 
 **Electron 环境**：
 ```bash
-npm run rebuild:electron
+pnpm run rebuild:electron
 ```
 
 ---
@@ -423,7 +424,7 @@ FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed
 
 ```bash
 # 增加 Node.js 内存限制
-NODE_OPTIONS="--max-old-space-size=4096" npm run start:prod
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run start:prod
 
 # PM2 配置
 pm2 start dist/main.js --name guada-backend --node-args="--max-old-space-size=4096"
@@ -521,7 +522,7 @@ res.setHeader('Connection', 'keep-alive');
 
 ```bash
 # 开发模式（控制台输出）
-npm run start:dev
+pnpm run start:dev
 
 # 生产模式（文件日志）
 tail -f backend-ts/logs/combined.log
@@ -554,7 +555,7 @@ sudo tail -f /var/log/nginx/guada-error.log
 
 ```bash
 # 后端调试模式
-npm run start:debug
+pnpm run start:debug
 
 # 然后在 Chrome 中打开 chrome://inspect
 # 点击 "Open dedicated DevTools for Node"
@@ -562,7 +563,51 @@ npm run start:debug
 
 ---
 
-## 快速诊断脚本
+## 后端进程静默死亡（dev 环境）
+
+### 21. 后端过一段时间就访问不了，但没有任何报错
+
+**症状**：
+
+```
+[1] 22:15:35.695 > BridgeServer: client disconnected
+[1] 22:15:43.911 > Frontend loaded, checking for updates...
+```
+
+之后再刷新前端，所有请求报"无法连接到服务器"；后端落盘日志（`~/.guada-dev/logs/combined-*.log`）戛然而止，但控制台没有任何错误输出，也没有弹出"后端异常退出"对话框。
+
+**故障链（2026-09-08 排查结论）**：
+
+1. 真正的 NestJS 子进程（`ts-node-dev` 的 child）突然死亡。`BridgeServer: client disconnected` 表示 named pipe 真正关闭（bridge-server.ts 无心跳机制，只会因进程退出/连接关闭而触发）。
+2. `ts-node-dev --respawn` 对子进程死亡的处理是**静默的**（`node_modules/ts-node-dev/lib/index.js` 中 `child.on('exit')` 仅 `child = undefined`）：不打印、不重启，直到下次文件变更。注意它与文件变更触发的重启不同——后者会打印 `Restarting, xxx has been modified`。
+3. Electron 只监控 npx 包装进程（`electron/main.ts` 的 `backendProcess.on("exit")`），包装进程未退出，因此崩溃弹窗、`backend-crash.log` 都不会触发。
+4. 若子进程死前零输出（无 JS 堆栈、无 `JavaScript heap out of memory`），基本排除 JS 异常与 V8 OOM，指向**外部强杀**（杀软 TerminateProcess 等，不产生 WER 事件、无任何输出）或原生崩溃。
+
+**已内置的观测与取证手段**：
+
+| 手段 | 位置 | 说明 |
+| ---- | ---- | ---- |
+| 健康看门狗 | `electron/main.ts` `startBackendWatchdog` | 15s 探测 `/api/v1/health`，连续 3 次失败写 `[BackendWatchdog]` 错误日志（含 bridge 状态、进程存活时长）。连接被拒=进程死亡；超时=事件循环阻塞。仅记录日志，不自动重启 |
+| 诊断报告 | `logs/diagnostic-reports/` | 后端 spawn 注入 `NODE_OPTIONS=--report-on-fatalerror --report-uncaught-exception`，原生崩溃/OOM/未捕获异常时生成完整现场（native 栈、模块列表）。**外部强杀不会产生报告——报告缺失本身就是证据** |
+| 进程级异常落盘 | `backend-ts/src/main.ts` | `uncaughtException`/`unhandledRejection` 写 winston error 日志后退出，不再只依赖控制台输出 |
+| Bridge 断开时长 | `electron/bridge-server.ts` | `client disconnected` 附带连接时长：秒级+随后 `client authenticated` = 热重载；永不重连 = 进程死亡 |
+
+**事故后取证步骤**：
+
+```bash
+# 1. 看看是否为外部强杀（三者对照）
+ls ~/.guada-dev/logs/diagnostic-reports/          # 有报告 → 原生崩溃/OOM，报告内有 faulting 模块
+# 2. 查 Windows 事件日志（EventID 1000 = Application Error）
+wevtutil qe Application "/q:*[System[(EventID=1000)]]" /rd:true /c:10 /f:text
+#    无 node.exe 记录 + 无诊断报告 + 看门狗报"连接被拒" → 外部强杀（重点排查杀软行为检测）
+# 3. 看门狗日志
+grep BackendWatchdog ~/AppData/Roaming/guada-dev/logs/main.log
+```
+
+**缓解措施**：若确认为杀软（如 360）行为检测所致，将 `D:\AI\ai_chat`、`backend-ts`、node 安装目录及 `npx.cmd`/`ts-node-dev` 相关进程加入信任/白名单；临时方案是在发现后端死亡后改任一 backend 文件触发 ts-node-dev 重启，或重启应用。
+
+---
+
 
 创建 `diagnose.sh` 脚本快速检查系统状态：
 
@@ -602,7 +647,7 @@ if [ -f backend-ts/data/ai_chat.db ]; then
     echo "✓ 数据库文件存在"
     ls -lh backend-ts/data/ai_chat.db
 else
-    echo "✗ 数据库文件不存在，请运行: npm run db:seed:force"
+    echo "✗ 数据库文件不存在，请运行: pnpm run db:seed:force"
 fi
 echo ""
 

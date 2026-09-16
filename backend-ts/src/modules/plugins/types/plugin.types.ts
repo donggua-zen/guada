@@ -80,8 +80,14 @@ export type GlobalPluginConfig = Record<string, GlobalPluginEntryConfig>;
  * 因此条目中不包含 enabled 字段；旧角色数据里遗留的 enabled 会被解析器忽略。
  */
 export interface RolePluginEntryConfig {
-  /** 工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单 */
-  toolkits_filter?: "deny" | "allow";
+  /**
+   * 工具包过滤模式：
+   * - "deny"（默认）黑名单：禁用 `toolkits_deny` 中列出的
+   * - "allow" 白名单：先全拒，再放行 `toolkits_allow` 中列出的
+   * - "deny_all" 全部禁用：压过两个列表，全部拒绝；列表原样保留，
+   *   供解除全部禁用时恢复（"关掉整个能力包但不改配置"）
+   */
+  toolkits_filter?: "deny" | "allow" | "deny_all";
   /** 黑名单模式下禁用的工具包 ID 列表 */
   toolkits_deny?: string[];
   /** 白名单模式下允许的工具包 ID 列表 */
@@ -214,6 +220,14 @@ export interface ToolKitDef {
   loadMode?: ToolKitLoadMode;
   /** 是否默认启用（默认 true） */
   enabled?: boolean;
+  /**
+   * 自治理：标记后本工具包不参与角色层过滤（__strategy / __default / 显式 deny 均不生效），
+   * 由本工具包的 handler 依据 PluginContext.pluginsConfig 自行决定 loadMode。
+   *
+   * 用于"有自己管理界面"的能力包（MCP 每服务器、skills、sub_agent）：
+   * 运行时过滤机制不变，只是过滤输入由自有界面写入、裁决权在该工具包自己手里。
+   */
+  governance?: "self";
   /** 激活词/触发说明：告诉 AI 何时加载本工具包 */
   activator?: string;
   /** 运行时解析器：返回此工具包的动态属性 */

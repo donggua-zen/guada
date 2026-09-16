@@ -11,8 +11,8 @@ import {
   MetadataBootstrapGate,
 } from '../../src/common/database/metadata-bootstrap.gate';
 import { KbMetaStore } from '../../src/modules/knowledge-base/kb-meta.store';
-import { KBFileRepository } from '../../src/common/database/kb-file.repository';
-import { KBChunkRepository } from '../../src/common/database/kb-chunk.repository';
+import { KBFileRepository } from '../../src/modules/knowledge-base/kb-file.repository';
+import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
 import {
   KbMigrationBootstrapService,
   KB_PRE_SQLITE_DIR,

@@ -4,9 +4,7 @@ import { HttpModule } from "@nestjs/axios";
 import { FilesController } from "./files.controller";
 import { FileService } from "./file.service";
 import { AuthModule } from "../auth/auth.module";
-import { FileParserService } from "../knowledge-base/file-parser.service";
-import { OcrService } from "../knowledge-base/ocr.service";
-import { SettingsService } from "../settings/settings.service";
+import { getChatUploadMaxBytes } from "./upload-limits";
 
 import * as multer from "multer";
 
@@ -15,22 +13,18 @@ import * as multer from "multer";
     AuthModule,
     HttpModule,
     MulterModule.register({
+      // 内存存储：图片需要完整 buffer 交给 sharp。上限由 upload-limits 统一控制，
+      // 在进入 handler 之前就拒绝超限请求，避免无效请求占用内存。
       storage: multer.memoryStorage(),
       limits: {
-        fileSize: 1024 * 1024 * 1024, // 1GB
+        fileSize: getChatUploadMaxBytes(),
       },
-      fileFilter: (req, file, cb) => {
-        // 确保文件名编码正确
-        if (file.originalname) {
-          // 尝试处理可能的编码问题，虽然 Multer 默认通常能处理好 UTF-8
-          // 在某些 Windows 环境下可能需要 iconv-lite 等库进行转换，但先观察日志
-        }
-        cb(null, true);
-      },
+      // 刻意不做类型/扩展名过滤：普通文件对模型只是一个路径引用，
+      // 接受哪些格式由 FileService 按「是不是位图」二分决定，没有白名单。
     }),
   ],
   controllers: [FilesController],
-  providers: [FileService, FileParserService, OcrService, SettingsService],
+  providers: [FileService],
   exports: [FileService], // 导出供其他模块使用
 })
 export class FilesModule { }

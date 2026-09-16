@@ -3,6 +3,7 @@
  */
 
 import type { ISODateString } from './common'
+import type { FileRefType } from './stream/content-block.types'
 
 /**
  * 消息角色类型（与后端协议对齐）
@@ -23,10 +24,10 @@ export interface MessageState {
  * ext/displayName/previewUrl 为展示便捷字段。
  */
 export interface FileAttachment {
-    /** 展示 key（新数据 = 存储 url；旧数据 = attachmentId） */
+    /** 展示 key（新数据 = 引用 url；旧数据 = attachmentId） */
     id?: string
     name: string
-    /** 相对存储路径（uploads/...）或绝对 URL */
+    /** 引用锚点：按 refType 解释（store → 全局附件目录；workspace → 会话工作目录；local → 本机绝对路径） */
     url?: string
     /** MIME 类型（FileRef.mediaType） */
     type?: string
@@ -38,6 +39,8 @@ export interface FileAttachment {
     absoluteUrl?: string
     /** 预览路径（图片缩略图） */
     previewUrl?: string
+    /** 引用形态（见 content-block.types.ts FileRefType）；缺省视为 'store' */
+    refType?: FileRefType
     file?: File
     [key: string]: any
 }

@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { CharacterRepository } from '../../../common/database/character.repository';
+import { CharacterFileStore } from '../../characters/character-file.store';
 import {
   byLastActiveDesc,
   SessionFileStore,
@@ -19,7 +19,7 @@ export class BotAdminService {
   constructor(
     private instanceManager: BotInstanceManager,
     private modelStore: ProviderFileStore,
-    private characterRepo: CharacterRepository,
+    private characterStore: CharacterFileStore,
     private sessionStore: SessionFileStore,
     private botStore: BotFileStore,
   ) {}
@@ -75,7 +75,7 @@ export class BotAdminService {
       .map((m) => this.sessionStore.get(m.id)!);
     const total = rows.length;
 
-    const charMap = await this.characterRepo.findManyByIds(
+    const charMap = await this.characterStore.findManyByIds(
       items
         .map((s: any) => s.characterId)
         .filter((id: any): id is string => typeof id === 'string' && id.length > 0),

@@ -37,14 +37,14 @@ cd guada-ai
 
 ```bash
 # 安装所有依赖（包括后端和前端）
-npm install
+pnpm install
 ```
 
 ### 3. 初始化数据库
 
 ```bash
 cd backend-ts
-npm run db:seed:force
+pnpm run db:seed:force
 ```
 
 这会创建默认管理员账户：
@@ -55,7 +55,7 @@ npm run db:seed:force
 
 ```bash
 # 在项目根目录执行
-npm run dev:electron
+pnpm run dev:electron
 ```
 
 这将同时启动：
@@ -81,6 +81,7 @@ env: {
   PORT: backendPort.toString(),
   BASE_URL: '__auto__',  // 自动检测端口
   DATABASE_URL: `file:${dbPath}`,
+  // 旧的全局向量库路径，现已退役；仍在传入只为让启动迁移能把老数据搬进各库的 kb.db
   VECTOR_DB_PATH: vectorDbPath,
   STATIC_DIR: staticDir,
   UPLOAD_ROOT_DIR: uploadDir,
@@ -100,10 +101,10 @@ env: {
 
 ```bash
 # 在项目根目录执行
-npm run build:electron
+pnpm run build:electron
 ```
 
-> macOS 构建请使用 `npm run build:electron:mac`（等价命令，显式指定 `electron-builder --mac`）。
+> macOS 构建请使用 `pnpm run build:electron:mac`（等价命令，显式指定 `electron-builder --mac`）。
 
 构建过程包括：
 1. 构建后端（TypeScript → JavaScript）
@@ -124,15 +125,15 @@ npm run build:electron
 - 平台包清单集中在 `scripts/platform-manifest.js`，新增平台包时在此登记
 - 裁剪发生在 `scripts/optimize-electron-deps.js`（Step 5.2），
   原生模块重建由跨平台的 `scripts/rebuild-native-electron.js`（基于 @electron/rebuild）执行
-- `npm run build:electron:backend` 会自动按当前平台选择目标，无需手工传参
+- `pnpm run build:electron:backend` 会自动按当前平台选择目标，无需手工传参
 
 常用脚本：
 
 ```bash
-npm run optimize:electron-deps:mac      # 单独执行 macOS 依赖裁剪
-npm run optimize:electron-deps:linux    # 单独执行 Linux 依赖裁剪
-npm run build:electron:mac              # macOS 完整构建（.app + dmg）
-npm run build:electron:dir              # 只生成未打包目录（本地验证最快）
+pnpm run optimize:electron-deps:mac      # 单独执行 macOS 依赖裁剪
+pnpm run optimize:electron-deps:linux    # 单独执行 Linux 依赖裁剪
+pnpm run build:electron:mac              # macOS 完整构建（.app + dmg）
+pnpm run build:electron:dir              # 只生成未打包目录（本地验证最快）
 ```
 
 > 注意：dmg 目标同时声明了 x64 与 arm64。原生模块只会按当前架构重建，
@@ -276,7 +277,7 @@ Error: better-sqlite3.node was compiled against a different Node.js version
 
 ```bash
 # 清理并重新构建
-npm run rebuild:electron
+pnpm run rebuild:electron
 
 # 或手动重建
 cd backend-ts
@@ -519,8 +520,8 @@ grep "ERROR" ~/Library/Application\ Support/GuaDa/logs/error-*.log | tail -50
 ### 构建流程
 
 1. **清理**：删除之前的构建产物
-2. **后端构建**：`cd backend-ts && npm run build`
-3. **前端构建**：`cd frontend && npm run build`
+2. **后端构建**：`cd backend-ts && pnpm run build`
+3. **前端构建**：`cd frontend && pnpm run build`
 4. **Electron 打包**：使用 electron-builder 打包
 5. **原生模块重建**：针对 Electron ABI 重新编译原生模块
 6. **签名**（macOS/Windows）：代码签名

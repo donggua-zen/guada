@@ -20,17 +20,28 @@ export interface FileRef {
   mediaType: string;
   /** 字节数 */
   bytes: number;
-  /** 显示名（去掉本地路径信息） */
+  /** 显示名（完整文件名，含扩展名） */
   name?: string;
-  /** 存储锚点：相对存储路径（uploads/...）、data URL 或远程 URL；展示时绝对化 */
+  /** 引用锚点：按 refType 解释为存储引用 / 工作目录相对引用 / 本机绝对路径 */
   url?: string;
-  /** 预览路径（图片缩略图，展示用） */
+  /** 预览路径（图片缩略图，展示用），仅 store 形态的图片有值 */
   previewUrl?: string;
   /** 扩展名（不带点，如 png；文件展示用） */
   fileExtension?: string;
+  /**
+   * 引用形态 —— 决定 url 如何解析（与后端 FileRef.refType 同构）。
+   * 缺省视为 'store'（历史数据零迁移）：
+   * 'store' = 全局附件目录存储引用；'workspace' = 会话工作目录相对引用；
+   * 'session' = 会话数据目录引用（自包含：sessions/<id>/images|previews/...）；
+   * 'local' = 本机绝对路径
+   */
+  refType?: FileRefType;
   /** @deprecated 旧数据读取回退；新写入不再产出 */
   attachmentId?: string;
 }
+
+/** 附件引用形态（见 FileRef.refType） */
+export type FileRefType = 'store' | 'workspace' | 'session' | 'local';
 
 /**
  * 块生命周期计时（epoch ms）：由后端 BlockAssembler 在块首见/闭合时统一打点，

@@ -562,8 +562,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
           // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射
           // 注：source.type 是 Anthropic 协议的标准字段（base64/url），
           // 与本项目三层消息的 Message.source.kind 概念无关，勿混淆、勿改名。
+          // 传整个附件对象：attachmentToPart 按 refType 分派物理路径。
           const part = await attachmentToPart(
-            block.attachment.url ?? block.attachment.attachmentId,
+            block.attachment,
             block.attachment.mediaType,
           );
           if (part?.kind === "base64") {

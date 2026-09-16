@@ -36,7 +36,7 @@ import { SessionFileStore } from "../../../modules/chat/session-file.store";
 import { generateOrderedMessageId } from "../../../common/utils/ordered-id.util";
 import {
   normalizeMediaType,
-  isImageMediaType,
+  isVisionImageMediaType,
 } from "../../../common/utils/media-type.util";
 import {
   isHealSkeletonMeta,
@@ -314,7 +314,7 @@ export class SessionMessageDbMigratorService {
               // 旧 DB fileType 为 'image'/'text' 语义值 → 归一为真 MIME（与 replayer 读取路径同口径）
               const mediaType = normalizeMediaType(f.fileType, f.fileExtension);
               userBlocks.push({
-                type: isImageMediaType(mediaType) ? "image" : "file",
+                type: isVisionImageMediaType(mediaType) ? "image" : "file",
                 attachment: {
                   mediaType,
                   bytes: f.fileSize || 0,

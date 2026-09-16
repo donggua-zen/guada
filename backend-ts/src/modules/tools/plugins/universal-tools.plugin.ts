@@ -355,8 +355,12 @@ export class UniversalToolsPlugin extends PluginBase {
       | undefined;
     for (const rp of resolved) {
       if (!rp.enabled) continue;
+      // loadMode=none 表示"压根不加载"：既不可广告，也不可被 learn 出来
       const kitInfo = rp.enabledToolKits.find(
-        (k) => k.enabled && (k.id === name || k.name === name),
+        (k) =>
+          k.enabled &&
+          k.loadMode !== "none" &&
+          (k.id === name || k.name === name),
       );
       if (!kitInfo) continue;
       // 懒加载工具包的工具存在 allTools 中（enabledTools 不含未激活的懒加载工具）

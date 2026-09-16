@@ -1,6 +1,10 @@
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
-import { SessionRepository } from "../../common/database/session.repository";
-import { CharacterRepository } from "../../common/database/character.repository";
+import {
+  SessionFileStore,
+  byLastActiveDesc,
+  byUpdatedDesc,
+} from "./session-file.store";
+import { CharacterFileStore } from "../characters/character-file.store";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util";
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
@@ -38,8 +42,8 @@ export class SessionService {
   private readonly logger = new Logger(SessionService.name);
 
   constructor(
-    private sessionRepo: SessionRepository,
-    private characterRepo: CharacterRepository,
+    private sessionStore: SessionFileStore,
+    private characterStore: CharacterFileStore,
     private modelStore: ProviderFileStore,
     private settingsStorage: SettingsStorage,
     private llmService: LLMService,
@@ -57,6 +61,109 @@ export class SessionService {
   ) {}
 
   /**
+   * 会话查询（原 SessionRepository.findAll）：web 会话按分组/关键词/归档过滤，
+   * lastActiveAt desc，内存分页 + total 同快照，并水合 character 视图。
+   */
+  private async querySessions(opts: {
+    skip?: number;
+    limit?: number;
+    groupId?: string | null;
+    keyword?: string;
+    includeArchived?: boolean;
+  }): Promise<{ items: any[]; total: number }> {
+    const {
+      skip = 0,
+      limit = 20,
+      groupId,
+      keyword,
+      includeArchived = false,
+    } = opts;
+    const needle = keyword?.toLowerCase();
+    const rows = this.sessionStore.query(
+      (m) =>
+        m.sessionType === "web" &&
+        (includeArchived || !m.archived) &&
+        (groupId === null
+          ? m.groupId === null
+          : groupId === undefined
+            ? true
+            : m.groupId === groupId) &&
+        (needle ? (m.title ?? "").toLowerCase().includes(needle) : true),
+      byLastActiveDesc,
+    );
+    return {
+      items: await this.hydrateMany(
+        rows.slice(skip, skip + limit).map((m) => this.sessionStore.get(m.id)!),
+      ),
+      total: rows.length,
+    };
+  }
+
+  /**
+   * 已归档会话查询（原 SessionRepository.findArchived）。
+   */
+  private async queryArchivedSessions(opts: {
+    skip?: number;
+    limit?: number;
+    keyword?: string;
+    groupId?: string | null;
+  }): Promise<{ items: any[]; total: number }> {
+    const { skip = 0, limit = 50, keyword, groupId } = opts;
+    const needle = keyword?.toLowerCase();
+    const rows = this.sessionStore.query(
+      (m) =>
+        m.sessionType === "web" &&
+        m.archived &&
+        (groupId === null
+          ? m.groupId === null
+          : groupId === undefined
+            ? true
+            : m.groupId === groupId) &&
+        (needle ? (m.title ?? "").toLowerCase().includes(needle) : true),
+      byUpdatedDesc,
+    );
+    return {
+      items: await this.hydrateMany(
+        rows.slice(skip, skip + limit).map((m) => this.sessionStore.get(m.id)!),
+      ),
+      total: rows.length,
+    };
+  }
+
+  /** 单会话视图：meta + children + character（原 SessionRepository.findById） */
+  private async hydrateSession(id: string): Promise<any | null> {
+    const meta = this.sessionStore.get(id);
+    if (!meta) return null;
+    const children = this.sessionStore.childrenOf(id);
+    return this.hydrateOne({ ...meta, children });
+  }
+
+  private async hydrateOne(session: any): Promise<any> {
+    if (!session) return session;
+    const character = session.characterId
+      ? ((await this.characterStore.findById(session.characterId)) ?? null)
+      : null;
+    return { ...session, character };
+  }
+
+  private async hydrateMany(sessions: any[]): Promise<any[]> {
+    const ids = Array.from(
+      new Set(
+        sessions
+          .map((s) => s.characterId)
+          .filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
+      ),
+    );
+    const map = await this.characterStore.findManyByIds(ids);
+    return sessions.map((s) => ({
+      ...s,
+      character: s.characterId ? (map.get(s.characterId) ?? null) : null,
+    }));
+  }
+
+  /**
    * 获取用户会话列表，按最后活跃时间倒序排列
    */
   /**
@@ -70,13 +177,7 @@ export class SessionService {
     keyword?: string,
     includeArchived: boolean = false,
   ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.sessionRepo.findAll(
-      skip,
-      limit,
-      groupId,
-      keyword,
-      includeArchived,
-    );
+    const { items, total } = await this.querySessions({ skip, limit, groupId, keyword, includeArchived });
 
     // 转换所有 session 的 URL（使用 character 的 avatarUrl），并注入流式状态
     const transformedItems = items.map((item) => ({
@@ -105,7 +206,7 @@ export class SessionService {
     const groupIds: (string | null)[] = [...groups.map((g) => g.id), null];
     const results = await Promise.all(
       groupIds.map((gid) =>
-        this.sessionRepo.findAll(0, limit, gid, undefined, false),
+        this.querySessions({ skip: 0, limit, groupId: gid, includeArchived: false }),
       ),
     );
 
@@ -134,7 +235,7 @@ export class SessionService {
     sessionId: string,
     archived: boolean,
   ): Promise<{ success: boolean; session?: any }> {
-    const session = await this.sessionRepo.findById(sessionId);
+    const session = await this.hydrateSession(sessionId);
     if (!session) {
       throw new HttpException("会话不存在", HttpStatus.NOT_FOUND);
     }
@@ -149,7 +250,7 @@ export class SessionService {
       updateData.lastActiveAt = new Date();
     }
 
-    const updated = await this.sessionRepo.update(sessionId, updateData);
+    const updated = await this.sessionStore.update(sessionId, updateData);
     return { success: true, session: updated };
   }
 
@@ -164,7 +265,7 @@ export class SessionService {
     const skipped: string[] = [];
 
     for (const id of sessionIds) {
-      const session = await this.sessionRepo.findById(id);
+      const session = await this.hydrateSession(id);
       if (!session) {
         skipped.push(id);
         continue;
@@ -179,7 +280,7 @@ export class SessionService {
       if (!archived) {
         updateData.lastActiveAt = new Date();
       }
-      await this.sessionRepo.update(id, updateData);
+      await this.sessionStore.update(id, updateData);
     }
 
     return { success: true, skipped };
@@ -195,12 +296,7 @@ export class SessionService {
     groupId?: string | null,
   ): Promise<PaginatedResponse<any>> {
     const parsedGroupId = groupId === "null" ? null : groupId;
-    const { items, total } = await this.sessionRepo.findArchived(
-      skip,
-      limit,
-      keyword,
-      parsedGroupId,
-    );
+    const { items, total } = await this.queryArchivedSessions({ skip, limit, keyword, groupId: parsedGroupId });
 
     const transformedItems = items.map((item) => ({
       ...item,
@@ -213,7 +309,7 @@ export class SessionService {
    * 根据 ID 获取单个会话详情
    */
   async getSessionById(sessionId: string) {
-    const session = await this.sessionRepo.findById(sessionId);
+    const session = await this.hydrateSession(sessionId);
     if (!session) return null;
 
     return {
@@ -262,7 +358,7 @@ export class SessionService {
     }
 
     // 获取角色信息
-    const character = await this.characterRepo.findById(mainCharacterId);
+    const character = await this.characterStore.findById(mainCharacterId);
     if (!character) {
       throw new Error(`Character with ID ${mainCharacterId} not found`);
     }
@@ -314,7 +410,7 @@ export class SessionService {
       sessionType: "web",
     };
 
-    const session = await this.sessionRepo.create(sessionData);
+    const session: any = await this.sessionStore.create(sessionData);
 
     // 创建即初始化 JSONL 事件存储（eager 创建）：此后所有并发请求 hasSession 恒为 true，
     // 消除懒创建在首屏并行请求下的 TOCTOU 竞态（ensureSession 内部另有串行化兜底）。
@@ -366,7 +462,7 @@ export class SessionService {
    * @param data UpdateSessionDto，仅允许更新白名单字段
    */
   async updateSession(sessionId: string, data: any) {
-    const session = await this.sessionRepo.findById(sessionId);
+    const session = await this.hydrateSession(sessionId);
     if (!session) {
       throw new Error("Session not found");
     }
@@ -386,7 +482,7 @@ export class SessionService {
       assertResolvableModelRef(this.modelStore, updateData.modelId, 'modelId');
     }
 
-    const updatedSession = await this.sessionRepo.update(sessionId, updateData);
+    const updatedSession = await this.sessionStore.update(sessionId, updateData);
 
     return updatedSession;
   }
@@ -397,18 +493,18 @@ export class SessionService {
    * @param deleteWorkspace 是否同时删除工作目录（默认 false）
    */
   async deleteSession(sessionId: string, deleteWorkspace: boolean = false) {
-    const session = await this.sessionRepo.findById(sessionId);
+    const session = await this.hydrateSession(sessionId);
     if (!session) {
       throw new Error("Session not found");
     }
 
     // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
     // Prisma 自关联未配置 onDelete，若只删主会话，子会话会被 ON DELETE SET NULL 孤儿化
-    const children = await this.sessionRepo.findByParentId(sessionId);
-    await this.sessionRepo.deleteByParentId(sessionId);
+    const children = this.sessionStore.childrenOf(sessionId);
+    await this.sessionStore.deleteChildrenOf(sessionId);
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
-    await this.sessionRepo.deleteById(sessionId);
+    await this.sessionStore.deleteSession(sessionId);
 
     // 同步删除 JSONL 事件存储目录（含子会话），避免遗留孤儿目录（此前只删 DB，目录会永久泄漏）。
     // 失败不影响会话删除本身：DB 行已删，目录可稍后手工清理。
@@ -580,7 +676,7 @@ export class SessionService {
       }
 
       // 更新会话标题
-      await this.sessionRepo.update(sessionId, { title: newTitle });
+      await this.sessionStore.update(sessionId, { title: newTitle });
 
       this.logger.log(
         `Successfully generated title '${newTitle}' for session ${sessionId}`,
@@ -733,7 +829,7 @@ ${diffText}
    * 使用 SessionContextFactory 确保与 Agent 对话使用完全一致的参数
    */
   async compressSession(sessionId: string) {
-    const session = await this.sessionRepo.findById(sessionId);
+    const session = await this.hydrateSession(sessionId);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
@@ -802,7 +898,7 @@ ${diffText}
    * 更新会话最后活跃时间
    */
   async updateLastActiveAt(sessionId: string) {
-    return this.sessionRepo.updateLastActiveAt(sessionId);
+    return this.sessionStore.updateLastActiveAt(sessionId);
   }
 
   // ── 会话搜索 ──
@@ -838,9 +934,7 @@ ${diffText}
     }
 
     // 标题匹配（两个阶段都查：title 阶段直接返回，content 阶段用于去重）
-    const titleMatches = await this.sessionRepo.findAll(
-      0, 200, undefined, keyword, includeArchived,
-    );
+    const titleMatches = await this.querySessions({ skip: 0, limit: 200, keyword, includeArchived });
     const titleIds = new Set<string>(titleMatches.items.map((s: any) => s.id));
 
     // 解析游标（旧版时间游标/base64("time|id") 解析失败时视为首扫，自然降级）
@@ -857,7 +951,7 @@ ${diffText}
     }
 
     // 全量会话 id 清单（扫描顺序 = lastActiveAt DESC；bot/子代理会话被 sessionType 排除）
-    const scanIds = this.sessionRepo.listWebSessionIds(includeArchived);
+    const scanIds = this.sessionStore.listWebSessionIds(includeArchived);
     const total = scanIds.length;
 
     if (phase === "title") {
@@ -883,8 +977,8 @@ ${diffText}
 
     let items: any[] = [];
     if (contentIds.length > 0) {
-      const rows = this.sessionRepo.getManyByIds(contentIds);
-      const charMap = await this.characterRepo.findManyByIds(
+      const rows = this.sessionStore.getManyByIds(contentIds);
+      const charMap = await this.characterStore.findManyByIds(
         rows
           .map((r: any) => r.characterId)
           .filter((id: any): id is string => typeof id === "string" && id.length > 0),

@@ -4,11 +4,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as fsp from "fs/promises";
-import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
+import { KbMetaStore } from "./kb-meta.store";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { KbFileService } from "./kb-file.service";
 import { KbDatabaseService } from "./kb-database.service";
-import { KbMetaStore } from "./kb-meta.store";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
 
@@ -26,7 +25,6 @@ export class KnowledgeBaseService {
   private readonly logger = new Logger(KnowledgeBaseService.name);
 
   constructor(
-    private kbRepo: KnowledgeBaseRepository,
     private kbMetaStore: KbMetaStore,
     private databases: KbDatabaseService,
     private kbFileService: KbFileService,
@@ -50,7 +48,7 @@ export class KnowledgeBaseService {
     );
 
     try {
-      const kb = await this.kbRepo.create({
+      const kb = await this.kbMetaStore.createKb({
         name: data.name,
         embeddingModelId: data.embeddingModelId,
         description: data.description || null,
@@ -74,7 +72,9 @@ export class KnowledgeBaseService {
    */
   async list(skip: number = 0, limit: number = 20) {
     try {
-      const { items, total } = await this.kbRepo.findAll(skip, limit);
+      const allKbs = await this.kbMetaStore.listKbs();
+      const items = allKbs.slice(skip, skip + limit);
+      const total = allKbs.length;
       return createPaginatedResponse(items, total, { skip, limit });
     } catch (error: any) {
       this.logger.error(`获取知识库列表失败：${error.message}`);
@@ -86,7 +86,7 @@ export class KnowledgeBaseService {
    * 获取知识库详情
    */
   async findOne(kbId: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
@@ -101,7 +101,11 @@ export class KnowledgeBaseService {
     Array<{ id: string; name: string; description?: string }>
   > {
     if (!ids || ids.length === 0) return [];
-    const kbs = await this.kbRepo.findByIds(ids);
+    const kbs: Record<string, any>[] = [];
+    for (const id of ids) {
+      const row = await this.kbMetaStore.getKb(id);
+      if (row) kbs.push(row);
+    }
     return kbs
       .filter((kb) => kb != null)
       .map((kb) => ({
@@ -116,7 +120,7 @@ export class KnowledgeBaseService {
    * 如果修改了向量模型，自动清空分块和向量数据，重置文件状态并重新处理
    */
   async update(kbId: string, data: any) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
@@ -147,7 +151,7 @@ export class KnowledgeBaseService {
         updateData.metadataConfig = data.metadataConfig || null;
       }
 
-      const updatedKb = await this.kbRepo.update(kbId, updateData);
+      const updatedKb = await this.kbMetaStore.updateKb(kbId, updateData);
 
       // 向量模型变更 → 维度不同，旧向量不可复用：清空后重处理
       if (modelChanged) {
@@ -172,7 +176,7 @@ export class KnowledgeBaseService {
    * rm 失败（文件被占用）。
    */
   async remove(kbId: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }

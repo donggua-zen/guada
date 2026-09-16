@@ -18,7 +18,7 @@ import { Logger } from "@nestjs/common";
 import { AppModule } from "../app.module";
 import { KbDatabaseService } from "../modules/knowledge-base/kb-database.service";
 import { KbMetaStore } from "../modules/knowledge-base/kb-meta.store";
-import { KBChunkRepository } from "../common/database/kb-chunk.repository";
+import { KBChunkRepository } from "../modules/knowledge-base/kb-chunk.repository";
 import { ProviderFileStore } from "../modules/llm-core/provider-file.store";
 import { EmbeddingService } from "../modules/knowledge-base/embedding.service";
 

@@ -60,24 +60,57 @@ export function fixStaticUrl(url: string): string {
 /**
  * 后端上传资源绝对化（FileRef.url / previewUrl 展示用）。
  *
- * 存储引用为相对路径（uploads/...，self-contained 契约），展示时按运行环境还原：
+ * 存储引用为相对路径（uploads/... 或自包含的 sessions/<id>/...），展示时按运行环境还原：
  * - Electron：用后端动态端口拼完整 URL（端口随启动变化，不能硬编码；进程内缓存）
- * - Web：同源相对路径（dev 由 Vite /uploads 代理，生产同源部署天然可达）
+ * - Web：同源相对路径（dev 由 Vite 代理，生产同源部署天然可达）
  * - 已是 http(s)/data:/blob: 的引用原样返回
+ *
+ * 会话附件（refType='session'，随会话数据目录存储、不再经 /uploads 静态挂载）
+ * 走鉴权取图端点：`<apiBase>/sessions/<id>/attachments/raw-file?path=..&token=..`。
+ * url 自包含（内嵌 sessionId），此处无需调用方传会话上下文。
  */
 let cachedBackendOrigin: string | null = null;
+
+/** Electron 下取后端源（进程内缓存动态端口）；Web 返回空串（同源相对路径） */
+function resolveBackendOrigin(): string {
+  const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined
+  if (!electronAPI) return ''
+  if (cachedBackendOrigin === null) {
+    const status = electronAPI.getBackendStatusSync?.()
+    cachedBackendOrigin = status?.port ? `http://localhost:${status.port}` : ''
+  }
+  return cachedBackendOrigin
+}
+
+/** 会话附件取图 URL；非 sessions/<id>/... 形态返回 null */
+function buildSessionAttachmentUrl(
+  storagePath: string,
+  origin: string,
+): string | null {
+  const match = storagePath.match(/^sessions\/([^/]+)\/(.+)$/)
+  if (!match) return null
+  const [, id, rel] = match
+  // <img> 带不上 Authorization 头，走 ?token= 查询通道（与 workspace raw-file 同款）
+  const token =
+    typeof window !== 'undefined'
+      ? sessionStorage.getItem('token') || localStorage.getItem('token') || ''
+      : ''
+  const apiPath =
+    `/api/v1/sessions/${encodeURIComponent(id)}/attachments/raw-file` +
+    `?path=${encodeURIComponent(rel)}&token=${encodeURIComponent(token)}`
+  return origin ? `${origin}${apiPath}` : apiPath
+}
 
 export function toResourceUrl(storagePath?: string | null): string {
   if (!storagePath) return ''
   if (/^(https?:\/\/|data:|blob:)/i.test(storagePath)) return storagePath
 
-  const path = storagePath.startsWith('/') ? storagePath : `/${storagePath}`
-  const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined
-  if (!electronAPI) return path
+  const origin = resolveBackendOrigin()
 
-  if (cachedBackendOrigin === null) {
-    const status = electronAPI.getBackendStatusSync?.()
-    cachedBackendOrigin = status?.port ? `http://localhost:${status.port}` : ''
-  }
-  return cachedBackendOrigin ? `${cachedBackendOrigin}${path}` : path
+  // 会话附件自包含引用 → 鉴权取图端点
+  const sessionUrl = buildSessionAttachmentUrl(storagePath, origin)
+  if (sessionUrl) return sessionUrl
+
+  const path = storagePath.startsWith('/') ? storagePath : `/${storagePath}`
+  return origin ? `${origin}${path}` : path
 }

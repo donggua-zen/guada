@@ -1,9 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
-import { PluginContext } from "../../plugins/types/plugin.types";
+import { PluginContext, RolePluginConfig } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import { isToolkitAllowedByRoleConfig } from "../../plugins/utils/role-toolkit-filter";
 import path from "path";
 import langZh from "./skill.lang.zh.json";
 import langEn from "./skill.lang.en.json";
@@ -92,9 +93,16 @@ export class SkillPlugin extends PluginBase {
       name: "%skill.toolkitName%",
       description: "%skill.toolkitDescription%",
       loadMode: "eager",
+      // Skills 有自己的管理页：总开关由 Skills tab 写入 settings.plugins.skill，
+      // 逐项偏好在 settings.skills 由 orchestrator 消费
+      governance: "self",
       activator:
         "Call this toolkit to get the full instructions for a skill when you need to use one",
       handler: async (ctx: PluginContext) => {
+        const entry = (ctx.pluginsConfig as RolePluginConfig | undefined)?.skill;
+        if (!isToolkitAllowedByRoleConfig(entry, "skill")) {
+          return { loadMode: "none" as const };
+        }
         const skills = this.orchestrator.listSkills(
           true,
           ctx?.session.workspacePath,

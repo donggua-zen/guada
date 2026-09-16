@@ -1,7 +1,6 @@
 import { Module, Global } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
 import { MigrationRunner } from "./migration-runner.service";
-import { CharacterRepository } from "./character.repository";
 import { CharacterFileStore } from "../../modules/characters/character-file.store";
 import { SessionFileStore } from "../../modules/chat/session-file.store";
 import { BotFileStore } from "../../modules/bot-gateway/bot-file.store";
@@ -9,11 +8,8 @@ import { KbMetaStore } from "../../modules/knowledge-base/kb-meta.store";
 import { KbDatabaseService } from "../../modules/knowledge-base/kb-database.service";
 import { KbSearchService } from "../../modules/knowledge-base/kb-search.service";
 import { McpFileStore } from "../../modules/mcp-servers/mcp-file.store";
-import { KBChunkRepository } from "./kb-chunk.repository";
-import { KBFileRepository } from "./kb-file.repository";
-import { KnowledgeBaseRepository } from "./knowledge-base.repository";
-import { SessionGroupRepository } from "./session-group.repository";
-import { SessionRepository } from "./session.repository";
+import { KBChunkRepository } from "../../modules/knowledge-base/kb-chunk.repository";
+import { KBFileRepository } from "../../modules/knowledge-base/kb-file.repository";
 import { MetadataBootstrapGate } from "./metadata-bootstrap.gate";
 import { AccountFileStore } from "../../modules/auth/account-file.store";
 import { AccountBootstrapService } from "./bootstrap/account-bootstrap.service";
@@ -25,7 +21,19 @@ import { KbMigrationBootstrapService } from "./bootstrap/kb-migration-bootstrap.
 import { SessionMessageDbMigratorService } from "./bootstrap/session-message-db-migrator.service";
 import { SessionMessageMigrationBootstrapService } from "./bootstrap/session-message-migration-bootstrap.service";
 
-const REPOSITORIES = [
+/**
+ * 持久化与启动迁移（全局）
+ *
+ * 本模块是全局持久化装配点：各域 FileStore、KB 的 kb.db 数据访问层，
+ * 以及一次性 DB→文件迁移脚手架（bootstrap/，临时）。
+ *
+ * 命名说明：目录 `common/database` 与 PrismaService/MigrationRunner 是迁移期遗留；
+ * 运行期存储的权威来源已是文件（会话 meta.json+JSONL、角色 AGENT.md、
+ * 供应商 yaml、每库 kb.db 等）。仓储兼容层（Character/Session/SessionGroup/
+ * KnowledgeBase 四个 Repository shim）已于 2026-09 第一阶段重构中删除，
+ * 调用方直连 FileStore；KB 双仓储已归位到 modules/knowledge-base。
+ */
+const PERSISTENCE_PROVIDERS = [
   PrismaService,
   MigrationRunner,
   // 元信息文件化：门控必须先于各 FileStore 提供（store 构造期注入）
@@ -49,19 +57,15 @@ const REPOSITORIES = [
   KbDatabaseService,
   KbSearchService,
   McpFileStore,
-  CharacterRepository,
   KBChunkRepository,
   KBFileRepository,
-  KnowledgeBaseRepository,
-  SessionGroupRepository,
-  SessionRepository,
   // 编排器必须最后注册：唯一 OnModuleInit，按序调用上面各 bootstrap 的 run()
   MigrationBootstrapService,
 ];
 
 @Global()
 @Module({
-  providers: REPOSITORIES,
-  exports: REPOSITORIES,
+  providers: PERSISTENCE_PROVIDERS,
+  exports: PERSISTENCE_PROVIDERS,
 })
 export class DatabaseModule {}

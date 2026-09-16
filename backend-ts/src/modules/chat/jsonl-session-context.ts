@@ -245,6 +245,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       fullReasoningRelay: this.resolveFullReasoningRelay(),
       providerProtocol: this.modelConfig.provider?.protocol,
       modelName: this.modelConfig.modelName,
+      // 'workspace' 形态附件引用的桥接基准（见 file-path-bridge 步骤）
+      workspaceDir: this._workspacePath ?? null,
     };
   }
 
@@ -258,7 +260,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return isFullReasoningRelayModel(this.modelConfig.modelName);
   }
 
-  /** 变换上下文指纹：模型能力/思考模式/协议/回传策略/回合变化即失效重建 */
+  /** 变换上下文指纹：模型能力/思考模式/协议/回传策略/回合/工作目录变化即失效重建 */
   private transformKey(): string {
     return [
       this.modelConfig.config.inputCapabilities?.includes('image')
@@ -270,6 +272,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       this.currentTurnId ?? '-',
       this.resolveFullReasoningRelay() ? 'relay-all' : 'relay-last',
       this.modelConfig.provider?.protocol ?? '-',
+      // 工作目录参与指纹：'workspace' 形态附件引用桥接出的绝对路径由它派生，
+      // 沿用旧快照会让模型拿到已经失效的路径。
+      this._workspacePath ?? '-',
     ].join('|');
   }
 

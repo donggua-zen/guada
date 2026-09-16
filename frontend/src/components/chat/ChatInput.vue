@@ -11,8 +11,9 @@
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
           :ext="file.fileExtension" :size="file.fileSize"
           :preview-url="file.fileType === 'image' ? previewUrls.get(file.id) : undefined" closable
-          :clickable="!!(file.isPasted && file.originalContent && file.fileType === 'text')"
-          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" @close="removeFile(file.id)"
+          :clickable="!!(file.isPasted && file.originalContent && file.fileType === 'file')"
+          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus"
+          :upload-error="file.uploadError" @close="removeFile(file.id)"
           @click="showFilePreview(file)">
         </FileItem>
       </div>
@@ -58,11 +59,10 @@
         </template>
       </div>
 
-      <!-- 隐藏的文件输入框 -->
-      <input type="file" ref="fileInputRef" style="display: none" multiple
-        :accept="getFileExtensionsFromType('TEXT').join(',')" @change="handleFileSelect">
+      <!-- 隐藏的文件输入框：文件侧不设 accept（任意格式都能作为路径引用附上） -->
+      <input type="file" ref="fileInputRef" style="display: none" multiple @change="handleInputChange">
       <input type="file" ref="imageInputRef" style="display: none" multiple
-        :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
+        :accept="IMAGE_PICKER_ACCEPT" @change="handleInputChange">
       <div class="input-actions w-full flex justify-between">
         <div class="tools left-tools flex gap-0.5 items-center">
           <slot name="buttons"></slot>
@@ -122,7 +122,7 @@
           </GdTooltip>
           <GdTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
-              :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
+              :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sending">
               <el-icon size="18">
                 <Send24Filled />
               </el-icon>
@@ -155,8 +155,9 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton, ElDialog, ElTag, ElMessageBox } from 'element-plus';
-import type { Model, ModelProvider } from '@/types/api';
+import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
+import type { Model, ModelProvider } from '@/types/api'
+import type { FileRefType } from '@/types/stream/content-block.types';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -170,31 +171,46 @@ import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
 import { getDefaultThinkingEffort, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { toResourceUrl } from '@/utils/url';
+import { isVisionImageMediaType, RASTER_IMAGE_EXTENSIONS } from '@/utils/media-type';
+import { extensionFromName, planAttachment, type AttachmentPlan } from '@/utils/attachment-classify';
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
   ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add24Regular
 } from '@vicons/fluent'
-import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
 
 /** File object managed by ChatInput (created via createFileObject) */
 interface ChatFile {
   id: number
+  /** 完整文件名（含扩展名）—— FileRef.name 的来源 */
   fileName: string
   fileSize: number
   fileExtension: string
-  fileType: string
+  /** 视图归类：'image'（可预览的位图）| 'file'（其余一律走路径引用） */
+  fileType: 'image' | 'file'
   displayName: string
-  file: File
+  /**
+   * 待上传的原始 File。Electron 下仍保留（图片要上传；非图片虽不上传，
+   * 但保留 File 便于「既无本机路径又需要上传」的兜底，如粘贴生成的 Blob 文件）。
+   */
+  file?: File
   isPasted: boolean
   originalContent?: string
+  /** 上传进度（0-100），由发送时的上传流程真实驱动 */
   uploadProgress: number
   uploadStatus: 'queued' | 'uploading' | 'uploaded' | 'failed' | undefined
-  previewUrl?: string
+  /** 上传失败原因（uploadStatus='failed' 时展示） */
+  uploadError?: string
+  /** 已上传/编辑回填的引用锚点（图片为全局附件目录，普通文件为工作目录相对路径） */
   url?: string
+  /** 预览路径（仅图片） */
+  previewUrl?: string
+  /** Electron 本机绝对路径（非图片附件，不经上传） */
   localPath?: string
+  /** 引用形态，随上传响应/编辑回填带出；缺省按 store 解释 */
+  refType?: FileRefType
 }
 
 /** Chat session config passed from parent */
@@ -214,8 +230,13 @@ type FileWithContent = File & { _originalContent?: string }
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('lg') // md = 768px
 
-const { confirm } = usePopup();
 const { t } = useI18n()
+
+// 聊天附件单文件上限（MB）——与后端 CHAT_UPLOAD_MAX_MB / upload-limits.ts 的默认值保持一致。
+// 前端只做"别让用户白等一场"的前置拦截，真正的权威校验在服务端。
+// 注意：只对**真正要上传**的文件生效；Electron 下非图片附件只发本机路径、
+// 字节不出本机，不受此限额约束（判据见 planAttachment.needsUpload）。
+const CHAT_UPLOAD_MAX_MB = 100
 
 // 响应式数据
 const isInputExpanded = ref(false);
@@ -261,30 +282,10 @@ const attachPopoverVisible = ref(false)
 const attachButtonRef = ref<any>(null)
 
 // 常量定义
-const FILE_TYPES: Record<string, { extensions: string[]; type: string }> = {
-  TEXT: {
-    extensions: [
-      '.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log',
-      '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql', '.sh',
-      '.bat', '.yml', '.yaml', '.ini', '.conf', '.properties', '.vue', '.toml',
-      '.env', '.cfg', '.config', '.reg', '.pem', '.tex', '.rst', '.adoc', '.org',
-      '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
-      '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
-      '.proto', '.graphql', '.sol', '.pdf',
-      '.docx',  // Word 文档
-      '.xlsx',  // Excel 文档
-      '.dts', '.dtsi'   // 设备树源文件
-    ],
-    type: 'text'
-  },
-  IMAGE: {
-    extensions: [
-      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico',
-      '.tif', '.tiff', '.psd', '.ai', '.eps'
-    ],
-    type: 'image'
-  }
-};
+// 图片选择器的 accept 列表：只是给系统文件对话框加个过滤器，不是准入策略。
+// 内容与后端 RASTER_IMAGE_EXTENSIONS 同源（见 utils/media-type.ts 的镜像契约测试）。
+// 文件选择器**不设 accept**：普通文件对模型只是一个路径引用，限制可附类型没有意义。
+const IMAGE_PICKER_ACCEPT = RASTER_IMAGE_EXTENSIONS.map((ext) => `.${ext}`).join(',');
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/bmp': 'bmp',
@@ -307,21 +308,33 @@ const previewUrls = ref(new Map<number | string, string>());
  * 把 props.files 中的两种附件形态统一为 ChatFile 视图对象（模板只认 ChatFile 字段）：
  * - 新选/粘贴文件：createFileObject 产出的 ChatFile，原样透传
  * - 编辑回填：消息束聚合出的 FileAttachment 投影 {id, name, url, type(MIME), ext, size, previewUrl}
- *   → 补齐 displayName/fileType/fileExtension/fileSize 视图字段（fileType 归一为 'image'|'text' 枚举）
+ *   → 补齐 displayName/fileType/fileExtension/fileSize 视图字段
  * 仅映射元数据，不复制 file/File 引用；发送链路（toPayloadFileRefs）本就双形态兼容，不受影响。
  */
 function toChatFileView(file: any): any {
   if (file.displayName !== undefined && file.fileType !== undefined) return file;
-  const isImage = !!file.type?.startsWith?.('image/');
+  const isImage = isVisionImageMediaType(file.type);
   return {
     ...file,
     displayName: file.displayName ?? file.name ?? file.fileName,
-    fileType: file.fileType ?? (isImage ? 'image' : 'text'),
+    fileType: file.fileType ?? (isImage ? 'image' : 'file'),
     fileExtension: file.fileExtension ?? file.ext,
     fileSize: file.fileSize ?? file.size ?? 0,
   };
 }
 
+/**
+ * 附件列表的**真实状态源**。
+ *
+ * 旧实现把列表存在 uploadFiles 这个 computed 的缓存值里（getter 返回
+ * props.files.map(...) 的副本，选择文件时往副本里 push）：附件是否还在，
+ * 取决于 computed 有没有被重新求值——任何一次依赖变化（props.files 更新、
+ * getter 内的预览图写入触发自失效）都会让已选附件凭空消失。
+ * 现在列表是本组件的 ref，props.files 只在“外部真的换了列表”时同步进来。
+ *
+ * ⚠ 本块必须在 defineProps 之后：下面带 immediate 的 props 同步 watch 在
+ * setup 期间同步求值，放前面会命中 TDZ（Cannot access 'props' before initialization）。
+ */
 const props = defineProps({
   value: { type: String, default: '' },
   files: { type: Array as PropType<ChatFile[]>, default: () => [] },
@@ -334,6 +347,20 @@ const props = defineProps({
   // 模式：create 为创建会话模式，chat 为对话模式
   mode: { type: String, default: 'chat' },
   backdrop: { type: Boolean, default: false },
+  /**
+   * 附件上传器。存在时：点发送先上传待上传附件（带真实进度），成功才 emit('send')。
+   * 缺省（如 create 模式尚无会话）则跳过上传，由父组件在会话就绪后统一上传。
+   */
+  uploader: {
+    type: Object as PropType<{
+      upload: (
+        sessionId: string,
+        file: File,
+        onProgress?: (percent: number) => void,
+      ) => Promise<any>
+    }>,
+    default: undefined,
+  },
   config: {
     type: Object as PropType<ChatConfig>,
     default: () => ({
@@ -345,6 +372,60 @@ const props = defineProps({
     })
   },
 });
+
+const localFiles = ref<any[]>([]);
+
+/** 同引用说明是父组件把本组件 emit 出去的数组原样传回来，此时不能覆盖本地状态 */
+watch(
+  () => props.files,
+  (incoming) => {
+    if (incoming === localFiles.value) return;
+    localFiles.value = (incoming ?? []).map(toChatFileView);
+  },
+  { immediate: true },
+);
+
+/** 提交新的附件列表：更新本地状态并同步父组件（替换旧的 push/赋值分裂写法） */
+function commitFiles(next: any[]) {
+  localFiles.value = next;
+  emit('update:files', next);
+}
+
+const uploadFiles = computed(() => localFiles.value);
+
+/**
+ * 图片预览 URL 的生命周期维护。
+ * 从 computed getter 里搬出来：在 getter 内写响应式 Map 属于自失效副作用，
+ * 会让 getter 返回新副本，是上面那类"附件消失"问题的来源之一。
+ */
+watch(
+  localFiles,
+  (files) => {
+    files.forEach((file: any) => {
+      if (file.fileType !== 'image' || previewUrls.value.has(file.id)) return;
+      if (file.file) {
+        // 本地文件（粘贴/新选择）：用 blob URL 预览
+        previewUrls.value.set(file.id, URL.createObjectURL(file.file));
+      } else if (file.previewUrl || file.url) {
+        // 已上传文件（如编辑消息回填）：相对存储路径绝对化后预览
+        // （Electron 拼动态端口绝对 URL，Web 走 /uploads 同源代理，与 TurnItem 展示同路径）
+        previewUrls.value.set(file.id, toResourceUrl(file.previewUrl || file.url || ''));
+      }
+    });
+
+    // 清理不再存在的文件的预览 URL
+    const currentFileIds = new Set(files.map((f: any) => f.id));
+    previewUrls.value.forEach((url, fileId) => {
+      if (!currentFileIds.has(fileId)) {
+        if (url?.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+        previewUrls.value.delete(fileId);
+      }
+    });
+  },
+  { immediate: true },
+);
 
 // 计算属性
 const styleClass = computed(() => {
@@ -408,46 +489,6 @@ watch(() => props.value, (val) => {
     // 将纯文本中的 \n 转换为 <br>，确保 setContent 作为 HTML 解析时保留换行
     const htmlContent = parseCommandTags(val).replace(/\n/g, '<br>');
     editor.value.commands.setContent(htmlContent, { emitUpdate: false });
-  }
-});
-
-// 管理上传文件列表，自动处理图片预览 URL 的生命周期
-const uploadFiles = computed({
-  get: () => {
-    // 统一规范化为 ChatFile 视图（编辑回填的 FileAttachment 投影在此补齐旧字段）
-    const files = props.files.map(toChatFileView);
-
-    // 为每个图片文件确保有预览 URL（懒加载）
-    files.forEach(file => {
-      if (file.fileType === 'image' && !previewUrls.value.has(file.id)) {
-        if (file.file) {
-          // 本地文件（粘贴/新选择）：用 blob URL 预览
-          const previewUrl = URL.createObjectURL(file.file);
-          previewUrls.value.set(file.id, previewUrl);
-        } else if (file.previewUrl || file.url) {
-          // 已上传文件（如编辑消息回填）：相对存储路径绝对化后预览
-          // （Electron 拼动态端口绝对 URL，Web 走 /uploads 同源代理，与 TurnItem 展示同路径）
-          previewUrls.value.set(file.id, toResourceUrl(file.previewUrl || file.url || ''));
-        }
-      }
-    });
-
-    // 清理不再存在的文件的预览 URL
-    const currentFileIds = new Set(files.map(f => f.id));
-    previewUrls.value.forEach((url, fileId) => {
-      if (!currentFileIds.has(fileId)) {
-        if (url?.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-        previewUrls.value.delete(fileId);
-      }
-    });
-
-    return files;
-  },
-  set: (newFiles) => {
-    // 直接发射更新事件，让父组件处理
-    emit('update:files', newFiles);
   }
 });
 
@@ -631,17 +672,12 @@ const getFeatureLabel = (type: string) => {
 const emit = defineEmits([
   'update:value',
   'update:files',
-  'send', 'abort', 'files-change',
+  'send', 'abort',
   'focus', 'blur',
   'update:modelId', 'config-change', 'update:knowledgeBaseIds'
 ]);
 
 // 工具函数
-const getFileExtension = (fileName: string) => {
-  const lastDotIndex = fileName.lastIndexOf('.');
-  return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1).toUpperCase() : 'FILE';
-};
-
 const getFileNameWithoutExtension = (fileName: string) => {
   const lastDotIndex = fileName.lastIndexOf('.');
   return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
@@ -651,41 +687,35 @@ const getFileExtensionFromType = (mimeType: string) => {
   return MIME_TO_EXT[mimeType] || mimeType.split('/')[1] || 'file';
 };
 
-const isFileType = (file: File, fileType: string) => {
-  const fileName = file.name.toLowerCase();
-  return FILE_TYPES[fileType].extensions.some(ext => fileName.endsWith(ext));
-};
-
-const getFileExtensionsFromType = (type: string) => {
-  return FILE_TYPES[type].extensions;
-}
-
-const createFileObject = (file: File, fileType: string, isPasted = false) => {
+/**
+ * 生成附件对象。分流与传输方式由 planAttachment 按真实类型判定（不看是从哪个入口选的）：
+ * 位图走图片通道（上传 + 转码 + 内联给模型），其余走路径引用通道；
+ * Electron 下后者只引用本机绝对路径，字节不出本机。
+ */
+const createFileObject = (file: File, plan: AttachmentPlan, localPath?: string): ChatFile => {
   const timestamp = Date.now();
   // 检测是否有通过粘贴附加的原始文本内容
   const hasOriginalContent = (file as FileWithContent)._originalContent;
 
-  // Electron 模式下非图片文件：只存本地路径，不上传
-  const isImageFile = FILE_TYPES[fileType].type === 'image';
-  const electronLocalPath = isElectron && !isImageFile
-    ? window.electronAPI?.getPathForFile(file)
-    : undefined;
+  // 文件名缺失（粘贴的 Blob）时按 MIME 补一个，命名便于用户识别
+  const fileName = file.name
+    || `pasted-${timestamp}.${getFileExtensionFromType(file.type)}`;
 
   return {
     id: fileIdCounter++,
-    fileName: file.name || `pasted-${fileType.toLowerCase()}-${timestamp}.${getFileExtensionFromType(file.type)}`,
+    fileName,
     fileSize: file.size,
-    fileExtension: isPasted ? getFileExtensionFromType(file.type) : getFileExtension(file.name),
-    fileType: FILE_TYPES[fileType].type,
-    displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
-    file: electronLocalPath ? undefined as unknown as File : file,
-    // 标记是否为粘贴自动转换的文件
-    isPasted: !!hasOriginalContent || isPasted,
+    fileExtension: extensionFromName(file.name) || getFileExtensionFromType(file.type),
+    fileType: plan.kind,
+    displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${timestamp}`,
+    file,
+    // 标记是否为粘贴自动转换的文件（超长文本转成的 .txt）
+    isPasted: !!hasOriginalContent,
     // 粘贴转换的原始文本内容（仅粘贴转文件时有值）
     originalContent: hasOriginalContent || undefined,
-    // Electron 本地路径（非图片文件，不上传）
-    localPath: electronLocalPath,
-    // 新增：上传进度状态
+    // 本机绝对路径引用（Electron 非图片，不上传）
+    localPath: plan.useLocalPath ? localPath : undefined,
+    // 上传进度状态（由发送时的上传流程真实驱动）
     uploadProgress: 0,
     uploadStatus: undefined, // 'queued' | 'uploading' | 'uploaded' | 'failed'
   };
@@ -974,43 +1004,67 @@ watch(() => props.config?.attachments, (attachments) => {
 }, { immediate: true });
 
 // 文件处理函数
-const checkFileConflict = async (newFileType: string) => {
-  const currentFileType = uploadFiles.value[0]?.fileType;
-  const conflictType = newFileType === 'image' ? t('common.fileType.file') : t('common.fileType.image');
 
-  if (currentFileType && currentFileType !== newFileType) {
-    const confirmed = await confirm(t('chat.input.overwriteTitle', { type: conflictType }), t('chat.input.overwriteConfirmDesc', { type: conflictType }));
-    if (!confirmed) return false;
-
-    uploadFiles.value = []; // setter 会自动清理预览 URL
-  }
-  return true;
+/** 取该文件在 Electron 下的本机绝对路径（非 Electron 或拿不到时返回 undefined） */
+const resolveLocalPath = (file: File): string | undefined => {
+  if (!isElectron) return undefined;
+  return window.electronAPI?.getPathForFile(file) || undefined;
 };
 
-const processFiles = async (files: File[], fileType: string) => {
-  if (files.length === 0) return;
-
-  const normalizedFileType = fileType.toUpperCase();
-  if (!(await checkFileConflict(FILE_TYPES[normalizedFileType].type))) return;
+/**
+ * 处理一批文件：**不筛类型，只做分流**。
+ *
+ * 普通文件对模型只是一个路径引用，限制可附格式没有意义——所以这里不再有
+ * 扩展名白名单。唯一按类型区分的是「是不是位图」：位图走图片通道
+ * （上传到全局附件目录 + sharp 转码 + 内联字节），其余走路径引用通道。
+ *
+ * 图片与文件也不再互斥：后端按 mediaType 逐块落 image/file 块，两种块
+ * 可以共存于同一条消息，模型侧分别投影（图片内联或占位、文件给路径）。
+ *
+ * 拦截只针对两种情况：
+ * - **0 字节条目**：拖入文件夹时 dataTransfer.files 里就是这种（无内容、无扩展名）
+ * - **超出上传限额**：仅对「字节要过网络」的文件生效（见 planAttachment.needsUpload）。
+ *   Electron 下非图片附件只发本机路径、字节始终留在本机，本服务既不接收也不存储，
+ *   拿上传限额去卡它是没有意义的——2GB 的本地压缩包照样可以附上。
+ */
+const processFiles = (files: File[]) => {
+  const maxBytes = CHAT_UPLOAD_MAX_MB * 1024 * 1024;
+  const added: ChatFile[] = [];
+  const oversize: string[] = [];
+  let emptyCount = 0;
 
   for (const file of files) {
-    if (isFileType(file, normalizedFileType)) {
-      const fileObj = createFileObject(file, normalizedFileType);
-      uploadFiles.value.push(fileObj);
+    if (file.size === 0) {
+      emptyCount++;
+      continue;
     }
+    const localPath = resolveLocalPath(file);
+    const plan = planAttachment(file, { isElectron, localPath });
+    if (plan.needsUpload && file.size > maxBytes) {
+      oversize.push(file.name);
+      continue;
+    }
+    added.push(createFileObject(file, plan, localPath));
+  }
+
+  if (oversize.length > 0) {
+    ElMessage.error(
+      t('chat.input.fileTooLarge', { names: oversize.join('、'), max: CHAT_UPLOAD_MAX_MB }),
+    );
+  }
+  if (emptyCount > 0) {
+    ElMessage.warning(t('chat.input.emptyFilesSkipped', { count: emptyCount }));
+  }
+  if (added.length > 0) {
+    commitFiles([...localFiles.value, ...added]);
   }
 };
 
-// 事件处理函数
-const handleFileSelect = (event: Event) => {
+// 事件处理函数：两个入口共用同一个处理——分流按文件真实类型判定，
+// 与「从图片还是文件入口进来」无关（图片入口的 accept 只是文件对话框的过滤器）
+const handleInputChange = (event: Event) => {
   const target = event.target as HTMLInputElement;
-  processFiles(Array.from(target.files ?? []), 'TEXT');
-  target.value = '';
-};
-
-const handleImageSelect = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  processFiles(Array.from(target.files ?? []), 'IMAGE');
+  processFiles(Array.from(target.files ?? []));
   target.value = '';
 };
 
@@ -1060,17 +1114,9 @@ const handlePaste = async (event: ClipboardEvent) => {
     }
   }
 
-  // 处理文件（优先图片，否则文本类文件）
+  // 处理文件项：逐个按真实类型分流（图片入图片通道、其余入路径通道），不再筛格式
   if (filesToProcess.length > 0) {
-    const imageFiles = filesToProcess.filter(file => isFileType(file, 'IMAGE'));
-    const textFiles = filesToProcess.filter(file => isFileType(file, 'TEXT'));
-
-    if (imageFiles.length > 0) {
-      await processFiles(imageFiles, 'IMAGE');
-    } else if (textFiles.length > 0) {
-      await processFiles(textFiles, 'TEXT');
-    }
-    // TODO：如果既不是图片也不是支持的文本类型，会被忽略（可选加提示）
+    processFiles(filesToProcess);
   }
 };
 
@@ -1093,23 +1139,15 @@ const handleDragLeave = () => {
   }
 };
 
-const handleDrop = async (event: DragEvent) => {
+const handleDrop = (event: DragEvent) => {
   dragCounter = 0;
   isDragOver.value = false;
 
   const droppedFiles = event.dataTransfer?.files;
   if (!droppedFiles || droppedFiles.length === 0) return;
 
-  const files = Array.from(droppedFiles);
-  const imageFiles = files.filter(file => isFileType(file, 'IMAGE'));
-  const textFiles = files.filter(file => isFileType(file, 'TEXT'));
-
-  if (imageFiles.length > 0) {
-    await processFiles(imageFiles, 'IMAGE');
-  }
-  if (textFiles.length > 0) {
-    await processFiles(textFiles, 'TEXT');
-  }
+  // 逐个按真实类型分流：图片入图片通道、其余入路径通道，允许混在同一批（也允许与已有附件共存）
+  processFiles(Array.from(droppedFiles));
 };
 
 // 内容预览相关（粘贴自动转换的文本文件预览）
@@ -1131,75 +1169,90 @@ const closeFilePreview = () => {
 };
 
 const removeFile = (fileId: number | string) => {
-  const index = uploadFiles.value.findIndex(file => file.id === fileId);
-  if (index !== -1) {
-    uploadFiles.value.splice(index, 1); // setter 会自动清理预览 URL
-  }
+  commitFiles(localFiles.value.filter(file => file.id !== fileId));
 };
 
 // UI 交互函数
 const triggerFileInput = () => fileInputRef.value?.click();
 const triggerImageInput = () => imageInputRef.value?.click();
 
+/**
+ * 上传待上传的附件（串行：保证服务端 createdAt 顺序与用户选择顺序一致）。
+ *
+ * 进度与失败状态写回对应的附件卡片（FileItem 的进度覆盖层/失败态就是为此准备的）。
+ * 返回失败项；调用方在失败非空时**不发送消息、也不清空列表**，
+ * 让用户可以只重试一次（失败项仍带 File，下次发送会重新上传）。
+ */
+async function uploadPendingFiles(pending: ChatFile[]): Promise<ChatFile[]> {
+  const failed: ChatFile[] = [];
+  const { uploader, sessionId } = props;
+
+  // create 模式尚无会话：服务端没有可落盘的工作目录，交给父组件在会话创建后上传
+  if (!uploader || !sessionId) return failed;
+
+  for (const item of pending) {
+    if (!item.file) continue;
+    patchFile(item.id, { uploadStatus: 'uploading', uploadProgress: 0, uploadError: undefined });
+    try {
+      const response = await uploader.upload(String(sessionId), item.file, (percent: number) => {
+        patchFile(item.id, { uploadProgress: percent });
+      });
+      patchFile(item.id, { ...(response as any), uploadProgress: 100, uploadStatus: 'uploaded' });
+    } catch (error: any) {
+      failed.push(item);
+      patchFile(item.id, {
+        uploadStatus: 'failed',
+        uploadError: error?.message || String(error),
+      });
+    }
+  }
+  return failed;
+}
+
+/** 就地更新某个附件并提交（commitFiles 会同步父组件，卡片据此显示进度/失败态） */
+function patchFile(id: number | string, patch: Record<string, any>) {
+  commitFiles(localFiles.value.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+}
+
+/** 仍需上传的项：既无引用锚点（未上传），也无本机路径（Electron 非图片不走上传） */
+const pendingUploadFiles = computed(() =>
+  localFiles.value.filter((f) => !f.url && !f.localPath && f.file),
+);
+
+const sending = ref(false);
+
 const sendMessage = async () => {
+  if (sending.value) return;
+
   const content = editor.value ? editor.value.getText() : inputContent.value;
-  if (!content.trim() && uploadFiles.value.length === 0) {
+  if (!content.trim() && localFiles.value.length === 0) {
     return;
   }
 
-  // 检查是否有文件正在上传
-  const uploadingFiles = uploadFiles.value.filter(f =>
-    f.uploadStatus === 'uploading' || f.uploadStatus === 'queued'
-  );
-
-  if (uploadingFiles.length > 0) {
-    // 弹窗提醒用户选择
-    const shouldWait = await showUploadWaitingDialog(uploadingFiles.length);
-
-    if (shouldWait) {
-      // 用户选择继续等待,仅关闭弹窗,不执行发送
-      // 用户观察上传完成后再次点击发送按钮即可
+  sending.value = true;
+  try {
+    const failed = await uploadPendingFiles(pendingUploadFiles.value);
+    if (failed.length > 0) {
+      // 有附件没传上去就不发消息：否则用户以为附件发出去了，实际只发出半条。
+      // 列表与正文都保留，用户可按发送键重试（失败项会重新上传）。
+      ElMessage.error(t('chat.input.uploadFailed'));
       return;
     }
-    // 用户选择直接发送或关闭弹窗,继续执行下面的发送逻辑
+
+    // 用上传前捕获的正文：上传期间用户可能继续敲字，不该混进这一条消息
+    emit('send', {
+      content,
+      files: localFiles.value,
+      knowledgeBaseIds: props.config?.knowledgeBaseIds || []
+    });
+
+    // 清空编辑器和文件列表
+    editor.value?.chain().clearContent().focus().run();
+    commitFiles([]);
+  } finally {
+    sending.value = false;
   }
-
-  // 过滤出已上传完成的文件(包括没有上传状态的文件)
-  const uploadedFiles = uploadFiles.value.filter(f =>
-    f.uploadStatus === 'uploaded' || !f.uploadStatus
-  );
-
-  // 发送消息(仅包含已上传完成的文件)
-  emit('send', {
-    content: editor.value ? editor.value.getText() : inputContent.value,
-    files: uploadedFiles,
-    knowledgeBaseIds: props.config?.knowledgeBaseIds || []
-  });
-
-  // 清空编辑器和文件列表
-  editor.value?.chain().clearContent().focus().run();
-  uploadFiles.value = [];
 };
-
-// 显示上传等待对话框
-async function showUploadWaitingDialog(uploadingCount: number): Promise<boolean> {
-  try {
-    await ElMessageBox.confirm(
-      t('chat.input.uploadingDesc', { count: uploadingCount }),
-      t('chat.input.uploadingTitle'),
-      {
-        confirmButtonText: t('chat.input.continueWaiting'),
-        cancelButtonText: t('chat.input.sendDirectly'),
-        type: 'warning',
-        distinguishCancelAndClose: true,
-        closeOnClickModal: false,
-      }
-    );
-    return true; // 用户点击"继续等待"
-  } catch {
-    return false; // 用户点击"直接发送"或关闭弹窗
-  }
-}
 
 
 const adjustTextareaHeight = () => {
@@ -1405,8 +1458,13 @@ onMounted(() => {
           }
           // Shift+Enter 换行，Enter 发送消息
           if (event.key === 'Enter' && !event.shiftKey) {
-            // 与发送按钮相同的禁用条件
-            if (props.readonly || !inputContent.value.trim() || !props.config?.modelId) {
+            // 与发送按钮相同的禁用条件（仅有附件、没有正文时也允许发送）
+            if (
+              props.readonly ||
+              (!inputContent.value.trim() && localFiles.value.length === 0) ||
+              !props.config?.modelId ||
+              sending.value
+            ) {
               event.preventDefault();
               return true;
             }

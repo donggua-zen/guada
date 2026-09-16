@@ -16,11 +16,12 @@ export class FilesController {
   constructor(private readonly fileService: FileService) {}
 
   /**
-   * 上传会话文件（支持图片、PDF、文本）
+   * 上传会话文件
    *
-   * 只做上传：落盘后返回内联 FileRef（`url` 为相对存储路径），由前端
-   * 发消息时原样携带、随事件写进 JSONL。不再有 DB 记录，故也没有配套的
-   * 「复制/删除」路由。
+   * 只做落盘与引用返回，不做任何内容解析：位图落全局附件目录（refType='store'），
+   * 其余落会话工作目录下的附件子目录（refType='workspace'，url 为相对工作目录的引用）。
+   * 前端发消息时原样携带该 FileRef，随事件写进 JSONL；模型侧按扩展名自行选工具读取内容。
+   * 不再有 DB 记录，故也没有配套的「复制/删除」路由。
    */
   @Post("sessions/:sessionId/files")
   @UseInterceptors(FileInterceptor("file"))

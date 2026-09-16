@@ -15,11 +15,14 @@
  *                          不暗示调用工具；模型可凭路径调用 image_recognize）
  *   2. image-path-annotation — 多模态模型：image 块后追加只读绝对路径注解文本块
  *                          （DSH 同款 normalized-copy 文案，模型可用工具二次处理图片）
- *   3. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
+ *   3. file-path-bridge   — 'workspace' 形态的 file 块引用（会话工作目录相对路径）
+ *                          → 绝对路径副本，使 adapter 侧的 fileBlockToText 无需会话上下文；
+ *                          存储层仍保留相对引用（工作目录迁移后仍可重新桥接）
+ *   4. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
  *                          历史轮次剥离；fullReasoningRelay（deepseek-v4 系）例外全量携带；
  *                          非思考模式剥离全部 reasoning 块
  *                          （剥离含 metadata 中的 signature/redactedData 思考私有元数据）
- *   4. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
+ *   5. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
  */
 
 import { Logger } from '@nestjs/common';
@@ -27,7 +30,7 @@ import {
   Message,
   ContentBlock,
 } from '../../common/types/conversation.types';
-import { resolveModelVisiblePath } from '../llm-core/utils/attachment.util';
+import { resolveModelVisiblePath, resolveRefPhysicalPath, normalizeRefType } from '../llm-core/utils/attachment.util';
 import { kbRefsToText } from '../../common/utils/kb-ref.util';
 
 // ═══ 上下文 ═══
@@ -53,6 +56,12 @@ export interface TransformContext {
   providerProtocol?: string;
   /** 模型名（仅日志用；能力派生由会话层完成，本层不读模型名） */
   modelName?: string;
+  /**
+   * 会话工作目录的绝对路径。'workspace' 形态的附件引用（会话工作目录内的相对引用）
+   * 需要它才能桥接为工具可读的绝对路径；缺省时该类引用按「无法桥接」降级（只给文件名）。
+   * 它参与缓存指纹（见 transformKey），改变会使管线快照失效重建。
+   */
+  workspaceDir?: string | null;
 }
 
 // ═══ 步骤契约 ═══
@@ -106,7 +115,9 @@ export const imageProjectionStep: TransformStep = {
         content: msg.content.map((block): ContentBlock => {
           if (block.type !== 'image') return block;
           // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
-          const imagePath = resolveModelVisiblePath(block.attachment.url);
+          const imagePath = resolveModelVisiblePath(block.attachment, {
+            workspaceDir: ctx.workspaceDir,
+          });
           const pathInfo = imagePath
             ? `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.`
             : 'No readable file path is available for this image (it was provided inline).';
@@ -140,7 +151,9 @@ export const imagePathAnnotationStep: TransformStep = {
         content.push(block);
         if (block.type !== 'image') continue;
         // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
-        const imagePath = resolveModelVisiblePath(block.attachment.url);
+        const imagePath = resolveModelVisiblePath(block.attachment, {
+          workspaceDir: ctx.workspaceDir,
+        });
         if (!imagePath) continue;
         changed = true;
         content.push({
@@ -153,6 +166,43 @@ export const imagePathAnnotationStep: TransformStep = {
       return { ...msg, content };
     });
     return changed ? out : messages;
+  },
+};
+
+/**
+ * 步骤 1c：文件块引用桥接（'workspace' 引用 → 绝对路径副本）。
+ *
+ * 'workspace' 引用存的是会话工作目录内的相对路径（uploads/20260915/报告_ab12cd.pdf），
+ * 而 adapter 侧的 fileBlockToText 只做纯文本投影、拿不到会话上下文。故在此把它改写成
+ * 绝对路径形态的**块副本**（refType='local' = 本机绝对路径语义），使「引用 → 路径」
+ * 的文案只在 fileBlockToText 一处实现——否则路径文案要在本层和 4 个 adapter 各写一遍。
+ *
+ * 存储层不受影响：被改写的是请求视图的副本，JSONL 里的引用仍是相对形态，
+ * 工作目录改名/迁移后历史附件照样能重新桥接。
+ * 无法桥接（无 workspaceDir / 引用越出工作目录）时不改写，下游退化为只给文件名。
+ */
+export const filePathBridgeStep: TransformStep = {
+  name: 'file-path-bridge',
+  apply(messages, ctx) {
+    if (!ctx.workspaceDir) return messages;
+    let anyChanged = false;
+    const out = messages.map((msg) => {
+      if (!msg.content.some((b) => b.type === 'file')) return msg;
+      let msgChanged = false;
+      const content = msg.content.map((block): ContentBlock => {
+        if (block.type !== 'file') return block;
+        const att = block.attachment;
+        if (normalizeRefType(att.refType) !== 'workspace') return block;
+        const absPath = resolveRefPhysicalPath(att, { workspaceDir: ctx.workspaceDir });
+        if (!absPath) return block;
+        msgChanged = true;
+        return { ...block, attachment: { ...att, url: absPath, refType: 'local' } };
+      });
+      if (!msgChanged) return msg;
+      anyChanged = true;
+      return { ...msg, content };
+    });
+    return anyChanged ? out : messages;
   },
 };
 
@@ -273,12 +323,13 @@ export class MessageTransformPipeline {
   }
 }
 
-/** 组装默认管线（顺序即契约：KB 引用投影 → 图片投影 → 路径注解 → reasoning → 空 content 兼容） */
+/** 组装默认管线（顺序即契约：KB 引用投影 → 图片投影 → 图片路径注解 → 文件块引用桥接 → reasoning → 空 content 兼容） */
 export function createDefaultMessageTransformPipeline(): MessageTransformPipeline {
   return new MessageTransformPipeline()
     .register(kbRefProjectionStep)
     .register(imageProjectionStep)
     .register(imagePathAnnotationStep)
+    .register(filePathBridgeStep)
     .register(reasoningPolicyStep)
     .register(emptyContentCompatStep);
 }

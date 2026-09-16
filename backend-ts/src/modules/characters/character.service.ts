@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as crypto from "crypto";
 import sharp from "sharp";
-import { CharacterRepository } from "../../common/database/character.repository";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -29,7 +28,6 @@ export class CharacterService {
   ];
 
   constructor(
-    private characterRepo: CharacterRepository,
     private characterStore: CharacterFileStore,
     private urlService: UrlService,
     private settingsStorage: SettingsStorage,
@@ -42,7 +40,9 @@ export class CharacterService {
     skip: number = 0,
     limit: number = 20,
   ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.characterRepo.findAll(skip, limit);
+    const allCharacters = await this.characterStore.listCharacters();
+    const items = allCharacters.slice(skip, skip + limit);
+    const total = allCharacters.length;
     return createPaginatedResponse(
       items.map((item) => this.withAbsoluteAvatar(item)),
       total,
@@ -51,7 +51,7 @@ export class CharacterService {
   }
 
   async getCharacterById(characterId: string) {
-    const character = await this.characterRepo.findById(characterId);
+    const character = await this.characterStore.findById(characterId);
     if (!character) {
       throw new Error("Character not found");
     }
@@ -62,7 +62,7 @@ export class CharacterService {
     const name = this.readName(data);
     assertResolvableModelRef(this.modelStore, data.modelId, "modelId");
 
-    const character = await this.characterRepo.create({
+    const character = await this.characterStore.create({
       name,
       description: data.description ?? null,
       modelId: data.modelId ?? null,
@@ -73,7 +73,7 @@ export class CharacterService {
   }
 
   async updateCharacter(characterId: string, data: any) {
-    const existing = await this.characterRepo.findById(characterId);
+    const existing = await this.characterStore.findById(characterId);
     if (!existing) {
       throw new Error("Character not found");
     }
@@ -86,7 +86,7 @@ export class CharacterService {
     if (data.modelId !== undefined) patch.modelId = data.modelId;
     if (data.settings !== undefined) patch.settings = data.settings;
 
-    const updated = await this.characterRepo.update(characterId, patch);
+    const updated = await this.characterStore.update(characterId, patch);
     if (!updated) {
       throw new Error("Character not found");
     }
@@ -94,11 +94,11 @@ export class CharacterService {
   }
 
   async deleteCharacter(characterId: string) {
-    const character = await this.characterRepo.findById(characterId);
+    const character = await this.characterStore.findById(characterId);
     if (!character) {
       throw new Error("Character not found");
     }
-    return this.characterRepo.delete(characterId);
+    return this.characterStore.delete(characterId);
   }
 
   /**
@@ -107,7 +107,7 @@ export class CharacterService {
    * 头像随角色目录存亡：删除角色即随目录进回收站，不产生孤儿文件。
    */
   async uploadAvatar(characterId: string, file: any) {
-    const character = await this.characterRepo.findById(characterId);
+    const character = await this.characterStore.findById(characterId);
     if (!character) {
       throw new Error("角色不存在");
     }
@@ -160,7 +160,7 @@ export class CharacterService {
           continue;
         }
 
-        const character = await this.characterRepo.create({
+        const character = await this.characterStore.create({
           name: parsed.name,
           description: parsed.description ?? null,
           modelId: parsed.model ?? null,

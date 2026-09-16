@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { McpClientService } from "../../common/mcp/mcp-client.service";
 import { McpFileStore } from "./mcp-file.store";
 import { PluginManager } from "../plugins/plugin.manager";
+import { findToolNameConflicts } from "./mcp-tool-name";
 
 @Injectable()
 export class McpServerService {
@@ -164,7 +165,14 @@ export class McpServerService {
       throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
     }
 
-    // 1. 先创建服务器记录
+    // 1. 先抓工具列表（失败不阻塞创建，见 fetchToolsFromServer）。
+    //    放在落盘之前，是为了能在写入前做工具名冲突校验并直接报错。
+    const toolsDict = await this.fetchToolsForCreate(data, effectiveType);
+
+    // 2. 工具名冲突校验：工具名不含服务器命名空间，与已有服务器重名时无法共存
+    this.assertNoToolNameConflicts(null, toolsDict);
+
+    // 3. 创建服务器记录
     const server = await this.mcpStore.create({
       name: data.name,
       url: data.url || null,
@@ -178,47 +186,75 @@ export class McpServerService {
       enabled: data.enabled !== undefined ? data.enabled : true,
     });
 
-    // 2. 尝试获取工具列表（不阻塞创建流程）
-    try {
-      if (effectiveType === "stdio" && data.command) {
-        // stdio 协议
-        const toolsDict = await this.fetchToolsFromServer(
-          null,
-          null,
-          data.type,
-          data.command,
-          data.args,
-          data.env,
-          data.cwd,
-        );
-        if (Object.keys(toolsDict).length > 0) {
-          await this.mcpStore.writeTools(server.id, toolsDict);
-          this.logger.log(
-            `Fetched ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
-          );
-        }
-      } else if (data.url) {
-        // HTTP 协议
-        const headers = (data.headers as Record<string, any>) || {};
-        const toolsDict = await this.fetchToolsFromServer(data.url, headers, data.type);
-        if (Object.keys(toolsDict).length > 0) {
-          await this.mcpStore.writeTools(server.id, toolsDict);
-          this.logger.log(
-            `Fetched ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
-          );
-        }
-      }
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to fetch tools during creation: ${error.message}`,
+    // 4. 落工具缓存
+    if (Object.keys(toolsDict).length > 0) {
+      await this.mcpStore.writeTools(server.id, toolsDict);
+      this.logger.log(
+        `Fetched ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
       );
-      // 不抛出错误，允许服务器创建成功但无工具
     }
 
-    // 3. 刷新插件注册，使新工具立即可用
+    // 5. 刷新插件注册，使新工具立即可用
     await this.pluginManager.reloadPlugin("mcp");
 
     return this.mcpStore.getRow(server.id) ?? server;
+  }
+
+  /**
+   * 取待创建服务器的工具列表（按传输类型分支）。
+   *
+   * `fetchToolsFromServer` 自身吞掉错误并返回 `{}`——抓取失败只记日志、不阻塞创建，
+   * 所以这里不重复兜错。返回 `{}` 时后续的冲突校验自然无命中。
+   */
+  private async fetchToolsForCreate(
+    data: any,
+    effectiveType?: string,
+  ): Promise<Record<string, any>> {
+    if (effectiveType === "stdio" && data.command) {
+      // stdio 协议
+      return this.fetchToolsFromServer(
+        null,
+        null,
+        data.type,
+        data.command,
+        data.args,
+        data.env,
+        data.cwd,
+      );
+    }
+    if (data.url) {
+      // HTTP 协议
+      const headers = (data.headers as Record<string, any>) || {};
+      return this.fetchToolsFromServer(data.url, headers, data.type);
+    }
+    return {};
+  }
+
+  /**
+   * 校验待写入的工具名是否已被其它**已启用**服务器占用。
+   *
+   * 重名工具无法共存：模型可见的工具名不含服务器命名空间，两条同名 function 会让
+   * 发给供应商的 tools 数组非法，整轮请求被拒——所以在配置阶段就拦住。
+   *
+   * @param selfId 自身服务器 id（创建时为 null，尚未落盘）
+   * @param tools 待写入的工具表（原始名 → schema）
+   */
+  private assertNoToolNameConflicts(
+    selfId: string | null,
+    tools: Record<string, any>,
+  ): void {
+    const others = this.mcpStore
+      .list()
+      .filter((s) => s.enabled && s.id !== selfId);
+    const conflicts = findToolNameConflicts(tools, others);
+    if (conflicts.length === 0) return;
+
+    const detail = conflicts
+      .map((c) => `「${c.tool}」已由服务器 ${c.ownerServerId} 提供`)
+      .join("；");
+    throw new BadRequestException(
+      `MCP 工具名与已有服务器冲突：${detail}。工具名不含服务器命名空间，同名工具无法共存；请先在其中一个服务器上重命名该工具。`,
+    );
   }
 
   async updateServer(id: string, data: any) {

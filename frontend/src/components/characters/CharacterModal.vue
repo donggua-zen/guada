@@ -141,14 +141,25 @@ const handleSave = async (): Promise<void> => {
     color: var(--el-text-color-primary);
 }
 
+/* GdDialog 的 .l-dialog__body 是普通 block 容器，flex 属性在此不生效；
+   必须用百分比高度撑满它（.l-dialog 有确定的 70vh），面板才能拿到确定高度，
+   否则内容溢出会由 body 滚动，左侧导航跟着一起滚。 */
 .dialog-content {
     display: flex;
     flex-direction: column;
-    flex: 1;
+    height: 100%;
     min-height: 0;
+    overflow: hidden;
 }
 </style>
 
 <style>
-/* GdDialog scoped styles handle dialog body/header — no global overrides needed */
+/* GdDialog scoped styles handle dialog body/header.
+   本对话框内容自带内边距（面板侧栏 py-3、各 tab px-4 py-6），
+   body 的 12px 顶部内边距是纯叠加，会让标题栏与内容之间留白过大 → 仅去掉顶部。
+   character-setting-dialog 类名仅本组件使用，故用全局选择器（Teleport 内容上
+   没有本组件的 scope id，scoped :deep 选不中 .l-dialog__body）。 */
+.l-dialog.character-setting-dialog .l-dialog__body {
+    padding-top: 0;
+}
 </style>

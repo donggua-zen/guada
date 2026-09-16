@@ -8,12 +8,12 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
-import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
-import { KBFileRepository } from "../../common/database/kb-file.repository";
+import { KbMetaStore } from "./kb-meta.store";
+import { KBFileRepository } from "./kb-file.repository";
 import {
   KBChunkRepository,
   KbChunkFileRow,
-} from "../../common/database/kb-chunk.repository";
+} from "./kb-chunk.repository";
 import { KbDatabaseService } from "./kb-database.service";
 import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
@@ -44,7 +44,7 @@ export class KbFileService implements OnModuleInit {
 
   constructor(
     private providerStore: ProviderFileStore,
-    private kbRepo: KnowledgeBaseRepository,
+    private kbMetaStore: KbMetaStore,
     private fileRepo: KBFileRepository,
     private chunkRepo: KBChunkRepository,
     private databases: KbDatabaseService,
@@ -167,7 +167,7 @@ export class KbFileService implements OnModuleInit {
 
       for (const file of allFiles) {
         let isOrphan = false;
-        const kb = await this.kbRepo.findById(file.knowledgeBaseId);
+        const kb = await this.kbMetaStore.getKb(file.knowledgeBaseId);
         if (!kb) {
           isOrphan = true;
           this.logger.log(`发现孤儿条目（知识库已不存在）: ${file.displayName}`);
@@ -319,7 +319,7 @@ export class KbFileService implements OnModuleInit {
     file: any,
     relativePath?: string,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
@@ -386,7 +386,7 @@ export class KbFileService implements OnModuleInit {
     sourceFilePath: string,
     targetPath: string,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
@@ -448,7 +448,7 @@ export class KbFileService implements OnModuleInit {
     folderName: string,
     parentFolderId: string | null = null,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
@@ -562,7 +562,7 @@ export class KbFileService implements OnModuleInit {
         `开始处理文件：${displayName} (KB: ${kbId}, ID: ${fileId})`,
       );
 
-      const kb = await this.kbRepo.findById(kbId);
+      const kb = await this.kbMetaStore.getKb(kbId);
       if (!kb) {
         throw new Error(`知识库不存在：${kbId}`);
       }
@@ -687,7 +687,7 @@ export class KbFileService implements OnModuleInit {
   // ============ 查询 ============
 
   async listFiles(kbId: string, skip: number = 0, limit: number = 50) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
     const { items, total } = await this.fileRepo.findByKnowledgeBaseId(
       kbId,
@@ -703,7 +703,7 @@ export class KbFileService implements OnModuleInit {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
     const { items, total } = await this.fileRepo.findByParentFolderId(
       kbId,
@@ -720,7 +720,7 @@ export class KbFileService implements OnModuleInit {
     skip: number = 0,
     limit: number = 50,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     let parentFolderId: string | null = null;
@@ -746,7 +746,7 @@ export class KbFileService implements OnModuleInit {
   }
 
   async getFile(fileId: string, kbId: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
     const file = await this.fileRepo.findById(kbId, fileId);
     if (!file) throw new NotFoundException("文件不存在");
@@ -759,7 +759,7 @@ export class KbFileService implements OnModuleInit {
   }
 
   async batchGetFileStatus(fileIds: string[], kbId: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
     const files = await this.fileRepo.findByIds(kbId, fileIds);
     return files.map((file) => this.toStatusView(file));
@@ -788,7 +788,7 @@ export class KbFileService implements OnModuleInit {
    * 不再是旧实现的「向量库删一次 + JSONL 删一次 + 元信息删一次」。
    */
   async deleteFileAndChunks(fileId: string, kbId: string): Promise<boolean> {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     const file = await this.fileRepo.findById(kbId, fileId);
@@ -865,7 +865,7 @@ export class KbFileService implements OnModuleInit {
    * 重新处理文件
    */
   async retryFileProcessing(fileId: string, kbId: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     const file = await this.fileRepo.findById(kbId, fileId);
@@ -968,7 +968,7 @@ export class KbFileService implements OnModuleInit {
    * 改名只动数据库行：原件目录以 itemId 命名，不随显示名变化。
    */
   async renameFile(fileId: string, kbId: string, newName: string) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     this.validateFileName(newName);
@@ -1017,7 +1017,7 @@ export class KbFileService implements OnModuleInit {
     kbId: string,
     targetParentFolderId: string | null,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     const file = await this.fileRepo.findById(kbId, fileId);
@@ -1132,7 +1132,7 @@ export class KbFileService implements OnModuleInit {
     skip: number = 0,
     limit: number = 10,
   ) {
-    const kb = await this.kbRepo.findById(kbId);
+    const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
 
     const file = await this.fileRepo.findById(kbId, fileId);
