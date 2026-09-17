@@ -285,13 +285,25 @@ function handleSubAgentClosed(event: any) {
  * 打开子代理会话（概览面板子代理行 / 工作流成员行消费）：
  * 在侧边栏工作区打开 subagent 标签，与中央主会话同屏并存。
  * Tab 状态不存在时补建（历史回放/其他端创建的 workflow 子代理）。
+ *
+ * 时序要求（务必保留 nextTick）：工作区隐藏时 WorkspaceSidebar 尚未挂载
+ * （ChatPage.vue 模板 v-if="layoutStore.workspaceVisible && mainSession"），
+ * 而它挂载时会执行一次 immediate 会话 watch —— 该 watch 在 oldSessionId 为
+ * undefined 时判定为「会话切换」，调用 tabStore.clearAll() 清空标签，随后
+ * restorePreviewCache() 再从 localStorage 恢复旧快照。
+ * 若在本 tick 内直接 openSubAgentTab，标签会被 clearAll 吃掉，表现为
+ * 「只打开了侧边栏，子代理标签没自动打开」。
+ * nextTick 让 openSubAgentTab 排在挂载之后执行，与概览面板打开
+ * Git 标签 / 工作目录浏览标签（OverviewPanel 的 openGit / openWorkspaceTree）一致。
  */
 function openSubAgentSessionById(subSessionId: string) {
   if (!subSessionId) return;
   const session = subSessions.value.find((s) => s.id === subSessionId);
-  // 工作区隐藏时先展开，再打开/激活子代理标签（对齐概览面板打开 Git 标签的模式）
+  const name = session?.title || t('chat.panel.subTask');
+  // 工作区隐藏时先展开，待侧边栏挂载完成（其 immediate watch 已跑完清空/恢复）
+  // 再打开/激活子代理标签，避免标签被挂载期清空逻辑吃掉。
   layoutStore.setWorkspaceVisible(true);
-  tabStore.openSubAgentTab(subSessionId, session?.title || t('chat.panel.subTask'));
+  nextTick(() => tabStore.openSubAgentTab(subSessionId, name));
 }
 provide('workspace:openSubAgentSession', openSubAgentSessionById);
 

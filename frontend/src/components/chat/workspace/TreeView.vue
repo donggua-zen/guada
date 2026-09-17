@@ -195,6 +195,28 @@ defineExpose({ scrollToKey });
   transition: background-color 0.15s;
   user-select: none;
   box-sizing: border-box;
+  /* 单行行盒：禁止换行 + 裁剪溢出。
+     此行高固定 26px；若不 nowrap，长名称会在行内折行、撑高内容盒，
+     而固定 height 下溢出的后半段会画到相邻行上（表现为行与行文字叠在一起）。
+     历史教训：行样式原分散在调用方（.git-tree-row 含 white-space:nowrap），
+     迁到本组件统一渲染后该约束丢失，导致部分长名称行换行重叠。 */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ── 行内文本兜底约束（长文件名重叠修复） ──
+   现象：同一棵树里有的行正常省略号截断、有的行文字溢出并与相邻行叠加。
+   插槽内容（.node-label / .git-tree-name）由调用方通过 #row 提供，样式命中
+   取决于调用方是否写全；本组件必须自己兜住，保证任意调用方都获得一致行为：
+     - min-width:0  → 允许在 flex 行内收缩（默认 min-width:auto 会撑破行宽）
+     - nowrap       → 硬约束：长文本一旦换行会撑高行盒、压到相邻行上
+     - ellipsis     → 收缩后用省略号表达"被截断"
+   只针对文本容器 span 生效，不干扰调用方插入的 img / el-button。 */
+.tree-view-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 缩进指引竖线：每层缩进一条 1px 线，线画在格子中心（6-7px 段），
