@@ -853,7 +853,14 @@ const confirmDeleteSession = async () => {
     deleteSessionData.value = null
   } catch (error) {
     console.error('删除对话失败:', error)
-    toast.error(t('ui.sidebar.deleteSessionFailed'))
+    // 运行中禁止删除（后端 409 SESSION_STREAMING）：给出可操作的专用提示，而非笼统失败
+    const status = (error as any)?.response?.status
+    const code = (error as any)?.response?.data?.code
+    if (status === 409 || code === 'SESSION_STREAMING') {
+      toast.error(t('ui.sidebar.deleteSessionStreaming'))
+    } else {
+      toast.error(t('ui.sidebar.deleteSessionFailed'))
+    }
   }
 }
 

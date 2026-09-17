@@ -164,6 +164,7 @@
     workspaceDeleteWarning: 'You have chosen to also delete the default working directory. This will permanently delete all file data for this session and cannot be undone!',
     sessionDeleted: 'Session deleted successfully',
     deleteSessionFailed: 'Failed to delete session',
+    deleteSessionStreaming: 'The session or a sub-agent is still running. Stop it before deleting.',
     logoutTitle: 'Notice',
     logoutConfirm: 'Are you sure you want to log out?',
     defaultUserName: 'User',
