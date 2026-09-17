@@ -34,7 +34,7 @@ export interface ScheduledTask {
   executeAt?: string | null;
   targetMode: TaskTargetMode;
   targetSessionId?: string | null;
-  characterId?: string | null;
+  agentId?: string | null;
   modelId?: string | null;
   settings?: Record<string, any> | null;
   enabled: boolean;

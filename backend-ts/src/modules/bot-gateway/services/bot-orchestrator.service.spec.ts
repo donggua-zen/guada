@@ -135,7 +135,7 @@ function createBotConfig(): BotConfig {
     name: 'Test Bot',
     platformConfig: {},
     enabled: true,
-    defaultCharacterId: 'char-1',
+    defaultAgentId: 'char-1',
   };
 }
 

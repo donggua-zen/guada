@@ -1,8 +1,7 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import * as chokidar from "chokidar";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   resolveSessionsBasePath,
   assertValidId,
@@ -29,7 +28,7 @@ import { mintId, atomicWriteFile } from "../../common/persistence/file-store-kit
  * - 查询时内存过滤 + `sort(...)` + 确定性 id tiebreak；磁盘文件顺序无意义
  * - 内存索引是盘的缓存，不是独立真相；重启全量重扫自愈
  *
- * 设计参考：CharacterFileStore/ProviderFileStore（chokidar + 原子写 + 非法隔离），
+ * 设计参考：AgentFileStore/ProviderFileStore（chokidar + 原子写 + 非法隔离），
  * 以及 DSH 的 projcache 模式（派生数据坏了就丢弃，权威永远是文件本身）。
  */
 
@@ -55,7 +54,7 @@ export interface SessionMeta {
   avatarUrl: string | null;
   description: string | null;
   modelId: string | null;
-  characterId: string | null;
+  agentId: string | null;
   groupId: string | null;
   settings: Record<string, any> | null;
   sessionType: string;
@@ -105,17 +104,14 @@ function toISO(value: any): string | null {
 }
 
 @Injectable()
-export class SessionFileStore implements OnModuleDestroy {
+export class SessionFileStore {
   private readonly logger = new Logger(SessionFileStore.name);
   private readonly baseDir: string;
 
   /** id → meta（内存索引；盘为权威，此处只是缓存） */
   private index = new Map<string, SessionMeta>();
   private loadErrors = new Map<string, SessionLoadError>();
-  private changeListeners = new Set<() => void>();
 
-  private watcher: chokidar.FSWatcher | null = null;
-  private debounceTimer: NodeJS.Timeout | null = null;
   private ready: Promise<void> | null = null;
 
   /** 每会话写互斥：meta.json 是整文件重写（RMW），并发写会丢更新 */
@@ -151,7 +147,6 @@ export class SessionFileStore implements OnModuleDestroy {
     await this.loadAll();
     const healed = await this.healOrphanSessions();
     if (healed > 0) await this.loadAll();
-    this.startWatcher();
   }
 
   /**
@@ -192,7 +187,7 @@ export class SessionFileStore implements OnModuleDestroy {
         avatarUrl: null,
         description: null,
         modelId: null,
-        characterId: null,
+        agentId: null,
         groupId: null,
         settings: null,
         sessionType: "web",
@@ -356,7 +351,7 @@ export class SessionFileStore implements OnModuleDestroy {
       avatarUrl: typeof r.avatarUrl === "string" ? r.avatarUrl : null,
       description: typeof r.description === "string" ? r.description : null,
       modelId: typeof r.modelId === "string" ? r.modelId : null,
-      characterId: typeof r.characterId === "string" ? r.characterId : null,
+      agentId: typeof r.agentId === "string" ? r.agentId : null,
       groupId: typeof r.groupId === "string" ? r.groupId : null,
       settings:
         r.settings && typeof r.settings === "object" && !Array.isArray(r.settings)
@@ -376,63 +371,6 @@ export class SessionFileStore implements OnModuleDestroy {
       updatedAt: toISO(r.updatedAt) ?? now,
       lastActiveAt: toISO(r.lastActiveAt),
     };
-  }
-
-  private startWatcher(): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = chokidar.watch(this.baseDir, {
-        ignoreInitial: true,
-        ignorePermissionErrors: true,
-        persistent: true,
-        depth: 1,
-        // 只关心 meta.json：seg-*.jsonl 在流式输出期间持续追加，监听整目录会造成事件风暴；
-        // 点开头条目（.trash/.migrated-* 等）也排除
-        ignored: (target: string) => {
-          const name = path.basename(target);
-          if (name.startsWith(".")) return true;
-          if (name === "manifest.json" || name === "snapshot.json") return true;
-          if (name.endsWith(".jsonl") || name.endsWith(".tmp")) return true;
-          return false;
-        },
-      });
-      const reload = () => this.scheduleReload();
-      this.watcher.on("add", reload);
-      this.watcher.on("change", reload);
-      this.watcher.on("unlink", reload);
-      this.watcher.on("addDir", reload);
-      this.watcher.on("unlinkDir", reload);
-      this.watcher.on("error", (err) =>
-        this.logger.error(`Session watcher error: ${String(err)}`),
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to start session watcher: ${String(err)}`);
-    }
-  }
-
-  private scheduleReload(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.loadAll()
-        .then(() => {
-          for (const listener of this.changeListeners) {
-            try {
-              listener();
-            } catch (err) {
-              this.logger.warn(`Session change listener failed: ${String(err)}`);
-            }
-          }
-        })
-        .catch((err) =>
-          this.logger.error(`Session reload failed: ${String(err)}`),
-        );
-    }, 300);
-  }
-
-  onDidChange(listener: () => void): () => void {
-    this.changeListeners.add(listener);
-    return () => this.changeListeners.delete(listener);
   }
 
   // ============ 查询 API（同步，走内存索引） ============
@@ -560,7 +498,7 @@ export class SessionFileStore implements OnModuleDestroy {
       avatarUrl: data.avatarUrl ?? null,
       description: data.description ?? null,
       modelId: data.modelId ?? null,
-      characterId: data.characterId ?? null,
+      agentId: data.agentId ?? null,
       groupId: data.groupId ?? null,
       settings: data.settings ?? null,
       sessionType: data.sessionType ?? "web",
@@ -830,7 +768,7 @@ export class SessionFileStore implements OnModuleDestroy {
     await atomicWriteFile(filePath, content);
   }
 
-  /** 删除目录（Windows 上 watcher 句柄可能短暂占用，重试） */
+  /** 删除目录（Windows 上句柄可能短暂占用，重试） */
   private async removeDir(dir: string): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -841,11 +779,6 @@ export class SessionFileStore implements OnModuleDestroy {
         await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
       }
     }
-  }
-
-  onModuleDestroy(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    void this.watcher?.close();
   }
 }
 

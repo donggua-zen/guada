@@ -9,7 +9,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { MigrationRunner } from '../database/migration-runner.service';
 import { MetadataBootstrapGate } from '../database/metadata-bootstrap.gate';
-import { CharacterFileBootstrapService } from '../database/bootstrap/character-file-bootstrap.service';
+import { AgentFileBootstrapService } from '../database/bootstrap/agent-file-bootstrap.service';
 import { ProviderBootstrapService } from '../database/bootstrap/provider-bootstrap.service';
 import { AccountBootstrapService } from '../database/bootstrap/account-bootstrap.service';
 import { MetadataFileBootstrapService } from '../database/bootstrap/metadata-file-bootstrap.service';
@@ -34,17 +34,17 @@ import { SessionMessageMigrationBootstrapService } from '../database/bootstrap/s
  * - PrismaService / MigrationRunner / MetadataBootstrapGate：冻结主库与门控
  * - bootstrap/ 一次性 DB→文件迁移脚手架（⚠️ 临时，两个版本后随主库整体移除）。
  *   脚手架**自持构造**所需 store（不经 DI），因此本模块不 import 任何域模块——
- *   反向 import 会把域模块初始化提到迁移导出之前（CharacterSeedService 在
+ *   反向 import 会把域模块初始化提到迁移导出之前（AgentSeedService 在
  *   init 期读写 store，会在空目录上补种）。
  *
  * ⚠️ 初始化顺序约束：本模块在 app.module.ts 必须位于所有域模块之前
- * （迁移导出与 gate 放行先于域模块的 onModuleInit——CharacterSeedService 补种、
+ * （迁移导出与 gate 放行先于域模块的 onModuleInit——AgentSeedService 补种、
  * 各 store 索引预热都依赖该顺序）。
  */
 const SCAFFOLD_PROVIDERS = [
   // 门控必须先于各 bootstrap 提供（bootstrap 构造期注入）
   MetadataBootstrapGate,
-  CharacterFileBootstrapService,
+  AgentFileBootstrapService,
   ProviderBootstrapService,
   AccountBootstrapService,
   MetadataFileBootstrapService,

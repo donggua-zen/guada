@@ -110,7 +110,7 @@ export function createMockSessionContext(options?: {
     sessionId: 'test-session-001',
     sessionType: 'web' as const,
     parentSessionId: null,
-    characterId: null,
+    agentId: null,
     workspacePath: '',
     getSandboxMode: jest.fn(() => 'workspace-write' as const),
     setSandboxMode: jest.fn().mockResolvedValue(undefined),

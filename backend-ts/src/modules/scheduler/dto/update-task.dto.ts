@@ -36,7 +36,7 @@ export class UpdateTaskDto {
 
   @IsString()
   @IsOptional()
-  characterId?: string | null;
+  agentId?: string | null;
 
   @IsString()
   @IsOptional()

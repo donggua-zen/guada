@@ -16,7 +16,7 @@
               </div>
             </template>
             <template v-else>
-              <template v-if="currentSessionId && activeTurns.length === 0 && currentSession?.character">
+              <template v-if="currentSessionId && activeTurns.length === 0 && currentSession?.agent">
                 <!-- 欢迎页 -->
                 <WelcomeScreen :session="currentSession" class="flex-1" />
               </template>
@@ -44,12 +44,14 @@
                   <EventCard v-if="turn.kind === 'event'" :event="turn" />
                   <TurnItem v-else :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
                     :turn="turn" :avatar="userAvater"
-                    :character-name="currentSession?.character?.name"
-                    :character-avatar="currentSession?.character?.avatarUrl" :is-last="index === visibleTurns.length - 1"
+                    :agent-name="currentSession?.agent?.name"
+                    :agent-avatar="currentSession?.agent?.avatarUrl" :is-last="index === visibleTurns.length - 1"
                     :allow-generate="!isStreaming && index === lastUserMessageIndex"
                     :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                     :session-id="currentSessionId || undefined" />                </template>
+                <!-- 会话待办卡：对话流下方、滚动区内跟随滚动（独立组件不挂 turn；REST+todo_updated SSE 契约不变） -->
+                <SessionTodoCard :session-id="currentSessionId || undefined" />
                 <!-- <div class="min-h-60"></div> -->
 
                 <!-- 流式输出状态指示 -->
@@ -88,7 +90,7 @@
               <div class="w-full flex items-center relative">
 
                 <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-                  :session-id="effectiveSessionId" :character-id="props.session?.characterId || ''"
+                  :session-id="effectiveSessionId" :agent-id="props.session?.agentId || ''"
                   :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
                   :uploader="chatAttachmentUploader"
                   :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
@@ -166,7 +168,7 @@ import {
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
 import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
-import type { Character } from '@/types/character';
+import type { Agent } from '@/types/agent';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
@@ -177,6 +179,7 @@ import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/
 // 组件导入
 import TurnItem from "./TurnItem.vue";
 import EventCard from "./EventCard.vue";
+import SessionTodoCard from "./SessionTodoCard.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
@@ -250,7 +253,7 @@ const emit = defineEmits<{
   'update:session': [session: Session]
   openSettings: []
   'save-settings': []
-  'select-character': [character: Character]  // 切换角色
+  'select-agent': [agent: Agent]  // 切换智能体
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
 }>();
@@ -647,7 +650,7 @@ watch(() => props.session?.id || props.sessionId, async (newSessionId: string | 
 
 // 监听流式状态变化，在第一次对话完成后生成标题
 watch(() => isStreaming.value, async (newVal, oldVal) => {
-  // 当流式状态从 true 变为 false 时（即助手回复完成）
+  // 当流式状态从 true 变为 false 时（即智能体回复完成）
   if (oldVal === true && newVal === false) {
     if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
       await generateTitleIfNeeded(currentSessionId.value!, activeMessages.value, currentSession);

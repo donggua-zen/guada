@@ -1,8 +1,7 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import * as chokidar from "chokidar";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   AGENT_ID_MAX_LENGTH,
   AgentFileDefinition,
@@ -11,7 +10,7 @@ import {
   parseAgentMarkdown,
   serializeAgentMarkdown,
   slugifyAgentId,
-} from "./character-file.mapper";
+} from "./agent-file.mapper";
 
 /**
  * 智能体文件存储（对齐 DSH「预设就是文件」与本项目 providers/*.yaml 的既有范式）
@@ -23,8 +22,8 @@ import {
  *   <AGENTS_DATA_DIR>/.tombstones.json  UI 删除墓碑（阻止补种复活）
  *
  * - 目录名即 id：findById 直接拼路径读取，零索引（列表才需要扫描缓存）
- * - 改 name 不改目录名 → 会话 characterId 引用稳定
- * - 内存缓存 + chokidar 300ms 防抖全量重读（兼容编辑器 tmp+rename）
+ * - 改 name 不改目录名 → 会话 agentId 引用稳定
+ * - 内存缓存（外部手改文件重启生效；UI 走 API 修改即时更新缓存）
  * - 原子写（tmp + rename）；解析失败文件隔离，不崩服务、不挤占缓存
  */
 
@@ -51,8 +50,8 @@ export function resolveBundledAgentsDir(): string {
   );
 }
 
-/** 对外的智能体视图（对齐原 Prisma Character，title 已更名为 name） */
-export interface CharacterDefinition {
+/** 对外的智能体视图（对齐原 Prisma Agent，title 已更名为 name） */
+export interface AgentDefinition {
   /** 目录名 */
   id: string;
   name: string;
@@ -67,38 +66,35 @@ export interface CharacterDefinition {
   bundled: boolean;
 }
 
-export interface CharacterCreateInput {
+export interface AgentCreateInput {
   name: string;
   description?: string | null;
   modelId?: string | null;
   settings?: Record<string, any> | null;
 }
 
-export interface CharacterUpdateInput {
+export interface AgentUpdateInput {
   name?: string;
   description?: string | null;
   modelId?: string | null;
   settings?: Record<string, any> | null;
 }
 
-export interface CharacterLoadError {
+export interface AgentLoadError {
   file: string;
   message: string;
 }
 
-interface CachedCharacter extends CharacterDefinition {
+interface CachedAgent extends AgentDefinition {
   dirPath: string;
 }
 
 @Injectable()
-export class CharacterFileStore implements OnModuleDestroy {
-  private readonly logger = new Logger(CharacterFileStore.name);
+export class AgentFileStore {
+  private readonly logger = new Logger(AgentFileStore.name);
   private readonly usersDir: string;
-  private cache = new Map<string, CachedCharacter>();
-  private loadErrors = new Map<string, CharacterLoadError>();
-  private changeListeners = new Set<() => void>();
-  private watcher: chokidar.FSWatcher | null = null;
-  private debounceTimer: NodeJS.Timeout | null = null;
+  private cache = new Map<string, CachedAgent>();
+  private loadErrors = new Map<string, AgentLoadError>();
   private ready: Promise<void> | null = null;
 
   constructor() {
@@ -109,7 +105,7 @@ export class CharacterFileStore implements OnModuleDestroy {
     return this.usersDir;
   }
 
-  /** 幂等初始化：建目录 + 全量加载 + 启动监听 */
+  /** 幂等初始化：建目录 + 全量加载 */
   async initialize(): Promise<void> {
     this.ready ??= this.doInitialize();
     return this.ready;
@@ -118,9 +114,8 @@ export class CharacterFileStore implements OnModuleDestroy {
   private async doInitialize(): Promise<void> {
     await fsp.mkdir(this.usersDir, { recursive: true });
     await this.loadAll();
-    this.startWatcher();
     this.logger.log(
-      `Character file store ready at ${this.usersDir} (${this.cache.size} agent(s))`,
+      `Agent file store ready at ${this.usersDir} (${this.cache.size} agent(s))`,
     );
   }
 
@@ -133,7 +128,7 @@ export class CharacterFileStore implements OnModuleDestroy {
   // ============ 读取 API ============
 
   /** 列表（按文件创建时间升序，缺失回退 mtime） */
-  async listCharacters(): Promise<CharacterDefinition[]> {
+  async listAgents(): Promise<AgentDefinition[]> {
     await this.initialize();
     return Array.from(this.cache.values())
       .sort(
@@ -148,7 +143,7 @@ export class CharacterFileStore implements OnModuleDestroy {
    * 按 id 查找。缓存优先；未命中则直接拼 `<usersDir>/<id>/AGENT.md` 读取
    * （目录名即 id，无需索引）。
    */
-  async findById(id: string): Promise<CharacterDefinition | undefined> {
+  async findById(id: string): Promise<AgentDefinition | undefined> {
     if (!id || !isValidAgentId(id)) return undefined;
     const cached = this.cache.get(id);
     if (cached) return this.toView(cached);
@@ -159,9 +154,9 @@ export class CharacterFileStore implements OnModuleDestroy {
   /** 批量查找（水合会话列表用；缓存优先，未命中回退磁盘） */
   async findManyByIds(
     ids: string[],
-  ): Promise<Map<string, CharacterDefinition>> {
+  ): Promise<Map<string, AgentDefinition>> {
     await this.initialize();
-    const out = new Map<string, CharacterDefinition>();
+    const out = new Map<string, AgentDefinition>();
     for (const id of ids) {
       if (!id || out.has(id)) continue;
       const cached = this.cache.get(id);
@@ -175,20 +170,14 @@ export class CharacterFileStore implements OnModuleDestroy {
     return out;
   }
 
-  listLoadErrors(): CharacterLoadError[] {
+  listLoadErrors(): AgentLoadError[] {
     return Array.from(this.loadErrors.values());
-  }
-
-  /** 变更通知（文件被手动/AI/UI 修改后触发） */
-  onDidChange(listener: () => void): () => void {
-    this.changeListeners.add(listener);
-    return () => this.changeListeners.delete(listener);
   }
 
   // ============ 写入 API ============
 
   /** 新建：由 name 派生目录 id，冲突时追加 `-2`/`-3` */
-  async create(input: CharacterCreateInput): Promise<CharacterDefinition> {
+  async create(input: AgentCreateInput): Promise<AgentDefinition> {
     await this.initialize();
     const id = this.uniqueId(slugifyAgentId(input.name));
     const dirPath = path.join(this.usersDir, id);
@@ -208,8 +197,8 @@ export class CharacterFileStore implements OnModuleDestroy {
   /** 更新：只重写 AGENT.md，目录名（id）保持不变 */
   async update(
     id: string,
-    patch: CharacterUpdateInput,
-  ): Promise<CharacterDefinition | undefined> {
+    patch: AgentUpdateInput,
+  ): Promise<AgentDefinition | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
     const dirPath = path.join(this.usersDir, id);
@@ -317,8 +306,8 @@ export class CharacterFileStore implements OnModuleDestroy {
     } catch {
       return;
     }
-    const next = new Map<string, CachedCharacter>();
-    const nextErrors = new Map<string, CharacterLoadError>();
+    const next = new Map<string, CachedAgent>();
+    const nextErrors = new Map<string, AgentLoadError>();
 
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
@@ -352,7 +341,7 @@ export class CharacterFileStore implements OnModuleDestroy {
     this.loadErrors = nextErrors;
   }
 
-  private async readFromDisk(id: string): Promise<CachedCharacter | null> {
+  private async readFromDisk(id: string): Promise<CachedAgent | null> {
     if (!isValidAgentId(id)) return null;
     const dirPath = path.join(this.usersDir, id);
     try {
@@ -376,7 +365,7 @@ export class CharacterFileStore implements OnModuleDestroy {
     stat: fs.Stats,
     dirStat: fs.Stats,
     avatarFileName: string | null,
-  ): CachedCharacter {
+  ): CachedAgent {
     const settings = this.normalizeSettings(def.settings);
     return {
       id,
@@ -392,7 +381,7 @@ export class CharacterFileStore implements OnModuleDestroy {
     };
   }
 
-  private toView(c: CachedCharacter): CharacterDefinition {
+  private toView(c: CachedAgent): AgentDefinition {
     return {
       id: c.id,
       name: c.name,
@@ -462,59 +451,5 @@ export class CharacterFileStore implements OnModuleDestroy {
       /* 目标不存在，正常 */
     }
     await fsp.rename(tmpPath, filePath);
-  }
-
-  // ============ 监听 ============
-
-  private startWatcher(): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = chokidar.watch(this.usersDir, {
-        ignoreInitial: true,
-        ignorePermissionErrors: true,
-        persistent: true,
-        depth: 2,
-        // 忽略 .trash / .tombstones.json 等点开头条目
-        ignored: /(^|[\/\\])\./,
-      });
-      const reload = () => this.scheduleReload();
-      this.watcher.on("add", reload);
-      this.watcher.on("change", reload);
-      this.watcher.on("unlink", reload);
-      this.watcher.on("addDir", reload);
-      this.watcher.on("unlinkDir", reload);
-      this.watcher.on("error", (err) =>
-        this.logger.error(`Character watcher error: ${String(err)}`),
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to start character watcher: ${String(err)}`);
-    }
-  }
-
-  private scheduleReload(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.loadAll()
-        .then(() => {
-          for (const listener of this.changeListeners) {
-            try {
-              listener();
-            } catch (err) {
-              this.logger.warn(
-                `Character change listener failed: ${String(err)}`,
-              );
-            }
-          }
-        })
-        .catch((err) =>
-          this.logger.error(`Character reload failed: ${String(err)}`),
-        );
-    }, 300);
-  }
-
-  onModuleDestroy(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    void this.watcher?.close();
   }
 }

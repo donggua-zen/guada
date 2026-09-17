@@ -122,7 +122,7 @@ export class CompactionService {
       };
     }
 
-    // resolveSummaryMode 在会话侧合并解析（session > character > 全局），此处归一
+    // resolveSummaryMode 在会话侧合并解析（session > agent > 全局），此处归一
     const summaryMode: SummaryMode = config.summaryMode ?? SummaryMode.DEFAULT;
 
     // 广播预压缩事件（无论最终走裁剪还是摘要，历史即将被处理）

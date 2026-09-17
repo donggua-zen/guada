@@ -30,7 +30,7 @@ type PluginResolutionState = {
   enabled: boolean;
   /** 启停来源："default"=按 category 默认值 / "global"=全局层禁用 */
   effective: "default" | "global";
-  /** 被角色层裁剪的工具包 ID 集合 */
+  /** 被智能体层裁剪的工具包 ID 集合 */
   deniedToolkits: Set<string>;
 };
 
@@ -50,7 +50,7 @@ export interface PluginInstance {
  *
  * 职责：
  * 1. 管理插件的加载/卸载/启用/禁用生命周期
- * 2. 两层开关决议：全局层控插件启停，角色层只裁剪工具包（能力包）
+ * 2. 两层开关决议：全局层控插件启停，智能体层只裁剪工具包（能力包）
  * 3. 聚合所有插件的工具定义和提示词
  */
 @Injectable()
@@ -332,11 +332,11 @@ export class PluginManager {
    * - 全局层（GlobalPluginConfig，持久化于 SG_PLUGINS/plugins_config）：
    *   仅控制插件级启停（entry.enabled），由 resolveGlobalLayer 独立解析；
    *   enabled=true 与 enabled=false 均生效（默认关闭的 user/extended 插件可被显式启用）
-   * - 角色层（RolePluginConfig，即 character/session settings.plugins）：
+   * - 智能体层（RolePluginConfig，即 agent/session settings.plugins）：
    *   仅裁剪工具包（toolkits_filter/deny/allow），由 applyRoleLayer 独立消费；
-   *   不消费 entry.enabled，旧角色数据中的插件级开关被直接忽略
-   * - 二级过滤：全局关闭的插件其工具包对角色层不可见——applyRoleLayer
-   *   直接跳过未启用插件，角色层对它们的 allow/deny 均不生效
+   *   不消费 entry.enabled，旧智能体数据中的插件级开关被直接忽略
+   * - 二级过滤：全局关闭的插件其工具包对智能体层不可见——applyRoleLayer
+   *   直接跳过未启用插件，智能体层对它们的 allow/deny 均不生效
    *
    * 这是 PluginManager 对外唯一决议入口。
    * ToolExecutor / PromptCollector 等消费方通过 ResolvedPluginInfo 使用结果。
@@ -346,7 +346,7 @@ export class PluginManager {
     roleCfg?: RolePluginConfig,
     skipHandler = false,
   ): Promise<ResolvedPluginInfo[]> {
-    // 全局层 → 角色层：两个配置各自独立解析，互不耦合
+    // 全局层 → 智能体层：两个配置各自独立解析，互不耦合
     const stateMap = await this.resolveGlobalLayer();
     this.applyRoleLayer(stateMap, roleCfg);
 
@@ -385,7 +385,7 @@ export class PluginManager {
 
   /**
    * 全局层决议：只读 SG_PLUGINS（plugins_config），决定每个插件的启停。
-   * 不消费任何角色配置；显式配置过的插件标记 effective='global'。
+   * 不消费任何智能体配置；显式配置过的插件标记 effective='global'。
    */
   private async resolveGlobalLayer(): Promise<
     Map<string, PluginResolutionState>
@@ -410,15 +410,15 @@ export class PluginManager {
   }
 
   /**
-   * 角色层决议：只消费角色配置（character/session settings.plugins），
+   * 智能体层决议：只消费智能体配置（agent/session settings.plugins），
    * 在全局已启用的插件范围内裁剪工具包，不触碰插件启停。
    *
    * - __strategy="deny_nonsystem"：拒绝所有非受保护插件的全部工具包（"全部禁用"）
    * - __default=false：白名单模式（未显式允许的工具包默认拒绝）
-   * - 全局关闭的插件直接跳过——角色层对它们的 allow/deny 均不生效（二级过滤）
+   * - 全局关闭的插件直接跳过——智能体层对它们的 allow/deny 均不生效（二级过滤）
    * - essential 插件的工具包不可被任何方式拒绝（如 universal_tools 的 lazy_tools 元能力）；
-   *   system 分类插件（mcp/skill/sub_agent）的插件本体不可禁用，但工具包可按角色裁剪
-   * - 角色层条目中遗留的 enabled 字段被显式忽略（角色层不再控制插件启停）
+   *   system 分类插件（mcp/skill/sub_agent）的插件本体不可禁用，但工具包可按智能体裁剪
+   * - 智能体层条目中遗留的 enabled 字段被显式忽略（智能体层不再控制插件启停）
    */
   private applyRoleLayer(
     stateMap: Map<string, PluginResolutionState>,
@@ -474,7 +474,7 @@ export class PluginManager {
   /**
    * 根据插件状态构建 ResolvedPluginInfo
    *
-   * enabledToolKits 返回全部工具包：被角色层裁剪的以 enabled=false 标记，
+   * enabledToolKits 返回全部工具包：被智能体层裁剪的以 enabled=false 标记，
    * 且不解析其 handler（loadMode/activator 取注册默认值），其工具与提示词
    * 均不进入运行时。
    */
@@ -520,7 +520,7 @@ export class PluginManager {
     const enabledToolKits: ResolvedPluginInfo["enabledToolKits"] = [];
 
     for (const kitReg of PluginRegistry.getToolKits(manifest.id)) {
-      // 自治理工具包不参与角色层过滤：applyRoleLayer 写入的 deniedToolkits 对其无效。
+      // 自治理工具包不参与智能体层过滤：applyRoleLayer 写入的 deniedToolkits 对其无效。
       // 这是 handler 必然被执行的前提——被 deny 的工具包会跳过 handler 直接取静态默认值。
       const isSelfGoverned = kitReg.def.governance === "self";
       const denied =

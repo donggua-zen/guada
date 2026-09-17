@@ -32,7 +32,7 @@ export class CreateTaskDto {
 
   @IsString()
   @IsOptional()
-  characterId?: string;
+  agentId?: string;
 
   @IsString()
   @IsOptional()

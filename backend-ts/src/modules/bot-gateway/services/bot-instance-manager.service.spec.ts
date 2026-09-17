@@ -130,7 +130,7 @@ function createConfig(
     name: 'Lifecycle Bot',
     platformConfig: {},
     enabled: true,
-    defaultCharacterId: 'character-1',
+    defaultAgentId: 'agent-1',
     reconnectConfig: {
       enabled: true,
       maxRetries: 3,

@@ -8,7 +8,7 @@ import { PlatformUtilsService } from './services/platform-utils.service';
 import { BotAdminController } from './controllers/bot-admin.controller';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
-import { CharactersModule } from '../characters/characters.module';
+import { AgentsModule } from '../agents/agents.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
@@ -18,7 +18,7 @@ import { SessionFileStore } from '../chat/session-file.store';
 import { BotFileStore } from './bot-file.store';
 
 @Module({
-  imports: [ChatModule, CharactersModule, AuthModule, SharedModule, ToolsModule],
+  imports: [ChatModule, AgentsModule, AuthModule, SharedModule, ToolsModule],
   controllers: [BotAdminController],
   providers: [
     BotInstanceManager, BotAdapterFactory, BotOrchestrator,

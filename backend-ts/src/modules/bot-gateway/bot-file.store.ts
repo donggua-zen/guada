@@ -1,8 +1,7 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import * as chokidar from "chokidar";
+import { Injectable, Logger } from "@nestjs/common";
 import * as yaml from "js-yaml";
 import {
   META_DOMAIN_BOTS,
@@ -20,7 +19,7 @@ import {
  *
  * 权威来源 = `<BOT_DATA_DIR>/<botId>.yaml`，每个实例一个 YAML 文件。
  * - 文件名（去扩展名）即 id（cuid，与原 DB 主键一致）→ 引用零改写
- * - 内存缓存 + chokidar 300ms 防抖全量重读（兼容编辑器 tmp+rename）
+ * - 内存缓存（外部手改文件重启生效；UI 走 API 修改即时更新缓存）
  * - 原子写（tmp + rename + Windows EPERM 退避重试）
  * - 非法文件隔离：解析失败仅记录，不崩服务、不挤占缓存
  *
@@ -42,7 +41,7 @@ export interface BotFileInstance {
   reconnectEnabled: boolean;
   maxRetries: number;
   retryInterval: number;
-  defaultCharacterId: string;
+  defaultAgentId: string;
   defaultModelId: string | null;
   defaultThinkingEffort: string | null;
   status: string;
@@ -69,16 +68,13 @@ export function resolveBotsDir(): string {
 }
 
 @Injectable()
-export class BotFileStore implements OnModuleDestroy {
+export class BotFileStore {
   private readonly logger = new Logger(BotFileStore.name);
   private readonly botsDir: string;
 
   private cache = new Map<string, BotFileInstance>();
   private loadErrors = new Map<string, BotLoadError>();
-  private changeListeners = new Set<() => void>();
 
-  private watcher: chokidar.FSWatcher | null = null;
-  private debounceTimer: NodeJS.Timeout | null = null;
   private ready: Promise<void> | null = null;
 
   /** 每实例写互斥（YAML 是整文件重写） */
@@ -102,7 +98,6 @@ export class BotFileStore implements OnModuleDestroy {
     await this.gate.wait(META_DOMAIN_BOTS);
     await fsp.mkdir(this.botsDir, { recursive: true });
     await this.loadAll();
-    this.startWatcher();
     this.logger.log(
       `Bot file store ready at ${this.botsDir} (${this.cache.size} instance(s))`,
     );
@@ -134,11 +129,6 @@ export class BotFileStore implements OnModuleDestroy {
     return Array.from(this.loadErrors.values());
   }
 
-  onDidChange(listener: () => void): () => void {
-    this.changeListeners.add(listener);
-    return () => this.changeListeners.delete(listener);
-  }
-
   // ============ 写入 API（原子写） ============
 
   async create(data: Partial<BotFileInstance> & { id?: string }): Promise<BotFileInstance> {
@@ -154,7 +144,7 @@ export class BotFileStore implements OnModuleDestroy {
       reconnectEnabled: data.reconnectEnabled !== false,
       maxRetries: data.maxRetries ?? 5,
       retryInterval: data.retryInterval ?? 5000,
-      defaultCharacterId: data.defaultCharacterId ?? "",
+      defaultAgentId: data.defaultAgentId ?? "",
       defaultModelId: data.defaultModelId ?? null,
       defaultThinkingEffort: data.defaultThinkingEffort ?? null,
       status: data.status ?? "stopped",
@@ -271,7 +261,7 @@ export class BotFileStore implements OnModuleDestroy {
       reconnectEnabled: raw.reconnectEnabled !== false,
       maxRetries: this.num(raw.maxRetries, 5),
       retryInterval: this.num(raw.retryInterval, 5000),
-      defaultCharacterId: this.str(raw.defaultCharacterId) ?? "",
+      defaultAgentId: this.str(raw.defaultAgentId) ?? "",
       defaultModelId: this.str(raw.defaultModelId),
       defaultThinkingEffort: this.str(raw.defaultThinkingEffort),
       status: this.str(raw.status) ?? "stopped",
@@ -297,48 +287,6 @@ export class BotFileStore implements OnModuleDestroy {
       : null;
   }
 
-  private startWatcher(): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = chokidar.watch(this.botsDir, {
-        ignoreInitial: true,
-        ignorePermissionErrors: true,
-        persistent: true,
-        depth: 0,
-        ignored: (target: string) => path.basename(target).startsWith("."),
-      });
-      const reload = () => this.scheduleReload();
-      this.watcher.on("add", reload);
-      this.watcher.on("change", reload);
-      this.watcher.on("unlink", reload);
-      this.watcher.on("error", (err) =>
-        this.logger.error(`Bot watcher error: ${String(err)}`),
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to start bot watcher: ${String(err)}`);
-    }
-  }
-
-  private scheduleReload(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.loadAll()
-        .then(() => {
-          for (const listener of this.changeListeners) {
-            try {
-              listener();
-            } catch (err) {
-              this.logger.warn(`Bot change listener failed: ${String(err)}`);
-            }
-          }
-        })
-        .catch((err) =>
-          this.logger.error(`Bot reload failed: ${String(err)}`),
-        );
-    }, 300);
-  }
-
   private async writeInstance(instance: BotFileInstance): Promise<void> {
     await fsp.mkdir(this.botsDir, { recursive: true });
     const body = yaml.dump(instance, { lineWidth: -1, noRefs: true });
@@ -361,10 +309,5 @@ export class BotFileStore implements OnModuleDestroy {
     } finally {
       if (this.writeChains.get(id) === tracked) this.writeChains.delete(id);
     }
-  }
-
-  onModuleDestroy(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    void this.watcher?.close();
   }
 }

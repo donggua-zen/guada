@@ -339,7 +339,7 @@ export class PluginApiImpl implements PluginApi {
   }
 
   registerToolKit(def: ToolKitDef): ToolKitHandle {
-    // 自治理会使其工具包逃逸角色层治理，因此只允许内建插件声明。
+    // 自治理会使其工具包逃逸智能体层治理，因此只允许内建插件声明。
     // 外部插件（dev/user）的 manifest 由插件自己提供，不能据此自封。
     const safeDef: ToolKitDef =
       this.pluginSource && this.pluginSource !== "builtin"

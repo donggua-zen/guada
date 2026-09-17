@@ -91,7 +91,7 @@ export class FilePlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    // ── file 能力包：全部文件工具与工作目录说明统一挂载，角色层按包启停 ──
+    // ── file 能力包：全部文件工具与工作目录说明统一挂载，智能体层按包启停 ──
     const fileKit = api.registerToolKit({
       id: "file",
       name: "%file.name%",
@@ -101,7 +101,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "read",
       description:
-        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and appends continuation parameters when truncated. NOTE: line numbers are prepended by the tool (e.g. '     1\\t') and are NOT part of the original file content.",
+        "Read the content of a text file at the specified path, supports pagination by line or by agent. Automatically truncates at a hard limit (20KB) and appends continuation parameters when truncated. NOTE: line numbers are prepended by the tool (e.g. '     1\\t') and are NOT part of the original file content.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -118,14 +118,14 @@ export class FilePlugin extends PluginBase {
           .enum(["line", "char"])
           .optional()
           .describe(
-            "Offset unit: line=read by line (default), char=read by character. When truncated=true, use the returned next.unit to continue",
+            "Offset unit: line=read by line (default), char=read by agent. When truncated=true, use the returned next.unit to continue",
           ),
         offset: z
           .number()
           .int()
           .optional()
           .describe(
-            "Starting position (line number or character offset); negative values count from the end (e.g., -10 = last 10 lines), default 0",
+            "Starting position (line number or agent offset); negative values count from the end (e.g., -10 = last 10 lines), default 0",
           ),
         limit: z
           .number()
@@ -133,7 +133,7 @@ export class FilePlugin extends PluginBase {
           .min(1)
           .optional()
           .describe(
-            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max characters to read (default 20000)",
+            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max agents to read (default 20000)",
           ),
         workspace: workspaceParamField,
       }),

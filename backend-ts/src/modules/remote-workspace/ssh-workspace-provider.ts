@@ -424,7 +424,7 @@ function planFind(pattern: string, cwd: string, deep?: number): FindPlan | null 
 /** shell 单引号包裹（内容内不允许单引号，出现即拒绝以防注入） */
 function shellQuote(s: string): string {
   if (s.includes("'")) {
-    throw new Error(`Unsupported character (') in pattern/path: ${s}`);
+    throw new Error(`Unsupported agent (') in pattern/path: ${s}`);
   }
   return `'${s}'`;
 }

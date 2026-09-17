@@ -4,7 +4,7 @@ import {
   byLastActiveDesc,
   byUpdatedDesc,
 } from "./session-file.store";
-import { CharacterFileStore } from "../characters/character-file.store";
+import { AgentFileStore } from "../agents/agent-file.store";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util";
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
@@ -43,7 +43,7 @@ export class SessionService {
 
   constructor(
     private sessionStore: SessionFileStore,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     private modelStore: ProviderFileStore,
     private settingsStorage: SettingsStorage,
     private llmService: LLMService,
@@ -62,7 +62,7 @@ export class SessionService {
 
   /**
    * 会话查询（原 SessionRepository.findAll）：web 会话按分组/关键词/归档过滤，
-   * lastActiveAt desc，内存分页 + total 同快照，并水合 character 视图。
+   * lastActiveAt desc，内存分页 + total 同快照，并水合 agent 视图。
    */
   private async querySessions(opts: {
     skip?: number;
@@ -130,7 +130,7 @@ export class SessionService {
     };
   }
 
-  /** 单会话视图：meta + children + character（原 SessionRepository.findById） */
+  /** 单会话视图：meta + children + agent（原 SessionRepository.findById） */
   private async hydrateSession(id: string): Promise<any | null> {
     const meta = this.sessionStore.get(id);
     if (!meta) return null;
@@ -140,26 +140,26 @@ export class SessionService {
 
   private async hydrateOne(session: any): Promise<any> {
     if (!session) return session;
-    const character = session.characterId
-      ? ((await this.characterStore.findById(session.characterId)) ?? null)
+    const agent = session.agentId
+      ? ((await this.agentStore.findById(session.agentId)) ?? null)
       : null;
-    return { ...session, character };
+    return { ...session, agent };
   }
 
   private async hydrateMany(sessions: any[]): Promise<any[]> {
     const ids = Array.from(
       new Set(
         sessions
-          .map((s) => s.characterId)
+          .map((s) => s.agentId)
           .filter(
             (id): id is string => typeof id === "string" && id.length > 0,
           ),
       ),
     );
-    const map = await this.characterStore.findManyByIds(ids);
+    const map = await this.agentStore.findManyByIds(ids);
     return sessions.map((s) => ({
       ...s,
-      character: s.characterId ? (map.get(s.characterId) ?? null) : null,
+      agent: s.agentId ? (map.get(s.agentId) ?? null) : null,
     }));
   }
 
@@ -179,15 +179,15 @@ export class SessionService {
   ): Promise<PaginatedResponse<any>> {
     const { items, total } = await this.querySessions({ skip, limit, groupId, keyword, includeArchived });
 
-    // 转换所有 session 的 URL（使用 character 的 avatarUrl），并注入流式状态
+    // 转换所有 session 的 URL（使用 agent 的 avatarUrl），并注入流式状态
     const transformedItems = items.map((item) => ({
       ...item,
       isStreaming: this.streamManager.hasActiveStream(item.id),
-      // character: item.character
+      // agent: item.agent
       //   ? {
-      //       ...item.character,
-      //       avatarUrl: item.character.avatarUrl
-      //         ? this.urlService.toResourceAbsoluteUrl(item.character.avatarUrl)
+      //       ...item.agent,
+      //       avatarUrl: item.agent.avatarUrl
+      //         ? this.urlService.toResourceAbsoluteUrl(item.agent.avatarUrl)
       //         : null,
       //     }
       //   : null,
@@ -314,12 +314,12 @@ export class SessionService {
 
     return {
       ...session,
-      character: session.character
+      agent: session.agent
         ? {
-            ...session.character,
-            avatarUrl: session.character.avatarUrl
+            ...session.agent,
+            avatarUrl: session.agent.avatarUrl
               ? this.urlService.toResourceAbsoluteUrl(
-                  session.character.avatarUrl,
+                  session.agent.avatarUrl,
                 )
               : null,
           }
@@ -346,33 +346,33 @@ export class SessionService {
   }
 
   /**
-   * 创建新会话，支持从角色继承配置
+   * 创建新会话，支持从智能体继承配置
    */
   async createSession(data: any) {
-    const { modelId, characterId, title, settings, workspacePath } = data;
+    const { modelId, agentId, title, settings, workspacePath } = data;
 
-    let mainCharacterId = characterId;
+    let mainAgentId = agentId;
 
-    if (!mainCharacterId) {
-      throw new Error("characterId is required");
+    if (!mainAgentId) {
+      throw new Error("agentId is required");
     }
 
-    // 获取角色信息
-    const character = await this.characterStore.findById(mainCharacterId);
-    if (!character) {
-      throw new Error(`Character with ID ${mainCharacterId} not found`);
+    // 获取智能体信息
+    const agent = await this.agentStore.findById(mainAgentId);
+    if (!agent) {
+      throw new Error(`Agent with ID ${mainAgentId} not found`);
     }
 
     // 处理会话设置：过滤非法字段 + 处理 memory 继承
     const filteredSettings = this.filterAndMergeSessionSettings(
       settings,
-      character.settings,
+      agent.settings,
     );
 
-    // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
-    let finalModelId = modelId || character.modelId;
+    // 确定使用的模型 ID：优先使用传入的 modelId，其次使用智能体的 modelId，最后使用默认对话模型
+    let finalModelId = modelId || agent.modelId;
 
-    // 如果角色和会话均未设置模型，尝试使用默认对话模型
+    // 如果智能体和会话均未设置模型，尝试使用默认对话模型
     if (!finalModelId) {
       finalModelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
@@ -397,12 +397,12 @@ export class SessionService {
       await this.workspaceService.ensureDirectoryExists(finalWorkspacePath);
     }
 
-    // 继承角色配置
+    // 继承智能体配置
     const sessionData = {
-      characterId: mainCharacterId,
-      title: title || character.name,
-      avatarUrl: character.avatarUrl,
-      description: character.description,
+      agentId: mainAgentId,
+      title: title || agent.name,
+      avatarUrl: agent.avatarUrl,
+      description: agent.description,
       modelId: finalModelId,
       settings: filteredSettings,
       workspacePath: finalWorkspacePath,
@@ -436,12 +436,12 @@ export class SessionService {
    * 过滤并合并会话设置：防止非法字段 + 处理 memory 继承
    *
    * @param sessionSettings 客户端传递的会话设置
-   * @param characterSettings 角色的默认设置
+   * @param agentSettings 智能体的默认设置
    * @returns 过滤后的安全设置
    */
   private filterAndMergeSessionSettings(
     sessionSettings: any,
-    characterSettings: any,
+    agentSettings: any,
   ) {
     if (!sessionSettings) {
       sessionSettings = {};
@@ -449,8 +449,8 @@ export class SessionService {
 
     const filteredSettings = { ...sessionSettings };
 
-    // memory 配置始终从角色继承，会话不再支持自定义 memory 覆盖
-    filteredSettings.memory = characterSettings?.memory || null;
+    // memory 配置始终从智能体继承，会话不再支持自定义 memory 覆盖
+    filteredSettings.memory = agentSettings?.memory || null;
     // 移除 memoryEnabled 字段，不再使用
     delete filteredSettings.memoryEnabled;
 
@@ -468,7 +468,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
-    const allowedFields = ["modelId", "settings", "title", "groupId", "characterId"];
+    const allowedFields = ["modelId", "settings", "title", "groupId", "agentId"];
     const updateData: any = {};
 
     for (const key of allowedFields) {
@@ -978,9 +978,9 @@ ${diffText}
     let items: any[] = [];
     if (contentIds.length > 0) {
       const rows = this.sessionStore.getManyByIds(contentIds);
-      const charMap = await this.characterStore.findManyByIds(
+      const charMap = await this.agentStore.findManyByIds(
         rows
-          .map((r: any) => r.characterId)
+          .map((r: any) => r.agentId)
           .filter((id: any): id is string => typeof id === "string" && id.length > 0),
       );
       const rowMap = new Map(
@@ -988,7 +988,7 @@ ${diffText}
           r.id,
           {
             ...r,
-            character: r.characterId ? charMap.get(r.characterId) ?? null : null,
+            agent: r.agentId ? charMap.get(r.agentId) ?? null : null,
           },
         ]),
       );

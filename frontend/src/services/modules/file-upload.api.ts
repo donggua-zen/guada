@@ -2,7 +2,7 @@ import type { ApiContext } from "./api-context";
 import type { UploadResponse, ResourceUploadResponse } from "@/types/service";
 
 export interface FileUploadApi {
-  uploadAvatar(uid: string, file: File, type?: "character" | "session"): Promise<ResourceUploadResponse>;
+  uploadAvatar(uid: string, file: File, type?: "agent" | "session"): Promise<ResourceUploadResponse>;
   uploadUserAvatar(file: File): Promise<ResourceUploadResponse>;
   uploadWallpaper(file: File): Promise<ResourceUploadResponse>;
   deleteWallpaper(): Promise<{ success: boolean }>;
@@ -14,12 +14,12 @@ export interface FileUploadApi {
 }
 
 export const fileUploadApi: FileUploadApi = {
-  async uploadAvatar(this: ApiContext, uid: string, file: File, type: "character" | "session" = "character") {
+  async uploadAvatar(this: ApiContext, uid: string, file: File, type: "agent" | "session" = "agent") {
     const formData = new FormData();
     formData.append("avatar", file);
 
     try {
-      const url = type === "character" ? "characters" : "sessions";
+      const url = type === "agent" ? "agents" : "sessions";
       return await this.axiosInstance.post(`/${url}/${uid}/avatars`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",

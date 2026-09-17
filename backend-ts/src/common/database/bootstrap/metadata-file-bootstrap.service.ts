@@ -35,13 +35,13 @@ import { sessionRowToMeta, toISO } from "./session-meta-mapping";
  *   <MCP根>/.migrated-mcp             mcp_server
  *
  * 四个域的 id 全部保持原 cuid 不变（文件名/目录名即 id）→ 无需重键、零引用改写
- * （MCP 的 id 还被角色设置里的 `mcp_<id>` 工具包过滤引用），因此不存在角色迁移
+ * （MCP 的 id 还被智能体设置里的 `mcp_<id>` 工具包过滤引用），因此不存在智能体迁移
  * 那种"引用改写失败"的风险面，只需保证：
  * 1. 导出完成前 FileStore 不得读索引（由 MetadataBootstrapGate 门控）
  * 2. 导出失败不落 marker，下次启动重试
  * 3. 已存在文件不覆盖（用户手改过的内容保留）
  *
- * 顺序约束：必须最后执行——角色/供应商的 rekey 改写完 DB 引用后，这里导出的
+ * 顺序约束：必须最后执行——智能体/供应商的 rekey 改写完 DB 引用后，这里导出的
  * meta.json / bot yaml / kb.json 才是归一化后的 id（此前分散在各模块时导出先于
  * rekey，跳版升级会导出旧引用且永不自愈）。
  *
@@ -52,7 +52,7 @@ export class MetadataFileBootstrapService {
   private readonly logger = new Logger(MetadataFileBootstrapService.name);
 
   // 脚手架自持构造 store（不经 DI）：本模块不得反向 import 域模块——那会把
-  // 域模块的初始化提到迁移导出之前（CharacterSeedService 等在 init 期读写
+  // 域模块的初始化提到迁移导出之前（AgentSeedService 等在 init 期读写
   // store，会造成空目录补种）。直写方法（writeMetaDirect 等）不走 initialize
   // 门控，可安全地在 gate 放行前落盘。
   private readonly sessionStore: SessionFileStore;
@@ -205,7 +205,7 @@ export class MetadataFileBootstrapService {
       reconnectEnabled: row.reconnectEnabled !== false,
       maxRetries: Number(row.maxRetries ?? 5),
       retryInterval: Number(row.retryInterval ?? 5000),
-      defaultCharacterId: String(row.defaultCharacterId ?? ""),
+      defaultAgentId: String(row.defaultCharacterId ?? ""),
       defaultModelId: row.defaultModelId ?? null,
       defaultThinkingEffort: row.defaultThinkingEffort ?? null,
       status: String(row.status ?? "stopped"),

@@ -58,7 +58,7 @@ export class TimePlugin extends PluginBase {
       },
     });
 
-    // 当前时间信息随工具包注入：角色层禁用 time 工具包时一并隐藏
+    // 当前时间信息随工具包注入：智能体层禁用 time 工具包时一并隐藏
     timeKit.registerPrompt({
       frequency: "STATIC",
       description: "当前时间信息（自动注入）",

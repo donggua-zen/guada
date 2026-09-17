@@ -11,30 +11,30 @@
         <span class="typewriter-cursor" :class="{ 'cursor-blink': isTypingComplete }"></span>
       </h1>
     </div>
-    <!-- 已选角色 + 抽屉切换 -->
+    <!-- 已选智能体 + 抽屉切换 -->
     <div class="w-full max-w-192 flex flex-col items-start mx-auto relative">
-      <!-- 角色选择行 -->
+      <!-- 智能体选择行 -->
       <div class="flex items-center justify-center gap-1.5 mb-4 text-sm text-(--gd-color-text-gray) ml-4">
         <span>{{ t('chat.welcome.use') }}</span>
-        <span v-if="currentCharacter"
-          class="character-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
-          @click="goToCharacters">
-          <Avatar :src="currentCharacter.avatarUrl" type="assistant" :name="currentCharacter.name"
+        <span v-if="currentAgent"
+          class="agent-chip group cursor-pointer inline-flex items-center gap-1.5 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
+          @click="goToAgents">
+          <Avatar :src="currentAgent.avatarUrl" type="assistant" :name="currentAgent.name"
             class="w-4 h-4 shrink-0 rounded overflow-hidden" />
-          <span class="text-sm font-medium text-(--gd-color-text)">{{ currentCharacter.name }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text)">{{ currentAgent.name }}</span>
           <el-icon size="12"
             class="shrink-0 text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
             <ChevronRight24Regular />
           </el-icon>
         </span>
         <button v-else
-          class="character-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
-          @click="goToCharacters">
+          class="agent-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
+          @click="goToAgents">
           <el-icon size="14" class="text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
             <PersonAdd24Regular />
           </el-icon>
           <span class="text-sm font-medium text-(--gd-color-text-gray) group-hover:text-(--gd-color-text)">{{
-            t('chat.welcome.selectCharacter') }}</span>
+            t('chat.welcome.selectAgent') }}</span>
         </button>
         <span>{{ t('chat.welcome.startNewSession') }}</span>
       </div>
@@ -44,7 +44,7 @@
         <!-- files 必须双向绑定：单向 :files 会让 ChatInput 里选好的附件全部丢失
              （ChatInput 只 emit('update:files')，父组件不接就没人保存） -->
         <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
-          :character-id="currentSession.characterId || ''" @config-change="handleConfigChange"
+          :agent-id="currentSession.agentId || ''" @config-change="handleConfigChange"
           :buttons="chatInputButtons" v-model:files="inputMessage.files" :streaming="false" @send="sendMessage" />
       </div>
 
@@ -72,7 +72,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrefillInput } from '@/composables/usePrefillInput';
-import { useSelectedCharacter } from '@/composables/useSelectedCharacter';
+import { useSelectedAgent } from '@/composables/useSelectedAgent';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
@@ -98,15 +98,15 @@ const title = useTitle();
 // Logo 路径（使用 fixFrontendAssetUrl 适配 Electron 环境）
 const bannerPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 
-// 角色数据
-const characters = ref<any[]>([]);
+// 智能体数据
+const agents = ref<any[]>([]);
 
 // 模型数据
 const models = ref<any[]>([]);
 
 // const lastSelectedModelId = useStorage('lastSelectedModelId', '');
 const lastModelConfig = useStorage<any>('lastModelConfig', {});
-const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
+const lastSelectedAgentId = useStorage('lastSelectedAgentId', '');
 
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
@@ -164,7 +164,7 @@ const clearTypewriterTimer = (): void => {
 
 // 计算属性
 const currentSession = ref<any>({
-  characterId: null,  // 必须绑定角色
+  agentId: null,  // 必须绑定智能体
   model_id: null,
   avatar_url: null,
   title: t('chat.welcome.newSession'),
@@ -189,10 +189,10 @@ const currentSession = ref<any>({
 
 
 
-// 当前选中的角色
-const currentCharacter = computed(() => {
-  if (currentSession.value.characterId) {
-    return characters.value.find(c => c.id === currentSession.value.characterId);
+// 当前选中的智能体
+const currentAgent = computed(() => {
+  if (currentSession.value.agentId) {
+    return agents.value.find(c => c.id === currentSession.value.agentId);
   }
   return null;
 });
@@ -204,9 +204,9 @@ const currentModelId = computed(() => {
     return userSelectedModelId.value;
   }
 
-  // 第二优先级：使用角色的默认模型
-  if (currentCharacter.value?.modelId) {
-    return currentCharacter.value.modelId;
+  // 第二优先级：使用智能体的默认模型
+  if (currentAgent.value?.modelId) {
+    return currentAgent.value.modelId;
   }
 
   // 第三优先级：使用模型列表的第一个模型
@@ -221,23 +221,23 @@ const currentModelId = computed(() => {
 // 标记是否正在初始化，避免 watch 重复处理
 const isInitializing = ref(false);
 
-// 监听角色变化，当角色切换时重置为角色默认模型
-watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
-  // 如果是初始化阶段，跳过处理（由 loadCharacters 直接设置）
+// 监听智能体变化，当智能体切换时重置为智能体默认模型
+watch(() => currentSession.value.agentId, (newCharId, oldCharId) => {
+  // 如果是初始化阶段，跳过处理（由 loadAgents 直接设置）
   if (isInitializing.value) {
     return;
   }
 
   if (newCharId && newCharId !== oldCharId) {
-    // 角色切换时，使用三级回退逻辑选择模型
-    const newCharacter = characters.value.find(c => c.id === newCharId);
-    if (newCharacter) {
+    // 智能体切换时，使用三级回退逻辑选择模型
+    const newAgent = agents.value.find(c => c.id === newCharId);
+    if (newAgent) {
       let selectedModelId: string | null = null;
 
-      // 第一优先级：角色的默认模型
-      if (newCharacter.modelId) {
-        selectedModelId = newCharacter.modelId;
-        // 清空用户手动选择的模型 ID（因为角色有推荐模型）
+      // 第一优先级：智能体的默认模型
+      if (newAgent.modelId) {
+        selectedModelId = newAgent.modelId;
+        // 清空用户手动选择的模型 ID（因为智能体有推荐模型）
         userSelectedModelId.value = null;
       }
       // 第二优先级：用户之前手动选择的模型
@@ -254,7 +254,7 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
         currentSession.value.model_id = selectedModelId;
       }
 
-      // 切换角色时，重置会话设置
+      // 切换智能体时，重置会话设置
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
       };
@@ -303,22 +303,22 @@ const loadModels = async (): Promise<void> => {
   }
 };
 
-// 加载角色列表
-const loadCharacters = async (): Promise<void> => {
+// 加载智能体列表
+const loadAgents = async (): Promise<void> => {
   try {
-    const response = await apiService.fetchCharacters();
-    characters.value = response.items || [];
+    const response = await apiService.fetchAgents();
+    agents.value = response.items || [];
 
-    // 优先使用上次选择的角色
-    if (characters.value.length > 0) {
+    // 优先使用上次选择的智能体
+    if (agents.value.length > 0) {
       // 设置初始化标志，防止 watch 干扰
       isInitializing.value = true;
 
-      const savedCharacter = characters.value.find(c => c.id === lastSelectedCharacterId.value);
-      const targetCharacter = savedCharacter || characters.value[0];
+      const savedAgent = agents.value.find(c => c.id === lastSelectedAgentId.value);
+      const targetAgent = savedAgent || agents.value[0];
 
-      if (targetCharacter) {
-        currentSession.value.characterId = targetCharacter.id;
+      if (targetAgent) {
+        currentSession.value.agentId = targetAgent.id;
 
         // 三级回退逻辑确定模型 ID
         let selectedModelId: string | null = null;
@@ -327,9 +327,9 @@ const loadCharacters = async (): Promise<void> => {
         if (userSelectedModelId.value) {
           selectedModelId = userSelectedModelId.value;
         }
-        // 第二优先级：角色的默认模型
-        else if (targetCharacter.modelId) {
-          selectedModelId = targetCharacter.modelId;
+        // 第二优先级：智能体的默认模型
+        else if (targetAgent.modelId) {
+          selectedModelId = targetAgent.modelId;
         }
         // 第三优先级：模型列表的第一个模型
         else if (models.value.length > 0) {
@@ -359,23 +359,23 @@ const loadCharacters = async (): Promise<void> => {
       isInitializing.value = false;
     }
   } catch (error) {
-    console.error('获取角色列表失败:', error);
+    console.error('获取智能体列表失败:', error);
     notify.error(t('common.error.loadFailed'), error);
     // 即使出错也要恢复标志
     isInitializing.value = false;
   }
 };
 
-// 选择角色（从抽屉中选择）
-const handleCharacterSelect = (character: any): void => {
-  currentSession.value.characterId = character.id;
-  lastSelectedCharacterId.value = character.id;
+// 选择智能体（从抽屉中选择）
+const handleAgentSelect = (agent: any): void => {
+  currentSession.value.agentId = agent.id;
+  lastSelectedAgentId.value = agent.id;
 
-  // 切换角色时的模型选择逻辑
+  // 切换智能体时的模型选择逻辑
   let selectedModelId: string | null = null;
 
-  if (character.modelId) {
-    selectedModelId = character.modelId;
+  if (agent.modelId) {
+    selectedModelId = agent.modelId;
     userSelectedModelId.value = null;
   } else if (userSelectedModelId.value) {
     selectedModelId = userSelectedModelId.value;
@@ -399,14 +399,14 @@ const handleCharacterSelect = (character: any): void => {
   }
 };
 
-const handleCharacterSelectById = (characterId: string): void => {
-  const character = characters.value.find(c => c.id === characterId);
-  if (character) handleCharacterSelect(character);
+const handleAgentSelectById = (agentId: string): void => {
+  const agent = agents.value.find(c => c.id === agentId);
+  if (agent) handleAgentSelect(agent);
 };
 
-// 前往助手页面切换角色
-const goToCharacters = (): void => {
-  router.push({ name: 'Characters' });
+// 前往智能体页面切换智能体
+const goToAgents = (): void => {
+  router.push({ name: 'Agents' });
 };
 
 // ========== ChatInput 配置管理 ==========
@@ -500,22 +500,22 @@ const handleConfigChange = (config: any): void => {
   }
 };
 
-// 前往角色管理页面
+// 前往智能体管理页面
 
 const workspaceStore = useWorkspaceStore()
 const { consumePrefill } = usePrefillInput()
-const { consumeSelectedCharacter } = useSelectedCharacter()
+const { consumeSelectedAgent } = useSelectedAgent()
 
 onMounted(() => {
   title.value = t('chat.welcome.pageTitle');
-  // 先加载模型列表，再加载角色列表
-  Promise.all([loadModels(), loadCharacters()]).then(() => {
-    // 角色列表加载完成后，检查是否有跨页面传递的预选角色
-    const preSelectedId = consumeSelectedCharacter();
+  // 先加载模型列表，再加载智能体列表
+  Promise.all([loadModels(), loadAgents()]).then(() => {
+    // 智能体列表加载完成后，检查是否有跨页面传递的预选智能体
+    const preSelectedId = consumeSelectedAgent();
     if (preSelectedId) {
-      const character = characters.value.find(c => c.id === preSelectedId);
-      if (character) {
-        handleCharacterSelect(character);
+      const agent = agents.value.find(c => c.id === preSelectedId);
+      if (agent) {
+        handleAgentSelect(agent);
       }
     }
   }).catch(error => {
@@ -610,13 +610,13 @@ const autoTitle = (): string => {
  *   归一后的列表；直接读 inputMessage.files 在双向绑定之外的场景（粘贴等）可能还是旧的。
  */
 const sendMessage = async (payload?: { content?: string; files?: any[]; knowledgeBaseIds?: string[] }): Promise<void> => {
-  if (!currentSession.value.characterId) {
-    notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoCharacter'));
+  if (!currentSession.value.agentId) {
+    notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoAgent'));
     return;
   }
   // 修复：传递完整的 payload，包含 knowledgeBaseIds
   emit("create-session", {
-    characterId: currentSession.value.characterId,
+    agentId: currentSession.value.agentId,
     modelId: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings,

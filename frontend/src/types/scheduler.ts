@@ -26,7 +26,7 @@ export interface ScheduledTask {
   executeAt?: string | null
   targetMode: TargetMode
   targetSessionId?: string | null
-  characterId?: string | null
+  agentId?: string | null
   modelId?: string | null
   settings?: Record<string, any> | null
   enabled: boolean
@@ -70,7 +70,7 @@ export interface CreateTaskRequest {
   cronExpression: string
   targetMode: TargetMode
   targetSessionId?: string
-  characterId?: string
+  agentId?: string
   modelId?: string
   settings?: Record<string, any>
   enabled?: boolean
@@ -88,7 +88,7 @@ export interface UpdateTaskRequest {
   cronExpression?: string
   targetMode?: TargetMode
   targetSessionId?: string | null
-  characterId?: string | null
+  agentId?: string | null
   modelId?: string | null
   settings?: Record<string, any> | null
   enabled?: boolean

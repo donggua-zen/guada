@@ -21,11 +21,11 @@ import {
   AGENT_FILE,
   REKEY_FILE,
   resolveAgentsDir,
-} from '../../../modules/characters/character-file.store';
+} from '../../../modules/agents/agent-file.store';
 import {
   parseAgentMarkdown,
   serializeAgentMarkdown,
-} from '../../../modules/characters/character-file.mapper';
+} from '../../../modules/agents/agent-file.mapper';
 
 const MIGRATED_MARKER = '.migrated-from-db';
 /** 历史遗留：曾把「引用改写」拆成独立 marker，现已与上面合并，见到就清掉 */
@@ -44,7 +44,7 @@ const OBSOLETE_REFS_MARKER = '.model-refs-migrated';
  *   共用一个 marker。
  * - 引用改写读的是旧 model/model_provider 表（此刻尚未删除），因此必须排在
  *   删除这些表之前；表删除后本步骤自然变为 no-op（读不到行 → 无映射 → 全 unresolved）。
- * - 编排顺序保证（MigrationBootstrapService）：角色导入先于本服务（AGENT.md
+ * - 编排顺序保证（MigrationBootstrapService）：智能体导入先于本服务（AGENT.md
  *   已存在，frontmatter 改写才生效）；本服务先于元信息导出（session/kb/bot 的
  *   DB 引用改写完成后导出，读到的即是归一化后的 id）。
  *
@@ -198,7 +198,7 @@ export class ProviderBootstrapService {
   /**
    * 存量模型引用改写：旧 cuid → `{实例id}:{模型名}`（幂等，随 DB→文件迁移同批执行）。
    *
-   * 覆盖 DB 列（session/character/knowledge_base/bot_instance）、models 设置组、
+   * 覆盖 DB 列（session/agent/knowledge_base/bot_instance）、models 设置组、
    * 调度任务 JSON。改写前逐条用文件目录校验目标 id，解析不到的保持原值并告警——
    * 运行期会 fail-loud 报出，避免静默指向错误模型。
    *
@@ -255,9 +255,9 @@ export class ProviderBootstrapService {
             select: { id: true, modelId: true },
           })
         ).map((r) => ({ id: r.id, value: r.modelId })),
-        // 角色定义权威来源已是 agents/<id>/AGENT.md：DB 行仅作只读兜底，
+        // 智能体定义权威来源已是 agents/<id>/AGENT.md：DB 行仅作只读兜底，
         // 改写落到文件 frontmatter（id 沿用旧 cuid，与文件侧目录名一致时生效）
-        update: (id, value) => this.rewriteCharacterFileModel(id, value),
+        update: (id, value) => this.rewriteAgentFileModel(id, value),
       },
       {
         label: 'knowledgeBase.embeddingModelId',
@@ -382,12 +382,12 @@ export class ProviderBootstrapService {
   }
 
   /**
-   * 改写角色文件里的模型引用（角色定义权威来源已是 agents/<id>/AGENT.md）。
+   * 改写智能体文件里的模型引用（智能体定义权威来源已是 agents/<id>/AGENT.md）。
    *
-   * id 可能是旧 cuid：角色导出时目录名换成了 name 派生的 slug，映射记在
+   * id 可能是旧 cuid：智能体导出时目录名换成了 name 派生的 slug，映射记在
    * `.rekey.json`。两条路径都试，找不到就跳过（导出引导会在导出时自行改写）。
    */
-  private async rewriteCharacterFileModel(
+  private async rewriteAgentFileModel(
     legacyId: string,
     value: string,
   ): Promise<void> {
@@ -406,7 +406,7 @@ export class ProviderBootstrapService {
       );
     } catch (err) {
       this.logger.warn(
-        `Failed to rewrite character model ref (${dirId}): ${String(err)}`,
+        `Failed to rewrite agent model ref (${dirId}): ${String(err)}`,
       );
     }
   }

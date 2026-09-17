@@ -12,7 +12,7 @@ import { WorkspaceEventsController } from "./workspace-events.controller";
 import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
-import { CharactersModule } from "../characters/characters.module";
+import { AgentsModule } from "../agents/agents.module";
 import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
 import { SettingsModule } from "../settings/settings.module";
@@ -38,7 +38,7 @@ import { SessionReplayService } from "./session-replay.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
+  imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     // 会话文件存储：会话域的公开仓储，跨域消费者（files/bot-gateway/sub-agent）

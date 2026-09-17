@@ -145,7 +145,7 @@ export class SkillLoaderService {
    */
   private validateManifest(manifest: SkillManifest): void {
     if (!manifest.name || manifest.name.length > 64) {
-      throw new Error('Skill name is required and must be ≤64 characters');
+      throw new Error('Skill name is required and must be ≤64 agents');
     }
 
     if (!/^[a-z0-9-]+$/.test(manifest.name)) {
@@ -153,7 +153,7 @@ export class SkillLoaderService {
     }
 
     if (!manifest.description || manifest.description.length > 1024) {
-      throw new Error('Skill description is required and must be ≤1024 characters');
+      throw new Error('Skill description is required and must be ≤1024 agents');
     }
   }
 

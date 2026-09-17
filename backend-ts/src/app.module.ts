@@ -7,7 +7,7 @@ import { WorkspaceModule } from "./common/workspace/workspace.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { ModelsModule } from "./modules/models/models.module";
 import { AuthModule } from "./modules/auth/auth.module";
-import { CharactersModule } from "./modules/characters/characters.module";
+import { AgentsModule } from "./modules/agents/agents.module";
 import { FilesModule } from "./modules/files/files.module";
 import { McpServersModule } from "./modules/mcp-servers/mcp-servers.module";
 import { SettingsModule } from "./modules/settings/settings.module";
@@ -42,7 +42,7 @@ import { HealthModule } from './modules/health/health.module';
     }),
     LlmCoreModule, // LLM 核心模块（全局）
     // ⚠️ 持久化机制层必须位于所有域模块之前：迁移脚手架在此完成 DB→文件导出
-    // 并放行 MetadataBootstrapGate，域模块的 onModuleInit（CharacterSeedService
+    // 并放行 MetadataBootstrapGate，域模块的 onModuleInit（AgentSeedService
     // 补种、各 store 索引预热）依赖该顺序。
     PersistenceModule,
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
@@ -54,7 +54,7 @@ import { HealthModule } from './modules/health/health.module';
     ChatModule,
     ModelsModule,
     AuthModule,
-    CharactersModule,
+    AgentsModule,
     FilesModule,
     McpServersModule,
     SettingsModule,

@@ -71,7 +71,7 @@ export class MemoryPlugin extends PluginBase {
       },
     });
 
-    // 长期记忆内容：随 memory 工具包注入（角色层禁用该包时一并隐藏）
+    // 长期记忆内容：随 memory 工具包注入（智能体层禁用该包时一并隐藏）
     memoryKit.registerPrompt({
       frequency: "VOLATILE",
       description: "长期记忆内容",

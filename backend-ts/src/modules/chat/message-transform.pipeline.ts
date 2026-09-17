@@ -277,7 +277,7 @@ export const reasoningPolicyStep: TransformStep = {
 };
 
 /**
- * 步骤 3：空 content 兼容（所有角色）。
+ * 步骤 3：空 content 兼容（所有消息角色）。
  * 部分端点（OpenAI/KIMI 等）拒绝空 content 数组（400 missing messages.content），
  * 重建为单个 '\n' 文本块。来源：DISABLED 检查点、reasoning 剥离后的 assistant、
  * 空 user 消息等——adapter 序列化边界前必须保证每个消息都有有效 content。

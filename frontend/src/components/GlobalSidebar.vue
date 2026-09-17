@@ -406,8 +406,8 @@ const navItems = computed(() => [
     shortcut: isElectron ? 'Ctrl N' : 'Ctrl Alt N'
   },
   {
-    key: 'characters',
-    label: t('ui.sidebar.navCharacters'),
+    key: 'agents',
+    label: t('ui.sidebar.navAgents'),
     icon: ContactCard20Regular
   },
   {
@@ -446,7 +446,7 @@ const currentActiveTab = computed(() => {
     const sessionIdStr = Array.isArray(sessionId) ? sessionId[0] : sessionId
     return sessionIdStr === 'new-session' ? 'chat' : ''
   }
-  if (routeName === 'Characters') return 'characters'
+  if (routeName === 'Agents') return 'agents'
   if (routeName === 'Bots') return 'bots'
   if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
@@ -612,8 +612,8 @@ const selectSession = (session: any) => {
 const handleNavClick = (tab: string) => {
   if (tab === 'chat') {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
-  } else if (tab === 'characters') {
-    router.replace({ name: 'Characters' })
+  } else if (tab === 'agents') {
+    router.replace({ name: 'Agents' })
   } else if (tab === 'bots') {
     router.replace({ name: 'Bots' })
   } else if (tab === 'setting') {

@@ -23,7 +23,7 @@ export class UnsupportedReasoningEffortError extends Error {
  *
  * 能力的唯一所有者是数据层（实例文件 → bundled 目录 → preset → 协议默认），
  * 由 ProviderFileStore 的合并视图解析。本服务把它暴露给两个消费者：
- * - LLMService：校验选择值并给出最终生效档位（对齐 DSH resolveCallWithInfo 的角色）
+ * - LLMService：校验选择值并给出最终生效档位（对齐 DSH resolveCallWithInfo 的职责）
  * - 协议适配器：取档位的 wire 值（vendor 词汇映射），拼请求体
  *
  * 菜单与映射都不出服务边界：调用方只递交「选择值」，拿走「生效档位 / wire 值」。

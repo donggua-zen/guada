@@ -27,7 +27,7 @@
     nameLabel: 'Server Name',
     namePlaceholder: 'Enter server name',
     nameRequired: 'Please enter a server name',
-    nameLength: 'Length must be between 2 and 50 characters',
+    nameLength: 'Length must be between 2 and 50 agents',
     urlLabel: 'Server URL',
     urlRequired: 'Please enter the server URL',
     urlInvalid: 'Please enter a valid URL',
@@ -159,7 +159,7 @@
   // ── 本地工具 (LocalTools.vue) ──
   localTools: {
     title: 'Plugins',
-    subtitle: 'Global tool settings determine which tools are available to all characters. Character-level tool settings further restrict on top of this.',
+    subtitle: 'Global tool settings determine which tools are available to all agents. Agent-level tool settings further restrict on top of this.',
     loading: 'Loading...',
     noDescription: 'No description',
     sourceDev: 'DEV',

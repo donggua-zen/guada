@@ -51,7 +51,7 @@ function makePdfDoc(pageTexts: string[]) {
 }
 
 /** 长文本（>50 字符，视为有文本层） */
-const LONG = 'This is a long text page with plenty of characters for extraction.';
+const LONG = 'This is a long text page with plenty of agents for extraction.';
 /** 短文本（<50 字符，疑似扫描页） */
 const SHORT = 'watermark';
 

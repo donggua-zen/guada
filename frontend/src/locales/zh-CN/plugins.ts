@@ -159,7 +159,7 @@ export default {
   // ── 插件 (LocalTools.vue) ──
   localTools: {
     title: '插件',
-    subtitle: '全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。',
+    subtitle: '全局工具设置决定了哪些工具对所有智能体可用。智能体级别的工具设置会在此基础上进一步限制。',
     loading: '加载中...',
     noDescription: '暂无描述',
     sourceDev: 'DEV',

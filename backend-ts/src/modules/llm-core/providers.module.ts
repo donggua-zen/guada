@@ -1,4 +1,4 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, OnModuleInit } from '@nestjs/common';
 import { AdapterRegistry } from './adapter-registry.service';
 import { BundledCatalogService } from './bundled-catalog.service';
 import { ProviderFileStore } from './provider-file.store';
@@ -37,4 +37,14 @@ import { MockAdapter } from './adapters/mock.adapter';
   ],
   exports: [AdapterRegistry, BundledCatalogService, LLMService, ProviderFileStore, ModelCapabilityService],
 })
-export class LlmCoreModule {}
+export class LlmCoreModule implements OnModuleInit {
+  // ProviderFileStore 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，
+  // 此刻迁移导出已完成，扫描成本留在启动期而非首个请求。
+  // （对齐 ChatModule/BotGatewayModule/McpServersModule 的域内预热契约；
+  //   ProviderBootstrapService 脚手架自持的 store 实例仅服务迁移本身，与 DI 单例无关）
+  constructor(private providerStore: ProviderFileStore) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.providerStore.initialize();
+  }
+}

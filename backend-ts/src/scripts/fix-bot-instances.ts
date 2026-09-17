@@ -10,8 +10,8 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import "dotenv/config";
-import { AGENT_FILE, resolveAgentsDir } from "../modules/characters/character-file.store";
-import { parseAgentMarkdown } from "../modules/characters/character-file.mapper";
+import { AGENT_FILE, resolveAgentsDir } from "../modules/agents/agent-file.store";
+import { parseAgentMarkdown } from "../modules/agents/agent-file.mapper";
 
 // 从环境变量读取数据库 URL
 const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
@@ -23,49 +23,49 @@ async function fixBotInstances() {
 
   try {
     // 1. 查找所有 defaultCharacterId 为 NULL 的记录
-    const botsWithoutCharacter = await prisma.botInstance.findMany({
+    const botsWithoutAgent = await prisma.botInstance.findMany({
       where: {
         defaultCharacterId: null,
       },
     });
 
-    if (botsWithoutCharacter.length === 0) {
+    if (botsWithoutAgent.length === 0) {
       console.log("没有需要修复的记录");
       return;
     }
 
-    console.log(`找到 ${botsWithoutCharacter.length} 条需要修复的记录:\n`);
-    botsWithoutCharacter.forEach(bot => {
+    console.log(`找到 ${botsWithoutAgent.length} 条需要修复的记录:\n`);
+    botsWithoutAgent.forEach(bot => {
       console.log(`  - ID: ${bot.id}, Name: ${bot.name}, Platform: ${bot.platform}`);
     });
 
-    // 2. 取一个可用的角色目录（权威来源 agents/<id>/AGENT.md）
+    // 2. 取一个可用的智能体目录（权威来源 agents/<id>/AGENT.md）
     const agentsDir = resolveAgentsDir();
     const dirs = (await fsp.readdir(agentsDir, { withFileTypes: true }))
       .filter((e) => e.isDirectory() && !e.name.startsWith("."))
       .map((e) => e.name)
       .sort();
     if (dirs.length === 0) {
-      console.error("错误: 没有找到任何角色，请先创建至少一个角色");
+      console.error("错误: 没有找到任何智能体，请先创建至少一个智能体");
       process.exit(1);
     }
-    const firstCharacterId = dirs[0];
-    const firstCharacter = await fsp.readFile(
-      path.join(agentsDir, firstCharacterId, AGENT_FILE),
+    const firstAgentId = dirs[0];
+    const firstAgent = await fsp.readFile(
+      path.join(agentsDir, firstAgentId, AGENT_FILE),
       "utf8",
     );
-    const firstCharacterName =
-      parseAgentMarkdown(firstCharacter, firstCharacterId).name;
+    const firstAgentName =
+      parseAgentMarkdown(firstAgent, firstAgentId).name;
 
-    console.log(`\n使用角色 ID: ${firstCharacterId} (${firstCharacterName})\n`);
+    console.log(`\n使用智能体 ID: ${firstAgentId} (${firstAgentName})\n`);
 
     // 3. 更新所有记录
     let updatedCount = 0;
-    for (const bot of botsWithoutCharacter) {
+    for (const bot of botsWithoutAgent) {
       await prisma.botInstance.update({
         where: { id: bot.id },
         data: {
-          defaultCharacterId: firstCharacterId,
+          defaultCharacterId: firstAgentId,
         },
       });
       updatedCount++;

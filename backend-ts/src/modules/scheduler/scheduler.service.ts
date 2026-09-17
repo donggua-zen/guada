@@ -67,7 +67,7 @@ export class SchedulerService {
       executeAt: dto.executeAt || null,
       targetMode: dto.targetMode,
       targetSessionId: dto.targetSessionId || null,
-      characterId: dto.characterId || null,
+      agentId: dto.agentId || null,
       modelId: dto.modelId || null,
       settings: dto.settings || null,
       enabled: dto.enabled !== false,
@@ -126,7 +126,7 @@ export class SchedulerService {
     if (dto.executeAt !== undefined) updates.executeAt = dto.executeAt;
     if (dto.targetMode !== undefined) updates.targetMode = dto.targetMode;
     if (dto.targetSessionId !== undefined) updates.targetSessionId = dto.targetSessionId;
-    if (dto.characterId !== undefined) updates.characterId = dto.characterId;
+    if (dto.agentId !== undefined) updates.agentId = dto.agentId;
     if (dto.modelId !== undefined) updates.modelId = dto.modelId;
     if (dto.settings !== undefined) updates.settings = dto.settings;
     if (dto.enabled !== undefined) updates.enabled = dto.enabled;

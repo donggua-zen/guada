@@ -27,7 +27,7 @@ export interface WorkflowMeta {
 
 /** 脚本内 agent(prompt, opts) 的选项（对齐 DSH AgentCallOptions 的进程内子集） */
 export interface AgentCallOptions {
-  /** 子代理角色 id（generic 或白名单角色；缺省 generic） */
+  /** 子代理智能体 id（generic 或白名单智能体；缺省 generic） */
   agentId?: string;
   /** 展示用短标签（前端 member 行名称；缺省用 prompt 截断） */
   label?: string;

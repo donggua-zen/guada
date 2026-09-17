@@ -7,7 +7,7 @@ import type { ResolvedPluginInfo } from "./types/plugin.types";
  *
  * 两层开关语义：
  * - 全局层：仅控制插件级启停
- * - 角色层：仅裁剪工具包（能力包），不消费 entry.enabled
+ * - 智能体层：仅裁剪工具包（能力包），不消费 entry.enabled
  */
 
 describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
@@ -123,7 +123,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
   });
 
-  it("角色层黑名单：toolkits_deny 裁剪单个工具包，不影响插件启停", async () => {
+  it("智能体层黑名单：toolkits_deny 裁剪单个工具包，不影响插件启停", async () => {
     registerPlugin("t_deny", "core", [
       { id: "ka", tool: "a_tool" },
       { id: "kb", tool: "b_tool", loadMode: "lazy" },
@@ -135,7 +135,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
       true,
     );
     const p = find(res, "t_deny");
-    expect(p.enabled).toBe(true); // 插件本身不被角色层禁用
+    expect(p.enabled).toBe(true); // 插件本身不被智能体层禁用
     const ka = p.enabledToolKits.find((k) => k.id === "ka")!;
     const kb = p.enabledToolKits.find((k) => k.id === "kb")!;
     expect(ka.enabled).toBe(false);
@@ -144,7 +144,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(p.enabledTools.map((t) => t.name)).not.toContain("a_tool");
   });
 
-  it("角色层白名单：__default=false + filter=allow 仅放行列出的工具包", async () => {
+  it("智能体层白名单：__default=false + filter=allow 仅放行列出的工具包", async () => {
     registerPlugin("t_allow", "core", [
       { id: "ka", tool: "a_tool" },
       { id: "kb", tool: "b_tool" },
@@ -205,7 +205,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(roleCfg).toEqual(snapshot);
   });
 
-  it("角色层不能禁用插件，全局层不受角色 toolkit 配置影响", async () => {
+  it("智能体层不能禁用插件，全局层不受智能体 toolkit 配置影响", async () => {
     registerPlugin("t_sep", "core", [{ id: "sep_k", tool: "sep_tool" }]);
 
     const res = await manager.resolvePlugins(
@@ -265,7 +265,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(p.enabledTools.map((t) => t.name)).toContain("o_tool");
   });
 
-  it("二级过滤：全局禁用插件的工具包在角色层 allow 下仍不生效", async () => {
+  it("二级过滤：全局禁用插件的工具包在智能体层 allow 下仍不生效", async () => {
     registerPlugin("t_off", "extended", [{ id: "ck", tool: "c_tool" }]);
 
     settingsStorage.getSettings.mockResolvedValue({
@@ -278,18 +278,18 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     );
     const p = find(res, "t_off");
     expect(p.enabled).toBe(false);
-    // 即使角色层显式放行，全局关闭的插件工具包仍不可用
+    // 即使智能体层显式放行，全局关闭的插件工具包仍不可用
     expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
     expect(p.enabledTools).toHaveLength(0);
   });
 
-  it("角色层条目中的遗留 enabled 字段被忽略，仅 toolkits_* 生效", async () => {
+  it("智能体层条目中的遗留 enabled 字段被忽略，仅 toolkits_* 生效", async () => {
     registerPlugin("t_legacy2", "core", [
       { id: "la", tool: "a2_tool" },
       { id: "lb", tool: "b2_tool" },
     ]);
 
-    // 旧角色数据混入 enabled:false（应被忽略），同时显式 deny 一个工具包
+    // 旧智能体数据混入 enabled:false（应被忽略），同时显式 deny 一个工具包
     const res = await manager.resolvePlugins(
       undefined,
       { t_legacy2: { enabled: false, toolkits_deny: ["la"] } } as any,
@@ -340,7 +340,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
   });
 
   // ── 自治理工具包（governance: "self"）──
-  // 语义：不参与角色层过滤（__strategy / __default / 显式 deny 均无效），
+  // 语义：不参与智能体层过滤（__strategy / __default / 显式 deny 均无效），
   // 由自己的 handler 依据 pluginsConfig 决定 loadMode。
   // handler 只在 !denied 时被调用，所以"永不被 denied"是自治理成立的前提。
 
@@ -412,7 +412,7 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     );
   });
 
-  it("handler 收到 pluginsConfig（角色配置透传）", async () => {
+  it("handler 收到 pluginsConfig（智能体配置透传）", async () => {
     const handler = jest.fn(async () => ({ loadMode: "eager" as const }));
     registerPlugin("t_self_cfg", "core", [
       { id: "s3", tool: "s3_tool", governance: "self", handler },

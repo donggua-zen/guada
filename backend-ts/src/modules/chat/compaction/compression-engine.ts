@@ -327,7 +327,7 @@ export class CompressionEngine {
         continue;
       }
       const content = tr.content;
-      const newContent = `${safeSubstring(content, 0, headTailChars)}...[omitted ${content.length - maxLength} characters]...${safeTail(content, headTailChars)}`;
+      const newContent = `${safeSubstring(content, 0, headTailChars)}...[omitted ${content.length - maxLength} agents]...${safeTail(content, headTailChars)}`;
       // 影子价格：原内容估 − 裁剪后估（estimateTextTokens 走文本直算、无缓存污染）
       const prunedTokens =
         (await this.tokenMeter.estimateTextTokens(modelName, content)) -

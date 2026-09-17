@@ -75,9 +75,9 @@ export interface GlobalPluginEntryConfig {
 export type GlobalPluginConfig = Record<string, GlobalPluginEntryConfig>;
 
 /**
- * 角色层插件条目配置（持久化于 character.settings.plugins）
- * 角色层只负责工具包（能力包）黑白名单过滤，不再控制插件启停，
- * 因此条目中不包含 enabled 字段；旧角色数据里遗留的 enabled 会被解析器忽略。
+ * 智能体层插件条目配置（持久化于 agent.settings.plugins）
+ * 智能体层只负责工具包（能力包）黑白名单过滤，不再控制插件启停，
+ * 因此条目中不包含 enabled 字段；旧智能体数据里遗留的 enabled 会被解析器忽略。
  */
 export interface RolePluginEntryConfig {
   /**
@@ -96,20 +96,20 @@ export interface RolePluginEntryConfig {
 }
 
 /**
- * 角色层插件配置
+ * 智能体层插件配置
  * 格式：{ __strategy?, __default?, pluginId: RolePluginEntryConfig }
  * 与全局层配置（GlobalPluginConfig）完全分离解析。
  */
 export type RolePluginConfig = {
   /** 未显式配置的插件其工具包默认是否放行 */
   __default?: boolean;
-  /** 角色配置策略 */
+  /** 智能体配置策略 */
   __strategy?: string;
 
   [pluginId: string]: RolePluginEntryConfig | boolean | string;
 };
 
-/** @deprecated 已拆分为 GlobalPluginEntryConfig（全局）与 RolePluginEntryConfig（角色） */
+/** @deprecated 已拆分为 GlobalPluginEntryConfig（全局）与 RolePluginEntryConfig（智能体） */
 export interface PluginEntryConfig extends RolePluginEntryConfig {
   enabled?: boolean;
 }
@@ -221,7 +221,7 @@ export interface ToolKitDef {
   /** 是否默认启用（默认 true） */
   enabled?: boolean;
   /**
-   * 自治理：标记后本工具包不参与角色层过滤（__strategy / __default / 显式 deny 均不生效），
+   * 自治理：标记后本工具包不参与智能体层过滤（__strategy / __default / 显式 deny 均不生效），
    * 由本工具包的 handler 依据 PluginContext.pluginsConfig 自行决定 loadMode。
    *
    * 用于"有自己管理界面"的能力包（MCP 每服务器、skills、sub_agent）：
@@ -400,7 +400,7 @@ export interface ResolvedPluginInfo {
   /** 所有注册的工具（不过滤） */
   allTools: ToolHandlerDef[];
   /**
-   * 全部工具包的运行时信息（含被角色层禁用的，以 enabled=false 标记；
+   * 全部工具包的运行时信息（含被智能体层禁用的，以 enabled=false 标记；
    * 被禁用的工具包不解析 handler，loadMode/activator 取注册默认值）
    */
   enabledToolKits: Array<{

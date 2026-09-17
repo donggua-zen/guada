@@ -5,7 +5,7 @@
 import type { ISODateString, DeepPartial } from './common'
 import type { Turn } from './message'
 // 注意：不要重新导出 Message，避免循环依赖
-import type { Character } from './character'
+import type { Agent } from './agent'
 
 /**
  * 会话设置
@@ -112,8 +112,8 @@ export interface SessionModel {
 export interface Session {
     id: string
     title: string
-    character: Character
-    characterId: string
+    agent: Agent
+    agentId: string
     modelId: string
     model?: SessionModel
     settings: SessionSettings
@@ -150,7 +150,7 @@ export interface Session {
  * 创建会话请求数据
  */
 export interface CreateSessionRequest {
-    characterId: string
+    agentId: string
     modelId?: string
     title?: string
     settings?: Partial<SessionSettings>

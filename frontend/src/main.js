@@ -79,10 +79,10 @@ const routes = [
         component: () => import("./components/chat/ChatPage.vue"),
       },
       {
-        path: "characters/:tab?",
-        name: "Characters",
-        meta: { titleKey: "common.route.characters", requiresAuth: true },
-        component: () => import("./components/characters/CharactersPage.vue"),
+        path: "agents/:tab?",
+        name: "Agents",
+        meta: { titleKey: "common.route.agents", requiresAuth: true },
+        component: () => import("./components/agents/AgentsPage.vue"),
       },
       {
         path: "bots/:tab?",

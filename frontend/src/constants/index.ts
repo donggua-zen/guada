@@ -12,9 +12,9 @@ export const DEFAULT_COMPRESSION_TIER: CompressionTier = 'conservative'
 /** 附加工作目录附件类型：session.settings.attachments 的键，值为远程连接 ID 数组 */
 export const SSH_CONNECTION_ATTACHMENT_TYPE = 'ssh-connection' as const
 
-/** 压缩档位选项（i18n key 指向 characters.setting.*） */
+/** 压缩档位选项（i18n key 指向 agents.setting.*） */
 export const COMPRESSION_TIER_OPTIONS = [
-  { value: 'off', labelKey: 'characters.setting.tierOff', descKey: 'characters.setting.tierOffDesc' },
-  { value: 'conservative', labelKey: 'characters.setting.tierConservative', descKey: 'characters.setting.tierConservativeDesc' },
-  { value: 'aggressive', labelKey: 'characters.setting.tierAggressive', descKey: 'characters.setting.tierAggressiveDesc' },
+  { value: 'off', labelKey: 'agents.setting.tierOff', descKey: 'agents.setting.tierOffDesc' },
+  { value: 'conservative', labelKey: 'agents.setting.tierConservative', descKey: 'agents.setting.tierConservativeDesc' },
+  { value: 'aggressive', labelKey: 'agents.setting.tierAggressive', descKey: 'agents.setting.tierAggressiveDesc' },
 ] as const

@@ -18,11 +18,11 @@ export class UpdateSessionDto {
   title?: string;
 
   /**
-   * 角色 ID
+   * 智能体 ID
    */
   @IsOptional()
   @IsString()
-  characterId?: string;
+  agentId?: string;
 
   /**
    * 使用的模型 ID

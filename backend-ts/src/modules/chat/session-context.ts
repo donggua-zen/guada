@@ -108,8 +108,8 @@ export interface ISessionContext {
   readonly sessionType: "web" | "bot" | "sub_agent";
   /** 父会话 ID（子代理场景下为主会话 ID，主会话场景下为 null） */
   readonly parentSessionId?: string | null;
-  /** 当前会话绑定的角色 ID（无角色时为 null） */
-  readonly characterId?: string | null;
+  /** 当前会话绑定的智能体 ID（无智能体时为 null） */
+  readonly agentId?: string | null;
   /** 机器人 ID（仅 bot 会话有值） */
   readonly botId?: string | null;
   /** 外部 ID（bot 会话中为 "platform:type:nativeId"，nativeId 即平台 conversationId） */

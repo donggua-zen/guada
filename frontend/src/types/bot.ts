@@ -35,7 +35,7 @@ export interface BotInstance {
   reconnectEnabled: boolean;
   maxRetries: number;
   retryInterval: number;
-  defaultCharacterId: string | null;
+  defaultAgentId: string | null;
   defaultModelId: string | null;
   defaultThinkingEffort: string | null;
   additionalKwargs?: {
@@ -61,7 +61,7 @@ export interface CreateBotRequest {
     maxRetries: number;
     retryInterval: number;
   };
-  defaultCharacterId?: string;
+  defaultAgentId?: string;
   defaultModelId?: string;
   defaultThinkingEffort?: string;
   additionalKwargs?: {
@@ -77,7 +77,7 @@ export interface UpdateBotRequest {
   name?: string;
   platformConfig?: Record<string, any>;
   enabled?: boolean;
-  defaultCharacterId?: string;
+  defaultAgentId?: string;
   defaultModelId?: string;
   defaultThinkingEffort?: string;
   additionalKwargs?: {

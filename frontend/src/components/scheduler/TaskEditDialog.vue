@@ -133,14 +133,14 @@
           <el-input v-model="form.targetSessionId" :placeholder="t('scheduler.edit.targetSessionPlaceholder')" clearable />
         </el-form-item>
 
-        <!-- 新建会话时可选配置助手和模型 -->
-        <el-form-item v-if="form.targetMode === 'new_session'" :label="t('scheduler.edit.characterLabel')" prop="characterId">
-          <el-select v-model="form.characterId" :placeholder="t('scheduler.edit.characterPlaceholder')" style="width: 100%" filterable>
-            <el-option v-for="character in characters" :key="character.id" :label="character.name"
-              :value="character.id">
+        <!-- 新建会话时可选配置智能体和模型 -->
+        <el-form-item v-if="form.targetMode === 'new_session'" :label="t('scheduler.edit.agentLabel')" prop="agentId">
+          <el-select v-model="form.agentId" :placeholder="t('scheduler.edit.agentPlaceholder')" style="width: 100%" filterable>
+            <el-option v-for="agent in agents" :key="agent.id" :label="agent.name"
+              :value="agent.id">
               <div class="flex items-center gap-2">
-                <img v-if="character.avatarUrl" :src="character.avatarUrl" class="w-5 h-5 rounded object-cover" />
-                <span>{{ character.name }}</span>
+                <img v-if="agent.avatarUrl" :src="agent.avatarUrl" class="w-5 h-5 rounded object-cover" />
+                <span>{{ agent.name }}</span>
               </div>
             </el-option>
           </el-select>
@@ -204,7 +204,7 @@ import { useI18n } from 'vue-i18n'
 import { ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton, ElSwitch, ElInputNumber, ElDivider, ElIcon, ElButton, ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker, ElMessage, ElSelect, ElOption } from 'element-plus'
 import { AddCircleOutlineRound, LogInRound } from '@vicons/material'
 import type { ScheduledTask } from '../../types/scheduler'
-import type { Character } from '../../types/character'
+import type { Agent } from '../../types/agent'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -262,8 +262,8 @@ const weekDays = computed(() => [
   t('common.weekday.saturday')
 ])
 
-// 角色列表
-const characters = ref<Character[]>([])
+// 智能体列表
+const agents = ref<Agent[]>([])
 
 // 模型列表
 const modelProviders = ref<ModelProvider[]>([])
@@ -280,7 +280,7 @@ const form = ref({
   cronExpression: '0 9 * * *',
   targetMode: 'new_session' as 'new_session' | 'existing_session',
   targetSessionId: '',
-  characterId: '',
+  agentId: '',
   modelId: '',
   maxExecutions: undefined as number | undefined,
   maxRetries: 3,
@@ -436,11 +436,11 @@ const rules = computed(() => ({
       trigger: 'blur'
     }
   ],
-  characterId: [
+  agentId: [
     {
       validator: (_rule: any, value: string, callback: Function) => {
         if (form.value.targetMode === 'new_session' && !value) {
-          callback(new Error(t('scheduler.edit.characterRequired')))
+          callback(new Error(t('scheduler.edit.agentRequired')))
         } else {
           callback()
         }
@@ -461,7 +461,7 @@ function initForm() {
       cronExpression: props.task.cronExpression || '0 9 * * *',
       targetMode: props.task.targetMode || 'new_session',
       targetSessionId: props.task.targetSessionId || '',
-      characterId: props.task.characterId || '',
+      agentId: props.task.agentId || '',
       modelId: props.task.modelId || '',
       maxExecutions: props.task.maxExecutions ?? undefined,
       maxRetries: props.task.maxRetries ?? 3,
@@ -482,7 +482,7 @@ function initForm() {
       cronExpression: '0 9 * * *',
       targetMode: 'new_session',
       targetSessionId: '',
-      characterId: '',
+      agentId: '',
       modelId: '',
       maxExecutions: undefined,
       maxRetries: 3,
@@ -570,8 +570,8 @@ async function handleSubmit() {
       data.targetSessionId = form.value.targetSessionId.trim()
     }
 
-    if (form.value.characterId) {
-      data.characterId = form.value.characterId.trim()
+    if (form.value.agentId) {
+      data.agentId = form.value.agentId.trim()
     }
 
     if (form.value.modelId) {
@@ -616,7 +616,7 @@ async function handleTest() {
 watch(() => props.modelValue, (val) => {
   if (val) {
     initForm()
-    loadCharacters()
+    loadAgents()
     loadModels()
     setTimeout(() => {
       formRef.value?.clearValidate()
@@ -624,13 +624,13 @@ watch(() => props.modelValue, (val) => {
   }
 })
 
-// 加载角色列表
-async function loadCharacters() {
+// 加载智能体列表
+async function loadAgents() {
   try {
-    const response = await apiService.fetchCharacters()
-    characters.value = response.items || []
+    const response = await apiService.fetchAgents()
+    agents.value = response.items || []
   } catch (error) {
-    console.error('获取助手列表失败:', error)
+    console.error('获取智能体列表失败:', error)
   }
 }
 

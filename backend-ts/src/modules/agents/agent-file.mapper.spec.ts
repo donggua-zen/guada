@@ -5,9 +5,9 @@ import {
   parseAgentMarkdown,
   serializeAgentMarkdown,
   slugifyAgentId,
-} from "./character-file.mapper";
+} from "./agent-file.mapper";
 
-describe("character-file.mapper", () => {
+describe("agent-file.mapper", () => {
   describe("slugifyAgentId", () => {
     it("保留中文并按空白分词", () => {
       expect(slugifyAgentId("产品经理")).toBe("产品经理");
@@ -137,7 +137,7 @@ settings:
       const body = "第一段。\n\n第二段：包含 # 标题与 **强调**。\n";
       const original = {
         name: "编剧",
-        description: "角色设计",
+        description: "智能体设计",
         settings: { systemPrompt: body.trim(), memory: { summaryMode: "memory_sync" } },
       };
       const round = parseAgentMarkdown(

@@ -122,26 +122,8 @@
         </GdTooltip>
       </section>
 
-      <!-- ── 待办事项：无待办不显示，平铺展示全部条目 ── -->
-      <section v-if="todoItems.length" class="overview-section">
-        <div class="overview-section-title">
-          <span>{{ t('chat.workspace.todoList') }}</span>
-          <span v-if="todoDoneCount" class="overview-section-count ml-auto">{{ todoDoneCount }}/{{ todoItems.length }}</span>
-        </div>
-        <div class="overview-todo-list">
-          <div v-for="(item, i) in todoItems" :key="i" class="overview-todo-item py-[3px]"
-            :class="{ done: item.status === 'completed', active: item.status === 'in_progress' }">
-            <span class="overview-todo-dot">
-              <el-icon v-if="item.status === 'completed'" class="overview-todo-check"><Check /></el-icon>
-              <el-icon v-else-if="item.status === 'in_progress'" class="overview-todo-arrow"><ArrowRight16Regular /></el-icon>
-              <span v-else class="overview-todo-ring"></span>
-            </span>
-            <span class="overview-todo-text min-w-0">{{ item.content }}</span>
-          </div>
-        </div>
-      </section>
-
       <!-- ── 后台进程：运行中的后台命令；点击行打开日志标签，行尾关闭按钮终止进程 ── -->
+      <!-- 待办事项分区已迁移至对话流下方（SessionTodoCard，ChatPanel 内 v-for 之后） -->
       <section v-if="processes.length" class="overview-section">
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.processes') }}</span>
@@ -275,11 +257,11 @@ import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { ArrowDown, Check, Close } from "@element-plus/icons-vue";
+import { ArrowDown, Close } from "@element-plus/icons-vue";
 import {
   BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
   Dismiss16Regular, Add16Regular,
-  ArrowSync20Regular, ArrowRight16Regular, Cloud16Regular,
+  ArrowSync20Regular, Cloud16Regular,
   Flowchart20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
@@ -317,28 +299,6 @@ const tabStore = useTabStore();
 const layoutStore = useLayoutStore();
 const browserStore = useBrowserWebviewStore();
 const sessionStore = useSessionStore();
-
-// ── 待办（环境初始化）：复用 SessionTodoList 的数据源与事件订阅 ──
-interface TodoItem {
-  content: string;
-  status: string;
-}
-const todoItems = ref<TodoItem[]>([]);
-/** 已完成待办数量（用于分组标题的绿色计数徽标，对齐参考图 “进程 4/4”） */
-const todoDoneCount = computed(() => todoItems.value.filter((it) => it.status === "completed").length);
-
-async function loadTodo(): Promise<void> {
-  if (!props.sessionId) {
-    todoItems.value = [];
-    return;
-  }
-  try {
-    const res = await apiService.getSessionTodo(props.sessionId);
-    todoItems.value = res.items || [];
-  } catch {
-    todoItems.value = [];
-  }
-}
 
 // ── 工作目录分组：主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
 /** 下拉空态命令：跳转设置页“远程工作区”创建连接 */
@@ -421,7 +381,6 @@ const processes = ref<UiProcessInfo[]>([]);
 const nowTick = ref(Date.now());
 let unsubscribeProcessChanged: (() => void) | null = null;
 let unsubscribeWorkflowStream: (() => void) | null = null;
-let unsubscribeTodoUpdated: (() => void) | null = null;
 let elapsedTimer: number | null = null;
 
 async function loadProcesses(): Promise<void> {
@@ -565,7 +524,7 @@ const subagentItems = computed<SubagentItem[]>(() =>
       return {
         id: s.id,
         title: s.title || t("chat.workspace.subagentTab"),
-        avatarUrl: s.avatarUrl || s.character?.avatarUrl || null,
+        avatarUrl: s.avatarUrl || s.agent?.avatarUrl || null,
         frozen: !!s.closedAt,
         status:
           streamStatus === "running"
@@ -635,7 +594,6 @@ watch(
   (id) => {
     git.bindSession(id);
     endedExpanded.value = false;
-    void loadTodo();
     void loadProcesses();
     void loadWorkflowRuns();
     void loadWorkspacePath();
@@ -645,9 +603,6 @@ watch(
 
 onMounted(() => {
   void loadConnections();
-  unsubscribeTodoUpdated = apiService.onSessionEvent("todo_updated", (event) => {
-    if (event.sessionId === props.sessionId) loadTodo();
-  });
   unsubscribeProcessChanged = apiService.onSessionEvent("process_changed", (event) => {
     if (event.sessionId === props.sessionId) loadProcesses();
   });
@@ -655,8 +610,6 @@ onMounted(() => {
   elapsedTimer = window.setInterval(() => { nowTick.value = Date.now(); }, 1000);
 });
 onUnmounted(() => {
-  unsubscribeTodoUpdated?.();
-  unsubscribeTodoUpdated = null;
   unsubscribeProcessChanged?.();
   unsubscribeProcessChanged = null;
   unsubscribeWorkflowStream?.();
@@ -923,61 +876,10 @@ async function createBrowser(): Promise<void> {
   white-space: nowrap;
 }
 
-/* 待办列表（平铺展开，对齐参考图：✓完成 / →进行中 / ○待处理） */
-.overview-todo-list {
-  display: flex;
-  flex-direction: column;
-  padding: 2px 4px 4px 8px;
-  gap: 2px;
-}
-.overview-todo-item {
-  display: flex;
-  /* 多行文本时状态点顶部对齐 */
-  align-items: flex-start;
-  gap: 8px;
-  border-radius: 4px;
-}
-.overview-todo-dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.overview-todo-check {
-  font-size: 15px;
-  color: var(--gd-color-success);
-}
-.overview-todo-arrow {
-  font-size: 15px;
-  color: var(--gd-color-text);
-}
-.overview-todo-ring {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  border: 1.5px solid var(--gd-color-text-disabled);
-}
+/* 待办列表样式段已随分区迁移至 SessionTodoCard（对话流下方）；
+   @keyframes overview-spin 保留：collapse-btn / process-spinner 仍引用 */
 @keyframes overview-spin {
   to { transform: rotate(360deg); }
-}
-.overview-todo-text {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--gd-size-text-base);
-  color: var(--gd-color-text-gray);
-  /* 超长换行（不截断），行内长词断词 */
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.overview-todo-item.active .overview-todo-text {
-  color: var(--gd-color-text);
-}
-.overview-todo-item.done .overview-todo-text {
-  text-decoration: line-through;
-  color: var(--gd-color-text-disabled);
 }
 
 /* 后台进程列表（平铺展开） */

@@ -1,42 +1,42 @@
 ﻿export default {
-  // ── 页面 (CharactersPage.vue) ──
+  // ── 页面 (AgentsPage.vue) ──
   page: {
-    title: 'Assistants',
-    // 角色操作
-    deleteCharacterTitle: 'Confirm Deletion',
-    deleteCharacterConfirm: 'Are you sure you want to delete assistant "{name}"? This action cannot be undone.',
-    characterDeleteSuccess: 'Assistant deleted successfully',
+    title: 'Agents',
+    // 智能体操作
+    deleteAgentTitle: 'Confirm Deletion',
+    deleteAgentConfirm: 'Are you sure you want to delete agent "{name}"? This action cannot be undone.',
+    agentDeleteSuccess: 'Agent deleted successfully',
     deleteFailed: 'Deletion failed',
-    loadFailed: 'Failed to load assistant list',
+    loadFailed: 'Failed to load agent list',
   },
 
-  // ── 列表标签页 (CharacterListTab.vue) ──
+  // ── 列表标签页 (AgentListTab.vue) ──
   list: {
-    create: 'New Assistant',
+    create: 'New Agent',
     import: 'Import',
     docs: 'Documentation',
     noDescription: 'No description',
-    useCharacter: 'Use this character',
-    characterSettings: 'Character Settings',
-    empty: 'No assistants',
-    emptyHint: 'Click the button above to create your first assistant',
-    importSuccess: 'Successfully imported {count} assistants',
+    useAgent: 'Use this agent',
+    agentSettings: 'Agent Settings',
+    empty: 'No agents',
+    emptyHint: 'Click the button above to create your first agent',
+    importSuccess: 'Successfully imported {count} agents',
     importPartial: '{count} files failed to import',
     importFailed: 'Import failed',
   },
 
-  // ── 角色弹窗 (CharacterModal.vue) ──
+  // ── 智能体弹窗 (AgentModal.vue) ──
   modal: {
-    editTitle: 'Edit Character',
-    createTitle: 'New Character',
+    editTitle: 'Edit Agent',
+    createTitle: 'New Agent',
     applyAll: 'Apply All Settings',
-    saveSuccess: 'Character updated successfully',
-    saveFailed: 'Failed to save character',
+    saveSuccess: 'Agent updated successfully',
+    saveFailed: 'Failed to save agent',
   },
 
-  // ── 角色设置面板 (CharacterSettingPanel.vue) ──
+  // ── 智能体设置面板 (AgentSettingPanel.vue) ──
   setting: {
-    loading: 'Loading character settings...',
+    loading: 'Loading agent settings...',
     // 侧边栏
     groupBasic: 'Basic Configuration',
     groupTools: 'Tools & Capabilities',
@@ -47,23 +47,23 @@
     navSkills: 'Skills',
     navSubAgents: 'Sub-agents',
     // 基础设置
-    avatarTitle: 'Character Avatar',
+    avatarTitle: 'Agent Avatar',
     avatarOptional: '(Optional)',
     avatarHint: 'Click the avatar to upload a new image',
-    titleLabel: 'Character Name',
-    titleHint: 'Display name of the assistant, shown in the conversation list. Renaming does not change the storage directory (id)',
-    titlePlaceholder: 'Enter character name',
-    titleRequired: 'Please enter a character name',
-    titleLength: 'Name length must be between 2 and 20 characters',
-    idLabel: 'Assistant ID',
-    idHint: 'Storage directory name, fixed after creation; renaming the assistant does not change it',
-    descLabel: 'Character Description',
+    titleLabel: 'Agent Name',
+    titleHint: 'Display name of the agent, shown in the conversation list. Renaming does not change the storage directory (id)',
+    titlePlaceholder: 'Enter agent name',
+    titleRequired: 'Please enter a agent name',
+    titleLength: 'Name length must be between 2 and 20 agents',
+    idLabel: 'Agent ID',
+    idHint: 'Storage directory name, fixed after creation; renaming the agent does not change it',
+    descLabel: 'Agent Description',
     descOptional: '(Optional)',
-    descHint: 'Briefly describe the purpose, features, or background of the assistant',
-    descPlaceholder: 'Enter character description',
+    descHint: 'Briefly describe the purpose, features, or background of the agent',
+    descPlaceholder: 'Enter agent description',
     modelLabel: 'Model Selection',
     modelOptional: '(Optional)',
-    modelHint: 'Specify a dedicated AI model for this assistant. Leave empty to use the default model. Changing the model will not affect already created sessions.',
+    modelHint: 'Specify a dedicated AI model for this agent. Leave empty to use the default model. Changing the model will not affect already created sessions.',
     modelPlaceholder: 'Select a model',
     modelUseDefault: 'Use Default Model',
     // 记忆与压缩
@@ -77,7 +77,7 @@
     tierAggressive: 'Aggressive',
     tierAggressiveDesc: 'Aggressive - triggers at 90%, keeps 20%, syncs memory before summarizing',
     // 提示词
-    systemPromptLabel: 'System Prompt (Character Settings)',
+    systemPromptLabel: 'System Prompt (Agent Settings)',
     systemPromptPlaceholder: 'Enter detailed settings',
     // 本地工具
     toolToggle: 'Feature Toggles',
@@ -102,7 +102,7 @@
     // 子代理
     loadingAgents: 'Loading...',
     noAgents: 'No sub-agents available',
-    noAgentsHint: 'Please create other assistants first',
+    noAgentsHint: 'Please create other agents first',
     // 提示
     tipTitle: 'Tips',
     tip1: '• Compression Strategy: presets decide trigger point, retention, and summary method together',
@@ -122,6 +122,6 @@
     memoryless: 'No Memory',
     // 通用子代理
     genericAgentTitle: 'Generic Sub-agent',
-    genericAgentDesc: 'A sub-agent for general tasks. No specific character settings required. Permissions inherit from the parent character.',
+    genericAgentDesc: 'A sub-agent for general tasks. No specific agent settings required. Permissions inherit from the parent agent.',
   },
 }

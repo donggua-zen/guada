@@ -71,7 +71,7 @@
                   :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                   @container-resize="onChatContainerResize"
                   @save-settings="handleSaveSessionSettings"
-                  @select-character="handleSelectCharacter">
+                  @select-agent="handleSelectAgent">
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
                   <template #aside>
@@ -131,7 +131,7 @@ import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
-import type { Character } from '@/types/character';
+import type { Agent } from '@/types/agent';
 import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
@@ -571,17 +571,17 @@ const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
 };
 
 /**
- * 切换角色
- * 更新会话的 characterId 并刷新本地角色信息
+ * 切换智能体
+ * 更新会话的 agentId 并刷新本地智能体信息
  */
-const handleSelectCharacter = async (character: Character) => {
+const handleSelectAgent = async (agent: Agent) => {
   if (!mainSession.value) return;
   try {
-    await apiService.updateSession(mainSession.value.id, { characterId: character.id });
-    mainSession.value.character = character;
-    mainSession.value.characterId = character.id;
+    await apiService.updateSession(mainSession.value.id, { agentId: agent.id });
+    mainSession.value.agent = agent;
+    mainSession.value.agentId = agent.id;
   } catch (error: any) {
-    console.error('切换角色失败:', error);
+    console.error('切换智能体失败:', error);
     toast.error(t('common.error.operationFailed'));
   }
 };

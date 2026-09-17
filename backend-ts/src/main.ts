@@ -102,7 +102,7 @@ async function bootstrap() {
     console.warn("⚠️  上传目录配置未设置（UPLOAD_ROOT_DIR 或 UPLOAD_URL_PREFIX），跳过挂载");
   }
 
-  // 智能体目录（角色定义与头像的权威来源）：只暴露目录内资源（头像等），
+  // 智能体目录（智能体定义与头像的权威来源）：只暴露目录内资源（头像等），
   // AGENT.md 由 API 提供，无需静态直出
   const agentsPhysicalRoot =
     process.env.AGENTS_DATA_DIR ||

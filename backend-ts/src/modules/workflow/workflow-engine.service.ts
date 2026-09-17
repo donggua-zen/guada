@@ -445,9 +445,9 @@ class WorkflowRun {
     if (next) next();
   }
 
-  private resolveCharacterId(agentId?: string): string | null {
+  private resolveAgentId(agentId?: string): string | null {
     if (!agentId || agentId === "generic") return null;
-    // 角色白名单：与会话 sub_agent 工具同一配置（settings.agents 显式 true）
+    // 智能体白名单：与会话 sub_agent 工具同一配置（settings.agents 显式 true）
     const agentsCfg = this.parentContext.getSettings("agents");
     const allowed =
       typeof agentsCfg === "object" && agentsCfg !== null
@@ -473,7 +473,7 @@ class WorkflowRun {
     this.childControllers.set(callId, controller);
 
     try {
-      const characterId = this.resolveCharacterId(opts.agentId);
+      const agentId = this.resolveAgentId(opts.agentId);
       if (this.settled || this.cancelRequested) return;
 
       const result = await this.subAgentManager.spawnForWorkflow(
@@ -481,7 +481,7 @@ class WorkflowRun {
           parentContext: this.parentContext,
           name: label,
           task: prompt,
-          characterId: characterId ?? undefined,
+          agentId: agentId ?? undefined,
           workflow: { runId: this.runId, label, phase },
           onCreated: (subSessionId) => {
             this.liveAgents.set(callId, { label, phase, subSessionId });
@@ -515,7 +515,7 @@ class WorkflowRun {
         stopReason,
       });
     } catch (e) {
-      // 角色白名单拒绝（AGENT_START）等启动期失败：响亮失败，杀死脚本
+      // 智能体白名单拒绝（AGENT_START）等启动期失败：响亮失败，杀死脚本
       this.liveAgents.delete(callId);
       this.emit("agent-end", {
         callId,

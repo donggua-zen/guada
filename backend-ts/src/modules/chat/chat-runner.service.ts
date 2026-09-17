@@ -142,7 +142,7 @@ export class ChatRunnerService {
       regenerationMode?: string;
       resumeData?: any;
       source?: Record<string, any>;
-      /** 预解析的会话对象（跳过 DB 重查，保留内存挂载的 model/character） */
+      /** 预解析的会话对象（跳过 DB 重查，保留内存挂载的 model/agent） */
       preloadedSession?: any;
     },
     callbacks?: StreamCallbacks,

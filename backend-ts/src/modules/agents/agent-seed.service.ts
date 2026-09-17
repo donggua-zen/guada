@@ -3,10 +3,10 @@ import * as fsSync from "fs";
 import * as path from "path";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import {
-  CharacterFileStore,
+  AgentFileStore,
   resolveBundledAgentsDir,
-} from "./character-file.store";
-import { isValidAgentId } from "./character-file.mapper";
+} from "./agent-file.store";
+import { isValidAgentId } from "./agent-file.mapper";
 
 /**
  * 默认助手补种
@@ -18,10 +18,10 @@ import { isValidAgentId } from "./character-file.mapper";
  * - 文件管理器误删（无墓碑）→ 自动恢复默认版本
  */
 @Injectable()
-export class CharacterSeedService implements OnModuleInit {
-  private readonly logger = new Logger(CharacterSeedService.name);
+export class AgentSeedService implements OnModuleInit {
+  private readonly logger = new Logger(AgentSeedService.name);
 
-  constructor(private readonly store: CharacterFileStore) {}
+  constructor(private readonly store: AgentFileStore) {}
 
   async onModuleInit(): Promise<void> {
     await this.store.initialize();
@@ -39,7 +39,7 @@ export class CharacterSeedService implements OnModuleInit {
 
     const tombstones = await this.store.readTombstones();
     const existing = new Set(
-      (await this.store.listCharacters()).map((c) => c.id.toLowerCase()),
+      (await this.store.listAgents()).map((c) => c.id.toLowerCase()),
     );
 
     let seeded = 0;
