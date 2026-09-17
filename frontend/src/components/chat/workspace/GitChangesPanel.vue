@@ -2327,60 +2327,17 @@ defineExpose({ refresh });
   overflow-y: auto;
 }
 
-.git-tree-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  /* 左右留 8px 外边距（hover 背景块不贴容器边）；
-     垂直方向不留间距（margin:0）——缩进指引线由每行 ::before 拼接，行间有缝隙会断线 */
-  margin: 0 8px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 14px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-/* 缩进指引竖线：每层缩进（14px）一条 1px 线，线画在格子**中心**（6-7px 段），
-   与图标（chevron 12px 中心 6px）居中对齐——线不再紧贴图标右侧；
-   depth=0 时 --indent=0px 宽度为 0 不显示；行间 2px margin 处自然断开（分段指引线） */
-.git-tree-row::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 0;
-  bottom: 0;
-  width: var(--indent, 0px);
-  background-image: repeating-linear-gradient(
-    to right,
-    transparent 0 6px,
-    var(--gd-color-surface-border) 6px 7px,
-    transparent 7px 14px
-  );
-  pointer-events: none;
-}
-
-/* 行 hover/active/selected 由 TreeView（.tree-view-row）统一处理 */
-.git-tree-row:hover {
-  background: var(--gd-color-sidebar-bg-hover);
-}
-
-/* 树键盘导航高亮行：方向键移动（VS Code 风格），无需鼠标悬停即可见；
-   与 hover 区分：用对话高亮底色，避免与悬停完全同色分不清焦点在哪 */
-.git-tree-row--active {
-  background: var(--gd-color-conversation-bg-active);
-}
+/* 行盒（高度 / 内边距 / 圆角 / nowrap / overflow / 缩进指引线 / hover / 选中 /
+   键盘高亮）已全部迁至 TreeView.vue 统一渲染 —— 本组件不再存在 .git-tree-row
+   元素，此处原有的一套 .git-tree-row* 样式属重构残留（已删除）。
+   行内只保留下方 .git-tree-name / .git-status / .git-row-actions 等内容样式。 */
 
 /* 树滚动容器可聚焦（键盘导航），去掉聚焦外框 */
 .git-tree-scroll:focus {
   outline: none;
 }
 
-.git-tree-row--dir {
-  font-weight: 500;
-  color: var(--gd-color-text);
-}
+/* 目录行加粗由 TreeView 的 .tree-view-row--dir 统一提供 */
 
 /* partial 文件行：名称警告色（行高亮/选中由 TreeView 统一处理） */
 .git-tree-name--partial {

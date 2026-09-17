@@ -480,13 +480,32 @@ watch([() => tabStore.activeTabKey, () => tabStore.tabs], () => {
 }, { deep: true });
 
 // ── 预览标签缓存：从 localStorage 恢复会话状态 ──
+/**
+ * 从缓存恢复会话标签状态。
+ *
+ * 关键约束（勿改回无条件覆盖）：必须保留调用 restore 之前 tabStore 里
+ * 「非 file 类型」的既有标签 —— 典型场景是概览面板点击子代理时先
+ * openSubAgentTab（subagent 标签）、或打开了 terminal / git / workflow 标签，
+ * 随后侧边栏才挂载并触发本函数。若直接 `tabStore.tabs = cached.tabs`，
+ * 这些刚打开的标签会被缓存快照覆盖丢失，表现为「只打开了侧边栏，
+ * 子代理标签没自动打开」。
+ * 因此采用「缓存为基底 + 追加既有非 file 标签 + 复用既有 file 标签」的合并策略。
+ */
 async function restorePreviewCache(sessionId: string): Promise<void> {
+    // 记录调用时已存在的标签（调用方在本函数前写入的标签需要被保留）
+    const preExistingTabs = tabStore.tabs.map(t => ({ ...t }));
+    const preExistingActiveKey = tabStore.activeTabKey;
+
     const cached = previewTabCache.getSession(sessionId);
-    if (!cached) return;
 
     isRestoring = true;
 
     try {
+        if (!cached) {
+            // 无缓存：不动既有标签（可能正是调用方刚打开的），仅补一次保存
+            return;
+        }
+
         // 恢复完整标签列表（保留顺序）
         tabStore.tabs = cached.tabs.map(t => ({ ...t }));
 
@@ -519,6 +538,19 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
             ? `file:${rawActive.path}`
             : cached.activeTabKey;
 
+        // ── 合并：保留恢复前已存在的标签（同 key 以既有为准，缓存为辅） ──
+        // 这样子代理 / 终端 / 工作流等在本函数之前打开的标签不会被缓存快照吃掉。
+        for (const prev of preExistingTabs) {
+            const existing = tabStore.tabs.find(t => t.key === prev.key);
+            if (existing) {
+                // 同 key：保留既有的运行时字段（如 subagent 名称变更、terminalId）
+                existing.name = prev.name ?? existing.name;
+                if (prev.terminalId) existing.terminalId = prev.terminalId;
+            } else {
+                tabStore.tabs.push(prev);
+            }
+        }
+
         // 补充 store 中存在但缓存中没有的浏览器标签
         for (const wv of browserStore.sessionWebviews) {
             const key = `browser:${wv.windowId}`;
@@ -528,8 +560,13 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
         }
 
         // 恢复激活标签（显示完全由激活标签驱动）
+        // 优先级：调用方刚激活的标签 > 缓存中的激活标签 > 第一个标签
         // null = 起始页；'newtab' 为旧缓存哨兵键，一并归一到起始页
-        if (cached.activeTabKey === null || cached.activeTabKey === 'newtab') {
+        if (preExistingActiveKey && tabStore.tabs.some(t => t.key === preExistingActiveKey)) {
+            // 调用方（如概览点击子代理）在本函数前已激活了目标标签 —— 保持它
+            await nextTick()
+            tabStore.selectTab(preExistingActiveKey)
+        } else if (cached.activeTabKey === null || cached.activeTabKey === 'newtab') {
             // 起始页不占用标签：恢复为无激活标签
             tabStore.selectTab(null)
         } else if (restoredActiveKey && tabStore.tabs.some(t => t.key === restoredActiveKey)) {
@@ -1306,24 +1343,36 @@ async function handleWorkspaceWatcherConnected(sessionId: string) {
     }
 }
 
-watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
+/**
+ * 上次已同步的会话 id。
+ * 用于区分「组件首次挂载」（此处为 null）与「用户真正切换会话」：
+ * 首次挂载时 tabStore 里可能已有合法标签（例如概览面板刚 push 的子代理标签、
+ * 或同一会话下其他入口打开的标签），此时绝不能 clearAll 清空。
+ * 仅当确认是从一个具体旧会话切到另一个会话时，才需要清空并重建。
+ */
+let syncedSessionId: string | null = null;
+
+watch(() => props.sessionId, async (newSessionId) => {
     treeLoadGeneration++;
     isLoading.value = false;
 
-    // 会话切换或组件重新挂载时清理旧状态
-    // oldSessionId 为 undefined 时是组件重新挂载（如新建会话后），tabStore 可能有上一个会话的残留
-    if (newSessionId !== oldSessionId) {
-        // 保存旧会话缓存：必须用 oldSessionId，不能用 props.sessionId（已指向新会话）
-        if (oldSessionId) {
-            previewTabCache.saveSession(oldSessionId, {
-                activeTabKey: tabStore.activeTabKey,
-                tabs: tabStore.tabs.map(t => ({ ...t })),
-            });
-        }
+    // 会话切换或组件重新挂载时清理旧状态。
+    // 注意：immediate 首跑时"上一次值"不可用（undefined），有两种可能 ——
+    //   1) immediate 首跑（组件首次挂载）：tabStore 可能已被调用方写好标签，不可清空；
+    //   2) 组件卸载后重新挂载（如新建会话后）且仍持有旧会话残留标签：需要清空。
+    // 用 syncedSessionId 区分：非 null 表示本组件实例已同步过某个会话，
+    // 此时才是真正的「从旧会话切走」，需要清空重建。
+    const isRealSessionSwitch = syncedSessionId !== null && syncedSessionId !== newSessionId;
+    if (isRealSessionSwitch) {
+        // 保存旧会话缓存：必须用 syncedSessionId，不能用 props.sessionId（已指向新会话）
+        previewTabCache.saveSession(syncedSessionId, {
+            activeTabKey: tabStore.activeTabKey,
+            tabs: tabStore.tabs.map(t => ({ ...t })),
+        });
         // 跳过 clearAll 触发的自动保存，避免空标签覆盖新会话缓存
         skipNextSave = true;
         // 旧会话解除 file 订阅（SSE 连接由 OverviewPanel 常驻持有，勿断开）
-        if (oldSessionId) void apiService.setWorkspaceWatchScope(oldSessionId, "file", false);
+        void apiService.setWorkspaceWatchScope(syncedSessionId, "file", false);
         tabStore.clearAll();
         fileChangeVersions.value = {};
         watchedWorkspacePath = null;
@@ -1336,6 +1385,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
         }
     }
 
+    syncedSessionId = newSessionId || null;
+
     if (newSessionId) {
         loadTree(true); // 会话切换时强制启动新请求
 
@@ -1345,7 +1396,8 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
         // 初始化工作区路径监听状态（不依赖 SSE onConnected —— 连接可能已由概览建立）
         void handleWorkspaceWatcherConnected(newSessionId);
 
-        // 恢复预览标签状态
+        // 恢复预览标签状态（内部会保护已存在的标签：已存在的 subagent/browser 标签
+        // 不会被缓存覆盖丢失，仅补齐缺失项）。
         await restorePreviewCache(newSessionId);
     } else {
         watchedWorkspacePath = null;
