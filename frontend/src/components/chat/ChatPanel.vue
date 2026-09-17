@@ -58,8 +58,9 @@
               </template>
             </template>
           </div>
-          <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位） -->
-          <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
+          <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位）。
+               只读模式（子代理会话）下整块隐藏：无输入框，也无需保留底部留白与渐隐遮罩。 -->
+          <div v-if="!readonly" class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto"></div>
             <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">

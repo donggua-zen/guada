@@ -1,7 +1,8 @@
 <template>
   <div class="w-full flex flex-col items-center">
-    <!-- 输入框区域 -->
-    <div
+    <!-- 输入框区域：只读模式（子代理会话）下整体隐藏 —— 子代理不可输入，无需展示输入框。
+         保留 v-if 结构以便后续需要时恢复 readonly-placeholder 提示。 -->
+    <div v-if="!props.readonly"
       class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
       :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--gd-color-input-bg)': !backdrop }, { 'bg-(--gd-color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
       @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"
@@ -42,20 +43,12 @@
 
       <!-- Tiptap 编辑器（替换 textarea） -->
       <div class="editor-container">
-        <template v-if="props.readonly">
-          <div class="readonly-placeholder"
-            style="min-height: 58px; padding: 0 8px; font-size: var(--gd-size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
-            {{ t('chat.input.readonlyPlaceholder') }}
-          </div>
-        </template>
-        <template v-else>
-          <component :is="EditorContent" :editor="editor" class="message-editor" />
-          <!-- 命令选择弹窗 -->
-          <CommandPicker v-if="commandPickerVisible" ref="commandPickerRef" :visible="commandPickerVisible"
-            :items="commandsCache[commandTrigger]" :query="pickerQuery" :selected-index="selectedIndex"
-            :trigger="commandTrigger" @select="selectCommand" @close="closeCommandPicker"
-            @update:selected-index="selectedIndex = $event" />
-        </template>
+        <component :is="EditorContent" :editor="editor" class="message-editor" />
+        <!-- 命令选择弹窗 -->
+        <CommandPicker v-if="commandPickerVisible" ref="commandPickerRef" :visible="commandPickerVisible"
+          :items="commandsCache[commandTrigger]" :query="pickerQuery" :selected-index="selectedIndex"
+          :trigger="commandTrigger" @select="selectCommand" @close="closeCommandPicker"
+          @update:selected-index="selectedIndex = $event" />
       </div>
 
       <!-- 隐藏的文件输入框：文件侧不设 accept（任意格式都能作为路径引用附上） -->
