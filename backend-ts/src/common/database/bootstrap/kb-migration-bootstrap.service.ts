@@ -88,14 +88,23 @@ interface LegacyKbFileMeta {
 export class KbMigrationBootstrapService {
   private readonly logger = new Logger(KbMigrationBootstrapService.name);
 
+  // 脚手架自持构造 KB 数据层（不经 DI）：避免本模块所在的持久化模块反向
+  // import 域模块（会把域模块初始化提到迁移导出之前）。KBFileRepository/
+  // KBChunkRepository 本就支持外部构造传实现（见其构造器注释）。
+  private readonly databases: KbDatabaseService;
+  private readonly kbMetaStore: KbMetaStore;
+  private readonly fileRepo: KBFileRepository;
+  private readonly chunkRepo: KBChunkRepository;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gate: MetadataBootstrapGate,
-    private readonly databases: KbDatabaseService,
-    private readonly kbMetaStore: KbMetaStore,
-    private readonly fileRepo: KBFileRepository,
-    private readonly chunkRepo: KBChunkRepository,
-  ) {}
+  ) {
+    this.databases = new KbDatabaseService(gate);
+    this.kbMetaStore = new KbMetaStore(this.databases);
+    this.fileRepo = new KBFileRepository(this.databases);
+    this.chunkRepo = new KBChunkRepository(this.databases);
+  }
 
   async run(): Promise<void> {
     // 设置注入完成后再报告生效的存储根（顺序由编排器保证）

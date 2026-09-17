@@ -51,13 +51,22 @@ import { sessionRowToMeta, toISO } from "./session-meta-mapping";
 export class MetadataFileBootstrapService {
   private readonly logger = new Logger(MetadataFileBootstrapService.name);
 
+  // 脚手架自持构造 store（不经 DI）：本模块不得反向 import 域模块——那会把
+  // 域模块的初始化提到迁移导出之前（CharacterSeedService 等在 init 期读写
+  // store，会造成空目录补种）。直写方法（writeMetaDirect 等）不走 initialize
+  // 门控，可安全地在 gate 放行前落盘。
+  private readonly sessionStore: SessionFileStore;
+  private readonly botStore: BotFileStore;
+  private readonly mcpStore: McpFileStore;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gate: MetadataBootstrapGate,
-    private readonly sessionStore: SessionFileStore,
-    private readonly botStore: BotFileStore,
-    private readonly mcpStore: McpFileStore,
-  ) {}
+  ) {
+    this.sessionStore = new SessionFileStore(gate);
+    this.botStore = new BotFileStore(gate);
+    this.mcpStore = new McpFileStore(gate);
+  }
 
   async run(): Promise<void> {
     await this.runDomain(META_DOMAIN_SESSIONS, () => this.exportSessions());

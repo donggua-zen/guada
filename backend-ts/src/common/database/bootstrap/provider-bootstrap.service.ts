@@ -11,6 +11,7 @@ import {
   ProviderFileConfig,
   ProviderFileModel,
 } from '../../../modules/llm-core/provider-file.store';
+import { BundledCatalogService } from '../../../modules/llm-core/bundled-catalog.service';
 import {
   MODEL_ID_KEYS,
   buildModelIdMap,
@@ -55,11 +56,15 @@ const OBSOLETE_REFS_MARKER = '.model-refs-migrated';
 export class ProviderBootstrapService {
   private readonly logger = new Logger(ProviderBootstrapService.name);
 
+  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
+  private readonly store: ProviderFileStore;
+
   constructor(
-    private readonly store: ProviderFileStore,
     private readonly prisma: PrismaService,
     private readonly settingsStorage: SettingsStorage,
-  ) {}
+  ) {
+    this.store = new ProviderFileStore(new BundledCatalogService());
+  }
 
   async run(): Promise<void> {
     await this.seedReadme();

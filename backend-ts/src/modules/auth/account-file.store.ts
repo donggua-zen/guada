@@ -7,6 +7,7 @@ import {
   META_DOMAIN_ACCOUNT,
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
+import { atomicWriteFile, iso } from "../../common/persistence/file-store-kit";
 
 /**
  * 单一全局账户文件存储
@@ -161,7 +162,7 @@ export class AccountFileStore implements OnModuleDestroy {
   /** 直接写入完整账户（供启动期导入） */
   async writeDirect(data: AccountData): Promise<void> {
     await this.withLock(async () => {
-      await this.atomicWrite(data);
+      await this.write(data);
       this.account = data;
     });
   }
@@ -176,7 +177,7 @@ export class AccountFileStore implements OnModuleDestroy {
         (next as any)[key] = value;
       }
       next.updatedAt = new Date().toISOString();
-      await this.atomicWrite(next);
+      await this.write(next);
       this.account = next;
       return next;
     });
@@ -219,8 +220,8 @@ export class AccountFileStore implements OnModuleDestroy {
         avatarUrl: typeof r.avatarUrl === "string" ? r.avatarUrl : null,
         wallpaperUrl:
           typeof r.wallpaperUrl === "string" ? r.wallpaperUrl : null,
-        createdAt: this.iso(r.createdAt) ?? now,
-        updatedAt: this.iso(r.updatedAt) ?? now,
+        createdAt: iso(r.createdAt) ?? now,
+        updatedAt: iso(r.updatedAt) ?? now,
       };
     } catch (err: any) {
       if (err?.code === "ENOENT") return null;
@@ -231,45 +232,9 @@ export class AccountFileStore implements OnModuleDestroy {
     }
   }
 
-  private iso(value: any): string | null {
-    if (typeof value !== "string" || !value) return null;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  }
-
   private async write(data: AccountData): Promise<void> {
     await fsp.mkdir(path.dirname(this.accountPath), { recursive: true });
-    await this.atomicWrite(data);
-  }
-
-  /** 原子写（tmp + rename；Windows EPERM/EBUSY 退避重试，复用既有范式） */
-  private async atomicWrite(data: AccountData): Promise<void> {
-    const tmpPath = `${this.accountPath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
-    let lastErr: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        try {
-          await fsp.unlink(this.accountPath);
-        } catch {
-          /* 目标不存在 */
-        }
-        await fsp.rename(tmpPath, this.accountPath);
-        return;
-      } catch (err: any) {
-        lastErr = err;
-        if (
-          err?.code !== "EPERM" &&
-          err?.code !== "EBUSY" &&
-          err?.code !== "EACCES"
-        ) {
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
-      }
-    }
-    await fsp.unlink(tmpPath).catch(() => undefined);
-    throw lastErr;
+    await atomicWriteFile(this.accountPath, JSON.stringify(data, null, 2));
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {

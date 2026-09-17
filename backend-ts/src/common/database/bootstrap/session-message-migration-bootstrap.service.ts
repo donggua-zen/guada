@@ -13,6 +13,7 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
+import { MetadataBootstrapGate } from "../metadata-bootstrap.gate";
 import { SessionFileStore } from "../../../modules/chat/session-file.store";
 import { SessionMessageDbMigratorService } from "./session-message-db-migrator.service";
 
@@ -22,10 +23,15 @@ export const SESSION_MESSAGES_MIGRATED_MARKER = ".migrated-session-messages";
 export class SessionMessageMigrationBootstrapService {
   private readonly logger = new Logger(SessionMessageMigrationBootstrapService.name);
 
+  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
+  private readonly sessionStore: SessionFileStore;
+
   constructor(
     private readonly migrator: SessionMessageDbMigratorService,
-    private readonly sessionStore: SessionFileStore,
-  ) {}
+    gate: MetadataBootstrapGate,
+  ) {
+    this.sessionStore = new SessionFileStore(gate);
+  }
 
   /** @returns 是否完成（已完成/本次成功 = true；失败 = false，下次启动重试） */
   async run(): Promise<boolean> {

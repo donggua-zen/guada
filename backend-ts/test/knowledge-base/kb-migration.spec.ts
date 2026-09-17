@@ -171,17 +171,14 @@ describe('KbMigrationBootstrapService', () => {
   function makeImporter(
     prismaLike: any = { knowledgeBase: { findMany: async () => [] }, kBFile: { findMany: async () => [] }, kBChunk: { findMany: async () => [] } },
   ): KbMigrationBootstrapService {
-    const metaStore = new KbMetaStore(service);
-    const fileRepo = new KBFileRepository(service);
-    const chunkRepo = new KBChunkRepository(service);
-    return new KbMigrationBootstrapService(
-      prismaLike,
-      gate,
-      service,
-      metaStore,
-      fileRepo,
-      chunkRepo,
-    );
+    const svc = new KbMigrationBootstrapService(prismaLike, gate);
+    // 构造器已自持构造 KB 数据层；这里用本 spec 统一管理连接的实例覆盖
+    // （readonly 仅编译期约束；自持实例未开过任何连接，直接丢弃无句柄泄漏）
+    (svc as any).databases = service;
+    (svc as any).kbMetaStore = new KbMetaStore(service);
+    (svc as any).fileRepo = new KBFileRepository(service);
+    (svc as any).chunkRepo = new KBChunkRepository(service);
+    return svc;
   }
 
   beforeEach(() => {

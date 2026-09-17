@@ -1,5 +1,6 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit } from "@nestjs/common";
 
+import { SessionFileStore } from "./session-file.store";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { ChatController } from "./chat.controller";
@@ -12,7 +13,6 @@ import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 import { CharactersModule } from "../characters/characters.module";
-import { FilesModule } from "../files/files.module";
 import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
 import { SettingsModule } from "../settings/settings.module";
@@ -38,9 +38,13 @@ import { SessionReplayService } from "./session-replay.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
+  imports: [AuthModule, ToolsModule, CharactersModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
+    // 会话文件存储：会话域的公开仓储，跨域消费者（files/bot-gateway/sub-agent）
+    // 经 import ChatModule 获取。文件在域内、注册在域内、生命周期也在域内。
+    SessionFileStore,
+
     AgentEngine,
     SessionContextFactory,
     SessionService,
@@ -64,6 +68,14 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     // 标签解析器管道
     TagParserPipeline,
   ],
-  exports: [AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
+  exports: [SessionFileStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
-export class ChatModule {}
+export class ChatModule implements OnModuleInit {
+  // 会话 store 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，
+  // 此刻 gate 已放行，扫描成本留在启动期而非首个请求
+  constructor(private sessionStore: SessionFileStore) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.sessionStore.initialize();
+  }
+}

@@ -8,6 +8,12 @@ import {
   META_DOMAIN_BOTS,
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
+import {
+  atomicWriteFile,
+  iso,
+  mintId,
+  removeFileWithRetry,
+} from "../../common/persistence/file-store-kit";
 
 /**
  * 机器人实例文件存储（对齐 providers/*.yaml 的既有范式）
@@ -137,7 +143,7 @@ export class BotFileStore implements OnModuleDestroy {
 
   async create(data: Partial<BotFileInstance> & { id?: string }): Promise<BotFileInstance> {
     await this.initialize();
-    const id = data.id ?? this.generateId();
+    const id = data.id ?? mintId("bot-");
     const now = new Date().toISOString();
     const instance: BotFileInstance = {
       id,
@@ -191,7 +197,7 @@ export class BotFileStore implements OnModuleDestroy {
     const existed = this.cache.has(id);
     if (!existed) return false;
     await this.withLock(id, async () => {
-      await this.removeFile(path.join(this.botsDir, `${id}.yaml`));
+      await removeFileWithRetry(path.join(this.botsDir, `${id}.yaml`));
       this.cache.delete(id);
     });
     return true;
@@ -272,30 +278,13 @@ export class BotFileStore implements OnModuleDestroy {
       lastStartedAt: this.str(raw.lastStartedAt),
       lastError: this.str(raw.lastError),
       additionalKwargs: this.obj(raw.additionalKwargs),
-      createdAt: this.iso(raw.createdAt) ?? now,
-      updatedAt: this.iso(raw.updatedAt) ?? now,
+      createdAt: iso(raw.createdAt) ?? now,
+      updatedAt: iso(raw.updatedAt) ?? now,
     };
   }
 
   private str(value: any): string | null {
     return typeof value === "string" && value.length > 0 ? value : null;
-  }
-
-  /**
-   * 时间戳收敛为 ISO 字符串。
-   * 手改 YAML 时未加引号的 ISO 时间会被 js-yaml 解析成 Date 对象，
-   * 只认字符串会让该字段静默回落到「当前时间」。
-   */
-  private iso(value: any): string | null {
-    if (value === null || value === undefined || value === "") return null;
-    if (value instanceof Date) {
-      return Number.isNaN(value.getTime()) ? null : value.toISOString();
-    }
-    if (typeof value === "number" || typeof value === "string") {
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
-    }
-    return null;
   }
 
   private num(value: any, fallback: number): number {
@@ -353,7 +342,7 @@ export class BotFileStore implements OnModuleDestroy {
   private async writeInstance(instance: BotFileInstance): Promise<void> {
     await fsp.mkdir(this.botsDir, { recursive: true });
     const body = yaml.dump(instance, { lineWidth: -1, noRefs: true });
-    await this.atomicWrite(
+    await atomicWriteFile(
       path.join(this.botsDir, `${instance.id}.yaml`),
       body,
     );
@@ -372,55 +361,6 @@ export class BotFileStore implements OnModuleDestroy {
     } finally {
       if (this.writeChains.get(id) === tracked) this.writeChains.delete(id);
     }
-  }
-
-  /** 原子写（tmp + rename；Windows EPERM/EBUSY 退避重试） */
-  private async atomicWrite(filePath: string, content: string): Promise<void> {
-    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.writeFile(tmpPath, content, "utf8");
-    let lastErr: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        try {
-          await fsp.unlink(filePath);
-        } catch {
-          /* 目标不存在 */
-        }
-        await fsp.rename(tmpPath, filePath);
-        return;
-      } catch (err: any) {
-        lastErr = err;
-        if (
-          err?.code !== "EPERM" &&
-          err?.code !== "EBUSY" &&
-          err?.code !== "EACCES"
-        ) {
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
-      }
-    }
-    await fsp.unlink(tmpPath).catch(() => undefined);
-    throw lastErr;
-  }
-
-  private async removeFile(filePath: string): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await fsp.unlink(filePath);
-        return;
-      } catch (err: any) {
-        if (err?.code === "ENOENT") return;
-        if (attempt === 2) throw err;
-        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-      }
-    }
-  }
-
-  private generateId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).slice(2, 10);
-    return `c${timestamp}${random}`;
   }
 
   onModuleDestroy(): void {

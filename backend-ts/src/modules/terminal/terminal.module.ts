@@ -11,7 +11,7 @@ import { AuthModule } from "../auth/auth.module";
  * - TerminalService：PTY 注册表（UI 终端 + Agent 终端）
  * - TerminalGateway：WS 网关（/api/v1/terminal/ws），鉴权 + 回放 + 输入转发
  *
- * 依赖：WorkspaceService（全局）、ConfigService（全局）、AccountFileStore（全局）
+ * 依赖：WorkspaceService（全局）、ConfigService（全局）、AccountFileStore（AuthModule 导出）
  *      SessionService（ChatModule 导出）、JwtModule（AuthModule 导出）
  */
 @Module({

@@ -4,6 +4,12 @@ import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
 import * as yaml from "js-yaml";
 import {
+  atomicWriteFile,
+  iso,
+  mintId,
+  removeFileWithRetry,
+} from "../../common/persistence/file-store-kit";
+import {
   META_DOMAIN_MCP,
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
@@ -159,7 +165,7 @@ export class McpFileStore {
     data: Partial<McpServerConfig> & { id?: string },
   ): Promise<McpServerRow> {
     await this.initialize();
-    const id = data.id ?? this.generateId();
+    const id = data.id ?? mintId("mcp-");
     assertValidId(id);
     const now = new Date().toISOString();
     const config: McpServerConfig = {
@@ -209,8 +215,8 @@ export class McpFileStore {
     await this.initialize();
     if (!this.cache.has(id)) return false;
     await this.withLock(id, async () => {
-      await this.removeFile(this.configPath(id));
-      await this.removeFile(this.toolsPath(id));
+      await removeFileWithRetry(this.configPath(id));
+      await removeFileWithRetry(this.toolsPath(id));
       this.cache.delete(id);
       this.toolsCache.delete(id);
     });
@@ -331,8 +337,8 @@ export class McpFileStore {
       env: this.strMap(raw.env),
       cwd: this.str(raw.cwd),
       enabled: raw.enabled !== false,
-      createdAt: this.iso(raw.createdAt) ?? now,
-      updatedAt: this.iso(raw.updatedAt) ?? now,
+      createdAt: iso(raw.createdAt) ?? now,
+      updatedAt: iso(raw.updatedAt) ?? now,
     };
   }
 
@@ -356,27 +362,6 @@ export class McpFileStore {
 
   private str(value: any): string | null {
     return typeof value === "string" && value.length > 0 ? value : null;
-  }
-
-  /**
-   * 时间戳收敛为 ISO 字符串。
-   * 手改 YAML 时未加引号的 ISO 时间会被 js-yaml 解析成 Date 对象，
-   * 只认字符串会让该字段静默回落到「当前时间」。
-   */
-  private iso(value: any): string | null {
-    if (value === null || value === undefined || value === "") return null;
-    if (value instanceof Date) {
-      return Number.isNaN(value.getTime()) ? null : value.toISOString();
-    }
-    if (typeof value === "number") {
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
-    }
-    if (typeof value === "string") {
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
-    }
-    return null;
   }
 
   private obj(value: any): Record<string, any> | null {
@@ -419,7 +404,7 @@ export class McpFileStore {
       body[key] = value;
     }
     const text = yaml.dump(body, { lineWidth: -1, noRefs: true });
-    await this.atomicWrite(this.configPath(id), text);
+    await atomicWriteFile(this.configPath(id), text);
   }
 
   private async writeToolsFile(
@@ -432,7 +417,7 @@ export class McpFileStore {
       null,
       2,
     );
-    await this.atomicWrite(this.toolsPath(id), body);
+    await atomicWriteFile(this.toolsPath(id), body);
   }
 
   private async withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -448,54 +433,5 @@ export class McpFileStore {
     } finally {
       if (this.writeChains.get(id) === tracked) this.writeChains.delete(id);
     }
-  }
-
-  /** 原子写（tmp + rename；Windows EPERM/EBUSY 退避重试） */
-  private async atomicWrite(filePath: string, content: string): Promise<void> {
-    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.writeFile(tmpPath, content, "utf8");
-    let lastErr: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        try {
-          await fsp.unlink(filePath);
-        } catch {
-          /* 目标不存在 */
-        }
-        await fsp.rename(tmpPath, filePath);
-        return;
-      } catch (err: any) {
-        lastErr = err;
-        if (
-          err?.code !== "EPERM" &&
-          err?.code !== "EBUSY" &&
-          err?.code !== "EACCES"
-        ) {
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
-      }
-    }
-    await fsp.unlink(tmpPath).catch(() => undefined);
-    throw lastErr;
-  }
-
-  private async removeFile(filePath: string): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await fsp.unlink(filePath);
-        return;
-      } catch (err: any) {
-        if (err?.code === "ENOENT") return;
-        if (attempt === 2) throw err;
-        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-      }
-    }
-  }
-
-  private generateId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).slice(2, 10);
-    return `c${timestamp}${random}`;
   }
 }

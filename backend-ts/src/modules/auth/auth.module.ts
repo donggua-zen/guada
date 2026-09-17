@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import type { StringValue } from "ms";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
+import { AccountFileStore } from "./account-file.store";
 
 
 @Module({
@@ -24,8 +25,8 @@ import { AuthController } from "./auth.controller";
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService],
+  providers: [AuthService, AccountFileStore],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, AccountFileStore],
 })
 export class AuthModule {}

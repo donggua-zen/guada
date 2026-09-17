@@ -2,6 +2,7 @@ import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { SubAgentModule } from "../sub-agent/sub-agent.module";
 import { AuthModule } from "../auth/auth.module";
 import { ChatModule } from "../chat/chat.module";
+import { CharactersModule } from "../characters/characters.module";
 import { PluginManager } from "../plugins";
 import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import { WorkflowEngineService } from "./workflow-engine.service";
@@ -17,7 +18,7 @@ import { WorkflowPlugin } from "./workflow.plugin";
  * （概览面板数据源），实时增量走 workflow_event SSE 流通道。
  */
 @Module({
-  imports: [SubAgentModule, AuthModule, ChatModule],
+  imports: [SubAgentModule, AuthModule, ChatModule, CharactersModule],
   controllers: [WorkflowController],
   providers: [WorkflowEngineService, WorkflowFileStore, WorkflowPlugin],
   exports: [WorkflowEngineService],

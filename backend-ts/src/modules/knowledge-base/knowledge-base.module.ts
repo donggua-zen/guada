@@ -11,6 +11,7 @@ import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
 import { OcrService } from "./ocr.service";
 import { KbMetaStore } from "./kb-meta.store";
+import { KbDatabaseService } from "./kb-database.service";
 import { KBFileRepository } from "./kb-file.repository";
 import { KBChunkRepository } from "./kb-chunk.repository";
 import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
@@ -26,16 +27,17 @@ import { DocumentPlugin } from "./plugins/document.plugin";
 @Module({
   imports: [HttpModule, AuthModule, SettingsModule, ToolsModule],
   controllers: [KnowledgeBasesController, KbFilesController, KbSearchController],
-  // KbDatabaseService/KbMetaStore/KbSearchService 与三个仓储由 @Global 的 DatabaseModule 提供。
-  // **不要在这里再注册一次**：那会造出第二个 KbDatabaseService 实例，两套句柄注册表互不知情，
-  // 一条路径打开的 kb.db，另一条路径 close() 时关不掉 → 删库时 Windows 报占用。
   providers: [
+    // KB 数据层（每库一个 kb.db 的句柄注册表）在本模块自持注册；
+    // 历史上「由 @Global 的集中模块提供、禁止在此重复注册」的约定已随注册归位移除。
+    KbDatabaseService, KbMetaStore, KbSearchService,
+    KBFileRepository, KBChunkRepository,
     KnowledgeBaseService, KbFileService,
     FileParserService, EmbeddingService, ChunkingService, OcrService,
     PdfToImageService,
     WorkspaceService,
   ],
-  exports: [EmbeddingService, KnowledgeBaseService],
+  exports: [EmbeddingService, KnowledgeBaseService, KbMetaStore, KbSearchService],
 })
 export class KnowledgeBaseModule implements OnModuleInit {
   private readonly logger = new Logger(KnowledgeBaseModule.name);

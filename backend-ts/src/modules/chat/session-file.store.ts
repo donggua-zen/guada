@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { randomUUID } from "crypto";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as chokidar from "chokidar";
 import {
@@ -12,6 +11,7 @@ import {
   META_DOMAIN_SESSIONS,
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
+import { mintId, atomicWriteFile } from "../../common/persistence/file-store-kit";
 
 /**
  * 会话元信息文件存储
@@ -19,7 +19,7 @@ import {
  * 权威来源 = `<sessions根>/<sessionId>/meta.json`（与 JSONL 事件日志、workflows 同目录）。
  * - 目录名即 id，两种来源：
  *   · 存量迁移 = 原 DB 主键（cuid，25 字符）→ 无需重键，引用零改写
- *   · 新建 = `${SESSION_ID_PREFIX}${randomUUID()}`（DSH 同款，44 字符）
+ *   · 新建 = `${SESSION_ID_PREFIX}<uuid v4>`（DSH 同款，见 file-store-kit 的 mintId）
  * - 会话增删 = 目录增删；删除会话即 `rm -rf <sessionId>/`（meta 与消息、工作流一起走）
  * - 目录内 JSONL 缺失时仍可是合法会话（bot 会话在首条消息前只有 meta.json）
  *
@@ -789,7 +789,7 @@ export class SessionFileStore implements OnModuleDestroy {
 
   /** 新建会话 id（DSH 同款：前缀 + UUID v4；前缀见 SESSION_ID_PREFIX） */
   private generateId(): string {
-    return `${SESSION_ID_PREFIX}${randomUUID()}`;
+    return mintId(SESSION_ID_PREFIX);
   }
 
   private async writeMeta(meta: SessionMeta): Promise<void> {
@@ -824,30 +824,10 @@ export class SessionFileStore implements OnModuleDestroy {
    * Windows 下 rename 不能覆盖已存在文件，且目标被杀毒/索引服务短暂持有时会
    * EPERM/EBUSY——因此先 unlink 再 rename，并对失败做退避重试。
    * updateLastActiveAt 是每条消息一次的最高频写，静默失败会让会话在侧边栏不跳顶。
+   * 机制实现在 common/persistence/file-store-kit（atomicWriteFile）。
    */
   private async atomicWrite(filePath: string, content: string): Promise<void> {
-    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.writeFile(tmpPath, content, "utf8");
-    let lastErr: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        try {
-          await fsp.unlink(filePath);
-        } catch {
-          /* 目标不存在，正常 */
-        }
-        await fsp.rename(tmpPath, filePath);
-        return;
-      } catch (err: any) {
-        lastErr = err;
-        if (err?.code !== "EPERM" && err?.code !== "EBUSY" && err?.code !== "EACCES") {
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
-      }
-    }
-    await fsp.unlink(tmpPath).catch(() => undefined);
-    throw lastErr;
+    await atomicWriteFile(filePath, content);
   }
 
   /** 删除目录（Windows 上 watcher 句柄可能短暂占用，重试） */

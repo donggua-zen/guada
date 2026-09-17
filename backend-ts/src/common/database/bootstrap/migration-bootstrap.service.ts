@@ -7,10 +7,6 @@ import { AccountBootstrapService } from "./account-bootstrap.service";
 import { MetadataFileBootstrapService } from "./metadata-file-bootstrap.service";
 import { KbMigrationBootstrapService } from "./kb-migration-bootstrap.service";
 import { SessionMessageMigrationBootstrapService } from "./session-message-migration-bootstrap.service";
-import { SessionFileStore } from "../../../modules/chat/session-file.store";
-import { BotFileStore } from "../../../modules/bot-gateway/bot-file.store";
-import { KbDatabaseService } from "../../../modules/knowledge-base/kb-database.service";
-import { McpFileStore } from "../../../modules/mcp-servers/mcp-file.store";
 
 /**
  * ⚠️ 迁移脚手架编排器（临时代码）：预计两个版本后随 Prisma/主库整体移除，
@@ -37,12 +33,8 @@ export class MigrationBootstrapService implements OnModuleInit {
     private readonly providerBootstrap: ProviderBootstrapService,
     private readonly accountBootstrap: AccountBootstrapService,
     private readonly metadataBootstrap: MetadataFileBootstrapService,
-    private readonly sessionStore: SessionFileStore,
-    private readonly botStore: BotFileStore,
     private readonly kbBootstrap: KbMigrationBootstrapService,
     private readonly sessionMessageBootstrap: SessionMessageMigrationBootstrapService,
-    private readonly kbDatabases: KbDatabaseService,
-    private readonly mcpStore: McpFileStore,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -71,13 +63,9 @@ export class MigrationBootstrapService implements OnModuleInit {
     //     索引预热/heal 抢先跑会给无 meta 的目录补 title=null 骨架（侧栏空行 + 丢绑定）。
     await this.step("session-messages", () => this.sessionMessageBootstrap.run());
 
-    // 5. 门控已放行，主动预热索引：把冷启动的文件扫描成本放在启动期，
-    //    既避免首个用户请求承担，也让冷加载耗时在启动日志里可见
-    await this.sessionStore.initialize();
-    await this.botStore.initialize();
-    // KB：不做全量预热（按需懒开该库的 kb.db，列表只读 kb.json）
-    this.kbDatabases.invalidateKbList();
-    await this.mcpStore.initialize();
+    // 5. 门控已放行。各域 FileStore 的索引预热由其所属域模块的 onModuleInit 负责
+    //    （ChatModule/BotGatewayModule/McpServersModule——它们在本模块之后初始化，
+    //    恰好在 gate 放行之后；预热归属 store 的生命周期所有者）。
   }
 
   /** 单步执行：失败记日志不抛出（各域自带 marker 重试语义），不阻塞后续步骤 */

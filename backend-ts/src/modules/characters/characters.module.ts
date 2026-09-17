@@ -2,6 +2,7 @@ import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { CharactersController } from "./characters.controller";
 import { CharacterService } from "./character.service";
 import { CharacterSeedService } from "./character-seed.service";
+import { CharacterFileStore } from "./character-file.store";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins/plugin.manager";
@@ -11,10 +12,12 @@ import { CharacterPlugin } from "./character.plugin";
   imports: [AuthModule, ToolsModule],
   controllers: [CharactersController],
   providers: [
+    CharacterFileStore,
     CharacterService,
     CharacterSeedService,
     CharacterPlugin,
   ],
+  exports: [CharacterFileStore],
 })
 export class CharactersModule implements OnModuleInit {
   private readonly logger = new Logger(CharactersModule.name);
