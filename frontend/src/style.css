@@ -440,17 +440,7 @@ html {
 }
 
 /* ==========================================
-   壁纸与毛玻璃效果
-   ========================================== */
-
-/* 侧边栏毛玻璃效果：通过 backdrop-filter 模糊背后的清晰壁纸 */
-html.acrylic-enabled .sidebar-transparent-bg {
-  backdrop-filter: blur(var(--wallpaper-blur, 20px)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 20px)) saturate(180%);
-}
-
-/* ==========================================
-   透明度与毛玻璃效果工具类
+   壁纸透明度工具类
    ========================================== */
 
 /* 侧边栏透明背景 */

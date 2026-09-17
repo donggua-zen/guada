@@ -1,7 +1,7 @@
 <template>
     <div class="h-full flex">
         <Teleport v-if="portalReady" to="#settings-sidebar-portal">
-            <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
+            <!-- 设置侧边栏：Teleport 到全局侧边栏位置以复用侧边栏背景与透明度 -->
             <div
                 class="h-full sidebar-transparent-bg global-sidebar flex flex-col overflow-hidden">
                 <!-- macOS：侧边栏按钮为整行铺满无法左预留，顶部腾出 28px 给红绿灯 -->

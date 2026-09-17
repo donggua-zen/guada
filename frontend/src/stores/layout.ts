@@ -72,8 +72,6 @@ export const useLayoutStore = defineStore('layout', () => {
   const wallpaperUrl = useStorage<string | null>('wallpaperUrl', null)
   const sidebarOpacity = useStorage<number>('sidebarOpacity', 100)
   const contentOpacity = useStorage<number>('contentOpacity', 100)
-  const acrylicEnabled = useStorage<boolean>('acrylicEnabled', true)
-  const blurRadius = useStorage<number>('blurRadius', 20)
 
   // 悬浮任务窗设置（持久化到 localStorage）
   const floatWidgetEnabled = useStorage<boolean>('floatWidgetEnabled', false)
@@ -147,20 +145,6 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
-   * 设置毛玻璃效果开关
-   */
-  const setAcrylicEnabled = (enabled: boolean): void => {
-    acrylicEnabled.value = enabled
-  }
-
-  /**
-   * 设置毛玻璃模糊半径
-   */
-  const setBlurRadius = (radius: number): void => {
-    blurRadius.value = radius
-  }
-
-  /**
    * 设置悬浮任务窗显隐
    */
   const setFloatWidgetEnabled = (enabled: boolean): void => {
@@ -189,7 +173,7 @@ export const useLayoutStore = defineStore('layout', () => {
 
   /**
    * 应用壁纸设置到 CSS 变量
-   * 无壁纸时不应用透明度和毛玻璃效果
+   * 无壁纸时不应用透明度
    */
   const applyWallpaperSettings = (): void => {
     const root = document.documentElement
@@ -226,15 +210,9 @@ export const useLayoutStore = defineStore('layout', () => {
       console.log('[壁纸加载] 开始加载:', fullUrl)
 
       root.style.setProperty('--wallpaper-image', `url(${fullUrl})`)
-      // 有壁纸时才应用透明度和毛玻璃
+      // 有壁纸时才应用透明度
       root.style.setProperty('--sidebar-opacity', String(sidebarOpacity.value / 100))
       root.style.setProperty('--content-opacity', String(contentOpacity.value / 100))
-      root.style.setProperty('--wallpaper-blur', `${blurRadius.value}px`)
-      if (acrylicEnabled.value) {
-        root.classList.add('acrylic-enabled')
-      } else {
-        root.classList.remove('acrylic-enabled')
-      }
     } else {
       // 无壁纸时清除所有效果
       isLoadingWallpaper = false
@@ -242,8 +220,6 @@ export const useLayoutStore = defineStore('layout', () => {
       root.style.removeProperty('--wallpaper-image')
       root.style.removeProperty('--sidebar-opacity')
       root.style.removeProperty('--content-opacity')
-      root.style.removeProperty('--wallpaper-blur')
-      root.classList.remove('acrylic-enabled')
     }
   }
 
@@ -262,12 +238,6 @@ export const useLayoutStore = defineStore('layout', () => {
       }
       if (response.contentOpacity !== undefined) {
         contentOpacity.value = response.contentOpacity
-      }
-      if (response.acrylicEnabled !== undefined) {
-        acrylicEnabled.value = response.acrylicEnabled !== false
-      }
-      if (response.blurRadius !== undefined) {
-        blurRadius.value = response.blurRadius
       }
       if (response.floatWidgetEnabled !== undefined) {
         floatWidgetEnabled.value = response.floatWidgetEnabled === true
@@ -303,7 +273,7 @@ export const useLayoutStore = defineStore('layout', () => {
 
   // 监听壁纸/透明度变化，自动同步到 CSS 变量
   watch(
-    [wallpaperUrl, sidebarOpacity, contentOpacity, acrylicEnabled, blurRadius],
+    [wallpaperUrl, sidebarOpacity, contentOpacity],
     () => {
       applyWallpaperSettings()
     },
@@ -320,8 +290,6 @@ export const useLayoutStore = defineStore('layout', () => {
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
-    acrylicEnabled,
-    blurRadius,
     floatWidgetEnabled,
     floatWidgetOpacity,
     toggleSidebar,
@@ -333,8 +301,6 @@ export const useLayoutStore = defineStore('layout', () => {
     setWallpaperUrl,
     setSidebarOpacity,
     setContentOpacity,
-    setAcrylicEnabled,
-    setBlurRadius,
     setFloatWidgetEnabled,
     setFloatWidgetOpacity,
     applyWallpaperSettings,

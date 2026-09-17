@@ -54,8 +54,15 @@ export interface PluginApi {
   getPluginData(pluginId: string): Promise<Record<string, any>>;
   setPluginData(pluginId: string, key: string, value: any): Promise<{ success: boolean }>;
   deletePluginData(pluginId: string, key: string): Promise<{ success: boolean }>;
-  /** 查询插件列表（分发管理） */
-  queryPlugins(): Promise<{ plugins: any[] }>;
+  /**
+   * ⚠️ 已注释：与 settings.api.ts 的同名方法重复（同一端点 POST /plugins/query）。
+   * ApiService.ts:326 的 Object.assign 里 pluginApi 排在 settingsApi 之后，
+   * 本版本会覆盖 settings.api.ts 的带参版本（config?, lang?），
+   * 导致 AgentSettingPanel / LocalTools / SearchSettings 共 4 个调用点传入的
+   * config（智能体层工具包过滤）与 lang（NLS 本地化）被静默丢弃。
+   * 此处让位给 settings.api.ts 的实现；测试通过后再删除本段。
+   */
+  // queryPlugins(): Promise<{ plugins: any[] }>;
   /** 从分发源安装插件（后台任务，返回 jobId，轮询 install-log 看进度） */
   installPlugin(source: string): Promise<{ jobId: string }>;
   /** 查询安装任务日志（假终端） */
@@ -120,9 +127,11 @@ export const pluginApi: PluginApi = {
     });
   },
 
-  async queryPlugins(this: ApiContext) {
-    return await this._request("/plugins/query", { method: "POST", data: {} });
-  },
+  // ⚠️ 已注释：重复实现，与接口声明同步停用（原因见 PluginApi.queryPlugins 上方说明）。
+  // 实际生效的是 settings.api.ts 的 queryPlugins(config?, lang?)。测试通过后再删除本段。
+  // async queryPlugins(this: ApiContext) {
+  //   return await this._request("/plugins/query", { method: "POST", data: {} });
+  // },
 
   async installPlugin(this: ApiContext, source: string) {
     return await this._request("/plugins/install", {

@@ -195,48 +195,6 @@
         </div>
       </div>
 
-      <!-- 毛玻璃效果分组（仅在有壁纸时显示） -->
-      <div v-if="previewUrl">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">毛玻璃效果</h3>
-        <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
-        >
-          <!-- 毛玻璃开关 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
-            <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">启用毛玻璃效果</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                为背景添加毛玻璃模糊效果
-              </span>
-            </div>
-            <el-switch v-model="settingsForm.acrylicEnabled" size="large" @change="handleAcrylicChange" />
-          </div>
-
-          <!-- 模糊程度 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
-            <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">模糊程度</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                调节背景壁纸的模糊半径
-              </span>
-            </div>
-            <div class="flex items-center gap-3 shrink-0 w-48">
-              <el-slider
-                v-model="settingsForm.blurRadius"
-                :min="0"
-                :max="50"
-                :step="1"
-                class="flex-1"
-                @change="handleBlurChange"
-              />
-              <span class="text-sm text-gray-600 dark:text-[#8b8d95] w-10 text-right">
-                {{ settingsForm.blurRadius }}px
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- 悬浮任务状态分组 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">悬浮任务状态</h3>
@@ -344,8 +302,6 @@ const themeOptions = computed(() => [
 const settingsForm = reactive({
   sidebarOpacity: 100,
   contentOpacity: 100,
-  acrylicEnabled: true,
-  blurRadius: 20,
   floatWidgetEnabled: false,
   floatWidgetOpacity: 95,
 })
@@ -387,9 +343,9 @@ const debouncedSave = useDebounceFn(async () => {
   await handleSave()
 }, 300)
 
-// 监听透明度/模糊程度变化自动保存（仅在有壁纸时生效）
+// 监听透明度变化自动保存（仅在有壁纸时生效）
 watch(
-  () => [settingsForm.sidebarOpacity, settingsForm.contentOpacity, settingsForm.blurRadius],
+  () => [settingsForm.sidebarOpacity, settingsForm.contentOpacity],
   () => {
     if (previewUrl.value) {
       debouncedSave()
@@ -404,8 +360,6 @@ const loadSettings = async () => {
 
     settingsForm.sidebarOpacity = response.sidebarOpacity ?? 100
     settingsForm.contentOpacity = response.contentOpacity ?? 100
-    settingsForm.acrylicEnabled = response.acrylicEnabled !== false
-    settingsForm.blurRadius = response.blurRadius ?? 20
     settingsForm.floatWidgetEnabled = response.floatWidgetEnabled === true
     settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 95
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
@@ -433,8 +387,6 @@ const loadSettings = async () => {
 const syncToLayoutStore = () => {
   layoutStore.setSidebarOpacity(settingsForm.sidebarOpacity)
   layoutStore.setContentOpacity(settingsForm.contentOpacity)
-  layoutStore.setAcrylicEnabled(settingsForm.acrylicEnabled)
-  layoutStore.setBlurRadius(settingsForm.blurRadius)
   layoutStore.setWallpaperUrl(previewUrl.value)
   layoutStore.setFloatWidgetEnabled(settingsForm.floatWidgetEnabled)
   layoutStore.setFloatWidgetOpacity(settingsForm.floatWidgetOpacity)
@@ -447,8 +399,6 @@ const handleSave = async () => {
     const dataToSave = {
       sidebarOpacity: settingsForm.sidebarOpacity,
       contentOpacity: settingsForm.contentOpacity,
-      acrylicEnabled: settingsForm.acrylicEnabled,
-      blurRadius: settingsForm.blurRadius,
       wallpaperUrl: extractRelativePath(previewUrl.value),
       floatWidgetEnabled: settingsForm.floatWidgetEnabled,
       floatWidgetOpacity: settingsForm.floatWidgetOpacity,
@@ -517,17 +467,6 @@ const handleOpacityChange = () => {
   layoutStore.setContentOpacity(settingsForm.contentOpacity)
 }
 
-// 毛玻璃开关变化
-const handleAcrylicChange = () => {
-  layoutStore.setAcrylicEnabled(settingsForm.acrylicEnabled)
-  handleSave()
-}
-
-// 模糊程度变化
-const handleBlurChange = () => {
-  layoutStore.setBlurRadius(settingsForm.blurRadius)
-}
-
 /**
  * 推送悬浮窗设置到 Electron 主进程
  */
@@ -551,8 +490,6 @@ const handleFloatWidgetChange = () => {
 const handleReset = async () => {
   settingsForm.sidebarOpacity = 100
   settingsForm.contentOpacity = 100
-  settingsForm.acrylicEnabled = true
-  settingsForm.blurRadius = 20
   settingsForm.floatWidgetEnabled = false
   settingsForm.floatWidgetOpacity = 95
 
