@@ -12,9 +12,8 @@
           :ext="file.fileExtension" :size="file.fileSize"
           :preview-url="file.fileType === 'image' ? previewUrls.get(file.id) : undefined" closable
           :clickable="!!(file.isPasted && file.originalContent && file.fileType === 'file')"
-          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus"
-          :upload-error="file.uploadError" @close="removeFile(file.id)"
-          @click="showFilePreview(file)">
+          :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" :upload-error="file.uploadError"
+          @close="removeFile(file.id)" @click="showFilePreview(file)">
         </FileItem>
       </div>
 
@@ -61,29 +60,15 @@
 
       <!-- 隐藏的文件输入框：文件侧不设 accept（任意格式都能作为路径引用附上） -->
       <input type="file" ref="fileInputRef" style="display: none" multiple @change="handleInputChange">
-      <input type="file" ref="imageInputRef" style="display: none" multiple
-        :accept="IMAGE_PICKER_ACCEPT" @change="handleInputChange">
+      <input type="file" ref="imageInputRef" style="display: none" multiple :accept="IMAGE_PICKER_ACCEPT"
+        @change="handleInputChange">
       <div class="input-actions w-full flex justify-between">
         <div class="tools left-tools flex gap-0.5 items-center">
-          <slot name="buttons"></slot>
-          <!-- 运行模式按钮 -->
-          <template v-if="!props.readonly">
-            <button ref="sandboxModeButtonRef" class="tool-btn" :class="{ 'run-mode-unrestricted': isUnrestrictedMode }" @click.stop="toggleSandboxModePopover">
-              <el-icon size="16">
-                <component :is="sandboxModeIcon" :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
-              </el-icon>
-              <span class="text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{ sandboxModeLabel }}</span>
-            </button>
-            <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
-              :current-value="currentSandboxMode" @select="handleSandboxModeChange" />
-            <el-divider direction="vertical"></el-divider>
-          </template>
-
           <!-- 附件/图片/知识库按钮 -->
           <template v-if="!props.readonly">
             <button ref="attachButtonRef" class="tool-btn" @click.stop="toggleAttachPopover">
               <el-icon size="16">
-                <Add24Regular />
+                <Add16Filled />
               </el-icon>
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
@@ -92,6 +77,23 @@
               @select-file="triggerFileInput" @toggle-kb="toggleKnowledgeBaseSelection"
               @toggle-attachment="toggleAttachmentSelection" />
           </template>
+            <slot name="buttons"></slot>
+          <!-- 运行模式按钮 -->
+          <template v-if="!props.readonly">
+            <button ref="sandboxModeButtonRef" class="tool-btn" :class="{ 'run-mode-unrestricted': isUnrestrictedMode }"
+              @click.stop="toggleSandboxModePopover">
+              <el-icon size="16">
+                <component :is="sandboxModeIcon" :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
+              </el-icon>
+              <span class="text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{ sandboxModeLabel
+                }}</span>
+            </button>
+            <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
+              :current-value="currentSandboxMode" @select="handleSandboxModeChange" />
+            <!-- <el-divider direction="vertical"></el-divider> -->
+          </template>
+
+
         </div>
         <div class="right-actions flex items-center gap-1">
           <slot name="right-actions-before" />
@@ -102,7 +104,7 @@
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
             <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel
-              }}</span>
+            }}</span>
           </button>
           <!-- 会话设置按钮 -->
           <GdTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
@@ -176,7 +178,7 @@ import { extensionFromName, planAttachment, type AttachmentPlan } from '@/utils/
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
-  ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add24Regular
+  ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled
 } from '@vicons/fluent'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
