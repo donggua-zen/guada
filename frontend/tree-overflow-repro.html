@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Git 变更树行重叠 · 根因与修复</title>
+<style>
+:root{
+  --gd-color-text:#1f2328; --gd-color-border:#e5e7eb;
+  --gd-color-surface-border:#e5e7eb; --gd-color-text-disabled:#9ca3af;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:22px 26px;background:#f6f7f9;
+  font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+h1{font-size:14px;margin:0 0 6px}
+.lead{font-size:12px;color:#6b7280;margin:0 0 20px;line-height:1.75;max-width:1000px}
+.row-wrap{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+.col{width:300px}
+h2{font-size:12px;margin:0 0 4px}
+.badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:9px;
+  background:#fee;color:#b91c1c;margin:0 0 7px}
+.badge.ok{background:#dcfce7;color:#15803d}
+.note{font-size:11px;color:#6b7280;margin:0 0 10px;line-height:1.65;min-height:52px}
+.code{font-family:Consolas,Monaco,monospace;font-size:10.5px;background:#eef1f4;
+  padding:1px 5px;border-radius:3px;color:#334155}
+
+/* 面板：模拟被拖到最小宽度的 Git 目录树（MIN_TREE_WIDTH = 160px） */
+.panel{width:200px;height:298px;border:1px solid #e5e7eb;border-radius:8px;
+  background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+
+/* ── TreeView.vue 行样式（两边共用同一套基础） ── */
+.row{position:relative;display:flex;align-items:center;gap:4px;height:26px;
+  padding:0 8px;border-radius:4px;cursor:pointer;font-size:13px;
+  color:var(--gd-color-text)}
+.chev{flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  width:12px;color:var(--gd-color-text-disabled);font-size:10px}
+.chev-ph{flex-shrink:0;width:12px}
+.status{width:18px;text-align:center;font-family:Consolas,monospace;font-size:11px;
+  font-weight:600;flex-shrink:0;color:#bf8700}
+.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--gd-color-text)}
+
+.scroll>.row+.row{margin-top:2px}
+
+/* ═══════ 修复前：行缺 white-space:nowrap（重构时从调用方丢失） ═══════
+   height 固定 26px，但行内允许折行 → 名称折成两行把行撑高，
+   固定 height 下后半段溢出、画到相邻行区域，形成"行与行文字叠在一起" */
+.before .row{/* 无 white-space */}
+
+/* ═══════ 修复后：行 nowrap + 裁剪；文本子项单行省略号 ═══════ */
+.after .row{white-space:nowrap;overflow:hidden}
+.after .row>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<h1>Git 变更树 · 行与行文字重叠的根因与修复</h1>
+<p class="lead">
+  行盒 <span class="code">height: 26px</span> 是固定值，但重构后行内丢失了
+  <span class="code">white-space: nowrap</span>（原在调用方的
+  <span class="code">.git-tree-row</span> 上，行改由 TreeView 统一渲染后该约束未随之迁移）。
+  行内允许折行时，长名称会折成两行、把内容撑高；固定 <span class="code">height</span> 压不住，
+  溢出的后半段就画到相邻行上 —— 表现为"有的行正常、有的行和下一条叠在一起"。
+</p>
+
+<div class="row-wrap">
+
+  <div class="col before">
+    <h2>修复前</h2>
+    <span class="badge">行内可折行 → 相邻行叠加</span>
+    <p class="note">
+      观察 <span class="code">InstrumentsSans-Regular.ttf</span>：
+      折成两行后与上下行挤在一起（对照你截图里 fonts 组那种重叠）
+    </p>
+    <div class="panel">
+      <div class="scroll">
+        <div class="row"><span class="chev">v</span><span class="name">guada-landing-temp</span></div>
+        <div class="row" style="padding-left:22px"><span class="chev">v</span><span class="name">_shared</span></div>
+        <div class="row" style="padding-left:36px"><span class="chev">v</span><span class="name">fonts</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Bold.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">InstrumentsSans-Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">JetBrainsMono-Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Regular.ttf</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col after">
+    <h2>修复后</h2>
+    <span class="badge ok">单行截断，行高稳定</span>
+    <p class="note">
+      行 <span class="code">nowrap</span> + <span class="code">overflow:hidden</span>，
+      文本子项 <span class="code">min-width:0</span> / <span class="code">ellipsis</span>，
+      长名称一律单行省略号
+    </p>
+    <div class="panel">
+      <div class="scroll">
+        <div class="row"><span class="chev">v</span><span class="name">guada-landing-temp</span></div>
+        <div class="row" style="padding-left:22px"><span class="chev">v</span><span class="name">_shared</span></div>
+        <div class="row" style="padding-left:36px"><span class="chev">v</span><span class="name">fonts</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Bold.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">InstrumentsSans-Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">JetBrainsMono-Regular.ttf</span></div>
+        <div class="row" style="padding-left:50px"><span class="chev-ph"></span><span class="status">?</span><span class="name">Regular.ttf</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
