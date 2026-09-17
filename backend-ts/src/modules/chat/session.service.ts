@@ -498,9 +498,28 @@ export class SessionService {
       throw new Error("Session not found");
     }
 
+    // 运行中禁止删除（对齐 archiveSession 的护栏）：主会话或任一子会话有活跃流即拒绝。
+    // 子会话随主会话级联删除，若此时引擎仍在写 JSONL，会写向已删目录产生竞态
+    // （孤儿 SSE 事件 + 落盘报错），故子会话的活跃流同样纳入检测。
+    const children = this.sessionStore.childrenOf(sessionId);
+    const activeChild = children.find((c) =>
+      this.streamManager.hasActiveStream(c.id),
+    );
+    if (this.streamManager.hasActiveStream(sessionId) || activeChild) {
+      throw new HttpException(
+        {
+          error: activeChild
+            ? "子代理正在运行中，请先停止后再删除会话"
+            : "会话正在流式输出中，无法删除",
+          code: "SESSION_STREAMING",
+          activeSessionId: activeChild ? activeChild.id : sessionId,
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
     // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
     // Prisma 自关联未配置 onDelete，若只删主会话，子会话会被 ON DELETE SET NULL 孤儿化
-    const children = this.sessionStore.childrenOf(sessionId);
     await this.sessionStore.deleteChildrenOf(sessionId);
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）

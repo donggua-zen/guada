@@ -164,6 +164,7 @@ export default {
     workspaceDeleteWarning: '您选择了同时删除默认工作目录，这将永久删除该会话的所有文件数据，且不可恢复！',
     sessionDeleted: '对话删除成功',
     deleteSessionFailed: '删除对话失败',
+    deleteSessionStreaming: '会话或子代理正在运行中，请先停止后再删除',
     logoutTitle: '提示',
     logoutConfirm: '确定要退出登录吗？',
     defaultUserName: '用户',
