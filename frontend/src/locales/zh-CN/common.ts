@@ -124,7 +124,7 @@ export default {
   // ── 路由标题 ──
   route: {
     chat: '对话',
-    characters: '助手',
+    agents: '智能体',
     bots: 'Bots',
     settings: '系统设置',
     plugins: '插件',

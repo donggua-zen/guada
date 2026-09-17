@@ -33,7 +33,7 @@ export interface ContextLoadParams {
 
 /** 细分 Token 统计（三项真值：压缩摘要折叠进 history） */
 export interface TokenBreakdown {
-  /** 系统提示词（角色 base + 插件 eager 提示词） */
+  /** 系统提示词（智能体 base + 插件 eager 提示词） */
   systemPrompt: number;
   /** user/assistant 对话消息（含被折叠的压缩摘要） */
   history: number;

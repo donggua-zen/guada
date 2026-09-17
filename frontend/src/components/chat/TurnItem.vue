@@ -81,7 +81,7 @@
         <div class="text-xs text-gray-400 mb-3">
           <div class="flex items-center">
             <div class="mr-5 flex items-center">
-              <Avatar class="w-6 h-6 mr-2.5 relative top-0" :src="characterAvatar || modelAvatarPath" :round="false"
+              <Avatar class="w-6 h-6 mr-2.5 relative top-0" :src="agentAvatar || modelAvatarPath" :round="false"
                 type="assistant" :name="displayName"></Avatar>
               <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
                 displayName }}</span>
@@ -267,8 +267,8 @@ const props = defineProps<{
   turn: Turn;
   isLast: boolean;
   allowGenerate: boolean;
-  characterName?: string | null;
-  characterAvatar?: string | null;
+  agentName?: string | null;
+  agentAvatar?: string | null;
   animateIn?: boolean;
   sessionId?: string;
 }>();
@@ -600,7 +600,7 @@ const currentModelName = computed(() => {
 });
 
 const displayName = computed(() => {
-  return props.characterName || currentModelName.value;
+  return props.agentName || currentModelName.value;
 });
 
 const modelAvatarPath = computed(() => {

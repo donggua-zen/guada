@@ -44,11 +44,11 @@ function buildService(overrides: {
     hasActiveStream: overrides.hasActiveStream ?? jest.fn().mockReturnValue(false),
   };
   // 角色权威来源是 agents/<id>/AGENT.md：水合只取「按 id 查角色」，测试里返回空映射即可
-  const characterStore = { findManyByIds: jest.fn().mockResolvedValue(new Map()) };
+  const agentStore = { findManyByIds: jest.fn().mockResolvedValue(new Map()) };
 
   const service = new SessionService(
     sessionStore as any, // 1 sessionStore
-    characterStore as any, // 2 characterStore
+    agentStore as any, // 2 agentStore
     {} as any, // 3 modelStore
     {} as any, // 4 settingsStorage
     {} as any, // 5 llmService

@@ -17,7 +17,7 @@ const TASK_FIELDS = new Set<keyof ScheduledTask>([
   "executeAt",
   "targetMode",
   "targetSessionId",
-  "characterId",
+  "agentId",
   "modelId",
   "settings",
   "enabled",

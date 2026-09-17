@@ -8,7 +8,7 @@ const config: BotConfig = {
   name: 'Platform Bot',
   platformConfig: {},
   enabled: true,
-  defaultCharacterId: 'character-1',
+  defaultAgentId: 'agent-1',
 };
 
 describe('Platform adapter lifecycle contracts', () => {

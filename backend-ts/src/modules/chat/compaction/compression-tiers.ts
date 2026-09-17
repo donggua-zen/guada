@@ -65,7 +65,7 @@ export function isCompressionTier(value: unknown): value is CompressionTier {
 }
 
 /**
- * 解析角色 settings.memory 的压缩档位：
+ * 解析智能体 settings.memory 的压缩档位：
  * ① compressionTier 合法 → 用之；② 旧 summaryMode==='disabled' → OFF；③ 否则默认档。
  */
 export function resolveCompressionTier(memory: any): CompressionTier {

@@ -4,7 +4,7 @@ import { Injectable } from "@nestjs/common";
  * 元信息文件化引导的就绪门控
  *
  * 各域（sessions/bots/kb/mcp/account）的启动期一次性导出必须在任何 FileStore 读取索引之前
- * 完成——否则导出未完成时 store 读到空目录，会把用户数据"变没"（角色迁移踩过的坑）。
+ * 完成——否则导出未完成时 store 读到空目录，会把用户数据"变没"（智能体迁移踩过的坑）。
  *
  * 用法：FileStore 在 initialize() 里 `await gate.wait(domain)`；引导服务完成导出后
  * `complete(domain)`。门控本身不依赖任何 provider（避免与 store 形成 DI 环）。

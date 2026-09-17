@@ -108,16 +108,16 @@ export interface BotConfig {
     retryInterval: number;
   };
   /** 
-   * 关联的默认角色ID
+   * 关联的默认智能体ID
    * 
    * 注意：此字段在每次创建会话时动态读取，修改后无需重启机器人
    */
-  defaultCharacterId: string;
+  defaultAgentId: string;
   /** 
    * 关联的默认模型ID
    * 
    * 注意：此字段在每次创建会话时动态读取，修改后无需重启机器人
-   * 优先级：Bot实例配置 > 角色配置 > 全局默认设置
+   * 优先级：Bot实例配置 > 智能体配置 > 全局默认设置
    */
   defaultModelId?: string;
   /**

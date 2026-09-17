@@ -115,7 +115,7 @@ describe("SshWorkspaceProvider", () => {
       const { provider, agent } = buildProvider(legacyAgent());
       await expect(
         provider.glob("a'b.ts", { cwd: "/remote/proj" }),
-      ).rejects.toThrow("Unsupported character");
+      ).rejects.toThrow("Unsupported agent");
       expect(agent.executeRaw).not.toHaveBeenCalled();
     });
 

@@ -3,7 +3,7 @@
  *
  * 实现 ISessionContext 接口，消息持久化经 MESSAGE_STORE_TOKEN 注入的 IMessageStore 驱动。
  * 能力与 persistent-session-context.ts（DB 版）对齐：
- * - 设置合并（会话 > 角色）、模型解析、插件决议、提示词拼接（system/插件/tools）
+ * - 设置合并（会话 > 智能体）、模型解析、插件决议、提示词拼接（system/插件/tools）
  * - 细粒度 Token 统计 + provider 真值锚点（dsh 式）
  * - 运行模式切换检测（system 注入块）、reasoning content 策略、KIMI 兼容
  * - 压缩接入统一 CompressionEngine（一级裁剪 prune）
@@ -107,7 +107,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   readonly sessionId: string;
   readonly sessionType: 'web' | 'bot' | 'sub_agent';
   readonly parentSessionId?: string | null;
-  readonly characterId?: string | null;
+  readonly agentId?: string | null;
   readonly botId?: string | null;
   readonly externalId?: string | null;
 
@@ -165,7 +165,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     this.sessionId = session.id;
     this.sessionType = session.sessionType || 'web';
     this.parentSessionId = session.parentId || null;
-    this.characterId = session.characterId || null;
+    this.agentId = session.agentId || null;
     this.botId = session.botId || null;
     this.externalId = session.externalId || null;
   }
@@ -1010,7 +1010,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /**
-   * 合并压缩配置（档位折算）：角色 settings.memory.compressionTier 决定
+   * 合并压缩配置（档位折算）：智能体 settings.memory.compressionTier 决定
    * enabled/trigger/retain/summaryMode 四元组（见 compression-tiers.ts）；
    * 旧自由比例/摘要模式配置读时映射到档位，不写库。
    */
@@ -1027,18 +1027,18 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
 
   /**
-   * 合并会话设置与角色默认配置（优先级：会话 > 角色）。
+   * 合并会话设置与智能体默认配置（优先级：会话 > 智能体）。
    */
   private buildEffectiveSettings(): EffectiveSettings {
     const sessionSettings = this.session.settings || {};
-    const characterSettings = this.session.character?.settings || {};
+    const agentSettings = this.session.agent?.settings || {};
 
-    const mergedTools = sessionSettings.plugins ?? characterSettings.plugins;
-    const mergedSkills = sessionSettings.skills ?? characterSettings.skills;
-    const mergedAgents = sessionSettings.agents ?? characterSettings.agents;
+    const mergedTools = sessionSettings.plugins ?? agentSettings.plugins;
+    const mergedSkills = sessionSettings.skills ?? agentSettings.skills;
+    const mergedAgents = sessionSettings.agents ?? agentSettings.agents;
 
     let systemPrompt =
-      sessionSettings.systemPrompt || characterSettings.systemPrompt || '';
+      sessionSettings.systemPrompt || agentSettings.systemPrompt || '';
 
     const merged: EffectiveSettings = {
       systemPrompt,
@@ -1049,7 +1049,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       agents: mergedAgents,
     };
 
-    merged.memory = { ...characterSettings.memory };
+    merged.memory = { ...agentSettings.memory };
     merged.maxTokensLimit = sessionSettings.maxTokensLimit ?? null;
     merged.thinkingEffort = sessionSettings.thinkingEffort;
     merged.attachments = sessionSettings.attachments ?? {};
@@ -1100,7 +1100,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 构建系统提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system）。
-   * 含：角色 systemPrompt + 插件 eager 提示词。
+   * 含：智能体 systemPrompt + 插件 eager 提示词。
    */
   private async buildSystemText(): Promise<string> {
     const systemPrompts: string[] = [this.effectiveSettings.systemPrompt];

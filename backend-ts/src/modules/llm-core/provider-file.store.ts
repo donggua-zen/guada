@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import * as chokidar from 'chokidar';
+import { Injectable, Logger } from '@nestjs/common';
 import * as yaml from 'js-yaml';
 import {
   AnyThinkingEffort,
@@ -108,23 +107,18 @@ const PROTOCOLS = new Set(['openai', 'openai-response', 'anthropic', 'gemini', '
  * 目录约定：PROVIDERS_DIR 环境变量（Electron 注入）|| USERDATA_DIR/providers
  * || cwd()/data/providers。每实例一个 YAML 文件，文件名（去扩展名）即实例 id。
  *
- * - 内存缓存 + chokidar 监听（300ms 防抖全量重读，兼容编辑器原子写 rename）
+ * - 内存缓存（外部手改 YAML 重启生效；UI 走 API 修改即时更新缓存）
  * - 原子写（tmp + rename）
  * - 非法文件隔离：解析失败仅记录，不崩服务，不挤占缓存
  * - 输入宽容：off→none 归一、thinkingStyle 未知值回退协议默认
  */
 @Injectable()
-export class ProviderFileStore implements OnModuleDestroy {
+export class ProviderFileStore {
   private readonly logger = new Logger(ProviderFileStore.name);
   private readonly providersDir: string;
   private cache = new Map<string, ProviderFileConfig>();
   private loadErrors = new Map<string, LoadError>();
-  private watcher: chokidar.FSWatcher | null = null;
-  private debounceTimer: NodeJS.Timeout | null = null;
   private ready: Promise<void> | null = null;
-
-  /** 配置变更通知（文件被 AI/手动/UI 修改后触发） */
-  private changeListeners = new Set<() => void>();
 
   constructor(private readonly bundledCatalog: BundledCatalogService) {
     this.providersDir = this.resolveDir();
@@ -144,7 +138,7 @@ export class ProviderFileStore implements OnModuleDestroy {
     return this.providersDir;
   }
 
-  /** 初始化：建目录 + 种子补种 + 全量加载 + 启动监听 */
+  /** 初始化：建目录 + 种子补种 + 全量加载 */
   async initialize(): Promise<void> {
     this.ready ??= this.doInitialize();
     return this.ready;
@@ -153,56 +147,12 @@ export class ProviderFileStore implements OnModuleDestroy {
   private async doInitialize(): Promise<void> {
     await fsp.mkdir(this.providersDir, { recursive: true });
     await this.loadAll();
-    this.startWatcher();
     this.logger.log(
       `Provider file store ready at ${this.providersDir} (${this.cache.size} providers)`,
     );
   }
 
   // ============ 读取与解析 ============
-
-  private startWatcher(): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = chokidar.watch(this.providersDir, {
-        ignoreInitial: true,
-        ignorePermissionErrors: true,
-        persistent: true,
-      });
-      this.watcher.on('add', () => this.scheduleReload());
-      this.watcher.on('change', () => this.scheduleReload());
-      this.watcher.on('unlink', () => this.scheduleReload());
-      this.watcher.on('error', (err) =>
-        this.logger.error('Provider watcher error: ' + String(err)),
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to start provider watcher: ${String(err)}`);
-    }
-  }
-
-  /** 300ms 防抖全量重读（兼容编辑器 tmp+rename 原子写触发的多事件） */
-  private scheduleReload(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.loadAll()
-        .then(() => {
-          for (const listener of this.changeListeners) {
-            try {
-              listener();
-            } catch (err) {
-              this.logger.warn(`Provider change listener failed: ${String(err)}`);
-            }
-          }
-        })
-        .catch((err) => this.logger.error(`Provider reload failed: ${String(err)}`));
-    }, 300);
-  }
-
-  onDidChange(listener: () => void): () => void {
-    this.changeListeners.add(listener);
-    return () => this.changeListeners.delete(listener);
-  }
 
   private async loadAll(): Promise<void> {
     let entries: fs.Dirent[];
@@ -703,11 +653,6 @@ export class ProviderFileStore implements OnModuleDestroy {
     if (models.length === (provider.models || []).length) return false;
     await this.saveProvider({ ...provider, models });
     return true;
-  }
-
-  onModuleDestroy(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    void this.watcher?.close();
   }
 }
 

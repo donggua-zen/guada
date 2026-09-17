@@ -452,12 +452,12 @@ export class ShellPlugin extends PluginBase {
                 remote.connectionName,
               );
               target!.provider.writeToStdin(processId, textToWrite);
-              return `Written ${textToWrite.length} characters to process ${processId}`;
+              return `Written ${textToWrite.length} agents to process ${processId}`;
             }
 
             this.processManager.writeToStdin(processId, textToWrite);
 
-            return `Written ${textToWrite.length} characters to process ${processId}`;
+            return `Written ${textToWrite.length} agents to process ${processId}`;
           }
 
           default:

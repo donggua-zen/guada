@@ -8,7 +8,7 @@
     logging: 'Logging in...',
     submit: 'Log In',
     requireUsername: 'Please enter your username',
-    usernameFormat: 'Username can only contain letters, numbers, and underscores, 3-20 characters',
+    usernameFormat: 'Username can only contain letters, numbers, and underscores, 3-20 agents',
     requirePassword: 'Please enter your password',
     failed: 'Login failed, please try again later',
     cannotConnect: 'Cannot connect to the server. Please check your network connection or try again later.',
@@ -21,7 +21,7 @@
   password: {
     securityTitle: 'Set a Security Password',
     securityDesc: 'To protect your account security, please set a strong password',
-    tip1: 'Use a password with at least 8 characters',
+    tip1: 'Use a password with at least 8 agents',
     tip2: 'Mix uppercase and lowercase letters, numbers, and symbols',
     tip3: 'Avoid common password combinations',
     tip4: 'Change your password regularly to keep your account secure',
@@ -40,7 +40,7 @@
     step3: 'Refresh this page to set a new password',
     setting: 'Setting...',
     setupNow: 'Set Now',
-    securityTip: 'Security tip: Do not use common passwords. Use a combination of uppercase and lowercase letters, numbers, and special characters.',
+    securityTip: 'Security tip: Do not use common passwords. Use a combination of uppercase and lowercase letters, numbers, and special agents.',
     resetTip: 'Reset instructions: To set the password again, delete the password_is_set.txt file in the backend directory and refresh this page.',
     noPermissionContact: 'You do not have permission to reset the password. Please contact the administrator or refresh the page to retry.',
     passwordMismatch: 'The two passwords do not match',
@@ -111,7 +111,7 @@
   // ── 侧边栏 ──
   sidebar: {
     navNewTask: 'New Task',
-    navCharacters: 'Assistants',
+    navAgents: 'Agents',
     navBots: 'Bots',
     navKnowledgeBase: 'Knowledge Base',
     navPlugins: 'Plugin Market',

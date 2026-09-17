@@ -44,9 +44,9 @@ export class PluginsController {
   }
 
   /**
-   * 查询插件列表（全局/角色通用）
-   * Body: { config?: RolePluginConfig, lang?: string } — 角色层工具包配置（character/session settings.plugins），
-   * 不传则仅返回全局状态（不做角色层工具包过滤）。
+   * 查询插件列表（全局/智能体通用）
+   * Body: { config?: RolePluginConfig, lang?: string } — 智能体层工具包配置（agent/session settings.plugins），
+   * 不传则仅返回全局状态（不做智能体层工具包过滤）。
    */
   @Public()
   @Post("query")

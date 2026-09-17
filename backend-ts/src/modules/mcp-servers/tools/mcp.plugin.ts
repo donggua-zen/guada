@@ -51,7 +51,7 @@ export class McpPlugin extends PluginBase {
         id: serverToolKitId,
         name: server.name || serverToolKitId,
         loadMode: "eager",
-        // 角色级门控由 MCP 自己的管理页写入 settings.plugins.mcp，
+        // 智能体级门控由 MCP 自己的管理页写入 settings.plugins.mcp，
         // 不参与通用工具包过滤：「全部禁用」「新插件默认」均不作用于它
         governance: "self",
         handler: (ctx: PluginContext) => {

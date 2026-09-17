@@ -3,7 +3,7 @@ import { Type } from "class-transformer";
 
 /**
  * 记忆配置（压缩档位；与后端 compression-tiers.ts 的 CompressionTier 值一致。
- * 注意：运行时压缩配置取自角色 settings.memory，会话级 memory 不参与合并——
+ * 注意：运行时压缩配置取自智能体 settings.memory，会话级 memory 不参与合并——
  * 此 DTO 仅作为会话设置写入的声明式契约）
  */
 class MemorySettingsDto {
@@ -47,7 +47,7 @@ export class SessionSettingsDto {
 
   @IsOptional()
   @IsNumber()
-  maxTokensLimit?: number; // 会话级别 Token 上限，独立于角色 memory 配置
+  maxTokensLimit?: number; // 会话级别 Token 上限，独立于智能体 memory 配置
 
   @IsOptional()
   attachments?: Record<string, string[]>; // 会话绑定的附件，key=附件类型ID，value=附件项ID列表

@@ -159,7 +159,7 @@ export class SkillPlugin extends PluginBase {
           context?.session,
         );
 
-        // 按角色级偏好过滤
+        // 按智能体级偏好过滤
         const charSkillCfg = context?.session.getSettings?.("skills");
         let skills: any[];
         if (charSkillCfg === false) {

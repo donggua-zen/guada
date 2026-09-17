@@ -1,19 +1,19 @@
 <template>
     <GdDialog v-model="visible" :close-on-click-modal="false" width="900px"
-        :style="{ height: '70vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
+        :style="{ height: '70vh', maxWidth: '90vw' }" class="agent-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
-                <span class="dialog-title">{{ currentCharacter?.id ? t('characters.modal.editTitle') : t('characters.modal.createTitle') }}</span>
+                <span class="dialog-title">{{ currentAgent?.id ? t('agents.modal.editTitle') : t('agents.modal.createTitle') }}</span>
             </div>
         </template>
 
         <div class="dialog-content">
-            <CharacterSettingPanel ref="settingPanelRef" :data="currentCharacter" :is-new="!props.characterId" :simple="false" class="flex-1" />
+            <AgentSettingPanel ref="settingPanelRef" :data="currentAgent" :is-new="!props.agentId" :simple="false" class="flex-1" />
         </div>
 
         <template #footer>
             <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
-            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('characters.modal.applyAll') }}</el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('agents.modal.applyAll') }}</el-button>
         </template>
     </GdDialog>
 </template>
@@ -22,7 +22,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton } from 'element-plus'
-import CharacterSettingPanel from './CharacterSettingPanel.vue'
+import AgentSettingPanel from './AgentSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -33,20 +33,20 @@ const { t } = useI18n()
 // Props
 const props = defineProps<{
     show?: boolean;
-    characterId?: string;
+    agentId?: string;
 }>()
 
 // Emits
 const emit = defineEmits<{
-    'saved': [character: any]
+    'saved': [agent: any]
     'update:show': [show: boolean]
 }>()
 
 // 响应式数据
 const visible = ref(false)
 const saving = ref(false)
-const currentCharacter = ref<any>({})
-const settingPanelRef = ref<InstanceType<typeof CharacterSettingPanel> | null>(null)
+const currentAgent = ref<any>({})
+const settingPanelRef = ref<InstanceType<typeof AgentSettingPanel> | null>(null)
 const panelHasChanges = ref(true)
 
 // 监听显示状态
@@ -60,13 +60,13 @@ watch(visible, async (newVal) => {
         emit('update:show', false)
         return
     }
-    currentCharacter.value = {};
-    if (props.characterId) {
+    currentAgent.value = {};
+    if (props.agentId) {
         try {
-            currentCharacter.value = await apiService.fetchCharacter(props.characterId);
+            currentAgent.value = await apiService.fetchAgent(props.agentId);
         } catch (error) {
-            console.error("[CharacterModal] Failed to fetch character:", error);
-            currentCharacter.value = {};
+            console.error("[AgentModal] Failed to fetch agent:", error);
+            currentAgent.value = {};
         }
     }
 })
@@ -95,33 +95,33 @@ const handleSave = async (): Promise<void> => {
     saving.value = true;
     try {
         const data = settingPanelRef.value.getFormData();
-        let character: any = null;
-        const { avatarFile, avatarUrl: _avatarUrl, ...characterData } = data;
+        let agent: any = null;
+        const { avatarFile, avatarUrl: _avatarUrl, ...agentData } = data;
 
-        if (currentCharacter.value && currentCharacter.value.id) {
-            const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);
-            character = response;
+        if (currentAgent.value && currentAgent.value.id) {
+            const response = await apiService.updateAgent(currentAgent.value.id, agentData);
+            agent = response;
         } else {
-            const response = await apiService.createCharacter(characterData);
-            character = response;
+            const response = await apiService.createAgent(agentData);
+            agent = response;
         }
 
-        if (character && avatarFile) {
-            const response = await apiService.uploadAvatar(character['id'], avatarFile);
-            character.avatarUrl = response.url;
+        if (agent && avatarFile) {
+            const response = await apiService.uploadAvatar(agent['id'], avatarFile);
+            agent.avatarUrl = response.url;
             settingPanelRef.value.clearAvatarFile();
         }
 
-        if (character) {
-            currentCharacter.value = character;
+        if (agent) {
+            currentAgent.value = agent;
         }
 
-        toast.success(t('characters.modal.saveSuccess'));
-        emit('saved', currentCharacter.value);
+        toast.success(t('agents.modal.saveSuccess'));
+        emit('saved', currentAgent.value);
         visible.value = false;
     } catch (error) {
-        console.error("角色保存失败:", error);
-        toast.error(t('characters.modal.saveFailed'));
+        console.error("智能体保存失败:", error);
+        toast.error(t('agents.modal.saveFailed'));
     } finally {
         saving.value = false;
     }
@@ -157,9 +157,9 @@ const handleSave = async (): Promise<void> => {
 /* GdDialog scoped styles handle dialog body/header.
    本对话框内容自带内边距（面板侧栏 py-3、各 tab px-4 py-6），
    body 的 12px 顶部内边距是纯叠加，会让标题栏与内容之间留白过大 → 仅去掉顶部。
-   character-setting-dialog 类名仅本组件使用，故用全局选择器（Teleport 内容上
+   agent-setting-dialog 类名仅本组件使用，故用全局选择器（Teleport 内容上
    没有本组件的 scope id，scoped :deep 选不中 .l-dialog__body）。 */
-.l-dialog.character-setting-dialog .l-dialog__body {
+.l-dialog.agent-setting-dialog .l-dialog__body {
     padding-top: 0;
 }
 </style>

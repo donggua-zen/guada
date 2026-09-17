@@ -18,9 +18,9 @@
  * 每回合恒写 turn/finish（usedTokens 锚点兜底后，无 usage 的回合也有占用锚点——
  * 前端环形指示器与压缩历史 before/after 回退链依赖这些锚点）。
  *
- * 元信息修复：meta.json 缺失或为 heal 骨架（title/characterId/groupId 全空）时，
+ * 元信息修复：meta.json 缺失或为 heal 骨架（title/agentId/groupId 全空）时，
  * 从 DB session 行全量重写（复用 sessionRowToMeta，与元信息导出线同口径）——
- * healOrphanSessions 的骨架会让侧栏出现空行并丢失角色/分组/设置绑定。
+ * healOrphanSessions 的骨架会让侧栏出现空行并丢失智能体/分组/设置绑定。
  *
  * ⚠️ 只读 DB、只写文件，不删除任何数据库数据（可回滚/重新迁移）。
  */
@@ -451,7 +451,7 @@ export class SessionMessageDbMigratorService {
 
   /**
    * meta 骨架修复：meta.json 缺失，或为 healOrphanSessions 重建的最小骨架
-   * （title/characterId/groupId 全空，侧栏空行 + 丢绑定）→ 从 DB 行全量重写。
+   * （title/agentId/groupId 全空，侧栏空行 + 丢绑定）→ 从 DB 行全量重写。
    * 用户实际使用过的 meta（任一字段有值）不触碰。DB 无该行（纯 JSONL 会话）→ 跳过。
    */
   private async repairSessionMeta(

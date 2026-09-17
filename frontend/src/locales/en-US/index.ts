@@ -5,7 +5,7 @@ import knowledge from './knowledge'
 import bot from './bot'
 import plugins from './plugins'
 import scheduler from './scheduler'
-import characters from './characters'
+import agents from './agents'
 import session from './session'
 import ui from './ui'
 import git from './git'
@@ -18,7 +18,7 @@ export default {
   bot,
   plugins,
   scheduler,
-  characters,
+  agents,
   session,
   ui,
   git,

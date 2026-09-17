@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { SessionFileStore } from '../../chat/session-file.store';
-import { CharacterFileStore } from '../../characters/character-file.store';
+import { AgentFileStore } from '../../agents/agent-file.store';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { WorkspaceService } from '../../../common/services/workspace.service';
@@ -20,7 +20,7 @@ export class SessionMapperService {
   constructor(
     private providerStore: ProviderFileStore,
     private sessionStore: SessionFileStore,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
     private botStore: BotFileStore,
@@ -32,7 +32,7 @@ export class SessionMapperService {
    * @param botId Bot 实例 ID
    * @param externalId 外部会话标识(由调用者根据平台策略组装)
    * @param platform 来源平台
-   * @param defaultCharacterId 默认角色 ID
+   * @param defaultAgentId 默认智能体 ID
    * @param defaultModelId 默认模型 ID（可选，用于模型解析优先级）
    * @param defaultThinkingEffort 默认思考强度（可选，动态注入到 session.settings）
    * @param title 会话标题(可选,不提供则自动生成)
@@ -41,12 +41,12 @@ export class SessionMapperService {
     botId: string,
     externalId: string,
     platform: string,
-    defaultCharacterId: string,
+    defaultAgentId: string,
     defaultModelId?: string | null,
     defaultThinkingEffort?: string | null,
     title?: string,
   ): Promise<any> {
-    // 尝试查找已存在的会话（Bot 会话的 characterId 为 null）
+    // 尝试查找已存在的会话（Bot 会话的 agentId 为 null）
     let session = this.sessionStore.findByBotAndExternalId(
       botId,
       externalId,
@@ -58,7 +58,7 @@ export class SessionMapperService {
         throw new Error(`Bot instance not found: ${botId}`);
       }
 
-      // 注意：不设置 characterId 和 modelId，都由下游动态解析
+      // 注意：不设置 agentId 和 modelId，都由下游动态解析
       // Bot 会话工作目录使用 BOT 前缀，与 Web 会话的 WORK 前缀区分
       const workspacePath = await this.workspaceService.generateWorkspaceDir('BOT');
       session = await this.sessionStore.create({
@@ -66,7 +66,7 @@ export class SessionMapperService {
         botId,
         platform,
         externalId,
-        characterId: null, // 不存储 characterId，动态从 Bot 实例读取
+        agentId: null, // 不存储 agentId，动态从 Bot 实例读取
         // modelId 不设置，保持 null，由下游动态解析
         title: title || this.generateBotSessionTitleFromExternalId(externalId),
         settings: {},
@@ -75,8 +75,8 @@ export class SessionMapperService {
 
     }
 
-    // 动态挂载 character 和 model（确保与 Bot 配置同步）
-    await this.enrichBotSessionCharacter(session, defaultCharacterId);
+    // 动态挂载 agent 和 model（确保与 Bot 配置同步）
+    await this.enrichBotSessionAgent(session, defaultAgentId);
     await this.enrichBotSessionModel(session, defaultModelId);
     this.enrichBotSessionThinkingEffort(session, defaultThinkingEffort);
 
@@ -84,39 +84,39 @@ export class SessionMapperService {
   }
 
   /**
-   * 为 Bot 会话动态解析并挂载 character 信息
+   * 为 Bot 会话动态解析并挂载 agent 信息
    * 
-   * 从 Bot 实例的 defaultCharacterId 中读取角色配置
-   * 这样确保修改 Bot 的默认角色后立即生效，无需重启
+   * 从 Bot 实例的 defaultAgentId 中读取智能体配置
+   * 这样确保修改 Bot 的默认智能体后立即生效，无需重启
    * 
    * @param session 会话对象
-   * @param defaultCharacterId Bot 实例配置的默认角色 ID
+   * @param defaultAgentId Bot 实例配置的默认智能体 ID
    */
-  private async enrichBotSessionCharacter(session: any, defaultCharacterId: string): Promise<void> {
-    if (!defaultCharacterId) {
-      throw new Error('Bot 实例未配置默认角色');
+  private async enrichBotSessionAgent(session: any, defaultAgentId: string): Promise<void> {
+    if (!defaultAgentId) {
+      throw new Error('Bot 实例未配置默认智能体');
     }
 
-    // 查询角色信息（权威来源 agents/<id>/AGENT.md）
-    const character = await this.characterStore.findById(defaultCharacterId);
+    // 查询智能体信息（权威来源 agents/<id>/AGENT.md）
+    const agent = await this.agentStore.findById(defaultAgentId);
 
-    if (!character) {
-      throw new Error(`角色不存在：${defaultCharacterId}，请检查 Bot 实例的角色配置`);
+    if (!agent) {
+      throw new Error(`智能体不存在：${defaultAgentId}，请检查 Bot 实例的智能体配置`);
     }
 
-    // 将 character 对象挂载到 session，模拟 include 的效果
-    session.character = character;
-    session.characterId = character.id;
+    // 将 agent 对象挂载到 session，模拟 include 的效果
+    session.agent = agent;
+    session.agentId = agent.id;
   }
 
   /**
    * 为 Bot 会话动态解析并挂载 model 信息
    * 
-   * 优先级链：Bot实例配置 -> 角色配置 -> 全局默认设置
-   * 这样确保 Bot 会话的模型配置与角色/全局设置实时同步
+   * 优先级链：Bot实例配置 -> 智能体配置 -> 全局默认设置
+   * 这样确保 Bot 会话的模型配置与智能体/全局设置实时同步
    * 
    * 注意：此方法仅用于 Bot 会话，不影响 Web 会话等其他模块
-   * 注意：调用此方法前必须先调用 enrichBotSessionCharacter 挂载 character
+   * 注意：调用此方法前必须先调用 enrichBotSessionAgent 挂载 agent
    * 
    * @param session 会话对象
    * @param defaultModelId Bot 实例配置的默认模型 ID（可选）
@@ -134,9 +134,9 @@ export class SessionMapperService {
       modelId = defaultModelId;
     }
 
-    // 2. 其次使用角色的 modelId（character 已通过 enrichBotSessionCharacter 挂载）
-    if (!modelId && session.character?.modelId) {
-      modelId = session.character.modelId;
+    // 2. 其次使用智能体的 modelId（agent 已通过 enrichBotSessionAgent 挂载）
+    if (!modelId && session.agent?.modelId) {
+      modelId = session.agent.modelId;
     }
 
     // 3. 最后使用全局默认对话模型

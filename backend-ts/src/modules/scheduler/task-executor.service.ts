@@ -4,7 +4,7 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { CharacterFileStore } from "../characters/character-file.store";
+import { AgentFileStore } from "../agents/agent-file.store";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
@@ -53,7 +53,7 @@ export class TaskExecutorService {
     private eventBus: EventBusService,
     private storage: TaskStorageService,
     private settingsStorage: SettingsStorage,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     private providerStore: ProviderFileStore,
   ) {}
 
@@ -242,7 +242,7 @@ export class TaskExecutorService {
    * 解析任务模型ID（三级回退）
    *
    * 1. 任务显式指定的 modelId
-   * 2. 角色的 modelId
+   * 2. 智能体的 modelId
    * 3. 全局默认对话模型
    *
    * 最终必须验证模型存在，否则抛出错误。
@@ -255,14 +255,14 @@ export class TaskExecutorService {
       modelId = task.modelId;
     }
 
-    // 第二优先级：角色的 modelId
-    if (!modelId && task.characterId) {
-      const character = await this.characterStore.findById(task.characterId);
-      if (!character) {
-        throw new Error(`角色不存在：${task.characterId}`);
+    // 第二优先级：智能体的 modelId
+    if (!modelId && task.agentId) {
+      const agent = await this.agentStore.findById(task.agentId);
+      if (!agent) {
+        throw new Error(`智能体不存在：${task.agentId}`);
       }
-      if (character.modelId) {
-        modelId = character.modelId;
+      if (agent.modelId) {
+        modelId = agent.modelId;
       }
     }
 
@@ -278,7 +278,7 @@ export class TaskExecutorService {
     // 最终必须有效
     if (!modelId) {
       throw new Error(
-        "无法解析模型ID：任务未指定模型，角色未配置模型，且全局默认对话模型未设置",
+        "无法解析模型ID：任务未指定模型，智能体未配置模型，且全局默认对话模型未设置",
       );
     }
 
@@ -295,16 +295,16 @@ export class TaskExecutorService {
     task: ScheduledTask,
   ): Promise<{ sessionId: string } | null> {
     if (task.targetMode === "new_session") {
-      // 创建新会话，必须指定角色ID
-      if (!task.characterId) {
-        throw new Error("新建会话模式必须设置 characterId");
+      // 创建新会话，必须指定智能体ID
+      if (!task.agentId) {
+        throw new Error("新建会话模式必须设置 agentId");
       }
 
       // 解析模型ID（三级回退）
       const finalModelId = await this.resolveModelId(task);
 
       const session = await this.sessionService.createSession({
-        characterId: task.characterId,
+        agentId: task.agentId,
         modelId: finalModelId,
         title: `[定时] ${task.name}`,
         settings: task.settings || undefined,

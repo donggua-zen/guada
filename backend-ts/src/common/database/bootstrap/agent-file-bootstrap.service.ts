@@ -7,17 +7,17 @@ import { SettingsStorage } from "../../utils/settings-storage.util";
 import { UploadPathService } from "../../services/upload-path.service";
 import {
   AGENT_FILE,
-  CharacterFileStore,
+  AgentFileStore,
   REKEY_FILE,
   resolveAgentsDir,
-} from "../../../modules/characters/character-file.store";
+} from "../../../modules/agents/agent-file.store";
 import {
   isAvatarFileName,
   parseAgentMarkdown,
   serializeAgentMarkdown,
   slugifyAgentId,
   AGENT_ID_MAX_LENGTH,
-} from "../../../modules/characters/character-file.mapper";
+} from "../../../modules/agents/agent-file.mapper";
 
 const MIGRATED_MARKER = ".migrated-from-db";
 
@@ -25,36 +25,36 @@ const MIGRATED_MARKER = ".migrated-from-db";
  * ⚠️ 迁移脚手架（临时代码）：预计两个版本后随 Prisma/主库整体移除，
  * 由 MigrationBootstrapService 编排调用，移除清单见 docs/design/metadata-file-format.md。
  *
- * 角色定义 DB → 文件一次性导出（含引用重键）
+ * 智能体定义 DB → 文件一次性导出（含引用重键）
  *
  * 权威源切换到 `agents/<id>/AGENT.md` 后，原 DB 主键（cuid）与新的目录名
- * （由 name 派生的 slug）不再相等。引用散落在 `session.character_id`、
- * `bot_instance.default_character_id`、调度任务 JSON，以及各角色的
+ * （由 name 派生的 slug）不再相等。引用散落在 `session.agent_id`、
+ * `bot_instance.default_agent_id`、调度任务 JSON，以及各智能体的
  * `settings.agents` 白名单键里，必须同批改写，否则会静默断链。
  *
  * 设计对齐 ProviderBootstrapService：
  * - 共用一个 marker，只跑一次；导出只读 DB、只写文件，DB 行原样保留作回滚
- * - 先跑 DB 迁移（0004 已解除 session→character 外键），否则写非 cuid 值会撞外键
+ * - 先跑 DB 迁移（0004 已解除 session→agent 外键），否则写非 cuid 值会撞外键
  *   （由编排器保证：migrationRunner.run() 先于本服务）
  * - 映射落在 `agents/.rekey.json`，供其它迁移（如模型引用改写）反查旧 id
  *
  * 顺序约束：必须先于 ProviderBootstrapService（其改写 AGENT.md frontmatter 需要
- * 角色文件已存在）与 MetadataFileBootstrapService（其导出会话/机器人时读取的
+ * 智能体文件已存在）与 MetadataFileBootstrapService（其导出会话/机器人时读取的
  * DB 引用由本服务改写归一化）。
  */
 @Injectable()
-export class CharacterFileBootstrapService {
-  private readonly logger = new Logger(CharacterFileBootstrapService.name);
+export class AgentFileBootstrapService {
+  private readonly logger = new Logger(AgentFileBootstrapService.name);
 
   // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
-  private readonly store: CharacterFileStore;
+  private readonly store: AgentFileStore;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly settingsStorage: SettingsStorage,
     private readonly uploadPathService: UploadPathService,
   ) {
-    this.store = new CharacterFileStore();
+    this.store = new AgentFileStore();
   }
 
   /** @returns 是否完整执行（含引用改写成功）；失败时由编排器记日志，下次启动重试 */
@@ -64,7 +64,7 @@ export class CharacterFileBootstrapService {
     const markerPath = path.join(agentsDir, MIGRATED_MARKER);
     if (fs.existsSync(markerPath)) return true;
 
-    const exported = await this.exportCharacters(agentsDir);
+    const exported = await this.exportAgents(agentsDir);
     if (!exported.ok) return false; // DB 不可读 / 引用改写失败：不落 marker，下次启动重试
 
     await this.writeMarker(markerPath);
@@ -77,7 +77,7 @@ export class CharacterFileBootstrapService {
    * 引用改写失败时不落 marker：外键未解除会让 update 抛错，此时若落 marker
    * 会永久留下指向旧 cuid 的悬空引用（会话/机器人/定时任务静默断链）。
    */
-  private async exportCharacters(
+  private async exportAgents(
     agentsDir: string,
   ): Promise<{ ok: boolean }> {
     let rows: Array<Record<string, any>>;
@@ -86,12 +86,12 @@ export class CharacterFileBootstrapService {
         orderBy: { createdAt: "asc" },
       });
     } catch (err) {
-      this.logger.warn(`DB unreadable, skip character export: ${String(err)}`);
+      this.logger.warn(`DB unreadable, skip agent export: ${String(err)}`);
       return { ok: false };
     }
 
     if (rows.length === 0) {
-      this.logger.log("No legacy character rows; export skipped");
+      this.logger.log("No legacy agent rows; export skipped");
       return { ok: true };
     }
 
@@ -147,13 +147,13 @@ export class CharacterFileBootstrapService {
       "utf8",
     );
 
-    // 白名单键与外部引用必须在所有目录写完后统一改写（白名单指向的角色可能尚未导出）
+    // 白名单键与外部引用必须在所有目录写完后统一改写（白名单指向的智能体可能尚未导出）
     const rewrittenAgents = await this.rewriteAgentWhitelists(agentsDir, rekey);
     const { sessions, bots, tasks, failed } =
       await this.rewriteExternalRefs(rekey);
 
     this.logger.log(
-      `Character definitions migrated from DB: ${migrated} written; ` +
+      `Agent definitions migrated from DB: ${migrated} written; ` +
         `refs rewritten: session=${sessions}, botInstance=${bots}, ` +
         `schedulerTask=${tasks}, agentWhitelist=${rewrittenAgents}` +
         (failed ? " (有引用改写失败，稍后重试)" : ""),
@@ -161,7 +161,7 @@ export class CharacterFileBootstrapService {
     return { ok: !failed };
   }
 
-  /** 旧头像文件 → 角色目录内 `avatar.<ext>`（复制不删除，原文件保持可回滚） */
+  /** 旧头像文件 → 智能体目录内 `avatar.<ext>`（复制不删除，原文件保持可回滚） */
   private async migrateAvatar(
     legacyAvatarUrl: string,
     dirPath: string,
@@ -179,8 +179,8 @@ export class CharacterFileBootstrapService {
   }
 
   /**
-   * 改写各角色 frontmatter 的 `settings.agents` 白名单键（旧 id → 目录名）。
-   * 只保留能映射到的键：映射不到的旧键（角色已删）直接丢弃。
+   * 改写各智能体 frontmatter 的 `settings.agents` 白名单键（旧 id → 目录名）。
+   * 只保留能映射到的键：映射不到的旧键（智能体已删）直接丢弃。
    */
   private async rewriteAgentWhitelists(
     agentsDir: string,
@@ -217,7 +217,7 @@ export class CharacterFileBootstrapService {
     return changed;
   }
 
-  /** 改写 DB 列与调度任务 JSON 里的角色引用；failed=true 表示有目标未改写成功 */
+  /** 改写 DB 列与调度任务 JSON 里的智能体引用；failed=true 表示有目标未改写成功 */
   private async rewriteExternalRefs(rekey: Record<string, string>): Promise<{
     sessions: number;
     bots: number;
@@ -307,10 +307,10 @@ export class CharacterFileBootstrapService {
 
     let changed = 0;
     for (const task of list) {
-      if (!task || typeof task.characterId !== "string") continue;
-      const next = rekey[task.characterId];
-      if (next && next !== task.characterId) {
-        task.characterId = next;
+      if (!task || typeof task.agentId !== "string") continue;
+      const next = rekey[task.agentId];
+      if (next && next !== task.agentId) {
+        task.agentId = next;
         changed += 1;
       }
     }

@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { CharacterFileStore } from '../../characters/character-file.store';
+import { AgentFileStore } from '../../agents/agent-file.store';
 import {
   byLastActiveDesc,
   SessionFileStore,
@@ -19,7 +19,7 @@ export class BotAdminService {
   constructor(
     private instanceManager: BotInstanceManager,
     private modelStore: ProviderFileStore,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     private sessionStore: SessionFileStore,
     private botStore: BotFileStore,
   ) {}
@@ -75,16 +75,16 @@ export class BotAdminService {
       .map((m) => this.sessionStore.get(m.id)!);
     const total = rows.length;
 
-    const charMap = await this.characterStore.findManyByIds(
+    const charMap = await this.agentStore.findManyByIds(
       items
-        .map((s: any) => s.characterId)
+        .map((s: any) => s.agentId)
         .filter((id: any): id is string => typeof id === 'string' && id.length > 0),
     );
 
     return {
       items: items.map((s: any) => ({
         ...s,
-        character: s.characterId ? charMap.get(s.characterId) ?? null : null,
+        agent: s.agentId ? charMap.get(s.agentId) ?? null : null,
       })),
       total,
       page: Math.floor(skip / limit) + 1,
@@ -129,9 +129,9 @@ export class BotAdminService {
       );
     }
 
-    // 验证 defaultCharacterId 必填
-    if (!dto.defaultCharacterId) {
-      throw new BadRequestException('defaultCharacterId is required for bot instance');
+    // 验证 defaultAgentId 必填
+    if (!dto.defaultAgentId) {
+      throw new BadRequestException('defaultAgentId is required for bot instance');
     }
 
     // 保存到文件（权威来源 bots/<id>.yaml）
@@ -143,7 +143,7 @@ export class BotAdminService {
       reconnectEnabled: dto.reconnectConfig?.enabled ?? true,
       maxRetries: dto.reconnectConfig?.maxRetries ?? 5,
       retryInterval: dto.reconnectConfig?.retryInterval ?? 5000,
-      defaultCharacterId: dto.defaultCharacterId,
+      defaultAgentId: dto.defaultAgentId,
       defaultModelId: dto.defaultModelId ?? null,
       defaultThinkingEffort: dto.defaultThinkingEffort ?? null,
       additionalKwargs: dto.additionalKwargs || null,
@@ -174,7 +174,7 @@ export class BotAdminService {
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.platformConfig !== undefined) updateData.platformConfig = dto.platformConfig;
     if (dto.enabled !== undefined) updateData.enabled = dto.enabled;
-    if (dto.defaultCharacterId !== undefined) updateData.defaultCharacterId = dto.defaultCharacterId;
+    if (dto.defaultAgentId !== undefined) updateData.defaultAgentId = dto.defaultAgentId;
     if (dto.defaultModelId !== undefined) updateData.defaultModelId = dto.defaultModelId;
     if (dto.defaultThinkingEffort !== undefined) updateData.defaultThinkingEffort = dto.defaultThinkingEffort;
     if (dto.additionalKwargs !== undefined) updateData.additionalKwargs = dto.additionalKwargs;
@@ -221,7 +221,7 @@ export class BotAdminService {
         this.logger.error(`Failed to restart bot after update: ${error.message}`);
       }
     }
-    // 其他配置更新（角色、模型、知识库等），重新加载内存中的配置
+    // 其他配置更新（智能体、模型、知识库等），重新加载内存中的配置
     else {
       try {
         await this.instanceManager.reloadBotConfig(id);
@@ -261,7 +261,7 @@ export class BotAdminService {
         maxRetries: instance.maxRetries,
         retryInterval: instance.retryInterval,
       },
-      defaultCharacterId: instance.defaultCharacterId || undefined,
+      defaultAgentId: instance.defaultAgentId || undefined,
       defaultModelId: instance.defaultModelId || undefined,
       defaultThinkingEffort: instance.defaultThinkingEffort || undefined,
       // 从 additionalKwargs 中提取知识库ID列表

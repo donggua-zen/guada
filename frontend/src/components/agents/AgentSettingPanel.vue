@@ -1,5 +1,5 @@
 <template>
-  <div class="character-setting-panel-root h-full" v-loading="pageLoading" :element-loading-text="t('characters.setting.loading')">
+  <div class="agent-setting-panel-root h-full" v-loading="pageLoading" :element-loading-text="t('agents.setting.loading')">
     <div class="flex h-full overflow-hidden">
       <!-- 侧边栏 -->
       <div class="w-40 shrink-0 overflow-y-auto py-3">
@@ -26,53 +26,53 @@
         <!-- 基础设置 -->
         <div v-show="tabsValue === 'basic'" class="flex-1 overflow-hidden">
           <div class="h-full overflow-y-auto px-4 py-4">
-            <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="top">
+            <el-form ref="basicFormRef" :model="agentForm" :rules="basicRules" label-position="top">
               <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 头像设置 -->
                 <el-form-item prop="avatarUrl" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('characters.setting.avatarOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.avatarHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('agents.setting.avatarOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.avatarHint') }}</span>
                     </div>
-                    <AvatarPreview :src="characterForm.avatarUrl" type="assistant" class="w-10"
-                      :name="characterForm.name" @avatar-changed="handleAvatarChanged" />
+                    <AvatarPreview :src="agentForm.avatarUrl" type="assistant" class="w-10"
+                      :name="agentForm.name" @avatar-changed="handleAvatarChanged" />
                   </div>
                 </el-form-item>
-                <!-- 角色名称 -->
+                <!-- 智能体名称 -->
                 <el-form-item prop="name" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.titleLabel') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.titleHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.titleLabel') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.titleHint') }}</span>
                     </div>
                     <div class="w-1/2 flex justify-end">
-                      <el-input v-model="characterForm.name" :placeholder="t('characters.setting.titlePlaceholder')" class="w-full" />
+                      <el-input v-model="agentForm.name" :placeholder="t('agents.setting.titlePlaceholder')" class="w-full" />
                     </div>
                   </div>
                 </el-form-item>
-                <!-- 角色描述 -->
+                <!-- 智能体描述 -->
                 <el-form-item prop="description" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.descLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.descOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.descHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.descLabel') }} <span class="text-xs text-gray-400">{{ t('agents.setting.descOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.descHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-input v-model="characterForm.description" type="textarea" :placeholder="t('characters.setting.descPlaceholder')"
+                      <el-input v-model="agentForm.description" type="textarea" :placeholder="t('agents.setting.descPlaceholder')"
                         :autosize="{ minRows: 3, maxRows: 5 }" class="w-full" />
                     </div>
                   </div>
                 </el-form-item>
                 <!-- 存储位置（只读提示：目录名即 id） -->
-                <el-form-item v-if="characterForm.id" prop="id" class="mb-0!">
+                <el-form-item v-if="agentForm.id" prop="id" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.idLabel') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.idHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.idLabel') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.idHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-input :model-value="characterForm.id" readonly class="w-full font-mono" />
+                      <el-input :model-value="agentForm.id" readonly class="w-full font-mono" />
                     </div>
                   </div>
                 </el-form-item>
@@ -83,11 +83,11 @@
                 <el-form-item prop="modelId" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.modelLabel') }} <span class="text-xs text-gray-400">{{ t('characters.setting.modelOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.modelHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.modelLabel') }} <span class="text-xs text-gray-400">{{ t('agents.setting.modelOptional') }}</span></span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.modelHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.modelId" :options="modelOptions" :placeholder="t('characters.setting.modelPlaceholder')" clearable
+                      <el-select v-model="agentForm.modelId" :options="modelOptions" :placeholder="t('agents.setting.modelPlaceholder')" clearable
                         class="w-full" />
                     </div>
                   </div>
@@ -100,11 +100,11 @@
                 <el-form-item prop="compressionTier" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('characters.setting.compressionTier') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('characters.setting.compressionTierHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.compressionTier') }}</span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.compressionTierHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="characterForm.compressionTier" :placeholder="t('characters.setting.compressionTierPlaceholder')" class="w-full">
+                      <el-select v-model="agentForm.compressionTier" :placeholder="t('agents.setting.compressionTierPlaceholder')" class="w-full">
                         <el-option v-for="opt in COMPRESSION_TIER_OPTIONS" :key="opt.value" :label="t(opt.labelKey)" :value="opt.value">
                           <span class="flex items-center gap-2">
                             <span>{{ t(opt.descKey) }}</span>
@@ -116,10 +116,10 @@
                 </el-form-item>
               </div>
 
-              <el-alert :title="t('characters.setting.tipTitle')" type="info" :closable="false" show-icon style="margin-top: 16px;">
-                <p class="text-sm">{{ t('characters.setting.tip1') }}</p>
-                <p class="text-sm">{{ t('characters.setting.tip2') }}</p>
-                <p class="text-sm">{{ t('characters.setting.tip3') }}</p>
+              <el-alert :title="t('agents.setting.tipTitle')" type="info" :closable="false" show-icon style="margin-top: 16px;">
+                <p class="text-sm">{{ t('agents.setting.tip1') }}</p>
+                <p class="text-sm">{{ t('agents.setting.tip2') }}</p>
+                <p class="text-sm">{{ t('agents.setting.tip3') }}</p>
               </el-alert>
             </el-form>
           </div>
@@ -130,18 +130,18 @@
         <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-y-auto">
           <div class="px-4 pt-2 pb-6 min-h-full flex flex-col">
             <div class="px-0 flex-1 flex flex-col min-h-0">
-              <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
+              <el-form ref="promptFormRef" :model="agentForm" :rules="promptRules" label-position="top"
                 label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
                 <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
                   <div class="flex items-center w-full justify-between">
-                    <span>{{ t('characters.setting.systemPromptLabel') }}</span>
+                    <span>{{ t('agents.setting.systemPromptLabel') }}</span>
                   </div>
                 </el-form-item>
 
                 <!-- 详细设定 -->
                 <el-form-item prop="systemPrompt" :show-label="false"
                   class="flex-1 min-h-40 prompt-form-item no-border-item">
-                  <el-input v-model="characterForm.systemPrompt" type="textarea" :placeholder="t('characters.setting.systemPromptPlaceholder')" resize="none" />
+                  <el-input v-model="agentForm.systemPrompt" type="textarea" :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
                 </el-form-item>
 
               </el-form>
@@ -158,11 +158,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allDisabled" @update:model-value="(v) => handleAllDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allDisabled }]">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.newPluginLabel') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.newPluginLabel') }}</span>
                       <SegmentedToggle v-model="allowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
@@ -172,8 +172,8 @@
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>{{ t('characters.setting.noLocalTools') }}</div>
-                  <div class="text-sm mt-2">{{ t('characters.setting.noLocalToolsHint') }}</div>
+                  <div>{{ t('agents.setting.noLocalTools') }}</div>
+                  <div class="text-sm mt-2">{{ t('agents.setting.noLocalToolsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2"
@@ -189,7 +189,7 @@
                         :disabled="allDisabled" size="small" inline-prompt />
                     </div>
                     <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">
-                      {{ card.kit.description || t('characters.setting.noDescription') }}
+                      {{ card.kit.description || t('agents.setting.noDescription') }}
                     </p>
                     <!-- 底部：左侧工具/提示词统计，右侧来源插件 -->
                     <div class="flex items-center justify-between mt-1.5 text-xs text-gray-400">
@@ -203,7 +203,7 @@
                           {{ card.kit.promptCount ?? 0 }}
                         </span>
                       </div>
-                      <span class="truncate ml-2">{{ t('characters.setting.kitSource', { plugin: card.pluginName }) }}</span>
+                      <span class="truncate ml-2">{{ t('agents.setting.kitSource', { plugin: card.pluginName }) }}</span>
                     </div>
                   </div>
                 </div>
@@ -221,11 +221,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allMcpDisabled" @update:model-value="(v) => handleAllMcpDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allMcpDisabled }]">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.newMcpLabel') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.newMcpLabel') }}</span>
                       <SegmentedToggle :model-value="mcpAllowlistMode" :options="autoEnableOptions"
                         @update:model-value="handleMcpAllowlistModeChange" />
                     </div>
@@ -236,7 +236,7 @@
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>{{ t('characters.setting.noMcpServers') }}</div>
+                  <div>{{ t('agents.setting.noMcpServers') }}</div>
                 </div>
 
                 <div v-else>
@@ -248,10 +248,10 @@
                         <div class="font-medium text-base mb-1 text-gray-800 dark:text-gray-200">
                           {{ server.name }}
                           <el-tag v-if="server.enabled" type="success" size="small" class="ml-2">
-                            {{ t('characters.setting.mcpRunning') }}
+                            {{ t('agents.setting.mcpRunning') }}
                           </el-tag>
                           <el-tag v-else type="info" size="small" class="ml-2">
-                            {{ t('characters.setting.mcpNotRunning') }}
+                            {{ t('agents.setting.mcpNotRunning') }}
                           </el-tag>
                         </div>
                         <div v-if="server.description" class="text-sm text-gray-600 line-clamp-2">
@@ -259,7 +259,7 @@
                         </div>
                         <div v-if="server.tools && Object.keys(server.tools).length > 0"
                           class="text-sm text-gray-500 mt-2">
-                          {{ t('characters.setting.availableTools', { count: Object.keys(server.tools).length }) }}
+                          {{ t('agents.setting.availableTools', { count: Object.keys(server.tools).length }) }}
                         </div>
                       </div>
 
@@ -284,11 +284,11 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allSkillsDisabled" @update:model-value="(v) => handleAllSkillsDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allSkillsDisabled }]">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.newSkillLabel') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.newSkillLabel') }}</span>
                       <SegmentedToggle v-model="skillsAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
@@ -298,15 +298,15 @@
                   <el-icon class="is-loading" size="24">
                     <LoadingOutlined />
                   </el-icon>
-                  <div class="text-sm text-gray-500 mt-2">{{ t('characters.setting.loadingSkills') }}</div>
+                  <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingSkills') }}</div>
                 </div>
 
                 <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>{{ t('characters.setting.noSkills') }}</div>
-                  <div class="text-sm mt-2">{{ t('characters.setting.noSkillsHint') }}</div>
+                  <div>{{ t('agents.setting.noSkills') }}</div>
+                  <div class="text-sm mt-2">{{ t('agents.setting.noSkillsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
@@ -320,12 +320,12 @@
                           :loading="updatingSkills.has(skill.id)"
                           @update:model-value="(val) => handleSkillToggle(skill.id, val)" :disabled="allSkillsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
-                        <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('characters.setting.sourceBuiltin') }}</el-tag>
+                        <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('agents.setting.sourceBuiltin') }}</el-tag>
                         <el-tag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{
                           skill.manifest.version }}</el-tag>
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || t('characters.setting.noDescription')
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || t('agents.setting.noDescription')
                       }}</p>
                   </div>
                 </div>
@@ -343,7 +343,7 @@
                 <el-form-item class="no-border-item">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
-                      <span class="text-sm text-gray-500">{{ t('characters.setting.toolToggle') }}</span>
+                      <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
                       <el-switch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
                     </div>
                   </div>
@@ -353,19 +353,19 @@
                   <el-icon class="is-loading" size="24">
                     <LoadingOutlined />
                   </el-icon>
-                  <div class="text-sm text-gray-500 mt-2">{{ t('characters.setting.loadingAgents') }}</div>
+                  <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingAgents') }}</div>
                 </div>
 
-                <div v-else-if="presetCharacters.length === 0" class="text-center text-gray-500 py-8">
+                <div v-else-if="presetAgents.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>{{ t('characters.setting.noAgents') }}</div>
-                  <div class="text-sm mt-2">{{ t('characters.setting.noAgentsHint') }}</div>
+                  <div>{{ t('agents.setting.noAgents') }}</div>
+                  <div class="text-sm mt-2">{{ t('agents.setting.noAgentsHint') }}</div>
                 </div>
 
                 <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                  <div v-for="char in presetCharacters" :key="char.id"
+                  <div v-for="char in presetAgents" :key="char.id"
                     class="agent-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
                     :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
                     <div class="flex items-start justify-between gap-2 mb-1">
@@ -376,7 +376,7 @@
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || t('characters.setting.noDescription') }}</p>
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || t('agents.setting.noDescription') }}</p>
                   </div>
                 </div>
               </el-form>
@@ -389,7 +389,7 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck - CharacterSettingPanel 组件复杂度高，临时使用@ts-nocheck
+// @ts-nocheck - AgentSettingPanel 组件复杂度高，临时使用@ts-nocheck
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
@@ -436,15 +436,15 @@ import {
   splitUnrendered,
   type ParsedPluginConfig,
   type UnrenderedRefs,
-} from '../../utils/characterPluginConfig'
+} from '../../utils/agentPluginConfig'
 
 const { toast, notify } = usePopup()
 const { t } = useI18n()
 
 // 工具栏目"全部禁用/自定义"分段按钮选项
 const autoEnableOptions = computed(() => [
-  { label: t('characters.setting.autoEnable'), value: false },
-  { label: t('characters.setting.keepDisabled'), value: true }
+  { label: t('agents.setting.autoEnable'), value: false },
+  { label: t('agents.setting.keepDisabled'), value: true }
 ])
 
 // Props
@@ -521,25 +521,25 @@ function deepEqual(a: any, b: any): boolean {
 // 侧边栏分组
 const sidebarGroups = computed(() => [
   {
-    label: t('characters.setting.groupBasic'),
+    label: t('agents.setting.groupBasic'),
     items: [
-      { label: t('characters.setting.navBasic'), path: 'basic', icon: UserOutlined },
-      { label: t('characters.setting.navPrompt'), path: 'prompt', icon: MessageOutlined },
+      { label: t('agents.setting.navBasic'), path: 'basic', icon: UserOutlined },
+      { label: t('agents.setting.navPrompt'), path: 'prompt', icon: MessageOutlined },
     ]
   },
   {
-    label: t('characters.setting.groupTools'),
+    label: t('agents.setting.groupTools'),
     items: [
-      { label: t('characters.setting.navLocalTools'), path: 'local_tools', icon: ToolOutlined },
-      { label: t('characters.setting.navMcpTools'), path: 'mcp_tools', icon: ApiOutlined },
-      { label: t('characters.setting.navSkills'), path: 'skills', icon: Code24Regular },
-      { label: t('characters.setting.navSubAgents'), path: 'agent_presets', icon: Bot24Regular },
+      { label: t('agents.setting.navLocalTools'), path: 'local_tools', icon: ToolOutlined },
+      { label: t('agents.setting.navMcpTools'), path: 'mcp_tools', icon: ApiOutlined },
+      { label: t('agents.setting.navSkills'), path: 'skills', icon: Code24Regular },
+      { label: t('agents.setting.navSubAgents'), path: 'agent_presets', icon: Bot24Regular },
     ]
   }
 ])
 
 // 表单数据
-const characterForm = reactive({
+const agentForm = reactive({
   id: '',
   name: '',
   description: '',
@@ -550,15 +550,15 @@ const characterForm = reactive({
   systemPrompt: '',
   modelId: null,
   memoryType: '',
-  enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
+  enabledSkills: {},       // 按智能体启用的技能 { skillId: true/false }
   compressionTier: DEFAULT_COMPRESSION_TIER, // 压缩策略档位：'off' | 'conservative' | 'aggressive'
 })
 
 // 验证规则
 const basicRules = computed(() => ({
   name: [
-    { required: true, message: t('characters.setting.titleRequired'), trigger: ['input', 'blur'] },
-    { min: 2, max: 20, message: t('characters.setting.titleLength'), trigger: ['input', 'blur'] }
+    { required: true, message: t('agents.setting.titleRequired'), trigger: ['input', 'blur'] },
+    { min: 2, max: 20, message: t('agents.setting.titleLength'), trigger: ['input', 'blur'] }
   ]
 }))
 
@@ -574,10 +574,10 @@ const promptRules = {}
 // ]
 
 const memoryOptions = computed(() => [
-  { label: t('characters.setting.memorySlidingWindow'), value: 'sliding_window' },
-  { label: t('characters.setting.memorySummaryAugmented'), value: 'summary_augmented_sliding_window' },
-  { label: t('characters.setting.memorySlidingWindowWithRag'), value: 'sliding_window_with_rag' },
-  { label: t('characters.setting.memoryless'), value: 'memoryless' }
+  { label: t('agents.setting.memorySlidingWindow'), value: 'sliding_window' },
+  { label: t('agents.setting.memorySummaryAugmented'), value: 'summary_augmented_sliding_window' },
+  { label: t('agents.setting.memorySlidingWindowWithRag'), value: 'sliding_window_with_rag' },
+  { label: t('agents.setting.memoryless'), value: 'memoryless' }
 ]);
 
 // 模型选择选项（按供应商分组）
@@ -588,7 +588,7 @@ const modelOptions = computed(() => {
 
   // 添加"使用默认模型"选项
   options.push({
-    label: t('characters.setting.modelUseDefault'),
+    label: t('agents.setting.modelUseDefault'),
     value: '',
     key: 'default'
   })
@@ -635,7 +635,7 @@ const updatingSkills = ref(new Set());
 // 本地工具数据
 const localTools = ref([]);
 
-// 卡片展示列表：只显示有工具包的插件（无能力包的插件不受角色层控制，不在此显示）
+// 卡片展示列表：只显示有工具包的插件（无能力包的插件不受智能体层控制，不在此显示）
 const visibleLocalTools = computed(() =>
   localTools.value.filter(t => Array.isArray(t.toolkits) && t.toolkits.length > 0),
 );
@@ -652,10 +652,10 @@ const visibleKitCards = computed(() =>
   ),
 );
 
-// 角色能力包设置（key = `${pluginId}::${kitId}` -> boolean）
-const characterToolSettings = ref<Record<string, boolean>>({});
+// 智能体能力包设置（key = `${pluginId}::${kitId}` -> boolean）
+const agentToolSettings = ref<Record<string, boolean>>({});
 
-// 已保存的角色插件配置（解析后），作为工具包开关的默认来源
+// 已保存的智能体插件配置（解析后），作为工具包开关的默认来源
 const parsedPluginConfig = ref<ParsedPluginConfig>({
   allDisabled: false,
   allowlistMode: false,
@@ -678,18 +678,18 @@ const mcpAllowlistServers = ref<string[]>([]);
 const allSkillsDisabled = ref(false);
 // Skills 白名单模式（新技能默认不开启）
 const skillsAllowlistMode = ref(false);
-// 通用子代理（虚拟角色，不出现在角色列表中）
+// 通用子代理（虚拟智能体，不出现在智能体列表中）
 const GENERIC_AGENT = computed(() => ({
   id: 'generic',
-  name: t('characters.setting.genericAgentTitle'),
-  description: t('characters.setting.genericAgentDesc'),
+  name: t('agents.setting.genericAgentTitle'),
+  description: t('agents.setting.genericAgentDesc'),
 }));
 // 是否全部禁用子代理
 const allAgentsDisabled = ref(false);
-// 助手偏好 { characterId: true/false }
+// 智能体偏好 { agentId: true/false }
 const enabledAgents = reactive<Record<string, boolean>>({});
-// 子代理列表（排除当前角色，含虚拟通用子代理）
-const presetCharacters = ref<any[]>([]);
+// 子代理列表（排除当前智能体，含虚拟通用子代理）
+const presetAgents = ref<any[]>([]);
 const loadingAgents = ref(false);
 
 
@@ -701,8 +701,8 @@ const kitKey = (pluginId, kitId) => `${pluginId}::${kitId}`;
 // 判断某个能力包是否启用（用于 Switch 显示）
 const isKitEnabled = (pluginId, kitId) => {
   const key = kitKey(pluginId, kitId);
-  if (key in characterToolSettings.value) return characterToolSettings.value[key];
-  // 未初始化时回退到查询结果（已含角色配置的生效状态）
+  if (key in agentToolSettings.value) return agentToolSettings.value[key];
+  // 未初始化时回退到查询结果（已含智能体配置的生效状态）
   const tool = localTools.value.find(t => t.pluginId === pluginId);
   const kit = tool?.toolkits?.find(k => k.id === kitId);
   return kit ? !!kit.enabled : false;
@@ -712,29 +712,29 @@ const isKitEnabled = (pluginId, kitId) => {
 const handleKitToggle = (pluginId, kitId, enabled) => {
   // 从全部禁用模式切回正常模式
   if (allDisabled.value) allDisabled.value = false;
-  characterToolSettings.value = {
-    ...characterToolSettings.value,
+  agentToolSettings.value = {
+    ...agentToolSettings.value,
     [kitKey(pluginId, kitId)]: enabled,
   };
 };
 
 // 计算技能的最终显示状态（不受模式影响，始终 = 用户显式值 → 全局继承）
 const getSkillEffectiveEnabled = (skill) => {
-  if (skill.id in characterForm.enabledSkills) {
-    return characterForm.enabledSkills[skill.id];
+  if (skill.id in agentForm.enabledSkills) {
+    return agentForm.enabledSkills[skill.id];
   }
   return skill.enabled !== false;
 };
 
-// 角色面板可见的技能
+// 智能体面板可见的技能
 const visibleSkills = computed(() => {
   // 强制追踪模式切换依赖，确保技能列表随白名单/黑名单切换重渲染
   void skillsAllowlistMode.value;
   // 全部禁用模式下仍然展示所有技能（灰色不可操作状态）
   return skillsList.value.filter(skill => {
-      // 全局禁用的技能，仅当角色显式启用时显示
+      // 全局禁用的技能，仅当智能体显式启用时显示
       if (skill.enabled === false) {
-        return characterForm.enabledSkills[skill.id] === true;
+        return agentForm.enabledSkills[skill.id] === true;
       }
     return true;
   });
@@ -752,30 +752,30 @@ const isMcpServerEnabled = (serverId) => {
 
 // 监听 props.data 变化
 watch(() => props.data, (newVal, oldVal) => {
-  // 检测是否是角色切换（id 变化）或初始化
-  const isCharacterSwitch = !characterForm.id || (newVal.id && newVal.id !== characterForm.id);
+  // 检测是否是智能体切换（id 变化）或初始化
+  const isAgentSwitch = !agentForm.id || (newVal.id && newVal.id !== agentForm.id);
 
-  if (isCharacterSwitch) {
-    characterForm.avatarFile = null;
+  if (isAgentSwitch) {
+    agentForm.avatarFile = null;
   }
 
-  characterForm.id = newVal.id || '';
-  characterForm.name = newVal.name || '';
-  characterForm.description = newVal.description || '';
-  characterForm.avatarUrl = newVal.avatarUrl || '';
-  characterForm.modelId = newVal.modelId || '';
+  agentForm.id = newVal.id || '';
+  agentForm.name = newVal.name || '';
+  agentForm.description = newVal.description || '';
+  agentForm.avatarUrl = newVal.avatarUrl || '';
+  agentForm.modelId = newVal.modelId || '';
 
-  characterForm.assistantName = newVal.settings?.assistantName || '';
-  characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
-  characterForm.systemPrompt = newVal.settings?.systemPrompt || '';
-  characterForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
+  agentForm.assistantName = newVal.settings?.assistantName || '';
+  agentForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
+  agentForm.systemPrompt = newVal.settings?.systemPrompt || '';
+  agentForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
 
   // 从 memory 分组加载压缩档位（旧自由比例/摘要模式读时映射：disabled→off，其余→默认档）
   const memoryConfig = newVal.settings?.memory || {};
-  characterForm.compressionTier = memoryConfig.compressionTier
+  agentForm.compressionTier = memoryConfig.compressionTier
     ?? (memoryConfig.summaryMode === 'disabled' ? 'off' : undefined)
     ?? DEFAULT_COMPRESSION_TIER;
-  // 加载角色插件设置（新格式：工具包粒度，仅消费 __strategy/__default/toolkits_*）
+  // 加载智能体插件设置（新格式：工具包粒度，仅消费 __strategy/__default/toolkits_*）
   // 旧版插件级开关条目（{ pluginId: { enabled } } / 裸布尔）直接忽略
   parsedPluginConfig.value = parsePluginConfig(newVal.settings?.plugins);
   allDisabled.value = parsedPluginConfig.value.allDisabled;
@@ -789,7 +789,7 @@ watch(() => props.data, (newVal, oldVal) => {
   // 全部禁用标记：白名单过滤但允许列表为空（拒绝全部 MCP 能力包）
   allMcpDisabled.value = mcpGate.allDisabled;
 
-  // 加载角色技能偏好
+  // 加载智能体技能偏好
   // 全部禁用：skill 插件的能力包被整体拒绝（allow 过滤 + 空允许列表）
   allSkillsDisabled.value = parseAllSkillsDisabled(newVal.settings?.plugins);
   // 白名单模式：从 skills.__default 读取
@@ -797,13 +797,13 @@ watch(() => props.data, (newVal, oldVal) => {
   skillsAllowlistMode.value = skillsConfig?.__default === false;
   // 单项偏好：从 skills 读取（过滤 __default 系统字段）
   if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
-    characterForm.enabledSkills = {};
+    agentForm.enabledSkills = {};
     for (const [skillId, val] of Object.entries(skillsConfig)) {
       if (skillId === '__default') continue;
-      characterForm.enabledSkills[skillId] = val;
+      agentForm.enabledSkills[skillId] = val;
     }
   } else {
-    characterForm.enabledSkills = {};
+    agentForm.enabledSkills = {};
   }
 
   // 加载子代理偏好（固定白名单语义：仅显式允许 subagent 能力包时启用）
@@ -827,7 +827,7 @@ watch(() => props.data, (newVal, oldVal) => {
 }, { immediate: true })
 
 const handleAvatarChanged = (file) => {
-  characterForm.avatarFile = file
+  agentForm.avatarFile = file
 }
 
 // MCP 服务器开关切换处理（根据当前模式决定存到拒绝列表或允许列表）
@@ -853,8 +853,8 @@ const handleMcpServerToggle = (serverId, enabled) => {
 
 // ── Skills 切换 ──
 const handleSkillToggle = (skillId, enabled) => {
-  characterForm.enabledSkills[skillId] = enabled;
-  characterForm.enabledSkills = { ...characterForm.enabledSkills };
+  agentForm.enabledSkills[skillId] = enabled;
+  agentForm.enabledSkills = { ...agentForm.enabledSkills };
 };
 
 // ── 子代理 ──
@@ -867,15 +867,15 @@ const handleAgentToggle = (charId, enabled) => {
 const handleAllAgentsDisabledToggle = async (val) => {
   allAgentsDisabled.value = val;
 };
-const loadPresetCharacters = async () => {
+const loadPresetAgents = async () => {
   loadingAgents.value = true;
   try {
-    const response = await apiService.fetchCharacters();
+    const response = await apiService.fetchAgents();
     const allChars = response.items || [];
-    // 排除当前正在编辑的角色，并在列表开头插入虚拟通用子代理
-    presetCharacters.value = [
+    // 排除当前正在编辑的智能体，并在列表开头插入虚拟通用子代理
+    presetAgents.value = [
       GENERIC_AGENT.value,
-      ...allChars.filter(c => c.id !== characterForm.id),
+      ...allChars.filter(c => c.id !== agentForm.id),
     ];
   } catch (err) {
     console.error('加载子代理失败:', err);
@@ -892,7 +892,7 @@ async function loadAllData() {
       apiService.fetchModels(),
       apiService.getMcpServers(),
       apiService.fetchSkills(),
-      apiService.fetchCharacters(),
+      apiService.fetchAgents(),
       loadLocalTools(),
     ])
 
@@ -914,53 +914,53 @@ async function loadAllData() {
       : []
     if (skillsAllowlistMode.value) {
       for (const skill of skillsList.value) {
-        if (!(skill.id in characterForm.enabledSkills)) {
-          characterForm.enabledSkills[skill.id] = false
+        if (!(skill.id in agentForm.enabledSkills)) {
+          agentForm.enabledSkills[skill.id] = false
         }
       }
     }
 
-    // 子代理列表（排除当前角色 + 通用虚拟子代理）
+    // 子代理列表（排除当前智能体 + 通用虚拟子代理）
     const allChars = charsResp.items || []
-    presetCharacters.value = [
+    presetAgents.value = [
       GENERIC_AGENT.value,
-      ...allChars.filter((c: any) => c.id !== characterForm.id),
+      ...allChars.filter((c: any) => c.id !== agentForm.id),
     ]
 
     // 所有数据就绪后记录初始快照
     _initialFormData.value = getFormData()
   } catch (err) {
-    console.error('加载角色设置数据失败', err)
+    console.error('加载智能体设置数据失败', err)
   } finally {
     pageLoading.value = false
   }
 }
 
-// 角色切换时刷新子代理列表
-watch(() => characterForm.id, () => {
-  if (characterForm.id) {
-    loadPresetCharacters();
+// 智能体切换时刷新子代理列表
+watch(() => agentForm.id, () => {
+  if (agentForm.id) {
+    loadPresetAgents();
   }
 })
 
 // 模式切换时同步初始状态
 const handleMcpModeChange = (mode) => {
-  if (mode === 'custom' && characterForm.enabledMcpServers.length === 0) {
+  if (mode === 'custom' && agentForm.enabledMcpServers.length === 0) {
     // 默认全选当前可用服务器
-    characterForm.enabledMcpServers = mcpServers.value
+    agentForm.enabledMcpServers = mcpServers.value
       .filter(s => s.enabled)
       .map(s => s.id);
   }
 };
 
 const handleSkillsModeChange = (mode) => {
-  if (mode === 'custom' && Object.keys(characterForm.enabledSkills).length === 0) {
+  if (mode === 'custom' && Object.keys(agentForm.enabledSkills).length === 0) {
     // 默认全选当前可用技能
     const initial = {};
     skillsList.value
       .filter(s => s.enabled !== false)
       .forEach(s => { initial[s.id] = true; });
-    characterForm.enabledSkills = initial;
+    agentForm.enabledSkills = initial;
   }
 };
 
@@ -983,7 +983,7 @@ const handleAllSkillsDisabledToggle = async (val) => {
 function buildKitEntries() {
   const denyByPlugin: Record<string, string[]> = {};
   const allowByPlugin: Record<string, string[]> = {};
-  for (const [key, enabled] of Object.entries(characterToolSettings.value)) {
+  for (const [key, enabled] of Object.entries(agentToolSettings.value)) {
     const idx = key.indexOf('::');
     if (idx === -1) continue;
     const pluginId = key.slice(0, idx);
@@ -1001,7 +1001,7 @@ function buildKitEntries() {
 
 // 根据查询结果初始化各能力包开关的显示状态（保留已有偏好）
 //
-// 默认来源是**已保存的角色配置**（parsedPluginConfig），而不是查询返回的 tk.enabled：
+// 默认来源是**已保存的智能体配置**（parsedPluginConfig），而不是查询返回的 tk.enabled：
 // 后者的 query 载荷是由当前 UI 状态构造的，拿它当默认值会形成循环依赖，
 // 导致首屏永远显示"全开"、已保存的关闭项被忽略。
 // 同时把当前列表里渲染不到的已保存条目收进 unrenderedRefs，供保存时原样透传。
@@ -1018,7 +1018,7 @@ function initKitSettings(stored: Record<string, boolean> = {}) {
         : effectiveKitEnabled(parsedPluginConfig.value, p.pluginId, tk.id);
     }
   }
-  characterToolSettings.value = next;
+  agentToolSettings.value = next;
   unrenderedRefs.value = splitUnrendered(
     parsedPluginConfig.value,
     renderableKitsByPlugin,
@@ -1028,7 +1028,7 @@ function initKitSettings(stored: Record<string, boolean> = {}) {
 // 加载本地工具列表
 async function loadLocalTools() {
   try {
-    const stored = { ...characterToolSettings.value };
+    const stored = { ...agentToolSettings.value };
     // 根据当前 UI 状态动态构建查询配置（工具包粒度预览）
     if (!allDisabled.value) {
       const queryConfig: any = {
@@ -1047,7 +1047,7 @@ async function loadLocalTools() {
 
       const plugins = response.plugins || [];
       // 本地工具列表：后端已过滤 system 插件；此处只保留全局启用的插件
-      // （全局关闭的插件其工具包对角色层不可见，二级过滤）
+      // （全局关闭的插件其工具包对智能体层不可见，二级过滤）
       localTools.value = plugins.filter(p => p.enabled);
       initKitSettings(stored);
     } else {
@@ -1063,7 +1063,7 @@ async function loadLocalTools() {
     }
   } catch (error) {
     console.error('加载本地工具失败:', error);
-    toast.error(t('characters.setting.loadLocalToolsFailed'));
+    toast.error(t('agents.setting.loadLocalToolsFailed'));
   }
 }
 
@@ -1079,7 +1079,7 @@ const loadModels = async () => {
 
   } catch (error) {
     console.error('获取模型列表失败:', error)
-    notify.error(t('characters.setting.loadModelsFailed'), error)
+    notify.error(t('agents.setting.loadModelsFailed'), error)
   }
 }
 
@@ -1123,14 +1123,14 @@ const findModelById = (modelId) => {
 // localTools 加载完成后，自定义模式下初始化能力包开关
 watch(localTools, (tools) => {
   if (!allDisabled.value && tools.length > 0) {
-    initKitSettings({ ...characterToolSettings.value });
+    initKitSettings({ ...agentToolSettings.value });
   }
 });
 
 // 监听白名单模式切换 → 按新模式重算未显式设置过的能力包默认值
 watch(allowlistMode, () => {
   if (allDisabled.value || localTools.value.length === 0) return;
-  initKitSettings({ ...characterToolSettings.value });
+  initKitSettings({ ...agentToolSettings.value });
 });
 
 // 生命周期
@@ -1140,8 +1140,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   // window.removeEventListener('resize', updateDrawerWidth)
-  if (characterForm.avatarUrl && characterForm.avatarUrl.startsWith('blob:')) {
-    URL.revokeObjectURL(characterForm.avatarUrl);
+  if (agentForm.avatarUrl && agentForm.avatarUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(agentForm.avatarUrl);
   }
 })
 
@@ -1156,24 +1156,24 @@ const handleSave = async () => {
 // 获取表单数据
 const getFormData = () => {
   let finalData = {
-    'name': characterForm.name,
-    'description': characterForm.description,
-    'avatarUrl': characterForm.avatarUrl,
-    'avatarFile': characterForm.avatarFile,
-    'identity': characterForm.identity,
-    'modelId': characterForm.modelId === '' ? null : characterForm.modelId,
+    'name': agentForm.name,
+    'description': agentForm.description,
+    'avatarUrl': agentForm.avatarUrl,
+    'avatarFile': agentForm.avatarFile,
+    'identity': agentForm.identity,
+    'modelId': agentForm.modelId === '' ? null : agentForm.modelId,
     'settings': {
-      'assistantName': characterForm.assistantName,
-      'assistantIdentity': characterForm.assistantIdentity,
-      'systemPrompt': characterForm.systemPrompt,
-      'memoryType': characterForm.memoryType,
+      'assistantName': agentForm.assistantName,
+      'assistantIdentity': agentForm.assistantIdentity,
+      'systemPrompt': agentForm.systemPrompt,
+      'memoryType': agentForm.memoryType,
       // 记忆与压缩配置分组（档位）
       'memory': {
-        'compressionTier': characterForm.compressionTier,
+        'compressionTier': agentForm.compressionTier,
       },
       // 插件配置（工具包/能力包粒度）
-      // 组装抽到纯函数（utils/characterPluginConfig）里：往返等价性必须可单测，
-      // 一次保存丢条目就等于角色层门控静默变化
+      // 组装抽到纯函数（utils/agentPluginConfig）里：往返等价性必须可单测，
+      // 一次保存丢条目就等于智能体层门控静默变化
       'plugins': buildPluginConfig({
         allDisabled: allDisabled.value,
         allowlistMode: allowlistMode.value,
@@ -1183,7 +1183,7 @@ const getFormData = () => {
             for (const tk of p.toolkits || []) {
               (byPlugin[p.pluginId] ||= []).push({
                 kitId: tk.id,
-                enabled: !!characterToolSettings.value[kitKey(p.pluginId, tk.id)],
+                enabled: !!agentToolSettings.value[kitKey(p.pluginId, tk.id)],
               });
             }
           }
@@ -1221,7 +1221,7 @@ const getFormData = () => {
       // 子代理配置（固定白名单：仅存显式 true）
       'agents': (() => {
         const agentsOut: Record<string, any> = {};
-        for (const char of presetCharacters.value) {
+        for (const char of presetAgents.value) {
           if (getAgentEffectiveEnabled(char)) {
             agentsOut[char.id] = true;
           }
@@ -1261,7 +1261,7 @@ const validate = async () => {
 
 // 清除头像文件（上传成功后由父组件调用）
 const clearAvatarFile = () => {
-  characterForm.avatarFile = null;
+  agentForm.avatarFile = null;
 }
 
 // 检测表单是否有未保存的变更

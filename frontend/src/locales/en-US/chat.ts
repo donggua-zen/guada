@@ -168,12 +168,12 @@
   // ── 欢迎页 ──
   welcome: {
     use: 'Use',
-    selectCharacter: 'Select Character',
+    selectAgent: 'Select Agent',
     startNewSession: 'Start New Session',
     greeting: 'Hi, what would you like to chat about?',
     pageTitle: 'What would you like to chat about today',
     newSession: 'New Chat',
-    createFailedNoCharacter: 'Please select a character template first',
+    createFailedNoAgent: 'Please select a agent template first',
   },
 
   // ── 消息项 ──
@@ -420,7 +420,7 @@
     loadSummaryFailed: 'Failed to load summary',
     streamingWarning: 'The current session is streaming, please wait until it finishes before compressing',
     compressConfirmTitle: 'Confirm Compression',
-    compressConfirmDesc: 'Are you sure you want to compress the current session\'s history? This action will automatically perform compression based on the session and character configuration.',
+    compressConfirmDesc: 'Are you sure you want to compress the current session\'s history? This action will automatically perform compression based on the session and agent configuration.',
     compressNotExecuted: 'Compression not executed',
     compressFailed: 'Compression failed',
   },

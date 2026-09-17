@@ -33,7 +33,7 @@ export class DocumentPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    // ── document 能力包：文档解析工具与说明统一挂载，角色层按包启停 ──
+    // ── document 能力包：文档解析工具与说明统一挂载，智能体层按包启停 ──
     const docKit = api.registerToolKit({
       id: "document",
       name: "%document.name%",

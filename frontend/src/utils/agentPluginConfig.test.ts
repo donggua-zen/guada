@@ -8,15 +8,15 @@ import {
   parsePluginConfig,
   splitUnrendered,
   type BuildPluginConfigInput,
-} from "./characterPluginConfig";
+} from "./agentPluginConfig";
 
 /**
  * 往返等价是这批逻辑的核心契约：
  * 面板打开一次再保存，`settings.plugins` 必须与保存前逐键等价——
- * 否则角色层的 MCP / Skills / 子代理门控会在用户没有察觉的情况下改变。
+ * 否则智能体层的 MCP / Skills / 子代理门控会在用户没有察觉的情况下改变。
  */
 
-/** 构造一份"已保存的"角色配置 */
+/** 构造一份"已保存的"智能体配置 */
 const SAVED = {
   __strategy: "custom",
   file: { toolkits_deny: ["file"] },
@@ -64,7 +64,7 @@ function buildFrom(saved: unknown, overrides: Partial<BuildPluginConfigInput> = 
   });
 }
 
-describe("角色插件配置往返", () => {
+describe("智能体插件配置往返", () => {
   it("面板打开一次再保存 → 逐键等价（含失效引用与已删除插件）", () => {
     expect(buildFrom(SAVED)).toEqual(SAVED);
   });

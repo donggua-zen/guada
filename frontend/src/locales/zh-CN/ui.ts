@@ -111,7 +111,7 @@ export default {
   // ── 侧边栏 ──
   sidebar: {
     navNewTask: '新建任务',
-    navCharacters: '助手',
+    navAgents: '智能体',
     navBots: '机器人',
     navKnowledgeBase: '知识库',
     navPlugins: '插件市场',

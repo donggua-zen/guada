@@ -167,7 +167,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   } | null> {
     const skill = this.registry.get(name.toLowerCase());
     if (!skill) return null;
-    // 对齐工具：插件关闭（当前会话岗位/角色配置下未启用）→ 该插件技能等同于不存在
+    // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）→ 该插件技能等同于不存在
     if (!this.isPluginSkillVisible(skill)) return null;
     const content = await this.loader.loadInstructions(skill);
     // 插件注册式技能无 SKILL.md 文件：path 指向资源基目录（供定位 scripts/ 等资源）

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext } from "../plugins/types/plugin.types";
-import { CharacterFileStore } from "../characters/character-file.store";
+import { AgentFileStore } from "../agents/agent-file.store";
 import { WorkflowEngineService, WORKFLOW_RESULT_MAX_CHARS } from "./workflow-engine.service";
 import type { WorkflowMeta } from "./workflow.types";
 import langZh from "./workflow.lang.zh.json";
@@ -24,7 +24,7 @@ export class WorkflowPlugin extends PluginBase {
 
   constructor(
     private workflowEngine: WorkflowEngineService,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
   ) {
     super();
   }
@@ -163,7 +163,7 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
       },
     });
 
-    // ── Prompt: workflow 使用指南 + 可用角色列表 ──
+    // ── Prompt: workflow 使用指南 + 可用智能体列表 ──
     kit.registerPrompt({
       frequency: "REGULAR",
       description: "Workflow orchestration usage guide and available agents list",
@@ -176,10 +176,10 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
           description:
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
-        const items = (await this.characterStore.listCharacters()).slice(0, 200);
-        const currentCharacterId = context?.session?.characterId;
-        const dbCandidates = currentCharacterId
-          ? items.filter((c: any) => c.id !== currentCharacterId)
+        const items = (await this.agentStore.listAgents()).slice(0, 200);
+        const currentAgentId = context?.session?.agentId;
+        const dbCandidates = currentAgentId
+          ? items.filter((c: any) => c.id !== currentAgentId)
           : items;
         const charAgentCfg = context?.session.getSettings?.("agents");
         let agents: any[];

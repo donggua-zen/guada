@@ -168,12 +168,12 @@ export default {
   // ── 欢迎页 ──
   welcome: {
     use: '使用',
-    selectCharacter: '选择角色',
+    selectAgent: '选择智能体',
     startNewSession: '开始新会话',
     greeting: 'Hi，想聊些什么？',
     pageTitle: '你今天想聊些什么',
     newSession: '新建对话',
-    createFailedNoCharacter: '请先选择一个角色模板',
+    createFailedNoAgent: '请先选择一个智能体模板',
   },
 
   // ── 消息项 ──
@@ -420,7 +420,7 @@ export default {
     loadSummaryFailed: '加载摘要失败',
     streamingWarning: '当前会话正在流式输出，请等待结束后再压缩',
     compressConfirmTitle: '确认压缩',
-    compressConfirmDesc: '确定要压缩当前会话的历史记录吗？此操作将根据会话和角色的配置自动执行压缩。',
+    compressConfirmDesc: '确定要压缩当前会话的历史记录吗？此操作将根据会话和智能体的配置自动执行压缩。',
     compressNotExecuted: '压缩未执行',
     compressFailed: '压缩失败',
   },
@@ -430,7 +430,7 @@ export default {
     smartAssistant: '智能助手',
     defaultDescription: '一个友好、专业的 AI 助手，可以帮你解答各种问题。',
     noDescription: '暂无描述',
-    noOtherRoles: '暂无其他角色',
+    noOtherRoles: '暂无其他智能体',
   },
 
   // ── 队列 ──

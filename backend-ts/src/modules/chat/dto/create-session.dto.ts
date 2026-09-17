@@ -11,7 +11,7 @@ import { SessionSettingsDto } from "./session-settings.dto";
 export class CreateSessionDto {
   @IsOptional()
   @IsString()
-  characterId?: string;
+  agentId?: string;
 
   @IsOptional()
   @IsString()

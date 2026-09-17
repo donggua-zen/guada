@@ -84,9 +84,9 @@ export default {
     targetSessionLabel: '目标会话',
     targetSessionPlaceholder: '输入会话 ID',
     targetSessionRequired: '请选择目标会话',
-    characterLabel: '助手',
-    characterPlaceholder: '请选择助手',
-    characterRequired: '请选择助手',
+    agentLabel: '智能体',
+    agentPlaceholder: '请选择智能体',
+    agentRequired: '请选择智能体',
     modelLabel: '模型',
     modelPlaceholder: '可选，指定模型',
     // 高级配置

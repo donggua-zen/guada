@@ -343,7 +343,7 @@ const props = defineProps({
   buttons: { type: Object as PropType<Record<string, boolean>>, default: () => ({}) },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
-  characterId: { type: String, default: null },
+  agentId: { type: String, default: null },
   // 模式：create 为创建会话模式，chat 为对话模式
   mode: { type: String, default: 'chat' },
   backdrop: { type: Boolean, default: false },
@@ -1390,7 +1390,7 @@ const selectCommand = (item: any) => {
 // ==================== 命令数据加载（按需 + 缓存） ====================
 const loadCommands = async (trigger: 'slash' | 'mention') => {
   try {
-    const res = await apiService.fetchCommands(trigger, props.characterId || undefined);
+    const res = await apiService.fetchCommands(trigger, props.agentId || undefined);
     commandsCache[trigger] = res.items || [];
   } catch (error) {
     console.error('获取命令列表失败:', error);

@@ -108,7 +108,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
             maxRetries: bot.maxRetries,
             retryInterval: bot.retryInterval,
           },
-          defaultCharacterId: bot.defaultCharacterId,  // 必填字段
+          defaultAgentId: bot.defaultAgentId,  // 必填字段
           defaultModelId: bot.defaultModelId || undefined,
           defaultThinkingEffort: bot.defaultThinkingEffort,
           knowledgeBaseIds,
@@ -393,7 +393,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         maxRetries: botData.maxRetries,
         retryInterval: botData.retryInterval,
       },
-      defaultCharacterId: botData.defaultCharacterId || undefined,
+      defaultAgentId: botData.defaultAgentId || undefined,
       defaultModelId: botData.defaultModelId || undefined,
       defaultThinkingEffort: botData.defaultThinkingEffort,
       knowledgeBaseIds,

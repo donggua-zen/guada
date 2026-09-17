@@ -215,15 +215,15 @@ export class BotOrchestrator {
     const nativeId = isGroupChat ? message.conversationId : message.senderId;
     const externalId = buildExternalId(platform, type, nativeId);
 
-    if (!config.defaultCharacterId) {
-      throw new Error(`Bot config or defaultCharacterId not found: ${botId}`);
+    if (!config.defaultAgentId) {
+      throw new Error(`Bot config or defaultAgentId not found: ${botId}`);
     }
 
     const session = await this.sessionMapper.getOrCreateBotSession(
       botId,
       externalId,
       platform,
-      config.defaultCharacterId,
+      config.defaultAgentId,
       config.defaultModelId,
       config.defaultThinkingEffort,
     );

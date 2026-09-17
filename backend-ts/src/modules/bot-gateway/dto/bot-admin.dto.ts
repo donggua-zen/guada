@@ -37,7 +37,7 @@ export class CreateBotDto {
 
   @IsString()
   @IsNotEmpty()
-  defaultCharacterId: string;
+  defaultAgentId: string;
 
   @IsOptional()
   @IsString()
@@ -79,7 +79,7 @@ export class UpdateBotDto {
 
   @IsOptional()
   @IsString()
-  defaultCharacterId?: string;
+  defaultAgentId?: string;
 
   @IsOptional()
   @IsString()

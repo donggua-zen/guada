@@ -9,17 +9,17 @@ import { UrlService } from "../../common/services/url.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
-import { CharacterFileStore } from "./character-file.store";
-import { parseAgentMarkdown } from "./character-file.mapper";
+import { AgentFileStore } from "./agent-file.store";
+import { parseAgentMarkdown } from "./agent-file.mapper";
 
 /**
- * 角色/智能体服务（文件权威）
+ * 智能体/智能体服务（文件权威）
  *
  * 定义存于 `<AGENTS_DATA_DIR>/<id>/AGENT.md`，头像存于同目录内，
  * 删除时整目录进回收站，因此不存在孤儿头像。
  */
 @Injectable()
-export class CharacterService {
+export class AgentService {
   private readonly ALLOWED_MIME_TYPES = [
     "image/jpeg",
     "image/png",
@@ -28,21 +28,21 @@ export class CharacterService {
   ];
 
   constructor(
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     private urlService: UrlService,
     private settingsStorage: SettingsStorage,
     private modelStore: ProviderFileStore,
   ) {}
 
-  // --- Character Management ---
+  // --- Agent Management ---
 
-  async getCharacters(
+  async getAgents(
     skip: number = 0,
     limit: number = 20,
   ): Promise<PaginatedResponse<any>> {
-    const allCharacters = await this.characterStore.listCharacters();
-    const items = allCharacters.slice(skip, skip + limit);
-    const total = allCharacters.length;
+    const allAgents = await this.agentStore.listAgents();
+    const items = allAgents.slice(skip, skip + limit);
+    const total = allAgents.length;
     return createPaginatedResponse(
       items.map((item) => this.withAbsoluteAvatar(item)),
       total,
@@ -50,32 +50,32 @@ export class CharacterService {
     );
   }
 
-  async getCharacterById(characterId: string) {
-    const character = await this.characterStore.findById(characterId);
-    if (!character) {
-      throw new Error("Character not found");
+  async getAgentById(agentId: string) {
+    const agent = await this.agentStore.findById(agentId);
+    if (!agent) {
+      throw new Error("Agent not found");
     }
-    return this.withAbsoluteAvatar(character);
+    return this.withAbsoluteAvatar(agent);
   }
 
-  async createCharacter(data: any) {
+  async createAgent(data: any) {
     const name = this.readName(data);
     assertResolvableModelRef(this.modelStore, data.modelId, "modelId");
 
-    const character = await this.characterStore.create({
+    const agent = await this.agentStore.create({
       name,
       description: data.description ?? null,
       modelId: data.modelId ?? null,
       settings: data.settings ?? null,
     });
 
-    return this.withAbsoluteAvatar(character);
+    return this.withAbsoluteAvatar(agent);
   }
 
-  async updateCharacter(characterId: string, data: any) {
-    const existing = await this.characterStore.findById(characterId);
+  async updateAgent(agentId: string, data: any) {
+    const existing = await this.agentStore.findById(agentId);
     if (!existing) {
-      throw new Error("Character not found");
+      throw new Error("Agent not found");
     }
     assertResolvableModelRef(this.modelStore, data.modelId, "modelId");
 
@@ -86,30 +86,30 @@ export class CharacterService {
     if (data.modelId !== undefined) patch.modelId = data.modelId;
     if (data.settings !== undefined) patch.settings = data.settings;
 
-    const updated = await this.characterStore.update(characterId, patch);
+    const updated = await this.agentStore.update(agentId, patch);
     if (!updated) {
-      throw new Error("Character not found");
+      throw new Error("Agent not found");
     }
     return this.withAbsoluteAvatar(updated);
   }
 
-  async deleteCharacter(characterId: string) {
-    const character = await this.characterStore.findById(characterId);
-    if (!character) {
-      throw new Error("Character not found");
+  async deleteAgent(agentId: string) {
+    const agent = await this.agentStore.findById(agentId);
+    if (!agent) {
+      throw new Error("Agent not found");
     }
-    return this.characterStore.delete(characterId);
+    return this.agentStore.delete(agentId);
   }
 
   /**
-   * 上传并处理角色头像（写入角色目录内的 `avatar.png`）
+   * 上传并处理智能体头像（写入智能体目录内的 `avatar.png`）
    *
-   * 头像随角色目录存亡：删除角色即随目录进回收站，不产生孤儿文件。
+   * 头像随智能体目录存亡：删除智能体即随目录进回收站，不产生孤儿文件。
    */
-  async uploadAvatar(characterId: string, file: any) {
-    const character = await this.characterStore.findById(characterId);
-    if (!character) {
-      throw new Error("角色不存在");
+  async uploadAvatar(agentId: string, file: any) {
+    const agent = await this.agentStore.findById(agentId);
+    if (!agent) {
+      throw new Error("智能体不存在");
     }
 
     if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
@@ -123,8 +123,8 @@ export class CharacterService {
       .png()
       .toBuffer();
 
-    const storagePath = await this.characterStore.saveAvatar(
-      characterId,
+    const storagePath = await this.agentStore.saveAvatar(
+      agentId,
       buffer,
       "png",
     );
@@ -136,14 +136,14 @@ export class CharacterService {
   }
 
   /**
-   * 从 .md 文件导入角色
+   * 从 .md 文件导入智能体
    * 文件格式: YAML frontmatter (name, description, settings) + Markdown body (systemPrompt)
    */
-  async importCharacters(files: { content: string; filename: string }[]) {
+  async importAgents(files: { content: string; filename: string }[]) {
     const results: {
       filename: string;
       status: "ok" | "invalid";
-      characterId?: string;
+      agentId?: string;
       error?: string;
     }[] = [];
 
@@ -160,7 +160,7 @@ export class CharacterService {
           continue;
         }
 
-        const character = await this.characterStore.create({
+        const agent = await this.agentStore.create({
           name: parsed.name,
           description: parsed.description ?? null,
           modelId: parsed.model ?? null,
@@ -170,7 +170,7 @@ export class CharacterService {
         results.push({
           filename: file.filename,
           status: "ok",
-          characterId: character.id,
+          agentId: agent.id,
         });
       } catch (error: any) {
         results.push({
@@ -189,16 +189,16 @@ export class CharacterService {
   private readName(data: any): string {
     const name = data?.name ?? data?.title;
     if (typeof name !== "string" || !name.trim()) {
-      throw new Error("角色名称不能为空");
+      throw new Error("智能体名称不能为空");
     }
     return name.trim();
   }
 
-  private withAbsoluteAvatar(character: any) {
+  private withAbsoluteAvatar(agent: any) {
     return {
-      ...character,
-      avatarUrl: character.avatarUrl
-        ? this.urlService.toResourceAbsoluteUrl(character.avatarUrl)
+      ...agent,
+      avatarUrl: agent.avatarUrl
+        ? this.urlService.toResourceAbsoluteUrl(agent.avatarUrl)
         : null,
     };
   }

@@ -1,8 +1,8 @@
 /**
- * 角色配置 `settings.plugins` 的解析与构建（纯函数）。
+ * 智能体配置 `settings.plugins` 的解析与构建（纯函数）。
  *
  * 单独成模块的原因有二：
- * 1. 组件内逻辑无法单测，而这段逻辑的**往返等价性**是 MCP / Skills / 子代理角色门控
+ * 1. 组件内逻辑无法单测，而这段逻辑的**往返等价性**是 MCP / Skills / 子代理智能体门控
  *    能否可靠工作的前提——保存一次丢条目就等于门控静默变化；
  * 2. 它必须镜像后端 `applyRoleLayer` 的条目语义，集中在一处才好对照。
  *
@@ -13,7 +13,7 @@
 /** 由各自管理页写入条目、不走通用工具包网格的插件 */
 export const DEDICATED_PLUGIN_IDS = ['mcp', 'skill', 'sub_agent'] as const
 
-/** 单个插件的角色层条目（规范化形态） */
+/** 单个插件的智能体层条目（规范化形态） */
 export interface RoleToolkitEntry {
   filter: 'deny' | 'allow'
   deny: string[]

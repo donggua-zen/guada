@@ -15,7 +15,7 @@ import * as yaml from "js-yaml";
  *   ---
  *   <systemPrompt 正文>
  *
- * 约定（详见 docs/design/character-file-format.md）：
+ * 约定（详见 docs/design/agent-file-format.md）：
  * - 目录名 = id，frontmatter 不再写 id；改 name 不改目录名，引用稳定
  * - 正文即 systemPrompt，读入时回填到 settings.systemPrompt，消费方零改动
  * - 其余内部设置原样落 `settings:`，mapper 只做"减法"（挑出 systemPrompt），零语义损失

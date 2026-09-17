@@ -106,7 +106,7 @@ export class TodoPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    // ── todo 能力包：工具 + 待办状态提示词统一挂载，角色层按包启停 ──
+    // ── todo 能力包：工具 + 待办状态提示词统一挂载，智能体层按包启停 ──
     const todoKit = api.registerToolKit({
       id: "todo",
       name: "%todo.name%",

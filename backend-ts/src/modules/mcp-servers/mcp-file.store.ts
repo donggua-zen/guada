@@ -21,7 +21,7 @@ import {
  * 工具列表抓取结果存同目录 `<id>.tools.json`（派生缓存，删掉可重抓）。
  *
  * - 文件名（去扩展名）即 id（cuid，与原 DB 主键一致）→ 引用零改写：
- *   角色设置里的 `toolkits_deny`/`toolkits_allow` 存的是 `mcp_<id>`，改 id 会静默失效
+ *   智能体设置里的 `toolkits_deny`/`toolkits_allow` 存的是 `mcp_<id>`，改 id 会静默失效
  * - 配置与工具缓存分开的理由：tools 是几十个工具 × inputSchema 的冗长 JSON，
  *   内联会让 YAML 膨胀几百行、把配置淹没（同 AGENT.md + avatar、file.json + chunks.jsonl）
  * - 内存缓存是盘的只读视图，**不做实时监听**：外部手改文件重启后生效。

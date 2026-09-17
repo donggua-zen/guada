@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { BotAdminService } from '../services/bot-admin.service';
-import { CharacterFileStore } from '../../characters/character-file.store';
+import { AgentFileStore } from '../../agents/agent-file.store';
 import { SessionFileStore } from '../../chat/session-file.store';
 import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from '../services/bot-instance-manager.service';
@@ -14,7 +14,7 @@ describe('CreateBotDto validation', () => {
     dto.platform = 'qq';
     dto.name = 'Test Bot';
     dto.platformConfig = { appId: '123', appSecret: 'secret' };
-    dto.defaultCharacterId = 'char-1';
+    dto.defaultAgentId = 'char-1';
 
     expect(dto.platform).toBe('qq');
     expect(dto.name).toBe('Test Bot');
@@ -52,7 +52,7 @@ describe('BotAdminService.createInstance platform validation', () => {
         BotAdminService,
         { provide: BotInstanceManager, useValue: instanceManager },
         { provide: ProviderFileStore, useValue: { findModel: () => undefined } },
-        { provide: CharacterFileStore, useValue: { findById: jest.fn().mockResolvedValue(null) } },
+        { provide: AgentFileStore, useValue: { findById: jest.fn().mockResolvedValue(null) } },
         { provide: SessionFileStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
         { provide: BotFileStore, useValue: botStore },
       ],
@@ -66,7 +66,7 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.platform = undefined as any;
     dto.name = 'Test';
     dto.platformConfig = {};
-    dto.defaultCharacterId = 'char-1';
+    dto.defaultAgentId = 'char-1';
 
     await expect(
       service.createInstance(dto),
@@ -78,7 +78,7 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.platform = 'nonexistent';
     dto.name = 'Test';
     dto.platformConfig = {};
-    dto.defaultCharacterId = 'char-1';
+    dto.defaultAgentId = 'char-1';
 
     await expect(
       service.createInstance(dto),
@@ -90,7 +90,7 @@ describe('BotAdminService.createInstance platform validation', () => {
     dto.platform = 'qq';
     dto.name = 'Test Bot';
     dto.platformConfig = { appId: '123', appSecret: 'secret' };
-    dto.defaultCharacterId = 'char-1';
+    dto.defaultAgentId = 'char-1';
 
     const result = await service.createInstance(dto);
     expect(result).toBeDefined();

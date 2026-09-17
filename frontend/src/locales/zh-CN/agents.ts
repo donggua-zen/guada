@@ -1,42 +1,42 @@
 export default {
-  // ── 页面 (CharactersPage.vue) ──
+  // ── 页面 (AgentsPage.vue) ──
   page: {
-    title: '助手',
-    // 角色操作
-    deleteCharacterTitle: '确认删除',
-    deleteCharacterConfirm: '确定要删除助手「{name}」吗？此操作不可撤销。',
-    characterDeleteSuccess: '助手删除成功',
+    title: '智能体',
+    // 智能体操作
+    deleteAgentTitle: '确认删除',
+    deleteAgentConfirm: '确定要删除智能体「{name}」吗？此操作不可撤销。',
+    agentDeleteSuccess: '智能体删除成功',
     deleteFailed: '删除失败',
-    loadFailed: '获取助手列表失败',
+    loadFailed: '获取智能体列表失败',
   },
 
-  // ── 列表标签页 (CharacterListTab.vue) ──
+  // ── 列表标签页 (AgentListTab.vue) ──
   list: {
-    create: '新建助手',
+    create: '新建智能体',
     import: '导入',
     docs: '使用说明',
     noDescription: '暂无描述',
-    useCharacter: '使用此角色',
-    characterSettings: '角色设置',
-    empty: '暂无助手',
-    emptyHint: '点击上方按钮创建第一个助手',
-    importSuccess: '成功导入 {count} 个助手',
+    useAgent: '使用此智能体',
+    agentSettings: '智能体设置',
+    empty: '暂无智能体',
+    emptyHint: '点击上方按钮创建第一个智能体',
+    importSuccess: '成功导入 {count} 个智能体',
     importPartial: '{count} 个文件导入失败',
     importFailed: '导入失败',
   },
 
-  // ── 角色弹窗 (CharacterModal.vue) ──
+  // ── 智能体弹窗 (AgentModal.vue) ──
   modal: {
-    editTitle: '编辑角色',
-    createTitle: '新建角色',
+    editTitle: '编辑智能体',
+    createTitle: '新建智能体',
     applyAll: '应用全部设置',
-    saveSuccess: '角色更新成功',
-    saveFailed: '角色保存失败',
+    saveSuccess: '智能体更新成功',
+    saveFailed: '智能体保存失败',
   },
 
-  // ── 角色设置面板 (CharacterSettingPanel.vue) ──
+  // ── 智能体设置面板 (AgentSettingPanel.vue) ──
   setting: {
-    loading: '正在加载角色设置...',
+    loading: '正在加载智能体设置...',
     // 侧边栏
     groupBasic: '基础配置',
     groupTools: '工具与能力',
@@ -47,23 +47,23 @@ export default {
     navSkills: 'Skills',
     navSubAgents: '子代理',
     // 基础设置
-    avatarTitle: '角色头像',
+    avatarTitle: '智能体头像',
     avatarOptional: '(可选)',
     avatarHint: '点击头像可以更换新的头像，支持上传图片文件',
-    titleLabel: '角色名称',
-    titleHint: '助手的显示名称，在对话列表中展示。修改名称不会改变助手的存储目录（id）',
-    titlePlaceholder: '请输入角色名称',
-    titleRequired: '请输入角色名称',
+    titleLabel: '智能体名称',
+    titleHint: '智能体的显示名称，在对话列表中展示。修改名称不会改变智能体的存储目录（id）',
+    titlePlaceholder: '请输入智能体名称',
+    titleRequired: '请输入智能体名称',
     titleLength: '名称长度在2-20个字符之间',
-    idLabel: '助手 ID',
-    idHint: '存储目录名，创建后固定不变；重命名助手不会改变它',
-    descLabel: '角色描述',
+    idLabel: '智能体 ID',
+    idHint: '存储目录名，创建后固定不变；重命名智能体不会改变它',
+    descLabel: '智能体描述',
     descOptional: '(可选)',
-    descHint: '简要描述助手的用途、特点或背景信息',
-    descPlaceholder: '请输入角色描述',
+    descHint: '简要描述智能体的用途、特点或背景信息',
+    descPlaceholder: '请输入智能体描述',
     modelLabel: '模型选择',
     modelOptional: '(可选)',
-    modelHint: '为此助手指定专用的 AI 模型，留空则使用默认模型。修改模型配置不会同步修改已经创建的会话。',
+    modelHint: '为此智能体指定专用的 AI 模型，留空则使用默认模型。修改模型配置不会同步修改已经创建的会话。',
     modelPlaceholder: '请选择模型',
     modelUseDefault: '使用默认模型',
     // 记忆与压缩
@@ -77,7 +77,7 @@ export default {
     tierAggressive: '激进',
     tierAggressiveDesc: '激进 - 90% 触发、保留 20%，摘要前先同步记忆',
     // 提示词
-    systemPromptLabel: '系统系提示(角色设定)',
+    systemPromptLabel: '系统系提示(智能体设定)',
     systemPromptPlaceholder: '请输入详细设定',
     // 本地工具
     toolToggle: '功能开关',
@@ -102,7 +102,7 @@ export default {
     // 子代理
     loadingAgents: '加载中...',
     noAgents: '暂无可用的子代理',
-    noAgentsHint: '请先创建其他助手',
+    noAgentsHint: '请先创建其他智能体',
     // 提示
     tipTitle: '提示',
     tip1: '• 压缩策略：档位同时决定触发时机、保留比例与摘要方式',
@@ -122,6 +122,6 @@ export default {
     memoryless: '无记忆',
     // 通用子代理
     genericAgentTitle: '通用子代理',
-    genericAgentDesc: '适用于通用任务的子代理，无需特定角色设定，权限继承父角色设置',
+    genericAgentDesc: '适用于通用任务的子代理，无需特定智能体设定，权限继承父智能体设置',
   },
 }

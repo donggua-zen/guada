@@ -15,15 +15,15 @@ export class CommandsController {
   /**
    * 获取命令列表（按触发方式聚合所有提供者的 items）
    * GET /commands?trigger=slash
-   * GET /commands?trigger=mention&characterId=xxx
+   * GET /commands?trigger=mention&agentId=xxx
    */
   @Get()
   async listCommands(
     @Query("trigger") trigger?: string,
-    @Query("characterId") characterId?: string,
+    @Query("agentId") agentId?: string,
   ): Promise<{ items: AggregatedItem[]; total: number }> {
     const t = trigger === "mention" ? "mention" : "slash";
-    const ctx: CommandContext = { characterId };
+    const ctx: CommandContext = { agentId };
     const items = await this.registry.getItems(t, ctx);
     return { items, total: items.length };
   }

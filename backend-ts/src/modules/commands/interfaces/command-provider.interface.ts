@@ -1,7 +1,7 @@
 /** 命令请求上下文（由调用方传递，供 provider 做会话级过滤） */
 export interface CommandContext {
   sessionId?: string;
-  characterId?: string | null;
+  agentId?: string | null;
   /** 本次消息中提取到的标记总数（TagParserPipeline 透传，供 parse 判断单/多命令注入策略） */
   commandCount?: number;
 }

@@ -1,16 +1,16 @@
 /**
- * 角色相关类型定义
+ * 智能体相关类型定义
  */
 
 import type { ISODateString } from './common'
 
 /**
- * 角色对象
+ * 智能体对象
  *
  * id 即 `agents/<id>` 目录名，由 name 派生并保持稳定（改 name 不改 id）。
  * 定义权威来源为 `AGENT.md`（YAML frontmatter + Markdown 正文）。
  */
-export interface Character {
+export interface Agent {
     id: string
     name: string
     description?: string | null
@@ -18,15 +18,15 @@ export interface Character {
     modelId?: string | null
     createdAt: ISODateString
     updatedAt: ISODateString
-    settings?: CharacterSettings
+    settings?: AgentSettings
     /** 是否来自随包内置模板 */
     bundled?: boolean
 }
 
 /**
- * 角色设置
+ * 智能体设置
  */
-export interface CharacterSettings {
+export interface AgentSettings {
     systemPrompt?: string
     temperature?: number
     max_tokens?: number
@@ -37,30 +37,30 @@ export interface CharacterSettings {
 }
 
 /**
- * 创建角色请求数据
+ * 创建智能体请求数据
  */
-export interface CreateCharacterRequest {
+export interface CreateAgentRequest {
     name: string
     description?: string
     modelId?: string
-    settings?: Partial<CharacterSettings>
+    settings?: Partial<AgentSettings>
 }
 
 /**
- * 更新角色请求数据
+ * 更新智能体请求数据
  */
-export interface UpdateCharacterRequest {
+export interface UpdateAgentRequest {
     name?: string
     description?: string
     modelId?: string
-    settings?: Partial<CharacterSettings>
+    settings?: Partial<AgentSettings>
 }
 
 /**
- * 角色列表响应
+ * 智能体列表响应
  */
-export interface CharacterListResponse {
-    items: Character[]
+export interface AgentListResponse {
+    items: Agent[]
     total: number
     page: number
     pageSize: number

@@ -24,7 +24,8 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
     avatarUrl: row.avatarUrl ?? null,
     description: row.description ?? null,
     modelId: row.modelId ?? null,
-    characterId: row.characterId ?? null,
+    // 右值是 prisma 字段名（DB 列 character_id，未改名），左键为文件 schema 新名
+    agentId: row.characterId ?? null,
     groupId: row.groupId ?? null,
     settings:
       row.settings && typeof row.settings === "object" ? row.settings : null,
@@ -45,11 +46,11 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
 
 /**
  * heal 骨架判定：meta.json 由 SessionFileStore.healOrphanSessions 自动重建的
- * 最小骨架（title/characterId/groupId 全空）——可安全地用 DB 行全量覆盖修复。
+ * 最小骨架（title/agentId/groupId 全空）——可安全地用 DB 行全量覆盖修复。
  * 用户实际使用过的 meta（任一字段有值）不触碰。
  */
 export function isHealSkeletonMeta(meta: unknown): boolean {
   if (!meta || typeof meta !== "object") return true;
   const m = meta as Record<string, any>;
-  return !m.title && !m.characterId && !m.groupId;
+  return !m.title && !m.agentId && !m.groupId;
 }

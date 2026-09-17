@@ -5,7 +5,7 @@ import { SubAgentManager } from "./sub-agent.manager";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext, RolePluginConfig } from "../plugins/types/plugin.types";
 import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
-import { CharacterFileStore } from "../characters/character-file.store";
+import { AgentFileStore } from "../agents/agent-file.store";
 import langZh from "./sub-agent.lang.zh.json";
 import langEn from "./sub-agent.lang.en.json";
 
@@ -22,7 +22,7 @@ export class SubAgentPlugin extends PluginBase {
 
   constructor(
     private subAgentManager: SubAgentManager,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
   ) {
     super();
   }
@@ -30,7 +30,7 @@ export class SubAgentPlugin extends PluginBase {
   /**
    * 校验 agentId 是否被当前会话的 agents 配置允许
    *
-   * 固定白名单模式：仅允许显式 true 的角色（generic 始终允许）
+   * 固定白名单模式：仅允许显式 true 的智能体（generic 始终允许）
    */
   private isAgentAllowed(agentId: string, ctx?: PluginContext): boolean {
     if (!agentId || agentId === "generic") return true;
@@ -40,7 +40,7 @@ export class SubAgentPlugin extends PluginBase {
     if (charAgentCfg === false) return false;
 
     if (typeof charAgentCfg === "object" && charAgentCfg !== null) {
-      // 固定白名单：仅允许显式 true 的角色
+      // 固定白名单：仅允许显式 true 的智能体
       return charAgentCfg[agentId] === true;
     }
 
@@ -99,7 +99,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         task: z
           .string()
           .describe("Specific task description for the sub-agent to complete"),
-        agentId: z.string().describe("Character ID"),
+        agentId: z.string().describe("Agent ID"),
         mode: z
           .enum(["foreground", "background"])
           .optional()
@@ -117,7 +117,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         // 校验 agentId 是否被允许
         if (args.agentId && !this.isAgentAllowed(args.agentId, ctx)) {
           throw new Error(
-            `Agent "${args.agentId}" is not allowed. Please enable it in the character settings and try again.`,
+            `Agent "${args.agentId}" is not allowed. Please enable it in the agent settings and try again.`,
           );
         }
 
@@ -131,7 +131,7 @@ The sub-agent has its own independent conversation context and tool capabilities
             parentContext: ctx.session,
             name: args.name,
             task: args.task,
-            characterId: args.agentId,
+            agentId: args.agentId,
             lifecycle,
           },
           args.mode || "foreground",
@@ -274,14 +274,14 @@ The sub-agent has its own independent conversation context and tool capabilities
       },
     });
 
-    // ── Prompt: 子代理使用指南 + 可用角色列表 ──
+    // ── Prompt: 子代理使用指南 + 可用智能体列表 ──
     subKit.registerPrompt({
       frequency: "REGULAR",
       description: "Sub-agent usage guide and available agents list",
       content: async (context: PluginContext) => {
         if (context?.session.sessionType === "sub_agent") return "";
 
-        // ── 构建可用角色列表 ──
+        // ── 构建可用智能体列表 ──
         const genericAgent = {
           id: "generic",
           name: "Generic Sub-Agent",
@@ -289,12 +289,12 @@ The sub-agent has its own independent conversation context and tool capabilities
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
 
-        const items = (await this.characterStore.listCharacters()).slice(0, 200);
+        const items = (await this.agentStore.listAgents()).slice(0, 200);
 
-        // 排除当前会话自身的角色
-        const currentCharacterId = context?.session?.characterId;
-        const dbCandidates = currentCharacterId
-          ? items.filter((c: any) => c.id !== currentCharacterId)
+        // 排除当前会话自身的智能体
+        const currentAgentId = context?.session?.agentId;
+        const dbCandidates = currentAgentId
+          ? items.filter((c: any) => c.id !== currentAgentId)
           : items;
 
         const charAgentCfg = context?.session.getSettings?.("agents");
@@ -303,12 +303,12 @@ The sub-agent has its own independent conversation context and tool capabilities
 
         if (charAgentCfg && typeof charAgentCfg === "object") {
           const allCandidates = [genericAgent, ...dbCandidates];
-          // 固定白名单：只保留显式 true 的角色
+          // 固定白名单：只保留显式 true 的智能体
           agents = allCandidates.filter(
             (c: any) => charAgentCfg[c.id] === true,
           );
         } else {
-          // 无配置：不注入任何角色
+          // 无配置：不注入任何智能体
           agents = [];
         }
 

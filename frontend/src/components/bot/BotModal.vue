@@ -25,22 +25,22 @@
         <el-input v-model="formData.name" :placeholder="t('bot.modal.namePlaceholder')" maxlength="50" show-word-limit />
       </el-form-item>
 
-      <!-- 默认角色选择（必填） -->
-      <el-form-item :label="t('bot.modal.characterLabel')" prop="defaultCharacterId">
-        <el-select v-model="formData.defaultCharacterId" :placeholder="t('bot.modal.characterPlaceholder')" style="width: 100%" filterable>
-          <el-option v-for="character in characters" :key="character.id" :label="character.name" :value="character.id">
+      <!-- 默认智能体选择（必填） -->
+      <el-form-item :label="t('bot.modal.agentLabel')" prop="defaultAgentId">
+        <el-select v-model="formData.defaultAgentId" :placeholder="t('bot.modal.agentPlaceholder')" style="width: 100%" filterable>
+          <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
             <div class="flex items-center gap-2">
-              <img v-if="character.avatarUrl" :src="character.avatarUrl" class="w-6 h-6 rounded object-cover" />
-              <span>{{ character.name }}</span>
+              <img v-if="agent.avatarUrl" :src="agent.avatarUrl" class="w-6 h-6 rounded object-cover" />
+              <span>{{ agent.name }}</span>
             </div>
           </el-option>
         </el-select>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
-          {{ t('bot.modal.characterHint') }}
+          {{ t('bot.modal.agentHint') }}
         </div>
       </el-form-item>
 
-      <!-- 模型选择（可选，不选则继承自角色/全局设置） -->
+      <!-- 模型选择（可选，不选则继承自智能体/全局设置） -->
       <el-form-item :label="t('bot.modal.modelLabel')">
         <el-select v-model="formData.defaultModelId" :placeholder="t('bot.modal.modelPlaceholder')" style="width: 100%" filterable clearable>
           <el-option v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
@@ -198,8 +198,8 @@ const submitting = ref(false)
 // 折叠面板激活项（空数组表示默认全部折叠）
 const activeCollapse = ref<string[]>([])
 
-// 角色列表
-const characters = ref<any[]>([])
+// 智能体列表
+const agents = ref<any[]>([])
 
 // 知识库列表
 const knowledgeBases = ref<KnowledgeBase[]>([])
@@ -263,8 +263,8 @@ const openConfigDoc = () => {
 const formData = ref({
   platform: '',
   name: '',
-  defaultCharacterId: '',
-  defaultModelId: '' as string | null, // null 表示继承自角色/全局设置
+  defaultAgentId: '',
+  defaultModelId: '' as string | null, // null 表示继承自智能体/全局设置
   defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
   platformConfig: {} as Record<string, any>,
@@ -283,8 +283,8 @@ const formRules = computed<FormRules>(() => {
       { required: true, message: t('bot.modal.nameRequired'), trigger: 'blur' },
       { min: 2, max: 50, message: t('bot.modal.nameLength'), trigger: 'blur' }
     ],
-    defaultCharacterId: [
-      { required: true, message: t('bot.modal.characterRequired'), trigger: 'change' }
+    defaultAgentId: [
+      { required: true, message: t('bot.modal.agentRequired'), trigger: 'change' }
     ]
   }
 
@@ -351,8 +351,8 @@ watch(dialogVisible, (visible) => {
       formData.value = {
         platform: bot.platform,
         name: bot.name,
-        defaultCharacterId: bot.defaultCharacterId || '',
-        defaultModelId: bot.defaultModelId || null, // null 表示继承自角色/全局设置
+        defaultAgentId: bot.defaultAgentId || '',
+        defaultModelId: bot.defaultModelId || null, // null 表示继承自智能体/全局设置
         defaultThinkingEffort: bot.defaultThinkingEffort || null,
         knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
         platformConfig: platformConfig,
@@ -398,8 +398,8 @@ const resetForm = () => {
   formData.value = {
     platform: '',
     name: '',
-    defaultCharacterId: '',
-    defaultModelId: null, // null 表示继承自角色/全局设置
+    defaultAgentId: '',
+    defaultModelId: null, // null 表示继承自智能体/全局设置
     defaultThinkingEffort: null,
     knowledgeBaseIds: [],
     platformConfig: {},
@@ -418,14 +418,14 @@ const handleClose = () => {
   resetForm()
 }
 
-// 加载角色列表
-const loadCharacters = async () => {
+// 加载智能体列表
+const loadAgents = async () => {
   try {
-    const response = await apiService.fetchCharacters()
-    characters.value = response.items || []
+    const response = await apiService.fetchAgents()
+    agents.value = response.items || []
   } catch (error) {
-    console.error('获取角色列表失败:', error)
-    ElMessage.error(t('bot.modal.loadCharactersFailed'))
+    console.error('获取智能体列表失败:', error)
+    ElMessage.error(t('bot.modal.loadAgentsFailed'))
   }
 }
 
@@ -458,9 +458,9 @@ const loadModels = async () => {
   }
 }
 
-// 组件挂载时加载角色列表、知识库列表和模型列表
+// 组件挂载时加载智能体列表、知识库列表和模型列表
 onMounted(() => {
-  loadCharacters()
+  loadAgents()
   loadKnowledgeBases()
   loadModels()
 })
@@ -478,7 +478,7 @@ const handleSubmit = async () => {
         // 编辑模式
         const updateData = {
           name: formData.value.name,
-          defaultCharacterId: formData.value.defaultCharacterId,
+          defaultAgentId: formData.value.defaultAgentId,
           defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
           defaultThinkingEffort: formData.value.defaultThinkingEffort || undefined,
           platformConfig: formData.value.platformConfig,
@@ -493,7 +493,7 @@ const handleSubmit = async () => {
         const createData = {
           platform: formData.value.platform,
           name: formData.value.name,
-          defaultCharacterId: formData.value.defaultCharacterId,
+          defaultAgentId: formData.value.defaultAgentId,
           defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
           defaultThinkingEffort: formData.value.defaultThinkingEffort || undefined,
           platformConfig: formData.value.platformConfig,

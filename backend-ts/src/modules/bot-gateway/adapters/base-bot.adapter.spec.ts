@@ -56,7 +56,7 @@ const config: BotConfig = {
   name: 'Test Bot',
   platformConfig: {},
   enabled: true,
-  defaultCharacterId: 'test-character',
+  defaultAgentId: 'test-agent',
 };
 
 describe('BaseBotAdapter reconnect lifecycle', () => {

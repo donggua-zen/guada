@@ -3,7 +3,7 @@
  */
 
 import type { PaginatedResponse } from './common'
-import type { Character, CharacterListResponse } from './character'
+import type { Agent, AgentListResponse } from './agent'
 import type { Session, SessionListResponse } from './session'
 import type { Message } from './message'
 
@@ -168,12 +168,12 @@ export interface ApiResponses {
     fetchModels: PaginatedResponse<Model>
     fetchRemoteModels: Model[]
 
-    // 角色相关
-    fetchCharacters: CharacterListResponse
-    fetchCharacter: Character
-    createCharacter: Character
-    updateCharacter: Character
-    deleteCharacter: { success: boolean }
+    // 智能体相关
+    fetchAgents: AgentListResponse
+    fetchAgent: Agent
+    createAgent: Agent
+    updateAgent: Agent
+    deleteAgent: { success: boolean }
 
     // 会话相关
     fetchSessions: SessionListResponse

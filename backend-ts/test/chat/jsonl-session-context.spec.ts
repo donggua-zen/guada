@@ -20,7 +20,7 @@ function makeSession(overrides: any = {}): any {
     id: 's1',
     sessionType: 'web',
     parentId: null,
-    characterId: null,
+    agentId: null,
     model: {
       modelName: 'test-model',
       name: 'Test',
@@ -361,7 +361,7 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
 describe('JsonlSessionContext 压缩配置档位', () => {
   // 注意：压缩配置只取角色 settings.memory（buildEffectiveSettings 不合并会话级 memory）
   function sessionWithMemory(memory: any) {
-    return { session: { character: { settings: { memory } } } };
+    return { session: { agent: { settings: { memory } } } };
   }
 
   it('compressionTier 合法 → 折算为档位预设（enabled/trigger/retain/summaryMode）', async () => {

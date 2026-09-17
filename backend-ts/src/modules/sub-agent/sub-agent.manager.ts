@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Inject } from "@nestjs/common";
 import { SessionFileStore } from "../chat/session-file.store";
-import { CharacterFileStore } from "../characters/character-file.store";
+import { AgentFileStore } from "../agents/agent-file.store";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { ISessionContext } from "../chat/session-context";
@@ -17,7 +17,7 @@ import type {
 /**
  * 子 Agent 默认系统提示词
  *
- * 当子 Agent 没有自定义角色提示词时，使用此提示词作为基础身份定义。
+ * 当子 Agent 没有自定义智能体提示词时，使用此提示词作为基础身份定义。
  * 通过 session.settings.systemPrompt 注入，与工具配置走相同的继承机制。
  */
 const SUB_AGENT_DEFAULT_PROMPT = `You are a Sub Agent, delegated by the main Agent to execute a specific task.
@@ -131,7 +131,7 @@ export class SubAgentManager implements OnModuleInit {
     private sessionStore: SessionFileStore,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
-    private characterStore: CharacterFileStore,
+    private agentStore: AgentFileStore,
     @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
   ) {}
 
@@ -154,7 +154,7 @@ export class SubAgentManager implements OnModuleInit {
       parentContext: ISessionContext;
       name: string;
       task: string;
-      characterId?: string;
+      agentId?: string;
       lifecycle?: "persist" | "one_shot";
     },
     mode: "foreground" | "background" = "foreground",
@@ -174,23 +174,23 @@ export class SubAgentManager implements OnModuleInit {
 
     // 从父会话上下文提取已合并的工具配置
     // PersistentSessionContext.mergeSettings() 已自动处理
-    // sessionSettings.xxx ?? characterSettings.xxx 回退
+    // sessionSettings.xxx ?? agentSettings.xxx 回退
     const inheritedPlugins = parentContext.getSettings("plugins");
     const inheritedSkillsConfig = parentContext.getSettings("skills");
 
-    // 角色驱动的子 Agent 创建
+    // 智能体驱动的子 Agent 创建
     let finalModelId: string | null = parentContext.getModelConfig().id;
-    let finalCharacterId: string | null = null;
+    let finalAgentId: string | null = null;
     let finalAvatarUrl: string | undefined;
 
     // 配置继承策略委托给 PersistentSessionContext.mergeSettings()，
-    // 它自动处理 sessionSettings.xxx ?? characterSettings.xxx 回退。
+    // 它自动处理 sessionSettings.xxx ?? agentSettings.xxx 回退。
     //
-    // 有角色时: 角色设定自动生效，spawn 只需设 characterId，不设重复值
-    // 无角色时: 显式设置父会话的继承值作为 sessionSettings
+    // 有智能体时: 智能体设定自动生效，spawn 只需设 agentId，不设重复值
+    // 无智能体时: 显式设置父会话的继承值作为 sessionSettings
     const settings: Record<string, any> = {};
 
-    // 思考强度：无论是否有角色，都从父会话继承
+    // 思考强度：无论是否有智能体，都从父会话继承
     settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
     // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
     settings.sandboxMode = parentContext.getSandboxMode();
@@ -199,26 +199,26 @@ export class SubAgentManager implements OnModuleInit {
     // 生命周期持久化：重启后可通过 session.settings.lifecycle 识别 one_shot 遗留（孤儿清扫）
     settings.lifecycle = params.lifecycle || "one_shot";
 
-    if (params.characterId && params.characterId !== "generic") {
-      // ── 角色模式（定义来自 agents/<id>/AGENT.md） ──
-      const character = await this.characterStore.findById(params.characterId);
-      if (!character) {
+    if (params.agentId && params.agentId !== "generic") {
+      // ── 智能体模式（定义来自 agents/<id>/AGENT.md） ──
+      const agent = await this.agentStore.findById(params.agentId);
+      if (!agent) {
         throw new Error(
-          `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
+          `Agent "${params.agentId}" does not exist. Please check if the ID is correct or if the agent has been deleted.`,
         );
       }
-      finalModelId = character.modelId || parentContext.getModelConfig().id;
-      finalCharacterId = params.characterId;
-      finalAvatarUrl = character.avatarUrl || undefined;
+      finalModelId = agent.modelId || parentContext.getModelConfig().id;
+      finalAgentId = params.agentId;
+      finalAvatarUrl = agent.avatarUrl || undefined;
       this.logger.log(
-        `子 Agent 将继承角色设定: ${character.name} (${params.characterId})`,
+        `子 Agent 将继承智能体设定: ${agent.name} (${params.agentId})`,
       );
     } else {
       // ── 通用子 Agent ──
       settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
       settings.plugins = inheritedPlugins;
       settings.skills = inheritedSkillsConfig;
-      // finalCharacterId 保持 null（不走 characterRepo）
+      // finalAgentId 保持 null（不走 agentRepo）
     }
 
     return this.createSubSessionAndRun(
@@ -229,28 +229,28 @@ export class SubAgentManager implements OnModuleInit {
       abortSignal,
       settings,
       finalModelId,
-      finalCharacterId,
+      finalAgentId,
       finalAvatarUrl,
     );
   }
 
   /**
    * 创建子会话记录、广播事件并启动执行
-   * 抽离为私有方法，供普通角色和轻量 Agent 共用
+   * 抽离为私有方法，供普通智能体和轻量 Agent 共用
    */
   private async createSubSessionAndRun(
     parentContext: ISessionContext,
     params: {
       name: string;
       task: string;
-      characterId?: string;
+      agentId?: string;
     },
     mode: "foreground" | "background",
     lifecycle: "persist" | "one_shot",
     abortSignal: AbortSignal | undefined,
     settings: Record<string, any>,
     modelId: string | null,
-    characterId: string | null,
+    agentId: string | null,
     avatarUrl: string | undefined,
   ): Promise<SubAgentResult> {
     const parentSessionId = parentContext.sessionId;
@@ -258,7 +258,7 @@ export class SubAgentManager implements OnModuleInit {
     const subSession = await this.sessionStore.create({
       parentId: parentSessionId,
       title: params.name,
-      characterId,
+      agentId,
       modelId,
       settings,
       sessionType: "sub_agent",
@@ -359,7 +359,7 @@ export class SubAgentManager implements OnModuleInit {
       parentContext: ISessionContext;
       name: string;
       task: string;
-      characterId?: string;
+      agentId?: string;
       workflow: { runId: string; label?: string; phase?: string | null };
       onCreated?: (subSessionId: string) => void;
     },
@@ -383,19 +383,19 @@ export class SubAgentManager implements OnModuleInit {
     };
 
     let finalModelId: string | null = parentContext.getModelConfig().id;
-    let finalCharacterId: string | null = null;
+    let finalAgentId: string | null = null;
     let finalAvatarUrl: string | undefined;
 
-    if (params.characterId && params.characterId !== "generic") {
-      const character = await this.characterStore.findById(params.characterId);
-      if (!character) {
+    if (params.agentId && params.agentId !== "generic") {
+      const agent = await this.agentStore.findById(params.agentId);
+      if (!agent) {
         throw new Error(
-          `Character "${params.characterId}" does not exist. Please check if the ID is correct or if the character has been deleted.`,
+          `Agent "${params.agentId}" does not exist. Please check if the ID is correct or if the agent has been deleted.`,
         );
       }
-      finalModelId = character.modelId || parentContext.getModelConfig().id;
-      finalCharacterId = params.characterId;
-      finalAvatarUrl = character.avatarUrl || undefined;
+      finalModelId = agent.modelId || parentContext.getModelConfig().id;
+      finalAgentId = params.agentId;
+      finalAvatarUrl = agent.avatarUrl || undefined;
     } else {
       // 通用子代理：显式继承父会话的插件/技能配置
       settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
@@ -406,7 +406,7 @@ export class SubAgentManager implements OnModuleInit {
     const subSession = await this.sessionStore.create({
       parentId: parentSessionId,
       title: params.name,
-      characterId: finalCharacterId,
+      agentId: finalAgentId,
       modelId: finalModelId,
       settings,
       sessionType: "sub_agent",

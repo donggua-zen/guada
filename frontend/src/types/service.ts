@@ -5,7 +5,7 @@
 
 import type { PaginatedResponse } from './common'
 import type { Model, ModelProvider, McpServer } from './api'
-import type { Character, CharacterListResponse } from './character'
+import type { Agent, AgentListResponse } from './agent'
 import type { Session, SessionListResponse } from './session'
 import type { Message } from './message'
 import type { FileRefType } from './stream/content-block.types'

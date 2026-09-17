@@ -124,7 +124,7 @@
   // ── Route Titles ──
   route: {
     chat: 'Chat',
-    characters: 'Assistants',
+    agents: 'Agents',
     bots: 'Bots',
     settings: 'Settings',
     plugins: 'Plugins',

@@ -29,7 +29,7 @@ import { createMockMethods, shouldEnableMock } from "./mock/MockApiService";
 
 // 领域 API 模块
 import { modelApi, type ModelApi } from "./modules/model.api";
-import { characterApi, type CharacterApi } from "./modules/character.api";
+import { agentApi, type AgentApi } from "./modules/agent.api";
 import { sessionApi, type SessionApi } from "./modules/session.api";
 import { workspaceApi, type WorkspaceApi } from "./modules/workspace.api";
 import { messageApi, type MessageApi } from "./modules/message.api";
@@ -54,7 +54,7 @@ export type { UiProcessInfo, UiProcessLog } from "./modules/session.api";
  */
 interface ApiService
   extends ModelApi,
-    CharacterApi,
+    AgentApi,
     SessionApi,
     WorkspaceApi,
     MessageApi,
@@ -326,7 +326,7 @@ class ApiService {
 Object.assign(
   ApiService.prototype,
   modelApi,
-  characterApi,
+  agentApi,
   sessionApi,
   workspaceApi,
   messageApi,

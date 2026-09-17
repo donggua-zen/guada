@@ -59,7 +59,7 @@ export class SkillMetadataValidator {
     if (name.length > 64) {
       return {
         isValid: false,
-        error: `Skill name is too long (max 64 characters). Got: ${name.length} characters`,
+        error: `Skill name is too long (max 64 agents). Got: ${name.length} agents`,
       };
     }
 
@@ -67,7 +67,7 @@ export class SkillMetadataValidator {
     if (!/^[a-z0-9-]+$/.test(name)) {
       return {
         isValid: false,
-        error: `Skill name contains invalid characters. Only lowercase letters, numbers, and hyphens are allowed. Got: "${name}"`,
+        error: `Skill name contains invalid agents. Only lowercase letters, numbers, and hyphens are allowed. Got: "${name}"`,
       };
     }
 
@@ -109,7 +109,7 @@ export class SkillMetadataValidator {
     if (description.length > 1024) {
       return {
         isValid: false,
-        error: `Skill description is too long (max 1024 characters). Got: ${description.length} characters`,
+        error: `Skill description is too long (max 1024 agents). Got: ${description.length} agents`,
       };
     }
 
