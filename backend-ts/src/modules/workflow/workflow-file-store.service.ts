@@ -13,6 +13,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { resolveSessionsBasePath } from "../../common/utils/session-path.util";
+import { atomicWriteFile } from "../../common/persistence/file-store-kit";
 import { WorkflowRunSnapshot } from "./workflow.types";
 
 /** runId 文件名白名单（引擎生成 wfr_<ts>_<rand>；防未来格式变化引入路径穿越） */
@@ -37,9 +38,7 @@ export class WorkflowFileStore {
     const dir = this.runDir(sessionId);
     await fs.mkdir(dir, { recursive: true });
     const finalPath = path.join(dir, `${snapshot.runId}.json`);
-    const tmpPath = `${finalPath}.tmp`;
-    await fs.writeFile(tmpPath, JSON.stringify(snapshot), "utf-8");
-    await fs.rename(tmpPath, finalPath);
+    await atomicWriteFile(finalPath, JSON.stringify(snapshot));
   }
 
   /** 读取会话全部历史 run 快照（目录不存在返回 []，单文件损坏跳过并告警） */

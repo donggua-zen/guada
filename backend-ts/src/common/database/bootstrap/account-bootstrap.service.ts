@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma.service";
 import {
   META_DOMAIN_ACCOUNT,
@@ -31,11 +32,16 @@ import { AccountData, AccountFileStore } from "../../../modules/auth/account-fil
 export class AccountBootstrapService {
   private readonly logger = new Logger(AccountBootstrapService.name);
 
+  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
+  private readonly accountStore: AccountFileStore;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gate: MetadataBootstrapGate,
-    private readonly accountStore: AccountFileStore,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.accountStore = new AccountFileStore(configService, gate);
+  }
 
   async run(): Promise<void> {
     try {

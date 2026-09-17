@@ -1,12 +1,13 @@
 import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { ChatModule } from "../chat/chat.module";
+import { CharactersModule } from "../characters/characters.module";
 import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins";
 import { SubAgentManager } from "./sub-agent.manager";
 import { SubAgentPlugin } from "./sub-agent.plugin";
 
 @Module({
-  imports: [ChatModule, ToolsModule],
+  imports: [ChatModule, CharactersModule, ToolsModule],
   providers: [
     SubAgentManager,
     SubAgentPlugin,

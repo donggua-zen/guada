@@ -20,6 +20,7 @@ import {
 import { resolveThinkingMenu } from './thinking/resolve-thinking-efforts';
 import type { ThinkingAwareModelEntry } from './thinking/resolve-thinking-efforts';
 import { BundledCatalogService } from './bundled-catalog.service';
+import { atomicWriteFile } from '../../common/persistence/file-store-kit';
 
 /** 单个供应商实例配置（providers/*.yaml 的 schema） */
 export interface ProviderFileConfig {
@@ -606,7 +607,7 @@ export class ProviderFileStore implements OnModuleDestroy {
       noRefs: true,
     });
     await fsp.mkdir(this.providersDir, { recursive: true });
-    await this.atomicWrite(path.join(this.providersDir, `${id}.yaml`), content);
+    await atomicWriteFile(path.join(this.providersDir, `${id}.yaml`), content);
     await this.loadAll();
   }
 
@@ -702,18 +703,6 @@ export class ProviderFileStore implements OnModuleDestroy {
     if (models.length === (provider.models || []).length) return false;
     await this.saveProvider({ ...provider, models });
     return true;
-  }
-
-  private async atomicWrite(filePath: string, content: string): Promise<void> {
-    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.writeFile(tmpPath, content, 'utf8');
-    // Windows rename 不能覆盖已存在文件，先删除目标
-    try {
-      await fsp.unlink(filePath);
-    } catch {
-      /* 目标不存在，正常 */
-    }
-    await fsp.rename(tmpPath, filePath);
   }
 
   onModuleDestroy(): void {

@@ -140,7 +140,7 @@ describe('McpFileStore', () => {
       type: 'streamableHttp',
       url: 'https://x.example/mcp',
     });
-    expect(created.id).toMatch(/^[a-z0-9]+$/i);
+    expect(created.id).toMatch(/^mcp-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(fs.existsSync(path.join(dir, `${created.id}.yaml`))).toBe(true);
 
     const updated = await store.update(created.id, {

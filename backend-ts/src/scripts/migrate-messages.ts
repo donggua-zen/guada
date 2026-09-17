@@ -35,19 +35,17 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { JsonlBackend } from "../common/persistence/jsonl-backend";
 import { MetadataBootstrapGate } from "../common/database/metadata-bootstrap.gate";
-import { SessionFileStore } from "../modules/chat/session-file.store";
 import { SessionMessageDbMigratorService } from "../common/database/bootstrap/session-message-db-migrator.service";
 
 const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 const backend = new JsonlBackend();
-// meta 修复/目录定位用（构造只需门控；不 initialize → 不起索引与监听）
-const sessionStore = new SessionFileStore(new MetadataBootstrapGate());
+// migrator 自持构造 SessionFileStore（仅 meta 修复/目录定位用，不 initialize）
 const migrator = new SessionMessageDbMigratorService(
   prisma as any,
   backend,
-  sessionStore,
+  new MetadataBootstrapGate(),
 );
 
 // ─── 参数解析 ───

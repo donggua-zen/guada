@@ -25,10 +25,10 @@ const KB_STORAGE_ROOT_KEY = "kbStorageRoot";
  *
  * **设置是直接读文件得到的，不依赖 SettingsService 的初始化时机。**
  *
- * 为什么不靠注入：SettingsService 在 AppModule 的导入序里排在 DatabaseModule 之后，
- * 而知识库迁移（MigrationBootstrapService.onModuleInit）先跑——实测结果是迁移按**默认根**
- * 执行、随后设置才注入，用户设了根却"知识库不见了"。存储根这种被启动期迁移依赖的东西
- * 必须自给自足，不能依赖另一个模块的 hook 顺序。
+ * 为什么不靠注入：SettingsService 在 AppModule 的导入序里排在持久化模块
+ * （PersistenceModule，迁移脚手架所在）之后，而知识库迁移（MigrationBootstrapService.onModuleInit）
+ * 先跑——实测结果是迁移按**默认根**执行、随后设置才注入，用户设了根却"知识库不见了"。
+ * 存储根这种被启动期迁移依赖的东西必须自给自足，不能依赖另一个模块的 hook 顺序。
  */
 let configuredRoot: string | null = null;
 let settingsRootCache: { value: string | null } | null = null;

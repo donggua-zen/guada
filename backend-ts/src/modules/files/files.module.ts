@@ -4,6 +4,7 @@ import { HttpModule } from "@nestjs/axios";
 import { FilesController } from "./files.controller";
 import { FileService } from "./file.service";
 import { AuthModule } from "../auth/auth.module";
+import { ChatModule } from "../chat/chat.module";
 import { getChatUploadMaxBytes } from "./upload-limits";
 
 import * as multer from "multer";
@@ -11,6 +12,7 @@ import * as multer from "multer";
 @Module({
   imports: [
     AuthModule,
+    ChatModule,
     HttpModule,
     MulterModule.register({
       // 内存存储：图片需要完整 buffer 交给 sharp。上限由 upload-limits 统一控制，

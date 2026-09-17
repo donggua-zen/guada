@@ -6,14 +6,14 @@ import { TaskExecutorService } from "./task-executor.service";
 import { TaskStorageService } from "./task-storage.service";
 import { ChatModule } from "../chat/chat.module";
 import { AuthModule } from "../auth/auth.module";
+import { CharactersModule } from "../characters/characters.module";
 import { SharedModule } from "../../common/services/shared.module";
-import { DatabaseModule } from "../../common/database/database.module";
 import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins";
 import { SchedulerPlugin } from "./plugins/scheduler.plugin";
 
 @Module({
-  imports: [ChatModule, ToolsModule, AuthModule, SharedModule, DatabaseModule],
+  imports: [ChatModule, CharactersModule, ToolsModule, AuthModule, SharedModule],
   controllers: [SchedulerController],
   providers: [SchedulerService, TaskSchedulerService, TaskExecutorService, TaskStorageService],
   exports: [SchedulerService],

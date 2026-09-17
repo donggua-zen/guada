@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
-import { DatabaseModule } from "./common/database/database.module";
 import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
 import { WorkspaceModule } from "./common/workspace/workspace.module";
@@ -30,7 +29,6 @@ import { GitModule } from './modules/git/git.module';
 import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
 import { HealthModule } from './modules/health/health.module';
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -43,7 +41,10 @@ import { HealthModule } from './modules/health/health.module';
       maxListeners: 20,
     }),
     LlmCoreModule, // LLM 核心模块（全局）
-    DatabaseModule, // 全局持久化装配（各域 FileStore + KB 数据层 + 迁移脚手架）
+    // ⚠️ 持久化机制层必须位于所有域模块之前：迁移脚手架在此完成 DB→文件导出
+    // 并放行 MetadataBootstrapGate，域模块的 onModuleInit（CharacterSeedService
+    // 补种、各 store 索引预热）依赖该顺序。
+    PersistenceModule,
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块
@@ -69,7 +70,6 @@ import { HealthModule } from './modules/health/health.module';
     BridgeModule,     // Electron ↔ Backend 通信桥（全局）
     GitModule,        // Git 源码管理模块
     TerminalModule,   // 终端模块（后端 PTY + WebSocket）
-    PersistenceModule, // 持久化存储模块（全局：PersistenceBackend + IMessageStore 抽象）
     HealthModule,      // 健康检查端点（Electron 看门狗探测用）
   ],
 })

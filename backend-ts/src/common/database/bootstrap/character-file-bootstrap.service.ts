@@ -46,12 +46,16 @@ const MIGRATED_MARKER = ".migrated-from-db";
 export class CharacterFileBootstrapService {
   private readonly logger = new Logger(CharacterFileBootstrapService.name);
 
+  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
+  private readonly store: CharacterFileStore;
+
   constructor(
-    private readonly store: CharacterFileStore,
     private readonly prisma: PrismaService,
     private readonly settingsStorage: SettingsStorage,
     private readonly uploadPathService: UploadPathService,
-  ) {}
+  ) {
+    this.store = new CharacterFileStore();
+  }
 
   /** @returns 是否完整执行（含引用改写成功）；失败时由编排器记日志，下次启动重试 */
   async run(): Promise<boolean> {

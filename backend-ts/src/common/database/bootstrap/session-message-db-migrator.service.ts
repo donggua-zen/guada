@@ -32,6 +32,7 @@ import {
   PersistenceBackend,
   BaseEvent,
 } from "../../persistence/types";
+import { MetadataBootstrapGate } from "../metadata-bootstrap.gate";
 import { SessionFileStore } from "../../../modules/chat/session-file.store";
 import { generateOrderedMessageId } from "../../../common/utils/ordered-id.util";
 import {
@@ -75,11 +76,16 @@ interface LegacyContextStateRow {
 export class SessionMessageDbMigratorService {
   private readonly logger = new Logger(SessionMessageDbMigratorService.name);
 
+  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
+  private readonly sessionStore: SessionFileStore;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PERSISTENCE_BACKEND_TOKEN) private readonly backend: PersistenceBackend,
-    private readonly sessionStore: SessionFileStore,
-  ) {}
+    gate: MetadataBootstrapGate,
+  ) {
+    this.sessionStore = new SessionFileStore(gate);
+  }
 
   /** 列出所有有消息的会话（CLI 无参调用时的候选清单） */
   async listSessionsWithMessages(): Promise<
