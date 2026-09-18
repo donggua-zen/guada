@@ -1445,10 +1445,12 @@ onMounted(() => {
         StarterKit,
         CommandNode,
         Placeholder.configure({
-          // 只读模式（子代理会话）提示只读文案，不可输入
+          // 只读模式（子代理会话）提示只读文案，不可输入；
+          // showOnlyWhenEditable: false —— 默认 true 时不可编辑的编辑器不渲染占位装饰
           placeholder: props.readonly
             ? t('chat.input.readonlyPlaceholder')
             : t('chat.input.editorPlaceholder'),
+          showOnlyWhenEditable: false,
         }),
       ],
       content: parseCommandTags(props.value || ''),

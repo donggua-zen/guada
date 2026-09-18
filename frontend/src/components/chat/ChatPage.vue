@@ -264,6 +264,8 @@ function handleSubAgentCreate(event: any) {
  *
  * 后端已将子会话冻结（closedAt 标记，仅供回放），此处就地标记而非移除：
  * 概览"子代理"区把该行折叠进"已结束"组，与刷新后 fetchSession 返回的表现一致。
+ * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭；
+ * 冻结的子代理也可随时从概览"已结束"组重开回放）。
  */
 function handleSubAgentClosed(event: any) {
   const payload = event.payload || {};
@@ -276,9 +278,6 @@ function handleSubAgentClosed(event: any) {
     sub.closeReason = payload.stopReason || null;
     sub.isStreaming = false;
   }
-
-  // 侧边栏子代理标签同步关闭（冻结的子代理可随时从概览"已结束"组重开回放）
-  tabStore.removeTab(`subagent:${subSessionId}`);
 }
 
 /**
