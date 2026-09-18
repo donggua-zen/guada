@@ -86,7 +86,7 @@ import { useAuthStore } from '@/stores/auth'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-const isMac = isElectron && window.electronAPI.platform === 'darwin'
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 const authStore = useAuthStore()
 

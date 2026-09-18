@@ -27,7 +27,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { WindowMinimize, WindowMaximize, WindowRestore, WindowClose } from '@/components/icons'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-const isMac = isElectron && window.electronAPI.platform === 'darwin'
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 const isMaximized = ref(false)
 

@@ -76,7 +76,10 @@ function measure() {
 
 function startScroll() {
   // hover 后延迟 100ms 再滚动，避免快速划过时闪动
-  clearTimeout(scrollTimer)
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+    scrollTimer = null
+  }
   scrollTimer = setTimeout(() => {
     measure()
     if (overflows.value && scrollDist.value > 0) {
@@ -86,8 +89,10 @@ function startScroll() {
 }
 
 function stopScroll() {
-  clearTimeout(scrollTimer)
-  scrollTimer = null
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+    scrollTimer = null
+  }
   isScrolling.value = false
 }
 
@@ -103,8 +108,10 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  clearTimeout(scrollTimer)
-  scrollTimer = null
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+    scrollTimer = null
+  }
 })
 </script>
 

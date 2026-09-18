@@ -246,7 +246,7 @@ const handlePasswordToggle = async (enabled: boolean | string | number) => {
       )
       await apiService.changePassword(undefined, value)
       authStore.passwordSet = true
-      notify.success(t('settings.general.passwordSetSuccess'))
+      notify.success(t('common.updateSuccess'), t('settings.general.passwordSetSuccess'))
     } else {
       await ElMessageBox.confirm(
         t('settings.general.clearPasswordConfirm'),
@@ -255,12 +255,12 @@ const handlePasswordToggle = async (enabled: boolean | string | number) => {
       )
       await apiService.clearPassword()
       authStore.passwordSet = false
-      notify.success(t('settings.general.passwordClearedSuccess'))
+      notify.success(t('common.updateSuccess'), t('settings.general.passwordClearedSuccess'))
     }
   } catch (e: any) {
     // 用户取消：开关状态由 authStore.passwordSet 决定，无需回滚
     if (e !== 'cancel' && e !== 'close') {
-      notify.error(e?.message || t('settings.general.passwordOpFailed'))
+      notify.error(t('common.saveFailed'), e?.message || t('settings.general.passwordOpFailed'))
     }
   }
 }

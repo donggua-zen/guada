@@ -1362,17 +1362,20 @@ watch(() => props.sessionId, async (newSessionId) => {
     //   2) 组件卸载后重新挂载（如新建会话后）且仍持有旧会话残留标签：需要清空。
     // 用 syncedSessionId 区分：非 null 表示本组件实例已同步过某个会话，
     // 此时才是真正的「从旧会话切走」，需要清空重建。
-    const isRealSessionSwitch = syncedSessionId !== null && syncedSessionId !== newSessionId;
+    // 取切换前的旧会话 id 快照：syncedSessionId 是外部可变 let，直接经布尔别名判断
+    // 无法被 TS 收窄为 string，这里用 const 局部量，语义与 syncedSessionId 完全一致
+    const prevSessionId = syncedSessionId;
+    const isRealSessionSwitch = prevSessionId !== null && prevSessionId !== newSessionId;
     if (isRealSessionSwitch) {
-        // 保存旧会话缓存：必须用 syncedSessionId，不能用 props.sessionId（已指向新会话）
-        previewTabCache.saveSession(syncedSessionId, {
+        // 保存旧会话缓存：必须用 prevSessionId，不能用 props.sessionId（已指向新会话）
+        previewTabCache.saveSession(prevSessionId, {
             activeTabKey: tabStore.activeTabKey,
             tabs: tabStore.tabs.map(t => ({ ...t })),
         });
         // 跳过 clearAll 触发的自动保存，避免空标签覆盖新会话缓存
         skipNextSave = true;
         // 旧会话解除 file 订阅（SSE 连接由 OverviewPanel 常驻持有，勿断开）
-        void apiService.setWorkspaceWatchScope(syncedSessionId, "file", false);
+        void apiService.setWorkspaceWatchScope(prevSessionId, "file", false);
         tabStore.clearAll();
         fileChangeVersions.value = {};
         watchedWorkspacePath = null;
