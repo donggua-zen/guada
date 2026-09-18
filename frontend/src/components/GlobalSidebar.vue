@@ -303,7 +303,7 @@ import { Loading } from '@element-plus/icons-vue'
 import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-const isMac = isElectron && window.electronAPI.platform === 'darwin'
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 const router = useRouter()
 const route = useRoute()

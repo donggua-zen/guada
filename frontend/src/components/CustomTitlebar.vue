@@ -22,7 +22,7 @@ const isElectron = computed(() => {
 })
 
 const isMac = computed(() => {
-  return isElectron.value && window.electronAPI.platform === 'darwin'
+  return isElectron.value && window.electronAPI?.platform === 'darwin'
 })
 </script>
 

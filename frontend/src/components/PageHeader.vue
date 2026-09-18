@@ -37,7 +37,7 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 const { t } = useI18n()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-const isMac = isElectron && window.electronAPI.platform === 'darwin'
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 /**
  * 页面通用标题栏组件

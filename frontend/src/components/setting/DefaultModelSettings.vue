@@ -493,7 +493,7 @@ const handleSave = async () => {
                 .flat()
 
             console.error('表单验证失败:', errors)
-            notify.error(t('settings.defaultModel.formValidationError'))
+            notify.error(t('common.saveFailed'), t('settings.defaultModel.formValidationError'))
             return
         }
 

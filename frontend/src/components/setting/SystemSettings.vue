@@ -141,7 +141,7 @@ import { useAuthStore } from '../../stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { usePluginSlots } from '../../stores/pluginSlots'
+import { usePluginSlots, type ResolvedSlotItem } from '../../stores/pluginSlots'
 import { PuzzleCube20Regular, PuzzleCube24Regular } from '@vicons/fluent'
 
 const { t } = useI18n()
@@ -173,7 +173,8 @@ onMounted(() => pluginSlots.init())
 const pluginSidebarItems = computed(() =>
   pluginSlots
     .resolve('settings')
-    .filter((item) => item.meta?.label)
+    // meta.label 由插件自行声明，缺失的条目不进侧边栏；类型谓词把收窄结果带给下面的 map
+    .filter((item): item is ResolvedSlotItem & { meta: { label: string } } => !!item.meta?.label)
     .map((item) => ({
       label: item.meta.label,
       path: `plugin:${item.pluginId}:${item.component}`,

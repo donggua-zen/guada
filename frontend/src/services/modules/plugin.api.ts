@@ -41,12 +41,26 @@ export interface UiPageInfo {
   order: number;
 }
 
+/** 插件主题清单条目（/plugins/slots 的 themes[]，由插件 frontend/dist 下发） */
+export interface PluginThemeManifest {
+  id: string;
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+  mode?: "light" | "dark" | "all";
+  pluginId: string;
+  /** CSS 文件名，相对插件 frontend/dist */
+  cssFile: string;
+  /** 资源版本号，拼静态资源 URL 用 */
+  rev?: string;
+}
+
 export interface PluginApi {
   getAttachmentTypes(): Promise<AttachmentTypeInfo[]>;
   getPluginAttachments(pluginId: string): Promise<PluginAttachmentList[]>;
   getPluginUiPages(area?: string): Promise<UiPageInfo[]>;
-  /** 获取所有插件的 slot 注册清单（v2 插件 UI） */
-  getPluginSlots(): Promise<{ slots: Record<string, any[]> }>;
+  /** 获取所有插件的 slot 注册清单（v2 插件 UI）与插件主题清单 */
+  getPluginSlots(): Promise<{ slots: Record<string, any[]>; themes?: PluginThemeManifest[] }>;
   /** 调用插件后端 RPC 方法 */
   call(pluginId: string, method: string, args?: any): Promise<any>;
   /** 获取共享运行时上下文（用户/会话等基础信息） */

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { markRaw, defineAsyncComponent } from 'vue'
+import { markRaw, defineAsyncComponent, type Component } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import {
@@ -7,13 +7,43 @@ import {
   removeThemesByPlugin,
 } from '@/themes'
 import { useTheme } from '@/composables/useTheme'
+import type { GuaDaModuleLoader } from '@/types/plugin-runtime'
+import type { PluginThemeManifest } from '@/services/modules/plugin.api'
 
 // 主应用内置组件 import map：'builtin:xxx' 从这里解析
 import ConnectionSettings from '@/components/setting/ConnectionSettings.vue'
 import ModelsProviderList from '@/components/setting/ModelsProviderList.vue'
 import GeneralSettings from '@/components/setting/GeneralSettings.vue'
 
-const BUILTIN = {
+/** slot 条目（后端 /plugins/slots 下发，或 registerLocal 本地注册） */
+export interface SlotItem {
+  pluginId: string
+  /** 组件标识：'builtin:<key>' 走内置 import map，其余按插件产物文件名解析 */
+  component: string
+  order: number
+  /** 渲染模式（list 等，语义由 slot 消费方决定） */
+  mode?: string
+  /** 透传给 slot 组件的 props */
+  props?: Record<string, any>
+  /** slot 消费方读取的元数据（如设置页的 label） */
+  meta?: Record<string, any>
+  /** 插件资源版本号，拼静态资源 URL 用 */
+  rev?: string
+}
+
+/** resolve() 返回项：component 已解析为可渲染组件 */
+export interface ResolvedSlotItem extends Omit<SlotItem, 'component'> {
+  component: Component
+}
+
+interface PluginSlotsState {
+  /** slot 名 → 条目列表 */
+  slots: Record<string, SlotItem[]>
+  initialized: boolean
+  version: number
+}
+
+const BUILTIN: Record<string, Component> = {
   connection: ConnectionSettings,
   models: ModelsProviderList,
   general: GeneralSettings,
@@ -25,22 +55,34 @@ const PluginErrorBoundary = {
   template: '<div class="p-4 text-sm text-red-400">Plugin failed to load: {{ error }}</div>',
 }
 
-function resolveBuiltin(key) {
+function resolveBuiltin(key: string): Component {
   const c = BUILTIN[key]
   if (!c) throw new Error(`pluginSlots: unknown builtin component "${key}"`)
   return markRaw(c)
 }
 
-function asyncPluginComponent(item) {
+/** 外部插件模块加载器由 main.js 启动时挂载，缺失属初始化异常，快速失败而非静默降级 */
+function moduleLoader(): GuaDaModuleLoader {
+  const loader = window.__GuaDaModuleLoader__
+  if (!loader) throw new Error('pluginSlots: __GuaDaModuleLoader__ 未初始化')
+  return loader
+}
+
+function asyncPluginComponent(item: SlotItem): Component {
   return defineAsyncComponent({
     loader: () =>
-      window.__GuaDaModuleLoader__.import(`${item.pluginId}:${item.component}`).then((mod) => mod.default),
+      moduleLoader().import(`${item.pluginId}:${item.component}`).then((mod) => mod.default),
     loadingComponent: LoadingPlaceholder,
     errorComponent: PluginErrorBoundary,
     delay: 0,
     timeout: 15000,
   })
 }
+
+// 已注册主题的插件集合：模块级而非 pinia state（Set 不适合进响应式 state）
+let registeredThemePlugins: Set<string> | null = null
+// plugins_changed 的 SSE 取消订阅函数（保留引用，供后续扩展解绑）
+let unsubPluginsChanged: (() => void) | null = null
 
 /**
  * 插件 Slot 注册表（Pinia store）
@@ -50,14 +92,14 @@ function asyncPluginComponent(item) {
  * - watchRefresh()：SSE 监听插件启停，增量增删 slot 条目并卸载失效模块
  */
 export const usePluginSlots = defineStore('pluginSlots', {
-  state: () => ({
+  state: (): PluginSlotsState => ({
     slots: {},          // slot 名 → SlotItem[]（含 pluginId/component/order/props/meta/loadMode/rev）
     initialized: false,
     version: 0,
   }),
 
   getters: {
-    resolve: (state) => (name) => {
+    resolve: (state) => (name: string): ResolvedSlotItem[] => {
       const items = (state.slots[name] || []).slice().sort((a, b) => a.order - b.order)
       return items.map((item) => ({
         ...item,
@@ -67,10 +109,10 @@ export const usePluginSlots = defineStore('pluginSlots', {
       }))
     },
 
-    metaOf: (state) => (name) =>
+    metaOf: (state) => (name: string): any[] =>
       (state.slots[name] || []).map((i) => i.meta).filter(Boolean),
 
-    hasSlot: (state) => (name) => (state.slots[name] || []).length > 0,
+    hasSlot: (state) => (name: string): boolean => (state.slots[name] || []).length > 0,
   },
 
   actions: {
@@ -82,7 +124,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
       this.watchRefresh()
     },
 
-    applySlots(slots, themes = []) {
+    applySlots(slots: Record<string, SlotItem[]>, themes: PluginThemeManifest[] = []) {
       for (const [slot, items] of Object.entries(slots)) {
         for (const item of items) {
           this.prepareExternal(item)
@@ -98,8 +140,8 @@ export const usePluginSlots = defineStore('pluginSlots', {
      * - 清单内插件：replaceThemesByPlugin 全量替换（rev 变化自然更新 URL）
      * - 清单外插件（禁用/卸载）：removeThemesByPlugin，若当前生效主题被移除则回退 default
      */
-    syncThemes(themes) {
-      if (!this._registeredThemePlugins) this._registeredThemePlugins = new Set()
+    syncThemes(themes: PluginThemeManifest[]) {
+      if (!registeredThemePlugins) registeredThemePlugins = new Set()
       const next = new Set(themes.map((t) => t.pluginId).filter(Boolean))
 
       for (const pluginId of next) {
@@ -120,22 +162,22 @@ export const usePluginSlots = defineStore('pluginSlots', {
         replaceThemesByPlugin(pluginId, list)
       }
 
-      const removed = [...this._registeredThemePlugins].filter((p) => !next.has(p))
+      const removed = [...registeredThemePlugins].filter((p) => !next.has(p))
       for (const pluginId of removed) {
         const removedIds = removeThemesByPlugin(pluginId)
         if (removedIds.length) this.fallbackIfActiveThemeRemoved(removedIds)
       }
-      this._registeredThemePlugins = next
+      registeredThemePlugins = next
     },
 
     /** 拼插件主题 CSS 完整 URL（与 prepareExternal 同一 base 规则） */
-    themeCssUrl(theme) {
+    themeCssUrl(theme: PluginThemeManifest): string {
       const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
       return `${base}/plugins/${theme.pluginId}/assets/${theme.cssFile}?rev=${theme.rev || ''}`
     },
 
     /** 当前生效主题被插件移除时回退 default */
-    fallbackIfActiveThemeRemoved(removedIds) {
+    fallbackIfActiveThemeRemoved(removedIds: string[]) {
       const { activeThemePreset, setActiveThemePreset } = useTheme()
       if (removedIds.includes(activeThemePreset.value)) {
         setActiveThemePreset('default')
@@ -143,13 +185,13 @@ export const usePluginSlots = defineStore('pluginSlots', {
       }
     },
 
-    prepareExternal(item) {
+    prepareExternal(item: SlotItem) {
       if (!item.component || item.component.startsWith('builtin:')) return
       // apiService.baseURL：web dev = "/api/v1"，Electron = "http://localhost:PORT/api/v1"
       const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
       // slot 组件产物约定位于插件 frontend/dist/（相对插件根），显式带上前缀；
       // 插件主题 CSS 由 syncThemes → themeCssUrl 按 cssFile 相对插件根拼接
-      window.__GuaDaModuleLoader__.prepare({
+      moduleLoader().prepare({
         id: `${item.pluginId}:${item.component}`,
         url: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.js?rev=${item.rev || ''}`,
         cssUrl: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.css?rev=${item.rev || ''}`,
@@ -157,7 +199,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
     },
 
     // 从所有 slot 移除某插件的条目（插件禁用时）
-    removePlugin(pluginId) {
+    removePlugin(pluginId: string) {
       for (const name of Object.keys(this.slots)) {
         const before = this.slots[name].length
         this.slots[name] = this.slots[name].filter((x) => x.pluginId !== pluginId)
@@ -168,7 +210,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
       // 同步移除该插件的主题注册；当前生效主题被移除时回退 default
       const removedIds = removeThemesByPlugin(pluginId)
       if (removedIds.length) this.fallbackIfActiveThemeRemoved(removedIds)
-      if (this._registeredThemePlugins) this._registeredThemePlugins.delete(pluginId)
+      if (registeredThemePlugins) registeredThemePlugins.delete(pluginId)
       this.version++
     },
 
@@ -176,7 +218,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
     // 插件注册/卸载/启停时后端广播 plugins_changed，这里全量刷新（简单可靠）
     watchRefresh() {
       try {
-        this._unsub = apiService.onSessionEvent('plugins_changed', async () => {
+        unsubPluginsChanged = apiService.onSessionEvent('plugins_changed', async () => {
           try {
             const data = await apiService.getPluginSlots()
             this.slots = {}
@@ -190,14 +232,14 @@ export const usePluginSlots = defineStore('pluginSlots', {
       }
     },
 
-    registerLocal(name, item) {
+    registerLocal(name: string, item: Partial<SlotItem> & { component: string }) {
       const entry = { pluginId: '__local__', order: 100, mode: 'list', ...item }
       if (!this.slots[name]) this.slots[name] = []
       this.slots[name].push(markRaw(entry))
       this.version++
     },
 
-    invalidate(name) {
+    invalidate(name: string) {
       delete this.slots[name]
     },
   },

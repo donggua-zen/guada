@@ -8,6 +8,7 @@
     "preinstall": "node ../scripts/ensure-pnpm.js",
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

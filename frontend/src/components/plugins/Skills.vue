@@ -340,6 +340,8 @@ interface Skill {
     manifest: SkillManifest
     contentHash: string
     source?: SkillSource
+    /** 技能提供方（插件注册时写入 `plugin:<id>`），仅插件技能有此字段 */
+    provider?: string
     enabled?: boolean
 }
 
