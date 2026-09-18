@@ -45,54 +45,58 @@
                     <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">{{ currentTabLabel }}</span>
                 </template>
             </PageHeader>
-            <div class="flex-1 overflow-hidden flex flex-col md:max-w-220 md:mx-auto w-full">
+            <!-- 滚动容器必须满宽：滚动条贴内容区右缘（对齐 PluginsPage 范式）。
+                 限宽（max-w-220）下移到滚动内容的第一层，只约束内容、不约束滚动条。 -->
+            <div class="flex-1 overflow-hidden flex flex-col w-full">
                 <div class="flex-1 overflow-hidden py-3">
-                    <ScrollContainer class="h-full p-4">
-                        <template v-if="currentTabValue === 'general'">
-                            <GeneralSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'default-models'">
-                            <DefaultModelSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'ocr'">
-                            <OcrSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'appearance'">
-                            <AppearanceSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'search'">
-                            <SearchSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'browser'">
-                            <BrowserSettings />
-                        </template>
-                        <template v-else-if="currentTabValue === 'about'">
-                            <AboutPanel />
-                        </template>
-                        <template v-else-if="currentTabValue === 'community'">
-                            <CommunityPanel />
-                        </template>
-                        <template v-else-if="currentTabValue === 'session-groups'">
-                            <SessionGroupManage />
-                        </template>
-                        <template v-else-if="currentTabValue === 'session-archived'">
-                            <ArchivedSessions />
-                        </template>
-                        <template v-else-if="currentTabValue === 'profile'">
-                            <UserProfile />
-                        </template>
-                        <template v-else-if="currentTabValue === 'security'">
-                            <UserSecurity />
-                        </template>
-                        <template v-else-if="currentTabValue === 'connections'">
-                            <ConnectionSettings />
-                        </template>
-                        <template v-else-if="isPluginTab">
-                            <component
-                                :is="activePluginItem?._item.component"
-                                v-bind="activePluginItem?._item.props"
-                            />
-                        </template>
+                    <ScrollContainer class="h-full">
+                        <div class="p-4 w-full md:max-w-220 md:mx-auto">
+                            <template v-if="currentTabValue === 'general'">
+                                <GeneralSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'default-models'">
+                                <DefaultModelSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'ocr'">
+                                <OcrSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'appearance'">
+                                <AppearanceSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'search'">
+                                <SearchSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'browser'">
+                                <BrowserSettings />
+                            </template>
+                            <template v-else-if="currentTabValue === 'about'">
+                                <AboutPanel />
+                            </template>
+                            <template v-else-if="currentTabValue === 'community'">
+                                <CommunityPanel />
+                            </template>
+                            <template v-else-if="currentTabValue === 'session-groups'">
+                                <SessionGroupManage />
+                            </template>
+                            <template v-else-if="currentTabValue === 'session-archived'">
+                                <ArchivedSessions />
+                            </template>
+                            <template v-else-if="currentTabValue === 'profile'">
+                                <UserProfile />
+                            </template>
+                            <template v-else-if="currentTabValue === 'security'">
+                                <UserSecurity />
+                            </template>
+                            <template v-else-if="currentTabValue === 'connections'">
+                                <ConnectionSettings />
+                            </template>
+                            <template v-else-if="isPluginTab">
+                                <component
+                                    :is="activePluginItem?._item.component"
+                                    v-bind="activePluginItem?._item.props"
+                                />
+                            </template>
+                        </div>
                     </ScrollContainer>
                 </div>
             </div>

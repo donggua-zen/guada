@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -487,7 +488,7 @@ export class BotOrchestrator {
    * 生成唯一的流 ID
    */
   private generateStreamId(): string {
-    return `stream-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    return `stream-${randomUUID()}`;
   }
 
   /**

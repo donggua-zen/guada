@@ -51,7 +51,7 @@
                   <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="agent.name">
                     {{ agent.name }}
                   </div>
-                  <el-button link size="small" type="danger"
+                  <el-button v-if="canDelete(agent)" link size="small" type="danger"
                     class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
                     @click.stop="$emit('deleteAgent', agent)">
                     <el-icon :size="18">
@@ -118,6 +118,11 @@ const emit = defineEmits<{
   openDocs: []
   imported: []
 }>()
+
+// 内置默认智能体：后端保证恒排第一且禁止删除，前端同步隐藏删除入口
+const DEFAULT_AGENT_ID = 'assistant-agent'
+
+const canDelete = (agent: any): boolean => agent.id !== DEFAULT_AGENT_ID
 
 const fileInputRef = ref<HTMLInputElement>()
 

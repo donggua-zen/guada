@@ -96,7 +96,7 @@ export class StreamEventHub {
    */
   subscribeAll(onEvent: (chunk: HubStreamEvent) => void): () => void {
     const sub: SessionSubscriber = {
-      id: `all_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       onEvent,
     };
     this.globalSubscribers.push(sub);
@@ -129,7 +129,7 @@ export class StreamEventHub {
     });
 
     const sub: SessionSubscriber = {
-      id: `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       onEvent,
     };
     state.subscribers.push(sub);

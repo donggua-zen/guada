@@ -1,4 +1,5 @@
 import * as yaml from "js-yaml";
+import { ID_PREFIXES } from "../../common/utils/id.util";
 
 /**
  * 智能体文件（`agents/<id>/AGENT.md`）的映射与校验
@@ -43,37 +44,77 @@ const WINDOWS_RESERVED = new Set([
   ...Array.from({ length: 9 }, (_, i) => `LPT${i + 1}`),
 ]);
 
-/** 文件系统非法字符（Windows）与控制字符 */
-const ILLEGAL_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f]/;
-/** 同上，但用于 replace（`g` 标志与 test 的 lastIndex 状态冲突，故分开定义） */
+/** 文件系统非法字符（Windows）与控制字符；slugify 首阶段剔除，其余交给 AGENT_ID_PATTERN 兜底 */
 const ILLEGAL_CHARS_GLOBAL = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
 
 export const AGENT_ID_MAX_LENGTH = 100;
 
 /**
+ * id 允许的形态：ASCII slug。小写字母/数字/连字符，且以字母或数字开头。
+ *
+ * **禁止中文与非 ASCII 字符**（历史版本曾允许中文目录名，导致跨平台风险：
+ * Linux 大小写敏感、URL/命令行需转义、macOS/Windows 归一化差异）。
+ * 显示名请写 `AGENT.md` 的 `name` 字段，与 id 解耦。
+ */
+export const AGENT_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * 自动生成 id 的前缀（统一铸造见 common/utils/id.util.ts 的 ID_PREFIXES 表）。
+ *
+ * 留空「标识符」时产出 `agent-<uuid v4>`：保证 ASCII 合法与全局唯一，
+ * 同时一眼可从目录名看出是自动生成的智能体（非用户显式命名）。
+ */
+export const AGENT_ID_PREFIX = ID_PREFIXES.agent;
+
+/**
+ * 内置默认智能体（bundled 补种，目录名固定）。
+ *
+ * 两条强约束（2026-09-18 起）：
+ * 1. 列表排序恒排第一（`AgentFileStore.listAgents`）——顺带让
+ *    「新建会话回退 agents[0]」的默认选中确定性地落在它身上；
+ * 2. 禁止删除（HTTP 边界 400 + store 防御性拦截），保证任何环境下
+ *    始终存在一个可用的默认智能体。
+ */
+export const DEFAULT_AGENT_ID = "assistant-agent";
+
+/**
  * 由显示名派生目录 id（= id）
  *
- * 保留 Unicode（含中文）以便 `ls agents/` 直接可读；仅剔除文件系统非法字符，
- * 空白折叠为 `-`，去首尾点/横线/空格，超长截断，规避 Windows 保留名。
+ * 产出恒为 ASCII slug：剔除文件系统非法字符与非 ASCII 字符（中文、emoji、
+ * 重音字母等一律折叠为分隔符），统一小写，去首尾点/横线/空格，超长截断，
+ * 规避 Windows 保留名，空则回退 `agent`。
+ *
+ * 注意：中文显示名经此函数会退化为 `agent`，因此**中文名助手必须显式指定 id**
+ * （前端新建表单的「标识符」字段），或由调用方生成 `agent-<随机>` 兜底。
  */
 export function slugifyAgentId(name: string): string {
   let s = (name ?? "").normalize("NFC").trim();
   s = s.replace(ILLEGAL_CHARS_GLOBAL, "");
-  s = s.replace(/\s+/g, "-");
+  // 非 ASCII 字母数字一律视作分隔符：中文名不会产出中文目录名
+  s = s.replace(/[^A-Za-z0-9]+/g, "-");
+  s = s.toLowerCase();
   s = s.replace(/^[.\-\s]+|[.\-\s]+$/g, "");
   if (!s) s = "agent";
-  if (s.length > AGENT_ID_MAX_LENGTH) s = s.slice(0, AGENT_ID_MAX_LENGTH);
+  if (s.length > AGENT_ID_MAX_LENGTH) {
+    s = s.slice(0, AGENT_ID_MAX_LENGTH).replace(/[.\-\s]+$/g, "") || "agent";
+  }
   const stem = s.split(".")[0]?.toUpperCase() ?? s.toUpperCase();
   if (WINDOWS_RESERVED.has(stem)) s = `_${s}`;
   return s;
 }
 
-/** 校验 id 是否可作为单层目录名（防路径逃逸） */
+/**
+ * 校验 id 是否可作为单层目录名
+ *
+ * 两条约束叠加：① 防路径逃逸（单层、无首尾空白、非 `.`/`..`/隐藏目录）；
+ * ② 必须是 ASCII slug（`AGENT_ID_PATTERN`），即**拒绝中文**。
+ * 因此历史遗留的中文目录名会被判为非法，不会进入运行时索引。
+ */
 export function isValidAgentId(id: string): boolean {
   if (!id || id.length > AGENT_ID_MAX_LENGTH) return false;
   if (id !== id.trim()) return false;
   if (id === "." || id === ".." || id.startsWith(".")) return false;
-  if (ILLEGAL_CHARS.test(id)) return false;
+  if (!AGENT_ID_PATTERN.test(id)) return false;
   const stem = id.split(".")[0]?.toUpperCase() ?? id.toUpperCase();
   if (WINDOWS_RESERVED.has(stem)) return false;
   return true;

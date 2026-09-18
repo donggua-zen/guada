@@ -8,7 +8,7 @@ import { AgentFileStore } from "../agents/agent-file.store";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
-import { randomUUID } from "crypto";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 
 /**
  * 可重试的错误类型
@@ -64,7 +64,7 @@ export class TaskExecutorService {
     this.logger.log(`开始执行任务: ${task.name} (${task.id})`);
 
     const log: ScheduledTaskLog = {
-      id: randomUUID(),
+      id: mintId(ID_PREFIXES.taskLog),
       taskId: task.id,
       status: "running",
       startedAt: new Date().toISOString(),

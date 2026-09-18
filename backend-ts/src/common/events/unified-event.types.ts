@@ -8,6 +8,8 @@
  * - id 参考 DSH rpcId:会话级事件作续传/去重游标;应答类事件可 echo
  */
 
+import { randomUUID } from "crypto";
+
 /** 事件域判别器:stream/* 流式、session/* 会话状态、subagent/* 子代理、host/* 宿主级全局 */
 export const EVENT_METHOD = {
   // ---- 流式事件(带 sessionId) ----
@@ -90,7 +92,7 @@ export function createUnifiedEvent<P extends Record<string, any>>(
   };
 }
 
-/** 事件 ID:rpcId 语义,前缀+随机串 */
+/** 事件 ID:rpcId 语义,前缀+uuid(统一铸造规则:瞬时句柄=可读前缀+crypto.randomUUID) */
 export function generateEventId(): string {
-  return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  return `evt_${randomUUID()}`;
 }

@@ -12,6 +12,7 @@
  * - 无 prefix / 无主请求消息时可回退为"序列化单 user 消息"方案（不破坏现有路径）
  */
 import { Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { LLMService } from '../../llm-core/llm.service';
 import { resolveThinkingEffort } from '../../llm-core/utils/model-config.helper';
 import type { RuntimeProviderConfig } from '../../llm-core/utils/provider-runtime.util';
@@ -222,8 +223,9 @@ export class LLMSummaryProvider implements SummaryProvider {
   }
 
   private instructionMessage(text: string): Message {
+    // 请求内临时占位（不落盘）：保留 __summary_ 哨兵前缀便于日志辨识，唯一性交给 uuid
     return {
-      id: `__summary_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `__summary_${randomUUID()}`,
       role: 'user',
       kind: 'user',
       source: { kind: 'user' },
@@ -234,7 +236,7 @@ export class LLMSummaryProvider implements SummaryProvider {
 
   private placeholderMessage(text: string): Message {
     return {
-      id: `__summary_placeholder_${Date.now()}`,
+      id: `__summary_placeholder_${randomUUID()}`,
       role: 'user',
       kind: 'user',
       source: { kind: 'user' },

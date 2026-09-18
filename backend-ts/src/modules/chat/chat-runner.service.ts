@@ -1,4 +1,5 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionService } from "./session.service";
@@ -213,7 +214,8 @@ export class ChatRunnerService {
       );
     }
 
-    const subscriberId = `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    // 瞬时订阅句柄（不落盘）：统一 crypto.randomUUID，禁止手搓 ts+rand
+    const subscriberId = randomUUID();
 
     // 启动新流
     const abortController = new AbortController();
@@ -288,7 +290,7 @@ export class ChatRunnerService {
     const { sessionId, blocks, source, callbacks, isValid, onConsumed } = params;
 
     const queueItem: QueueItem = {
-      id: `${sessionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: randomUUID(),
       sessionId,
       blocks,
       source,

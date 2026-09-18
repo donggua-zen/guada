@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { randomUUID } from "crypto";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { KbDatabaseService, resolveDefaultKbRoot } from "./kb-database.service";
@@ -230,7 +230,7 @@ export class KbMetaStore {
 
   private resolveId(rawId: any): string {
     if (rawId === undefined || rawId === null || String(rawId) === "") {
-      return `kb-${randomUUID()}`;
+      return mintId(ID_PREFIXES.kb);
     }
     const id = String(rawId);
     if (/[\\/:*?"<>|]/.test(id) || id.startsWith(".") || id === "undefined" || id === "null") {

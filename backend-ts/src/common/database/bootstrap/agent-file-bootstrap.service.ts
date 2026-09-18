@@ -15,7 +15,6 @@ import {
   isAvatarFileName,
   parseAgentMarkdown,
   serializeAgentMarkdown,
-  slugifyAgentId,
   AGENT_ID_MAX_LENGTH,
 } from "../../../modules/agents/agent-file.mapper";
 
@@ -25,18 +24,20 @@ const MIGRATED_MARKER = ".migrated-from-db";
  * ⚠️ 迁移脚手架（临时代码）：预计两个版本后随 Prisma/主库整体移除，
  * 由 MigrationBootstrapService 编排调用，移除清单见 docs/design/metadata-file-format.md。
  *
- * 智能体定义 DB → 文件一次性导出（含引用重键）
+ * 智能体定义 DB → 文件一次性导出
  *
- * 权威源切换到 `agents/<id>/AGENT.md` 后，原 DB 主键（cuid）与新的目录名
- * （由 name 派生的 slug）不再相等。引用散落在 `session.agent_id`、
- * `bot_instance.default_agent_id`、调度任务 JSON，以及各智能体的
- * `settings.agents` 白名单键里，必须同批改写，否则会静默断链。
+ * **目录 id 原样沿用 DB 主键（cuid），不做任何改名**（2026-09-18 起）：
+ * - 引用散落在 `session.agent_id`、`bot_instance.default_agent_id`、调度任务 JSON、
+ *   各智能体的 `settings.agents` 白名单键里；沿用原名则**一处都不用改写**，零断链风险
+ * - cuid 天然是小写字母数字，符合现行 `AGENT_ID_PATTERN`（ASCII slug），无需 slugify
+ * - DB 里的角色一律视为「用户自建」：与 bundled 模板（`assistant-agent` /
+ *   `code-analyst`）id 不同故二者并存；即便显示名重复（出现两个「智能助手」）也保留，
+ *   以免误删用户改过的提示词与头像
  *
  * 设计对齐 ProviderBootstrapService：
  * - 共用一个 marker，只跑一次；导出只读 DB、只写文件，DB 行原样保留作回滚
- * - 先跑 DB 迁移（0004 已解除 session→agent 外键），否则写非 cuid 值会撞外键
- *   （由编排器保证：migrationRunner.run() 先于本服务）
- * - 映射落在 `agents/.rekey.json`，供其它迁移（如模型引用改写）反查旧 id
+ * - `rekey`（`agents/.rekey.json`）保留兼容：历史映射存在时优先沿用，
+ *   其余情况恒为「旧 id → 同 id」的恒等映射
  *
  * 顺序约束：必须先于 ProviderBootstrapService（其改写 AGENT.md frontmatter 需要
  * 智能体文件已存在）与 MetadataFileBootstrapService（其导出会话/机器人时读取的
@@ -109,8 +110,12 @@ export class AgentFileBootstrapService {
 
     for (const row of rows) {
       const name = String(row.title ?? row.id);
-      const dirId =
-        rekey[row.id] ?? this.uniqueId(slugifyAgentId(name), taken);
+      // 旧 DB 角色的 id 原样沿用其 uuid/cuid，不做任何改名：
+      // ① 会话 / 机器人 / 定时任务里已绑定的引用零改写（无断链风险）
+      // ② cuid 天然是小写字母数字，符合现行 AGENT_ID_PATTERN（无需 slugify）
+      // ③ 与 bundled 模板（assistant-agent / code-analyst）id 不同，二者并存——
+      //    旧角色一律视为「用户自建」，与内置助手重复也保留，绝不丢用户写过的提示词
+      const dirId = rekey[row.id] ?? this.uniqueId(row.id, taken);
       rekey[row.id] = dirId;
       taken.add(dirId.toLowerCase());
 

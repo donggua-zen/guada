@@ -59,8 +59,9 @@
             </template>
           </div>
           <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位）。
-               只读模式（子代理会话）下整块隐藏：无输入框，也无需保留底部留白与渐隐遮罩。 -->
-          <div v-if="!readonly" class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
+               只读模式（子代理会话）仍渲染：输入区承载停止按钮（流式时可停），
+               内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。 -->
+          <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto"></div>
             <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
@@ -100,7 +101,7 @@
                     <!-- 上下文使用率：圆形进度条 -->
                     <GdTooltip :content="contextTooltip" placement="top">
                       <button ref="contextRingRef" class="context-ring-btn"
-                        :class="{ 'is-open': memoPanelVisible }" @click.stop="memoPanelVisible = !memoPanelVisible">
+                        :class="{ 'is-open': memoPanelVisible }" @click.stop="toggleMemoPanel">
                         <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
                           <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
                           <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" :stroke="ringColor"
@@ -211,6 +212,12 @@ const memoPanelVisible = ref(false);
 const contextRingRef = ref<HTMLElement | null>(null);
 // 面板内子弹窗/确认框打开期间，冻结 popover 的"点击外部/Esc 关闭"
 const memoOverlayActive = ref(false);
+
+/** 上下文圆环点击：切换记忆管理弹窗；只读模式（子代理会话）仅展示占用，不允许打开编辑 */
+const toggleMemoPanel = () => {
+  if (props.readonly) return;
+  memoPanelVisible.value = !memoPanelVisible.value;
+};
 
 // 上下文使用率：圆形进度条
 const ringPercent = computed(() => {
@@ -955,6 +962,9 @@ async function copyMessage(block: any) {
  * 合并消息创建和流式启动为一个原子操作
  */
 async function handleSendMessage(payload?: InputMessageState) {
+  // 只读模式（子代理会话）防御性拦截：发送按钮已禁用、Enter 已拦，
+  // 此处兜住队列回填/isWaiting 自动发送等旁路。
+  if (props.readonly) return;
   const data = payload;
   if (!data || (!data.content?.trim() && !data.files.length)) return;
 

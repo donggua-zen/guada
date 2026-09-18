@@ -34,6 +34,11 @@
 ## 智能体/角色（文件化后的约定）
 
 - **权威来源 = `agents/<id>/AGENT.md`**（YAML frontmatter + Markdown 正文）。**目录名即 id**，`title` 已统一改名 `name`，改 name 不改目录名 → 会话引用不会断。
+- **id 必须是 ASCII slug**（`^[a-z0-9][a-z0-9-]*$`），**禁止中文**（2026-09-18 起强制）。显示名写在 `name` 字段，与 id 完全解耦（内置 `assistant-agent` ↔ name「智能助手」）。新建时前端「标识符」字段可显式指定，**非法值返回 HTTP 400**；**留空一律生成 `agent-<uuid v4>`**，不从 name 派生（中文名无法转写为可读 slug，派生只会产出不可辨认的目录名）。规则实现见 `agent-file.mapper.ts` 的 `AGENT_ID_PREFIX` / `AGENT_ID_PATTERN` / `isValidAgentId`，id 解析集中在 `AgentFileStore.resolveCreateId`，HTTP 边界校验在 `AgentService.createAgent`。
+- **DB 迁移的旧角色 id = 原 cuid（恒等映射，2026-09-18 起）**：`AgentFileBootstrapService` 导出时 `dirId = rekey[row.id] ?? this.uniqueId(row.id, taken)`，**不再 slugify**。理由：`session.character_id` / `bot_instance.default_character_id` / `scheduler/tasks.json` 里绑的就是 cuid，沿用则**引用零改写、零断链**；cuid 天然是小写字母数字，符合 `AGENT_ID_PATTERN`。旧角色一律视为「用户自建」，与 bundled 模板 id 不同故二者并存——**即使显示名重复（出现两个「智能助手」）也保留**，以免误删用户自定义提示词/头像。副作用：`rekey` 退化为恒等映射 → `rewriteAgentWhitelists`/`rewriteExternalRefs`/`rewriteSchedulerTasks` 全部空跑。
+- **引用一致性排查以正式库为准**：`agents/<id>/` 目录名必须与 DB 的 `session.character_id` 取值一致。注意 `.guada-dev.bak-20260913` 的 DB 曾被历史迁移（`rewriteExternalRefs`）把引用从 cuid 改写成**中文名**；**正式库 `.guada/data/ai_chat.db` 保留的是原始 cuid**。换数据源或重建后，务必核对 `sessions/*/meta.json` 的 `agentId` 分布是否与 `agents/` 目录名一一对应。
+- **内置助手 = `bundled-agents/<id>/`，当前两个**：`assistant-agent`（name「智能助手」）、`code-analyst`（name「代码分析师」）。已移除 `产品经理`、`剧本编剧` 模板。DB `character` 表的导出路径（`agent-file-bootstrap.service.ts:113`）同样产出 ASCII id；若 DB 中仍有中文 character，会退化成一堆 `agent`/`agent-2`，需要时应在该处补显式映射表。
+- **`assistant-agent` 两条强约束 + 全局 id 不可变（2026-09-18 起强制）**：① `AgentFileStore.listAgents` 排序时 `DEFAULT_AGENT_ID`（`agent-file.mapper.ts`）恒排第一——顺带使「新建会话回退 agents[0]」的默认选中确定性地落在它身上；② 禁止删除：`AgentService.deleteAgent` HTTP 边界抛 400 + `AgentFileStore.delete` 防御性拦截，永不进墓碑、补种永远有效；③ **所有智能体 id 创建后不可修改**：`updateAgent` 对请求体中与路径 id 不一致的 `id` 抛 400。前端 `AgentListTab.vue` 的 `canDelete()` 同步隐藏 assistant-agent 删除按钮。
 - 头像在角色目录内（`avatar.<ext>`，约定文件名），删目录即删头像，无孤儿文件。
 - 字段只有 `name` / `description` / `model` / `settings`（+ 正文即 systemPrompt）。`id`=目录名，时间用文件系统，**没有** `public`、`group`、`createdAt`（分组功能与 isPublic 已彻底移除）。
 - `bundled-agents/<id>/` 是随包内置模板，启动补种到用户目录（**已存在不覆盖**）。UI 删除 → 移入 `.trash/` + 写 `.tombstones.json`（不复活）；文件管理器误删且无墓碑 → 下次启动补种（恢复默认版本）。

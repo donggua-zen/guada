@@ -64,15 +64,21 @@
                     </div>
                   </div>
                 </el-form-item>
-                <!-- 存储位置（只读提示：目录名即 id） -->
-                <el-form-item v-if="agentForm.id" prop="id" class="mb-0!">
+                <!-- 标识符（目录名即 id）：新建时可自定义，编辑时只读 -->
+                <el-form-item prop="id" class="mb-0!">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.idLabel') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.idHint') }}</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">
+                        {{ t('agents.setting.idLabel') }}
+                        <span v-if="props.isNew" class="text-xs text-gray-400">{{ t('agents.setting.idOptional') }}</span>
+                      </span>
+                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                        {{ props.isNew ? t('agents.setting.idCreateHint') : t('agents.setting.idHint') }}
+                      </span>
                     </div>
                     <div class="w-1/2">
-                      <el-input :model-value="agentForm.id" readonly class="w-full font-mono" />
+                      <el-input v-model="agentForm.id" :readonly="!props.isNew"
+                        :placeholder="t('agents.setting.idPlaceholder')" class="w-full font-mono" />
                     </div>
                   </div>
                 </el-form-item>
@@ -559,6 +565,19 @@ const basicRules = computed(() => ({
   name: [
     { required: true, message: t('agents.setting.titleRequired'), trigger: ['input', 'blur'] },
     { min: 2, max: 20, message: t('agents.setting.titleLength'), trigger: ['input', 'blur'] }
+  ],
+  // 标识符（id）：可留空（后端按 name 派生，非 ASCII 名则随机兜底）；
+  // 一旦填写必须是 ASCII slug —— 禁止中文，否则跨平台会有目录名风险
+  id: [
+    {
+      validator: (_rule: any, value: string, callback: (err?: Error) => void) => {
+        if (!value) return callback()
+        return /^[a-z0-9][a-z0-9-]*$/.test(value)
+          ? callback()
+          : callback(new Error(t('agents.setting.idInvalid')))
+      },
+      trigger: ['input', 'blur']
+    }
   ]
 }))
 
@@ -1156,6 +1175,8 @@ const handleSave = async () => {
 // 获取表单数据
 const getFormData = () => {
   let finalData = {
+    // 新建时生效（编辑由 updateAgent 处理，忽略 id）；留空则后端按 name 派生或随机兜底
+    'id': agentForm.id || undefined,
     'name': agentForm.name,
     'description': agentForm.description,
     'avatarUrl': agentForm.avatarUrl,
