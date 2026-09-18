@@ -14,6 +14,7 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { safeTruncate, safeTail } from "../../common/utils/string.utils";
 import { SanitizerTransform } from "./stream-sanitizer";
 import type { ProcessChangedEvent } from "../../common/events/stream.events";
@@ -865,7 +866,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 内部方法 ──
 
   private generateId(): string {
-    return `p${Math.random().toString(36).slice(2, 8)}`;
+    // pid 不可得时的兜底句柄：统一铸造（proc-<uuid>），禁用手搓 Math.random
+    return mintId(ID_PREFIXES.proc);
   }
 
   /**

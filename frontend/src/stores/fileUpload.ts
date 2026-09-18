@@ -271,7 +271,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态)
             const task = addUploadTask({
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                id: crypto.randomUUID(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,
@@ -312,7 +312,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态),将 relativePath 绑定到任务上
             const task = addUploadTask({
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                id: crypto.randomUUID(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,
@@ -376,7 +376,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态)
             const task = addUploadTask({
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                id: crypto.randomUUID(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,

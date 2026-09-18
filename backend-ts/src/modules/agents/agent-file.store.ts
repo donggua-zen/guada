@@ -1,15 +1,17 @@
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
+import { mintId } from "../../common/utils/id.util";
 import { Injectable, Logger } from "@nestjs/common";
 import {
   AGENT_ID_MAX_LENGTH,
+  AGENT_ID_PREFIX,
   AgentFileDefinition,
+  DEFAULT_AGENT_ID,
   isAvatarFileName,
   isValidAgentId,
   parseAgentMarkdown,
   serializeAgentMarkdown,
-  slugifyAgentId,
 } from "./agent-file.mapper";
 
 /**
@@ -68,6 +70,11 @@ export interface AgentDefinition {
 
 export interface AgentCreateInput {
   name: string;
+  /**
+   * 显式指定的 id（= 目录名）。必须是 ASCII slug（`^[a-z0-9][a-z0-9-]*$`）。
+   * 省略时由 `name` 派生；若 name 非 ASCII（如纯中文）则回退 `agent-<8位随机>`。
+   */
+  id?: string;
   description?: string | null;
   modelId?: string | null;
   settings?: Record<string, any> | null;
@@ -127,15 +134,21 @@ export class AgentFileStore {
 
   // ============ 读取 API ============
 
-  /** 列表（按文件创建时间升序，缺失回退 mtime） */
+  /**
+   * 列表排序：`DEFAULT_AGENT_ID` 恒排第一；其余按文件创建时间升序
+   * （缺失回退 mtime），同刻回退 id 字典序。
+   */
   async listAgents(): Promise<AgentDefinition[]> {
     await this.initialize();
     return Array.from(this.cache.values())
-      .sort(
-        (a, b) =>
+      .sort((a, b) => {
+        if (a.id === DEFAULT_AGENT_ID) return b.id === DEFAULT_AGENT_ID ? 0 : -1;
+        if (b.id === DEFAULT_AGENT_ID) return 1;
+        return (
           a.createdAt.getTime() - b.createdAt.getTime() ||
-          a.id.localeCompare(b.id),
-      )
+          a.id.localeCompare(b.id)
+        );
+      })
       .map((c) => this.toView(c));
   }
 
@@ -176,10 +189,17 @@ export class AgentFileStore {
 
   // ============ 写入 API ============
 
-  /** 新建：由 name 派生目录 id，冲突时追加 `-2`/`-3` */
+  /**
+   * 新建智能体
+   *
+   * id 解析优先级：显式 `input.id`（推荐，前端「标识符」字段）> `name` 的 ASCII slug
+   * > `agent-<8位随机>` 兜底（中文等非 ASCII 名经 slugify 会退化成 `agent`，
+   * 若不兜底会导致一批助手全叫 agent / agent-2 / agent-3，无法辨认）。
+   * 最终仍经 `uniqueId` 去重，冲突追加 `-2`/`-3`。
+   */
   async create(input: AgentCreateInput): Promise<AgentDefinition> {
     await this.initialize();
-    const id = this.uniqueId(slugifyAgentId(input.name));
+    const id = this.uniqueId(this.resolveCreateId(input));
     const dirPath = path.join(this.usersDir, id);
     await fsp.mkdir(dirPath, { recursive: true });
     await this.writeDefinition(dirPath, {
@@ -192,6 +212,27 @@ export class AgentFileStore {
     const created = await this.findById(id);
     if (!created) throw new Error(`创建智能体失败：${id}`);
     return created;
+  }
+
+  /**
+   * 解析新建时的目录 id（尚未去重）
+   *
+   * - 填了「标识符」→ 用它（校验 ASCII slug，非法直接抛错）
+   * - 留空 → `agent-<uuid v4>`：不尝试从 name 派生
+   *   （中文名无法转写为可读 slug，派生只会产出不可辨认的目录名；
+   *    想要可读 id 请在「标识符」字段显式填写，如 `code-analyst`）
+   */
+  private resolveCreateId(input: AgentCreateInput): string {
+    const explicit = (input.id ?? "").trim();
+    if (explicit) {
+      if (!isValidAgentId(explicit)) {
+        throw new Error(
+          `非法智能体 id「${explicit}」：只允许小写字母、数字与连字符，且以字母或数字开头（^[a-z0-9][a-z0-9-]*$）`,
+        );
+      }
+      return explicit;
+    }
+    return mintId(AGENT_ID_PREFIX);
   }
 
   /** 更新：只重写 AGENT.md，目录名（id）保持不变 */
@@ -225,6 +266,10 @@ export class AgentFileStore {
    * 文件管理器直接删除不经此路径（无墓碑 → 启动补种恢复）。
    */
   async delete(id: string): Promise<boolean> {
+    if (id === DEFAULT_AGENT_ID) {
+      // 防御性拦截：正常流已在 HTTP 边界（AgentService.deleteAgent）抛 400
+      throw new Error(`内置默认智能体「${id}」不可删除`);
+    }
     const existing = await this.findById(id);
     if (!existing) return false;
     const dirPath = path.join(this.usersDir, id);

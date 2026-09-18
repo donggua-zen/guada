@@ -1,5 +1,4 @@
 import * as fsp from "fs/promises";
-import { randomUUID } from "crypto";
 
 /**
  * 文件存储机制件（file-store primitives）
@@ -67,13 +66,10 @@ export async function removeFileWithRetry(filePath: string): Promise<void> {
 /**
  * 铸造新 id：`<prefix><uuid v4>`。
  *
- * 会话 id 已采用此形态（session-<uuid>，DSH 同款）；bot/mcp 由原
- * `c<base36时间><随机>` 统一到此前缀 + uuid。id 只作目录/文件名使用，
- * 全代码库无格式假设，存量 id 不受影响。
+ * 实现已上移到 common/utils/id.util.ts（全局唯一 id 铸造入口，前缀表
+ * ID_PREFIXES 同在那里登记）；此处保留 re-export 以兼容既有 import 路径。
  */
-export function mintId(prefix = ""): string {
-  return `${prefix}${randomUUID()}`;
-}
+export { mintId } from "../utils/id.util";
 
 /**
  * 时间字段的容错归一：接受 Date / 时间戳 / ISO 字符串（js-yaml 会把

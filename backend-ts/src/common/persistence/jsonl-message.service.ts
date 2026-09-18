@@ -383,10 +383,6 @@ export class JsonlMessageService implements IMessageStore {
     return Math.max(stateSeq, diskSeq) + 1;
   }
 
-  private genId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  }
-
   // ─── 读取 ───
 
   /**
@@ -433,7 +429,8 @@ export class JsonlMessageService implements IMessageStore {
     },
   ): Promise<{ turnId: string; revision: number }> {
     const seq = await this.getNextSeq(sessionId);
-    const turnId = this.genId('msg');
+    // turnId 与主路径（agent-engine 的 preGenAssistantId）同基座：m_<ULID> 有序 id
+    const turnId = generateOrderedMessageId('m');
 
     const events: BaseEvent[] = [];
     // 整轮次重答：先删除旧轮次（按回合 id 遮蔽），再开新回合
@@ -822,7 +819,7 @@ export class JsonlMessageService implements IMessageStore {
     }
 
     for (const turn of turns) {
-      const turnId = turn.id || this.genId('msg');
+      const turnId = turn.id || generateOrderedMessageId('m');
       // 建首回合外壳（若无）
       if (!existingTurnIds.has(turnId)) {
         await this.append(sessionId, {

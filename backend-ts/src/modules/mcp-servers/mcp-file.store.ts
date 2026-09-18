@@ -9,6 +9,7 @@ import {
   mintId,
   removeFileWithRetry,
 } from "../../common/persistence/file-store-kit";
+import { ID_PREFIXES } from "../../common/utils/id.util";
 import {
   META_DOMAIN_MCP,
   MetadataBootstrapGate,
@@ -165,7 +166,7 @@ export class McpFileStore {
     data: Partial<McpServerConfig> & { id?: string },
   ): Promise<McpServerRow> {
     await this.initialize();
-    const id = data.id ?? mintId("mcp-");
+    const id = data.id ?? mintId(ID_PREFIXES.mcp);
     assertValidId(id);
     const now = new Date().toISOString();
     const config: McpServerConfig = {

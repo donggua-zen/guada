@@ -11,6 +11,7 @@ import {
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
 import { mintId, atomicWriteFile } from "../../common/persistence/file-store-kit";
+import { ID_PREFIXES } from "../../common/utils/id.util";
 
 /**
  * 会话元信息文件存储
@@ -37,8 +38,8 @@ export const GROUPS_FILE = "_groups.json";
 /** 分域迁移标记（由 MetadataFileBootstrapService 落盘） */
 export const SESSIONS_MIGRATED_MARKER = ".migrated-sessions";
 
-/** 新建会话 id 前缀（改这一行即可切换命名风格，如 `sess_`） */
-export const SESSION_ID_PREFIX = "session-";
+/** 新建会话 id 前缀（统一铸造见 common/utils/id.util.ts，此处为兼容性别名） */
+export const SESSION_ID_PREFIX = ID_PREFIXES.session;
 
 // id 合法性校验见 common/utils/session-path.util.ts 的 assertValidId（单一真相，
 // 供会话存储与取图路由共用——id 会进 path.join，挡住分隔符与 `..` 是硬约束）。
@@ -716,11 +717,9 @@ export class SessionFileStore {
     return groups.filter((g) => map.has(g.id));
   }
 
-  /** cuid 风格分组 id（与存量分组 id 形态一致，便于混用） */
+  /** 新建分组 id：统一铸造（grp-<uuid>，前缀见 ID_PREFIXES.group；存量 cuid 分组不迁移） */
   private generateGroupId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).slice(2, 10);
-    return `c${timestamp}${random}`;
+    return mintId(ID_PREFIXES.group);
   }
 
   // ============ 内部：写入与锁 ============

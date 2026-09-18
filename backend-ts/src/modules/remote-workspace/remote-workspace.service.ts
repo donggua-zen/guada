@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { verifyAndDeployAgent, type DeployResult } from "./agent-deploy";
 import { encryptSecret, decryptSecret } from "./secret-crypto.util";
 export interface RemoteConnection {
@@ -58,7 +60,7 @@ export class RemoteWorkspaceService {
       throw new Error(`Connection name '${name}' already exists`);
     }
     const conn: RemoteConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: mintId(ID_PREFIXES.conn),
       name,
       config,
     };
@@ -209,7 +211,7 @@ export class RemoteWorkspaceService {
   async deployConnection(
     config: RemoteConnection["config"],
   ): Promise<{ jobId: string }> {
-    const jobId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const jobId = `deploy-${randomUUID()}`;
     const job: { log: string[]; done: boolean; result?: DeployResult; controller?: AbortController } =
       { log: [], done: false };
     const controller = new AbortController();

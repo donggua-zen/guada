@@ -13,6 +13,7 @@ import {
   mintId,
   removeFileWithRetry,
 } from "../../common/persistence/file-store-kit";
+import { ID_PREFIXES } from "../../common/utils/id.util";
 
 /**
  * 机器人实例文件存储（对齐 providers/*.yaml 的既有范式）
@@ -133,7 +134,7 @@ export class BotFileStore {
 
   async create(data: Partial<BotFileInstance> & { id?: string }): Promise<BotFileInstance> {
     await this.initialize();
-    const id = data.id ?? mintId("bot-");
+    const id = data.id ?? mintId(ID_PREFIXES.bot);
     const now = new Date().toISOString();
     const instance: BotFileInstance = {
       id,

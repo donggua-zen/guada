@@ -9,9 +9,12 @@ import {
 
 describe("agent-file.mapper", () => {
   describe("slugifyAgentId", () => {
-    it("保留中文并按空白分词", () => {
-      expect(slugifyAgentId("产品经理")).toBe("产品经理");
-      expect(slugifyAgentId("UI Designer")).toBe("UI-Designer");
+    it("只产出 ASCII slug：中文折叠为分隔符、统一小写", () => {
+      // 非 ASCII（中文）一律视作分隔符；若结果无可读字符则回退 agent
+      expect(slugifyAgentId("产品经理")).toBe("agent");
+      expect(slugifyAgentId("公众号-主编-小张")).toBe("agent");
+      expect(slugifyAgentId("UI Designer")).toBe("ui-designer");
+      expect(slugifyAgentId("Assistant Agent")).toBe("assistant-agent");
     });
 
     it("剔除文件系统非法字符", () => {
@@ -27,21 +30,29 @@ describe("agent-file.mapper", () => {
     it("空名回退并规避 Windows 保留名", () => {
       expect(slugifyAgentId("")).toBe("agent");
       expect(slugifyAgentId("   ")).toBe("agent");
-      expect(slugifyAgentId("CON")).toBe("_CON");
+      expect(slugifyAgentId("CON")).toBe("_con");
       expect(slugifyAgentId("com1")).toBe("_com1");
-      expect(slugifyAgentId("LPT9")).toBe("_LPT9");
+      expect(slugifyAgentId("LPT9")).toBe("_lpt9");
     });
 
     it("超长截断到上限", () => {
-      const id = slugifyAgentId("中".repeat(200));
+      const id = slugifyAgentId("a".repeat(200));
       expect(id.length).toBe(AGENT_ID_MAX_LENGTH);
     });
   });
 
   describe("isValidAgentId", () => {
-    it("接受普通与中文目录名", () => {
-      expect(isValidAgentId("产品经理")).toBe(true);
+    it("接受 ASCII slug 目录名", () => {
       expect(isValidAgentId("ui-designer")).toBe(true);
+      expect(isValidAgentId("assistant-agent")).toBe(true);
+      expect(isValidAgentId("code-analyst")).toBe(true);
+      expect(isValidAgentId("agent-2")).toBe(true);
+    });
+
+    it("拒绝中文与非 ASCII 目录名", () => {
+      expect(isValidAgentId("产品经理")).toBe(false);
+      expect(isValidAgentId("智能助手")).toBe(false);
+      expect(isValidAgentId("UI-Designer")).toBe(false);
     });
 
     it("拒绝路径逃逸与非法形态", () => {

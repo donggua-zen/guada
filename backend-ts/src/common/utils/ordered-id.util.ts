@@ -37,11 +37,16 @@ function encodeUlid(ts: bigint, rand: bigint): string {
     out = CROCKFORD[Number(ts & 31n)] + out;
     ts >>= 5n;
   }
+  // 随机段同样大端（高位在前）：同毫秒低位递增时字符串变化发生在右端，
+  // 才能保证「数值递增 = 字典序递增」。旧实现小端（低位在前追加），
+  // 每 32 次递增后字符串序回退一次，违背下方单调性声明（2026-09-18 修正）。
+  // 存量 id 不迁移：时间戳段编码未变，跨 id 排序由时间段主导，仍成立。
+  let rs = '';
   for (let i = 0; i < 16; i++) {
-    out += CROCKFORD[Number(rand & 31n)];
+    rs = CROCKFORD[Number(rand & 31n)] + rs;
     rand >>= 5n;
   }
-  return out;
+  return out + rs;
 }
 
 /**

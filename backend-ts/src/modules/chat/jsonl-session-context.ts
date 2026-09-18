@@ -30,6 +30,7 @@ import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { TokenMeterService } from './token-meter.service';
 import { generateOrderedMessageId } from '../../common/utils/ordered-id.util';
+import { ID_PREFIXES, mintId } from '../../common/utils/id.util';
 import {
   CompactionConfig,
   CompactionDataSource,
@@ -606,8 +607,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   generateId(): string {
-    // 与 messageStore.genId 保持一致的前缀/格式（通用 id：contentId/attachmentId/turnId）
-    return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // JSONL 内通用 id（contentId/attachmentId）：统一铸造入口
+    // （id-<uuid>，前缀见 ID_PREFIXES.id；与消息域 m_ ULID 分域，见 id.util.ts）
+    return mintId(ID_PREFIXES.id);
   }
 
   /** 生成下一个有序消息 id（ULID 基座，同步；m_<ULID> 按时间单调，遮蔽分界点标记依据） */

@@ -1,8 +1,8 @@
 <template>
   <div class="w-full flex flex-col items-center">
-    <!-- 输入框区域：只读模式（子代理会话）下整体隐藏 —— 子代理不可输入，无需展示输入框。
-         保留 v-if 结构以便后续需要时恢复 readonly-placeholder 提示。 -->
-    <div v-if="!props.readonly"
+    <!-- 输入框区域：只读模式（子代理会话）仍渲染输入区外壳——承载停止按钮；
+         内部按 readonly 禁用矩阵收口：编辑器不可编辑、模型选择/拖拽入口守卫、发送禁用。 -->
+    <div
       class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
       :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--gd-color-input-bg)': !backdrop }, { 'bg-(--gd-color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
       @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"
@@ -92,7 +92,8 @@
           <slot name="right-actions-before" />
           <!-- 模型选择按钮 -->
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
-            :class="{ 'is-open': modelButtonExpanded }" :style="{ width: modelButtonWidth }">
+            :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly }"
+            :style="{ width: modelButtonWidth }">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
@@ -756,6 +757,8 @@ function collapseModelButton() {
 }
 
 const openModelPanel = () => {
+  // 只读模式（子代理会话）：模型仅展示不可切换
+  if (props.readonly) return
   if (modelPanelVisible.value) {
     modelPanelVisible.value = false
     return
@@ -1122,6 +1125,8 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI !== undef
 let dragCounter = 0;
 
 const handleDragEnter = () => {
+  // 只读模式：不显示拖拽高亮态
+  if (props.readonly) return;
   dragCounter++;
   isDragOver.value = true;
 };
@@ -1135,6 +1140,9 @@ const handleDragLeave = () => {
 };
 
 const handleDrop = (event: DragEvent) => {
+  // 只读模式（子代理会话）：不接收拖拽附件
+  if (props.readonly) return;
+
   dragCounter = 0;
   isDragOver.value = false;
 
@@ -1437,11 +1445,14 @@ onMounted(() => {
         StarterKit,
         CommandNode,
         Placeholder.configure({
-          placeholder: t('chat.input.editorPlaceholder'),
+          // 只读模式（子代理会话）提示只读文案，不可输入
+          placeholder: props.readonly
+            ? t('chat.input.readonlyPlaceholder')
+            : t('chat.input.editorPlaceholder'),
         }),
       ],
       content: parseCommandTags(props.value || ''),
-      editable: true,
+      editable: !props.readonly,
       editorProps: {
         handleKeyDown: (_view, event) => {
           // 弹窗打开时拦截键盘事件

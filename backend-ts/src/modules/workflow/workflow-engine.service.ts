@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import * as os from "os";
 import * as vm from "vm";
 import { Worker } from "worker_threads";
@@ -674,7 +675,7 @@ export class WorkflowEngineService {
         : undefined,
     };
 
-    const runId = `wfr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const runId = `wfr_${randomUUID()}`;
     const run = new WorkflowRun({
       runId,
       parentContext,

@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from "@nestjs/common";
-import { randomUUID } from "crypto";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { TaskStorageService } from "./task-storage.service";
 import { TaskSchedulerService } from "./task-scheduler.service";
 import { TaskExecutorService } from "./task-executor.service";
@@ -59,7 +59,7 @@ export class SchedulerService {
 
     const now = new Date().toISOString();
     const task: ScheduledTask = {
-      id: randomUUID(),
+      id: mintId(ID_PREFIXES.task),
       name: dto.name,
       prompt: dto.prompt,
       scheduleType: dto.scheduleType,

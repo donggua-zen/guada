@@ -5,11 +5,13 @@ import {
   KbDatabaseService,
   assertValidKbId,
 } from "./kb-database.service";
+import { ID_PREFIXES } from "../../common/utils/id.util";
 
 /**
- * 条目 id 前缀（与 DB 时代 cuid 并存：存量 id 保持原值不动）
+ * 条目 id 前缀（统一铸造见 common/utils/id.util.ts；与 DB 时代 cuid 并存：
+ * 存量 id 保持原值不动）
  */
-export const KB_ITEM_ID_PREFIX = "kbf-";
+export const KB_ITEM_ID_PREFIX = ID_PREFIXES.kbFile;
 
 /**
  * 仓储需要的最小数据库访问面（KbDatabaseService 实现它）。
