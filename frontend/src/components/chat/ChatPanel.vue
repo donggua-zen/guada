@@ -80,7 +80,7 @@
               <!-- 编辑模式提示条 -->
               <div v-if="editMode" class="max-w-full w-full flex px-4">
                 <div
-                  class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-gray-200/80 dark:bg-[#2a2a2a]/80 backdrop-blur-xl">
+                  class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-(--gd-color-sidebar-bg-active) backdrop-blur-xl">
                   <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
                     }}</span>
                   <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
@@ -113,6 +113,11 @@
                   </template>
                 </ChatInput>
               </div>
+
+              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染 -->
+              <WorkingDirBar v-if="!props.readonly && effectiveSessionId" class="mt-1"
+                :session-id="effectiveSessionId" :attachments="props.session?.settings?.attachments"
+                @attachments-change="handleAttachmentsChange" />
             </div>
           </div>
         </div>
@@ -124,10 +129,12 @@
       </div>
     </ScrollContainer>
 
-    <!-- 右侧 aside 槽位（工作区概览）：恒为浮层（absolute、自带底色/描边/投影），不随消息滚动；
-         有占位时恰好落在避让空位上（视觉上像停靠），无占位（临时展开）时悬浮于消息上方 -->
+    <!-- 右侧 aside 槽位（工作区概览）：不随消息滚动；有占位时落在避让空位上，
+         默认融入背景（视觉原语 style.css --gd-overview-panel-*）；
+         无占位（临时展开）悬浮于消息上方，回退卡片底色保证可读 -->
     <Transition name="aside-fade">
       <div v-if="(props.asideWidth || 0) > 0" class="chat-aside"
+        :class="{ 'chat-aside--floating': !(props.asideReserve || 0) }"
         :style="{ width: (props.asideWidth || 0) + 'px', right: asideRight + 'px' }">
         <slot name="aside" />
       </div>
@@ -187,6 +194,7 @@ import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
 import QueuedMessages from './QueuedMessages.vue';
 import SessionCards from './SessionCards.vue';
+import WorkingDirBar from './workspace/WorkingDirBar.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import GdTooltip from '../ui/GdTooltip.vue';
@@ -262,6 +270,8 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'select-agent': [agent: Agent]  // 切换智能体
+  /** 工作目录条（输入框下方）：附加远程目录绑定变更，转发给 ChatPage 持久化 */
+  'attachments-change': [attachments: Record<string, string[]>]
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
 }>();
@@ -593,6 +603,14 @@ onMounted(() => {
 onUnmounted(() => {
   clearSkeletonTimers();
 });
+
+/**
+ * 工作目录条（输入框下方）的附加远程目录绑定变更：向上转发给 ChatPage
+ * （写 mainSession.settings.attachments 并 PUT /sessions/:id 持久化）
+ */
+const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
+  emit("attachments-change", attachments);
+};
 
 /**
  * 处理 ChatInput 配置变更
@@ -1228,6 +1246,14 @@ function scrollToMessage(messageId: string) {
   position: absolute;
   top: 12px;
   z-index: 20;
+}
+
+/* 临时展开（无避让占位）悬浮于消息上方：回退卡片底色保证可读。
+   常驻停靠态默认融入背景；卡片视觉原语见 style.css --gd-overview-panel-* */
+.chat-aside--floating :deep(.overview-panel) {
+  background: var(--gd-color-dialog-bg, var(--gd-color-surface));
+  border-color: var(--gd-color-surface-border);
+  box-shadow: var(--gd-overview-panel-shadow);
 }
 
 .chat-aside :deep(> *) {

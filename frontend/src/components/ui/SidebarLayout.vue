@@ -19,7 +19,7 @@
 
       <!-- 折叠展开按钮 -->
       <button v-if="showToggleButton || isMobile" @click="$emit('update:sidebarVisible', !sidebarVisible)"
-        class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none z-10  border-gray-200 dark:border-gray-800 dark:hover:bg-gray-600"
+        class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-(--gd-color-surface) dark:bg-gray-800 shadow-sm hover:bg-(--gd-color-surface-hover) focus:outline-none z-10  border-(--gd-color-surface-border) dark:border-gray-800 dark:hover:bg-gray-600"
         :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
         :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-lg border'">
         <slot name="toggle-icon" :sidebar-visible="sidebarVisible">
