@@ -1,5 +1,5 @@
 <template>
-  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden border-r-1 border-(--gd-color-border)">
+  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
     <!-- 标题栏左侧面板 -->
     <!-- macOS：为系统红绿灯按钮预留左侧空间，避免遮挡 logo/菜单 -->
     <div :class="{ 'mac-sidebar-title-padding': isMac }">
@@ -47,7 +47,7 @@
               <GdTooltip :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
                 <div @click.stop="openNewSession(group.id)">
                   <div
-                    class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
+                    class="session-action-trigger p-0.5 bg-(--gd-color-surface) dark:bg-gray-700 border border-(--gd-color-surface-border) dark:border-gray-700">
                     <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
                   </div>
                 </div>
@@ -162,11 +162,11 @@
             <!-- 颜色主题：内联三态切换 -->
             <div class="px-5 py-2 flex items-center gap-2">
               <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
-              <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-gray-100 dark:bg-[#1a1b1e]">
+              <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
                 <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
                   class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
                   :class="themeMode === option.value
-                    ? 'bg-white dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
+                    ? 'bg-(--gd-color-surface) dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
                     : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
                   <component :is="option.icon" class="w-3.5 h-3.5" />
                   {{ option.label }}

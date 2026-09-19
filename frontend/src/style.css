@@ -54,8 +54,18 @@
   --gd-color-surface-border: #efefef;
   --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
   --gd-size-surface-radius: 12px;
-  --gd-color-bg: #fff;
-  --gd-color-border: #dbdcdc;
+
+  /* 工作区概览面板（OverviewPanel）视觉原语：默认融入背景（无卡片感）。
+     自定义主题可赋值恢复卡片样式，例如：
+     --gd-overview-panel-bg: var(--gd-color-surface);
+     --gd-overview-panel-border-color: var(--gd-color-surface-border);
+     --gd-overview-panel-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); */
+  --gd-overview-panel-bg: transparent;
+  --gd-overview-panel-border-color: transparent;
+  --gd-overview-panel-shadow: none;
+  --gd-size-overview-panel-radius: 12px;
+  --gd-color-bg: #fdfdfd;
+  --gd-color-border: #e8e8e8;
   --gd-code-block-bg: #f8f8f8;
 
   --gd-color-bubble-user-bg: #f0f0f0;
@@ -66,7 +76,7 @@
   --gd-color-bubble-assitant-border: none;
   --gd-color-bubble-assitant-text-strong: #17181a;
 
-  --gd-color-sidebar-bg: #f9fafb;
+  --gd-color-sidebar-bg: #f6f6f6;
   --gd-color-sidebar-bg-active: #2631480f;
   /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
   --gd-color-sidebar-text-active: var(--gd-color-text);
@@ -77,7 +87,7 @@
   --gd-color-titlebar-border: var(--gd-color-sidebar-bg);
 
   /* 聊天对话样式 */
-  --gd-color-conversation-bg: #f9f9f9;
+  --gd-color-conversation-bg: #f6f6f6;
   /* --gd-color-conversation-bg: var(--gd-color-surface); */
   --gd-color-conversation-text: #333;
   --gd-color-conversation-border: transparent;

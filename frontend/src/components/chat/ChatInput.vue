@@ -430,11 +430,8 @@ const styleClass = computed(() => {
     classes.push('expanded');
   }
   // if (props.mode === 'create') {
-  if (focused.value) {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
-  } else {
-    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-none');
-  }
+  // 输入区阴影弱化，聚焦不再加重（层次感交给边框）
+  classes.push('shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:shadow-none');
   // }
   return classes.join(' ') + ' ' + props.class;
 });
@@ -1681,7 +1678,7 @@ defineExpose({ insertText, insertBadge });
   line-height: inherit;
   cursor: pointer;
   user-select: none;
-  background: #f3f3f3;
+  background: var(--gd-color-sidebar-bg-active);
   color: var(--gd-color-text);
   padding: 0 8px;
   border-radius: 4px;

@@ -2,7 +2,7 @@
     <div class="workspace-sidebar h-full flex flex-col relative">
         <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制 -->
         <div
-            class="flex items-center h-10 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
+            class="flex items-center h-10 drag-region shrink-0 border-b border-(--gd-color-surface-border) dark:border-[#2e3035]">
             <!-- 所有类型标签统一一行（文件 / 浏览器 / Git 审阅） -->
 
             <!-- 标签栏（可横向滚动）+ 新建按钮（固定，不随标签滚出视野） -->
@@ -132,7 +132,7 @@
 
             <!-- 右侧目录树：仅文件标签激活时显示（起始页/浏览器/Git 均隐藏） -->
             <div v-if="activeTab?.type === 'file'"
-                class="shrink-0 w-72 border-l border-gray-100 dark:border-[#2e3035] flex flex-col min-h-0 bg-[var(--gd-color-surface)]">
+                class="shrink-0 w-72 border-l border-(--gd-color-surface-border) dark:border-[#2e3035] flex flex-col min-h-0 bg-[var(--gd-color-surface)]">
                 <!-- 头部 -->
                 <div class="shrink-0 flex items-center justify-between px-2 py-3">
                     <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -1718,8 +1718,8 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: var(--gd-color-surface);
+    border: 1px solid var(--gd-color-surface-border);
     border-radius: 12px;
     box-shadow: 0 0 16px rgba(0, 0, 0, 0.10);
     opacity: 0;
@@ -1788,7 +1788,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 6px;
     padding: 6px 14px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--gd-color-surface-border);
     border-radius: 8px;
     background: transparent;
     color: var(--gd-color-text-gray);

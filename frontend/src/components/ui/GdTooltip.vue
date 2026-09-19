@@ -6,6 +6,7 @@
     @mouseleave="onMouseLeave"
     @focus="onMouseEnter"
     @blur="onMouseLeave"
+    @click="onTriggerClick"
   >
     <slot />
   </span>
@@ -42,6 +43,11 @@ function onMouseEnter(): void {
 }
 
 function onMouseLeave(): void {
+  hideTooltip()
+}
+
+/** 点击触发区立即隐藏 tooltip（如点击按钮弹出菜单/弹层时，避免压在浮层上）；移出再悬停可重新触发 */
+function onTriggerClick(): void {
   hideTooltip()
 }
 

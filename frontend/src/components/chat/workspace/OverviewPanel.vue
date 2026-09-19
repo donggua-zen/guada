@@ -2,7 +2,7 @@
   <!-- 工作区概览：常驻于聊天内容右侧（占位挤宽），与 WorkspaceSidebar 解耦。
        数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store、会话待办、后台进程。
        布局：分组标题 + 下属行（Git 工具 / 待办事项 / 后台进程 / 浏览器），默认平铺展开。 -->
-  <aside class="overview-panel shadow">
+  <aside class="overview-panel">
     <!-- 标题行 -->
     <div class="overview-header">
       <span class="overview-title">{{ t('git.overviewTitle') }}</span>
@@ -69,61 +69,9 @@
         </button>
       </section>
 
-      <!-- ── 工作目录：主目录（不可删改，点击打开工作区）+ 附加目录（远程连接绑定，增删走
-           session.settings.attachments["ssh-connection"]，后端下回合 diff 注入生效） ── -->
-      <section class="overview-section">
-        <div class="overview-section-title overview-title-row">
-          <span>{{ t('chat.workspace.workingDir') }}</span>
-          <!-- 添加附加目录（标题行右对齐，图标按钮）：下拉列出 remote-workspace 全部连接（✓ 为已绑定）；无连接时引导去设置页 -->
-          <DropdownMenu @command="handleAttachedCommand">
-            <GdTooltip :content="t('chat.workspace.addAttachedDir')" placement="bottom">
-              <button class="overview-title-icon-btn">
-                <el-icon :size="14"><Add16Regular /></el-icon>
-              </button>
-            </GdTooltip>
-            <template #dropdown>
-              <div class="overview-branch-menu">
-                <template v-if="availableConnections.length">
-                  <DropdownMenuItem v-for="c in availableConnections" :key="c.id" :command="c.id">
-                    <span class="overview-branch-item">
-                      <span class="overview-branch-check">{{ attachedIds.includes(c.id) ? '✓' : '' }}</span>
-                      <span class="overview-branch-name">{{ c.name }}</span>
-                    </span>
-                  </DropdownMenuItem>
-                </template>
-                <DropdownMenuItem v-else :command="OPEN_SETTINGS_COMMAND">
-                  <span class="overview-branch-item">
-                    <span class="overview-branch-name">{{ t('chat.workspace.noConnections') }}</span>
-                  </span>
-                </DropdownMenuItem>
-              </div>
-            </template>
-          </DropdownMenu>
-        </div>
-
-        <!-- 主目录：展示 basename；点击打开工作区面板（目录树） -->
-        <button class="overview-row" @click="openWorkspaceTree">
-          <el-icon :size="16" class="overview-row-icon"><Folder16Regular /></el-icon>
-          <span class="overview-row-label">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
-        </button>
-
-        <!-- 附加目录：已绑定的远程连接；hover 显示解除按钮（对齐后台进程行的 kill 样式） -->
-        <GdTooltip v-for="conn in attachedConnections" :key="conn.id"
-          :content="conn.description || conn.name" placement="bottom">
-          <div class="overview-row overview-attach-row">
-            <el-icon :size="16" class="overview-row-icon"><Cloud16Regular /></el-icon>
-            <span class="overview-row-label">{{ conn.name }}</span>
-            <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">
-              <button class="overview-attach-remove" @click.stop="removeAttached(conn.id)">
-                <el-icon :size="10"><Close /></el-icon>
-              </button>
-            </GdTooltip>
-          </div>
-        </GdTooltip>
-      </section>
-
       <!-- ── 后台进程：运行中的后台命令；点击行打开日志标签，行尾关闭按钮终止进程 ── -->
       <!-- 待办事项分区已迁移至对话流下方（SessionTodoCard，ChatPanel 内 v-for 之后） -->
+      <!-- 工作目录区块已迁移至输入框底部外侧（WorkingDirBar，ChatPanel 输入列内） -->
       <section v-if="processes.length" class="overview-section">
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.processes') }}</span>
@@ -255,19 +203,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ArrowDown, Close } from "@element-plus/icons-vue";
 import {
-  BranchFork16Regular, ArrowUpload16Regular, Folder16Regular,
+  BranchFork16Regular, ArrowUpload16Regular,
   Dismiss16Regular, Add16Regular,
-  ArrowSync20Regular, Cloud16Regular,
+  ArrowSync20Regular,
   Flowchart20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
-import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
@@ -280,18 +226,13 @@ import type { Session } from "@/types/session";
 import type { WorkflowRunState, WorkflowAgentState, WorkflowMemberStatus } from "@/types/stream/workflow.types";
 
 const { t } = useI18n();
-const router = useRouter();
 const props = defineProps<{
   sessionId: string | null;
   /** 子会话列表（ChatPage 维护：SSE sub_agent_create/closed 增改 + fetchSession 基线，含已冻结的） */
   subSessions?: Session[];
-  /** 主会话的附件绑定（mainSession.settings.attachments，ChatPage 单向下传；增删经事件上行） */
-  attachments?: Record<string, string[]>;
 }>();
 const emit = defineEmits<{
   collapse: [];
-  /** 附加工作目录绑定变更（ChatPage 写回 mainSession.settings 并 PUT 持久化） */
-  attachmentsChange: [attachments: Record<string, string[]>];
 }>();
 
 const git = useGitStore();
@@ -300,80 +241,7 @@ const layoutStore = useLayoutStore();
 const browserStore = useBrowserWebviewStore();
 const sessionStore = useSessionStore();
 
-// ── 工作目录分组：主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
-/** 下拉空态命令：跳转设置页“远程工作区”创建连接 */
-const OPEN_SETTINGS_COMMAND = "__open_settings";
-
-/** 主工作目录（后端解析：自定义 workspacePath 或会话默认目录），仅展示 */
-const mainWorkspacePath = ref("");
-const mainWorkspaceBasename = computed(() => {
-  if (!mainWorkspacePath.value) return "";
-  const normalized = mainWorkspacePath.value.replace(/[\\/]+$/, "");
-  return normalized.split(/[\\/]/).pop() || normalized;
-});
-
-interface AttachableConnection { id: string; name: string; description?: string; }
-/** remote-workspace 插件提供的全部连接（设置页创建，与会话无关的全局清单） */
-const availableConnections = ref<AttachableConnection[]>([]);
-
-/** 当前会话已绑定的附加目录 ID（props.attachments 单向下传，增删经 attachmentsChange 上行） */
-const attachedIds = computed<string[]>(() => props.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE] ?? []);
-/** 已绑定连接的展示信息（连接清单缺失时回退显示 ID） */
-const attachedConnections = computed<AttachableConnection[]>(() =>
-  attachedIds.value.map((id) => availableConnections.value.find((c) => c.id === id) ?? { id, name: id }),
-);
-
-async function loadWorkspacePath(): Promise<void> {
-  if (!props.sessionId) {
-    mainWorkspacePath.value = "";
-    return;
-  }
-  try {
-    const res = await apiService.getWorkspacePath(props.sessionId);
-    mainWorkspacePath.value = res.workspacePath || "";
-  } catch {
-    mainWorkspacePath.value = "";
-  }
-}
-
-async function loadConnections(): Promise<void> {
-  try {
-    // 直连 remote-workspace REST 清单（与设置页同源）；不经附件类型端点（该类型已注销）
-    const connections = await apiService.getConnections();
-    availableConnections.value = connections.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: `${c.config.username}@${c.config.host}`,
-    }));
-  } catch {
-    availableConnections.value = [];
-  }
-}
-
-/** 解绑附加目录（主目录不可删；后端下回合 diff 后注入解绑提醒） */
-function removeAttached(connectionId: string): void {
-  writeAttachments(attachedIds.value.filter((id) => id !== connectionId));
-}
-
-/** 下拉命令分发：连接 ID 切换绑定；空态命令跳设置页 */
-function handleAttachedCommand(command: string): void {
-  if (command === OPEN_SETTINGS_COMMAND) {
-    void router.replace({ name: "SystemSettings", params: { tab: "connections" } });
-    return;
-  }
-  writeAttachments(
-    attachedIds.value.includes(command)
-      ? attachedIds.value.filter((id) => id !== command)
-      : [...attachedIds.value, command],
-  );
-}
-
-/** 写回附件绑定并上行（ChatPage 写 mainSession.settings 后 PUT /sessions/:id 持久化） */
-function writeAttachments(ids: string[]): void {
-  emit("attachmentsChange", { ...props.attachments, [SSH_CONNECTION_ATTACHMENT_TYPE]: ids });
-}
-
-// ClipboardTaskListLtr20Regular 原用于待办折叠头行，分组标题化后暂不使用；保留导入会报 unused，移除。
+// 工作目录分组（主目录展示 + 附加远程目录绑定管理）已迁移至输入框底部外侧的 WorkingDirBar
 
 // ── 后台进程（shell 插件 run_command 转后台的运行中进程）──
 const processes = ref<UiProcessInfo[]>([]);
@@ -596,13 +464,11 @@ watch(
     endedExpanded.value = false;
     void loadProcesses();
     void loadWorkflowRuns();
-    void loadWorkspacePath();
   },
   { immediate: true },
 );
 
 onMounted(() => {
-  void loadConnections();
   unsubscribeProcessChanged = apiService.onSessionEvent("process_changed", (event) => {
     if (event.sessionId === props.sessionId) loadProcesses();
   });
@@ -624,12 +490,6 @@ function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
   // 显示完全由激活标签驱动：打开 Git 审阅标签
   nextTick(() => tabStore.openGitTab());
-}
-
-function openWorkspaceTree(): void {
-  layoutStore.setWorkspaceVisible(true);
-  // 文件标签激活中→保持；否则选标签栏末个文件标签；无→新建空浏览标签（目录树随之显示）
-  nextTick(() => tabStore.openWorkspaceBrowseTab(t('chat.workspace.newTab')));
 }
 
 function activateBrowser(windowId: string): void {
@@ -664,9 +524,10 @@ async function createBrowser(): Promise<void> {
   flex-direction: column;
   width: 100%;
   min-width: 0;
-  background: var(--gd-color-dialog-bg, var(--gd-color-surface));
-  border: 1px solid var(--gd-color-surface-border);
-  border-radius: 12px;
+  /* 卡片感原语默认融入背景；主题自定义见 style.css --gd-overview-panel-* */
+  background: var(--gd-overview-panel-bg);
+  border: 1px solid var(--gd-overview-panel-border-color);
+  border-radius: var(--gd-size-overview-panel-radius);
   overflow: hidden;
 }
 
@@ -814,34 +675,6 @@ async function createBrowser(): Promise<void> {
 .overview-row-chevron {
   color: var(--gd-color-text-disabled);
   flex-shrink: 0;
-}
-
-/* 附加目录行：div 行 + hover 显示解除按钮（对齐后台进程行的 kill 样式） */
-.overview-attach-row {
-  cursor: default;
-}
-.overview-attach-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--gd-color-text-gray);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
-}
-.overview-attach-row:hover .overview-attach-remove {
-  opacity: 1;
-}
-.overview-attach-remove:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
 }
 
 /* 分支下拉行：外层撑满，穿透 DropdownMenu 内部 inline-flex（否则收缩为内容宽） */

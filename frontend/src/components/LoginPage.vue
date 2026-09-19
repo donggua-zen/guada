@@ -1,13 +1,13 @@
 <template>
   <div class="flex flex-col h-full">
     <CustomTitlebar />
-    <div class="flex-1 flex items-center justify-center bg-surface p-5">
+    <div class="flex-1 flex items-center justify-center bg-(--gd-color-bg) p-5">
     <div class="w-full max-w-md p-10 transition-all duration-300 ease-in-out">
       <div class="text-center mb-8">
-        <div class="flex items-center justify-center gap-3 mb-3"> 
-          <h1 class="text-4xl font-semibold text-text m-0">GuaDa</h1>
+        <div class="flex items-center justify-center gap-3 mb-3">
+          <h1 class="text-4xl font-semibold text-(--gd-color-text) m-0">GuaDa</h1>
         </div>
-        <p class="text-sm text-text-gray m-0">{{ t('ui.login.welcome') }}</p>
+        <p class="text-sm text-(--gd-color-text-gray) m-0">{{ t('ui.login.welcome') }}</p>
       </div>
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="flex flex-col gap-5" @keyup.enter="handleLogin">
@@ -181,7 +181,7 @@ const handleLogin = async (): Promise<void> => {
 :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 1px var(--gd-color-border) inset;
   border-radius: 10px;
-  background-color: #ffffff;
+  background-color: var(--gd-color-surface);
   transition: all 0.2s ease;
   padding: 4px 12px;
 }
