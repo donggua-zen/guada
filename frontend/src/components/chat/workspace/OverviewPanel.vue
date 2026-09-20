@@ -13,11 +13,6 @@
             <el-icon :size="14" :class="{ 'is-loading': git.refreshing }"><ArrowSync20Regular /></el-icon>
           </button>
         </GdTooltip>
-        <GdTooltip :content="t('chat.workspace.collapseOverview')" placement="bottom">
-          <button class="overview-collapse-btn" @click="emit('collapse')">
-            <el-icon :size="14"><Dismiss16Regular /></el-icon>
-          </button>
-        </GdTooltip>
       </div>
     </div>
 
@@ -207,7 +202,7 @@ import { ElMessage } from "element-plus";
 import { ArrowDown, Close } from "@element-plus/icons-vue";
 import {
   BranchFork16Regular, ArrowUpload16Regular,
-  Dismiss16Regular, Add16Regular,
+  Add16Regular,
   ArrowSync20Regular,
   Flowchart20Regular,
 } from "@vicons/fluent";
@@ -230,9 +225,6 @@ const props = defineProps<{
   sessionId: string | null;
   /** 子会话列表（ChatPage 维护：SSE sub_agent_create/closed 增改 + fetchSession 基线，含已冻结的） */
   subSessions?: Session[];
-}>();
-const emit = defineEmits<{
-  collapse: [];
 }>();
 
 const git = useGitStore();

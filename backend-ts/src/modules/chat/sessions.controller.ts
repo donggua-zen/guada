@@ -23,6 +23,7 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { CreateSessionDto } from "./dto/create-session.dto";
+import { BranchSessionDto } from "./dto/branch-session.dto";
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
@@ -135,6 +136,31 @@ export class SessionsController {
   @Get("sessions/:id")
   async getSession(@Param("id") id: string) {
     return this.sessionService.getSessionById(id);
+  }
+
+  /**
+   * 分支会话：以指定回合（助手消息所在回合）为节点，完整复制源会话为新会话
+   */
+  @Post("sessions/:id/branch")
+  async branchSession(
+    @Param("id") id: string,
+    @Body() data: BranchSessionDto,
+    @Headers("x-client-id") clientId: string,
+  ) {
+    const session = await this.sessionService.branchSession(id, {
+      turnId: data.turnId,
+      title: data.title,
+    });
+
+    // 广播会话创建事件，携带 source 使前端能过滤自身事件（其他客户端侧边栏同步出现分支会话）
+    this.eventBus.emit("session.created", {
+      sessionId: session.id,
+      timestamp: new Date().toISOString(),
+      source: clientId || undefined,
+      payload: { session },
+    });
+
+    return session;
   }
 
   @Put("sessions/:id")

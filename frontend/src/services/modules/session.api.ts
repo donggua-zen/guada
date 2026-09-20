@@ -3,6 +3,8 @@ import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse,
 
 export interface SessionApi {
   createSession(data: any): Promise<Session>;
+  /** 分支会话：以指定回合（助手消息所在回合）为节点完整复制源会话 */
+  branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<Session>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
@@ -303,6 +305,10 @@ export interface UiProcessLog {
 export const sessionApi: SessionApi = {
   async createSession(this: ApiContext, data: any) {
     return await this._request("/sessions", { method: "POST", data });
+  },
+
+  async branchSession(this: ApiContext, sessionId: string, data: { turnId: string; title?: string }) {
+    return await this._request(`/sessions/${sessionId}/branch`, { method: "POST", data });
   },
 
   async deleteSession(this: ApiContext, sessionId: string, deleteWorkspace: boolean = false) {

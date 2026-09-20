@@ -922,6 +922,42 @@ export class JsonlMessageService implements IMessageStore {
     return { imported: count };
   }
 
+  // ─── 分支/克隆（原始事件迁移）───
+
+  /** 全量领域事件（seq 序原样，不折叠）：分支/克隆等迁移路径的读取入口 */
+  async getAllEvents(sessionId: string): Promise<BaseEvent[]> {
+    return this.backend.getAllEvents(sessionId);
+  }
+
+  /**
+   * 批量导入原始事件（分支/克隆路径）：事件原样重放写入（type/data/time 保留，仅重编 seq）。
+   * 与 importTurns（Turn[] → 三事件合成）互补：压缩、遮蔽、命令/提问事件卡片等
+   * 非回合事件原样保留，回放后与源会话对应时刻的状态一致。
+   * 调用方须先 ensureSession（session/init seq=0 已写入），本方法从下一空闲 seq 起重编。
+   */
+  async importEvents(
+    sessionId: string,
+    events: BaseEvent[],
+  ): Promise<{ imported: number }> {
+    if (!events || events.length === 0) return { imported: 0 };
+    return this.runExclusive(sessionId, async () => {
+      let seq = await this.getNextSeq(sessionId);
+      const startSeq = seq;
+      // 分批落盘：单批有界，避免超大前缀一次性 stringify 占内存；事件保留原 time（分支历史时间戳不变）
+      const BATCH = 500;
+      for (let i = 0; i < events.length; i += BATCH) {
+        const batch = events.slice(i, i + BATCH).map((e) => ({ ...e, seq: seq++ }));
+        await this.backend.appendEvents(sessionId, batch);
+        this.applyToCache(sessionId, batch);
+      }
+      await this.maybeSnapshot(sessionId);
+      this.logger.log(
+        `[jsonl] imported ${events.length} events into ${sessionId} (seq ${startSeq}..${seq - 1})`,
+      );
+      return { imported: events.length };
+    });
+  }
+
   // ─── 压缩占位（后续接入 compression-engine）───
 
   /** 追加一级压缩（裁剪）事件：只裁剪 tool 内容，不改可见性。@returns 写入后版本号（revision） */

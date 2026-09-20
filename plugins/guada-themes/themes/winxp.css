@@ -1,0 +1,593 @@
+/* ============================================================
+   主题：视窗 XP（winxp）【仅亮色】
+   风格：Windows XP Luna 蓝 —— 蓝色渐变标题栏、资源管理器浅蓝
+        侧栏、米色对话框、凸起斜面按钮、淡黄便签 tooltip、
+        #316AC5 经典选中色。字体 Tahoma（中文回退宋体）。
+   说明：本主题仅针对亮色模式设计，暗色模式不落任何变量，
+        完全回落到 style.css 基础默认样式。
+        字体零第三方文件：Tahoma / SimSun 均为系统自带。
+   ============================================================ */
+
+/* ---------- 亮色模式：Luna 蓝（本体） ---------- */
+[data-theme="winxp"] {
+  /* 主色：Luna 标题栏蓝 */
+  --gd-color-primary: #0058e6;
+  --gd-color-primary-0f: #0058e60f;
+  --gd-color-primary-hover: #0048c2;
+  --gd-color-primary-active: #003a9a;
+  --gd-color-primary-disabled: #c0d8fe;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-primary-50:  #eff5ff;
+  --gd-color-primary-100: #dbe9fe;
+  --gd-color-primary-200: #c0d8fe;
+  --gd-color-primary-300: #94bdfd;
+  --gd-color-primary-400: #5f97fa;
+  --gd-color-primary-500: #3a78f0;
+  --gd-color-primary-600: #0058e6;
+  --gd-color-primary-700: #0048c2;
+  --gd-color-primary-800: #003a9a;
+  --gd-color-primary-900: #002e73;
+  --gd-color-primary-950: #001f4d;
+
+  /* 副色：开始按钮绿 */
+  --gd-color-secondary: #3a9b3a;
+  --gd-color-secondary-hover: #2e7f2e;
+  --gd-color-secondary-active: #256825;
+  --gd-color-secondary-disabled: #bde5bd;
+  --gd-color-secondary-text: #ffffff;
+  --gd-color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-secondary-50:  #f0faf0;
+  --gd-color-secondary-100: #dcf2dc;
+  --gd-color-secondary-200: #bde5bd;
+  --gd-color-secondary-300: #8fd28f;
+  --gd-color-secondary-400: #5fb95f;
+  --gd-color-secondary-500: #3a9b3a;
+  --gd-color-secondary-600: #2e7f2e;
+  --gd-color-secondary-700: #256825;
+  --gd-color-secondary-800: #1c521c;
+  --gd-color-secondary-900: #143d14;
+  --gd-color-secondary-950: #0a260a;
+
+  /* 基础表面与文字：白色客户区 + 米色窗口框架 */
+  --gd-color-text: #1a1a1a;
+  --gd-color-text-gray: #5a5a5a;
+  --gd-color-text-disabled: #a09c8f;
+  --gd-color-surface: #ffffff;
+  --gd-color-surface-border: #d4d0c8;
+  --gd-color-bg: #ffffff;
+  --gd-color-border: #d4d0c8;
+  --gd-code-block-bg: #ffffff;
+
+  /* 侧边栏（左栏）：资源管理器「常见任务」浅蓝面板 */
+  --gd-color-sidebar-bg: #c3d5f2;
+  --gd-color-sidebar-bg-active: #316ac5;
+  --gd-color-sidebar-bg-hover: rgba(255, 255, 255, 0.5);
+  --gd-color-sidebar-text: #16306e;
+  --gd-color-sidebar-text-hover: #16306e;
+  --gd-color-sidebar-text-active: #ffffff;
+
+  /* 标题栏：Luna 蓝（渐变由下方选择器叠加） */
+  --gd-color-titlebar-bg: #0058e6;
+  --gd-color-titlebar-border: #003494;
+  --gd-titlebar-text-color: #ffffff;
+  --gd-titlebar-hover-bg: rgba(255, 255, 255, 0.2);
+
+  /* 会话列表：比侧栏更浅一档的蓝 */
+  --gd-color-conversation-bg: #d0defa;
+  --gd-color-conversation-text: #16306e;
+  --gd-color-conversation-border: transparent;
+  --gd-color-conversation-bg-active: #316ac5;
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: rgba(255, 255, 255, 0.5);
+  --gd-color-conversation-text-hover: #16306e;
+
+  /* 消息气泡：用户 = MSN 式浅蓝渐变（渐变由选择器叠加） */
+  --gd-color-bubble-user-bg: #d6e6fb;
+  --gd-color-bubble-user-text: #12306e;
+  --gd-color-bubble-user-border: #7f9db9;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #1a1a1a;
+  --gd-color-bubble-assitant-border: transparent;
+  --gd-color-bubble-assitant-text-strong: #0058e6;
+
+  /* 输入框：白底 + XP 编辑框经典蓝灰边 */
+  --gd-color-input-bg: #ffffff;
+  --gd-color-input-border: #7f9db9;
+
+  /* 模态框：米色对话框 + 蓝色窗口边框 */
+  --gd-color-overlay-bg: #ffffff;
+  --gd-color-dialog-bg: #ece9d8;
+  --gd-color-dialog-border: #0058e6;
+  --gd-size-dialog-rounded-radius: 8px;
+
+  /* 语义色：贴合 XP 调色 */
+  --gd-color-warning: #e69500;
+  --gd-color-success: #3a9b3a;
+  --gd-color-danger: #c7502b;
+  --gd-color-info: #6b6b6b;
+
+  /* 尺寸：XP 控件接近直角，仅保留微小圆角 */
+  --gd-size-text-base: 13px;
+  --gd-size-text-sm: 12px;
+  --gd-size-rounded-radius: 4px;
+  --gd-size-surface-radius: 4px;
+  --gd-size-overview-panel-radius: 4px;
+
+  /* 工作区概览面板：白卡 + 米色描边（恢复卡片感） */
+  --gd-overview-panel-bg: #ffffff;
+  --gd-overview-panel-border-color: #d4d0c8;
+  --gd-overview-panel-shadow: none;
+
+  /* 窗口控制按钮：蓝底白字（斜面按钮由选择器叠加） */
+  --gd-window-controls-color: #ffffff;
+  --gd-window-controls-hover-bg: rgba(255, 255, 255, 0.15);
+  --gd-window-controls-hover-color: #ffffff;
+
+  /* 流式波纹 */
+  --gd-shimmer-base: #aca899;
+  --gd-shimmer-highlight: #0058e6;
+
+  /* 代码块配色变量（markdown.css 消费，带默认值） */
+  --gd-code-block-border: #aca899;         /* 米灰描边 */
+  --gd-code-block-header-bg: #ece9d8;      /* 标题栏 = 对话框米色 */
+  --gd-code-block-language-color: #0058e6;
+
+  /* 字体栈：Tahoma + 宋体，XP 中文界面原味 */
+  --theme-font: Tahoma, Verdana, SimSun, "宋体", sans-serif;
+}
+
+/* ---------- 字体 ---------- */
+html[data-theme="winxp"] body {
+  font-family: Tahoma, Verdana, SimSun, "宋体", sans-serif;
+}
+
+/* 经典选中色：#316AC5 白字 */
+html[data-theme="winxp"] ::selection {
+  background: #316ac5;
+  color: #ffffff;
+}
+
+/* ============================================================
+   标题栏：Luna 蓝色渐变 + 白色标题
+   （背景色仍走 --gd-color-titlebar-bg 供 color-mix 消费，
+     渐变作为 background-image 叠加在其上，cyberpunk 同款手法）
+   ============================================================ */
+html[data-theme="winxp"] .custom-titlebar {
+  background-image: linear-gradient(180deg,
+    #0997ff 0%, #0053ee 8%, #0050ee 40%, #0064ff 88%,
+    #0064ff 93%, #005bff 95%, #003dd7 96%, #0065ff 100%) !important;
+  box-shadow: inset 0 -1px 0 rgba(0, 32, 102, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 25, 80, 0.8);
+  font-weight: 600;
+}
+
+/* 窗口控制按钮：XP 斜面小方钮（覆盖 Tailwind 的 w-11/h-full/无框） */
+html[data-theme="winxp"] .window-controls button {
+  width: 21px;
+  height: 21px;
+  margin: 0 2px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  opacity: 1;
+  color: #ffffff;
+  background: linear-gradient(180deg, #5c9bf3 0%, #2f74e4 45%, #0058e6 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 20, 60, 0.4);
+}
+html[data-theme="winxp"] .window-controls button:hover {
+  filter: brightness(1.12);
+}
+html[data-theme="winxp"] .window-controls button:active {
+  filter: brightness(0.92);
+}
+/* 关闭按钮：橙红渐变（同时覆盖 Tailwind 的 hover 红底） */
+html[data-theme="winxp"] .window-controls .close-button,
+html[data-theme="winxp"] .window-controls .close-button:hover {
+  background: linear-gradient(180deg, #f0a08a 0%, #df6b48 40%, #c7502b 55%, #b03a1a 100%);
+}
+html[data-theme="winxp"] .window-controls .close-button:hover {
+  filter: brightness(1.12);
+}
+
+/* ============================================================
+   侧栏：Explorer 任务窗格
+   每组会话 = 白色面板盒（蓝白渐变标题条 + 常驻折叠箭头），
+   顶部导航 = 独立白色面板盒；整体垫在更深的蓝色渐变上
+   ============================================================ */
+html[data-theme="winxp"] .global-sidebar {
+  background-image: linear-gradient(180deg,
+    #6a97e6 0%, #8ab0ec 35%, #a9c3f2 70%, #b8cef5 100%);
+  border-right: 1px solid #7f9db9;
+}
+
+/* 白色面板盒：会话分组容器（每组一个 .mb-1） */
+html[data-theme="winxp"] .global-sidebar .mb-1 {
+  background: #ffffff;
+  border: 1px solid #a8c0e8;
+  border-radius: 4px;
+  margin: 0 6px 8px 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 50, 130, 0.15);
+}
+/* 面板标题条：白→浅蓝渐变 + 深藏青文字 */
+html[data-theme="winxp"] .group-header {
+  background: linear-gradient(180deg, #ffffff 0%, #d9e4f8 55%, #b9cdf0 100%);
+  color: #0b2470 !important;
+  font-weight: 700;
+  border-radius: 0;
+  margin: 0;
+  padding: 4px 6px;
+  box-shadow: inset 0 -1px 0 #a8c0e8;
+}
+/* 标题条左侧图标位：变成常驻的折叠箭头晕章（隐藏文件夹图标） */
+html[data-theme="winxp"] .group-header span.relative {
+  background: linear-gradient(180deg, #7aa3e8 0%, #4a82e8 100%);
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 1px rgba(0, 40, 120, 0.3);
+}
+html[data-theme="winxp"] .group-header span.relative svg:first-of-type {
+  display: none;
+}
+html[data-theme="winxp"] .group-header span.relative svg:last-of-type {
+  opacity: 1 !important;
+  color: #ffffff;
+}
+/* 面板内的会话项：白底，hover 淡蓝，选中 #316AC5 */
+html[data-theme="winxp"] .global-sidebar .mb-1 .session-item {
+  border-radius: 2px;
+}
+html[data-theme="winxp"] .global-sidebar .mb-1 .session-item:hover {
+  background: #e8f0fc;
+}
+html[data-theme="winxp"] .global-sidebar .mb-1 .session-item-active,
+html[data-theme="winxp"] .global-sidebar .mb-1 .session-item-active:hover {
+  background: #316ac5;
+}
+/* 顶部导航区也包一层白色面板盒 */
+html[data-theme="winxp"] .global-sidebar > .px-2.py-2 {
+  background: #ffffff;
+  border: 1px solid #a8c0e8;
+  border-radius: 4px;
+  margin: 6px 6px 8px 6px;
+  padding: 4px 6px;
+  box-shadow: 0 1px 2px rgba(20, 50, 130, 0.15);
+}
+html[data-theme="winxp"] .workspace-sidebar {
+  border-left: 1px solid #d4d0c8;
+}
+
+/* 选中项：#316AC5 蓝底白字 + 内高光斜面（导航区等其它位置） */
+html[data-theme="winxp"] .session-item,
+html[data-theme="winxp"] .nav-item {
+  border-radius: 3px;
+}
+html[data-theme="winxp"] .session-item-active,
+html[data-theme="winxp"] .nav-item-active {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================
+   用户气泡：MSN 式浅蓝渐变 + 硬投影
+   ============================================================ */
+html[data-theme="winxp"] .user-section .message-item__card {
+  background: linear-gradient(180deg, #e3eefc 0%, #d6e6fb 100%);
+  border: 1px solid #7f9db9;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 rgba(20, 40, 90, 0.08);
+}
+
+/* ============================================================
+   输入区：白底编辑框 + 经典 #7F9DB9 边框
+   ============================================================ */
+html[data-theme="winxp"] .input-area,
+html[data-theme="winxp"] .mock-inputbar {
+  border: 1px solid #7f9db9;
+  border-radius: 3px;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.08);
+}
+html[data-theme="winxp"] .tool-btn,
+html[data-theme="winxp"] .model-selector-btn {
+  border-radius: 3px;
+}
+
+/* ============================================================
+   Markdown 正文细节
+   ============================================================ */
+
+/* 标题：深藏青 */
+html[data-theme="winxp"] .markdown-text h1,
+html[data-theme="winxp"] .markdown-text h2 {
+  color: #003a9a;
+  border-bottom: 1px solid #d4d0c8;
+  padding-bottom: 4px;
+}
+
+/* 链接：Luna 蓝 + 下划线 */
+html[data-theme="winxp"] .markdown-text a {
+  color: #0058e6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 引用块：蓝左杠 + 浅蓝底 */
+html[data-theme="winxp"] .markdown-text blockquote {
+  border-left: 3px solid #0058e6;
+  border-radius: 0;
+  background: #f0f4fc;
+  padding: 6px 12px;
+}
+
+/* 分隔线：米灰渐隐 */
+html[data-theme="winxp"] .markdown-text hr {
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg, transparent, #aca899, transparent);
+}
+
+/* 行内代码：米色便签块 */
+html[data-theme="winxp"] .markdown-text code:not(pre code) {
+  background: #f2f0e4;
+  border: 1px solid #d4d0c8;
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+/* 表格：米灰实线 */
+html[data-theme="winxp"] .markdown-text table th,
+html[data-theme="winxp"] .markdown-text table td {
+  border-bottom: 1px solid #d4d0c8;
+}
+
+/* 代码块：白底米灰框 + 米色标题栏（配色走变量，这里只收形状） */
+html[data-theme="winxp"] .markdown-text .custom-code-block {
+  border-radius: 3px;
+}
+html[data-theme="winxp"] .markdown-text .code-header {
+  border-radius: 3px 3px 0 0;
+}
+html[data-theme="winxp"] .markdown-text .custom-code-block pre.hljs {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Element Plus 组件：XP 凸起斜面按钮
+   ============================================================ */
+html[data-theme="winxp"] .el-button {
+  border-radius: 3px;
+}
+/* 普通按钮：米白渐变 + 内斜面 */
+html[data-theme="winxp"] .el-button--default {
+  background: linear-gradient(180deg, #ffffff 0%, #f0efe9 8%, #e4e1d5 90%, #d8d3c3 100%);
+  border: 1px solid #706e66;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.85),
+    inset -1px -1px 0 rgba(172, 168, 153, 0.6);
+  color: #1c1c1c;
+}
+html[data-theme="winxp"] .el-button--default:hover {
+  border-color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f3ee 8%, #ebe8de 90%, #e0dccf 100%);
+}
+/* 主要按钮：Luna 蓝渐变 */
+html[data-theme="winxp"] .el-button--primary {
+  background: linear-gradient(180deg, #4c93f2 0%, #2167d8 45%, #0058e6 100%);
+  border: 1px solid #003494;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+html[data-theme="winxp"] .el-button--primary:hover {
+  filter: brightness(1.1);
+}
+html[data-theme="winxp"] .el-tag {
+  border-radius: 3px;
+}
+html[data-theme="winxp"] .el-popper.is-light {
+  border-radius: 3px;
+  border-color: #aca899;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.25);
+}
+/* 消息框：XP 对话框——米色底 + 蓝框 */
+html[data-theme="winxp"] .el-message-box {
+  background: #ece9d8;
+  border: 1px solid #0058e6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 25, 80, 0.35);
+}
+
+/* ============================================================
+   Tooltip：XP 经典淡黄便签 #FFFFE1
+   （.l-tooltip 自身定义了默认变量，必须在同名类上覆盖）
+   ============================================================ */
+html[data-theme="winxp"] .l-tooltip {
+  --gd-tooltip-bg: #ffffe1;
+  --gd-tooltip-text: #000000;
+}
+html[data-theme="winxp"] .l-tooltip__content {
+  border: 1px solid #3a3a3a;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* ============================================================
+   XP 窗口外框：整窗蓝色边框（最大化窗口的描边感）
+   复用 style.css 的浅色遮罩层 body::after（fixed inset 0，
+   pointer-events none），改为叠层描边环，不产生布局位移
+   ============================================================ */
+html[data-theme="winxp"] body::after {
+  background: transparent !important;
+  z-index: 9999;
+  box-shadow:
+    inset 0 0 0 1px #002e73,
+    inset 0 0 0 3px #0058e6,
+    inset 0 0 0 4px #4a94f5;
+}
+
+/* ============================================================
+   底部任务栏：XP 经典蓝色任务栏 + 绿色「开始」按钮
+   #app::after 画任务栏条带，#app::before 画开始按钮；
+   #app 底部留白 30px 容纳任务栏，内容不被遮挡
+   ============================================================ */
+html[data-theme="winxp"] #app {
+  padding-bottom: 30px;
+}
+html[data-theme="winxp"] #app::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30px;
+  background: linear-gradient(180deg,
+    #245edb 0%, #3f8cf3 9%, #245edb 18%, #245edb 92%, #1941a5 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  z-index: 2000;
+  pointer-events: none;
+}
+html[data-theme="winxp"] #app::before {
+  content: "开始";
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  height: 30px;
+  padding: 0 22px 0 38px;
+  display: flex;
+  align-items: center;
+  /* 左：XP 四色旗帜（内联 SVG）；右：开始按钮绿渐变 */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cpath d='M1 3.5 L8 2.5 L8 8 L1 8 Z' fill='%23f8682c'/%3E%3Cpath d='M9 2.5 L17 1.5 L17 8 L9 8 Z' fill='%2391c300'/%3E%3Cpath d='M1 9 L8 9 L8 15.5 L1 14.5 Z' fill='%2300b4f1'/%3E%3Cpath d='M9 9 L17 9 L17 16.5 L9 15.5 Z' fill='%23ffc300'/%3E%3C/svg%3E") no-repeat 12px center / 18px 18px,
+    linear-gradient(180deg, #62b962 0%, #4aa84a 30%, #3a9b3a 55%, #2e7d2e 100%);
+  color: #ffffff;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.45);
+  border-radius: 0 10px 10px 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 3px rgba(0, 60, 0, 0.35),
+    2px 0 5px rgba(0, 0, 0, 0.35);
+  z-index: 2001;
+  pointer-events: none;
+}
+
+/* ============================================================
+   菜单栏：聊天页 PageHeader 变成 XP 米色菜单栏
+   （.drag-region 同时被 CustomTitlebar 使用，需排除；
+     左侧操作组的 ::after 注入经典菜单文字）
+   ============================================================ */
+html[data-theme="winxp"] .drag-region:not(.custom-titlebar) {
+  background: linear-gradient(180deg, #f5f4ec 0%, #ece9d8 100%);
+  border-bottom: 1px solid #aca899;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+html[data-theme="winxp"] .drag-region:not(.custom-titlebar) > div:first-child::after {
+  content: "文件(F)  编辑(E)  查看(V)  收藏(A)  工具(T)  帮助(H)";
+  margin-left: 10px;
+  font-size: 12px;
+  color: #1a1a1a;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+/* 侧栏品牌行也带 .drag-region：还原为渐变底，不注入菜单文字 */
+html[data-theme="winxp"] .global-sidebar .drag-region {
+  background: none;
+  border-bottom: none;
+  box-shadow: none;
+}
+html[data-theme="winxp"] .global-sidebar .drag-region > div:first-child::after {
+  content: none;
+}
+
+/* ============================================================
+   侧栏分组标题：Explorer 任务窗格的蓝色渐变分节条
+   ============================================================ */
+html[data-theme="winxp"] .group-header {
+  background: linear-gradient(180deg, #6ea0f0 0%, #4a82e8 100%);
+  color: #ffffff !important;
+  font-weight: 700;
+  border-radius: 3px;
+  text-shadow: 0 1px 1px rgba(0, 30, 90, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(0, 40, 120, 0.25);
+}
+
+/* ============================================================
+   发送按钮：开始按钮同款绿色渐变
+   ============================================================ */
+html[data-theme="winxp"] .send-btn {
+  border-radius: 4px;
+  background: linear-gradient(180deg, #62b962 0%, #3a9b3a 55%, #2e7d2e 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 60, 0, 0.3),
+    1px 1px 2px rgba(0, 0, 0, 0.25);
+}
+html[data-theme="winxp"] .send-btn:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+/* ============================================================
+   细节控件：XP 质感
+   ============================================================ */
+/* 焦点虚线框（XP 经典 focus rect，盖过全局 outline:none） */
+html[data-theme="winxp"] *:focus-visible {
+  outline: 1px dotted #1a1a1a !important;
+  outline-offset: 0;
+}
+/* 复选框：直角白底蓝灰边 */
+html[data-theme="winxp"] .el-checkbox__inner {
+  border-radius: 0;
+  border-color: #7f9db9;
+  background: #ffffff;
+}
+html[data-theme="winxp"] .el-checkbox__input.is-checked .el-checkbox__inner {
+  background: #ffffff;
+  border-color: #316ac5;
+}
+html[data-theme="winxp"] .el-checkbox__input.is-checked .el-checkbox__inner::after {
+  border-color: #316ac5;
+}
+/* 输入域：直角 + 内凹阴影 */
+html[data-theme="winxp"] .el-input__wrapper,
+html[data-theme="winxp"] .el-textarea__inner {
+  border-radius: 0;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+/* 下拉菜单项 hover：经典 #316AC5 */
+html[data-theme="winxp"] .el-dropdown-menu__item:not(.is-disabled):hover {
+  background: #316ac5;
+  color: #ffffff;
+}
+html[data-theme="winxp"] .el-select-dropdown__item.is-hovering,
+html[data-theme="winxp"] .el-select-dropdown__item:hover {
+  background: #316ac5;
+  color: #ffffff;
+}
+
+/* ============================================================
+   滚动条：米色斜面滑块（仅本主题生效）
+   ============================================================ */
+html[data-theme="winxp"] *::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html[data-theme="winxp"] *::-webkit-scrollbar-track {
+  background: #f2f0e4;
+}
+html[data-theme="winxp"] *::-webkit-scrollbar-thumb {
+  background-color: #ece9d8;
+  border: 1px solid #9a9484;
+  border-radius: 0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #b5ae9d;
+}
+html[data-theme="winxp"] *::-webkit-scrollbar-thumb:hover {
+  background-color: #dcd8c8;
+}

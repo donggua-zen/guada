@@ -22,7 +22,7 @@ export default class GuadaThemesPlugin extends PluginBase {
   manifest = {
     id: "guada-themes",
     name: "GuaDa 内置主题",
-    version: "1.0.0",
+    version: "1.1.0",
     description: "官方内置主题插件（由 frontend/public/themes 迁移），插件注册主题参考范例",
     category: "system" as const,
   };
@@ -45,6 +45,7 @@ export default class GuadaThemesPlugin extends PluginBase {
       { id: "doodle", name: "涂鸦本", primaryColor: "#3a7bd5", secondaryColor: "#e8854a" },
       { id: "cyberpunk", name: "赛博朋克（仅暗色）", primaryColor: "#00e5ff", secondaryColor: "#ff2a6d", mode: "dark" },
       { id: "wandering-earth", name: "小破球（仅暗色）", primaryColor: "#d99a4e", secondaryColor: "#43b581", mode: "dark" },
+      { id: "winxp", name: "视窗 XP（仅亮色）", primaryColor: "#0058e6", secondaryColor: "#3a9b3a", mode: "light" },
     ];
 
     for (const t of themes) {

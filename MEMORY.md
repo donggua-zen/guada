@@ -11,8 +11,8 @@
   | `data/ai_chat.db` | SQLite 主库。**仅供测试**：数据不再新增/维护，只在测试损坏后用它还原，上线前会正式删除 |
   | `providers/*.yaml` | 供应商实例配置——模型/供应商的唯一权威来源 |
   | `agents/<id>/AGENT.md` | 智能体（角色）定义——**唯一权威来源**，含头像 `avatar.<ext>` |
-  | `sessions/<id>/meta.json` | 会话元信息——**唯一权威来源**（含 parentId/closedAt/分组/归档） |
-  | `sessions/_groups.json` | 会话分组（整表一份） |
+  | `sessions/_meta.db` | 会话元数据 SQLite 库——**唯一权威来源**（WAL；含 parent_id/root_id/分组/归档；通用 `data` 扩展列，settings 折叠为受管键 data.settings；`_bootstrap` 表记「已从主库转换」标记，**删库即下次启动自动重转**；schema v3，迁移步骤按列存在性幂等判断） |
+  | `sessions/<id>/` | 会话目录：JSONL 事件日志 + workflows/ + 图片附件。**没有 meta.json**（2026-09-20 起彻底不读写文件形态） |
   | `bots/<id>.yaml` | 机器人实例——**唯一权威来源** |
   | `<KB根>/<kbId>/kb.json` | 知识库配置 |
   | `<KB根>/<kbId>/kb.db` | KB 条目 + 分块 + 向量 + FTS（每库一个 SQLite） |
@@ -36,7 +36,7 @@
 - **权威来源 = `agents/<id>/AGENT.md`**（YAML frontmatter + Markdown 正文）。**目录名即 id**，`title` 已统一改名 `name`，改 name 不改目录名 → 会话引用不会断。
 - **id 必须是 ASCII slug**（`^[a-z0-9][a-z0-9-]*$`），**禁止中文**（2026-09-18 起强制）。显示名写在 `name` 字段，与 id 完全解耦（内置 `assistant-agent` ↔ name「智能助手」）。新建时前端「标识符」字段可显式指定，**非法值返回 HTTP 400**；**留空一律生成 `agent-<uuid v4>`**，不从 name 派生（中文名无法转写为可读 slug，派生只会产出不可辨认的目录名）。规则实现见 `agent-file.mapper.ts` 的 `AGENT_ID_PREFIX` / `AGENT_ID_PATTERN` / `isValidAgentId`，id 解析集中在 `AgentFileStore.resolveCreateId`，HTTP 边界校验在 `AgentService.createAgent`。
 - **DB 迁移的旧角色 id = 原 cuid（恒等映射，2026-09-18 起）**：`AgentFileBootstrapService` 导出时 `dirId = rekey[row.id] ?? this.uniqueId(row.id, taken)`，**不再 slugify**。理由：`session.character_id` / `bot_instance.default_character_id` / `scheduler/tasks.json` 里绑的就是 cuid，沿用则**引用零改写、零断链**；cuid 天然是小写字母数字，符合 `AGENT_ID_PATTERN`。旧角色一律视为「用户自建」，与 bundled 模板 id 不同故二者并存——**即使显示名重复（出现两个「智能助手」）也保留**，以免误删用户自定义提示词/头像。副作用：`rekey` 退化为恒等映射 → `rewriteAgentWhitelists`/`rewriteExternalRefs`/`rewriteSchedulerTasks` 全部空跑。
-- **引用一致性排查以正式库为准**：`agents/<id>/` 目录名必须与 DB 的 `session.character_id` 取值一致。注意 `.guada-dev.bak-20260913` 的 DB 曾被历史迁移（`rewriteExternalRefs`）把引用从 cuid 改写成**中文名**；**正式库 `.guada/data/ai_chat.db` 保留的是原始 cuid**。换数据源或重建后，务必核对 `sessions/*/meta.json` 的 `agentId` 分布是否与 `agents/` 目录名一一对应。
+- **引用一致性排查以正式库为准**：`agents/<id>/` 目录名必须与 DB 的 `session.character_id` 取值一致。注意 `.guada-dev.bak-20260913` 的 DB 曾被历史迁移（`rewriteExternalRefs`）把引用从 cuid 改写成**中文名**；**正式库 `.guada/data/ai_chat.db` 保留的是原始 cuid**。换数据源或重建后，务必核对 `_meta.db` 的 `sessions.agent_id` 分布是否与 `agents/` 目录名一一对应。
 - **内置助手 = `bundled-agents/<id>/`，当前两个**：`assistant-agent`（name「智能助手」）、`code-analyst`（name「代码分析师」）。已移除 `产品经理`、`剧本编剧` 模板。DB `character` 表的导出路径（`agent-file-bootstrap.service.ts:113`）同样产出 ASCII id；若 DB 中仍有中文 character，会退化成一堆 `agent`/`agent-2`，需要时应在该处补显式映射表。
 - **`assistant-agent` 两条强约束 + 全局 id 不可变（2026-09-18 起强制）**：① `AgentFileStore.listAgents` 排序时 `DEFAULT_AGENT_ID`（`agent-file.mapper.ts`）恒排第一——顺带使「新建会话回退 agents[0]」的默认选中确定性地落在它身上；② 禁止删除：`AgentService.deleteAgent` HTTP 边界抛 400 + `AgentFileStore.delete` 防御性拦截，永不进墓碑、补种永远有效；③ **所有智能体 id 创建后不可修改**：`updateAgent` 对请求体中与路径 id 不一致的 `id` 抛 400。前端 `AgentListTab.vue` 的 `canDelete()` 同步隐藏 assistant-agent 删除按钮。
 - 头像在角色目录内（`avatar.<ext>`，约定文件名），删目录即删头像，无孤儿文件。
@@ -48,9 +48,11 @@
 
 ## 会话/机器人/知识库（文件化后的约定，2026-09）
 
-- **会话元信息 = `sessions/<id>/meta.json`**（与 JSONL 事件日志、workflows 同目录）。**删除会话 = 删整个 `<id>/` 目录**（meta + 消息 + 工作流一起走）。id 有两种来源：**存量迁移 = 原 DB cuid**（25 字符，零重键 → tasks.json 里的 sessionId、JSONL 目录名全部无需改）；**新建 = `session-<uuid v4>`**（44 字符，DSH 同款，前缀常量 `SESSION_ID_PREFIX`）。`SessionFileStore.create` 在缺 id 时自行铸造（原先只做 `String(data.id)` → 所有新会话落到 `sessions/undefined/` 互相覆盖、HTTP 返回 `id:"undefined"`，2026-09-14 修复），并对 id 做路径安全校验（`assertValidId`，见下条）。
-- **排序键落盘在 meta.json 里**（`lastActiveAt`/`updatedAt`/`createdAt`），**不要**改成读文件系统时间：`lastActiveAt` 是每消息都变的业务数据，且 Electron 数据目录迁移整目录拷贝不保留 mtime，用文件时间会让侧边栏顺序全乱。排序 = 内存排序 + 确定性 id tiebreak。
-- **会话分组 = `sessions/_groups.json`**；删分组会把该组会话 groupId 置 null。
+- **会话元数据权威 = `sessions/_meta.db`（SQLite，2026-09-20 起）**：唯一实现是 `SessionMetaStore`（`src/modules/chat/session-meta.store.ts`，契约+类型+迁移助手+SQLite 实现同一模块）。**没有任何文件兼容层**——文件版（meta.json/_groups.json）从未上线、客户只有主库数据，故一次性转换走「冻结主库 → _meta.db」直转（`common/database/bootstrap/metadata-file-bootstrap.service.ts` 的会话步，12ms/219 会话）。messages 仍是 JSONL 事件溯源（迁移成果不动）。转换门控在库内 `_bootstrap.migrated_from_db_at`：**删掉 `_meta.db` 即下次启动自动重转**（唯一重转入口，无需清 marker）。`root_id` 列由 create 依 parentId 自动解析、转换时按链回填。启动自愈双规则：目录有 seg 无行 → 从 seg-0000 重建（含真实消息才救）；行无目录 → 删行。
+- **会话目录 = `sessions/<id>/`**（JSONL 事件日志、workflows、附件同目录）。**删除会话 = 删整个 `<id>/` 目录**（meta + 消息 + 工作流一起走）。id 有两种来源：**存量迁移 = 原 DB cuid**（25 字符，零重键 → tasks.json 里的 sessionId、JSONL 目录名全部无需改）；**新建 = `session-<uuid v4>`**（44 字符，DSH 同款，前缀常量 `SESSION_ID_PREFIX`）。`create` 缺 id 时自行铸造并对 id 做路径安全校验（`assertValidId`）。
+- **排序键是业务数据**（`lastActiveAt`/`updatedAt`/`createdAt` 落在 _meta.db），**不要**改成读文件系统时间：`lastActiveAt` 每消息都变（现为单字段 UPDATE，0.1ms 级），且 Electron 数据目录迁移整目录拷贝不保留 mtime。排序 = SQL ORDER BY + 确定性 id tiebreak（结构化过滤 `SessionQueryFilter`/`SessionSortKey` 定义在 session-meta.store，groupId tri-state：null=仅未分组、undefined=不过滤）。
+- **fork/branch 复制子会话（2026-09-20 起）**：`branchSession` 对子代理子会话做整目录克隆 + 元数据行克隆（新 id、parentId=新分支、closedAt 保留冻结态），目录内 `*.json/*.jsonl` 做文本级 `sessions/<旧id>/`→`sessions/<新id>/` 引用改写（**自引用与对原父的引用都要改**）；任一子会话流式中 409；失败回滚克隆行+目录。主会话自身 workflows/ 仍不复制。
+- **会话分组**：已迁入 _meta.db 的 `session_groups` 表；删分组在单事务内解绑该组会话（groupId 置 null）。
 - **机器人 = `bots/<id>.yaml`**（同 providers 范式）。`status`/`lastStartedAt`/`lastError` 是三个持久化点；运行中真实状态在内存。
 - **知识库 = 一个自包含目录**：`<KB根>/<kbId>/{kb.json, kb.db, raw/}`（2026-09-14 从「file.json + chunks.jsonl + 全局 vector_db.sqlite」改为每库一个 SQLite，设计见 `docs/design/kb-storage.md`）。删库 = 关连接 + `rm -rf <kbId>/`；**改名不搬字节**（raw 目录用 itemId 命名）；**改名/移动 = 1 条 UPDATE**（原先文件夹改名要 N+1 次整写 file.json 并触发全量重扫）。
   - **知识库根**解析：`kbStorageRoot` 设置 → `KB_DATA_DIR` → `USERDATA_DIR/data/kb` → `./data/kb`。设置由 `kb-database.service` 的 `resolveKbRoot()` **直接读 `<SETTINGS_DIR>/system.json`**（进程内只读一次），**不要改回"由 SettingsService 启动时注入"**——`SettingsService` 排在 DatabaseModule 之后，而 KB 迁移在 DatabaseModule 的 hook 里先跑，实测会按默认根迁移、设置随后才注入，用户设了根却"知识库不见了"。设置页入口：通用 → 知识库（带目录选择器）。改根需重启生效，不自动搬数据（新根为空而默认根有库时启动告警）。
@@ -62,7 +64,7 @@
 - **启动门控（关键，别拆）**：`MetadataBootstrapGate` 确保一次性导出完成前各 FileStore 不读索引——否则导出未完成时读到空目录会把数据"变没"。新增文件化 store 时务必在 `initialize()` 里 `await gate.wait(域)`。
 - **一次性导出标记**：`sessions/.migrated-sessions`、`bots/.migrated-bots`、`data/kb/.migrated-kb`（旧 file.json 形态）、`data/kb/.migrated-kb-sqlite`（每库 kb.db 形态；**新标记名**，已写过 `.migrated-kb` 的安装必须仍执行本次导入）（分域独立重试；导出失败不落 marker）。删 marker 重启可幂等重跑。
 - **KB 导入器实测踩到的三个坑（都已修 + 有回归测试）**：① 判"已迁移"不能只看 `kb.db` 存在——被中断的启动会留下**空库**，会永久阻断导入，判据必须是"库里已有条目行"；② 冻结表任何一张读失败，旧写法会吞掉**整批**数据，必须逐表独立容错；③ 冻结行可能是 camelCase（Prisma）或 snake_case（直接 open sqlite），只认一种会因 `row.knowledgeBaseId === undefined` **静默丢条目**。另外原件缺失的历史残留行现在以 `failed` 导入并在 `errorMessage` 写明原因（界面可见可删），不再静默丢弃。
-- **孤儿自愈**：有 JSONL 但无 meta.json 的会话目录，启动时从 `session/init` 重建骨架 meta；**只救含真实消息的**（纯空壳目录是历史遗留，复活会产生幽灵会话）。
+- **孤儿自愈**：有 JSONL 但库内无行的会话目录，启动时从 `session/init` 重建骨架行；**只救含真实消息的**（纯空壳目录是历史遗留，复活会产生幽灵会话）。
 - DB 的 `session`/`session_group`/`bot_instance`/`knowledge_base`/`kb_file`/`kb_chunk`/`memory`/`user_setting`/`mcp_server` 表已冻结（schema 有 `已冻结` 标注）。**这些表不删除**：安装/升级时仍要读它们做用户数据迁移，只停止运行时读写。`user` 同理（认证已改读 `account.json`）。
 - 冷启动实测（233 会话）：约 0.7-1.2s 建索引，启动期一次性，已在启动日志打点。若未来会话数上万再考虑派生缓存（纯内部改动，无数据迁移）。
 
@@ -76,7 +78,7 @@
 ## 迁移脚手架集中化（2026-09-13，临时——预计两个版本后随主库整体移除）
 
 - **全部启动期迁移集中在 `src/common/database/bootstrap/`**：character / provider / account / metadata 四个 bootstrap 服务 + `model-reference-migration.ts` + 编排器 `MigrationBootstrapService`。各服务只有 `run()`，唯一 `OnModuleInit` 在编排器，**执行顺序是代码显式的**：connect → DB migration → 角色 rekey → 供应商 rekey → 账户 → 元信息导出 → store 预热。
-- **为什么必须编排（别改回去）**：早期分散在 DatabaseModule/ModelsModule/CharactersModule 时按 Nest 初始化顺序「导出先于 rekey」，跳版升级（旧库首迁）会把旧 cuid 引用导进 meta.json/yaml/kb.json 且永不自愈；provider rekey 改 AGENT.md frontmatter 也因角色文件未导入而落空。顺带还踩出一个潜伏 bug：`bot_instance.defaultCharacterId` 非空列不能用 `{ not: null }` 过滤（PrismaClientValidationError，dev 环境 marker 一直在所以从未跑过该路径）。
+- **为什么必须编排（别改回去）**：早期分散在 DatabaseModule/ModelsModule/CharactersModule 时按 Nest 初始化顺序「导出先于 rekey」，跳版升级（旧库首迁）会把旧 cuid 引用写进会话元数据/yaml/kb.json 且永不自愈；provider rekey 改 AGENT.md frontmatter 也因角色文件未导入而落空。顺带还踩出一个潜伏 bug：`bot_instance.defaultCharacterId` 非空列不能用 `{ not: null }` 过滤（PrismaClientValidationError，dev 环境 marker 一直在所以从未跑过该路径）。
 - **配套验证工具**：`scripts/verify-migration.cjs <数据根>`——逐域断言 DB（只读）↔ 文件一致。跳版升级 runbook（含两条手动脚本）见 `docs/design/metadata-file-format.md`。
 - **package.json 死脚本已删**：db:verify / test:pdf-extract / test:mock-bot（目标文件不存在）。CharactersModule/ModelsModule 的本地 PrismaService provider 已随 bootstrap 迁走一并删除（误导性「收尾提交时移除」注释同去）。
 - **`~/.guada-dev` 已全量重建实测**（用户授权）：旧环境整体移到 `~/.guada-dev.bak-20260913` 保留；playground 只播种 DB + file_stores + 设置 json + scheduler，一次启动全链路导出成功（233 会话/3 角色 rekey/11 供应商/40 模型/3 bot/2 kb/3 mcp/账户密码保留），三次启动幂等，断言 60/60。**注意**：`.bak` 里含 DB 冻结后的活会话增量（只存在于旧 JSONL），playbook 环境没有；`.bak` 处置待用户确认。
@@ -119,3 +121,4 @@
 
 - 用户会直接指出设计里的多余假设（例："除了测试环境没有老用户"），此时应重新评估该设计是否还有依据，而不是只改措辞。
 - 涉及真实数据的操作（迁移、还原）先说清楚会动到什么；dev server 热重载会自动执行启动期迁移，改迁移代码时要注意这一点。
+- **热重载误标记事故（2026-09-20）**：dev server（ts-node-dev --respawn）会在编辑中途加载瞬时代码。当时分批编辑 _meta.db 迁移代码，服务器在"VERSION 已升、迁移步骤未加"的窗口热重载，把 `user_version` 盖到超前值而实际没跑迁移 → 纯版本门控永久跳过 → 崩溃循环（后升 v3 按列存在性自愈）。**schema 迁移步骤必须按物理状态（table_info 列存在性等）判断且幂等，版本戳只做粗门控**；编辑迁移代码期间要意识到服务器在持续热重载中间态。

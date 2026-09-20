@@ -86,7 +86,6 @@ describe('目录继承 + 覆盖合并', () => {
   });
 
   afterEach(() => {
-    store.onModuleDestroy();
     delete process.env.PROVIDERS_DIR;
     delete process.env.BUNDLED_PROVIDERS_DIR;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -175,7 +174,6 @@ describe('目录继承 + 覆盖合并', () => {
     expect(byName.get('gpt-5')!.config.contextWindow).toBe(400000); // 修正流入
     expect(byName.has('gpt-6')).toBe(true); // 新模型流入
     expect(byName.has('text-embedding-3-small')).toBe(false); // 删除标记仍生效
-    await store2.onModuleDestroy();
   });
   it('目录 map 被未覆盖实例继承：菜单与 wire 值均生效', () => {
     const gpt5 = store.findModel('my-openai:gpt-5');

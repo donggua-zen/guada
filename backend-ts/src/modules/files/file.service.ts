@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import sharp from "sharp";
-import { SessionFileStore } from "../chat/session-file.store";
+import { SessionMetaStore } from "../chat/session-meta.store";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { FileNamingService } from "../../common/services/file-naming.service";
 import { FileRef } from "../../common/types/conversation.types";
@@ -19,7 +19,7 @@ export class FileService {
 
   constructor(
     private fileNamingService: FileNamingService,
-    private sessionStore: SessionFileStore,
+    private sessionStore: SessionMetaStore,
     private workspaceService: WorkspaceService,
   ) { }
 

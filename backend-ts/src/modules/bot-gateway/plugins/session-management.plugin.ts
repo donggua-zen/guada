@@ -2,7 +2,7 @@ import { Logger, Injectable } from "@nestjs/common";
 import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
-import { SessionFileStore } from "../../chat/session-file.store";
+import { SessionMetaStore } from "../../chat/session-meta.store";
 import { appendResetMarker } from "../utils/external-id";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./session-management.lang.zh.json";
@@ -21,7 +21,7 @@ export class SessionManagementPlugin extends PluginBase {
   };
 
   constructor(
-    private sessionStore: SessionFileStore,
+    private sessionStore: SessionMetaStore,
   ) {
     super();
   }

@@ -41,7 +41,7 @@ const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 const backend = new JsonlBackend();
-// migrator 自持构造 SessionFileStore（仅 meta 修复/目录定位用，不 initialize）
+// migrator 内部自持 _meta.db 连接（仅 meta 骨架修复用）与 JSONL 后端
 const migrator = new SessionMessageDbMigratorService(
   prisma as any,
   backend,

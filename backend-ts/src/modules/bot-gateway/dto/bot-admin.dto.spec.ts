@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { BotAdminService } from '../services/bot-admin.service';
 import { AgentFileStore } from '../../agents/agent-file.store';
-import { SessionFileStore } from '../../chat/session-file.store';
+import { SessionMetaStore } from '../../chat/session-meta.store';
 import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from '../services/bot-instance-manager.service';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
@@ -53,7 +53,7 @@ describe('BotAdminService.createInstance platform validation', () => {
         { provide: BotInstanceManager, useValue: instanceManager },
         { provide: ProviderFileStore, useValue: { findModel: () => undefined } },
         { provide: AgentFileStore, useValue: { findById: jest.fn().mockResolvedValue(null) } },
-        { provide: SessionFileStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
+        { provide: SessionMetaStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
         { provide: BotFileStore, useValue: botStore },
       ],
     }).compile();

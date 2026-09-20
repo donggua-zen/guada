@@ -20,7 +20,7 @@ import {
 } from "../../common/events/unified-event.types";
 import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
-import { SessionFileStore } from "./session-file.store";
+import { SessionMetaStore } from "./session-meta.store";
 import { HOOKS } from "./types/hooks.contract";
 /**
  * 会话事件类型
@@ -86,7 +86,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly streamManager: SessionStreamManager,
-    private readonly sessionStore: SessionFileStore,
+    private readonly sessionStore: SessionMetaStore,
   ) {}
 
   /**

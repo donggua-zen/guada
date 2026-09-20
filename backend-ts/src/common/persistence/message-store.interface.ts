@@ -16,7 +16,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
-import type { SessionMeta } from './types';
+import type { BaseEvent, SessionMeta } from './types';
 
 // ============================================================================
 // 参数类型定义
@@ -151,6 +151,17 @@ export interface IMessageStore {
     turns: Turn[],
     opts?: { effectiveContextWindow?: number },
   ): Promise<{ imported: number }>;
+
+  // ─── 分支/克隆（原始事件迁移）───
+  /** 读取会话全量领域事件（seq 序原样，不折叠；分支/克隆等迁移路径用） */
+  getAllEvents(sessionId: string): Promise<BaseEvent[]>;
+  /**
+   * 批量导入原始事件（分支/克隆路径）：事件原样重放写入（type/data/time 保留，仅重编 seq）。
+   * 与 importTurns（Turn[] → 三事件合成）互补：压缩、遮蔽、命令/提问事件卡片等
+   * 非回合事件原样保留，回放后与源会话对应时刻的状态一致。
+   * 调用方须先 ensureSession（session/init seq=0 已写入），本方法从下一空闲 seq 起重编。
+   */
+  importEvents(sessionId: string, events: BaseEvent[]): Promise<{ imported: number }>;
 
   // ─── 压缩写入（统一 CompressionEngine 只经此读写，后端无关）───
   /** 一级压缩（裁剪）：只裁剪超长内容，不改可见性。@returns 写入后版本号（revision） */

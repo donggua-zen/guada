@@ -16,7 +16,7 @@ import { SessionMessageMigrationBootstrapService } from "./session-message-migra
  * 顺序是正确性的一部分，不能靠 Nest 模块初始化顺序碰运气——历史上三个 bug
  * 都源于此：
  * 1. 元信息导出（读 session.agentId/modelId 等）必须晚于智能体/供应商 rekey，
- *    否则跳版升级导出的 meta.json/yaml/kb.json 永久带旧 cuid 引用；
+ *    否则跳版升级写出的会话元数据/yaml/kb.json 永久带旧 cuid 引用；
  * 2. 供应商 rekey 改写 AGENT.md frontmatter 必须晚于智能体导入（文件需已存在）；
  * 3. 0003/0004 解除外键的 DB 迁移必须先于一切 rekey 写（否则 update 撞外键）。
  *

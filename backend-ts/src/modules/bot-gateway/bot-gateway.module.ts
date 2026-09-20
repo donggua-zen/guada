@@ -14,7 +14,7 @@ import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
 import { SessionManagementPlugin } from './plugins/session-management.plugin';
 import { BotFileSenderPlugin } from './plugins/bot-file-sender.plugin';
-import { SessionFileStore } from '../chat/session-file.store';
+import { SessionMetaStore } from '../chat/session-meta.store';
 import { BotFileStore } from './bot-file.store';
 
 @Module({
@@ -31,7 +31,7 @@ export class BotGatewayModule implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly botInstanceManager: BotInstanceManager,
-    private readonly sessionStore: SessionFileStore,
+    private readonly sessionStore: SessionMetaStore,
     private readonly botStore: BotFileStore,
   ) {}
 

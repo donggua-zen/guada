@@ -1,17 +1,17 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
-import { SessionFileStore } from "./session-file.store";
+import { SessionMetaStore } from "./session-meta.store";
 
 /**
  * 会话分组服务（单账户）
  *
  * 分组无归属维度：全局一份，不再按用户过滤。
- * 权威来源 = `sessions/_groups.json`（见 SessionFileStore）。
+ * 权威来源 = `sessions/_meta.db` 的 session_groups 表（见 SessionMetaStore）。
  */
 @Injectable()
 export class SessionGroupService {
   private readonly logger = new Logger(SessionGroupService.name);
 
-  constructor(private sessionStore: SessionFileStore) {}
+  constructor(private sessionStore: SessionMetaStore) {}
 
   /** 获取所有会话分组（按 sortOrder 升序） */
   async getGroups() {

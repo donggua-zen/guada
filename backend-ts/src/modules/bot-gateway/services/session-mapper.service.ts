@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
-import { SessionFileStore } from '../../chat/session-file.store';
+import { SessionMetaStore } from '../../chat/session-meta.store';
 import { AgentFileStore } from '../../agents/agent-file.store';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
@@ -19,7 +19,7 @@ export class SessionMapperService {
 
   constructor(
     private providerStore: ProviderFileStore,
-    private sessionStore: SessionFileStore,
+    private sessionStore: SessionMetaStore,
     private agentStore: AgentFileStore,
     private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
