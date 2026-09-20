@@ -49,6 +49,7 @@
                     :allow-generate="!isStreaming && index === lastUserMessageIndex"
                     :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+                    @branch="branchFromTurn"
                     :session-id="currentSessionId || undefined" />                </template>
                 <!-- 会话待办卡：对话流下方、滚动区内跟随滚动（独立组件不挂 turn；REST+todo_updated SSE 契约不变） -->
                 <SessionTodoCard :session-id="currentSessionId || undefined" />
@@ -163,6 +164,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 const { t } = useI18n()
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
@@ -206,6 +208,7 @@ const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 const layoutStore = useLayoutStore();
+const router = useRouter();
 
 // 有壁纸时隐藏底部渐变遮罩（壁纸已有视觉层次，不透明遮罩会像补丁）
 const hasWallpaper = computed(() => !!layoutStore.wallpaperUrl);
@@ -927,6 +930,22 @@ async function deleteTurnMessage(turn: any) {
   }
 }
 
+// 分支会话：以该回合（助手消息所在，必为完整一轮）为节点，复制出新会话并跳转过去
+async function branchFromTurn(turn: any) {
+  if (!currentSessionId.value || !turn?.id) return;
+  try {
+    const newSession = await apiService.branchSession(currentSessionId.value, {
+      turnId: turn.id,
+    });
+    sessionStore.setSession(newSession);
+    toast.success(t('chat.panel.branchSuccess'));
+    router.replace({ name: 'Chat', params: { sessionId: newSession.id } });
+  } catch (error: any) {
+    toast.error(error?.message || t('chat.panel.branchFailed'));
+    console.error("分支会话失败:", error);
+  }
+}
+
 async function editMessage(block: any) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 无可编辑内容，提前返回
@@ -1294,9 +1313,10 @@ function scrollToMessage(messageId: string) {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 48px;
+  /* 56px 实心区需盖住输入框下方的工作目录条（约 36px），否则滚动消息会从条后漏出 */
+  height: 76px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--gd-color-bg) 25px, transparent 48px);
+  background: linear-gradient(to top, var(--gd-color-bg) 56px, transparent 76px);
 }
 
 /* 加载指示器淡入淡出 */

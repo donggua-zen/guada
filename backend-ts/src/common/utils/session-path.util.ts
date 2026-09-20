@@ -1,11 +1,11 @@
 /**
  * 会话数据目录（sessions base）的解析与会话 id 校验 —— 单一真相。
  *
- * 背景：会话 JSONL、meta.json、workflows/、以及 2026-09 起新增的会话图片附件
+ * 背景：会话 JSONL、workflows/、以及 2026-09 起新增的会话图片附件
  * （<sessionsBase>/<sessionId>/images|previews/）都落在同一个 base 下。删除会话
  * 是对会话目录的整目录 rm -rf，因此这些内容全部「随会话删除免费」。
  *
- * 本模块被持久层（jsonl-backend / session-file.store / workflow-file-store）与
+ * 本模块被持久层（jsonl-backend / session-meta.store / workflow-file-store）与
  * 附件解析层（attachment.util）共同引用；不要再各自实现 env 优先级。
  */
 

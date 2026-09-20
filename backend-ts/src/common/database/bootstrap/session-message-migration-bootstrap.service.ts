@@ -3,7 +3,7 @@
  *
  * DB message/message_content/session_context_state → JSONL 事件日志的启动期一次性迁移，
  * 由 MigrationBootstrapService 编排调用（kb 步之后、sessionStore.initialize() 之前——
- * JSONL 与 meta 修复先于索引预热，healOrphanSessions 不再抢先产生无标题骨架 meta）。
+ * JSONL 与 meta 修复先于索引预热，孤儿自愈不再抢先产生无标题骨架行）。
  *
  * Marker：<sessions根>/.migrated-session-messages（独立于元信息导出的 .migrated-sessions：
  * 消息迁移可能晚于元信息导出数个版本才上线，共用 marker 会漏迁）。
@@ -13,8 +13,7 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
-import { MetadataBootstrapGate } from "../metadata-bootstrap.gate";
-import { SessionFileStore } from "../../../modules/chat/session-file.store";
+import { resolveSessionsBasePath } from "../../utils/session-path.util";
 import { SessionMessageDbMigratorService } from "./session-message-db-migrator.service";
 
 export const SESSION_MESSAGES_MIGRATED_MARKER = ".migrated-session-messages";
@@ -23,20 +22,12 @@ export const SESSION_MESSAGES_MIGRATED_MARKER = ".migrated-session-messages";
 export class SessionMessageMigrationBootstrapService {
   private readonly logger = new Logger(SessionMessageMigrationBootstrapService.name);
 
-  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
-  private readonly sessionStore: SessionFileStore;
-
-  constructor(
-    private readonly migrator: SessionMessageDbMigratorService,
-    gate: MetadataBootstrapGate,
-  ) {
-    this.sessionStore = new SessionFileStore(gate);
-  }
+  constructor(private readonly migrator: SessionMessageDbMigratorService) {}
 
   /** @returns 是否完成（已完成/本次成功 = true；失败 = false，下次启动重试） */
   async run(): Promise<boolean> {
     const marker = path.join(
-      this.sessionStore.getDirectory(),
+      resolveSessionsBasePath(),
       SESSION_MESSAGES_MIGRATED_MARKER,
     );
     if (fs.existsSync(marker)) return true;
@@ -62,6 +53,9 @@ export class SessionMessageMigrationBootstrapService {
     } catch (err) {
       this.logger.error(`会话消息迁移失败（下次启动重试）: ${String(err)}`);
       return false;
+    } finally {
+      // 释放 _meta.db 句柄（meta 修复用），避免 Windows 下锁住目录
+      this.migrator.close();
     }
   }
 }

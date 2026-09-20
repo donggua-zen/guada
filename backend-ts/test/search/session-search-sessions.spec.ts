@@ -4,9 +4,9 @@
  * 覆盖：title 阶段先行返回 + 扫描清单规模、content 阶段批扫描结果组装
  * （保持扫描顺序、排除标题命中）、游标推进与终止、archived 过滤、空关键词。
  *
- * 注：会话元信息权威来源已改为 sessions/<id>/meta.json（SessionFileStore），
- * 仓储兼容层已删除——本测试直接 mock SessionFileStore：
- * `query` 提供标题阶段命中、`listWebSessionIds` 提供扫描清单、
+ * 注：会话元信息权威来源为 sessions/_meta.db（SessionMetaStore），
+ * 仓储兼容层已删除——本测试直接 mock SessionMetaStore：
+ * `queryPaged` 提供标题阶段命中、`listWebSessionIds` 提供扫描清单、
  * `getManyByIds` 提供内容命中行——与生产实现的索引访问点一一对应。
  */
 import { SessionService } from "../../src/modules/chat/session.service";
@@ -24,8 +24,10 @@ function buildService(overrides: {
 }) {
   const rows = overrides.rows ?? [];
   const sessionStore = {
-    // 标题阶段：query 返回命中的 meta（此处只需 id），get 取回行
-    query: overrides.queryMock ?? jest.fn().mockReturnValue([]),
+    // 标题阶段：queryPaged 返回命中的 meta（此处只需 id），get 取回行
+    queryPaged:
+      overrides.queryMock ??
+      jest.fn().mockReturnValue({ rows: [], total: 0 }),
     get: jest
       .fn()
       .mockImplementation((id: string) => rows.find((r) => r.id === id) ?? null),
@@ -77,7 +79,7 @@ describe("SessionService.searchSessions（渐进扫描游标协议）", () => {
   });
 
   it("title 阶段：标题命中先行返回，游标指向 content offset=0，携带 progress.total", async () => {
-    const queryMock = jest.fn().mockReturnValue([{ id: "s_title" }]);
+    const queryMock = jest.fn().mockReturnValue({ rows: [{ id: "s_title" }], total: 1 });
     const { service } = buildService({
       queryMock,
       scanIds: ["s_title", "s_a", "s_b"],
@@ -93,7 +95,7 @@ describe("SessionService.searchSessions（渐进扫描游标协议）", () => {
   });
 
   it("content 阶段：命中组装保持扫描顺序、排除标题命中，游标推进", async () => {
-    const queryMock = jest.fn().mockReturnValue([{ id: "s_title" }]);
+    const queryMock = jest.fn().mockReturnValue({ rows: [{ id: "s_title" }], total: 1 });
     const scanBatch = jest.fn().mockResolvedValue({
       matches: new Map([
         ["s_a", "片段A【测试】"],

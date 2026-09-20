@@ -212,17 +212,12 @@
       :allow-generate="false" :time-full="assistantTime.full"
       :time-friendly="assistantTime.firendly" :duration-text="durationText" @copy="emit('copy', activeBlock)"
       @regenerate="emit('regenerate', props.turn)" @edit="emit('edit', activeBlock)"
-      @delete="emit('delete', props.turn)" />
+      @delete="emit('delete', props.turn)" @branch="emit('branch', props.turn)" />
 
-    <!-- 流式期间：工作中 / 重试中状态（retry 为回合级瞬态 turn.state.retry，不落库） -->
+    <!-- 流式期间：思考中（点阵动画 + 轮播文案）/ 重试中状态（retry 为回合级瞬态 turn.state.retry，不落库） -->
     <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
-      <template v-if="retryState">
-        <span class="text-amber-500 dark:text-amber-400">{{ retryState.message }}</span>
-      </template>
-      <template v-else>
-        <span v-if="durationText">{{ t('chat.turn.workingWithDuration', { duration: durationText }) }}</span>
-        <span v-else>{{ t('chat.turn.working') }}</span>
-      </template>
+      <span v-if="retryState" class="text-amber-500 dark:text-amber-400">{{ retryState.message }}</span>
+      <ThinkingStatus v-else :duration-text="durationText" />
     </div>
     <!-- 图片预览 -->
     <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
@@ -250,6 +245,7 @@ import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArg
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
+import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
@@ -280,6 +276,8 @@ const emit = defineEmits<{
   copy: [block: TurnContent | ReturnType<typeof toUserMessageView> | null]
   generate: [turn: Turn]
   regenerate: [turn: Turn]
+  /** 从该回合（助手消息所在）分支新会话 */
+  branch: [turn: Turn]
 }>();
 
 // 三层结构（turn → messages → blocks）：从 turn.messages 按消息束拆分。

@@ -1,0 +1,1084 @@
+import * as fs from "fs";
+import * as fsp from "fs/promises";
+import * as path from "path";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import Database from "better-sqlite3";
+
+import {
+  resolveSessionsBasePath,
+  assertValidId,
+} from "../../common/utils/session-path.util";
+import {
+  META_DOMAIN_SESSIONS,
+  MetadataBootstrapGate,
+} from "../../common/database/metadata-bootstrap.gate";
+import { mintId } from "../../common/persistence/file-store-kit";
+import { ID_PREFIXES } from "../../common/utils/id.util";
+
+/**
+ * 会话元数据存储（`<sessions根>/_meta.db`）
+ *
+ * 权威来源 = 本 SQLite 库；消息事件仍是 JSONL 事件溯源（见 persistence/），互不越界。
+ * 元数据是「小、关系型、写热」的数据（childrenOf / 分组过滤 / 每条消息一次的
+ * lastActiveAt），SQLite 直接给到索引与事务；消息是「大、追加型」数据，留在文件。
+ *
+ * ## 无文件兼容层（刻意为之）
+ *
+ * 文件版会话元数据（meta.json / _groups.json）**从未上线**：客户侧只有主库
+ * （`data/ai_chat.db`）数据，本地出现过的文件形态只是迁移中间产物。因此本存储
+ * 不读也不写 meta.json —— 一次性转换直接走「冻结主库 → _meta.db」
+ * （见 `common/database/bootstrap/metadata-file-bootstrap.service.ts` 的会话步）。
+ * 删掉 `_meta.db` 即可从主库重转（转换标记随之消失）。
+ *
+ * ## 自愈（启动收敛）
+ *
+ * - 目录有 `seg-0000.jsonl` 事件日志而库无行（转换中断 / 手删库）→ 重建骨架行；
+ *   只救含真实往来消息的会话，纯 `session/init` 空壳跳过（否则侧栏出幽灵会话）
+ * - 库有行而目录无（被绕过本存储手删）→ 删行。对齐「目录即会话」语义
+ *
+ * ## 扩展位
+ *
+ * 两表都有通用 `data` 列（JSON 文本，不索引）：新增非索引字段无需 schema 变更。
+ * `settings` 是 `sessions.data` 下的受管键（读 = `data.settings ?? null`，写以
+ * `meta.settings` 为准），data 其余键自由透传。
+ */
+
+export const META_DB_FILE = "_meta.db";
+/** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
+export const SESSION_META_DB_VERSION = 3;
+/** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
+export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
+
+/**
+ * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
+ *
+ * 时间字段用 ISO 字符串（JSON 可读、可手改；读取时按需转 Date 供旧 Prisma 形状兼容）。
+ */
+export interface SessionMeta {
+  id: string;
+  title: string | null;
+  avatarUrl: string | null;
+  description: string | null;
+  modelId: string | null;
+  agentId: string | null;
+  groupId: string | null;
+  settings: Record<string, any> | null;
+  /**
+   * 通用扩展字段（不索引，未来新字段放这里）。
+   * 落 `sessions.data` 列（JSON 文本），`settings` 折叠为其中的 `settings` 键
+   * （以 meta.settings 为准）。
+   */
+  data: Record<string, any> | null;
+  sessionType: string;
+  archived: boolean;
+  botId: string | null;
+  platform: string | null;
+  externalId: string | null;
+  workspacePath: string | null;
+  parentId: string | null;
+  /** 顶层祖先会话 id（主会话自身为 null；子会话 = 顶层主会话 id） */
+  rootId: string | null;
+  closedAt: string | null;
+  closeReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastActiveAt: string | null;
+}
+
+/** 会话分组（原 session_group 表行） */
+export interface SessionGroupMeta {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  /** 通用扩展字段（不索引），落 `session_groups.data` 列 */
+  data?: Record<string, any> | null;
+}
+
+/**
+ * 结构化查询过滤（tri-state 语义）：
+ * - `groupId`：null = 仅未分组，undefined = 不过滤
+ * - `archived`：undefined = 不过滤
+ */
+export interface SessionQueryFilter {
+  sessionType?: string;
+  archived?: boolean;
+  groupId?: string | null;
+  /** 标题子串（大小写不敏感） */
+  keyword?: string;
+  parentId?: string;
+  botId?: string;
+}
+
+export type SessionSortKey = "lastActiveDesc" | "updatedDesc" | "createdAsc";
+
+/** LIMIT/OFFSET 分页（limit 传 Infinity 或省略 = 不分页） */
+export interface SessionQueryPage {
+  skip?: number;
+  limit?: number;
+}
+
+/** queryPaged 返回：页内行 + 同事务快照的总行数 */
+export interface PagedQueryResult {
+  rows: SessionMeta[];
+  total: number;
+}
+
+/** 新建会话 id 前缀（统一铸造见 common/utils/id.util.ts） */
+export const SESSION_ID_PREFIX = ID_PREFIXES.session;
+
+const SORT_SQL: Record<SessionSortKey, string> = {
+  // 确定性 id tiebreak：同查询同顺序
+  lastActiveDesc: "last_active_at DESC, id ASC",
+  updatedDesc: "updated_at DESC, id ASC",
+  createdAsc: "created_at ASC, id ASC",
+};
+
+export const META_COLUMNS =
+  "id, parent_id, root_id, session_type, title, avatar_url, description, " +
+  "model_id, agent_id, group_id, data, workspace_path, bot_id, platform, " +
+  "external_id, archived, closed_at, close_reason, created_at, updated_at, last_active_at";
+
+const V1_DDL = `
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  parent_id TEXT,
+  root_id TEXT,
+  session_type TEXT NOT NULL DEFAULT 'web',
+  title TEXT,
+  avatar_url TEXT,
+  description TEXT,
+  model_id TEXT,
+  agent_id TEXT,
+  group_id TEXT,
+  settings TEXT,
+  workspace_path TEXT,
+  bot_id TEXT,
+  platform TEXT,
+  external_id TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
+  closed_at TEXT,
+  close_reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_active_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_root ON sessions(root_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
+CREATE INDEX IF NOT EXISTS idx_sessions_group ON sessions(group_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_bot ON sessions(bot_id, external_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
+CREATE TABLE IF NOT EXISTS session_groups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS _bootstrap (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+`;
+
+// ============ 行 ↔ 领域对象 ============
+
+/** 外层用 Date 形状（对齐旧 Prisma 返回，避免调用方处理字符串） */
+export function toRow(meta: SessionMeta): Record<string, any> {
+  return {
+    ...meta,
+    createdAt: new Date(meta.createdAt),
+    updatedAt: new Date(meta.updatedAt),
+    lastActiveAt: meta.lastActiveAt ? new Date(meta.lastActiveAt) : null,
+    closedAt: meta.closedAt ? new Date(meta.closedAt) : null,
+  };
+}
+
+export function toISO(value: any): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** 普通对象判定（非 null/数组）——settings/data 字段归一用 */
+export function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * data 列 JSON 合成：settings 是 data 下的受管键（以 meta.settings 为准），
+ * data 其余键自由透传（未来扩展免 schema 变更）。
+ */
+export function buildDataJson(meta: SessionMeta): string | null {
+  const hasData = isPlainObject(meta.data);
+  const hasSettings = meta.settings != null;
+  if (!hasData && !hasSettings) return null;
+  const obj: Record<string, any> = { ...(hasData ? meta.data : {}) };
+  obj.settings = meta.settings ?? null;
+  return JSON.stringify(obj);
+}
+
+/** 分组 data 列 JSON 合成（文件形态可省略 data → 归一 null，better-sqlite3 拒绝 undefined 绑定） */
+function groupDataJson(g: SessionGroupMeta): string | null {
+  return isPlainObject(g.data) ? JSON.stringify(g.data) : null;
+}
+
+function parseJsonObject(text: unknown): Record<string, any> | null {
+  if (typeof text !== "string" || !text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rowToMeta(r: any): SessionMeta {
+  // settings 是 data 下的受管键（以 meta.settings 为准，见 buildDataJson）
+  const dataObj = parseJsonObject(r.data);
+  return {
+    id: r.id,
+    parentId: r.parent_id ?? null,
+    rootId: r.root_id ?? null,
+    sessionType: r.session_type,
+    title: r.title ?? null,
+    avatarUrl: r.avatar_url ?? null,
+    description: r.description ?? null,
+    modelId: r.model_id ?? null,
+    agentId: r.agent_id ?? null,
+    groupId: r.group_id ?? null,
+    settings: dataObj?.settings ?? null,
+    data: dataObj,
+    workspacePath: r.workspace_path ?? null,
+    botId: r.bot_id ?? null,
+    platform: r.platform ?? null,
+    externalId: r.external_id ?? null,
+    archived: r.archived === 1,
+    closedAt: r.closed_at ?? null,
+    closeReason: r.close_reason ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    lastActiveAt: r.last_active_at ?? null,
+  };
+}
+
+function escapeLike(needle: string): string {
+  return needle.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/**
+ * 解析孤儿事件日志：取首个 `session/init` 的标题/时间，跳过纯空壳
+ * （仅 session/init、无任何真实往来消息的目录是历史遗留产物）。
+ */
+export function inspectOrphanLogContent(content: string): {
+  title: string;
+  createdAt: string;
+} | null {
+  const lines = content.split("\n").filter((l) => l.trim());
+  let title = "";
+  let createdAt: string | null = null;
+  let hasRealMessage = false;
+
+  for (const line of lines) {
+    let evt: any;
+    try {
+      evt = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (evt?.type === "session/init") {
+      if (!title && typeof evt.data?.title === "string") {
+        title = evt.data.title;
+      }
+      if (!createdAt && typeof evt.time === "number") {
+        createdAt = new Date(evt.time).toISOString();
+      }
+    } else if (typeof evt?.type === "string") {
+      // 除 init 外任何事件都说明会话真实发生过（user/message、assistant/message…）
+      hasRealMessage = true;
+    }
+  }
+
+  if (!hasRealMessage) return null;
+  return {
+    title,
+    createdAt: createdAt ?? new Date().toISOString(),
+  };
+}
+
+// ============ 库的打开 / 迁移 / 一次性转换助手 ============
+// 助手为「冻结主库 → _meta.db」转换与消息迁移的 meta 修复共用（bootstrap 自持连接，
+// 不经 DI——迁移脚手架不得反向依赖域模块的初始化）。
+
+/** 开库 + pragma + schema 迁移（调用方负责 close） */
+export function openMetaDb(baseDir: string): Database.Database {
+  fs.mkdirSync(baseDir, { recursive: true });
+  const db = new Database(path.join(baseDir, META_DB_FILE));
+  db.pragma("journal_mode = WAL");
+  db.pragma("synchronous = NORMAL");
+  db.pragma("busy_timeout = 5000");
+  migrateMetaDbSchema(db);
+  return db;
+}
+
+export function migrateMetaDbSchema(db: Database.Database): void {
+  const version = (db.pragma("user_version", { simple: true }) as number) ?? 0;
+  if (version >= SESSION_META_DB_VERSION) return;
+  if (version < 1) db.exec(V1_DDL);
+  // v2/v3 教训：dev 热重载可能在编辑中途加载「VERSION 已升、迁移步骤未加」的瞬时代码，
+  // 把 user_version 误标记而实际没跑迁移，纯版本门控会永久跳过——
+  // 因此后续步骤一律按**列存在性**判断，任何误标记状态都可自愈
+  if (version < 3) migrateToDataColumn(db);
+  db.pragma(`user_version = ${SESSION_META_DB_VERSION}`);
+}
+
+/**
+ * v2/v3：两表增通用 `data` 扩展列（不索引），`settings` 折叠为 `data.settings`。
+ * 全部步骤按 table_info 列存在性判断，幂等（settings 值是 JSON 文本，
+ * json() 解析后嵌入对象；非法 JSON 跳过，属防御分支）。
+ */
+function migrateToDataColumn(db: Database.Database): void {
+  const tx = db.transaction(() => {
+    const sessionCols = new Set(
+      (db.pragma("table_info(sessions)") as { name: string }[]).map((c) => c.name),
+    );
+    if (!sessionCols.has("data")) {
+      db.exec(`ALTER TABLE sessions ADD COLUMN data TEXT`);
+    }
+    if (sessionCols.has("settings")) {
+      db.exec(
+        `UPDATE sessions SET data = json_object('settings', json(settings))
+         WHERE settings IS NOT NULL AND json_valid(settings)`,
+      );
+      db.exec(`ALTER TABLE sessions DROP COLUMN settings`);
+    }
+    const groupCols = new Set(
+      (db.pragma("table_info(session_groups)") as { name: string }[]).map((c) => c.name),
+    );
+    if (!groupCols.has("data")) {
+      db.exec(`ALTER TABLE session_groups ADD COLUMN data TEXT`);
+    }
+  });
+  tx();
+}
+
+/** 写入/覆盖一行会话元数据（转换、meta 修复与运行时写入共用同一口径） */
+export function upsertMetaRow(db: Database.Database, meta: SessionMeta): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
+      `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    meta.id,
+    meta.parentId,
+    meta.rootId,
+    meta.sessionType,
+    meta.title,
+    meta.avatarUrl,
+    meta.description,
+    meta.modelId,
+    meta.agentId,
+    meta.groupId,
+    buildDataJson(meta),
+    meta.workspacePath,
+    meta.botId,
+    meta.platform,
+    meta.externalId,
+    meta.archived ? 1 : 0,
+    meta.closedAt,
+    meta.closeReason,
+    meta.createdAt,
+    meta.updatedAt,
+    meta.lastActiveAt,
+  );
+}
+
+/** 读一行（不存在返回 null）——meta 骨架判定与存在性检查用 */
+export function readMetaRow(db: Database.Database, id: string): SessionMeta | null {
+  const row = db.prepare(`SELECT ${META_COLUMNS} FROM sessions WHERE id = ?`).get(id);
+  return row ? rowToMeta(row) : null;
+}
+
+/** 全量替换分组表（一次性转换用；运行时 CRUD 走 SessionMetaStore） */
+export function replaceAllGroups(
+  db: Database.Database,
+  groups: SessionGroupMeta[],
+): void {
+  const tx = db.transaction((list: SessionGroupMeta[]) => {
+    db.prepare(`DELETE FROM session_groups`).run();
+    const insert = db.prepare(
+      `INSERT INTO session_groups (id, name, sort_order, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const g of list) {
+      insert.run(g.id, g.name, g.sortOrder ?? 0, g.createdAt, g.updatedAt, groupDataJson(g));
+    }
+  });
+  tx(groups);
+}
+
+/**
+ * root_id 回填：沿父链解析顶层祖先（链上防御环，visited 封顶）。
+ * 单层 sub_agent → web 是常态，但按链解析不设深度假设。
+ */
+export function backfillRootIds(db: Database.Database): void {
+  const rows = db
+    .prepare(`SELECT id, parent_id, root_id FROM sessions`)
+    .all() as { id: string; parent_id: string | null; root_id: string | null }[];
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const update = db.prepare(`UPDATE sessions SET root_id = ? WHERE id = ?`);
+  for (const row of rows) {
+    if (!row.parent_id) continue;
+    let root = row.parent_id;
+    const seen = new Set<string>([row.id]);
+    let cursor = byId.get(row.parent_id);
+    while (cursor?.parent_id && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      root = cursor.parent_id;
+      cursor = byId.get(cursor.parent_id);
+    }
+    if (root !== row.root_id) update.run(root, row.id);
+  }
+}
+
+/** 一次性转换是否已完成（标记在库内：库文件被删即视为未转换，下次启动自动重转） */
+export function isMetaDbMigrated(db: Database.Database): boolean {
+  const row = db
+    .prepare(`SELECT value FROM _bootstrap WHERE key = ?`)
+    .get(META_DB_MIGRATED_KEY) as { value: string | null } | undefined;
+  return !!row?.value;
+}
+
+/**
+ * 一次性转换（单一入口）：主库行 + 分组 → 本库，单事务完成
+ * 「写行 → 回填 root_id → 覆盖分组」三步，避免调用方漏步。
+ * 调用方负责 markMetaDbMigrated 与关库。
+ */
+export function importSessionMetaRows(
+  db: Database.Database,
+  rows: SessionMeta[],
+  groups: SessionGroupMeta[],
+): void {
+  const tx = db.transaction(() => {
+    for (const meta of rows) upsertMetaRow(db, meta);
+    backfillRootIds(db);
+    replaceAllGroups(db, groups);
+  });
+  tx();
+}
+
+export function markMetaDbMigrated(db: Database.Database): void {
+  db.prepare(`INSERT OR REPLACE INTO _bootstrap (key, value) VALUES (?, ?)`).run(
+    META_DB_MIGRATED_KEY,
+    new Date().toISOString(),
+  );
+}
+
+// ============ 存储实现 ============
+
+@Injectable()
+export class SessionMetaStore implements OnModuleDestroy {
+  private readonly log = new Logger(SessionMetaStore.name);
+  private readonly sessionsRoot = resolveSessionsBasePath();
+
+  private readonly bootstrapGate: MetadataBootstrapGate;
+  private db: Database.Database | null = null;
+  private initReady: Promise<void> | null = null;
+
+  private upsertStmt!: Database.Statement;
+  private deleteRowStmt!: Database.Statement;
+  private touchStmt!: Database.Statement;
+
+  constructor(gate: MetadataBootstrapGate) {
+    this.bootstrapGate = gate;
+  }
+
+  // ============ 生命周期 ============
+
+  /** 幂等初始化：等主库转换放行 → 开库建表 → 孤儿/幽灵收敛 */
+  async initialize(): Promise<void> {
+    this.initReady ??= this.runInitialize();
+    return this.initReady;
+  }
+
+  private async runInitialize(): Promise<void> {
+    // 转换未完成时不得建索引（否则读到空库会把会话"变没"）
+    await this.bootstrapGate.wait(META_DOMAIN_SESSIONS);
+    await fsp.mkdir(this.sessionsRoot, { recursive: true });
+    this.open();
+    await this.healOrphanRows();
+    this.removeGhostRows();
+  }
+
+  onModuleDestroy(): void {
+    this.db?.close();
+    this.db = null;
+  }
+
+  private open(): void {
+    const db = openMetaDb(this.sessionsRoot);
+    this.db = db;
+    this.upsertStmt = db.prepare(
+      `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
+        `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    this.deleteRowStmt = db.prepare(`DELETE FROM sessions WHERE id = ?`);
+    this.touchStmt = db.prepare(
+      `UPDATE sessions SET updated_at = ?, last_active_at = ? WHERE id = ?`,
+    );
+  }
+
+  private sessionDir(id: string): string {
+    assertValidId(id);
+    return path.join(this.sessionsRoot, id);
+  }
+
+  // ============ 启动收敛（孤儿/幽灵） ============
+
+  /**
+   * 孤儿自愈：目录有事件日志而库无行（转换中断 / 手删库 / 目录手建）时，
+   * 从 `seg-0000.jsonl` 重建骨架——只救含真实往来消息的会话。
+   */
+  private async healOrphanRows(): Promise<number> {
+    if (!this.db) return 0;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(this.sessionsRoot, { withFileTypes: true });
+    } catch {
+      return 0;
+    }
+    let healed = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const id = entry.name;
+      if (this.getMeta(id)) continue;
+
+      let content: string;
+      try {
+        content = await fsp.readFile(
+          path.join(this.sessionsRoot, id, "seg-0000.jsonl"),
+          "utf8",
+        );
+      } catch {
+        continue; // 无事件日志 → 不是会话
+      }
+      const parsed = inspectOrphanLogContent(content);
+      if (!parsed) continue;
+
+      const meta: SessionMeta = {
+        id,
+        title: parsed.title || null,
+        avatarUrl: null,
+        description: null,
+        modelId: null,
+        agentId: null,
+        groupId: null,
+        settings: null,
+        data: null,
+        sessionType: "web",
+        archived: false,
+        botId: null,
+        platform: null,
+        externalId: null,
+        workspacePath: null,
+        parentId: null,
+        rootId: null,
+        closedAt: null,
+        closeReason: null,
+        createdAt: parsed.createdAt,
+        updatedAt: parsed.createdAt,
+        lastActiveAt: parsed.createdAt,
+      };
+      upsertMetaRow(this.db, meta);
+      healed += 1;
+      this.log.warn(`Recovered session "${id}" from event log (no meta row)`);
+    }
+
+    if (healed > 0) {
+      this.log.log(`Recovered ${healed} session(s) from orphan directories`);
+    }
+    return healed;
+  }
+
+  /** 幽灵清理：库有行而目录无（被绕过本存储删除）→ 删行，对齐「目录即会话」语义 */
+  private removeGhostRows(): number {
+    if (!this.db) return 0;
+    const rows = this.db.prepare(`SELECT id FROM sessions`).all() as {
+      id: string;
+    }[];
+    let removed = 0;
+    for (const { id } of rows) {
+      if (!fs.existsSync(path.join(this.sessionsRoot, id))) {
+        this.deleteRowStmt.run(id);
+        removed += 1;
+        this.log.warn(`Dropped session row "${id}" (directory removed out-of-band)`);
+      }
+    }
+    return removed;
+  }
+
+  // ============ 查询 API（同步，走 SQLite） ============
+
+  /** 原始 meta（含 ISO 字符串时间） */
+  getMeta(id: string): SessionMeta | undefined {
+    if (!this.db) return undefined;
+    return readMetaRow(this.db, id) ?? undefined;
+  }
+
+  /** 行视图（Date 形状，对齐旧 Prisma 返回） */
+  get(id: string): Record<string, any> | undefined {
+    const meta = this.getMeta(id);
+    return meta ? toRow(meta) : undefined;
+  }
+
+  /**
+   * 结构化过滤查询（SQL 直译，返回按 `sort` 排序的全量结果——
+   * 无界场景请改用 queryPaged；本方法留给 childrenOf / listWebSessionIds 等
+   * 天然有界或需要完整清单的调用方）。
+   */
+  query(
+    filter: SessionQueryFilter,
+    sort: SessionSortKey = "lastActiveDesc",
+  ): SessionMeta[] {
+    if (!this.db) return [];
+    const { where, params } = this.buildWhere(filter);
+    const sql =
+      `SELECT ${META_COLUMNS} FROM sessions` +
+      (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
+      ` ORDER BY ${SORT_SQL[sort]}`;
+    return (this.db.prepare(sql).all(...params) as any[]).map(rowToMeta);
+  }
+
+  /**
+   * 数据库原生分页：LIMIT/OFFSET + 同事务 COUNT(*)。
+   * better-sqlite3 同步 API 下两条语句之间不会插入写；事务包裹使
+   * 「total 与分页同一快照」成为硬性保证。排序 tiebreak 为 id，翻页确定。
+   */
+  queryPaged(
+    filter: SessionQueryFilter,
+    sort: SessionSortKey,
+    page: SessionQueryPage,
+  ): PagedQueryResult {
+    if (!this.db) return { rows: [], total: 0 };
+    const { where, params } = this.buildWhere(filter);
+    const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+    const limit = page.limit ?? Infinity;
+    const skip = page.skip ?? 0;
+    const paged = Number.isFinite(limit);
+    const run = this.db.transaction(() => {
+      const total = (
+        this.db!
+          .prepare(`SELECT COUNT(*) AS n FROM sessions${whereSql}`)
+          .get(...params) as { n: number }
+      ).n;
+      const sql =
+        `SELECT ${META_COLUMNS} FROM sessions` +
+        whereSql +
+        ` ORDER BY ${SORT_SQL[sort]}` +
+        (paged ? " LIMIT ? OFFSET ?" : "");
+      const sqlParams = paged ? [...params, limit, skip] : params;
+      const rows = (this.db!.prepare(sql).all(...sqlParams) as any[]).map(
+        rowToMeta,
+      );
+      return { rows, total };
+    });
+    return run();
+  }
+
+  private buildWhere(filter: SessionQueryFilter): {
+    where: string[];
+    params: any[];
+  } {
+    const where: string[] = [];
+    const params: any[] = [];
+    if (filter.sessionType !== undefined) {
+      where.push("session_type = ?");
+      params.push(filter.sessionType);
+    }
+    if (filter.archived !== undefined) {
+      where.push("archived = ?");
+      params.push(filter.archived ? 1 : 0);
+    }
+    if (filter.groupId !== undefined) {
+      if (filter.groupId === null) {
+        where.push("group_id IS NULL");
+      } else {
+        where.push("group_id = ?");
+        params.push(filter.groupId);
+      }
+    }
+    if (filter.parentId !== undefined) {
+      where.push("parent_id = ?");
+      params.push(filter.parentId);
+    }
+    if (filter.botId !== undefined) {
+      where.push("bot_id = ?");
+      params.push(filter.botId);
+    }
+    const needle = filter.keyword?.toLowerCase();
+    if (needle) {
+      where.push(`lower(coalesce(title, '')) LIKE ? ESCAPE '\\'`);
+      params.push(`%${escapeLike(needle)}%`);
+    }
+    return { where, params };
+  }
+
+  /** 由 id 取子会话（升序，用于 findById 的 children） */
+  childrenOf(parentId: string): Record<string, any>[] {
+    return this.query({ parentId }, "createdAsc").map(toRow);
+  }
+
+  /** 某父会话下活跃子会话数（排除已冻结 closedAt）——子代理名额上限依据 */
+  countByParentId(parentId: string): number {
+    if (!this.db) return 0;
+    return (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM sessions WHERE parent_id = ? AND closed_at IS NULL`,
+        )
+        .get(parentId) as { n: number }
+    ).n;
+  }
+
+  /** 按 botId + externalId 查 bot 会话（复合索引；幂等映射） */
+  findByBotAndExternalId(
+    botId: string,
+    externalId: string,
+  ): Record<string, any> | null {
+    if (!this.db) return null;
+    const row = this.db
+      .prepare(
+        `SELECT ${META_COLUMNS} FROM sessions WHERE bot_id = ? AND external_id = ? AND session_type = 'bot' LIMIT 1`,
+      )
+      .get(botId, externalId);
+    return row ? toRow(rowToMeta(row)) : null;
+  }
+
+  /** sessionType='web' 的 id 清单（lastActiveAt desc）——供内容搜索两阶段协议 */
+  listWebSessionIds(includeArchived = false): string[] {
+    return this.query(
+      { sessionType: "web", archived: includeArchived ? undefined : false },
+      "lastActiveDesc",
+    ).map((m) => m.id);
+  }
+
+  /** 会话类型（web/bot/sub_agent/team） */
+  getSessionType(id: string): string | null {
+    return this.getMeta(id)?.sessionType ?? null;
+  }
+
+  /** 按 id 批量取行（保持入参顺序，缺失项忽略） */
+  getManyByIds(ids: string[]): Record<string, any>[] {
+    const out: Record<string, any>[] = [];
+    for (const id of ids) {
+      const row = this.get(id);
+      if (row) out.push(row);
+    }
+    return out;
+  }
+
+  /** 级联删除某父会话下的全部子会话（行删除走 deleteSession，目录随行删） */
+  async deleteChildrenOf(parentId: string): Promise<number> {
+    const children = this.query({ parentId }, "createdAsc");
+    let n = 0;
+    for (const meta of children) {
+      if (await this.deleteSession(meta.id)) n += 1;
+    }
+    return n;
+  }
+
+  // ============ 写入 API ============
+
+  /** 是否存在 */
+  has(id: string): boolean {
+    return this.getMeta(id) !== undefined;
+  }
+
+  /**
+   * 创建会话元信息（建目录 + 插行；lastActiveAt 默认置为当前时间）。
+   * root_id 由 parentId 自动解析（父会话的 root_id，顶层父则取父 id）。
+   */
+  async create(data: Record<string, any>): Promise<Record<string, any>> {
+    await this.initialize();
+    // 缺 id 时本地铸造；显式传入的 id 保持原值（fork 克隆子会话走显式 id）
+    let id: string;
+    if (data.id === undefined || data.id === null || String(data.id) === "") {
+      id = mintId(SESSION_ID_PREFIX);
+      while (this.has(id)) id = mintId(SESSION_ID_PREFIX);
+    } else {
+      id = String(data.id);
+      assertValidId(id);
+    }
+    const parentId = data.parentId ?? null;
+    let rootId: string | null = null;
+    if (parentId) {
+      const parent = this.getMeta(String(parentId));
+      rootId = parent?.rootId ?? String(parentId);
+    }
+    const now = new Date().toISOString();
+    const meta: SessionMeta = {
+      id,
+      title: data.title ?? null,
+      avatarUrl: data.avatarUrl ?? null,
+      description: data.description ?? null,
+      modelId: data.modelId ?? null,
+      agentId: data.agentId ?? null,
+      groupId: data.groupId ?? null,
+      settings: data.settings ?? null,
+      data: isPlainObject(data.data) ? data.data : null,
+      sessionType: data.sessionType ?? "web",
+      archived: data.archived === true,
+      botId: data.botId ?? null,
+      platform: data.platform ?? null,
+      externalId: data.externalId ?? null,
+      workspacePath: data.workspacePath ?? null,
+      parentId,
+      rootId,
+      closedAt: toISO(data.closedAt),
+      closeReason: data.closeReason ?? null,
+      createdAt: toISO(data.createdAt) ?? now,
+      updatedAt: now,
+      lastActiveAt: toISO(data.lastActiveAt) ?? now,
+    };
+    // 目录先建：bot 会话在首条消息前没有 JSONL，目录存在性是幽灵清理的判据
+    await fsp.mkdir(this.sessionDir(id), { recursive: true });
+    this.upsertMeta(meta);
+    return toRow(meta);
+  }
+
+  /**
+   * 更新会话元信息（部分字段；undefined 保持原值，`null` 显式置空）。
+   * 未命中时返回 undefined（对齐旧 update 语义）。
+   */
+  async update(
+    id: string,
+    data: Record<string, any>,
+  ): Promise<Record<string, any> | undefined> {
+    await this.initialize();
+    const current = this.getMeta(id);
+    if (!current || !this.db) return undefined;
+
+    const merged: SessionMeta = { ...current };
+    for (const [key, value] of Object.entries(data)) {
+      if (value === undefined) continue;
+      if (key === "createdAt") {
+        merged.createdAt = toISO(value) ?? merged.createdAt;
+      } else if (
+        key === "updatedAt" ||
+        key === "lastActiveAt" ||
+        key === "closedAt"
+      ) {
+        (merged as any)[key] = toISO(value);
+      } else if (key in merged) {
+        (merged as any)[key] = value;
+      }
+    }
+    merged.updatedAt = new Date().toISOString();
+    this.upsertMeta(merged);
+    return toRow(merged);
+  }
+
+  /** 仅刷新最后活跃时间（每条消息一次；单字段 UPDATE） */
+  async updateLastActiveAt(id: string): Promise<void> {
+    await this.initialize();
+    if (!this.db || !this.has(id)) return;
+    const now = new Date().toISOString();
+    this.touchStmt.run(now, now, id);
+  }
+
+  /** 删除会话元信息（先整目录 rm，再删行；崩溃残留由下次启动幽灵清理收敛） */
+  async deleteSession(id: string): Promise<boolean> {
+    await this.initialize();
+    // 先校验：下面是无条件的整目录 rm，非法 id（`..`／分隔符）必须挡在这里
+    assertValidId(id);
+    const existed = this.has(id);
+    await this.removeDirWithRetry(this.sessionDir(id));
+    if (existed) this.deleteRowStmt.run(id);
+    return existed;
+  }
+
+  /** 级联删除多个会话 */
+  async deleteMany(ids: string[]): Promise<number> {
+    let n = 0;
+    for (const id of ids) {
+      if (await this.deleteSession(id)) n += 1;
+    }
+    return n;
+  }
+
+  /** 批量把某分组的会话置为未分组（单语句原子；顺带刷新 updatedAt） */
+  async clearGroup(groupId: string): Promise<number> {
+    await this.initialize();
+    if (!this.db) return 0;
+    const result = this.db
+      .prepare(
+        `UPDATE sessions SET group_id = NULL, updated_at = ? WHERE group_id = ?`,
+      )
+      .run(new Date().toISOString(), groupId);
+    return result.changes;
+  }
+
+  // ============ 分组（session_groups 表） ============
+
+  /** 分组列表（按 sortOrder 升序） */
+  async listGroups(): Promise<SessionGroupMeta[]> {
+    await this.initialize();
+    if (!this.db) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT id, name, sort_order, created_at, updated_at, data FROM session_groups ORDER BY sort_order ASC, id ASC`,
+      )
+      .all() as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      sortOrder: r.sort_order,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      data: parseJsonObject(r.data),
+    }));
+  }
+
+  async findGroupById(id: string): Promise<SessionGroupMeta | undefined> {
+    const groups = await this.listGroups();
+    return groups.find((g) => g.id === id);
+  }
+
+  /** 新建分组（id 为 grp-<uuid>） */
+  async createGroup(data: {
+    name: string;
+    sortOrder?: number;
+  }): Promise<SessionGroupMeta> {
+    await this.initialize();
+    const now = new Date().toISOString();
+    const group: SessionGroupMeta = {
+      id: mintId(ID_PREFIXES.group),
+      name: data.name,
+      sortOrder: data.sortOrder ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db
+      ?.prepare(
+        `INSERT INTO session_groups (id, name, sort_order, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(group.id, group.name, group.sortOrder, group.createdAt, group.updatedAt, null);
+    return group;
+  }
+
+  async updateGroup(
+    id: string,
+    data: { name?: string; sortOrder?: number; data?: Record<string, any> | null },
+  ): Promise<SessionGroupMeta | undefined> {
+    await this.initialize();
+    const target = await this.findGroupById(id);
+    if (!target || !this.db) return undefined;
+    const name = data.name !== undefined ? data.name : target.name;
+    const sortOrder =
+      data.sortOrder !== undefined ? data.sortOrder : target.sortOrder;
+    const groupData =
+      data.data !== undefined
+        ? isPlainObject(data.data)
+          ? data.data
+          : null
+        : (target.data ?? null);
+    const updatedAt = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE session_groups SET name = ?, sort_order = ?, updated_at = ?, data = ? WHERE id = ?`,
+      )
+      .run(name, sortOrder, updatedAt, groupData ? JSON.stringify(groupData) : null, id);
+    return { ...target, name, sortOrder, updatedAt, data: groupData };
+  }
+
+  /** 删除分组：连同该组会话解绑（单事务，替代 FK onDelete SetNull） */
+  async deleteGroup(id: string): Promise<{ id: string }> {
+    await this.initialize();
+    if (this.db) {
+      const tx = this.db.transaction((groupId: string) => {
+        this.db!.prepare(`DELETE FROM session_groups WHERE id = ?`).run(groupId);
+        this.db!
+          .prepare(
+            `UPDATE sessions SET group_id = NULL, updated_at = ? WHERE group_id = ?`,
+          )
+          .run(new Date().toISOString(), groupId);
+      });
+      tx(id);
+    }
+    return { id };
+  }
+
+  /** 当前最大 sortOrder（新建分组排在最后） */
+  async getMaxGroupSortOrder(): Promise<number> {
+    await this.initialize();
+    if (!this.db) return 0;
+    const row = this.db
+      .prepare(`SELECT MAX(sort_order) AS max FROM session_groups`)
+      .get() as { max: number | null };
+    return row.max ?? 0;
+  }
+
+  /** 批量更新分组排序（单事务） */
+  async batchUpdateGroupSortOrder(
+    updates: { id: string; sortOrder: number }[],
+  ): Promise<SessionGroupMeta[]> {
+    await this.initialize();
+    if (!this.db) return [];
+    const map = new Map(updates.map((u) => [u.id, u.sortOrder]));
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      const update = this.db!.prepare(
+        `UPDATE session_groups SET sort_order = ?, updated_at = ? WHERE id = ?`,
+      );
+      for (const [id, sortOrder] of map) {
+        update.run(sortOrder, now, id);
+      }
+    });
+    tx();
+    const all = await this.listGroups();
+    return all.filter((g) => map.has(g.id));
+  }
+
+  // ============ 内部 ============
+
+  private upsertMeta(meta: SessionMeta): void {
+    this.upsertStmt.run(
+      meta.id,
+      meta.parentId,
+      meta.rootId,
+      meta.sessionType,
+      meta.title,
+      meta.avatarUrl,
+      meta.description,
+      meta.modelId,
+      meta.agentId,
+      meta.groupId,
+      buildDataJson(meta),
+      meta.workspacePath,
+      meta.botId,
+      meta.platform,
+      meta.externalId,
+      meta.archived ? 1 : 0,
+      meta.closedAt,
+      meta.closeReason,
+      meta.createdAt,
+      meta.updatedAt,
+      meta.lastActiveAt,
+    );
+  }
+
+  /** 删除目录（Windows 上句柄可能短暂占用，重试） */
+  private async removeDirWithRetry(dir: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await fsp.rm(dir, { recursive: true, force: true });
+        return;
+      } catch (err: any) {
+        if (attempt === 2) throw err;
+        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, Inject } from "@nestjs/common";
-import { SessionFileStore } from "../chat/session-file.store";
+import { SessionMetaStore } from "../chat/session-meta.store";
 import { AgentFileStore } from "../agents/agent-file.store";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -128,7 +128,7 @@ export class SubAgentManager implements OnModuleInit {
   private readonly states = new Map<string, ParentSessionState>();
 
   constructor(
-    private sessionStore: SessionFileStore,
+    private sessionStore: SessionMetaStore,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private agentStore: AgentFileStore,

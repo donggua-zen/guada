@@ -40,6 +40,15 @@
                       </GdPopover>
                     </div>
                   </template>
+                  <!-- 概览面板开关（常驻，不自动隐藏）：点击展开/收起；激活态=面板展示中 -->
+                  <GdTooltip v-if="mainSession"
+                    :content="overviewPanelShown ? t('chat.workspace.collapseOverview') : t('chat.workspace.openOverview')"
+                    placement="bottom">
+                    <div class="header-icon-btn" :class="{ active: overviewPanelShown }" data-overview-pin
+                      @click="overviewPanelShown ? handleOverviewCollapse() : handleOverviewRestore()">
+                      <AppsListDetail20Regular class="w-5 h-5" />
+                    </div>
+                  </GdTooltip>
                   <!-- 工作目录切换 -->
                   <GdTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
@@ -78,8 +87,7 @@
                   <template #aside>
                     <div ref="asideSlotRef" class="h-full w-full">
                       <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
-                        :sub-sessions="subSessions"
-                        @collapse="handleOverviewCollapse" />
+                        :sub-sessions="subSessions" />
                     </div>
                   </template>                </ChatPanel>
               </Teleport>
@@ -87,12 +95,6 @@
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession" :messages="chatPanelRef?.activeMessages || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
-
-              <!-- 概览不可见时的恢复小按钮（悬浮于右上）：空间足够=恢复还原状态；不足=临时展开 -->
-              <button v-if="mainSession && !overviewPanelShown" class="overview-restore-bar"
-                data-overview-pin :title="t('chat.workspace.openOverview')" @click="handleOverviewRestore">
-                <el-icon :size="14"><PanelLeftExpand16Filled /></el-icon>
-              </button>
             </div>
           </template>
 
@@ -146,7 +148,7 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled, PanelLeftExpand16Filled, ChevronDown16Regular } from "@vicons/fluent";
+import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular } from "@vicons/fluent";
 import { VsCode, WindowsExplorer } from "@/components/icons";
 import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";
@@ -740,29 +742,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 概览折叠后的恢复小按钮（悬浮于右上） */
-.overview-restore-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  top: 48px;
-  right: 8px;
-  width: 28px;
-  height: 56px;
-  z-index: 20;
-  border: 1px solid var(--gd-color-surface-border);
-  border-radius: 8px;
-  background: var(--gd-color-dialog-bg, var(--gd-color-surface));
-  color: var(--gd-color-text-gray);
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-.overview-restore-bar:hover {
-  background: var(--gd-color-sidebar-bg-hover);
-  color: var(--gd-color-text);
-}
-
 /* 工作目录打开方式下拉项 */
 .open-with-item {
   display: flex;

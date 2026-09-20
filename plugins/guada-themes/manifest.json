@@ -1,7 +1,7 @@
 {
   "id": "guada-themes",
   "name": "GuaDa 内置主题",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "官方内置主题插件（由 frontend/public/themes 迁移），同时作为第三方插件注册主题的参考范例",
   "author": "guada",
   "category": "system",

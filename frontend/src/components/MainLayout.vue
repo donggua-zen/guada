@@ -25,6 +25,7 @@ import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLayoutStore } from '@/stores/layout'
 import { useSessionStore } from '@/stores/session'
+import { usePluginSlots } from '@/stores/pluginSlots'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { useSessionEvents } from '@/composables/useSessionEvents'
@@ -111,6 +112,9 @@ onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
   apiService.connectSessionEvents()
   initSessionEvents()
+  // 插件槽（含插件主题注册表）需在主界面即初始化：
+  // 否则冷启动落在聊天页时无人触发 init，插件主题会一直 pending 不加载
+  usePluginSlots().init()
   // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
   layoutStore.loadAppearanceSettings()
 

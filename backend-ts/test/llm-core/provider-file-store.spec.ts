@@ -58,7 +58,6 @@ describe('ProviderFileStore', () => {
   });
 
   afterEach(() => {
-    store.onModuleDestroy();
     delete process.env.PROVIDERS_DIR;
     delete process.env.BUNDLED_PROVIDERS_DIR;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -192,7 +191,6 @@ describe('ProviderFileStore', () => {
       'utf8',
     );
     // 卡片与实例文件都必须在首次 initialize 前落盘（initialize 幂等）
-    store.onModuleDestroy();
     store = new ProviderFileStore(new BundledCatalogService());
     await store.initialize();
 

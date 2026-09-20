@@ -30,6 +30,16 @@
       </GdTooltip>
     </template>
 
+    <template v-if="isAssistant">
+      <GdTooltip :content="t('chat.messageActions.branchFromHere')" placement="top">
+        <div class="message-action-button" @click="$emit('branch')">
+          <el-icon :size="16">
+            <BranchFork16Regular />
+          </el-icon>
+        </div>
+      </GdTooltip>
+    </template>
+
     <GdTooltip :content="t('chat.messageActions.more')" placement="top">
       <DropdownMenu @command="handleCommand">
         <div class="message-action-button">
@@ -81,6 +91,7 @@ import {
   MoreHorizontal16Regular,
   Delete16Regular,
   Edit16Regular,
+  BranchFork16Regular,
 } from '@vicons/fluent';
 import { ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
 
@@ -99,6 +110,7 @@ const emit = defineEmits<{
   (e: 'regenerate'): void;
   (e: 'edit'): void;
   (e: 'delete'): void;
+  (e: 'branch'): void;
 }>();
 
 const handleCommand = (command: string) => {

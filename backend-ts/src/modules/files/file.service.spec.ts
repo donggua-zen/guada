@@ -39,7 +39,7 @@ describe("FileService upload routing", () => {
     process.env.UPLOAD_ROOT_DIR = uploadRoot;
     process.env.SESSION_DATA_DIR = tmpRoot; // → sessionsBase = <tmpRoot>/sessions
 
-    // 会话元信息权威来源：sessions/<id>/meta.json（SessionFileStore）
+    // 会话元信息权威来源：sessions/<id>/meta.json（SessionMetaStore）
     sessionStore = {
       get: jest.fn().mockReturnValue({ id: "session-1", workspacePath: workspaceDir }),
     };
@@ -246,7 +246,7 @@ describe("FileService upload routing", () => {
     const sessionDir = path.join(sessionsBase, "session-1");
     expect(fs.existsSync(path.join(sessionDir, "images"))).toBe(true);
 
-    // 模拟会话删除（与 JsonlBackend.deleteSession / SessionFileStore.deleteSession 相同的整目录 rm）
+    // 模拟会话删除（与 JsonlBackend.deleteSession / SessionMetaStore.deleteSession 相同的整目录 rm）
     fs.rmSync(sessionDir, { recursive: true, force: true });
     expect(fs.existsSync(path.join(sessionsBase, "session-1"))).toBe(false);
   });

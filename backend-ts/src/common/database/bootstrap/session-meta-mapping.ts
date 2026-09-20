@@ -3,9 +3,9 @@
  *
  * 从 MetadataFileBootstrapService 提取的共享纯函数：元数据映射单一来源，
  * 元信息导出（metadata-file-bootstrap）与会话消息迁移（session-message-db-migrator）
- * 共用，保证两条迁移线写出的 meta.json 字段口径逐字段一致。
+ * 共用，保证元信息转换线与消息迁移的 meta 修复口径逐字段一致。
  */
-import type { SessionMeta } from "../../../modules/chat/session-file.store";
+import type { SessionMeta } from "../../../modules/chat/session-meta.store";
 
 /** DB 日期值（Date | 字符串 | null）→ ISO 字符串，不可解析返回 null */
 export function toISO(value: unknown): string | null {
@@ -29,6 +29,8 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
     groupId: row.groupId ?? null,
     settings:
       row.settings && typeof row.settings === "object" ? row.settings : null,
+    // 冻结库无 data 列（通用扩展字段 2026-09-20 引入，仅存在于 SQLite 元库）
+    data: null,
     sessionType: row.sessionType ?? "web",
     archived: row.archived === true,
     botId: row.botId ?? null,
@@ -36,6 +38,8 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
     externalId: row.externalId ?? null,
     workspacePath: row.workspacePath ?? null,
     parentId: row.parentId ?? null,
+    // 冻结库无 root_id 列；由 SQLite 元库导入时按父链回填
+    rootId: null,
     closedAt: toISO(row.closedAt),
     closeReason: row.closeReason ?? null,
     createdAt: toISO(row.createdAt) ?? now,
@@ -45,9 +49,9 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
 }
 
 /**
- * heal 骨架判定：meta.json 由 SessionFileStore.healOrphanSessions 自动重建的
+ * 骨架判定：库内行由孤儿自愈（SessionMetaStore.healOrphanRows）从事件日志重建的
  * 最小骨架（title/agentId/groupId 全空）——可安全地用 DB 行全量覆盖修复。
- * 用户实际使用过的 meta（任一字段有值）不触碰。
+ * 用户实际使用过的行（任一字段有值）不触碰。
  */
 export function isHealSkeletonMeta(meta: unknown): boolean {
   if (!meta || typeof meta !== "object") return true;

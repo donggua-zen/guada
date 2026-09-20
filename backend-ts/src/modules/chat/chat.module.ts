@@ -1,6 +1,6 @@
 import { Module, OnModuleInit } from "@nestjs/common";
 
-import { SessionFileStore } from "./session-file.store";
+import { SessionMetaStore } from "./session-meta.store";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { ChatController } from "./chat.controller";
@@ -41,9 +41,10 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
-    // 会话文件存储：会话域的公开仓储，跨域消费者（files/bot-gateway/sub-agent）
-    // 经 import ChatModule 获取。文件在域内、注册在域内、生命周期也在域内。
-    SessionFileStore,
+    // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
+    // （files/bot-gateway/sub-agent）经 import ChatModule 获取。
+    // 一次性转换在启动期由迁移脚手架直写本库（冻结主库 → _meta.db，不经文件中间层）。
+    SessionMetaStore,
 
     AgentEngine,
     SessionContextFactory,
@@ -68,12 +69,12 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     // 标签解析器管道
     TagParserPipeline,
   ],
-  exports: [SessionFileStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
+  exports: [SessionMetaStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
 export class ChatModule implements OnModuleInit {
   // 会话 store 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，
   // 此刻 gate 已放行，扫描成本留在启动期而非首个请求
-  constructor(private sessionStore: SessionFileStore) {}
+  constructor(private sessionStore: SessionMetaStore) {}
 
   async onModuleInit(): Promise<void> {
     await this.sessionStore.initialize();

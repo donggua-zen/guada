@@ -1,9 +1,9 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { AgentFileStore } from '../../agents/agent-file.store';
 import {
-  byLastActiveDesc,
-  SessionFileStore,
-} from '../../chat/session-file.store';
+  SessionMetaStore,
+  toRow,
+} from '../../chat/session-meta.store';
 import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from './bot-instance-manager.service';
 import { PLATFORM_METADATA } from '../constants/platform-metadata';
@@ -20,7 +20,7 @@ export class BotAdminService {
     private instanceManager: BotInstanceManager,
     private modelStore: ProviderFileStore,
     private agentStore: AgentFileStore,
-    private sessionStore: SessionFileStore,
+    private sessionStore: SessionMetaStore,
     private botStore: BotFileStore,
   ) {}
 
@@ -66,14 +66,12 @@ export class BotAdminService {
    * 获取 Bot 会话列表
    */
   async getBotSessions(skip: number, limit: number, botId?: string) {
-    const rows = this.sessionStore.query(
-      (m) => m.sessionType === "bot" && (botId ? m.botId === botId : true),
-      byLastActiveDesc,
+    const { rows, total } = this.sessionStore.queryPaged(
+      { sessionType: "bot", ...(botId ? { botId } : {}) },
+      "lastActiveDesc",
+      { skip, limit },
     );
-    const items = rows
-      .slice(skip, skip + limit)
-      .map((m) => this.sessionStore.get(m.id)!);
-    const total = rows.length;
+    const items = rows.map((m) => toRow(m));
 
     const charMap = await this.agentStore.findManyByIds(
       items

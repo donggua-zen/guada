@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
+import type Database from "better-sqlite3";
 import { PrismaService } from "../prisma.service";
 import {
   META_DOMAIN_BOTS,
@@ -10,10 +11,14 @@ import {
   MetadataBootstrapGate,
 } from "../metadata-bootstrap.gate";
 import {
-  SESSIONS_MIGRATED_MARKER,
-  SessionFileStore,
+  importSessionMetaRows,
+  isMetaDbMigrated,
+  markMetaDbMigrated,
+  openMetaDb,
+  META_DB_FILE,
   SessionGroupMeta,
-} from "../../../modules/chat/session-file.store";
+} from "../../../modules/chat/session-meta.store";
+import { resolveSessionsBasePath } from "../../utils/session-path.util";
 import { BOTS_MIGRATED_MARKER, BotFileInstance, BotFileStore } from "../../../modules/bot-gateway/bot-file.store";
 import {
   MCP_MIGRATED_MARKER,
@@ -22,27 +27,33 @@ import {
 } from "../../../modules/mcp-servers/mcp-file.store";
 import { sessionRowToMeta, toISO } from "./session-meta-mapping";
 
+/** 会话元信息转换的人工可见标志（真值在 `_meta.db` 的 `_bootstrap` 表；仅提示，不参与判断） */
+export const SESSIONS_MIGRATED_MARKER = ".migrated-sessions";
+
 /**
  * ⚠️ 迁移脚手架（临时代码）：预计两个版本后随 Prisma/主库整体移除，
- * 由 MigrationBootstrapService 编排调用，移除清单见 docs/design/metadata-file-format.md。
+ * 由 MigrationBootstrapService 编排调用。
  *
- * 会话/机器人/知识库/MCP 服务器元信息 DB → 文件一次性导出
+ * 会话/机器人/知识库/MCP 服务器元信息 DB → 本地存储一次性转换
  *
- * 四域各自独立 marker、独立重试：
- *   <sessions根>/.migrated-sessions   session + session_group
- *   <bots根>/.migrated-bots           bot_instance
- *   <KB根>/.migrated-kb               knowledge_base + kb_file
- *   <MCP根>/.migrated-mcp             mcp_server
+ * 四域各自独立门控、独立重试：
+ *   <sessions根>/_meta.db 的 _bootstrap 表   session + session_group（库删即重转）
+ *   <bots根>/.migrated-bots                  bot_instance
+ *   <KB根>/.migrated-kb                      knowledge_base + kb_file
+ *   <MCP根>/.migrated-mcp                    mcp_server
  *
- * 四个域的 id 全部保持原 cuid 不变（文件名/目录名即 id）→ 无需重键、零引用改写
+ * 会话元数据**直接写 SQLite（`_meta.db`），不经 meta.json 中间层**：文件版从未上线，
+ * 客户侧只有主库数据，保留文件往返只会引入两份真相与回滚歧义（2026-09-20 决定）。
+ *
+ * 四个域的 id 全部保持原 cuid 不变（目录名/主键即 id）→ 无需重键、零引用改写
  * （MCP 的 id 还被智能体设置里的 `mcp_<id>` 工具包过滤引用），因此不存在智能体迁移
  * 那种"引用改写失败"的风险面，只需保证：
- * 1. 导出完成前 FileStore 不得读索引（由 MetadataBootstrapGate 门控）
- * 2. 导出失败不落 marker，下次启动重试
- * 3. 已存在文件不覆盖（用户手改过的内容保留）
+ * 1. 转换完成前 FileStore 不得读索引（由 MetadataBootstrapGate 门控）
+ * 2. 转换失败不落标记，下次启动重试（写入幂等：INSERT OR REPLACE）
+ * 3. 已存在的行不覆盖（门控在库内，转换过一次即跳过）
  *
- * 顺序约束：必须最后执行——智能体/供应商的 rekey 改写完 DB 引用后，这里导出的
- * meta.json / bot yaml / kb.json 才是归一化后的 id（此前分散在各模块时导出先于
+ * 顺序约束：必须最后执行——智能体/供应商的 rekey 改写完 DB 引用后，这里写出的
+ * 会话元数据 / bot yaml / kb.json 才是归一化后的 id（此前分散在各模块时导出先于
  * rekey，跳版升级会导出旧引用且永不自愈）。
  *
  * 无需 DB migration：四域迁完后对 DB 只读不写，外键不会触发。
@@ -52,10 +63,9 @@ export class MetadataFileBootstrapService {
   private readonly logger = new Logger(MetadataFileBootstrapService.name);
 
   // 脚手架自持构造 store（不经 DI）：本模块不得反向 import 域模块——那会把
-  // 域模块的初始化提到迁移导出之前（AgentSeedService 等在 init 期读写
-  // store，会造成空目录补种）。直写方法（writeMetaDirect 等）不走 initialize
-  // 门控，可安全地在 gate 放行前落盘。
-  private readonly sessionStore: SessionFileStore;
+  // 域模块的初始化提到迁移转换之前（AgentSeedService 等在 init 期读写
+  // store，会造成空目录补种）。会话元数据直接写库（openMetaDb 助手），
+  // bot/mcp 的直写方法不走 initialize 门控，可安全地在 gate 放行前落盘。
   private readonly botStore: BotFileStore;
   private readonly mcpStore: McpFileStore;
 
@@ -63,13 +73,12 @@ export class MetadataFileBootstrapService {
     private readonly prisma: PrismaService,
     private readonly gate: MetadataBootstrapGate,
   ) {
-    this.sessionStore = new SessionFileStore(gate);
     this.botStore = new BotFileStore(gate);
     this.mcpStore = new McpFileStore(gate);
   }
 
   async run(): Promise<void> {
-    await this.runDomain(META_DOMAIN_SESSIONS, () => this.exportSessions());
+    await this.runDomain(META_DOMAIN_SESSIONS, () => this.importSessions());
     await this.runDomain(META_DOMAIN_BOTS, () => this.exportBots());
     await this.runDomain(META_DOMAIN_MCP, () => this.exportMcpServers());
   }
@@ -107,54 +116,61 @@ export class MetadataFileBootstrapService {
     }
   }
 
-  // ============ sessions ============
+  // ============ sessions（直接写 _meta.db，不经文件） ============
 
-  private async exportSessions(): Promise<{ ok: boolean; marker: string }> {
-    const dir = this.sessionStore.getDirectory();
-    await fsp.mkdir(dir, { recursive: true });
+  /**
+   * 会话 + 分组元信息：冻结主库 → `_meta.db`。
+   *
+   * 幂等门控在库内（`_bootstrap.migrated_from_db_at`）：删掉 `_meta.db` 即视为未转换、
+   * 下次启动自动从主库重转（这是唯一的"重新转换"入口，无需人工清理 marker 文件）。
+   * 库外的 `.migrated-sessions` 文件仅作人工可见标志，不参与判断。
+   */
+  private async importSessions(): Promise<{ ok: boolean; marker: string }> {
+    const dir = resolveSessionsBasePath();
     const marker = path.join(dir, SESSIONS_MIGRATED_MARKER);
-    if (await this.markerExists(marker)) {
-      return { ok: true, marker };
-    }
-
-    let rows: Array<Record<string, any>>;
-    let groups: Array<Record<string, any>>;
+    let db: Database.Database | null = null;
     try {
-      rows = await this.prisma.session.findMany();
-      groups = await this.prisma.sessionGroup.findMany();
+      db = openMetaDb(dir);
+      if (isMetaDbMigrated(db)) return { ok: true, marker };
+
+      let rows: Array<Record<string, any>>;
+      let groups: Array<Record<string, any>>;
+      try {
+        rows = await this.prisma.session.findMany();
+        groups = await this.prisma.sessionGroup.findMany();
+      } catch (err) {
+        this.logger.warn(`DB unreadable, skip session meta import: ${String(err)}`);
+        return { ok: false, marker };
+      }
+
+      const groupMetas: SessionGroupMeta[] = groups.map((g) => ({
+        id: String(g.id),
+        name: String(g.name ?? ""),
+        sortOrder: Number(g.sortOrder ?? 0),
+        createdAt: toISO(g.createdAt) ?? new Date().toISOString(),
+        updatedAt: toISO(g.updatedAt) ?? new Date().toISOString(),
+      }));
+
+      const handle = db;
+      importSessionMetaRows(
+        handle,
+        rows.map((row) => sessionRowToMeta(row)),
+        groupMetas,
+      );
+      markMetaDbMigrated(handle);
+
+      this.logger.log(
+        `Session meta imported into ${META_DB_FILE}: ${rows.length} session(s), ` +
+          `${groupMetas.length} group(s)`,
+      );
+      await this.writeMarker(marker);
+      return { ok: true, marker };
     } catch (err) {
-      this.logger.warn(`DB unreadable, skip session export: ${String(err)}`);
+      this.logger.error(`session 元信息转换异常: ${String(err)}`);
       return { ok: false, marker };
+    } finally {
+      db?.close();
     }
-
-    let written = 0;
-    for (const row of rows) {
-      const meta = sessionRowToMeta(row);
-      const metaPath = this.sessionStore.getMetaPath(meta.id);
-      // 已存在则保留（可能是用户手改或上次部分导出）——只补缺失
-      if (fs.existsSync(metaPath)) continue;
-      await this.sessionStore.writeMetaDirect(meta);
-      written += 1;
-    }
-
-    const groupMetas: SessionGroupMeta[] = groups.map((g) => ({
-      id: String(g.id),
-      name: String(g.name ?? ""),
-      sortOrder: Number(g.sortOrder ?? 0),
-      createdAt: toISO(g.createdAt) ?? new Date().toISOString(),
-      updatedAt: toISO(g.updatedAt) ?? new Date().toISOString(),
-    }));
-    const existingGroups = await this.sessionStore.readGroups();
-    if (existingGroups.length === 0 && groupMetas.length > 0) {
-      await this.sessionStore.writeGroups(groupMetas);
-    }
-
-    this.logger.log(
-      `Session meta migrated from DB: ${written} new, ${rows.length - written} kept, ` +
-        `${groupMetas.length} group(s)`,
-    );
-    await this.sessionStore.reload();
-    return { ok: true, marker };
   }
 
   // ============ bots ============

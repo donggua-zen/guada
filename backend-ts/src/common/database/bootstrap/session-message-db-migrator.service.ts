@@ -18,9 +18,9 @@
  * 每回合恒写 turn/finish（usedTokens 锚点兜底后，无 usage 的回合也有占用锚点——
  * 前端环形指示器与压缩历史 before/after 回退链依赖这些锚点）。
  *
- * 元信息修复：meta.json 缺失或为 heal 骨架（title/agentId/groupId 全空）时，
- * 从 DB session 行全量重写（复用 sessionRowToMeta，与元信息导出线同口径）——
- * healOrphanSessions 的骨架会让侧栏出现空行并丢失智能体/分组/设置绑定。
+ * 元信息修复：`_meta.db` 内无该行，或为孤儿自愈重建的骨架（title/agentId/groupId
+ * 全空）时，从 DB session 行全量重写（复用 sessionRowToMeta，与元信息转换线同口径）——
+ * 骨架会让侧栏出现空行并丢失智能体/分组/设置绑定。
  *
  * ⚠️ 只读 DB、只写文件，不删除任何数据库数据（可回滚/重新迁移）。
  */
@@ -33,7 +33,13 @@ import {
   BaseEvent,
 } from "../../persistence/types";
 import { MetadataBootstrapGate } from "../metadata-bootstrap.gate";
-import { SessionFileStore } from "../../../modules/chat/session-file.store";
+import type Database from "better-sqlite3";
+import {
+  openMetaDb,
+  readMetaRow,
+  upsertMetaRow,
+} from "../../../modules/chat/session-meta.store";
+import { resolveSessionsBasePath, getSessionDir } from "../../utils/session-path.util";
 import { generateOrderedMessageId } from "../../../common/utils/ordered-id.util";
 import {
   normalizeMediaType,
@@ -76,16 +82,15 @@ interface LegacyContextStateRow {
 export class SessionMessageDbMigratorService {
   private readonly logger = new Logger(SessionMessageDbMigratorService.name);
 
-  // 脚手架自持构造 store（不经 DI）：避免持久化模块反向 import 域模块。
-  private readonly sessionStore: SessionFileStore;
+  /** `_meta.db` 句柄（meta 骨架修复用；懒开，迁移结束由 close() 释放） */
+  private metaDb: Database.Database | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PERSISTENCE_BACKEND_TOKEN) private readonly backend: PersistenceBackend,
-    gate: MetadataBootstrapGate,
-  ) {
-    this.sessionStore = new SessionFileStore(gate);
-  }
+    // gate 保留在签名里仅为兼容既有构造点（迁移器不再自持 FileStore，无需门控）
+    _gate: MetadataBootstrapGate,
+  ) {}
 
   /** 列出所有有消息的会话（CLI 无参调用时的候选清单） */
   async listSessionsWithMessages(): Promise<
@@ -128,7 +133,7 @@ export class SessionMessageDbMigratorService {
       }
     }
     if (metaRepaired > 0) {
-      await this.sessionStore.reload();
+      this.logger.log(`meta 骨架修复 ${metaRepaired} 个会话`);
     }
     return { migrated, skipped, metaRepaired, failed };
   }
@@ -437,7 +442,7 @@ export class SessionMessageDbMigratorService {
     // 批量写入
     await this.backend.appendEvents(sessionId, events);
 
-    // meta 修复（新建迁移的会话 meta.json 缺失 → 直接从 DB 行写全量）
+    // meta 修复（新建迁移的会话在 _meta.db 无行 → 直接从 DB 行写全量）
     const metaRepaired = await this.repairSessionMeta(sessionId, dbRow);
 
     this.logger.log(
@@ -450,25 +455,32 @@ export class SessionMessageDbMigratorService {
   // ─── 元信息修复 ───
 
   /**
-   * meta 骨架修复：meta.json 缺失，或为 healOrphanSessions 重建的最小骨架
+   * meta 骨架修复：库内无该行，或为孤儿自愈重建的最小骨架
    * （title/agentId/groupId 全空，侧栏空行 + 丢绑定）→ 从 DB 行全量重写。
-   * 用户实际使用过的 meta（任一字段有值）不触碰。DB 无该行（纯 JSONL 会话）→ 跳过。
+   * 用户实际使用过的行（任一字段有值）不触碰。DB 无该行（纯 JSONL 会话）→ 跳过。
    */
   private async repairSessionMeta(
     sessionId: string,
     dbRow: Record<string, any> | null,
   ): Promise<number> {
     if (!dbRow) return 0;
-    let current: unknown = null;
-    try {
-      const raw = await fsp.readFile(this.sessionStore.getMetaPath(sessionId), "utf-8");
-      current = JSON.parse(raw);
-    } catch {
-      current = null; // 缺失/损坏 → 视为骨架
-    }
+    const db = this.metaDbHandle();
+    const current = readMetaRow(db, sessionId);
     if (!isHealSkeletonMeta(current)) return 0;
-    await this.sessionStore.writeMetaDirect(sessionRowToMeta(dbRow as Record<string, any>));
+    upsertMetaRow(db, sessionRowToMeta(dbRow as Record<string, any>));
     return 1;
+  }
+
+  /** `_meta.db` 懒开（迁移期间单连接复用；close() 释放） */
+  private metaDbHandle(): Database.Database {
+    this.metaDb ??= openMetaDb(resolveSessionsBasePath());
+    return this.metaDb;
+  }
+
+  /** 释放 `_meta.db` 句柄（迁移结束调用；Windows 下不释放会锁目录） */
+  close(): void {
+    this.metaDb?.close();
+    this.metaDb = null;
   }
 
   // ─── DB 读取 ───
@@ -541,7 +553,7 @@ export class SessionMessageDbMigratorService {
 
   /** 删除会话目录（仅用于清理空壳/损坏/force 覆盖重迁） */
   private async removeSessionDir(sessionId: string): Promise<void> {
-    await fsp.rm(this.sessionStore.getSessionDir(sessionId), {
+    await fsp.rm(getSessionDir(sessionId), {
       recursive: true,
       force: true,
     });

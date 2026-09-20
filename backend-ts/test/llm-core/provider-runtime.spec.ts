@@ -48,7 +48,6 @@ describe('运行时供应商配置契约', () => {
   });
 
   afterEach(() => {
-    store.onModuleDestroy();
     delete process.env.PROVIDERS_DIR;
     delete process.env.BUNDLED_PROVIDERS_DIR;
     fs.rmSync(dir, { recursive: true, force: true });
