@@ -129,3 +129,86 @@ describe("StreamEventHub 邮箱 + 订阅", () => {
     expect(initialEvents).toEqual([]);
   });
 });
+
+/**
+ * 入口幂等:后端 publish 为事件盖戳 streamSeq(每会话单调)+ streamBootId(进程标识)。
+ * SSE 重连时连接补发会重放整个 eventBuffer——已路由过的事件必须丢弃,
+ * 否则已加载会话的 live 路径会把 delta 重复追加(文本翻倍)。
+ */
+describe("StreamEventHub 入口幂等(streamSeq 去重)", () => {
+  let hub: StreamEventHub;
+
+  beforeEach(() => {
+    hub = new StreamEventHub();
+  });
+
+  /** 带盖戳序号的合成事件(prevSeq 带上,便于 subscribe 增量断言) */
+  function seqEv(
+    type: string,
+    sessionId: string,
+    streamSeq: number,
+    bootId = "boot1",
+  ): HubStreamEvent {
+    return { type, sessionId, prevSeq: 1, streamSeq, streamBootId: bootId } as HubStreamEvent;
+  }
+
+  it("重连补发的重放事件(streamSeq <= 游标)丢弃,窗口期新到事件保留", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+
+    // 首次连接:live 1..3
+    hub.route(seqEv("turn_start", "s1", 1));
+    hub.route(seqEv("text_delta", "s1", 2));
+    hub.route(seqEv("text_delta", "s1", 3));
+    expect(onEvent).toHaveBeenCalledTimes(3);
+
+    // SSE 重连:后端补发重放 buffer 1..3,另含断连窗口期新到的 4
+    hub.route(seqEv("turn_start", "s1", 1));
+    hub.route(seqEv("text_delta", "s1", 2));
+    hub.route(seqEv("text_delta", "s1", 3));
+    hub.route(seqEv("text_delta", "s1", 4));
+
+    // 只有 4 是新事件
+    expect(onEvent).toHaveBeenCalledTimes(4);
+    expect(onEvent.mock.calls[3][0].streamSeq).toBe(4);
+    // 邮箱无重复
+    const { initialEvents } = hub.subscribe("s1", null, () => {});
+    expect(initialEvents.length).toBe(4);
+  });
+
+  it("bootId 变化(后端重启)重置游标:序号归零的新流事件照常接收", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+
+    hub.route(seqEv("text_delta", "s1", 5, "boot1"));
+    // 后端重启:序号从 1 重新开始,bootId 不同 → 接受并重置游标
+    hub.route(seqEv("turn_start", "s1", 1, "boot2"));
+    hub.route(seqEv("text_delta", "s1", 2, "boot2"));
+    expect(onEvent).toHaveBeenCalledTimes(3);
+    // 重置后在新 bootId 下继续按序号去重
+    hub.route(seqEv("turn_start", "s1", 1, "boot2"));
+    expect(onEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it("无 streamSeq 的事件放行(fail-open),不影响游标", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+    const plain = (type: string): HubStreamEvent =>
+      ({ type, sessionId: "s1", prevSeq: 1 } as HubStreamEvent);
+
+    hub.route(plain("text_delta")); // 无序号 → 放行
+    hub.route(seqEv("text_delta", "s1", 1)); // 建立游标
+    hub.route(seqEv("text_delta", "s1", 1)); // 重复 → 丢弃
+    hub.route(plain("text_delta")); // 无序号 → 放行
+    expect(onEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it("cleanup 一并清掉幂等游标", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+    hub.route(seqEv("text_delta", "s1", 5));
+    hub.cleanup("s1");
+    hub.route(seqEv("text_delta", "s1", 3)); // 游标已清 → 接受
+    expect(onEvent).toHaveBeenCalledTimes(2);
+  });
+});

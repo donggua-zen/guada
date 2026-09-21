@@ -41,11 +41,13 @@ export class SessionEventsController {
   ): Promise<Observable<MessageEvent>> {
     const finalClientId = clientId || `default_${Date.now()}`;
 
-    const observable = this.sessionEventsService.subscribe(finalClientId);
+    const { observable, connectionId } =
+      this.sessionEventsService.subscribe(finalClientId);
 
-    // 监听连接关闭，清理订阅
+    // 监听连接关闭，清理订阅（connectionId 身份校验：本连接的 close 只清理本连接，
+    // 刷新重连时旧连接的 close 晚到不会误删新连接的注册）
     req.on("close", () => {
-      this.sessionEventsService.unsubscribe(finalClientId);
+      this.sessionEventsService.unsubscribe(finalClientId, connectionId);
     });
 
     return observable;

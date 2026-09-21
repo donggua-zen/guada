@@ -10,6 +10,11 @@
  * 关键不变量(先入库后发事件):广播事件的 prevSeq = 该会话最后一条已入库事件的 seq。
  * 因 chunk 不入库,lastSeq 永远不会落在 chunk 区间中间 → 区间内 chunk 要么全补(prevSeq >= lastSeq)
  * 要么全不补(prevSeq < lastSeq),顺序由邮箱数组顺序保证。
+ *
+ * 入口幂等(route 内):后端 publish 为每条事件盖戳 streamSeq(每会话单调)+ streamBootId
+ * (进程标识)。SSE 重连时连接补发会重放整个 eventBuffer,已路由过的事件
+ * (streamSeq <= 游标)在此直接丢弃——邮箱、订阅者、全局常驻消费方共享同一份去重,
+ * 防止 delta 重复追加导致文本翻倍。bootId 变化(后端重启,序号归零)则接受并重置游标。
  */
 
 /**
@@ -41,6 +46,11 @@ export class StreamEventHub {
   private globalSubscribers: SessionSubscriber[] = [];
   /** 每会话邮箱上限:防止未打开会话的流式事件无限累积 */
   private readonly MAX_BUFFERED = 2000;
+  /** 每会话幂等游标(后端盖戳的 streamSeq/streamBootId;重连补发去重依据) */
+  private readonly streamCursor = new Map<
+    string,
+    { bootId?: string; lastSeq: number }
+  >();
 
   private ensure(sessionId: string): SessionStreamState {
     let state = this.sessions.get(sessionId);
@@ -57,12 +67,27 @@ export class StreamEventHub {
   /**
    * 路由一条流式事件(由 SessionEventsService 在收到 stream/* method 时调用)
    *
-   * 事件先进邮箱(无订阅者也保留,供打开会话时订阅取增量);有订阅者则实时推。
-   * 不做内容去重——增量切分统一交给 subscribe 的 lastSeq 游标完成。
+   * 入口幂等:带 streamSeq 的事件,若序号 <= 游标(同 bootId)则判定为
+   * 连接补发的重放/重复投递,直接丢弃;bootId 变化(后端重启)接受并重置游标;
+   * 无 streamSeq 的事件放行(fail-open)。
+   * 通过校验后:事件进邮箱(无订阅者也保留,供打开会话时订阅取增量);有订阅者则实时推。
    */
   route(event: HubStreamEvent): void {
     const sessionId = event.sessionId;
     if (!sessionId) return;
+
+    const seq = event.streamSeq;
+    if (typeof seq === "number") {
+      const cursor = this.streamCursor.get(sessionId);
+      if (cursor && cursor.bootId === event.streamBootId && seq <= cursor.lastSeq) {
+        return;
+      }
+      this.streamCursor.set(sessionId, {
+        bootId: event.streamBootId,
+        lastSeq: seq,
+      });
+    }
+
     const state = this.ensure(sessionId);
 
     state.mailbox.push(event);
@@ -146,6 +171,7 @@ export class StreamEventHub {
   /** 清理会话状态(会话关闭/删除时) */
   cleanup(sessionId: string): void {
     this.sessions.delete(sessionId);
+    this.streamCursor.delete(sessionId);
   }
 }
 
