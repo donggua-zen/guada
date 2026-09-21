@@ -2,7 +2,8 @@
   <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
     <!-- 标题栏左侧面板 -->
     <!-- macOS：为系统红绿灯按钮预留左侧空间，避免遮挡 logo/菜单 -->
-    <div :class="{ 'mac-sidebar-title-padding': isMac }">
+    <!-- Windows(Electron)：隐藏——logo/图标按钮已移入 MainLayout 的独立标题栏行 -->
+    <div v-if="!isElectron || isMac" :class="{ 'mac-sidebar-title-padding': isMac }">
       <TitlebarLeftPanel />
     </div>
     <!-- 导航菜单 -->

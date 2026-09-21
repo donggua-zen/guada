@@ -121,10 +121,13 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 4px;
+  /* 满铺到卡片内缘（抵消 .tool-result-inline 的右内边距）：滚动条贴右边框、不悬空 */
+  margin-right: calc(-1 * var(--tool-card-pad-x, 12px));
 }
 
+/* 表格按满铺量收窄，增删底色行仍与卡片留白对齐（不顶到边框） */
 .diff-table {
-  width: 100%;
+  width: calc(100% - var(--tool-card-pad-x, 12px));
   border-collapse: collapse;
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
   font-size: 12px;
@@ -171,7 +174,7 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
 }
 
 .diff-truncated {
-  padding: 4px 10px;
+  padding: 4px calc(10px + var(--tool-card-pad-x, 12px)) 4px 10px;
   font-size: 11px;
   color: var(--el-text-color-secondary);
   border-top: 1px solid var(--el-border-color-lighter);

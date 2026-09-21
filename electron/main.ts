@@ -14,7 +14,7 @@ import {
 } from "electron";
 import * as path from "path";
 import * as os from "os";
-import { ChildProcess, exec } from "child_process";
+import { ChildProcess, exec, spawn } from "child_process";
 import * as fs from "fs";
 // import { autoUpdater } from "electron-updater";
 import log from "electron-log";
@@ -45,15 +45,260 @@ let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 
 // —— 后端健康看门狗状态（仅记录日志，不自动重启）——
-// 背景：ts-node-dev --respawn 不会重启退出的子进程，Electron 只监控 npx 包装进程，
-// 真正的 NestJS 子进程死亡时全链路静默。看门狗用于留下死亡时间线供规律分析。
+// 背景：dev 模式 Electron 只持有 cmd/npx 包装进程，真实 NestJS 进程是孙进程；
+// ts-node-dev 也不会因子进程退出而重启它（只有文件变更触发 restart），所以真实进程
+// 死亡在全链路里是静默的。死亡定性由两路观测留下：看门狗的 HTTP 判定 +
+// watchBackendRealExit 抓到的真实进程退出码。
 let backendStartedAt = 0; // 后端子进程 spawn 时刻
 let backendHealthFailures = 0;
 let backendHealthAlerted = false;
 let lastBackendHealthOkAt = 0;
+let lastBackendHealthFailReason = "";
 let backendWatchdogTimer: NodeJS.Timeout | null = null;
 const BACKEND_WATCHDOG_INTERVAL_MS = 15000;
 const BACKEND_HEALTH_ALERT_THRESHOLD = 3;
+
+/**
+ * 后端自身的真实 PID（由 bridge 的 port_ready 上报）。
+ * dev 模式下 backendProcess.pid 是 cmd/npx 包装进程，真实 NestJS 进程是孙进程，
+ * 其退出 Electron 收不到 exit 事件 —— 记下真实 PID 才能为它挂退出码监视。
+ */
+let backendRealPid = 0;
+/** 持有后端进程句柄、阻塞等待其退出码的辅助子进程 */
+let backendExitWatcher: ChildProcess | null = null;
+/** 致命错误诊断报告目录（Node 不会自建，目录缺失时报告被静默丢弃） */
+function diagnosticReportDir(logsDir: string): string {
+  const dir = path.join(logsDir, "diagnostic-reports");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    log.error("创建诊断报告目录失败:", err);
+  }
+  return dir;
+}
+
+/** 进程是否仍存在。用于校验 taskkill 是否真的清干净了进程树 */
+function isPidAlive(pid: number | null | undefined): boolean {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    return err?.code !== "ESRCH";
+  }
+}
+
+/** 退出码语义：区分「自己退出」「被外部强杀」「原生崩溃」的硬证据 */
+const EXIT_CODE_HINTS: Record<number, string> = {
+  0: "退出码 0：优雅 process.exit(0)（bridge shutdown），或外部 TerminateProcess 以 0 收尾（如 taskkill /F）—— 同码不可区分",
+  1: "退出码 1：后端 logFatal 主动退出（error 日志同刻有「进程级 …」条目），或 ts-node-dev 热重载/停机时的 SIGTERM=TerminateProcess（Windows 下同为 1，error 日志无条目）",
+  3: "V8 致命错误",
+  134: "SIGABRT：原生模块 abort 或堆内存耗尽",
+  0xc0000005: "访问违例（原生模块崩溃），通常有 WER 事件",
+  0xc00000fd: "栈溢出",
+  0xc0000409: "fail-fast（__fastfail）：Node abort 路径，绕过 WER，故常无崩溃报告",
+  0xc0000374: "堆损坏",
+};
+
+function describeExitCode(code: number | null): string {
+  if (code === null) return "退出码不可得（监视进程被提前终止或非 Windows 句柄等待）";
+  return EXIT_CODE_HINTS[code] || "未分类退出码，无已知语义";
+}
+
+/** 崩溃现场落盘（生产/开发共用），供 backend-crash.log 事后分析 */
+function writeBackendCrashLog(info: Record<string, unknown>): void {
+  try {
+    const crashLogsDir = computeDataPaths(detectDataPath()).logsDir;
+    const crashLogPath = path.join(crashLogsDir, "backend-crash.log");
+    fs.writeFileSync(
+      crashLogPath,
+      JSON.stringify({ timestamp: new Date().toISOString(), ...info }, null, 2),
+      "utf-8",
+    );
+    log.info(`崩溃日志已保存: ${crashLogPath}`);
+  } catch (err) {
+    log.error("保存崩溃日志失败:", err);
+  }
+}
+
+/**
+ * 等待真实后端进程退出并取回退出码的 PowerShell 助手。
+ * Electron 无法监听非直接子进程的退出，只能 OpenProcess 持句柄 + WaitForSingleObject；
+ * 退出码是判定死亡性质的唯一硬证据（历史上三个观测点全部失效，才误判成「外部强杀」）。
+ */
+const BACKEND_EXIT_WAITER_PS = `param([Parameter(Mandatory = $true)][int]$TargetPid)
+$ErrorActionPreference = 'Stop'
+Add-Type -Namespace GuadaDiag -Name ProcessWait -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr OpenProcess(int access, bool inherit, int pid);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetExitCodeProcess(System.IntPtr handle, out uint exitCode);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern uint WaitForSingleObject(System.IntPtr handle, uint milliseconds);
+'@
+$handle = [GuadaDiag.ProcessWait]::OpenProcess(0x101000, $false, $TargetPid)
+if ($handle -eq [System.IntPtr]::Zero) {
+  Write-Output ("OPENFAILED " + [System.Runtime.InteropServices.Marshal]::GetLastWin32Error())
+  exit 0
+}
+while ([GuadaDiag.ProcessWait]::WaitForSingleObject($handle, 2000) -ne 0) { }
+$code = [uint32]0
+[void][GuadaDiag.ProcessWait]::GetExitCodeProcess($handle, [ref]$code)
+Write-Output ("EXIT " + $code + " 0x" + ("{0:X8}" -f $code))
+exit 0
+`;
+
+function stopBackendExitWatcher(): void {
+  const watcher = backendExitWatcher;
+  backendExitWatcher = null; // 先摘引用：助手退出回调据此判断是否已被取代（热重载）
+  if (watcher && !watcher.killed) watcher.kill("SIGKILL");
+}
+
+function watchBackendRealExit(pid: number): void {
+  if (!pid || pid === backendRealPid) return; // 同一进程重复上报（bridge 重连）
+  stopBackendExitWatcher();
+  backendRealPid = pid;
+
+  const wrapperPid = backendProcess?.pid;
+  if (wrapperPid === pid) return; // 生产模式：直接子进程，exit 事件已带退出码
+
+  let helper: ChildProcess | null = null;
+  let stdout = "";
+  try {
+    if (process.platform === "win32") {
+      const scriptPath = path.join(app.getPath("temp"), "guada-backend-exit-waiter.ps1");
+      fs.writeFileSync(scriptPath, BACKEND_EXIT_WAITER_PS, "utf-8");
+      helper = spawn(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          scriptPath,
+          "-TargetPid",
+          String(pid),
+        ],
+        { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+      );
+    } else {
+      helper = spawn(
+        "/bin/sh",
+        ["-c", `while kill -0 ${pid} 2>/dev/null; do sleep 1; done; echo "EXIT null"`],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+    }
+  } catch (err) {
+    log.error(`[BackendExit] 启动退出码监视失败 (PID=${pid}):`, err);
+    return;
+  }
+  if (!helper) return;
+  backendExitWatcher = helper;
+  helper.stdout?.on("data", (d) => {
+    stdout += String(d);
+  });
+  helper.on("error", (err) => {
+    log.warn(`[BackendExit] 退出码监视进程异常 (PID=${pid}): ${err.message}`);
+  });
+  helper.on("exit", () => {
+    if (backendExitWatcher !== helper) return; // 已被新监视取代 → 视为热重载
+    backendExitWatcher = null;
+    const m = /EXIT\s+(\d+)/.exec(stdout);
+    onBackendRealProcessGone(pid, m ? Number(m[1]) : null, stdout.trim());
+  });
+}
+
+function onBackendRealProcessGone(
+  pid: number,
+  code: number | null,
+  detail: string,
+): void {
+  // 给 ts-node-dev 的重启留窗口（实测文件变更重启约 8s）：期间已有新 PID 或
+  // bridge 重连 → 属于热重载，只记 info；否则才是真正的非预期死亡
+  setTimeout(() => {
+    const restarted =
+      (backendRealPid !== pid && backendRealPid !== 0) ||
+      (bridgeServer?.hasAuthenticatedClient() ?? false);
+    const head =
+      `后端真实进程 PID=${pid} 已退出，退出码=${code ?? "未知"} —— ${describeExitCode(code)}`;
+    if (isBackendStopping || restarted) {
+      log.info(`[BackendExit] ${head}（${isBackendStopping ? "主动停机" : "随后已重启"}）`);
+      return;
+    }
+    log.error(
+      `[BackendExit] ${head}\n` +
+        `  包装进程 PID=${backendProcess?.pid ?? "无"} 存活=${isPidAlive(backendProcess?.pid)}` +
+        `（包装树存活 = ts-node-dev 仍在，但它不会因子进程退出而重启，只有文件变更会）\n` +
+        `  监视助手输出=${detail || "无"}`,
+    );
+    writeBackendCrashLog({
+      pid,
+      exitCode: code,
+      exitCodeMeaning: describeExitCode(code),
+      wrapperPid: backendProcess?.pid ?? null,
+      wrapperAlive: isPidAlive(backendProcess?.pid),
+      stderrTail: stderrBuffer.slice(-50).join("\n") || "(无 stderr 输出)",
+      watcherOutput: detail || null,
+    });
+  }, 10_000);
+}
+
+/**
+ * 终止后端进程树并校验清理干净。
+ * 仅 taskkill 包装树会漏掉已脱离父链的孙进程（曾累积 6 套泄漏包装树 / 1.1GB），
+ * 故对包装树与真实 PID 分别下刀并验证，失败时留日志而不是静默置空。
+ */
+async function forceKillBackendTree(): Promise<void> {
+  const wrapperPid = backendProcess?.pid ?? 0;
+  const realPid = backendRealPid;
+  const taskkill = (pid: number) =>
+    new Promise<void>((resolve) => {
+      if (!pid) return resolve();
+      exec(
+        `taskkill /pid ${pid} /T /F`,
+        { windowsHide: true },
+        (error: any, _stdout: string, stderr: string) => {
+          if (error) {
+            log.error(`[BackendStop] taskkill PID=${pid} 失败: ${stderr || error.message}`);
+          }
+          resolve();
+        },
+      );
+    });
+
+  if (process.platform === "win32") {
+    await taskkill(wrapperPid);
+    if (realPid && realPid !== wrapperPid && isPidAlive(realPid)) {
+      log.warn(`[BackendStop] 真实后端 PID=${realPid} 未随包装树退出，单独终止`);
+      await taskkill(realPid);
+    }
+  } else {
+    if (wrapperPid) {
+      try {
+        process.kill(wrapperPid, "SIGKILL");
+      } catch {
+        /* 已退出 */
+      }
+    }
+    if (realPid && realPid !== wrapperPid) {
+      try {
+        process.kill(realPid, "SIGKILL");
+      } catch {
+        /* 已退出 */
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (isPidAlive(realPid) || isPidAlive(wrapperPid)) {
+    log.error(
+      `[BackendStop] 进程树未清理干净：wrapper=${wrapperPid}(${isPidAlive(wrapperPid)}) real=${realPid}(${isPidAlive(realPid)})`,
+    );
+  } else {
+    log.info(`[BackendStop] 进程树已清理（wrapper=${wrapperPid} real=${realPid}）`);
+  }
+}
 
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
 async function doCheckForUpdates() {
@@ -451,18 +696,24 @@ async function handleMigration(): Promise<void> {
 }
 
 // 后端健康看门狗：HTTP 探测 /api/v1/health，仅记录日志不做恢复动作。
-// 连接被拒 => 后端进程死亡；请求超时 => 进程在但事件循环阻塞。
-// 与 bridge 断开事件（bridge-server.ts 的 client disconnected）交叉验证可区分三种故障：
-// 进程死亡 / 事件循环挂死 / ts-node-dev 子进程与包装进程状态不一致。
-async function pingBackendHealth(): Promise<boolean> {
-  if (!backendPort) return false;
+// 探测失败原因必须区分：连接被拒（进程已死/端口未监听）vs 超时（进程在但事件循环阻塞）。
+// 与 bridge 断开事件、真实进程退出码监视（watchBackendRealExit）三路交叉才能定性。
+async function pingBackendHealth(): Promise<{ ok: boolean; reason: string }> {
+  if (!backendPort) return { ok: false, reason: "未获取到端口" };
   try {
     const res = await fetch(`http://127.0.0.1:${backendPort}/api/v1/health`, {
       signal: AbortSignal.timeout(3000),
     });
-    return res.ok;
-  } catch {
-    return false;
+    return { ok: res.ok, reason: res.ok ? "" : `HTTP ${res.status}` };
+  } catch (err: any) {
+    const code = err?.cause?.code || err?.code;
+    if (err?.name === "TimeoutError" || code === "ETIMEDOUT") {
+      return { ok: false, reason: "超时(3s)：进程在但事件循环阻塞" };
+    }
+    if (code === "ECONNREFUSED") {
+      return { ok: false, reason: "连接被拒：端口无监听（进程已死或端口未 bind）" };
+    }
+    return { ok: false, reason: `${err?.name || "Error"}${code ? `/${code}` : ""}: ${err?.message || ""}` };
   }
 }
 
@@ -471,7 +722,7 @@ function startBackendWatchdog(): void {
   backendWatchdogTimer = setInterval(() => {
     // 启动期与主动停机期不判定失败
     if (isBackendStarting || isBackendStopping) return;
-    void pingBackendHealth().then((ok) => {
+    void pingBackendHealth().then(({ ok, reason }) => {
       if (ok) {
         lastBackendHealthOkAt = Date.now();
         if (backendHealthAlerted) {
@@ -479,8 +730,10 @@ function startBackendWatchdog(): void {
         }
         backendHealthFailures = 0;
         backendHealthAlerted = false;
+        lastBackendHealthFailReason = "";
         return;
       }
+      lastBackendHealthFailReason = reason;
       backendHealthFailures += 1;
       if (backendHealthFailures === BACKEND_HEALTH_ALERT_THRESHOLD && !backendHealthAlerted) {
         backendHealthAlerted = true;
@@ -490,13 +743,18 @@ function startBackendWatchdog(): void {
           : -1;
         log.error(
           `[BackendWatchdog] 后端健康检查连续 ${BACKEND_HEALTH_ALERT_THRESHOLD} 次失败，` +
-            `bridge 已连接=${bridgeConnected}，后端进程存活 ${uptimeMin} 分钟，` +
+            `原因=${reason || "未知"}，bridge 已连接=${bridgeConnected}，` +
+            `包装进程 PID=${backendProcess?.pid ?? "无"}(存活=${isPidAlive(backendProcess?.pid)})，` +
+            `真实进程 PID=${backendRealPid || "未上报"}(存活=${isPidAlive(backendRealPid)})，` +
+            `后端已启动 ${uptimeMin} 分钟，` +
             `最后正常响应=${lastBackendHealthOkAt ? new Date(lastBackendHealthOkAt).toLocaleTimeString() : "无记录"}。` +
-            `判读：连接被拒+bridge断开=进程死亡；超时=事件循环阻塞。` +
-            `若 logs/diagnostic-reports/ 无新报告且无 WER 事件，指向外部强杀（杀软等）`,
+            `真实进程退出码由 [BackendExit] 监视器在 10s 内给出；` +
+            `若无 [BackendExit] 且真实进程已消失，才是外部强杀（TerminateProcess 不产生 WER/诊断报告）`,
         );
       } else if (backendHealthAlerted && backendHealthFailures % 20 === 0) {
-        log.error(`[BackendWatchdog] 后端仍无响应（连续失败 ${backendHealthFailures} 次）`);
+        log.error(
+          `[BackendWatchdog] 后端仍无响应（连续失败 ${backendHealthFailures} 次，原因=${lastBackendHealthFailReason}）`,
+        );
       }
     });
   }, BACKEND_WATCHDOG_INTERVAL_MS);
@@ -574,13 +832,14 @@ async function startBackend(): Promise<void> {
           PORT: String(backendPort),
           BASE_URL: "__auto__", // 与生产一致：动态设置 BASE_URL，后端返回的资源 URL 指向实际端口
           // 致命错误诊断报告：原生崩溃/内存耗尽时生成完整现场（native 栈、模块列表）。
-          // 外部强杀（如杀软 TerminateProcess）不产生报告——报告缺失本身就是证据
+          // 外部强杀（TerminateProcess）与 process.exit() 都不产生报告：报告缺失不能证明是他杀，
+          // 定性以 [BackendExit] 记录的退出码为准（Node 不会自建 --report-dir，故需先 mkdir）
           NODE_OPTIONS: [
             process.env.NODE_OPTIONS,
             "--max-old-space-size=4096",
             "--report-on-fatalerror",
             "--report-uncaught-exception",
-            `--report-dir=${path.join(paths.logsDir, "diagnostic-reports")}`,
+            `--report-dir=${diagnosticReportDir(paths.logsDir)}`,
           ].filter(Boolean).join(" "),
           DATABASE_URL: `file:${paths.dbPath}`,
           VECTOR_DB_PATH: paths.vectorDbPath,
@@ -653,13 +912,14 @@ async function startBackend(): Promise<void> {
           ELECTRON_RUN_AS_NODE: "1", // 关键：以纯 Node 模式运行
           NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
           // 致命错误诊断报告：原生崩溃/内存耗尽时生成完整现场（native 栈、模块列表）。
-          // 外部强杀（如杀软 TerminateProcess）不产生报告——报告缺失本身就是证据
+          // 外部强杀（TerminateProcess）与 process.exit() 都不产生报告：报告缺失不能证明是他杀，
+          // 定性以 [BackendExit] 记录的退出码为准（Node 不会自建 --report-dir，故需先 mkdir）
           NODE_OPTIONS: [
             process.env.NODE_OPTIONS,
             "--max-old-space-size=4096",
             "--report-on-fatalerror",
             "--report-uncaught-exception",
-            `--report-dir=${path.join(paths.logsDir, "diagnostic-reports")}`,
+            `--report-dir=${diagnosticReportDir(paths.logsDir)}`,
           ].filter(Boolean).join(" "),
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
@@ -694,6 +954,9 @@ async function startBackend(): Promise<void> {
     let isResolved = false;
     // 通过 BridgeServer 监听后端端口上报事件
     bridgeServer?.onEvent("port_ready", (data: any) => {
+      // 后端上报自身 PID：dev 包装链下 Electron 只能看到 cmd/npx，真实进程的死亡
+      // 需要它自己的句柄退出监视来留证据（ts-node-dev 热重载会再次上报，据此换监视器）
+      if (typeof data?.pid === "number") watchBackendRealExit(data.pid);
       if (data?.port && !isResolved) {
         backendPort = data.port;
         console.log(`通过 Bridge 接收到后端端口号 ${backendPort}`);
@@ -738,31 +1001,32 @@ async function startBackend(): Promise<void> {
       reject(error);
     });
 
-    // 处理退出
+    // 处理退出（dev 下这是 cmd/npx 包装进程，真实后端的退出由 [BackendExit] 监视器报告）
     backendProcess.on("exit", (code) => {
-      log.info(`后端进程退出，退出码: ${code}`);
+      log.info(`后端包装进程退出，退出码: ${code} (pid=${backendProcess?.pid})`);
       isBackendStarting = false; // 重置标志
       isBackendReady = false;
       backendProcess = null;
+      stopBackendExitWatcher();
+      const realAlive = isPidAlive(backendRealPid);
+      if (realAlive && !isBackendStopping) {
+        log.error(
+          `[BackendExit] 包装树已死但真实后端 PID=${backendRealPid} 仍在运行（孤儿进程，无人重启它），请检查进程树清理`,
+        );
+      }
+      backendRealPid = 0;
 
       if (code !== 0 && code !== null && !isBackendStopping) {
-        log.error(`后端进程异常退出，退出码: ${code}`);
+        log.error(`后端进程异常退出，退出码: ${code} —— ${describeExitCode(code)}`);
 
         // 保存崩溃日志（stderr 最后 200 行）
-        try {
-          const crashLogsDir = computeDataPaths(detectDataPath()).logsDir;
-          const crashLogPath = path.join(crashLogsDir, "backend-crash.log");
-          const crashInfo = {
-            timestamp: new Date().toISOString(),
-            exitCode: code,
-            signal: code === 134 ? "SIGABRT (原生模块崩溃或内存不足)" : undefined,
-            stderr: stderrBuffer.join("\n") || "(无 stderr 输出)",
-          };
-          fs.writeFileSync(crashLogPath, JSON.stringify(crashInfo, null, 2), "utf-8");
-          log.info(`崩溃日志已保存: ${crashLogPath}`);
-        } catch (e) {
-          log.error("保存崩溃日志失败:", e);
-        }
+        writeBackendCrashLog({
+          exitCode: code,
+          exitCodeMeaning: describeExitCode(code),
+          signal: code === 134 ? "SIGABRT (原生模块崩溃或内存不足)" : undefined,
+          realProcessAlive: realAlive,
+          stderr: stderrBuffer.join("\n") || "(无 stderr 输出)",
+        });
 
         // 显示重启对话框
         const exitCodeDesc = code === 134 ? "\n\n退出码 134 = SIGABRT，通常由原生模块崩溃或内存不足引起。" : "";
@@ -1192,7 +1456,18 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    frame: false, // 无边框窗口，去掉默认标题栏
+    // 不用 frame: false —— 完全无边框会移除原生 caption，丢失 Win11 贴靠布局
+    // （snap layouts）、贴靠键盘动画等 DWM 能力；hidden 保留不可见原生标题栏，
+    // 自绘标题栏照常覆盖其上
+    titleBarStyle: "hidden", // Windows：隐藏但保留原生 caption；macOS：隐藏红绿灯栏
+    // Windows：原生窗口按钮（Win11 贴靠布局 flyout 的前提）。overlay 底色全透明
+    // （Qoder 同款做法）——去掉系统灰底，按钮符号直接画在主题标题栏上；
+    // 符号色与高度由渲染进程按主题经 IPC（titlebar-overlay-color）同步
+    titleBarOverlay: {
+      color: "#00000000",
+      symbolColor: "#ffffff",
+      height: 40,
+    },
     icon: isDev
       ? path.join(__dirname, "..", "build-resources", "icon.ico")
       : path.join(process.resourcesPath, "build-resources", "icon.ico"),
@@ -1205,7 +1480,6 @@ function createWindow() {
     },
     show: false,
     backgroundColor: "#000000",
-    titleBarStyle: "hidden", // 隐藏标题栏但保留系统按钮（macOS）
     // macOS：红绿灯与 40px 高标题行垂直对齐（默认位置偏上）
     trafficLightPosition: { x: 14, y: 13 },
   });
@@ -1377,20 +1651,10 @@ function setupIpcHandlers() {
   ipcMain.handle("migrate-data", async () => {
     try {
       console.log("开始数据迁移...");
-      // 先停止后端
+      // 先停止后端（标记为主动停机，避免包装进程退出时弹崩溃框）
       if (backendProcess && !backendProcess.killed) {
-        const { exec } = require("child_process");
-        await new Promise<void>((resolve, reject) => {
-          exec(`taskkill /pid ${backendProcess!.pid} /T /F`, { windowsHide: true }, (error: any) => {
-            if (error) {
-              console.error("停止后端失败:", error.message);
-              reject(error);
-            } else {
-              console.log("后端进程已终止");
-              resolve();
-            }
-          });
-        });
+        isBackendStopping = true;
+        await forceKillBackendTree();
         backendProcess = null;
       }
 
@@ -1411,9 +1675,11 @@ function setupIpcHandlers() {
         });
 
       await backendReadyPromise;
+      isBackendStopping = false; // 迁移后重启完成，恢复看门狗与崩溃判定
       return { success: true, message: "迁移完成" };
     } catch (error: any) {
       console.error("数据迁移失败:", error);
+      isBackendStopping = false;
       return { success: false, message: error.message };
     }
   });
@@ -1521,6 +1787,15 @@ function setupIpcHandlers() {
   ipcMain.handle("is-window-maximized", () => {
     return mainWindow?.isMaximized() || false;
   });
+
+  // 主题切换时同步 Windows 原生窗口按钮（titleBarOverlay）配色
+  ipcMain.on(
+    "titlebar-overlay-color",
+    (_e, c: { color?: string; symbolColor?: string; height?: number }) => {
+      if (c && typeof c === "object")
+        mainWindow?.setTitleBarOverlay({ color: "#00000000", height: 40, ...c });
+    },
+  );
 
   // 打开/关闭开发者工具
   ipcMain.on("toggle-devtools", () => {
@@ -2287,34 +2562,10 @@ app.on("window-all-closed", () => {
   if (backendProcess) {
     console.log("Stopping backend service...");
     isBackendStopping = true;
-    if (process.platform === "win32") {
-      // Windows: 使用 taskkill 命令终止进程树
-      const { exec } = require("child_process");
-      exec(
-        `taskkill /pid ${backendProcess.pid} /T /F`,
-        { windowsHide: true },
-        (error: any, stdout: string, stderr: string) => {
-          if (error) {
-            console.error("Failed to kill backend process:", error.message);
-          } else {
-            console.log("Backend process terminated successfully");
-          }
-        },
-      );
-    } else {
-      // Unix-like systems: 发送 SIGTERM 信号
-      backendProcess.kill("SIGTERM");
-
-      // 设置超时强制关闭
-      setTimeout(() => {
-        if (!backendProcess?.killed) {
-          console.log("Force killing backend process...");
-          backendProcess?.kill("SIGKILL");
-        }
-      }, 3000);
-    }
-
-    backendProcess = null;
+    // 异步清理进程树；app.quit() 随即触发 before-quit，其兜底逻辑会等待同一目标
+    void forceKillBackendTree().then(() => {
+      backendProcess = null;
+    });
   }
 
   if (process.platform !== "darwin") {
@@ -2379,21 +2630,11 @@ app.on("before-quit", async (event) => {
     // 如果后端仍未退出，强制终止
     if (!backendExited && backendProcess && !backendProcess.killed) {
       console.log("Backend did not exit gracefully, force killing...");
-      if (process.platform === "win32") {
-        const { execSync } = require("child_process");
-        try {
-          execSync(`taskkill /pid ${backendProcess.pid} /T /F`, {
-            stdio: "ignore",
-            windowsHide: true,
-          });
-        } catch (error) {
-          console.error("Failed to kill backend process:", error);
-        }
-      } else {
-        backendProcess.kill("SIGKILL");
-      }
+      await forceKillBackendTree();
     }
+    stopBackendExitWatcher();
     backendProcess = null;
+    backendRealPid = 0;
   }
 
   // 2. 停止 Bridge Server

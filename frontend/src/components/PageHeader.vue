@@ -11,19 +11,21 @@
     </div>
 
     <!-- 中间：标题区域 -->
-    <div v-if="title || $slots.title" class="flex items-center flex-1 min-w-0">
+    <div v-if="title || $slots.title || $slots['title-actions']" class="flex items-center flex-1 min-w-0">
       <slot name="title">
         <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed] m-0 truncate">{{ title }}</span>
       </slot>
+      <!-- 标题后缀操作区（紧跟标题）：no-drag 收在组件内部，
+           否则落在 .drag-region 上会被 Electron 当作窗口拖拽区、点击不生效 -->
+      <div v-if="$slots['title-actions']" class="flex items-center shrink-0 ml-1 no-drag">
+        <slot name="title-actions" />
+      </div>
     </div>
 
     <!-- 右侧：操作按钮组 -->
     <div class="flex items-center justify-end min-w-10 gap-2 no-drag mr-3">
       <slot name="actions" />
     </div>
-
-    <!-- Electron 窗口控制按钮 -->
-    <WindowControls v-if="isElectron && !hideWindowControls" />
   </div>
 </template>
 
@@ -31,7 +33,6 @@
 import { useLayoutStore } from '@/stores/layout'
 import { useI18n } from 'vue-i18n'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
-import WindowControls from '@/components/WindowControls.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const { t } = useI18n()
@@ -42,12 +43,12 @@ const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 /**
  * 页面通用标题栏组件
  * 提供侧边栏切换、标题展示和操作按钮插槽
+ * （Electron 窗口控制按钮统一由 MainLayout 的 CustomTitlebar 承载）
  */
 const layoutStore = useLayoutStore()
 
 defineProps<{
   title?: string
-  hideWindowControls?: boolean
   hideSidebarToggle?: boolean
 }>()
 </script>

@@ -24,6 +24,7 @@ export interface ElectronAPI {
   maximizeWindow: () => void
   closeWindow: () => void
   isMaximized: () => Promise<boolean>
+  setWindowControlsColor: (colors: { symbolColor: string }) => void
   toggleDevTools: () => void
   openUserDataFolder: () => void
   openInstallFolder: () => void

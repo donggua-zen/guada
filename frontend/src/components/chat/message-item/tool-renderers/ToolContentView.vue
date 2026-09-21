@@ -76,6 +76,8 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 4px;
+  /* 满铺到卡片内缘（抵消 .tool-result-inline 的右内边距）：滚动条贴右边框、不悬空 */
+  margin-right: calc(-1 * var(--tool-card-pad-x, 12px));
 }
 
 .tool-content-code {
@@ -87,15 +89,16 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
   color: var(--el-text-color-regular);
 }
 
+/* 右侧额外补一个卡片内边距，抵消 .tool-content-body 的负边距，保持代码换行宽度不变 */
 .code-line {
   display: block;
-  padding: 0 10px;
+  padding: 0 calc(10px + var(--tool-card-pad-x, 12px)) 0 10px;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .content-truncated {
-  padding: 4px 10px;
+  padding: 4px calc(10px + var(--tool-card-pad-x, 12px)) 4px 10px;
   font-size: 11px;
   color: var(--el-text-color-secondary);
   border-top: 1px solid var(--el-border-color-lighter);

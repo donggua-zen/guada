@@ -4,13 +4,15 @@
     <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-19"
       @click="$emit('update:sidebarVisible', false)"></div>
     <!-- 侧边栏容器 -->
+    <!-- z-index 仅移动端（absolute 浮动覆盖）生效：桌面端侧栏与内容卡片并排无重叠， -->
+    <!-- 且桌面端不需要它——内容卡片的左侧外阴影要绘制在侧栏右缘之上 -->
     <div :class="[
       'h-full absolute lg:relative transform transition-all duration-300 ease-in-out justify-content-end shrink-0'
     ]" :style="{
           width: sidebarContainerWidth,
           maxWidth: sidebarContainerWidth,
           minWidth: sidebarContainerWidth,
-          zIndex: zIndex
+          zIndex: isMobile ? zIndex : undefined
         }">
       <div class="absolute right-0 h-full"
         :style="{ width: (sidebarWidth ?? 278) < 0 ? '100vw' : `${sidebarWidth ?? 278}px` }">

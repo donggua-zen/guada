@@ -205,12 +205,15 @@ const formatToolResponse = (response: any): string => {
 </script>
 
 <style scoped>
-/* 内联结果区：统一卡片容器（边框 + 圆角 + 表面底色）区分展开内容与正文；
-   限高滚动收在 .result-scroll（通用结果分支），内部渲染视图不再自带边框。 */
-/* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文 */
+/* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文；
+   margin-left 21px = 工具图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标。
+   横向内边距抽成 --tool-card-pad-x：内部各视图的滚动区用等量负边距抵消，
+   让滚动条贴住卡片右边框，而不是被内边距顶开、悬空在中间。 */
 .tool-result-inline {
+  --tool-card-pad-x: 12px;
   margin-top: 4px;
-  padding: 4px 12px;
+  margin-left: 21px;
+  padding: 4px var(--tool-card-pad-x);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   /* 微微透明：透出下方正文一点底色，视觉更轻 */
@@ -222,6 +225,8 @@ const formatToolResponse = (response: any): string => {
   max-height: 240px;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 满铺到卡片内缘：滚动条贴右边框（正文留白改由 .io-content 承担） */
+  margin-right: calc(-1 * var(--tool-card-pad-x));
 }
 
 .io-section {
@@ -241,12 +246,16 @@ const formatToolResponse = (response: any): string => {
 
 .io-divider {
   border-top: 1px solid var(--el-border-color-lighter);
+  /* 与 .io-content 的右侧留白对齐，分割线不顶到卡片边框 */
+  margin-right: var(--tool-card-pad-x);
 }
 
 .io-content {
   flex: 1;
   min-width: 0;
   margin: 0;
+  /* 滚动区已满铺，右侧留白收在正文上（保证换行位置与改动前一致） */
+  padding-right: var(--tool-card-pad-x);
   font-size: 12px;
   color: var(--el-text-color-regular);
 }

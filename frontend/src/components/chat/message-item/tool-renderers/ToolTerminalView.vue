@@ -112,7 +112,10 @@ const pillClass = computed(() => {
 }
 
 .term-output {
-  margin: 6px 0 0;
+  /* 满铺到卡片内缘（抵消 .tool-result-inline 的右内边距）：滚动条贴右边框、不悬空；
+     右侧留白改由自身 padding 承担，换行位置与改动前一致 */
+  margin: 6px calc(-1 * var(--tool-card-pad-x, 12px)) 0 0;
+  padding-right: var(--tool-card-pad-x, 12px);
   max-height: 170px;
   overflow-y: auto;
   overflow-x: hidden;

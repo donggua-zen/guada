@@ -106,9 +106,11 @@ watch(() => props.autoExpand, (auto, prevAuto) => {
   user-select: none;
 }
 
-/* 与工具展开卡片（tool-result-inline）完全一致的容器样式（微透明表面底色） */
+/* 与工具展开卡片（tool-result-inline）完全一致的容器样式（微透明表面底色）；
+   margin-left 21px = 图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标 */
 .thinking-section__content-wrapper {
   margin-top: 4px;
+  margin-left: 21px;
   padding: 8px 12px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;

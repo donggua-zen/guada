@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   isMaximized: () => ipcRenderer.invoke('is-window-maximized'),
+  setWindowControlsColor: (colors: { symbolColor: string }) =>
+    ipcRenderer.send('titlebar-overlay-color', colors),
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
 
   // 自动更新相关

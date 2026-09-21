@@ -21,9 +21,11 @@ const logger = WinstonModule.createLogger(createWinstonConfig(logsDir));
 
 /**
  * 进程级致命错误兜底。
- * 不兜底的后果：进程级异常只打 stderr，而 ts-node-dev --respawn 不会重启已退出的
- * 子进程（静默无输出），Electron 又只监控 npx 包装进程（不触发崩溃弹窗/backend-crash.log），
- * 现场即丢失。这里落盘 winston error 日志后保持 Node 默认的退出语义。
+ * 不兜底的后果：进程级异常只打 stderr，Electron 又只监控 npx 包装进程（不触发崩溃弹窗
+ * /backend-crash.log），现场即丢失。这里落盘 winston error 日志后保持 Node 默认的退出语义。
+ * 注意：ts-node-dev 不会因为子进程退出而重启它（lib/index.js 的 child.on('exit') 只清空引用），
+ * 只有文件变更触发 restart() 才会再 start() —— 所以本函数的每次退出在 dev 下都可能表现为
+ * 「后端长时间不可用」，直到下次改文件或重启应用。
  */
 function logFatal(kind: string, err: unknown): void {
   const error = err instanceof Error ? err : new Error(String(err));
@@ -38,6 +40,21 @@ function logFatal(kind: string, err: unknown): void {
 
 process.on("uncaughtException", (err) => logFatal("uncaughtException", err));
 process.on("unhandledRejection", (reason) => logFatal("unhandledRejection", reason));
+
+/**
+ * stdout/stderr 管道断裂不算致命错误。
+ * dev 模式下后端 stdout 是 Electron 持有的命名管道（经 cmd/npx/ts-node-dev 继承），
+ * 包装链任一环退出后，下一次 console 写入即抛 EPIPE；该错误以 uncaughtException 形式
+ * 冒泡，被 logFatal 当成致命错误 process.exit(1)，导致整个后端静默自杀（2026-09-21
+ * 06:16 现场：error 日志只有 3 条 "进程级 uncaughtException: EPIPE: broken pipe, write"，
+ * 栈顶是 winston Console 传输）。服务本身与此无关，吞掉流错误即可继续运行。
+ */
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err?.code === "EPIPE" || err?.code === "EOF") return;
+    logFatal("stdioError", err);
+  });
+}
 
 async function bootstrap() {
   // 修正工作目录到 backend-ts 根目录，确保 bundled-skills/、skills/ 等路径可预测
@@ -166,7 +183,9 @@ async function bootstrap() {
       // 获取已初始化的 BridgeClient 实例
       const bridgeClient = app.get(BridgeClient);
       await bridgeClient.ready;
-      bridgeClient.emit("port_ready", { port: actualPort });
+      // pid：dev 模式下 Electron 持有的是 cmd/npx 包装进程，真实后端是孙进程，
+      // 上报自身 pid 让 Electron 能为真正的进程挂上退出码监视
+      bridgeClient.emit("port_ready", { port: actualPort, pid: process.pid });
       console.log(`已通过 Bridge 上报端口: ${actualPort}`);
 
       // 监听 Electron 退出信号，优雅关闭
