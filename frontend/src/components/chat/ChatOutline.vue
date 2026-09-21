@@ -83,12 +83,17 @@ function buildPreview(msg: Message): string {
 }
 
 const outlineItems = computed<OutlineItem[]>(() => {
+  // 一次遍历建「parentId → 最后一条 assistant」索引，避免下面每个 user 消息
+  // 都全量 filter 一次（O(n²)，长会话每次内容变更都要重算上百次遍历）
+  const finalReplyByParent = new Map<string, Message>();
+  for (const m of props.messages) {
+    if (m.role === 'assistant' && m.parentId) finalReplyByParent.set(m.parentId, m);
+  }
   return props.messages
     .filter(msg => msg.role === 'user' && !isHiddenBlock(msg))
     .map(msg => {
-      // 找到该用户消息对应的助手最终回复（parentId 匹配的最后一条 = 最新版本）
-      const replies = props.messages.filter(m => m.role === 'assistant' && m.parentId === msg.id)
-      const finalReply = replies[replies.length - 1]
+      // 该用户消息对应的助手最终回复（parentId 匹配的最后一条 = 最新版本）
+      const finalReply = finalReplyByParent.get(msg.id)
       return {
         id: msg.id,
         title: extractMessageTitle(msg),
@@ -121,10 +126,17 @@ let pollTimer: number | null = null
 // 防抖计算当前可视区第一条（100ms，滚动跟手且不频繁重排）
 const debouncedUpdateActive = useDebounceFn(updateActiveFromScroll, 100)
 
-// 消息变化时重建；immediate 确保异步组件挂载后即使消息已就绪也能初始化
-watch(() => props.messages, () => {
-  scheduleSetup()
-}, { deep: true, immediate: true })
+// 消息集合变化时重建元素索引；immediate 确保异步组件挂载后即使消息已就绪也能初始化。
+// 不用 deep：props.messages 是全会话的深层响应式数组，深度遍历每个流式 token 都会跑
+// 一遍所有消息的所有属性；而本函数要重建的只是 [data-message-id] 元素映射，它只在
+// 数组换了来源（切会话）或条数变了（新增/删除回合）时才需要更新。
+watch(
+  [() => props.messages, () => props.messages.length],
+  () => {
+    scheduleSetup()
+  },
+  { immediate: true }
+)
 
 // 保险：组件挂载且 DOM 渲染完成后初始化
 onMounted(() => {

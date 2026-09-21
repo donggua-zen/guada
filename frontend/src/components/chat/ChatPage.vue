@@ -190,8 +190,24 @@ function onChatContainerResize(cw: number): void {
 
 const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40));
 
-/** 空间是否容得下概览面板 */
-const asideFit = computed(() => chatContentWidth.value - ASIDE_TOTAL >= MSG_MAX_WIDTH);
+/**
+ * 空间是否容得下概览面板。
+ * 带迟滞：进入要 ≥MSG_MAX_WIDTH，退出要 <MSG_MAX_WIDTH-48。单点阈值在拖拽穿越边界时
+ * 会逐帧翻转 → asideReserve 0↔280 抖动 + OverviewPanel（异步挂载的重组件）反复创建销毁。
+ */
+const ASIDE_FIT_HYSTERESIS = 48;
+const asideFit = ref(false);
+
+watch(
+  chatContentWidth,
+  (w) => {
+    const avail = w - ASIDE_TOTAL;
+    asideFit.value = asideFit.value
+      ? avail >= MSG_MAX_WIDTH - ASIDE_FIT_HYSTERESIS
+      : avail >= MSG_MAX_WIDTH;
+  },
+  { immediate: true },
+);
 
 /** 面板实际可见：用户意图开 &&（空间足够 || 空间不足时的临时展开） */
 const overviewPanelShown = computed(() =>

@@ -228,7 +228,10 @@ function handleSplitterMouseMove(e: MouseEvent) {
     if (!containerRef.value) return;
 
     const delta = ev.clientX - resizeStartPos;
-    const cw = containerRef.value.getBoundingClientRect().width;
+    // 用 ResizeObserver 维护的容器宽，而不是每帧 getBoundingClientRect：
+    // 后者紧跟上一帧的 style 写入，等于每帧插入一次强制同步布局。
+    // 拖拽期间容器宽恒定，只有窗口尺寸变化才会动它。
+    const cw = containerWidth.value || containerRef.value.getBoundingClientRect().width;
     const available = cw - SPLITTER_SIZE;
     if (available <= 0) return;
 

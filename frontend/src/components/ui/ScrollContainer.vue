@@ -37,6 +37,8 @@ const emit = defineEmits<{
 const isAtBottom = ref(true);
 const resizeObserver = ref<ResizeObserver | null>(null);
 const lastScrollHeight = ref(0);
+/** 上一次观测到的内容宽度：用于区分「重排」与「内容增长」（0 = 尚未测量） */
+let lastContentWidth = 0;
 const contentElement = ref<HTMLElement | null>(null);
 const scrollElement = ref<HTMLElement | null>(null);
 
@@ -115,9 +117,16 @@ function initScrollObservers() {
 
     const contentEl = contentElement.value;
 
-    // 使用 ResizeObserver 作为兜底（处理图片加载等异步尺寸变化）
-    resizeObserver.value = new ResizeObserver(() => {
-        if (props.autoScroll) {
+    // 用内容元素尺寸变化兜底（图片加载等异步尺寸变化）。
+    // 只在「宽度未变、高度因内容增长而变化」时贴底：宽度变化（拖拽分割条、窗口缩放）
+    // 引起的是文字重排，此时读 scrollHeight + 写 scrollTop 会在每帧插入一次强制布局，
+    // 还抢在浏览器自身的滚动锚定之前把视图拽到底（用户只是在调宽窄，不是在跳读）。
+    resizeObserver.value = new ResizeObserver((entries) => {
+        const width = entries[entries.length - 1]?.contentRect.width ?? 0;
+        const reflowedByWidth =
+            lastContentWidth > 0 && Math.abs(width - lastContentWidth) > 0.5;
+        lastContentWidth = width;
+        if (!reflowedByWidth && props.autoScroll) {
             immediateScrollToBottom();
         }
     });

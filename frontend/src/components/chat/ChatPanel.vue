@@ -1179,16 +1179,22 @@ function scrollToMessage(messageId: string) {
 
   // 在容器中查找目标消息元素
   const targetElement = container.querySelector(`[data-message-id="${messageId}"]`)
-  if (targetElement) {
-    // 使用容器级滚动，避免 scrollIntoView 导致整个页面位移
-    const targetTop = targetElement.offsetTop
-    container.scrollTo({
-      top: targetTop,
-      behavior: 'smooth'
-    })
-  } else {
+  if (!targetElement) {
     console.warn(`[ChatPanel] 未找到消息元素: ${messageId}`)
+    return
   }
+
+  // 用容器级滚动，避免 scrollIntoView 导致整个页面位移
+  container.scrollTo({ top: targetElement.offsetTop, behavior: 'smooth' })
+
+  // 屏外回合带 content-visibility，跳转途中它们才按真实高度展开，落点会偏；
+  // 滚动结束后按实测位置校正一次
+  const correct = () => {
+    const drift =
+      targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
+    if (Math.abs(drift) > 2) container.scrollBy({ top: drift, behavior: 'smooth' })
+  }
+  container.addEventListener('scrollend', correct, { once: true })
 }
 
 </script>
