@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
-import sharp from "sharp";
 import { SessionMetaStore } from "../chat/session-meta.store";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { FileNamingService } from "../../common/services/file-naming.service";
@@ -11,6 +10,10 @@ import {
   mimeFromExtension,
 } from "../../common/utils/media-type.util";
 import { getSessionDir } from "../../common/utils/session-path.util";
+import {
+  transcodeImage,
+  transcodePreview,
+} from "../../common/utils/image-transcode.util";
 import { getChatUploadMaxBytes, getChatUploadMaxMb } from "./upload-limits";
 
 @Injectable()
@@ -160,11 +163,15 @@ export class FileService {
    * url 是**自包含**引用：内嵌 sessionId（sessions/<id>/images/...），解析端可直接
    * 反推会话目录，任何渲染/内联点都不需要额外上下文。
    *
-   * sharp 会把所有输入统一转成 JPEG，因此 `name`/`fileExtension`/`mediaType`
-   * 必须跟着改成 jpg / image/jpeg —— 否则会出现「文件名 .png、声明 image/png、
-   * 实际字节是 JPEG」的三方不一致，视觉模型按声明校验时会拒绝。
-   * 同时 transparent PNG 的 alpha、GIF 的动画帧也会在这一步丢失（已知取舍：
-   * 统一 JPEG 是既有转码行为，本次只修正元数据的不诚实）。
+   * 转码统一交给 image-transcode.util（「体积优先」的自适应质量阶梯）：目标约束是
+   * **输出体积**而非最长边，避免大图产出数百 KB 直接变成模型的图片 token 成本。
+   * 输出恒为 JPEG，因此 `name`/`fileExtension`/`mediaType` 必须跟着改成
+   * jpg / image/jpeg —— 否则会出现「文件名 .png、声明 image/png、实际字节是 JPEG」
+   * 的三方不一致，视觉模型按声明校验时会拒绝。
+   *
+   * 已知取舍：GIF 的动画帧会在统一 JPEG 这一步丢失（既有行为，本次未改）。
+   * `bytes` 报的是**转码后实际落盘的字节数**，不是上传的原始大小——原样上报会让
+   * 下游（模型侧预算、UI 展示）以为附件比实际大得多。
    */
   private async uploadImageFile(
     session: any,
@@ -178,17 +185,19 @@ export class FileService {
     const outputFileName = this.replaceExtension(fileInfo.fileName, "jpg");
     let url: string;
     let previewUrl: string;
+    let storedBytes: number;
     try {
       const saved = await this.saveImageWithMetadata(session, file, outputFileName);
       url = saved.url;
       previewUrl = saved.previewUrl;
+      storedBytes = saved.bytes;
     } catch (error: any) {
       throw new Error(`图片上传失败：${error.message}`);
     }
 
     return {
       mediaType: "image/jpeg",
-      bytes: fileInfo.fileSize,
+      bytes: storedBytes,
       name: outputFileName,
       url,
       previewUrl,
@@ -230,13 +239,18 @@ export class FileService {
 
   /**
    * 保存图片并生成缩略图（输出统一为 JPEG），落会话数据目录。
+   *
+   * 两张图的转码都走 image-transcode.util（体积优先的自适应阶梯 + EXIF 旋转 +
+   * alpha 拍平 + 解压炸弹防护 + 内部串行化），这里只负责落盘与拼引用。
+   *
    * @param session 会话对象（决定 <sessionsBase>/<id>/ 前缀，url 内嵌 id 使其自包含）
+   * @returns url/previewUrl 自包含引用；bytes 为**转码后原图实际落盘字节数**
    */
   private async saveImageWithMetadata(
     session: any,
     file: any,
     outputFileName: string,
-  ): Promise<{ url: string; previewUrl: string }> {
+  ): Promise<{ url: string; previewUrl: string; bytes: number }> {
     try {
       // 会话目录（含 id 合法性校验）；images/ 与 previews/ 是随会话删除的子目录
       const sessionDir = getSessionDir(session.id);
@@ -251,23 +265,26 @@ export class FileService {
         outputFileName,
       );
 
-      // 1. 保存原图（最大边长 1024px）
-      await sharp(file.buffer)
-        .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: 85 })
-        .toFile(imagePathResult.filePath);
+      // 1. 原图：≤ 目标体积（默认 100KB，CHAT_IMAGE_TARGET_KB 可配），最长边 ≤ 1920px
+      const image = await transcodeImage(file.buffer);
+      // 2. 缩略图：固定 256px / 64KB 预算，供列表与附件卡片展示
+      const preview = await transcodePreview(file.buffer);
 
-      // 2. 生成缩略图（最大边长 256px）
-      await sharp(file.buffer)
-        .resize(256, 256, { fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: 75 })
-        .toFile(previewPathResult.filePath);
+      await fs.promises.writeFile(imagePathResult.filePath, image.data);
+      await fs.promises.writeFile(previewPathResult.filePath, preview.data);
+
+      this.logger.debug(
+        `图片转码：${image.width}x${image.height} → ${image.data.byteLength}B` +
+          `（编码 ${image.encodes} 次${image.passthrough ? "，快速通道未重编码" : ""}` +
+          `${image.overBudget ? "，已到最小档仍超目标体积" : ""}）`,
+      );
 
       // 自包含引用：sessions/<id>/images/<相对路径>（前端展示经 toResourceUrl 识别，
       // 后端字节内联经 resolveRefPhysicalPath 的 'session' 分支反推会话目录）
       return {
         url: `sessions/${session.id}/images/${imagePathResult.relativePath}`,
         previewUrl: `sessions/${session.id}/previews/${previewPathResult.relativePath}`,
+        bytes: image.data.byteLength,
       };
     } catch (error: any) {
       throw new Error(`图片处理失败: ${error.message}`);

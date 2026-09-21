@@ -213,9 +213,13 @@ export type SessionStreamEvent =
   | WorkflowEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
   /** 续传游标：广播那一刻该会话最后一条已入库事件的 seq（先入库后发事件的契约下精确） */
   prevSeq?: number;
+  /** 幂等序号：每会话单调递增（SessionStreamManager.publish 唯一盖戳点；前端重放去重游标） */
+  streamSeq?: number;
+  /** 后端进程启动标识：重启后 streamSeq 归零，前端据此重置幂等游标 */
+  streamBootId?: string;
 };

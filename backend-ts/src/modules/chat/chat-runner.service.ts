@@ -217,6 +217,13 @@ export class ChatRunnerService {
     // 瞬时订阅句柄（不落盘）：统一 crypto.randomUUID，禁止手搓 ts+rand
     const subscriberId = randomUUID();
 
+    // 上下文构建上移到 startStream 之前：只读装配（模型解析/工作目录/设置合并），
+    // 不发布流事件。失败（如 MODEL_NOT_RESOLVED）发生在 ActiveStream 创建之前，
+    // 不会留下僵尸流把会话永久卡在 SESSION_BUSY（与维护流路径同序，
+    // 见 session.service.ts 手动压缩段）。
+    const sessionContext =
+      await this.sessionContextFactory.createFromSession(session);
+
     // 启动新流
     const abortController = new AbortController();
 
@@ -228,47 +235,52 @@ export class ChatRunnerService {
       );
     }
 
-    // 注册订阅者（如果提供了回调）
-    let unsubscribe: (() => void) | null = null;
-    if (callbacks) {
-      unsubscribe = this.streamManager.subscribe(
-        sessionId,
-        subscriberId,
-        callbacks.onEvent,
-        callbacks.onComplete,
-        callbacks.onError,
-      );
-      if (!unsubscribe) {
-        throw new HttpException(
-          { error: "Stream not available", code: "SUBSCRIBE_FAILED" },
-          HttpStatus.CONFLICT,
+    // startStream 成功之后、runAgentEngine 的错误兜底挂上之前：本段任何抛错
+    // 都必须 stopStream 回收 ActiveStream，否则僵尸流把会话永久卡在 SESSION_BUSY
+    // （/stop 只 abort，没有引擎运行时无人消费 abort 信号，永远等不到 stopStream）。
+    try {
+      // 注册订阅者（如果提供了回调）
+      let unsubscribe: (() => void) | null = null;
+      if (callbacks) {
+        unsubscribe = this.streamManager.subscribe(
+          sessionId,
+          subscriberId,
+          callbacks.onEvent,
+          callbacks.onComplete,
+          callbacks.onError,
         );
+        if (!unsubscribe) {
+          throw new HttpException(
+            { error: "Stream not available", code: "SUBSCRIBE_FAILED" },
+            HttpStatus.CONFLICT,
+          );
+        }
       }
-    }
 
-    // 回合开括号 turn_start 由 agent-engine 在 executeAgentLoop 内广播(与 turn_end 成对,同一文件)。
-    // 不再单独构造 stream_started(携带 session 对象) — 规范化:回合开始语义统一为 stream/turn_start。
-    const sessionContext =
-      await this.sessionContextFactory.createFromSession(session);
+      // 回合开括号 turn_start 由 agent-engine 在 executeAgentLoop 内广播(与 turn_end 成对,同一文件)。
+      // 不再单独构造 stream_started(携带 session 对象) — 规范化:回合开始语义统一为 stream/turn_start。
+      // 在后台启动 Agent 循环
+      this.runAgentEngine(
+        sessionContext,
+        userMessage,
+        abortController,
+        regenerationMode,
+        resumeData,
+        clientId,
+      ).catch((error) => {
+        this.logger.error(`Agent engine error stack:`, error?.stack);
+        this.streamManager.publish(sessionId, {
+          type: "error",
+          error: error.message,
+        } as any);
+        this.streamManager.stopStream(sessionId, "error");
+      });
 
-    // 在后台启动 Agent 循环
-    this.runAgentEngine(
-      sessionContext,
-      userMessage,
-      abortController,
-      regenerationMode,
-      resumeData,
-      clientId,
-    ).catch((error) => {
-      this.logger.error(`Agent engine error stack:`, error?.stack);
-      this.streamManager.publish(sessionId, {
-        type: "error",
-        error: error.message,
-      } as any);
+      return unsubscribe || (() => {});
+    } catch (error) {
       this.streamManager.stopStream(sessionId, "error");
-    });
-
-    return unsubscribe || (() => {});
+      throw error;
+    }
   }
 
   /**

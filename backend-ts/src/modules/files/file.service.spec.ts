@@ -2,6 +2,7 @@ import { FileService } from "./file.service";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as crypto from "crypto";
 
 /**
  * 附件上传的落点与契约测试
@@ -228,6 +229,39 @@ describe("FileService upload routing", () => {
     expect(head[0]).toBe(0xff);
     expect(head[1]).toBe(0xd8);
   });
+
+  it("downscales a large image to the target budget and reports the stored size", async () => {
+    // 真随机噪声 = JPEG 最坏情况，必须靠阶梯才能压到目标体积
+    const sharp = (await import("sharp")).default;
+    const size = 900;
+    const raw = crypto.randomBytes(size * size * 3);
+    const pngBytes = await sharp(raw, {
+      raw: { width: size, height: size, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    // 前置条件：源图确实远大于目标预算，否则这个用例没有意义
+    expect(pngBytes.length).toBeGreaterThan(200 * 1024);
+
+    const ref = await service.uploadFile("session-1", {
+      originalname: "big.png",
+      size: pngBytes.length,
+      buffer: pngBytes,
+    });
+
+    const sessionDir = path.join(sessionsBase, "session-1");
+    const imageAbs = path.join(
+      sessionDir,
+      (ref.url as string).replace(/^sessions\/session-1\//, ""),
+    );
+    const stored = fs.statSync(imageAbs).size;
+
+    // 体积保证：落盘字节 ≤ 默认 100KB 目标
+    expect(stored).toBeLessThanOrEqual(100 * 1024);
+    // bytes 报的是**转码后实际落盘**的字节数，不是上传的原始大小
+    expect(ref.bytes).toBe(stored);
+    expect(ref.bytes).toBeLessThan(pngBytes.length);
+  }, 30_000);
 
   it("session image dirs die with the session dir (rm -rf 整目录，零钩子)", async () => {
     const sharp = (await import("sharp")).default;

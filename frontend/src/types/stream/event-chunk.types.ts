@@ -245,8 +245,12 @@ export type SessionStreamEvent =
   | WorkflowEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
   prevSeq?: number;
+  /** 幂等序号：每会话单调递增（后端 publish 唯一盖戳点；hub 入口重放去重游标） */
+  streamSeq?: number;
+  /** 后端进程启动标识：重启后 streamSeq 归零，hub 据此重置幂等游标 */
+  streamBootId?: string;
 };

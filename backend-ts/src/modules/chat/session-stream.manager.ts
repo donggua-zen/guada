@@ -49,6 +49,19 @@ export class SessionStreamManager {
   private readonly logger = new Logger(SessionStreamManager.name);
   private readonly activeStreams = new Map<string, ActiveStream>();
   private readonly DEFAULT_MAX_BUFFER_SIZE = 2000;
+  /**
+   * 进程启动标识：随每条事件下发（streamBootId）。进程重启后计数器归零，
+   * 前端幂等游标据此识别"序号已重置"，避免把新流的首批事件误判为重复。
+   */
+  private readonly bootId = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  /**
+   * 每会话单调流序号（publish 唯一盖戳点）。不随 ActiveStream 销毁重置——
+   * 回合结束 stopStream 后下一回合序号继续递增，否则前端会把新回合事件误判为已消费。
+   * 仅按会话累积一个数字，无清理钩子（量级可忽略）。
+   */
+  private readonly streamSeqBySession = new Map<string, number>();
 
   /**
    * SSE 直投回调（SessionEventsService 启动时注入）
@@ -178,8 +191,19 @@ export class SessionStreamManager {
       this.cleanupIntermediateEvents(stream, event.messageId);
     }
 
+    // 盖戳：每会话单调 streamSeq + 进程 bootId。前端 StreamEventHub 据此做入口幂等——
+    // SSE 重连时连接补发会重放整个 eventBuffer，已消费过的事件（序号 <= 游标）直接丢弃，
+    // 防止 delta 重复追加导致文本翻倍。
+    const streamSeq = (this.streamSeqBySession.get(sessionId) ?? 0) + 1;
+    this.streamSeqBySession.set(sessionId, streamSeq);
+    const stamped: StreamEvent = {
+      ...event,
+      streamSeq,
+      streamBootId: this.bootId,
+    };
+
     // 缓存事件
-    stream.eventBuffer.push(event);
+    stream.eventBuffer.push(stamped);
     if (stream.eventBuffer.length > stream.maxBufferSize) {
       stream.eventBuffer.shift();
     }
@@ -187,7 +211,7 @@ export class SessionStreamManager {
     // 广播到所有订阅者
     for (const subscriber of stream.subscribers.values()) {
       try {
-        subscriber.subject.next(event);
+        subscriber.subject.next(stamped);
       } catch (error) {
         this.logger.warn(
           `Failed to send to subscriber ${subscriber.id}, removing`,
@@ -197,7 +221,7 @@ export class SessionStreamManager {
     }
 
     // SSE 直投：所有在线客户端（单账户，多窗口）
-    this.streamRelay?.(sessionId, event);
+    this.streamRelay?.(sessionId, stamped);
   }
 
   /**

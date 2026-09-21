@@ -760,14 +760,16 @@ async function loadMessages(
     sessionState.eventCursor = page.nextBeforeSeq;
 
     // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
-    // prevSeq 是"先入库后发事件"的入库游标:prevSeq <= endSeq 的事件必已包含在历史页内
-    // (跳过,防 deltas 重复应用导致文本翻倍);prevSeq > endSeq 的才是拉取未覆盖的增量
-    // (无缓存期间/拉取期间新到的事件)。prevSeq 缺失时照旧应用(fail-open)。
+    // prevSeq 是"先入库后发事件"的入库游标:prevSeq < endSeq 的事件必已包含在历史页内
+    // (跳过,防重复);prevSeq == endSeq 的事件发布于快照末尾之后、不在快照内——
+    // 在飞 chunk 恰属此类(chunk 不入库,prevSeq == 最后在库事件 seq),必须应用,
+    // 否则刷新后已流出的增量丢失、只能等 finish 重建。边界上重复应用的已入库事件
+    // (user_message 等)由 projector 按 messageId/turnId 幂等吸收。prevSeq 缺失照旧应用(fail-open)。
     const endSeq = page.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
     for (const chunk of projectorStash) {
       const prevSeq = (chunk as { prevSeq?: number }).prevSeq;
-      if (typeof prevSeq === "number" && prevSeq <= endSeq) continue;
+      if (typeof prevSeq === "number" && prevSeq < endSeq) continue;
       applyLiveChunk(sessionStore, sessionId, chunk);
     }
 

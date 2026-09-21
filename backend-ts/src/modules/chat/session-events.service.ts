@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { Subject, Observable, Subscription } from "rxjs";
+import { Subject, Observable, Subscription, defer, concat, from } from "rxjs";
 import { MessageEvent } from "@nestjs/common";
 import {
   StreamStatusChangedEvent,
@@ -59,6 +59,8 @@ interface UserEventSubscriber {
   subject: Subject<MessageEvent>;
   connectedAt: Date;
   clientId: string;
+  /** 本次连接的唯一标识：unsubscribe 按它做身份校验，防止旧连接的 close 误删新连接注册 */
+  connectionId: string;
   heartbeatSubscription?: any;
 }
 
@@ -81,8 +83,10 @@ interface InternalEventListener {
 @Injectable()
 export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
-  /** 单账户：所有客户端订阅同一张表 */
+  /** 在线连接表：键 = connectionId（同一 clientId 的多标签页/多窗口各占一条连接） */
   private readonly subscribers = new Map<string, UserEventSubscriber>();
+  /** 连接序号：生成 connectionId 用 */
+  private connectionSeq = 0;
 
   constructor(
     private readonly streamManager: SessionStreamManager,
@@ -102,12 +106,16 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 订阅事件流（单账户：所有客户端平级）
+   * 订阅事件流（每条连接独立条目；同一 clientId 的多标签页并存，互不惊扰）
    * @param clientId 客户端唯一标识（如 tabId）
-   * @returns Observable<MessageEvent>
+   * @returns observable 事件流 + connectionId（本次连接标识，unsubscribe 时回传做身份校验）
    */
-  subscribe(clientId: string): Observable<MessageEvent> {
+  subscribe(clientId: string): {
+    observable: Observable<MessageEvent>;
+    connectionId: string;
+  } {
     const subject = new Subject<MessageEvent>();
+    const connectionId = `conn_${++this.connectionSeq}_${Date.now()}`;
 
     // 每 90 秒发送一次心跳，防止前端超时断开
     const heartbeatSubscription = new Subscription();
@@ -127,88 +135,69 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     }, 90000);
     heartbeatSubscription.add(() => clearInterval(heartbeatTimer));
 
-    this.subscribers.set(clientId, {
+    // 键即身份：同 clientId 的新连接（刷新重连/另一标签页）是独立条目，不覆盖旧连接；
+    // 旧连接的 req close 只删自己那条，不会误删新连接，心跳定时器也不存在孤儿泄漏。
+    this.subscribers.set(connectionId, {
       subject,
       connectedAt: new Date(),
       clientId,
+      connectionId,
       heartbeatSubscription,
     });
 
     this.logger.debug(
-      `Client ${clientId} subscribed, total clients: ${this.subscribers.size}`,
+      `Client ${clientId} (${connectionId}) subscribed, total connections: ${this.subscribers.size}`,
     );
 
-    // 连接建立时的补发（connected + eventBuffer 重放 + running 状态）必须延迟到 NestJS
-    // 订阅返回的 observable 之后。此前用普通 Subject 在 subscribe() 同步栈内直接 next，
-    // 而框架是在拿到 asObservable() 返回值后才订阅——同步 emit 早于订阅者附加，全部被
-    // 无重放缓冲的 Subject 静默丢弃（表现为刷新后会话级 isStreaming/streamStatus 丢失）。
-    // 用 queueMicrotask 推迟到当前同步栈之后（订阅已建立），并在回调内做三重防护：
-    //   1) 重新取 subscriber 确认连接仍在（快速刷新/断连时已被 unsubscribe 删除则跳过）
-    //   2) running 补发重新取当下活跃流快照，避免闭包捕获旧列表发出 stale running
-    //   3) 每次 next 包 try/catch，与 broadcastToUser/pushStreamToUser 一致
-    queueMicrotask(() => {
-      void this.emitCatchup(clientId, subject);
+    // 连接补发（connected + eventBuffer 重放 + running 状态）必须作为返回流自身的前缀，
+    // 而不能往 subject 上异步 next：NestJS 对 @Sse 返回值的订阅发生在
+    // Promise.resolve(result).then(...) 及拦截器链 transformDeferred 的 promise 反应里，
+    // 严格晚于本方法的同步栈——此前用 queueMicrotask 补发，全部打在零订阅者的普通
+    // Subject 上被静默丢弃（表现为刷新后已流出的事件丢失、isStreaming 状态丢失）。
+    // defer + concat 语义：
+    //   - defer：订阅真正发生的那一刻才计算补发快照，连接窗口内新进的 chunk 也在其中；
+    //   - concat：补发先同步发出，随后同一同步栈内订阅 subject，两者之间无缝隙，
+    //     不存在"补发算完但 subject 未订阅"的丢失窗口；
+    //   - 若订阅时该连接已被注销（快速刷新秒关），跳过补发只接 live。
+    const observable = defer(() => {
+      if (this.subscribers.get(connectionId)?.subject !== subject) {
+        return subject.asObservable();
+      }
+      return concat(from(this.buildCatchupEvents()), subject.asObservable());
     });
 
-    return subject.asObservable();
+    return { observable, connectionId };
   }
 
   /**
-   * 连接建立后的补发：connected 事件、活跃流 eventBuffer 重放、running 状态补发。
-   * 在 queueMicrotask 中执行，确保晚于 NestJS 对返回 observable 的订阅。
+   * 连接补发事件列表：connected 事件、活跃流 eventBuffer 重放、running 状态补发。
+   * 在返回流被订阅时同步计算并作为流前缀发出（见 subscribe 的 defer+concat 说明）。
    */
-  private async emitCatchup(
-    clientId: string,
-    subject: Subject<MessageEvent>,
-  ): Promise<void> {
-    // 防护 1：连接可能在微任务前已断开（req close → unsubscribe → subject.complete + map 删除）
-    const stillSubscribed = () =>
-      this.subscribers.get(clientId)?.subject === subject && !subject.closed;
+  private buildCatchupEvents(): MessageEvent[] {
+    const events: MessageEvent[] = [];
 
-    const safeNext = (event: MessageEvent): boolean => {
-      if (!stillSubscribed()) return false;
-      try {
-        subject.next(event);
-        return true;
-      } catch (error) {
-        this.logger.debug(
-          `emitCatchup next failed for ${clientId}: ${String(error)}`,
-        );
-        return false;
-      }
-    };
+    // 连接成功事件
+    events.push({
+      data: JSON.stringify({
+        type: "connected",
+        timestamp: new Date().toISOString(),
+      }),
+    } as MessageEvent);
 
-    // 发送连接成功事件
-    if (
-      !safeNext({
-        data: JSON.stringify({
-          type: "connected",
-          timestamp: new Date().toISOString(),
-        }),
-      } as MessageEvent)
-    ) {
-      return;
-    }
-
-    // 防护 2：重新取当下活跃流快照（微任务窗口内流可能已 stop）
     const activeStreams = this.streamManager.getActiveStreams();
 
     // 统一 SSE:连接建立时补发全部活跃流的 eventBuffer 增量。
     // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
-    // 前端按 payload.sessionId 归会话、按 prevSeq >= lastSeq 去重后消费。
+    // 前端按 payload.sessionId 归会话、按 streamSeq 入口幂等去重后消费。
     for (const stream of activeStreams) {
       for (const chunk of stream.eventBuffer) {
         const unified = createUnifiedEvent(
           this.mapStreamMethod(chunk.type),
           { sessionId: stream.sessionId, ...chunk } as Record<string, any>,
         );
-        if (
-          !safeNext({
-            data: JSON.stringify(unified),
-          } as MessageEvent)
-        ) {
-          return;
-        }
+        events.push({
+          data: JSON.stringify(unified),
+        } as MessageEvent);
       }
     }
 
@@ -224,33 +213,34 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     for (const stream of activeStreams) {
       const sessionType =
         this.sessionStore.getSessionType(stream.sessionId) ?? "web";
-      if (
-        !safeNext({
-          data: JSON.stringify(
-            toSessionEvent("stream_status_changed", {
-              sessionId: stream.sessionId,
-              timestamp: new Date().toISOString(),
-              payload: { status: "running", kind: stream.kind, sessionType },
-            }),
-          ),
-        } as MessageEvent)
-      ) {
-        return;
-      }
+      events.push({
+        data: JSON.stringify(
+          toSessionEvent("stream_status_changed", {
+            sessionId: stream.sessionId,
+            timestamp: new Date().toISOString(),
+            payload: { status: "running", kind: stream.kind, sessionType },
+          }),
+        ),
+      } as MessageEvent);
     }
+
+    return events;
   }
 
   /**
    * 取消订阅
+   * @param clientId 客户端标识（仅作日志/ sanity 校验）
+   * @param connectionId 本次连接标识：订阅表按 connectionId 键控，旧连接的 req close
+   *   晚到只删自己那条——刷新重连（同 clientId 新旧两条连接）不会误删新连接注册
    */
-  unsubscribe(clientId: string): void {
-    const subscriber = this.subscribers.get(clientId);
-    if (!subscriber) return;
+  unsubscribe(clientId: string, connectionId: string): void {
+    const subscriber = this.subscribers.get(connectionId);
+    if (!subscriber || subscriber.clientId !== clientId) return;
     subscriber.heartbeatSubscription?.unsubscribe();
     subscriber.subject.complete();
-    this.subscribers.delete(clientId);
+    this.subscribers.delete(connectionId);
     this.logger.debug(
-      `Client ${clientId} unsubscribed, remaining: ${this.subscribers.size}`,
+      `Client ${clientId} (${connectionId}) unsubscribed, remaining: ${this.subscribers.size}`,
     );
   }
 
@@ -367,7 +357,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Failed to send event to ${subscriber.clientId}, removing`,
         );
-        this.unsubscribe(subscriber.clientId);
+        this.unsubscribe(subscriber.clientId, subscriber.connectionId);
       }
     }
   }
@@ -399,7 +389,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Failed to send stream event to ${subscriber.clientId}, removing`,
         );
-        this.unsubscribe(subscriber.clientId);
+        this.unsubscribe(subscriber.clientId, subscriber.connectionId);
       }
     }
   }
