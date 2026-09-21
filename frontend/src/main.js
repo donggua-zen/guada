@@ -31,6 +31,16 @@ import {
 } from "@/composables/useBackendStatus";
 import { i18n } from "./locales";
 
+// 平台标记挂到 <html>：布局按平台差异处理
+// （Electron-Windows 有独立标题栏行，内容卡片顶/左不留边距；Web/Mac 卡片顶部留缝防吸顶）
+document.documentElement.classList.add(
+  isElectron
+    ? window.electronAPI?.platform === "darwin"
+      ? "platform-mac"
+      : "platform-win"
+    : "platform-web",
+);
+
 // 页面刷新标志：首次导航时强制服务端验证 token，后续路由切换不再重复验证
 let isInitialPageLoad = true;
 

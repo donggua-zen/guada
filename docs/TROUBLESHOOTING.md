@@ -576,35 +576,49 @@ pnpm run start:debug
 
 之后再刷新前端，所有请求报"无法连接到服务器"；后端落盘日志（`~/.guada-dev/logs/combined-*.log`）戛然而止，但控制台没有任何错误输出，也没有弹出"后端异常退出"对话框。
 
-**故障链（2026-09-08 排查结论）**：
+**故障链（2026-09-08 结论，2026-09-21 用退出码修正）**：
 
 1. 真正的 NestJS 子进程（`ts-node-dev` 的 child）突然死亡。`BridgeServer: client disconnected` 表示 named pipe 真正关闭（bridge-server.ts 无心跳机制，只会因进程退出/连接关闭而触发）。
-2. `ts-node-dev --respawn` 对子进程死亡的处理是**静默的**（`node_modules/ts-node-dev/lib/index.js` 中 `child.on('exit')` 仅 `child = undefined`）：不打印、不重启，直到下次文件变更。注意它与文件变更触发的重启不同——后者会打印 `Restarting, xxx has been modified`。
+2. `ts-node-dev --respawn` 对子进程死亡的处理是**静默的**（`node_modules/ts-node-dev/lib/index.js` 中 `child.on('exit')` 仅 `child = undefined`）：不打印、不重启，直到下次文件变更（`restart()` 发现 `child` 已空才 `start()`）。注意它与文件变更触发的重启不同——后者会打印 `Restarting, xxx has been modified`。
+   推论：死亡后是否自愈，取决于其后有没有文件变更。2026-09-21 06:16 那次 8s 后恢复即属此类；2026-09-20 22:21 那次 20 分钟无人重启。
 3. Electron 只监控 npx 包装进程（`electron/main.ts` 的 `backendProcess.on("exit")`），包装进程未退出，因此崩溃弹窗、`backend-crash.log` 都不会触发。
-4. 若子进程死前零输出（无 JS 堆栈、无 `JavaScript heap out of memory`），基本排除 JS 异常与 V8 OOM，指向**外部强杀**（杀软 TerminateProcess 等，不产生 WER 事件、无任何输出）或原生崩溃。
+4. ~~指向外部强杀（杀软）~~ —— **该结论已被证据推翻**：三个观测点在 dev 下全部失效，"没有证据"是观测装置坏了，不是死亡方式干净。2026-09-21 06:16 用句柄等待抓到真实退出码 **1**，后端 error 日志同期只有 3 条
+   `进程级 uncaughtException: EPIPE: broken pipe, write`（栈顶 `winston/lib/winston/transports/console.js` → `Socket._write`）：
+   dev 下后端 stdout 是经 cmd/npx/ts-node-dev 继承的命名管道，包装链断裂后**下一次 console 写入即 EPIPE**，冒泡成 uncaughtException，被 `logFatal` 当作致命错误 `process.exit(1)`——即后端因"日志管道断了"而自杀。已修复：`backend-ts/src/main.ts` 吞掉 stdout/stderr 的 EPIPE/EOF 流错误，不再退出进程。
+   注意退出码语义不可反推：
+   - `1` 有两种来源 —— `logFatal` 主动退出（error 日志同刻必有「进程级 …」条目），以及 ts-node-dev 热重载/停机时的 `child.kill('SIGTERM')`（Windows 上即 TerminateProcess，退出码也是 1，error 日志无条目；2026-09-21 06:38 改文件触发重启即为此例）；
+   - `0` 既可能是优雅 `process.exit(0)`，也可能是外部 `taskkill /F`（TerminateProcess 的退出码由调用方给）；
+   - `0xC0000409`（fail-fast）绕过 WER，故"无 WER 事件"不能排除原生崩溃。
+5. **切换会话触发的原生崩溃（2026-09-21 07:34 抓到实证）**：句柄监视记录后端 PID 22100 退出码 `-1073741819` = **0xC0000005 STATUS_ACCESS_VIOLATION**，且 Application 日志无 EventID 1000、`CrashDumps` 无 node.exe.dmp、winston 无任何 error 条目 —— 与"死前零输出、不重连、无重启"的历史 Mode B 完全吻合。落盘日志的最后 4 行正是切换会话时的
+   `POST /api/v1/sessions/:id/workspace/watch`（两个会话、同一 `workspacePath`，交替各 2 次 → `setWatchScope` → `@parcel/watcher` 在途 subscribe 与 unsubscribe 交叠）。待办：用同形状并发压 `workspace-watcher.service.ts` 复现，并开 `HKCU\...\Windows Error Reporting\LocalDumps` 收 node.exe 用户态 dump 以定位 faulting 模块。
+
 
 **已内置的观测与取证手段**：
 
 | 手段 | 位置 | 说明 |
 | ---- | ---- | ---- |
-| 健康看门狗 | `electron/main.ts` `startBackendWatchdog` | 15s 探测 `/api/v1/health`，连续 3 次失败写 `[BackendWatchdog]` 错误日志（含 bridge 状态、进程存活时长）。连接被拒=进程死亡；超时=事件循环阻塞。仅记录日志，不自动重启 |
-| 诊断报告 | `logs/diagnostic-reports/` | 后端 spawn 注入 `NODE_OPTIONS=--report-on-fatalerror --report-uncaught-exception`，原生崩溃/OOM/未捕获异常时生成完整现场（native 栈、模块列表）。**外部强杀不会产生报告——报告缺失本身就是证据** |
-| 进程级异常落盘 | `backend-ts/src/main.ts` | `uncaughtException`/`unhandledRejection` 写 winston error 日志后退出，不再只依赖控制台输出 |
-| Bridge 断开时长 | `electron/bridge-server.ts` | `client disconnected` 附带连接时长：秒级+随后 `client authenticated` = 热重载；永不重连 = 进程死亡 |
+| 真实进程退出码 | `electron/main.ts` `watchBackendRealExit` / 日志前缀 `[BackendExit]` | 后端经 bridge `port_ready` 上报自身 PID，Electron 起一个 PowerShell 助手 `OpenProcess`+`WaitForSingleObject`+`GetExitCodeProcess` 阻塞等待，死亡时打印退出码及其语义，并写 `backend-crash.log`。10s 内若有新 PID/bridge 重连则判为热重载（info），否则为非预期死亡（error） |
+| 健康看门狗 | `electron/main.ts` `startBackendWatchdog` | 15s 探测 `/api/v1/health`，连续 3 次失败写 `[BackendWatchdog]` 错误日志，**含失败原因分类**（连接被拒 / 超时 / HTTP 状态）+ 包装进程与真实进程各自的存活状态。仅记录日志，不自动重启 |
+| 诊断报告 | `logs/diagnostic-reports/` | 后端 spawn 注入 `NODE_OPTIONS=--report-on-fatalerror --report-uncaught-exception`。**Node 不会自建 `--report-dir`**，目录缺失时报告被静默丢弃（此前该目录一直不存在，故从未产出一份报告）；现已在 spawn 前 `mkdir -p`。外部强杀与 `process.exit()` 都不产生报告，报告缺失不可作为"他杀"证据 |
+| 进程级异常落盘 | `backend-ts/src/main.ts` | `uncaughtException`/`unhandledRejection` 写 winston error 日志后退出；stdout/stderr 的 EPIPE 不再计入致命错误 |
+| Bridge 断开时长 | `electron/bridge-server.ts` | `client disconnected` 附带连接时长：秒级+随后 `client authenticated` = 热重载；永不重连 = 进程死亡且无文件变更触发重启 |
+| 进程树清理 | `electron/main.ts` `forceKillBackendTree` | 停机时对包装树与真实 PID 分别 `taskkill` 并用 `isPidAlive` 验证，清理不干净会留下 `[BackendStop] 进程树未清理干净` 日志（历史上静默泄漏过 6 套 cmd→npx→ts-node-dev 树） |
+| 手工句柄监视 | `scripts/watch-backend-exit.ps1` | 应用未重启时想抓现场：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\watch-backend-exit.ps1 -IntervalSec 3`，自动定位后端孙进程，退出时打印退出码+内存/句柄/线程时间线 CSV |
 
 **事故后取证步骤**：
 
 ```bash
-# 1. 看看是否为外部强杀（三者对照）
-ls ~/.guada-dev/logs/diagnostic-reports/          # 有报告 → 原生崩溃/OOM，报告内有 faulting 模块
-# 2. 查 Windows 事件日志（EventID 1000 = Application Error）
+# 1. 先看 Electron 侧的定性日志（含真实退出码）
+grep -E "BackendExit|BackendStop|BackendWatchdog" ~/AppData/Roaming/guada-dev/logs/main.log
+# 2. 后端自身日志：退出码 1 的现场一定在这里
+grep -E "进程级|uncaughtException" ~/.guada-dev/logs/error-*.log
+# 3. 原生崩溃/OOM 报告（需 dev 重启过一次应用让目录被创建）
+ls ~/.guada-dev/logs/diagnostic-reports/
+# 4. Windows 事件日志（EventID 1000 = Application Error；fail-fast 不写事件，无记录不等于没崩）
 wevtutil qe Application "/q:*[System[(EventID=1000)]]" /rd:true /c:10 /f:text
-#    无 node.exe 记录 + 无诊断报告 + 看门狗报"连接被拒" → 外部强杀（重点排查杀软行为检测）
-# 3. 看门狗日志
-grep BackendWatchdog ~/AppData/Roaming/guada-dev/logs/main.log
 ```
 
-**缓解措施**：若确认为杀软（如 360）行为检测所致，将 `D:\AI\ai_chat`、`backend-ts`、node 安装目录及 `npx.cmd`/`ts-node-dev` 相关进程加入信任/白名单；临时方案是在发现后端死亡后改任一 backend 文件触发 ts-node-dev 重启，或重启应用。
+**缓解措施**：dev 下后端死亡后，改任一 backend 文件即可让 ts-node-dev 重启它（或重启应用）。若 `[BackendExit]` 给出 `0xC0000409`/`0xC0000005` 一类原生码且无 WER 记录，再考虑杀软白名单（`D:\AI\ai_chat`、node 安装目录、`npx.cmd`/`ts-node-dev` 相关进程）。
 
 ---
 

@@ -10,7 +10,23 @@
             <div ref="paneContentRef" class="chat-pane-content"
               style="position: relative; height: 100%; display: flex; flex-direction: column;">
               <!-- 页面标题栏 -->
-              <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
+              <PageHeader :title="mainSession?.title || ''">
+                <!-- 标题后缀操作区：更多操作紧跟标题（不再随右侧操作组右对齐） -->
+                <template #title-actions>
+                  <DropdownMenu @command="handleMoreSelect">
+                    <div class="header-icon-btn">
+                      <MoreVertOutlined class="w-5 h-5" />
+                    </div>
+                    <template #dropdown>
+                      <DropdownMenuItem command="clear">
+                        <span class="flex items-center gap-2">
+                          <DeleteTwotone class="w-4 h-4" />
+                          <span>{{ t('chat.header.clearRecords') }}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    </template>
+                  </DropdownMenu>
+                </template>
                 <template #actions>
                   <!-- 工作目录打开操作（仅 Electron）：主按钮 VSCode + 下拉箭头选其他方式 -->
                   <template v-if="isElectron && mainSession?.id">
@@ -56,20 +72,6 @@
                     <PanelRightExpand20Filled class="w-5 h-5" />
                   </div>
                   </GdTooltip>
-                  <!-- 更多操作下拉菜单 -->
-                  <DropdownMenu @command="handleMoreSelect">
-                    <div class="header-icon-btn">
-                      <MoreVertOutlined class="w-5 h-5" />
-                    </div>
-                    <template #dropdown>
-                      <DropdownMenuItem command="clear">
-                        <span class="flex items-center gap-2">
-                          <DeleteTwotone class="w-4 h-4" />
-                          <span>{{ t('chat.header.clearRecords') }}</span>
-                        </span>
-                      </DropdownMenuItem>
-                    </template>
-                  </DropdownMenu>
                 </template>
               </PageHeader>
 

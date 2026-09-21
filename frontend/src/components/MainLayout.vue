@@ -2,6 +2,10 @@
   <!-- 全屏模式下悬浮对话面板（必须在 SidebarLayout 之前确保 #floating-chat 先于 Teleport 挂载） -->
   <FloatingChatPanel />
 
+  <!-- Windows 标题栏行：左 logo/图标按钮，右窗口控制。
+       Mac 无此行（红绿灯悬浮侧栏顶部），Web 无窗口按钮需求 -->
+  <CustomTitlebar v-if="isElectron && !isMac" />
+
   <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
     :sidebarWidth="285" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
@@ -10,7 +14,8 @@
     </template>
     <template #content>
       <div
-        class="relative h-full flex-1 min-w-0 overflow-hidden content-clear-wallpaper dark:border-[#2f2f2f]">
+        class="content-card relative flex-1 min-w-0 overflow-hidden content-clear-wallpaper"
+        :class="{ 'sidebar-collapsed': !effectiveSidebarVisible }">
         <RouterView />
       </div>
     </template>
@@ -32,6 +37,7 @@ import { useSessionEvents } from '@/composables/useSessionEvents'
 import { setPluginToolDisplays } from '@/utils/toolDisplay'
 import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
+import CustomTitlebar from './CustomTitlebar.vue'
 import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
 import FloatingChatPanel from './chat/FloatingChatPanel.vue'
 
@@ -45,6 +51,7 @@ const { init: initSessionEvents, cleanup: cleanupSessionEvents } = useSessionEve
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 const effectiveSidebarVisible = computed(() => layoutStore.sidebarVisible)
 

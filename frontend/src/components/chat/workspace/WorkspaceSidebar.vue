@@ -83,9 +83,6 @@
                     </el-icon>
                 </button>
             </GdTooltip>
-
-            <!-- 窗口控制按钮（仅 Electron） -->
-            <WindowControls v-if="isElectron" class="no-drag" />
         </div>
         <!-- 内容区：主内容（左）+ 目录树（右） -->
         <div class="flex-1 min-h-0 flex overflow-hidden">
@@ -208,7 +205,6 @@ import { useSessionStore } from '@/stores/session';
 import { useTabStore } from '@/stores/tab';
 import { usePreviewTabCache, type UnifiedTab } from '@/composables/usePreviewTabCache';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
-import WindowControls from '@/components/WindowControls.vue';
 
 const props = defineProps<{
     sessionId: string | null;

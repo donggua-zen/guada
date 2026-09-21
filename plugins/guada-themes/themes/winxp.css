@@ -119,6 +119,10 @@
   --gd-overview-panel-border-color: #d4d0c8;
   --gd-overview-panel-shadow: none;
 
+  /* 布局卡片：直角化 + XP 窗口边框色（缝隙底色走默认=侧栏色链） */
+  --gd-layout-card-radius: 4px;
+  --gd-layout-card-border: #7f9db9;
+
   /* 窗口控制按钮：蓝底白字（斜面按钮由选择器叠加） */
   --gd-window-controls-color: #ffffff;
   --gd-window-controls-hover-bg: rgba(255, 255, 255, 0.15);
@@ -244,14 +248,36 @@ html[data-theme="winxp"] .global-sidebar .mb-1 .session-item-active,
 html[data-theme="winxp"] .global-sidebar .mb-1 .session-item-active:hover {
   background: #316ac5;
 }
-/* 顶部导航区也包一层白色面板盒 */
+/* 顶部导航区：与会话分组同款面板盒 + 同款渐变标题条。
+   margin-right 16px = 分组盒右侧的滚动条 gutter(10px) + 6px 间距，两边对齐 */
 html[data-theme="winxp"] .global-sidebar > .px-2.py-2 {
   background: #ffffff;
   border: 1px solid #a8c0e8;
   border-radius: 4px;
-  margin: 6px 6px 8px 6px;
-  padding: 4px 6px;
+  margin: 6px 16px 8px 6px;
+  padding: 0 6px 4px;
+  overflow: hidden;
   box-shadow: 0 1px 2px rgba(20, 50, 130, 0.15);
+}
+html[data-theme="winxp"] .global-sidebar > .px-2.py-2::before {
+  content: "功能";
+  display: block;
+  margin: 0 -6px 6px;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, #ffffff 0%, #d9e4f8 55%, #b9cdf0 100%);
+  color: #0b2470;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: inset 0 -1px 0 #a8c0e8;
+}
+/* 导航项激活态里的快捷键提示：白字防蓝底低对比 */
+html[data-theme="winxp"] .nav-item-active .font-mono {
+  color: rgba(255, 255, 255, 0.75);
+}
+/* 滚动容器默认 both-edges 会在左侧多空出一条滚动条位，面板盒左缘被推歪；
+   改为仅右侧保留（XP 面板滚动条本来就在右缘） */
+html[data-theme="winxp"] .global-sidebar .scroll-container {
+  scrollbar-gutter: stable;
 }
 html[data-theme="winxp"] .workspace-sidebar {
   border-left: 1px solid #d4d0c8;
@@ -424,6 +450,12 @@ html[data-theme="winxp"] body::after {
     inset 0 0 0 4px #4a94f5;
 }
 
+/* Windows 下卡片贴住标题栏/侧栏（顶/左边距为 0），顶部两角取直角——XP 最大化窗口观感 */
+html[data-theme="winxp"].platform-win .content-card {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 /* ============================================================
    底部任务栏：XP 经典蓝色任务栏 + 绿色「开始」按钮
    #app::after 画任务栏条带，#app::before 画开始按钮；
@@ -474,33 +506,15 @@ html[data-theme="winxp"] #app::before {
 }
 
 /* ============================================================
-   菜单栏：聊天页 PageHeader 变成 XP 米色菜单栏
-   （.drag-region 同时被 CustomTitlebar 使用，需排除；
-     左侧操作组的 ::after 注入经典菜单文字）
+   页面头部：XP 米色工具栏质感
+   作用域限定 .content-card 内的拖拽区（PageHeader 等）——
+   CustomTitlebar 在卡片外，保持 Luna 蓝渐变不受影响；
+   侧栏品牌行在卡片外，同样不受影响。
    ============================================================ */
-html[data-theme="winxp"] .drag-region:not(.custom-titlebar) {
+html[data-theme="winxp"] .content-card .drag-region {
   background: linear-gradient(180deg, #f5f4ec 0%, #ece9d8 100%);
   border-bottom: 1px solid #aca899;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-html[data-theme="winxp"] .drag-region:not(.custom-titlebar) > div:first-child::after {
-  content: "文件(F)  编辑(E)  查看(V)  收藏(A)  工具(T)  帮助(H)";
-  margin-left: 10px;
-  font-size: 12px;
-  color: #1a1a1a;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  flex-shrink: 1;
-}
-/* 侧栏品牌行也带 .drag-region：还原为渐变底，不注入菜单文字 */
-html[data-theme="winxp"] .global-sidebar .drag-region {
-  background: none;
-  border-bottom: none;
-  box-shadow: none;
-}
-html[data-theme="winxp"] .global-sidebar .drag-region > div:first-child::after {
-  content: none;
 }
 
 /* ============================================================
