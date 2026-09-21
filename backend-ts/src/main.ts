@@ -56,6 +56,38 @@ for (const stream of [process.stdout, process.stderr]) {
   });
 }
 
+/**
+ * 「临终呼吸」同步记录：判定死亡性质的最后一块拼图。
+ * winston 是异步流，进程被杀时必然丢日志；这里用 appendFileSync 直写，
+ * 四种结果分别对应四种死法：
+ *   - 有 exit(N) 行          → 走的是正常/半正常退出路径（含 logFatal 的 exit(1)）
+ *   - 有 beforeExit 行       → 事件循环被抽空（所有句柄被关），不是被杀
+ *   - 有 signal SIGxxx 行    → 收到可捕获信号（ts-node-dev 重启 / SIGBREAK 关窗）
+ *   - 什么都没有             → TerminateProcess 强杀或原生 AV，句柄级退出，无任何 JS 执行机会
+ */
+const lastBreathPath = path.join(logsDir, "backend-last-breath.log");
+function lastBreath(why: string): void {
+  try {
+    const mem = process.memoryUsage();
+    fs.appendFileSync(
+      lastBreathPath,
+      `${new Date().toISOString()} pid=${process.pid} ${why}` +
+        ` uptime=${process.uptime().toFixed(1)}s rss=${Math.round(mem.rss / 1048576)}MB\n`,
+    );
+  } catch {
+    // 临终记录不得改变退出语义
+  }
+}
+process.on("exit", (code) => lastBreath(`exit(${code})`));
+process.on("beforeExit", (code) => lastBreath(`beforeExit(${code}) 事件循环耗尽`));
+for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"] as const) {
+  process.on(sig, () => {
+    lastBreath(`signal ${sig}`);
+    // 注册监听会覆盖默认「终止进程」行为，必须自己退回去，否则 SIGTERM 变成空操作
+    process.exit(1);
+  });
+}
+
 async function bootstrap() {
   // 修正工作目录到 backend-ts 根目录，确保 bundled-skills/、skills/ 等路径可预测
   const backendRoot = path.resolve(__dirname, '..');

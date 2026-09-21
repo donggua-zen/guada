@@ -66,6 +66,12 @@ const BACKEND_HEALTH_ALERT_THRESHOLD = 3;
 let backendRealPid = 0;
 /** 持有后端进程句柄、阻塞等待其退出码的辅助子进程 */
 let backendExitWatcher: ChildProcess | null = null;
+/**
+ * 最近一次 ts-node-dev 在 stdout 上公告重启（"Restarting: xxx has been modified"）的时刻。
+ * 热重载走的是 child.kill('SIGTERM')，Windows 下即 TerminateProcess：退出码 1、不留任何
+ * JS 侧日志，与 logFatal 的主动 exit(1) 无法区分 —— 这条公告是判定「正常热重载」的唯一硬证据。
+ */
+let lastHotReloadNoticeAt = 0;
 /** 致命错误诊断报告目录（Node 不会自建，目录缺失时报告被静默丢弃） */
 function diagnosticReportDir(logsDir: string): string {
   const dir = path.join(logsDir, "diagnostic-reports");
@@ -209,28 +215,40 @@ function watchBackendRealExit(pid: number): void {
   });
 }
 
+/**
+ * 真实后端进程消失后的定性。
+ * 两段式：10s 未见重启只记 warn（ts-node-dev 编译+启动实测 8~20s，一刀切会误报死亡），
+ * 再等 35s 仍无重启且期间没有热重载公告才落 error + 崩溃日志。
+ */
 function onBackendRealProcessGone(
   pid: number,
   code: number | null,
   detail: string,
 ): void {
-  // 给 ts-node-dev 的重启留窗口（实测文件变更重启约 8s）：期间已有新 PID 或
-  // bridge 重连 → 属于热重载，只记 info；否则才是真正的非预期死亡
-  setTimeout(() => {
+  const decide = (final: boolean) => {
     const restarted =
       (backendRealPid !== pid && backendRealPid !== 0) ||
       (bridgeServer?.hasAuthenticatedClient() ?? false);
+    const hotReload = Date.now() - lastHotReloadNoticeAt < 60_000;
     const head =
       `后端真实进程 PID=${pid} 已退出，退出码=${code ?? "未知"} —— ${describeExitCode(code)}`;
-    if (isBackendStopping || restarted) {
-      log.info(`[BackendExit] ${head}（${isBackendStopping ? "主动停机" : "随后已重启"}）`);
+    if (isBackendStopping || restarted || hotReload) {
+      const why = isBackendStopping ? "主动停机" : restarted ? "随后已重启" : "ts-node-dev 热重载";
+      log.info(`[BackendExit] ${head}（${why}）`);
+      return;
+    }
+    if (!final) {
+      log.warn(`[BackendExit] ${head}，10s 内未见重启，继续观察 35s…`);
+      setTimeout(() => decide(true), 35_000);
       return;
     }
     log.error(
       `[BackendExit] ${head}\n` +
         `  包装进程 PID=${backendProcess?.pid ?? "无"} 存活=${isPidAlive(backendProcess?.pid)}` +
         `（包装树存活 = ts-node-dev 仍在，但它不会因子进程退出而重启，只有文件变更会）\n` +
-        `  监视助手输出=${detail || "无"}`,
+        `  监视助手输出=${detail || "无"}\n` +
+        `  判读：若 logs/backend-last-breath.log 同刻无记录 = 句柄级终止（TerminateProcess/原生崩溃）；` +
+        `有 exit(N)/beforeExit/signal 行则看 backend-ts 侧退出路径`,
     );
     writeBackendCrashLog({
       pid,
@@ -241,7 +259,8 @@ function onBackendRealProcessGone(
       stderrTail: stderrBuffer.slice(-50).join("\n") || "(无 stderr 输出)",
       watcherOutput: detail || null,
     });
-  }, 10_000);
+  };
+  setTimeout(() => decide(false), 10_000);
 }
 
 /**
@@ -971,6 +990,13 @@ async function startBackend(): Promise<void> {
       const message = data.toString().trim();
       if (message) {
         console.log(`[Backend] ${message}`);
+        // ts-node-dev 的 restart() 会往 stdout 打 "Restarting: <file> has been modified"，
+        // 这是判定热重载的唯一硬证据（Windows 下 SIGTERM=TerminateProcess，退出码与日志都和异常死亡一样）
+        const plain = message.replace(/\u001b\[[0-9;]*m/g, "");
+        if (/\[(INFO|WARN)\]\s*(Restarting|Reinitializing TS compilation)/.test(plain)) {
+          lastHotReloadNoticeAt = Date.now();
+          log.info(`[BackendReload] ${plain}`);
+        }
       }
 
       // // 开发模式：通过日志检测启动成功（开发环境固定端口 3000）

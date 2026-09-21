@@ -173,8 +173,12 @@ const overviewTempExpanded = ref(false);
  *   才写它；自动逻辑绝不触碰，空间拉宽后按它还原（折叠前是关的就保持关）。
  * - asideFit：容器减去面板占位（ASIDE_TOTAL=288）后仍放得下消息列（MSG_MAX_WIDTH=744）。
  * - overviewTempExpanded：空间不足时的临时展开——可看但不落状态，点击面板外/空间变化即收起。
- * 面板可见 = overviewVisible && (asideFit || overviewTempExpanded)；
+ * 面板可见 = (overviewVisible && asideFit) || overviewTempExpanded；
  * 空间不足时面板自动"折叠"（不渲染，恢复小按钮常显供临时展开），overviewVisible 冻结不变。
+ *
+ * 临时展开必须是独立的显示来源，不能写成 overviewVisible && (asideFit || temp)：
+ * overviewVisible 只表达"空间足够时的常驻意图"，若它持久化为 false 而当前空间不足，
+ * 恢复分支只写 temp → 与意图相与恒为 false，头栏按钮点了毫无反应（死状态）。
  */
 const ASIDE_WIDTH = 280;
 const ASIDE_GAP = 8;
@@ -209,9 +213,9 @@ watch(
   { immediate: true },
 );
 
-/** 面板实际可见：用户意图开 &&（空间足够 || 空间不足时的临时展开） */
-const overviewPanelShown = computed(() =>
-  overviewVisible.value && (asideFit.value || overviewTempExpanded.value),
+/** 面板实际可见：（意图开 && 空间足够）或 空间不足时的临时展开 */
+const overviewPanelShown = computed(
+  () => (overviewVisible.value && asideFit.value) || overviewTempExpanded.value,
 );
 
 /** 避让占位宽：仅"用户意图开 && 空间足够"时占位（撑开避让列让消息列让位）——与浮层面板各管各的 */
