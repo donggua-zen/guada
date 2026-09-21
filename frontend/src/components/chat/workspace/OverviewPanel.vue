@@ -3,19 +3,6 @@
        数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store、会话待办、后台进程。
        布局：分组标题 + 下属行（Git 工具 / 待办事项 / 后台进程 / 浏览器），默认平铺展开。 -->
   <aside class="overview-panel">
-    <!-- 标题行 -->
-    <div class="overview-header">
-      <span class="overview-title">{{ t('git.overviewTitle') }}</span>
-      <div class="overview-header-actions">
-        <!-- 重新检测：手动刷新 git 状态（覆盖 git init / 仓库状态变化等 watcher 无法感知的场景） -->
-        <GdTooltip :content="t('git.refresh')" placement="bottom">
-          <button class="overview-collapse-btn" :disabled="git.refreshing" @click="git.refresh()">
-            <el-icon :size="14" :class="{ 'is-loading': git.refreshing }"><ArrowSync20Regular /></el-icon>
-          </button>
-        </GdTooltip>
-      </div>
-    </div>
-
     <div class="overview-rows">
       <!-- ── Git 工具：默认隐藏，后端确认是 git 仓库才出现（非仓库/未装 git 不占位） ── -->
       <section v-if="git.isGitRepo" class="overview-section">
@@ -203,7 +190,6 @@ import { ArrowDown, Close } from "@element-plus/icons-vue";
 import {
   BranchFork16Regular, ArrowUpload16Regular,
   Add16Regular,
-  ArrowSync20Regular,
   Flowchart20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
@@ -523,54 +509,19 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
 }
 
-/* 标题行（无下划线） */
-.overview-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-  height: 38px;
-  padding: 0 10px 0 14px;
-}
-.overview-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--gd-color-text-gray);
-  text-transform: uppercase;
-}
-.overview-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.overview-collapse-btn .is-loading {
-  animation: overview-spin 1s linear infinite;
-}
-.overview-collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--gd-color-text-gray);
-  cursor: pointer;
-}
-.overview-collapse-btn:hover {
-  background: var(--gd-color-sidebar-bg-hover);
-  color: var(--gd-color-text);
-}
+/* 标题行（含「重新检测」按钮）已移除：面板常驻悬浮在聊天列右侧，
+   git 状态由 watcher + SSE 驱动，标题行只是重复占位。需要手动重检时恢复此块即可：
+   .overview-header / .overview-title / .overview-header-actions / .overview-collapse-btn
+   + 模板里的标题行 + ArrowSync20Regular 导入（git.refresh 的唯一入口） */
 
-/* 行列表：高度随内容自适应（悬浮卡片），超高时内部滚动 */
+/* 行列表：高度随内容自适应（悬浮卡片），超高时内部滚动；
+   顶部内边距承担原标题行让出的呼吸感 */
 .overview-rows {
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
   max-height: calc(100vh - 140px);
-  padding: 2px 8px 12px;
+  padding: 5px 4px 6px;
   display: flex;
   flex-direction: column;
 }
@@ -580,19 +531,19 @@ async function createBrowser(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding-top: 10px;
+  padding-top: 5px;
 }
 .overview-section + .overview-section {
-  margin-top: 12px;
-  padding-top: 14px;
+  margin-top: 6px;
+  padding-top: 7px;
   position: relative;
 }
 .overview-section + .overview-section::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 8px;
-  right: 8px;
+  left: 4px;
+  right: 4px;
   height: 1px;
   background: var(--gd-color-surface-border);
 }
@@ -600,7 +551,7 @@ async function createBrowser(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 8px 5px;
+  padding: 0 4px 3px;
   font-size: var(--gd-size-text-base);
   font-weight: 400;
   color: var(--gd-color-text-disabled);
@@ -620,7 +571,7 @@ async function createBrowser(): Promise<void> {
   gap: 8px;
   width: 100%;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 4px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -702,7 +653,7 @@ async function createBrowser(): Promise<void> {
 }
 
 /* 待办列表样式段已随分区迁移至 SessionTodoCard（对话流下方）；
-   @keyframes overview-spin 保留：collapse-btn / process-spinner 仍引用 */
+   @keyframes overview-spin 保留：process-spinner 仍引用 */
 @keyframes overview-spin {
   to { transform: rotate(360deg); }
 }
@@ -711,14 +662,14 @@ async function createBrowser(): Promise<void> {
 .overview-process-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px 8px;
+  padding: 1px 2px 2px 4px;
   gap: 1px;
 }
 .overview-process-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
+  padding: 1px 2px;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -781,7 +732,7 @@ async function createBrowser(): Promise<void> {
 .overview-workflow-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px;
+  padding: 1px 2px 2px;
 }
 .wf-run + .wf-run {
   margin-top: 6px;
@@ -790,7 +741,7 @@ async function createBrowser(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
+  padding: 1px 2px;
   min-width: 0;
   cursor: pointer;
   border-radius: 4px;
@@ -869,7 +820,7 @@ async function createBrowser(): Promise<void> {
 .wf-agent {
   position: relative;
   /* 与标题行同宽同起点；左内边距容纳树形线列（线对齐标题行圆点下方） */
-  padding: 3px 4px 3px 24px;
+  padding: 2px 2px 2px 24px;
   border-radius: 4px;
 }
 /* GdTooltip 渲染 inline trigger 包装器：撑满行宽，hover 背景才铺满而非仅包内容 */
@@ -932,8 +883,8 @@ async function createBrowser(): Promise<void> {
 }
 /* 查看全部（进工作流审阅标签） */
 .wf-view-all {
-  margin: 4px 4px 0;
-  padding: 2px 4px;
+  margin: 2px 2px 0;
+  padding: 1px 2px;
   border: none;
   background: transparent;
   font-size: 11px;
@@ -973,13 +924,13 @@ async function createBrowser(): Promise<void> {
 .overview-subagent-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px;
+  padding: 1px 2px 2px;
 }
 .overview-subagent {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 4px;
+  padding: 2px 2px;
   border-radius: 4px;
   cursor: pointer;
   min-width: 0;
@@ -1015,8 +966,8 @@ async function createBrowser(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin: 2px 0 1px;
-  padding: 2px 4px;
+  margin: 1px 0;
+  padding: 1px 2px;
   border: none;
   background: none;
   cursor: pointer;
@@ -1034,21 +985,21 @@ async function createBrowser(): Promise<void> {
   transform: rotate(180deg);
 }
 .overview-subagent--frozen {
-  margin-left: 14px;
+  margin-left: 7px;
 }
 
 /* 浏览器列表（平铺展开） */
 .overview-browser-list {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 4px 8px;
+  padding: 1px 2px 2px 4px;
   gap: 1px;
 }
 .overview-browser-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
+  padding: 1px 2px;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -1085,7 +1036,7 @@ async function createBrowser(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 4px;
+  padding: 1px 2px;
   border: none;
   border-radius: 4px;
   background: transparent;
