@@ -51,6 +51,10 @@
                         <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
                             <el-icon :size="13"><Flowchart20Regular /></el-icon>
                         </span>
+                        <!-- 差异/编辑记录图标 -->
+                        <span v-else-if="tab.type === 'diff'" class="tab-favicon tab-git">
+                            <el-icon :size="13"><Code20Regular /></el-icon>
+                        </span>
                         <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                         <span class="tab-close"
                             @click.stop="closeTab(tab)">
@@ -109,6 +113,9 @@
                 <!-- 工作流审阅标签（终态归档 + 运行中快照合并，行展开看成员/日志/结果） -->
                 <WorkflowHistoryPanel v-if="activeTab?.type === 'workflow' && sessionId" class="h-full"
                     :session-id="sessionId" />
+                <!-- 差异/编辑记录标签（文件变更历史，多次操作用 op-tabs 展示） -->
+                <FileDiffPanel v-if="activeTab?.type === 'diff'" class="h-full"
+                    :entry="activeTab ? tabStore.getDiffEntry(activeTab.key) : null" />
                 <!-- 浏览器标签（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
                 <BrowserPreviewPlaceholder v-if="isElectron"
                     v-show="activeTab?.type === 'browser' && !!browserStore.activeWindowId" />
@@ -185,7 +192,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular } from '@vicons/fluent';
+import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
@@ -193,6 +200,7 @@ import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SubagentChatTab from './SubagentChatTab.vue';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel.vue';
+import FileDiffPanel from './FileDiffPanel.vue';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
 import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
@@ -248,6 +256,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
     if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
     if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
+    if (tab.type === 'diff') return tab.name || tab.path || tab.key;
     return tab.title || t('chat.workspace.unnamedWindow');
 }
 
@@ -459,12 +468,17 @@ async function createBrowserTab(): Promise<void> {
 
 // ── 预览标签缓存：保存当前会话状态到 localStorage ──
 
+// diff 标签仅存运行时 Map、不持久化；序列化缓存时剔除，避免还原出无内容的死标签
+function buildTabCacheSnapshot(): { activeTabKey: string | null; tabs: UnifiedTab[] } {
+    const tabs = tabStore.tabs.filter(t => t.type !== 'diff').map(t => ({ ...t }));
+    const active = tabStore.activeTabKey;
+    const activeIsDiff = active ? active.startsWith('diff:') : false;
+    return { activeTabKey: activeIsDiff ? null : active, tabs };
+}
+
 function savePreviewCache(): void {
     if (!props.sessionId) return;
-    previewTabCache.saveSession(props.sessionId, {
-        activeTabKey: tabStore.activeTabKey,
-        tabs: tabStore.tabs.map(t => ({ ...t })),
-    });
+    previewTabCache.saveSession(props.sessionId, buildTabCacheSnapshot());
 }
 
 // 自动保存：当标签列表、激活标签变化时（排除会话切换期间的自动保存）
@@ -1364,10 +1378,7 @@ watch(() => props.sessionId, async (newSessionId) => {
     const isRealSessionSwitch = prevSessionId !== null && prevSessionId !== newSessionId;
     if (isRealSessionSwitch) {
         // 保存旧会话缓存：必须用 prevSessionId，不能用 props.sessionId（已指向新会话）
-        previewTabCache.saveSession(prevSessionId, {
-            activeTabKey: tabStore.activeTabKey,
-            tabs: tabStore.tabs.map(t => ({ ...t })),
-        });
+        previewTabCache.saveSession(prevSessionId, buildTabCacheSnapshot());
         // 跳过 clearAll 触发的自动保存，避免空标签覆盖新会话缓存
         skipNextSave = true;
         // 旧会话解除 file 订阅（SSE 连接由 OverviewPanel 常驻持有，勿断开）

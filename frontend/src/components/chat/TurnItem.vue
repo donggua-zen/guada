@@ -221,9 +221,6 @@
     <!-- 图片预览 -->
     <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
       :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
-
-    <!-- 文件变更 Diff 弹窗 -->
-    <FileDiffDialog v-model="diffDialogVisible" :entry="activeDiffEntry" />
   </div>
 </template>
 
@@ -248,11 +245,12 @@ import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
-import FileDiffDialog from './message-item/FileDiffDialog.vue';
 import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { apiService } from '@/services/ApiService';
+import { useTabStore } from '@/stores/tab';
+import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
 
 const { toast } = usePopup();
@@ -390,12 +388,14 @@ const displayGroups = computed<DisplayGroup[]>(() => {
 
 // 文件变更记录
 const { fileChanges } = useFileChanges(activeContents);
-const diffDialogVisible = ref(false);
-const activeDiffEntry = ref<FileChangeEntry | null>(null);
 
+const layoutStore = useLayoutStore();
+const tabStore = useTabStore();
+
+// 点击 diff：改为在侧边栏以「编辑记录」标签展示（不再弹窗）
 const openDiffDialog = (entry: FileChangeEntry) => {
-  activeDiffEntry.value = entry;
-  diffDialogVisible.value = true;
+  layoutStore.setWorkspaceVisible(true);
+  nextTick(() => tabStore.openDiffTab(entry, props.turn.id));
 };
 
 // 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
