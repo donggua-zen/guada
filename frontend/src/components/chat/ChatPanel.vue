@@ -7,10 +7,10 @@
       <div class="scroll-inner">
         <div class="scroll-main">
           <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
-          <div class="chat-messages max-w-186 w-full mx-auto pt-5 flex-1">
+          <div class="chat-messages chat-column w-full mx-auto pt-5 flex-1">
             <template v-if="showSkeleton">
               <div class="absolute inset-0 z-1 overflow-hidden">
-                <div class="px-5 max-w-186 mx-auto h-full flex flex-col py-10 ">
+                <div class="px-5 chat-column mx-auto h-full flex flex-col py-10 ">
                   <MessageSkeleton :count="2" />
                 </div>
               </div>
@@ -51,8 +51,6 @@
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                     @branch="branchFromTurn"
                     :session-id="currentSessionId || undefined" />                </template>
-                <!-- 会话待办卡：对话流下方、滚动区内跟随滚动（独立组件不挂 turn；REST+todo_updated SSE 契约不变） -->
-                <SessionTodoCard :session-id="currentSessionId || undefined" />
                 <!-- <div class="min-h-60"></div> -->
 
                 <!-- 流式输出状态指示 -->
@@ -64,8 +62,8 @@
                内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。 -->
           <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
-            <div v-if="!hasWallpaper" class="chat-bottom-fade max-w-186 mx-auto"></div>
-            <div class="max-w-186 mx-auto flex flex-col items-start relative" style="z-index: 1;">
+            <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
+            <div class="chat-column mx-auto flex flex-col items-start relative" style="z-index: 1;">
 
               <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
               <Transition name="queue-drawer">
@@ -89,6 +87,9 @@
                   </el-button>
                 </div>
               </div>
+
+              <!-- 浮动 TODO 条：悬浮在输入区上方，不跟随滚动 -->
+              <FloatingTodoBar :session-id="currentSessionId || undefined" />
 
               <div class="w-full flex items-center relative">
 
@@ -190,7 +191,7 @@ import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/
 // 组件导入
 import TurnItem from "./TurnItem.vue";
 import EventCard from "./EventCard.vue";
-import SessionTodoCard from "./SessionTodoCard.vue";
+import FloatingTodoBar from "./FloatingTodoBar.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
@@ -324,7 +325,7 @@ let lastScrollTop = 0;
 // ── 右侧 aside（工作区概览）自适应 ──
 // 滚动条恒定 10px（ScrollContainer ::-webkit-scrollbar + scrollbar-gutter），
 // 概览 absolute 定位在滚动条左侧；aside 可见即实占空间（避让占位列恒占位）：
-// 消息(≤ max-w-186)自动在剩余区内居中。
+// 消息(≤ --gd-chat-column-width)自动在剩余区内居中。
 const SCROLLBAR_W = 10;
 const ASIDE_GAP = 8;
 /** aside 定位：right = 滚动条宽 + 间距（位于滚动条左侧） */
@@ -1217,15 +1218,23 @@ function scrollToMessage(messageId: string) {
   min-width: 0;
 }
 
-/* 消息列：basis = 目标宽 744（不塌零），shrink 权重小 → 几乎不缩；
+/* 消息列：basis = 目标宽（不塌零），shrink 权重小 → 几乎不缩；
    空间不足时负空间几乎全由占位承担，占位缩到 0 后消息才缩。
    position:relative 让 absolute 骨架屏相对消息列宽（随避让让出） */
 .scroll-main {
   position: relative;
-  flex: 1 1 744px;
+  flex: 1 1 var(--gd-chat-column-width);
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 对话列宽度：唯一真相是 --gd-chat-column-width（style.css）。
+   原先写 Tailwind 的 max-w-186，浮动小窗要靠 :deep(.max-w-186) 反选才能覆盖，
+   类名即尺寸——改名/换刻度就静默失效，故收成本语义类。
+   JS 侧镜像见 ChatPage.vue 的 MSG_MAX_WIDTH，改 token 时同步。 */
+.chat-column {
+  max-width: var(--gd-chat-column-width);
 }
 
 /* 避让占位（消息行右端 = 滚动条左侧）：shrink 权重极大（100×268）

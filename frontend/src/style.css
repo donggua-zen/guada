@@ -66,7 +66,6 @@
   --gd-size-overview-panel-radius: 12px;
   --gd-color-bg: #fdfdfd;
   --gd-color-border: #e8e8e8;
-  --gd-code-block-bg: #f8f8f8;
 
   --gd-color-bubble-user-bg: #f0f0f0;
   --gd-color-bubble-user-text: #1f2937;
@@ -74,7 +73,6 @@
   --gd-color-bubble-assitant-bg: transparent;
   --gd-color-bubble-assitant-text: #0d0d0d;
   --gd-color-bubble-assitant-border: none;
-  --gd-color-bubble-assitant-text-strong: #17181a;
 
   --gd-color-sidebar-bg: #f6f6f6;
   --gd-color-sidebar-bg-active: #2631480f;
@@ -115,6 +113,65 @@
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
   --gd-size-rounded-radius: 18px;
+
+  /* ====================
+     字体族与对话 Markdown 排版原语
+     --gd-md-font-size 是排版唯一旋钮：行高、标题阶梯、代码尺寸、块间距全部由它派生。
+     将来做「用户自定义字号」只需覆盖这一个变量（或把它绑到设置项），整段 Markdown
+     会等比放大而不会撑破某处写死的 px。阶梯用「字号 + Npx」而非倍数：12px 与 18px
+     基准下同一倍数会让标题忽大忽小，加法增量在两端都保持合理层级。
+     ==================== */
+  --gd-font-sans:
+    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --gd-font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+
+  --gd-md-font-size: var(--gd-size-text-base);
+  --gd-md-font-family: var(--gd-font-sans);
+  /* 标题/加粗默认与正文同族（Qoder 即如此）：以前在此硬换 Segoe UI Variable，
+     会让同一行 Latin 字在中文字体与 Segoe 之间跳字宽。保留钩子供主题覆盖。 */
+  --gd-md-heading-font-family: var(--gd-md-font-family);
+  --gd-md-heading-tracking: -0.025em;
+  /* 绝对尺寸旋钮（不随字号派生） */
+  --gd-md-radius: 8px;
+  --gd-md-inline-code-radius: 4px;
+  --gd-md-code-header-height: 36px;
+  --gd-md-code-max-height: 280px; /* 代码块折叠高度，超出走底部展开条 */
+  /* 相对 --gd-md-font-size 派生的行高/阶梯/间距不在此处：见 markdown.css 顶部的
+     .markdown-text, .custom-code-block 规则。放在 :root 会漏掉容器级覆盖。 */
+
+  /* Markdown 语义色：浅色一处定义，暗色只覆盖确实需要变的项（填充层、分隔线）
+     注意：正文/加粗的颜色不在此列——它由消息气泡（.message-item__card）决定，
+     markdown.css 一律用 inherit，避免思考区等次要语境被强行拉成主文本色。 */
+  --gd-md-text-secondary: var(--gd-color-text-gray);
+  --gd-md-text-tertiary: #8a8a8a; /* 三级文本（h6/代码块图标/占位）：不用 --gd-color-text-disabled，它在暗色下过暗 */
+  --gd-md-accent: var(--gd-color-secondary); /* 链接与引用条共用强调色，主题可换 */
+  --gd-md-fill-secondary: #efefef; /* 表头灰带、图标 hover 底 */
+  --gd-md-fill-tertiary: #f6f6f6; /* 代码块与行内码底（原 --gd-code-block-bg: #f8f8f8） */
+  --gd-md-scrollbar-thumb: rgba(0, 0, 0, 0.2); /* 代码块/表格滚动条滑块 */
+  --gd-md-code-header-text: var(--gd-md-text-secondary);
+  /* 加粗字重旋钮：Qoder 用 500；中文在 500 下偏"灰"，需要更实感时覆盖成 600 */
+  --gd-md-strong-weight: 500;
+  /* 对话列宽（消息列 max-width）：markdown.css 的预览 iframe 与 ChatPanel 的 .chat-column 共用。
+     ChatPage.vue 的 MSG_MAX_WIDTH 在 setup 时用 getComputedStyle 读同一个值，不再各写一份字面量。 */
+  --gd-chat-column-width: 744px;
+  /* 语法高亮色（对齐 Qoder 的 cursor-light 调色板）：highlight.js 出 .hljs-* 类，
+     这里按语义角色上色，两套主题共用同一组类名选择器，不再另写 .dark .hljs-* 分支 */
+  --gd-md-syntax-text: #141414;
+  --gd-md-syntax-comment: #6b6b66;
+  --gd-md-syntax-keyword: #a30034;
+  --gd-md-syntax-string: #7565cc;
+  --gd-md-syntax-number: #005293;
+  --gd-md-syntax-function: #cd4500;
+  --gd-md-syntax-type: #005293;
+  --gd-md-syntax-property: #654dc0;
+  --gd-md-syntax-tag: #007041;
+  --gd-md-syntax-punctuation: #5a5a57;
+  --gd-md-border: var(--gd-color-border);
+  --gd-md-divider: var(--gd-color-surface-border);
+  --gd-md-list-marker: var(--gd-md-text-secondary);
 
   /* 布局卡片：内容区圆角卡片 + 卡片外缝隙底色（默认同侧栏色，缝隙融入侧栏） */
   --gd-layout-card-gap: 4px;
@@ -253,7 +310,6 @@ html.dark {
   --gd-color-bubble-assitant-bg: transparent;
   --gd-color-bubble-assitant-text: var(--gd-color-text);
   --gd-color-bubble-assitant-border: transparent;
-  --gd-color-bubble-assitant-text-strong: var(--gd-color-text);
 
   --gd-size-dialog-rounded-radius: 12px;
 
@@ -275,8 +331,23 @@ html.dark {
     --gd-color-gray-900: #f9fafb;
     --gd-color-gray-950: #ffffff; */
 
-  /* 代码块背景（暗色）：:root 定义了亮色 #f8f8f8，此处覆盖避免暗色下代码块保持白底 */
-  --gd-code-block-bg: #2f3131;
+  /* 对话 Markdown（暗色）：文本/强调/边框类 token 已跟随主题变量自动切换，
+     这里只需给出「比页面底色 #222 更亮一档」的两个填充层，避免出现白底代码块。 */
+  --gd-md-fill-secondary: #303131;
+  --gd-md-fill-tertiary: #2a2b2b;
+  --gd-md-scrollbar-thumb: rgba(255, 255, 255, 0.22);
+  --gd-md-divider: oklch(28% 0.02 250);
+  /* 语法高亮（暗色）：Qoder cursor-dark 调色板，与亮色同一组类名选择器 */
+  --gd-md-syntax-text: #f0f0f0;
+  --gd-md-syntax-comment: #9d9d98;
+  --gd-md-syntax-keyword: #82d2ce;
+  --gd-md-syntax-string: #e394dc;
+  --gd-md-syntax-number: #f8c762;
+  --gd-md-syntax-function: #efb080;
+  --gd-md-syntax-type: #87c3ff;
+  --gd-md-syntax-property: #aaa0fa;
+  --gd-md-syntax-tag: #87c3ff;
+  --gd-md-syntax-punctuation: #d6d6dd;
 
   /* 布局卡片（暗色）：描边/阴影随暗色系（缝隙底色自动跟随暗色侧栏色，无需覆盖） */
   --gd-layout-card-border: var(--gd-color-border);
@@ -382,9 +453,7 @@ body {
   height: 100vh;
   margin: 0;
   padding: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--gd-font-sans);
   overflow: hidden;
   /* 给 body 设置相对定位，创建 stacking context，使 backdrop-filter 能正确工作 */
   position: relative;

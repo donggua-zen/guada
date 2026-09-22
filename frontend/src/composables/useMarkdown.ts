@@ -145,12 +145,64 @@ export interface MarkdownOptions {
   escapeHtml?: boolean;
 }
 
+/** 代码块超过该行数即折叠为 --gd-md-code-max-height 高度，出现底部展开条 */
+const CODE_COLLAPSE_MIN_LINES = 12;
+
+const copySvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g fill="none"><path d="M4 4.085V10.5a2.5 2.5 0 0 0 2.336 2.495L6.5 13h4.414A1.5 1.5 0 0 1 9.5 14H6a3 3 0 0 1-3-3V5.5a1.5 1.5 0 0 1 1-1.415zM11.5 2A1.5 1.5 0 0 1 13 3.5v7a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 5 10.5v-7A1.5 1.5 0 0 1 6.5 2h5zm0 1h-5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5z" fill="currentColor"></path></g></svg>`;
+
+const wrapSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11"/><path d="M2.5 8h7.5a2.4 2.4 0 0 1 0 4.8H7.2"/><path d="M2.5 12.8h3.6"/><path d="m10.6 10.4 2.2 2.4-2.2 2.4"/></svg>`;
+
+const chevronSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M8 10.9 3.6 6.5l1-1L8 8.9l3.4-3.4 1 1z"/></svg>`;
+
+/**
+ * markdown 代码块头部三类操作（复制 / 折行切换 / 折叠展开）的统一委托处理。
+ *
+ * code renderer 只产出 markup，行为不在 HTML 里，因此每个 v-html 消费方都要挂一次点击
+ * 委托。集中到这里，对话流与插件文档弹窗等才不会各写一份（或某处按了没反应）。
+ * @param onCopyResult 复制结果回调：各消费方按自己的提示体系落地（toast / 静默）
+ */
+export function delegateMarkdownCodeClick(
+  event: MouseEvent,
+  onCopyResult?: (ok: boolean) => void,
+): void {
+  const target = event.target as HTMLElement | null;
+  if (!target || typeof target.closest !== "function") return;
+  const block = target.closest(".custom-code-block");
+  if (!block) return;
+
+  const copyBtn = target.closest(".copy-code-button") as HTMLElement | null;
+  if (copyBtn) {
+    const text = block.querySelector("code")?.textContent ?? "";
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        // 图标自身给一次短暂强调色反馈（与 Qoder 复制后转 success 一致）
+        copyBtn.classList.add("is-copied");
+        setTimeout(() => copyBtn.classList.remove("is-copied"), 1200);
+        onCopyResult?.(true);
+      })
+      .catch(() => onCopyResult?.(false));
+    return;
+  }
+
+  const wrapBtn = target.closest(".code-wrap-button") as HTMLElement | null;
+  if (wrapBtn) {
+    const wrapped = block.classList.toggle("is-wrap");
+    wrapBtn.setAttribute("aria-pressed", wrapped ? "true" : "false");
+    return;
+  }
+
+  const expandBtn = target.closest(".code-expand") as HTMLElement | null;
+  if (expandBtn) {
+    const expanded = block.classList.toggle("is-expanded");
+    expandBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+}
+
 /**
  * 创建 Marked 实例
  */
 export function createMarkedInstance(options?: MarkdownOptions): Marked {
-  const coypysvg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 16 16"><g fill="none"><path d="M4 4.085V10.5a2.5 2.5 0 0 0 2.336 2.495L6.5 13h4.414A1.5 1.5 0 0 1 9.5 14H6a3 3 0 0 1-3-3V5.5a1.5 1.5 0 0 1 1-1.415zM11.5 2A1.5 1.5 0 0 1 13 3.5v7a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 5 10.5v-7A1.5 1.5 0 0 1 6.5 2h5zm0 1h-5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5z" fill="currentColor"></path></g></svg>`;
-
   const marked = new Marked(
     markedHighlight({
       emptyLangClass: "hljs",
@@ -182,14 +234,23 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
       return `<div class="custom-table-block"><table>${h}</table></div>`;
     },
     code(code: Tokens.Code): string {
-      const lang = code.lang || "text";
+      const rawLang = code.lang || "text";
+      // fence 信息串来自模型输出：只允许类名字符集进入 class / 文案，避免属性逃逸
+      const lang = rawLang.replace(/[^a-zA-Z0-9_+-]/g, "").toLowerCase() || "text";
+      const lines = code.text.split("\n").length;
+      // 折叠与否按行数判定（对齐 Qoder 的 280px 折叠高度）：读 DOM 尺寸会在流式期反复触发强制布局
+      const collapsible = lines > CODE_COLLAPSE_MIN_LINES;
       return `
-        <div class="custom-code-block">
+        <div class="custom-code-block${collapsible ? " is-collapsible" : ""}">
           <div class="code-header">
-                <span class="code-language">${lang}</span>
-                <button class="copy-code-button"><i role="img">${coypysvg}</i></button>
+            <span class="code-language">${lang}</span>
+            <span class="code-actions">
+              <button class="code-wrap-button" aria-pressed="false" title="切换折行">${wrapSvg}</button>
+              <button class="copy-code-button" title="复制代码">${copySvg}</button>
+            </span>
           </div>
-          <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
+          <div class="code-scroll"><pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre></div>
+          ${collapsible ? `<button class="code-expand" aria-expanded="false" title="展开/收起代码块">${chevronSvg}</button>` : ""}
         </div>
       `;
     },
@@ -361,7 +422,7 @@ html,body{
   }
 
 </style>
-<style>:root{html,body{margin:0;padding:0;font-size:15px;color:var(--gd-color-text);}.markdown-text{max-width:768px;margin:0 auto;}</style>
+<style>:root{html,body{margin:0;padding:0;font-size:var(--gd-md-font-size);color:var(--gd-color-text);}.markdown-text{max-width:var(--gd-chat-column-width);margin:0 auto;}</style>
 </head>
 <body style="padding:16px;overflow-x:auto;overflow-y:auto;height:100%;">
 <div class="markdown-text">
@@ -369,14 +430,26 @@ ${html}
 </div>
 <script>
 (function(){
-  // 代码块复制
+  // 代码块头部操作：复制 / 折行切换 / 展开收起（与主界面同一套 class 约定）
   document.addEventListener('click', function(e){
-    var btn = e.target.closest('.copy-code-button');
-    if(!btn) return;
-    var block = btn.closest('.custom-code-block');
-    var code = block && block.querySelector('code');
-    if(code && navigator.clipboard){
-      navigator.clipboard.writeText(code.textContent || '').catch(function(){});
+    var block = e.target.closest('.custom-code-block');
+    if(!block) return;
+    if(e.target.closest('.copy-code-button')){
+      var code = block.querySelector('code');
+      if(code && navigator.clipboard){
+        navigator.clipboard.writeText(code.textContent || '').catch(function(){});
+      }
+      return;
+    }
+    if(e.target.closest('.code-wrap-button')){
+      var wrapBtn = e.target.closest('.code-wrap-button');
+      var on = block.classList.toggle('is-wrap');
+      wrapBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      return;
+    }
+    if(e.target.closest('.code-expand')){
+      var expanded = block.classList.toggle('is-expanded');
+      e.target.closest('.code-expand').setAttribute('aria-expanded', expanded ? 'true' : 'false');
     }
   });
   // 链接点击 → postMessage 通知父页面

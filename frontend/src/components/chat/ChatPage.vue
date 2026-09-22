@@ -183,7 +183,12 @@ const overviewTempExpanded = ref(false);
 const ASIDE_WIDTH = 280;
 const ASIDE_GAP = 8;
 const ASIDE_TOTAL = ASIDE_WIDTH + ASIDE_GAP;
-const MSG_MAX_WIDTH = 744; // max-w-186
+/** 对话列目标宽：取自 CSS token --gd-chat-column-width（样式侧唯一真相），
+ *  此处只在 setup 读一次快照，不参与逐帧计算。 */
+const MSG_MAX_WIDTH =
+  Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--gd-chat-column-width"),
+  ) || 744;
 
 /** 决策用容器宽（ResizeObserver 实时上报） */
 const chatDecisionWidth = ref(0);

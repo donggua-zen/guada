@@ -95,8 +95,7 @@
           <template v-for="(group, groupIndex) in displayGroups" :key="group.id">
             <template v-if="group.type === 'content'">
               <template v-for="item in group.items" :key="item.id">
-                <MarkdownContent class="message-item__text markdown-text" @click="handleClick"
-                  :content="item.content || ''" />
+                <MarkdownContent class="message-item__text markdown-text" :content="item.content || ''" />
               </template>
             </template>
             <div v-else class="process-group">
@@ -698,23 +697,6 @@ const handleImageClick = (file: any) => {
   showImageViewer.value = true;
 };
 
-// 代码复制
-const handleClick = (event: MouseEvent) => {
-  const target = event.target as HTMLElement;
-  if (target.closest('.copy-code-button')) {
-    const button = target.closest('.copy-code-button') as HTMLElement;
-    const codeBlock = button.closest('.custom-code-block');
-    const codeElement = codeBlock?.querySelector('code');
-    if (codeElement) {
-      navigator.clipboard.writeText(codeElement.textContent).then(() => {
-        toast.success(t('chat.turn.codeCopied'));
-      }).catch(err => {
-        console.error('复制失败:', err);
-        toast.error(t('common.copyFailed'));
-      });
-    }
-  }
-};
 </script>
 
 <style scoped>
@@ -848,22 +830,19 @@ const handleClick = (event: MouseEvent) => {
   border: none;
 }
 
-.assistant-section .message-item__card strong {
-  color: var(--gd-color-bubble-assitant-text-strong);
-}
-
 .assistant-section .message-item__wrapper {
   align-items: flex-start;
   width: 100%;
 }
 
-/* 消息文本 */
+/* 消息文本：字号/行高取自 markdown.css 的 --gd-md-* 体系（唯一旋钮 --gd-md-font-size），
+   用户气泡与助手正文共用，避免同一份文字有两处尺寸真相 */
 .message-item__text {
-  line-height: calc(var(--gd-size-text-base) * 1.6);
+  font-size: var(--gd-md-font-size);
+  line-height: var(--gd-md-line-height);
   color: inherit;
   max-width: 100%;
   vertical-align: middle;
-  font-size: var(--gd-size-text-base);
 }
 
 .user-section .message-item__text {
@@ -1043,8 +1022,4 @@ const handleClick = (event: MouseEvent) => {
 .max-iterations-notice {
   margin-top: 12px;
 }
-</style>
-<style>
-@import "@/assets/markdown.css";
-@import 'highlight.js/styles/foundation.css';
 </style>
