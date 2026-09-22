@@ -8,8 +8,8 @@ export interface UnifiedTab {
      * 'newtab' 仅作遗留兼容：起始页不占用标签栏（openNewTab 只清空 activeTabKey），
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
-    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'workflow' | 'newtab';
-    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'subagent:<subSessionId>' / 'workflow:<sessionId>' / 'newtab:<id>'
+    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'workflow' | 'diff' | 'newtab';
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'subagent:<subSessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;
@@ -28,6 +28,8 @@ export interface UnifiedTab {
     // processlog（后台进程日志）
     processId?: string;   // 后台进程 ID（ProcessManagerService entry.id）
     command?: string;     // 进程命令（标签标题与日志面板头部展示）
+    // diff（编辑记录标签：仅存骨架，FileChangeEntry 由 tabStore 运行时 Map 持有，不持久化）
+    turnId?: string;      // 所属回合 ID（标签 key 的一部分）
 }
 
 /**

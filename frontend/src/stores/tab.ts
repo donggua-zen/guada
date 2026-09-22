@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useBrowserWebviewStore } from './browserWebview'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
+import type { FileChangeEntry } from '@/composables/useFileChanges'
 
 /**
  * 标签 Store — 统一管理文件标签和浏览器标签的状态
@@ -27,6 +28,34 @@ export const useTabStore = defineStore('tab', () => {
 
     /** 当前激活的标签 key（'file:<path>' 或 'browser:<windowId>'） */
     const activeTabKey = ref<string | null>(null)
+
+    /**
+     * diff 标签的运行时数据源：tab.key → FileChangeEntry。
+     * 刻意不进 UnifiedTab（标签会被 previewTabCache 序列化到 localStorage，
+     * 而 entry 携带 oldText/newText 可能很大）；标签只存骨架，内容留在这里。
+     */
+    const diffEntries = new Map<string, FileChangeEntry>()
+
+    /**
+     * 打开"编辑记录"标签（同一回合同一文件复用同一标签，已存在则直接激活）。
+     * entry 是本回合从工具调用派生的编辑历史，多次编辑 = entry.operations 多条。
+     */
+    function openDiffTab(entry: FileChangeEntry, turnId: string): void {
+        const key = `diff:${turnId}:${entry.filePath}`
+        diffEntries.set(key, entry)
+        if (!tabs.value.some(t => t.key === key)) {
+            tabs.value.push({
+                type: 'diff', key, name: entry.fileName,
+                path: entry.filePath, turnId,
+            })
+        }
+        selectTab(key)
+    }
+
+    /** 取某 diff 标签的编辑记录数据（无则 null，如刷新后标签骨架已过滤不恢复） */
+    function getDiffEntry(key: string): FileChangeEntry | null {
+        return diffEntries.get(key) ?? null
+    }
 
     /** 打开 Git 审阅标签（标签唯一，已存在则直接激活） */
     function openGitTab(): void {
@@ -267,6 +296,7 @@ export const useTabStore = defineStore('tab', () => {
         const idx = tabs.value.findIndex(t => t.key === key)
         if (idx === -1) return
         tabs.value.splice(idx, 1)
+        if (key.startsWith('diff:')) diffEntries.delete(key)
         if (activeTabKey.value === key) {
             const next = tabs.value[idx] || tabs.value[idx - 1] || null
             if (next) {
@@ -326,6 +356,7 @@ export const useTabStore = defineStore('tab', () => {
     function clearAll(): void {
         tabs.value = []
         activeTabKey.value = null
+        diffEntries.clear()
     }
 
     return {
@@ -340,6 +371,8 @@ export const useTabStore = defineStore('tab', () => {
         openProcessLogTab,
         openSubAgentTab,
         openWorkflowTab,
+        openDiffTab,
+        getDiffEntry,
         selectTab,
         addTab,
         removeTab,

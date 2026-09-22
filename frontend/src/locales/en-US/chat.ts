@@ -289,11 +289,12 @@
 
   // ── 文件变更 ──
   fileChanges: {
-    summary: '{count} files modified in this round',
+    summary: 'Edited {count} files',
     viewDiff: 'View Diff',
     diff: 'Diff',
     dialogTitle: 'File Changes',
     dialogTitleWithName: 'File Changes: {name}',
+    noDiff: 'This file type has no line-by-line diff preview',
   },
 
   // ── 工作区 ──

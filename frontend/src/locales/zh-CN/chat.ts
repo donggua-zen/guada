@@ -289,11 +289,12 @@ export default {
 
   // ── 文件变更 ──
   fileChanges: {
-    summary: '本轮修改了 {count} 个文件',
+    summary: '已编辑 {count} 个文件',
     viewDiff: '查看 Diff',
     diff: 'Diff',
     dialogTitle: '文件变更',
     dialogTitleWithName: '文件变更: {name}',
+    noDiff: '该文件类型不支持逐行差异预览',
   },
 
   // ── 工作区 ──
