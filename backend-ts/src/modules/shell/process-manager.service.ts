@@ -884,21 +884,33 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (this.sandboxBinPath !== undefined) return this.sandboxBinPath;
 
     const isWindows = process.platform === "win32";
-    const binName = isWindows ? "sandbox.exe" : "sandbox";
+    // macOS and Linux share the extension-less `sandbox` name in the repo
+    // layout, but they are different binaries. A macOS build therefore ships
+    // an architecture-suffixed name and is preferred there, falling back to the
+    // bare name so a Linux-only checkout still resolves.
+    const binNames = isWindows
+      ? ["sandbox.exe"]
+      : process.platform === "darwin"
+        ? [`sandbox-macos-${process.arch}`, "sandbox"]
+        : ["sandbox"];
 
     const candidates: string[] = [];
     const isElectron = process.env.ELECTRON_APP === "true";
 
     if (isElectron && (process as any).resourcesPath) {
-      candidates.push(
-        path.join((process as any).resourcesPath, "sandbox", binName),
-      );
+      for (const binName of binNames) {
+        candidates.push(
+          path.join((process as any).resourcesPath, "sandbox", binName),
+        );
+      }
     }
 
     let dir = process.cwd();
     for (let i = 0; i < 4; i++) {
-      candidates.push(path.join(dir, "sandbox", binName));
-      candidates.push(path.join(dir, "build", "bin", binName));
+      for (const binName of binNames) {
+        candidates.push(path.join(dir, "sandbox", binName));
+        candidates.push(path.join(dir, "build", "bin", binName));
+      }
       const parent = path.dirname(dir);
       if (parent === dir) break;
       dir = parent;
@@ -916,7 +928,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.logger.warn(
-      `sandbox binary (${binName}) not found, confined sandbox modes will be unavailable`,
+      `sandbox binary (${binNames.join(" or ")}) not found, confined sandbox modes will be unavailable`,
     );
     this.sandboxBinPath = null;
     return null;

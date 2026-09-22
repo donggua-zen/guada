@@ -17,6 +17,7 @@
     "build:frontend": "pnpm --dir frontend run build",
     "build:electron-ts": "cd electron && tsc",
     "rebuild:backend-native": "node scripts/rebuild-native.js",
+    "patch:watcher": "node scripts/patch-parcel-watcher.mjs",
     "rebuild:backend-native:electron": "node scripts/rebuild-native-electron.js",
     "optimize:electron-deps": "node scripts/optimize-electron-deps.js",
     "optimize:electron-deps:mac": "cross-env SHARP_TARGET_PLATFORMS=darwin node scripts/optimize-electron-deps.js",
@@ -159,7 +160,13 @@
         }
       ],
       "icon": "build-resources/icon.icns",
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "extraResources": [
+        {
+          "from": "sandbox/sandbox-macos-arm64",
+          "to": "sandbox/sandbox-macos-arm64"
+        }
+      ]
     },
     "linux": {
       "target": [
