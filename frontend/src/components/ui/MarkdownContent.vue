@@ -1,16 +1,28 @@
 <template>
     <!-- 方案二：DOM 节点级增量更新 -->
-    <div class="markdown-content">
+    <div class="markdown-content" @click="handleCodeBlockClick">
         <div ref="markdownContainerRef"></div>
     </div>
 </template>
 <script setup lang="ts">
 import { watch, ref, onMounted, onBeforeUnmount } from 'vue';
-import { useMarkdown } from "../../composables/useMarkdown";
+import { ElMessage } from 'element-plus';
+import { useI18n } from 'vue-i18n';
+import { useMarkdown, delegateMarkdownCodeClick } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
 import DiffDOM from 'diff-dom';
 
 const { marked } = useMarkdown()
+const { t } = useI18n()
+
+// 代码块 markup 由 code renderer 产出，行为挂在本组件：所有 markdown 消费方
+// （对话流、思考区、插件文档…）都不必各写一遍委托，也不会出现"按钮按了没反应"。
+const handleCodeBlockClick = (event: MouseEvent) => {
+    delegateMarkdownCodeClick(event, (ok) => {
+        if (ok) ElMessage.success(t('chat.turn.codeCopied'));
+        else ElMessage.error(t('common.copyFailed'));
+    });
+};
 
 
 // 定义 Props - 类型化

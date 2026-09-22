@@ -201,8 +201,7 @@
                     </table>
                 </div>
                 <!-- 正文内容 -->
-                <div class="markdown-doc prose dark:prose-invert max-w-none" v-html="parsedDocumentation">
-                </div>
+                <MarkdownContent class="markdown-text" :content="bodyContent" />
             </div>
             <template #footer>
                 <el-button @click="showDocDialog = false">{{ t('common.close') }}</el-button>
@@ -318,7 +317,7 @@ import { RefreshRight, Loading, UploadFilled, Document, Close } from '@element-p
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
-import { useMarkdown } from '@/composables/useMarkdown'
+import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
@@ -358,9 +357,6 @@ const docError = ref<string | null>(null)
 const documentation = ref('')
 const currentSkillName = ref('')
 const currentSkillId = ref('')
-
-// Markdown 解析
-const { parseMarkdown } = useMarkdown()
 
 // 解析 YAML frontmatter
 interface SkillMeta {
@@ -469,10 +465,6 @@ const bodyContent = computed(() => {
 
     const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n([\s\S]*)$/)
     return match ? match[1].trim() : content.trim()
-})
-
-const parsedDocumentation = computed(() => {
-    return parseMarkdown(bodyContent.value)
 })
 
 // 安装相关状态
@@ -876,177 +868,29 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-@import "@/assets/markdown.css";
-
 /* 市场安装弹窗中按钮垂直排列，取消 Element Plus 默认水平按钮间距 */
 .market-install-actions :deep(.el-button + .el-button) {
     margin-left: 0;
 }
 
-
-/* 代码块容器 */
-.markdown-doc :deep(.custom-code-block) {
-    margin-bottom: 1em;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #e3e3e7;
-}
-
-.dark .markdown-doc :deep(.custom-code-block) {
-    border-color: #333;
-}
-
-/* 代码块头部 */
-.markdown-doc :deep(.code-header) {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 7px 12px;
-    background: #f3f3f5;
-    color: #222;
-    font-size: 0.8em;
-    border-bottom: 1px solid #e3e3e7;
-}
-
-.dark .markdown-doc :deep(.code-header) {
-    background: #2a2c30;
-    color: #e8e9ed;
-    border-color: #333;
-}
-
-.markdown-doc :deep(.code-language) {
-    font-weight: 600;
-    text-transform: uppercase;
-    color: #666;
-}
-
-.dark .markdown-doc :deep(.code-language) {
-    color: #8b8d95;
-}
-
-/* 代码块内容 */
-.markdown-doc :deep(pre.hljs) {
-    margin: 0;
-    border-radius: 0;
-    background: #fafafb !important;
-    padding: 16px;
-    overflow-x: auto;
-}
-
-.dark .markdown-doc :deep(pre.hljs) {
-    background: #1a1c20 !important;
-}
-
-.markdown-doc :deep(code.hljs) {
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.875em;
-    background: transparent !important;
-    display: block;
-    overflow-x: auto;
-}
-
-/* 行内代码 */
-.markdown-doc :deep(:not(pre) > code) {
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.875em;
-    background-color: #f0f0f0;
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: #e83e8c;
-}
-
-.dark .markdown-doc :deep(:not(pre) > code) {
-    background-color: #2a2c30;
-    color: #ff7b72;
-}
-
-.markdown-doc :deep(p) {
-    margin-bottom: 1em;
-    line-height: 1.6;
-}
-
-.markdown-doc :deep(h1),
-.markdown-doc :deep(h2),
-.markdown-doc :deep(h3),
-.markdown-doc :deep(h4) {
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
-    font-weight: 600;
-}
-
-.markdown-doc :deep(ul),
-.markdown-doc :deep(ol) {
-    margin-bottom: 1em;
-    padding-left: 1.5em;
-}
-
-.markdown-doc :deep(li) {
-    margin-bottom: 0.25em;
-}
-
-.markdown-doc :deep(blockquote) {
-    border-left: 4px solid #ddd;
-    padding-left: 1em;
-    color: #666;
-    margin-bottom: 1em;
-}
-
-.dark .markdown-doc :deep(blockquote) {
-    border-left-color: #444;
-    color: #999;
-}
-
-.markdown-doc :deep(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 1em;
-}
-
-.markdown-doc :deep(th),
-.markdown-doc :deep(td) {
-    border: 1px solid #ddd;
-    padding: 8px 12px;
-    text-align: left;
-}
-
-.dark .markdown-doc :deep(th),
-.dark .markdown-doc :deep(td) {
-    border-color: #444;
-}
-
-.markdown-doc :deep(th) {
-    background-color: #f6f8fa;
-    font-weight: 600;
-}
-
-.dark .markdown-doc :deep(th) {
-    background-color: #2a2c30;
-}
-
-/* 元信息表格样式 */
+/* 元信息表格样式
+   颜色全部取自 markdown token：暗色下变量值本身会翻转，无需再写 .dark 分支 */
 .skill-meta-table {
-    border-radius: 8px;
+    border-radius: var(--gd-md-radius);
     overflow: hidden;
-    border: 1px solid #e3e3e7;
-}
-
-.dark .skill-meta-table {
-    border-color: #333;
+    border: 1px solid var(--gd-md-border);
+    font-size: var(--gd-md-font-size);
 }
 
 .skill-meta-table table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9em;
 }
 
 .skill-meta-table td {
-    padding: 10px 14px;
-    border-bottom: 1px solid #e3e3e7;
-}
-
-.dark .skill-meta-table td {
-    border-color: #333;
+    padding: calc(var(--gd-md-font-size) - 4px) calc(var(--gd-md-font-size) + 6px);
+    border-bottom: 1px solid var(--gd-md-divider);
+    color: var(--gd-color-text);
 }
 
 .skill-meta-table tr:last-child td {
@@ -1055,24 +899,14 @@ onMounted(async () => {
 
 .skill-meta-table .meta-key {
     width: 100px;
-    background-color: #f6f8fa;
+    background-color: var(--gd-md-fill-secondary);
     font-weight: 600;
-    color: #444;
+    color: var(--gd-md-text-secondary);
     white-space: nowrap;
 }
 
-.dark .skill-meta-table .meta-key {
-    background-color: #2a2c30;
-    color: #b0b2b8;
-}
-
 .skill-meta-table .meta-value {
-    color: #333;
     word-break: break-word;
-}
-
-.dark .skill-meta-table .meta-value {
-    color: #e8e9ed;
 }
 
 /* All tags: flat gray style, no colored borders */

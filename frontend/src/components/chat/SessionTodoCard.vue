@@ -180,7 +180,7 @@ onUnmounted(() => {
   color: var(--gd-color-success);
 }
 .todo-icon--active {
-  color: var(--gd-color-secondary);
+  color: var(--gd-color-text);
 }
 .todo-icon--done {
   color: var(--gd-color-success);

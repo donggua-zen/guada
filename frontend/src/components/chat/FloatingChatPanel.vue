@@ -466,7 +466,7 @@ watch(() => layoutStore.floatingChatCollapsed, (collapsed) => {
   display: none;
 }
 
-.floating-chat-mode :deep(.max-w-186) {
+.floating-chat-mode :deep(.chat-column) {
   max-width: 100% !important;
 }
 

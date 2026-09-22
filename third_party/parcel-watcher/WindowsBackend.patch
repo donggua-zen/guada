@@ -1,0 +1,146 @@
+--- a/src/windows/WindowsBackend.cc
++++ b/src/windows/WindowsBackend.cc
+@@ -67,15 +67,21 @@
+   QueueUserAPC([](__in ULONG_PTR) {}, mThread.native_handle(), (ULONG_PTR)this);
+ }
+ 
+-class Subscription: public WatcherState {
++class Subscription: public WatcherState, public std::enable_shared_from_this<Subscription> {
+ public:
++  // Each in-flight ReadDirectoryChangesW keeps a strong reference to this
++  // subscription on the heap, released by its own completion callback, so the
++  // object can never be freed while the OS still owns a pointer to it.
++  struct PendingIo {
++    std::shared_ptr<Subscription> subscription;
++  };
++
+   Subscription(WindowsBackend *backend, WatcherRef watcher, std::shared_ptr<DirTree> tree) {
+     mRunning = true;
+     mBackend = backend;
+     mWatcher = watcher;
+     mTree = tree;
+     ZeroMemory(&mOverlapped, sizeof(OVERLAPPED));
+-    mOverlapped.hEvent = this;
+     mReadBuffer.resize(DEFAULT_BUF_SIZE);
+     mWriteBuffer.resize(DEFAULT_BUF_SIZE);
+ 
+@@ -110,7 +116,13 @@
+   }
+ 
+   virtual ~Subscription() {
+-    stop();
++    // Reaching here means no overlapped operation is in flight, since each one
++    // holds a strong reference. The handle is therefore safe to close.
++    mRunning = false;
++    if (mDirectoryHandle != INVALID_HANDLE_VALUE) {
++      CloseHandle(mDirectoryHandle);
++      mDirectoryHandle = INVALID_HANDLE_VALUE;
++    }
+   }
+ 
+   void run() {
+@@ -121,11 +133,14 @@
+     }
+   }
+ 
+-  void stop() {
+-    if (mRunning) {
+-      mRunning = false;
+-      CancelIo(mDirectoryHandle);
+-      CloseHandle(mDirectoryHandle);
++  // Only requests the stop: cancels pending reads without freeing anything.
++  // Actual destruction happens once the last completion callback releases its
++  // reference. CancelIo only affects I/O submitted by the calling thread, and
++  // unsubscribe runs on the NAPI thread, so CancelIoEx is required here.
++  void requestStop() {
++    mRunning = false;
++    if (mDirectoryHandle != INVALID_HANDLE_VALUE) {
++      CancelIoEx(mDirectoryHandle, NULL);
+     }
+   }
+ 
+@@ -135,6 +150,13 @@
+     }
+ 
+     // Asynchronously wait for changes.
++    // hEvent carries the in-flight operation's own strong reference, not this.
++    // That keeps the Subscription alive for the whole duration of the
++    // completion callback, so unsubscribing can never make us dereference
++    // freed memory.
++    auto *io = new PendingIo{shared_from_this()};
++    ZeroMemory(&mOverlapped, sizeof(OVERLAPPED));
++    mOverlapped.hEvent = io;
+     int success = ReadDirectoryChangesW(
+       mDirectoryHandle,
+       mWriteBuffer.data(),
+@@ -145,7 +167,14 @@
+       NULL,
+       &mOverlapped,
+       [](DWORD errorCode, DWORD numBytes, LPOVERLAPPED overlapped) {
+-        auto subscription = reinterpret_cast<Subscription *>(overlapped->hEvent);
++        std::unique_ptr<PendingIo> io(static_cast<PendingIo *>(overlapped->hEvent));
++        // Take the strong reference out before dropping the in-flight record:
++        // if this was the last one, the object still outlives this callback.
++        std::shared_ptr<Subscription> subscription = std::move(io->subscription);
++        io.reset();
++        if (!subscription) {
++          return;
++        }
+         try {
+           subscription->processEvents(errorCode);
+         } catch (WatcherError &err) {
+@@ -155,6 +184,7 @@
+     );
+ 
+     if (!success) {
++      delete io;
+       throw WatcherError("Failed to read changes", mWatcher);
+     }
+   }
+@@ -184,7 +214,7 @@
+           mWatcher->mEvents.remove(mWatcher->mDir);
+           mTree->remove(mWatcher->mDir);
+           mWatcher->notify();
+-          stop();
++          requestStop();
+           return;
+         }
+       }
+@@ -266,17 +296,34 @@
+   watcher->state = sub;
+ 
+   // Queue polling for this subscription in the correct thread.
++  // The APC parameter is a heap-allocated strong reference as well, so the
++  // object survives even if it is unsubscribed before the APC runs.
++  auto *holder = new std::shared_ptr<Subscription>(sub);
+   bool success = QueueUserAPC([](__in ULONG_PTR ptr) {
+-    Subscription *sub = (Subscription *)ptr;
+-    sub->run();
+-  }, mThread.native_handle(), (ULONG_PTR)sub.get());
++    std::unique_ptr<std::shared_ptr<Subscription>> holder(
++      reinterpret_cast<std::shared_ptr<Subscription> *>(ptr));
++    (*holder)->run();
++  }, mThread.native_handle(), reinterpret_cast<ULONG_PTR>(holder));
+ 
+   if (!success) {
++    delete holder;
+     throw std::runtime_error("Unable to queue APC");
+   }
+ }
+ 
+ // This function is called by Backend::unwatch which takes a lock on mMutex
+ void WindowsBackend::unsubscribe(WatcherRef watcher) {
++  // RTTI is disabled in this build, so dynamic_pointer_cast is unavailable.
++  // watcher->state is only ever assigned by WindowsBackend::subscribe above,
++  // so the downcast is safe by construction (and yields null when unset).
++  auto sub = std::static_pointer_cast<Subscription>(watcher->state);
+   watcher->state = nullptr;
++  // Request the stop only; do not release here. After the pending read is
++  // cancelled, the final completion callback still holds a strong reference
++  // and performs the destruction. Clearing state alone (the previous
++  // behaviour) left the backend thread running a completion callback on an
++  // object that had already been freed.
++  if (sub) {
++    sub->requestStop();
++  }
+ }

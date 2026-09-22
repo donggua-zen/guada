@@ -14,6 +14,11 @@ import "element-plus/dist/index.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
 import "./tailwind.css";
 import "./style.css";
+// markdown 排版全局样式：对话流、插件文档、知识库详情等所有 v-html markdown 消费方共用。
+// 必须排在 style.css 之后（token 定义在 style.css），且排在 highlight.js 主题之前，
+// 与历史注入顺序一致（同优先级选择器由后者胜出，我们依赖更高优先级而非顺序，保持不动）。
+import "./assets/markdown.css";
+import "highlight.js/styles/foundation.css";
 import "nprogress/nprogress.css";
 
 import { apiService } from "@/services/ApiService";

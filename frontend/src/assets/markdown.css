@@ -1,144 +1,168 @@
+/* ============================================================
+ * 对话 Markdown 排版（对齐 Qoder 客户端排版规格）
+ *
+ * 本文件不写字面色、也不写字号字面量：
+ * - 颜色取自 --gd-md-* 语义 token（定义于 style.css 的 :root / html.dark）
+ * - 尺寸全部由唯一旋钮 --gd-md-font-size 派生（行高、标题阶梯、代码尺寸、块间距）
+ * 做「用户自定义对话字号」时覆盖 --gd-md-font-size 一个变量即可整体等比缩放；
+ * 暗色只切换填充层与语法高亮两组 token，不再另写一套 .dark 排版分支。
+ * ============================================================ */
+
+/* 派生尺寸：行高/标题阶梯/间距全部由唯一旋钮 --gd-md-font-size 算出。
+ *
+ * 为什么写在 .markdown-text 而不是 :root：自定义属性的 var() 替换发生在
+ * "该属性所在的那个元素"上。定义在 :root 时，派生值只认 html 上的旋钮，
+ * 在任何容器上覆盖 --gd-md-font-size 都只会改变直接用到旋钮的那几条
+ * （正文、内边距），而行高/标题/块间距仍是 html 刻度 → 半缩放、层级错乱。
+ * 挂到排版根节点上，容器级覆盖才会整套重算。
+ * .custom-code-block 一并列出：代码块可能渲染在 .markdown-text 之外，
+ * 让它自带一份等价的派生值，不依赖祖先。 */
+.markdown-text,
+.custom-code-block {
+  --gd-md-line-height: calc(var(--gd-md-font-size) + 10px); /* 24px @14（原 22.4） */
+  --gd-md-line-height-tight: calc(var(--gd-md-font-size) + 6px); /* 20px，紧凑语境 */
+  --gd-md-gap-block: calc(var(--gd-md-font-size) - 2px); /* 块间距 12px @14 */
+  --gd-md-gap-list-item: calc(var(--gd-md-font-size) / 3.5); /* 列表项 4px @14 */
+  --gd-md-indent-list: calc(var(--gd-md-font-size) + 10px); /* 列表缩进 24px @14 */
+  --gd-md-gap-heading: calc(var(--gd-md-font-size) * 2); /* 标题上间距 28px @14 */
+  --gd-md-gap-heading-sm: calc(var(--gd-md-font-size) / 1.75); /* 标题下间距 8px @14 */
+  --gd-md-h1-size: calc(var(--gd-md-font-size) + 6px); /* 20 @14 */
+  --gd-md-h2-size: calc(var(--gd-md-font-size) + 4px); /* 18 @14 */
+  --gd-md-h3-size: calc(var(--gd-md-font-size) + 2px); /* 16 @14 */
+  --gd-md-h4-size: calc(var(--gd-md-font-size) + 1px); /* 15 @14 */
+  --gd-md-code-font-size: calc(var(--gd-md-font-size) - 1px); /* 代码块 13 @14 */
+  --gd-md-code-line-height: calc(var(--gd-md-font-size) + 10px); /* 24 @14，等宽块固定行高 */
+  --gd-md-code-padding-x: calc(var(--gd-md-font-size) * 0.85); /* 代码区左右内缩 ~12 @14，与头部对齐 */
+  --gd-md-code-padding-y: calc(var(--gd-md-font-size) - 2px); /* 代码上下留白 12 @14 */
+  --gd-md-inline-code-font-size: calc(var(--gd-md-font-size) - 2px); /* 行内码 12 @14 */
+  --gd-md-table-font-size: var(--gd-md-code-font-size); /* 表格同代码 13 @14 */
+  --gd-md-table-cell-min-width: calc(var(--gd-md-font-size) * 6.4); /* 90px @14 */
+}
+
+.markdown-text {
+  font-family: var(--gd-md-font-family);
+  font-size: var(--gd-md-font-size);
+  line-height: var(--gd-md-line-height);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
 .markdown-text p {
-  margin-bottom: 12px;
-  margin-top: 0;
+  margin: 0 0 var(--gd-md-gap-block);
 }
-.markdown-text strong,
+
+/* ---------- 标题：h1~h4 逐级 +1px 收敛，字号阶梯见 --gd-md-h*-size ---------- */
 .markdown-text h1,
 .markdown-text h2,
 .markdown-text h3,
 .markdown-text h4,
 .markdown-text h5,
 .markdown-text h6 {
-  font-family:
-    Segoe UI Variable,
-    Segoe UI,
-    Microsoft YaHei UI,
-    sans-serif !important;
-  --font-family-default:
-    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  --font-family-heading:
-    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-family: var(--gd-md-heading-font-family);
+  margin: var(--gd-md-gap-heading) 0 var(--gd-md-gap-heading-sm);
+  line-height: var(--gd-md-line-height);
+  letter-spacing: var(--gd-md-heading-tracking);
 }
 
-.markdown-text > :last-child {
-  margin-top: 0;
-  margin-bottom: 0;
+.markdown-text h1 {
+  font-size: var(--gd-md-h1-size);
+  font-weight: 500;
+  line-height: calc(var(--gd-md-h1-size) + 8px);
 }
 
-.markdown-text > div > :last-child {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.markdown-text h1,
-.markdown-text h2,
-.markdown-text h3,
-.markdown-text h4,
-.markdown-text h5,
-.markdown-text h6 {
-  margin-top: 1em;
-  margin-bottom: 0.5em;
+.markdown-text h2 {
+  font-size: var(--gd-md-h2-size);
   font-weight: 600;
-  font-size: var(--gd-size-text-base);
-  color: var(--gd-color-bubble-assitant-text-strong);
+  margin-top: calc(var(--gd-md-gap-heading) - 4px);
 }
 
-.markdown-text h1,
-.markdown-text h2,
-.markdown-text h3,
+.markdown-text h3 {
+  font-size: var(--gd-md-h3-size);
+  font-weight: 600;
+  margin-top: calc(var(--gd-md-gap-heading) - 8px);
+}
+
+.markdown-text h4,
+.markdown-text h5,
+.markdown-text h6 {
+  margin-top: calc(var(--gd-md-gap-heading) - 12px);
+}
+
 .markdown-text h4 {
-  font-size: calc(var(--gd-size-text-base) * 1.1);
-  /* padding-bottom: 0.5em; */
+  font-size: var(--gd-md-h4-size);
+  font-weight: 600;
+}
+
+.markdown-text h5 {
+  font-size: var(--gd-md-font-size);
+  font-weight: 600;
+  color: var(--gd-md-text-secondary);
 }
 
 .markdown-text h6 {
-  color: #6a737d;
+  font-size: calc(var(--gd-md-font-size) - 1px);
+  font-weight: 600;
+  color: var(--gd-md-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
-.dark .markdown-text h6 {
-  color: oklch(65% 0.02 250); /* 次要文本色 */
+/* 流式渲染时任何块都可能是首块：首块不留上间距，末块不留下间距
+   （MarkdownContent 会在 .markdown-text 内再套一层容器，故两条都写） */
+.markdown-text > :first-child,
+.markdown-text > div > :first-child {
+  margin-top: 0;
 }
 
+.markdown-text > :last-child,
+.markdown-text > div > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- 链接：常态细下划线，hover 才实心 ---------- */
 .markdown-text a {
-  color: #0366d6;
-  text-decoration: none;
-}
-
-.dark .markdown-text a {
-  color: oklch(65% 0.12 240); /* 柔和的蓝色链接 */
+  color: var(--gd-md-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: calc(var(--gd-md-font-size) / 7);
 }
 
 .markdown-text a:hover {
-  text-decoration: underline;
+  text-decoration-color: currentColor;
 }
 
+/* ---------- 列表：原生 marker，marker 与正文分档；嵌套列表靠 padding 递进 ---------- */
+.markdown-text ul,
 .markdown-text ol {
-  list-style: none;
-  counter-reset: item;
-  margin-bottom: 12px;
+  margin: 0 0 var(--gd-md-gap-block);
+  padding-left: var(--gd-md-indent-list);
 }
 
 .markdown-text ul {
-  list-style: none;
-  padding-left: 0;
-  margin-bottom: 12px;
+  list-style: disc;
 }
 
-.markdown-text ol > li,
-.markdown-text ul > li {
-  position: relative;
-  margin-bottom: 4px;
-  margin-top: 0;
+.markdown-text ol {
+  list-style: decimal;
 }
 
-.markdown-text ul > li {
-  padding-left: 18px;
+.markdown-text li {
+  margin-bottom: var(--gd-md-gap-list-item);
 }
 
-.markdown-text ol > li {
-  flex-wrap: wrap;
-  counter-increment: item;
-  padding-left: 3ch;
-  position: relative;
+.markdown-text li > ul,
+.markdown-text li > ol {
+  margin: var(--gd-md-gap-list-item) 0 0;
+  /* 嵌套再让出半个缩进量，层级一眼可辨 */
+  padding-left: calc(var(--gd-md-indent-list) / 2);
 }
 
-.markdown-text ol > li:before {
-  content: counter(item) ".";
-  text-align: left;
-  color: #666;
-  min-width: 14px;
-  display: inline-block;
-  width: 2.5ch;
-  position: absolute;
-  left: 0;
+.markdown-text li::marker {
+  color: var(--gd-md-list-marker);
 }
 
-.dark .markdown-text ol > li:before {
-  color: oklch(65% 0.02 250); /* 次要文本色 */
-}
-
-/* 其他子元素保持正常流 */
-ol > *:not(li) {
-  display: block;
-  margin: 1em 0;
-}
-
-.markdown-text ul > li::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 0.7em;
-  width: 5px;
-  height: 5px;
-  background-color: #555;
-  border-radius: 50%;
-}
-
-.dark .markdown-text ul > li::before {
-  background-color: oklch(65% 0.02 250); /* 次要文本色 */
-}
-
-.markdown-text ul > li:last-child {
+.markdown-text li:last-child {
   margin-bottom: 0;
 }
 
@@ -146,86 +170,78 @@ ol > *:not(li) {
   display: none;
 }
 
-.markdown-text ul > li ul {
-  margin-bottom: 8px;
+/* GFM 任务列表：勾选框取代 marker */
+.markdown-text li:has(> input[type='checkbox']) {
+  list-style: none;
 }
 
-.markdown-text code {
-  background-color: #f3f3f5;
-  border-radius: 3px;
-  padding: 0 0.4em;
-  /* font-size: 0.9em; */
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: var(--gd-size-text-base) !important;
+.markdown-text li > input[type='checkbox'] {
+  margin-right: calc(var(--gd-md-font-size) / 3.5);
+  accent-color: var(--gd-md-accent);
 }
 
-.dark .markdown-text code {
-  background-color: oklch(28% 0.02 250); /* 柔和的代码背景 */
-  color: oklch(90% 0.01 250); /* 柔和白文本 */
-}
-
-.markdown-text pre {
-  border-radius: 5px;
-  overflow: auto;
-  margin-top: 1rem;
-  margin-bottom: 1em;
-  /* border: 1px solid #dfe2e5; */
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-size: var(--gd-size-text-base) !important;
+/* ---------- 行内码：比正文小 2px，靠内边距成块，无边框 ---------- */
+.markdown-text :not(pre) > code {
+  font-family: var(--gd-font-mono);
+  font-size: var(--gd-md-inline-code-font-size);
+  line-height: var(--gd-md-line-height-tight);
+  background-color: var(--gd-md-fill-tertiary);
+  border-radius: var(--gd-md-inline-code-radius);
+  padding: calc(var(--gd-md-inline-code-radius) / 2) var(--gd-md-inline-code-radius);
+  word-break: break-all;
 }
 
 .markdown-text blockquote {
-  border-left: 4px solid #dfe2e5;
-  margin: 1em 0 0;
-  padding-left: 1em;
+  margin: var(--gd-md-gap-block) 0;
+  padding-left: calc(var(--gd-md-font-size) + 2px);
+  border-left: 2px solid var(--gd-color-border);
+  color: var(--gd-md-text-secondary);
+  font-style: italic;
 }
 
-.dark .markdown-text blockquote {
-  border-left-color: oklch(35% 0.02 250); /* 柔和的引用边框 */
+.markdown-text blockquote > :last-child {
+  margin-bottom: 0;
 }
 
+/* ---------- 表格：表头一条灰带，表体透出所在语境（Qoder 即如此）
+   早先整块刷成 fill-secondary，看着像一整块灰板，行/列都分不清。
+   表体不铺底色：对话气泡、弹窗、思考区各自的底色不同，铺死会在暗色里露出一块矩形。 ---------- */
 .markdown-text .custom-table-block {
-  margin-bottom: 1em;
+  margin: var(--gd-md-gap-block) 0;
   overflow-x: auto;
   max-width: 100%;
-  display: flex;
-  align-items: center;
-  justify-items: center;
-  /* border: 1px solid var(--gd-color-border); */
-  /* border-radius: var(--gd-size-surface-radius); */
-  
+  background-color: transparent;
+  border: 1px solid var(--gd-md-border);
+  border-radius: var(--gd-md-radius);
 }
 
-/* 表格样式优化 - 仅行间分割线和外边框和外边框 */
 .markdown-text table {
-  border-collapse: collapse;
+  border-collapse: separate;
   border-spacing: 0;
-  min-width: 100%;
+  width: 100%;
+  font-size: var(--gd-md-table-font-size);
+  line-height: var(--gd-md-line-height-tight);
 }
 
 .markdown-text table th,
 .markdown-text table td {
-  border-bottom: 1px solid var(--gd-color-border);
+  border-bottom: 1px solid var(--gd-md-border);
+  text-align: left;
   vertical-align: top;
-  padding: 12px 16px 12px 16px;
-  min-width: 100px;
-  /* max-width: 220px; */
+  padding: calc(var(--gd-md-font-size) - 4px) calc(var(--gd-md-font-size) + 2px);
+  min-width: var(--gd-md-table-cell-min-width);
 }
 
-.markdown-text table th:last-child,
-.markdown-text table td:last-child {
-    padding-right: 0;
-}
-
-.markdown-text table th:first-child,
-.markdown-text table td:first-child {
-    padding-left: 0;
-}
-
-.dark .markdown-text table th,
-.dark .markdown-text table td {
-  border-color: var(--gd-color-border);
+.markdown-text table th {
+  height: calc(var(--gd-md-line-height) + 12px);
+  padding-block: 0;
+  /* 表头是定高单行：跟 td 的 top 对齐会浮在上沿，必须 middle 才在灰带里垂直居中 */
+  vertical-align: middle;
+  font-size: var(--gd-md-inline-code-font-size);
+  font-weight: 500;
+  color: var(--gd-md-text-secondary);
+  background-color: var(--gd-md-fill-secondary);
+  white-space: nowrap;
 }
 
 .markdown-text table tbody tr:last-child td,
@@ -233,252 +249,308 @@ ol > *:not(li) {
   border-bottom: none;
 }
 
-.markdown-text table th {
-  text-align: left;
-  left: 0;
-  z-index: 1;
+/* marked 把对齐写在 _align 属性上（历史遗留属性名，不是标准 align） */
+.markdown-text table [_align='center'] {
+  text-align: center;
 }
 
-.dark .markdown-text table th {
-  /* background-color: var(--gd-color-sidebar-bg-active); */
-  color: var(--gd-color-text);
-}
-
-.dark .markdown-text table td {
-  /* background-color: var(--gd-color-surface); */
-  color: var(--gd-color-text);
+.markdown-text table [_align='right'] {
+  text-align: right;
 }
 
 .markdown-text hr {
-  height: 0px;
-  border-top: 2px dotted #efefef;
-  margin: 22px 0;
-}
-
-.dark .markdown-text hr {
-  border-top-color: oklch(32% 0.02 250); /* 分隔线颜色 */
+  height: 0;
+  border: none;
+  border-top: 1px solid var(--gd-md-divider);
+  margin: calc(var(--gd-md-gap-heading) - 4px) 0;
 }
 
 .markdown-text img {
   max-width: 100%;
   height: auto;
-  border-radius: 3px;
+  border-radius: calc(var(--gd-md-font-size) / 4.67);
 }
 
 .markdown-text strong {
-  font-weight: 600;
+  font-weight: var(--gd-md-strong-weight);
 }
 
 .markdown-text em {
   font-style: italic;
 }
 
-/* 表格容器样式，确保表格不会撑破容器 */
-.markdown-text {
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  word-break: break-word;
-  max-width: 100%;
+.markdown-text del {
+  color: var(--gd-md-text-secondary);
 }
 
-/* 暗色模式下的 Markdown 文本样式 */
-/* 已迁移到各个元素的选择器中，保持代码组织清晰 */
-
-
-/* 响应式表格样式 */
 @media (max-width: 768px) {
-  .markdown-text table {
-    font-size: 14px;
-    border-radius: 6px;
-  }
-
   .markdown-text table th,
   .markdown-text table td {
-    padding: 0.3em 0.5em;
-    min-width: 80px;
+    padding-inline: calc(var(--gd-md-font-size) / 1.75);
+    min-width: calc(var(--gd-md-table-cell-min-width) - var(--gd-md-font-size));
   }
 }
 
-/* 代码块容器样式 */
+/* ============================================================
+ * 围栏代码块
+ * 结构由 useMarkdown.ts 的 code renderer 产出：
+ * .custom-code-block > .code-header(.code-language + .code-actions)
+ *                    + .code-scroll > pre > code
+ *                    + .code-expand
+ * ============================================================ */
 .custom-code-block {
-  margin-bottom: 1em;
-  background: var(--gd-code-block-bg, #fff) !important;
+  margin: var(--gd-md-gap-block) 0;
+  background-color: var(--gd-md-fill-tertiary);
+  border-radius: var(--gd-md-radius);
   overflow: hidden;
-  border-radius: var(--gd-size-surface-radius);
-  border: 1px solid var(--gd-color-border);
-}
-/* 确保 hljs 样式正常工作 */
-
-.custom-code-block pre.hljs {
-  margin: 0;
-  border-radius: 0 0 8px 8px;
-  background: transparent !important;
-  /* border: 1px solid #e3e3e7;
-  border-top: 0; */
-  max-height: 800px;
-  overflow: auto;
-}
-
-.dark .custom-code-block pre.hljs {
-  background: var(--gd-code-block-bg, #2f3232) !important;
-  color: var(--gd-color-text);
-  border: 1px solid var(--gd-code-block-border, #2f3232);
-}
-
-.custom-code-block code.hljs {
-  background: transparent !important;
-  display: block;
-  overflow-x: auto;
-  padding: 0.5em 1em;
-}
-
-
-
-.dark .custom-code-block {
-  border-color: var(--gd-color-border);
 }
 
 .code-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 7px 12px;
-  color: #222;
-  font-size: 0.8em;
-
-  border-bottom: 0;
-}
-
-.dark .code-header {
-  background: var(--gd-code-block-header-bg, var(--gd-color-sidebar-bg-active));
-  color: var(--gd-color-text);
-  border: 1px solid var(--gd-code-block-border, #2f3232);
+  justify-content: space-between;
+  gap: calc(var(--gd-md-font-size) - 2px);
+  min-height: var(--gd-md-code-header-height);
+  padding: calc(var(--gd-md-font-size) / 2.33) var(--gd-md-code-padding-x);
+  font-family: var(--gd-md-font-family);
+  color: var(--gd-md-code-header-text);
 }
 
 .code-language {
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--gd-code-block-language-color, #666);
-}
-
-.dark .code-language {
-  color: var(--gd-code-block-language-color, oklch(65% 0.02 250)); /* 次要文本色 */
+  font-size: var(--gd-md-inline-code-font-size);
   font-weight: 500;
+  line-height: var(--gd-md-line-height-tight);
+  color: var(--gd-md-syntax-text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.copy-code-button {
-  color: var(--gd-code-block-language-color, #666);
+.code-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--gd-md-font-size) / 3.5);
+  flex-shrink: 0;
+}
+
+.code-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--gd-md-code-header-height) - 12px);
+  height: calc(var(--gd-md-code-header-height) - 12px);
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--gd-md-font-size) / 2.33);
+  background-color: transparent;
+  color: var(--gd-md-text-tertiary);
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 15px;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 
-.dark .copy-code-button {
-  color: var(--gd-code-block-language-color, oklch(65% 0.02 250)); /* 次要文本色 */
-  background: transparent;
+.code-actions button:hover {
+  color: var(--gd-md-syntax-text);
+  background-color: var(--gd-md-fill-secondary);
 }
 
-.copy-code-button:hover {
-  color: #333;
+/* 换行开关按下态：用强调色标出当前生效的排版模式 */
+.code-actions button[aria-pressed='true'] {
+  color: var(--gd-md-accent);
 }
 
-.dark .copy-code-button:hover {
-  color: oklch(90% 0.01 250); /* 悬停时变亮 */
-  background: rgba(255, 255, 255, 0.08); /* 柔和的悬停背景 */
+.code-actions button.is-copied {
+  color: var(--gd-color-success);
 }
 
-.copy-code-button svg {
-  width: 15px;
-  height: 15px;
+.code-actions button svg,
+.code-expand svg {
+  width: calc(var(--gd-md-font-size) + 1px);
+  height: calc(var(--gd-md-font-size) + 1px);
 }
 
-/* 暗色模式样式 - 已整合到各元素选择器中 */
-
-/* HLJS 语法高亮暗色主题 - 使用 VS Code Dark+ 配色 */
-.dark pre.hljs {
-  color: oklch(90% 0.01 250); /* 主文本色 */
+.code-scroll {
+  overflow: auto;
+  /* 滚动视口贴到卡片边缘，滚动条自然落在最外侧；
+     左右呼吸带改由内层 pre 的 padding 承担，滚动条叠在呼吸带上不额外占宽。 */
+  margin-inline: 0;
+  padding: 0;
+  /* 折叠上限：只在长块（.is-collapsible）生效，短块天然全额展示 */
+  max-height: var(--gd-md-code-max-height);
+  transition: max-height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.dark .hljs-keyword,
-.dark .hljs-selector-tag,
-.dark .hljs-title,
-.dark .hljs-section,
-.dark .hljs-doctag,
-.dark .hljs-name,
-.dark .hljs-strong {
-  color: oklch(70% 0.12 260); /* 蓝色 - 关键字 */
+.custom-code-block:not(.is-collapsible) .code-scroll,
+.custom-code-block.is-expanded .code-scroll {
+  max-height: none;
 }
 
-.dark .hljs-comment {
-  color: oklch(60% 0.08 140); /* 绿色 - 注释 */
-}
-
-.dark .hljs-string,
-.dark .hljs-built_in,
-.dark .hljs-literal,
-.dark .hljs-type,
-.dark .hljs-addition,
-.dark .hljs-tag,
-.dark .hljs-quote,
-.dark .hljs-selector-id,
-.dark .hljs-selector-class {
-  color: oklch(75% 0.15 45); /* 橙色 - 字符串 */
-}
-
-.dark .hljs-meta,
-.dark .hljs-subst,
-.dark .hljs-symbol,
-.dark .hljs-regexp,
-.dark .hljs-attribute,
-.dark .hljs-deletion,
-.dark .hljs-variable,
-.dark .hljs-template-variable,
-.dark .hljs-link,
-.dark .hljs-bullet {
-  color: oklch(75% 0.12 130); /* 浅绿 - 变量 */
-}
-
-.dark .hljs-emphasis {
-  font-style: italic;
-}
-
-.dark .hljs-strong {
-  font-weight: bold;
-}
-
-/* 行号样式（如果有的话） */
-.dark .custom-code-block .line-numbers {
-  background: oklch(25% 0.02 250); /* 行号背景 */
-  color: oklch(65% 0.02 250); /* 行号文本 */
-  border-right: 1px solid oklch(32% 0.02 250); /* 行号边框 */
-}
-
-/* 代码块内部滚动条样式 */
-.dark .custom-code-block ::-webkit-scrollbar {
+/* 滚动条自绘：UA 默认（含 scrollbar-width: thin）会在滑块与滚动视口边框之间再留
+   一圈透明边距，看上去就是"滚动条离边框太远"。显式定义 ::-webkit-scrollbar 后滑块
+   正好占满 8px 槽并贴住视口边。表格横向滚动同理。
+   注意：Chromium 一旦看到非 auto 的 scrollbar-width，就忽略 ::-webkit-scrollbar，
+   所以本块所在元素不得再写 scrollbar-width（Firefox 走默认样式，可接受）。 */
+.code-scroll::-webkit-scrollbar,
+.markdown-text .custom-table-block::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.dark .custom-code-block ::-webkit-scrollbar-track {
-  background: transparent;
+.code-scroll::-webkit-scrollbar-track,
+.markdown-text .custom-table-block::-webkit-scrollbar-track {
+  background-color: transparent;
 }
 
-.dark .custom-code-block ::-webkit-scrollbar-thumb {
-  background: oklch(35% 0.02 250); /* 滚动条滑块 */
+.code-scroll::-webkit-scrollbar-thumb,
+.markdown-text .custom-table-block::-webkit-scrollbar-thumb {
+  background-color: var(--gd-md-scrollbar-thumb);
   border-radius: 4px;
 }
 
-.dark .custom-code-block ::-webkit-scrollbar-thumb:hover {
-  background: oklch(40% 0.02 250); /* 悬停时变亮 */
+/* foundation.css 给 .hljs 加了 overflow-x:auto；pre 与 code 都带这个类，
+   不显式覆盖的话内层 code 会自己变成滚动容器——外层 .code-scroll 收不到溢出，
+   文字被 code 的 padding 边缘裁掉（贴边），滚动条也画在 code 底边（悬在块中间）。
+   滚动只归 .code-scroll 一家。 */
+.custom-code-block pre.hljs,
+.custom-code-block code.hljs {
+  overflow: visible;
 }
 
-/* 代码块高亮行（如果有高亮功能） */
-.dark .custom-code-block .highlighted-line {
-  background: rgba(86, 156, 214, 0.08); /* 柔和的高亮背景 */
+.custom-code-block pre.hljs {
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
 }
 
-/* 代码块行号高亮 */
-.dark .custom-code-block .highlighted-line-number {
-  color: oklch(70% 0.12 260); /* 蓝色高亮 */
-  background: rgba(86, 156, 214, 0.08);
+.custom-code-block code.hljs {
+  display: block;
+  margin: 0;
+  /* 上下留白 + 左右呼吸带（滚动条叠在呼吸带上，不额外占宽）；
+     顶部减半：头部区已自带留白，内容再满留白会显得过空 */
+  padding: calc(var(--gd-md-code-padding-y) / 2) var(--gd-md-code-padding-x) var(--gd-md-code-padding-y);
+  background-color: transparent;
+  font-family: var(--gd-font-mono);
+  font-size: var(--gd-md-code-font-size);
+  line-height: var(--gd-md-code-line-height);
+  color: var(--gd-md-syntax-text);
+  tab-size: 4;
+  /* 默认不折行：长行横向滚动，由头部开关切到折行模式（对齐 Qoder） */
+  white-space: pre;
+}
+
+.custom-code-block.is-wrap code.hljs {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.custom-code-block.is-wrap .code-scroll {
+  overflow-x: hidden;
+}
+
+/* 底部展开条：仅长块显示，箭头随状态翻转 */
+.code-expand {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: calc(var(--gd-md-code-header-height) - 8px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background-color: transparent;
+  color: var(--gd-md-text-tertiary);
+  cursor: pointer;
+}
+
+.custom-code-block.is-collapsible .code-expand {
+  display: inline-flex;
+}
+
+.code-expand:hover {
+  color: var(--gd-md-syntax-text);
+}
+
+.code-expand svg {
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.custom-code-block.is-expanded .code-expand svg {
+  transform: rotate(180deg);
+}
+
+/* ---------- 语法高亮 ----------
+ * highlight.js 输出 .hljs-* 类。选择器统一挂在 .markdown-text 下（多一层类，
+ * 特异性 0,2,0 > foundation.css 的 0,1,0），因此不依赖两份样式的引入顺序，
+ * 也不必用 !important；亮/暗切换只换 token 值，色板对齐 Qoder 的 cursor 主题。 */
+.markdown-text .hljs-comment,
+.markdown-text .hljs-quote {
+  color: var(--gd-md-syntax-comment);
+  font-style: italic;
+}
+
+.markdown-text .hljs-keyword,
+.markdown-text .hljs-selector-tag,
+.markdown-text .hljs-literal,
+.markdown-text .hljs-operator {
+  color: var(--gd-md-syntax-keyword);
+}
+
+.markdown-text .hljs-string,
+.markdown-text .hljs-regexp,
+.markdown-text .hljs-addition,
+.markdown-text .hljs-template-tag {
+  color: var(--gd-md-syntax-string);
+}
+
+.markdown-text .hljs-number,
+.markdown-text .hljs-symbol,
+.markdown-text .hljs-bullet,
+.markdown-text .hljs-variable,
+.markdown-text .hljs-template-variable {
+  color: var(--gd-md-syntax-number);
+}
+
+.markdown-text .hljs-title.function_,
+.markdown-text .hljs-built_in {
+  color: var(--gd-md-syntax-function);
+}
+
+.markdown-text .hljs-type,
+.markdown-text .hljs-class .hljs-title,
+.markdown-text .hljs-title.class_ {
+  color: var(--gd-md-syntax-type);
+}
+
+.markdown-text .hljs-attr,
+.markdown-text .hljs-attribute,
+.markdown-text .hljs-property,
+.markdown-text .hljs-params {
+  color: var(--gd-md-syntax-property);
+}
+
+.markdown-text .hljs-name,
+.markdown-text .hljs-tag,
+.markdown-text .hljs-selector-id,
+.markdown-text .hljs-selector-class,
+.markdown-text .hljs-section {
+  color: var(--gd-md-syntax-tag);
+}
+
+.markdown-text .hljs-meta,
+.markdown-text .hljs-punctuation {
+  color: var(--gd-md-syntax-punctuation);
+}
+
+.markdown-text .hljs-deletion {
+  color: var(--gd-color-danger);
+}
+
+.markdown-text .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown-text .hljs-strong {
+  font-weight: 600;
 }
