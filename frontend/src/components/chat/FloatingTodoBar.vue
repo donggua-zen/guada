@@ -145,10 +145,7 @@ onUnmounted(() => {
 <style scoped>
 .floating-todo-bar {
   position: relative;
-  width: 100%;
   display: flex;
-  justify-content: center;
-  margin-bottom: 6px;
 }
 
 .todo-capsule {
@@ -233,14 +230,15 @@ onUnmounted(() => {
   border: 1.5px solid var(--gd-color-text-disabled);
 }
 
-/* 面板出入动画 */
+/* 面板出入动画：只动 transform，不动 opacity。
+   opacity 过渡依赖 rAF 推进到不透明终态，而本环境 rAF 不可靠会把面板卡在半透明，
+   故改为恒定不透明 + 仅位移滑入，避免残留 enter-from 的 opacity:0。 */
 .todo-panel-enter-active,
 .todo-panel-leave-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: transform 0.12s ease;
 }
 .todo-panel-enter-from,
 .todo-panel-leave-to {
-  opacity: 0;
   transform: translateX(-50%) translateY(4px);
 }
 </style>

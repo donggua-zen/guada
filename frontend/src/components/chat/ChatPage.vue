@@ -461,10 +461,11 @@ function onPaneResized(size: number) {
   }
 
   // 保存工作目录分割位置（目录树 / 预览 / Git 统一保存到单一宽度）
-  if (layoutStore.workspaceVisible && isElectron) {
+  // 拖拽是纯前端布局状态，Web 与 Electron 都要记住（resized 只在拖拽结束时触发，
+  // 窗口尺寸变化走 ResizeObserver，不会写回）
+  if (layoutStore.workspaceVisible) {
     layoutStore.setWorkspaceSplitSize(size);
   }
-  console.log('onPaneResized', size);
 }
 
 /**

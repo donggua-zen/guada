@@ -88,8 +88,13 @@
                 </div>
               </div>
 
-              <!-- 浮动 TODO 条：悬浮在输入区上方，不跟随滚动 -->
-              <FloatingTodoBar :session-id="currentSessionId || undefined" />
+              <!-- 输入区上方状态行：TODO 胶囊 + 回到底部，并排居中。
+                   位于避让过侧边栏的 .chat-column 内 → 开侧边栏时与输入框同轴居中。 -->
+              <div class="composer-status-row">
+                <FloatingTodoBar :session-id="currentSessionId || undefined" />
+                <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
+                  @click="handleScrollToBottomClick" />
+              </div>
 
               <div class="w-full flex items-center relative">
 
@@ -141,10 +146,6 @@
         <slot name="aside" />
       </div>
     </Transition>
-
-    <!-- 回到底部悬浮按钮 -->
-    <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
-      @click="handleScrollToBottomClick" />
   </div>
   <!-- 记忆管理弹窗（非模态，锚定上下文使用率圆环） -->
   <GdPopover :show="memoPanelVisible" @update:show="memoPanelVisible = $event" :anchor-el="contextRingRef"
@@ -1411,5 +1412,15 @@ function scrollToMessage(messageId: string) {
 
 .context-ring .ring-fg {
   transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
+}
+
+/* 输入区上方状态行：TODO 胶囊与回到底部按钮并排居中，随内容出现/消失 */
+.composer-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
 }
 </style>

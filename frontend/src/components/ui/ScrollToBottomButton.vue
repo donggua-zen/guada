@@ -1,153 +1,79 @@
-<!-- ScrollToBottomButton.vue -->
+<!-- ScrollToBottomButton.vue：回到底部控件。
+     中性小方块，与输入区上方状态行的 TODO 胶囊并排（不再悬浮于消息区）。
+     仅在未贴底（show）时淡入。 -->
 <template>
     <Transition name="fade">
-        <button 
-            v-if="show"
-            ref="buttonRef"
-            class="scroll-to-bottom-btn"
-            :class="{ streaming: isStreaming }"
-            @click="handleClick"
-            type="button"
-        >
-            <div class="scroll-to-bottom-btn-content">
-                <!-- 向下箭头图标 -->
-                <svg class="scroll-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path 
-                        d="M12 5V19M12 19L5 12M12 19L19 12" 
-                        stroke="currentColor" 
-                        stroke-width="2" 
-                        stroke-linecap="round" 
-                        stroke-linejoin="round"
-                    />
-                </svg>
-            </div>
+        <button v-if="show" ref="buttonRef" class="scroll-to-bottom-btn" type="button"
+            :aria-label="t('chat.panel.scrollToBottom')" @click="handleClick">
+            <svg class="scroll-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
         </button>
     </Transition>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
+import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-// Props 类型化
 const props = defineProps<{
     show?: boolean;
     isStreaming?: boolean;
     onClick?: (event: MouseEvent) => void;
 }>()
 
-// Emits 类型化
 const emit = defineEmits<{
     click: [event: MouseEvent]
 }>()
 
-// 响应式数据 - 类型化
+const { t } = useI18n()
 const buttonRef = ref<HTMLButtonElement | null>(null)
 
-// 调试：监听 props 变化
-watch(() => props.isStreaming, (newVal) => {
-  console.log('[ScrollButton Component] isStreaming prop changed:', newVal)
-  // 检查类名
-  if (buttonRef.value) {
-    const hasStreamingClass = buttonRef.value.classList.contains('streaming')
-    console.log('[ScrollButton Component] Button has streaming class:', hasStreamingClass)
-  }
-}, { immediate: true })
-
-watch(() => props.show, (newVal) => {
-  console.log('[ScrollButton Component] show prop changed:', newVal)
-}, { immediate: true })
-
-// 方法 - 类型化
 function handleClick(event: MouseEvent): void {
-  console.log('[ScrollButton Component] handleClick called')
-  emit('click', event)
-  if (props.onClick) {
-    props.onClick(event)
-  }
+    emit('click', event)
+    if (props.onClick) {
+        props.onClick(event)
+    }
 }
 
-// 暴露方法给父组件
 defineExpose({
     buttonRef
 })
 </script>
 
 <style scoped>
-/* 按钮基础样式 */
 .scroll-to-bottom-btn {
-    position: absolute;
-    bottom: 140px; /* 输入框上方，留出足够空间 */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background-color: var(--gd-color-primary, #3b82f6);
-    border: none;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-    cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
-    z-index: 100;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--gd-color-surface);
+    border: 1px solid var(--gd-color-border);
+    color: var(--gd-color-text);
+    cursor: pointer;
     padding: 0;
     outline: none;
+    flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-/* 悬停效果 */
 .scroll-to-bottom-btn:hover {
-    background-color: var(--gd-color-primary-hover, #2563eb);
-    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
-    transform: translateX(-50%) translateY(-2px);
+    background: var(--gd-color-surface-hover);
 }
 
-/* 点击效果 */
 .scroll-to-bottom-btn:active {
-    transform: translateX(-50%) translateY(0);
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    background: var(--gd-color-surface-hover);
 }
 
-/* 按钮内容 */
-.scroll-to-bottom-btn-content {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-}
-
-/* 滚动图标 */
 .scroll-icon {
-    width: 18px;
-    height: 18px;
-    color: white;
+    width: 16px;
+    height: 16px;
 }
 
-/* 呼吸动画 - 流式输出时启用 */
-/* 注意：.streaming 类直接绑定在按钮元素上 */
-.scroll-to-bottom-btn.streaming {
-    animation: breathing 2s ease-in-out infinite;
-}
-
-@keyframes breathing {
-    0%, 100% {
-        opacity: 0.6;
-        /* 保持居中的同时缩放 */
-        transform: translateX(-50%) scale(0.95);
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-    }
-    50% {
-        opacity: 1;
-        /* 保持居中的同时缩放 */
-        transform: translateX(-50%) scale(1.05);
-        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
-    }
-}
-
-/* 淡入淡出动画 - 使用 !important 确保优先于呼吸动画 */
+/* 淡入淡出 */
 .fade-enter-active,
 .fade-leave-active {
     transition: opacity 0.2s ease, transform 0.2s ease;
@@ -155,44 +81,7 @@ defineExpose({
 
 .fade-enter-from,
 .fade-leave-to {
-    opacity: 0 !important;  /* ← 强制覆盖呼吸动画的 opacity */
-    transform: scale(0.8) translateY(10px) !important;  /* ← 强制覆盖呼吸动画的 transform */
-}
-
-/* 图标跳动动画 */
-@keyframes bounce-down {
-    0%, 100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(3px);
-    }
-}
-
-/* 深色模式适配 */
-@media (prefers-color-scheme: dark) {
-    .scroll-to-bottom-btn {
-        background-color: var(--gd-color-primary, #60a5fa);
-        box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
-    }
-    
-    .scroll-to-bottom-btn:hover {
-        background-color: var(--gd-color-primary-hover, #3b82f6);
-        box-shadow: 0 6px 16px rgba(96, 165, 250, 0.4);
-    }
-}
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-    .scroll-to-bottom-btn {
-        bottom: 80px;
-        width: 40px;
-        height: 40px;
-    }
-    
-    .scroll-icon {
-        width: 20px;
-        height: 20px;
-    }
+    opacity: 0;
+    transform: translateY(6px);
 }
 </style>
