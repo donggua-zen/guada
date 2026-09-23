@@ -177,8 +177,8 @@
   --gd-layout-card-gap: 4px;
   --gd-layout-card-radius: 6px;
   --gd-layout-card-border: var(--gd-color-border);
-  /* 左侧细发线阴影（实测参考图剖面标定：约 6px 窄带、峰值透明度 ~0.065） */
-  --gd-layout-card-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.03);
+  /* 内容卡阴影（实测运行中 Qoder getComputedStyle）：朝左的方向影，投进侧栏缝隙 */
+  --gd-layout-card-shadow: -4px 0 12px -8px rgba(0, 0, 0, 0.1);
   --gd-color-app-backdrop: var(--gd-color-sidebar-bg);
 
   /* --gd-color-gray-50: #f9fafb;
@@ -349,9 +349,9 @@ html.dark {
   --gd-md-syntax-tag: #87c3ff;
   --gd-md-syntax-punctuation: #d6d6dd;
 
-  /* 布局卡片（暗色）：描边/阴影随暗色系（缝隙底色自动跟随暗色侧栏色，无需覆盖） */
+  /* 布局卡片（暗色）：同几何，暗底加深投影 */
   --gd-layout-card-border: var(--gd-color-border);
-  --gd-layout-card-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --gd-layout-card-shadow: -4px 0 12px -8px rgba(0, 0, 0, 0.35);
 }
 
 :root {
@@ -524,8 +524,7 @@ html {
    防止卡片贴住左窗沿）；Electron-Windows 顶部为 0（标题栏行已提供分隔），
    Web/Mac 顶部留缝防吸顶。
    父容器是 block，h-full 与 margin 叠加会溢出，故高度用 calc 扣除纵向边距。
-   z-index:1 让卡片压在桌面端侧栏（z-index 已移除）之上，左侧外阴影才能
-   绘制到缝隙处；移动端侧栏 z-index:20 仍高于卡片，浮动覆盖不受影响 */
+   实测运行中 Qoder：内容卡是 1px 实边框 + 一道朝左方向影（-4px 0 12px -8px / 10%）。 */
 .content-card {
   position: relative;
   z-index: 1;
@@ -537,7 +536,7 @@ html {
   transition: box-shadow 0.3s ease;
 }
 
-/* 侧栏收起后卡片左侧无相邻面板，细影失去意义，直接去掉 */
+/* 侧栏收起后卡片左侧无相邻面板，方向影失去意义，直接去掉（边框保留） */
 .content-card.sidebar-collapsed {
   box-shadow: none;
 }
