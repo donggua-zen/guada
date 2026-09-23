@@ -1,11 +1,10 @@
 {
-  "memory.name": "记忆管理",
-  "memory.description": "记忆索引管理与缓存同步工具",
-  "memory.toolkitName": "记忆管理",
+  "memory.name": "长期记忆",
+  "memory.description": "MEMORY.md 索引 + 明细文件的长期记忆",
+  "memory.toolkitName": "长期记忆",
+  "memory.toolkitDescription": "长期记忆：MEMORY.md 索引与按需读取的明细文件，索引随上下文注入",
   "memory.executing": "正在编辑记忆",
   "memory.completed": "已编辑记忆",
   "memory.aggregate.executing": "正在编辑{n}次记忆",
-  "memory.aggregate.completed": "已编辑{n}次记忆",
-  "memory.toolkitDescription": "长期记忆管理：保存事实、偏好与备忘录"
-
+  "memory.aggregate.completed": "已编辑{n}次记忆"
 }

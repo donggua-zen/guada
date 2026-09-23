@@ -13,6 +13,7 @@ import {
 import { AskService } from "../../../common/services/ask.service";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
+import { resolveMemoryDir } from "../../../common/utils/memory-path.util";
 import {
   WorkspaceToolRouter,
   workspaceParamField,
@@ -206,6 +207,7 @@ export class FilePlugin extends PluginBase {
       execute: async (args, ctx) => {
         const { pattern, directory, limit = 100, depth } = args;
         if (!pattern) throw new Error("pattern 不能为空");
+        this.assertJailGlobPattern(pattern, ctx);
 
         const target = await this.resolveTarget(ctx, args.workspace);
         if (target) {
@@ -231,9 +233,10 @@ export class FilePlugin extends PluginBase {
           return output;
         }
 
+        // 牢笼模式下省略 directory 时以牢笼根为基准（否则会默认到整个工作区）
         const basePath = directory
           ? this.resolvePath(directory, ctx)
-          : ctx?.session.workspacePath || process.cwd();
+          : this.getPathJail(ctx) || ctx?.session.workspacePath || process.cwd();
 
         // fast-glob deep 语义：1=当前目录, 2=一级, ... N=N-1级
         const deep = depth !== undefined ? depth + 1 : undefined;
@@ -654,6 +657,20 @@ export class FilePlugin extends PluginBase {
     ctx: PluginContext,
     workspace?: string,
   ): Promise<RemoteToolTarget | null> {
+    // 牢笼是本地单根约束，远程工作目录会让它形同虚设（远端路径不在本地包含性判断内）
+    if (this.getPathJail(ctx)) {
+      const target = await this.workspaceRouter.resolveRemoteTarget(
+        workspace,
+        ctx.session.sessionId,
+        ctx.session.getSettings?.()?.attachments,
+      );
+      if (target) {
+        throw new Error(
+          "Path jail active: remote workspaces are not accessible in this mode.",
+        );
+      }
+      return null;
+    }
     return this.workspaceRouter.resolveRemoteTarget(
       workspace,
       ctx.session.sessionId,
@@ -754,11 +771,11 @@ export class FilePlugin extends PluginBase {
     const formattedLines: string[] = [];
     for (let i = startLine; i < endLine; i++) {
       const num = String(i + 1).padStart(padWidth, " ");
-      formattedLines.push(`${num}\t|${lines[i]}`);
+      formattedLines.push(`${num}\t${lines[i]}`);
     }
     if (partialLine !== null) {
       const num = String(endLine + 1).padStart(padWidth, " ");
-      formattedLines.push(`${num}\t|${partialLine}`);
+      formattedLines.push(`${num}\t${partialLine}`);
     }
     let result = formattedLines.join("\n");
 
@@ -847,11 +864,75 @@ export class FilePlugin extends PluginBase {
     }
   }
 
+  /** 当前会话的路径牢笼（瞬态；记忆维护等系统级写入为文件工具收窄可用范围） */
+  private getPathJail(context?: PluginContext): string | null {
+    return context?.session.getPathJail?.() ?? null;
+  }
+
+  /**
+   * 目标路径是否落在会话自己的记忆目录内（只读模式下的记忆写入例外）。
+   * 路径规则取自 common/utils/memory-path.util.ts，与记忆注入/牢笼根同一真相。
+   */
+  private isInSessionMemoryDir(
+    filePath: string,
+    context?: PluginContext,
+  ): boolean {
+    const workspacePath = context?.session.workspacePath;
+    const sessionId = context?.session.sessionId;
+    if (!workspacePath || !sessionId) return false;
+    try {
+      const memoryDir = resolveMemoryDir({
+        workspacePath,
+        sessionId,
+        sessionType: context?.session.sessionType,
+      });
+      return this.workspaceService.isPathWithin(
+        this.resolvePath(filePath, context),
+        [memoryDir],
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 牢笼越界拒绝。
+   *
+   * 读类工具（read/glob/grep）本身没有沙箱约束且接受绝对路径，所以牢笼必须由
+   * 所有文件工具共同的路径解析点 resolvePath 收口，而不是只挂在写校验上。
+   */
+  private assertWithinJail(resolvedPath: string, context?: PluginContext): void {
+    const jail = this.getPathJail(context);
+    if (!jail) return;
+    if (!this.workspaceService.isPathWithin(resolvedPath, [jail])) {
+      throw new Error(
+        `Path jail active: only paths under "${jail}" are accessible in this mode (requested: ${resolvedPath}). ` +
+          `Relative paths resolve against the working directory, so use an absolute path under "${jail}" ` +
+          `or a working-directory-relative path that lands inside it.`,
+      );
+    }
+  }
+
+  /**
+   * 牢笼下的 glob pattern 约束：fast-glob 的 cwd 只约束基准目录，
+   * 绝对 pattern 与 `..` 段都能逃逸出牢笼。
+   */
+  private assertJailGlobPattern(pattern: string, context?: PluginContext): void {
+    if (!this.getPathJail(context)) return;
+    if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes("..")) {
+      throw new Error(
+        `Path jail active: glob pattern must be relative and must not contain ".." (got: ${pattern}).`,
+      );
+    }
+  }
+
   private resolvePath(filePath: string, context?: PluginContext): string {
-    return this.workspaceService.resolveFilePath(
+    const resolved = this.workspaceService.resolveFilePath(
       filePath,
       context?.session.workspacePath,
     );
+    this.assertWithinJail(resolved, context);
+    return resolved;
   }
 
   private validateWritePath(
@@ -859,10 +940,25 @@ export class FilePlugin extends PluginBase {
     context?: PluginContext,
     approvedMode?: SandboxMode,
   ): void {
+    // 牢笼优先：记忆维护这类系统级写入不受 read-only 安全模式约束，
+    // 作用面已由牢笼收窄到单一根目录（牢笼内可写，牢笼外一律拒绝）。
+    if (this.getPathJail(context)) {
+      this.resolvePath(filePath, context);
+      return;
+    }
+
     // 安全模式判定：read-only 拒绝一切写入（one-shot 提权到 workspace-write 除外）；
     // danger-full-access（自由编辑）不限工作目录
     const mode = context?.session.getSandboxMode?.() ?? "workspace-write";
     if (mode === "read-only" && approvedMode !== "workspace-write") {
+      // 例外：会话自己的记忆目录（.guada/memory）始终可写——记忆是应用状态而非项目文件，
+      // 且压缩前记忆维护（牢笼模式）本就绕过只读模式，前台与后台语义需一致。
+      if (this.isInSessionMemoryDir(filePath, context)) {
+        this.logger.debug(
+          `[read-only] write allowed inside the session memory dir: ${filePath}`,
+        );
+        return;
+      }
       throw new Error(
         "Read-only mode: file writes are denied. To modify a file, retry once with sandbox_permissions + justification (user approval required), or ask the user to switch modes.",
       );
@@ -899,6 +995,14 @@ export class FilePlugin extends PluginBase {
       args.justification,
     );
     if (!escalation) return null;
+
+    // 牢笼模式已自带写入授权（牢笼内可写），且是后台系统流程，不应唤起用户审批
+    if (this.getPathJail(context)) {
+      this.logger.debug(
+        `[path-jail] sandbox_permissions ignored inside jail: ${toolName}`,
+      );
+      return null;
+    }
 
     const currentMode: SandboxMode =
       context?.session.getSandboxMode?.() ?? "workspace-write";

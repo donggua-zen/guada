@@ -253,26 +253,42 @@ export class WorkspaceService {
   }
 
   /**
+   * 检查路径是否落在任一给定根目录内（含根本身）。
+   *
+   * 路径牢笼与安全写入路径共用同一套包含性语义：先 resolve 归一（`..` 与符号链接外的
+   * 相对段在此消除）再做前缀比较，因此调用方无需另行处理逃逸写法。
+   *
+   * @param targetPath 要检查的目标路径
+   * @param roots 允许的根目录列表
+   */
+  isPathWithin(targetPath: string, roots: string[]): boolean {
+    const resolvedTarget = path.resolve(targetPath);
+
+    for (const root of roots) {
+      const resolvedRoot = path.resolve(root);
+      if (
+        resolvedTarget.startsWith(resolvedRoot + path.sep) ||
+        resolvedTarget === resolvedRoot
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * 检查路径是否为安全写入路径
    * @param targetPath 要检查的目标路径
    * @param extraSafePaths 额外允许的安全路径数组（如工作目录）
    * @returns 是否允许写入
    */
   isSafeWritePath(targetPath: string, extraSafePaths: string[] = []): boolean {
-    const resolvedTarget = path.resolve(targetPath);
-    
     // 合并系统注册的安全路径和额外传入的安全路径
-    const allSafePaths = [...this.safeWritePaths, ...extraSafePaths];
-    
-    // 检查目标路径是否在任何安全路径之下
-    for (const safePath of allSafePaths) {
-      const resolvedSafePath = path.resolve(safePath);
-      if (resolvedTarget.startsWith(resolvedSafePath + path.sep) || resolvedTarget === resolvedSafePath) {
-        return true;
-      }
-    }
-    
-    return false;
+    return this.isPathWithin(targetPath, [
+      ...this.safeWritePaths,
+      ...extraSafePaths,
+    ]);
   }
 
   /**

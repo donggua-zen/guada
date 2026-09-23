@@ -134,7 +134,7 @@ export const imageProjectionStep: TransformStep = {
 };
 
 /**
- * 步骤 1b：多模态路径注解（DSH 同款 normalized-copy 文案）。
+ * 步骤 1b：多模态路径注解。
  * 支持图片输入的模型：image 块后追加同消息 text 块，附上桥接后的绝对路径（只读语义），
  * 使模型能用工具（image_recognize / read / run_command）直接处理图片，不必向用户询问路径。
  * data: 内联图（工具产出）无物理路径，跳过。存储层不受影响。
@@ -159,8 +159,7 @@ export const imagePathAnnotationStep: TransformStep = {
         content.push({
           type: 'text',
           text:
-            `[Image attachment (read-only): ${imagePath}. ` +
-            `Use this path with tools (e.g. image_recognize, read) if you need to process it.]`,
+            `[Image attachment (read-only): ${imagePath}. ]`,
         });
       }
       return { ...msg, content };

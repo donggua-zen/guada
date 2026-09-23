@@ -151,6 +151,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /** 工具范围锁定（瞬态、不入库）：影子轮次等场景仅允许指定插件的工具 */
   private toolScope: string | null = null;
 
+  /** 路径牢笼（瞬态、不入库）：设置后文件工具只能访问该根内的路径，且牢笼内写入不受只读安全模式限制 */
+  private pathJail: string | null = null;
+
   constructor(
     private readonly session: any,
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
@@ -634,6 +637,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   getToolScope(): string | null {
     return this.toolScope;
+  }
+
+  setPathJail(root: string | null): void {
+    this.pathJail = root;
+  }
+
+  getPathJail(): string | null {
+    return this.pathJail;
   }
 
   // ═══ 模型配置 ═══

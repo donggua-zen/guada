@@ -124,6 +124,16 @@ export interface ISessionContext {
   setToolScope(pluginId: string | null): void;
   /** 读取当前工具范围锁定 */
   getToolScope(): string | null;
+  /**
+   * 路径牢笼（瞬态、不入库，正交于安全模式）。
+   *
+   * 设置后文件工具只能访问该根目录内的路径（读/写/编辑/glob/grep 一律受限），
+   * 且牢笼内的写入不受安全模式只读限制——供记忆维护这类系统级写入使用。
+   * null = 不限制（普通对话）。
+   */
+  setPathJail(root: string | null): void;
+  /** 读取当前路径牢笼（null = 不限制） */
+  getPathJail(): string | null;
 
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */

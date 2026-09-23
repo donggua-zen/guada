@@ -723,7 +723,7 @@ export class RemoteAgent {
     const selected = lines.slice(start, end);
     const padWidth = String(end).length;
     const formatted = selected.map(
-      (line, i) => `${String(start + i + 1).padStart(padWidth, " ")}\t|${line}`,
+      (line, i) => `${String(start + i + 1).padStart(padWidth, " ")}\t${line}`,
     );
     let result2 = formatted.join("\n");
     if (end < lines.length) {

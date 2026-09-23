@@ -793,9 +793,19 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   async drainCompleted(sessionId: string): Promise<PollResult[]> {
     const results: PollResult[] = [];
 
-    for (const entry of this.processes.values()) {
+    // 快照迭代：循环内 buildPollResult 会 cleanupProcess 删除 entry，
+    // 且 exitPromise await 期间进程表可能被其他路径变更
+    for (const entry of [...this.processes.values()]) {
       if (entry.sessionId !== sessionId) continue;
       if (entry.status === "running") continue;
+
+      // 进程刚结束且 enqueue 路径在进行中 → 等它完成（与 poll 一致）。
+      // 否则与 enqueue 的读取竞争可能读到空输出后又清掉 entry，
+      // 排队中的通知消息随即被 isValid() 判失效丢弃，输出彻底丢失。
+      if (entry.exitPromise) {
+        await entry.exitPromise;
+        if (!this.processes.has(entry.id)) continue;
+      }
 
       // 已完成 → 确保日志落盘后读取
       await finished(entry.writeStream).catch(() => {});
@@ -1070,9 +1080,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 读取自 readOffset 以来的增量输出（更新 readOffset） */
+  /** 读取自 readOffset 以来的增量输出（advance=true 时推进 readOffset；false 只窥视不消费） */
   private async readIncrementalOutput(
     entry: ProcessEntry,
+    advance = true,
   ): Promise<{ output: string; truncated: boolean }> {
     let fileSize: number;
     try {
@@ -1094,7 +1105,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       increment,
     );
 
-    entry.readOffset = fileSize;
+    if (advance) entry.readOffset = fileSize;
     return result;
   }
 
@@ -1165,8 +1176,14 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     // 确保日志全部落盘
     await finished(entry.writeStream).catch(() => {});
 
-    // 读取剩余增量
-    const { output, truncated } = await this.readIncrementalOutput(entry);
+    // 只窥视不推进 readOffset：输出可能先被 poll / drainCompleted 消费，
+    // 届时 entry 被清理、本消息经 isValid() 自动作废（不重复投递）。
+    // 若此处预消费偏移，回合结束拦截器 drain 将读到空输出、判定不续跑，
+    // 同时清理 entry 使本消息也被丢弃，输出彻底丢失。
+    const { output, truncated } = await this.readIncrementalOutput(
+      entry,
+      false,
+    );
 
     this.logger.debug(`投递进程完成通知: ${entry.id}`);
     this.chatRunnerService.enqueueMessage({

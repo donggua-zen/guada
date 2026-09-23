@@ -116,6 +116,8 @@ export function createMockSessionContext(options?: {
     setSandboxMode: jest.fn().mockResolvedValue(undefined),
     setToolScope: jest.fn(),
     getToolScope: jest.fn(() => null),
+    setPathJail: jest.fn(),
+    getPathJail: jest.fn(() => null),
     getModelConfig: jest.fn((): any => ({
       id: 'model-1',
       modelName: 'gpt-4',

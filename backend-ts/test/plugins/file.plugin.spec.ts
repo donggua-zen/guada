@@ -131,9 +131,9 @@ describe("FilePlugin", () => {
     it("should read file by line with line numbers", async () => {
       const fp = await writeFile("test.txt", "line1\nline2\nline3");
       const result = await getTool("read").execute({ file_path: fp }, ctx());
-      expect(result).toContain("1\t|line1");
-      expect(result).toContain("2\t|line2");
-      expect(result).toContain("3\t|line3");
+      expect(result).toContain("1\tline1");
+      expect(result).toContain("2\tline2");
+      expect(result).toContain("3\tline3");
     });
 
     it("should support offset and limit", async () => {
@@ -143,9 +143,9 @@ describe("FilePlugin", () => {
         { file_path: fp, offset: 2, limit: 3 },
         ctx(),
       );
-      expect(result).toContain("3\t|line3");
-      expect(result).toContain("4\t|line4");
-      expect(result).toContain("5\t|line5");
+      expect(result).toContain("3\tline3");
+      expect(result).toContain("4\tline4");
+      expect(result).toContain("5\tline5");
       expect(result).not.toContain("line2");
       expect(result).not.toContain("line6");
     });
@@ -168,9 +168,9 @@ describe("FilePlugin", () => {
         { file_path: fp, offset: -3 },
         ctx(),
       );
-      expect(result).toContain("8\t|line8");
-      expect(result).toContain("9\t|line9");
-      expect(result).toContain("10\t|line10");
+      expect(result).toContain("8\tline8");
+      expect(result).toContain("9\tline9");
+      expect(result).toContain("10\tline10");
       expect(result).not.toContain("line7");
     });
 
