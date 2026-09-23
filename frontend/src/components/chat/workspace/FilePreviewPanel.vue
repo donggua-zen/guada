@@ -31,18 +31,33 @@
                 <span v-else-if="saveStatus === 'unsaved'" class="text-xs text-amber-500 ml-1">{{ t('chat.workspace.unsaved') }}</span>
                 <!-- 外部冲突提示 -->
                 <span v-if="externalConflict" class="text-xs text-red-500 ml-2">{{ t('chat.workspace.fileModifiedExternal') }}</span>
-                <div class="flex items-center gap-1 shrink-0">
-                    <!-- 手动刷新预览按钮 -->
-                    <button class="preview-close-btn" :title="t('chat.workspace.refreshPreview')" @click="handleManualRefresh">
-                        <el-icon :size="14">
-                            <ArrowClockwise20Regular class="text-gray-500 dark:text-[#8b8d95]" />
+            </div>
+
+            <!-- 右侧操作区（右对齐，与 GitChangesPanel 头部同款按钮）：刷新预览 + 目录树显隐开关 -->
+            <div class="flex items-center gap-1 shrink-0">
+                <!-- 手动刷新预览按钮 -->
+                <button class="preview-tool-btn" :title="t('chat.workspace.refreshPreview')" @click="handleManualRefresh">
+                    <el-icon :size="16">
+                        <ArrowClockwise20Regular />
+                    </el-icon>
+                </button>
+                <!-- 目录树显隐开关（每个文件标签独立记忆，样式与 Git 审阅面板一致） -->
+                <GdTooltip :content="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
+                    placement="bottom">
+                    <button class="preview-tool-btn" :class="{ 'preview-tool-btn--active': treeVisible }"
+                        :title="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
+                        @click="props.tab.treeVisible = !treeVisible">
+                        <el-icon :size="20">
+                            <TextboxAlignTopRotate9020Regular />
                         </el-icon>
                     </button>
-                </div>
+                </GdTooltip>
             </div>
         </div>
 
+        <!-- 左：文件内容区（弹性） | 右：目录树 pane2（仅激活面板 + 全局开关开启时渲染） -->
         <div class="flex-1 flex overflow-hidden w-full min-h-0 p-1" @contextmenu.prevent="handleContextMenu($event)">
+            <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
             <!-- 空态标签（path 为空）：新建标签页提示 -->
             <div v-if="!selectedFile && props.tab.type === 'file'" class="flex items-center justify-center h-full w-full">
                 <div class="text-center">
@@ -123,6 +138,11 @@
                         class="text-sm leading-relaxed whitespace-pre-wrap break-all  text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
                 </template>
             </template>
+            </div>
+
+            <!-- 右侧目录树：仅在激活面板渲染（v-if 于 panel-hidden 之外，非激活面板不持有树 DOM） -->
+            <WorkspaceTreePanel v-if="props.isActive && treeVisible"
+                :session-id="props.sessionId" @insert-to-input="emit('insert-to-input', $event)" />
         </div>
 
         <!-- 右键上下文菜单 -->
@@ -137,7 +157,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { apiService } from '@/services/ApiService'
 import { LoadingOutlined } from '@vicons/antd'
-import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular } from '@vicons/fluent'
+import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, TextboxAlignTopRotate9020Regular } from '@vicons/fluent'
 import { DocumentCopy, Plus } from '@element-plus/icons-vue'
 import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
@@ -145,6 +165,8 @@ import { useTheme } from '@/composables/useTheme'
 import { useHighlight } from '@/composables/useHighlight'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
+import WorkspaceTreePanel from './WorkspaceTreePanel.vue'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
 interface SelectedFile {
@@ -181,6 +203,15 @@ const emit = defineEmits<{
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const { t } = useI18n()
+
+/**
+ * 目录树显隐：每文件标签独立记忆（tab.treeVisible，随标签缓存持久化）。
+ * - 用户手动设置过 → 始终用该值（之后打开文件也不覆盖用户选择）；
+ * - 从未设置（undefined）→ 按标签状态推导：空白标签展开（便于从树里选文件），
+ *   已打开文件的标签自动收起（给预览让出宽度）。
+ * 推导式（不写回状态）：点了文件后 path 变为非空即自动收起，刷新后同一规则重算，无需事件监听。
+ */
+const treeVisible = computed(() => props.tab.treeVisible ?? !props.tab.path)
 
 // ── 预览状态 ──
 
@@ -896,23 +927,35 @@ watch(() => props.tab.path, (newPath, oldPath) => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-/* 关闭预览按钮 */
-.preview-close-btn {
-    display: inline-flex;
+/* 头部工具按钮（与 GitChangesPanel 的 .git-tool-btn 同款：26px 方形圆角图标按钮） */
+.preview-tool-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
+    border-radius: 8px;
     background: transparent;
-    color: var(--gd-color-text);
+    color: var(--gd-color-text-gray);
+    cursor: pointer;
+    flex-shrink: 0;
     transition: background 0.15s ease, color 0.15s ease;
-    outline: none;
 }
 
-.preview-close-btn:hover {
+.preview-tool-btn:hover:not(:disabled) {
     background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
+}
+
+.preview-tool-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 开关型按钮的开启态（目录树显隐开关） */
+.preview-tool-btn--active {
+    color: var(--gd-color-text);
+    background: var(--gd-color-sidebar-bg-active);
 }
 </style>

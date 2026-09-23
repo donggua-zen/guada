@@ -339,6 +339,8 @@
     exitFullscreen: 'Exit Fullscreen',
     fullscreen: 'Fullscreen',
     workingDir: 'Working Directory',
+    expandTree: 'Expand file tree',
+    collapseTree: 'Collapse file tree',
   collapseOverview: 'Collapse overview',
   openOverview: 'Open overview',
     openInFileManager: 'Open in File Manager',

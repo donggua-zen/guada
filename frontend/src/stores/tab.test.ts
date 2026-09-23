@@ -200,3 +200,70 @@ describe("tabStore.openNewTab", () => {
     expect(store.tabs).toHaveLength(1);
   });
 });
+
+describe("tabStore.pinTab", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("预览文件标签：固定为持久，标签数与激活态不变", () => {
+    const store = useTabStore();
+    store.addTab({ type: "file", key: "file:/a.ts", name: "a.ts", path: "/a.ts", isPreview: true });
+    store.selectTab("file:/a.ts");
+
+    store.pinTab("file:/a.ts");
+
+    expect(store.tabs).toHaveLength(1);
+    expect(store.tabs[0].isPreview).toBe(false);
+    expect(store.activeTabKey).toBe("file:/a.ts");
+  });
+
+  it("固定后新增预览标签不会替换它（固定即为防止被替换）", () => {
+    const store = useTabStore();
+    store.addTab({ type: "file", key: "file:/a.ts", name: "a.ts", path: "/a.ts", isPreview: true });
+    store.pinTab("file:/a.ts");
+
+    store.addTab({ type: "file", key: "file:/b.ts", name: "b.ts", path: "/b.ts", isPreview: true });
+
+    expect(store.tabs.map((t) => t.key)).toEqual(["file:/a.ts", "file:/b.ts"]);
+    expect(store.tabs[0].isPreview).toBe(false);
+    expect(store.tabs[1].isPreview).toBe(true);
+  });
+
+  it("空占位标签（path=''）同样可固定", () => {
+    const store = useTabStore();
+    store.addTab({ type: "file", key: "file:new-1", name: "新建", path: "", isPreview: true });
+
+    store.pinTab("file:new-1");
+
+    expect(store.tabs[0].isPreview).toBe(false);
+  });
+
+  it("非文件标签（git）：no-op", () => {
+    const store = useTabStore();
+    store.openGitTab();
+
+    store.pinTab("git");
+
+    expect(store.tabs).toHaveLength(1);
+    expect(store.tabs[0].type).toBe("git");
+    expect(store.tabs[0].isPreview).toBeUndefined();
+  });
+
+  it("已是持久标签：幂等不变", () => {
+    const store = useTabStore();
+    store.addTab({ type: "file", key: "file:/a.ts", name: "a.ts", path: "/a.ts" });
+
+    store.pinTab("file:/a.ts");
+
+    expect(store.tabs[0].isPreview).toBeFalsy();
+  });
+
+  it("key 不存在：no-op 不抛错", () => {
+    const store = useTabStore();
+    store.addTab({ type: "file", key: "file:/a.ts", name: "a.ts", path: "/a.ts", isPreview: true });
+
+    expect(() => store.pinTab("file:/nope.ts")).not.toThrow();
+    expect(store.tabs[0].isPreview).toBe(true);
+  });
+});

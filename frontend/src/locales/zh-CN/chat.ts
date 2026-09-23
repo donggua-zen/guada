@@ -339,6 +339,8 @@ export default {
     exitFullscreen: '退出全屏',
     fullscreen: '全屏',
     workingDir: '工作目录',
+    expandTree: '展开目录树',
+    collapseTree: '收起目录树',
   collapseOverview: '折叠概览',
   openOverview: '打开概览',
     openInFileManager: '在文件管理器中打开',

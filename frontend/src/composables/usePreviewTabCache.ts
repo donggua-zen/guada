@@ -17,6 +17,12 @@ export interface UnifiedTab {
     size?: number;
     lastAccessedAt?: number;  // 最后访问时间戳（LRU 淘汰依据）
     isPreview?: boolean;       // 临时标签标记（单击打开为临时，双击打开为持久）
+    /**
+     * 目录树显隐（每个文件标签独立记忆，随标签缓存持久化）。
+     * undefined = 从未手动设置 → 按标签状态推导：空白标签展开（便于选文件）、
+     * 已打开文件的标签自动收起；手动设置后固定用该值，打开新文件不覆盖。
+     */
+    treeVisible?: boolean;
     // browser
     windowId?: string;
     title?: string;

@@ -59,6 +59,14 @@ export const useLayoutStore = defineStore('layout', () => {
   // 目录树 / 预览 / Git 三种模式统一使用该宽度
   const workspaceSplitSize = useStorage('workspaceSplitSize', 75)
 
+  // 目录树显隐已改为「每个文件标签独立记忆」（tab.treeVisible，随标签缓存持久化），
+  // 清理早期全局开关的遗留存储键
+  try {
+    localStorage.removeItem('workspaceTreeVisible')
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+
   // 工作目录全屏模式（非持久化，会话级运行时状态）
   const workspaceFullscreen = ref(false)
 
