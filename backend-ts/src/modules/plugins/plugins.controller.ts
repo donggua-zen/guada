@@ -181,6 +181,28 @@ export class PluginsController {
       );
     }
 
+    // 记忆工具（v1.5 起取消：长期记忆改由文件工具维护 MEMORY.md 索引 + 明细文件，
+    // 不再有专用工具）。此处保留展示映射，使历史会话中持久化的 memory 工具调用块
+    // 仍按原样渲染；NLS 键保留在 memory 语言包中（插件仍加载，故可解析）。
+    if (!result["memory"]) {
+      result["memory"] = this.nlsService.resolveDisplay(
+        "memory",
+        {
+          text: {
+            executing: "%memory.executing%",
+            completed: "%memory.completed%",
+          },
+          aggregate: {
+            executing: "%memory.aggregate.executing%",
+            completed: "%memory.aggregate.completed%",
+          },
+          argsKey: "action",
+          icon: "generic",
+        },
+        nlsLocale,
+      );
+    }
+
     return result;
   }
 

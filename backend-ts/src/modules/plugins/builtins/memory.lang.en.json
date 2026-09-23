@@ -1,11 +1,10 @@
 {
-  "memory.name": "Memory Management",
-  "memory.description": "Memory index management and cache sync tools",
-  "memory.toolkitName": "Memory Management",
+  "memory.name": "Long-term Memory",
+  "memory.description": "Long-term memory as a MEMORY.md index plus detail files",
+  "memory.toolkitName": "Long-term Memory",
+  "memory.toolkitDescription": "Long-term memory: a MEMORY.md index plus on-demand detail files; the index is injected into context",
   "memory.executing": "Editing memory",
   "memory.completed": "Edited memory",
   "memory.aggregate.executing": "Editing {n} memories",
-  "memory.aggregate.completed": "Edited {n} memories",
-  "memory.toolkitDescription": "Long-term memory: save facts, preferences and memos"
-
+  "memory.aggregate.completed": "Edited {n} memories"
 }

@@ -654,12 +654,15 @@ export class ShellPlugin extends PluginBase {
       ? await this.checkRemoteRunningProcesses(session.sessionId)
       : [];
 
-    // 3. 无已完成输出且无运行中进程 → 不续跑
-    const hasOutput =
-      completed.some((r) => r.output) ||
-      remoteCompleted.some((r) => r.output);
+    // 3. 无已完成进程且无运行中进程 → 不续跑。
+    // 本地已完成进程本身就要告知（含无输出：drain 已消费该完成事件并清理 entry，
+    // 队列里的 process_monitor 通知随之失效，若不在此续跑，静默完成的信息也会丢失）；
+    // 远程保持"有输出才续跑"的既有语义。
+    const hasLocalCompleted = completed.length > 0;
+    const hasRemoteOutput = remoteCompleted.some((r) => r.output);
     if (
-      !hasOutput &&
+      !hasLocalCompleted &&
+      !hasRemoteOutput &&
       stillRunning.length === 0 &&
       remoteRunningIds.length === 0
     ) {
@@ -670,7 +673,6 @@ export class ShellPlugin extends PluginBase {
     const parts: string[] = [];
 
     for (const result of completed) {
-      if (!result.output) continue;
       const exitInfo =
         result.status === "completed"
           ? ` exitcode:${result.exitCode}`
@@ -680,7 +682,7 @@ export class ShellPlugin extends PluginBase {
           ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the run_command tool if needed.]`
           : "";
       parts.push(
-        `[Process ${result.processId},status:${result.status}${exitInfo}]:\nnew Output:\n${result.output}${truncNote}`,
+        `[Process ${result.processId},status:${result.status}${exitInfo}]:\nnew Output:\n${result.output || "(no output)"}${truncNote}`,
       );
     }
 
