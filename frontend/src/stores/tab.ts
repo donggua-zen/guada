@@ -94,6 +94,24 @@ export const useTabStore = defineStore('tab', () => {
     }
 
     /**
+     * 设置激活文件标签的目录树显隐（每标签字段，随标签缓存持久化）。
+     * 用于 WorkingDirBar 点目录名这类"显式浏览意图"：强制展开，覆盖该标签此前的收起状态。
+     */
+    function setActiveFileTabTreeVisible(visible: boolean): void {
+        const active = tabs.value.find(t => t.key === activeTabKey.value)
+        if (active?.type === 'file') active.treeVisible = visible
+    }
+
+    /**
+     * 将指定标签固定为持久（双击标签栏的文件标签，与目录树双击打开文件同语义）。
+     * 仅文件标签有预览态（isPreview），其他类型 no-op；已是持久则幂等。
+     */
+    function pinTab(key: string): void {
+        const tab = tabs.value.find(t => t.key === key)
+        if (tab?.type === 'file') tab.isPreview = false
+    }
+
+    /**
      * 在激活的文件标签中打开文件（目录树单击/双击：树仅在文件标签激活时可见，
      * 所以永远只作用于当前激活的文件标签，不会新开标签）。
      * 目标已打开 → 直接激活；否则把激活标签原位改键为 file:<path>，
@@ -367,6 +385,8 @@ export const useTabStore = defineStore('tab', () => {
         openWorkspaceBrowseTab,
         openFileInActiveTab,
         openFilePreview,
+        setActiveFileTabTreeVisible,
+        pinTab,
         openTerminalTab,
         openProcessLogTab,
         openSubAgentTab,

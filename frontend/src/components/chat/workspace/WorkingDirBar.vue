@@ -156,7 +156,12 @@ function writeAttachments(ids: string[]): void {
 function openWorkspaceTree(): void {
   layoutStore.setWorkspaceVisible(true);
   // 文件标签激活中→保持；否则选标签栏末个文件标签；无→新建空浏览标签（目录树随之显示）
-  nextTick(() => tabStore.openWorkspaceBrowseTab(t('chat.workspace.newTab')));
+  nextTick(() => {
+    tabStore.openWorkspaceBrowseTab(t('chat.workspace.newTab'));
+    // 点目录名是显式浏览意图：强制展开目标标签的目录树（覆盖该标签此前的收起状态；
+    // 新建空白标签本就默认展开，此处只对"选中已有文件标签"的情况生效）
+    tabStore.setActiveFileTabTreeVisible(true);
+  });
 }
 
 watch(
