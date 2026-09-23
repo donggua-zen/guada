@@ -72,14 +72,38 @@
             </div>
 
             <!-- 图片预览 -->
-            <img v-else-if="previewType === 'image' && imagePreviewUrl && !previewError" :src="imagePreviewUrl" @error="onImageError"
+            <img v-else-if="previewType === 'image' && assetPreviewUrl && !previewError" :src="assetPreviewUrl" @error="onImageError"
                 class="image-preview w-full h-full object-contain p-2" :alt="t('chat.workspace.imageAlt')" />
+
+            <!-- 视频预览（raw-file 走 Range/206，可拖进度条） -->
+            <video v-else-if="previewType === 'video' && assetPreviewUrl && !previewError" ref="mediaElRef"
+                :src="assetPreviewUrl" controls playsinline preload="metadata"
+                class="w-full h-full object-contain p-2" @error="onMediaError" />
+
+            <!-- 音频预览（无画面：文件图标 + 原生播放器） -->
+            <div v-else-if="previewType === 'audio' && assetPreviewUrl && !previewError"
+                class="w-full h-full flex items-center justify-center">
+                <div class="flex flex-col items-center gap-3 px-6 max-w-full">
+                    <img :src="getFileIcon(props.tab.name!)" class="w-12 h-12" alt="" />
+                    <span class="text-sm text-gray-600 dark:text-[#8b8d95] truncate max-w-full">{{ props.tab.name }}</span>
+                    <audio ref="mediaElRef" :src="assetPreviewUrl" controls class="w-[420px] max-w-full"
+                        @error="onMediaError" />
+                </div>
+            </div>
+
+            <!-- PDF 预览（浏览器内置阅读器） -->
+            <iframe v-else-if="previewType === 'pdf' && assetPreviewUrl && !previewError" :src="assetPreviewUrl"
+                class="w-full border-0" style="height: 100%;" />
 
             <!-- 不支持的文件 -->
             <div v-else-if="previewType === 'unsupported' && !previewError"
                 class="w-full h-full flex items-center justify-center">
                 <div class="text-center">
-                    <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.unsupportedPreview') }}</p>
+                    <p class="text-gray-400 dark:text-gray-500 text-sm">
+                        {{ isUnplayableMediaFile(props.tab.extension || '')
+                            ? t('chat.workspace.mediaNotPlayable')
+                            : t('chat.workspace.unsupportedPreview') }}
+                    </p>
                     <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
                         {{ t('chat.workspace.openInExplorer') }}
                     </el-button>
@@ -101,15 +125,20 @@
                 <div v-else-if="previewError" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
-                        <el-button v-if="isElectron && previewType === 'unsupported'"
-                            @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                        <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
                             {{ t('chat.workspace.openInExplorer') }}
                         </el-button>
                     </div>
                 </div>
                 <template v-else-if="previewType === 'text'">
+                    <!-- SVG 渲染模式：<img> 加载（SVG 作为图片不执行脚本），切换按钮与 md/html 同一套。
+                         必须带 assetPreviewUrl 守卫：否则会先以 src="" 挂载，空 src 会触发一次 error 事件把预览打回错误态 -->
+                    <img v-if="isSvgFile && renderMode === 'rendered' && assetPreviewUrl && !previewError"
+                        :src="assetPreviewUrl" @error="onImageError"
+                        class="image-preview w-full h-full object-contain p-2" :alt="t('chat.workspace.imageAlt')" />
+
                     <!-- HTML 预览模式（通过 src 直接加载，后端 Set-Cookie 鉴权） -->
-                    <iframe v-if="isHtmlFile && renderMode === 'rendered'" :src="htmlPreviewSrc" class="w-full border-0"
+                    <iframe v-else-if="isHtmlFile && renderMode === 'rendered'" :src="htmlPreviewSrc" class="w-full border-0"
                         style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
 
                     <!-- Markdown 渲染模式（iframe srcdoc + <base> 让浏览器原生解析相对路径） -->
@@ -162,7 +191,8 @@ import { DocumentCopy, Plus } from '@element-plus/icons-vue'
 import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
-import { useHighlight } from '@/composables/useHighlight'
+import { useHighlight, getPreviewKind, isUnplayableMediaFile, type FilePreviewKind } from '@/composables/useHighlight'
+import { getFileIcon } from '@/composables/useFileIcon'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
@@ -224,11 +254,16 @@ const fileContent = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
 const fileNotFound = ref(false)
-const previewType = ref<'text' | 'image' | 'unsupported' | null>(null)
-const imagePreviewUrl = ref('')
+const previewType = ref<FilePreviewKind | null>(null)
+/** 图片/音视频/pdf/svg 渲染态共用的直出 URL（raw-file 或 Electron 本地 file://） */
+const assetPreviewUrl = ref('')
 const htmlPreviewUrl = ref('')
 const htmlPreviewVersion = ref(0)
 const fileContentHash = ref('')
+/** 手动刷新计数：并入直出 URL 的版本参数，使元素真正重新请求（缓存击穿） */
+const localRefreshCount = ref(0)
+/** <video>/<audio> 元素引用（切走标签时暂停，避免隐藏面板继续出声） */
+const mediaElRef = ref<HTMLMediaElement | null>(null)
 
 // 文件加载/切换时，同步编辑内容（冲突时不覆盖）
 watch([() => selectedFile.value?.path, () => fileContent.value], () => {
@@ -269,23 +304,35 @@ const iframeSelection = ref('')
 // ── 依赖初始化 ──
 
 const { parseMarkdown } = usePreviewMarkdown()
-const { highlightCode, getLanguageFromExtension, isTextFile, isImageFile } = useHighlight()
+const { highlightCode, getLanguageFromExtension } = useHighlight()
 
 // ── 计算属性 ──
 
 const isHtmlFile = computed(() => {
     if (!selectedFile.value) return false
-    const ext = selectedFile.value.extension.toLowerCase()
+    const ext = (selectedFile.value.extension || '').toLowerCase()
     return ext === '.html' || ext === '.htm'
 })
 
 const isMarkdownFile = computed(() => {
     if (!selectedFile.value) return false
-    const ext = selectedFile.value.extension.toLowerCase()
+    const ext = (selectedFile.value.extension || '').toLowerCase()
     return ext === '.md' || ext === '.markdown'
 })
 
-const canTogglePreview = computed(() => isMarkdownFile.value || isHtmlFile.value)
+const isSvgFile = computed(() => {
+    if (!selectedFile.value) return false
+    return (selectedFile.value.extension || '').toLowerCase() === '.svg'
+})
+
+const canTogglePreview = computed(() => isMarkdownFile.value || isHtmlFile.value || isSvgFile.value)
+
+/**
+ * 直出资源型预览（不走文本接口）：图片/音视频/pdf，以及 SVG 的渲染态。
+ * 这些类型内容变更时只能重建 URL（raw-file 直出），不能调文本接口刷新。
+ */
+const isAssetPreview = computed(() => previewType.value !== 'text'
+    || (isSvgFile.value && renderMode.value === 'rendered'))
 
 const htmlPreviewSrc = computed(() => {
     if (!htmlPreviewUrl.value) return ''
@@ -309,10 +356,7 @@ const markdownSrcDoc = computed(() => {
 
     let baseUrl: string
     if (isElectron && window.location.protocol === 'file:' && cachedWorkspacePath.value) {
-        const separator = cachedWorkspacePath.value.endsWith('/') || cachedWorkspacePath.value.endsWith('\\') ? '' : '/'
-        const fullPath = (cachedWorkspacePath.value + separator + mdFileDir).replace(/\\/g, '/')
-        const encodedPath = encodeURI(fullPath)
-        baseUrl = encodedPath.startsWith('/') ? `file://${encodedPath}/` : `file:///${encodedPath}/`
+        baseUrl = toLocalFileUrl(joinWorkspacePath(cachedWorkspacePath.value, mdFileDir)) + '/'
     } else {
         baseUrl = `/api/v1/sessions/${props.sessionId}/workspace/html-preview/${mdFileDir ? mdFileDir + '/' : ''}`
     }
@@ -322,7 +366,7 @@ const markdownSrcDoc = computed(() => {
 
 const highlightedCode = computed(() => {
     if (!selectedFile.value || !fileContent.value) return ''
-    const lang = getLanguageFromExtension(selectedFile.value.extension.toLowerCase())
+    const lang = getLanguageFromExtension((selectedFile.value.extension || '').toLowerCase())
     if (lang) return highlightCode(fileContent.value, lang)
     return ''
 })
@@ -339,6 +383,49 @@ function hashString(str: string): string {
     return hash.toString(16)
 }
 
+// ── 直出资源 URL（图片 / 音视频 / pdf / SVG 渲染态共用） ──
+
+/** 工作区绝对路径 → file:// URL（仅 Electron 生产形态用：页面本身就是 file:） */
+function toLocalFileUrl(absolutePath: string): string {
+    const normalized = absolutePath.replace(/\\/g, '/')
+    const encodedPath = encodeURI(normalized)
+    return encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`
+}
+
+/** 拼接工作区绝对路径与相对路径（统一分隔符，处理 Windows 反斜杠） */
+function joinWorkspacePath(workspacePath: string, relativePath: string): string {
+    const separator = workspacePath.endsWith('/') || workspacePath.endsWith('\\') ? '' : '/'
+    return (workspacePath + separator + relativePath).replace(/\\/g, '/')
+}
+
+/** 确保已缓存工作目录绝对路径（Electron 生产形态拼 file:// 需要） */
+async function ensureWorkspacePath(): Promise<string | null> {
+    if (cachedWorkspacePath.value) return cachedWorkspacePath.value
+    try {
+        const resp = await apiService.getWorkspacePath(props.sessionId!)
+        cachedWorkspacePath.value = resp.workspacePath || null
+    } catch { /* 取不到只影响 Electron 本地形态，由调用方提示 */ }
+    return cachedWorkspacePath.value
+}
+
+/**
+ * 直出资源 URL：Electron 生产（file:）走本地路径，其余走带 token 的 raw-file 端点。
+ * 端点侧用 sendFile 提供 Range/206，故音视频可拖进度条、大文件按块加载；
+ * `_v=` 版本参数用于外部变更/手动刷新后真正重新请求（URL 不变则元素不会重新加载）。
+ */
+async function resolveAssetUrl(filePath: string): Promise<string | null> {
+    if (isElectron && window.location.protocol === 'file:') {
+        const wsPath = await ensureWorkspacePath()
+        if (!wsPath) {
+            previewError.value = t('chat.workspace.workspacePathError')
+            return null
+        }
+        return toLocalFileUrl(joinWorkspacePath(wsPath, filePath))
+    }
+    const rawUrl = apiService.getWorkspaceRawFileUrl(props.sessionId, filePath)
+    return `${rawUrl}&_v=${props.contentVersion}.${localRefreshCount.value}`
+}
+
 // ── 文件加载 ──
 
 async function loadFilePreview(): Promise<void> {
@@ -350,7 +437,7 @@ async function loadFilePreview(): Promise<void> {
         previewError.value = ''
         fileNotFound.value = false
         previewType.value = null
-        imagePreviewUrl.value = ''
+        assetPreviewUrl.value = ''
         return
     }
 
@@ -366,43 +453,42 @@ async function loadFilePreview(): Promise<void> {
     previewError.value = ''
     previewLoading.value = false
     fileContentHash.value = ''
-    imagePreviewUrl.value = ''
+    assetPreviewUrl.value = ''
 
-    const ext = tab.extension!
-    if (isTextFile(ext)) {
-        previewType.value = 'text'
-        if (isHtmlFile.value) {
-            if (isElectron && window.location.protocol === 'file:') {
-                await loadHtmlPreviewLocal()
-            } else {
-                htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, tab.path!)
-            }
-            await loadFileContent(tab.path!)
-        } else if (isMarkdownFile.value) {
-            if (isElectron && window.location.protocol === 'file:' && !cachedWorkspacePath.value) {
-                try {
-                    const resp = await apiService.getWorkspacePath(props.sessionId!)
-                    cachedWorkspacePath.value = resp.workspacePath || null
-                } catch { /* ignore */ }
-            }
-            await loadFileContent(tab.path!)
-        } else {
-            await loadFileContent(tab.path!)
-        }
-    } else if (isImageFile(ext)) {
-        previewType.value = 'image'
-        if (isElectron && window.location.protocol === 'file:') {
-            await loadImageLocal()
-        } else {
-            if (tab.size && tab.size > 20 * 1024 * 1024) {
-                previewError.value = t('chat.workspace.fileTooLarge')
-            } else {
-                imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, tab.path!)
-            }
-        }
-    } else {
-        previewType.value = 'unsupported'
+    const kind = getPreviewKind(tab.extension ?? '')
+    previewType.value = kind
+
+    // 不支持的类型：直接落兜底 UI，不发任何请求
+    if (kind === 'unsupported') return
+
+    // 图片 / 音视频 / pdf：raw-file 直出，加载或解码失败由元素的 error 事件兜底
+    if (kind !== 'text') {
+        assetPreviewUrl.value = (await resolveAssetUrl(tab.path!)) ?? ''
+        return
     }
+
+    // 文本类：HTML 走 iframe（后端 Set-Cookie 鉴权，相对资源可用）、SVG 渲染态走直出图片
+    if (isHtmlFile.value) {
+        if (isElectron && window.location.protocol === 'file:') {
+            await loadHtmlPreviewLocal()
+        } else {
+            htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, tab.path!)
+        }
+    } else if (isSvgFile.value) {
+        assetPreviewUrl.value = (await resolveAssetUrl(tab.path!)) ?? ''
+    } else if (isMarkdownFile.value && isElectron && window.location.protocol === 'file:') {
+        // 渲染态的相对资源 base 需要工作目录绝对路径
+        await ensureWorkspacePath()
+    }
+
+    await loadFileContent(tab.path!)
+}
+
+/** 只重建直出 URL（不发内容请求）：外部文件变更、手动刷新时用 */
+async function refreshAssetUrl(): Promise<void> {
+    if (!props.tab.path) return
+    const url = await resolveAssetUrl(props.tab.path)
+    if (url) assetPreviewUrl.value = url
 }
 
 async function loadFileContent(filePath: string, force = false, skipLoading = false): Promise<void> {
@@ -449,50 +535,29 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
     }
 }
 
-async function loadImageLocal(): Promise<void> {
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId!)
-        const absWorkspacePath = resp.workspacePath
-        if (!absWorkspacePath) {
-            previewError.value = t('chat.workspace.workspacePathError')
-            return
-        }
-        const relativePath = props.tab.path!.replace(/\\/g, '/')
-        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/'
-        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/')
-        const encodedPath = encodeURI(fullPath)
-        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`
-        imagePreviewUrl.value = fileUrl
-    } catch (error: any) {
-        previewError.value = t('chat.workspace.loadImageFailed')
-        console.error('[FilePreviewPanel] Failed to load image locally:', error)
-    }
-}
-
 async function loadHtmlPreviewLocal(): Promise<void> {
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId!)
-        const absWorkspacePath = resp.workspacePath
-        if (!absWorkspacePath) {
-            previewError.value = t('chat.workspace.workspacePathError')
-            return
-        }
-        const relativePath = props.tab.path!.replace(/\\/g, '/')
-        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/'
-        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/')
-        const encodedPath = encodeURI(fullPath)
-        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`
-        htmlPreviewUrl.value = fileUrl
-    } catch (error: any) {
-        previewError.value = t('chat.workspace.loadHtmlFailed')
-        console.error('[FilePreviewPanel] Failed to load HTML locally:', error)
+    const wsPath = await ensureWorkspacePath()
+    if (!wsPath) {
+        previewError.value = t('chat.workspace.workspacePathError')
+        return
     }
+    htmlPreviewUrl.value = toLocalFileUrl(joinWorkspacePath(wsPath, props.tab.path!))
 }
 
 // ── 操作方法 ──
 
 function handleManualRefresh(): void {
     if (!selectedFile.value) return
+    // 有未保存编辑：先标记冲突，不覆盖用户内容（与外部变更路径一致）
+    if (saveStatus.value === 'unsaved') {
+        externalConflict.value = true
+        return
+    }
+    if (isAssetPreview.value) {
+        localRefreshCount.value++ // URL 变了元素才会重新请求
+        void refreshAssetUrl()
+        return
+    }
     loadFileContent(selectedFile.value.path, true, false)
 }
 
@@ -529,9 +594,16 @@ async function handleConflictSave(): Promise<void> {
 function onImageError(event: Event | string): void {
     const src = (typeof event === 'object' && (event as Event).target instanceof HTMLImageElement)
         ? (event.target as HTMLImageElement).getAttribute('src')
-        : imagePreviewUrl.value
+        : assetPreviewUrl.value
     console.error('[FilePreviewPanel] Image load failed, URL:', src)
-    previewError.value = isElectron ? t('chat.workspace.imageLoadFailed') : t('chat.workspace.fileTooLarge')
+    // 失败原因无法从 error 事件读出（解码不了 / 后端拒绝 / 文件已删），统一按"加载失败"提示；
+    // 旧实现在 Web 下把任何失败都错报成"文件过大"
+    previewError.value = t('chat.workspace.imageLoadFailed')
+}
+
+function onMediaError(): void {
+    // 浏览器解不了该容器/编码，或后端拒绝（超上限等），统一提示
+    previewError.value = t('chat.workspace.mediaPlaybackFailed')
 }
 
 async function handleOpenInExplorerForCurrent(): Promise<void> {
@@ -755,14 +827,19 @@ onBeforeUnmount(() => {
 // ── Watch：懒加载 + 文件变更 ──
 
 watch(() => props.isActive, async (active) => {
-    if (!active) return
+    if (!active) {
+        // 非激活面板只是 CSS 隐藏、DOM 仍在：视频/音频不暂停会继续出声
+        mediaElRef.value?.pause()
+        return
+    }
 
     if (!hasLoaded.value) {
         hasLoaded.value = true
         await loadFilePreview()
     } else if (isStale.value) {
         isStale.value = false
-        await loadFileContent(props.tab.path!, false, true)
+        if (isAssetPreview.value) await refreshAssetUrl()
+        else await loadFileContent(props.tab.path!, false, true)
     }
 })
 
@@ -773,11 +850,14 @@ watch(() => props.contentVersion, (newVer, oldVer) => {
         externalConflict.value = true
         return
     }
-    if (props.isActive) {
-        loadFileContent(props.tab.path!, false, true)
-    } else {
+    if (!props.isActive) {
         isStale.value = true
+        return
     }
+    // 直出资源（图片/音视频/pdf/SVG 渲染态）没有内容接口，只能重建 URL 让元素重新请求；
+    // 文本类走内容接口并跳过 loading，避免每次外部写入都闪一下转圈
+    if (isAssetPreview.value) void refreshAssetUrl()
+    else loadFileContent(props.tab.path!, false, true)
 })
 
 // tab.path 变化（空占位标签选中文件 / 在当前标签页切换其他文件）：

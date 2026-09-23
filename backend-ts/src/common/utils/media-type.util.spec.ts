@@ -1,6 +1,7 @@
 import {
   mimeFromExtension,
   normalizeMediaType,
+  resolveServingMimeType,
   isVisionImageMediaType,
   isRasterImageExtension,
   RASTER_IMAGE_EXTENSIONS,
@@ -45,6 +46,37 @@ describe('media-type.util', () => {
       expect(normalizeMediaType(undefined, undefined)).toBe('application/octet-stream');
       expect(normalizeMediaType('', '')).toBe('application/octet-stream');
       expect(normalizeMediaType('image', '')).toBe('application/octet-stream');
+    });
+  });
+
+  describe('resolveServingMimeType（工作区文件直出）', () => {
+    it('文本/代码走覆盖层（扩展名带点、大小写无关）', () => {
+      expect(resolveServingMimeType('.css')).toBe('text/css');
+      expect(resolveServingMimeType('.CSS')).toBe('text/css');
+      expect(resolveServingMimeType('js')).toBe('application/javascript');
+      expect(resolveServingMimeType('.ts')).toBe('application/typescript');
+      expect(resolveServingMimeType('vue')).toBe('text/html');
+    });
+
+    it('音视频/位图/pdf 落到契约表（此前 raw-file 发 octet-stream 的回归）', () => {
+      expect(resolveServingMimeType('.mp4')).toBe('video/mp4');
+      expect(resolveServingMimeType('.mp3')).toBe('audio/mpeg');
+      expect(resolveServingMimeType('.flac')).toBe('audio/flac');
+      expect(resolveServingMimeType('.avif')).toBe('image/avif');
+      expect(resolveServingMimeType('.heic')).toBe('image/heic');
+      expect(resolveServingMimeType('.pdf')).toBe('application/pdf');
+    });
+
+    it('契约表与覆盖层语义一致的类型不因取表顺序改变', () => {
+      expect(resolveServingMimeType('.html')).toBe('text/html');
+      expect(resolveServingMimeType('.csv')).toBe('text/csv');
+      expect(resolveServingMimeType('.svg')).toBe('image/svg+xml');
+    });
+
+    it('未知/空值回退 octet-stream', () => {
+      expect(resolveServingMimeType('.xyz')).toBe('application/octet-stream');
+      expect(resolveServingMimeType(undefined)).toBe('application/octet-stream');
+      expect(resolveServingMimeType('')).toBe('application/octet-stream');
     });
   });
 

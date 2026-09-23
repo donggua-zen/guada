@@ -91,21 +91,31 @@ const fileIconMap: Record<string, string> = {
     'bmp': vscodeImage,
     'ico': vscodeImage,
     'tiff': vscodeImage,
+    'tif': vscodeImage,
+    'avif': vscodeImage,
+    'heic': vscodeImage,
+    'heif': vscodeImage,
+    'jfif': vscodeImage,
 
     // 音频文件
     'mp3': vscodeAudio,
     'wav': vscodeAudio,
     'flac': vscodeAudio,
     'ogg': vscodeAudio,
+    'oga': vscodeAudio,
+    'opus': vscodeAudio,
     'm4a': vscodeAudio,
     'aac': vscodeAudio,
+    'weba': vscodeAudio,
 
     // 视频文件
     'mp4': vscodeVideo,
+    'm4v': vscodeVideo,
     'avi': vscodeVideo,
     'mkv': vscodeVideo,
     'mov': vscodeVideo,
     'webm': vscodeVideo,
+    'ogv': vscodeVideo,
     'flv': vscodeVideo,
 
     // 压缩文件
