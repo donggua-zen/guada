@@ -29,6 +29,12 @@ import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import { resolveSessionAttachmentPath } from '../../common/utils/session-path.util';
 import { resolveAttachmentResponseHeaders } from '../../common/utils/attachment-serving.util';
+import { resolveServingMimeType } from '../../common/utils/media-type.util';
+
+/** 预览类资源（位图/音视频/pdf）上限：浏览器按 Range 分块取，此处仅兜底防呆 */
+const MAX_PREVIEW_ASSET_SIZE = 2 * 1024 * 1024 * 1024;
+/** 其余二进制（.zip/.exe 之类不可预览的文件）上限，沿用原 10MB 策略 */
+const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024;
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -526,21 +532,29 @@ export class SessionsController {
       throw new Error("Cannot read directory as file");
     }
 
-    // 检查文件大小（限制为 10MB）
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    if (stat.size > MAX_FILE_SIZE) {
-      throw new Error("File too large (max 10MB)");
-    }
-
-    // 根据扩展名设置 Content-Type
+    // 根据扩展名设置 Content-Type（音视频/位图/pdf 走前后端契约表，否则 .mp4 会发成
+    // application/octet-stream，<video>/<audio> 认不出容器）
     const ext = path.extname(filePath).toLowerCase();
     const mimeType = this.getMimeType(ext);
+    this.assertServableSize(mimeType, stat.size);
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Length', stat.size);
 
-    // 流式返回文件内容
-    const stream = fs.createReadStream(resolvedPath);
-    stream.pipe(res);
+    // 用 sendFile 而非 createReadStream().pipe：express/send 自带 Range/206、Accept-Ranges、
+    // ETag/Last-Modified —— <video>/<audio> 拖进度条、按块加载都依赖它；Content-Length 由 send
+    // 按实际区间写入，故不再手动设置（预设全量长度会让 206 的响应头对不上）。
+    // dotfiles: 'allow' 维持与原 createReadStream 相同的可见性（工作区内可能有 .xxx 目录）。
+    res.sendFile(resolvedPath, { dotfiles: 'allow' }, (err) => {
+      if (!err || res.headersSent) return;
+      const status = (err as any).status || ((err as any).code === 'ENOENT' ? 404 : undefined);
+      if (status === 404) {
+        res.status(404).json({ message: 'File not found' });
+      } else if (status === 403) {
+        res.status(403).json({ message: 'Access denied: File is outside workspace directory' });
+      } else {
+        console.error(`[workspace/raw-file] sendFile failed: ${resolvedPath}: ${err.message}`);
+        res.status(500).json({ message: 'File read failed' });
+      }
+    });
   }
 
   /**
@@ -661,21 +675,26 @@ export class SessionsController {
       throw new HttpException("Cannot read directory as file", HttpStatus.BAD_REQUEST);
     }
 
-    // 检查文件大小（限制为 10MB）
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    if (stat.size > MAX_FILE_SIZE) {
-      throw new HttpException("File too large (max 10MB)", HttpStatus.PAYLOAD_TOO_LARGE);
-    }
-
-    // 根据扩展名设置 Content-Type
+    // 检查文件大小（媒体/位图/pdf 按预览上限放行，其余维持 10MB）
     const ext = path.extname(filePath).toLowerCase();
     const mimeType = this.getMimeType(ext);
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Length', stat.size);
+    this.assertServableSize(mimeType, stat.size);
 
-    // 流式返回文件内容
-    const stream = fs.createReadStream(resolvedPath);
-    stream.pipe(res);
+    // 根据扩展名设置 Content-Type
+    res.setHeader('Content-Type', mimeType);
+
+    // 同 raw-file：sendFile 自带 Range/206/ETag，预览页里嵌的视频/大图才能按块加载；
+    // Content-Length 由 send 按实际区间写入，不再手动设置。
+    res.sendFile(resolvedPath, { dotfiles: 'allow' }, (err) => {
+      if (!err || res.headersSent) return;
+      const status = (err as any).status || ((err as any).code === 'ENOENT' ? 404 : undefined);
+      if (status === 404) {
+        res.status(404).end();
+      } else {
+        console.error(`[workspace/html-preview] sendFile failed: ${resolvedPath}: ${err.message}`);
+        res.status(500).end();
+      }
+    });
   }
 
   @Delete("sessions/:id/workspace/file")
@@ -778,34 +797,28 @@ export class SessionsController {
     }
   }
 
+  /** 直出响应 MIME（文本/代码 + 契约表兜底，见 media-type.util） */
   private getMimeType(extension: string): string {
-    const mimeTypes: Record<string, string> = {
-      '.html': 'text/html',
-      '.htm': 'text/html',
-      '.css': 'text/css',
-      '.js': 'application/javascript',
-      '.json': 'application/json',
-      '.md': 'text/markdown',
-      '.txt': 'text/plain',
-      '.py': 'text/x-python',
-      '.java': 'text/x-java',
-      '.ts': 'application/typescript',
-      '.vue': 'text/html',
-      '.xml': 'application/xml',
-      '.yaml': 'text/yaml',
-      '.yml': 'text/yaml',
-      '.csv': 'text/csv',
-      '.sql': 'application/sql',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml',
-      '.webp': 'image/webp',
-      '.bmp': 'image/bmp',
-      '.ico': 'image/x-icon',
-    };
-    return mimeTypes[extension] || 'application/octet-stream';
+    return resolveServingMimeType(extension);
+  }
+
+  /**
+   * 直出大小上限分层：预览类资源（位图/音视频/pdf）由浏览器按 Range 分块取，
+   * 上限仅作兜底；其余二进制沿用 10MB。
+   */
+  private assertServableSize(mimeType: string, size: number): void {
+    const isPreviewAsset =
+      mimeType.startsWith('image/') ||
+      mimeType.startsWith('audio/') ||
+      mimeType.startsWith('video/') ||
+      mimeType === 'application/pdf';
+    const maxSize = isPreviewAsset ? MAX_PREVIEW_ASSET_SIZE : MAX_BINARY_FILE_SIZE;
+    if (size > maxSize) {
+      throw new HttpException(
+        `File too large (max ${Math.floor(maxSize / 1024 / 1024)}MB)`,
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
   }
 }
 

@@ -229,8 +229,75 @@ export function isImageFile(ext: string): boolean {
     ".avif",
     ".tiff",
     ".tif",
+    ".heic",
+    ".heif",
+    ".jfif",
   ];
   return imageExtensions.includes(ext.toLowerCase());
+}
+
+/** 音频扩展名（浏览器可直接解码的容器/编码组合） */
+const AUDIO_EXTENSIONS = [
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".oga",
+  ".opus",
+  ".m4a",
+  ".aac",
+  ".flac",
+  ".weba",
+];
+
+/** 视频扩展名（浏览器可直接解码的容器/编码组合；.mkv/.mov 视内部编码而定，失败有兜底 UI） */
+const VIDEO_EXTENSIONS = [
+  ".mp4",
+  ".m4v",
+  ".webm",
+  ".ogv",
+  ".mov",
+  ".mkv",
+];
+
+/**
+ * 已知但浏览器基本解不了的媒体容器 → 给"浏览器无法播放"专门文案，
+ * 而不是通用的"此文件暂不支持预览"（用户才知道该换播放器）。
+ * 刻意不含 .ts：那是 TypeScript，不是 MPEG-TS。
+ */
+const UNPLAYABLE_MEDIA_EXTENSIONS = [
+  ".avi",
+  ".flv",
+  ".wmv",
+  ".wma",
+  ".ape",
+  ".mpg",
+  ".mpeg",
+  ".rmvb",
+  ".3gp",
+];
+
+/** 预览面板的渲染形态（唯一分流结果，由 getPreviewKind 产出） */
+export type FilePreviewKind = 'text' | 'image' | 'audio' | 'video' | 'pdf' | 'unsupported';
+
+/**
+ * 扩展名 → 预览形态（预览面板的唯一分流入口）。
+ *
+ * 判定顺序：文本优先（.svg 归 text —— 它源码可编辑，渲染成图片的能力由面板按
+ * isSvgFile 另判），再位图，再音视频，最后 pdf；其余落 unsupported 走兜底 UI。
+ */
+export function getPreviewKind(ext: string): FilePreviewKind {
+  const normalized = ext.toLowerCase();
+  if (isTextFile(normalized)) return 'text';
+  if (isImageFile(normalized)) return 'image';
+  if (AUDIO_EXTENSIONS.includes(normalized)) return 'audio';
+  if (VIDEO_EXTENSIONS.includes(normalized)) return 'video';
+  if (normalized === '.pdf') return 'pdf';
+  return 'unsupported';
+}
+
+/** 已知但浏览器解不了的媒体格式（用于 unsupported 分支的专门文案） */
+export function isUnplayableMediaFile(ext: string): boolean {
+  return UNPLAYABLE_MEDIA_EXTENSIONS.includes(ext.toLowerCase());
 }
 
 /**

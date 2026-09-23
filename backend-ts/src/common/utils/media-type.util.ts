@@ -109,6 +109,37 @@ export function mimeFromExtension(ext?: string | null): string {
   return EXT_TO_MIME[normalizeExtension(ext)] ?? 'application/octet-stream';
 }
 
+/**
+ * EXT_TO_MIME 未覆盖的文本/代码类扩展名（键不带点，同风格）。
+ *
+ * 单列原因：这些类型是「服务端要直出给浏览器」的，判定比附件契约表更细——
+ * 例如 .css 必须是 text/css，否则浏览器会拒绝应用 <link> 样式。EXT_TO_MIME
+ * 服务的是上传/模型侧的附件判定，不该被服务端细节污染。
+ */
+const TEXT_CODE_MIME_TYPES: Record<string, string> = {
+  css: 'text/css',
+  js: 'application/javascript',
+  py: 'text/x-python',
+  java: 'text/x-java',
+  ts: 'application/typescript',
+  vue: 'text/html',
+  yaml: 'text/yaml',
+  yml: 'text/yaml',
+  sql: 'application/sql',
+};
+
+/**
+ * 工作区文件直出的响应 MIME（workspace/raw-file、html-preview 等）。
+ *
+ * 先查文本/代码覆盖表，其余（位图/音视频/pdf/office）交给前后端契约表
+ * EXT_TO_MIME —— 避免再长出第三份会漂移的 MIME 表（此前 raw-file 就因为
+ * 私有一张表，把 .mp4/.mp3 发成 application/octet-stream 导致播放器不认）。
+ */
+export function resolveServingMimeType(ext?: string | null): string {
+  const normalized = normalizeExtension(ext);
+  return TEXT_CODE_MIME_TYPES[normalized] ?? mimeFromExtension(normalized);
+}
+
 /** MIME 形态判定：type/subtype（含 + 后缀，如 image/svg+xml） */
 function looksLikeMime(value?: string | null): boolean {
   return !!value && /^[a-z]+\/[a-z0-9.+-]+$/i.test(value.trim());
