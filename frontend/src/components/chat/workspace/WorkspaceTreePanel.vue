@@ -1,7 +1,7 @@
 <template>
     <!-- 目录树面板：作为 FilePreviewPanel 的右栏（参照 GitChangesPanel 的 pane2 布局）。
          仅在激活的文件标签内渲染（FilePreviewPanel v-if 控制），数据来自 workspaceTree store。 -->
-    <div class="workspace-tree-pane shrink-0 w-72 border-l border-(--gd-color-surface-border) dark:border-[#2e3035] flex flex-col min-h-0 bg-[var(--gd-color-surface)]"
+    <div class="workspace-tree-pane shrink-0 w-56 border-l border-(--gd-color-surface-border) dark:border-[#2e3035] flex flex-col min-h-0 bg-[var(--gd-color-surface)]"
         @contextmenu.stop>
         <!-- 头部 -->
         <div class="shrink-0 flex items-center justify-between px-2 py-3">
