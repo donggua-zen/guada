@@ -888,7 +888,7 @@ const handleImageClick = (file: any) => {
 
 /* 中间处理过程分组 */
 .process-group {
-  margin: 12px 0 12px 0;
+  margin: 16px 0;
 }
 
 .process-group:first-child {

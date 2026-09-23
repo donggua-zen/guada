@@ -114,6 +114,7 @@ export default {
     noMoreMessages: '没有更多消息了',
     editingMessage: '正在编辑消息',
     memoryManagement: '记忆管理',
+    scrollToBottom: '回到底部',
     contextUsage: '上下文使用率',
     contextUsagePercent: '上下文使用率 {pct}%',
     editCancelled: '已取消编辑',

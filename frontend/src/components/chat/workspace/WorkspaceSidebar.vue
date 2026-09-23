@@ -81,7 +81,7 @@
 
             <!-- 全屏按钮 -->
             <GdTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
-                <button class="sidebar-tool-btn no-drag" @click="layoutStore.toggleWorkspaceFullscreen()">
+                <button class="sidebar-tool-btn no-drag mr-1.5" @click="layoutStore.toggleWorkspaceFullscreen()">
                     <el-icon :size="16">
                         <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
                         <ArrowMinimize16Regular v-else />

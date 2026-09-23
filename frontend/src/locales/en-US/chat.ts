@@ -114,6 +114,7 @@
     noMoreMessages: 'No more messages',
     editingMessage: 'Editing message',
     memoryManagement: 'Memory Management',
+    scrollToBottom: 'Scroll to bottom',
     contextUsage: 'Context Usage',
     contextUsagePercent: 'Context Usage {pct}%',
     editCancelled: 'Edit cancelled',
