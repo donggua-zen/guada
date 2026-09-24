@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import Database from "better-sqlite3";
+import sqliteVec from "sqlite-vec";
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import {
@@ -17,6 +18,8 @@ import {
   KB_CONFIG_FILE,
   KbMetaStore,
   KnowledgeBaseMeta,
+  DEFAULT_KEYWORD_WEIGHT,
+  DEFAULT_SEMANTIC_WEIGHT,
 } from "../../../modules/knowledge-base/kb-meta.store";
 import { KBFileRepository, KbDbAccess } from "../../../modules/knowledge-base/kb-file.repository";
 import { KBChunkRepository } from "../../../modules/knowledge-base/kb-chunk.repository";
@@ -40,6 +43,17 @@ const LEGACY_VECTOR_DB = "vector_db.sqlite";
 function pick<T = any>(row: Record<string, any>, camel: string, snake: string): T {
   if (row[camel] !== undefined && row[camel] !== null) return row[camel];
   return row[snake];
+}
+
+/**
+ * 把来源值强制成有限数字，否则回退默认。
+ *
+ * 不能用 `Number(pick(...) ?? fallback)`：旧数据里字段存在但内容非法（空串、字符串 "abc"）
+ * 时 `Number()` 会给出 NaN，而 NaN 会一路写进 kb.json 并让权重计算静默失效。
+ */
+function num(value: any, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 interface LegacyKbFileMeta {
@@ -198,8 +212,13 @@ export class KbMigrationBootstrapService {
       const stagingDbPath = path.join(stagingDir, KB_DB_FILE);
       const db = new Database(stagingDbPath);
       try {
+        // 必须加载 sqlite-vec：分块写入会同步维护 `chunk_vec`（vec0 虚拟表），
+        // 不加载扩展会在建表时报 `no such module: vec0`，整个迁移被 run() 的
+        // try/catch 吞掉、只留一行日志，表现为"迁移后知识库是空的"。
+        sqliteVec.load(db);
         db.pragma("journal_mode = WAL");
         db.pragma("busy_timeout = 5000");
+        db.pragma("synchronous = NORMAL");
         const staging = await this.createStagingRepositories(
           kbId,
           db,
@@ -594,12 +613,14 @@ class KbIntegrationSources {
           pick(row, "chunkOverlapSize", "chunk_overlap_size") ?? 100,
         ),
         chunkMinSize: Number(pick(row, "chunkMinSize", "chunk_min_size") ?? 50),
-        isActive: pick(row, "isActive", "is_active") !== false,
-        isPublic: pick(row, "isPublic", "is_public") === true,
-        metadataConfig: (() => {
-          const value = pick(row, "metadataConfig", "metadata_config");
-          return value && typeof value === "object" ? value : null;
-        })(),
+        semanticWeight: num(
+          pick(row, "semanticWeight", "semantic_weight"),
+          DEFAULT_SEMANTIC_WEIGHT,
+        ),
+        keywordWeight: num(
+          pick(row, "keywordWeight", "keyword_weight"),
+          DEFAULT_KEYWORD_WEIGHT,
+        ),
         createdAt: this.toISO(pick(row, "createdAt", "created_at")),
         updatedAt: this.toISO(pick(row, "updatedAt", "updated_at")),
       });
@@ -673,12 +694,8 @@ class KbIntegrationSources {
             chunkMaxSize: Number(doc.chunkMaxSize ?? 1000),
             chunkOverlapSize: Number(doc.chunkOverlapSize ?? 100),
             chunkMinSize: Number(doc.chunkMinSize ?? 50),
-            isActive: doc.isActive !== false,
-            isPublic: doc.isPublic === true,
-            metadataConfig:
-              doc.metadataConfig && typeof doc.metadataConfig === "object"
-                ? doc.metadataConfig
-                : null,
+            semanticWeight: num(doc.semanticWeight, DEFAULT_SEMANTIC_WEIGHT),
+            keywordWeight: num(doc.keywordWeight, DEFAULT_KEYWORD_WEIGHT),
             createdAt: this.toISO(doc.createdAt),
             updatedAt: this.toISO(doc.updatedAt),
           });

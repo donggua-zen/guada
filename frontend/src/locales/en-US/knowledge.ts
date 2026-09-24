@@ -18,8 +18,6 @@
     searchPlaceholder: 'Search knowledge base',
     docs: 'Documentation',
     createKb: 'New Knowledge Base',
-    tagPublic: 'Public',
-    tagPrivate: 'Private',
     noDescription: 'No description',
     enter: 'Open',
     notFound: 'No matching knowledge base found',
@@ -40,8 +38,9 @@
     chunkMaxSize: 'Max Chunk Size',
     chunkOverlapSize: 'Overlap Size',
     chunkMinSize: 'Min Chunk Size',
-    visibility: 'Visibility',
-    visibilityHint: 'Public knowledge bases can be viewed by others',
+    semanticWeight: 'Semantic Weight',
+    keywordWeight: 'Keyword Weight',
+    fusionWeightHint: 'Fusion ratio of the two recall paths in hybrid search. Chinese document corpora usually favour keyword weight (default 0.3 / 0.7); code or English corpora may raise semantic weight. The two must not both be 0.',
     inputNameWarning: 'Please enter a knowledge base name',
     selectModelWarning: 'Please select an embedding model',
     switchModelTitle: 'Switch Embedding Model',
@@ -66,6 +65,8 @@
     retry: 'Reprocess',
     chunks: 'chunks',
     unknown: 'UNKNOWN',
+    duplicateContent: '"{name}" has the same content as an existing file. It was saved anyway; delete one of them to deduplicate.',
+    outdatedChunkStrategy: 'This file was chunked with the legacy scheme (line breaks and indentation were flattened). Reprocessing is recommended to improve retrieval. Reprocessing calls the embedding model again and incurs cost.',
   },
 
   tree: {
@@ -153,6 +154,7 @@
     selectKbWarning: 'Please select a knowledge base and enter search content',
     selectKbFirst: 'Please select a knowledge base first',
     searchFailed: 'Search failed',
+    resultUnavailable: 'The file for this result no longer exists and cannot be opened',
   },
 
   sidebar: {

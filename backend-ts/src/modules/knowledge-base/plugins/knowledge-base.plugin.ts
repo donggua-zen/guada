@@ -4,7 +4,7 @@ import * as path from "path";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
-import { KbMetaStore } from "../kb-meta.store";
+import { KbMetaStore, normalizeFusionWeights } from "../kb-meta.store";
 import { KBFileRepository } from "../kb-file.repository";
 import { KBChunkRepository } from "../kb-chunk.repository";
 import { KbSearchService } from "../kb-search.service";
@@ -92,14 +92,21 @@ export class KnowledgeBasePlugin extends PluginBase {
           model.modelName,
         );
 
+        // 融合权重读知识库配置（此前硬编码 0.6/0.4，与 REST 的 0.3/0.7 分叉，
+        // 同一次检索走 UI 与走 Agent 排序不同）。默认值见 kb-meta.store 的 DEFAULT_*_WEIGHT。
+        const weights = normalizeFusionWeights(
+          kb.semanticWeight,
+          kb.keywordWeight,
+        );
+
         // 执行混合搜索（当前库内检索，库即作用域）
         const results = await this.searchService.hybridSearch(
           knowledge_base_id,
           queryEmbedding,
           query,
           top_k,
-          0.6,
-          0.4,
+          weights.semantic,
+          weights.keyword,
           filterOptions,
         );
 
@@ -110,9 +117,17 @@ export class KnowledgeBasePlugin extends PluginBase {
         const parts: string[] = [];
         results.forEach((result: any, i: number) => {
           const fileName = result.metadata?.fileName || "unknown";
+          // file_id 必须给出来：否则 Agent 拿到一条命中后无法走到 kb_get_chunks
+          // （它需要 file_id），只能先 kb_list_files 按文件名猜 id——多一跳，且常常不会做。
+          const fileId = result.metadata?.fileId;
+          const fileLabel = fileId ? `, file_id: ${fileId}` : "";
+          // chunkIndex 可能为 null（老数据或 metadata 缺列），只在是数字时展示
           const chunkIndex = result.metadata?.chunkIndex;
-          const chunkLabel = chunkIndex !== undefined ? `, chunk: ${chunkIndex}` : "";
-          parts.push(`--- [${i + 1}] file: ${fileName}${chunkLabel} ---`);
+          const chunkLabel =
+            typeof chunkIndex === "number" ? `, chunk: ${chunkIndex}` : "";
+          parts.push(
+            `--- [${i + 1}] file: ${fileName}${fileLabel}${chunkLabel} ---`,
+          );
           parts.push(result.content || "");
         });
         return parts.join("\n\n");

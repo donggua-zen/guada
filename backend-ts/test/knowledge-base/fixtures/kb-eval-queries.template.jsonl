@@ -1,0 +1,35 @@
+# 检索质量评测查询集 —— 模板（不是可直接使用的标注集）
+#
+# ## 为什么这里没有真实标注
+#
+# 检索质量标注是**人力活**，而且必须针对你自己的知识库：相关分块 id 是库内实际存在的
+# id，凭空编造只会让指标全 0 并误导判断。所以这里只给格式与流程，标注由你补。
+#
+# ## 标注流程（建议 30 分钟内跑通第一版）
+#
+# 1. 挑一个**内容你熟悉**的知识库，先跑一遍把 top-N 打出来：
+#      pnpm --dir backend-ts run kb:eval -- --kb <kbId> --queries <本文件> --dump-top
+#    注意：此时 relevantChunkIds 还是占位，指标无意义，只看 dump 出来的候选。
+# 2. 对每个查询，从 dump 结果里挑出**真正相关**的分块 id（可以只挑前 20 里的）。
+#    相关就写上；都不相关就留空数组——空数组会被计为 recall=1（见 metrics.ts 的口径说明），
+#    所以**更推荐直接删掉这条查询**，只留能判定的。
+# 3. 想更精细就给 gradedRelevance（0=不相关，1=沾边，2=相关，3=直接答案）。
+# 4. 回填后再跑一次，加 --out 存成基线：
+#      pnpm --dir backend-ts run kb:eval -- --kb <kbId> --queries <本文件> --out before.json --label before
+# 5. 改代码（分块/权重/模型）后，带 --baseline before.json 再跑，看 Δ 与变化的查询。
+#
+# ## 覆盖建议（查询集质量比数量重要）
+#
+# - 中文关键词型：「编译报错」
+# - 中文自然语句型：「怎么关闭 selinux」
+# - 型号/代码标识符型：「DV430FBM-N20」（考连字符拆分召回）
+# - 跨文件综合型：答案分散在两三个文件里（考召回广度）
+# - 应当查不到型：库内确实没有的内容（考"不硬凑"——这类建议单独看，别混进均值）
+#
+# ## 规模
+#
+# 20~30 条足够发现方向性问题；少于 10 条时单条查询的波动会主导指标。
+#
+# 下面两行是**格式示例**，id 是占位值，用前请替换：
+{"query": "示例：怎么关闭 selinux", "relevantChunkIds": ["REPLACE_WITH_REAL_CHUNK_ID"], "note": "占位示例，请替换或删除"}
+{"query": "示例：DV430FBM-N20 接线", "relevantChunkIds": ["REPLACE_WITH_REAL_CHUNK_ID_1", "REPLACE_WITH_REAL_CHUNK_ID_2"], "gradedRelevance": {"REPLACE_WITH_REAL_CHUNK_ID_1": 3}, "note": "占位示例，演示 gradedRelevance"}

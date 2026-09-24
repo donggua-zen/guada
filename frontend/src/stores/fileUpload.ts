@@ -4,6 +4,7 @@ import { ref, type Ref } from 'vue'
 import type { AxiosError } from 'axios'
 import type { KBFile } from './knowledgeBase'
 import { t } from '@/locales'
+import { ElMessage } from 'element-plus'
 
 /**
  * 文件上传任务(仅负责上传阶段)
@@ -235,6 +236,12 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                     taskToUpdate.currentStep = t('chat.upload.completed')
                     taskToUpdate.serverFileRecord = response.data  // 保存后端返回的完整文件记录
                     onProgressUpdate?.(taskToUpdate)
+                }
+
+                // 内容重复提示：后端按 content_hash 判定（此前该字段只写不读，重复上传会
+                // 重复解析/嵌入并让检索出重复条目）。默认策略仍会新建，所以这里只提示。
+                if (response.data?.duplicateOf) {
+                    ElMessage.warning(t('knowledge.file.duplicateContent', { name: task.fileName }))
                 }
 
                 // 关键:上传完成后,处理队列中的下一个任务

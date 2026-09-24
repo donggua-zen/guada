@@ -14,9 +14,10 @@ export interface KnowledgeBase {
     chunkMaxSize: number
     chunkOverlapSize: number
     chunkMinSize: number
-    isActive: boolean
-    isPublic: boolean
-    metadataConfig: Record<string, any> | null
+    /** 混合检索：语义召回权重（0~1） */
+    semanticWeight: number
+    /** 混合检索：关键词（BM25）召回权重（0~1） */
+    keywordWeight: number
     createdAt: string
     updatedAt: string
 }
@@ -44,6 +45,13 @@ export interface KBFile {
     totalTokens: number
     uploadedAt: string
     processedAt: string | null
+    /**
+     * 分块策略标记（形如 `md-heading-v2`；历史数据为 `token`）。
+     * 仅文件状态接口返回，列表接口不带。
+     */
+    chunkStrategy?: string | null
+    /** 该文件用旧分块方案产出，建议重新处理（重处理会重新调用嵌入模型，有成本） */
+    chunkStrategyOutdated?: boolean
 }
 
 
@@ -91,7 +99,8 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         chunkMaxSize?: number
         chunkOverlapSize?: number
         chunkMinSize?: number
-        isPublic?: boolean
+        semanticWeight?: number
+        keywordWeight?: number
     }) {
         loading.value = true
         try {

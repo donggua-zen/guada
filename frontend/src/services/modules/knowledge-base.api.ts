@@ -11,7 +11,8 @@ export interface KnowledgeBaseApi {
     chunkMaxSize?: number;
     chunkOverlapSize?: number;
     chunkMinSize?: number;
-    isPublic?: boolean;
+    semanticWeight?: number;
+    keywordWeight?: number;
   }): Promise<KnowledgeBase>;
   updateKnowledgeBase(kbId: string, data: Partial<KnowledgeBase>): Promise<KnowledgeBase>;
   deleteKnowledgeBase(kbId: string): Promise<{ success: boolean }>;
@@ -44,7 +45,8 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
     chunkMaxSize?: number;
     chunkOverlapSize?: number;
     chunkMinSize?: number;
-    isPublic?: boolean;
+    semanticWeight?: number;
+    keywordWeight?: number;
   }) {
     return await this._request("/knowledge-bases", {
       method: "POST",

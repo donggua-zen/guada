@@ -63,6 +63,14 @@ Cherry 还专门有一个「找出没有归属行的知识库目录」扫描器�
    Windows 上未释放的句柄会让删除失败（文件被占用）。Cherry 踩过同一个坑。
 6. **向量可重建**：`chunk.embedding` 是派生数据，正文正本在 `chunk.content`（以及原件）。
    向量缺失/损坏时用 `pnpm kb:reembed` 从正文重算，**不需要**重新解析/OCR。
+7. **`chunk_vec` 与 `chunk` 必须同事务同步**：它是派生索引，脱节不会导致错误结果
+   （就绪判定会失败 → 检索自动降级为全表扫描），但会白丢性能。所以
+   `replaceChunks` / `updateEmbeddings` / 三条删除路径都同步维护它。
+8. **vec0 的 rowid 必须绑 BigInt，且不能同时用 `LIMIT` 与 `k = ?`**：
+   `run(101, buf)` 会报 `Only integers are allows for primary key values`（错误信息完全不提 BigInt）；
+   `LIMIT` 与 `k` 并用会报 `Only LIMIT or 'k =?' can be provided`。
+9. **不要给 `chunk_vec` 加 `INSERT OR REPLACE`**：vec0 的 xUpdate 不支持冲突解决子句，
+   实测报 `UNIQUE constraint failed`。要覆盖必须先删后插。
 
 ## kb.db 结构
 
@@ -92,6 +100,18 @@ CREATE TABLE chunk (
 );
 CREATE INDEX chunk_item ON chunk(item_id, chunk_index);
 CREATE VIRTUAL TABLE chunk_fts USING fts5(content, content_rowid='rowid');
+```
+
+另有索引层两张表（**不进 schema 版本门**，见下节「向量索引层」）：
+
+```sql
+-- 索引自身的水位/维度记账（幂等创建）
+CREATE TABLE IF NOT EXISTS kb_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+
+-- 向量索引虚拟表；N 由库内实际向量维度决定（逐库不同，故 DDL 是动态拼的）
+CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vec USING vec0(
+  embedding float[N] distance_metric=cosine
+);
 ```
 
 **没有 `knowledge_base_id` 列**：库即作用域。同理，`KBFileRepository` 的**点查询都需要
@@ -160,11 +180,59 @@ kbId**（`findById(kbId, id)`）——全局 id 空间已不存在。跨库方�
 
 搜索结果里的 `fileName` 取 `item.display_name` 的**当前值**（旧实现用处理时快照，改名后是陈旧名）。
 
+## 向量索引层（`chunk_vec`）
+
+语义召回走 sqlite-vec 的 `vec0` 虚拟表 `chunk_vec`，与 `chunk` 用 **rowid 一一对应**
+（`chunk_vec.rowid === chunk.rowid`）。
+
+### 为什么不进 `kb-schema.ts` 的版本门
+
+`chunk_vec` 与 `chunk.embedding` 同性质：**派生数据，可随时重建**。所以它
+**不参与 `user_version` 判定**，而是幂等创建、按需重建。两个理由：
+
+1. **降级兼容**：`migrateKbDatabase` 对"库版本高于程序"是硬拒绝。若把 vec0 做成 v2，
+   用户一旦降级安装就**再也打不开**知识库。索引层不进版本门，旧程序看到多余的表会忽略。
+2. **不阻塞启动**：建表 + 回填若塞进 `migrateKbDatabase` 的单事务，十万级分块的库会在
+   首次打开时把事件循环卡死数秒。索引层走**分批 + 批间让出事件循环**。
+
+### 就绪判定用"计数比对"，不用水位
+
+```
+就绪 ⟺ 表存在 ∧ COUNT(chunk_vec) === COUNT(chunk WHERE embedding IS NOT NULL)
+```
+
+不用 rowid 水位：SQLite 的 rowid 会**复用**（表清空后从 1 重新分配），
+"全删后重建"的场景下水位会误判为就绪。计数比对天然自愈——任何原因导致索引与分块不一致，
+都会被判为未就绪并触发重建。
+
+### 回填与并发写入
+
+回填用 `NOT EXISTS (SELECT 1 FROM chunk_vec WHERE rowid = c.rowid)` 守卫跳过已索引的行。
+这不是优化而是**必需**：vec0 的 rowid 是主键且**不支持 `INSERT OR REPLACE` / `OR IGNORE`**
+（实测都报 `UNIQUE constraint failed`），而启动期 `resumePendingFileTasks` 会同时写库，
+全量重插必然撞上并发写入的那几行。
+
+### 写路径的职责边界
+
+- **写路径**（`KBChunkRepository`）只做保守判定：表不存在就按当前向量维度建表，
+  维度不符就**跳过**（不写），结构性问题留给索引服务。
+- **索引服务**（`KbVectorIndexService`）独占结构性变更（drop / 重建）。
+
+这样避免两条路径在"单库混合维度"这种异常态下互相拆台。
+
+### 已知限制
+
+`vec0` 在 sqlite-vec 0.1.9 里是 **SIMD 加速的穷举搜索**，不是 ANN 索引——复杂度仍是 O(n)，
+相比标量 `vec_distance_cosine` 只有约 2 倍常数收益（实测数据见
+[架构评审附录 B](kb-architecture-review.md)）。10 万块量级仍有 150ms 级的主线程阻塞。
+后续方向：**量化**（0.1.9 已支持 `int8` / 二值 + Hamming 距离）或**把检索移出主线程**。
+
 ## 相关文件
 
 - `kb-schema.ts` DDL 与版本迁移（`LATEST` + 有序 `MIGRATIONS`）
 - `kb-database.service.ts` 连接注册表、根解析、id 校验
 - `kb-meta.store.ts` `kb.json`（KB 配置）
+- `kb-vector-index.ts` / `kb-vector-index.service.ts` 向量索引层（vec0 建表、KNN、回填、就绪判定）
 - `kb-tokenizer.ts` 分词（写入/查询同源）
 - `kb-search.service.ts` 语义 / FTS / BM25 重排 / RRF 融合
 - `../../common/database/kb-file.repository.ts`、`kb-chunk.repository.ts` 仓储

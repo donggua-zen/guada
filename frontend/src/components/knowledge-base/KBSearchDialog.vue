@@ -98,7 +98,7 @@
 
                         <!-- 元数据信息 -->
                         <div v-if="result.metadata" class="mt-2 text-xs text-gray-400">
-                            <span v-if="result.metadata.chunk_index">{{ t('knowledge.search.chunk') }} #{{ result.metadata.chunk_index }}</span>
+                            <span v-if="typeof result.metadata.chunkIndex === 'number'">{{ t('knowledge.search.chunk') }} #{{ result.metadata.chunkIndex }}</span>
                         </div>
                     </div>
                 </div>

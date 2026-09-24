@@ -7,6 +7,43 @@ import { KbDatabaseService, resolveDefaultKbRoot } from "./kb-database.service";
 /** KB 配置文件（每个库目录一个，UTF-8 JSON） */
 export const KB_CONFIG_FILE = "kb.json";
 
+/**
+ * 混合检索融合权重的默认值（**全项目唯一真相**）
+ *
+ * 为什么是 0.3 / 0.7：
+ * - 黄金基线（`test/knowledge-base/fixtures/kb-search-golden.json`）锁的就是这一组，
+ *   改它会让基线失败——而基线的价值正是"融合算法不许无声漂移"。
+ * - REST / 前端路径此前用的就是这组，所以统一到它意味着改动只落在 Agent 工具一侧
+ *   （工具此前硬编码 0.6/0.4，与 REST 分叉，同一次检索走 UI 和走 Agent 排序不同）。
+ *
+ * 注意：中文文档语料 + jieba FTS 下关键词权重给高是合理的；换成代码/英文语料时
+ * 用户可在知识库设置里调，不要在这里改默认值。
+ */
+export const DEFAULT_SEMANTIC_WEIGHT = 0.3;
+export const DEFAULT_KEYWORD_WEIGHT = 0.7;
+
+/**
+ * 归一化融合权重：非法值回退默认；两者同时为 0 时回退默认。
+ *
+ * 两者都为 0 会让 RRF 融合得分恒为 0（排序退化成 Map 插入顺序），是静默的错误结果，
+ * 所以必须在这里挡掉，而不是让调用方各自判断。
+ */
+export function normalizeFusionWeights(
+  semantic: unknown,
+  keyword: unknown,
+): { semantic: number; keyword: number } {
+  const s = typeof semantic === "number" && Number.isFinite(semantic) && semantic >= 0
+    ? semantic
+    : DEFAULT_SEMANTIC_WEIGHT;
+  const k = typeof keyword === "number" && Number.isFinite(keyword) && keyword >= 0
+    ? keyword
+    : DEFAULT_KEYWORD_WEIGHT;
+  if (s === 0 && k === 0) {
+    return { semantic: DEFAULT_SEMANTIC_WEIGHT, keyword: DEFAULT_KEYWORD_WEIGHT };
+  }
+  return { semantic: s, keyword: k };
+}
+
 /** 知识库配置（= 原 knowledge_base 表行） */
 export interface KnowledgeBaseMeta {
   id: string;
@@ -16,9 +53,10 @@ export interface KnowledgeBaseMeta {
   chunkMaxSize: number;
   chunkOverlapSize: number;
   chunkMinSize: number;
-  isActive: boolean;
-  isPublic: boolean;
-  metadataConfig: Record<string, any> | null;
+  /** 混合检索：语义召回权重 */
+  semanticWeight: number;
+  /** 混合检索：关键词（BM25）召回权重 */
+  keywordWeight: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -181,9 +219,8 @@ export class KbMetaStore {
       chunkMaxSize: data.chunkMaxSize ?? 1000,
       chunkOverlapSize: data.chunkOverlapSize ?? 100,
       chunkMinSize: data.chunkMinSize ?? 50,
-      isActive: data.isActive !== false,
-      isPublic: data.isPublic === true,
-      metadataConfig: data.metadataConfig ?? null,
+      semanticWeight: this.num(data.semanticWeight, DEFAULT_SEMANTIC_WEIGHT),
+      keywordWeight: this.num(data.keywordWeight, DEFAULT_KEYWORD_WEIGHT),
       createdAt: now,
       updatedAt: now,
     };
@@ -261,12 +298,8 @@ export class KbMetaStore {
       chunkMaxSize: this.num(r.chunkMaxSize, 1000),
       chunkOverlapSize: this.num(r.chunkOverlapSize, 100),
       chunkMinSize: this.num(r.chunkMinSize, 50),
-      isActive: r.isActive !== false,
-      isPublic: r.isPublic === true,
-      metadataConfig:
-        r.metadataConfig && typeof r.metadataConfig === "object"
-          ? r.metadataConfig
-          : null,
+      semanticWeight: this.num(r.semanticWeight, DEFAULT_SEMANTIC_WEIGHT),
+      keywordWeight: this.num(r.keywordWeight, DEFAULT_KEYWORD_WEIGHT),
       createdAt: toISO(r.createdAt, now)!,
       updatedAt: toISO(r.updatedAt, now)!,
     };

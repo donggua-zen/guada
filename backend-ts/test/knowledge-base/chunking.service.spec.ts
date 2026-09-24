@@ -86,7 +86,8 @@ describe('ChunkingService', () => {
         expect(chunk.content).toBeDefined();
         expect(chunk.metadata.tokenCount).toBeGreaterThan(0);
         expect(chunk.metadata.chunkSize).toBeGreaterThan(0);
-        expect(['sentence', 'token', 'overflow']).toContain(chunk.metadata.strategy.toLowerCase());
+        // 策略标记现在带类型与版本，形如 `sentence-v2` / `md-heading-v2` / `code-block-v2`
+        expect(chunk.metadata.strategy).toMatch(/^(sentence|md-heading|code-block|table-rows)-v\d+$/);
       }
     });
 
@@ -157,7 +158,8 @@ describe('ChunkingService', () => {
       expect(result.length).toBeGreaterThanOrEqual(1);
       // 验证相邻分块的内容来源于合并后的连续文本
       for (const chunk of result) {
-        expect(chunk.metadata.strategy).toBe('token');
+        // 未指定扩展名 → 归入 prose，策略标记为 sentence-v2
+        expect(chunk.metadata.strategy).toBe('sentence-v2');
       }
     });
 

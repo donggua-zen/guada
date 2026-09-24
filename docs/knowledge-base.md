@@ -7,22 +7,33 @@ GuaDa 的知识库模块实现了完整的 **检索增强生成 (RAG)** 流程�
 ```
 知识库模块
 ├── knowledge-base.service.ts     → 知识库 CRUD
-├── kb-file.service.ts            → 文件管理（上传、删除、移动、重命名）
+├── kb-file.service.ts            → 文件管理（上传、删除、移动、重命名、重复检测）
 ├── kb-meta.store.ts              → KB 配置（kb.json）
 ├── kb-database.service.ts        → 每库一个 kb.db 的连接注册表（懒开 + LRU + schema 迁移）
+├── kb-file.repository.ts         → 条目仓储（item 表）
+├── kb-chunk.repository.ts        → 分块仓储（chunk / chunk_fts / chunk_vec 的写入与删除）
+├── kb-vector-index.ts            → 向量索引的纯 SQL 层（vec0 建表 / KNN / 回填扫描）
+├── kb-vector-index.service.ts    → 向量索引生命周期（维度探测、回填、就绪判定）
 ├── kb-search.service.ts          → 语义 / FTS / BM25 / RRF 融合检索
 ├── kb-tokenizer.ts               → 分词（写入与查询同口径）
+├── chunking.service.ts           → 文档分块（按文件类型分流）
+├── chunking-kind.util.ts         → 扩展名 → 分块类型；策略版本标记
 ├── kb-schema.ts                  → kb.db 表结构与版本迁移
 ├── kb-files.controller.ts        → 文件 REST API
 ├── kb-search.controller.ts       → 搜索 REST API
 ├── knowledge-bases.controller.ts → 知识库 REST API
 ├── embedding.service.ts          → 向量嵌入
-├── chunking.service.ts           → 文档分块
 ├── file-parser.service.ts        → 文件解析
 ├── ocr.service.ts                → OCR 图片文字识别
-└── tools/
-    ├── knowledge-base-tool.provider.ts  → Agent 搜索工具
-    └── document-tool.provider.ts         → Agent 文档管理工具
+├── eval/metrics.ts               → 检索质量指标（recall@k / MRR / NDCG@k，纯函数）
+└── plugins/
+    ├── knowledge-base.plugin.ts  → Agent 搜索工具（kb_search 等 4 个）
+    └── document.plugin.ts        → Agent 文档解析工具（doc_parse 等，不入库）
+
+配套脚本：
+  scripts/kb-reembed.ts   从正文重建向量（不重新解析）
+  scripts/kb-eval.ts      检索质量评测（pnpm kb:eval）
+  scripts/kb-vec-bench.js 向量检索性能基准
 ```
 
 ## 存储分层
@@ -52,11 +63,21 @@ GuaDa 的知识库模块实现了完整的 **检索增强生成 (RAG)** 流程�
 
 | 检索方式 | 技术 | 说明 |
 |----------|------|------|
-| **语义搜索** | sqlite-vec | 基于向量相似度的语义匹配 |
+| **语义搜索** | sqlite-vec `vec0` KNN | 基于向量相似度的语义匹配，走 `chunk_vec` 索引 |
 | **关键词搜索** | FTS5 + jieba + BM25 | 中文分词 + 全文检索 + BM25 排序 |
-| **融合策略** | 加权融合 | 语义和关键词得分按权重混合，权重可配置 |
+| **融合策略** | RRF（Reciprocal Rank Fusion）| 两路各召回 `topK × 4`，动态权重 + RRF 融合后归一化 |
 
-支持文件过滤（按文件 ID）、分区存储（按知识库 ID）。
+**融合权重**：`semanticWeight` / `keywordWeight` 存在每个知识库的 `kb.json` 里
+（默认 0.3 / 0.7），设置页可调；请求体可临时覆盖。REST 接口与 Agent 工具读的是**同一份配置**。
+
+**按文件过滤**：`filterFileId` 走「受限扫描」而非向量索引——候选集已被单个文件界定
+（通常几十到几百行），全表扫描的开销与文件大小同阶、本来就快，且语义精确。
+
+> **语义召回的两条路径**：索引就绪走 `vec0` KNN；未就绪（升级后尚未回填、维度不一致、
+> 索引损坏）**自动降级为全表扫描**——慢但结果正确，并在日志里标明走了哪条路径与耗时。
+> 两条路径的 id 序列与分数已实测**位级相同**（`kb-vector-index.spec.ts` 有等价性断言）。
+
+支持分区存储（按知识库 ID）。
 
 ### Agent 自助管理（区别于常规 RAG）
 
@@ -71,16 +92,25 @@ GuaDa 的知识库模块实现了完整的 **检索增强生成 (RAG)** 流程�
 ```
 PDF/DOCX/TXT/MD/Excel/PPT/图片 → file-parser.service 解析
     ↓
-Token 智能分块 → chunking.service
-    ├─ 按 Token 数切割（可配置）
-    └─ 重叠窗口保留上下文连贯性
+按文件类型分块 → chunking.service
+    ├─ markdown：按 ATX 标题切分，每块带标题路径前缀
+    ├─ code    ：按空行分隔的代码块聚合，不切在块内部
+    ├─ table   ：按行分组，每组重复表头
+    ├─ prose   ：按句子边界切分（txt 等）
+    ├─ Token 上限（chunkMaxSize，可配置）
+    ├─ 重叠窗口（chunkOverlapSize）保留上下文连贯性
+    └─ 尾部碎片块合并（chunkMinSize）
     ↓
 向量嵌入 → embedding.service（生成向量）
     ↓
-写入 kb.db → KBChunkRepository.replaceChunks（正文 + 向量 + FTS 单事务）
+写入 kb.db → KBChunkRepository.replaceChunks（正文 + 向量 + FTS + 向量索引 单事务）
 ```
 
 支持 40+ 文件格式，异步处理自动恢复中断。
+
+> **分块策略带版本标记**（`md-heading-v2` 等），存在分块的 metadata 里。改造前入库的
+> 文件标记为 `token`（旧方案），前端会提示"建议重新处理"——**不会自动重处理**，
+> 因为重新分块必须重新调用嵌入模型，是有成本的，由用户决定。
 
 ### 文件管理
 

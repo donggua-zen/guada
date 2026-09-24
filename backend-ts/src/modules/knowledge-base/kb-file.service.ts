@@ -20,6 +20,24 @@ import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import type { FileProgressCallback } from "../../common/types/file-progress.types";
+import { isLegacyChunkStrategy } from "./chunking-kind.util";
+
+/**
+ * 上传时遇到**内容重复**的处理策略。
+ *
+ * - `keep-both`（默认）：照常新建，只在响应里回报 `duplicateOf`。默认不改行为，
+ *   避免老调用方（前端历史版本、Agent 工具）突然发现文件"没上传成功"。
+ * - `skip`：不新建，直接返回已存在的那条（响应带 `skipped: true`）。
+ * - `overwrite`：先删掉已存在的那条（含分块、向量、原件），再新建。
+ *
+ * 判据是 `item.content_hash`（上传时按字节算的 md5）。此前这个字段**只写不读**——
+ * 重复上传会重复解析、重复 OCR、重复嵌入、重复占空间，检索结果里还会出现重复条目。
+ */
+export type OnDuplicateMode = "keep-both" | "skip" | "overwrite";
+
+function normalizeOnDuplicate(value: unknown): OnDuplicateMode {
+  return value === "skip" || value === "overwrite" ? value : "keep-both";
+}
 
 /**
  * 知识库文件服务
@@ -318,6 +336,7 @@ export class KbFileService implements OnModuleInit {
     kbId: string,
     file: any,
     relativePath?: string,
+    onDuplicate?: OnDuplicateMode,
   ) {
     const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
@@ -333,6 +352,22 @@ export class KbFileService implements OnModuleInit {
       .createHash("md5")
       .update(file.buffer)
       .digest("hex");
+
+    // 内容去重：同一字节序列重复上传会重复解析/OCR/嵌入，且检索出重复条目
+    const existing = await this.fileRepo.findByContentHash(kbId, contentHash);
+    const duplicateMode = normalizeOnDuplicate(onDuplicate);
+    if (existing && duplicateMode === "skip") {
+      this.logger.log(
+        `内容重复，按 skip 策略跳过：${originalName}（已存在 ${existing.id}）`,
+      );
+      return { ...existing, duplicateOf: existing.id, skipped: true };
+    }
+    if (existing && duplicateMode === "overwrite") {
+      this.logger.log(
+        `内容重复，按 overwrite 策略先删除旧条目：${existing.id}`,
+      );
+      await this.deleteFileAndChunks(existing.id, kbId);
+    }
 
     // 解析相对路径,提取父文件夹信息
     let parentFolderId: string | null = null;
@@ -368,11 +403,12 @@ export class KbFileService implements OnModuleInit {
     await this.fileRepo.update(kbId, fileRecord.id, { rawName });
 
     this.logger.log(
-      `文件记录已创建：${originalName}, 相对路径:${relativePath || "无"}, KB=${kbId}, File ID=${fileRecord.id}`,
+      `文件记录已创建：${originalName}, 相对路径:${relativePath || "无"}, KB=${kbId}, File ID=${fileRecord.id}` +
+        (existing ? `（内容与 ${existing.id} 重复）` : ""),
     );
 
     this.processFileInBackground(kbId, fileRecord.id);
-    return { ...fileRecord, rawName };
+    return { ...fileRecord, rawName, duplicateOf: existing?.id ?? null };
   }
 
   /**
@@ -385,6 +421,7 @@ export class KbFileService implements OnModuleInit {
     kbId: string,
     sourceFilePath: string,
     targetPath: string,
+    onDuplicate?: OnDuplicateMode,
   ) {
     const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) {
@@ -400,6 +437,20 @@ export class KbFileService implements OnModuleInit {
       .createHash("md5")
       .update(content)
       .digest("hex");
+
+    // 内容去重（与 uploadFile 同一套语义）
+    const existing = await this.fileRepo.findByContentHash(kbId, contentHash);
+    const duplicateMode = normalizeOnDuplicate(onDuplicate);
+    if (existing && duplicateMode === "skip") {
+      this.logger.log(
+        `内容重复，按 skip 策略跳过：${displayName}（已存在 ${existing.id}）`,
+      );
+      return { ...existing, duplicateOf: existing.id, skipped: true };
+    }
+    if (existing && duplicateMode === "overwrite") {
+      this.logger.log(`内容重复，按 overwrite 策略先删除旧条目：${existing.id}`);
+      await this.deleteFileAndChunks(existing.id, kbId);
+    }
 
     let parentFolderId: string | null = null;
     const folderPath = path.dirname(targetPath);
@@ -437,7 +488,7 @@ export class KbFileService implements OnModuleInit {
     );
 
     this.processFileInBackground(kbId, fileRecord.id);
-    return { ...fileRecord, rawName };
+    return { ...fileRecord, rawName, duplicateOf: existing?.id ?? null };
   }
 
   /**
@@ -593,6 +644,10 @@ export class KbFileService implements OnModuleInit {
         {
           chunkSize: kb.chunkMaxSize,
           overlapSize: kb.chunkOverlapSize,
+          // chunkMinSize 此前只被读写、从未被消费；现在用于合并尾部碎片块
+          chunkMinSize: kb.chunkMinSize,
+          // 扩展名决定分块类型（markdown 按标题、code 按空行块、table 按行分组）
+          fileExtension: fileRecord.fileExtension,
         },
       );
       const chunks = chunksData.map((chunk) => chunk.content);
@@ -694,7 +749,11 @@ export class KbFileService implements OnModuleInit {
       skip,
       limit,
     );
-    return createPaginatedResponse(items, total, { skip, limit });
+    return createPaginatedResponse(
+      await this.attachChunkStrategy(kbId, items),
+      total,
+      { skip, limit },
+    );
   }
 
   async getFilesByParent(
@@ -711,7 +770,11 @@ export class KbFileService implements OnModuleInit {
       skip,
       limit,
     );
-    return createPaginatedResponse(items, total, { skip, limit });
+    return createPaginatedResponse(
+      await this.attachChunkStrategy(kbId, items),
+      total,
+      { skip, limit },
+    );
   }
 
   async getFilesByRelativePath(
@@ -742,7 +805,38 @@ export class KbFileService implements OnModuleInit {
       skip,
       limit,
     );
-    return createPaginatedResponse(items, total, { skip, limit });
+    return createPaginatedResponse(
+      await this.attachChunkStrategy(kbId, items),
+      total,
+      { skip, limit },
+    );
+  }
+
+  /**
+   * 给条目列表补上分块策略信息（供前端提示"用旧方案分块，建议重新处理"）。
+   *
+   * 为什么放在列表接口而不是只放状态接口：文件树只在"处理中"时才轮询状态接口，
+   * 而已完成的老文件恰恰是唯一需要提示的那批——它们永远不会被轮询到。
+   * 这里一次查询取回整页条目的策略（`findStrategiesForItems`），不产生 N 次点查。
+   */
+  private async attachChunkStrategy(
+    kbId: string,
+    items: Array<Record<string, any>>,
+  ): Promise<Array<Record<string, any>>> {
+    if (items.length === 0) return items;
+    const strategies = await this.chunkRepo.findStrategiesForItems(
+      kbId,
+      items.map((i) => i.id),
+    );
+    return items.map((item) => {
+      const strategy = strategies.get(item.id) ?? null;
+      return {
+        ...item,
+        chunkStrategy: strategy,
+        chunkStrategyOutdated:
+          strategy !== null && isLegacyChunkStrategy(strategy),
+      };
+    });
   }
 
   async getFile(fileId: string, kbId: string) {
@@ -755,17 +849,31 @@ export class KbFileService implements OnModuleInit {
 
   async getFileStatus(fileId: string, kbId: string) {
     const file = await this.getFile(fileId, kbId);
-    return this.toStatusView(file);
+    const strategy = await this.chunkRepo.findStrategyForItem(kbId, fileId);
+    return this.toStatusView(file, strategy);
   }
 
   async batchGetFileStatus(fileIds: string[], kbId: string) {
     const kb = await this.kbMetaStore.getKb(kbId);
     if (!kb) throw new NotFoundException("知识库不存在");
     const files = await this.fileRepo.findByIds(kbId, fileIds);
-    return files.map((file) => this.toStatusView(file));
+    // 一次查询取回所有条目的策略，避免 N 次点查
+    const strategies = await this.chunkRepo.findStrategiesForItems(kbId, fileIds);
+    return files.map((file) =>
+      this.toStatusView(file, strategies.get(file.id) ?? null),
+    );
   }
 
-  private toStatusView(file: Record<string, any>) {
+  /**
+   * 文件状态视图。
+   *
+   * `chunkStrategy` / `chunkStrategyOutdated` 供前端提示"该文件用旧分块方案，建议重新处理"。
+   * 只提示不自动重处理：重处理要重新调用嵌入模型，是有成本的，由用户决定。
+   */
+  private toStatusView(
+    file: Record<string, any>,
+    chunkStrategy: string | null = null,
+  ) {
     return {
       id: file.id,
       fileName: file.displayName,
@@ -776,6 +884,11 @@ export class KbFileService implements OnModuleInit {
       totalChunks: file.totalChunks,
       uploadedAt: file.uploadedAt.toISOString(),
       processedAt: file.processedAt ? file.processedAt.toISOString() : null,
+      chunkStrategy,
+      // 有分块但策略标记不是当前版本 → 旧方案产出，值得提示重新处理。
+      // chunkStrategy 为 null（没有分块）时不提示，否则未处理完的文件会被误标。
+      chunkStrategyOutdated:
+        chunkStrategy !== null && isLegacyChunkStrategy(chunkStrategy),
     };
   }
 
@@ -800,8 +913,13 @@ export class KbFileService implements OnModuleInit {
         return true;
       }
 
-      await this.chunkRepo.deleteByItemId(kbId, fileId);
-      await this.fileRepo.delete(kbId, fileId);
+      // 条目行与分块必须**同一个事务**：否则崩在中间会留下"行还在、分块没了"
+      // 的半程状态——文件显示已完成却搜不到内容，启动期对账也查不出来。
+      const db = await this.databases.getDb(kbId);
+      db.transaction(() => {
+        this.chunkRepo.deleteManyWithin(db, [fileId]);
+        this.fileRepo.deleteManyWithin(db, [fileId]);
+      })();
       await this.removeRawDir(kbId, fileId);
       this.logger.log(`已删除文件：${file.displayName} (${fileId})`);
       return true;
@@ -814,8 +932,9 @@ export class KbFileService implements OnModuleInit {
   /**
    * 递归删除文件夹及其所有内容。
    *
-   * 子项一次性收齐（不再分页 1000 递归），分块一批删，条目行一批删，
-   * 原件目录逐个删。
+   * 子项一次性收齐（不再分页 1000 递归），**条目行与分块在同一事务内删除**，
+   * 原件目录在事务提交后逐个删（文件系统操作无法参与 SQL 事务，失败只记日志——
+   * 留下的空目录由启动期 `reportOrphanRawDirs` 报告，不会静默丢数据）。
    */
   private async deleteFolderRecursive(
     kbId: string,
@@ -825,9 +944,12 @@ export class KbFileService implements OnModuleInit {
     const itemIds = [folderId, ...allItems.map((i) => i.id)];
 
     try {
-      await this.chunkRepo.deleteMany(kbId, itemIds);
+      const db = await this.databases.getDb(kbId);
+      db.transaction(() => {
+        this.chunkRepo.deleteManyWithin(db, itemIds);
+        this.fileRepo.deleteManyWithin(db, itemIds);
+      })();
       for (const itemId of itemIds) {
-        await this.fileRepo.delete(kbId, itemId);
         await this.removeRawDir(kbId, itemId);
       }
       this.logger.log(

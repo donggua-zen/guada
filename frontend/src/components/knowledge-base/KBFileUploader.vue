@@ -426,20 +426,9 @@ async function handleFolderSelect(event: Event) {
     const input = event.target as HTMLInputElement
     if (!input.files || input.files.length === 0) return
 
-    // 定义允许的文件扩展名(与 ChatInput 保持一致)
-    const ALLOWED_EXTENSIONS = [
-        '.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log',
-        '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql', '.sh',
-        '.bat', '.yml', '.yaml', '.ini', '.conf', '.properties', '.vue', '.toml',
-        '.env', '.cfg', '.config', '.reg', '.pem', '.tex', '.rst', '.adoc', '.org',
-        '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
-        '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
-        '.proto', '.graphql', '.sol', '.pdf',
-        '.docx',  // Word 文档
-        '.xlsx',  // Excel 文档
-    ]
-
     // 过滤文件,只保留允许的格式
+    // 用模块级 ALLOWED_EXTENSIONS：这里此前又抄了一份，且漏了 .dts/.dtsi，
+    // 导致"文件夹上传"会静默跳过设备树源文件（单个文件上传却能过）。
     const filesWithPath = Array.from(input.files)
         .filter(file => {
             const fileName = file.name.toLowerCase()
