@@ -130,6 +130,8 @@
     deleteTurnTitle: 'Delete This Turn',
     deleteTurnDesc: 'Are you sure you want to delete this turn? The question and its answer will both be removed. This action cannot be undone.',
     editMessageTitle: 'Edit Message',
+    branchConfirmTitle: 'Branch Session',
+    branchConfirmDesc: 'Only the main conversation is copied. Workflow and sub-agent history will not be carried over. The original session is unaffected.',
     branchSuccess: 'Branched into a new session',
     branchFailed: 'Failed to branch session',
   },

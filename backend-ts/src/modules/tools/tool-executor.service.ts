@@ -234,14 +234,16 @@ export class ToolExecutor {
       }
 
       if (content && fullToolName !== "read") {
-        content = await this.handleLargeResult(
+        const handled = await this.handleLargeResult(
           content,
           fullToolName,
           toolCallId,
           session,
         );
-        // content 已被替换为 spill JSON，meta 与正文的对应关系失效，丢弃
-        meta = undefined;
+        content = handled.content;
+        // 仅当正文真被替换（spill/截断）时才丢弃：替换后 meta 与正文失配。
+        // 未超阈值时正文原样返回，meta 与正文仍然对应，必须保留。
+        if (handled.replaced) meta = undefined;
       }
       return {
         toolCallId,
@@ -276,12 +278,18 @@ export class ToolExecutor {
 
   // ── 大结果处理 ──
 
+  /**
+   * 大结果处理。
+   *
+   * 返回值 `replaced` 表示正文是否被替换（spill 到文件或截断）——调用方据此决定
+   * 是否丢弃 meta：未超阈值时正文原样返回，meta 与正文仍对应，须保留。
+   */
   private async handleLargeResult(
     content: string,
     toolName: string,
     toolCallId: string,
     session: ISessionContext,
-  ): Promise<string> {
+  ): Promise<{ content: string; replaced: boolean }> {
     const MAX_TOKENS = 20000;
     const PREVIEW_BYTES = 2048;
 
@@ -295,17 +303,20 @@ export class ToolExecutor {
     } catch {
       tokenCount = Math.ceil(Buffer.byteLength(content, "utf-8") / 4);
     }
-    if (tokenCount <= MAX_TOKENS) return content;
+    if (tokenCount <= MAX_TOKENS) return { content, replaced: false };
 
     const preview = safeTruncate(content, PREVIEW_BYTES);
 
     const workspacePath = session.workspacePath;
     if (!workspacePath) {
-      return JSON.stringify({
-        warning: `结果过大（约 ${tokenCount} tokens），且无法保存到工作目录`,
-        preview,
-        tool_truncated_hint: "请使用 read 工具读取文件，或要求缩小范围",
-      });
+      return {
+        content: JSON.stringify({
+          warning: `结果过大（约 ${tokenCount} tokens），且无法保存到工作目录`,
+          preview,
+          tool_truncated_hint: "请使用 read 工具读取文件，或要求缩小范围",
+        }),
+        replaced: true,
+      };
     }
 
     try {
@@ -314,22 +325,28 @@ export class ToolExecutor {
       const safeName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_");
       const fileName = `${safeName}_${toolCallId}.json`;
       await fs.writeFile(path.join(outputDir, fileName), content, "utf-8");
-      return JSON.stringify({
-        message: `结果较大（约 ${tokenCount} tokens），已保存到工作目录`,
-        file_path: path.join(".guada", "tools_output", fileName),
-        preview,
-        tool_truncated_hint: `完整结果已保存至上述文件。如需读取，请使用 read 工具并指定 file_path 参数为 "${path.join(".guada", "tools_output", fileName)}"，可配合 unit/offset/limit 分块读取（unit="char" 按字符偏移读取）。`,
-      });
+      return {
+        content: JSON.stringify({
+          message: `结果较大（约 ${tokenCount} tokens），已保存到工作目录`,
+          file_path: path.join(".guada", "tools_output", fileName),
+          preview,
+          tool_truncated_hint: `完整结果已保存至上述文件。如需读取，请使用 read 工具并指定 file_path 参数为 "${path.join(".guada", "tools_output", fileName)}"，可配合 unit/offset/limit 分块读取（unit="char" 按字符偏移读取）。`,
+        }),
+        replaced: true,
+      };
     } catch (saveError: any) {
       this.logger.warn(
         `保存大结果到文件失败: ${saveError.message}，回退到截断`,
       );
-      return JSON.stringify({
-        warning: "结果过大且无法保存到文件",
-        preview,
-        tool_truncated_hint: "请使用 read 工具读取文件，或要求缩小范围",
-        token_count: tokenCount,
-      });
+      return {
+        content: JSON.stringify({
+          warning: "结果过大且无法保存到文件",
+          preview,
+          tool_truncated_hint: "请使用 read 工具读取文件，或要求缩小范围",
+          token_count: tokenCount,
+        }),
+        replaced: true,
+      };
     }
   }
 }

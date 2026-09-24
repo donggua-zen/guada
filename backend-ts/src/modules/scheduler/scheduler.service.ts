@@ -67,11 +67,16 @@ export class SchedulerService {
       executeAt: dto.executeAt || null,
       targetMode: dto.targetMode,
       targetSessionId: dto.targetSessionId || null,
+      outputMode: dto.targetMode === "new_session" ? dto.outputMode || "independent" : undefined,
+      mergedSessionId: null,
       agentId: dto.agentId || null,
       modelId: dto.modelId || null,
       settings: dto.settings || null,
+      workspacePath: dto.workspacePath || null,
+      attachments: dto.attachments || null,
       enabled: dto.enabled !== false,
-      maxExecutions: dto.maxExecutions ?? null,
+      expiresAt: dto.expiresAt || null,
+      unattended: dto.unattended ?? false,
       executionCount: 0,
       maxRetries: dto.maxRetries ?? 0,
       retryInterval: dto.retryInterval ?? 60,
@@ -125,12 +130,16 @@ export class SchedulerService {
     if (dto.cronExpression !== undefined) updates.cronExpression = dto.cronExpression;
     if (dto.executeAt !== undefined) updates.executeAt = dto.executeAt;
     if (dto.targetMode !== undefined) updates.targetMode = dto.targetMode;
+    if (dto.outputMode !== undefined) updates.outputMode = dto.outputMode;
     if (dto.targetSessionId !== undefined) updates.targetSessionId = dto.targetSessionId;
     if (dto.agentId !== undefined) updates.agentId = dto.agentId;
     if (dto.modelId !== undefined) updates.modelId = dto.modelId;
     if (dto.settings !== undefined) updates.settings = dto.settings;
+    if (dto.workspacePath !== undefined) updates.workspacePath = dto.workspacePath;
+    if (dto.attachments !== undefined) updates.attachments = dto.attachments;
     if (dto.enabled !== undefined) updates.enabled = dto.enabled;
-    if (dto.maxExecutions !== undefined) updates.maxExecutions = dto.maxExecutions;
+    if (dto.expiresAt !== undefined) updates.expiresAt = dto.expiresAt;
+    if (dto.unattended !== undefined) updates.unattended = dto.unattended;
     if (dto.maxRetries !== undefined) updates.maxRetries = dto.maxRetries;
     if (dto.retryInterval !== undefined) updates.retryInterval = dto.retryInterval;
 
@@ -178,6 +187,16 @@ export class SchedulerService {
 
     this.logger.log(`${updated.enabled ? "启用" : "禁用"}定时任务: ${updated.name}`);
     return updated;
+  }
+
+  /**
+   * 立即执行任务（手动触发，带日志与计数副作用）
+   */
+  async runTask(id: string): Promise<{ success: boolean; message: string }> {
+    const task = await this.getTask(id);
+    this.logger.log(`手动触发任务: ${task.name}`);
+    await this.executor.execute(task);
+    return { success: true, message: "已触发执行" };
   }
 
   /**

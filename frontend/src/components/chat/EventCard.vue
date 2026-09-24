@@ -22,11 +22,13 @@
 
     <!-- 压缩摘要事件 -->
     <div v-else-if="eventType === 'compaction'" class="event-card__compaction">
-      <!-- 压缩中占位：同款胶囊 + loading（压缩完成后由 compaction_summary 原位替换为结果卡） -->
+      <!-- 压缩中占位：同款胶囊 + loading（压缩完成后由 compaction_summary 原位替换为结果卡）。
+           图标 14px（偶数）与分隔线 2px（h-0.5）：奇数尺寸会让居中余量成半像素，
+           图标/线会随容器（回合折叠、滚动）在两种奇偶相位间跳一个设备像素。 -->
       <div v-if="compressing" class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="13" class="is-loading">
+          <el-icon size="14" class="is-loading">
             <Loading />
           </el-icon>
           <span class="event-card__compaction-text">{{ t('chat.turn.contextCompacting') }}</span>
@@ -129,7 +131,9 @@ const outcomeClass = computed(() => {
 }
 
 .event-card__line {
-  @apply h-px flex-1;
+  /* 2px 而非 1px：28px 行内居中时 1px 线的余量是 13.5px（半像素），
+     线会落在半像素上、随容器相位随机变粗变虚；2px 余量 13px，稳定落在整像素。 */
+  @apply h-0.5 flex-1;
 }
 .event-card__line--left {
   @apply bg-gradient-to-r from-transparent to-gray-200 dark:to-gray-700/60;

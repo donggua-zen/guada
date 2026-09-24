@@ -5,6 +5,7 @@ import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { AgentFileStore } from "../agents/agent-file.store";
+import { DEFAULT_AGENT_ID } from "../agents/agent-file.mapper";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
@@ -117,25 +118,21 @@ export class TaskExecutorService {
   }
 
   /**
-   * 增加任务执行次数，达到上限时自动禁用
+   * 增加任务执行次数
+   *
+   * 从存储重读最新计数，避免调度回调闭包捕获的旧 task 引用导致计数不累加。
+   * 一次性任务执行完成后自动禁用。
    */
   private async incrementExecutionCount(task: ScheduledTask): Promise<void> {
-    const newCount = (task.executionCount ?? 0) + 1;
-    const maxExecutions = task.maxExecutions;
-
-    // 检查是否达到最大执行次数上限
-    const reachedMaxExecutions =
-      maxExecutions !== null &&
-      maxExecutions !== undefined &&
-      newCount >= maxExecutions;
+    const fresh = await this.storage.getTaskById(task.id);
+    const newCount = (fresh?.executionCount ?? task.executionCount ?? 0) + 1;
+    const scheduleType = fresh?.scheduleType ?? task.scheduleType;
 
     // 一次性任务执行完成后自动禁用
-    const isOnceCompleted = task.scheduleType === "once";
+    const isOnceCompleted = scheduleType === "once";
 
-    if (reachedMaxExecutions || isOnceCompleted) {
-      this.logger.log(
-        `任务 ${task.name} ${reachedMaxExecutions ? `已达到最大执行次数 (${newCount}/${maxExecutions})` : "已完成"}，自动禁用`,
-      );
+    if (isOnceCompleted) {
+      this.logger.log(`任务 ${task.name} 已完成（一次性），自动禁用`);
       await this.storage.updateTask(task.id, {
         executionCount: newCount,
         enabled: false,
@@ -166,6 +163,8 @@ export class TaskExecutorService {
     await this.storage.updateLog(log.id, { sessionId });
 
     // 投递到 ChatRunnerService 队列（S2：结构化入站消息统一载体，文本即 text 块）
+    // 回合的真实终态由 callbacks.onComplete/onError 异步回填（startStream 不阻塞到流结束），
+    // 此处不再提前标记 completed，避免"入队即成功"的假象。
     await this.chatRunner.enqueueMessage({
       sessionId,
       blocks: [
@@ -175,6 +174,28 @@ export class TaskExecutorService {
         },
       ],
       source: { kind: "scheduler", schedulerId: task.id },
+      callbacks: {
+        onEvent: () => {},
+        onComplete: (reason: string) => {
+          const ok = reason === "completed";
+          this.storage
+            .updateLog(log.id, {
+              status: ok ? "completed" : "failed",
+              error: ok ? null : `回合结束原因: ${reason}`,
+              finishedAt: new Date().toISOString(),
+            })
+            .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+        },
+        onError: (err: any) => {
+          this.storage
+            .updateLog(log.id, {
+              status: "failed",
+              error: err?.message || "未知错误",
+              finishedAt: new Date().toISOString(),
+            })
+            .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+        },
+      },
     });
 
     this.logger.log(`任务已投递到消息队列: ${task.name}`);
@@ -183,14 +204,6 @@ export class TaskExecutorService {
     await this.storage.updateTask(task.id, {
       lastRunAt: new Date().toISOString(),
     });
-
-    // 标记日志为完成
-    await this.storage.updateLog(log.id, {
-      status: "completed",
-      finishedAt: new Date().toISOString(),
-    });
-
-    this.logger.log(`任务执行完成: ${task.name}`);
   }
 
   /**
@@ -239,6 +252,25 @@ export class TaskExecutorService {
    * @returns 会话 ID
    */
   /**
+   * 解析有效智能体 ID：
+   * 未指定、或指定的智能体已被删除时，回退到固定默认智能体（DEFAULT_AGENT_ID）。
+   */
+  private async resolveAgentId(task: ScheduledTask): Promise<string> {
+    if (!task.agentId) {
+      this.logger.warn(`任务 ${task.name} 未指定智能体，回退默认智能体 ${DEFAULT_AGENT_ID}`);
+      return DEFAULT_AGENT_ID;
+    }
+    const agent = await this.agentStore.findById(task.agentId);
+    if (!agent) {
+      this.logger.warn(
+        `任务 ${task.name} 的智能体 ${task.agentId} 已不存在，回退默认智能体 ${DEFAULT_AGENT_ID}`,
+      );
+      return DEFAULT_AGENT_ID;
+    }
+    return task.agentId;
+  }
+
+  /**
    * 解析任务模型ID（三级回退）
    *
    * 1. 任务显式指定的 modelId
@@ -247,7 +279,7 @@ export class TaskExecutorService {
    *
    * 最终必须验证模型存在，否则抛出错误。
    */
-  private async resolveModelId(task: ScheduledTask): Promise<string> {
+  private async resolveModelId(task: ScheduledTask, agentId: string): Promise<string> {
     let modelId: string | null = null;
 
     // 第一优先级：任务显式指定的 modelId
@@ -256,12 +288,9 @@ export class TaskExecutorService {
     }
 
     // 第二优先级：智能体的 modelId
-    if (!modelId && task.agentId) {
-      const agent = await this.agentStore.findById(task.agentId);
-      if (!agent) {
-        throw new Error(`智能体不存在：${task.agentId}`);
-      }
-      if (agent.modelId) {
+    if (!modelId && agentId) {
+      const agent = await this.agentStore.findById(agentId);
+      if (agent?.modelId) {
         modelId = agent.modelId;
       }
     }
@@ -295,21 +324,46 @@ export class TaskExecutorService {
     task: ScheduledTask,
   ): Promise<{ sessionId: string } | null> {
     if (task.targetMode === "new_session") {
-      // 创建新会话，必须指定智能体ID
-      if (!task.agentId) {
-        throw new Error("新建会话模式必须设置 agentId");
+      // 合并输出：若已记住会话且仍存在，直接复用，不再新建
+      if (task.outputMode === "merged" && task.mergedSessionId) {
+        const existing = await this.sessionService.getSessionById(task.mergedSessionId);
+        if (existing) {
+          this.logger.log(`复用合并会话: ${existing.id}`);
+          return { sessionId: existing.id };
+        }
+        this.logger.warn(`合并会话已失效，将重新新建: ${task.mergedSessionId}`);
       }
 
+      // 解析有效智能体（缺失/已删除时回退默认智能体）
+      const agentId = await this.resolveAgentId(task);
+
       // 解析模型ID（三级回退）
-      const finalModelId = await this.resolveModelId(task);
+      const finalModelId = await this.resolveModelId(task, agentId);
+
+      // 组装会话设置：并入附加工作目录（attachments）与无人值守沙盒模式
+      const sessionSettings: Record<string, any> = { ...(task.settings || {}) };
+      if (task.attachments && Object.keys(task.attachments).length > 0) {
+        sessionSettings.attachments = task.attachments;
+      }
+      // 无人值守：注入 danger-full-access 沙盒模式，使命中提权的工具审批在触发前即被放行，
+      // 回合不会卡在等待人工确认（仅对 new_session 生效）
+      if (task.unattended) {
+        sessionSettings.sandboxMode = "danger-full-access";
+      }
 
       const session = await this.sessionService.createSession({
-        agentId: task.agentId,
+        agentId,
         modelId: finalModelId,
         title: `[定时] ${task.name}`,
-        settings: task.settings || undefined,
+        settings: Object.keys(sessionSettings).length > 0 ? sessionSettings : undefined,
+        workspacePath: task.workspacePath ?? null,
       });
       this.logger.log(`已创建新会话: ${session.id}`);
+
+      // 合并输出：回存 mergedSessionId，供后续执行复用
+      if (task.outputMode === "merged") {
+        await this.storage.updateTask(task.id, { mergedSessionId: session.id });
+      }
 
       // 广播会话创建事件，让前端会话列表刷新
       this.eventBus.emit("session.created", {

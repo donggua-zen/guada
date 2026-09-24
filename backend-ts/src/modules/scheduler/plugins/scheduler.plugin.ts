@@ -58,12 +58,10 @@ export class SchedulerPlugin extends PluginBase {
           .describe(
             "执行时间，schedule_type 为 once 时必填。ISO 8601 格式，如 '2026-01-01T00:00:00Z'",
           ),
-        max_executions: z
-          .number()
-          .int()
-          .min(1)
+        expires_at: z
+          .string()
           .optional()
-          .describe("最大执行次数，不传则不限次数"),
+          .describe("到期时间 ISO 字符串，到期后自动暂停不再执行；不传则永不到期"),
         max_retries: z
           .number()
           .int()
@@ -101,7 +99,7 @@ export class SchedulerPlugin extends PluginBase {
           executeAt: args.execute_at || null,
           targetMode: "existing_session" as const,
           targetSessionId: sessionId,
-          maxExecutions: args.max_executions ?? null,
+          expiresAt: args.expires_at || null,
           maxRetries: args.max_retries ?? 0,
           retryInterval: args.retry_interval ?? 60,
           enabled: true,
@@ -144,7 +142,7 @@ export class SchedulerPlugin extends PluginBase {
             executeAt: t.executeAt,
             enabled: t.enabled,
             executionCount: t.executionCount,
-            maxExecutions: t.maxExecutions,
+            expiresAt: t.expiresAt,
             lastRunAt: t.lastRunAt,
             nextRunAt: t.nextRunAt,
             createdAt: t.createdAt,

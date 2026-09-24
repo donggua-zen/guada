@@ -130,6 +130,8 @@ export default {
     deleteTurnTitle: '删除本轮对话',
     deleteTurnDesc: '确定要删除本轮对话吗？提问与回答将一并删除。此操作不可撤销。',
     editMessageTitle: '编辑消息',
+    branchConfirmTitle: '分支新会话',
+    branchConfirmDesc: '分支只复制主对话，工作流、子代理等历史信息不跟随复制。原会话不受影响。',
     branchSuccess: '已分支为新会话',
     branchFailed: '分支会话失败',
   },

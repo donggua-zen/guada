@@ -86,6 +86,15 @@ export class SchedulerController {
   }
 
   /**
+   * 立即执行任务（手动触发，带执行日志与计数副作用）
+   */
+  @Post("tasks/:id/run")
+  @HttpCode(HttpStatus.OK)
+  async runTask(@Param("id") id: string) {
+    return this.schedulerService.runTask(id);
+  }
+
+  /**
    * 测试触发任务（无任何副作用）
    *
    * 特性：

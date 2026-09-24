@@ -68,10 +68,19 @@ function close() {
   }
 }
 
-function handleOverlayClick() {
-  if (props.closeOnClickModal) {
+// 记录遮罩上的按下是否直接发生在遮罩本身（而非弹窗内部拖拽起手）。
+// 只有"按下和松开都在遮罩上"才关闭，避免在弹窗内选中文本后拖到遮罩松手误关。
+let downOnOverlay = false
+
+function handleOverlayMouseDown(e: MouseEvent) {
+  downOnOverlay = e.target === e.currentTarget
+}
+
+function handleOverlayClick(e: MouseEvent) {
+  if (downOnOverlay && e.target === e.currentTarget && props.closeOnClickModal) {
     close()
   }
+  downOnOverlay = false
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -108,7 +117,8 @@ onBeforeUnmount(() => {
         v-if="visible"
         class="l-dialog__overlay"
         :class="{ 'l-dialog__overlay--top': !alignCenter }"
-        @click.self="handleOverlayClick"
+        @mousedown="handleOverlayMouseDown"
+        @click="handleOverlayClick"
         @keydown.esc="handleKeydown"
         tabindex="-1"
       >
