@@ -366,3 +366,62 @@ LLMService.completions                    ← 唯一 seam（路由/序列化/流
 ### 9.5 测试
 
 全部 93 例改动相关模块测试通过（agent-engine.spec 构造 mock 恢复为直接 LLMService）。
+
+## 10. v1.5：记忆形态改为 MEMORY.md 索引（取消记忆工具）
+
+记忆侧从"专用工具 + 双文件（factual.md / memos）"改为 **MEMORY.md 索引 + 明细文件**，
+写入统一走文件工具。压缩管线本身（触发、裁剪、摘要、档位）不变，本版只换记忆的载体与写入路径。
+完整设计见 [../memory.md](../memory.md)。
+
+### 10.1 问题与裁决
+
+| 问题 | 现状 | v1.5 裁决 |
+|------|------|-----------|
+| 记忆不可见/不可编辑 | `.guada/memory/factual.md` 由专用工具读写，格式自由 | 索引化：`MEMORY.md`（AI 与用户都可直接编辑），明细按需读取 |
+| 注入预算与实际不符 | 注入截断按 3000 字符算 factual，容量警告却把 memo 正文全部计入 → 实测 87% 占用被报成 "272% 记忆已满、无法显示" | 删除容量核算（整块逻辑随工具一起删）；预算改为"索引前 200 行" |
+| 写后注入不刷新 | 插件 LRU 缓存只由 `memory.compacted` 失效，前台工具写入后索引长期是旧的 | 删除插件侧缓存，每次构建直读文件 |
+| 影子轮次锁死专用插件 | `setToolScope("memory")` 匹配插件粒度，删除插件后会静默空转 | 改锁 `file` 插件 + 新增**路径牢笼**（`setPathJail`）收窄到记忆目录 |
+| 记忆可写的边界与沙箱冲突 | 原记忆工具全文无 `getSandboxMode` 检查，绕过沙箱 | 牢笼显式声明优先于 `read-only`（保持"记忆始终可写"），牢笼内忽略提权参数以免唤起审批 |
+
+### 10.2 关键设计点
+
+- **prompt-only 工具包**：`memory` 工具包不再注册任何工具，只注册 VOLATILE 提示词；toolkit id
+  保留，智能体层 `toolkits_deny` / 功能开关卡片零迁移。
+- **索引注入**：读 `MEMORY.md` 前 200 行 + 常驻维护指南（格式、排序、瘦身、分类目录惯例）；
+  超限追加一行"N 行仅前 200 行可见"。无缓存 → 记忆改动下一回合可见（systemText 每回合构建一次）。
+- **路径牢笼**：`setPathJail(root)` 与 `setToolScope` 正交，收口在 `FilePlugin.resolvePath`
+  （读类工具没有沙箱约束，不能只挂在写校验上），并在 `glob`（绝对/`..` pattern）、
+  `resolveTarget`（远程工作目录）上补齐逃逸面。包含性判断抽出 `WorkspaceService.isPathWithin`。
+- **只收窄不改变路径语义**：相对路径仍按工作目录解析——牢笼只决定落点是否允许，
+  因此影子指令显式要求用绝对路径。
+- **旧布局懒迁移**：索引缺失且探测到 `memory/factual.md` / `memos/*.md` 时复制进新树并生成
+  无摘要索引行（`wx` 写入防并发覆盖），原文件不删。
+- **影子轮次前缀不变式**：请求前缀（system + tools + 完整 surface）必须与主请求逐字节一致以复用
+  provider warm prefix cache（见 [../summary-prefix-cache-plan.md](../summary-prefix-cache-plan.md) §3），
+  因此工具范围/牢笼只在**执行期**收窄，不过滤工具定义、不改写 system。牢笼信息只作为 novel 后缀出现。
+- **影子轮次日志**：`<workspace>/.guada/logs/compression.jsonl` 改为**追加式真 JSONL**（每次运行一行，
+  超 5MB 轮转 `.1`）。此前 `writeFileSync` 覆盖写且按工作区共用单一路径，多会话互相抹记录、只留最后一次。
+- **子智能体跳过影子轮次**：子代理走同一条 `PRE_STEP → CompactionCoordinator → BEFORE_COMPACTION` 链路，
+  此前压缩时也会跑记忆维护并写进自己的隔离目录，但那份记忆在 run 结束后无人再读（短任务）。
+  现在 `onBeforeCompaction` 按 `sessionType === "sub_agent"` 直接返回；隔离路径与索引注入保持不变。
+
+### 10.3 文件变更（v1.5）
+
+| 文件 | 变更 |
+|------|------|
+| `common/utils/memory-path.util.ts` | 新增：记忆目录/索引路径单一真相（插件注入与牢笼根共用），`MEMORY_INDEX_MAX_LINES = 200` |
+| `builtins/memory.plugin.ts` | 重写：1862 行（含 1331 空行）→ 约 230 行；删工具/缓存/容量核算/事件订阅，新增索引注入、维护指南、旧布局迁移 |
+| `chat/memory-sync.service.ts` | `setToolScope("file")` + `setPathJail(memoryDir)`，双开关 finally 恢复；指令改写为文件工具语义 + 绝对路径要求 |
+| `chat/session-context.ts` / `jsonl-session-context.ts` | 新增瞬态 `setPathJail/getPathJail` |
+| `builtins/file.plugin.ts` | 牢笼执行：`resolvePath` 越界拒绝、`glob` pattern 约束与默认基准、远程目标拒绝、`validateWritePath` 牢笼优先、`resolveWriteEscalation` 牢笼内直接返回 |
+| `common/services/workspace.service.ts` | 抽出 `isPathWithin(target, roots)`，`isSafeWritePath` 改为委托 |
+| `plugins.controller.ts` | tool-displays 补 `memory` legacy 映射（历史会话的工具调用块仍正确渲染） |
+| `memory.lang.*.json` | 语义改为索引形态；4 个 display 键保留供 legacy 映射解析 |
+
+### 10.4 测试（v1.5）
+
+新增 3 个 spec（42 例）：`file-plugin-jail.spec.ts`（越界/绝对路径/`..`/远程/glob pattern/
+牢笼优先写/无牢笼时沙箱行为不变/isPathWithin 边界）、`memory.plugin.spec.ts`（200 行截断、
+超限提示、CRLF、子智能体隔离路径、迁移幂等与不覆盖手写索引）、
+`memory-sync.service.spec.ts`（非 MEMORY_SYNC 零调用、作用域与牢笼的设置/恢复、
+指令语义、工具执行、fail-open、中止）。全量 119 套件 / 1552 例通过。

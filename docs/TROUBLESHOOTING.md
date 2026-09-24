@@ -589,15 +589,53 @@ pnpm run start:debug
    - `1` 有两种来源 —— `logFatal` 主动退出（error 日志同刻必有「进程级 …」条目），以及 ts-node-dev 热重载/停机时的 `child.kill('SIGTERM')`（Windows 上即 TerminateProcess，退出码也是 1，error 日志无条目；2026-09-21 06:38 改文件触发重启即为此例）；
    - `0` 既可能是优雅 `process.exit(0)`，也可能是外部 `taskkill /F`（TerminateProcess 的退出码由调用方给）；
    - `0xC0000409`（fail-fast）绕过 WER，故"无 WER 事件"不能排除原生崩溃。
-5. **切换会话触发的原生崩溃（2026-09-21 07:34 抓到实证）**：句柄监视记录后端 PID 22100 退出码 `-1073741819` = **0xC0000005 STATUS_ACCESS_VIOLATION**，且 Application 日志无 EventID 1000、`CrashDumps` 无 node.exe.dmp、winston 无任何 error 条目 —— 与"死前零输出、不重连、无重启"的历史 Mode B 完全吻合。落盘日志的最后 4 行正是切换会话时的
-   `POST /api/v1/sessions/:id/workspace/watch`（两个会话、同一 `workspacePath`，交替各 2 次 → `setWatchScope` → `@parcel/watcher` 在途 subscribe 与 unsubscribe 交叠）。待办：用同形状并发压 `workspace-watcher.service.ts` 复现，并开 `HKCU\...\Windows Error Reporting\LocalDumps` 收 node.exe 用户态 dump 以定位 faulting 模块。
+5. **切换会话触发的原生崩溃（2026-09-21 已定位到根因）**：句柄监视记录后端 PID 22100 退出码 `-1073741819` = **0xC0000005 STATUS_ACCESS_VIOLATION**，且 Application 日志无 EventID 1000、`CrashDumps` 无 node.exe.dmp、winston 无任何 error 条目 —— 与"死前零输出、不重连、无重启"的历史 Mode B 完全吻合。落盘日志的最后 4 行正是切换会话时的
+   `POST /api/v1/sessions/:id/workspace/watch`（两个会话、同一 `workspacePath`，交替各 2 次 → `setWatchScope` → `@parcel/watcher` 在途 subscribe 与 unsubscribe 交叠）。
+
+**根因（已复现，非推测）**：`@parcel/watcher@2.6.0` Windows 后端的 **use-after-free**。
+`src/windows/WindowsBackend.cc` 中 `Subscription` 把自身裸指针塞进重叠 I/O：`mOverlapped.hEvent = this`，完成回调再 `reinterpret_cast<Subscription *>(overlapped->hEvent)` 解引用；而 `WindowsBackend::unsubscribe()` 只做 `watcher->state = nullptr`，共享指针一放掉 `~Subscription` 立刻执行 `CancelIo(mDirectoryHandle); CloseHandle(mDirectoryHandle)`：
+
+- `CancelIo` 只取消**调用线程**提交的 I/O，而这次 `ReadDirectoryChangesW` 是后端线程发的 → 取消不掉；
+- 句柄在 I/O 仍悬挂时被 `CloseHandle`，随后的完成（含 `ERROR_OPERATION_ABORTED`）照样投递到后端线程的 alertable wait，回调里的 `Subscription *` 已析构 → 读 `mRunning` 即崩。
+
+也就是说：**只要在退订后该目录又有任何文件变动，就必崩**，与是否 `await` 无关。
+
+复现脚本 `scripts/repro-parcel-watcher-crash.js`（在自己的一次性临时目录里压，不依赖应用）：
+
+| 模式 | 形状 | 结果 |
+| ---- | ---- | ---- |
+| `churn 3000` | 订阅→退订循环，目录**无**变动 | 退出码 0，全部存活 |
+| `writeonly` | 目录高频写，订阅**不**退订 | 退出码 0，全部存活 |
+| `churnwrite 3000` | 目录高频写 **且** 订阅→退订循环 | **3/3 段错误（bash 139 / 0xC0000005），无 JS 栈、无日志** |
+
+两个对照各自都安全，只有「事件在途 + 退订」组合崩 —— 与 dev 现场（切换会话触发 `setWatchScope` 撤销 → `disposeWatcher`/`updateWatcherSubscriptions` 退订，同时工作区里 agent 正在写文件）完全一致。同一子系统的旁证：`WorkspaceWatcherService: Failed to subscribe watcher for D:\AI\work\WORK-…: Error: Invalid handle`，那是 `CreateFileW` 对**已不存在的 workspace 目录**返回 `INVALID_HANDLE_VALUE`（后端 stderr 同刻有 `scandir ENOENT`），订阅前未做存在性校验。
+
+**修复（已实施，2026-09-21）**：给原生模块打补丁，见 `third_party/parcel-watcher/`（补丁源码 + 编译好的 `watcher.node`）与 `scripts/patch-parcel-watcher.mjs`（挂在 `backend-ts` 的 `postinstall`，把补丁二进制覆盖进 `node_modules` 与 `node_modules_production` 三处）。补丁做三件事：
+
+1. `Subscription` 改为 `enable_shared_from_this`，每次在途 `ReadDirectoryChangesW` 用堆上的 `PendingIo` 持一份强引用（`mOverlapped.hEvent` 不再是裸 `this`），完成回调结束时才释放 → 对象不可能在 IRP 还挂着时被析构；
+2. `stop()` → `requestStop()`：只 `mRunning=false` + `CancelIoEx`（`CancelIo` 只取消调用线程的 I/O，退订发生在 NAPI 线程），句柄改由析构函数在无在途操作时关闭；
+3. `QueueUserAPC` 的参数同样改为堆上的 `shared_ptr`，避免 APC 未跑完订阅就被撤销。
+
+验证（同一台机器、同一脚本，`WATCHER_MODULE` 指向自编译产物）：
+
+| 模式 | 打补丁前 | 打补丁后 |
+| ---- | ---- | ---- |
+| `churnwrite 3000` | 5/5 退出码 `0xC0000005` | 8/8 退出码 0 |
+| `churn 5000` | 约 1/10 崩 | 6/6 退出码 0 |
+| `events`（功能回归） | 正常 | 正常，退订后再写 30 次不崩 |
+
+上游状态：npm `latest` 仍是 2.6.0，master 的 `WindowsBackend.cc` 三处缺陷原样存在，issue #262 只给了「不要退订」的绕过办法，无补丁。注意补丁后 `churn` 的 RSS 稳态比上游高（订阅对象要等取消完成才析构，实测在途峰值约 20 个 × 每个 2MB 缓冲），是**有界**的流水线积压而非泄漏（构造/析构计数 500/499，地址复用）；应用里订阅数量是 scope 级的个位数，不受影响。
+
+残留竞态（已在 `third_party/parcel-watcher/upstream-pr.md` 记为后续项）：`poll()` 里「查 `mRunning` → 发 `ReadDirectoryChangesW`」不在 `mMutex` 保护下，退订若正好落在这条缝里，IRP 会发在取消之后而长期悬挂 —— 后果从崩溃降级为「一个订阅对象 + 目录句柄 + 2MB 缓冲泄漏」，窗口是亚微秒级。
 
 
 **已内置的观测与取证手段**：
 
 | 手段 | 位置 | 说明 |
 | ---- | ---- | ---- |
-| 真实进程退出码 | `electron/main.ts` `watchBackendRealExit` / 日志前缀 `[BackendExit]` | 后端经 bridge `port_ready` 上报自身 PID，Electron 起一个 PowerShell 助手 `OpenProcess`+`WaitForSingleObject`+`GetExitCodeProcess` 阻塞等待，死亡时打印退出码及其语义，并写 `backend-crash.log`。10s 内若有新 PID/bridge 重连则判为热重载（info），否则为非预期死亡（error） |
+| 真实进程退出码 | `electron/main.ts` `watchBackendRealExit` / 日志前缀 `[BackendExit]` | 后端经 bridge `port_ready` 上报自身 PID，Electron 起一个 PowerShell 助手 `OpenProcess`+`WaitForSingleObject`+`GetExitCodeProcess` 阻塞等待，死亡时打印退出码及其语义。定性是**两段式**：10s 内未见重启只记 warn（ts-node-dev 文件变更重启实测 8~20s，一刀切会把热重载误判成死亡），再等 35s 仍无重启且无热重载公告才记 error 并写 `backend-crash.log` |
+| 热重载公告 | `electron/main.ts` / 日志前缀 `[BackendReload]` | ts-node-dev 的 `restart()` 会往包装进程 stdout 打 `Restarting: <file> has been modified`，Electron 读 stdout 时识别并落 main.log。Windows 下 `child.kill('SIGTERM')` 即 TerminateProcess，退出码与日志死相和异常死亡完全相同，这条公告是唯一可靠的区分依据 |
+| 临终呼吸 | `backend-ts/src/main.ts` / `~/.guada-dev/logs/backend-last-breath.log` | `appendFileSync` 同步写，`exit(N)` / `beforeExit` / `signal SIGxxx` 三种行分别对应「主动退出路径」「事件循环抽空」「收到可捕获信号」；**同刻什么都不写**才是句柄级终止（TerminateProcess / 原生崩溃）。winston 是异步流，被杀时必丢，不能用于死亡定性 |
 | 健康看门狗 | `electron/main.ts` `startBackendWatchdog` | 15s 探测 `/api/v1/health`，连续 3 次失败写 `[BackendWatchdog]` 错误日志，**含失败原因分类**（连接被拒 / 超时 / HTTP 状态）+ 包装进程与真实进程各自的存活状态。仅记录日志，不自动重启 |
 | 诊断报告 | `logs/diagnostic-reports/` | 后端 spawn 注入 `NODE_OPTIONS=--report-on-fatalerror --report-uncaught-exception`。**Node 不会自建 `--report-dir`**，目录缺失时报告被静默丢弃（此前该目录一直不存在，故从未产出一份报告）；现已在 spawn 前 `mkdir -p`。外部强杀与 `process.exit()` 都不产生报告，报告缺失不可作为"他杀"证据 |
 | 进程级异常落盘 | `backend-ts/src/main.ts` | `uncaughtException`/`unhandledRejection` 写 winston error 日志后退出；stdout/stderr 的 EPIPE 不再计入致命错误 |
@@ -618,7 +656,12 @@ ls ~/.guada-dev/logs/diagnostic-reports/
 wevtutil qe Application "/q:*[System[(EventID=1000)]]" /rd:true /c:10 /f:text
 ```
 
-**缓解措施**：dev 下后端死亡后，改任一 backend 文件即可让 ts-node-dev 重启它（或重启应用）。若 `[BackendExit]` 给出 `0xC0000409`/`0xC0000005` 一类原生码且无 WER 记录，再考虑杀软白名单（`D:\AI\ai_chat`、node 安装目录、`npx.cmd`/`ts-node-dev` 相关进程）。
+**缓解措施**：
+
+- 原生崩溃类（`0xC0000005` + `workspace/watch` 前后）：已根治 —— native 补丁见上文「修复（已实施）」，随 `pnpm install` 自动生效。若日志里再次出现这类退出码，先确认补丁没被 `pnpm install --ignore-scripts` 或版本升级绕过：`node scripts/patch-parcel-watcher.mjs` 会打印「已打补丁，跳过」或替换结果，`cd backend-ts && node -e "console.log(require('fs').statSync(require.resolve('@parcel/watcher-win32-x64/watcher.node')).size)"` 应输出 `531968`。
+- 订阅前未校验目录存在，会产生 `Invalid handle` 那批日志（workspace 目录已被删）；这与崩溃无关，属独立待办。
+- dev 下后端死亡后，改任一 backend 文件即可让 ts-node-dev 重启它（或重启应用）。
+- 杀软白名单已无必要：`[BackendExit]` + `backend-last-breath.log` 两路证据都没支持"他杀"，历史误判源于观测装置在 dev 下全部失效。
 
 ---
 
