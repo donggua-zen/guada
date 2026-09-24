@@ -18,6 +18,8 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TaskSchedulerService.name);
   private readonly activeJobs = new Map<string, cron.ScheduledTask>();
   private readonly activeTimeouts = new Map<string, NodeJS.Timeout>();
+  /** 重叠守卫：正在派发执行中的任务 id，防止上一次未结束时被再次触发 */
+  private readonly runningTasks = new Set<string>();
 
   constructor(
     private storage: TaskStorageService,
@@ -34,11 +36,17 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
       const tasks = await this.storage.getAllTasks();
       const enabledTasks = tasks.filter((t) => t.enabled);
 
+      let scheduled = 0;
       for (const task of enabledTasks) {
-        this.scheduleTask(task);
+        // 启动即过期的任务：置为禁用，不注册调度
+        if (this.isExpired(task)) {
+          await this.expireTask(task);
+          continue;
+        }
+        if (this.scheduleTask(task)) scheduled++;
       }
 
-      this.logger.log(`已加载 ${enabledTasks.length} 个启用的定时任务`);
+      this.logger.log(`已加载 ${scheduled} 个启用的定时任务`);
     } catch (error) {
       this.logger.error("加载定时任务失败:", error);
     }
@@ -102,10 +110,8 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
     }
 
     const timeout = setTimeout(async () => {
-      this.logger.log(`一次性任务触发执行: ${task.name} (${task.id})`);
-      await this.executor.execute(task);
-      // 执行完成后清理 timeout 引用
       this.activeTimeouts.delete(task.id);
+      await this.fireTask(task, "一次性");
     }, delay);
 
     this.activeTimeouts.set(task.id, timeout);
@@ -136,10 +142,9 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
     const job = cron.schedule(
       task.cronExpression,
       async () => {
-        this.logger.log(`Cron 触发执行任务: ${task.name} (${task.id})`);
-        await this.executor.execute(task);
-        // 执行完成后更新下次执行时间
-        await this.updateNextRunAt(task);
+        const fired = await this.fireTask(task, "Cron");
+        // 仅在成功派发后推进下次执行时间
+        if (fired) await this.updateNextRunAt(task);
       },
       {
         scheduled: true,
@@ -229,6 +234,57 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
       { label: "每周一 8 点", expression: "0 8 * * 1" },
       { label: "每月1日 0 点", expression: "0 0 1 * *" },
     ];
+  }
+
+  /**
+   * 任务是否已到期（expiresAt 存在且已过当前时间）
+   */
+  private isExpired(task: ScheduledTask): boolean {
+    if (!task.expiresAt) return false;
+    const t = new Date(task.expiresAt).getTime();
+    return !isNaN(t) && t <= Date.now();
+  }
+
+  /**
+   * 到期处理：取消调度并置为禁用，不再创建新的执行
+   */
+  private async expireTask(task: ScheduledTask): Promise<void> {
+    this.logger.log(`任务已到期，自动暂停: ${task.name} (${task.id})`);
+    this.unscheduleTask(task.id);
+    await this.storage.updateTask(task.id, { enabled: false });
+  }
+
+  /**
+   * 统一的触发派发入口：重读最新任务、到期检查、重叠守卫、执行
+   * @returns 是否成功派发执行（用于决定是否推进 nextRunAt）
+   */
+  private async fireTask(task: ScheduledTask, label: string): Promise<boolean> {
+    // 重读最新任务，反映运行期间对 enabled/expiresAt 的改动
+    const fresh = await this.storage.getTaskById(task.id);
+    if (!fresh || !fresh.enabled) {
+      this.unscheduleTask(task.id);
+      return false;
+    }
+    if (this.isExpired(fresh)) {
+      await this.expireTask(fresh);
+      return false;
+    }
+    if (this.runningTasks.has(task.id)) {
+      this.logger.warn(`任务上次执行尚未结束，跳过本次${label}触发: ${task.name}`);
+      return false;
+    }
+
+    this.runningTasks.add(task.id);
+    try {
+      this.logger.log(`${label} 触发执行任务: ${task.name} (${task.id})`);
+      await this.executor.execute(fresh);
+      return true;
+    } catch (error) {
+      this.logger.error(`${label} 任务执行异常: ${task.name}`, error);
+      return false;
+    } finally {
+      this.runningTasks.delete(task.id);
+    }
   }
 
   /**

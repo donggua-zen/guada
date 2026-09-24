@@ -4,13 +4,15 @@
      数据契约：REST GET /sessions/:id/todo + todo_updated SSE → 全量重拉。 -->
 <template>
   <div v-if="items.length" class="floating-todo-bar" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
-    <!-- 胶囊态 -->
+    <!-- 胶囊态。图标尺寸用偶数：外层容器 16px，13px 会让居中余量成 1.5px（半像素），
+         图标就会落在半像素上，随容器位置在两种奇偶相位间跳一个设备像素；
+         14px 余量 2px → 1px，稳定落在整像素。横线类元素同理（见 EventCard 的 h-0.5）。 -->
     <div class="todo-capsule">
       <span class="flex h-4 w-4 shrink-0 items-center justify-center">
-        <el-icon v-if="currentItem?.status === 'in_progress'" size="13" class="todo-icon--active">
+        <el-icon v-if="currentItem?.status === 'in_progress'" size="14" class="todo-icon--active">
           <ArrowRight16Regular />
         </el-icon>
-        <el-icon v-else-if="currentItem?.status === 'completed'" size="13" class="todo-icon--done">
+        <el-icon v-else-if="currentItem?.status === 'completed'" size="14" class="todo-icon--done">
           <Check />
         </el-icon>
         <span v-else class="todo-ring"></span>
@@ -37,10 +39,10 @@
         <div class="flex flex-col gap-0.5 overflow-y-auto todo-panel-scroll">
           <div v-for="(item, i) in items" :key="i" class="todo-item">
             <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-              <el-icon v-if="item.status === 'completed'" size="13" class="todo-icon--done">
+              <el-icon v-if="item.status === 'completed'" size="14" class="todo-icon--done">
                 <Check />
               </el-icon>
-              <el-icon v-else-if="item.status === 'in_progress'" size="13" class="todo-icon--active">
+              <el-icon v-else-if="item.status === 'in_progress'" size="14" class="todo-icon--active">
                 <ArrowRight16Regular />
               </el-icon>
               <span v-else class="todo-ring"></span>
@@ -146,6 +148,9 @@ onUnmounted(() => {
 .floating-todo-bar {
   position: relative;
   display: flex;
+  /* 收缩链：行变窄时能一直传到胶囊内部的 truncate，不把同行的回到底部按钮挤出可视区 */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .todo-capsule {
@@ -154,17 +159,24 @@ onUnmounted(() => {
   gap: 6px;
   height: 28px;
   padding: 0 12px;
-  border-radius: 9999px;
+  /* 与回到底部按钮同圆角：同一行的两个 chip 必须同形（改这里要同步 ScrollToBottomButton） */
+  border-radius: 8px;
   border: 1px solid var(--gd-color-border);
   background: var(--gd-color-surface);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
   user-select: none;
-  max-width: min(420px, calc(100% - 32px));
-  width: fit-content;
+  /* 宽度上限必须是定长：百分比上限在内在尺寸计算阶段不可解析、会被忽略，外层 flex 项
+     就会按「未截断的文本宽度」定宽，胶囊右侧留出空档把两个 chip 推远（实测 103px）。
+     定长 420px 后外层宽度 = 胶囊实宽，两者之间只剩行的 gap。min-width:0 保证行窄时能收缩。 */
+  max-width: 420px;
+  min-width: 0;
+  /* 悬停底色是半透明 tint，换 background 会连同不透明底色一起换掉（浮层下方的消息文字透出来）。
+     改用 inset 阴影叠在 surface 之上，合成恒为实色。 */
+  box-shadow: inset 0 0 0 999px transparent;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .todo-capsule:hover {
-  background: var(--gd-color-surface-hover);
+  box-shadow: inset 0 0 0 999px var(--gd-color-surface-hover);
 }
 
 .todo-detail-panel {

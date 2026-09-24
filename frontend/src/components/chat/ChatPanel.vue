@@ -7,7 +7,7 @@
       <div class="scroll-inner">
         <div class="scroll-main">
           <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
-          <div class="chat-messages chat-column w-full mx-auto pt-5 flex-1">
+          <div class="chat-messages chat-column w-full mx-auto pt-5 pb-5 flex-1">
             <template v-if="showSkeleton">
               <div class="absolute inset-0 z-1 overflow-hidden">
                 <div class="px-5 chat-column mx-auto h-full flex flex-col py-10 ">
@@ -89,11 +89,16 @@
               </div>
 
               <!-- 输入区上方状态行：TODO 胶囊 + 回到底部，并排居中。
+                   绝对定位浮层，不占布局高度（见 .composer-status-row 样式注释）。
                    位于避让过侧边栏的 .chat-column 内 → 开侧边栏时与输入框同轴居中。 -->
               <div class="composer-status-row">
                 <FloatingTodoBar :session-id="currentSessionId || undefined" />
-                <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
-                  @click="handleScrollToBottomClick" />
+                <!-- 0 宽插槽：按钮在插槽内绝对定位，插槽本身不占宽度。
+                     行的居中因此只由胶囊决定 → 按钮出现/消失（到达或离开底部）不再把胶囊横移
+                     （实测 18px：胶囊与图标一起跳，与"到底部时图标动了"的现象一致）。 -->
+                <div class="scroll-btn-slot">
+                  <ScrollToBottomButton :show="showScrollToBottomBtn" @click="handleScrollToBottomClick" />
+                </div>
               </div>
 
               <div class="w-full flex items-center relative">
@@ -403,26 +408,24 @@ const queueLength = computed(() => messageQueue.value.length);
 
 // 滚动管理相关状态和方法
 const showScrollToBottomBtn = ref(false)
-const shouldButtonBreathe = ref(false)
 
 /**
  * 更新滚动按钮显示状态
+ *
+ * 只跟随滚动位置，与流式状态完全无关：不在底部就显示、贴底就隐藏。
+ * 此前用会话级 isStreaming 门控——它由最晚的 stream_status_changed 复位（晚于回合级 turn_end），
+ * 会让按钮在回合结束后再滞留百毫秒才消失；而它是 28px 的实占控件，增删会改变 scrollHeight
+ * 把上方消息顶跳。
+ * 贴底判定与 handleScroll 同式：ScrollContainer 暴露的是滚动元素，不是 isAtBottom 状态
+ * （其内部 ref 从未被写入，读它恒为 undefined）。
  */
 const updateScrollButtonVisibility = useDebounceFn(() => {
-  const isAtBottom = scrollContainerRef.value?.isAtBottom
+  const scrollElement = scrollContainerRef.value?.getScrollElement?.()
+  const isAtBottom = scrollElement
+    ? scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <= 5
+    : true
 
-  if (isAtBottom) {
-    showScrollToBottomBtn.value = false
-    shouldButtonBreathe.value = false
-    return
-  }
-
-  if (isStreaming.value) {
-    showScrollToBottomBtn.value = true
-    shouldButtonBreathe.value = true
-  } else {
-    showScrollToBottomBtn.value = false
-  }
+  showScrollToBottomBtn.value = !isAtBottom
 }, 100)
 
 /**
@@ -446,6 +449,11 @@ function immediateScrollToBottom() {
  * 处理滚动事件
  */
 function handleScroll(event: any) {
+  // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 FloatingTodoBar 的注释），
+  // 而 scrollTicking 守卫会让 rAF 未回调时的后续滚动事件全部被丢弃——若只在 rAF 里更新，
+  // 按钮会永不出现。防抖收在 updateScrollButtonVisibility 内部，逐次调用无额外开销。
+  updateScrollButtonVisibility();
+
   if (scrollTicking) return;
   scrollTicking = true;
 
@@ -492,11 +500,8 @@ function handleScrollToBottomClick() {
   scrollToBottom()
 }
 
-// 监听流式状态变化
-watch(() => isStreaming.value, (newVal, oldVal) => {
-  shouldButtonBreathe.value = newVal
-  updateScrollButtonVisibility()
-}, { immediate: true })
+// 滚动按钮显隐只由滚动事件驱动（updateScrollButtonVisibility 在 handleScroll 中触发）；
+// 不再监听 isStreaming——流式状态与按钮无关。
 
 const activeMessages = computed({
   get: () => {
@@ -935,8 +940,14 @@ async function deleteTurnMessage(turn: any) {
 }
 
 // 分支会话：以该回合（助手消息所在，必为完整一轮）为节点，复制出新会话并跳转过去
+// 分支只复制主对话（工作流、子代理等历史不跟随），故先弹窗告知该取舍
 async function branchFromTurn(turn: any) {
   if (!currentSessionId.value || !turn?.id) return;
+  const confirmed = await confirm(
+    t('chat.panel.branchConfirmTitle'),
+    t('chat.panel.branchConfirmDesc'),
+  );
+  if (!confirmed) return;
   try {
     const newSession = await apiService.branchSession(currentSessionId.value, {
       turnId: turn.id,
@@ -1414,13 +1425,49 @@ function scrollToMessage(messageId: string) {
   transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
 }
 
-/* 输入区上方状态行：TODO 胶囊与回到底部按钮并排居中，随内容出现/消失 */
+/* 输入区上方状态行：TODO 胶囊与回到底部按钮并排居中。
+   浮层而非流内元素——两者都是按状态增删的 28px 控件（胶囊随待办项、按钮随是否贴底），
+   参与布局会让该行在 0↔34px 之间跳变，直接改变 scrollHeight 把上方消息顶跳。
+   包含块 = .chat-column（已 relative），left/right:0 宽度等同原 width:100%。
+   pointer-events 收口：浮层空白区透传点击，子控件自身可点。
+   will-change: transform 不为动效：把本行提升为合成层，让浏览器有机会把渲染吸附到设备像素网格，
+   缓解本行继承的小数位置（输入区是 sticky bottom-0，滚到最底部时落到由内容高度决定的自然位置，
+   实测带 0.5px 小数；滚动中途则贴视口底、为整数）。
+   注意：图标自身的半像素是另一回事——「容器尺寸 − 图标尺寸 = 奇数」会让居中余量为半像素
+   （16px 容器放 13px 图标 → 上下各 1.5px），这是几何问题，应按尺寸取偶数修
+   （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。
+   本行吸附是尽力而为（实测有时生效、有时仍差半个像素），不是根治手段。 */
 .composer-status-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  margin-bottom: 6px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.composer-status-row > :deep(*) {
+  pointer-events: auto;
+}
+
+/* 回到底部按钮的 0 宽插槽：按钮在插槽内绝对定位（与胶囊的间距由行的 gap 提供），
+   插槽自身不占宽度 → 按钮显隐不参与行的居中计算，胶囊与图标的横向位置恒定。
+   否则按钮消失（到达底部）会让「胶囊+按钮」整组重新居中，把胶囊横移 18px。 */
+.scroll-btn-slot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 0;
+  height: 28px;
+}
+
+.scroll-btn-slot > :deep(*) {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 </style>

@@ -32,6 +32,11 @@ export class UpdateTaskDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(["independent", "merged"])
+  outputMode?: "independent" | "merged";
+
+  @IsString()
+  @IsOptional()
   targetSessionId?: string | null;
 
   @IsString()
@@ -46,14 +51,25 @@ export class UpdateTaskDto {
   @IsOptional()
   settings?: Record<string, any> | null;
 
+  @IsString()
+  @IsOptional()
+  workspacePath?: string | null;
+
+  @IsObject()
+  @IsOptional()
+  attachments?: Record<string, string[]> | null;
+
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
 
-  @IsInt()
-  @Min(1)
+  @IsString()
   @IsOptional()
-  maxExecutions?: number;
+  expiresAt?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  unattended?: boolean;
 
   @IsInt()
   @Min(0)

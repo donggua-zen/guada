@@ -122,9 +122,14 @@ export class UniversalToolsPlugin extends PluginBase {
           signal,
           { allowLazy: true },
         );
-        // 透传 images，让 ToolExecutor 注入为隐藏 user 消息（多模态图片返回）
-        if (result.images && result.images.length > 0) {
-          return { content: result.content, images: result.images };
+        // 透传 images（多模态图片返回，由 ToolExecutor 注入为隐藏 user 消息）与 meta
+        //（内层工具的结构化结果元数据，如 todo 的待办列表）；不传则在本通道被静默丢弃
+        if (result.images?.length || result.meta) {
+          return {
+            content: result.content,
+            ...(result.images?.length ? { images: result.images } : {}),
+            ...(result.meta ? { meta: result.meta } : {}),
+          };
         }
         return result.content;
       },

@@ -52,7 +52,7 @@
                   <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                     {{ task.name }}
                   </h3>
-                  <el-tag v-if="isTaskLimited(task)" size="small" effect="plain">{{ t('scheduler.page.remainingCount', { count: getRemainingCount(task) }) }}</el-tag>
+                  <el-tag v-if="task.unattended" size="small" effect="plain" type="success">{{ t('scheduler.page.unattendedTag') }}</el-tag>
                 </div>
 
                 <!-- Description: prompt -->
@@ -72,6 +72,7 @@
                     </span>
                   </div>
                   <div class="flex items-center gap-2 shrink-0">
+                    <el-button link size="small" @click.stop="handleRunNow(task)">{{ t('scheduler.page.runNow') }}</el-button>
                     <el-button link size="small" @click.stop="handleViewLogs(task)">{{ t('scheduler.page.logs') }}</el-button>
                     <el-button link size="small" type="danger" @click.stop="handleDeleteTask(task)">{{ t('scheduler.page.delete') }}</el-button>
                     <el-switch v-model="task.enabled" :active-value="true" :inactive-value="false"
@@ -448,19 +449,18 @@ function handleViewLogs(task: ScheduledTask) {
 }
 
 /**
- * 判断任务是否有限制执行次数
+ * 立即执行任务（手动触发，带日志与计数）
  */
-function isTaskLimited(task: ScheduledTask): boolean {
-  return task.maxExecutions !== null && task.maxExecutions !== undefined && task.maxExecutions > 0
-}
-
-/**
- * 获取剩余执行次数
- */
-function getRemainingCount(task: ScheduledTask): number {
-  const count = task.executionCount || 0
-  const max = task.maxExecutions || 0
-  return Math.max(0, max - count)
+async function handleRunNow(task: ScheduledTask) {
+  try {
+    await apiService.runScheduledTask(task.id)
+    toast.success(t('scheduler.page.runNowSuccess'))
+    // 触发后台回合，稍后刷新以更新执行次数/日志状态
+    setTimeout(() => loadTasks(), 800)
+  } catch (err: any) {
+    console.error('立即执行失败:', err)
+    toast.error(err.message || t('scheduler.page.runNowFailed'))
+  }
 }
 
 /**

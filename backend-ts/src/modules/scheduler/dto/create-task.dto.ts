@@ -28,6 +28,11 @@ export class CreateTaskDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(["independent", "merged"])
+  outputMode?: "independent" | "merged";
+
+  @IsString()
+  @IsOptional()
   targetSessionId?: string;
 
   @IsString()
@@ -42,14 +47,25 @@ export class CreateTaskDto {
   @IsOptional()
   settings?: Record<string, any>;
 
+  @IsString()
+  @IsOptional()
+  workspacePath?: string;
+
+  @IsObject()
+  @IsOptional()
+  attachments?: Record<string, string[]>;
+
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
 
-  @IsInt()
-  @Min(1)
+  @IsString()
   @IsOptional()
-  maxExecutions?: number;
+  expiresAt?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  unattended?: boolean;
 
   @IsInt()
   @Min(0)

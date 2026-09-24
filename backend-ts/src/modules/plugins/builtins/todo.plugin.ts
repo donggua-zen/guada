@@ -5,20 +5,23 @@ import * as path from "path";
 import { z } from "zod";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
-import { PluginApi } from "../api/plugin-api";
+import { PluginApi, ToolResultObject } from "../api/plugin-api";
 import { TodoUpdatedEvent } from "../../../common/events/stream.events";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { HOOKS } from "../../../modules/chat/types/hooks.contract";
+import {
+  TODO_META_CARD,
+  resolveTodoFilePath,
+  type TodoItem,
+  type TodoStore,
+} from "../../../common/utils/todo-store.util";
 import langZh from "./todo.lang.zh.json";
 import langEn from "./todo.lang.en.json";
 
-interface TodoItem {
+/** 一次 todo 调用的结果：content 给模型看，store 是调用后的权威持久态（写进 meta） */
+interface TodoCallResult {
   content: string;
-  status: "pending" | "in_progress" | "completed";
-}
-
-interface TodoStore {
-  items: TodoItem[];
+  store: TodoStore;
 }
 
 const STATUS_DISPLAY: Record<string, string> = {
@@ -65,11 +68,9 @@ export class TodoPlugin extends PluginBase {
   ): Promise<void> {
     try {
       const workspaceDir = sessionContext.getWorkspacePath();
-      const filePath = path.join(
+      const filePath = resolveTodoFilePath(
         workspaceDir,
-        ".guada",
-        "todo",
-        `${sessionContext.sessionId}.json`,
+        sessionContext.sessionId,
       );
       let store: TodoStore;
       try {
@@ -183,20 +184,41 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
   private async handleTodo(
     args: Record<string, any>,
     ctx: PluginContext,
-  ): Promise<string> {
+  ): Promise<ToolResultObject> {
     const { action, contents } = args;
     switch (action) {
       case "add":
-        return await this.addTodoItems(contents, ctx);
+        return this.toToolResult(action, await this.addTodoItems(contents, ctx));
       case "update":
-        return await this.updateTodoItems(contents, ctx);
+        return this.toToolResult(
+          action,
+          await this.updateTodoItems(contents, ctx),
+        );
       case "create":
-        return await this.createTodoItems(contents, ctx);
+        return this.toToolResult(
+          action,
+          await this.createTodoItems(contents, ctx),
+        );
       case "next":
-        return await this.nextTodoItem(ctx);
+        return this.toToolResult(action, await this.nextTodoItem(ctx));
       default:
         throw new Error(`Unknown action: ${action}`);
     }
+  }
+
+  /**
+   * 包装为工具结果对象：content 走 LLM，meta 随事件流持久化且模型不可见。
+   * meta.items 恒为调用后的权威持久态（全部完成时为 []，与已删文件语义一致），
+   * 分支会话据此从历史还原锚点时刻的 TODO，无需在别处复制 action 语义。
+   */
+  private toToolResult(
+    action: string,
+    result: TodoCallResult,
+  ): ToolResultObject {
+    return {
+      content: result.content,
+      meta: { card: TODO_META_CARD, action, items: result.store.items },
+    };
   }
 
   /** 全局串行执行：确保并发文件读写不互相覆盖 */
@@ -214,8 +236,7 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
     const workspaceDir = ctx?.session?.workspacePath;
     if (!workspaceDir) throw new Error("missing workspace directory");
 
-    const fileName = `${ctx.session.sessionId}.json`;
-    return path.join(workspaceDir, ".guada", "todo", fileName);
+    return resolveTodoFilePath(workspaceDir, ctx.session.sessionId);
   }
 
   private async readStore(ctx: PluginContext): Promise<TodoStore> {
@@ -284,13 +305,14 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
 
   /**
    * 格式化列表并写入存储。
-   * 若全部步骤已完成，先保留格式化结果（供 AI 查看）再删除存储文件。
+   * 若全部步骤已完成，先保留格式化结果（供 AI 查看）再删除存储文件；
+   * 此时返回的 store 为空——与「文件已删」的持久态一致。
    */
   private async finalizeAndFormat(
     store: TodoStore,
     ctx: PluginContext,
-  ): Promise<string> {
-    const result = this.formatTodoList(store);
+  ): Promise<TodoCallResult> {
+    const content = this.formatTodoList(store);
 
     const allCompleted =
       store.items.length > 0 &&
@@ -299,29 +321,34 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
     if (allCompleted) {
       // 全部完成 → 删除存储文件（AI 仍能看到已完成的列表）
       await this.deleteStoreFile(ctx);
-    } else {
-      await this.writeStore(store, ctx);
+      return { content, store: { items: [] } };
     }
 
-    return result;
+    await this.writeStore(store, ctx);
+    return { content, store };
+  }
+
+  /** 入参 step → 存储字段 content（trim） */
+  private toTodoItems(
+    contents: Array<{ step: string; status: string }> | undefined,
+  ): TodoItem[] {
+    return (contents ?? []).map((c) => ({
+      content: c.step.trim(),
+      status: c.status as TodoItem["status"],
+    }));
   }
 
   /** 追加步骤到现有待办 */
   private async addTodoItems(
     contents: Array<{ step: string; status: string }> | undefined,
     ctx: PluginContext,
-  ): Promise<string> {
+  ): Promise<TodoCallResult> {
     return this.runSerialized(async () => {
       const store = await this.readStore(ctx);
 
-      const newItems: TodoItem[] = (contents ?? []).map((c) => ({
-        content: c.step.trim(),
-        status: c.status as TodoItem["status"],
-      }));
-
-      const allItems = [...store.items, ...newItems];
+      const allItems = [...store.items, ...this.toTodoItems(contents)];
       const error = this.validateMaxOneInProgress(allItems);
-      if (error) return error;
+      if (error) return { content: error, store };
 
       store.items = allItems;
 
@@ -333,19 +360,17 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
   private async updateTodoItems(
     contents: Array<{ step: string; status: string }> | undefined,
     ctx: PluginContext,
-  ): Promise<string> {
+  ): Promise<TodoCallResult> {
     return this.runSerialized(async () => {
-      const items: TodoItem[] = (contents ?? []).map((c) => ({
-        content: c.step.trim(),
-        status: c.status as TodoItem["status"],
-      }));
+      const items = this.toTodoItems(contents);
 
       const error = this.validateMaxOneInProgress(items);
-      if (error) return error;
+      if (error) {
+        // 校验不通过 → 状态未变，回传现有持久态
+        return { content: error, store: await this.readStore(ctx) };
+      }
 
-      const store: TodoStore = { items };
-
-      return this.finalizeAndFormat(store, ctx);
+      return this.finalizeAndFormat({ items }, ctx);
     });
   }
 
@@ -353,27 +378,23 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
   private async createTodoItems(
     contents: Array<{ step: string; status: string }> | undefined,
     ctx: PluginContext,
-  ): Promise<string> {
+  ): Promise<TodoCallResult> {
     return this.runSerialized(async () => {
       // 清除残留文件，确保从干净状态开始
       await this.deleteStoreFile(ctx);
 
-      const items: TodoItem[] = (contents ?? []).map((c) => ({
-        content: c.step.trim(),
-        status: c.status as TodoItem["status"],
-      }));
+      const items = this.toTodoItems(contents);
 
       const error = this.validateMaxOneInProgress(items);
-      if (error) return error;
+      // 校验不通过时文件已被清空，持久态就是空
+      if (error) return { content: error, store: { items: [] } };
 
-      const store: TodoStore = { items };
-
-      return this.finalizeAndFormat(store, ctx);
+      return this.finalizeAndFormat({ items }, ctx);
     });
   }
 
   /** 推进到下一步：完成当前 in_progress，启动下一个 pending */
-  private async nextTodoItem(ctx: PluginContext): Promise<string> {
+  private async nextTodoItem(ctx: PluginContext): Promise<TodoCallResult> {
     return this.runSerialized(async () => {
       const store = await this.readStore(ctx);
 

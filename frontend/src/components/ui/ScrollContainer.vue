@@ -36,7 +36,6 @@ const emit = defineEmits<{
 // 响应式数据 - 类型化
 const isAtBottom = ref(true);
 const resizeObserver = ref<ResizeObserver | null>(null);
-const lastScrollHeight = ref(0);
 /** 上一次观测到的内容宽度：用于区分「重排」与「内容增长」（0 = 尚未测量） */
 let lastContentWidth = 0;
 const contentElement = ref<HTMLElement | null>(null);
@@ -88,16 +87,14 @@ function immediateScrollToBottom(): void {
 
 function smoothScrollToBottom(): void {
     const element = scrollElement.value;
-    if (element) {
-        const currentScrollHeight = element.scrollHeight;
-        if (currentScrollHeight !== lastScrollHeight.value) {
-            element.scrollTo({
-                top: currentScrollHeight,
-                behavior: "smooth",
-            });
-            lastScrollHeight.value = currentScrollHeight;
-        }
-    }
+    if (!element) return;
+    // 已贴底才跳过（幂等）；不能按「scrollHeight 是否变化」守卫：
+    // 内容没增长时（用户向上滚一下再点回到底部）高度与上次相同，会让第二次点击完全空转。
+    if (element.scrollHeight - element.scrollTop - element.clientHeight <= 1) return;
+    element.scrollTo({
+        top: element.scrollHeight,
+        behavior: "smooth",
+    });
 }
 
 function scrollToBottom(options: { immediate?: boolean } = {}): void {

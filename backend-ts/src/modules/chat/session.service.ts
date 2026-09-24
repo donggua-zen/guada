@@ -1,17 +1,13 @@
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
-import { getSessionDir, assertValidId } from "../../common/utils/session-path.util";
-import {
-  mintId,
-  atomicWriteFile,
-} from "../../common/persistence/file-store-kit";
+import { getSessionDir } from "../../common/utils/session-path.util";
 import type { BaseEvent } from "../../common/persistence/types";
+import { SessionMetaStore, toRow } from "./session-meta.store";
 import {
-  SessionMetaStore,
-  SESSION_ID_PREFIX,
-  toRow,
-} from "./session-meta.store";
+  extractTodoStateFromEvents,
+  writeTodoStore,
+} from "../../common/utils/todo-store.util";
 import { AgentFileStore } from "../agents/agent-file.store";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util";
@@ -432,7 +428,7 @@ export class SessionService {
   }
 
   /**
-   * 分支会话：以指定助手消息所在回合为节点，完整复制源会话（元信息 + 事件前缀）为新会话。
+   * 分支会话：以指定助手消息所在回合为节点，复制源会话（元信息 + 事件前缀）为新会话。
    *
    * 只允许以「已完成回合」（存在 turn/finish）为节点——分支必须是完整的一轮对话，
    * 不能是中间状态。复制范围：
@@ -441,11 +437,11 @@ export class SessionService {
    *   两者由新会话自有初始化承担、重放均为 no-op），消息/回合 id 保留原值
    * - 会话目录内附件（refType='session'，url 内嵌源会话 id）：物理文件拷入新会话目录
    *   并改写引用，分支图片不随源会话删除断链
-   * - 子代理子会话：元数据行克隆（新 id、parentId 指向新分支）+ 整目录克隆
-   *   （事件/快照/附件/子会话自己的 workflows 记录一并随迁），目录内会话文件引用
-   *   同步改写；运行中的子代理阻止分支（对齐 deleteSession 的流式防护）
-   * 主会话自身的 workflows/ 运行记录不复制；store/workspace/local 形态附件为
-   * 外部路径引用，按现有共享语义不改写。
+   * - TODO：从事件前缀中最后一个 todo 工具结果的 meta 还原锚点时刻的列表，写入
+   *   分支自己的工作目录（TODO 本身不进事件流，见 common/utils/todo-store.util.ts）
+   * 子代理子会话与 workflows/ 运行记录均不复制——分支只保留主对话。子代理运行中
+   * 同样允许分支（克隆目录的竞态已随克隆一并消失），该取舍由前端分支前弹窗告知。
+   * store/workspace/local 形态附件为外部路径引用，按现有共享语义不改写。
    */
   async branchSession(
     sourceSessionId: string,
@@ -468,23 +464,6 @@ export class SessionService {
         HttpStatus.CONFLICT,
       );
     }
-    // 子会话流式防护：子会话随分支克隆，运行中的子代理不能复制
-    // （否则克隆目录后引擎仍向源目录写事件，产生分叉/竞态）
-    const children = this.sessionStore.childrenOf(sourceSessionId);
-    const activeChild = children.find((c) =>
-      this.streamManager.hasActiveStream(c.id),
-    );
-    if (activeChild) {
-      throw new HttpException(
-        {
-          error: "子代理正在运行中，请先停止后再分支会话",
-          code: "SESSION_STREAMING",
-          activeSessionId: activeChild.id,
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
     // 锚点校验：目标回合必须已完整结束（turn/finish 存在即完整一轮）
     const events = await this.contextManager.getAllEvents(sourceSessionId);
     const anchorFinish = events.find(
@@ -513,7 +492,20 @@ export class SessionService {
       sessionType: "web",
     });
     const newSessionId = created.id as string;
-    const clonedChildIds: string[] = [];
+
+    // 事件前缀：锚点回合（含）之前的全部事件
+    const prefix = events.filter(
+      (e) =>
+        e.seq <= anchorFinish.seq &&
+        e.type !== "session/init" &&
+        e.type !== "session/rotate",
+    );
+    // 附件引用改写（就地改传入事件对象，纯计算）；物理拷贝在下方 try 内
+    const migrated = this.rewriteSessionFileRefs(
+      prefix,
+      sourceSessionId,
+      newSessionId,
+    );
 
     try {
       // 新会话事件存储初始化（写 session/init seq=0）；失败不阻断（懒创建自愈）
@@ -521,42 +513,36 @@ export class SessionService {
         title: created.title,
       });
 
-      // 事件前缀：锚点回合（含）之前的全部事件
-      const prefix = events.filter(
-        (e) =>
-          e.seq <= anchorFinish.seq &&
-          e.type !== "session/init" &&
-          e.type !== "session/rotate",
-      );
-
-      // 会话目录内附件：物理文件拷入新会话目录 + 引用改写
+      // 会话目录内附件：物理文件拷入新会话目录
       await this.copySessionAssetDirs(sourceSessionId, newSessionId);
-      const migrated = this.rewriteSessionFileRefs(
-        prefix,
-        sourceSessionId,
-        newSessionId,
-      );
 
       await this.contextManager.importEvents(newSessionId, migrated);
-
-      // 子会话随分支克隆：元数据行 + 整目录（事件/快照/附件/workflows）+ 引用改写
-      for (const child of children) {
-        await this.cloneSubSessionForBranch(child, newSessionId);
-        clonedChildIds.push(String(child.id));
-      }
     } catch (err: any) {
       this.logger.error(
         `Failed to branch session ${sourceSessionId} -> ${newSessionId}: ${err?.message ?? err}`,
       );
-      // 回滚半成品分支（克隆的子会话 + 主分支，meta + JSONL 事件目录一起删，
-      // 对齐 deleteSession 的级联），避免残留空分支
-      for (const childId of clonedChildIds) {
-        await this.sessionStore.deleteSession(childId).catch(() => {});
-        await this.contextManager.clearSessionTurns(childId).catch(() => {});
-      }
+      // 回滚半成品分支（meta + JSONL 事件目录一起删，对齐 deleteSession 的级联），
+      // 避免残留空分支
       await this.sessionStore.deleteSession(newSessionId).catch(() => {});
       await this.contextManager.clearSessionTurns(newSessionId).catch(() => {});
       throw err;
+    }
+
+    // TODO 重建：TODO 不进事件流，只能从锚点前最后一个 todo 工具结果的 meta 还原
+    // （无 meta 的存量会话得到 null → 不写，分支 TODO 为空）。
+    // 置于回滚 try 之外：TODO 失败绝不能连带回滚已建好的分支。
+    try {
+      const todoState = extractTodoStateFromEvents(migrated);
+      if (todoState && todoState.items.length > 0) {
+        const destDir = await this.workspaceService.resolveSessionWorkspaceDir(
+          created,
+        );
+        await writeTodoStore(destDir, newSessionId, todoState);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `[branch] todo rebuild skipped for ${newSessionId}: ${err?.message ?? err}`,
+      );
     }
 
     this.logger.log(
@@ -584,97 +570,6 @@ export class SessionService {
         recursive: true,
       });
     }
-  }
-
-  /**
-   * 分支时克隆单个子代理会话：整目录复制（seg/snapshot/manifest + images/previews
-   * + 子会话自己的 workflows 记录随迁）→ 克隆目录内会话文件引用改写 →
-   * 元数据行克隆（显式新 id、parentId 指向新分支，rootId 由 store 依 parentId
-   * 自动解析；closedAt/closeReason 保留冻结态，createdAt/lastActiveAt 保留溯源）。
-   */
-  private async cloneSubSessionForBranch(
-    child: Record<string, any>,
-    newParentSessionId: string,
-  ): Promise<Record<string, any>> {
-    const sourceChildId = String(child.id);
-    assertValidId(sourceChildId);
-    const newChildId = mintId(SESSION_ID_PREFIX);
-
-    const srcDir = getSessionDir(sourceChildId);
-    if (fs.existsSync(srcDir)) {
-      await fs.promises.cp(srcDir, getSessionDir(newChildId), { recursive: true });
-      // 子会话目录内引用改写：既改自引用（自己的附件），也改对原父会话的引用
-      //（子代理展示过父会话图片的场景），否则 fork 后源会话删除即断链
-      await this.rewriteCopiedSessionDirRefs(getSessionDir(newChildId), [
-        [sourceChildId, newChildId],
-        [String(child.parentId ?? sourceChildId), newParentSessionId],
-      ]);
-    }
-
-    return await this.sessionStore.create({
-      id: newChildId,
-      parentId: newParentSessionId,
-      title: child.title,
-      avatarUrl: child.avatarUrl,
-      description: child.description,
-      modelId: child.modelId,
-      agentId: child.agentId,
-      groupId: child.groupId,
-      settings: child.settings,
-      data: child.data,
-      sessionType: child.sessionType,
-      archived: child.archived,
-      botId: child.botId,
-      platform: child.platform,
-      externalId: child.externalId,
-      workspacePath: child.workspacePath,
-      closedAt: child.closedAt,
-      closeReason: child.closeReason,
-      createdAt: child.createdAt,
-      lastActiveAt: child.lastActiveAt,
-    });
-  }
-
-  /**
-   * 改写克隆目录内的会话文件引用（seg-*.jsonl / snapshot.json / manifest.json /
-   * workflows 下 json）：文本级 `sessions/<旧id>/` → `sessions/<新id>/`，
-   * 与 rewriteSessionFileRefs 同口径；二进制附件不改写。
-   */
-  private async rewriteCopiedSessionDirRefs(
-    dir: string,
-    pairs: [string, string][],
-  ): Promise<void> {
-    const rules = pairs
-      .filter(([src]) => src)
-      .map(([src, dst]) => ({
-        srcSegment: `sessions/${src}/`,
-        dstSegment: `sessions/${dst}/`,
-      }));
-    const walk = async (current: string): Promise<void> => {
-      for (const entry of await fs.promises.readdir(current, {
-        withFileTypes: true,
-      })) {
-        const filePath = path.join(current, entry.name);
-        if (entry.isDirectory()) {
-          await walk(filePath);
-          continue;
-        }
-        if (!/\.(json|jsonl)$/i.test(entry.name)) continue;
-        let raw: string;
-        try {
-          raw = await fs.promises.readFile(filePath, "utf8");
-        } catch {
-          continue;
-        }
-        if (!rules.some((r) => raw.includes(r.srcSegment))) continue;
-        let content = raw;
-        for (const { srcSegment, dstSegment } of rules) {
-          content = content.split(srcSegment).join(dstSegment);
-        }
-        await atomicWriteFile(filePath, content);
-      }
-    };
-    await walk(dir);
   }
 
   /**
