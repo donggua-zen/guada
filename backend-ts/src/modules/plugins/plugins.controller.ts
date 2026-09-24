@@ -449,15 +449,16 @@ export class PluginsController {
    * - 扩展名白名单覆盖 css/js/字体/图片，插件可自包含分发资源
    */
   @Public()
-  @Get(":pluginId/assets/*")
+  @Get(":pluginId/assets/*path")
   async getPluginAsset(
     @Param("pluginId") pluginId: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    // 手动解析 assets/ 之后的路径：NestJS 11 / Express 5 下命名通配
-    // （assets/*assetPath）对多段路径捕获异常（@Param 得到 "a,b" 逗号拼接），
-    // 故从 originalUrl 截取，绕开路由参数。
+    // 路由使用 path-to-regexp v8 要求的命名通配语法（assets/*path），
+    // 避免 Nest 启动时对裸 "*" 报 Unsupported route path 警告。
+    // 路径仍从 originalUrl 手动截取：不同 Nest/Express 版本对多段通配的
+    // 参数捕获行为不一致（@Param 可能得到逗号拼接值），截取更稳定。
     const marker = `/plugins/${pluginId}/assets/`;
     const idx = req.originalUrl.indexOf(marker);
     if (idx < 0) return res.status(404).send("Not found");
