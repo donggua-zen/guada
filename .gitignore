@@ -48,3 +48,8 @@ backend-ts/src/nul
 mem-log/**
 CODELY.md
 memory/**
+.workbuddy-ai/**
+.sandbox/**
+.openclaw/**
+outputs/**
+MEMORY.md
