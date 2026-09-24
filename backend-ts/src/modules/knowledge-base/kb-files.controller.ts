@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthGuard } from "../auth/auth.guard";
-import { KbFileService } from "./kb-file.service";
+import { KbFileService, OnDuplicateMode } from "./kb-file.service";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { CreateFolderDto } from "./dto/create-folder.dto";
@@ -28,8 +28,19 @@ export class KbFilesController {
     @Param("kb_id") kbId: string,
     @UploadedFile() file: any,
     @Body("relativePath") relativePath?: string,
+    /**
+     * 内容重复时的策略：`keep-both`（默认，照常新建并回报 `duplicateOf`）/
+     * `skip`（不新建，返回已存在的那条）/ `overwrite`（先删旧的再新建）。
+     * 默认保持原行为，调用方按需显式传入。
+     */
+    @Body("onDuplicate") onDuplicate?: OnDuplicateMode,
   ) {
-    return await this.kbFileService.uploadFile(kbId, file, relativePath);
+    return await this.kbFileService.uploadFile(
+      kbId,
+      file,
+      relativePath,
+      onDuplicate,
+    );
   }
 
   @Get()

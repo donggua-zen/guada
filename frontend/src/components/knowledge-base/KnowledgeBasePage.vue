@@ -40,7 +40,6 @@
                 <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
                   {{ kb.name }}
                 </h3>
-                <el-tag size="small" effect="plain">{{ kb.isPublic ? t('knowledge.page.tagPublic') : t('knowledge.page.tagPrivate') }}</el-tag>
               </div>
 
               <!-- Description -->
@@ -133,7 +132,8 @@
 
           <!-- 搜索 Tab -->
           <div v-show="activeTab === 'search'" class="flex flex-1 overflow-hidden min-h-0 w-full">
-            <KBSearchPanel :knowledge-bases="store.knowledgeBases" :default-kb-id="store.activeKnowledgeBaseId" />
+            <KBSearchPanel :knowledge-bases="store.knowledgeBases" :default-kb-id="store.activeKnowledgeBaseId"
+              @result-click="handleSearchResultClick" />
           </div>
         </div>
       </div>
@@ -186,10 +186,28 @@
         <el-input-number v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
-      <el-form-item :label="t('knowledge.page.visibility')">
-        <el-switch v-model="dialogForm.isPublic" />
-        <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">{{ t('knowledge.page.visibilityHint') }}</span>
+      <el-divider />
+
+      <!-- 混合检索权重：语义召回与关键词召回的占比 -->
+      <el-form-item>
+        <template #label>
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.semanticWeight') }}</span>
+        </template>
+        <el-slider v-model="dialogForm.semanticWeight" :min="0" :max="1" :step="0.05" show-input
+          :show-input-controls="false" />
       </el-form-item>
+
+      <el-form-item>
+        <template #label>
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.keywordWeight') }}</span>
+        </template>
+        <el-slider v-model="dialogForm.keywordWeight" :min="0" :max="1" :step="0.05" show-input
+          :show-input-controls="false" />
+      </el-form-item>
+
+      <div class="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-2 pl-[140px]">
+        {{ t('knowledge.page.fusionWeightHint') }}
+      </div>
     </el-form>
 
     <template #footer>
@@ -277,7 +295,8 @@ const dialogForm = reactive({
   chunkMaxSize: 1000,
   chunkOverlapSize: 100,
   chunkMinSize: 50,
-  isPublic: false
+  semanticWeight: 0.3,
+  keywordWeight: 0.7
 })
 
 // ========== 计算属性 ==========
@@ -382,7 +401,8 @@ function handleOpenCreate() {
   dialogForm.chunkMaxSize = 1000
   dialogForm.chunkOverlapSize = 100
   dialogForm.chunkMinSize = 50
-  dialogForm.isPublic = false
+  dialogForm.semanticWeight = 0.3
+  dialogForm.keywordWeight = 0.7
   dialogMode.value = 'create'
   showKbDialog.value = true
 }
@@ -412,7 +432,8 @@ async function handleKbSave() {
         chunkMaxSize: dialogForm.chunkMaxSize,
         chunkOverlapSize: dialogForm.chunkOverlapSize,
         chunkMinSize: dialogForm.chunkMinSize,
-        isPublic: dialogForm.isPublic
+        semanticWeight: dialogForm.semanticWeight,
+        keywordWeight: dialogForm.keywordWeight
       })
 
       toast.success(t('common.createSuccess'))
@@ -448,7 +469,8 @@ async function handleKbSave() {
         chunkMaxSize: dialogForm.chunkMaxSize,
         chunkOverlapSize: dialogForm.chunkOverlapSize,
         chunkMinSize: dialogForm.chunkMinSize,
-        isPublic: dialogForm.isPublic
+        semanticWeight: dialogForm.semanticWeight,
+        keywordWeight: dialogForm.keywordWeight
       })
 
       toast.success(t('common.saveSuccess'))
@@ -475,7 +497,9 @@ function handleEdit(kb: KnowledgeBase) {
     chunkMaxSize: kb.chunkMaxSize,
     chunkOverlapSize: kb.chunkOverlapSize,
     chunkMinSize: kb.chunkMinSize,
-    isPublic: kb.isPublic
+    // 老数据可能没有这两个字段（后端已给默认 0.3/0.7），这里兜底避免滑块拿到 undefined
+    semanticWeight: typeof kb.semanticWeight === 'number' ? kb.semanticWeight : 0.3,
+    keywordWeight: typeof kb.keywordWeight === 'number' ? kb.keywordWeight : 0.7
   })
   dialogMode.value = 'edit'
   showKbDialog.value = true
@@ -645,6 +669,39 @@ async function handleRetryFile(file: KBFile) {
       console.error('重新处理失败:', error)
       toast.error(error.response?.data?.detail || error.message || t('knowledge.page.retryFailed'))
     }
+  }
+}
+
+/**
+ * 搜索结果点击 → 打开该文件的分块查看器
+ *
+ * 此前 KBSearchPanel 的 `result-click` 事件**没有任何监听者**，点击搜索结果完全无反应。
+ *
+ * 搜索结果只带 fileId / fileName，而分块查看器需要完整的 KBFile（含 processingStatus
+ * 才能判断"是否可查看"），所以这里先按 id 取一次条目详情。取不到（文件已被删）就明确提示，
+ * 不要静默什么都不做。
+ */
+async function handleSearchResultClick(result: any) {
+  const meta = result?.metadata ?? {}
+  const kbId = meta.knowledgeBaseId || store.activeKnowledgeBaseId
+  const fileId = meta.fileId
+  if (!kbId || !fileId) {
+    toast.warning(t('knowledge.search.resultUnavailable'))
+    return
+  }
+  try {
+    const file = await apiService.getKBFile(kbId, fileId)
+    if (!file) {
+      toast.warning(t('knowledge.search.resultUnavailable'))
+      return
+    }
+    // 结果可能来自非当前激活的库：切过去，否则分块查看器会在错误的库里找文件
+    if (kbId !== store.activeKnowledgeBaseId) {
+      store.setActiveKnowledgeBase(kbId)
+    }
+    handleViewFile(file as KBFile)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || t('knowledge.search.resultUnavailable'))
   }
 }
 

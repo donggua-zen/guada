@@ -20,8 +20,6 @@ export default {
     searchPlaceholder: '搜索知识库',
     docs: '使用说明',
     createKb: '新建知识库',
-    tagPublic: '公开',
-    tagPrivate: '私有',
     noDescription: '暂无描述',
     enter: '进入',
     notFound: '未找到匹配的知识库',
@@ -43,8 +41,9 @@ export default {
     chunkMaxSize: '最大分块大小',
     chunkOverlapSize: '重叠大小',
     chunkMinSize: '最小分块大小',
-    visibility: '可见性',
-    visibilityHint: '公开的知识库可被其他人查看',
+    semanticWeight: '语义权重',
+    keywordWeight: '关键词权重',
+    fusionWeightHint: '混合检索时两路召回的融合占比。中文文档语料通常关键词权重给高一些（默认 0.3 / 0.7）；代码或英文语料可适当提高语义权重。两者不能同时为 0。',
     inputNameWarning: '请输入知识库名称',
     selectModelWarning: '请选择向量模型',
     // 确认弹窗
@@ -71,6 +70,8 @@ export default {
     waitUpload: '等待上传...',
     retry: '重新处理',
     chunks: '分块',
+    duplicateContent: '「{name}」的内容与库中已有文件重复，已照常保存；如需去重请删除其中一个。',
+    outdatedChunkStrategy: '该文件使用旧分块方案（换行与缩进已被压平），建议重新处理以提升检索效果。重新处理会重新调用嵌入模型，产生费用。',
     unknown: 'UNKNOWN',
   },
 
@@ -170,6 +171,7 @@ export default {
     selectKbWarning: '请选择知识库并输入搜索内容',
     selectKbFirst: '请先选择一个知识库',
     searchFailed: '搜索失败',
+    resultUnavailable: '该结果对应的文件已不存在，无法打开',
   },
 
   // ── 侧边栏 (KBSidebar.vue) ──

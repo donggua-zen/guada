@@ -462,6 +462,20 @@ export class KBFileRepository {
   }
 
   /**
+   * 在**调用方开启的事务内**删除多个条目行（同步）。
+   *
+   * 供"条目行 + 分块"必须原子删除的场景使用，原因见
+   * `KBChunkRepository.deleteManyWithin` 的注释（半程状态会让文件显示完成却搜不到内容）。
+   */
+  deleteManyWithin(db: Database.Database, itemIds: string[]): number {
+    if (itemIds.length === 0) return 0;
+    const stmt = db.prepare(`DELETE FROM item WHERE id = ?`);
+    let changed = 0;
+    for (const id of itemIds) changed += stmt.run(id).changes;
+    return changed;
+  }
+
+  /**
    * 前缀级联重写 relativePath（文件夹改名/移动）——**单条 UPDATE**。
    *
    * 替代原实现「逐个子项整写 file.json」：原实现 N 个子项 = N+1 次原子写 + 触发一次

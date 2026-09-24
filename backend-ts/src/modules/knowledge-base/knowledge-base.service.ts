@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as fsp from "fs/promises";
-import { KbMetaStore } from "./kb-meta.store";
+import { KbMetaStore, normalizeFusionWeights } from "./kb-meta.store";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { KbFileService } from "./kb-file.service";
 import { KbDatabaseService } from "./kb-database.service";
@@ -55,8 +55,8 @@ export class KnowledgeBaseService {
         chunkMaxSize: data.chunkMaxSize || 1000,
         chunkOverlapSize: data.chunkOverlapSize || 100,
         chunkMinSize: data.chunkMinSize || 50,
-        isPublic: data.isPublic || false,
-        metadataConfig: data.metadataConfig || null,
+        semanticWeight: data.semanticWeight,
+        keywordWeight: data.keywordWeight,
       });
 
       this.logger.log(`创建知识库成功：${kb.id}`);
@@ -146,9 +146,14 @@ export class KnowledgeBaseService {
         updateData.chunkOverlapSize = data.chunkOverlapSize;
       if (data.chunkMinSize !== undefined)
         updateData.chunkMinSize = data.chunkMinSize;
-      if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
-      if (data.metadataConfig !== undefined) {
-        updateData.metadataConfig = data.metadataConfig || null;
+      // 融合权重：非法值交给 normalizeFusionWeights 兜底（两者同为 0 会让 RRF 恒为 0）
+      if (data.semanticWeight !== undefined || data.keywordWeight !== undefined) {
+        const normalized = normalizeFusionWeights(
+          data.semanticWeight ?? kb.semanticWeight,
+          data.keywordWeight ?? kb.keywordWeight,
+        );
+        updateData.semanticWeight = normalized.semantic;
+        updateData.keywordWeight = normalized.keyword;
       }
 
       const updatedKb = await this.kbMetaStore.updateKb(kbId, updateData);

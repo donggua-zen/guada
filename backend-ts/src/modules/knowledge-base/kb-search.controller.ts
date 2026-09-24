@@ -9,7 +9,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
-import { KbMetaStore } from "./kb-meta.store";
+import { KbMetaStore, normalizeFusionWeights } from "./kb-meta.store";
 import { KbSearchService, SearchResult } from "./kb-search.service";
 import { EmbeddingService } from "./embedding.service";
 
@@ -41,10 +41,13 @@ export class KbSearchController {
       throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
     }
 
-    // 构建过滤条件（库内检索，按条目过滤）
-    const filterOptions = searchRequest.filter_file_id
-      ? { itemId: searchRequest.filter_file_id }
-      : undefined;
+    // 按文件过滤的字段名兼容：
+    // 前端 `knowledge-base.api.ts` 一直发 camelCase `filterFileId`，而这里历史实现读
+    // snake_case `filter_file_id` —— 两边对不上，导致「按文件过滤」这个功能端到端失效
+    // （静默不生效，不报错）。两个名字都认，且以 camelCase 为准。
+    const filterFileId =
+      searchRequest.filterFileId ?? searchRequest.filter_file_id;
+    const filterOptions = filterFileId ? { itemId: filterFileId } : undefined;
 
     // 获取查询文本的向量
     const queryEmbedding = await this.embeddingService.getEmbedding(
@@ -54,16 +57,24 @@ export class KbSearchController {
       model.modelName,
     );
 
+    // 融合权重：**以知识库配置为默认**，请求体可覆盖。
+    // 此前这里写死 0.3/0.7，而 Agent 工具写死 0.6/0.4，同一次检索走 UI 与走 Agent
+    // 会得到不同排序。现在两处都读 kb.json，默认值来自 DEFAULT_*_WEIGHT。
+    const weights = normalizeFusionWeights(
+      searchRequest.semanticWeight ?? kb.semanticWeight,
+      searchRequest.keywordWeight ?? kb.keywordWeight,
+    );
+
     // 执行混合搜索
     const results = await this.searchService.hybridSearch(
       kbId,
       queryEmbedding,
       searchRequest.query,
       searchRequest.topK || 5,
-      searchRequest.semanticWeight || 0.3, // 默认语义权重 30%
-      searchRequest.keywordWeight || 0.7, // 默认关键词权重 70%
+      weights.semantic,
+      weights.keyword,
       filterOptions,
-      searchRequest.enableBM25Rerank ?? true, // 新增：是否启用 BM25 重排，默认 true
+      searchRequest.enableBM25Rerank ?? true, // 是否启用 BM25 重排，默认 true
     );
 
     // 格式化结果

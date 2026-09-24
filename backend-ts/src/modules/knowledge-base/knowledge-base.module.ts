@@ -12,6 +12,7 @@ import { ChunkingService } from "./chunking.service";
 import { OcrService } from "./ocr.service";
 import { KbMetaStore } from "./kb-meta.store";
 import { KbDatabaseService } from "./kb-database.service";
+import { KbVectorIndexService } from "./kb-vector-index.service";
 import { KBFileRepository } from "./kb-file.repository";
 import { KBChunkRepository } from "./kb-chunk.repository";
 import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
@@ -31,13 +32,21 @@ import { DocumentPlugin } from "./plugins/document.plugin";
     // KB 数据层（每库一个 kb.db 的句柄注册表）在本模块自持注册；
     // 历史上「由 @Global 的集中模块提供、禁止在此重复注册」的约定已随注册归位移除。
     KbDatabaseService, KbMetaStore, KbSearchService,
+    KbVectorIndexService,
     KBFileRepository, KBChunkRepository,
     KnowledgeBaseService, KbFileService,
     FileParserService, EmbeddingService, ChunkingService, OcrService,
     PdfToImageService,
     WorkspaceService,
   ],
-  exports: [EmbeddingService, KnowledgeBaseService, KbMetaStore, KbSearchService],
+  exports: [
+    EmbeddingService,
+    KnowledgeBaseService,
+    KbMetaStore,
+    KbSearchService,
+    // 换嵌入模型时需要丢弃旧向量索引（维度变了），故对外可见
+    KbVectorIndexService,
+  ],
 })
 export class KnowledgeBaseModule implements OnModuleInit {
   private readonly logger = new Logger(KnowledgeBaseModule.name);

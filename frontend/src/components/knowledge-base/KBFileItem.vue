@@ -55,6 +55,14 @@
             </p>
         </div>
 
+        <!-- 旧分块方案提示：改造后新文件按类型保真分块（Markdown 保标题、代码保缩进），
+             老数据仍是被压平过的结果。重处理会重新调用嵌入模型（有成本），所以只提示、不自动做。 -->
+        <div v-if="file.chunkStrategyOutdated"
+            class="mt-2 px-2 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+            <span>⚠</span>
+            <span>{{ t('knowledge.file.outdatedChunkStrategy') }}</span>
+        </div>
+
         <!-- 错误信息 -->
         <div v-if="file.processingStatus === 'failed' && file.errorMessage" 
             class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
