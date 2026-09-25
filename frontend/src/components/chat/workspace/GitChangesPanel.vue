@@ -2538,11 +2538,11 @@ html.dark .git-stat-del { color: #f85149; }
   color: var(--gd-color-text-disabled);
 }
 
-/* 字体与行高两种视图共用（拆出行号大小不一致的根源：统一 12px/20px，
-   否则列继承 pane 大字号） */
+/* 字体与行高两种视图共用（拆出行号大小不一致的根源：统一 14px/20px，
+   否则列继承 pane 大字号；14px 与文件查看器/编辑器的 14px 对齐） */
 .git-diff-split {
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
-  font-size: 12px;
+  font-size: 14px;
   /* 整数行高（20px）：--stripe-size 公式得出整数周期 2px，行高 ÷ 周期 = 10 整除，
      每行恰好整数个条纹周期，行间虚线相位精确对齐；
      若用 1.6 × 12px = 19.2px 小数行高，浏览器瓦片化会把 1.92px 周期

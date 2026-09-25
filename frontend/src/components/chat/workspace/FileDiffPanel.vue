@@ -161,7 +161,7 @@ function highlightLine(line: string): string {
   min-height: 0;
   gap: 12px;
   padding: 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* 操作切换标签 */
@@ -245,7 +245,7 @@ function highlightLine(line: string): string {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
