@@ -893,6 +893,8 @@ watch(() => props.tab.path, (newPath, oldPath) => {
 .code-lines {
     display: flex;
     flex-direction: column;
+    /* 与编辑模式（CodeMirror 14px）、纯文本 fallback（text-sm）统一 */
+    font-size: 14px;
 }
 
 .line {

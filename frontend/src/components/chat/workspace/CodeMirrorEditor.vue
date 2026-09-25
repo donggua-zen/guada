@@ -93,7 +93,7 @@ function buildState(doc: string, extension: string) {
                 }
             }),
             EditorView.theme({
-                '&': { height: '100%' },
+                '&': { height: '100%', fontSize: '14px' },
                 '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--gd-font-mono, monospace)' },
             }),
             // 主题（暗色跟随系统）

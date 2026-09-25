@@ -264,7 +264,7 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
 }
 .git-diff-line.git-diff-hunk .git-diff-content {
   color: var(--gd-color-text-gray);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 二进制文件提示行（图片等不支持文本预览）：占满整个 diff 区域，垂直水平居中
@@ -303,7 +303,7 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
   background: var(--gd-color-sidebar-bg-hover);
   color: var(--gd-color-text-gray);
   font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
-  font-size: 11px;
+  font-size: 12px;
   user-select: none;
   /* 横向滚动时条钉在视口左缘不跟随内容（行宽已被虚拟化定位撑满整行） */
   position: sticky;
