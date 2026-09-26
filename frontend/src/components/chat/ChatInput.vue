@@ -1724,11 +1724,11 @@ defineExpose({ insertText, insertBadge });
 }
 
 
-/* 工具按钮 - 原生 button */
+/* 工具按钮 - 原生 button（12px：与模型选择器、工作目录条 chips 同字号） */
 .tool-btn {
   color: var(--gd-color-text-gray);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   height: 28px;
   padding: 0 6px;
   display: flex;

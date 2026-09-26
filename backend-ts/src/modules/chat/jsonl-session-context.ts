@@ -51,6 +51,11 @@ import {
 import type { ThinkingEffort } from '../llm-core/thinking/thinking-vocabulary';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
+import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
+import {
+  pickBaselineUserMessage,
+  resolveBindingBaseline,
+} from './injection-baseline.util';
 import {
   SG_MODELS,
   SK_MOD_CHAT,
@@ -165,6 +170,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly tokenMeter: TokenMeterService,
     private readonly streamManager: SessionStreamManager,
     private readonly knowledgeBaseService: KnowledgeBaseService,
+    private readonly bindingState: RemoteBindingStateService,
   ) {
     this.sessionId = session.id;
     this.sessionType = session.sessionType || 'web';
@@ -501,16 +507,25 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     },
   ): Promise<{ messageId: string; userMessage: any }> {
     const replaceTurnId = options?.replaceTurnId;
+    // 注入检测（模式叙事 / 绑定变更）共用一次可见视图读取：两者都以「上一条真实 user 消息」为基准
+    const prevUserMsg = pickBaselineUserMessage(
+      await this.loadVisibleMessages(),
+      replaceTurnId,
+    );
     // 检测 sandbox 模式切换 → system 注入块（origin='system'，前端不渲染；LLM 按 <system_reminder> 文本处理）
-    const modeNarration = await this.detectModeTransition(replaceTurnId);
-    // sandboxMode 保留写入：下一条消息模式切换检测的 prevMode 基准（+审计）
+    const modeNarration = this.detectModeTransition(prevUserMsg);
+    // 检测远程连接绑定变更 → system 注入块（基准随消息落库/删除，重答后自动重新注入）
+    const bindingReminder = await this.detectBindingTransition(prevUserMsg);
+    // 保留写入：下一条消息的模式切换 / 绑定变更检测基准（+审计）。
+    // sshBindings 空数组也要写——缺字段会回退系统提示词快照，无法区分「当时确实没绑定」
     const enrichedMetadata: Record<string, any> = {
       ...options?.metadata,
       sandboxMode: this.sandboxMode,
+      sshBindings: this.liveBindingIds(),
     };
 
     // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）。
-    // 顺序即 DSH 注入瀑布语义：背景在前（模式叙事 → KB 引用），材料在后（命令解析产物
+    // 顺序即 DSH 注入瀑布语义：背景在前（模式叙事 → 绑定变更 → KB 引用），材料在后（命令解析产物
     // ——用户要求做的事的上下文最贴近模型作答位置）
     const injectedBlocks: ContentBlock[] = [];
     if (modeNarration) {
@@ -519,6 +534,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         text: `<system_reminder>\n${modeNarration}\n</system_reminder>`,
         origin: 'system',
       });
+    }
+    if (bindingReminder) {
+      injectedBlocks.push(bindingReminder);
     }
     if (options?.knowledgeBaseIds?.length) {
       // KB 明细展开（不存在的 id 静默跳过）；结构化落库为 KbRefBlock，
@@ -944,26 +962,35 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   // ═══ 内部工具 ═══
 
+  /** 当前会话绑定的远程连接 id（session.settings.attachments['ssh-connection']） */
+  private liveBindingIds(): string[] {
+    const ids = this.session?.settings?.attachments?.['ssh-connection'];
+    return Array.isArray(ids) ? ids : [];
+  }
+
   /**
-   * 检测安全模式是否发生切换（基于当前可见视图的最后一条 user 消息 metadata.sandboxMode）。
+   * 检测远程连接绑定是否变化：基准 = 上一条可见用户消息 metadata.sshBindings。
+   * 基准随消息落库、随消息删除消失——重答（回合删除）或手工删轮次后基准自然回退到更早的消息，
+   * 变更被重新判定，reminder 重新注入（修复「重答后绑定提醒丢失」）。
+   * 无基准（冷启动 / 旧会话消息无该字段）→ 回退系统提示词冻结快照（模型仅剩的认知来源）。
+   */
+  private async detectBindingTransition(
+    prevUserMsg: Message | undefined,
+  ): Promise<ContentBlock | null> {
+    const liveIds = this.liveBindingIds();
+    const before = resolveBindingBaseline(
+      prevUserMsg?.metadata?.sshBindings,
+      await this.bindingState.getSnapshotIds(this.sessionId, liveIds),
+    );
+    return this.bindingState.buildChangeReminder(this.sessionId, before, liveIds);
+  }
+
+  /**
+   * 检测安全模式是否发生切换（基准 = 上一条真实 user 消息 metadata.sandboxMode）。
    * 叙事按方向组合：进入/退出 read-only 与进入/退出 danger-full-access 可叠加。
    */
-  private async detectModeTransition(replaceTurnId?: string): Promise<string | null> {
-    const history = await this.loadVisibleMessages();
-
-    const userMsgs = history.filter(
-      (m) =>
-        m.role === 'user' &&
-        // 排除注入消息（图片注入等 hidden user 消息 kind='model'，
-        // 其 metadata.sandboxMode 为空会把 prevMode 错误回退为默认值）
-        m.kind !== 'model' &&
-        m.id !== replaceTurnId,
-    );
-
-    const prevMode =
-      userMsgs.length > 0
-        ? userMsgs[userMsgs.length - 1].metadata?.sandboxMode || 'workspace-write'
-        : 'workspace-write';
+  private detectModeTransition(prevUserMsg?: Message): string | null {
+    const prevMode = prevUserMsg?.metadata?.sandboxMode || 'workspace-write';
     const currentMode = this.sandboxMode;
 
     if (prevMode === currentMode) return null;

@@ -11,7 +11,7 @@
     <template v-for="conn in attachedConnections" :key="conn.id">
       <GdTooltip :content="conn.description || conn.name" placement="bottom">
         <span class="wdb-attach">
-          <el-icon :size="12" class="wdb-icon"><Cloud16Regular /></el-icon>
+          <el-icon :size="16" class="wdb-icon"><Cloud16Regular /></el-icon>
           <span class="wdb-name">{{ conn.name }}</span>
           <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">
             <button class="wdb-remove" @click.stop="removeAttached(conn.id)">
@@ -220,13 +220,13 @@ onMounted(() => {
 .wdb-attach {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
+  gap: 5px;
+  height: 24px;
   padding: 0 6px;
   border-radius: 6px;
   background: var(--gd-color-surface);
   color: var(--gd-color-text-gray);
-  font-size: 11px;
+  font-size: 12px;
 }
 .wdb-attach:hover {
   color: var(--gd-color-text);

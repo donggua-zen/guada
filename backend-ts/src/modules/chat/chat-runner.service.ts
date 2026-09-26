@@ -10,7 +10,6 @@ import {
 } from "../../common/events/stream.events";
 import { ISessionContext } from "./session-context";
 import type { ContentBlock } from "../../common/types/conversation.types";
-import { RemoteBindingStateService } from "../remote-workspace/remote-binding-state.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 
 /**
@@ -101,7 +100,6 @@ export class ChatRunnerService {
     private agentEngine: AgentEngine,
     private sessionContextFactory: SessionContextFactory,
     private eventBus: EventBusService,
-    private bindingState: RemoteBindingStateService,
   ) {}
 
   /**
@@ -177,29 +175,9 @@ export class ChatRunnerService {
       );
     }
 
-    // 远程连接绑定变更检测：变更以 origin='system' 注入块跟随本条用户消息
-    //（不改系统提示词——提示词中的连接清单按冻结快照渲染，保护 LLM 前缀缓存）。
-    // 覆盖 HTTP 与 bot/队列路径（均经 startStream）；失败不阻塞回合。
-    if (userMessage) {
-      try {
-        const liveIds: string[] =
-          session?.settings?.attachments?.["ssh-connection"] || [];
-        const bindingBlocks = await this.bindingState.detectAndBuildInjection(
-          sessionId,
-          liveIds,
-        );
-        if (bindingBlocks.length > 0) {
-          userMessage.injectedBlocks = [
-            ...(userMessage.injectedBlocks || []),
-            ...bindingBlocks,
-          ];
-        }
-      } catch (err: any) {
-        this.logger.warn(
-          `Remote binding state detection failed (session ${sessionId}): ${err?.message || err}`,
-        );
-      }
-    }
+    // 远程连接绑定变更检测已下沉到 jsonl-session-context.addUserMessage（与模式叙事同处）：
+    // 基准取自「上一条仍在历史里的用户消息」的 metadata.sshBindings，重答/删轮次后自动重新判定，
+    // 不再依赖会话级 lastInjectedIds 记账（那份记账不会随消息删除回退）。
 
     // 更新会话最后活跃时间，用于会话管理和清理策略
     await this.sessionService.updateLastActiveAt(sessionId);
