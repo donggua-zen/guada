@@ -13,9 +13,6 @@
 jest.mock("./session.service", () => ({ SessionService: class {} }));
 jest.mock("./agent-engine.service", () => ({ AgentEngine: class {} }));
 jest.mock("./session-context.factory", () => ({ SessionContextFactory: class {} }));
-jest.mock("../remote-workspace/remote-binding-state.service", () => ({
-  RemoteBindingStateService: class {},
-}));
 jest.mock("../../common/events/event-bus.service", () => ({
   EventBusService: class {},
 }));
@@ -36,7 +33,6 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
   let agentEngine: { run: jest.Mock };
   let sessionContextFactory: { createFromSession: jest.Mock };
   let eventBus: { emit: jest.Mock };
-  let bindingState: { detectAndBuildInjection: jest.Mock };
   let runner: ChatRunnerService;
 
   beforeEach(() => {
@@ -48,16 +44,12 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
     agentEngine = { run: jest.fn() };
     sessionContextFactory = { createFromSession: jest.fn() };
     eventBus = { emit: jest.fn() };
-    bindingState = {
-      detectAndBuildInjection: jest.fn().mockResolvedValue([]),
-    };
     runner = new ChatRunnerService(
       streamManager,
       sessionService as any,
       agentEngine as any,
       sessionContextFactory as any,
       eventBus as any,
-      bindingState as any,
     );
   });
 

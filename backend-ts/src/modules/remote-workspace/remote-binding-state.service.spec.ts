@@ -2,16 +2,14 @@ import { RemoteBindingStateService } from "./remote-binding-state.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 /**
- * RemoteBindingStateService — 绑定"冻结快照 + 增量注入"状态机测试：
- * - 冷启动初始化（无注入）
- * - 变更 → origin='system' 注入块（systemPromptIds 冻结不动）
- * - 无变化跳过
- * - 压缩刷新（两态对齐 live）
- * - 快照渲染按冻结清单（live 变化不影响）
+ * RemoteBindingStateService — 绑定「冻结快照 + 变更渲染」测试：
+ * - 冷启动初始化（以 live 建快照，无变更不注入）
+ * - 变更 → origin='system' reminder 块；无变化 → null
+ * - 快照冻结（live 变化不影响提示词清单）
+ * - 压缩刷新（快照对齐 live）
+ * - 旧记录兼容（含已废弃的 lastInjectedIds 字段）
  */
 describe("RemoteBindingStateService", () => {
-  type State = { systemPromptIds: string[]; lastInjectedIds: string[] };
-
   const build = (connections: any[] = []) => {
     const store = new Map<string, Record<string, any>>();
     const settingsStorage = {
@@ -36,74 +34,70 @@ describe("RemoteBindingStateService", () => {
     { id: "c2", name: "server-b", config: { username: "root", host: "2.2.2.2", port: 22, path: "/b" } },
   ];
 
-  it("冷启动：无记录 → 初始化两态为 live，不注入", async () => {
+  it("冷启动：无记录 → 快照以 live 初始化，无变更不注入", async () => {
     const { service } = build(conns);
-    const blocks = await service.detectAndBuildInjection("s1", ["c1"]);
-    expect(blocks).toEqual([]);
+    expect(await service.getSnapshotIds("s1", ["c1"])).toEqual(["c1"]);
+    expect(await service.buildChangeReminder("s1", ["c1"], ["c1"])).toBeNull();
     const list = await service.renderSnapshotList("s1", ["c1"]);
     expect(list).toContain('"server-a"');
   });
 
-  it("绑定变更 → origin='system' 注入块，systemPromptIds 冻结不动", async () => {
+  it("绑定变更 → origin='system' reminder 块，快照冻结不动", async () => {
     const { service } = build(conns);
-    await service.detectAndBuildInjection("s1", ["c1"]); // 冷启动
-    await service.renderSnapshotList("s1", ["c1"]); // 快照渲染（systemPromptIds=[c1]）
+    await service.renderSnapshotList("s1", ["c1"]); // 冷启动建快照 systemPromptIds=[c1]
 
-    const blocks = await service.detectAndBuildInjection("s1", ["c1", "c2"]);
-    expect(blocks).toHaveLength(1);
-    const block: any = blocks[0];
+    const block: any = await service.buildChangeReminder("s1", ["c1"], ["c1", "c2"]);
+    expect(block).not.toBeNull();
     expect(block.type).toBe("text");
     expect(block.origin).toBe("system");
     expect(block.text).toContain("<system_reminder>");
     expect(block.text).toContain("Remote Workspace Bindings Changed");
     expect(block.text).toContain('"server-b"');
+    expect(block.text).toContain("Newly bound");
 
-    // 冻结验证：live 已变，但快照仍渲染旧清单（c1）
+    // 冻结验证：live 已变，但提示词快照仍渲染旧清单（c1）
     const list = await service.renderSnapshotList("s1", ["c1", "c2"]);
     expect(list).toContain('"server-a"');
     expect(list).not.toContain('"server-b"');
   });
 
-  it("无变化 → 不注入", async () => {
+  it("无变化 → 不注入（null）", async () => {
     const { service } = build(conns);
-    await service.detectAndBuildInjection("s1", ["c1"]);
-    const blocks = await service.detectAndBuildInjection("s1", ["c1"]);
-    expect(blocks).toEqual([]);
+    expect(await service.buildChangeReminder("s1", ["c1"], ["c1"])).toBeNull();
+    // 顺序无关
+    expect(await service.buildChangeReminder("s1", ["c2", "c1"], ["c1", "c2"])).toBeNull();
   });
 
-  it("解除绑定 → 注入块声明 none；快照冻结仍含旧清单", async () => {
+  it("解除绑定 → 块声明 none，并列出 Unbound", async () => {
     const { service } = build(conns);
-    await service.detectAndBuildInjection("s1", ["c1"]);
-    const blocks = await service.detectAndBuildInjection("s1", []);
-    expect(blocks).toHaveLength(1);
-    expect((blocks[0] as any).text).toContain("no remote workspaces are bound now");
-    const list = await service.renderSnapshotList("s1", []);
-    expect(list).toContain('"server-a"');
+    const block: any = await service.buildChangeReminder("s1", ["c1"], []);
+    expect(block).not.toBeNull();
+    expect(block.text).toContain("no remote workspaces are bound now");
+    expect(block.text).toContain("Unbound");
   });
 
   it("id→name 容错：连接已删除 → removed 占位", async () => {
     const { service } = build([]);
-    await service.detectAndBuildInjection("s1", ["c1"]);
-    await service.detectAndBuildInjection("s1", ["c1", "gone"]);
-    const blocks = await service.detectAndBuildInjection("s1", ["c1", "gone"]);
-    expect(blocks).toEqual([]);
-    // 变更发生在上一次调用已注入 — 重新制造变更验证 removed 文案
-    const blocks2 = await service.detectAndBuildInjection("s1", ["gone"]);
-    expect((blocks2[0] as any).text).toContain('"gone" (removed)');
+    const block: any = await service.buildChangeReminder("s1", [], ["gone"]);
+    expect(block).not.toBeNull();
+    expect(block.text).toContain('"gone" (removed)');
   });
 
-  it("压缩刷新：两态对齐 live，快照渲染跟随", async () => {
+  it("压缩刷新：快照对齐 live，提示词渲染跟随", async () => {
     const { service } = build(conns);
-    await service.detectAndBuildInjection("s1", ["c1"]);
-    await service.renderSnapshotList("s1", ["c1"]);
-    await service.detectAndBuildInjection("s1", ["c1", "c2"]); // 注入变更
-
+    await service.renderSnapshotList("s1", ["c1"]); // 冻结为 [c1]
     await service.refreshOnCompaction("s1", ["c1", "c2"]);
     const list = await service.renderSnapshotList("s1", ["c1", "c2"]);
     expect(list).toContain('"server-a"');
     expect(list).toContain('"server-b"');
-    // 刷新后 lastInjected == live → 无注入
-    const blocks = await service.detectAndBuildInjection("s1", ["c1", "c2"]);
-    expect(blocks).toEqual([]);
+  });
+
+  it("旧记录兼容：带已废弃 lastInjectedIds 的状态仍按快照读取", async () => {
+    const { service, store } = build(conns);
+    store.set("chat-session-state:s1::ssh-bindings", {
+      systemPromptIds: ["c1"],
+      lastInjectedIds: ["c1", "c2"],
+    });
+    expect(await service.getSnapshotIds("s1", ["c1", "c2"])).toEqual(["c1"]);
   });
 });

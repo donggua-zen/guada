@@ -1,15 +1,16 @@
 /**
- * RemoteBindingStateService — 远程连接绑定的"冻结快照 + 增量注入"状态机。
+ * RemoteBindingStateService — 远程连接绑定的"冻结快照 + 变更渲染"。
  *
  * 解决的问题：ssh-tools 提示词清单随会话绑定实时变化 → 系统提示词前缀变化 → LLM KV 缓存整体失效。
  *
- * 语义（两态）：
- * - systemPromptIds：当前系统提示词所反映的绑定（冻结）。仅两处更新：冷启动（无记录时初始化）与压缩后（MEMORY_COMPACTED）。
- * - lastInjectedIds：历史注入块已告知模型的绑定。每次检测发现变更时更新。
+ * 语义（单态）：
+ * - systemPromptIds：当前系统提示词所反映的绑定（冻结）。仅两处更新：冷启动（无记录时初始化）
+ *   与压缩后（MEMORY_COMPACTED）。
  *
  * 变更通道：绑定变更不进系统提示词，而是以 origin='system' 注入块跟随下一条用户消息
- * （chat-runner.startStream 检测 → userMessage.injectedBlocks → addUserMessage 落库），
- * 追加式不改前缀，KV 缓存零损失。
+ * （追加式不改前缀，KV 缓存零损失）。变更判定基准 = 上一条用户消息 metadata.sshBindings：
+ * 基准随消息落库、随消息删除消失，故重答（回合删除）/删轮次后会自动重新判定并重新注入
+ * （判定在 jsonl-session-context.detectBindingTransition，本服务只负责渲染与冻结快照）。
  *
  * 存储：SettingsStorage group `chat-session-state:<sessionId>`（JSON 文件，非 session.settings
  * ——前端整对象 PUT 会覆盖 settings 内部字段，故状态独立存放）。
@@ -23,8 +24,6 @@ import { RemoteWorkspaceService } from "./remote-workspace.service";
 interface BindingState {
   /** 系统提示词当前反映的连接 id（冻结，仅冷启动/压缩后更新） */
   systemPromptIds: string[];
-  /** 最近一次注入块已告知的连接 id */
-  lastInjectedIds: string[];
 }
 
 const STATE_KEY = "ssh-bindings";
@@ -48,14 +47,11 @@ export class RemoteBindingStateService {
       STATE_KEY,
       null,
     );
-    if (
-      !state ||
-      !Array.isArray(state.systemPromptIds) ||
-      !Array.isArray(state.lastInjectedIds)
-    ) {
+    // 旧记录里的 lastInjectedIds 已废弃（判定基准改由消息 metadata 承载）：只校验快照字段
+    if (!state || !Array.isArray(state.systemPromptIds)) {
       return null;
     }
-    return state as BindingState;
+    return { systemPromptIds: state.systemPromptIds as string[] };
   }
 
   private async saveState(sessionId: string, state: BindingState): Promise<void> {
@@ -65,62 +61,54 @@ export class RemoteBindingStateService {
   }
 
   /**
-   * 回合开始检测：绑定相对"已注入状态"发生变更 → 生成注入块并更新 lastInjectedIds。
-   * - 无记录（冷启动）→ 初始化两态为 live，返回空（系统提示词将直接渲染 live）；
-   * - 无变化 → 返回空；
-   * - systemPromptIds 冻结不动（缓存保持）。
+   * 系统提示词冻结快照中的连接 id（无记录 → 以 live 初始化并返回 live）。
+   * 用途：注入判定的基准回退——消息未记录绑定时（冷启动、旧会话消息），
+   * 模型对绑定的认知只剩系统提示词，快照即基准。
    */
-  async detectAndBuildInjection(
-    sessionId: string,
-    liveIds: string[],
-  ): Promise<ContentBlock[]> {
-    const live = this.normalize(liveIds);
+  async getSnapshotIds(sessionId: string, liveIds: string[]): Promise<string[]> {
     const state = await this.loadState(sessionId);
-    if (!state) {
-      await this.saveState(sessionId, {
-        systemPromptIds: live,
-        lastInjectedIds: live,
-      });
-      return [];
-    }
-    if (this.sameIds(state.lastInjectedIds, live)) {
-      return [];
-    }
-    const text = await this.renderChangeText(state.lastInjectedIds, live);
-    await this.saveState(sessionId, { ...state, lastInjectedIds: live });
-    this.logger.log(
-      `Remote binding change detected (session ${sessionId}), injecting reminder block`,
-    );
-    return [
-      {
-        type: "text",
-        text: `<system_reminder>\n${text}\n</system_reminder>`,
-        origin: "system",
-      } as ContentBlock,
-    ];
+    if (state) return state.systemPromptIds;
+    const live = this.normalize(liveIds);
+    await this.saveState(sessionId, { systemPromptIds: live });
+    return live;
   }
 
   /**
    * 供 ssh-tools 提示词 handler：按 systemPromptIds（冻结快照）渲染连接清单。
-   * 无记录（首次）→ 以 live 初始化两态。返回空串表示快照为空（未绑定）。
+   * 无记录（首次）→ 以 live 初始化。返回空串表示快照为空（未绑定）。
    */
   async renderSnapshotList(sessionId: string, liveIds: string[]): Promise<string> {
-    let state = await this.loadState(sessionId);
-    if (!state) {
-      const live = this.normalize(liveIds);
-      state = { systemPromptIds: live, lastInjectedIds: live };
-      await this.saveState(sessionId, state);
-    }
-    return this.renderList(state.systemPromptIds);
+    return this.renderList(await this.getSnapshotIds(sessionId, liveIds));
   }
 
-  /** 压缩后刷新：两态都对齐 live（缓存本就因历史重写而重建，提示词可安全反映最新绑定） */
+  /** 压缩后刷新：快照对齐 live（缓存本就因历史重写而重建，提示词可安全反映最新绑定） */
   async refreshOnCompaction(sessionId: string, liveIds: string[]): Promise<void> {
-    const live = this.normalize(liveIds);
     await this.saveState(sessionId, {
-      systemPromptIds: live,
-      lastInjectedIds: live,
+      systemPromptIds: this.normalize(liveIds),
     });
+  }
+
+  /**
+   * 绑定变更 reminder 块：before → after 无差异时返回 null（不注入）。
+   * 文案自带全量当前绑定清单与 "supersedes" 语义，故基准偏保守也不会误导模型。
+   */
+  async buildChangeReminder(
+    sessionId: string,
+    before: string[],
+    after: string[],
+  ): Promise<ContentBlock | null> {
+    const from = this.normalize(before);
+    const to = this.normalize(after);
+    if (this.sameIds(from, to)) return null;
+    const text = await this.renderChangeText(from, to);
+    this.logger.log(
+      `Remote binding change detected (session ${sessionId}), building reminder block`,
+    );
+    return {
+      type: "text",
+      text: `<system_reminder>\n${text}\n</system_reminder>`,
+      origin: "system",
+    } as ContentBlock;
   }
 
   // ── 渲染 ──
