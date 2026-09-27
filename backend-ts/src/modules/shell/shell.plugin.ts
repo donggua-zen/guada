@@ -32,6 +32,7 @@ import {
   buildRemoteProcessId,
   parseRemoteProcessId,
 } from "../remote-workspace/ssh-workspace-provider";
+import { isTransportError } from "../remote-workspace/rpc";
 import langZh from "./shell.lang.zh.json";
 import langEn from "./shell.lang.en.json";
 
@@ -561,12 +562,16 @@ export class ShellPlugin extends PluginBase {
       );
     } catch (e: any) {
       if (e?.name === "AbortError") throw e;
-      // 超时/断线/响应丢失：agent 端日志按 requestId 落盘，路径可预测
-      const log: string | undefined = e?.predictedLog;
-      const readHint = log
-        ? ` Read its log file with the read tool (workspace="${target.connectionName}", file_path: "${log}") or check with run_command (workspace="${target.connectionName}"): tail -f ${log}.`
-        : "";
-      return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server.${readHint}]`;
+      // 分流:传输类失败(超时/断线/agent 退出)命令可能已在远端运行,输出落在 agent 日志目录;
+      // agent 明确拒绝(如工作目录不存在)则进程从未启动,直接把原因说清楚,不提示去读日志。
+      if (!isTransportError(e)) {
+        return (
+          `[Remote command failed on "${target.connectionName}": ${e?.message || e}. ` +
+          `The command did not start. If this mentions a working directory, fix the connection's path ` +
+          `in workspace settings (the path is resolved on the remote host).]`
+        );
+      }
+      return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server. Its output (if any) is written to the agent's log directory (guada-logs under the remote temp dir) — inspect it with glob/read (workspace="${target.connectionName}") on that directory, or use the process tool to check status.]`;
     }
 
     const truncatedNote =

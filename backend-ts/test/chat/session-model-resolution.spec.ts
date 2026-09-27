@@ -69,6 +69,11 @@ function createContext(opts: {
     } as any,
     { publish: jest.fn() } as any,
     { findByIds: jest.fn(async () => []) } as any,
+    // RemoteBindingStateService：本用例不涉及远程绑定
+    {
+      getSnapshotIds: jest.fn(async (_sid: string, live: string[]) => live),
+      buildChangeReminder: jest.fn(async () => null),
+    } as any,
   );
   return { ctx, modelStore, settingsStorage };
 }
