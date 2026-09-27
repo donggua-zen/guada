@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ProviderFileStore } from './provider-file.store';
 import { ThinkingEffort } from './thinking/thinking-vocabulary';
 import { clampThinkingEffort } from './thinking/thinking-effort-policy';
-
 /** 调用方可恢复的「档位不受支持」错误（fail-loud，对齐 DSH UNSUPPORTED_REASONING_EFFORT） */
 export class UnsupportedReasoningEffortError extends Error {
   readonly code = 'UNSUPPORTED_REASONING_EFFORT';
@@ -65,6 +64,23 @@ export class ModelCapabilityService {
       supported: menu.includes('none'),
       wire: typeof mapNone === 'string' && mapNone ? mapNone : undefined,
     };
+  }
+
+  /**
+   * 该档位的 JSON merge patch（条目 thinkingEffortsPatch 声明）。
+   * - patch 与平面 wire 值正交：适配器在按 thinkingFormat/wireValues 拼完
+   *   请求体后整体应用本 patch（null 删键），即 patch 优先于字符串映射；
+   * - 不影响菜单推导（菜单由 thinkingEfforts 数组 / map 键 / 兜底链决定）；
+   * - 档位无 patch 声明 → undefined。
+   */
+  resolveThinkingPatch(
+    providerId: string | undefined,
+    modelName: string | undefined,
+    level: string | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!level) return undefined;
+    const model = this.lookup(providerId, modelName);
+    return model?.thinkingEffortsPatch?.[level as ThinkingEffort];
   }
 
   /**

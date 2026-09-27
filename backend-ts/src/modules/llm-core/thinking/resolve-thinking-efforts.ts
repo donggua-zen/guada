@@ -5,7 +5,9 @@ import {
   THINKING_EFFORTS,
   ThinkingEffort,
   ThinkingEffortMap,
+  ThinkingEffortPatch,
   normalizeEffortMap,
+  normalizeEffortPatch,
   normalizeThinkingEffort,
 } from './thinking-vocabulary';
 
@@ -24,6 +26,8 @@ export interface ThinkingAwareModelEntry {
   thinkingEfforts?: ModelThinkingDeclaration;
   /** 档位 → wire 值映射（非 null 键派生菜单，值作为 wire 字符串） */
   thinkingEffortsMap?: ThinkingEffortMap;
+  /** 档位 → JSON merge patch 映射（该档生效时整体打进请求体；不影响菜单推导） */
+  thinkingEffortsPatch?: ThinkingEffortPatch;
 }
 
 const EMPTY_EFFORTS: ThinkingEffort[] = [];
@@ -174,6 +178,8 @@ export interface ResolvedThinkingMenu {
   menu: ThinkingEffort[];
   /** 档位 → wire 字符串（无 map 时缺省，wire 值恒等于档位名） */
   wireValues: Partial<Record<ThinkingEffort, string>>;
+  /** 档位 → JSON merge patch（条目声明了 thinkingEffortsPatch 时存在；同档 patch 优先于 wireValues） */
+  patch?: ThinkingEffortPatch;
 }
 
 /**
@@ -185,6 +191,10 @@ export interface ResolvedThinkingMenu {
  * 走通用兜底时额外合成 `none → 'none'`：兜底是"格式能发强度值"的通用模型，
  * 关闭要按官方的档位值发出去（openai 拼法 → `reasoning_effort:"none"`），
  * 而不是"参数缺席"。显式声明过档位的模型不合成，保持既有行为不变。
+ *
+ * thinkingEffortsPatch 独立于以上链路原样透出（仅归一）：它不改菜单推导，
+ * 只在该档生效时由适配器整体打进请求体；同档同时有字符串映射与 patch 时，
+ * 消费方（适配器）先应用 wireValues 再应用 patch，即 patch 优先。
  */
 export function resolveThinkingMenu(
   model: Pick<
@@ -194,6 +204,7 @@ export function resolveThinkingMenu(
     | 'supportsThinking'
     | 'thinkingEfforts'
     | 'thinkingEffortsMap'
+    | 'thinkingEffortsPatch'
   >,
   providerThinking: ProviderThinkingConfig | undefined,
   opts?: ThinkingFallbackOptions,
@@ -204,6 +215,9 @@ export function resolveThinkingMenu(
   if (model.supportsThinking === false || model.thinkingEfforts === false) {
     return { menu: [], wireValues };
   }
+
+  // patch 与菜单/映射链正交：无论走哪条链都原样透出（归一后）
+  const patch = normalizeEffortPatch(model.thinkingEffortsPatch);
 
   // 防御性归一（store/catalog 解析时已归一；直接调用方可能传原始键）
   const map = normalizeEffortMap(model.thinkingEffortsMap);
@@ -221,7 +235,7 @@ export function resolveThinkingMenu(
     if (isEmbeddingModel(model.modelName, model.modelType)) {
       return { menu: [], wireValues: {} };
     }
-    return { menu, wireValues };
+    return { menu, wireValues, ...(patch ? { patch } : {}) };
   }
 
   // 无 map：沿用数组/默认回退链，wire 值恒等于档位名
@@ -229,5 +243,5 @@ export function resolveThinkingMenu(
   if (genericFallback && menu.includes('none')) {
     wireValues.none = 'none';
   }
-  return { menu, wireValues };
+  return { menu, wireValues, ...(patch ? { patch } : {}) };
 }

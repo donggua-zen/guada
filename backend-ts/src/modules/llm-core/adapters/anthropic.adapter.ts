@@ -30,6 +30,7 @@ import { assertNoImageContent } from "../utils/content.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import { insecureFetch } from "../utils/tls.util";
+import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 
 import {
   UpstreamRateLimitError,
@@ -185,18 +186,26 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 注意：不传 thinking 参数 = 模型默认行为（Claude 4+ 默认启用思考）
     // 不传 output_config = 默认 effort
 
+    // 条目 thinkingEffortsPatch：拼装完成后整体打 patch（RFC 7386，patch 优先）
+    const finalRequestParams = params.thinkingPatch
+      ? applyJsonMergePatch(
+          requestParams as any,
+          params.thinkingPatch,
+        ) as Anthropic.MessageCreateParams
+      : requestParams;
+
     try {
       if (params.stream) {
         // 单次尝试，重试由 AgentEngine 统一处理
         const stream = await client.messages.create({
-          ...requestParams,
+          ...finalRequestParams,
           stream: true,
         }, { signal: params.abortSignal });
 
         yield* this.handleStreamResponse(stream as any);
       } else {
         const message = await client.messages.create({
-          ...requestParams,
+          ...finalRequestParams,
           stream: false,
         }, { signal: params.abortSignal }) as Anthropic.Messages.Message;
         yield* this.handleNonStreamResponse(message);

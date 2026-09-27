@@ -334,3 +334,61 @@ export interface ModelThinkingConfig {
   style?: string;
 }
 
+/**
+ * 档位 → JSON merge patch 映射（对齐 ZCode 的 option map 思路，取其子集）：
+ *
+ * 值是一个 JSON merge patch 对象（RFC 7386 语义：null 删键、对象递归合并、
+ * 数组整体替换），在该档位生效时整体打到最后装配完成的请求体上。与平面
+ * `ThinkingEffortMap`（档位→字符串，只改 effort 值）正交：
+ * - patch 只表达"这个档位要额外写/删哪些请求字段"，能覆盖任意字段形状
+ *   （自定义网关的非标 thinking 参数、多家字段并存的超集写法等）；
+ * - 同档位同时有字符串映射与 patch 时 patch 优先（见 resolveThinkingMenu）；
+ * - 菜单推导不受 patch 影响（仍由 thinkingEfforts 数组 / map 键 / 兜底链决定）。
+ *
+ * 键为规范档位（off 归一为 none；on 不能作键——on 的开关行为由 thinkingFormat
+ * 承载，与 ThinkingEffortMap 同规则）。
+ */
+export type ThinkingEffortPatch = Partial<Record<ThinkingEffort, Record<string, unknown>>>;
+
+/** JSON-safe 校验：仅允许 plain object / 数组 / string / number / boolean / null */
+function isJsonSafe(value: unknown): boolean {
+  if (value === null || typeof value === 'string') return true;
+  if (typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.every(isJsonSafe);
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).every(isJsonSafe);
+  }
+  return false;
+}
+
+/**
+ * 归一 patch 映射（输入宽容，读取侧用）：
+ * - `off` 键 → `none`；未知键、legacy `on`、非对象值丢弃
+ * - 值须为非数组 plain object（空对象无补丁语义，丢弃）
+ * - 值深度 JSON-safe 校验（含 undefined 值的键丢弃）
+ * @returns 归一后的映射；无有效条目时返回 undefined
+ */
+export function normalizeEffortPatch(
+  raw: unknown,
+): ThinkingEffortPatch | undefined {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const out: ThinkingEffortPatch = {};
+  let kept = 0;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const effort = normalizeThinkingEffort(key);
+    if (effort === undefined || effort === 'on') continue;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+    if (!isJsonSafe(value)) continue;
+    const patch: Record<string, unknown> = {};
+    for (const [patchKey, patchValue] of Object.entries(value)) {
+      if (patchValue !== undefined) patch[patchKey] = patchValue;
+    }
+    if (Object.keys(patch).length === 0) continue;
+    out[effort] = patch;
+    kept += 1;
+  }
+  return kept > 0 ? out : undefined;
+}
+

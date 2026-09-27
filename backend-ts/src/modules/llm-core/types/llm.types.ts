@@ -31,6 +31,12 @@ export interface LLMCompletionParams {
   maxTokens?: number; // 原 max_tokens
   tools?: ToolDefinition[];
   thinkingEffort?: string; // 思考强度级别（中立词表：none/minimal/low/medium/high/xhigh/max，legacy 'on'）
+  /**
+   * 档位生效时的 JSON merge patch（RFC 7386：null 删键、对象递归合并、数组替换）。
+   * 由 LLMService 按条目 thinkingEffortsPatch 解析后下传；adapter 在请求体
+   * 装配完成后整体应用（patch 优先于 thinkingFormat/字符串映射的拼装结果）。
+   */
+  thinkingPatch?: Record<string, any>;
   /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据（如摘要调用标记） */
   purpose?: string;
   extraBody?: Record<string, any>;

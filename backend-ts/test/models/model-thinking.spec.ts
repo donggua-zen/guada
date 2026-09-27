@@ -27,6 +27,95 @@ describe('parseThinkingPatch（模型条目 thinking 声明写入口）', () => 
     expect(clears).toEqual(['thinkingEfforts']);
   });
 
+  it('thinkingEffortsMap 合法映射：off 键归一、trim、规范序', () => {
+    const { patch, clears } = parseThinkingPatch({
+      thinkingEffortsMap: { max: ' maximum ', off: 'none', high: 'high' },
+    });
+    expect(patch.thinkingEffortsMap).toEqual({ none: 'none', high: 'high', max: 'maximum' });
+    expect(clears).toEqual([]);
+  });
+
+  it('thinkingEffortsMap: null = 清除条目覆盖；null 值 = 显式不支持', () => {
+    const { patch, clears } = parseThinkingPatch({ thinkingEffortsMap: null });
+    expect(patch).toEqual({});
+    expect(clears).toEqual(['thinkingEffortsMap']);
+    expect(parseThinkingPatch({ thinkingEffortsMap: { low: null } }).patch.thinkingEffortsMap).toEqual({
+      low: null,
+    });
+  });
+
+  it('thinkingEffortsMap 非法输入 fail-loud（400）', () => {
+    // 未知档位键
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: { bogus: 'x' } })).toThrow(
+      BadRequestException,
+    );
+    // on 不能作键：开关行为由 thinkingFormat 承载
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: { on: 'true' } })).toThrow(
+      BadRequestException,
+    );
+    // 非对象 / 数组 / 空对象
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: 'high' })).toThrow(BadRequestException);
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: ['high'] })).toThrow(BadRequestException);
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: {} })).toThrow(BadRequestException);
+    // 值须为非空字符串或 null
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: { high: '' } })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseThinkingPatch({ thinkingEffortsMap: { high: 42 } })).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('thinkingEffortsPatch 合法映射：off 键归一、规范序', () => {
+    const { patch, clears } = parseThinkingPatch({
+      thinkingEffortsPatch: {
+        high: { reasoning_effort: 'high', thinking: { type: 'enabled' } },
+        off: { thinking: { type: 'disabled' } },
+      },
+    });
+    expect(patch.thinkingEffortsPatch).toEqual({
+      none: { thinking: { type: 'disabled' } },
+      high: { reasoning_effort: 'high', thinking: { type: 'enabled' } },
+    });
+    expect(clears).toEqual([]);
+  });
+
+  it('thinkingEffortsPatch: null = 清除条目覆盖', () => {
+    expect(parseThinkingPatch({ thinkingEffortsPatch: null })).toEqual({
+      patch: {},
+      clears: ['thinkingEffortsPatch'],
+    });
+  });
+
+  it('thinkingEffortsPatch 非法输入 fail-loud（400）', () => {
+    // 未知档位键 / on 键
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { bogus: {} } })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { on: {} } })).toThrow(
+      BadRequestException,
+    );
+    // 值须为对象
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { high: 'x' } })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { high: ['x'] } })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { high: null } })).toThrow(
+      BadRequestException,
+    );
+    // 空 patch / 整体空对象
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: { high: {} } })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseThinkingPatch({ thinkingEffortsPatch: {} })).toThrow(BadRequestException);
+    // 非 JSON 值（undefined 条目被丢弃后空 patch → 400）
+    expect(() =>
+      parseThinkingPatch({ thinkingEffortsPatch: { high: { a: undefined } } as any }),
+    ).toThrow(BadRequestException);
+  });
+
   it('compat 合法值写入 patch', () => {
     const { patch } = parseThinkingPatch({
       compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: true },
@@ -117,6 +206,7 @@ class StubStore {
       {
         modelName: 'm-override',
         thinkingEfforts: ['high'] as string[],
+        thinkingEffortsMap: { high: 'max' } as Record<string, string | null>,
         compat: { thinkingFormat: 'enable-thinking' },
       },
       { modelName: 'm-inherit' },
@@ -175,10 +265,12 @@ describe('ModelService：thinking 载荷与白名单 patch', () => {
     expect(override.thinkingFormat).toBe('qwen');
     expect(override.supportsReasoningEffort).toBe(true);
     expect(override.compatOverride).toEqual({ thinkingFormat: 'enable-thinking' });
+    expect(override.thinkingEffortsMapOverride).toEqual({ high: 'max' });
 
     const inherit = models.find((m) => m.modelName === 'm-inherit')!;
     expect(inherit.thinkingFormat).toBe('deepseek');
     expect(inherit.compatOverride).toBeUndefined();
+    expect(inherit.thinkingEffortsMapOverride).toBeUndefined();
   });
 
   it('updateModel 白名单 patch：表单杂字段与 modelName 不落盘', async () => {
@@ -189,13 +281,42 @@ describe('ModelService：thinking 载荷与白名单 patch', () => {
       modelType: 'text',
       config: { contextWindow: 1 },
       thinkingEfforts: ['high', 'none', 'high'],
+      thinkingEffortsMap: { high: 'max', low: ' low ' },
       compat: { thinkingFormat: 'enable-thinking' },
     });
     expect(store.updateModel).toHaveBeenCalledWith('p1', 'm-override', {
       modelType: 'text',
       config: { contextWindow: 1 },
       thinkingEfforts: ['none', 'high'],
+      thinkingEffortsMap: { low: 'low', high: 'max' },
       compat: { thinkingFormat: 'qwen' },
+    });
+  });
+
+  it('updateModel：thinkingEffortsMap null 原样下发，由 store 翻译为清除', async () => {
+    const { store, service } = buildService();
+    await service.updateModel('p1:m-override', { thinkingEffortsMap: null });
+    expect(store.updateModel).toHaveBeenCalledWith('p1', 'm-override', {
+      thinkingEffortsMap: null,
+    });
+  });
+
+  it('updateModel：thinkingEffortsPatch 白名单 patch 与 null 清除', async () => {
+    const { store, service } = buildService();
+    await service.updateModel('p1:m-override', {
+      thinkingEffortsPatch: {
+        high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+      },
+    });
+    expect(store.updateModel).toHaveBeenCalledWith('p1', 'm-override', {
+      thinkingEffortsPatch: {
+        high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+      },
+    });
+
+    await service.updateModel('p1:m-override', { thinkingEffortsPatch: null });
+    expect(store.updateModel).toHaveBeenCalledWith('p1', 'm-override', {
+      thinkingEffortsPatch: null,
     });
   });
 

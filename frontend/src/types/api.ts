@@ -51,6 +51,10 @@ export interface Model {
     supportsThinking?: boolean
     /** 条目级档位覆盖（false = 显式无档位；缺省 = 档位来自继承链） */
     thinkingEffortsOverride?: false | string[]
+    /** 条目级档位→wire 映射覆盖（缺省 = 映射来自继承链或无映射；切回继承时发 null 清除） */
+    thinkingEffortsMapOverride?: Record<string, string | null>
+    /** 条目级档位→JSON merge patch 覆盖（缺省 = 来自继承链或无声明；切回继承时发 null 清除） */
+    thinkingEffortsPatchOverride?: Record<string, Record<string, unknown>>
     /** 条目级思考能力覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */
     supportsThinkingOverride?: boolean
     /** 条目级 compat 覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */

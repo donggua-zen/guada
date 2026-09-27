@@ -223,3 +223,64 @@ export function getThinkingEffortLabel(effort: string): string {
   const label = t(key);
   return label !== key ? label : effort;
 }
+
+/**
+ * 规范思考档位全集（编辑表单复选框数据源）。
+ * 与后端 THINKING_EFFORTS 同集同序（none/on/minimal/low/medium/high/xhigh/max），
+ * 词表增删时两处需同步（后端有漂移门控，此处靠注释约束）。
+ */
+export const THINKING_EFFORT_OPTIONS: readonly string[] = [
+  'none',
+  'on',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+];
+
+/**
+ * thinkingFormat 全集（拼法下拉数据源），与后端 THINKING_FORMATS 同集。
+ * 显示原样技术名——它们本身就是 wire 字段的命名约定。
+ */
+export const THINKING_FORMAT_OPTIONS: readonly string[] = [
+  'openai',
+  'deepseek',
+  'zai',
+  'qwen',
+  'openrouter',
+  'together',
+  'baseten',
+  'ant-ling',
+  'string-thinking',
+  'qwen-chat-template',
+  'chat-template',
+];
+
+/**
+ * format 级"强度值上 wire"默认（与后端 FORMAT_SUPPORTS_REASONING_EFFORT 同表）。
+ * 仅用于编辑表单的非阻断提示：开关型拼法下 on 档没有独立 wire 值。
+ */
+const FORMAT_SUPPORTS_EFFORT: Record<string, boolean> = {
+  openai: true,
+  deepseek: true,
+  zai: false,
+  qwen: true,
+  openrouter: true,
+  together: false,
+  baseten: true,
+  'ant-ling': false,
+  'string-thinking': true,
+  'qwen-chat-template': true,
+  'chat-template': true,
+};
+
+/** 该拼法默认是否发送强度值；未知 format 回退 fallback（调用方传生效值） */
+export function formatSupportsEffort(
+  format: string | undefined,
+  fallback = true,
+): boolean {
+  if (!format) return fallback;
+  return FORMAT_SUPPORTS_EFFORT[format] ?? fallback;
+}

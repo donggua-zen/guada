@@ -233,3 +233,62 @@ describe('通用兜底的 wire 值（关闭按官方档位值发出）', () => {
     expect(withDefault.wireValues).toEqual({});
   });
 });
+
+describe('thinkingEffortsPatch（档位→JSON merge patch，与菜单/映射正交）', () => {
+  it('条目 patch 原样透出（归一后），不影响菜单推导', () => {
+    const r = resolveThinkingMenu(
+      {
+        modelName: 'm',
+        thinkingEfforts: ['low', 'high'],
+        thinkingEffortsPatch: {
+          high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+        },
+      },
+      undefined,
+    );
+    expect(r.menu).toEqual(['low', 'high']);
+    expect(r.wireValues).toEqual({});
+    expect(r.patch).toEqual({
+      high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+    });
+  });
+
+  it('off 键归一为 none；未知键 / on 键 / 非对象值 / 空 patch 丢弃', () => {
+    const r = resolveThinkingMenu(
+      {
+        modelName: 'm',
+        thinkingEfforts: ['none', 'low'],
+        thinkingEffortsPatch: {
+          off: { thinking: { type: 'disabled' } },
+          bogus: { a: 1 },
+          on: { a: 1 },
+          medium: 'not-an-object',
+          low: {},
+        } as any,
+      },
+      undefined,
+    );
+    expect(r.patch).toEqual({ none: { thinking: { type: 'disabled' } } });
+  });
+
+  it('无 patch 声明 → patch 字段缺席', () => {
+    const r = resolveThinkingMenu(
+      { modelName: 'm', thinkingEfforts: ['high'] },
+      undefined,
+    );
+    expect(r.patch).toBeUndefined();
+  });
+
+  it('能力短路（false）时 patch 一并缺席', () => {
+    const r = resolveThinkingMenu(
+      {
+        modelName: 'm',
+        supportsThinking: false,
+        thinkingEffortsPatch: { high: { a: 1 } },
+      },
+      undefined,
+    );
+    expect(r.menu).toEqual([]);
+    expect(r.patch).toBeUndefined();
+  });
+});

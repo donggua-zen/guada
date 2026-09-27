@@ -10,9 +10,11 @@ import {
   ThinkingCompatConfig,
   ThinkingEffort,
   ThinkingEffortMap,
+  ThinkingEffortPatch,
   defaultSupportsReasoningEffort,
   mergeThinkingCompat,
   normalizeEffortMap,
+  normalizeEffortPatch,
   normalizeThinkingFormat,
   parseThinkingCompat,
 } from './thinking/thinking-vocabulary';
@@ -66,6 +68,8 @@ export interface ProviderFileModel {
   thinkingEfforts?: boolean | AnyThinkingEffort[];
   /** 档位→wire 值映射（非 null 键派生菜单，值作为 wire 字符串；优先于 thinkingEfforts 数组） */
   thinkingEffortsMap?: ThinkingEffortMap;
+  /** 档位→JSON merge patch 映射（该档生效时整体打进请求体；不影响菜单推导） */
+  thinkingEffortsPatch?: ThinkingEffortPatch;
   /** 模型条目级 wire 兼容开关（逐字段覆盖实例/卡片 compat） */
   compat?: ThinkingCompatConfig;
   isFavorite?: boolean;
@@ -88,6 +92,8 @@ export interface ModelWithProvider {
   thinkingEfforts: string[];
   /** 档位→wire 值映射（菜单与 wire 解耦；缺省时 wire 值=档位名） */
   thinkingEffortMap?: Partial<Record<ThinkingEffort, string>>;
+  /** 档位→JSON merge patch 映射（条目声明时存在；该档生效时由适配器打进请求体） */
+  thinkingEffortsPatch?: ThinkingEffortPatch;
   /** 生效的 wire 兼容开关（模型条目 > 实例级 > 类型卡；format/supportsEffort 必有值） */
   thinkingCompat: ResolvedThinkingCompat;
 }
@@ -287,6 +293,9 @@ export class ProviderFileStore {
       const thinkingEffortsMap = normalizeEffortMap(
         (item as any).thinkingEffortsMap,
       );
+      const thinkingEffortsPatch = normalizeEffortPatch(
+        (item as any).thinkingEffortsPatch,
+      );
       // 能力声明：显式 supportsThinking 优先；否则由 legacy thinkingEfforts 折叠
       //（false → 不能思考；数组/true → 能思考）；都未声明 → undefined（fail-safe）
       const rawSupports = (item as any).supportsThinking;
@@ -318,6 +327,7 @@ export class ProviderFileStore {
         ...(supportsThinking !== undefined ? { supportsThinking } : {}),
         ...(thinkingEfforts !== undefined ? { thinkingEfforts } : {}),
         ...(thinkingEffortsMap !== undefined ? { thinkingEffortsMap } : {}),
+        ...(thinkingEffortsPatch !== undefined ? { thinkingEffortsPatch } : {}),
         ...(compat ? { compat } : {}),
         isFavorite: (item as any).isFavorite === true,
         isActive: (item as any).isActive !== false,
@@ -432,6 +442,12 @@ export class ProviderFileStore {
                 override?.thinkingEffortsMap ?? cat.thinkingEffortsMap,
             }
           : {}),
+        ...(override?.thinkingEffortsPatch !== undefined || cat.thinkingEffortsPatch !== undefined
+          ? {
+              thinkingEffortsPatch:
+                override?.thinkingEffortsPatch ?? cat.thinkingEffortsPatch,
+            }
+          : {}),
         // wire 兼容开关：实例条目 compat 逐字段覆盖目录条目 compat
         //（此前 thinking 整体替换曾把模型级覆盖静默吃掉，故逐字段合并）
         ...(mergeThinkingCompat(cat.compat, override?.compat)
@@ -477,6 +493,7 @@ export class ProviderFileStore {
         supportsThinking: model.supportsThinking,
         thinkingEfforts: model.thinkingEfforts,
         thinkingEffortsMap: model.thinkingEffortsMap,
+        thinkingEffortsPatch: model.thinkingEffortsPatch,
       } as ThinkingAwareModelEntry,
       thinking,
       // 档位未知时的兜底要跟着格式走：开关型格式给不了强度档，别造假菜单
@@ -501,6 +518,7 @@ export class ProviderFileStore {
       ...(Object.keys(resolved.wireValues).length > 0
         ? { thinkingEffortMap: resolved.wireValues }
         : {}),
+      ...(resolved.patch ? { thinkingEffortsPatch: resolved.patch } : {}),
       thinkingCompat: compat,
     };
   }

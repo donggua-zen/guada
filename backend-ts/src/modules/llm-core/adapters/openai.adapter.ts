@@ -35,6 +35,7 @@ import { assertNoImageContent } from "../utils/content.util";
 import { StreamBlockTracker } from "../utils/block-lifecycle.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
+import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
@@ -399,13 +400,18 @@ export class OpenAIAdapter implements IProtocolAdapter {
       providerConfig: params.providerConfig,
     });
 
+    // 条目 thinkingEffortsPatch：拼装完成后整体打 patch（RFC 7386，patch 优先）
+    const finalRequestParams = params.thinkingPatch
+      ? applyJsonMergePatch(requestParams, params.thinkingPatch)
+      : requestParams;
+
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     let response: any = null;
 
     try {
       // 单次尝试，重试由 AgentEngine 统一处理
-      response = await client.chat.completions.create(requestParams, {
+      response = await client.chat.completions.create(finalRequestParams, {
         signal: params.abortSignal,
         timeout: requestTimeout,
       });

@@ -6,9 +6,11 @@ import {
   ProviderThinkingConfig,
   ThinkingCompatConfig,
   ThinkingEffortMap,
+  ThinkingEffortPatch,
   mergeThinkingCompat,
   normalizeThinkingFormat,
   normalizeEffortMap,
+  normalizeEffortPatch,
   parseThinkingCompat,
 } from './thinking/thinking-vocabulary';
 
@@ -26,6 +28,8 @@ export interface CatalogModel {
   thinkingEfforts?: boolean | string[];
   /** 档位→wire 值映射（非 null 键派生菜单，值作为 wire 字符串） */
   thinkingEffortsMap?: ThinkingEffortMap;
+  /** 档位→JSON merge patch 映射（该档生效时整体打进请求体） */
+  thinkingEffortsPatch?: ThinkingEffortPatch;
   /** 逐模型 wire 兼容开关覆盖 */
   compat?: ThinkingCompatConfig;
 }
@@ -123,6 +127,7 @@ export class BundledCatalogService {
                       ? m.thinkingEfforts
                       : undefined,
                   thinkingEffortsMap: normalizeEffortMap(m.thinkingEffortsMap),
+                  thinkingEffortsPatch: normalizeEffortPatch(m.thinkingEffortsPatch),
                   ...(compat ? { compat } : {}),
                 };
               })

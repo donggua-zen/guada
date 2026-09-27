@@ -242,6 +242,58 @@ describe('ProviderFileStore', () => {
     expect(store.findModel('openai:gpt-4o')!.thinkingCompat.thinkingFormat).toBe('openai');
   });
 
+  it('updateModel 写入 thinkingEffortsMap 并在清除后回退继承链', async () => {
+    // 写入映射：openai:gpt-4o 无目录/条目 map（bundled 目录已隔离为空）→ 覆盖即生效
+    await store.updateModel('openai', 'gpt-4o', {
+      thinkingEfforts: ['low', 'high'],
+      thinkingEffortsMap: { low: 'minimal', high: 'max' },
+    });
+    const model = store.findModel('openai:gpt-4o')!;
+    // map 存在时菜单由非 null 键派生（resolveThinkingMenu 语义）
+    expect(model.thinkingEfforts).toEqual(['low', 'high']);
+    expect(model.thinkingEffortMap).toEqual({ low: 'minimal', high: 'max' });
+    // 实例条目落盘
+    const entry = store.getProvider('openai')!.models!.find((m) => m.modelName === 'gpt-4o')!;
+    expect(entry.thinkingEffortsMap).toEqual({ low: 'minimal', high: 'max' });
+
+    // null 清除 → 条目键消失；thinkingEfforts 数组仍在，菜单回退数组声明
+    await store.updateModel('openai', 'gpt-4o', { thinkingEffortsMap: null });
+    expect(
+      store.getProvider('openai')!.models!.find((m) => m.modelName === 'gpt-4o')!
+        .thinkingEffortsMap,
+    ).toBeUndefined();
+    expect(store.findModel('openai:gpt-4o')!.thinkingEffortMap).toBeUndefined();
+    expect(store.findModel('openai:gpt-4o')!.thinkingEfforts).toEqual(['low', 'high']);
+    const reread = fs.readFileSync(path.join(dir, 'openai.yaml'), 'utf8');
+    expect(reread).not.toContain('thinkingEffortsMap');
+  });
+
+  it('updateModel 写入 thinkingEffortsPatch 并在清除后回退继承链', async () => {
+    await store.updateModel('openai', 'gpt-4o', {
+      thinkingEffortsPatch: {
+        high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+        low: { reasoning_effort: null },
+      },
+    });
+    const model = store.findModel('openai:gpt-4o')!;
+    // patch 不参与菜单推导：菜单仍由 thinkingEfforts / 兜底链决定
+    expect(model.thinkingEfforts).toEqual(['low', 'medium', 'high']);
+    expect(model.thinkingEffortsPatch).toEqual({
+      low: { reasoning_effort: null },
+      high: { reasoning_effort: 'ultra', thinking: { type: 'enabled' } },
+    });
+
+    // null 清除 → 条目键消失
+    await store.updateModel('openai', 'gpt-4o', { thinkingEffortsPatch: null });
+    expect(
+      store.getProvider('openai')!.models!.find((m) => m.modelName === 'gpt-4o')!
+        .thinkingEffortsPatch,
+    ).toBeUndefined();
+    expect(store.findModel('openai:gpt-4o')!.thinkingEffortsPatch).toBeUndefined();
+    const reread = fs.readFileSync(path.join(dir, 'openai.yaml'), 'utf8');
+    expect(reread).not.toContain('thinkingEffortsPatch');
+  });
+
   it('deleteProvider 移除文件', async () => {
     expect(await store.deleteProvider('deepseek-toggle')).toBe(true);
     expect(store.getProvider('deepseek-toggle')).toBeUndefined();

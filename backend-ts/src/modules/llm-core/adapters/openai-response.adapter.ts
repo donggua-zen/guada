@@ -10,6 +10,7 @@ import {
 import type { Message, ContentBlock } from "../../../common/types/conversation.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
+import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 import { attachmentToPart, fileBlockToText } from "../utils/attachment.util";
 import { assertNoImageContent } from "../utils/content.util";
 import { StreamBlockTracker } from "../utils/block-lifecycle.util";
@@ -118,13 +119,18 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     const formattedInput = await this.formatInput(params.messages, params.system);
     const requestParams = this.buildRequestParam(params, formattedInput);
 
+    // 条目 thinkingEffortsPatch：拼装完成后整体打 patch（RFC 7386，patch 优先）
+    const finalRequestParams = params.thinkingPatch
+      ? applyJsonMergePatch(requestParams, params.thinkingPatch)
+      : requestParams;
+
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     let response: any = null;
 
     try {
       // 单次尝试，重试由 AgentEngine 统一处理
-      response = await client.responses.create(requestParams, {
+      response = await client.responses.create(finalRequestParams, {
         signal: params.abortSignal,
         timeout: requestTimeout,
       });
