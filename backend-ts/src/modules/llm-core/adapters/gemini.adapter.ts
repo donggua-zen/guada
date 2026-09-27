@@ -30,6 +30,7 @@ import { assertNoImageContent } from "../utils/content.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { StreamBlockTracker } from "../utils/block-lifecycle.util";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
+import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 
 import {
   UpstreamRateLimitError,
@@ -117,14 +118,20 @@ export class GeminiAdapter implements IProtocolAdapter {
       ? [{ functionDeclarations: this.convertTools(params.tools) }]
       : undefined;
 
-    const model = genAI.getGenerativeModel({
+    // 模型配置对象 = Gemini 的"请求体"等价物（generationConfig 含 thinkingConfig）
+    const modelConfig: Record<string, any> = {
       model: params.model,
       generationConfig: this.buildGenerationConfig(params),
       safetySettings: this.getSafetySettings(),
       tools,
       // system 为请求 envelope 独立字段 → Gemini systemInstruction 槽
       ...(params.system ? { systemInstruction: params.system } : {}),
-    });
+    };
+    // 条目 thinkingEffortsPatch：装配完成后整体打 patch（RFC 7386，patch 优先）
+    const patchedModelConfig = params.thinkingPatch
+      ? applyJsonMergePatch(modelConfig, params.thinkingPatch)
+      : modelConfig;
+    const model = genAI.getGenerativeModel(patchedModelConfig as any);
 
     const chatHistory = await this.formatMessages(params.messages.slice(0, -1));
     const chat = model.startChat({ history: chatHistory });

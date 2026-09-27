@@ -129,6 +129,14 @@ export class LLMService {
       );
     }
 
+    // 档位 patch：条目 thinkingEffortsPatch 的该档声明，adapter 装配完请求体后
+    // 整体应用（null 删键）。能力解析与 effort 同层，适配器只消费不查询。
+    const thinkingPatch = this.capability.resolveThinkingPatch(
+      params.providerConfig?.id,
+      params.model,
+      thinkingEffort,
+    );
+
     // 清洗消息（三层 Message[]：清洗各 text/reasoning 块中的孤儿代理字符）
     const sanitizedMessages: Message[] = params.messages.map((msg) => ({
       ...msg,
@@ -161,6 +169,7 @@ export class LLMService {
       ...params,
       messages: sanitizedMessages,
       thinkingEffort,
+      thinkingPatch,
       abortSignal: streamTc.signal,
       timeout: requestTimeoutMs,
     });

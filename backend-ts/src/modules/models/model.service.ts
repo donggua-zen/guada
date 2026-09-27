@@ -106,6 +106,14 @@ export class ModelService {
           ...(own?.thinkingEfforts !== undefined
             ? { thinkingEffortsOverride: own.thinkingEfforts }
             : {}),
+          // 条目级档位→wire 映射覆盖（无 = 生效值来自继承链，切回继承时发 null 清除）
+          ...(own?.thinkingEffortsMap !== undefined
+            ? { thinkingEffortsMapOverride: own.thinkingEffortsMap }
+            : {}),
+          // 条目级档位→JSON patch 覆盖（无 = 生效值来自继承链，切回继承时发 null 清除）
+          ...(own?.thinkingEffortsPatch !== undefined
+            ? { thinkingEffortsPatchOverride: own.thinkingEffortsPatch }
+            : {}),
           ...(own?.supportsThinking !== undefined
             ? { supportsThinkingOverride: own.supportsThinking }
             : {}),
@@ -321,9 +329,6 @@ export class ModelService {
       ...(typeof data.modelType === "string" ? { modelType: data.modelType } : {}),
       ...(typeof data.name === "string" ? { name: data.name } : data.name === null ? { name: null } : {}),
       ...(data.config && typeof data.config === "object" ? { config: data.config } : data.config === null ? { config: null } : {}),
-      ...(data.thinkingEffortsMap && typeof data.thinkingEffortsMap === "object"
-        ? { thinkingEffortsMap: data.thinkingEffortsMap }
-        : {}),
       ...(typeof data.isFavorite === "boolean" ? { isFavorite: data.isFavorite } : {}),
       ...(typeof data.isActive === "boolean" ? { isActive: data.isActive } : {}),
       ...(typeof data.deleted === "boolean" ? { deleted: data.deleted } : {}),

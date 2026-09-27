@@ -33,6 +33,11 @@ describe('ModelCapabilityService', () => {
         'models:',
         '  - modelName: think-a',
         '    thinkingEffortsMap: { low: low, high: ultra }',
+        '    thinkingEffortsPatch:',
+        '      high:',
+        '        thinking: { type: enabled }',
+        '      none:',
+        '        thinking: { type: disabled }',
         '  - modelName: plain-b',
         '    thinkingEfforts: false',
         '  - modelName: think-c',
@@ -114,6 +119,24 @@ describe('ModelCapabilityService', () => {
 
     it('请求 none 但菜单无 none → 调整到首个非 off 档', () => {
       expect(capability.resolveThinkingEffort('p1', 'think-a', 'none')).toBe('low');
+    });
+  });
+
+  describe('resolveThinkingPatch（条目 patch 映射，与 wire 值正交）', () => {
+    it('声明的档位返回 patch 对象', () => {
+      expect(capability.resolveThinkingPatch('p1', 'think-a', 'high')).toEqual({
+        thinking: { type: 'enabled' },
+      });
+      expect(capability.resolveThinkingPatch('p1', 'think-a', 'none')).toEqual({
+        thinking: { type: 'disabled' },
+      });
+    });
+
+    it('未声明 patch 的档位/模型/实例 → undefined', () => {
+      expect(capability.resolveThinkingPatch('p1', 'think-a', 'low')).toBeUndefined();
+      expect(capability.resolveThinkingPatch('p1', 'think-c', 'high')).toBeUndefined();
+      expect(capability.resolveThinkingPatch('p1', undefined, 'high')).toBeUndefined();
+      expect(capability.resolveThinkingPatch('nope', 'think-a', 'high')).toBeUndefined();
     });
   });
 });
