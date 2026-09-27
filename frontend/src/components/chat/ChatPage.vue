@@ -94,8 +94,10 @@
                   </template>                </ChatPanel>
               </Teleport>
 
-              <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="mainSession" :messages="chatPanelRef?.activeMessages || []"
+              <!-- 大纲导航：聊天区左缘垂直居中（定位见 ChatOutline .chat-outline-container）。
+                   数据源 = ChatPanel 实际渲染的 visibleTurns（回合制）；
+                   旧扁平 activeMessages 在回合制重构后无人写入（恒为空），已弃用 -->
+              <ChatOutline v-if="mainSession" :turns="chatPanelRef?.visibleTurns || []"
                 :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
             </div>
           </template>
@@ -385,27 +387,9 @@ watch(() => layoutStore.workspaceFullscreen, async (fs) => {
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 
-// 统一流状态派生:useSessionEvents(MainLayout 常驻)统一订阅 stream_status_changed 并写入
-// sessionStore.streamStatus。主会话 running → 触发 ChatPanel 订阅
-// (自身发起的流 isStreaming 已 true,subscribeToActiveStream 守卫自动挡住)。
-// 子代理的运行状态由概览"子代理"区直接读 store 派生,此处不再维护 agentTabs。
-// 注意 source 必须用纯读 peekStreamStatus:getSessionState 的 miss 分支会创建缓存+清扫
-// (写响应式 Map),source 里读写相间会自我触发 → 递归更新白屏
-watch(
-  () =>
-    mainSession.value?.id
-      ? sessionStore.peekStreamStatus(mainSession.value.id)
-      : undefined,
-  () => {
-    const mainId = mainSession.value?.id;
-    if (mainId && sessionStore.peekStreamStatus(mainId) === "running") {
-      const chatPanel = chatPanelRef.value;
-      if (chatPanel && chatPanel.subscribeToActiveStream) {
-        chatPanel.subscribeToActiveStream();
-      }
-    }
-  },
-);
+// 流状态消费说明:stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入
+// sessionStore.streamStatus,消费方(概览"子代理"区/侧边栏标签等)直接读 store 派生,
+// 本组件不再 watch 派生(旧 watch 曾用于触发 ChatPanel.subscribeToActiveStream,该空壳已删)。
 
 // SSE 事件监听取消函数(stream_status_changed 已由 useSessionEvents 统一订阅,此处不再重复监听)
 let unsubscribeSubAgentCreate: (() => void) | null = null;
@@ -737,7 +721,7 @@ onMounted(async () => {
   await updateSelectedSession(sessionId);
 
   // stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入 sessionStore.streamStatus,
-  // 本组件改为 watch 派生,不再重复 onSessionEvent。
+  // 消费方直读 store,本组件不再派生、也不重复 onSessionEvent。
 
   // 注册子 Agent 生命周期事件监听（仅负责增删 Tab）
   unsubscribeSubAgentCreate = apiService.onSessionEvent('sub_agent_create', handleSubAgentCreate);

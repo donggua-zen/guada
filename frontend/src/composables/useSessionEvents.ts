@@ -165,7 +165,7 @@ export function useSessionEvents() {
           status === "running" ? "running" : status === "completed" ? "completed" : "error",
         );
 
-        // isStreaming 由实际流状态驱动(修复:此前 subscribeToActiveStream 盲置 true 且不置回,
+        // isStreaming 由实际流状态驱动(修复:旧订阅模式曾盲置 true 且不置回,
         // 导致打开每个会话都显示流式当中):running → true,completed/error → false。
         sessionStore.setSessionIsStreaming(sessionId, status === "running");
 

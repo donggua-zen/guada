@@ -175,8 +175,3 @@ export interface Turn {
     /** 回合瞬态视图态（历史加载的回合无此字段 = 非工作态） */
     state?: TurnState
 }
-
-/**
- * 消息对（用于 UI 展示）
- */
-export type MessagePair = [Message] | [Message, Message]

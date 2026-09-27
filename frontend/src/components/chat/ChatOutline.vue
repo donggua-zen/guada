@@ -34,12 +34,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
+import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
-import type { Message } from '@/utils/messageUtils'
-import { extractMessageTitle, isHiddenBlock } from '@/utils/messageUtils'
+import type { MessageBundle, Turn } from '@/types/message'
+import { stripSystemReminder, isHiddenBlock } from '@/utils/messageUtils'
 
+const { t } = useI18n()
+
+// 数据源 = 回合列表（回合制重构后扁平 messages 数组已无人写入，恒为空，
+// 曾导致本组件 outlineItems 恒为空而永不渲染）
 const props = defineProps<{
-  messages: Message[]
+  turns: Turn[]
   chatPanelRef: any
 }>()
 
@@ -73,37 +78,51 @@ function cleanMarkdown(text: string): string {
     .trim()
 }
 
-/** 内容预览：取最后一段有内容的 content（ReAct 循环中最后一段才是最终回复），清洗后前 180 字符 */
-function buildPreview(msg: Message): string {
-  const contents = msg.contents?.filter(c => c?.content) || []
-  const content = contents[contents.length - 1]?.content || ''
+/** bundle 标题：首块内容剥 <system_reminder> 后取首行（与旧 extractMessageTitle 同规则） */
+function bundleTitle(bundle: MessageBundle): string {
+  const content = stripSystemReminder(bundle.blocks?.[0]?.content || "")
+  if (!content) return t("chat.message.unnamed");
+  const firstLine = content.split("\n")[0].trim();
+  return firstLine.length > 50 ? firstLine.substring(0, 47) + "..." : (firstLine || t("chat.message.unnamed"));
+}
+
+/** 内容预览：bundle 内最后一块有内容的 content（清洗后前 180 字符） */
+function bundlePreview(bundle: MessageBundle): string {
+  const blocks = bundle.blocks?.filter(b => b?.content) || []
+  const content = blocks[blocks.length - 1]?.content || ''
   if (!content) return ''
   const clean = cleanMarkdown(content)
   return clean.length > 180 ? clean.substring(0, 177) + '...' : clean
 }
 
 const outlineItems = computed<OutlineItem[]>(() => {
-  // 一次遍历建「parentId → 最后一条 assistant」索引，避免下面每个 user 消息
-  // 都全量 filter 一次（O(n²)，长会话每次内容变更都要重算上百次遍历）
-  const finalReplyByParent = new Map<string, Message>();
-  for (const m of props.messages) {
-    if (m.role === 'assistant' && m.parentId) finalReplyByParent.set(m.parentId, m);
-  }
-  return props.messages
-    .filter(msg => msg.role === 'user' && !isHiddenBlock(msg))
-    .map(msg => {
-      // 该用户消息对应的助手最终回复（parentId 匹配的最后一条 = 最新版本）
-      const finalReply = finalReplyByParent.get(msg.id)
-      return {
-        id: msg.id,
-        title: extractMessageTitle(msg),
-        // 有回复时展示助手最终回复；尚未回复（流式中/失败）时回退为用户消息
-        preview: finalReply ? buildPreview(finalReply) : buildPreview(msg),
-        timeText: msg.createdAt
-          ? dayjs(msg.createdAt).format('MM-DD HH:mm')
-          : ''
+  const items: OutlineItem[] = []
+  for (const turn of props.turns) {
+    // 用户锚点：回合内第一条真实用户输入（id 与 TurnItem 的 data-message-id 同源）
+    const user = turn.messages?.find(m => m.role === 'user' && !isHiddenBlock(m))
+    if (!user) continue
+    // 最终回复：同回合倒序第一条有内容的 assistant bundle（ReAct 多次 LLM 调用取最后一次；
+    // regenerate = 删旧回合+新建，每条用户输入至多一个可见回合，无重复条目）
+    let finalReply: MessageBundle | undefined
+    const msgs = turn.messages || []
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i]
+      if (m.role === 'assistant' && m.blocks?.some(b => b?.content)) {
+        finalReply = m
+        break
       }
+    }
+    items.push({
+      id: user.messageId,
+      title: bundleTitle(user),
+      // 有回复时展示助手最终回复；尚未回复（流式中/失败）时回退为用户消息
+      preview: finalReply ? bundlePreview(finalReply) : bundlePreview(user),
+      timeText: user.createdAt
+        ? dayjs(user.createdAt).format('MM-DD HH:mm')
+        : ''
     })
+  }
+  return items
 })
 
 /** 当前悬停项的索引（用于相邻层级判断） */
@@ -126,12 +145,12 @@ let pollTimer: number | null = null
 // 防抖计算当前可视区第一条（100ms，滚动跟手且不频繁重排）
 const debouncedUpdateActive = useDebounceFn(updateActiveFromScroll, 100)
 
-// 消息集合变化时重建元素索引；immediate 确保异步组件挂载后即使消息已就绪也能初始化。
-// 不用 deep：props.messages 是全会话的深层响应式数组，深度遍历每个流式 token 都会跑
-// 一遍所有消息的所有属性；而本函数要重建的只是 [data-message-id] 元素映射，它只在
+// 回合列表变化时重建元素索引；immediate 确保异步组件挂载后即使回合已就绪也能初始化。
+// 不用 deep：props.turns 是全会话的深层响应式数组，深度遍历每个流式 token 都会跑
+// 一遍所有回合的所有属性；而本函数要重建的只是 [data-message-id] 元素映射，它只在
 // 数组换了来源（切会话）或条数变了（新增/删除回合）时才需要更新。
 watch(
-  [() => props.messages, () => props.messages.length],
+  [() => props.turns, () => props.turns.length],
   () => {
     scheduleSetup()
   },
