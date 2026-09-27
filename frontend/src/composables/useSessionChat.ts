@@ -17,14 +17,15 @@ export function useSessionChat(
   }
 
   /**
-   * 检查是否需要生成标题
+   * 生成会话标题（幂等：hasGeneratedTitle 保证每组件实例至多一次）。
+   * 「是否首轮完成」的判断在调用方（回合制：恰好一个可见回合且有 assistant 回复），
+   * 本函数不再接收消息列表自行判长度——旧扁平 messages 数组已死。
    */
   async function generateTitleIfNeeded(
     sessionId: string,
-    messages: any[],
     currentSession: Ref<Session | null>,
   ) {
-    if (messages.length === 2 && !hasGeneratedTitle.value) {
+    if (!hasGeneratedTitle.value) {
       hasGeneratedTitle.value = true;
 
       try {

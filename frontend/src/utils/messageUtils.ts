@@ -2,8 +2,6 @@
  * 消息工具函数 TypeScript 版本
  */
 
-import { shallowReactive, type ShallowReactive } from "vue";
-import { t } from "@/locales";
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
 import type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
@@ -68,24 +66,6 @@ export function collectReferencedKbs(
 }
 
 /**
- * 消息对类型
- */
-export type MessagePair = [Message] | [Message, Message];
-
-/**
- * 创建浅响应式消息对象
- * @param data - 消息数据
- * @returns 浅响应式消息对象
- */
-export function createShallowMessage(data: Message): ShallowReactive<Message> {
-  return shallowReactive({
-    ...data,
-    contents: data.contents?.map((c) => shallowReactive(c)) || [],
-    files: data.files || [],
-  });
-}
-
-/**
  * 格式化思考时长
  * @param ms - 毫秒数
  * @returns 格式化后的时长
@@ -141,16 +121,6 @@ export interface DisplayGroup {
   items: DisplayItem[];
   isCollapsible: boolean;
   isExpanded: boolean;
-}
-
-/** 计算分组中实际步骤数（think 算1个，tool 按调用数算） */
-export function countSteps(items: DisplayItem[]): number {
-  return items.reduce((sum, item) => {
-    if (item.type === 'tool' && item.toolCalls?.length) {
-      return sum + item.toolCalls.length;
-    }
-    return sum + 1;
-  }, 0);
 }
 
 /**
@@ -328,26 +298,4 @@ export function stripSystemReminder(text: string): string {
   if (!text) return text;
   const match = text.match(/<system_reminder>([\s\S]*?)<\/system_reminder>/);
   return match ? match[1].trim() : text;
-}
-
-/**
- * 从消息内容中提取标题
- * @param message - 消息对象
- * @returns 提取的标题文本
- */
-export function extractMessageTitle(message: Message): string {
-  // 从内容中提取第一行或前50字符（通知类先剥离 <system_reminder> 标签）
-  const rawContent = message.contents?.[0]?.content || "";
-  const content = stripSystemReminder(rawContent) || rawContent;
-  if (!content) return t("chat.message.unnamed");
-
-  // 去除 Markdown 标记和空白
-  const cleanContent = content
-    .split("\n")[0] // 取第一行
-    .trim();
-
-  // 限制长度
-  return cleanContent.length > 50
-    ? cleanContent.substring(0, 47) + "..."
-    : cleanContent || t("chat.message.unnamed");
 }

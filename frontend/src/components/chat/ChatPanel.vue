@@ -503,18 +503,9 @@ function handleScrollToBottomClick() {
 // 滚动按钮显隐只由滚动事件驱动（updateScrollButtonVisibility 在 handleScroll 中触发）；
 // 不再监听 isStreaming——流式状态与按钮无关。
 
-const activeMessages = computed({
-  get: () => {
-    const sessionId = currentSessionId.value;
-    return sessionId && !isLoading.value ? sessionStore.getMessages(sessionId) || [] : [];
-  },
-  set: (value: any[]) => {
-    const sessionId = currentSessionId.value;
-    if (sessionId) {
-      sessionStore.setMessages(sessionId, value);
-    }
-  }
-});
+// （旧扁平 activeMessages computed 已删：回合制重构后 store 的扁平 messages 数组无人写入，
+//  该 computed 恒返回 []，曾连带导致 ChatOutline 大纲与首轮标题自动生成双双失效。
+//  渲染与对外暴露统一走回合列表 activeTurns / visibleTurns。）
 
 // 直接消费后端 Turn[]（不再打平为扁平消息再按 parentId 归组）
 const activeTurns = computed(() => {
@@ -688,8 +679,17 @@ watch(() => props.session?.id || props.sessionId, async (newSessionId: string | 
 watch(() => isStreaming.value, async (newVal, oldVal) => {
   // 当流式状态从 true 变为 false 时（即智能体回复完成）
   if (oldVal === true && newVal === false) {
-    if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
-      await generateTitleIfNeeded(currentSessionId.value!, activeMessages.value, currentSession);
+    // 首轮对话完成：可见回合恰为一个，且有 user 锚点 + 有内容的 assistant 回复
+    // （旧扁平模型判 messages.length == 2；回合制后改判回合，语义等价）
+    const firstTurn = visibleTurns.value[0];
+    const firstExchangeDone =
+      visibleTurns.value.length === 1 &&
+      !!userOfTurn(firstTurn) &&
+      (firstTurn?.messages || []).some(
+        (m: any) => m.role === 'assistant' && m.blocks?.some((b: any) => b?.content),
+      );
+    if (firstExchangeDone && !hasGeneratedTitle.value) {
+      await generateTitleIfNeeded(currentSessionId.value!, currentSession);
     }
   }
 }, { immediate: true });
@@ -886,9 +886,6 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
     // StreamEventHub 邮箱常驻收事件,无需 startBuffering——订阅时按 prevSeq >= lastSeq 取增量。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
-    // 打开会话后一次性尝试订阅活跃流(刷新/多窗口同步;无活跃流时 subscribe 模式自行结束)
-    await subscribeToActiveStream(newSessionId);
-    if (token !== sessionChangeToken) return;
 
     nextTick(() => {
       if (token !== sessionChangeToken) return;
@@ -977,10 +974,11 @@ async function editMessage(block: any) {
     }) as string | null;
 
     if (result != null && currentSessionId.value) {
+      // 块对象即回合树内的响应式引用,就地改写即已更新 UI;
+      // 持久化走 updateMessage API(按消息级 messageId 回传,块继承自所属消息)。
+      // (旧版还调 sessionStore.updateMessage 改扁平数组,回合制后恒空、从未生效,已清除)
       block.content = result;
-      // 按消息级 messageId 回传（块继承自所属消息）
       await apiService.updateMessage(currentSessionId.value, block.messageId, { content: result });
-      sessionStore.updateMessage(currentSessionId.value, block.messageId, block);
       toast.success(t('common.updateSuccess'));
     } else if (result === null || result === undefined) {
       toast.info(t('chat.panel.editCancelled'));
@@ -1040,18 +1038,12 @@ async function handleSendMessage(payload?: InputMessageState) {
 
     // 如果是编辑模式，需要处理替换逻辑
     // replaceTurnId 已由 enterEditMode 定位好(回合外壳 id=turnId),直接使用,无需反查。
+    // 整轮删除完全由 replaceTurnId 触发后端 turn/delete + 新建回合——旧版在这里
+    // 前端删除「该回合的扁平消息」(getMessages+deleteMessage),回合制后该数组恒空,
+    // 循环从未执行过,已按死代码清除。
     let replaceTurnId: string | undefined = undefined;
     if (editMode.value && editMode.value.turnId && currentSessionId.value) {
       replaceTurnId = editMode.value.turnId;
-      const rid = editMode.value.message?.id;
-      const sid = currentSessionId.value;
-      // 删除该回合（user 及其 assistant 一并移除），随后由 replaceTurnId 触发后端 turn/delete + 新建回合
-      const roundMessages = sessionStore
-        .getMessages(sid)
-        .filter((msg: any) => msg.id === rid || msg.parentId === rid);
-      for (const rm of roundMessages) {
-        sessionStore.deleteMessage(sid, rm.id);
-      }
       exitEditMode();
     }
 
@@ -1154,27 +1146,14 @@ function regenerateResponse(turn: any) {
   });
 }
 
-/**
- * 订阅活跃流
- * 当检测到会话有正在进行的流式输出时调用（如刷新页面后重连或多窗口打开）
- */
-async function subscribeToActiveStream(sessionId?: string) {
-  const sid = sessionId || currentSessionId.value;
-  if (!sid || isStreaming.value) return;
-
-  // 常驻接收链路(useSessionEvents 的 streamReceiver.subscribeAll)已消费所有会话事件
-  // (按 sessionId 路由 → projectChunk 写缓存/暂存),无需再启动 processStream('subscribe') 事件循环,
-  // 也不再盲置 isStreaming=true —— isStreaming 由后端 stream_status_changed 实际流状态驱动。
-  void sid;
-}
-
 // 将方法暴露给父组件
+// （旧 subscribeToActiveStream 已删：接收唯一链路是 useSessionEvents 的
+//   streamReceiver.subscribeAll——常驻、按 sessionId 路由，本组件无需再"订阅活跃流"）
 defineExpose({
   sendMessage: handleSendMessage,
   loadMessages,
-  activeMessages,
+  visibleTurns,
   scrollToMessage,
-  subscribeToActiveStream,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
   insertText: (text: string) => chatInputRef.value?.insertText(text),
   insertBadge: (data: any) => chatInputRef.value?.insertBadge(data),

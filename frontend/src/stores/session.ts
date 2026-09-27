@@ -110,7 +110,6 @@ export const useSessionStore = defineStore('session', () => {
     const getSessionState = (sessionId: string): SessionState => {
         if (!sessions.value.has(sessionId)) {
             sessions.value.set(sessionId, {
-                messages: [],
                 turns: [],
                 isStreaming: false,
                 isCompressing: false,
@@ -120,7 +119,6 @@ export const useSessionStore = defineStore('session', () => {
                     files: [],
                     isWaiting: false,
                 },
-                scrollPosition: 0,
                 lastUpdated: Date.now(),
                 settings: {
                 },
@@ -265,36 +263,6 @@ export const useSessionStore = defineStore('session', () => {
         return hasMoreMap.value.get(groupId) ?? true
     }
 
-    /**
-     * 获取消息列表
-     * @param sessionId - 会话 ID
-     */
-    const getMessages = (sessionId: string): any[] => {
-        return getSessionState(sessionId).messages
-    }
-
-    /**
-     * 添加消息
-     * @param sessionId - 会话 ID
-     * @param message - 消息对象
-     */
-    const addMessage = (sessionId: string, message: any): void => {
-        const session = getSessionState(sessionId)
-        session.messages.push(message)
-        session.lastUpdated = Date.now()
-    }
-
-    /**
-     * 设置消息列表
-     * @param sessionId - 会话 ID
-     * @param newMessages - 新消息列表
-     */
-    const setMessages = (sessionId: string, newMessages: any[]): void => {
-        const session = getSessionState(sessionId)
-        session.messages.splice(0, session.messages.length, ...newMessages)
-        session.lastUpdated = Date.now()
-    }
-
     // ── Turn 直连（后端 getTurns → 前端渲染，不再打平为扁平消息） ──
 
     /**
@@ -357,17 +325,6 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 在消息列表前部插入消息（用于加载历史消息）
-     * @param sessionId - 会话 ID
-     * @param newMessages - 要插入的消息列表
-     */
-    const prependMessages = (sessionId: string, newMessages: any[]): void => {
-        const session = getSessionState(sessionId)
-        session.messages.unshift(...newMessages)
-        session.lastUpdated = Date.now()
-    }
-
-    /**
      * 获取最早的回合 ID（用于向上滚动分页的游标）。
      * ⚠️ 必须是回合 id：后端 getTurns 按 beforeTurnId 匹配回合外壳 id，
      * 传消息 id 会 findIndex 落空返回空页并静默终止分页。
@@ -377,36 +334,6 @@ export const useSessionStore = defineStore('session', () => {
     const getEarliestTurnId = (sessionId: string): string | null => {
         const turns = getSessionState(sessionId).turns
         return turns.length > 0 ? turns[0].id : null
-    }
-
-    /**
-     * 删除消息
-     * @param sessionId - 会话 ID
-     * @param messageId - 消息 ID
-     */
-    const deleteMessage = (sessionId: string, messageId: string): void => {
-        const session = getSessionState(sessionId)
-        const index = session.messages.findIndex((m: any) => m.id === messageId)
-        if (index !== -1) {
-            session.messages.splice(index, 1)
-            session.lastUpdated = Date.now()
-        }
-    }
-
-    /**
-     * 更新消息
-     * @param sessionId - 会话 ID
-     * @param messageId - 消息 ID
-     * @param newMessage - 新消息数据
-     */
-    const updateMessage = (sessionId: string, messageId: string, newMessage: any): void => {
-        const session = getSessionState(sessionId)
-        const index = session.messages.findIndex((m: any) => m.id === messageId)
-        if (index !== -1) {
-            const message = session.messages[index]
-            session.messages[index] = { ...message, ...newMessage }
-            session.lastUpdated = Date.now()
-        }
     }
 
     /**
@@ -443,10 +370,9 @@ export const useSessionStore = defineStore('session', () => {
      * 设置统一流状态(统一订阅器写入)
      *
      * 仅更新 streamStatus 字段。侧边栏 working 由 useSessionEvents 显式设置(仅主会话),
-     * 此处不写——子 Agent 也通过此方法写状态(供 ChatPage watch 派生 tab),但不出现在侧边栏。
-     * 注意:不同步 isStreaming——那是前端"本窗口已订阅/发起"标记,
-     * 由 processStreamLoop / subscribeToActiveStream 维护;若在此置 true,
-     * 会误挡 subscribeToActiveStream 的 isStreaming 守卫(其他窗口发起时本窗口无法订阅)。
+     * 此处不写——子 Agent 也通过此方法写状态(供概览/侧边栏标签派生),但不出现在侧边栏。
+     * 注意:不同步 isStreaming——那是另一维度的"本窗口流式"标记,由 useSessionEvents
+     * 按 stream_status_changed 的实际流状态经 setSessionIsStreaming 维护,两者各管各的。
      */
     const setStreamStatus = (sessionId: string, status: StreamStatus): void => {
         const state = getSessionState(sessionId)
@@ -550,35 +476,13 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 获取会话设置
-     * @param sessionId - 会话 ID
-     * @param key - 设置键
-     */
-    const getSessionSetting = (sessionId: string, key: string): any => {
-        return getSessionState(sessionId).settings[key]
-    }
-
-    /**
-     * 设置会话设置
-     * @param sessionId - 会话 ID
-     * @param key - 设置键
-     * @param value - 设置值
-     */
-    const setSessionSetting = (sessionId: string, key: string, value: any): void => {
-        getSessionState(sessionId).settings[key] = value
-    }
-
-    /**
      * 更新会话标题
      * @param sessionId - 会话 ID
      * @param title - 新标题
      */
     const updateSessionTitle = (sessionId: string, title: string): void => {
-        // 更新运行时状态
-        const state = getSessionState(sessionId)
-        state.title = title
-        state.lastUpdated = Date.now()
-        // 同步更新 sessionsMap
+        // 同步更新 sessionsMap（会话列表/侧边栏标题的唯一数据源；
+        // SessionState 不再存 title 副本——旧 state.title 从无读取方）
         const session = sessionsMap.value.get(sessionId)
         if (session) {
             session.title = title
@@ -672,7 +576,11 @@ export const useSessionStore = defineStore('session', () => {
     const clearSessionMessages = (sessionId: string): void => {
         const state = sessions.value.get(sessionId)
         if (state) {
-            state.messages = []
+            // 渲染源是回合树，且 loadMessages 靠 loaded 门禁跳过重拉——
+            // 旧模型清扁平 messages 的写法在回合制后既无效又漏清树，导致清空后旧回合滞留
+            state.turns.splice(0, state.turns.length)
+            state.eventLog = []
+            state.loaded = false
             state.isStreaming = false
             state.isCompressing = false
             state.streamKind = 'chat'
@@ -682,7 +590,6 @@ export const useSessionStore = defineStore('session', () => {
                 files: [],
                 isWaiting: false,
             }
-            state.scrollPosition = 0
             state.lastUpdated = Date.now()
             state.messageQueue = []
         }
@@ -697,18 +604,12 @@ export const useSessionStore = defineStore('session', () => {
         // actions
         getSessionState,
         evictSessionStates,
-        getMessages,
-        addMessage,
-        setMessages,
-        prependMessages,
         getTurns,
         setTurns,
         prependTurns,
         pushTurn,
         deleteTurnById,
         getEarliestTurnId,
-        deleteMessage,
-        updateMessage,
         sessionIsStreaming,
         setSessionIsStreaming,
         setSessionStreamKind,
@@ -728,8 +629,6 @@ export const useSessionStore = defineStore('session', () => {
         getQueueLength,
         getInputMessage,
         setInputMessage,
-        getSessionSetting,
-        setSessionSetting,
         updateSessionTitle,
         updateSessionLastActiveTime,
         clearSessionMessages,

@@ -52,7 +52,6 @@ export interface QueuedMessage {
 export type StreamStatus = "idle" | "pending" | "running" | "completed" | "error";
 
 export interface SessionState {
-    messages: any[]  // 使用 any 避免循环导入
     turns: Turn[]  // 回合外壳列表（后端 getTurns 直连，渲染用）
     isStreaming: boolean
     isCompressing: boolean
@@ -90,10 +89,8 @@ export interface SessionState {
     /** 分页游标：下一页事件页的 beforeSeq（页首前一 seq）；null = 无更早内容 */
     eventCursor?: number | null
     inputMessage: InputMessageState
-    scrollPosition: number
     lastUpdated: number
     settings: SessionSettings
-    title?: string
     messageQueue: QueuedMessage[]  // 排队消息列表
 }
 

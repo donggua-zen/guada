@@ -9,8 +9,8 @@ import { useSessionStore } from "./session";
  * - 初始 streamStatus = 'idle'
  * - setStreamStatus 各状态迁移(pending/running/completed/error)
  * - 关键设计约束:
- *   ① setStreamStatus 不同步 isStreaming(那是前端"本窗口已订阅/发起"标记,
- *      由 processStreamLoop/subscribeToActiveStream 维护;同步会误挡 subscribeToActiveStream 守卫)
+ *   ① setStreamStatus 不同步 isStreaming(两套状态各管各的:streamStatus 是会话级
+ *      统一流状态,isStreaming 由 useSessionEvents 按 stream_status_changed 实际流状态维护)
  *   ② setStreamStatus 不写侧边栏 working(由 useSessionEvents 显式管理,仅主会话)
  * - getSessionState 对同一会话幂等
  */
@@ -50,18 +50,18 @@ describe("sessionStore 流状态机", () => {
     expect(store.getSessionState("s1").streamStatus).toBe("idle");
   });
 
-  it("设计约束①:setStreamStatus 不同步 isStreaming(避免误挡 subscribeToActiveStream 守卫)", () => {
+  it("设计约束①:setStreamStatus 不同步 isStreaming(两套状态各管各的)", () => {
     const store = useSessionStore();
-    // 预置一个"前端已订阅"标记(running 时本窗口已通过 processStreamLoop 置 true)
+    // 预置 isStreaming(running 时由 useSessionEvents 按实际流状态置 true)
     store.setSessionIsStreaming("s1", true);
 
-    // 另一窗口发起:统一订阅器写 streamStatus=running
+    // 另一来源写 streamStatus=running
     store.setStreamStatus("s1", "running");
-    // 本窗口 isStreaming 应保持 true(本窗口已订阅),不应被 setStreamStatus 改掉
+    // isStreaming 不被 setStreamStatus 改动
     expect(store.getSessionState("s1").isStreaming).toBe(true);
 
-    // 更关键:无前端订阅时(其他窗口发起,本窗口没订阅),isStreaming 必须保持 false
-    // 这样 subscribeToActiveStream 的守卫才能放行本窗口去订阅
+    // 反向:仅有 streamStatus=running 时,isStreaming 必须保持 false
+    // (isStreaming 只由 setSessionIsStreaming 按后端实际状态维护)
     const store2 = useSessionStore();
     store2.setStreamStatus("s2", "running");
     expect(store2.getSessionState("s2").isStreaming).toBe(false);
