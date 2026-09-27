@@ -1,5 +1,11 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { RpcClient } from "./rpc";
+import {
+  RpcClient,
+  isTransportError,
+  RPC_ERROR_AGENT_SHUTDOWN,
+  RPC_ERROR_TIMEOUT,
+  RPC_ERROR_WS_CLOSED,
+} from "./rpc";
 
 /**
  * RpcClient 断线通知测试:
@@ -197,5 +203,111 @@ describe("RpcClient disconnect notification", () => {
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(5000); // 立即失败,不无限挂
     expect(disconnected).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 错误分类(回归:远端报错曾被一律说成"未按时返回、去读日志"):
+ * - agent 明确返回的业务错误(命令根本没启动,日志必然为空;可带错误码)
+ * - 传输类失败(超时/断连/agent 退出:命令可能已在远端运行,输出可能落日志)
+ * 判定走显式标记与错误码,不做文案匹配。
+ */
+describe("RpcClient error classification", () => {
+  let server: WebSocketServer;
+
+  beforeEach(() => {
+    server = new WebSocketServer({ port: 0 });
+  });
+
+  afterEach(async () => {
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  function serverUrl(): string {
+    const addr = server.address() as { port: number };
+    return `ws://127.0.0.1:${addr.port}`;
+  }
+
+  async function connectRpc(): Promise<RpcClient> {
+    const ws = new WebSocket(serverUrl());
+    await new Promise<void>((resolve) => ws.once("open", () => resolve()));
+    const rpc = new RpcClient(ws);
+    rpc.setConnected();
+    rpc.onDisconnect(() => {});
+    return rpc;
+  }
+
+  /** 捕获 reject 的错误对象(断言 code/标记需要拿到实例) */
+  async function capture(p: Promise<unknown>): Promise<any> {
+    try {
+      await p;
+    } catch (e) {
+      return e;
+    }
+    throw new Error("expected the call to reject");
+  }
+
+  test("agent 业务错误:保留错误码,且不标记为传输类", async () => {
+    server.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        const req = JSON.parse(raw.toString());
+        ws.send(
+          JSON.stringify({
+            id: req.id,
+            error: "working directory does not exist: '/home/donggua'",
+            code: "invalid_cwd",
+          }),
+        );
+      });
+    });
+
+    const rpc = await connectRpc();
+    const err = await capture(rpc.call("execute", {}));
+
+    expect(err.message).toContain("working directory does not exist");
+    expect(err.code).toBe("invalid_cwd");
+    // 命令未启动 → 不得被当作"可能仍在后台运行"
+    expect(isTransportError(err)).toBe(false);
+  });
+
+  test("响应超时 → 传输类 + rpc_timeout", async () => {
+    server.on("connection", () => {
+      /* 静默:不回复 */
+    });
+
+    const rpc = await connectRpc();
+    const err = await capture(rpc.call("execute", {}, undefined, 150));
+
+    expect(err.code).toBe(RPC_ERROR_TIMEOUT);
+    expect(isTransportError(err)).toBe(true);
+  });
+
+  test("连接断开 → 传输类 + ws_closed", async () => {
+    server.on("connection", () => {
+      /* 静默:不回复 */
+    });
+
+    const rpc = await connectRpc();
+    const call = rpc.call("execute", {});
+    for (const client of server.clients) client.terminate();
+    const err = await capture(call);
+
+    expect(err.code).toBe(RPC_ERROR_WS_CLOSED);
+    expect(isTransportError(err)).toBe(true);
+  });
+
+  test("agent 退出(shutdown 推送) → 传输类 + agent_shutdown", async () => {
+    server.on("connection", (client) => {
+      client.on("message", () => {
+        client.send(JSON.stringify({ event: "shutdown", data: "bye" }));
+      });
+    });
+
+    const rpc = await connectRpc();
+    const err = await capture(rpc.call("execute"));
+
+    expect(err.code).toBe(RPC_ERROR_AGENT_SHUTDOWN);
+    expect(isTransportError(err)).toBe(true);
   });
 });

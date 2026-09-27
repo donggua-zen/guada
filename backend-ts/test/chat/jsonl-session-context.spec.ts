@@ -8,7 +8,8 @@
  * - appendMessages 只写 store，后续读取直通新视图
  * - getTokenCount 用 provider 锚点 + 启发式增量（全量口径）
  * - addUserMessage 写侧注入块（消息伴随信息）：kb-ref 结构化引用 / sandbox 切换
- *   <system_reminder>（origin=system）；hidden 注入消息（kind=model）不污染 prevMode
+ *   <system_reminder>（origin=system）/ 远程绑定变更（基准取上一条消息 metadata.sshBindings，
+ *   随消息删除消失 → 重答后自动重新注入）；hidden 注入消息（kind=model）不污染基准检测
  */
 import { JsonlSessionContext } from '../../src/modules/chat/jsonl-session-context';
 import type { Message } from '../../src/common/types/conversation.types';
@@ -92,6 +93,13 @@ function createContext(overrides: any = {}) {
       // KnowledgeBaseService：默认空明细（按需在用例内覆盖 findByIds）
       findByIds: jest.fn(async () => []),
       ...(overrides.knowledgeBaseService || {}),
+    } as any,
+    {
+      // RemoteBindingStateService：默认"快照 == live、无变更"（不注入 reminder）；
+      // 用例按需覆盖 getSnapshotIds / buildChangeReminder 模拟状态机行为
+      getSnapshotIds: jest.fn(async (_sid: string, live: string[]) => live),
+      buildChangeReminder: jest.fn(async () => null),
+      ...(overrides.bindingState || {}),
     } as any,
   );
   return { ctx, messageStore, tokenMeter, streamManager };
@@ -408,6 +416,39 @@ describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
     return (messageStore.addUserMessage as jest.Mock).mock.calls[0][3];
   }
 
+  /**
+   * 模拟 RemoteBindingStateService 的契约（文案/差异渲染由该服务自身的 spec 覆盖）：
+   * 快照固定为 snapshotIds；before 与 after 不同才产出 reminder 块。
+   */
+  function fakeBindingState(snapshotIds: string[] = []) {
+    return {
+      getSnapshotIds: jest.fn(async (_sid: string, _live: string[]) => snapshotIds),
+      buildChangeReminder: jest.fn(
+        async (_sid: string, before: string[], after: string[]) => {
+          const key = (ids: string[]) => [...ids].sort().join(',');
+          if (key(before) === key(after)) return null;
+          return {
+            type: 'text',
+            text: `<system_reminder>\n# Remote Workspace Bindings Changed\n- ${after.join(', ')}\n</system_reminder>`,
+            origin: 'system',
+          };
+        },
+      ),
+    };
+  }
+
+  /** 会话带远程绑定（attachments['ssh-connection'] 即 live 绑定） */
+  function sessionWithBindings(ids: string[]) {
+    return {
+      session: {
+        settings: {
+          systemPrompt: 'sys',
+          attachments: { 'ssh-connection': ids },
+        },
+      },
+    };
+  }
+
   it('普通消息：无注入块，metadata 落 sandboxMode 基准', async () => {
     const { ctx, messageStore } = createContext();
     makeStoreReturnValidUserMessage(messageStore);
@@ -484,6 +525,83 @@ describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
     const opts = storeOptions(messageStore);
     expect(opts.injectedBlocks).toBeUndefined();
     expect(opts.metadata.sandboxMode).toBe('read-only');
+  });
+
+  it('远程绑定变更 → <system_reminder> 注入块，metadata 落 sshBindings 基准', async () => {
+    const bindingState = fakeBindingState([]); // 系统提示词快照为空
+    const { ctx, messageStore } = createContext({
+      bindingState,
+      ...sessionWithBindings(['c1']),
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 上一条消息未记录绑定（旧会话/升级后首轮）→ 基准回退快照 []，与 live [c1] 不同 → 注入
+    messageStore.loadContext.mockResolvedValue([makeMsg('u1', 'user')]);
+    await ctx.addUserMessage('连上 nas');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toHaveLength(1);
+    expect(opts.injectedBlocks[0].origin).toBe('system');
+    expect(opts.injectedBlocks[0].text).toContain('Remote Workspace Bindings Changed');
+    // 基准随消息落库：下一条消息据此比对
+    expect(opts.metadata.sshBindings).toEqual(['c1']);
+  });
+
+  it('绑定未变化（上一条消息已记录同一组 id）→ 不注入', async () => {
+    const bindingState = fakeBindingState([]);
+    const { ctx, messageStore } = createContext({
+      bindingState,
+      ...sessionWithBindings(['c1']),
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sshBindings: ['c1'] } }),
+    ]);
+    await ctx.addUserMessage('继续');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toBeUndefined();
+    expect(opts.metadata.sshBindings).toEqual(['c1']);
+  });
+
+  it('重答等价：携带基准的消息被删除 → 基准回退到更早消息并重新注入', async () => {
+    const bindingState = fakeBindingState([]);
+    const { ctx, messageStore } = createContext({
+      bindingState,
+      ...sessionWithBindings(['c1', 'c2']),
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 记录 [c1,c2] 的那条消息所属回合已被 turn/delete 抹掉，只剩记录 [c1] 的更早消息
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sshBindings: ['c1'] } }),
+    ]);
+    await ctx.addUserMessage('重答');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toHaveLength(1);
+    expect(opts.injectedBlocks[0].text).toContain('Remote Workspace Bindings Changed');
+    expect(opts.metadata.sshBindings).toEqual(['c1', 'c2']);
+  });
+
+  it('hidden 注入消息（kind=model）不污染绑定基准检测', async () => {
+    const bindingState = fakeBindingState([]);
+    const { ctx, messageStore } = createContext({
+      bindingState,
+      ...sessionWithBindings(['c1']),
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    // 真实 user 已记录 [c1]（无变化），其后是图片注入等 hidden 消息（无 sshBindings）
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { sshBindings: ['c1'] } }),
+      makeMsg('inject1', 'user', { kind: 'model', metadata: {} }),
+    ]);
+    await ctx.addUserMessage('继续');
+
+    const opts = storeOptions(messageStore);
+    expect(opts.injectedBlocks).toBeUndefined();
   });
 
   it('外部命令注入块（TagParserPipeline 产物）追加在内部注入块之后（background first, material last）', async () => {

@@ -250,7 +250,10 @@ export class RemoteWorkspaceService {
         job.result = result;
         job.done = true;
       } catch (err: any) {
-        job.log.push(`Deployment failed: ${err?.message || err}`);
+        // 多行错误(可能含 agent 原始输出)按行展开,前端部署日志逐行渲染更易读
+        const lines = String(err?.message || err).split("\n");
+        job.log.push(`Deployment failed: ${lines[0]}`);
+        for (const line of lines.slice(1)) job.log.push(`  | ${line}`);
         job.result = { success: false, installed: false, version: "", log: job.log };
         job.done = true;
       }

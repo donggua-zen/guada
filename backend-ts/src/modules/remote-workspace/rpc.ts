@@ -19,6 +19,8 @@ export interface RPCResponse {
   id: string;
   result?: any;
   error?: string;
+  /** 可选错误码(agent ≥0.5.1，如 invalid_cwd / exec_start_failed)：区分"agent 立即拒绝"与"传输失败" */
+  code?: string;
 }
 
 export interface PushEvent {
@@ -30,6 +32,36 @@ export interface PushEvent {
 export interface HeartbeatOptions {
   intervalMs?: number;
   deadlineMs?: number;
+}
+
+/** 错误码:与 agent 端 rpc.go 的 code* 常量对齐(agent 明确拒绝,命令未启动) */
+export const AGENT_ERROR_INVALID_CWD = "invalid_cwd";
+export const AGENT_ERROR_EXEC_START_FAILED = "exec_start_failed";
+
+/** 错误码:客户端侧传输类失败(命令是否启动未知,输出可能已落 agent 日志) */
+export const RPC_ERROR_TIMEOUT = "rpc_timeout";
+export const RPC_ERROR_WS_CLOSED = "ws_closed";
+export const RPC_ERROR_AGENT_SHUTDOWN = "agent_shutdown";
+export const RPC_ERROR_WS_SEND_FAILED = "ws_send_failed";
+
+/**
+ * 构造传输类错误:超时/断连/agent 退出时命令可能已在远端启动,
+ * 输出可能落在 agent 日志文件里 —— 调用方可提示去查日志。
+ * 与"agent 明确拒绝"(命令根本没启动、无日志可读)严格区分。
+ */
+export function transportError(message: string, code: string): Error {
+  const err = new Error(message);
+  (err as any).code = code;
+  (err as any).transport = true;
+  return err;
+}
+
+/**
+ * 是否为传输类失败(超时/断连/agent 退出)。判定走显式标记,不做文案匹配。
+ * 注意:agent 返回的业务错误(如 invalid_cwd)不是传输类——进程未启动,日志必然为空。
+ */
+export function isTransportError(e: any): boolean {
+  return e?.transport === true;
 }
 
 /**
@@ -71,7 +103,10 @@ export class RpcClient {
           if (pending) {
             this.pending.delete(msg.id);
             if (msg.error) {
-              pending.reject(new Error(msg.error));
+              // agent 明确返回的错误(含可选错误码):命令未启动/操作被拒,不属传输类
+              const err = new Error(msg.error);
+              if (msg.code) (err as any).code = msg.code;
+              pending.reject(err);
             } else {
               pending.resolve(msg.result);
             }
@@ -82,7 +117,7 @@ export class RpcClient {
             // agent 进程退出前广播:立即拒绝所有挂起请求并通知断开,
             // 避免"agent 被信号杀死"时对未完成请求无限等待
             for (const [, { reject }] of this.pending) {
-              reject(new Error("Agent shutting down"));
+              reject(transportError("Agent shutting down", RPC_ERROR_AGENT_SHUTDOWN));
             }
             this.pending.clear();
             for (const handler of this.disconnectHandlers) {
@@ -104,7 +139,7 @@ export class RpcClient {
       this.connected = false;
       this.stopHeartbeat();
       for (const [, { reject }] of this.pending) {
-        reject(new Error("WebSocket closed"));
+        reject(transportError("WebSocket closed", RPC_ERROR_WS_CLOSED));
       }
       this.pending.clear();
       // 通知断开(供上层清理缓存/重建连接)
@@ -186,7 +221,12 @@ export class RpcClient {
         timer = setTimeout(() => {
           this.pending.delete(id);
           if (signal) signal.removeEventListener("abort", onAbort);
-          reject(new Error(`RPC timeout after ${timeoutMs}ms: ${method}`));
+          reject(
+            transportError(
+              `RPC timeout after ${timeoutMs}ms: ${method}`,
+              RPC_ERROR_TIMEOUT,
+            ),
+          );
         }, timeoutMs);
       }
 
@@ -229,7 +269,12 @@ export class RpcClient {
           if (timer) clearTimeout(timer);
           this.pending.delete(id);
           if (signal) signal.removeEventListener("abort", onAbort);
-          reject(err);
+          // 发送失败 = 请求可能未送达,归入传输类(命令是否启动未知)
+          const wrapped = transportError(
+            String((err as any)?.message || err),
+            RPC_ERROR_WS_SEND_FAILED,
+          );
+          reject(wrapped);
         }
       });
     });

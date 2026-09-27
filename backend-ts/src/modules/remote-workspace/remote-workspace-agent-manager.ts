@@ -12,7 +12,7 @@ import { Client as SshClient } from "ssh2";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as iconv from "iconv-lite";
 import { deployAgent } from "./agent-deploy";
-import { RpcClient, isUnknownMethodError } from "./rpc";
+import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
 import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
@@ -654,8 +654,9 @@ export class RemoteAgent {
 
   /**
    * 原始命令执行（不加工输出）。超时转后台语义由 agent 端保证（60s 默认）；
-   * RPC 兜底超时 = 命令超时 + 30s。失败（超时/断线/响应丢失）时在错误对象上
-   * 携带 predictedLog（/tmp/guada-logs/<requestId>.out），调用方可据此提示 AI 读日志。
+   * RPC 兜底超时 = 命令超时 + 30s。
+   * 抛出的错误分两类（见 rpc.ts isTransportError）：传输类（超时/断线/agent 退出，
+   * 命令可能已在远端运行）与 agent 明确拒绝（如工作目录不存在，进程未启动）。
    */
   async executeRaw(
     command: string,
@@ -697,7 +698,9 @@ export class RemoteAgent {
       return decodeAgentOutput(result, opts?.encoding);
     } catch (e: any) {
       if (e?.name === "AbortError") throw e;
-      e.predictedLog = `/tmp/guada-logs/${reqId}.out`;
+      // 不在此处给错误"化妆":传输类失败(超时/断连)由 rpc.ts 打 transport 标记,
+      // agent 明确拒绝(如 invalid_cwd)则不带标记 —— 由调用方按 isTransportError 分流,
+      // 避免把"命令根本没启动"说成"未按时返回、去读日志"。
       throw e;
     }
   }
@@ -771,9 +774,9 @@ export class RemoteAgent {
   }
 
   async execute(command: string, signal?: AbortSignal): Promise<string> {
-    // 90s 超时兜底(> agent 60s 命令超时):executeRaw 内部已设置,
-    // 失败时错误对象携带可预测的日志路径(/tmp/guada-logs/<requestId>.out),
-    // 即使没拿到响应,也能直接给出日志路径供 AI 读取。
+    // 失败分流(见 rpc.ts isTransportError):
+    // - 传输类(超时/断线/agent 退出):命令可能已在远端运行,输出落在 agent 日志目录;
+    // - agent 明确拒绝(如工作目录不存在):进程未启动,日志必然为空,直接把原因说清楚。
     let result: {
       kind: string;
       output: string;
@@ -786,13 +789,14 @@ export class RemoteAgent {
     } catch (e: any) {
       // abort:原样抛出(由上层处理)
       if (e?.name === "AbortError") throw e;
-      // 超时/断线/响应丢失:给出可预测的日志路径,AI 可自行读取
-      const predictedLog = e?.predictedLog || "/tmp/guada-logs/";
+      if (!isTransportError(e)) {
+        return `[Remote command failed: ${e?.message || e}]`;
+      }
       return (
         `[Command did not return in time (${e?.message || e}). ` +
         `It may still be running in the background on the remote server. ` +
-        `Read its log file with remote_read (file_path: "${predictedLog}") ` +
-        `or check with remote_bash ('ls -la ${predictedLog}' / 'tail -f ${predictedLog}').]`
+        `Its output (if any) is written to the agent's log directory (guada-logs under the remote temp dir) — ` +
+        `inspect it with remote_bash ('ls -la "$TMPDIR"/guada-logs' or 'tail -f').]`
       );
     }
 

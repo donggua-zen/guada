@@ -234,6 +234,26 @@ export async function verifyAndDeployAgent(
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
     push(`Remote directory ready: ${remoteDir}`);
 
+    // 工作目录预校验:连接配置的 path 就是 agent 的 --root(命令默认 cwd)。
+    // 路径不存在时 agent(0.5.1+)会拒绝启动;这里提前给出明确原因,
+    // 避免用户在执行命令时只看到 "fork/exec /bin/sh: no such file or directory" 这类间接报错。
+    throwIfAborted();
+    const workspacePath = uri.path || "/";
+    push(`Checking remote workspace path: ${workspacePath}`);
+    const pathCheck = await execCommand(
+      sshClient,
+      `test -d '${workspacePath}' && echo OK || echo MISSING`,
+    );
+    if (!pathCheck.includes("OK")) {
+      push(
+        `Remote workspace path does not exist on ${sshConfig.host}: ${workspacePath} — ` +
+          `fix the connection's path in workspace settings ` +
+          `(on macOS home directories live under /Users/<user>).`,
+      );
+      return { success: false, installed: false, version: "", log };
+    }
+    push("Remote workspace path exists");
+
     // 确保访问令牌文件已写入远端(agent 鉴权)
     throwIfAborted();
     const token = getOrCreateToken();
@@ -371,7 +391,10 @@ export async function verifyAndDeployAgent(
     if (err?.cancelled) {
       push("Deployment cancelled");
     } else {
-      push(`Deployment failed: ${err?.message || err}`);
+      // 多行错误(可能含 agent 原始输出,如 --root 校验失败原因)按行展开,前端逐行渲染更易读
+      const lines = String(err?.message || err).split("\n");
+      push(`Deployment failed: ${lines[0]}`);
+      for (const line of lines.slice(1)) push(`  | ${line}`);
     }
     return { success: false, installed: false, version: "", log };
   } finally {
@@ -623,6 +646,7 @@ function execCommand(
 
       let output = "";
       let stderrOutput = "";
+      let exitCode: number | null = null;
 
       stream.on("data", (data: Buffer) => {
         output += data.toString();
@@ -630,8 +654,21 @@ function execCommand(
       stream.stderr.on("data", (data: Buffer) => {
         stderrOutput += data.toString();
       });
+      stream.on("exit", (code: number | null) => {
+        exitCode = code;
+      });
       stream.on("close", () => {
         clearTimeout(timer);
+        // 非零退出且无 stdout:失败原因在 stderr —— 必须按失败返回,
+        // 否则 "mkdir -p"/"chmod" 之类失败会被当成正常输出吞掉
+        if (exitCode !== null && exitCode !== 0 && !output) {
+          reject(
+            new Error(
+              `SSH command failed (exit ${exitCode}): ${stderrOutput.trim() || "(no output)"} [command: ${command}]`,
+            ),
+          );
+          return;
+        }
         if (stderrOutput && !output) {
           resolve(stderrOutput);
         } else {
@@ -651,9 +688,15 @@ function startAgentBackground(
   perm?: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("Agent start timeout (10s)"));
-    }, 10000);
+    // agent 启动失败的原因写在它自己的 stderr 里(如 "--root '/home/donggua' does not exist").
+    // 必须原样带进错误信息:否则用户只看到 "Agent didn't report listening",无从排查。
+    let output = "";
+    const fail = (message: string) => {
+      const trimmed = output.trim();
+      reject(new Error(trimmed ? `${message}\nAgent output:\n${trimmed}` : message));
+    };
+
+    const timer = setTimeout(() => fail("Agent start timeout (10s)"), 10000);
 
     // 权限参数:工作目录(--root)无论权限模式都必须传递,
     // 它是命令行/文件编辑的相对路径基准;权限模式默认为 workspace。
@@ -665,11 +708,9 @@ function startAgentBackground(
       (err, stream) => {
         if (err) {
           clearTimeout(timer);
-          reject(new Error(`Agent 启动命令执行失败: ${err.message || err}`));
+          fail(`Agent 启动命令执行失败: ${err.message || err}`);
           return;
         }
-
-        let output = "";
 
         stream.on("data", (data: Buffer) => {
           output += data.toString();
@@ -683,7 +724,7 @@ function startAgentBackground(
           if (output.includes("listening on")) {
             resolve(output);
           } else {
-            reject(new Error(`Agent didn't report listening. Output: ${output}`));
+            fail("Agent didn't report listening.");
           }
         });
       },
@@ -790,7 +831,10 @@ async function ensureAgentRunning(
   );
   const portMatch = startOutput.match(/listening on \S+:(\d+)/);
   if (!portMatch) {
-    throw new Error(`Agent failed to start. Output: ${startOutput}`);
+    throw new Error(
+      `Agent failed to start (root: ${rootDir || "(unset)"}, perm: ${perm || "workspace"}). ` +
+        `Output: ${startOutput}`,
+    );
   }
   const actualPort = parseInt(portMatch[1], 10);
   return actualPort;
