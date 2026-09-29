@@ -82,7 +82,6 @@
                   :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                   @container-resize="onChatContainerResize"
                   @save-settings="handleSaveSessionSettings"
-                  @attachments-change="handleAttachmentsChange"
                   @select-agent="handleSelectAgent">
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
@@ -581,18 +580,6 @@ const handleSaveSessionSettings = async () => {
   } catch (error: any) {
     console.error('保存对话设置失败:', error);
   }
-};
-
-/**
- * 附加工作目录（远程连接）绑定变更（来源：输入框下方的工作目录条 WorkingDirBar，
- * 经 ChatPanel 转发）：写回 mainSession.settings.attachments 后复用既有保存链路
- * （PUT /sessions/:id）；后端在下回合开始时 diff 绑定快照并注入增量提醒
- */
-const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
-  const targetSession = mainSession.value;
-  if (!targetSession) return;
-  targetSession.settings.attachments = attachments;
-  void handleSaveSessionSettings();
 };
 
 /**

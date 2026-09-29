@@ -9,7 +9,7 @@
 
     <!-- 附加目录：已绑定的远程连接；hover 显示解除按钮 -->
     <template v-for="conn in attachedConnections" :key="conn.id">
-      <GdTooltip :content="conn.description || conn.name" placement="bottom">
+      <GdTooltip :content="chipTooltip(conn)" placement="bottom">
         <span class="wdb-attach">
           <el-icon :size="16" class="wdb-icon"><Cloud16Regular /></el-icon>
           <span class="wdb-name">{{ conn.name }}</span>
@@ -22,8 +22,8 @@
       </GdTooltip>
     </template>
 
-    <!-- 添加附加目录：下拉列出 remote-workspace 全部连接（✓ 为已绑定）；无连接时引导去设置页 -->
-    <DropdownMenu @command="handleAttachedCommand">
+    <!-- 添加附加目录：共享绑定菜单（✓ 为已绑定，点击 toggle 不关闭，点外部收起；空态引导去设置页） -->
+    <DropdownMenu>
       <GdTooltip :content="t('chat.workspace.addAttachedDir')" placement="bottom">
         <button class="wdb-add">
           <el-icon :size="12"><Add16Regular /></el-icon>
@@ -31,20 +31,7 @@
       </GdTooltip>
       <template #dropdown>
         <div class="wdb-menu">
-          <template v-if="availableConnections.length">
-            <DropdownMenuItem v-for="c in availableConnections" :key="c.id" :command="c.id">
-              <span class="wdb-menu-item">
-                <span class="wdb-menu-check">{{ attachedIds.includes(c.id) ? '✓' : '' }}</span>
-                <span>{{ c.name }}</span>
-              </span>
-            </DropdownMenuItem>
-          </template>
-          <DropdownMenuItem v-else :command="OPEN_SETTINGS_COMMAND">
-            <span class="wdb-menu-item">
-              <span class="wdb-menu-check"></span>
-              <span>{{ t('chat.workspace.noConnections') }}</span>
-            </span>
-          </DropdownMenuItem>
+          <ConnectionBindingMenu :attached-ids="attachedIds" @toggle="handleAttachedToggle" />
         </div>
       </template>
     </DropdownMenu>
@@ -54,15 +41,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
 import { Close } from "@element-plus/icons-vue";
 import { Folder16Regular, Cloud16Regular, Add16Regular } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
-import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
+import ConnectionBindingMenu from "../chat-input/ConnectionBindingMenu.vue";
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
+import { useRemoteWorkspaceStore, toggleConnectionBinding } from "@/stores/remoteWorkspace";
 import { apiService } from "@/services/ApiService";
 
 const props = defineProps<{
@@ -76,13 +63,10 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const router = useRouter();
 const tabStore = useTabStore();
 const layoutStore = useLayoutStore();
 
 // ── 主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
-/** 下拉空态命令：跳转设置页"远程工作区"创建连接 */
-const OPEN_SETTINGS_COMMAND = "__open_settings";
 
 /** 主工作目录（后端解析：自定义 workspacePath 或会话默认目录），仅展示 */
 const mainWorkspacePath = ref("");
@@ -92,9 +76,10 @@ const mainWorkspaceBasename = computed(() => {
   return normalized.split(/[\\/]/).pop() || normalized;
 });
 
-interface AttachableConnection { id: string; name: string; description?: string; }
-/** remote-workspace 插件提供的全部连接（设置页创建，与会话无关的全局清单） */
-const availableConnections = ref<AttachableConnection[]>([]);
+interface AttachableConnection { id: string; name: string; description?: string; path?: string; }
+const remoteWorkspaceStore = useRemoteWorkspaceStore();
+/** remote-workspace 全部连接（store 共享清单，设置页新建后此处自动可见） */
+const availableConnections = computed(() => remoteWorkspaceStore.connectionOptions);
 
 /** 当前会话已绑定的附加目录 ID（props.attachments 单向下传，增删经 attachmentsChange 上行） */
 const attachedIds = computed<string[]>(() => props.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE] ?? []);
@@ -116,41 +101,25 @@ async function loadWorkspacePath(): Promise<void> {
   }
 }
 
-async function loadConnections(): Promise<void> {
-  try {
-    // 直连 remote-workspace REST 清单（与设置页同源）；不经附件类型端点（该类型已注销）
-    const connections = await apiService.getConnections();
-    availableConnections.value = connections.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: `${c.config.username}@${c.config.host}`,
-    }));
-  } catch {
-    availableConnections.value = [];
-  }
+/** chips 悬浮提示：user@host · 远端工作目录（tooltip 为单行文本渲染，不支持换行） */
+function chipTooltip(conn: AttachableConnection): string {
+  if (!conn.description) return conn.name;
+  return conn.path ? `${conn.description} · ${conn.path}` : conn.description;
 }
 
 /** 解绑附加目录（主目录不可删；后端下回合 diff 后注入解绑提醒） */
 function removeAttached(connectionId: string): void {
-  writeAttachments(attachedIds.value.filter((id) => id !== connectionId));
+  writeAttachments(toggleConnectionBinding(props.attachments, connectionId));
 }
 
-/** 下拉命令分发：连接 ID 切换绑定；空态命令跳设置页 */
-function handleAttachedCommand(command: string): void {
-  if (command === OPEN_SETTINGS_COMMAND) {
-    void router.replace({ name: "SystemSettings", params: { tab: "connections" } });
-    return;
-  }
-  writeAttachments(
-    attachedIds.value.includes(command)
-      ? attachedIds.value.filter((id) => id !== command)
-      : [...attachedIds.value, command],
-  );
+/** 下拉 toggle 绑定（经共享纯函数翻转后上行；父层写 session.settings 后防抖持久化） */
+function handleAttachedToggle(connectionId: string): void {
+  writeAttachments(toggleConnectionBinding(props.attachments, connectionId));
 }
 
-/** 写回附件绑定并上行（父层写 session.settings 后 PUT /sessions/:id 持久化） */
-function writeAttachments(ids: string[]): void {
-  emit("attachmentsChange", { ...props.attachments, [SSH_CONNECTION_ATTACHMENT_TYPE]: ids });
+/** 写回附件绑定并上行（完整 attachments 对象，父层写 session.settings 后防抖持久化） */
+function writeAttachments(attachments: Record<string, string[]>): void {
+  emit("attachmentsChange", attachments);
 }
 
 function openWorkspaceTree(): void {
@@ -173,7 +142,7 @@ watch(
 );
 
 onMounted(() => {
-  void loadConnections();
+  void remoteWorkspaceStore.ensureConnections();
 });
 </script>
 
@@ -271,20 +240,8 @@ onMounted(() => {
   color: var(--gd-color-text);
 }
 
-/* 下拉菜单项：✓ 占位对齐（与概览面板分支菜单同构） */
+/* 下拉菜单容器：宽度下限 */
 .wdb-menu {
   min-width: 160px;
-}
-.wdb-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  font-size: 12px;
-}
-.wdb-menu-check {
-  width: 14px;
-  flex-shrink: 0;
-  text-align: center;
 }
 </style>
