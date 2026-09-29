@@ -280,8 +280,6 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'select-agent': [agent: Agent]  // 切换智能体
-  /** 工作目录条（输入框下方）：附加远程目录绑定变更，转发给 ChatPage 持久化 */
-  'attachments-change': [attachments: Record<string, string[]>]
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
 }>();
@@ -606,11 +604,14 @@ onUnmounted(() => {
 });
 
 /**
- * 工作目录条（输入框下方）的附加远程目录绑定变更：向上转发给 ChatPage
- * （写 mainSession.settings.attachments 并 PUT /sessions/:id 持久化）
+ * 工作目录条（输入框下方）的附加远程目录绑定变更：与 handleConfigChange 的
+ * attachments 分支同构——写 currentSession.settings.attachments 后防抖保存
+ * （两条绑定写回路径统一，均经 debouncedSaveSession → save-settings）
  */
 const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
-  emit("attachments-change", attachments);
+  if (!currentSession.value) return;
+  currentSession.value.settings.attachments = attachments;
+  debouncedSaveSession();
 };
 
 /**

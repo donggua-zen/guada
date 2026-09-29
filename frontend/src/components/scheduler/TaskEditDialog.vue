@@ -257,7 +257,7 @@ import Avatar from '@/components/ui/Avatar.vue'
 import WorkspaceSelectorPopover from '@/components/chat/chat-input/WorkspaceSelectorPopover.vue'
 import ModelSelectorPanel from '@/components/chat/chat-input/ModelSelectorPanel.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
+import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabel } from '@/utils/modelUtils'
 
 const { t } = useI18n()
@@ -697,12 +697,7 @@ function handleWorkspaceSelect(workspacePath: string | null) {
 }
 
 function handleToggleAttachment(connectionId: string) {
-  const current = form.value.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
-  const ids = Array.isArray(current) ? current : []
-  const nextIds = ids.includes(connectionId)
-    ? ids.filter((id) => id !== connectionId)
-    : [...ids, connectionId]
-  form.value.attachments = { ...(form.value.attachments || {}), [SSH_CONNECTION_ATTACHMENT_TYPE]: nextIds }
+  form.value.attachments = toggleConnectionBinding(form.value.attachments, connectionId)
 }
 
 // ── 智能体选择（工具条同款轻量弹层）──

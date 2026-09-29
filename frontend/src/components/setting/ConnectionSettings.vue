@@ -102,21 +102,20 @@
               <div class="shrink-0" style="width: 130px;">
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Auth</label>
                 <el-select v-model="editConfig.authMethod" style="width: 130px;">
-                  <el-option :label="t('settings.connection.connectionName') === '连接名称' ? '密码' : 'Password'" value="password" />
-                  <el-option :label="t('settings.connection.connectionName') === '连接名称' ? '私钥' : 'Private Key'" value="privateKey" />
+                  <el-option v-for="opt in authOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                 </el-select>
               </div>
             </div>
 
             <div v-if="editConfig.authMethod === 'password'">
-              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') === '连接名称' ? '密码' : 'Password' }}</label>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.passwordLabel') }}</label>
               <el-input v-model="editConfig.password" type="password" show-password />
             </div>
             <div v-if="editConfig.authMethod === 'privateKey'">
-              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') === '连接名称' ? '私钥路径' : 'Private Key Path' }}</label>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.privateKeyPathLabel') }}</label>
               <div class="flex gap-2">
                 <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
-                  :placeholder="isElectron ? '选择或输入私钥文件路径' : '请输入私钥文件绝对路径'" />
+                  :placeholder="isElectron ? t('settings.connection.privateKeyPathPlaceholderElectron') : t('settings.connection.privateKeyPathPlaceholderWeb')" />
                 <el-button v-if="isElectron" @click="selectPrivateKeyFile">
                   {{ t('settings.connection.browse') }}
                 </el-button>
@@ -274,6 +273,8 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
+import { useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'
+import type { RemoteConnection, DirEntry } from '@/services/modules/remote-workspace.api'
 
 const { t } = useI18n()
 
@@ -295,34 +296,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', cancelDeployPolling)
 }
 
-interface ConnectionConfig {
-  host: string
-  port: number
-  username: string
-  authMethod: 'password' | 'privateKey'
-  password?: string
-  privateKeyPath?: string
-  path: string
-  perm?: string
-}
-
-interface Connection {
-  id: string
-  name: string
-  config: ConnectionConfig
-}
-
-interface DirEntry {
-  name: string
-  isDirectory: boolean
-  size: number
-}
-
-const connections = ref<Connection[]>([])
+const remoteWorkspaceStore = useRemoteWorkspaceStore()
+/** 连接清单（store 统一管理，与聊天侧绑定入口 WorkingDirBar / WorkspaceSelectorPopover 共享） */
+const connections = computed(() => remoteWorkspaceStore.connections)
 const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
-const editConfig = ref<ConnectionConfig>({
+const editConfig = ref<RemoteConnection['config']>({
   host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKeyPath: '', path: '', perm: 'workspace'
 })
 // Electron 环境判断(有文件选择能力)
@@ -339,6 +319,11 @@ async function selectPrivateKeyFile() {
     console.error('选择私钥文件失败:', error)
   }
 }
+// 认证方式下拉选项（与 permOptions 同构：label 走 locale key）
+const authOptions = computed(() => [
+  { value: 'password' as const, label: t('settings.connection.authPassword') },
+  { value: 'privateKey' as const, label: t('settings.connection.authPrivateKey') },
+])
 // 权限模式横向切换选项
 const permOptions = computed(() => [
   { value: 'workspace', label: t('settings.connection.permWorkspace') },
@@ -365,14 +350,8 @@ const browserPath = ref('/')
 const browserEntries = ref<DirEntry[]>([])
 const browserLoading = ref(false)
 
-async function loadData() {
-  try {
-    connections.value = await apiService.getConnections()
-  } catch (e) {
-    console.error('Failed to load connections:', e)
-  }
-}
-loadData()
+// 连接清单由 store 加载（失败静默，重开设置页时重试）
+void remoteWorkspaceStore.ensureConnections()
 
 function hue(name: string): number {
   let h = 0
@@ -392,7 +371,7 @@ function startNew() {
   currentStep.value = 0
 }
 
-function editConn(conn: Connection) {
+function editConn(conn: RemoteConnection) {
   editing.value = true
   editConnId.value = conn.id
   editName.value = conn.name
@@ -493,14 +472,14 @@ async function saveConn() {
   if (!editName.value.trim()) { ElMessage.warning(t('settings.connection.nameRequired')); return }
   saving.value = true
   try {
+    // store 动作成功后已同步本地清单，无需重新加载
     if (editConnId.value) {
-      await apiService.updateConnection(editConnId.value, {
+      await remoteWorkspaceStore.updateConnection(editConnId.value, {
         name: editName.value, config: editConfig.value
       })
     } else {
-      await apiService.createConnection(editName.value, editConfig.value)
+      await remoteWorkspaceStore.createConnection(editName.value, editConfig.value)
     }
-    await loadData()
     editing.value = false
     ElMessage.success(t('common.saveSuccess'))
   } catch (e: any) {
@@ -512,8 +491,7 @@ async function saveConn() {
 
 async function deleteConn(id: string) {
   try {
-    await apiService.deleteConnection(id)
-    connections.value = connections.value.filter(c => c.id !== id)
+    await remoteWorkspaceStore.deleteConnection(id)
     ElMessage.success(t('common.deleteSuccess'))
   } catch (e: any) {
     ElMessage.error(t('common.deleteFailed') + ': ' + (e.message || String(e)))

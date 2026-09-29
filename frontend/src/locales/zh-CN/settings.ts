@@ -161,6 +161,13 @@ export default {
     save: '保存连接',
     browse: '浏览',
     privateKeyPathDesc: 'Electron 下可点击"浏览"选择私钥文件;Web 端请手动输入私钥文件绝对路径。仅保存路径,不保存私钥内容。',
+    // 认证方式与凭据字段
+    authPassword: '密码',
+    authPrivateKey: '私钥',
+    passwordLabel: '密码',
+    privateKeyPathLabel: '私钥路径',
+    privateKeyPathPlaceholderElectron: '选择或输入私钥文件路径',
+    privateKeyPathPlaceholderWeb: '请输入私钥文件绝对路径',
     // 部署验证
     deployTitle: '部署 Agent',
     deployDesc: '此步骤会在服务器上安装并启动远程代理(Agent),它是后续文件操作与命令执行的基础。Agent 会自动保持最新版本,安装成功后即可继续下一步。',

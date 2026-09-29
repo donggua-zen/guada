@@ -160,6 +160,13 @@
     save: 'Save Connection',
     browse: 'Browse',
     privateKeyPathDesc: 'Click "Browse" to pick the private key file (Electron), or type the absolute path manually (Web). Only the path is saved, never the key content.',
+    // Auth method and credential fields
+    authPassword: 'Password',
+    authPrivateKey: 'Private Key',
+    passwordLabel: 'Password',
+    privateKeyPathLabel: 'Private Key Path',
+    privateKeyPathPlaceholderElectron: 'Select or enter the private key file path',
+    privateKeyPathPlaceholderWeb: 'Enter the absolute path of the private key file',
     // Deploy verification
     deployTitle: 'Deploy Agent',
     deployDesc: 'This step installs and starts the remote agent on your server. It powers all file operations and command execution in the next steps. The agent is kept up-to-date automatically; once installed, you can continue.',
