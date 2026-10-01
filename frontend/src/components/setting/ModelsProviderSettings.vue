@@ -1,116 +1,112 @@
 <template>
   <div class="h-full overflow-hidden flex flex-col">
-    <PageHeader :title="t('settings.models.title')" />
-    <div class="flex-1 flex flex-col overflow-hidden">
-      <template v-if="!showDetail">
-        <!-- 标题区（固定不滚动） -->
-        <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
-          <div class="min-w-0">
-            <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
-            <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
-          </div>
-          <el-button type="primary" @click="handleCreateGroup">
-            <template #icon><PlusOutlined /></template>
-            {{ t('settings.models.addCustom') }}
-          </el-button>
+    <template v-if="!showDetail">
+      <!-- 标题区（固定不滚动） -->
+      <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-220 md:mx-auto">
+        <div class="min-w-0">
+          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
+          <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
         </div>
+        <el-button type="primary" @click="handleCreateGroup">
+          <template #icon><PlusOutlined /></template>
+          {{ t('settings.models.addCustom') }}
+        </el-button>
+      </div>
 
-        <!-- 内容区（独立滚动，满屏宽度） -->
-        <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
-          <div class="px-4 pb-4 w-full md:max-w-260 md:mx-auto">
-            <ModelsProviderList :items="providers" :templates="availableTemplates"
-              @item-click="handleItemClick"
-              @item-toggle="handleToggleProvider"
-              @item-edit="handleEditProvider"
-              @item-delete="handleDeleteProviderFromList"
-              @template-click="handleTemplateClick">
-            </ModelsProviderList>
-          </div>
+      <!-- 内容区（独立滚动，满屏宽度） -->
+      <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
+        <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
+          <ModelsProviderList :items="providers" :templates="availableTemplates"
+            @item-click="handleItemClick"
+            @item-toggle="handleToggleProvider"
+            @item-edit="handleEditProvider"
+            @item-delete="handleDeleteProviderFromList"
+            @template-click="handleTemplateClick">
+          </ModelsProviderList>
         </div>
-      </template>
-      <template v-else>
-        <ModelsProviderDetail
-          :provider="currentProvider"
-          :models="currentModels"
-          :model-presets="modelPresets"
-          @back="showDetail = false"
-          @changed="reloadProvidersAndModels"
-        />
-      </template>
+      </div>
+    </template>
+    <template v-else>
+      <ModelsProviderDetail
+        :provider="currentProvider"
+        :models="currentModels"
+        :model-presets="modelPresets"
+        @back="showDetail = false"
+        @changed="reloadProvidersAndModels"
+      />
+    </template>
 
-      <!-- 供应商编辑弹窗 -->
-      <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
-        class="provider-modal dialog-with-scroll">
-        <div class="dialog-content">
-          <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-            label-position="left" hide-required-asterisk>
-            <el-form-item :label="t('settings.models.name')" prop="name">
-              <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
-            </el-form-item>
-            <el-form-item :label="t('settings.models.protocol')" prop="protocol">
-              <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
-                :disabled="!isProtocolEditable">
-                <el-option label="OpenAI" value="openai" />
-                <el-option label="OpenAI-Response" value="openai-response" />
-                <el-option label="Gemini" value="gemini" />
-                <el-option label="Anthropic" value="anthropic" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
-              <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
-            </el-form-item>
-            <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
-              <div class="api-key-input-wrapper">
-                <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
-                <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
-                  :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
-                  {{ t('settings.models.test') }}
-                </el-button>
-              </div>
-              <!-- API Key 获取链接（仅非自定义供应商显示） -->
-              <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
-                <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
-                  <el-icon class="mr-1">
-                    <LinkOutlined />
-                  </el-icon>
-                  {{ t('settings.models.getApiKey') }}
-                </el-link>
-              </div>
-            </el-form-item>
-            <!-- 自定义请求头（仅自定义供应商可编辑） -->
-            <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
-              <el-input
-                v-model="currentProviderEdit.headers"
-                type="textarea"
-                :rows="4"
-                class="w-full"
-                :placeholder="t('settings.models.customHeadersPlaceholder')"
-              />
-              <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
-            </el-form-item>
-          </el-form>
-        </div>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
-            <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
-          </span>
-        </template>
-      </GdDialog>
-    </div>
+    <!-- 供应商编辑弹窗 -->
+    <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
+      class="provider-modal dialog-with-scroll">
+      <div class="dialog-content">
+        <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
+          label-position="left" hide-required-asterisk>
+          <el-form-item :label="t('settings.models.name')" prop="name">
+            <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
+          </el-form-item>
+          <el-form-item :label="t('settings.models.protocol')" prop="protocol">
+            <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
+              :disabled="!isProtocolEditable">
+              <el-option label="OpenAI" value="openai" />
+              <el-option label="OpenAI-Response" value="openai-response" />
+              <el-option label="Gemini" value="gemini" />
+              <el-option label="Anthropic" value="anthropic" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
+            <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
+          </el-form-item>
+          <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
+            <div class="api-key-input-wrapper">
+              <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
+              <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
+                :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
+                {{ t('settings.models.test') }}
+              </el-button>
+            </div>
+            <!-- API Key 获取链接（仅非自定义供应商显示） -->
+            <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
+              <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
+                <el-icon class="mr-1">
+                  <LinkOutlined />
+                </el-icon>
+                {{ t('settings.models.getApiKey') }}
+              </el-link>
+            </div>
+          </el-form-item>
+          <!-- 自定义请求头（仅自定义供应商可编辑） -->
+          <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
+            <el-input
+              v-model="currentProviderEdit.headers"
+              type="textarea"
+              :rows="4"
+              class="w-full"
+              :placeholder="t('settings.models.customHeadersPlaceholder')"
+            />
+            <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
+        </span>
+      </template>
+    </GdDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ModelsProviderList from '../setting/ModelsProviderList.vue'
-import ModelsProviderDetail from './ModelsProviderDetail.vue'
+import ModelsProviderList from './ModelsProviderList.vue'
+import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
 import {
   PlusOutlined,
   LinkOutlined
 } from '@vicons/material'
-import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
@@ -402,24 +398,24 @@ const handleOpenApiKeyUrl = () => {
 const parseHeaders = (text: string): Record<string, string> => {
   const headers: Record<string, string> = {}
   const lines = text.trim().split('\n')
-  
+
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (!trimmedLine) continue
-    
+
     const colonIndex = trimmedLine.indexOf(':')
     if (colonIndex === -1) {
       continue
     }
-    
+
     const key = trimmedLine.substring(0, colonIndex).trim()
     const value = trimmedLine.substring(colonIndex + 1).trim()
-    
+
     if (key) {
       headers[key] = value
     }
   }
-  
+
   return headers
 }
 
@@ -427,11 +423,11 @@ const parseHeaders = (text: string): Record<string, string> => {
 const validateHeadersText = (text: string): string[] => {
   const errors: string[] = []
   const lines = text.trim().split('\n')
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
-    
+
     const colonIndex = line.indexOf(':')
     if (colonIndex === -1) {
       errors.push(t('settings.models.headerFormatError', { line: i + 1 }))
@@ -442,7 +438,7 @@ const validateHeadersText = (text: string): string[] => {
       }
     }
   }
-  
+
   return errors
 }
 

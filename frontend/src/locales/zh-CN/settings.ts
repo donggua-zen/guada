@@ -242,6 +242,7 @@ export default {
     tabs: {
       general: '通用设置',
       defaultModels: '默认模型',
+      providers: '模型供应商',
       ocr: 'OCR 设置',
       appearance: '外观',
       search: '搜索设置',

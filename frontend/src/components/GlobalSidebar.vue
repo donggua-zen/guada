@@ -287,7 +287,6 @@ import {
   Add12Regular,
   ClockAlarm20Regular,
   Apps20Regular,
-  Cloud20Regular,
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
@@ -430,11 +429,6 @@ const navItems = computed(() => [
     key: 'scheduler',
     label: t('ui.sidebar.navScheduler'),
     icon: ClockAlarm20Regular
-  },
-  {
-    key: 'models',
-    label: t('ui.sidebar.navModels'),
-    icon: Cloud20Regular
   }
 ])
 
@@ -453,7 +447,6 @@ const currentActiveTab = computed(() => {
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   if (routeName === 'Plugins') return 'plugins'
   if (routeName === 'Scheduler') return 'scheduler'
-  if (routeName === 'Models') return 'models'
   return ''
 })
 
@@ -625,8 +618,6 @@ const handleNavClick = (tab: string) => {
     router.replace({ name: 'Plugins' })
   } else if (tab === 'scheduler') {
     router.replace({ name: 'Scheduler' })
-  } else if (tab === 'models') {
-    router.replace({ name: 'Models' })
   }
 }
 

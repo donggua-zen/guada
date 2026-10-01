@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col overflow-hidden">
     <!-- 详情标题区（固定不滚动） -->
-    <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
+    <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-220 md:mx-auto">
       <div class="flex items-center gap-3 min-w-0">
         <el-button link @click="$emit('back')"
           class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium shrink-0">
@@ -18,7 +18,7 @@
 
     <!-- 内容区（独立滚动，满屏宽度） -->
     <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
-      <div class="px-4 pb-4 w-full md:max-w-260 md:mx-auto">
+      <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
         <!-- 空状态 -->
         <div v-if="models.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
           <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">

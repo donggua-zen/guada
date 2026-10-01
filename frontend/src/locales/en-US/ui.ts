@@ -117,7 +117,6 @@
     navKnowledgeBase: 'Knowledge Base',
     navPlugins: 'Plugin Market',
     navScheduler: 'Scheduled Tasks',
-    navModels: 'Model Management',
     noTasks: 'No tasks',
     loadingMore: 'Loading...',
     loadMore: 'Click to load more',

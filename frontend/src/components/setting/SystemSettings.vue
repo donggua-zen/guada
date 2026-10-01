@@ -49,7 +49,12 @@
                  限宽（max-w-220）下移到滚动内容的第一层，只约束内容、不约束滚动条。 -->
             <div class="flex-1 overflow-hidden flex flex-col w-full">
                 <div class="flex-1 overflow-hidden py-3">
-                    <ScrollContainer class="h-full">
+                    <!-- 模型供应商：全高特例，不走下方统一滚动容器——
+                         其列表↔详情视图自带内部滚动区，塞进外层滚动容器会让详情"返回"钮随长列表滚走 -->
+                    <div v-if="currentTabValue === 'providers'" class="h-full">
+                        <ModelsProviderSettings />
+                    </div>
+                    <ScrollContainer v-else class="h-full">
                         <div class="p-4 w-full md:max-w-220 md:mx-auto">
                             <template v-if="currentTabValue === 'general'">
                                 <GeneralSettings />
@@ -105,9 +110,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
+// 模型供应商：体量大（列表+详情约 1700 行），分区级懒加载避免拖大设置页 chunk
+const ModelsProviderSettings = defineAsyncComponent(() => import('./ModelsProviderSettings.vue'))
 import OcrSettings from './OcrSettings.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import SearchSettings from './SearchSettings.vue'
@@ -133,6 +140,7 @@ import {
     Archive20Regular,
     Cloud24Regular,
     Chat24Regular,
+    Database24Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -153,6 +161,7 @@ const route = useRoute()
 const groupMap = computed<Record<string, string>>(() => ({
     general: t('settings.system.groups.general'),
     'default-models': t('settings.system.groups.general'),
+    providers: t('settings.system.groups.general'),
     ocr: t('settings.system.groups.general'),
     browser: t('settings.system.groups.general'),
     connections: t('settings.system.groups.general'),
@@ -194,6 +203,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.defaultModels'),
         path: 'default-models',
         icon: Grid16Regular,
+    },
+    {
+        label: t('settings.system.tabs.providers'),
+        path: 'providers',
+        icon: Database24Regular,
     },
     {
         label: t('settings.system.tabs.ocr'),
