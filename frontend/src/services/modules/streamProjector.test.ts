@@ -138,6 +138,34 @@ describe("StreamProjector 折叠器", () => {
     expect(block.metadata.toolCallsResponse[0].content).toBe("结果");
   });
 
+  it("subagent_link 把关联键写到对应 tool-call 条目上（工具结果落库前即可用）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "subagent_spawn", argumentsDelta: '{"name":"分析架构"}' } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", contentId: "tc_c1", toolCallId: "tc1", name: "subagent_spawn", arguments: '{"name":"分析架构"}' } } as any,
+      // 工具结果尚未到达（前台 spawn 阻塞期间），关联键只能来自这条流事件
+      { type: "subagent_link", toolCallId: "tc1", subSessionId: "sub-9", name: "分析架构" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.role === "assistant");
+    expect(block.metadata.toolCalls[0].subAgentLink).toEqual({
+      subSessionId: "sub-9",
+      name: "分析架构",
+    });
+    // 结果还没到：不应误建 toolCallsResponse
+    expect(block.metadata.toolCallsResponse).toBeUndefined();
+  });
+
+  it("subagent_link 找不到对应 tool-call 时静默忽略（不抛错）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "subagent_link", toolCallId: "nope", subSessionId: "sub-9" } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    expect(() => foldEvents(store as any, "s1", events)).not.toThrow();
+  });
+
   it("compaction_summary in-turn：标记遮蔽 + 回合内 event 消息束", () => {
     const events: WireStreamEvent[] = [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,

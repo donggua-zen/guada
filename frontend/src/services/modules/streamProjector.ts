@@ -774,6 +774,23 @@ export function applyChunkToStore(
     sessionStore.setSessionPendingAsk(sessionId, undefined);
     return;
   }
+  if (chunk.type === "subagent_link") {
+    // 子代理创建 → 把"工具调用 ↔ 子会话"关联键写到对应工具调用条目上（渲染层据此提供
+    // "打开子代理面板"入口）。它比工具结果早到：前台 spawn 阻塞期间结果尚未落库，
+    // 只有这条流事件能建立关联；刷新时它随 SSE 建连重放 + 暂存消费回到这里。
+    const turns = sessionStore.getTurns(sessionId) || [];
+    const target = findBlockByToolCallId(turns, chunk.toolCallId);
+    const tc = (target?.metadata?.toolCalls || []).find(
+      (c: any) => c.id === chunk.toolCallId,
+    );
+    if (tc) {
+      tc.subAgentLink = {
+        subSessionId: chunk.subSessionId,
+        ...(chunk.name ? { name: chunk.name } : {}),
+      };
+    }
+    return;
+  }
   if (chunk.type === "tool_calls_response") {
     // 工具执行结果下发 → 交互已消费，关闭会话级卡（与 ask_resolved 幂等双保险）
     sessionStore.setSessionPendingAsk(sessionId, undefined);

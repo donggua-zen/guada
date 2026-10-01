@@ -288,6 +288,7 @@
     terminalTruncated: 'Output truncated — full log: {path}',
     inputLabel: 'Input',
     outputLabel: 'Output',
+    openSubAgentPanel: 'Open sub-agent panel',
   },
 
   // ── 文件变更 ──

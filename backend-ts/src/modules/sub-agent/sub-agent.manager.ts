@@ -156,6 +156,8 @@ export class SubAgentManager implements OnModuleInit {
       task: string;
       agentId?: string;
       lifecycle?: "persist" | "one_shot";
+      /** 派生这次子代理的工具调用 id：据此发布 subagent_link 流事件（可选，非工具路径不传） */
+      toolCallId?: string;
     },
     mode: "foreground" | "background" = "foreground",
     abortSignal?: AbortSignal,
@@ -244,6 +246,7 @@ export class SubAgentManager implements OnModuleInit {
       name: string;
       task: string;
       agentId?: string;
+      toolCallId?: string;
     },
     mode: "foreground" | "background",
     lifecycle: "persist" | "one_shot",
@@ -280,6 +283,19 @@ export class SubAgentManager implements OnModuleInit {
         session: subSession,
       },
     });
+
+    // 工具调用 ↔ 子会话的关联键，走流通道（进 eventBuffer）：
+    // 前台 spawn 会阻塞到子代理跑完，这段时间工具结果尚未落库（meta.link 还不存在），
+    // 客户端若在此时刷新只能靠 SSE 建连重放这条事件找回关联。
+    // 必须在创建瞬间发布——等 spawn 返回再发就与 meta.link 同时到达，失去意义。
+    if (params.toolCallId) {
+      await parentContext.publishStream({
+        type: "subagent_link",
+        toolCallId: params.toolCallId,
+        subSessionId: subSession.id,
+        name: params.name,
+      });
+    }
 
     this.getOrCreateState(parentSessionId);
 

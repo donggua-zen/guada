@@ -288,6 +288,7 @@ export default {
     terminalTruncated: '输出已截断，完整日志：{path}',
     inputLabel: '输入',
     outputLabel: '输出',
+    openSubAgentPanel: '打开子代理面板',
   },
 
   // ── 文件变更 ──

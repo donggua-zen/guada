@@ -413,6 +413,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       case "ask_resolved": return EVENT_METHOD.STREAM_ASK_RESOLVED;
       // Workflow 编排进度
       case "workflow_event": return EVENT_METHOD.STREAM_WORKFLOW_EVENT;
+      // 子代理创建（工具调用 ↔ 子会话关联键，供工具行打开面板）
+      case "subagent_link": return EVENT_METHOD.STREAM_SUBAGENT_LINK;
       // 消息级:StreamChunk 直通
       case "block_start": return EVENT_METHOD.STREAM_BLOCK_START;
       case "text_delta": return EVENT_METHOD.STREAM_TEXT_DELTA;
