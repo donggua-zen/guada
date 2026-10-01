@@ -53,3 +53,4 @@ memory/**
 .openclaw/**
 outputs/**
 MEMORY.md
+.zcode/**
