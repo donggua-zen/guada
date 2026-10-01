@@ -42,6 +42,7 @@ export default {
     selectModelHint: '选择模型，鼠标悬停此处以选择模式',
     reasoningEffort: '推理强度',
     favoriteModels: '收藏模型',
+    manageModels: '模型管理',
 
     // RemoteConnectionDialog.vue
     remoteDir: '远端目录',

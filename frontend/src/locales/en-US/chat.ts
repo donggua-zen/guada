@@ -42,6 +42,7 @@
     selectModelHint: 'Select a model, hover here to choose a mode',
     reasoningEffort: 'Reasoning Effort',
     favoriteModels: 'Favorite Models',
+    manageModels: 'Manage Models',
 
     // RemoteConnectionDialog.vue
     remoteDir: 'Remote Directory',
