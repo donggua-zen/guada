@@ -54,3 +54,4 @@ memory/**
 outputs/**
 MEMORY.md
 .zcode/**
+.zcodeignore
