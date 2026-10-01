@@ -19,9 +19,8 @@
 
         <!-- hover 弹窗：只显示当前悬停的这一条消息，离开热区即消失（卡片本身不响应 hover、无动画） -->
         <div v-if="hoveredId === item.id" class="outline-popover">
-          <div class="pop-header">
-            <span class="pop-index">#{{ idx + 1 }}</span>
-            <span v-if="item.timeText" class="pop-time">{{ item.timeText }}</span>
+          <div v-if="item.timeText" class="pop-header">
+            <span class="pop-time">{{ item.timeText }}</span>
           </div>
           <div class="pop-title">{{ item.title }}</div>
           <div v-if="item.preview" class="pop-preview">{{ item.preview }}</div>
@@ -383,15 +382,9 @@ function handleItemClick(messageId: string) {
 .pop-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   margin-bottom: 4px;
-}
-
-.pop-index {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--el-color-primary, #409eff);
 }
 
 .pop-time {
