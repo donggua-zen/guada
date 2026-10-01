@@ -117,7 +117,6 @@ export default {
     navKnowledgeBase: '知识库',
     navPlugins: '插件市场',
     navScheduler: '定时任务',
-    navModels: '模型管理',
     noTasks: '暂无任务',
     loadingMore: '加载中...',
     loadMore: '点击加载更多',

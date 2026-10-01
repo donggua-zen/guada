@@ -240,6 +240,7 @@
     tabs: {
       general: 'General Settings',
       defaultModels: 'Default Models',
+      providers: 'Model Providers',
       ocr: 'OCR Settings',
       appearance: 'Appearance',
       search: 'Search Settings',

@@ -160,7 +160,7 @@ const goToSecuritySettings = () => {
 }
 
 const goToProviderSettings = () => {
-  router.replace('/models')
+  router.replace('/setting/providers')
 }
 
 const goToDefaultModelSettings = () => {
