@@ -1,6 +1,7 @@
 <template>
+  <!-- 标题栏高度 36px（h-9）：与 electron/main.ts 的 TITLEBAR_HEIGHT 对应，两侧需同步修改 -->
   <div v-if="isElectron"
-    class="custom-titlebar flex items-center justify-between h-10 sidebar-transparent-bg select-none drag-region"
+    class="custom-titlebar flex items-center justify-between h-9 sidebar-transparent-bg select-none drag-region"
     :class="{ 'mac-traffic-light-padding': isMac }">
     <!-- 左侧：应用标题 + 菜单按钮 -->
     <TitlebarLeftPanel />
