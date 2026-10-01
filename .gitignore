@@ -12,6 +12,10 @@ backend/static/*
 .env
 frontend/stats.html
 frontend/src/types/components.d.ts
+frontend/src/types/auto-imports.d.ts
+frontend/components.d.ts
+frontend/auto-imports.d.ts
+/src/types/auto-imports.d.ts
 backend/experiment/**
 backend/tests/verification/**
 backend/build/**
