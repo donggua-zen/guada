@@ -36,6 +36,8 @@ let bridgeServer: BridgeServer | null = null;
 let automationService: BrowserAutomationService | null = null;
 let stderrBuffer: string[] = []; // 后端 stderr 缓冲，用于崩溃诊断
 const MAX_STDERR_LINES = 200;
+/** 标题栏高度(px)：原生窗口按钮 overlay 用；修改需同步前端 CustomTitlebar.vue 根节点的 h-9 */
+const TITLEBAR_HEIGHT = 36;
 let tray: Tray | null = null; // 系统托盘图标
 let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
 /** 当前聚合的托盘统计信息 */
@@ -1488,11 +1490,11 @@ function createWindow() {
     titleBarStyle: "hidden", // Windows：隐藏但保留原生 caption；macOS：隐藏红绿灯栏
     // Windows：原生窗口按钮（Win11 贴靠布局 flyout 的前提）。overlay 底色全透明
     // （Qoder 同款做法）——去掉系统灰底，按钮符号直接画在主题标题栏上；
-    // 符号色与高度由渲染进程按主题经 IPC（titlebar-overlay-color）同步
+    // 符号色由渲染进程按主题经 IPC（titlebar-overlay-color）同步，高度来自 TITLEBAR_HEIGHT
     titleBarOverlay: {
       color: "#00000000",
       symbolColor: "#ffffff",
-      height: 40,
+      height: TITLEBAR_HEIGHT,
     },
     icon: isDev
       ? path.join(__dirname, "..", "build-resources", "icon.ico")
@@ -1814,12 +1816,13 @@ function setupIpcHandlers() {
     return mainWindow?.isMaximized() || false;
   });
 
-  // 主题切换时同步 Windows 原生窗口按钮（titleBarOverlay）配色
+  // 主题切换时同步 Windows 原生窗口按钮（titleBarOverlay）配色；
+  // height 用常量兜底重申（渲染层只传配色，不传高度）
   ipcMain.on(
     "titlebar-overlay-color",
     (_e, c: { color?: string; symbolColor?: string; height?: number }) => {
       if (c && typeof c === "object")
-        mainWindow?.setTitleBarOverlay({ color: "#00000000", height: 40, ...c });
+        mainWindow?.setTitleBarOverlay({ color: "#00000000", height: TITLEBAR_HEIGHT, ...c });
     },
   );
 
