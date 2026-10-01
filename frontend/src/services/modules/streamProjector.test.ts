@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ref } from "vue";
 import { setActivePinia, createPinia } from "pinia";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
-import { foldEvents, applyLiveChunk } from "./streamProjector";
+import { foldEvents, applyLiveChunk, resetTurnTransientState, resetSessionTurnsTransientState } from "./streamProjector";
 import { useSessionTokenStats } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
 
@@ -28,6 +28,7 @@ function createStore() {
     deleteTurnById: (_sid: string, id: string) => { state.turns = state.turns.filter((t: any) => t.id !== id); },
     setSessionIsCompressing: () => {},
     sessionIsCompressing: () => false,
+    sessionIsStreaming: () => false,
     setSessionPendingAsk: (_sid: string, v: any) => { state.pendingAsk = v; },
     sessionPendingAsk: () => state.pendingAsk,
   };
@@ -359,5 +360,81 @@ describe("思考态跨块复位", () => {
     expect(b.state.isThinking).toBe(false);
     expect(b.reasoningContent).toBe("思考中");
     expect(b.thinkingDurationMs).toBe(2500);
+  });
+
+  // ===== 流终止瞬态复位（resetTurnTransientState / resetSessionTurnsTransientState）=====
+
+  it("turn_end 错误收尾（无 finish chunk）复位块级瞬态", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+    const bundle = bundleOf(store.state.turns[0], "T1_a");
+    expect(bundle.blocks[0].state.isThinking).toBe(true);
+    expect(bundle.blocks[0].state.isStreaming).toBe(true);
+
+    // 错误路径：LLM 报错后只有 turn_end，finish chunk 永不到达
+    applyLiveChunk(store as any, "s1", { type: "turn_end", turnId: "T1", finishReason: "error", error: "boom" } as any);
+    expect(store.state.turns[0].state.isWorking).toBe(false);
+    expect(bundle.blocks[0].state.isThinking).toBe(false);
+    expect(bundle.blocks[0].state.isStreaming).toBe(false);
+  });
+
+  it("resetTurnTransientState：一次性复位回合级与块级全部瞬态", () => {
+    const turn: any = {
+      id: "T9", kind: "turn", metadata: {},
+      messages: [{
+        messageId: "m1", role: "assistant", metadata: {},
+        blocks: [
+          { state: { isStreaming: true, isThinking: true } },
+          { state: { isStreaming: true, isThinking: false } },
+        ],
+        state: { isStreaming: true, isThinking: true },
+      }],
+      state: { isWorking: true, startedAt: 1, retry: { retryReason: "timeout", retryAttempt: 1, retryMaxAttempts: 3, retryDelayMs: 100 } },
+    };
+    resetTurnTransientState(turn);
+    expect(turn.state.isWorking).toBe(false);
+    expect(turn.state.retry).toBeUndefined();
+    expect(turn.messages[0].state.isStreaming).toBe(false);
+    expect(turn.messages[0].state.isThinking).toBe(false);
+    for (const b of turn.messages[0].blocks) {
+      expect(b.state.isStreaming).toBe(false);
+      expect(b.state.isThinking).toBe(false);
+    }
+  });
+
+  it("resetTurnTransientState：历史回合（无 state）安全通过", () => {
+    const turn: any = { id: "T8", kind: "turn", metadata: {}, messages: [] };
+    expect(() => resetTurnTransientState(turn)).not.toThrow();
+    expect(turn.state).toBeUndefined();
+  });
+
+  it("resetSessionTurnsTransientState：复位会话下所有回合的瞬态", () => {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      { type: "turn_start", turnId: "T2", modelName: "m1" } as any,
+    ]);
+    applyThinkStart("T1_a", "T1");
+    for (const t of store.state.turns) t.state.isWorking = true;
+
+    resetSessionTurnsTransientState(store as any, "s1");
+    expect(store.state.turns.every((t: any) => !t.state.isWorking)).toBe(true);
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(false);
+  });
+
+  it("foldEvents 重放无 turn/finish 的回合不复活工作态（后端重启残留）", () => {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      { type: "user_message", messageId: "T1_u", turnId: "T1", userMessage: { id: "T1_u", role: "user", kind: "user", metadata: {}, content: [{ type: "text", contentId: "T1_uc", text: "你好" }] } } as any,
+    ]);
+    // turn_start 折叠置位的工作态被折叠后复位：会话未在流式中 → 视为已终止
+    expect(store.state.turns[0].state.isWorking).toBe(false);
+  });
+
+  it("foldEvents 流式中重折保留工作态", () => {
+    (store as any).sessionIsStreaming = () => true;
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+    ]);
+    expect(store.state.turns[0].state.isWorking).toBe(true);
   });
 });
