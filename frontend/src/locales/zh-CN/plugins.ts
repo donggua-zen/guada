@@ -149,6 +149,14 @@ export default {
     marketInstallTitle: '安装技能',
     marketViewSource: '访问仓库',
     marketViewDetail: '查看详情',
+    // 安装弹窗决策信息（版本/方式/位置/覆盖影响）
+    marketLocalVersion: '已装 {version}',
+    marketInstallMethod: '安装方式',
+    marketInstallMethodZip: 'ZIP 包',
+    marketInstallScope: '安装位置',
+    marketInstallScopeGlobal: '全局技能目录 · 所有智能体可用',
+    marketUpgradeNotice: '已安装 {from}，安装后将升级到 {to}',
+    marketReinstallNotice: '该技能已安装，重新安装将覆盖当前版本',
     // 文档弹窗
     docNoContent: '暂无文档内容',
     docLoadFailed: '获取文档失败',
