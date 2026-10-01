@@ -68,6 +68,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.9
         version: 6.43.9
+      '@element-plus/icons-vue':
+        specifier: ^2.3.2
+        version: 2.3.2(vue@3.5.41(typescript@6.0.3))
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
@@ -125,6 +128,9 @@ importers:
       axios:
         specifier: ^1.13.2
         version: 1.19.0
+      dayjs:
+        specifier: ^1.11.23
+        version: 1.11.23
       diff:
         specifier: ^9.0.0
         version: 9.0.0
