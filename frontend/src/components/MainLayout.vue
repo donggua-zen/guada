@@ -7,7 +7,8 @@
   <CustomTitlebar v-if="isElectron && !isMac" />
 
   <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
-    :sidebarWidth="285" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
+    :sidebarWidth="layoutStore.sidebarWidth" resizable @update:sidebarWidth="layoutStore.setSidebarWidth"
+    :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
       <GlobalSidebar v-if="!isSettingsRoute" />
       <div v-else id="settings-sidebar-portal" class="h-full"></div>
