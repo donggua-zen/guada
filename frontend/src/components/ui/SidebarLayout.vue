@@ -43,12 +43,16 @@
     <div class="h-full flex-1 min-w-0">
       <slot name="content" />
     </div>
-  </div>
 
-  <!-- 拖拽时全屏遮罩：阻止下层 webview/iframe 截获 mousemove 中断拖拽 -->
-  <Teleport to="body">
-    <div v-if="isResizing" class="sidebar-resize-overlay"></div>
-  </Teleport>
+    <!-- 拖拽时全屏遮罩：阻止下层 webview/iframe 截获 mousemove 中断拖拽。
+         必须留在根 div 内部保持组件单根：Teleport 若作第二根节点会把组件变成
+         fragment root，禁用 Vue 的 attribute 透传，外部传入的 class（如
+         MainLayout 的 flex-1 撑高度）会静默丢失导致整页塌陷。
+         遮罩渲染位置由 Teleport 决定（body），模板里的位置无实际影响 -->
+    <Teleport to="body">
+      <div v-if="isResizing" class="sidebar-resize-overlay"></div>
+    </Teleport>
+  </div>
 </template>
 
 <script setup lang="ts">
