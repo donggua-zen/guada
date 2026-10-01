@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection, dropCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -56,6 +56,11 @@ function languageForExt(ext: string) {
 
 const { isDark } = useTheme();
 
+// 主题经 Compartment 注入：主题固化在 EditorState 里，切换暗/浅色时只能用
+// reconfigure 效果热替换这一段扩展（文档、撤销历史、滚动位置、选区全部保留）
+const themeCompartment = new Compartment();
+const currentTheme = () => (isDark.value ? vscodeDark : vscodeLight);
+
 function buildState(doc: string, extension: string) {
     const langSupport = languageForExt(extension);
     return EditorState.create({
@@ -97,7 +102,7 @@ function buildState(doc: string, extension: string) {
                 '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--gd-font-mono, monospace)' },
             }),
             // 主题（暗色跟随系统）
-            isDark.value ? vscodeDark : vscodeLight,
+            themeCompartment.of(currentTheme()),
         ],
     });
 }
@@ -113,6 +118,11 @@ watch(() => props.modelValue, (val) => {
     if (view && val !== view.state.doc.toString()) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: val } });
     }
+});
+
+// 主题切换（手动暗/浅或"跟随系统"变化）→ 热替换主题扩展
+watch(isDark, () => {
+    view?.dispatch({ effects: themeCompartment.reconfigure(currentTheme()) });
 });
 
 onBeforeUnmount(() => {

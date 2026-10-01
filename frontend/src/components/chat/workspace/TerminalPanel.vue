@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { TerminalSocketService } from "@/services/modules/TerminalSocketService";
 import { useTheme } from "@/composables/useTheme";
 import type { ServerTerminalMessage } from "@/types/terminal.types";
@@ -57,6 +57,12 @@ const xtermTheme = computed(() => ({
     brightCyan: "#29b8db",
     brightWhite: "#e5e5e5",
 }));
+
+// 主题切换时热更新终端配色：xterm 主题同样在创建时固化，
+// 官方支持运行时改 options.theme（立即重绘，不影响缓冲区内容）
+watch(isDark, () => {
+    if (term) term.options.theme = xtermTheme.value;
+});
 
 async function initTerminal() {
     if (!terminalRef.value) return;
