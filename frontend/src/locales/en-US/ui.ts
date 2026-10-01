@@ -87,8 +87,9 @@
   // ── 后端启动等待 ──
   backend: {
     starting: 'Starting backend service',
-    startingDesc: 'First launch requires database initialization. Please wait…',
+    startingDesc: 'First launch requires data initialization and may take longer. Please hold on.',
     startFailed: 'Startup failed',
+    retry: 'Retry',
   },
 
   // ── 标题栏 ──

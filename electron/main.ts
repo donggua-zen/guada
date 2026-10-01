@@ -2626,7 +2626,8 @@ app.on("before-quit", async (event) => {
 
   // 0. 显示退出画面，浏览器导航会断开前端 keep-alive HTTP 连接
   if (mainWindow && !mainWindow.isDestroyed()) {
-    const shutdownHtml = `<html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;flex-direction:column"><div style="width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:#4a9eff;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:20px"></div><p>正在退出...</p></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body></html>`;
+    // spinner 用品牌粉 #fb7299，与启动加载页（BackendWaitingOverlay.vue）一致
+    const shutdownHtml = `<html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;flex-direction:column"><div style="width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:#fb7299;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:20px"></div><p>正在退出...</p></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body></html>`;
     mainWindow.loadURL(
       `data:text/html;charset=utf-8,${encodeURIComponent(shutdownHtml)}`,
     );

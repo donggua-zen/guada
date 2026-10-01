@@ -87,8 +87,9 @@ export default {
   // ── 后端启动等待 ──
   backend: {
     starting: '正在启动后端服务',
-    startingDesc: '首次启动需初始化数据库，请稍候…',
+    startingDesc: '首次启动需要初始化数据，可能需要更久，请耐心等候',
     startFailed: '启动失败',
+    retry: '重试',
   },
 
   // ── 标题栏 ──
