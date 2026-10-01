@@ -243,7 +243,10 @@ export class ToolExecutor {
         content = handled.content;
         // 仅当正文真被替换（spill/截断）时才丢弃：替换后 meta 与正文失配。
         // 未超阈值时正文原样返回，meta 与正文仍然对应，必须保留。
-        if (handled.replaced) meta = undefined;
+        // 例外：meta.link 是"UI 跳转目标"（指向会话等外部对象，与正文无关，不存在失配），
+        // spill 后必须留下——否则子代理长报告恰好丢掉"打开子代理面板"入口，
+        // 而长报告正是最想点进去回看的场景。
+        if (handled.replaced) meta = meta?.link ? { link: meta.link } : undefined;
       }
       return {
         toolCallId,

@@ -36,6 +36,7 @@ export const EVENT_METHOD = {
   STREAM_ASK_REQUESTED: "stream/ask_requested",
   STREAM_ASK_RESOLVED: "stream/ask_resolved",
   STREAM_WORKFLOW_EVENT: "stream/workflow_event",
+  STREAM_SUBAGENT_LINK: "stream/subagent_link",
 
   // ---- 会话状态事件(带 sessionId) ----
   SESSION_CREATED: "session/created",

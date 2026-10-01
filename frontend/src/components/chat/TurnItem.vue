@@ -26,15 +26,27 @@
           </div>
           <!-- P5b：通知类折叠区（极简显示，可展开看全文；内容为剥离 <system_reminder> 标签后的全文） -->
           <div v-if="isNotificationUser && notificationText" class="user-reminder">
-            <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
-              <el-icon size="12">
-                <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
-                <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
-              </el-icon>
-              <span class="user-reminder__label">
-                {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
-              </span>
-            </button>
+            <div class="user-reminder__row">
+              <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
+                <el-icon size="12">
+                  <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
+                  <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
+                </el-icon>
+                <span class="user-reminder__label">
+                  {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
+                </span>
+              </button>
+              <!-- 子代理结果通知：直接点进派生子代理的会话（source.subSessionId 由后端结构化携带，
+                   实时与回放两条路径都透传，刷新后仍在） -->
+              <GdTooltip v-if="notificationSubSessionId && openSubAgentSession"
+                :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
+                <span class="open-subagent-btn" @click="openNotificationSubAgent">
+                  <el-icon size="14">
+                    <PanelRightExpand20Filled />
+                  </el-icon>
+                </span>
+              </GdTooltip>
+            </div>
             <div v-if="reminderExpanded" class="user-reminder__body">{{ notificationText }}</div>
           </div>
         </div>
@@ -229,7 +241,7 @@ import { computed, ref, watch, nextTick, inject } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
-import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
+import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, PanelRightExpand20Filled } from "@vicons/fluent";
 import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
@@ -243,6 +255,7 @@ import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
 import EventCard from './EventCard.vue';
@@ -512,6 +525,25 @@ const notificationLabel = computed(() => {
     : t('chat.turn.viewSubagentResult');
 });
 
+/** 子代理结果通知目标会话（仅 kind='sub_agent' 有；process_monitor 不参与跳转） */
+const notificationSubSessionId = computed(() => {
+  const source = user.value?.source;
+  if (source?.kind !== 'sub_agent') return '';
+  return typeof source.subSessionId === 'string' ? source.subSessionId : '';
+});
+
+/** 打开子代理面板（ChatPage provide；无 provide 的宿主如 BotSessionDialog 下为 null → 不渲染入口） */
+const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
+  'workspace:openSubAgentSession',
+  null,
+);
+
+const openNotificationSubAgent = (): void => {
+  if (notificationSubSessionId.value) {
+    openSubAgentSession?.(notificationSubSessionId.value);
+  }
+};
+
 const userTime = computed(() => {
   return {
     firendly: formatTime(user.value?.createdAt || '', 'friendly'),
@@ -774,6 +806,24 @@ const handleImageClick = (file: any) => {
   align-items: flex-start;
   margin-top: 4px;
   max-width: 100%;
+}
+/* 折叠按钮与"打开子代理面板"同行（后者仅子代理结果通知出现） */
+.user-reminder__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 打开子代理面板：与工具行的同名入口保持同一视觉/交互 */
+.open-subagent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary, #999);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.open-subagent-btn:hover {
+  color: var(--el-color-primary);
 }
 .user-reminder__toggle {
   display: inline-flex;

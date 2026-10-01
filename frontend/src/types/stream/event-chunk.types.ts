@@ -227,6 +227,20 @@ export interface WorkflowEvent {
   event: import("./workflow.types").WorkflowEventData;
 }
 
+/**
+ * 子代理已创建（与后端 event-chunk.types.ts 同构）：工具调用 ↔ 子会话的关联键。
+ * 它比工具结果早到——前台 spawn 阻塞期间工具结果尚未落库，只有这条流事件能建立关联；
+ * 走流通道（进 eventBuffer）故随 SSE 建连重放回来，刷新不丢。
+ */
+export interface SubAgentLinkEvent {
+  type: "subagent_link";
+  /** 派生子代理的那次工具调用 id */
+  toolCallId: string;
+  subSessionId: string;
+  /** 子代理名称，仅用于展示 */
+  name?: string;
+}
+
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
@@ -243,6 +257,7 @@ export type SessionStreamEvent =
   | AskRequestedEvent
   | AskResolvedEvent
   | WorkflowEvent
+  | SubAgentLinkEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

@@ -17,11 +17,17 @@ import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 
 export interface ToolCall {
+  /** 工具调用 id（= 后端 toolCallId），与 toolCallsResponse[].toolCallId 对应。
+   *  运行时一直存在，仅类型未声明；并行调用的结果按它匹配，不能用数组下标（到达顺序不保证） */
+  id?: string;
   name?: string;
   arguments?: any;
   args?: any;
   outcome?: "success" | "error" | "rejected" | "aborted";
   metadata?: { [key: string]: any };
+  /** 子代理关联（由流事件 subagent_link 折叠写入）：工具结果落库前即可用，
+   *  供工具行提供"打开子代理面板"入口 */
+  subAgentLink?: { subSessionId: string; name?: string };
 }
 
 /** 定制渲染器配置（kind → 前端 tool-renderers 通用组件） */

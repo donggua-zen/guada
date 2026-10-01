@@ -26,6 +26,17 @@
             <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--el-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
           </span>
         </div>
+        <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
+             无 provide 的宿主如 BotSessionDialog 下不渲染） -->
+        <GdTooltip v-if="subAgentLinks[toolIndex]"
+          :content="t('chat.toolCalls.openSubAgentPanel')" placement="top"
+          class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <span class="open-subagent-btn" @click.stop="openSubAgentPanel(toolIndex)">
+            <el-icon size="14">
+              <PanelRightExpand20Filled />
+            </el-icon>
+          </span>
+        </GdTooltip>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
         <el-icon class="shrink-0 ml-2 text-gray-400 transition-opacity duration-200"
           :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'" size="12">
@@ -70,10 +81,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { ErrorCircle16Regular, ChevronDown12Regular } from '@vicons/fluent';
+import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import {
   type ToolCall,
@@ -84,6 +95,8 @@ import {
 } from '@/utils/toolDisplay';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
+import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 
 const props = defineProps<{
@@ -96,6 +109,28 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+
+// ── 子代理跳转（工具行 → 侧边栏工作区打开 subagent 标签）──
+
+/** ChatPage provide；无 provide 的宿主（BotSessionDialog 等）下为 null → 不渲染入口 */
+const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
+  'workspace:openSubAgentSession',
+  null,
+);
+
+/** 每行可跳转的子代理会话（null = 该行无唯一目标，不显示按钮） */
+const subAgentLinks = computed(() =>
+  openSubAgentSession
+    ? props.toolCalls.map((tool, index) =>
+        resolveSubAgentLink(tool, findToolResponse(tool, index, props.toolResponses)),
+      )
+    : [],
+);
+
+const openSubAgentPanel = (index: number): void => {
+  const link = subAgentLinks.value[index];
+  if (link) openSubAgentSession?.(link.subSessionId);
+};
 
 // ── 执行状态 ──
 
@@ -205,6 +240,21 @@ const formatToolResponse = (response: any): string => {
 </script>
 
 <style scoped>
+/* 打开子代理面板：与展开箭头同节奏显隐（整行 hover 时出现，故预留位置不引起跳动） */
+.open-subagent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.open-subagent-btn:hover {
+  color: var(--el-color-primary);
+}
+
 /* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文；
    margin-left 21px = 工具图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标。
    横向内边距抽成 --tool-card-pad-x：内部各视图的滚动区用等量负边距抵消，
