@@ -88,8 +88,8 @@
 
   <!-- 级联：全部模型列表 -->
   <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'" @update:show="onCascadeShowChange"
-    :width="300" :max-height="400" :position="cascadePosition" @mouseenter="cancelCloseCascade"
-    @mouseleave="scheduleCloseCascade">
+    :width="300" :max-height="400" :position="cascadePosition" align-item-selector=".model-item-compact"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
     <template v-for="provider in filteredProviders" :key="provider.id">
       <div class="provider-group">
         <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
@@ -132,8 +132,8 @@
 
   <!-- 级联：推理强度列表 -->
   <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'" @update:show="onCascadeShowChange"
-    :width="180" :max-height="300" :position="cascadePosition" @mouseenter="cancelCloseCascade"
-    @mouseleave="scheduleCloseCascade">
+    :width="180" :max-height="300" :position="cascadePosition" align-item-selector=".te-item"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
     <div v-for="effort in thinkingEffortOptions" :key="effort"
       class="te-item flex items-center justify-between px-2 py-1 mb-0.5 last:mb-0 rounded-xl cursor-pointer transition-all text-sm"
       :class="{
@@ -269,32 +269,21 @@ async function openCascade(type: 'browse' | 'thinking', triggerEl: HTMLElement |
   }
   if (cascadeMenu.visible && cascadeMenu.type === type) return
 
-  // 先算坐标再显示，避免先出现在默认位置再跳变
+  // 先算首选坐标再显示，避免先出现在默认位置再跳变。
+  // 这里只决定"贴在触发项哪一侧 + 与触发项顶边对齐"，视口边界收缩由 GdPopover
+  // 按实测尺寸处理：用假定高度收缩会把矮菜单顶到离触发项很远的视口边缘
   if (triggerEl) {
     const rect = triggerEl.getBoundingClientRect()
     const menuWidth = type === 'browse' ? 300 : 180
-    const menuHeight = type === 'browse' ? 400 : 200
     const gap = 5
 
     const spaceRight = window.innerWidth - rect.right
     const spaceLeft = rect.left
     const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= spaceLeft
 
-    let left: number
-    if (showOnRight) {
-      left = rect.right + gap
-    } else {
-      left = rect.left - menuWidth - gap
-    }
-
-    let top = rect.top
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, window.innerHeight - menuHeight - 8)
-    }
-
     cascadePosition.value = {
-      left,
-      top,
+      left: showOnRight ? rect.right + gap : rect.left - menuWidth - gap,
+      top: rect.top,
     }
   }
 

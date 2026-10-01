@@ -187,20 +187,18 @@ function openCascade(): void {
     cascadeCloseTimer = null
   }
   if (cascadeVisible.value) return
-  // 先按触发行坐标计算位置再显示（右侧优先，空间不足放左侧），避免先出现在默认位置再跳变
+  // 先按触发行坐标算首选位置再显示（右侧优先，空间不足放左侧），避免先出现在默认位置再跳变。
+  // 视口边界收缩交给 GdPopover 按实测尺寸做（用假定高度收缩会把矮菜单顶到视口边缘）
   if (addTriggerRef.value) {
     const rect = addTriggerRef.value.getBoundingClientRect()
     const menuWidth = 260
-    const menuHeight = 240
     const gap = 5
     const spaceRight = window.innerWidth - rect.right
     const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= rect.left
-    const left = showOnRight ? rect.right + gap : rect.left - menuWidth - gap
-    let top = rect.top
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, window.innerHeight - menuHeight - 8)
+    cascadePosition.value = {
+      left: showOnRight ? rect.right + gap : rect.left - menuWidth - gap,
+      top: rect.top,
     }
-    cascadePosition.value = { left, top }
   }
   cascadeVisible.value = true
 }
