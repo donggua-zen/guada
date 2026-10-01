@@ -119,6 +119,21 @@ onBeforeUnmount(() => {
     view?.destroy();
     view = null;
 });
+
+// 选区读取：CodeMirror 自己管理选区，父组件的 window.getSelection() 取不到，
+// 右键"加入会话"需要靠它拿到文本与起止行号
+defineExpose({
+    getSelectionInfo(): { text: string; startLine: number; endLine: number } | null {
+        if (!view) return null;
+        const range = view.state.selection.main;
+        if (range.empty) return null;
+        return {
+            text: view.state.sliceDoc(range.from, range.to),
+            startLine: view.state.doc.lineAt(range.from).number,
+            endLine: view.state.doc.lineAt(range.to).number,
+        };
+    },
+});
 </script>
 
 <style scoped>
