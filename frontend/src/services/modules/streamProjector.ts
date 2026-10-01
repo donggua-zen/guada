@@ -681,9 +681,9 @@ export function applyChunkToStore(
     const turns = sessionStore.getTurns(sessionId) || [];
     const turn = turns.find((t: any) => t.id === chunk.turnId);
     if (turn) {
-      if (!turn.state) turn.state = {};
-      turn.state.isWorking = false;
-      delete turn.state.retry;
+      // 瞬态统一复位（isWorking/retry + 块级 isStreaming/isThinking）：
+      // 错误路径可能没有 finish chunk，块级状态不能只指望 finish 复位
+      resetTurnTransientState(turn);
       // 业务错误归拢回合级：finishReason/errorDetail/usage/耗时 只写 turn.metadata + 最后一条 assistant 块 usage
       turn.metadata = {
         ...(turn.metadata || {}),
@@ -949,5 +949,51 @@ export function foldEvents(
   sessionStore.setTurns(sessionId, []);
   for (const chunk of chunks) {
     applyChunkToStore(sessionStore, sessionId, chunk);
+  }
+  // 历史重放不复活工作态：JSONL 里 turn/start 无 turn/finish（后端重启/断连时终态未落盘）时，
+  // 折叠会置 isWorking + startedAt → 重开会话永久卡"正在流式中"。会话当前不在流式中
+  // （Bot 本地适配器无此方法，可选调用为 undefined，同样视为非流式）→ 折叠产物一律视为已终止。
+  // 流式中重折（load-more / 打开进行中的会话）跳过复位，live 事件照常接管。
+  if (!sessionStore.sessionIsStreaming?.(sessionId)) {
+    resetSessionTurnsTransientState(sessionStore, sessionId);
+  }
+}
+
+/**
+ * 复位单个回合的全部瞬态视图态（流终止的统一出口）。
+ * 此前瞬态复位散在多处且互不兜底：isWorking/retry 由 turn_end 复位；块级
+ * isStreaming/isThinking 只由 finish chunk 复位——错误路径 finish 永不到达、
+ * turn_end 分支不碰块级 state、stream_status_changed 兜底又只复位 isWorking，
+ * 任一环丢失即残留"正在流式/思考中"动画。统一在此一次清干净。
+ * 注意：展示层读取的是块级 state（TurnItem 经 item.source.state），束级
+ * bundle.state 仅类型兜底，两者一并复位。
+ */
+export function resetTurnTransientState(turn: Turn): void {
+  if (turn.state) {
+    turn.state.isWorking = false;
+    delete turn.state.retry;
+  }
+  for (const bundle of turn.messages ?? []) {
+    if (bundle.state?.isStreaming) bundle.state.isStreaming = false;
+    if (bundle.state?.isThinking) bundle.state.isThinking = false;
+    for (const block of bundle.blocks ?? []) {
+      if (block.state?.isStreaming) block.state.isStreaming = false;
+      if (block.state?.isThinking) block.state.isThinking = false;
+    }
+  }
+}
+
+/**
+ * 会话级流终止兜底：复位该会话所有回合的瞬态视图态。
+ * 由 stream_status_changed 非 running 时调用（与输入区 isStreaming 复位同源同批），
+ * 调用方须保证在子会话提前 return 之前执行——否则子代理/bot 回合会永久卡流式中。
+ */
+export function resetSessionTurnsTransientState(
+  sessionStore: any,
+  sessionId: string,
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  for (const turn of turns) {
+    resetTurnTransientState(turn);
   }
 }

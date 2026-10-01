@@ -15,7 +15,7 @@ import { t } from "@/locales";
 import { useSessionStore } from "@/stores/session";
 import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
-import { projectChunk } from "@/services/modules/streamProjector";
+import { projectChunk, resetSessionTurnsTransientState } from "@/services/modules/streamProjector";
 import { usePopup } from "@/composables/usePopup";
 
 export function useSessionEvents() {
@@ -176,20 +176,19 @@ export function useSessionEvents() {
           payload?.kind === "maintenance" ? "maintenance" : "chat",
         );
 
+        // 回合级瞬态兜底复位（必须在 isSubOrBot return 之前）：流终止(completed/user_cancel/error)时,
+        // 即使 turn_end 事件因连接中断丢失,也确保回合不卡在"正在流式中"。会话级 isStreaming
+        // 已在上面统一复位(输入框恢复),子代理/bot 的回合级瞬态若不在此一并复位,
+        // 其 TurnItem 会与输入框状态脱节——永久显示流式中、动画不消失。
+        if (status !== "running") {
+          resetSessionTurnsTransientState(sessionStore, sessionId);
+        }
+
         // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象
         if (isSubOrBot) return;
 
         // 主会话:侧边栏"工作中"(后端确认 running 才显示)
         sessionStore.setSidebarFlag(sessionId, "working", status === "running");
-
-        // 回合级工作态兜底复位：流终止(completed/user_cancel/error)时,
-        // 即使 turn_end 事件因连接中断丢失,也确保回合不卡在"工作中"。
-        if (status !== "running") {
-          const turns = sessionStore.getTurns(sessionId) || [];
-          for (const t of turns) {
-            if (t.state?.isWorking) t.state.isWorking = false;
-          }
-        }
 
         // 流结束后自动消费队列——放在 source 过滤之前：
         // 队列是本窗口 store 的本地状态,任何本窗可见的流完成都应尝试消费
