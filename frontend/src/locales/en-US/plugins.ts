@@ -149,6 +149,14 @@
     marketInstallTitle: 'Install Skill',
     marketViewSource: 'View Repository',
     marketViewDetail: 'View Details',
+    // Install dialog facts (version / method / location / overwrite impact)
+    marketLocalVersion: 'installed {version}',
+    marketInstallMethod: 'Install method',
+    marketInstallMethodZip: 'ZIP package',
+    marketInstallScope: 'Install location',
+    marketInstallScopeGlobal: 'Global skills directory · available to all agents',
+    marketUpgradeNotice: 'Installed {from}; installing will upgrade to {to}',
+    marketReinstallNotice: 'Already installed; reinstalling will overwrite the current version',
     // 文档弹窗
     docNoContent: 'No documentation content',
     docLoadFailed: 'Failed to load documentation',
