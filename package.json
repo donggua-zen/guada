@@ -53,6 +53,7 @@
   "license": "ISC",
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
+    "@types/node": "^24.13.3",
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
     "electron": "^41.10.3",
