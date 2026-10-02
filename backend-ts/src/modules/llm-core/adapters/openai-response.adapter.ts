@@ -310,32 +310,35 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     // - 关闭（none，且模型声明可关）→ reasoning:{effort: off 映射值 ?? 'none'}
     //   Responses 协议没有独立开关字段，"关闭"就是一个 effort 值；
     //   不提供 thinkingFormat（DSH 的 responses 门控不含它）。
+    // 拼法表达式接管时（thinkingPatchReplacesFormat）跳过内置写入，完全由表达式输出决定
     const compat = resolveEffectiveThinkingCompat(params.providerConfig);
-    if (params.thinkingEffort === 'none') {
-      const off = this.capability.resolveThinkingOff(
-        params.providerConfig?.id,
-        params.model,
-      );
-      if (off.supported) {
-        requestParams.reasoning = { effort: off.wire ?? 'none' };
+    if (!params.thinkingPatchReplacesFormat) {
+      if (params.thinkingEffort === 'none') {
+        const off = this.capability.resolveThinkingOff(
+          params.providerConfig?.id,
+          params.model,
+        );
+        if (off.supported) {
+          requestParams.reasoning = { effort: off.wire ?? 'none' };
+        }
+      } else if (
+        params.thinkingEffort &&
+        params.thinkingEffort !== 'on'
+      ) {
+        // OpenAI Responses API 使用 reasoning.effort 参数；
+        // wire 值向能力服务查（缺省=档位名）
+        requestParams.reasoning = {
+          effort:
+            this.capability.resolveThinkingWireValue(
+              params.providerConfig?.id,
+              params.model,
+              params.thinkingEffort,
+            ) ?? params.thinkingEffort,
+        };
       }
-    } else if (
-      params.thinkingEffort &&
-      params.thinkingEffort !== 'on'
-    ) {
-      // OpenAI Responses API 使用 reasoning.effort 参数；
-      // wire 值向能力服务查（缺省=档位名）
-      requestParams.reasoning = {
-        effort:
-          this.capability.resolveThinkingWireValue(
-            params.providerConfig?.id,
-            params.model,
-            params.thinkingEffort,
-          ) ?? params.thinkingEffort,
-      };
-    }
-    if (compat.includeEncryptedReasoning) {
-      requestParams.include = ["reasoning.encrypted_content"];
+      if (compat.includeEncryptedReasoning) {
+        requestParams.include = ["reasoning.encrypted_content"];
+      }
     }
 
     return requestParams;

@@ -70,6 +70,11 @@ export interface ProviderFileModel {
   thinkingEffortsMap?: ThinkingEffortMap;
   /** 档位→JSON merge patch 映射（该档生效时整体打进请求体；不影响菜单推导） */
   thinkingEffortsPatch?: ThinkingEffortPatch;
+  /**
+   * 拼法表达式（CEL）：档位 → JSON 对象，存在时接管思考字段写入
+   * （替换内置 thinkingFormat 分派；求值上下文见 cel-evaluator.ts）。
+   */
+  thinkingPatchExpr?: string;
   /** 模型条目级 wire 兼容开关（逐字段覆盖实例/卡片 compat） */
   compat?: ThinkingCompatConfig;
   isFavorite?: boolean;
@@ -94,6 +99,8 @@ export interface ModelWithProvider {
   thinkingEffortMap?: Partial<Record<ThinkingEffort, string>>;
   /** 档位→JSON merge patch 映射（条目声明时存在；该档生效时由适配器打进请求体） */
   thinkingEffortsPatch?: ThinkingEffortPatch;
+  /** 拼法表达式（CEL）：存在时接管思考字段写入（替换内置拼法分派） */
+  thinkingPatchExpr?: string;
   /** 生效的 wire 兼容开关（模型条目 > 实例级 > 类型卡；format/supportsEffort 必有值） */
   thinkingCompat: ResolvedThinkingCompat;
 }
@@ -296,6 +303,12 @@ export class ProviderFileStore {
       const thinkingEffortsPatch = normalizeEffortPatch(
         (item as any).thinkingEffortsPatch,
       );
+      // 拼法表达式：非空字符串才有效（空白视为未声明）
+      const rawPatchExpr = (item as any).thinkingPatchExpr;
+      const thinkingPatchExpr =
+        typeof rawPatchExpr === 'string' && rawPatchExpr.trim()
+          ? rawPatchExpr.trim()
+          : undefined;
       // 能力声明：显式 supportsThinking 优先；否则由 legacy thinkingEfforts 折叠
       //（false → 不能思考；数组/true → 能思考）；都未声明 → undefined（fail-safe）
       const rawSupports = (item as any).supportsThinking;
@@ -328,6 +341,7 @@ export class ProviderFileStore {
         ...(thinkingEfforts !== undefined ? { thinkingEfforts } : {}),
         ...(thinkingEffortsMap !== undefined ? { thinkingEffortsMap } : {}),
         ...(thinkingEffortsPatch !== undefined ? { thinkingEffortsPatch } : {}),
+        ...(thinkingPatchExpr !== undefined ? { thinkingPatchExpr } : {}),
         ...(compat ? { compat } : {}),
         isFavorite: (item as any).isFavorite === true,
         isActive: (item as any).isActive !== false,
@@ -448,6 +462,12 @@ export class ProviderFileStore {
                 override?.thinkingEffortsPatch ?? cat.thinkingEffortsPatch,
             }
           : {}),
+        ...(override?.thinkingPatchExpr !== undefined || cat.thinkingPatchExpr !== undefined
+          ? {
+              thinkingPatchExpr:
+                override?.thinkingPatchExpr ?? cat.thinkingPatchExpr,
+            }
+          : {}),
         // wire 兼容开关：实例条目 compat 逐字段覆盖目录条目 compat
         //（此前 thinking 整体替换曾把模型级覆盖静默吃掉，故逐字段合并）
         ...(mergeThinkingCompat(cat.compat, override?.compat)
@@ -519,6 +539,9 @@ export class ProviderFileStore {
         ? { thinkingEffortMap: resolved.wireValues }
         : {}),
       ...(resolved.patch ? { thinkingEffortsPatch: resolved.patch } : {}),
+      ...(model.thinkingPatchExpr
+        ? { thinkingPatchExpr: model.thinkingPatchExpr }
+        : {}),
       thinkingCompat: compat,
     };
   }

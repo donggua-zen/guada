@@ -294,36 +294,77 @@
                     </template>
 
                     <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mt-3 mb-2">
-                      {{ t('settings.providerDetail.thinkingFormatLabel') }}
+                      {{ t('settings.providerDetail.thinkingTemplateLabel') }}
                     </div>
-                    <el-select v-model="editModelForm.thinkingFormat" clearable filterable
-                      :placeholder="t('settings.providerDetail.thinkingFormatInherit')" style="max-width: 240px;">
-                      <el-option v-for="format in THINKING_FORMAT_OPTIONS" :key="format" :label="format" :value="format" />
+                    <el-select v-model="templateSelection" clearable filterable
+                      :placeholder="t('settings.providerDetail.thinkingTemplateInherit')"
+                      style="max-width: 240px;" @change="onTemplateSelect">
+                      <el-option v-for="tpl in curatedTemplates" :key="tpl.format"
+                        :label="templateLabel(tpl.format)" :value="tpl.format" />
+                      <el-option :label="t('settings.providerDetail.thinkingTemplateCustom')"
+                        :value="PATCH_TEMPLATE_CUSTOM" />
                     </el-select>
                     <div v-if="formatSuggestion" class="preset-hint">
                       <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
-                      {{ t('settings.providerDetail.thinkingFormatSuggestion', formatSuggestion) }}
+                      {{ t('settings.providerDetail.thinkingTemplateSuggested', formatSuggestion) }}
+                      <el-button v-if="suggestedTemplateExpr" link type="primary" class="!text-xs !px-1"
+                        @click="fillTemplate(suggestedTemplateExpr)">
+                        {{ t('settings.providerDetail.thinkingExprFill') }}
+                      </el-button>
                     </div>
-                    <div class="mt-1 text-xs text-gray-400">{{ t('settings.providerDetail.thinkingFormatHint') }}</div>
-                    <div v-if="!effectiveFormatSupportsEffort" class="mt-1.5 text-xs text-amber-500">
+
+                    <!-- 拼法表达式（CEL）：选模板回填，可自定义；表达式接管思考字段写入 -->
+                    <div class="mt-2">
+                      <CelExpressionEditor v-model="editModelForm.thinkingPatchExpr"
+                        :placeholder="t('settings.providerDetail.thinkingExprPlaceholder')"
+                        @diagnostic="onExprDiagnostic" />
+                      <div v-if="exprDiagnostic" class="mt-1 text-xs text-red-500">
+                        {{ t('settings.providerDetail.thinkingExprInvalid', { message: exprDiagnostic.message }) }}
+                      </div>
+                      <div v-else class="mt-1 text-xs text-gray-400">
+                        {{ t('settings.providerDetail.thinkingExprHint') }}
+                      </div>
+                      <div class="mt-0.5 text-xs text-gray-400">
+                        {{ t('settings.providerDetail.thinkingExprVars', { vars: exprVariablesText }) }}
+                      </div>
+                    </div>
+
+                    <!-- 各档位输出预览（与运行时同库求值，所见即所发） -->
+                    <div v-if="exprPreview.length" class="mt-2">
+                      <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mb-1">
+                        {{ t('settings.providerDetail.thinkingExprPreview') }}
+                      </div>
+                      <div v-for="row in exprPreview" :key="'pv-' + row.level" class="flex items-start gap-2 mb-1">
+                        <span class="w-16 shrink-0 text-xs text-gray-500 dark:text-[#8b8d95] text-right">
+                          {{ getThinkingEffortLabel(row.level) }}
+                        </span>
+                        <code class="text-xs font-mono break-all text-gray-600 dark:text-[#b8bac1]">{{ row.json }}</code>
+                      </div>
+                    </div>
+
+                    <!-- 表达式为空：显示当前生效拼法及其等价表达式，一键填入（不自动改数据） -->
+                    <div v-if="!editModelForm.thinkingPatchExpr.trim()" class="preset-hint">
+                      <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
+                      {{ t('settings.providerDetail.thinkingExprInheritHint', { format: effectiveFormatLabel }) }}
+                      <el-button v-if="inheritedTemplateExpr" link type="primary" class="!text-xs !px-1"
+                        @click="fillTemplate(inheritedTemplateExpr)">
+                        {{ t('settings.providerDetail.thinkingExprFill') }}
+                      </el-button>
+                    </div>
+                    <div v-else-if="!effectiveFormatSupportsEffort" class="mt-1.5 text-xs text-amber-500">
                       {{ t('settings.providerDetail.thinkingOnNoEffortHint') }}
                     </div>
 
-                    <!-- 高级：档位 → JSON merge patch（覆盖任意请求字段形状） -->
-                    <div class="mt-3">
-                      <el-button link type="primary" class="!text-xs !px-0"
-                        @click="showPatchEditor = !showPatchEditor">
-                        {{ t('settings.providerDetail.thinkingPatchTitle') }}
-                        <el-icon class="ml-0.5" :size="12">
-                          <ArrowBackIosFilled :class="showPatchEditor ? 'rotate-90' : 'rotate-[-90deg]'" />
-                        </el-icon>
+                    <!-- 旧版「档位 → JSON Patch」数据：界面已由表达式取代，运行时继续生效；
+                         有残留数据时提示，可显式清除（不随保存隐式清除） -->
+                    <div v-if="legacyPatchLevels" class="mt-1.5 text-xs text-amber-500">
+                      {{ t('settings.providerDetail.thinkingLegacyPatch', { levels: legacyPatchLevels }) }}
+                      <el-button link type="primary" class="!text-xs !px-1" @click="clearLegacyPatchRequested = true">
+                        {{ t('settings.providerDetail.thinkingLegacyPatchClear') }}
                       </el-button>
-                      <div v-if="showPatchEditor" class="mt-1.5">
-                        <el-input v-model="patchStr" type="textarea" :rows="4" class="font-mono text-xs"
-                          placeholder='{ "high": { "reasoning_effort": "high", "thinking": { "type": "enabled" } } }' />
-                        <div v-if="patchError" class="mt-1 text-xs text-red-500">{{ patchError }}</div>
-                        <div v-else class="mt-1 text-xs text-gray-400">{{ t('settings.providerDetail.thinkingPatchHint') }}</div>
-                      </div>
+                    </div>
+                    <div v-else-if="clearLegacyPatchRequested" class="mt-1 text-xs text-gray-400">
+                      {{ t('settings.providerDetail.thinkingLegacyPatchCleared') }}
                     </div>
                   </div>
                 </template>
@@ -475,10 +516,17 @@ import {
   getModelAvatarPath,
   getThinkingEffortLabel,
   THINKING_EFFORT_OPTIONS,
-  THINKING_FORMAT_OPTIONS,
-  formatSupportsEffort
+  matchPatchTemplate,
+  PATCH_TEMPLATE_CUSTOM
 } from '@/utils/modelUtils'
+import {
+  buildPatchExprContext,
+  evaluatePatchExpr,
+  validatePatchExpr,
+  type CelDiagnostic
+} from '@/utils/celExpression'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import CelExpressionEditor from './CelExpressionEditor.vue'
 
 const props = defineProps<{
   provider: any
@@ -503,7 +551,10 @@ const isEditMode = ref(false)
 
 // 编辑弹窗每次打开时尝试加载拼法推荐（进程内只请求一次）
 watch(showEditModal, (open) => {
-  if (open) loadFormatSuggestion()
+  if (open) {
+    loadFormatSuggestion()
+    loadPatchTemplates()
+  }
 })
 
 // ========== 思考调节（能力三态 + 档位菜单 + wire 映射 + 拼法）==========
@@ -536,7 +587,7 @@ const wireValuesFromModel = (model: any): Record<string, string> => {
 /** 组思考 payload：
  * - true：能力覆盖 + 可选显式档位/映射/拼法（勾选菜单 → thinkingEfforts 数组；
  *   任一 wire 值非空 → thinkingEffortsMap（键集 = 菜单，空值填档位名）；
- *   选了拼法 → compat.thinkingFormat（保留条目已有 compat 其余字段））
+ *   表达式非空 → thinkingPatchExpr（并清掉条目级 thinkingFormat 覆盖，表达式接管拼法））
  * - false：仅能力覆盖 false
  * - auto：条目存在任一覆盖时发 null 清除，全部回退继承链
  */
@@ -549,6 +600,7 @@ const buildThinkingPayload = (): Record<string, any> => {
     if (model?.supportsThinkingOverride !== undefined) payload.supportsThinking = null
     if (model?.thinkingEffortsOverride !== undefined) payload.thinkingEfforts = null
     if (model?.thinkingEffortsMapOverride !== undefined) payload.thinkingEffortsMap = null
+    if (model?.thinkingPatchExprOverride !== undefined) payload.thinkingPatchExpr = null
     if (model?.compatOverride !== undefined) payload.compat = null
     return payload
   }
@@ -572,22 +624,29 @@ const buildThinkingPayload = (): Record<string, any> => {
     payload.thinkingEffortsMap = null
   }
 
-  const format = editModelForm.value.thinkingFormat
-  if (format) {
-    payload.compat = { ...(model?.compatOverride || {}), thinkingFormat: format }
-  } else if (model?.compatOverride !== undefined) {
-    payload.compat = null
+  // 拼法表达式：非空 → 提交并清掉条目级 thinkingFormat 覆盖（表达式接管拼法，
+  // 避免清空表达式后回落到陈旧拼法）；空 → 有条目覆盖则 null 清除（回退内置拼法）
+  const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
+  if (expr) {
+    payload.thinkingPatchExpr = expr
+    const restCompat = { ...(model?.compatOverride || {}) }
+    delete restCompat.thinkingFormat
+    if (Object.keys(restCompat).length > 0) {
+      payload.compat = restCompat
+    } else if (model?.compatOverride !== undefined) {
+      payload.compat = null
+    }
+  } else if (model?.thinkingPatchExprOverride !== undefined) {
+    payload.thinkingPatchExpr = null
   }
 
-  // 高级 patch：有效 JSON 串已解析则提交；留空且条目有 patch 覆盖 → null 清除
-  if (parsedPatch.value && Object.keys(parsedPatch.value).length > 0) {
-    payload.thinkingEffortsPatch = parsedPatch.value
-  } else if (model?.thinkingEffortsPatchOverride !== undefined) {
+  // 旧版「档位 → JSON Patch」：界面已由表达式取代；仅显式清除时下发 null
+  //（保存不再隐式清除，存量 patch 数据运行时继续生效）
+  if (clearLegacyPatchRequested.value) {
     payload.thinkingEffortsPatch = null
   }
   return payload
 }
-
 // 显式"支持"态的派生提示
 const menuNeedsNonOff = computed(() => {
   const menu = editModelForm.value.thinkingEffortsMenu as string[]
@@ -595,23 +654,31 @@ const menuNeedsNonOff = computed(() => {
 })
 
 const hasExplicitOverrides = computed(() => {
-  const model = props.models?.find((x) => x.id === currentEditModelId.value)
+  const model = currentModel.value
   if (!model) return false
   return (
     model.supportsThinkingOverride !== undefined ||
     model.thinkingEffortsOverride !== undefined ||
     model.thinkingEffortsMapOverride !== undefined ||
     model.thinkingEffortsPatchOverride !== undefined ||
+    model.thinkingPatchExprOverride !== undefined ||
     model.compatOverride !== undefined
   )
 })
 
-const effectiveFormatSupportsEffort = computed(() => {
-  const model = props.models?.find((x) => x.id === currentEditModelId.value)
-  const selected = editModelForm.value.thinkingFormat
-  if (selected) return formatSupportsEffort(selected)
-  return model?.supportsReasoningEffort ?? true
-})
+const currentModel = computed(() =>
+  props.models?.find((x) => x.id === currentEditModelId.value) || null
+)
+
+/** 生效拼法不上强度值（开关型 format）——表达式为空时的非阻断提示 */
+const effectiveFormatSupportsEffort = computed(
+  () => currentModel.value?.supportsReasoningEffort ?? true
+)
+
+/** 当前生效拼法名（条目覆盖 > 继承链，后端已解析） */
+const effectiveFormatLabel = computed(
+  () => currentModel.value?.thinkingFormat || 'openai'
+)
 
 // 按 API 地址推荐拼法（每次会话只请求一次；仅供提示，保存需用户显式选择）
 const formatSuggestion = ref<{ format: string; vendor: string } | null>(null)
@@ -627,46 +694,123 @@ const loadFormatSuggestion = async () => {
   }
 }
 
-// ========== 高级：档位 → JSON merge patch ==========
-const showPatchEditor = ref(false)
-const patchStr = ref('')
-const patchError = ref<string | null>(null)
-/** validatePatchStr() 的解析结果：null = 清除/不使用；undefined = 非法（patchError 已置） */
-const parsedPatch = ref<Record<string, any> | null | undefined>(null)
-
-/** 表单 JSON 串 → 解析结果；只做形状校验（档位键与 JSON-safe 由后端 fail-loud 全量校验） */
-const validatePatchStr = (): Record<string, any> | null | undefined => {
-  patchError.value = null
-  const raw = patchStr.value.trim()
-  if (raw === '') return null
-  let parsed: any
+// ========== 拼法模板 + CEL 表达式 ==========
+/** 模板列表（后端 /models/thinking-patch-templates；与内置拼法等价，矩阵测试锁定） */
+const patchTemplates = ref<Array<{ format: string; expression: string; curated?: boolean; requiresCustomization?: boolean }>>([])
+const patchTemplateVars = ref<Array<{ name: string; type: string }>>([])
+const templatesLoaded = ref(false)
+const loadPatchTemplates = async () => {
+  if (templatesLoaded.value) return
+  templatesLoaded.value = true
   try {
-    parsed = JSON.parse(raw)
+    const res: any = await apiService.getThinkingPatchTemplates()
+    patchTemplates.value = Array.isArray(res?.templates) ? res.templates : []
+    patchTemplateVars.value = Array.isArray(res?.variables) ? res.variables : []
   } catch {
-    patchError.value = t('settings.providerDetail.thinkingPatchInvalidJson')
-    return undefined
+    patchTemplates.value = []
+    patchTemplateVars.value = []
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    patchError.value = t('settings.providerDetail.thinkingPatchInvalidShape')
-    return undefined
-  }
-  return parsed
 }
 
-/** 条目 patch 覆盖 → 表单 JSON 串（无覆盖 = 空串） */
-const patchStrFromModel = (model: any): string => {
-  const override = model?.thinkingEffortsPatchOverride
-  return override && typeof override === 'object' && Object.keys(override).length > 0
-    ? JSON.stringify(override, null, 2)
-    : ''
+/** 表达式校验诊断（编辑器实时回传；保存前再校验一次兜底） */
+const exprDiagnostic = ref<CelDiagnostic | null>(null)
+const onExprDiagnostic = (diag: CelDiagnostic | null) => {
+  exprDiagnostic.value = diag
 }
+
+/** 模板下拉数据源：仅预制 3 条（OpenAI / DeepSeek / enable_thinking 风格，覆盖主流场景） */
+const curatedTemplates = computed(() => patchTemplates.value.filter((x) => x.curated))
+
+/** 预制模板的风格名（i18n）；非预制格式回退技术名 */
+const templateLabel = (format: string) => {
+  const key = ({
+    openai: 'thinkingTemplateOpenai',
+    deepseek: 'thinkingTemplateDeepseek',
+    qwen: 'thinkingTemplateQwen',
+  } as Record<string, string>)[format]
+  return key ? t(`settings.providerDetail.${key}`) : format
+}
+
+/** 模板下拉显示值：表达式文本反推（'' = 跟随继承；format = 命中预制模板；custom = 自定义） */
+const templateSelection = computed(() =>
+  matchPatchTemplate(editModelForm.value.thinkingPatchExpr, curatedTemplates.value)
+)
+
+/** 选模板 → 回填表达式；跟随继承 = 清空；自定义 = 保持文本不动（焦点交给编辑器） */
+const onTemplateSelect = (value: string) => {
+  if (value === PATCH_TEMPLATE_CUSTOM) return
+  const tpl = patchTemplates.value.find((x) => x.format === value)
+  editModelForm.value.thinkingPatchExpr = tpl ? tpl.expression : ''
+}
+
+const fillTemplate = (expression: string) => {
+  editModelForm.value.thinkingPatchExpr = expression
+}
+
+/** 建议模板表达式（按 apiUrl 识别的 format → 模板） */
+const suggestedTemplateExpr = computed(() => {
+  const format = formatSuggestion.value?.format
+  if (!format) return ''
+  return patchTemplates.value.find((x) => x.format === format)?.expression || ''
+})
+
+/** 当前生效拼法的等价表达式（表达式为空时提示可一键填入） */
+const inheritedTemplateExpr = computed(
+  () => patchTemplates.value.find((x) => x.format === effectiveFormatLabel.value)?.expression || ''
+)
+
+/** 表达式可用变量提示文本 */
+const exprVariablesText = computed(() =>
+  patchTemplateVars.value.map((v) => `${v.name}（${v.type}）`).join('、')
+)
+
+/**
+ * 各档位输出预览：按当前勾选菜单 + wire 值求值（与运行时同库同语义）。
+ * - 表单未勾选任何档位（菜单走继承）→ 回落到模型生效菜单，避免预览空白
+ * - wire 值填充规则与保存时一致（空值回填档位名），保证预览即所发
+ */
+const exprPreview = computed(() => {
+  const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
+  if (!expr || exprDiagnostic.value) return []
+  const checked = new Set(editModelForm.value.thinkingEffortsMenu as string[])
+  const formMenu = THINKING_EFFORT_OPTIONS.filter((e) => checked.has(e))
+  const menu = formMenu.length > 0
+    ? formMenu
+    : (Array.isArray(currentModel.value?.thinkingEfforts) ? currentModel.value.thinkingEfforts as string[] : [])
+  if (menu.length === 0) return []
+  const wireValues = editModelForm.value.wireValues || {}
+  const effectiveMap: Record<string, string> = currentModel.value?.thinkingEffortsMap || {}
+  const map: Record<string, string> = {}
+  for (const e of menu) map[e] = (wireValues[e] || '').trim() || effectiveMap[e] || e
+  return menu.map((level) => {
+    try {
+      const ctx = buildPatchExprContext(level, {
+        mappedValue: level === 'none' || level === 'on' ? undefined : map[level],
+        offWire: 'none' in map ? map['none'] : undefined,
+      })
+      return { level, json: JSON.stringify(evaluatePatchExpr(expr, ctx)) }
+    } catch {
+      return { level, json: '—' }
+    }
+  })
+})
+
+/** 旧版「档位 → JSON Patch」残留数据（界面已移除编辑器，仅提示 + 可显式清除） */
+const clearLegacyPatchRequested = ref(false)
+const legacyPatchLevels = computed(() => {
+  if (clearLegacyPatchRequested.value) return ''
+  const override = currentModel.value?.thinkingEffortsPatchOverride
+  if (!override || typeof override !== 'object') return ''
+  const levels = Object.keys(override)
+  return levels.length > 0 ? levels.join(' / ') : ''
+})
 
 const editModelForm = ref<any>({  modelName: '',
   modelType: 'text',
   thinkingMode: 'auto',
   thinkingEffortsMenu: [] as string[],
   wireValues: {} as Record<string, string>,
-  thinkingFormat: '',
+  thinkingPatchExpr: '',
   config: {
     inputCapabilities: ['text'],
     outputCapabilities: ['text'],
@@ -781,7 +925,7 @@ const handleSelectFromFetch = (model: any) => {
     thinkingMode: 'auto',
     thinkingEffortsMenu: [],
     wireValues: {},
-    thinkingFormat: '',
+    thinkingPatchExpr: '',
     config: {
       inputCapabilities: model.config?.inputCapabilities || ['text'],
       outputCapabilities: model.config?.outputCapabilities || ['text'],
@@ -808,7 +952,7 @@ const handleAddModel = () => {
     thinkingMode: 'auto',
     thinkingEffortsMenu: [],
     wireValues: {},
-    thinkingFormat: '',
+    thinkingPatchExpr: '',
     config: {
       inputCapabilities: ['text'],
       outputCapabilities: ['text'],
@@ -822,16 +966,9 @@ const handleAddModel = () => {
       vectorDimensions: null
     }
   }
-  resetPatchEditor(null)
+  exprDiagnostic.value = null
+  clearLegacyPatchRequested.value = false
   showEditModal.value = true
-}
-
-// 重置高级 patch 编辑态（编辑 = 回填条目覆盖；新增 = 清空）
-const resetPatchEditor = (model: any) => {
-  patchStr.value = patchStrFromModel(model)
-  patchError.value = null
-  parsedPatch.value = null
-  showPatchEditor.value = patchStr.value !== ''
 }
 
 // 编辑模型
@@ -845,7 +982,8 @@ const handleEditClick = (model: any) => {
     thinkingMode: thinkingModeFromModel(model),
     thinkingEffortsMenu: effortsMenuFromModel(model),
     wireValues: wireValuesFromModel(model),
-    thinkingFormat: model.compatOverride?.thinkingFormat || '',
+    // 仅回填条目级覆盖；继承链的表达式不回填（避免保存时误写覆盖）
+    thinkingPatchExpr: model.thinkingPatchExprOverride || '',
     config: {
       inputCapabilities: config.inputCapabilities || ['text'],
       outputCapabilities: config.outputCapabilities || ['text'],
@@ -859,7 +997,8 @@ const handleEditClick = (model: any) => {
       vectorDimensions: config.vectorDimensions || null
     }
   }
-  resetPatchEditor(model)
+  exprDiagnostic.value = null
+  clearLegacyPatchRequested.value = false
   showEditModal.value = true
 }
 
@@ -874,17 +1013,24 @@ const handleSaveModel = async () => {
       return false
     }
 
-    // 高级 patch 预解析（非法 JSON 阻断保存，错误就地显示）
+    // 拼法表达式保存前兜底校验（编辑器实时诊断可能滞后；后端同样 fail-loud 400）
     if (editModelForm.value.thinkingMode === 'true') {
-      parsedPatch.value = validatePatchStr()
-      if (parsedPatch.value === undefined) return false
-    } else {
-      parsedPatch.value = null
+      const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
+      const diag = validatePatchExpr(expr)
+      exprDiagnostic.value = diag
+      if (diag) {
+        notify.error(
+          t('common.operationFailed'),
+          t('settings.providerDetail.thinkingExprInvalid', { message: diag.message }),
+          { duration: 3000 }
+        )
+        return false
+      }
     }
 
-    // 表单态字段（thinkingMode / thinkingEffortsMenu / wireValues / thinkingFormat）
-    // 不进 payload；思考域按三态 + null 清除语义由 buildThinkingPayload 组装
-    const { thinkingMode, thinkingEffortsMenu, wireValues, thinkingFormat, ...formRest } = editModelForm.value
+    // 表单态字段（thinkingMode / thinkingEffortsMenu / wireValues）不进 payload；
+    // 思考域按三态 + null 清除语义由 buildThinkingPayload 组装
+    const { thinkingMode, thinkingEffortsMenu, wireValues, ...formRest } = editModelForm.value
     const body = { ...formRest, ...buildThinkingPayload() }
 
     if (isEditMode.value) {

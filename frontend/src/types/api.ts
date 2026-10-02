@@ -55,6 +55,10 @@ export interface Model {
     thinkingEffortsMapOverride?: Record<string, string | null>
     /** 条目级档位→JSON merge patch 覆盖（缺省 = 来自继承链或无声明；切回继承时发 null 清除） */
     thinkingEffortsPatchOverride?: Record<string, Record<string, unknown>>
+    /** 生效的拼法表达式（CEL：档位 → JSON 对象，存在时接管思考字段写入） */
+    thinkingPatchExpr?: string
+    /** 条目级拼法表达式覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */
+    thinkingPatchExprOverride?: string
     /** 条目级思考能力覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */
     supportsThinkingOverride?: boolean
     /** 条目级 compat 覆盖（缺省 = 来自继承链；切回继承时发 null 清除） */

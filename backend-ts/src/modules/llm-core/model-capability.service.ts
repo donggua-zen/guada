@@ -84,6 +84,19 @@ export class ModelCapabilityService {
   }
 
   /**
+   * 条目拼法表达式（CEL 源文本）。存在时由 LLMService 按当前档位求值为 patch，
+   * 并跳过内置 thinkingFormat 分派（表达式接管思考字段写入）。
+   * 未声明 → undefined（回退内置拼法）。
+   */
+  resolveThinkingPatchExpr(
+    providerId: string | undefined,
+    modelName: string | undefined,
+  ): string | undefined {
+    const model = this.lookup(providerId, modelName);
+    return model?.thinkingPatchExpr;
+  }
+
+  /**
    * 校验选择值并返回最终生效档位（策略见 clampThinkingEffort，与会话侧共用）：
    * - 模型无思考能力（菜单无非 off 档）却请求非 none → 抛
    *   UnsupportedReasoningEffortError（fail-loud，调用方 bug 不静默掩盖）

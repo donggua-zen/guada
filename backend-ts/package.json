@@ -34,6 +34,7 @@
     "@anthropic-ai/sdk": "^0.104.2",
     "@google/generative-ai": "^0.24.1",
     "@larksuiteoapi/node-sdk": "^1.62.0",
+    "@marcbachmann/cel-js": "^8.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.18",
