@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 // modelUtils 依赖 locales（i18n 单例）在 node 测试环境不可用，mock 掉
 vi.mock("@/locales", () => ({ t: (k: string) => k }));
-import { getDefaultThinkingEffort } from "./modelUtils";
+import {
+  PATCH_TEMPLATE_CUSTOM,
+  getDefaultThinkingEffort,
+  matchPatchTemplate,
+} from "./modelUtils";
 
 /**
  * 思考档位默认值测试
@@ -37,5 +41,41 @@ describe("getDefaultThinkingEffort", () => {
     expect(getDefaultThinkingEffort([])).toBe("none");
     expect(getDefaultThinkingEffort(["none"])).toBe("none");
     expect(getDefaultThinkingEffort(undefined)).toBe("none");
+  });
+});
+
+/**
+ * 拼法模板选择态推导：表达式文本 → 下拉显示值。
+ * 逐字相等才算命中模板（避免"看起来像"的误判），空 = 跟随继承。
+ */
+describe("matchPatchTemplate", () => {
+  const templates = [
+    { format: "openai", expression: '{"reasoning_effort": wireValue}' },
+    { format: "zai", expression: '{"thinking": {"type": "enabled"}}' },
+  ];
+
+  it("空表达式 → 跟随继承（空串）", () => {
+    expect(matchPatchTemplate("", templates)).toBe("");
+    expect(matchPatchTemplate("   ", templates)).toBe("");
+    expect(matchPatchTemplate(undefined, templates)).toBe("");
+    expect(matchPatchTemplate(null, templates)).toBe("");
+  });
+
+  it("与模板逐字相等（忽略首尾空白）→ 该模板名", () => {
+    expect(
+      matchPatchTemplate('{"reasoning_effort": wireValue}', templates),
+    ).toBe("openai");
+    expect(
+      matchPatchTemplate('  {"thinking": {"type": "enabled"}}  ', templates),
+    ).toBe("zai");
+  });
+
+  it("模板被编辑过 → 自定义", () => {
+    expect(
+      matchPatchTemplate('{"reasoning_effort": "high"}', templates),
+    ).toBe(PATCH_TEMPLATE_CUSTOM);
+    expect(matchPatchTemplate('{"reasoning_effort": wireValue} ', [
+      { format: "openai", expression: '{"reasoning_effort": wireValue} ' },
+    ])).toBe("openai");
   });
 });

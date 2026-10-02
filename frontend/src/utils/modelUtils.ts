@@ -241,46 +241,22 @@ export const THINKING_EFFORT_OPTIONS: readonly string[] = [
 ];
 
 /**
- * thinkingFormat 全集（拼法下拉数据源），与后端 THINKING_FORMATS 同集。
- * 显示原样技术名——它们本身就是 wire 字段的命名约定。
+ * 表达式文本 → 拼法模板选择态：
+ * - '' = 跟随继承（表达式为空）
+ * - format 名 = 表达式与某模板逐字相等（trim 后比较）
+ * - 'custom' = 自定义表达式
+ *
+ * 模板列表来自后端 GET /models/thinking-patch-templates（与内置拼法等价，
+ * 由后端矩阵测试锁定），前端只做文本匹配，不内置模板内容。
  */
-export const THINKING_FORMAT_OPTIONS: readonly string[] = [
-  'openai',
-  'deepseek',
-  'zai',
-  'qwen',
-  'openrouter',
-  'together',
-  'baseten',
-  'ant-ling',
-  'string-thinking',
-  'qwen-chat-template',
-  'chat-template',
-];
+export const PATCH_TEMPLATE_CUSTOM = 'custom'
 
-/**
- * format 级"强度值上 wire"默认（与后端 FORMAT_SUPPORTS_REASONING_EFFORT 同表）。
- * 仅用于编辑表单的非阻断提示：开关型拼法下 on 档没有独立 wire 值。
- */
-const FORMAT_SUPPORTS_EFFORT: Record<string, boolean> = {
-  openai: true,
-  deepseek: true,
-  zai: false,
-  qwen: true,
-  openrouter: true,
-  together: false,
-  baseten: true,
-  'ant-ling': false,
-  'string-thinking': true,
-  'qwen-chat-template': true,
-  'chat-template': true,
-};
-
-/** 该拼法默认是否发送强度值；未知 format 回退 fallback（调用方传生效值） */
-export function formatSupportsEffort(
-  format: string | undefined,
-  fallback = true,
-): boolean {
-  if (!format) return fallback;
-  return FORMAT_SUPPORTS_EFFORT[format] ?? fallback;
+export function matchPatchTemplate(
+  expression: string | undefined | null,
+  templates: Array<{ format: string; expression: string }>,
+): string {
+  const source = (expression || '').trim()
+  if (!source) return ''
+  const hit = templates.find((tpl) => tpl.expression.trim() === source)
+  return hit ? hit.format : PATCH_TEMPLATE_CUSTOM
 }

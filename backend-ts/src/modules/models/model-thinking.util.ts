@@ -10,6 +10,10 @@ import {
   normalizeThinkingFormat,
   parseThinkingCompat,
 } from "../llm-core/thinking/thinking-vocabulary";
+import {
+  PATCH_EXPR_MAX_LENGTH,
+  validatePatchExpr,
+} from "../llm-core/thinking/cel-evaluator";
 
 /**
  * 模型条目 thinking 声明的写入口校验（PUT /models/:id、POST /models）
@@ -22,6 +26,9 @@ import {
  *   非 on；值为非空字符串或 null=该档不支持；null 整体 = 清除条目级覆盖）
  * - thinkingEffortsPatch: { level: patch 对象 } → 档位→JSON merge patch 映射
  *   （该档生效时整体打进请求体；null 整体 = 清除条目级覆盖）
+ * - thinkingPatchExpr: "CEL 表达式" → 拼法表达式（档位→JSON 对象，存在时接管
+ *   思考字段写入，替换内置 thinkingFormat 分派）；写入口做 parse + 全档位试算；
+ *   空串/null = 清除条目级覆盖（回退内置拼法）
  * - compat: { thinkingFormat, supportsReasoningEffort, ... } → 条目级 wire 兼容开关
  * - compat: null → 清除条目级 compat，回退继承链
  * - legacy thinking: { style } → 归一到 compat.thinkingFormat（thinking: null → 清除 compat）
@@ -33,12 +40,14 @@ export interface ThinkingPatchResult {
     thinkingEfforts?: boolean | ThinkingEffort[];
     thinkingEffortsMap?: ThinkingEffortMap;
     thinkingEffortsPatch?: ThinkingEffortPatch;
+    thinkingPatchExpr?: string;
     compat?: ThinkingCompatConfig;
   };
   clears: Array<
     | 'thinkingEfforts'
     | 'thinkingEffortsMap'
     | 'thinkingEffortsPatch'
+    | 'thinkingPatchExpr'
     | 'compat'
     | 'supportsThinking'
   >;
@@ -106,6 +115,37 @@ export function parseThinkingPatch(data: any): ThinkingPatchResult {
     result.patch.thinkingEffortsPatch = normalizeEffortPatchStrict(
       rawPatch as Record<string, unknown>,
     );
+  }
+
+  // 拼法表达式（CEL）：null/空串清除覆盖；字符串做 parse + 全档位试算（fail-loud，
+  // 保存即校验——运行时求值失败会回落内置拼法，但配置错误必须在此拦下）
+  const rawPatchExpr = data?.thinkingPatchExpr;
+  if (rawPatchExpr === null) {
+    result.clears.push('thinkingPatchExpr');
+  } else if (rawPatchExpr !== undefined) {
+    if (typeof rawPatchExpr !== 'string') {
+      throw new BadRequestException(
+        'thinkingPatchExpr 须为字符串或 null（清除覆盖）',
+      );
+    }
+    const expr = rawPatchExpr.trim();
+    if (!expr) {
+      result.clears.push('thinkingPatchExpr');
+    } else if (expr.length > PATCH_EXPR_MAX_LENGTH) {
+      throw new BadRequestException(
+        `拼法表达式过长（上限 ${PATCH_EXPR_MAX_LENGTH} 字符）`,
+      );
+    } else {
+      const diagnostic = validatePatchExpr(expr);
+      if (diagnostic) {
+        const where =
+          diagnostic.start !== undefined ? `（位置 ${diagnostic.start}）` : '';
+        throw new BadRequestException(
+          `拼法表达式无效：${diagnostic.message}${where}`,
+        );
+      }
+      result.patch.thinkingPatchExpr = expr;
+    }
   }
 
   // legacy thinking 块：{ style } 归一到 compat.thinkingFormat；null 视为清除 compat

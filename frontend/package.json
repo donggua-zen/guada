@@ -37,6 +37,7 @@
     "@element-plus/icons-vue": "^2.3.2",
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.10",
+    "@marcbachmann/cel-js": "^8.0.0",
     "@tiptap/core": "^3.30.1",
     "@tiptap/extension-placeholder": "^3.26.0",
     "@tiptap/starter-kit": "^3.26.0",

@@ -80,6 +80,13 @@ export class ModelsController {
     return this.modelService.getThinkingFormatSuggestion(apiUrl);
   }
 
+  /** 拼法模板（请求拼法：模板下拉 + CEL 表达式编辑器的数据源） */
+  @Public()
+  @Get("models/thinking-patch-templates")
+  async thinkingPatchTemplates() {
+    return this.modelService.getThinkingPatchTemplates();
+  }
+
   @Public()
   @Post("providers/test-connection")
   async testConnection(@Body() data: any) {

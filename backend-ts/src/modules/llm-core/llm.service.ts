@@ -18,6 +18,10 @@ import {
   SK_SYS_LLM_REQUEST_TIMEOUT_MS,
   SK_SYS_LLM_IDLE_TIMEOUT_MS,
 } from "../../constants/settings.constants";
+import {
+  buildPatchExprContext,
+  evaluatePatchExpr,
+} from "./thinking/cel-evaluator";
 
 /** Default idle timeout between stream chunks (2 minutes). */
 const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
@@ -131,11 +135,46 @@ export class LLMService {
 
     // 档位 patch：条目 thinkingEffortsPatch 的该档声明，adapter 装配完请求体后
     // 整体应用（null 删键）。能力解析与 effort 同层，适配器只消费不查询。
-    const thinkingPatch = this.capability.resolveThinkingPatch(
+    let thinkingPatch = this.capability.resolveThinkingPatch(
       params.providerConfig?.id,
       params.model,
       thinkingEffort,
     );
+
+    // 拼法表达式（CEL）：存在时按当前档位求值为 patch，并接管内置拼法分派
+    // （适配器跳过 thinkingFormat/协议固定形状的思考字段写入）。
+    // 求值失败 fail-open：log 告警并回落内置拼法——思考字段是增强，
+    // 不因表达式问题阻断整轮请求（配置错误已在保存时 400 拦下）。
+    let thinkingPatchReplacesFormat = false;
+    const patchExpr = this.capability.resolveThinkingPatchExpr(
+      params.providerConfig?.id,
+      params.model,
+    );
+    if (patchExpr && thinkingEffort) {
+      try {
+        const mappedValue = this.capability.resolveThinkingWireValue(
+          params.providerConfig?.id,
+          params.model,
+          thinkingEffort,
+        );
+        const off = this.capability.resolveThinkingOff(
+          params.providerConfig?.id,
+          params.model,
+        );
+        thinkingPatch = evaluatePatchExpr(
+          patchExpr,
+          buildPatchExprContext(thinkingEffort, {
+            mappedValue,
+            offWire: off.wire,
+          }),
+        );
+        thinkingPatchReplacesFormat = true;
+      } catch (err: any) {
+        this.logger.warn(
+          `拼法表达式求值失败，回落内置拼法（provider=${params.providerConfig?.id} model=${params.model}）：${err?.message ?? err}`,
+        );
+      }
+    }
 
     // 清洗消息（三层 Message[]：清洗各 text/reasoning 块中的孤儿代理字符）
     const sanitizedMessages: Message[] = params.messages.map((msg) => ({
@@ -170,6 +209,7 @@ export class LLMService {
       messages: sanitizedMessages,
       thinkingEffort,
       thinkingPatch,
+      thinkingPatchReplacesFormat,
       abortSignal: streamTc.signal,
       timeout: requestTimeoutMs,
     });

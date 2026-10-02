@@ -178,8 +178,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 处理思考功能：使用自适应模式 + effort 参数
     // 官方推荐使用 thinking: {type: "adaptive"}，废弃手动 budget_tokens
     // effort 通过 output_config 透传，控制思考深度
+    // 拼法表达式接管时（thinkingPatchReplacesFormat）跳过内置写入，完全由表达式输出决定
     const effort = params.thinkingEffort;
-    if (effort && effort !== 'none') {
+    if (!params.thinkingPatchReplacesFormat && effort && effort !== 'none') {
       requestParams.thinking = { type: "adaptive" };
       requestParams.output_config = { effort: effort as any };
     }
