@@ -263,7 +263,7 @@
                       <el-checkbox-button v-for="effort in THINKING_EFFORT_OPTIONS" :key="effort" :value="effort">
                         <span class="gd-option">
                           <span class="gd-option__mark"></span>
-                          <span class="gd-option__label">{{ getThinkingEffortLabel(effort) }}</span>
+                          <span class="gd-option__label">{{ getThinkingEffortLabelWithKey(effort) }}</span>
                         </span>
                       </el-checkbox-button>
                     </el-checkbox-group>
@@ -314,8 +314,8 @@
                         {{ t('settings.providerDetail.thinkingExprPreview') }}
                       </div>
                       <div v-for="row in exprPreview" :key="'pv-' + row.level" class="flex items-start gap-2 mb-1">
-                        <span class="w-16 shrink-0 text-xs text-gray-500 dark:text-[#8b8d95] text-right">
-                          {{ getThinkingEffortLabel(row.level) }}
+                        <span class="w-28 shrink-0 text-xs text-gray-500 dark:text-[#8b8d95] text-right">
+                          {{ getThinkingEffortLabelWithKey(row.level) }}
                         </span>
                         <code class="text-xs font-mono break-all text-gray-600 dark:text-[#b8bac1]">{{ row.json }}</code>
                       </div>
@@ -505,7 +505,7 @@ import { usePopup } from '../../composables/usePopup'
 import {
   getModelDisplayName,
   getModelAvatarPath,
-  getThinkingEffortLabel,
+  getThinkingEffortLabelWithKey,
   THINKING_EFFORT_OPTIONS,
   matchPatchTemplate,
   PATCH_TEMPLATE_CUSTOM

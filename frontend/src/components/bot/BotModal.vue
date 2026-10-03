@@ -58,7 +58,7 @@
       <!-- 思考强度选择（仅当选中模型支持思考时显示） -->
       <el-form-item v-if="thinkingEffortOptions.length > 0" :label="t('bot.modal.thinkingLabel')">
         <el-select v-model="formData.defaultThinkingEffort" :placeholder="t('bot.modal.thinkingPlaceholder')" style="width: 100%">
-          <el-option v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabel(effort)"
+          <el-option v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabelWithKey(effort)"
             :value="effort" />
         </el-select>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
@@ -174,7 +174,7 @@ import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import { getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils'
+import { getModelThinkingEfforts, getThinkingEffortLabelWithKey } from '@/utils/modelUtils'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { ModelProvider, Model } from '@/types/api'
