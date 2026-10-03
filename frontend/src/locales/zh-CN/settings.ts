@@ -437,7 +437,7 @@ export default {
     thinkingLegacyMapCleared: '已标记清除旧版 wire 值映射（保存后生效）。',
     contextWindow: '上下文窗口',
     maxOutputTokens: '最大输出长度',
-    defaultParamsDesc: '模型默认参数（除非你明确知道自己在干什么，否则请留空，由 API 自行决定）',
+    defaultParamsDesc: '高级设置',
     temperature: '温度',
     modelDefault: '模型默认',
     frequencyPenalty: '频率惩罚',

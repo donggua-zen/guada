@@ -380,27 +380,39 @@
               </el-input-number>
             </el-form-item>
 
-            <el-divider content-position="left" class="!my-4 text-xs text-gray-400">{{ t('settings.providerDetail.defaultParamsDesc') }}</el-divider>
+            <el-divider content-position="left" class="!my-4 text-xs text-gray-400">
+              <button type="button"
+                class="inline-flex items-center gap-1 cursor-pointer whitespace-nowrap hover:text-gray-600 dark:hover:text-[#b8bac1]"
+                @click="defaultParamsExpanded = !defaultParamsExpanded">
+                <el-icon class="transition-transform" :class="defaultParamsExpanded ? 'rotate-90' : ''" :size="12">
+                  <ChevronRight16Regular />
+                </el-icon>
+                {{ t('settings.providerDetail.defaultParamsDesc') }}
+              </button>
+            </el-divider>
 
-            <el-form-item :label="t('settings.providerDetail.temperature')" prop="config.temperature">
-              <el-input-number v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
-                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
-            </el-form-item>
+            <!-- 默认折叠：这些参数绝大多数情况不需要设置；条目已有值时自动展开，不隐藏存量配置 -->
+            <div v-show="defaultParamsExpanded">
+              <el-form-item :label="t('settings.providerDetail.temperature')" prop="config.temperature">
+                <el-input-number v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
+                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+              </el-form-item>
 
-            <el-form-item label="Top P" prop="config.topP">
-              <el-input-number v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
-                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
-            </el-form-item>
+              <el-form-item label="Top P" prop="config.topP">
+                <el-input-number v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
+                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+              </el-form-item>
 
-            <el-form-item :label="t('settings.providerDetail.frequencyPenalty')" prop="config.frequencyPenalty">
-              <el-input-number v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
-                :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
-            </el-form-item>
+              <el-form-item :label="t('settings.providerDetail.frequencyPenalty')" prop="config.frequencyPenalty">
+                <el-input-number v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
+                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+              </el-form-item>
 
-            <el-form-item :label="t('settings.providerDetail.customParameters')" prop="config.customParameters">
-              <el-input v-model="customParamsStr" type="textarea" :rows="3"
-                placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
-            </el-form-item>
+              <el-form-item :label="t('settings.providerDetail.customParameters')" prop="config.customParameters">
+                <el-input v-model="customParamsStr" type="textarea" :rows="3"
+                  placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
+              </el-form-item>
+            </div>
           </div>
 
           <!-- 嵌入模型配置 -->
@@ -497,7 +509,7 @@ import {
   AutoFixHighOutlined
 } from '@vicons/material'
 import {
-  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular
+  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular, ChevronRight16Regular
 } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
 import { apiService } from '../../services/ApiService'
@@ -911,8 +923,17 @@ const getModelAvatarForSetting = (model: { modelName: string }) => {
   return avatarPath || undefined
 }
 
+/** 「模型默认参数」折叠态：默认收起（不建议设置）；条目已有值时自动展开，不隐藏存量配置 */
+const defaultParamsExpanded = ref(false)
+const hasCustomDefaultParams = (config: any): boolean =>
+  config?.temperature != null ||
+  config?.topP != null ||
+  config?.frequencyPenalty != null ||
+  (config?.customParameters && Object.keys(config.customParameters).length > 0)
+
 // 从获取列表中选择模型（预填充到编辑表单，不调用API）
 const handleSelectFromFetch = (model: any) => {
+  defaultParamsExpanded.value = hasCustomDefaultParams(model.config)
   editModelForm.value = {
     modelName: model.modelName || '',
     modelType: model.modelType || 'text',
@@ -939,6 +960,7 @@ const handleSelectFromFetch = (model: any) => {
 const handleAddModel = () => {
   isEditMode.value = false
   currentEditModelId.value = null
+  defaultParamsExpanded.value = false
   editModelForm.value = {
     modelName: '',
     modelType: 'text',
@@ -968,6 +990,7 @@ const handleEditClick = (model: any) => {
   isEditMode.value = true
   currentEditModelId.value = model.id
   const config = model.config || {}
+  defaultParamsExpanded.value = hasCustomDefaultParams(config)
   editModelForm.value = {
     modelName: model.modelName || '',
     modelType: model.modelType || 'text',
@@ -1137,6 +1160,13 @@ const handleFetchModels = async () => {
 :deep(.el-input-number__decrease),
 :deep(.el-input-number__increase) {
   text-align: left !important;
+}
+
+/* el-divider 的文本自带一层实色背景（用来遮住分隔横线），底色是 Element 的
+   --el-bg-color，暗色下与 GdDialog 表面色不一致，会显出一条异色带——
+   对齐对话框底色（变量与 GdDialog.vue 的面板背景同源） */
+:deep(.el-divider__text) {
+  background-color: var(--gd-color-dialog-bg, var(--gd-color-bg));
 }
 
 /* ── 选项胶囊（模型类型 / 能力 / 思考调节）──────────────────────
