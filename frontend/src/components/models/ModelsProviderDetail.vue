@@ -1135,10 +1135,17 @@ const handleFetchModels = async () => {
    也与"高亮色不要用黑色"的反馈一致（主色既做了强调，又不喧宾夺主）。
    固定项（必选的"文本"）外观与其它选中项一致，约束另由锁图标表达。 */
 
-/* 相邻胶囊间距（Element 靠 font-size:0 消除空白，需显式补间距） */
+/* 组内胶囊用 flex + gap 排布：水平间距与换行行距统一 8px（原方案是相邻胶囊
+   补 margin-left，胶囊换行后两行之间没有间距，且行首胶囊会被 margin 顶出缩进） */
+:deep(.el-checkbox-group),
+:deep(.el-radio-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 :deep(.el-checkbox-button + .el-checkbox-button),
 :deep(.el-radio-button + .el-radio-button) {
-  margin-left: 8px;
+  margin-left: 0;
 }
 
 /* 中和 Element 的选中态变量：它的 is-checked / is-active 规则会据此上色，
