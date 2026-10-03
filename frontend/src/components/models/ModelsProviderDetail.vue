@@ -272,27 +272,6 @@
                       {{ t('settings.providerDetail.thinkingMenuNeedsNonOff') }}
                     </div>
 
-                    <template v-if="editModelForm.thinkingEffortsMenu.length > 0">
-                      <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mt-3 mb-2">
-                        {{ t('settings.providerDetail.thinkingWireValue') }}
-                      </div>
-                      <div v-for="effort in editModelForm.thinkingEffortsMenu" :key="'wv-' + effort"
-                        class="flex items-center gap-2 mb-1.5">
-                        <span class="w-24 shrink-0 text-xs text-gray-500 dark:text-[#8b8d95] text-right">
-                          {{ getThinkingEffortLabel(effort) }}
-                        </span>
-                        <el-input v-model="editModelForm.wireValues[effort]" size="small"
-                          :disabled="effort === 'on'"
-                          :placeholder="t('settings.providerDetail.thinkingWireValuePlaceholder', { level: effort })"
-                          class="font-mono" style="max-width: 240px;" />
-                        <GdTooltip v-if="effort === 'on'" :content="t('settings.providerDetail.thinkingWireOnLocked')"
-                          placement="top">
-                          <el-icon class="text-gray-400" :size="14"><LockClosed16Regular /></el-icon>
-                        </GdTooltip>
-                      </div>
-                      <div class="mt-1 text-xs text-gray-400">{{ t('settings.providerDetail.thinkingWireValueHint') }}</div>
-                    </template>
-
                     <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mt-3 mb-2">
                       {{ t('settings.providerDetail.thinkingTemplateLabel') }}
                     </div>
@@ -365,6 +344,18 @@
                     </div>
                     <div v-else-if="clearLegacyPatchRequested" class="mt-1 text-xs text-gray-400">
                       {{ t('settings.providerDetail.thinkingLegacyPatchCleared') }}
+                    </div>
+
+                    <!-- 旧版「wire 值映射」数据：界面已由表达式取代，运行时继续生效
+                         （且会优先于档位勾选决定菜单）；有残留时提示，可显式清除 -->
+                    <div v-if="legacyMapLevels" class="mt-1.5 text-xs text-amber-500">
+                      {{ t('settings.providerDetail.thinkingLegacyMap', { levels: legacyMapLevels }) }}
+                      <el-button link type="primary" class="!text-xs !px-1" @click="clearLegacyMapRequested = true">
+                        {{ t('settings.providerDetail.thinkingLegacyPatchClear') }}
+                      </el-button>
+                    </div>
+                    <div v-else-if="clearLegacyMapRequested" class="mt-1 text-xs text-gray-400">
+                      {{ t('settings.providerDetail.thinkingLegacyMapCleared') }}
                     </div>
                   </div>
                 </template>
@@ -572,22 +563,10 @@ const effortsMenuFromModel = (model: any): string[] => {
   return Array.isArray(override) ? [...override] : []
 }
 
-/** 覆盖态 → 表单 wire 值（null 值 = 该档不支持，回填为空串表示"不发映射"） */
-const wireValuesFromModel = (model: any): Record<string, string> => {
-  const override = model?.thinkingEffortsMapOverride
-  const values: Record<string, string> = {}
-  if (override && typeof override === 'object') {
-    for (const [level, wire] of Object.entries(override)) {
-      values[level] = typeof wire === 'string' ? wire : ''
-    }
-  }
-  return values
-}
-
 /** 组思考 payload：
- * - true：能力覆盖 + 可选显式档位/映射/拼法（勾选菜单 → thinkingEfforts 数组；
- *   任一 wire 值非空 → thinkingEffortsMap（键集 = 菜单，空值填档位名）；
- *   表达式非空 → thinkingPatchExpr（并清掉条目级 thinkingFormat 覆盖，表达式接管拼法））
+ * - true：能力覆盖 + 可选显式档位/表达式（勾选菜单 → thinkingEfforts 数组；
+ *   表达式非空 → thinkingPatchExpr 并清掉条目级 thinkingFormat 覆盖——wire 值
+ *   输入已移出界面，改名/钳制由表达式承担，thinkingEffortsMap 不再由表单产出）
  * - false：仅能力覆盖 false
  * - auto：条目存在任一覆盖时发 null 清除，全部回退继承链
  */
@@ -614,13 +593,8 @@ const buildThinkingPayload = (): Record<string, any> => {
     payload.thinkingEfforts = null
   }
 
-  const wireValues = editModelForm.value.wireValues || {}
-  const hasWireValue = menu.some((e) => (wireValues[e] || '').trim() !== '')
-  if (hasWireValue) {
-    const map: Record<string, string> = {}
-    for (const e of menu) map[e] = (wireValues[e] || '').trim() || e
-    payload.thinkingEffortsMap = map
-  } else if (model?.thinkingEffortsMapOverride !== undefined) {
+  // 旧版 wire 值映射：仅显式清除时下发 null（保存不隐式清除，存量数据运行时继续生效）
+  if (clearLegacyMapRequested.value) {
     payload.thinkingEffortsMap = null
   }
 
@@ -765,9 +739,10 @@ const exprVariablesText = computed(() =>
 )
 
 /**
- * 各档位输出预览：按当前勾选菜单 + wire 值求值（与运行时同库同语义）。
+ * 各档位输出预览：按当前勾选菜单 + 生效 wire 映射求值（与运行时同库同语义）。
  * - 表单未勾选任何档位（菜单走继承）→ 回落到模型生效菜单，避免预览空白
- * - wire 值填充规则与保存时一致（空值回填档位名），保证预览即所发
+ * - wire 值输入已移出界面：改名映射来自模型既有 thinkingEffortsMap（旧数据），
+ *   无映射时 wire 值 = 档位名，与运行时 resolveThinkingWireValue 一致
  */
 const exprPreview = computed(() => {
   const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
@@ -778,10 +753,9 @@ const exprPreview = computed(() => {
     ? formMenu
     : (Array.isArray(currentModel.value?.thinkingEfforts) ? currentModel.value.thinkingEfforts as string[] : [])
   if (menu.length === 0) return []
-  const wireValues = editModelForm.value.wireValues || {}
-  const effectiveMap: Record<string, string> = currentModel.value?.thinkingEffortsMap || {}
+  const effectiveMap: Record<string, string | null> = currentModel.value?.thinkingEffortsMap || {}
   const map: Record<string, string> = {}
-  for (const e of menu) map[e] = (wireValues[e] || '').trim() || effectiveMap[e] || e
+  for (const e of menu) map[e] = effectiveMap[e] || e
   return menu.map((level) => {
     try {
       const ctx = buildPatchExprContext(level, {
@@ -805,11 +779,20 @@ const legacyPatchLevels = computed(() => {
   return levels.length > 0 ? levels.join(' / ') : ''
 })
 
+/** 旧版「wire 值映射」残留数据（界面已移除输入，仅提示 + 可显式清除） */
+const clearLegacyMapRequested = ref(false)
+const legacyMapLevels = computed(() => {
+  if (clearLegacyMapRequested.value) return ''
+  const override = currentModel.value?.thinkingEffortsMapOverride
+  if (!override || typeof override !== 'object') return ''
+  const levels = Object.keys(override).filter((k) => override[k] != null)
+  return levels.length > 0 ? levels.join(' / ') : ''
+})
+
 const editModelForm = ref<any>({  modelName: '',
   modelType: 'text',
   thinkingMode: 'auto',
   thinkingEffortsMenu: [] as string[],
-  wireValues: {} as Record<string, string>,
   thinkingPatchExpr: '',
   config: {
     inputCapabilities: ['text'],
@@ -924,7 +907,6 @@ const handleSelectFromFetch = (model: any) => {
     modelType: model.modelType || 'text',
     thinkingMode: 'auto',
     thinkingEffortsMenu: [],
-    wireValues: {},
     thinkingPatchExpr: '',
     config: {
       inputCapabilities: model.config?.inputCapabilities || ['text'],
@@ -951,7 +933,6 @@ const handleAddModel = () => {
     modelType: 'text',
     thinkingMode: 'auto',
     thinkingEffortsMenu: [],
-    wireValues: {},
     thinkingPatchExpr: '',
     config: {
       inputCapabilities: ['text'],
@@ -981,7 +962,6 @@ const handleEditClick = (model: any) => {
     modelType: model.modelType || 'text',
     thinkingMode: thinkingModeFromModel(model),
     thinkingEffortsMenu: effortsMenuFromModel(model),
-    wireValues: wireValuesFromModel(model),
     // 仅回填条目级覆盖；继承链的表达式不回填（避免保存时误写覆盖）
     thinkingPatchExpr: model.thinkingPatchExprOverride || '',
     config: {
@@ -1028,9 +1008,9 @@ const handleSaveModel = async () => {
       }
     }
 
-    // 表单态字段（thinkingMode / thinkingEffortsMenu / wireValues）不进 payload；
+    // 表单态字段（thinkingMode / thinkingEffortsMenu）不进 payload；
     // 思考域按三态 + null 清除语义由 buildThinkingPayload 组装
-    const { thinkingMode, thinkingEffortsMenu, wireValues, ...formRest } = editModelForm.value
+    const { thinkingMode, thinkingEffortsMenu, ...formRest } = editModelForm.value
     const body = { ...formRest, ...buildThinkingPayload() }
 
     if (isEditMode.value) {
