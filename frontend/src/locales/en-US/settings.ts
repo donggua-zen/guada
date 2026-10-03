@@ -435,7 +435,7 @@
     thinkingLegacyMapCleared: 'Legacy wire value map marked for removal (applies after saving).',
     contextWindow: 'Context Window',
     maxOutputTokens: 'Max Output Tokens',
-    defaultParamsDesc: 'Default model parameters (leave empty unless you know exactly what you are doing; the API will decide on its own)',
+    defaultParamsDesc: 'Advanced Settings',
     temperature: 'Temperature',
     modelDefault: 'Model Default',
     frequencyPenalty: 'Frequency Penalty',
