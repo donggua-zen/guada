@@ -52,12 +52,9 @@
         </div>
       </template>
 
-      <!-- 模型管理快速入口：跳设置页「模型供应商」分区 -->
+      <!-- 模型管理快速入口：跳设置页「模型供应商」分区（不加前置图标，与其它行风格一致） -->
       <div class="section-divider"></div>
       <div class="cascade-trigger" @click="goProviderSettings">
-        <el-icon size="16" class="text-gray-400 shrink-0">
-          <Database24Regular />
-        </el-icon>
         <span class="text-sm flex-1">{{ t('chat.input.manageModels') }}</span>
         <el-icon size="14" class="text-gray-400">
           <ChevronRight24Regular />
@@ -162,7 +159,7 @@ import { computed, ref, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled, Database24Regular } from '@vicons/fluent'
+import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import Avatar from '../../ui/Avatar.vue'
 import { getModelDisplayName, getModelAvatarPath, getThinkingEffortLabel } from '@/utils/modelUtils'
