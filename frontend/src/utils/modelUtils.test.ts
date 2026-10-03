@@ -46,7 +46,7 @@ describe("getDefaultThinkingEffort", () => {
 
 /**
  * 拼法模板选择态推导：表达式文本 → 下拉显示值。
- * 逐字相等才算命中模板（避免"看起来像"的误判），空 = 跟随继承。
+ * 逐字相等才算命中模板（避免"看起来像"的误判），空 = 默认 openai 拼法（无表达式）。
  */
 describe("matchPatchTemplate", () => {
   const templates = [
@@ -54,7 +54,7 @@ describe("matchPatchTemplate", () => {
     { format: "zai", expression: '{"thinking": {"type": "enabled"}}' },
   ];
 
-  it("空表达式 → 跟随继承（空串）", () => {
+  it("空表达式 → 空串（下拉显示默认 openai 占位）", () => {
     expect(matchPatchTemplate("", templates)).toBe("");
     expect(matchPatchTemplate("   ", templates)).toBe("");
     expect(matchPatchTemplate(undefined, templates)).toBe("");

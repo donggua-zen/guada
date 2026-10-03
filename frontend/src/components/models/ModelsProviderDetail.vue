@@ -275,8 +275,8 @@
                     <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mt-3 mb-2">
                       {{ t('settings.providerDetail.thinkingTemplateLabel') }}
                     </div>
-                    <el-select v-model="templateSelection" clearable filterable
-                      :placeholder="t('settings.providerDetail.thinkingTemplateInherit')"
+                    <el-select v-model="templateSelection" filterable
+                      :placeholder="t('settings.providerDetail.thinkingTemplateDefault')"
                       style="max-width: 240px;" @change="onTemplateSelect">
                       <el-option v-for="tpl in curatedTemplates" :key="tpl.format"
                         :label="templateLabel(tpl.format)" :value="tpl.format" />
@@ -324,7 +324,7 @@
                     <!-- 表达式为空：显示当前生效拼法及其等价表达式，一键填入（不自动改数据） -->
                     <div v-if="!editModelForm.thinkingPatchExpr.trim()" class="preset-hint">
                       <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
-                      {{ t('settings.providerDetail.thinkingExprInheritHint', { format: effectiveFormatLabel }) }}
+                      {{ t('settings.providerDetail.thinkingExprEmptyHint', { format: formEffectiveFormat }) }}
                       <el-button v-if="inheritedTemplateExpr" link type="primary" class="!text-xs !px-1"
                         @click="fillTemplate(inheritedTemplateExpr)">
                         {{ t('settings.providerDetail.thinkingExprFill') }}
@@ -599,7 +599,9 @@ const buildThinkingPayload = (): Record<string, any> => {
   }
 
   // 拼法表达式：非空 → 提交并清掉条目级 thinkingFormat 覆盖（表达式接管拼法，
-  // 避免清空表达式后回落到陈旧拼法）；空 → 有条目覆盖则 null 清除（回退内置拼法）
+  // 避免清空表达式后回落到陈旧拼法）。空 → 自定义态拼法显式化：默认 openai 钉在
+  // 条目 compat 上（不再跟随类型卡，想跟随用「自动判断」）；条目已有显式
+  // thinkingFormat（legacy 数据）则保留不动；同时清掉残留的表达式覆盖
   const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
   if (expr) {
     payload.thinkingPatchExpr = expr
@@ -610,8 +612,13 @@ const buildThinkingPayload = (): Record<string, any> => {
     } else if (model?.compatOverride !== undefined) {
       payload.compat = null
     }
-  } else if (model?.thinkingPatchExprOverride !== undefined) {
-    payload.thinkingPatchExpr = null
+  } else {
+    if (model?.thinkingPatchExprOverride !== undefined) {
+      payload.thinkingPatchExpr = null
+    }
+    if (model?.compatOverride?.thinkingFormat === undefined) {
+      payload.compat = { ...(model?.compatOverride || {}), thinkingFormat: 'openai' }
+    }
   }
 
   // 旧版「档位 → JSON Patch」：界面已由表达式取代；仅显式清除时下发 null
@@ -649,10 +656,10 @@ const effectiveFormatSupportsEffort = computed(
   () => currentModel.value?.supportsReasoningEffort ?? true
 )
 
-/** 当前生效拼法名（条目覆盖 > 继承链，后端已解析） */
-const effectiveFormatLabel = computed(
-  () => currentModel.value?.thinkingFormat || 'openai'
-)
+/** 自定义态空表达式的生效拼法（所见即所存）：条目显式 thinkingFormat（legacy 保留）> 默认 openai */
+const formEffectiveFormat = computed(() => {
+  return currentModel.value?.compatOverride?.thinkingFormat ?? 'openai'
+})
 
 // 按 API 地址推荐拼法（每次会话只请求一次；仅供提示，保存需用户显式选择）
 const formatSuggestion = ref<{ format: string; vendor: string } | null>(null)
@@ -705,12 +712,16 @@ const templateLabel = (format: string) => {
   return key ? t(`settings.providerDetail.${key}`) : format
 }
 
-/** 模板下拉显示值：表达式文本反推（'' = 跟随继承；format = 命中预制模板；custom = 自定义） */
-const templateSelection = computed(() =>
-  matchPatchTemplate(editModelForm.value.thinkingPatchExpr, curatedTemplates.value)
-)
+/** 模板下拉显示值 = 当前生效拼法：表达式命中预制模板 → 风格名；自定义表达式 → 自定义；
+ *  空表达式 → 生效内置拼法直接回显为选中项（自定义态默认 openai / legacy 显式 format），
+ *  所见即所发——下拉没有"未选择"态，想跟随类型卡拼法应切「自动判断」 */
+const templateSelection = computed(() => {
+  const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
+  if (expr) return matchPatchTemplate(expr, curatedTemplates.value)
+  return formEffectiveFormat.value || 'openai'
+})
 
-/** 选模板 → 回填表达式；跟随继承 = 清空；自定义 = 保持文本不动（焦点交给编辑器） */
+/** 选模板 → 回填表达式；清除选择 = 清空回落默认 openai；自定义 = 保持文本不动（焦点交给编辑器） */
 const onTemplateSelect = (value: string) => {
   if (value === PATCH_TEMPLATE_CUSTOM) return
   const tpl = patchTemplates.value.find((x) => x.format === value)
@@ -730,7 +741,7 @@ const suggestedTemplateExpr = computed(() => {
 
 /** 当前生效拼法的等价表达式（表达式为空时提示可一键填入） */
 const inheritedTemplateExpr = computed(
-  () => patchTemplates.value.find((x) => x.format === effectiveFormatLabel.value)?.expression || ''
+  () => patchTemplates.value.find((x) => x.format === formEffectiveFormat.value)?.expression || ''
 )
 
 /** 表达式可用变量提示文本 */
