@@ -38,7 +38,7 @@
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-4.5 h-4.5 shrink-0" />
               <span class="text-xs font-medium ml-1 max-w-32 truncate">{{ modelButtonLabel }}</span>
-              <span v-if="displayThinkingEffort" class="text-xs text-gray-400">{{ getThinkingEffortLabel(displayThinkingEffort) }}</span>
+              <span v-if="displayThinkingEffort" class="text-xs text-gray-400">{{ getThinkingEffortLabelWithKey(displayThinkingEffort) }}</span>
               <el-icon size="14" class="ml-0.5"><ChevronUpDown16Regular /></el-icon>
             </button>
           </div>
@@ -258,7 +258,7 @@ import WorkspaceSelectorPopover from '@/components/chat/chat-input/WorkspaceSele
 import ModelSelectorPanel from '@/components/chat/chat-input/ModelSelectorPanel.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
-import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabel } from '@/utils/modelUtils'
+import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabelWithKey } from '@/utils/modelUtils'
 
 const { t } = useI18n()
 const DEFAULT_AGENT_ID = 'assistant-agent'

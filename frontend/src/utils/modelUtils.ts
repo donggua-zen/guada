@@ -225,6 +225,16 @@ export function getThinkingEffortLabel(effort: string): string {
 }
 
 /**
+ * 获取思考强度的显示标签（附括号原值）——配置场景专用：
+ * 表达式变量 reasoningLevel / wireValue、thinkingEffortsMap 的键都是
+ * 原始档位键，配置界面需展示对应关系。聊天等使用场景保持纯标签。
+ */
+export function getThinkingEffortLabelWithKey(effort: string): string {
+  const label = getThinkingEffortLabel(effort);
+  return label === effort ? label : `${label} (${effort})`;
+}
+
+/**
  * 规范思考档位全集（编辑表单复选框数据源）。
  * 与后端 THINKING_EFFORTS 同集同序（none/on/minimal/low/medium/high/xhigh/max），
  * 词表增删时两处需同步（后端有漂移门控，此处靠注释约束）。
