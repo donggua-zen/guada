@@ -15,7 +15,7 @@
                 <template #title-actions>
                   <DropdownMenu @command="handleMoreSelect">
                     <div class="header-icon-btn">
-                      <MoreVertOutlined class="w-5 h-5" />
+                      <MoreHorizontal24Regular class="w-5 h-5" />
                     </div>
                     <template #dropdown>
                       <DropdownMenuItem command="clear">
@@ -144,12 +144,11 @@ import GdTooltip from "@/components/ui/GdTooltip.vue";
 import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
-  MoreVertOutlined,
   DeleteTwotone,
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular } from "@vicons/fluent";
+import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular } from "@vicons/fluent";
 import { VsCode, WindowsExplorer } from "@/components/icons";
 import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";
