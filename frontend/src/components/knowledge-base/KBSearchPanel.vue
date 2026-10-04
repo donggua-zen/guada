@@ -129,7 +129,7 @@ import { apiService } from '@/services/ApiService'
 
 interface SearchResult {
   content: string
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   similarity?: number  // 旧版字段，兼容纯语义搜索
   semanticScore?: number  // 语义分数
   keywordScore?: number   // 关键词分数

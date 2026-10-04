@@ -567,10 +567,10 @@ const handleSaveSessionSettings = async () => {
   try {
     const targetSession = mainSession.value;
     if (targetSession) {
+      // workspacePath 不在后端 updateSession 白名单内（服务端会丢弃），此处不再发送
       await apiService.updateSession(targetSession.id, {
         modelId: targetSession.modelId,
         settings: targetSession.settings,
-        workspacePath: targetSession.workspacePath
       });
     }
   } catch (error: any) {

@@ -60,7 +60,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { WorkspaceNode } from './WorkspaceTree.vue';
+import type { WorkspaceNode } from '@/types/workspace';
 
 // 递归组件需要显式导入自身
 import WorkspaceTreeNode from './WorkspaceTreeNode.vue';

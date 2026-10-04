@@ -92,6 +92,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
 import { useDebounceFn } from '@vueuse/core'
+import type { SearchGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
@@ -146,7 +147,7 @@ const handleProviderChange = async (val: string) => {
 // 加载设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('search')
+    const response = await apiService.fetchGroupSettings<SearchGroupSettings>('search')
     selectedProvider.value = response.provider || 'bocha'
     providerKeys.bocha = response.bocha?.apiKey || ''
     providerKeys.tavily = response.tavily?.apiKey || ''

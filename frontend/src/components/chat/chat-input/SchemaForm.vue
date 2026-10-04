@@ -38,7 +38,7 @@
             v-for="opt in field.options"
             :key="String(opt.value)"
             :label="opt.label"
-            :value="opt.value"
+            :value="(opt.value as string | number | boolean | object)"
           />
         </el-select>
 

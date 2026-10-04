@@ -8,6 +8,14 @@ import type { StreamEvent } from '@/types/service'
 /**
  * Mock 配置选项
  */
+/** 自定义工具调用（mock 场景配置） */
+export interface MockToolCall {
+  id?: string
+  name: string
+  arguments?: string
+  [key: string]: unknown
+}
+
 export interface MockConfig {
   /** 是否启用思考过程 */
   enableThinking?: boolean
@@ -28,7 +36,7 @@ export interface MockConfig {
   /** 自定义思考内容 */
   customThinking?: string
   /** 自定义工具调用 */
-  customToolCalls?: any[]
+  customToolCalls?: MockToolCall[]
 }
 
 /**
@@ -345,6 +353,8 @@ modelName: 'mock-model-v1',
     yield {
       type: 'tool_call',
       toolCalls: customToolCalls.map((tc, index) => ({
+        // type 是 ToolCall 契约的必需字段，mock 侧补齐以保证载荷形状与真实链路一致
+        type: 'function' as const,
         ...tc,
         index,
       })),

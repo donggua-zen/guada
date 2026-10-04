@@ -1,13 +1,14 @@
 import type { ApiContext } from "./api-context";
 import type { PaginatedResponse } from "@/types/common";
+import type { Skill, SkillCommand } from "@/types/skills";
 
 export interface SkillsApi {
-  fetchSkills(): Promise<PaginatedResponse<any>>;
-  fetchCommands(trigger: string, agentId?: string): Promise<{ items: any[]; total: number }>;
-  fetchSkillDetail(skillId: string): Promise<any>;
+  fetchSkills(): Promise<PaginatedResponse<Skill>>;
+  fetchCommands(trigger: string, agentId?: string): Promise<{ items: SkillCommand[]; total: number }>;
+  fetchSkillDetail(skillId: string): Promise<Skill | null>;
   fetchSkillDocumentation(skillId: string): Promise<{ content: string }>;
-  scanSkills(): Promise<any>;
-  reloadSkill(skillId: string): Promise<any>;
+  scanSkills(): Promise<{ success: boolean; message: string }>;
+  reloadSkill(skillId: string): Promise<Skill>;
   getAutoScanStatus(): Promise<{ enabled: boolean }>;
   toggleAutoScan(enabled: boolean): Promise<{ enabled: boolean }>;
   installSkill(file: File, force?: boolean): Promise<{ success: boolean; skillId?: string; message: string }>;
@@ -21,38 +22,40 @@ export interface SkillsApi {
 
 export const skillsApi: SkillsApi = {
   async fetchSkills(this: ApiContext) {
-    return await this._request("/skills");
+    return await this._request<PaginatedResponse<Skill>>("/skills");
   },
 
   async fetchCommands(this: ApiContext, trigger: string, agentId?: string) {
     const query = agentId
       ? `/commands?trigger=${trigger}&agentId=${agentId}`
       : `/commands?trigger=${trigger}`;
-    return await this._request(query);
+    return await this._request<{ items: SkillCommand[]; total: number }>(query);
   },
 
   async fetchSkillDetail(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}`);
+    return await this._request<Skill | null>(`/skills/${skillId}`);
   },
 
   async fetchSkillDocumentation(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}/documentation`);
+    return await this._request<{ content: string }>(`/skills/${skillId}/documentation`);
   },
 
   async scanSkills(this: ApiContext) {
-    return await this._request("/skills/scan", { method: "POST" });
+    return await this._request<{ success: boolean; message: string }>("/skills/scan", {
+      method: "POST",
+    });
   },
 
   async reloadSkill(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}/reload`, { method: "POST" });
+    return await this._request<Skill>(`/skills/${skillId}/reload`, { method: "POST" });
   },
 
   async getAutoScanStatus(this: ApiContext) {
-    return await this._request("/skills/watcher/status");
+    return await this._request<{ enabled: boolean }>("/skills/watcher/status");
   },
 
   async toggleAutoScan(this: ApiContext, enabled: boolean) {
-    return await this._request("/skills/watcher/toggle", {
+    return await this._request<{ enabled: boolean }>("/skills/watcher/toggle", {
       method: "POST",
       data: { enabled },
     });
@@ -66,7 +69,7 @@ export const skillsApi: SkillsApi = {
     }
 
     try {
-      return await this._request("/skills/install", {
+      return await this._request<{ success: boolean; skillId?: string; message: string }>("/skills/install", {
         method: "POST",
         data: formData,
         headers: {
@@ -80,38 +83,38 @@ export const skillsApi: SkillsApi = {
   },
 
   async installSkillFromUrl(this: ApiContext, url: string, force: boolean = false) {
-    return await this._request("/skills/install-from-url", {
+    return await this._request<{ success: boolean; skillId?: string; message: string }>("/skills/install-from-url", {
       method: "POST",
       data: { url, force },
     });
   },
 
   async uninstallSkill(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}/uninstall`, {
+    return await this._request<{ success: boolean; message: string }>(`/skills/${skillId}/uninstall`, {
       method: "POST",
     });
   },
 
   async enableSkill(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}/enable`, {
+    return await this._request<{ success: boolean; message: string }>(`/skills/${skillId}/enable`, {
       method: "POST",
     });
   },
 
   async disableSkill(this: ApiContext, skillId: string) {
-    return await this._request(`/skills/${skillId}/disable`, {
+    return await this._request<{ success: boolean; message: string }>(`/skills/${skillId}/disable`, {
       method: "POST",
     });
   },
 
   async batchToggleSkills(this: ApiContext, ids: string[], enabled: boolean) {
-    return await this._request("/skills/batch-toggle", {
+    return await this._request<{ success: boolean; message: string }>("/skills/batch-toggle", {
       method: "POST",
       data: { ids, enabled },
     });
   },
 
   async fetchSkillsEnabledStatus(this: ApiContext) {
-    return await this._request("/skills/enabled-status");
+    return await this._request<Array<{ id: string; enabled: boolean }>>("/skills/enabled-status");
   },
 };

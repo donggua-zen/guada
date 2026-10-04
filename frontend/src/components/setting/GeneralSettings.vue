@@ -140,6 +140,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDebounceFn } from '@vueuse/core'
+import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { useAuthStore } from '@/stores/auth'
@@ -189,7 +190,7 @@ watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir
 // 加载 system 分组设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('system')
+    const response = await apiService.fetchGroupSettings<SystemGroupSettings>('system')
 
     // 填充表单
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''

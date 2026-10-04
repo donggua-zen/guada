@@ -4,22 +4,24 @@
  */
 
 import type { StreamEvent } from "@/types/service";
+import type { FileRef } from "@/types/stream/content-block.types";
+import type { MockConfig } from "../mockStreamService";
 
 /**
  * 创建 Mock 模式的方法集合（延迟加载配置）
  */
 export function createMockMethods() {
   // 缓存配置，避免重复加载
-  let cachedConfig: any = null;
-  let configPromise: Promise<any> | null = null;
+  let cachedConfig: MockConfig | null = null;
+  let configPromise: Promise<MockConfig> | null = null;
 
   // 异步加载配置的函数
-  async function loadMockConfig(): Promise<any> {
+  async function loadMockConfig(): Promise<MockConfig> {
     if (cachedConfig) return cachedConfig;
     if (configPromise) return configPromise;
 
     configPromise = (async () => {
-      let defaultConfig: any = {};
+      let defaultConfig: MockConfig = {};
       const scenarioName =
         localStorage.getItem("VITE_MOCK_SCENARIO") ||
         import.meta.env.VITE_MOCK_SCENARIO;
@@ -59,7 +61,7 @@ export function createMockMethods() {
       sessionId: string;
       regenerationMode?: string | null;
       assistantMessageId?: string | null;
-      resumeData?: any;
+      resumeData?: unknown;
       userMessage?: {
         id?: string;
         content?: string;
@@ -108,10 +110,10 @@ export function createMockMethods() {
   const mockCreateMessage = async (
     sessionId: string,
     content: string,
-    files: any[] = [],
+    files: FileRef[] = [],
     replaceTurnId: string | null = null,
     knowledgeBaseIds?: string[],
-  ): Promise<any> => {
+  ): Promise<unknown> => {
     console.log(`[Mock] 拦截 createMessage 请求:`, {
       sessionId,
       content: content.substring(0, 50) + (content.length > 50 ? "..." : ""),

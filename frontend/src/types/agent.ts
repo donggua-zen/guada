@@ -42,7 +42,8 @@ export interface AgentSettings {
 export interface CreateAgentRequest {
     name: string
     description?: string
-    modelId?: string
+    /** null = 清除模型绑定（与 Agent.modelId 的可空语义对齐） */
+    modelId?: string | null
     settings?: Partial<AgentSettings>
 }
 
@@ -52,7 +53,7 @@ export interface CreateAgentRequest {
 export interface UpdateAgentRequest {
     name?: string
     description?: string
-    modelId?: string
+    modelId?: string | null
     settings?: Partial<AgentSettings>
 }
 
