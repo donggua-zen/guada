@@ -134,13 +134,6 @@ const openSubAgentPanel = (index: number): void => {
 
 // ── 执行状态 ──
 
-const isExecuting = computed(() => {
-  if (props.isStreaming === false) return false;
-  if (props.toolResponses && props.toolResponses.length > 0) return false;
-  if (props.toolCalls?.some((tc) => tc.outcome)) return false;
-  return true;
-});
-
 const isToolExecuting = (tool: ToolCall, index: number): boolean => {
   if (tool.outcome) return false;
   if (props.isStreaming === false) return false;

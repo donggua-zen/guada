@@ -26,7 +26,7 @@
     </GdDialog>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onUnmounted, watch } from 'vue'
 import Avatar from './Avatar.vue'
 import GdTooltip from './GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'

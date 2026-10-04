@@ -199,7 +199,7 @@ const providerRules = computed(() => ({
     trigger: ['blur']
   },
   headers: {
-    validator: (rule: any, value: string, callback: any) => {
+    validator: (_rule: any, value: string, callback: any) => {
       const errors = validateHeadersText(value)
       if (errors.length > 0) {
         callback(new Error(errors.join('；')))

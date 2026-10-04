@@ -45,9 +45,6 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     /** 最大并发上传数 */
     const MAX_CONCURRENT_UPLOADS = 3
 
-    /** 上传队列定时器 */
-    const queueProcessorTimer: ReturnType<typeof setTimeout> | null = null
-
 
     // ========== Actions ==========
 
@@ -269,7 +266,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     async function uploadToKnowledgeBase(
         kbId: string,
         file: File,
-        onProgressUpdate?: (status: UploadTask) => void
+        _onProgressUpdate?: (status: UploadTask) => void
     ) {
         try {
             // 从文件名提取扩展名

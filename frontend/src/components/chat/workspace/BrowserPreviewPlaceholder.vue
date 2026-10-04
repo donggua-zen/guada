@@ -264,11 +264,6 @@ async function navigateToUrl(): Promise<void> {
   addressBarRef.value?.blur()
 }
 
-function close(): void {
-  store.setActive(null)
-  store.setPreviewRect(null)
-}
-
 // ── 监听活跃 webview URL 变化，同步地址栏 ──
 
 watch(

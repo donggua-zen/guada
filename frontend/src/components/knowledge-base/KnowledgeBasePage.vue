@@ -238,7 +238,6 @@ import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
 import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
-import { useStorage, useDebounceFn } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
 import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
 import { MenuBookOutlined } from '@vicons/material'
@@ -259,7 +258,6 @@ const router = useRouter()
 // ========== 状态 ==========
 const showKbDialog = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
-const showUploadModal = ref(false)
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
@@ -377,17 +375,6 @@ function backToList() {
   viewMode.value = 'list'
   store.setActiveKnowledgeBase(null)
   router.replace({ name: 'KnowledgeBase' })
-}
-
-/**
- * 处理下拉菜单命令
- */
-function handleDropdownCommand(command: string, kb: KnowledgeBase) {
-  if (command === 'edit') {
-    handleEdit(kb)
-  } else if (command === 'delete') {
-    handleDelete(kb)
-  }
 }
 
 /**
@@ -609,7 +596,7 @@ async function handleFolderCreated() {
 /**
  * 处理滚动事件（带防抖）
  */
-function handleScroll(event: Event) {
+function handleScroll(_event: Event) {
   if (!fileListContainer.value || !fileTreeRef.value) return
 
   const container = fileListContainer.value.getScrollElement?.() || fileListContainer.value.$el

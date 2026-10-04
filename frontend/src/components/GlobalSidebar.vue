@@ -494,12 +494,6 @@ const getGroupSessions = (groupId: string): any[] => {
   return sessionStore.getSessionsByGroup(groupIdParam)
 }
 
-// 获取分组会话数量（从 sessionStore 统一数据源获取）
-const getGroupSessionCount = (groupId: string): number => {
-  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
-  return sessionStore.getGroupTotal(groupIdParam)
-}
-
 // 分组是否展开
 const isGroupExpanded = (groupId: string): boolean => {
   if (groupId === UNGROUPED_ID) {

@@ -19,9 +19,9 @@
     "noImplicitThis": true,
     "alwaysStrict": true,
     
-    /* 未使用的代码检查 - 初期关闭 */
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    /* 未使用的代码检查 */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     

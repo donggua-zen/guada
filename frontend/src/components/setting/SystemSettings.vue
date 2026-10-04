@@ -145,15 +145,13 @@ import {
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
 
-import { useAuthStore } from '../../stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePluginSlots, type ResolvedSlotItem } from '../../stores/pluginSlots'
-import { PuzzleCube20Regular, PuzzleCube24Regular } from '@vicons/fluent'
+import { PuzzleCube20Regular } from '@vicons/fluent'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 

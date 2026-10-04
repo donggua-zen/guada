@@ -104,9 +104,6 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 const { notify } = usePopup()
 
-// 表单引用
-const formRef = ref(null)
-
 // 表单数据
 const settingsForm = reactive({
   provider: 'none',

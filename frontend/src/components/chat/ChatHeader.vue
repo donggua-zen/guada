@@ -72,7 +72,6 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 import {
-    FormatListBulletedSharp,
     MoreVertOutlined,
     DeleteTwotone,
     FileDownloadOutlined,
@@ -108,9 +107,6 @@ const emit = defineEmits<{
     'toggle-workspace': [] // 新增：切换工作目录
     'select-more-option': [command: string]
 }>();
-
-// 判断是否为 Electron 环境
-const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
 const handleSelect = (command: string): void => {
     emit('select-more-option', command);

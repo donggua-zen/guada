@@ -362,11 +362,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
-import { RefreshOutlined, InboxOutlined, DescriptionOutlined, UploadOutlined, DeleteOutlined } from '@vicons/material'
-import { RefreshRight, Loading, UploadFilled, Document, Close, TopRight } from '@element-plus/icons-vue'
+import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material'
+import { Loading, UploadFilled, Document, Close, TopRight } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
-import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
+import { SkillMarketService, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
@@ -687,8 +687,6 @@ async function handleScan() {
  * 重载指定 Skill
  */
 async function handleReloadSkill(skillId: string) {
-    const previousState = reloadingSkills.value.has(skillId)
-
     try {
         reloadingSkills.value.add(skillId)
         await apiService.reloadSkill(skillId)

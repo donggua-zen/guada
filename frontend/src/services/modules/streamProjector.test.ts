@@ -11,8 +11,6 @@
  *   tool_calls_response 按 toolCallId 挂载到块
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ref } from "vue";
-import { setActivePinia, createPinia } from "pinia";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 import {
   foldEvents,
@@ -22,9 +20,8 @@ import {
   type ProjectorSessionStore,
   type ProjectorSessionState,
 } from "./streamProjector";
-import { useSessionTokenStats } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
-import type { Turn, TurnContent, MessageBundle } from "@/types/message";
+import type { Turn } from "@/types/message";
 
 function createStore() {
   // 测试断言按"目标存在"编写：turns/eventLog 放宽为 any[]，让 find/index 访问不必逐处非空断言；

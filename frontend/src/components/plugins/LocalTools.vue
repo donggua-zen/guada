@@ -159,11 +159,6 @@ function showDetail(tool: PluginQueryPlugin) {
   detailVisible.value = true
 }
 
-async function handleInstall() {
-  // 兼容保留：直接同步安装（无轮询）。UI 用 startInstallDialog（假终端）。
-  await startInstall()
-}
-
 // ── 安装假终端（轮询日志）──
 const installDialogVisible = ref(false)
 const installLog = ref('')

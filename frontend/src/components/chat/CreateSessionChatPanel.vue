@@ -80,11 +80,6 @@ import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 
-// UI 组件导入
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
-
-const breakpoints = useBreakpoints(breakpointsTailwind)
-
 // 弹出层工具
 const { notify } = usePopup();
 const router = useRouter();
@@ -397,11 +392,6 @@ const handleAgentSelect = (agent: any): void => {
       modelId: selectedModelId
     };
   }
-};
-
-const handleAgentSelectById = (agentId: string): void => {
-  const agent = agents.value.find(c => c.id === agentId);
-  if (agent) handleAgentSelect(agent);
 };
 
 // 前往智能体页面切换智能体

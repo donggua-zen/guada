@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, type CSSProperties } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import { ArrowRight } from "@element-plus/icons-vue";
 
 /**

@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { GlobalSettings, User } from "@/types/service";
+import type { GlobalSettings } from "@/types/service";
 import type { ToolDisplayConfig } from "@/utils/toolDisplay";
 
 export interface SettingsApi {

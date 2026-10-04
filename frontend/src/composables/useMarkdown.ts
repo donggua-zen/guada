@@ -3,7 +3,6 @@ import {
   Marked,
   type Renderer,
   type Tokens,
-  type TokenizerAndRendererExtension,
 } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js/lib/core";
@@ -306,7 +305,7 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
   // 禁用 autolink - 通过覆盖 tokenizer
   marked.use({
     tokenizer: {
-      url(src: string) {
+      url(_src: string) {
         // 返回 undefined 以禁用 URL 自动链接
         return undefined;
       },

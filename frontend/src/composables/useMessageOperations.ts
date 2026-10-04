@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { t } from '@/locales'
 import type { InputMessageState } from '@/types/session'

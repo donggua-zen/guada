@@ -238,20 +238,18 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, inject } from "vue";
-import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
+import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, PanelRightExpand20Filled } from "@vicons/fluent";
-import { Loading } from "@element-plus/icons-vue";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
-import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
+import { groupContentsForDisplay, type DisplayGroup, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
-import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
@@ -261,12 +259,10 @@ import FileChangesBar from './message-item/FileChangesBar.vue';
 import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
-import { apiService } from '@/services/ApiService';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
 
-const { toast } = usePopup();
 const { t } = useI18n();
 
 const props = defineProps<{
@@ -560,7 +556,6 @@ const isSystemMessage = computed(() => {
 const systemMessageLabel = computed(() => {
   const meta = user.value?.metadata;
   const type = meta?.type || '';
-  const name = meta?.subAgentName || '';
   switch (type) {
     case 'scheduler': return t('chat.turn.systemMessageScheduler');
     case 'sub_agent': return t('chat.turn.systemMessageSubAgent');
@@ -573,7 +568,7 @@ const renderSkillBadges = (text: string): string => {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return escaped.replace(
     /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g,
-    (match, prefix, provider, name, attrsStr) => {
+    (_match, prefix, provider, name, attrsStr) => {
       const attrs: Record<string, string> = { label: '' };
       if (attrsStr) {
         const attrRegex = /(\w+)="([^"]*)"/g;

@@ -308,7 +308,6 @@ const settingsForm = reactive({
 })
 
 const previewUrl = ref<string | null>(null)
-const uploadRef = ref<InstanceType<typeof ElUpload> | null>(null)
 
 /**
  * 将相对路径拼接为完整 URL（用于预览和显示）

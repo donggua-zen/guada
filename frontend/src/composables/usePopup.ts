@@ -1,11 +1,9 @@
 // src/composables/usePopup.ts
-import { ref, h, type VNode } from 'vue'
+import { h, type VNode } from 'vue'
 import {
     ElMessageBox,
     ElMessage,
     ElNotification,
-    ElButton,
-    type ElMessageBoxOptions,
     type NotificationOptions
 } from 'element-plus'
 import { t } from '@/locales'
@@ -214,7 +212,7 @@ export function usePopup(): UsePopupReturn {
                     fontFamily: 'inherit',
                     boxSizing: 'border-box'
                 },
-                onInput: (e: Event) => {
+                onInput: (_e: Event) => {
                     // 注意：这里我们无法直接访问 textarea 元素
                     // 在 beforeClose 回调中仍然需要通过 DOM 查询获取值
                 }

@@ -3,7 +3,7 @@
  */
 
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
-import type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
+import type { MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 
 /**

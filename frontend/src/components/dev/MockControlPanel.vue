@@ -22,7 +22,7 @@
         <label>选择场景:</label>
         <select v-model="selectedScenario" @change="handleScenarioChange">
           <option value="">-- 自定义 --</option>
-          <option v-for="(config, name) in scenarios" :key="name" :value="name">
+          <option v-for="(_, name) in scenarios" :key="name" :value="name">
             {{ formatScenarioName(name) }}
           </option>
         </select>

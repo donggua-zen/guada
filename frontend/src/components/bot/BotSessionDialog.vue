@@ -55,7 +55,7 @@ import { foldEvents, type ProjectorSessionStore } from '@/services/modules/strea
 import { isHiddenBlock } from '@/utils/messageUtils'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
-import type { Turn, TurnContent } from '@/types/message'
+import type { Turn } from '@/types/message'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
@@ -160,13 +160,13 @@ const handleDeleteMessage = async (turn: Turn) => {
 }
 
 // 编辑消息
-const handleEditMessage = async (block: any) => {
+const handleEditMessage = async (_: any) => {
   ElMessage.info(t('bot.sessionDialog.editNotImplemented'))
   // TODO: 实现编辑功能
 }
 
 // 复制消息
-const handleCopyMessage = (block: any) => {
+const handleCopyMessage = (_: any) => {
   // TurnItem 组件内部已经处理了复制逻辑
   // 这里可以添加额外的处理
 }

@@ -175,7 +175,6 @@ import {
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
   ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled
 } from '@vicons/fluent'
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
 
 /** File object managed by ChatInput (created via createFileObject) */
@@ -223,9 +222,6 @@ interface ChatConfig {
 
 /** File with optional _originalContent attached by paste handler */
 type FileWithContent = File & { _originalContent?: string }
-
-const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('lg') // md = 768px
 
 const { t } = useI18n()
 
@@ -459,7 +455,7 @@ const parseCommandTags = (text: string): string => {
   // 匹配 [/type:name key="val" key="val" ...] 或 [@type:name ...]
   return text.replace(
     /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g,
-    (match, prefix, provider, name, attrsStr) => {
+    (_match, prefix, provider, name, attrsStr) => {
       const attrs: Record<string, string> = { label: '' };
       if (attrsStr) {
         const attrRegex = /(\w+)="([^"]*)"/g;
@@ -566,11 +562,6 @@ const initThinkingEffort = () => {
   syncThinkingEffort();
 };
 
-// 获取思考强度的标签（用于按钮显示）
-const getThinkingEffortShortLabel = (effort: string) => {
-  return getThinkingEffortLabel(effort);
-};
-
 // 处理思考强度变更
 const handleThinkingEffortChange = (effort: string) => {
   if (!effort) return;
@@ -597,12 +588,6 @@ const currentThinkingLabel = computed(() => {
   if (!showButtons.thinkingButton) return '';
   const effort = localThinkingEffort.value;
   return getThinkingEffortLabel(effort);
-});
-
-const currentModelName = computed(() => {
-  const name = currentModelNameOnly.value;
-  const effort = currentThinkingLabel.value;
-  return effort ? `${name} · ${effort}` : name;
 });
 
 // 当前选中的知识库列表（根据 ID 从完整列表中过滤）
@@ -654,14 +639,6 @@ const handleMaxTokensChange = (val: number | null) => {
 };
 
 
-
-const getFeatureLabel = (type: string) => {
-  switch (type) {
-    case 'tools': return t('chat.input.featureTools');
-    case 'thinking': return t('chat.input.featureThinking');
-    default: return type;
-  }
-}
 
 const emit = defineEmits([
   'update:value',
@@ -1357,7 +1334,6 @@ const selectCommand = (item: SkillCommand) => {
   const { $from } = selection;
 
   const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
-  const slashIndex = textBefore.lastIndexOf('/');
 
   // 删除触发字符（/ 或 @）及其后的查询文本
   const triggerIndex = textBefore.lastIndexOf('/');
@@ -1496,7 +1472,6 @@ onMounted(() => {
         nextTick(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
           if (pmEl) {
-            const height = Math.min(pmEl.scrollHeight, 240);
             pmEl.style.minHeight = '58px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
@@ -1561,7 +1536,7 @@ onUnmounted(() => {
   }
 
   // 清理所有预览 URL，防止内存泄漏
-  previewUrls.value.forEach((url, fileId) => {
+  previewUrls.value.forEach((url, _fileId) => {
     if (url?.startsWith('blob:')) {
       URL.revokeObjectURL(url);
     }

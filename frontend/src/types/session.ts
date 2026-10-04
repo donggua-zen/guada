@@ -2,7 +2,7 @@
  * 会话相关类型定义
  */
 
-import type { ISODateString, DeepPartial } from './common'
+import type { ISODateString } from './common'
 import type { Turn } from './message'
 // 注意：不要重新导出 Message，避免循环依赖
 import type { Agent } from './agent'

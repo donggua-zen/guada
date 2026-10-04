@@ -91,21 +91,6 @@ const sidebarContainerWidth = computed((): string => {
   return (props.sidebarWidth ?? 278) < 0 ? '100%' : (props.sidebarWidth ?? 278) + 'px';
 });
 
-// 计算切换按钮位置 - 类型化（此计算属性在模板中未使用，可以保留或删除）
-const toggleButtonClasses = computed((): string => {
-  const baseClasses = "absolute top-1/2 transform -translate-y-1/2 w-5 h-16 flex items-center justify-center bg-white rounded-r-lg shadow-sm hover:bg-gray-50 focus:outline-none z-10";
-
-  if ((props.sidebarPosition ?? 'left') === 'left') {
-    return props.sidebarVisible
-      ? `${baseClasses} left-full -translate-x-full rounded-l-lg rounded-r-none`
-      : `${baseClasses} left-0 translate-x-0 rounded-r-lg rounded-l-none`;
-  } else {
-    return props.sidebarVisible
-      ? `${baseClasses} right-0 translate-x-full rounded-l-lg rounded-r-none`
-      : `${baseClasses} right-0 translate-x-0 rounded-r-lg rounded-l-none`;
-  }
-});
-
 // Emits 类型化
 const emit = defineEmits<{
   'update:sidebarVisible': [value: boolean]

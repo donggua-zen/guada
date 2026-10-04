@@ -1723,7 +1723,7 @@ async function loadGapRows(idx: number): Promise<void> {
     // gap 区间是连续文本：整段一次高亮再拆行（跨行 token 上下文，与 diff 行一致）
     const texts = res.content.split("\n");
     const htmls = highlightCodeLines(texts.join("\n"), lang);
-    const lines: SplitDiffLine[] = texts.map((text, i) => {
+    const lines: SplitDiffLine[] = texts.map((_text, i) => {
       const html = htmls[i] || "&nbsp;";
       return {
         type: "ctx",
