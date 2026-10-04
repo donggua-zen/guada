@@ -13,7 +13,7 @@ export interface WebviewState {
   partition: string
   preloadUrl: string
   isVisible: boolean
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 /**

@@ -42,7 +42,8 @@ export interface FileAttachment {
     /** 引用形态（见 content-block.types.ts FileRefType）；缺省视为 'store' */
     refType?: FileRefType
     file?: File
-    [key: string]: any
+    /** 投影层保留开放字段（历史数据兜底）；读取时按需收窄 */
+    [key: string]: unknown
 }
 
 /**
@@ -160,7 +161,7 @@ export interface MessageBundle {
      * kind='user' 才是人类真实输入；其余（plugin/model/tool/sub_agent/...）
      * 为注入或产出，不作为用户消息展示。
      */
-    source?: { kind: string; [key: string]: any }
+    source?: { kind: string; [key: string]: unknown }
     /** 消息级元数据：usage/finishReason/referencedKbs/hidden/compactInfo 等 */
     metadata: Record<string, any>
     createdAt?: ISODateString
@@ -181,7 +182,7 @@ export interface TurnContent extends MessageContent {
     messageId: string
     blockIndex?: number
     /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
-    source?: { kind: string; [key: string]: any }
+    source?: { kind: string; [key: string]: unknown }
     /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
     kind?: 'user' | 'model'
 }

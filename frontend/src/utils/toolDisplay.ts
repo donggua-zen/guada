@@ -20,10 +20,11 @@ export interface ToolCall {
    *  运行时一直存在，仅类型未声明；并行调用的结果按它匹配，不能用数组下标（到达顺序不保证） */
   id?: string;
   name?: string;
-  arguments?: any;
-  args?: any;
+  /** 原始 JSON 参数字符串（流式期间可能半截）或已解析的参数对象 */
+  arguments?: string | Record<string, unknown>;
+  args?: string | Record<string, unknown>;
   outcome?: "success" | "error" | "rejected" | "aborted";
-  metadata?: { [key: string]: any };
+  metadata?: Record<string, unknown>;
   /** 子代理关联（由流事件 subagent_link 折叠写入）：工具结果落库前即可用，
    *  供工具行提供"打开子代理面板"入口 */
   subAgentLink?: { subSessionId: string; name?: string };
@@ -163,12 +164,14 @@ export function getToolIcon(tool: ToolCall): Component {
   return TOOL_ICON_MAP[DEFAULT_CONFIG.icon!];
 }
 
-export function formatArgSummary(value: any): string {
+export function formatArgSummary(value: unknown): string {
   if (typeof value !== "string") return String(value);
   return value.length > 60 ? value.substring(0, 260) : value;
 }
 
-export function getToolArgs(tool: ToolCall): any {
+export function getToolArgs(
+  tool: ToolCall,
+): string | Record<string, unknown> | undefined {
   if (tool.name === "tool_use") {
     try {
       const parsed =
@@ -240,7 +243,9 @@ const BUILTIN_RENDERERS: Record<string, ToolRendererConfig> = {
 };
 
 /** 校验并归一化后端下发的 renderer 声明（fields 缺省补默认映射） */
-function normalizeRenderer(decl: any): ToolRendererConfig | null {
+function normalizeRenderer(
+  decl: ToolRendererConfig | null | undefined,
+): ToolRendererConfig | null {
   if (!decl || typeof decl !== "object") return null;
   const kind: ToolRendererConfig["kind"] | undefined = decl.kind;
   if (kind !== "diff" && kind !== "content" && kind !== "terminal") {
@@ -298,7 +303,7 @@ export function getRendererArgs(
 
   const out: Record<string, string> = {};
   for (const [semantic, key] of Object.entries(renderer.fields)) {
-    const value = (parsed as Record<string, any>)[key];
+    const value = (parsed as Record<string, unknown>)[key];
     if (typeof value === "string") out[semantic] = value;
   }
   const hasRequired = RENDERER_REQUIRED_KEYS[renderer.kind].some(
@@ -307,7 +312,10 @@ export function getRendererArgs(
   return hasRequired ? out : null;
 }
 
-export function countSteps(items: any[]): number {
+/** 展示项最小结构（与 messageUtils.DisplayItem 同构，避免反向类型依赖） */
+export function countSteps(
+  items: ReadonlyArray<{ type: string; toolCalls?: ReadonlyArray<unknown> }>,
+): number {
   return items.reduce((sum, item) => {
     if (item.type === "tool" && item.toolCalls?.length) {
       return sum + item.toolCalls.length;

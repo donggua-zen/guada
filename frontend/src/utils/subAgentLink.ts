@@ -1,5 +1,6 @@
 import { parse as partialParse } from 'partial-json';
 import { type ToolCall, resolveToolName, getToolArgs } from './toolDisplay';
+import type { ToolCallResponseEntry } from '@/types/message';
 
 /** 子代理工具名（后端 sub-agent 插件注册；resolveToolName 已兼容 legacy tool_use 包装） */
 const SUB_AGENT_TOOLS = new Set(['subagent_spawn', 'subagent_manager']);
@@ -11,7 +12,7 @@ export interface SubAgentLink {
 }
 
 /** 解析工具参数对象（getToolArgs 可能返回原始 JSON 字符串，流式期间还是半截 JSON） */
-function parseArgs(tool: ToolCall): Record<string, any> | undefined {
+function parseArgs(tool: ToolCall): Record<string, unknown> | undefined {
   const raw = getToolArgs(tool);
   if (!raw) return undefined;
   if (typeof raw === 'string') {
@@ -42,7 +43,7 @@ function parseArgs(tool: ToolCall): Record<string, any> | undefined {
  */
 export function resolveSubAgentLink(
   tool: ToolCall,
-  response?: any,
+  response?: Partial<ToolCallResponseEntry>,
 ): SubAgentLink | null {
   const toolName = resolveToolName(tool);
   if (!SUB_AGENT_TOOLS.has(toolName)) return null;
@@ -84,8 +85,8 @@ export function resolveSubAgentLink(
 export function findToolResponse(
   tool: ToolCall,
   index: number,
-  responses?: any[],
-): any {
+  responses?: ReadonlyArray<Partial<ToolCallResponseEntry>>,
+): Partial<ToolCallResponseEntry> | undefined {
   if (!responses || responses.length === 0) return undefined;
   if (tool.id) {
     const hit = responses.find((r) => r?.toolCallId === tool.id);

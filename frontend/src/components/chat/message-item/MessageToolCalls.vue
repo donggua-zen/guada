@@ -96,12 +96,13 @@ import {
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
+import type { ToolCallResponseEntry } from '@/types/message';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
-  toolResponses?: any[];
+  toolResponses?: ToolCallResponseEntry[];
   isStreaming?: boolean;
   sessionId?: string;
   /** 所在分组可见且仅含本步骤时由父级置真：展开分组即展开全部调用（单步骤分组免二次点击） */
@@ -175,7 +176,7 @@ const toggleExpand = (index: number): void => {
 };
 
 /** 结果直接取后端返回的 toolResponses[index]（无懒加载） */
-const getToolResponses = (index: number): any => {
+const getToolResponses = (index: number): ToolCallResponseEntry | undefined => {
   return props.toolResponses && props.toolResponses[index];
 };
 
@@ -221,7 +222,7 @@ const formatToolArgs = (tool: ToolCall): string => {
   }
 };
 
-const formatToolResponse = (response: any): string => {
+const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   if (!response) return t('chat.toolCalls.noResponse');
   const content = extractResultContent(response);
   if (content) {
