@@ -1,7 +1,9 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { t } from '@/locales'
-import type { InputMessageState } from '@/types/session'
+import type { InputMessageState, ChatFileView } from '@/types/session'
+import type { MessageBundle } from '@/types/message'
+import type { FileUploadApi } from '@/services/modules/file-upload.api'
 import { normalizeMediaType } from '@/utils/media-type'
 import { toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import type { FileRef } from '@/types/stream/content-block.types'
@@ -18,7 +20,7 @@ import type { FileRef } from '@/types/stream/content-block.types'
  * ——历史数据（编辑重发）没有 refType，其 url 是 uploads/... 存储引用，store 语义正确；
  * 'workspace' 引用一定由上传响应带回来，不会走到缺省分支。
  */
-export function toPayloadFileRef(f: any): FileRef | null {
+export function toPayloadFileRef(f: ChatFileView): FileRef | null {
     const ext = f.fileExtension || f.ext
     const localPath = typeof f.localPath === 'string' && f.localPath ? f.localPath : undefined
     const url = f.url || localPath
@@ -40,7 +42,7 @@ export function toPayloadFileRef(f: any): FileRef | null {
  * 把前端附件对象数组统一映射为发送 payload 的 FileRef 契约对象。
  * 无引用锚点（既未上传、也无本机路径）的对象不进入 payload。
  */
-export function toPayloadFileRefs(files: any[]): FileRef[] {
+export function toPayloadFileRefs(files: ChatFileView[]): FileRef[] {
     const refs: FileRef[] = []
     for (const f of files ?? []) {
         const ref = toPayloadFileRef(f)
@@ -51,13 +53,13 @@ export function toPayloadFileRefs(files: any[]): FileRef[] {
 
 export function useMessageOperations(
     sessionStore: ReturnType<typeof useSessionStore>,
-    apiService: any,
+    apiService: Pick<FileUploadApi, 'uploadFile'>,
     currentSessionId: Ref<string | null>
 ) {
     // editMode 移到内部统一管理
     // turnId:被编辑消息所属的回合外壳 id,进入编辑模式时直接定位,
     // 由 handleSendMessage 直接使用(不再反查)。
-    const editMode = ref<{ message: any; turnId?: string; inputMessage: InputMessageState } | null>(null)
+    const editMode = ref<{ turnId?: string; inputMessage: InputMessageState } | null>(null)
 
     // 监听 sessionId 变化，自动退出编辑模式
     watch(currentSessionId, (newId, oldId) => {
@@ -107,7 +109,7 @@ export function useMessageOperations(
      */
     async function prepareNewMessage(
         text: string,
-        files: any[],
+        files: ChatFileView[],
         replaceTurnId: string | null = null,
         knowledgeBaseIds?: string[]
     ): Promise<{
@@ -157,8 +159,9 @@ export function useMessageOperations(
      * 入参可能是用户消息束（bundle，块级内容分散）或旧块形态——统一经
      * toUserMessageView 聚合为带 content/files 的视图再消费。
      */
-    function enterEditMode(message: any, turnId: string) {
-        const view = toUserMessageView(message) ?? message
+    function enterEditMode(message: MessageBundle | null, turnId: string) {
+        const view = toUserMessageView(message)
+        if (!view) return
         // KB 回填：kb-ref 块明细优先（toUserMessageView 保留的 blocks 仍带 kbRefs），
         // 历史数据回退 metadata（归一化见 collectReferencedKbs）
         const knowledgeBaseIds = collectReferencedKbs(view).map((kb) => kb.id)
@@ -172,7 +175,6 @@ export function useMessageOperations(
 
         // turnId 由调用方经渲染链路直接传入(整轮 turn 携带),此处零反查。
         editMode.value = {
-            message: view,
             turnId: turnId,
             inputMessage: inputMsg
         }
