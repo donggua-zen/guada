@@ -176,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { getErrorMessage } from '@/utils/errorMessage'
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -512,9 +512,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
         if (isHtmlFile.value && renderMode.value === 'rendered') {
             htmlPreviewVersion.value++
         }
-    } catch (error: any) {
-        const status = error?.response?.status
-        const msg = error?.response?.data?.message || error.message || ''
+    } catch (error) {
+        const status = getApiErrorStatus(error)
+        const msg = getErrorMessage(error)
         if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
             fileNotFound.value = true
         } else if (msg.includes('File too large') || msg.includes('too large')) {
