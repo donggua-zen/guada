@@ -6,6 +6,7 @@ import type { ISODateString } from './common'
 import type { Turn } from './message'
 // 注意：不要重新导出 Message，避免循环依赖
 import type { Agent } from './agent'
+import type { FileRef, FileRefType } from './stream/content-block.types'
 
 /**
  * 会话设置
@@ -17,11 +18,51 @@ export interface SessionSettings {
 }
 
 /**
+ * 附件视图对象（输入框 / 排队消息 / 编辑回填共用）。
+ *
+ * 是三种前端形态的字段并集，消费方（toPayloadFileRef）按「有没有引用锚点」分派：
+ * - 上传响应 / 编辑回填的投影：有 url（+ refType），即 UploadResponse / FileRef 契约
+ * - Electron 非图片附件：有 localPath 无 url
+ * - 新选未上传的：只有 file（原始 File）与展示字段
+ * 全部字段可选，便于三种形态互转与渐进回填。
+ */
+export interface ChatFileView {
+    /** 展示名（历史 FileRef 为 name；ChatFile 卡片为 fileName/displayName） */
+    name?: string
+    fileName?: string
+    displayName?: string
+    /** MIME 类型（FileRef 契约字段） */
+    mediaType?: string
+    bytes?: number
+    fileSize?: number
+    size?: number
+    /** 引用锚点：上传响应 / 历史 FileRef 的存储引用 */
+    url?: string
+    previewUrl?: string
+    fileExtension?: string
+    ext?: string
+    /** Electron 本机绝对路径（非图片附件，不经上传） */
+    localPath?: string
+    /** 引用形态；缺省由消费方按来源推断（localPath → 'local'，否则 'store'） */
+    refType?: FileRefType
+    /** 待上传的原始 File（新选附件才有） */
+    file?: File
+    /** 以下为 ChatInput 附件卡片字段 */
+    id?: number | string
+    fileType?: 'image' | 'file'
+    isPasted?: boolean
+    originalContent?: string
+    uploadProgress?: number
+    uploadStatus?: 'queued' | 'uploading' | 'uploaded' | 'failed'
+    uploadError?: string
+}
+
+/**
  * 输入消息状态
  */
 export interface InputMessageState {
     content: string
-    files: any[]
+    files: ChatFileView[]
     knowledgeBaseIds?: string[]
     isWaiting: boolean
 }
@@ -32,7 +73,8 @@ export interface InputMessageState {
 export interface QueuedMessage {
     id: string              // 前端生成的唯一 ID
     content: string         // 消息文本
-    files: any[]            // 已上传的文件对象列表
+    /** 已是发送契约形态：enqueue 前经 prepareNewMessage 上传并映射为 FileRef（唯一入队路径 ChatPanel.handleSendMessage） */
+    files: FileRef[]
     knowledgeBaseIds?: string[]
     createdAt: number       // 创建时间戳
     status: 'queued' | 'sending'  // 状态

@@ -4,6 +4,7 @@ import { t } from '@/locales'
 import type { InputMessageState } from '@/types/session'
 import { normalizeMediaType } from '@/utils/media-type'
 import { toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
+import type { FileRef } from '@/types/stream/content-block.types'
 
 /**
  * 单个附件对象 → 发送 payload 的 FileRef 契约对象；不可用时返回 null。
@@ -17,7 +18,7 @@ import { toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
  * ——历史数据（编辑重发）没有 refType，其 url 是 uploads/... 存储引用，store 语义正确；
  * 'workspace' 引用一定由上传响应带回来，不会走到缺省分支。
  */
-export function toPayloadFileRef(f: any): any | null {
+export function toPayloadFileRef(f: any): FileRef | null {
     const ext = f.fileExtension || f.ext
     const localPath = typeof f.localPath === 'string' && f.localPath ? f.localPath : undefined
     const url = f.url || localPath
@@ -39,8 +40,8 @@ export function toPayloadFileRef(f: any): any | null {
  * 把前端附件对象数组统一映射为发送 payload 的 FileRef 契约对象。
  * 无引用锚点（既未上传、也无本机路径）的对象不进入 payload。
  */
-export function toPayloadFileRefs(files: any[]): any[] {
-    const refs: any[] = []
+export function toPayloadFileRefs(files: any[]): FileRef[] {
+    const refs: FileRef[] = []
     for (const f of files ?? []) {
         const ref = toPayloadFileRef(f)
         if (ref) refs.push(ref)
@@ -111,7 +112,7 @@ export function useMessageOperations(
         knowledgeBaseIds?: string[]
     ): Promise<{
         content: string;
-        files: any[];
+        files: FileRef[];
         replaceTurnId: string | null;
         knowledgeBaseIds?: string[];
     }> {
@@ -119,7 +120,7 @@ export function useMessageOperations(
             throw new Error(t('chat.message.noActiveSession'))
         }
 
-        const payloadFiles: any[] = []
+        const payloadFiles: FileRef[] = []
 
         // 串行上传未上传的文件，确保服务端 createdAt 顺序与用户选择顺序一致。
         // 已带引用锚点的（上传响应 / 编辑回填 / Electron 本机路径）直接透传，不再上传。
