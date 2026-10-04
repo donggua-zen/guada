@@ -124,19 +124,10 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search, Loading } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
+import type { KBSearchResult } from '@/services/modules/knowledge-base.api'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
 
-
-interface SearchResult {
-  content: string
-  metadata?: Record<string, any>
-  similarity?: number  // 旧版字段，兼容纯语义搜索
-  semanticScore?: number  // 语义分数
-  keywordScore?: number   // 关键词分数
-  finalScore?: number     // 综合分数
-  fileName?: string
-}
 
 interface Props {
   knowledgeBases: KnowledgeBase[]
@@ -146,7 +137,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  resultClick: [result: SearchResult]
+  resultClick: [result: KBSearchResult]
 }>()
 
 const { t } = useI18n()
@@ -161,7 +152,7 @@ const searchForm = ref({
 // 搜索状态
 const isSearching = ref(false)
 const hasSearched = ref(false)
-const searchResults = ref<SearchResult[]>([])
+const searchResults = ref<KBSearchResult[]>([])
 
 /**
  * 是否可以执行搜索
@@ -269,7 +260,7 @@ function highlightText(text: string, query: string): string {
 /**
  * 判断是否有混合搜索分数
  */
-function hasHybridScores(result: SearchResult): boolean {
+function hasHybridScores(result: KBSearchResult): boolean {
   return result.semanticScore !== undefined &&
     result.keywordScore !== undefined &&
     result.finalScore !== undefined
@@ -278,7 +269,7 @@ function hasHybridScores(result: SearchResult): boolean {
 /**
  * 处理结果点击
  */
-function handleResultClick(result: SearchResult) {
+function handleResultClick(result: KBSearchResult) {
   emit('resultClick', result)
 }
 

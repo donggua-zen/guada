@@ -69,6 +69,7 @@ import {
   ElCheckbox,
   ElButton
 } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 
 const authStore = useAuthStore()
 // 消息提示
@@ -99,7 +100,7 @@ const rules = reactive({
   username: {
     required: true,
     trigger: ['input', 'blur'],
-    validator: (_rule: any, value: string, callback: any) => {
+    validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
       if (!value) {
         callback(new Error(t('ui.login.requireUsername')))
         return
@@ -120,7 +121,7 @@ const rules = reactive({
 })
 
 // 表单引用 - 类型化
-const formRef = ref<any>(null)
+const formRef = ref<FormInstance | null>(null)
 
 // 登录处理 - 类型化
 const handleLogin = async (): Promise<void> => {

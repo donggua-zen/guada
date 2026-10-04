@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
-import type { BotInstance, PlatformMetadata } from '@/types/bot'
+import type { BotInstance, CreateBotRequest, PlatformMetadata, UpdateBotRequest } from '@/types/bot'
 import { ElMessage } from 'element-plus'
 import { t } from '@/locales'
 
@@ -39,7 +39,7 @@ export const useBotStore = defineStore('bot', () => {
     }
   }
 
-  async function createBot(data: any) {
+  async function createBot(data: CreateBotRequest) {
     try {
       const newBot = await apiService.createBotInstance(data)
       botInstances.value.unshift(newBot)
@@ -51,7 +51,7 @@ export const useBotStore = defineStore('bot', () => {
     }
   }
 
-  async function updateBot(id: string, data: any) {
+  async function updateBot(id: string, data: UpdateBotRequest) {
     try {
       const updatedBot = await apiService.updateBotInstance(id, data)
       const index = botInstances.value.findIndex(bot => bot.id === id)

@@ -41,7 +41,16 @@ export interface KBChunk {
   content: string
 }
 
-/** 语义搜索结果条目（POST /:kbId/search；type 别名以获得隐式索引签名，可赋给 Record<string, any> 消费方） */
+/** 搜索结果 metadata（后端 mergeMetadata 产物：分块快照元信息 + 条目当前信息 + chunkId/chunkIndex 定位列，其余键动态） */
+export type KBSearchResultMetadata = {
+  fileId?: string
+  knowledgeBaseId?: string
+  fileName?: string
+  chunkIndex?: number | null
+  [key: string]: unknown
+}
+
+/** 语义搜索结果条目（POST /:kbId/search；type 别名以获得隐式索引签名，可赋给索引签名消费方） */
 export type KBSearchResult = {
   id?: string
   content: string
@@ -51,7 +60,7 @@ export type KBSearchResult = {
   keywordScore?: number
   finalScore?: number
   similarity?: number
-  metadata?: { fileId?: string; chunkIndex?: number; [key: string]: unknown }
+  metadata?: KBSearchResultMetadata
 }
 
 export const knowledgeBaseApi: KnowledgeBaseApi = {

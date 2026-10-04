@@ -32,7 +32,8 @@ export interface BotInstance {
   platform: string;
   name: string;
   enabled: boolean;
-  platformConfig: Record<string, any>;
+  /** 键/值由各平台插件动态定义（后端契约），前端不感知具体形状 */
+  platformConfig: Record<string, unknown>;
   reconnectEnabled: boolean;
   maxRetries: number;
   retryInterval: number;
@@ -56,7 +57,8 @@ export interface BotInstance {
 export interface CreateBotRequest {
   platform: string;
   name: string;
-  platformConfig: Record<string, any>;
+  /** 键/值由各平台插件动态定义（后端契约），前端不感知具体形状 */
+  platformConfig: Record<string, unknown>;
   reconnectConfig?: {
     enabled: boolean;
     maxRetries: number;
@@ -77,7 +79,8 @@ export interface CreateBotRequest {
  */
 export interface UpdateBotRequest {
   name?: string;
-  platformConfig?: Record<string, any>;
+  /** 键/值由各平台插件动态定义（后端契约），前端不感知具体形状 */
+  platformConfig?: Record<string, unknown>;
   enabled?: boolean;
   defaultAgentId?: string;
   defaultModelId?: string;

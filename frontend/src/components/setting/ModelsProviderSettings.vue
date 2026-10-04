@@ -110,25 +110,32 @@ import {
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import type { Model, ModelPreset, ModelProvider, ProviderTemplate } from '@/types/api'
+import type { CreateProviderPayload, UpdateProviderPayload } from '../../services/modules/model.api'
 
 // Element Plus 组件导入
 import { ElInput, ElFormItem, ElForm, ElButton, ElSelect, ElOption } from 'element-plus'
-import type { FormInstance } from 'element-plus'
+import type { FormInstance, FormItemRule } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
+
+// wire 数据含 enabled（列表开关读写，setProviderEnabled 返回 { id, enabled }），共享接口未收录该字段
+type ProviderRow = ModelProvider & { enabled?: boolean }
+// bundled-providers/*.yaml 模板携带 apiKeyUrl（"获取 API Key"跳转用），ProviderTemplate 接口未收录
+type ProviderTemplateRow = ProviderTemplate & { apiKeyUrl?: string }
 
 const { t } = useI18n()
 const { notify, confirm } = usePopup()
 const currentProviderId = ref<string | null>(null)
 
 // 使用响应式数据替代伪数据
-const providers = ref<any[]>([])
-const models = ref<any[]>([])
+const providers = ref<ProviderRow[]>([])
+const models = ref<Model[]>([])
 const showDetail = ref(false)
 
 // 供应商模板相关
-const providerTemplates = ref<any[]>([])
+const providerTemplates = ref<ProviderTemplateRow[]>([])
 // 模型预设库
-const modelPresets = ref<any[]>([])
+const modelPresets = ref<ModelPreset[]>([])
 
 // 模板全量展示（同类型可添加多实例；内置类型即预置配置文件，不再限制一个）
 const availableTemplates = computed(() => providerTemplates.value)
@@ -199,7 +206,7 @@ const providerRules = computed(() => ({
     trigger: ['blur']
   },
   headers: {
-    validator: (_rule: any, value: string, callback: any) => {
+    validator: (_rule: FormItemRule, value: string, callback: (error?: string | Error) => void) => {
       const errors = validateHeadersText(value)
       if (errors.length > 0) {
         callback(new Error(errors.join('；')))
@@ -244,10 +251,12 @@ const reloadProvidersAndModels = async () => {
   })
 }
 
-const currentProvider = computed(() => {
+const currentProvider = computed<ModelProvider>(() => {
   const provider = providers.value.find(p => p.id === currentProviderId.value)
   if (!provider) {
-    return { name: "", apiUrl: "", apiKey: "" }
+    // 未选中供应商时的显示占位：详情视图仅在选中具体供应商（handleItemClick 先写 id）后渲染，
+    // 该兜底对象只参与标题展示，缺失字段不会被任何请求读取
+    return { name: "", apiUrl: "", apiKey: "" } as ModelProvider
   }
   return provider
 })
@@ -283,7 +292,7 @@ const handleSaveProvider = async () => {
     const headers = parseHeaders(currentProviderEdit.value.headers)
 
     if (isProviderEditMode.value) {
-      const updateData: any = {
+      const updateData: UpdateProviderPayload = {
         apiKey: currentProviderEdit.value.apiKey,
         apiUrl: currentProviderEdit.value.apiUrl,
         attributes: {
@@ -315,7 +324,7 @@ const handleSaveProvider = async () => {
 
       showProviderModal.value = false
     } else {
-      const payload: any = {
+      const payload: CreateProviderPayload = {
         name: currentProviderEdit.value.name,
         apiUrl: currentProviderEdit.value.apiUrl,
         apiKey: currentProviderEdit.value.apiKey,
@@ -443,13 +452,13 @@ const validateHeadersText = (text: string): string[] => {
 }
 
 
-const handleItemClick = (provider: any) => {
+const handleItemClick = (provider: ProviderRow) => {
   showDetail.value = true
   currentProviderId.value = provider.id
 }
 
 // 编辑供应商配置
-const handleEditProvider = (provider: any) => {
+const handleEditProvider = (provider: ProviderRow) => {
   currentProviderId.value = provider.id
   isProviderEditMode.value = true
   const existingHeaders = provider.attributes?.headers || {}
@@ -473,7 +482,7 @@ const handleEditProvider = (provider: any) => {
 }
 
 // 处理模板点击（从网格中添加）
-const handleTemplateClick = (template: any) => {
+const handleTemplateClick = (template: ProviderTemplateRow) => {
   currentProviderId.value = null
   isProviderEditMode.value = false
 
@@ -494,7 +503,7 @@ const handleTemplateClick = (template: any) => {
 }
 
 // 启用/禁用开关
-const handleToggleProvider = async (provider: any, enabled: boolean) => {
+const handleToggleProvider = async (provider: ProviderRow, enabled: boolean) => {
   try {
     await apiService.setProviderEnabled(provider.id, enabled)
     provider.enabled = enabled
@@ -516,7 +525,7 @@ const deleteProviderInstance = async (providerId: string) => {
 // 删除供应商实例（真删文件）：
 // 内置类型实例删掉后不会自动补种，可从「可添加的供应商」随时重新添加；
 // 停用请用卡片开关（enabled: false），删除是不可逆的移除。
-const handleDeleteProviderFromList = async (provider: any) => {
+const handleDeleteProviderFromList = async (provider: ProviderRow) => {
   const isBuiltinType = provider.provider && provider.provider !== 'custom'
   const result = await confirm(
     t('settings.models.deleteProvider'),

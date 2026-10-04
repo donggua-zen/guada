@@ -27,6 +27,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useSelectedAgent } from '../../composables/useSelectedAgent'
+import type { Agent } from '@/types/agent'
 
 const { confirm, toast } = usePopup()
 const { t } = useI18n()
@@ -34,7 +35,7 @@ const router = useRouter()
 const { setSelectedAgent } = useSelectedAgent()
 
 // ========== 智能体列表逻辑 ==========
-const agents = ref<any[]>([])
+const agents = ref<Agent[]>([])
 const showModal = ref(false)
 const currentAgentId = ref('')
 const loading = ref(false)
@@ -57,12 +58,12 @@ const createAgent = (): void => {
   showModal.value = true
 }
 
-const editAgent = (agent: any): void => {
+const editAgent = (agent: Agent): void => {
   currentAgentId.value = agent.id
   showModal.value = true
 }
 
-const deleteAgent = async (agent: any): Promise<void> => {
+const deleteAgent = async (agent: Agent): Promise<void> => {
   try {
     const result = await confirm(t('agents.page.deleteAgentTitle'), t('agents.page.deleteAgentConfirm', { name: agent.name }))
     if (!result) return
@@ -75,7 +76,7 @@ const deleteAgent = async (agent: any): Promise<void> => {
   }
 }
 
-const startNewChat = (agent: any): void => {
+const startNewChat = (agent: Agent): void => {
   setSelectedAgent(agent.id)
   router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
 }

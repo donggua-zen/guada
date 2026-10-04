@@ -51,6 +51,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading, Document } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
+import type { KBChunk } from '@/services/modules/knowledge-base.api'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
@@ -73,7 +74,7 @@ const { toast } = usePopup()
 // 状态
 const showModal = ref(false)
 const loading = ref(false)
-const chunks = ref<any[]>([])
+const chunks = ref<KBChunk[]>([])
 const totalChunks = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
