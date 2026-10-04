@@ -91,6 +91,33 @@ export interface Message {
 }
 
 /**
+ * 块级 metadata 里的工具调用条目（协议化字典字段；与后端 ToolCallEntry 同构）。
+ * 由 tool-call 块 / tool_call_delta 写入，tool/result 与 subagent_link 事件补充结果与关联。
+ */
+export interface ToolCallEntry {
+    id: string
+    index?: number
+    type?: string
+    name?: string
+    arguments?: string
+    /** 工具执行结果（toolCallsResponse / tool/result 写入） */
+    outcome?: 'success' | 'error' | 'rejected'
+    /** 子代理关联（subagent_link 事件写入） */
+    subAgentLink?: { subSessionId: string; name?: string }
+    metadata?: Record<string, any>
+}
+
+/** 块级 metadata 里的工具结果条目（与 event-chunk.types 的 ToolCallsResponseEvent 条目同构） */
+export interface ToolCallResponseEntry {
+    messageId?: string
+    name: string
+    content: string
+    toolCallId: string
+    outcome?: 'success' | 'error' | 'rejected'
+    meta?: Record<string, any>
+}
+
+/**
  * 回合瞬态状态（纯前端视图态，不落库、不进协议）
  */
 export interface TurnState {

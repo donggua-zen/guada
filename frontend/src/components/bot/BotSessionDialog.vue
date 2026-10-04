@@ -51,7 +51,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
-import { foldEvents } from '@/services/modules/streamProjector'
+import { foldEvents, type ProjectorSessionStore } from '@/services/modules/streamProjector'
 import { isHiddenBlock } from '@/utils/messageUtils'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
@@ -107,8 +107,8 @@ const loadMessages = async () => {
     })
     // 本地 store 适配器：foldEvents 通过 getTurns/setTurns 操作本地 turns ref
     const localStore = {
-      getTurns: () => turns.value as any,
-      setTurns: (_sid: string, t: any[]) => {
+      getTurns: () => turns.value,
+      setTurns: (_sid: string, t: Turn[]) => {
         turns.value = t
       },
       deleteTurnById: (_sid: string, id: string) => {
@@ -116,9 +116,11 @@ const loadMessages = async () => {
       },
       setSessionIsCompressing: () => {},
       sessionIsCompressing: () => false,
+      // 只读回放视图无交互卡：ask/turn_end 路径落空实现（此前缺失该方法是隐雷）
+      setSessionPendingAsk: () => {},
       getSessionState: () => ({ loaded: true, turns: turns.value, eventLog: [] }),
-    }
-    foldEvents(localStore as any, props.session.id, page.events)
+    } satisfies ProjectorSessionStore
+    foldEvents(localStore, props.session.id, page.events)
   } catch (error) {
     console.error('加载消息失败:', error)
     ElMessage.error(t('bot.sessionDialog.loadFailed'))

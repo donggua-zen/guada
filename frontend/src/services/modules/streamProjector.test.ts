@@ -14,31 +14,49 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ref } from "vue";
 import { setActivePinia, createPinia } from "pinia";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
-import { foldEvents, applyLiveChunk, resetTurnTransientState, resetSessionTurnsTransientState } from "./streamProjector";
+import {
+  foldEvents,
+  applyLiveChunk,
+  resetTurnTransientState,
+  resetSessionTurnsTransientState,
+  type ProjectorSessionStore,
+  type ProjectorSessionState,
+} from "./streamProjector";
 import { useSessionTokenStats } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
+import type { Turn, TurnContent, MessageBundle } from "@/types/message";
 
 function createStore() {
-  const state: any = { loaded: true, turns: [], eventLog: [] };
+  // 测试断言按"目标存在"编写：turns/eventLog 放宽为 any[]，让 find/index 访问不必逐处非空断言；
+  // mock 本身仍需 satisfies 接口（编译期保证 mock 与投影器契约一致）
+  const state = {
+    loaded: true,
+    turns: [] as any[],
+    eventLog: [] as any[],
+    pendingAsk: undefined as ProjectorSessionState["pendingAsk"],
+  };
   return {
     state,
     getSessionState: () => state,
     getTurns: () => state.turns,
-    setTurns: (_sid: string, t: any[]) => { state.turns = t; },
-    deleteTurnById: (_sid: string, id: string) => { state.turns = state.turns.filter((t: any) => t.id !== id); },
+    setTurns: (_sid: string, t: Turn[]) => { state.turns = t; },
+    deleteTurnById: (_sid: string, id: string) => {
+      state.turns = state.turns.filter((t) => t.id !== id);
+    },
     setSessionIsCompressing: () => {},
     sessionIsCompressing: () => false,
-    sessionIsStreaming: () => false,
-    setSessionPendingAsk: (_sid: string, v: any) => { state.pendingAsk = v; },
+    sessionIsStreaming: (): boolean => false,
+    setSessionPendingAsk: (_sid: string, v: ProjectorSessionState["pendingAsk"]) => { state.pendingAsk = v; },
     sessionPendingAsk: () => state.pendingAsk,
-  };
+  } satisfies ProjectorSessionStore & { state: typeof state; sessionPendingAsk: () => typeof state.pendingAsk };
 }
 
-function blocksOf(turn: any): any[] {
-  return (turn?.messages ?? []).flatMap((m: any) => m.blocks ?? []);
+// 测试断言按"目标束/块必然存在"编写：返回值保持宽松，避免逐处非空断言噪声
+function blocksOf(turn: Turn | undefined): any[] {
+  return (turn?.messages ?? []).flatMap((m) => m.blocks ?? []);
 }
-function bundleOf(turn: any, messageId: string): any {
-  return (turn?.messages ?? []).find((m: any) => m.messageId === messageId);
+function bundleOf(turn: Turn | undefined, messageId: string): any {
+  return (turn?.messages ?? []).find((m) => m.messageId === messageId);
 }
 
 function textChunks(mid: string, tid: string, text: string): WireStreamEvent[] {
@@ -459,7 +477,7 @@ describe("思考态跨块复位", () => {
   });
 
   it("foldEvents 流式中重折保留工作态", () => {
-    (store as any).sessionIsStreaming = () => true;
+    store.sessionIsStreaming = () => true;
     foldEvents(store as any, "s1", [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
     ]);

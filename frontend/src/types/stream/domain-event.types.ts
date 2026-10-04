@@ -38,7 +38,13 @@ export type DomainEvent =
   | {
       type: "turn/start";
       seq: number;
-      data: { turnId: string; kind?: string; metadata?: Record<string, unknown> };
+      data: {
+        turnId: string;
+        kind?: string;
+        metadata?: Record<string, unknown>;
+        /** 随事件自包含的回合模型名（旧事件无此字段，向后兼容） */
+        modelName?: string;
+      };
     }
   | { type: "turn/resume"; seq: number; data: { turnId: string } }
   | {
@@ -52,7 +58,7 @@ export type DomainEvent =
         totalTokens?: number;
         finishReason?: string;
         totalDurationMs?: number;
-        errorDetail?: unknown;
+        errorDetail?: string;
         modelName?: string;
         /** 回合后完整请求 token（envelope + 可见视图；前端上下文占用锚点） */
         usedTokens?: number;
