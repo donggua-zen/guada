@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Bug16Regular, Search16Regular } from '@vicons/fluent'
@@ -182,8 +183,8 @@ const startMigration = async () => {
     } else {
       alert(t('ui.titlebar.migrationFailed', { reason: result.message }))
     }
-  } catch (error: any) {
-    alert(t('ui.titlebar.migrationError', { reason: error.message || error }))
+  } catch (error) {
+    alert(t('ui.titlebar.migrationError', { reason: getErrorMessage(error) }))
   } finally {
     isMigrating.value = false
   }

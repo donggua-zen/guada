@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Upload, Folder, Document } from '@element-plus/icons-vue'
@@ -608,8 +609,8 @@ async function confirmCreateFolder() {
         
         // 通知父组件刷新
         emit('folder-created')
-    } catch (error: any) {
-        ElMessage.error(error.message || t('knowledge.upload.folderCreateFailed'))
+    } catch (error) {
+        ElMessage.error(getErrorMessage(error) || t('knowledge.upload.folderCreateFailed'))
     } finally {
         createFolderLoading.value = false
     }

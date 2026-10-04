@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElMessage } from 'element-plus'
@@ -153,8 +154,8 @@ const handleFileSelect = async (event: Event) => {
       ElMessage.warning(t('agents.list.importPartial', { count: failCount }))
     }
     emit('imported')
-  } catch (err: any) {
-    ElMessage.error(err.message || t('agents.list.importFailed'))
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err) || t('agents.list.importFailed'))
   }
 
   // 重置 input 以便重复选择同一文件

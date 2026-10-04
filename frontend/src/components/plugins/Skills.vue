@@ -359,6 +359,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
@@ -560,9 +561,9 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
         } else {
             marketInstallError.value = response.message || t('plugins.skills.installFailed')
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error('从市场安装技能失败:', err)
-        marketInstallError.value = err.message || t('plugins.skills.installFailed')
+        marketInstallError.value = getErrorMessage(err) || t('plugins.skills.installFailed')
     } finally {
         installingFromMarket.value.delete(marketSkill.id)
     }
@@ -625,9 +626,9 @@ async function loadSkills() {
         skills.value = Array.isArray(response?.items) ? response.items : []
         // 加载后刷新市场技能状态
         refreshMarketSkillStatus()
-    } catch (err: any) {
+    } catch (err) {
         console.error('加载 Skills 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.loadFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.loadFailed')
         ElMessage.error(errorMsg)
         skills.value = []
     } finally {
@@ -653,11 +654,11 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
         } else {
             await apiService.disableSkill(skillId)
         }
-    } catch (err: any) {
+    } catch (err) {
         // 失败回滚
         skill.enabled = previousState
         console.error('切换技能状态失败:', err)
-        ElMessage.error(err.message || t('plugins.skills.toggleFailed'))
+        ElMessage.error(getErrorMessage(err) || t('plugins.skills.toggleFailed'))
     } finally {
         updatingSkills.value.delete(skillId)
     }
@@ -674,9 +675,9 @@ async function handleScan() {
         ElMessage.success(t('plugins.skills.scanSuccess'))
         // 扫描后重新加载列表
         await loadSkills()
-    } catch (err: any) {
+    } catch (err) {
         console.error('扫描 Skills 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.scanFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.scanFailed')
         ElMessage.error(errorMsg)
     } finally {
         scanning.value = false
@@ -693,9 +694,9 @@ async function handleReloadSkill(skillId: string) {
         ElMessage.success(t('plugins.skills.reloadSuccess'))
         // 重载后重新加载列表
         await loadSkills()
-    } catch (err: any) {
+    } catch (err) {
         console.error('重载 Skill 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.reloadFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.reloadFailed')
         ElMessage.error(errorMsg)
     } finally {
         reloadingSkills.value.delete(skillId)
@@ -719,9 +720,9 @@ async function handleViewDocumentation(skillId: string) {
     try {
         const response = await apiService.fetchSkillDocumentation(skillId)
         documentation.value = response.content || t('plugins.skills.docNoContent')
-    } catch (err: any) {
+    } catch (err) {
         console.error('获取 Skill 文档失败:', err)
-        const errorMsg: string = err.message || t('plugins.skills.docLoadFailed')
+        const errorMsg: string = getErrorMessage(err) || t('plugins.skills.docLoadFailed')
         docError.value = errorMsg
         ElMessage.error(errorMsg)
     } finally {
@@ -791,9 +792,9 @@ async function handleInstallSkill() {
         } else {
             ElMessage.error(response.message || t('plugins.skills.installFailed'))
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error('安装 Skill 失败:', err)
-        ElMessage.error(err.message || t('plugins.skills.installFailed'))
+        ElMessage.error(getErrorMessage(err) || t('plugins.skills.installFailed'))
     } finally {
         installing.value = false
     }
@@ -874,9 +875,9 @@ async function loadMarketSkills(forceRefresh: boolean = false) {
         }))
         // 与本地技能做名字匹配，更新状态
         refreshMarketSkillStatus()
-    } catch (err: any) {
+    } catch (err) {
         console.error('加载市场技能失败:', err)
-        marketError.value = err.message || t('plugins.skills.marketError')
+        marketError.value = getErrorMessage(err) || t('plugins.skills.marketError')
     } finally {
         loadingMarket.value = false
     }

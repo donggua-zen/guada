@@ -246,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
 import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
@@ -412,9 +413,9 @@ const handleSave = async () => {
     syncToLayoutStore()
     // 同步到 Electron 主进程
     pushFloatWidgetSettings()
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存外观设置失败:', error)
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    ElMessage.error('保存失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -442,9 +443,9 @@ const handleFileChange = async (uploadFile: any) => {
     previewUrl.value = resolveWallpaperUrl(extractRelativePath(response.url))
     await handleSave()
     ElMessage.success('壁纸上传成功')
-  } catch (error: any) {
+  } catch (error) {
     console.error('壁纸上传失败:', error)
-    ElMessage.error('壁纸上传失败: ' + (error.message || '未知错误'))
+    ElMessage.error('壁纸上传失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -455,9 +456,9 @@ const handleRemoveWallpaper = async () => {
     previewUrl.value = null
     await handleSave()
     ElMessage.success('壁纸已删除')
-  } catch (error: any) {
+  } catch (error) {
     console.error('壁纸删除失败:', error)
-    ElMessage.error('壁纸删除失败: ' + (error.message || '未知错误'))
+    ElMessage.error('壁纸删除失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 

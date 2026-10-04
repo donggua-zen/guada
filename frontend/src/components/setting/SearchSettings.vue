@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
@@ -197,9 +198,9 @@ const handleSave = async () => {
       tavily: { apiKey: providerKeys.tavily },
       metaso: { apiKey: providerKeys.metaso },
     }))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存搜索设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 
@@ -213,10 +214,10 @@ const handlePluginToggle = async (val: string | number | boolean) => {
       pluginEnabled.value = enabled
       ElMessage.success(enabled ? t('settings.search.pluginEnabled') : t('settings.search.pluginDisabled'))
     }
-  } catch (error: any) {
+  } catch (error) {
     pluginEnabled.value = !enabled
     console.error('切换插件状态失败:', error)
-    notify.error(t('settings.search.pluginToggleFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('settings.search.pluginToggleFailed'), getErrorMessage(error) || t('common.error.unknown'))
   } finally {
     pluginLoading.value = false
   }

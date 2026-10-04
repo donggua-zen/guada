@@ -1,4 +1,5 @@
 // stores/git.ts
+import { getErrorMessage } from '@/utils/errorMessage'
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
@@ -147,8 +148,8 @@ export const useGitStore = defineStore("git", () => {
       ElMessage.success(t("git.checkoutSuccess", { branch }));
       selectedBranch.value = branch;
       await refresh();
-    } catch (e: any) {
-      ElMessage.error(t("git.checkoutFailed", { msg: e?.message || "" }));
+    } catch (e) {
+      ElMessage.error(t("git.checkoutFailed", { msg: getErrorMessage(e) || "" }));
     }
   }
 
@@ -179,8 +180,8 @@ export const useGitStore = defineStore("git", () => {
       commitMessage.value = "";
       commitDialogVisible.value = false;
       await refresh();
-    } catch (e: any) {
-      ElMessage.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: e?.message || "" }));
+    } catch (e) {
+      ElMessage.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: getErrorMessage(e) || "" }));
       await refresh();
     } finally {
       committing.value = false;
@@ -198,8 +199,8 @@ export const useGitStore = defineStore("git", () => {
       ElMessage.success(t("git.pushSuccess"));
       commitDialogVisible.value = false;
       await refresh();
-    } catch (e: any) {
-      ElMessage.error(t("git.pushFailed", { msg: e?.message || "" }));
+    } catch (e) {
+      ElMessage.error(t("git.pushFailed", { msg: getErrorMessage(e) || "" }));
     } finally {
       committing.value = false;
     }
@@ -279,9 +280,9 @@ export const useGitStore = defineStore("git", () => {
     try {
       const res = await apiService.getCommitConstraint(sessionId.value);
       constraintContent.value = res.content || "";
-    } catch (e: any) {
+    } catch (e) {
       constraintContent.value = "";
-      ElMessage.error(t("git.constraintLoadFailed", { msg: e?.message || "" }));
+      ElMessage.error(t("git.constraintLoadFailed", { msg: getErrorMessage(e) || "" }));
     }
   }
 
@@ -296,8 +297,8 @@ export const useGitStore = defineStore("git", () => {
       );
       constraintDialogVisible.value = false;
       ElMessage.success(t("git.constraintSaveSuccess"));
-    } catch (e: any) {
-      ElMessage.error(t("git.constraintSaveFailed", { msg: e?.message || "" }));
+    } catch (e) {
+      ElMessage.error(t("git.constraintSaveFailed", { msg: getErrorMessage(e) || "" }));
     } finally {
       constraintSaving.value = false;
     }

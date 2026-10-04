@@ -176,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -563,9 +564,9 @@ async function handleSaveFile(content: string): Promise<void> {
         saveStatus.value = 'saved'
         externalConflict.value = false
         ElMessage.success(t('chat.workspace.saveSuccess'))
-    } catch (e: any) {
+    } catch (e) {
         saveStatus.value = 'unsaved'
-        ElMessage.error(e?.message || t('chat.workspace.saveFailed'))
+        ElMessage.error(getErrorMessage(e) || t('chat.workspace.saveFailed'))
     }
 }
 

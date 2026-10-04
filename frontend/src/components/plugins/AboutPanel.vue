@@ -73,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElIcon } from 'element-plus'
@@ -113,9 +114,9 @@ const checkForUpdates = async () => {
             updateStatus.value = 'error'
             errorMessage.value = res.error || ''
         }
-    } catch (e: any) {
+    } catch (e) {
         updateStatus.value = 'error'
-        errorMessage.value = e.message || t('plugins.about.unknownError')
+        errorMessage.value = getErrorMessage(e) || t('plugins.about.unknownError')
     } finally {
         isChecking.value = false
     }

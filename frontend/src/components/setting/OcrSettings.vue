@@ -93,6 +93,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
@@ -190,9 +191,9 @@ const handleSave = async () => {
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
     notify.success(t('common.saveSuccess'), t('settings.ocr.updated'))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存 OCR 设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 

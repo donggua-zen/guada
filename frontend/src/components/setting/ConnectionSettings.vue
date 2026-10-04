@@ -268,6 +268,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -397,9 +398,9 @@ async function testConn() {
     const result = await apiService.testConnection(editConfig.value)
     testResult.value = result
     testLog.value = result.log || ''
-  } catch (e: any) {
-    testResult.value = { success: false, error: e.message || String(e) }
-    testLog.value = e.message || String(e)
+  } catch (e) {
+    testResult.value = { success: false, error: getErrorMessage(e) }
+    testLog.value = getErrorMessage(e)
   } finally {
     testing.value = false
   }
@@ -429,9 +430,9 @@ async function deployConn() {
       }
       await new Promise((r) => setTimeout(r, 500))
     }
-  } catch (e: any) {
-    deployResult.value = { success: false, installed: false, version: '', log: [e.message || String(e)] }
-    deployLog.value = e.message || String(e)
+  } catch (e) {
+    deployResult.value = { success: false, installed: false, version: '', log: [getErrorMessage(e)] }
+    deployLog.value = getErrorMessage(e)
   } finally {
     deploying.value = false
   }
@@ -482,8 +483,8 @@ async function saveConn() {
     }
     editing.value = false
     ElMessage.success(t('common.saveSuccess'))
-  } catch (e: any) {
-    ElMessage.error(t('common.saveFailed') + ': ' + (e.message || String(e)))
+  } catch (e) {
+    ElMessage.error(t('common.saveFailed') + ': ' + (getErrorMessage(e)))
   } finally {
     saving.value = false
   }
@@ -493,8 +494,8 @@ async function deleteConn(id: string) {
   try {
     await remoteWorkspaceStore.deleteConnection(id)
     ElMessage.success(t('common.deleteSuccess'))
-  } catch (e: any) {
-    ElMessage.error(t('common.deleteFailed') + ': ' + (e.message || String(e)))
+  } catch (e) {
+    ElMessage.error(t('common.deleteFailed') + ': ' + (getErrorMessage(e)))
   }
 }
 </script>

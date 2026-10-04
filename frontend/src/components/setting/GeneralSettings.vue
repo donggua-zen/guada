@@ -136,6 +136,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -201,9 +202,9 @@ const loadSettings = async () => {
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取通用设置失败:', error)
-    notify.error(t('settings.general.loadFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('settings.general.loadFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 
@@ -315,9 +316,9 @@ const handleSave = async () => {
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
     notify.success(t('common.saveSuccess'), t('settings.general.updated'))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 
