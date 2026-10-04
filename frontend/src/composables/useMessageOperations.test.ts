@@ -61,7 +61,7 @@ describe('toPayloadFileRef', () => {
       previewUrl: 'uploads/previews/20250101/a.jpg',
     })
     expect(ref).toMatchObject({ refType: 'store', fileExtension: 'jpg' })
-    expect(ref.previewUrl).toBe('uploads/previews/20250101/a.jpg')
+    expect(ref!.previewUrl).toBe('uploads/previews/20250101/a.jpg')
   })
 
   it('name 优先取完整文件名（含扩展名），不再用剥掉扩展名的 displayName', () => {
@@ -72,7 +72,7 @@ describe('toPayloadFileRef', () => {
       localPath: 'D:\\季度报告.pdf',
       fileSize: 1,
     })
-    expect(ref.name).toBe('季度报告.pdf')
+    expect(ref!.name).toBe('季度报告.pdf')
   })
 
   it('新选未上传（无 url、无 localPath）→ null，不进入 payload', () => {
@@ -106,7 +106,7 @@ describe('toPayloadFileRef', () => {
       url: 'uploads/20260915/a.docx',
       refType: 'workspace',
     })
-    expect(ref.mediaType).toBe(
+    expect(ref!.mediaType).toBe(
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
   })

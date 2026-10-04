@@ -153,6 +153,8 @@ import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type 
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
+import type { UploadResponse } from '@/types/service'
+import type { ChatFileView } from '@/types/session'
 import type { FileRefType } from '@/types/stream/content-block.types';
 import type { SkillCommand } from '@/types/skills';
 import { Editor, EditorContent } from '@tiptap/vue-3';
@@ -330,7 +332,7 @@ function toChatFileView(file: any): any {
  */
 const props = defineProps({
   value: { type: String, default: '' },
-  files: { type: Array as PropType<ChatFile[]>, default: () => [] },
+  files: { type: Array as PropType<ChatFileView[]>, default: () => [] },
   streaming: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
   buttons: { type: Object as PropType<Record<string, boolean>>, default: () => ({}) },
@@ -350,7 +352,7 @@ const props = defineProps({
         sessionId: string,
         file: File,
         onProgress?: (percent: number) => void,
-      ) => Promise<any>
+      ) => Promise<UploadResponse>
     }>,
     default: undefined,
   },
@@ -1175,7 +1177,7 @@ async function uploadPendingFiles(pending: ChatFile[]): Promise<ChatFile[]> {
       const response = await uploader.upload(String(sessionId), item.file, (percent: number) => {
         patchFile(item.id, { uploadProgress: percent });
       });
-      patchFile(item.id, { ...(response as any), uploadProgress: 100, uploadStatus: 'uploaded' });
+      patchFile(item.id, { ...response, uploadProgress: 100, uploadStatus: 'uploaded' });
     } catch (error: any) {
       failed.push(item);
       patchFile(item.id, {
