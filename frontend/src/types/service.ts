@@ -197,6 +197,49 @@ export interface GlobalSettings {
     [key: string]: any
 }
 
+// ── 分组设置（GET/PUT /settings/:group 的已知键；写侧为局部 patch，键可选） ──
+
+/** appearance 分组：外观/壁纸/主题预设 */
+export interface AppearanceGroupSettings {
+    wallpaperUrl?: string | null
+    sidebarOpacity?: number
+    contentOpacity?: number
+    floatWidgetEnabled?: boolean
+    floatWidgetOpacity?: number
+    lightThemePreset?: string
+    darkThemePreset?: string
+}
+
+/** system 分组：工作目录/上传子目录/知识库存储/对话引擎参数 */
+export interface SystemGroupSettings {
+    workspaceBaseDir?: string
+    chatUploadSubdir?: string
+    kbStorageRoot?: string
+    maxToolIterations?: number
+    /** 后端以 ms 存储 */
+    llmRequestTimeoutMs?: number
+    /** 后端以 ms 存储 */
+    llmIdleTimeoutMs?: number
+}
+
+/** ocr 分组：OCR 提供方与密钥 */
+export interface OcrGroupSettings {
+    provider?: string
+    umiHost?: string
+    umiPort?: number
+    baiduApiKey?: string
+    baiduSecretKey?: string
+    ocrMode?: string
+}
+
+/** search 分组：联网搜索提供方与各 provider 的密钥 */
+export interface SearchGroupSettings {
+    provider?: string
+    bocha?: { apiKey?: string }
+    tavily?: { apiKey?: string }
+    metaso?: { apiKey?: string }
+}
+
 // ========== 文件上传类型 ==========
 
 /**

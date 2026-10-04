@@ -250,6 +250,7 @@ import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
 import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
+import type { AppearanceGroupSettings } from '@/types/service'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
@@ -356,7 +357,7 @@ watch(
 // 加载外观设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('appearance')
+    const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
 
     settingsForm.sidebarOpacity = response.sidebarOpacity ?? 100
     settingsForm.contentOpacity = response.contentOpacity ?? 100

@@ -426,6 +426,8 @@ import { Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular 
 
 import { apiService } from '../../services/ApiService'
 import type { Model, ModelProvider, McpServer } from '@/types/api'
+import type { Skill } from '@/types/skills'
+import type { PluginQueryPlugin } from '../../services/modules/settings.api'
 import type { FormInstance } from 'element-plus'
 import type { CompressionTier } from '@/constants'
 
@@ -657,33 +659,13 @@ const mcpDeniedServers = ref<string[]>([]);
 // MCP 服务器数据
 const mcpServers = ref<McpServer[]>([]);
 
-// Skills 数据（面板仅消费 id/enabled/source/manifest，最小结构即可）
-interface SkillListItem {
-  id: string
-  enabled?: boolean
-  source?: string
-  manifest?: { name?: string; version?: string; description?: string }
-}
-const skillsList = ref<SkillListItem[]>([]);
+// Skills 数据（面板仅消费 id/enabled/source/manifest）
+const skillsList = ref<Skill[]>([]);
 const loadingSkills = ref(false);
 const updatingSkills = ref(new Set<string>());
 
 // 本地工具数据（queryPlugins 返回的插件条目，仅消费插件与工具包标识字段）
-interface ToolkitInfo {
-  id: string
-  name?: string
-  description?: string
-  enabled?: boolean
-  toolCount?: number
-  promptCount?: number
-}
-interface LocalToolPlugin {
-  pluginId: string
-  displayName?: string
-  enabled: boolean
-  toolkits: ToolkitInfo[]
-}
-const localTools = ref<LocalToolPlugin[]>([]);
+const localTools = ref<PluginQueryPlugin[]>([]);
 
 // 卡片展示列表：只显示有工具包的插件（无能力包的插件不受智能体层控制，不在此显示）
 const visibleLocalTools = computed(() =>
@@ -774,7 +756,7 @@ const handleKitToggle = (pluginId: string, kitId: string, enabled: boolean) => {
 };
 
 // 计算技能的最终显示状态（不受模式影响，始终 = 用户显式值 → 全局继承）
-const getSkillEffectiveEnabled = (skill: SkillListItem) => {
+const getSkillEffectiveEnabled = (skill: Skill) => {
   if (skill.id in agentForm.enabledSkills) {
     return agentForm.enabledSkills[skill.id];
   }
@@ -965,7 +947,7 @@ async function loadAllData() {
 
     // Skills
     skillsList.value = Array.isArray(skillsResp?.items)
-      ? skillsResp.items.filter((s: any) => s.enabled !== false)
+      ? skillsResp.items.filter((s) => s.enabled !== false)
       : []
     if (skillsAllowlistMode.value) {
       for (const skill of skillsList.value) {
@@ -1079,7 +1061,7 @@ async function loadLocalTools() {
 
       const response = await apiService.queryPlugins(queryConfig, getLocale());
 
-      const plugins: LocalToolPlugin[] = response.plugins || [];
+      const plugins = response.plugins || [];
       // 本地工具列表：后端已过滤 system 插件；此处只保留全局启用的插件
       // （全局关闭的插件其工具包对智能体层不可见，二级过滤）
       localTools.value = plugins.filter(p => p.enabled);
@@ -1090,7 +1072,7 @@ async function loadLocalTools() {
         __strategy: 'deny_nonsystem',
       }, getLocale());
 
-      const plugins: LocalToolPlugin[] = response.plugins || [];
+      const plugins = response.plugins || [];
       // 全部禁用模式下仍只展示全局启用的插件（全局关闭的插件工具包不可见）
       localTools.value = plugins.filter(p => p.enabled);
       initKitSettings(stored);

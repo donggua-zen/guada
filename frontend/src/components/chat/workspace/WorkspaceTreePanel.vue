@@ -61,7 +61,7 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
-import type { WorkspaceNode } from './WorkspaceTree.vue';
+import type { WorkspaceNode } from '@/types/workspace';
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree';
 import { useTabStore } from '@/stores/tab';
 

@@ -372,27 +372,7 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
-
-interface SkillManifest {
-    name: string
-    description?: string
-    version?: string
-    author?: string
-    tags?: string[]
-}
-
-type SkillSource = 'global' | 'system' | 'agents'
-
-interface Skill {
-    id: string
-    basePath: string
-    manifest: SkillManifest
-    contentHash: string
-    source?: SkillSource
-    /** 技能提供方（插件注册时写入 `plugin:<id>`），仅插件技能有此字段 */
-    provider?: string
-    enabled?: boolean
-}
+import type { Skill } from '@/types/skills'
 
 const loading = ref(false)
 const scanning = ref(false)

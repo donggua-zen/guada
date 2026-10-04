@@ -151,15 +151,23 @@ export interface CreateSessionRequest {
     modelId?: string
     title?: string
     settings?: Partial<SessionSettings>
+    /** 自定义工作目录；null → 后端自动生成临时目录 */
+    workspacePath?: string | null
+    groupId?: string
+    avatarUrl?: string
 }
 
 /**
- * 更新会话请求数据
+ * 更新会话请求数据（后端 updateSession 白名单：modelId/settings/title/groupId/agentId，
+ * 工作目录路径明确不允许经此接口更新）
  */
 export interface UpdateSessionRequest {
     title?: string
     modelId?: string
     settings?: Partial<SessionSettings>
+    /** null = 移出分组（后端按 !== undefined 透传） */
+    groupId?: string | null
+    agentId?: string
 }
 
 /**

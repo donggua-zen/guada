@@ -97,6 +97,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import type { OcrGroupSettings } from '@/types/service'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useI18n } from 'vue-i18n'
 
@@ -149,7 +150,7 @@ const openOcrDocs = () => {
 // 加载 OCR 分组设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('ocr')
+    const response = await apiService.fetchGroupSettings<OcrGroupSettings>('ocr')
 
     // 填充表单
     settingsForm.provider = response.provider || 'none'

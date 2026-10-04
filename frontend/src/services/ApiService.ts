@@ -73,7 +73,8 @@ interface ApiService
 
 class ApiService {
   baseURL: string;
-  tokenStore: any;
+  /** useStorage('token') 的引用（读写 .value） */
+  tokenStore: { value: string };
   axiosInstance: AxiosInstance;
   chatStreamService: ChatStreamService;
   workspaceWatcherService: WorkspaceWatcherService;

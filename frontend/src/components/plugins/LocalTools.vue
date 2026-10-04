@@ -138,20 +138,9 @@ import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
 const { t } = useI18n()
-
-interface ToolMetadata {
-  pluginId: string
-  name: string
-  displayName: string
-  description: string
-  enabled: boolean
-  isMcp: boolean
-  icon?: string
-  source?: 'builtin' | 'dev' | 'user'
-  tools?: any[]
-}
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -159,13 +148,13 @@ const updatingTools = ref<Set<string>>(new Set())
 const installSource = ref('')
 const installing = ref(false)
 
-const globalTools = ref<ToolMetadata[]>([])
+const globalTools = ref<PluginQueryPlugin[]>([])
 
 // Detail dialog
 const detailVisible = ref(false)
-const currentTool = ref<ToolMetadata | null>(null)
+const currentTool = ref<PluginQueryPlugin | null>(null)
 
-function showDetail(tool: ToolMetadata) {
+function showDetail(tool: PluginQueryPlugin) {
   currentTool.value = tool
   detailVisible.value = true
 }

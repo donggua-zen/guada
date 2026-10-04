@@ -61,7 +61,8 @@ export interface CreateBotRequest {
     maxRetries: number;
     retryInterval: number;
   };
-  defaultAgentId?: string;
+  /** 后端 CreateBotDto 必填（@IsNotEmpty），前端此前误标可选 */
+  defaultAgentId: string;
   defaultModelId?: string;
   defaultThinkingEffort?: string;
   additionalKwargs?: {

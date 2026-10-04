@@ -109,6 +109,27 @@ export interface ProviderTemplate {
 }
 
 /**
+ * 模型预设条目（与后端 llm-core/model-preset-library 的 ModelPreset 同构；
+ * patterns 为后端内部匹配用字段，语义不下发，前端不消费）
+ */
+export interface ModelPreset {
+    id: string
+    label: string
+    modeType: 'text' | 'embedding'
+    config: {
+        inputCapabilities?: string[]
+        outputCapabilities?: string[]
+        features?: string[]
+        contextWindow?: number | null
+        maxOutputTokens?: number | null
+    }
+    /** 能力声明：能不能思考（缺省 = 未声明，fail-safe 不能思考） */
+    supportsThinking?: boolean
+    /** 强度档位菜单（仅 supportsThinking: true 时有意义） */
+    thinkingEfforts?: string[]
+}
+
+/**
  * MCP 服务器工具
  */
 export interface McpTool {

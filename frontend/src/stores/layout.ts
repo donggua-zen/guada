@@ -4,6 +4,7 @@ import { useStorage } from '@vueuse/core'
 import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useTheme } from '@/composables/useTheme'
+import type { AppearanceGroupSettings } from '@/types/service'
 import { useSessionStore } from '@/stores/session'
 
 /**
@@ -246,7 +247,7 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const loadAppearanceSettings = async (): Promise<void> => {
     try {
-      const response = await apiService.fetchGroupSettings('appearance')
+      const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
 
       if (response.wallpaperUrl !== undefined) {
         wallpaperUrl.value = response.wallpaperUrl || null

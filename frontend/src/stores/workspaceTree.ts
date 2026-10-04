@@ -5,7 +5,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { apiService, type FileChangeEvent } from '@/services/ApiService'
 import { useTabStore } from '@/stores/tab'
-import type { WorkspaceNode } from '@/components/chat/workspace/WorkspaceTree.vue'
+import type { WorkspaceNode } from '@/types/workspace'
 
 export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
   // ── 状态（会话级：切换会话时整体重置） ──

@@ -415,7 +415,7 @@ async function handleCompress() {
       toast.success(t('chat.memo.compressStarted'));
       emit('close');
     } else {
-      toast.warning(res?.message || t('chat.memo.compressNotExecuted'));
+      toast.warning(t('chat.memo.compressNotExecuted'));
     }
   } catch (error: any) {
     console.error('触发压缩失败:', error);

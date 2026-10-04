@@ -1,8 +1,9 @@
 import type { ApiContext } from "./api-context";
+import type { WorkspaceNode } from "@/types/workspace";
 
 export interface WorkspaceApi {
-  getWorkspaceTree(sessionId: string): Promise<{ tree: any[] }>;
-  getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: any[] }>;
+  getWorkspaceTree(sessionId: string): Promise<{ tree: WorkspaceNode[] }>;
+  getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: WorkspaceNode[] }>;
   getWorkspaceFile(sessionId: string, filePath: string): Promise<{
     path: string;
     name: string;
@@ -21,11 +22,11 @@ export interface WorkspaceApi {
 
 export const workspaceApi: WorkspaceApi = {
   async getWorkspaceTree(this: ApiContext, sessionId: string) {
-    return await this._request(`/sessions/${sessionId}/workspace/tree`);
+    return await this._request<{ tree: WorkspaceNode[] }>(`/sessions/${sessionId}/workspace/tree`);
   },
 
   async getWorkspaceChildren(this: ApiContext, sessionId: string, dirPath: string) {
-    return await this._request(
+    return await this._request<{ children: WorkspaceNode[] }>(
       `/sessions/${sessionId}/workspace/children?path=${encodeURIComponent(dirPath)}`,
     );
   },
@@ -34,7 +35,14 @@ export const workspaceApi: WorkspaceApi = {
     // 非 file:// 页面（Web / Electron Dev）覆盖为相对路径，走 Vite proxy（同源），
     // 使 Set-Cookie 作用在页面源上，后续 img 请求才能携带 cookie
     const isFileProto = typeof window !== 'undefined' && window.location.protocol === 'file:';
-    return await this._request(
+    return await this._request<{
+      path: string;
+      name: string;
+      extension: string;
+      size: number;
+      content: string;
+      mimeType: string;
+    }>(
       `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
       isFileProto ? undefined : { baseURL: '/api/v1' },
     );
@@ -55,27 +63,33 @@ export const workspaceApi: WorkspaceApi = {
   },
 
   async deleteWorkspaceFile(this: ApiContext, sessionId: string, filePath: string) {
-    return await this._request(
+    return await this._request<{ success: boolean; isDirectory?: boolean }>(
       `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
       { method: "DELETE" },
     );
   },
 
   async renameWorkspaceFile(this: ApiContext, sessionId: string, filePath: string, newName: string) {
-    return await this._request(`/sessions/${sessionId}/workspace/rename`, {
-      method: "POST",
-      data: { path: filePath, newName },
-    });
+    return await this._request<{ success: boolean; isDirectory?: boolean; newPath?: string }>(
+      `/sessions/${sessionId}/workspace/rename`,
+      {
+        method: "POST",
+        data: { path: filePath, newName },
+      },
+    );
   },
   async saveWorkspaceFile(this: ApiContext, sessionId: string, filePath: string, content: string) {
-    return await this._request(`/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`, {
-      method: "POST",
-      data: { content },
-    });
+    return await this._request<{ success: boolean; path: string }>(
+      `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
+      {
+        method: "POST",
+        data: { content },
+      },
+    );
   },
 
   async disposeTerminal(this: ApiContext, terminalId: string) {
-    return await this._request(`/terminal/${encodeURIComponent(terminalId)}`, {
+    return await this._request<{ success: boolean; terminalId: string }>(`/terminal/${encodeURIComponent(terminalId)}`, {
       method: "DELETE",
     });
   },
