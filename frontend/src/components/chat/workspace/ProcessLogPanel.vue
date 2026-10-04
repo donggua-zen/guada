@@ -44,6 +44,7 @@ import { ElMessage } from 'element-plus';
 import { Refresh, CloseBold } from '@element-plus/icons-vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { apiService, type UiProcessLog } from '@/services/ApiService';
+import { getApiErrorStatus } from '@/utils/errorMessage';
 
 const props = defineProps<{
     sessionId: string;
@@ -124,9 +125,9 @@ async function fetchLog(): Promise<void> {
         const res = await apiService.getSessionProcessLog(props.sessionId, props.processId);
         log.value = res;
         if (res.status !== 'running') stopPolling();
-    } catch (e: any) {
+    } catch (e) {
         // 404 = 进程已结束且被清理（退出即从注册表消失）
-        if (e?.response?.status === 404) {
+        if (getApiErrorStatus(e) === 404) {
             stopPolling();
             if (!log.value) gone.value = true;
         } else {
@@ -149,8 +150,8 @@ async function killProcess(): Promise<void> {
         await apiService.killSessionProcess(props.sessionId, props.processId);
         ElMessage.success(t('chat.workspace.processKilledToast'));
         await fetchLog();
-    } catch (e: any) {
-        if (e?.response?.status !== 404) {
+    } catch (e) {
+        if (getApiErrorStatus(e) !== 404) {
             console.error('[ProcessLogPanel] Failed to kill process:', e);
             ElMessage.error(t('chat.workspace.processKillFailed'));
         }

@@ -187,6 +187,7 @@ import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { ArrowDown, Close } from "@element-plus/icons-vue";
+import { getApiErrorStatus } from '@/utils/errorMessage';
 import {
   BranchFork16Regular, ArrowUpload16Regular,
   Add16Regular,
@@ -267,8 +268,8 @@ async function killProcess(p: UiProcessInfo): Promise<void> {
   try {
     await apiService.killSessionProcess(props.sessionId, p.id);
     ElMessage.success(t("chat.workspace.processKilledToast"));
-  } catch (e: any) {
-    if (e?.response?.status !== 404) {
+  } catch (e) {
+    if (getApiErrorStatus(e) !== 404) {
       console.error("Failed to kill process:", e);
       ElMessage.error(t("chat.workspace.processKillFailed"));
     }

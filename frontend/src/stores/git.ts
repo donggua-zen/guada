@@ -233,14 +233,14 @@ export const useGitStore = defineStore("git", () => {
         generateAbortController.signal,
       );
       ElMessage.success(t("git.generateMessageSuccess"));
-    } catch (e: any) {
+    } catch (e) {
       // 用户主动取消：保留已生成内容，不报错
-      if (e?.name === "AbortError" || generateAbortController?.signal.aborted) {
+      if ((e instanceof Error && e.name === "AbortError") || generateAbortController?.signal.aborted) {
         ElMessage.info(t("git.generateMessageCancelled"));
         return;
       }
       // skipped 事件：错误 message 即 reason 键（如 no_model_configured）
-      const reason = e?.message || "";
+      const reason = getErrorMessage(e);
       const knownReasons = [
         "empty_diff",
         "no_model_configured",
