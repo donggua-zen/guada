@@ -1188,7 +1188,7 @@ const getFormData = () => {
       // Skills 单项偏好（按模式保存）
       'skills': (() => {
         // 遍历所有技能，按当前显示状态保存
-        const skillsOut: Record<string, any> = {};
+        const skillsOut: Record<string, boolean> = {};
         for (const skill of skillsList.value) {
           const effectiveEnabled = getSkillEffectiveEnabled(skill);
           if (skillsAllowlistMode.value) {
@@ -1206,7 +1206,7 @@ const getFormData = () => {
       })(),
       // 子代理配置（固定白名单：仅存显式 true）
       'agents': (() => {
-        const agentsOut: Record<string, any> = {};
+        const agentsOut: Record<string, boolean> = {};
         for (const char of presetAgents.value) {
           if (getAgentEffectiveEnabled(char)) {
             agentsOut[char.id] = true;

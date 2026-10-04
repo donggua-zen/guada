@@ -26,6 +26,7 @@ import AgentSettingPanel from './AgentSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import type { Agent } from '@/types/agent'
 
 const { toast } = usePopup()
 const { t } = useI18n()
@@ -38,14 +39,15 @@ const props = defineProps<{
 
 // Emits
 const emit = defineEmits<{
-    'saved': [agent: any]
+    'saved': [agent: Partial<Agent>]
     'update:show': [show: boolean]
 }>()
 
 // 响应式数据
 const visible = ref(false)
 const saving = ref(false)
-const currentAgent = ref<any>({})
+// 未选中/加载失败时为空对象占位（模板据此展示"新建"标题）
+const currentAgent = ref<Partial<Agent>>({})
 const settingPanelRef = ref<InstanceType<typeof AgentSettingPanel> | null>(null)
 const panelHasChanges = ref(true)
 
@@ -95,7 +97,7 @@ const handleSave = async (): Promise<void> => {
     saving.value = true;
     try {
         const data = settingPanelRef.value.getFormData();
-        let agent: any = null;
+        let agent: Agent | null = null;
         const { avatarFile, avatarUrl: _avatarUrl, ...agentData } = data;
 
         if (currentAgent.value && currentAgent.value.id) {

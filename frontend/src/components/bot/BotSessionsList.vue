@@ -163,7 +163,7 @@ const restoreFilterState = () => {
 
 // 更新URL查询参数以维持状态
 const updateUrlParams = () => {
-  const query: any = { ...route.query }
+  const query = { ...route.query }
   
   if (selectedBotId.value) {
     query.botId = selectedBotId.value

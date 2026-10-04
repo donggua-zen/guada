@@ -79,9 +79,17 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 import FolderIcon from '@/components/ui/FolderIcon.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 
+/**
+ * 目录树节点：KBFile 附加展开态与子节点（文件夹节点 children 为空数组）
+ */
+interface TreeNodeItem extends KBFile {
+    expanded?: boolean
+    children: TreeNodeItem[]
+}
+
 interface Props {
-    node: any
-    allNodes: Map<string, any>
+    node: TreeNodeItem
+    allNodes: Map<string, TreeNodeItem>
 }
 
 const props = defineProps<Props>()

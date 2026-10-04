@@ -176,6 +176,7 @@ import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { getModelThinkingEfforts, getThinkingEffortLabelWithKey } from '@/utils/modelUtils'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
+import type { Agent } from '@/types/agent'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { ModelProvider, Model } from '@/types/api'
 
@@ -199,7 +200,7 @@ const submitting = ref(false)
 const activeCollapse = ref<string[]>([])
 
 // 智能体列表
-const agents = ref<any[]>([])
+const agents = ref<Agent[]>([])
 
 // 知识库列表
 const knowledgeBases = ref<KnowledgeBase[]>([])
@@ -267,6 +268,8 @@ const formData = ref({
   defaultModelId: '' as string | null, // null 表示继承自智能体/全局设置
   defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
+  // 动态边界：键由后端平台元数据定义，同一键多态绑定 el-input/el-input-number/el-select/el-switch，
+  // 各组件 modelValue 契约互斥（string|number / number|null / boolean|...），值类型无法收窄为单一形状
   platformConfig: {} as Record<string, any>,
   reconnectConfig: {
     enabled: true,

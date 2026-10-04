@@ -530,6 +530,8 @@ import {
 import GdDialog from '@/components/ui/GdDialog.vue'
 import CelExpressionEditor from './CelExpressionEditor.vue'
 import type { Model, ModelProvider, ModelPreset } from '@/types/api'
+import type { FormInstance } from 'element-plus'
+import type { ThinkingPatchPayload } from '../../services/modules/model.api'
 
 const props = defineProps<{
   provider: ModelProvider
@@ -548,7 +550,7 @@ const { notify, confirm } = usePopup()
 // ========== 编辑/新增模型信息 ==========
 const showEditModal = ref(false)
 const saving = ref(false)
-const editFormRef = ref<any>(null)
+const editFormRef = ref<FormInstance | null>(null)
 const currentEditModelId = ref<string | null>(null)
 const isEditMode = ref(false)
 
@@ -582,12 +584,12 @@ const effortsMenuFromModel = (model: Model): string[] => {
  * - false：仅能力覆盖 false
  * - auto：条目存在任一覆盖时发 null 清除，全部回退继承链
  */
-const buildThinkingPayload = (): Record<string, any> => {
+const buildThinkingPayload = (): ThinkingPatchPayload => {
   const mode = editModelForm.value.thinkingMode
   const model = props.models?.find((x) => x.id === currentEditModelId.value)
   if (mode === 'false') return { supportsThinking: false }
   if (mode === 'auto') {
-    const payload: Record<string, any> = {}
+    const payload: ThinkingPatchPayload = {}
     if (model?.supportsThinkingOverride !== undefined) payload.supportsThinking = null
     if (model?.thinkingEffortsOverride !== undefined) payload.thinkingEfforts = null
     if (model?.thinkingEffortsMapOverride !== undefined) payload.thinkingEffortsMap = null
@@ -596,7 +598,7 @@ const buildThinkingPayload = (): Record<string, any> => {
     return payload
   }
 
-  const payload: Record<string, any> = { supportsThinking: true }
+  const payload: ThinkingPatchPayload = { supportsThinking: true }
   const checked = new Set(editModelForm.value.thinkingEffortsMenu as string[])
   const menu = THINKING_EFFORT_OPTIONS.filter((e) => checked.has(e))
   if (menu.length > 0) {
@@ -812,7 +814,18 @@ const legacyMapLevels = computed(() => {
   return levels.length > 0 ? levels.join(' / ') : ''
 })
 
-const editModelForm = ref<any>({  modelName: '',
+/** 编辑弹窗表单（thinkingMode / thinkingEffortsMenu 为表单态字段，保存时不进 payload） */
+interface EditModelFormData {
+  modelName: string
+  modelType: string
+  thinkingMode: 'auto' | 'true' | 'false'
+  thinkingEffortsMenu: string[]
+  thinkingPatchExpr: string
+  /** 与 Model.config 同构（customParameters 为动态 JSON 元数据，沿用项目既有类型） */
+  config: NonNullable<Model['config']>
+}
+
+const editModelForm = ref<EditModelFormData>({  modelName: '',
   modelType: 'text',
   thinkingMode: 'auto',
   thinkingEffortsMenu: [] as string[],
@@ -897,7 +910,7 @@ const editModelRules = computed(() => ({
   'config.maxOutputTokens': {
     required: false,
     type: 'number' as const,
-    validator: (_rule: any, value: any) => !value || value > 0,
+    validator: (_rule: unknown, value: number | undefined) => !value || value > 0,
     message: t('settings.providerDetail.maxOutputTokensInvalid'),
     trigger: 'blur' as const
   }
@@ -935,7 +948,7 @@ const hasCustomDefaultParams = (config: Model['config']): boolean =>
   )
 
 // 从获取列表中选择模型（预填充到编辑表单，不调用API）
-const handleSelectFromFetch = (model: any) => {
+const handleSelectFromFetch = (model: Model) => {
   defaultParamsExpanded.value = hasCustomDefaultParams(model.config)
   editModelForm.value = {
     modelName: model.modelName || '',
@@ -989,7 +1002,7 @@ const handleAddModel = () => {
 }
 
 // 编辑模型
-const handleEditClick = (model: any) => {
+const handleEditClick = (model: Model) => {
   isEditMode.value = true
   currentEditModelId.value = model.id
   const config = model.config || {}
@@ -1099,7 +1112,7 @@ const handleToggleModelActive = async (model: Model) => {
 // ========== 获取模型列表 ==========
 const showFetchModal = ref(false)
 const fetchingModels = ref(false)
-const fetchedModels = ref<any[]>([])
+const fetchedModels = ref<Model[]>([])
 const searchModelName = ref('')
 
 const handleSearchModel = useDebounceFn((_value) => {
@@ -1129,9 +1142,9 @@ const handleFetchModels = async () => {
     const data = await apiService.fetchRemoteModels(props.provider.id)
     const apiModels = data.items || []
     // 从已添加的模型中继承config参数
-    const enrichedModels = apiModels.map((apiModel: any) => {
+    const enrichedModels = apiModels.map((apiModel) => {
       const existingModel = props.models.find(
-        (model: any) => model.modelName === apiModel.modelName
+        (model) => model.modelName === apiModel.modelName
       )
       if (existingModel) {
         return {
