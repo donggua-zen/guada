@@ -116,7 +116,7 @@ const settingsForm = reactive({
 })
 
 // 原始设置备份，用于对比是否有改动
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 计算是否有改动
 const hasChanges = computed(() => {
@@ -171,7 +171,7 @@ const loadSettings = async () => {
 const handleSave = async () => {
   try {
     // 构造保存数据
-    const dataToSave: Record<string, any> = {
+    const dataToSave: OcrGroupSettings = {
       provider: settingsForm.provider,
       ocrMode: settingsForm.ocrMode === 'force' ? 'force' : 'auto',
     }
@@ -185,7 +185,7 @@ const handleSave = async () => {
     }
 
     // 使用分组设置接口更新 ocr 分组
-    await apiService.updateGroupSettings('ocr', dataToSave)
+    await apiService.updateGroupSettings('ocr', { ...dataToSave })
 
     // 保存成功后更新原始数据备份
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))

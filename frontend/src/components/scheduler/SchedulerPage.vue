@@ -213,7 +213,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { usePrefillInput } from '../../composables/usePrefillInput'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
-import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'
+import type { ScheduledTask, ScheduledTaskLog, UpdateTaskRequest } from '../../types/scheduler'
 import TaskEditDialog from './TaskEditDialog.vue'
 import TaskLogDrawer from './TaskLogDrawer.vue'
 
@@ -390,13 +390,29 @@ function handleLogClick(log: ScheduledTaskLog) {
 /**
  * 保存任务
  */
-async function handleSaveTask(data: any) {
+async function handleSaveTask(data: UpdateTaskRequest) {
   try {
     if (isEditMode.value && currentTask.value) {
       await apiService.updateScheduledTask(currentTask.value.id, data)
       toast.success(t('common.updateSuccess'))
     } else {
-      await apiService.createScheduledTask(data)
+      // 对话框构造的是 UpdateTaskRequest 形态（可空字段允许 null）；新建分支要求非空必填字段、
+      // null 一律归一为 undefined（后端 create DTO 缺省即 null，wire 行为一致）
+      await apiService.createScheduledTask({
+        ...data,
+        name: data.name ?? '',
+        prompt: data.prompt ?? '',
+        scheduleType: data.scheduleType ?? 'cron',
+        executeAt: data.executeAt ?? undefined,
+        targetMode: data.targetMode ?? 'new_session',
+        targetSessionId: data.targetSessionId ?? undefined,
+        agentId: data.agentId ?? undefined,
+        modelId: data.modelId ?? undefined,
+        settings: data.settings ?? undefined,
+        workspacePath: data.workspacePath ?? undefined,
+        attachments: data.attachments ?? undefined,
+        expiresAt: data.expiresAt ?? undefined,
+      })
       toast.success(t('common.createSuccess'))
     }
     showEditDialog.value = false

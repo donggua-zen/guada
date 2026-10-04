@@ -233,6 +233,7 @@ class ApiService {
    * （如 LocalTools）存在 80+ 处不带泛型实参的裸调用，依赖默认 any 落到各自的
    * 接口声明返回类型上；改成 unknown 会把错误成片推向本任务范围外的文件。
    */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   async _request<T = any>(
     endpoint: string,
     options?: AxiosRequestConfig,

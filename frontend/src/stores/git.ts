@@ -248,11 +248,12 @@ export const useGitStore = defineStore("git", () => {
         "generation_failed",
         "aborted",
         "error",
-      ];
-      if (knownReasons.includes(reason)) {
+      ] as const;
+      if ((knownReasons as readonly string[]).includes(reason)) {
         ElMessage.warning(
           t("git.generateMessageFailed", {
-            reason: t(`git.generateReason.${reason}` as any),
+            // includes 判定后 reason 必为已知键之一，收窄以满足 i18n 键类型
+            reason: t(`git.generateReason.${reason as (typeof knownReasons)[number]}`),
           }),
         );
       } else {

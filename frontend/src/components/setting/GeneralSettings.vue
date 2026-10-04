@@ -169,7 +169,7 @@ const settingsForm = reactive({
 })
 
 // 原始设置备份，用于对比是否有改动
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 计算是否有改动
 const hasChanges = computed(() => {

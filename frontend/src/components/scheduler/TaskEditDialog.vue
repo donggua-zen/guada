@@ -44,7 +44,7 @@
           </div>
 
           <!-- 工作目录选择弹窗 -->
-          <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
+          <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
             :current-workspace-path="form.workspacePath || null" :public-path="publicPath"
             :current-attachments="form.attachments" @select="handleWorkspaceSelect"
             @toggle-attachment="handleToggleAttachment" />
@@ -246,9 +246,10 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton, ElSwitch, ElInputNumber, ElIcon, ElButton, ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker, ElMessage } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 import { AddCircleOutlineRound, LogInRound } from '@vicons/material'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Checkmark16Filled } from '@vicons/fluent'
-import type { ScheduledTask } from '../../types/scheduler'
+import type { ScheduledTask, UpdateTaskRequest } from '../../types/scheduler'
 import type { Agent } from '../../types/agent'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
@@ -276,7 +277,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  'save': [data: any]
+  'save': [data: UpdateTaskRequest]
 }>()
 
 const dialogVisible = computed({
@@ -284,7 +285,7 @@ const dialogVisible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const formRef = ref<any>(null)
+const formRef = ref<FormInstance | null>(null)
 const submitting = ref(false)
 const testing = ref(false)
 const formError = ref('')
@@ -292,7 +293,7 @@ const formError = ref('')
 // 工作目录选择
 const workspaceStore = useWorkspaceStore()
 const workspacePopoverVisible = ref(false)
-const workspaceButtonRef = ref<any>(null)
+const workspaceButtonRef = ref<{ $el: HTMLElement } | null>(null)
 const publicPath = computed(() => workspaceStore.getPublicPath())
 
 // 时间模式
@@ -600,7 +601,7 @@ async function handleSubmit() {
 
     const cronExpression = generateCron()
 
-    const data: any = {
+    const data: UpdateTaskRequest = {
       name: form.value.name.trim(),
       prompt: form.value.prompt.trim(),
       scheduleType: timeMode.value === 'once' ? 'once' : 'cron',
@@ -643,7 +644,7 @@ async function handleSubmit() {
 
     // 思考强度走 task.settings 透传（executor 把 task.settings 并入 session.settings，thinkingEffort 本就在白名单）
     if (form.value.targetMode === 'new_session') {
-      const settings: Record<string, any> = { ...(props.task?.settings || {}) }
+      const settings: Record<string, unknown> = { ...(props.task?.settings || {}) }
       if (form.value.thinkingEffort) settings.thinkingEffort = form.value.thinkingEffort
       else delete settings.thinkingEffort
       data.settings = settings

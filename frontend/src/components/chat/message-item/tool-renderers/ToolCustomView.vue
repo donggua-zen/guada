@@ -59,6 +59,7 @@ const outputText = computed(() => {
 });
 
 /** 工具结果 meta（card: "terminal" 时为新契约的结构化来源；后端 meta 即 card + 各卡片自定义字段的开放字典） */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
 const resultMeta = computed<Record<string, any> | null>(() => {
   const m = props.response?.meta;
   return m && m.card === "terminal" ? m : null;

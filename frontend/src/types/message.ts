@@ -54,7 +54,9 @@ export interface MessageContent {
     content: string | null
     reasoningContent?: string | null
     turnsId?: string
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     additionalKwargs?: Record<string, any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
     createdAt?: ISODateString
     updatedAt?: ISODateString
@@ -88,6 +90,7 @@ export interface Message {
      * 轮次级元数据（来自后端 Turn.metadata / 三层适配层）：
      * finishReason / errorDetail / modelName / totalDurationMs / compactInfo / hidden / shadowed 等
      */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
 }
 
@@ -105,6 +108,7 @@ export interface ToolCallEntry {
     outcome?: 'success' | 'error' | 'rejected'
     /** 子代理关联（subagent_link 事件写入） */
     subAgentLink?: { subSessionId: string; name?: string }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
 }
 
@@ -115,6 +119,7 @@ export interface ToolCallResponseEntry {
     content: string
     toolCallId: string
     outcome?: 'success' | 'error' | 'rejected'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     meta?: Record<string, any>
 }
 
@@ -163,6 +168,7 @@ export interface MessageBundle {
      */
     source?: { kind: string; [key: string]: unknown }
     /** 消息级元数据：usage/finishReason/referencedKbs/hidden/compactInfo 等 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata: Record<string, any>
     createdAt?: ISODateString
     /** 块级内容（展示派生时引用收集，不复制） */
@@ -196,6 +202,7 @@ export interface Turn {
     id: string
     /** 'turn' 对话回合 / 'event' 事件类消息外壳（command/compaction 等） */
     kind: 'turn' | 'event'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata: Record<string, any>
     visible: boolean
     /** 消息束（取代旧平铺 blocks：一条后端消息 = 一个 bundle） */
