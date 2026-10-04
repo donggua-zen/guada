@@ -65,7 +65,8 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { useStorage } from "@vueuse/core"
-import { apiService } from '@/services/ApiService';
+import { apiService } from '@/services/ApiService'
+import { getErrorMessage } from '@/utils/errorMessage';
 import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
 import { useRouter, useRoute } from 'vue-router';
@@ -298,7 +299,7 @@ const loadModels = async (): Promise<void> => {
     });
   } catch (error) {
     console.error('获取模型列表失败:', error);
-    notify.error(t('common.error.loadFailed'), error);
+    notify.error(t('common.error.loadFailed'), getErrorMessage(error));
   }
 };
 
@@ -359,7 +360,7 @@ const loadAgents = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('获取智能体列表失败:', error);
-    notify.error(t('common.error.loadFailed'), error);
+    notify.error(t('common.error.loadFailed'), getErrorMessage(error));
     // 即使出错也要恢复标志
     isInitializing.value = false;
   }
