@@ -185,13 +185,16 @@ cd backend-ts && npx tsc --noEmit
 # 前端类型检查
 cd frontend && npx vue-tsc --noEmit
 
-# 前端 ESLint（error 必须清零；no-explicit-any 目前为 warn 存量基线，只防增量）
+# 前端 ESLint（no-explicit-any 为 error，全量零告警）
 cd frontend && npx eslint src
 ```
 
-**提交前请确保 typecheck 零错误、lint 零 error。** 禁止新增 `@ts-ignore` / `@ts-nocheck`
-（`@typescript-eslint/ban-ts-comment` 已设为 error）；新增显式 `any` 会被 warn 提示，
-请优先给出真实类型。未配置 Prettier，格式请与周边代码保持一致。
+**提交前请确保 typecheck 零错误、lint 零 error 零 warning。** 禁止新增 `@ts-ignore` /
+`@ts-nocheck`（`@typescript-eslint/ban-ts-comment` 已设为 error）；显式 `any` 同为 error
+（2026-10 类型债务清偿后从约定升级为强制门禁）。确属动态边界（后端开放式 metadata 字典、
+插件运行时值袋等）时，逐处 `eslint-disable-next-line` 豁免并附白名单说明；测试夹具与
+第三方 ambient 声明（partial-json / plugin-runtime）在 eslint.config.mjs 配置级豁免。
+未配置 Prettier，格式请与周边代码保持一致。
 
 ### 编码约定
 

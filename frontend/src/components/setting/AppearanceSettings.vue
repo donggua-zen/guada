@@ -249,6 +249,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
 import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import type { AppearanceGroupSettings } from '@/types/service'
@@ -420,8 +421,8 @@ const handleSave = async () => {
 }
 
 // 处理文件选择
-const handleFileChange = async (uploadFile: any) => {
-  const file = uploadFile.raw as File
+const handleFileChange = async (uploadFile: UploadFile) => {
+  const file = uploadFile.raw
   if (!file) return
 
   // 验证文件类型

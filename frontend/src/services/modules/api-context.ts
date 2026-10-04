@@ -6,6 +6,7 @@ import type { AxiosInstance, AxiosRequestConfig } from "axios";
  */
 export interface ApiContext {
   // 与 ApiService._request 的动态边界默认值保持一致（说明见 ApiService._request 注释）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   _request<T = any>(endpoint: string, options?: AxiosRequestConfig): Promise<T>;
   axiosInstance: AxiosInstance;
   baseURL: string;

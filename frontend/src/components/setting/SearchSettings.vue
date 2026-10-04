@@ -113,7 +113,7 @@ const providerKeys = reactive({
 })
 
 // 原始备份，用于检测变更
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 插件状态
 const pluginEnabled = ref(false)
@@ -172,7 +172,7 @@ const loadSettings = async () => {
   // 加载插件状态
   try {
     const pluginsRes = await apiService.queryPlugins(undefined, getLocale())
-    const plugin = pluginsRes.plugins?.find((p: any) => p.pluginId === 'web-search')
+    const plugin = pluginsRes.plugins?.find((p) => p.pluginId === 'web-search')
     if (plugin) {
       pluginEnabled.value = plugin.enabled
     }
@@ -184,14 +184,14 @@ const loadSettings = async () => {
 // 保存设置
 const handleSave = async () => {
   try {
-    const dataToSave: Record<string, any> = {
+    const dataToSave: SearchGroupSettings = {
       provider: selectedProvider.value,
       bocha: { apiKey: providerKeys.bocha || '' },
       tavily: { apiKey: providerKeys.tavily || '' },
       metaso: { apiKey: providerKeys.metaso || '' },
     }
 
-    await apiService.updateGroupSettings('search', dataToSave)
+    await apiService.updateGroupSettings('search', { ...dataToSave })
     originalSettings.value = JSON.parse(JSON.stringify({
       provider: selectedProvider.value,
       bocha: { apiKey: providerKeys.bocha },

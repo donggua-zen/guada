@@ -270,6 +270,7 @@ const formData = ref({
   knowledgeBaseIds: [] as string[],
   // 动态边界：键由后端平台元数据定义，同一键多态绑定 el-input/el-input-number/el-select/el-switch，
   // 各组件 modelValue 契约互斥（string|number / number|null / boolean|...），值类型无法收窄为单一形状
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   platformConfig: {} as Record<string, any>,
   reconnectConfig: {
     enabled: true,

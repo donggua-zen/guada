@@ -363,6 +363,7 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material'
 import { Loading, UploadFilled, Document, Close, TopRight } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
@@ -742,8 +743,8 @@ function handleShowInstallDialog() {
 /**
  * 处理文件选择
  */
-function handleFileChange(file: any) {
-    selectedFile.value = file.raw
+function handleFileChange(file: UploadFile) {
+    selectedFile.value = file.raw ?? null
 }
 
 /**
