@@ -53,13 +53,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { reinitApiService } from '@/services/ApiService'
+import type { MockConfig } from '@/services/mockStreamService'
 
 const isDev = import.meta.env.DEV
 const isVisible = ref(false)
 const isMockEnabled = ref(false)
 const selectedScenario = ref('')
-const scenarios = ref<Record<string, any>>({})
-const currentConfig = ref<any>(null)
+const scenarios = ref<Record<string, MockConfig>>({})
+const currentConfig = ref<MockConfig | null>(null)
 
 onMounted(async () => {
   // 从 localStorage 读取运行时配置

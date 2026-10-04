@@ -229,6 +229,9 @@ class ApiService {
 
   /**
    * 通用请求方法
+   * 泛型默认保持 any：这是 API 层唯一的动态逃逸口 —— 16 个领域模块与个别组件
+   * （如 LocalTools）存在 80+ 处不带泛型实参的裸调用，依赖默认 any 落到各自的
+   * 接口声明返回类型上；改成 unknown 会把错误成片推向本任务范围外的文件。
    */
   async _request<T = any>(
     endpoint: string,
@@ -313,9 +316,9 @@ class ApiService {
   }
 
   // ========== 工具方法 ============
-  debounce<T extends (...args: any[]) => any>(func: T, delay: number): T {
+  debounce<T extends (...args: never[]) => unknown>(func: T, delay: number): T {
     let timer: number | undefined;
-    return function (this: any, ...args: Parameters<T>) {
+    return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
       clearTimeout(timer);
       timer = window.setTimeout(() => {
         func.apply(this, args);

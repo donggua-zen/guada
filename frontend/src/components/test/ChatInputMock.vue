@@ -194,7 +194,23 @@ const props = defineProps({
   mode: { type: String, default: 'chat' },
 });
 
-const emit = defineEmits(['send', 'abort']);
+/** 模拟附件条目（本地 mock 形态：计数 id + 展示名 + 原始 File） */
+interface MockUploadFile {
+  id: number;
+  displayName: string;
+  file: File;
+}
+
+/** 模拟知识库条目（与 KB 选择器的最小展示字段同构） */
+interface MockKnowledgeBase {
+  id: string;
+  name: string;
+}
+
+const emit = defineEmits<{
+  send: [data: { content: string; files: MockUploadFile[] }];
+  abort: [];
+}>();
 
 // ==================== 状态 ====================
 const editor = ref<Editor>();
@@ -210,8 +226,8 @@ const selectedIndex = ref(0);
 const pickerQuery = ref('');
 // 模拟数据
 const currentModelName = ref('GPT-4o');
-const uploadFiles = ref<any[]>([]);
-const selectedKnowledgeBases = ref<any[]>([]);
+const uploadFiles = ref<MockUploadFile[]>([]);
+const selectedKnowledgeBases = ref<MockKnowledgeBase[]>([]);
 let fileIdCounter = 0;
 
 const allSkills = [

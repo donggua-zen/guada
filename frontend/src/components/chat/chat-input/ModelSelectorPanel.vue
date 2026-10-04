@@ -240,7 +240,7 @@ const filteredProviders = computed(() => {
   return props.providers.map(provider => ({
     ...provider,
     models: props.models.filter((model: Model) => model.providerId === provider.id),
-  })).filter((provider: any) => provider.models.length > 0)
+  })).filter((provider) => provider.models.length > 0)
 })
 
 function getProviderModels(providerId: string): Model[] {

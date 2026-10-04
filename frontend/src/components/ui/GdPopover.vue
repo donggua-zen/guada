@@ -23,7 +23,7 @@
 }
 </style>
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from 'vue'
 
 interface Props {
     show: boolean
@@ -58,7 +58,7 @@ const emit = defineEmits<{
 }>()
 
 const popoverRef = ref<HTMLElement | null>(null)
-const positionStyle = ref<Record<string, any>>({})
+const positionStyle = ref<CSSProperties>({})
 let resizeObserver: ResizeObserver | null = null
 
 // 计算并更新位置
@@ -190,7 +190,7 @@ const handleEscKey = (e: KeyboardEvent) => {
 
 // 计算弹窗位置和样式
 const popoverStyle = computed(() => {
-    const style: Record<string, any> = {
+    const style: CSSProperties = {
         width: typeof props.width === 'number' ? `${props.width}px` : props.width,
         maxHeight: typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight
     }

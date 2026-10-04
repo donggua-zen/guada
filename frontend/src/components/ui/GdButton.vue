@@ -8,7 +8,7 @@
     </button>
 </template>
 <script setup lang="ts">
-import { computed, useSlots } from "vue";
+import { computed, useSlots, type CSSProperties } from "vue";
 
 const $slots = useSlots();
 
@@ -142,7 +142,7 @@ const sizeMap: Record<string, SizeClasses> = {
         padding: "px-4 h-[40px]",
     },
 }
-const btnThemeStyle = computed((): any => {
+const btnThemeStyle = computed((): CSSProperties => {
     const theme = colorMap[(props.type || 'default').toLowerCase()] || colorMap.default;
     const baseStyles = {
         '--btn-base-color': theme.color,

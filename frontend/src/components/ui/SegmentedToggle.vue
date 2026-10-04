@@ -14,10 +14,13 @@
 </template>
 
 <script setup lang="ts">
+import type { Component } from 'vue'
+
 export interface SegmentedOption {
   label: string
   value: string | number | boolean
-  icon?: any
+  /** 可选图标：动态组件（<component :is> 接受组件定义或组件名） */
+  icon?: string | Component
 }
 
 defineProps<{

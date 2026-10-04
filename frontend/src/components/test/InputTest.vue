@@ -257,8 +257,8 @@ const handlePickerKeydown = (e: KeyboardEvent) => {
   }
 };
 
-// 处理发送事件
-const handleSend = (data: { content: string; files: any[] }) => {
+// 处理发送事件（files 载荷本页仅记录日志，不做字段级消费）
+const handleSend = (data: { content: string; files: unknown[] }) => {
   addLog('send', `发送消息: ${data.content.slice(0, 50)}${data.content.length > 50 ? '...' : ''}`);
 };
 

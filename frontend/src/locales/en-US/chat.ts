@@ -57,7 +57,7 @@
     // RunModePopover.vue
     runModeReadOnlyDesc: 'Files and commands are read-only, suitable for analysis and planning',
     runModeWorkspaceWriteDesc: 'File and shell writes are confined to the working directory, read-only outside',
-    runModeFullAccessDesc: 'No restrictions on tools or paths, can read/write any file (high risk)',
+    runModeFullAccessDesc: 'No restrictions on tools or paths, can read/write arbitrary files (high risk)',
 
     // ThinkingEffortPopover.vue
     thinkingEffortTitle: 'Thinking Effort',

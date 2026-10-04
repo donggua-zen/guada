@@ -128,7 +128,8 @@
 
               <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染 -->
               <WorkingDirBar v-if="!props.readonly && effectiveSessionId" class="mt-1"
-                :session-id="effectiveSessionId" :attachments="props.session?.settings?.attachments"
+                :session-id="effectiveSessionId"
+                :attachments="(props.session?.settings?.attachments as Record<string, string[]> | undefined)"
                 @attachments-change="handleAttachmentsChange" />
             </div>
           </div>
@@ -169,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide, type VNode } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 const { t } = useI18n()
@@ -195,6 +196,7 @@ import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessag
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage } from '@/utils/errorMessage'
+import type { SnipData } from './workspace/FilePreviewPanel.vue'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -288,7 +290,7 @@ const emit = defineEmits<{
 
 defineSlots<{
   /** 右侧 aside 槽位：渲染于滚动条左侧、不随消息滚动；宽度由 asideWidth 控制 */
-  aside?: () => any
+  aside?: () => VNode[]
 }>();
 
 // 计算属性 - 类型化
@@ -322,7 +324,7 @@ const {
 } = useSessionChat(sessionStore, apiService)
 
 // 响应式数据
-const scrollContainerRef = ref<any>(null);
+const scrollContainerRef = ref<InstanceType<typeof ScrollContainer> | null>(null);
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const needScrollToBottom = ref(true);
 let scrollTicking = false;
@@ -461,8 +463,9 @@ function handleScroll(event: Event) {
     // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const scrollTop = scrollElement?.scrollTop ?? (event.target as HTMLElement | null)?.scrollTop ?? 0;
+    // 滚动元素缺失时原表达式为 NaN（NaN <= 5 === false），?? NaN 保持同一结果
     const isAtBottom =
-      scrollElement?.scrollHeight - scrollTop - scrollElement?.clientHeight <= 5;
+      (scrollElement?.scrollHeight ?? NaN) - scrollTop - (scrollElement?.clientHeight ?? NaN) <= 5;
 
     // 检测是否滚动到顶部附近，触发加载更多历史消息
     if (
@@ -586,16 +589,28 @@ const chatAttachmentUploader = {
     apiService.uploadFile(sessionId, file, onProgress),
 };
 
-const chatInputConfig = computed(() => ({
-  modelId: currentModelId.value,
-  // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
-  maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
-  knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
-  workspacePath: currentSession.value?.workspacePath || null,
-  sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
-  attachments: currentSession.value?.settings?.attachments || {},
-}));
+/** settings 开放字典（索引签名收敛为 unknown）的收窄读取切片，与下方 handleConfigChange 的写回字段一一对应 */
+type SessionSettingsView = {
+  maxTokensLimit?: number | null
+  referencedKbs?: string[]
+  sandboxMode?: string
+  attachments?: Record<string, string[]>
+}
+
+const chatInputConfig = computed(() => {
+  // 断言只作用于读取切片，运行时仍是同一个 settings 对象
+  const settings = currentSession.value?.settings as SessionSettingsView | undefined;
+  return {
+    modelId: currentModelId.value,
+    // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
+    thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
+    maxTokensLimit: settings?.maxTokensLimit ?? null,
+    knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || settings?.referencedKbs || [],
+    workspacePath: currentSession.value?.workspacePath || null,
+    sandboxMode: settings?.sandboxMode || 'workspace-write',
+    attachments: settings?.attachments || {},
+  };
+});
 
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
@@ -1113,9 +1128,9 @@ function handleEditQueued(item: QueuedMessage) {
  * TurnItem 已直接传入整轮 turn(渲染链路传递,零反查),
  * enterEditMode 直接用 turn.id 作为被编辑回合外壳 id。
  */
-function generateResponse(turn: any) {
+function generateResponse(turn: Turn) {
   const user = (turn?.messages || []).find(
-    (m: any) => m.role === "user" && !isHiddenBlock(m),
+    (m) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
   // 用户消息束 → 编辑视图（跨块聚合文本/附件），enterEditMode 消费
@@ -1127,9 +1142,9 @@ function generateResponse(turn: any) {
  * TurnItem 已直接传入整轮 turn,用户块与回合外壳 id 均从 turn 直接取(零反查),
  * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
-function regenerateResponse(turn: any) {
+function regenerateResponse(turn: Turn) {
   const user = (turn?.messages || []).find(
-    (m: any) => m.role === "user" && !isHiddenBlock(m),
+    (m) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
   // 用户消息束 → 可见视图：跨块聚合可见正文/附件；注入块（origin='system' 系统提示、
@@ -1172,7 +1187,7 @@ defineExpose({
   scrollToMessage,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
   insertText: (text: string) => chatInputRef.value?.insertText(text),
-  insertBadge: (data: any) => chatInputRef.value?.insertBadge(data),
+  insertBadge: (data: SnipData) => chatInputRef.value?.insertBadge(data),
 });
 
 /**
@@ -1195,7 +1210,8 @@ function scrollToMessage(messageId: string) {
   }
 
   // 用容器级滚动，避免 scrollIntoView 导致整个页面位移
-  container.scrollTo({ top: targetElement.offsetTop, behavior: 'smooth' })
+  // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
+  container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior: 'smooth' })
 
   // 屏外回合带 content-visibility，跳转途中它们才按真实高度展开，落点会偏；
   // 滚动结束后按实测位置校正一次

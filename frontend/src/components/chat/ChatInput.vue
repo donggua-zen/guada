@@ -815,7 +815,7 @@ const handleModelSelect = (modelId: string) => {
   localThinkingEffort.value = newThinkingEffort;
 
   // 构建配置变更对象
-  const configChanges: Record<string, any> = {
+  const configChanges: { modelId: string; thinkingEffort?: string } = {
     modelId: modelId,
   };
   // 未显式选过档位时不落库：让会话保持"未设置"，由后端 defaultThinkingEffort 决定，

@@ -73,7 +73,7 @@ export interface WireMessage {
   kind?: "user" | "model";
   /** 消息来源（判断"是不是人说的话"的单一真相） */
   source?: { kind: string; [key: string]: unknown };
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   content: ContentBlock[];
   /** Unix 毫秒时间戳（replayer 从事件 time 还原） */
   createdAt?: number;
@@ -117,7 +117,7 @@ export interface ToolCallsResponseEvent {
     toolCallId: string;
     outcome?: "success" | "error" | "rejected";
     /** UI 渲染元数据（仅前端消费，不进 LLM 上下文），来自工具返回的 meta */
-    meta?: Record<string, any>;
+    meta?: Record<string, unknown>;
   }>;
 }
 

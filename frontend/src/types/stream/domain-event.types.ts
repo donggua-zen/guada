@@ -108,7 +108,7 @@ export type DomainEvent =
         content: string;
         isError?: boolean;
         /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */
-        meta?: Record<string, any>;
+        meta?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
       };
     }

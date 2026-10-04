@@ -49,6 +49,8 @@ export interface TreeViewRow {
   isDir: boolean;
   /** 组头行（git 变更树的分组标题）：不参与选中/折叠，仅展示 */
   isGroup?: boolean;
+  // 行为开放扩展点：文件树/git 树各自附加 name/path/file 等字段并由插槽盲读，
+  // 收敛为 unknown 会把错误推向范围外的插槽模板，故保留 any 并在此说明
   [k: string]: any;
 }
 

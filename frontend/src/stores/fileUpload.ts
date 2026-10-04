@@ -27,7 +27,7 @@ export interface UploadTask {
     rawFile?: File // 原始文件对象(用于延迟上传)
     relativePath?: string // 相对路径(用于文件夹上传)
     createdAt: number // 创建时间戳(用于队列排序)
-    serverFileRecord?: any // 后端返回的完整文件记录
+    serverFileRecord?: KBFile // 后端返回的完整文件记录
     onProgressUpdate?: (status: UploadTask) => void  // 进度更新回调
 }
 

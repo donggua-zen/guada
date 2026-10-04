@@ -74,7 +74,19 @@ export interface StreamToolCallEvent {
  */
 export interface StreamToolCallsResponseEvent {
     type: 'tool_calls_response'
-    toolCallsResponse: any[]  // 驼峰式
+    /** 工具结果条目（与 event-chunk.types 的 ToolCallsResponseEvent 条目同构；
+     *  附加 role（后端消息角色，mock/后端均为 'tool'）；legacy 事件 toolCallId 可缺失） */
+    toolCallsResponse: Array<{
+        role?: string
+        /** 独立 tool 结果消息 id（与持久化 tool/result.messageId 一致） */
+        messageId?: string
+        name: string
+        content: string
+        toolCallId?: string
+        outcome?: 'success' | 'error' | 'rejected'
+        /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */
+        meta?: Record<string, unknown>
+    }>  // 驼峰式
     usage?: TokenUsage
 }
 
@@ -189,7 +201,7 @@ export interface User {
  * 全局设置
  */
 export interface GlobalSettings {
-    [key: string]: any
+    [key: string]: unknown
 }
 
 // ── 分组设置（GET/PUT /settings/:group 的已知键；写侧为局部 patch，键可选） ──

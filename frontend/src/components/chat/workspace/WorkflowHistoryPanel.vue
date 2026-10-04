@@ -89,9 +89,10 @@ async function load(): Promise<void> {
 
 function handleStreamChunk(chunk: HubStreamEvent): void {
   if (chunk.type !== "workflow_event") return;
-  const sid = (chunk as any).sessionId;
+  // WireStreamEvent 信封自带 sessionId，WorkflowEvent 自带 event，无需断言
+  const sid = chunk.sessionId;
   if (sid !== props.sessionId) return;
-  applyWorkflowEvent(runs.value, (chunk as any).event);
+  applyWorkflowEvent(runs.value, chunk.event);
 }
 
 function toggleRun(runId: string): void {
