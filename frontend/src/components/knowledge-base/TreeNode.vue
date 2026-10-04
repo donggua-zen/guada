@@ -107,6 +107,7 @@ function handleNodeClick() {
         // 文件夹: 切换展开/折叠
         isExpanded.value = !isExpanded.value
         // 同步回原对象
+        // eslint-disable-next-line vue/no-mutating-props -- node 是树数据实体的引用，展开态需同步回源数据
         props.node.expanded = isExpanded.value
     } else if (props.node.processingStatus === 'completed') {
         // 文件: 触发查看事件

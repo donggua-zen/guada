@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- *.vue 兜底声明里 DefineComponent<{}, {}, any> 是社区惯例写法 */
+
 // 全局 Vue 类型声明
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'

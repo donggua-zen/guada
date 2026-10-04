@@ -1,12 +1,12 @@
 <template>
     <div class="p-4">
-        <template v-for="size in sizes">
+        <template v-for="size in sizes" :key="size">
             <h1>{{ size }}</h1>
             <div class="flex flex-wrap gap-4 mb-4">
-                <GdButton v-for="theme in themes" :type="theme" :size="size">{{ theme }}</GdButton>
+                <GdButton v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
             </div>
             <div class="flex flex-wrap gap-4 mb-4">
-                <GdButton v-for="theme, index in themes" :type="theme" :size="size">
+                <GdButton v-for="theme, index in themes" :key="theme" :type="theme" :size="size">
                     <template #icon>
                         <component :is="icons[index]" />
                     </template>
@@ -15,15 +15,15 @@
             </div>
             <h1>{{ size }} plain</h1>
             <div class="flex flex-wrap gap-4 mb-4">
-                <GdButton plain v-for="theme in themes" :type="theme" :size="size">{{ theme }}</GdButton>
+                <GdButton plain v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
             </div>
             <h1>{{ size }} text</h1>
             <div class="flex flex-wrap gap-4 mb-4">
-                <GdButton text v-for="theme in themes" :type="theme" :size="size">{{ theme }}</GdButton>
+                <GdButton text v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
             </div>
         </template>
         <div class="flex flex-wrap gap-4 mb-4">
-            <GdButton disabled v-for="theme, index in themes" :type="theme">
+            <GdButton disabled v-for="theme, index in themes" :key="theme" :type="theme">
                 <template #icon>
                     <component :is="icons[index]" />
                 </template>

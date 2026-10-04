@@ -322,7 +322,7 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
 /**
  * Markdown 解析缓存
  */
-interface MarkdownCache extends Map<string, string> {}
+type MarkdownCache = Map<string, string>
 
 /**
  * useMarkdown 返回值类型

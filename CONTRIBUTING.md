@@ -176,7 +176,7 @@ docker compose up -d --build
 
 ### TypeScript
 
-项目使用 TypeScript 严格模式，但没有配置 ESLint 或 Prettier。类型检查是主要的质量门禁：
+项目使用 TypeScript 严格模式。类型检查是主要的质量门禁，前端另有 ESLint 作为增量防劣化门禁：
 
 ```bash
 # 后端类型检查
@@ -184,9 +184,14 @@ cd backend-ts && npx tsc --noEmit
 
 # 前端类型检查
 cd frontend && npx vue-tsc --noEmit
+
+# 前端 ESLint（error 必须清零；no-explicit-any 目前为 warn 存量基线，只防增量）
+cd frontend && npx eslint src
 ```
 
-**提交前请确保以上两条命令零错误。**
+**提交前请确保 typecheck 零错误、lint 零 error。** 禁止新增 `@ts-ignore` / `@ts-nocheck`
+（`@typescript-eslint/ban-ts-comment` 已设为 error）；新增显式 `any` 会被 warn 提示，
+请优先给出真实类型。未配置 Prettier，格式请与周边代码保持一致。
 
 ### 编码约定
 

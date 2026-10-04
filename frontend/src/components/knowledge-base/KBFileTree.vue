@@ -162,7 +162,7 @@
         <!-- 文件夹树 -->
         <el-tree :data="folderTreeData" :props="{ label: 'displayName', children: 'children' }" node-key="id"
           highlight-current @node-click="selectTargetFolder" class="mt-2">
-          <template #default="{ node, data }">
+          <template #default="{ node }">
             <span class="flex items-center gap-2">
               <el-icon>
                 <Folder />

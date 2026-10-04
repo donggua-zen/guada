@@ -28,7 +28,6 @@ import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
 import { registerUiPrimitives } from "@/components/ui/register";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
-import { useLayoutStore } from "./stores/layout";
 import {
   backendReady,
   backendError,

@@ -5,6 +5,7 @@
  * 领域方法按模块拆分到 services/modules/*.api.ts，
  * 通过 Object.assign 挂载到原型，通过 interface 声明合并保证类型安全。
  */
+/* eslint-disable @typescript-eslint/no-unsafe-declaration-merging -- interface+class 同名声明合并正是本文件给 ApiService 补全领域方法类型的既定手法 */
 
 import axios, {
   type AxiosInstance,

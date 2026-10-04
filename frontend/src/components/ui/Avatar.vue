@@ -1,7 +1,7 @@
 <template>
     <div>
         <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
-            :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }"></img>
+            :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }" />
         <div v-else class="avatar-placeholder" :class="{
             'rounded-full': props.round,
             'rounded-lg': !props.round, 'avatar-user': props.type === 'user'

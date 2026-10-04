@@ -46,7 +46,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     const MAX_CONCURRENT_UPLOADS = 3
 
     /** 上传队列定时器 */
-    let queueProcessorTimer: ReturnType<typeof setTimeout> | null = null
+    const queueProcessorTimer: ReturnType<typeof setTimeout> | null = null
 
 
     // ========== Actions ==========

@@ -800,7 +800,7 @@ export function applyChunkToStore(
     const responseIds = new Set(
       (chunk.toolCallsResponse || []).map((r: any) => r.toolCallId),
     );
-    let target = responseIds.size > 0
+    const target = responseIds.size > 0
       ? findBlockByToolCallId(turns, [...responseIds][0])
       : undefined;
     if (target) {

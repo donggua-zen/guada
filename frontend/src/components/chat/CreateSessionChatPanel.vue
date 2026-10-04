@@ -4,7 +4,7 @@
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-20">
     <div class="w-full flex items-center justify-center mb-20">
       <div class="banner w-20 mb-4">
-        <img :src="bannerPath" alt=""></img>
+        <img :src="bannerPath" alt="" />
       </div>
       <h1 class="text-4xl mb-6 text-(--gd-color-text) ml-5">
         <span class="typewriter-text">{{ displayedText }}</span>
