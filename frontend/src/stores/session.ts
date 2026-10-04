@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -460,7 +460,7 @@ export const useSessionStore = defineStore('session', () => {
      * @param sessionId - 会话 ID
      * @param content - 输入内容
      */
-    const setInputMessage = (sessionId: string, content: any): void => {
+    const setInputMessage = (sessionId: string, content: InputMessageState): void => {
         getSessionState(sessionId).inputMessage = content
     }
 

@@ -156,6 +156,7 @@ import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
+import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { FileRefType } from '@/types/stream/content-block.types';
 import type { SkillCommand } from '@/types/skills';
 import { Editor, EditorContent } from '@tiptap/vue-3';
@@ -246,12 +247,12 @@ const isDragOver = ref(false);
 const models = ref<Model[]>([]);
 const providers = ref<ModelProvider[]>([]);
 // 弹窗触发按钮引用
-const modelButtonRef = ref<any>(null);
+const modelButtonRef = ref<HTMLElement | null>(null);
 // Token 上限 popover
 const settingsButtonRef = ref<HTMLElement | null>(null);
 const settingsPopoverVisible = ref(false);
 // 知识库选择器相关
-const knowledgeBases = ref<any[]>([]); // 知识库列表
+const knowledgeBases = ref<KnowledgeBase[]>([]); // 知识库列表
 // 附加连接(插件注册的附件类型)相关
 const attachmentTypes = ref<Array<{ id: string; label: string; icon: string; pluginId: string; _items?: Array<{ id: string; name: string; description?: string }> }>>([]);
 
@@ -268,14 +269,14 @@ const commandTrigger = ref<'slash' | 'mention'>('slash');
 const editorContent = ref('');
 
 // 命令选择弹窗 ref
-const commandPickerRef = ref<any>();
+const commandPickerRef = ref<InstanceType<typeof CommandPicker>>();
 
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
 const modelButtonExpanded = ref(false)
 const modelButtonWidth = ref<string | undefined>()
 const attachPopoverVisible = ref(false)
-const attachButtonRef = ref<any>(null)
+const attachButtonRef = ref<HTMLElement | null>(null)
 
 // 常量定义
 // 图片选择器的 accept 列表：只是给系统文件对话框加个过滤器，不是准入策略。
@@ -297,8 +298,9 @@ const showButtons = reactive({
   tokensButton: true,
 });
 
-// 图片预览 URL 字典（与 file 对象解耦；key = 文件 id，新选文件为 number、编辑回填为 string）
-const previewUrls = ref(new Map<number | string, string>());
+// 图片预览 URL 字典（与 file 对象解耦；key = 文件 id，新选文件为 number、编辑回填为 string。
+// key 理论上可为 undefined（历史回填无 id 的项），写入侧有 id === undefined 守卫）
+const previewUrls = ref(new Map<number | string | undefined, string>());
 
 /**
  * 把 props.files 中的两种附件形态统一为 ChatFile 视图对象（模板只认 ChatFile 字段）：
@@ -307,7 +309,7 @@ const previewUrls = ref(new Map<number | string, string>());
  *   → 补齐 displayName/fileType/fileExtension/fileSize 视图字段
  * 仅映射元数据，不复制 file/File 引用；发送链路（toPayloadFileRefs）本就双形态兼容，不受影响。
  */
-function toChatFileView(file: any): any {
+function toChatFileView(file: ChatFileView): ChatFileView {
   if (file.displayName !== undefined && file.fileType !== undefined) return file;
   const isImage = isVisionImageMediaType(file.type);
   return {
@@ -369,7 +371,7 @@ const props = defineProps({
   },
 });
 
-const localFiles = ref<any[]>([]);
+const localFiles = ref<ChatFileView[]>([]);
 
 /** 同引用说明是父组件把本组件 emit 出去的数组原样传回来，此时不能覆盖本地状态 */
 watch(
@@ -382,7 +384,7 @@ watch(
 );
 
 /** 提交新的附件列表：更新本地状态并同步父组件（替换旧的 push/赋值分裂写法） */
-function commitFiles(next: any[]) {
+function commitFiles(next: ChatFileView[]) {
   localFiles.value = next;
   emit('update:files', next);
 }
@@ -397,7 +399,8 @@ const uploadFiles = computed(() => localFiles.value);
 watch(
   localFiles,
   (files) => {
-    files.forEach((file: any) => {
+    files.forEach((file) => {
+      if (file.id === undefined) return;
       if (file.fileType !== 'image' || previewUrls.value.has(file.id)) return;
       if (file.file) {
         // 本地文件（粘贴/新选择）：用 blob URL 预览
@@ -410,7 +413,7 @@ watch(
     });
 
     // 清理不再存在的文件的预览 URL
-    const currentFileIds = new Set(files.map((f: any) => f.id));
+    const currentFileIds = new Set(files.map((f) => f.id));
     previewUrls.value.forEach((url, fileId) => {
       if (!currentFileIds.has(fileId)) {
         if (url?.startsWith('blob:')) {
@@ -505,7 +508,7 @@ const thinkingEffortChosen = ref(false);
 const localThinkingEffort = ref<string>('none');
 
 // 运行模式相关
-const sandboxModeButtonRef = ref<any>(null);
+const sandboxModeButtonRef = ref<HTMLElement | null>(null);
 const sandboxModePopoverVisible = ref(false);
 
 const currentSandboxMode = computed(() => props.config?.sandboxMode || 'workspace-write');
@@ -1136,10 +1139,10 @@ const previewDialogVisible = ref(false);
 const previewContent = ref('');
 const previewFileName = ref('');
 
-const showFilePreview = (file: any) => {
+const showFilePreview = (file: ChatFileView) => {
   if (!file.isPasted || !file.originalContent) return;
   previewContent.value = file.originalContent;
-  previewFileName.value = file.displayName;
+  previewFileName.value = file.displayName ?? '';
   previewDialogVisible.value = true;
 };
 
@@ -1149,7 +1152,7 @@ const closeFilePreview = () => {
   previewFileName.value = '';
 };
 
-const removeFile = (fileId: number | string) => {
+const removeFile = (fileId: number | string | undefined) => {
   commitFiles(localFiles.value.filter(file => file.id !== fileId));
 };
 
@@ -1164,8 +1167,8 @@ const triggerImageInput = () => imageInputRef.value?.click();
  * 返回失败项；调用方在失败非空时**不发送消息、也不清空列表**，
  * 让用户可以只重试一次（失败项仍带 File，下次发送会重新上传）。
  */
-async function uploadPendingFiles(pending: ChatFile[]): Promise<ChatFile[]> {
-  const failed: ChatFile[] = [];
+async function uploadPendingFiles(pending: ChatFileView[]): Promise<ChatFileView[]> {
+  const failed: ChatFileView[] = [];
   const { uploader, sessionId } = props;
 
   // create 模式尚无会话：服务端没有可落盘的工作目录，交给父组件在会话创建后上传
@@ -1191,7 +1194,7 @@ async function uploadPendingFiles(pending: ChatFile[]): Promise<ChatFile[]> {
 }
 
 /** 就地更新某个附件并提交（commitFiles 会同步父组件，卡片据此显示进度/失败态） */
-function patchFile(id: number | string, patch: Record<string, any>) {
+function patchFile(id: number | string | undefined, patch: Partial<ChatFileView>) {
   commitFiles(localFiles.value.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 }
 

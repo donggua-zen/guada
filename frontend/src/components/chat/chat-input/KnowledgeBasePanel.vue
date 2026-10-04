@@ -54,7 +54,8 @@ const { t } = useI18n()
 interface KnowledgeBase {
   id: string
   name: string
-  description?: string
+  /** store 形态为 string | null（后端可空），面板仅展示不写入 */
+  description?: string | null
 }
 
 const props = defineProps<{

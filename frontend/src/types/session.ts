@@ -33,6 +33,8 @@ export interface ChatFileView {
     displayName?: string
     /** MIME 类型（FileRef 契约字段） */
     mediaType?: string
+    /** MIME 类型别名（FileAttachment 历史形态用 type） */
+    type?: string
     bytes?: number
     fileSize?: number
     size?: number
