@@ -275,7 +275,6 @@ const props = defineProps<{
   session?: any;
 }>();
 
-// @ts-ignore - emit 类型定义
 const emit = defineEmits<{
   'update:session': [session: any]
   'create-session': [sessionData: any, messageData?: any]

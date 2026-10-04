@@ -57,7 +57,6 @@
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from "vue";
-// @ts-ignore - icons 类型缺失
 import {
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone

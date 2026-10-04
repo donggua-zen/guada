@@ -1,5 +1,4 @@
 <template>
-    <!-- @ts-ignore - fileIcon 类型推断问题 -->
     <div class="file-item flex items-center relative" :class="{ 'cursor-pointer': clickable }"
         @mouseenter="close_button_visible = true" @click="handleClick" @mouseleave="close_button_visible = false">
         <!-- 上传进度遮罩层 -->

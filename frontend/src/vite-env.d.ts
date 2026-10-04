@@ -8,15 +8,6 @@ declare module '*.vue' {
 }
 
 // 第三方库类型声明（没有官方类型定义的）
-declare module 'diff-dom' {
-  export class DiffDOM {
-    constructor(options?: any)
-    apply(element: Element, diff: any[]): Element | false
-    remove(element: Element, diff: any[]): Element | false
-  }
-  export default DiffDOM
-}
-
 declare module 'simplebar-vue' {
   import type { DefineComponent } from 'vue'
   const component: DefineComponent<{}, {}, any>
