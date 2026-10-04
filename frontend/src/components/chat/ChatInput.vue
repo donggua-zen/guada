@@ -149,6 +149,7 @@
 
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
@@ -1178,11 +1179,11 @@ async function uploadPendingFiles(pending: ChatFile[]): Promise<ChatFile[]> {
         patchFile(item.id, { uploadProgress: percent });
       });
       patchFile(item.id, { ...response, uploadProgress: 100, uploadStatus: 'uploaded' });
-    } catch (error: any) {
+    } catch (error) {
       failed.push(item);
       patchFile(item.id, {
         uploadStatus: 'failed',
-        uploadError: error?.message || String(error),
+        uploadError: getErrorMessage(error),
       });
     }
   }

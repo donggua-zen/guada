@@ -119,7 +119,7 @@ async function showLinkChoiceDialog(url: string): Promise<void> {
             },
         )
         await previewUrl(url)
-    } catch (action: any) {
+    } catch (action) {
         if (action === 'cancel') {
             openInExternalBrowser(url)
         }

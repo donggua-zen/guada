@@ -131,6 +131,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -203,8 +204,8 @@ async function startInstall() {
       }
       await new Promise((r) => setTimeout(r, 500))
     }
-  } catch (err: any) {
-    installLog.value += '\n❌ ' + (err.message || String(err))
+  } catch (err) {
+    installLog.value += '\n❌ ' + (getErrorMessage(err))
     installing.value = false
   }
 }
@@ -238,9 +239,9 @@ async function loadGlobalTools() {
   try {
     const response = await apiService.queryPlugins(undefined, getLocale())
     globalTools.value = response.plugins
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载全局工具失败:', err)
-    const errorMsg = err.message || t('plugins.localTools.loadFailed')
+    const errorMsg = getErrorMessage(err) || t('plugins.localTools.loadFailed')
     error.value = errorMsg
     ElMessage.error(errorMsg)
   } finally {
@@ -257,9 +258,9 @@ async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
         tool.enabled = enabled
       }
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('更新全局工具状态失败:', err)
-    ElMessage.error(err.message || t('plugins.localTools.updateFailed'))
+    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.updateFailed'))
   }
 }
 
@@ -272,10 +273,10 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
   try {
     updatingTools.value.add(pluginId)
     updateGlobalToolStatus(pluginId, enabled)
-  } catch (err: any) {
+  } catch (err) {
     console.error('更新工具状态失败:', err)
     tool.enabled = previousState
-    ElMessage.error(err.message || t('plugins.localTools.toggleFailed'))
+    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.toggleFailed'))
   } finally {
     updatingTools.value.delete(pluginId)
   }

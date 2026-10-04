@@ -242,6 +242,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton, ElSwitch, ElInputNumber, ElIcon, ElButton, ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker, ElMessage } from 'element-plus'
@@ -665,9 +666,9 @@ async function handleTest() {
   try {
     const result = await apiService.testScheduledTask(props.task.id)
     ElMessage.success(result.message || t('scheduler.edit.testSuccess'))
-  } catch (err: any) {
+  } catch (err) {
     console.error('测试触发失败:', err)
-    ElMessage.error(err.message || t('scheduler.edit.testFailed'))
+    ElMessage.error(getErrorMessage(err) || t('scheduler.edit.testFailed'))
   } finally {
     testing.value = false
   }

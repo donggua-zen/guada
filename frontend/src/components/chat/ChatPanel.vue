@@ -811,9 +811,9 @@ async function loadMessages(
         }
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载消息失败:', error);
-    notify.error('加载消息失败', error.message);
+    notify.error('加载消息失败', getErrorMessage(error));
   } finally {
     isLoadingMore.value = false;
   }
@@ -966,8 +966,8 @@ async function branchFromTurn(turn: Turn) {
     sessionStore.setSession(newSession);
     toast.success(t('chat.panel.branchSuccess'));
     router.replace({ name: 'Chat', params: { sessionId: newSession.id } });
-  } catch (error: any) {
-    toast.error(error?.message || t('chat.panel.branchFailed'));
+  } catch (error) {
+    toast.error(getErrorMessage(error) || t('chat.panel.branchFailed'));
     console.error("分支会话失败:", error);
   }
 }
@@ -1079,8 +1079,8 @@ async function handleSendMessage(payload?: InputMessageState) {
         },
       });
     }
-  } catch (error: any) {
-    notify.error(t('chat.panel.sendMessageFailed'), error.message);
+  } catch (error) {
+    notify.error(t('chat.panel.sendMessageFailed'), getErrorMessage(error));
     // 发送失败时由 SSE 事件驱动恢复检测
   }
 }

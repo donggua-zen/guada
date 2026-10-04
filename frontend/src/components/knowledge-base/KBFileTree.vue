@@ -181,6 +181,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Folder, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
@@ -965,9 +966,9 @@ async function confirmRename() {
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
-  } catch (error: any) {
+  } catch (error) {
     console.error('[DEBUG] 重命名失败:', error)
-    ElMessage.error(error.message || t('common.renameFailed'))
+    ElMessage.error(getErrorMessage(error) || t('common.renameFailed'))
   } finally {
     renameLoading.value = false
   }
@@ -1078,9 +1079,9 @@ async function confirmMove() {
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
-  } catch (error: any) {
+  } catch (error) {
     console.error('[DEBUG] 移动失败:', error)
-    ElMessage.error(error.message || t('knowledge.tree.moveFailed'))
+    ElMessage.error(getErrorMessage(error) || t('knowledge.tree.moveFailed'))
   } finally {
     moveLoading.value = false
   }

@@ -81,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch } from "vue";
 import { ElButton, ElInput } from "element-plus";
 import { useI18n } from "vue-i18n";
@@ -215,8 +216,8 @@ async function submit() {
     });
     await apiService.respond(props.sessionId, requestId, payload);
     // 卡片由 ask_resolved 帧（projector）清除；多窗口同步收卡
-  } catch (e: any) {
-    toast.error(e?.message || t("chat.ask.submitFailed"));
+  } catch (e) {
+    toast.error(getErrorMessage(e) || t("chat.ask.submitFailed"));
   } finally {
     busy.value = false;
   }
