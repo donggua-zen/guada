@@ -229,7 +229,7 @@ function detectUploadConflicts(
     const conflicts: UploadConflict[] = []
     const checkedPaths = new Set<string>()  // 用于去重
     
-    for (const { file, relativePath } of filesToUpload) {
+    for (const { relativePath } of filesToUpload) {
         // 提取需要检查的名称和路径
         let checkName: string
         let checkPath: string  // 用于去重的键
@@ -328,7 +328,6 @@ function applyConflictResolution(
             if (relativePath.includes('/')) {
                 // 文件夹：替换顶级目录名
                 const parts = relativePath.split('/')
-                const oldTopDir = parts[0]
                 parts[0] = newName  // 只替换第一层
                 const newPath = parts.join('/')
                 console.log(`[DEBUG]   → 新路径: ${newPath}`)
@@ -503,7 +502,7 @@ async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativeP
  */
 async function executeUpload(
     filesWithPath: Array<{ file: File, relativePath: string }>,
-    mode: 'overwrite' | 'keep-both'
+    _mode: 'overwrite' | 'keep-both'
 ) {
     let successCount = 0
     let failCount = 0

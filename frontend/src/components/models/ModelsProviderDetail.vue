@@ -499,7 +499,6 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
-import { ElMessageBox } from 'element-plus'
 import Avatar from '../ui/Avatar.vue'
 import GdTooltip from '../ui/GdTooltip.vue'
 import {
@@ -898,7 +897,7 @@ const editModelRules = computed(() => ({
   'config.maxOutputTokens': {
     required: false,
     type: 'number' as const,
-    validator: (rule: any, value: any) => !value || value > 0,
+    validator: (_rule: any, value: any) => !value || value > 0,
     message: t('settings.providerDetail.maxOutputTokensInvalid'),
     trigger: 'blur' as const
   }
@@ -1103,7 +1102,7 @@ const fetchingModels = ref(false)
 const fetchedModels = ref<any[]>([])
 const searchModelName = ref('')
 
-const handleSearchModel = useDebounceFn((value) => {
+const handleSearchModel = useDebounceFn((_value) => {
   // 防抖处理，仅依赖 computed 过滤
 }, 300)
 

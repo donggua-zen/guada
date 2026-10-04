@@ -12,7 +12,6 @@ import {
   Window16Regular,
   WindowConsole20Filled,
 } from "@vicons/fluent";
-import Terminal from "@/components/icons/Terminal.vue";
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 

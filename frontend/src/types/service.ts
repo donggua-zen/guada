@@ -3,11 +3,6 @@
  * 用于 ApiService 的完整类型支持
  */
 
-import type { PaginatedResponse } from './common'
-import type { Model, ModelProvider, McpServer } from './api'
-import type { Agent, AgentListResponse } from './agent'
-import type { Session, SessionListResponse } from './session'
-import type { Message } from './message'
 import type { FileRefType } from './stream/content-block.types'
 
 // ========== 流式响应类型 ==========

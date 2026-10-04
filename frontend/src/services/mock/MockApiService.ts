@@ -3,7 +3,6 @@
  * 提供开发环境下的 Mock 模式支持
  */
 
-import type { StreamEvent } from "@/types/service";
 import type { FileRef } from "@/types/stream/content-block.types";
 import type { MockConfig } from "../mockStreamService";
 

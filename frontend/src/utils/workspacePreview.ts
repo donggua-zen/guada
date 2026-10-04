@@ -11,7 +11,6 @@
 
 import { ElMessageBox } from 'element-plus'
 import { nextTick } from 'vue'
-import { useBrowserWebviewStore } from '@/stores/browserWebview'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'

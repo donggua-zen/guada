@@ -278,7 +278,7 @@ function createMockError(errorType: string): Error {
  * @returns 异步生成器，产生 StreamEvent
  */
 export async function* mockChatStream(
-  sessionId: string,
+  _sessionId: string,
   config: MockConfig = {},
   assistantMessageId?: string | null,
   regenerationMode?: string | null

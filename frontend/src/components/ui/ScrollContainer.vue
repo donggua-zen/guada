@@ -14,9 +14,6 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 
-// 常量定义
-const SCROLL_THRESHOLD = 10;
-
 // Props 类型化
 const props = defineProps<{
     autoScroll?: boolean;
@@ -34,7 +31,6 @@ const emit = defineEmits<{
 }>();
 
 // 响应式数据 - 类型化
-const isAtBottom = ref(true);
 const resizeObserver = ref<ResizeObserver | null>(null);
 /** 上一次观测到的内容宽度：用于区分「重排」与「内容增长」（0 = 尚未测量） */
 let lastContentWidth = 0;

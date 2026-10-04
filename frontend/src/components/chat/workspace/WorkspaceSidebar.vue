@@ -143,7 +143,7 @@ import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
@@ -262,7 +262,6 @@ function onTabDblClick(tab: UnifiedTab): void {
 }
 
 // 标签与起始页状态
-const gitPanelRef = ref<InstanceType<typeof GitChangesPanel> | null>(null);
 const tabs = computed(() => tabStore.tabs);
 const activeTabKey = computed(() => tabStore.activeTabKey);
 const tabBarRef = ref<HTMLElement | null>(null);

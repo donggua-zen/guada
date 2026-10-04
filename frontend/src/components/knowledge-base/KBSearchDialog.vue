@@ -134,7 +134,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, Loading, Document } from '@element-plus/icons-vue'
+import { Search, Loading } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'

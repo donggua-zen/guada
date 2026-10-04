@@ -1,4 +1,3 @@
-import type { AxiosRequestConfig } from "axios";
 import type { ApiContext } from "./api-context";
 import type { Model, ModelPreset, ModelProvider, ProviderTemplate, ThinkingCompatConfig } from "@/types/api";
 import type { PaginatedResponse } from "@/types/common";

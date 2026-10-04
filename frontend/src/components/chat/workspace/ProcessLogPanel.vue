@@ -44,7 +44,6 @@ import { ElMessage } from 'element-plus';
 import { Refresh, CloseBold } from '@element-plus/icons-vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { apiService, type UiProcessLog } from '@/services/ApiService';
-import { useTabStore } from '@/stores/tab';
 
 const props = defineProps<{
     sessionId: string;
@@ -54,7 +53,6 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const tabStore = useTabStore();
 
 const log = ref<UiProcessLog | null>(null);
 const loading = ref(false);

@@ -174,7 +174,7 @@ export function useModelDisplay(modelName: string, providerName?: string) {
  */
 export function getModelThinkingEfforts(
   model: any,
-  providers: any[],
+  _providers: any[],
 ): string[] {
   if (!model) {
     return [];

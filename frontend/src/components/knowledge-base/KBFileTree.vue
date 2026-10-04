@@ -183,7 +183,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
+import { Folder, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'

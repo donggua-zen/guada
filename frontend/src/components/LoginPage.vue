@@ -49,15 +49,13 @@ import { ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
     PersonOutlined as UserIcon,
-    LockOutlined as LockIcon,
-    LogInOutlined as LoginIcon
+    LockOutlined as LockIcon
 } from '@vicons/material'
 
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
 import { usePopup } from '../composables/usePopup'
-import { useStorage } from '@vueuse/core'
 import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
@@ -76,9 +74,6 @@ const { toast } = usePopup()
 const { t } = useI18n()
 
 const router = useRouter()
-
-// 登录方式 - 固定为邮箱登录
-const loginType = 'email'
 
 // 表单数据 - 类型化
 interface LoginForm {
@@ -102,7 +97,7 @@ const rules = reactive({
   username: {
     required: true,
     trigger: ['input', 'blur'],
-    validator: (rule: any, value: string, callback: any) => {
+    validator: (_rule: any, value: string, callback: any) => {
       if (!value) {
         callback(new Error(t('ui.login.requireUsername')))
         return

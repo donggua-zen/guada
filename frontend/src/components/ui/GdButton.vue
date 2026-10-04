@@ -213,13 +213,6 @@ const btnClasses = computed((): string => {
         "disabled:cursor-not-allowed",
     ];
 
-    let styleType = 'default'
-    if (props.plain) {
-        styleType = 'plain'
-    } else if (props.text) {
-        styleType = 'text'
-    }
-
     // if (typeClasses[type]) {
     //     classes.push(typeClasses[type].disabled || "");
     //     classes.push(typeClasses[type].base || "");

@@ -94,7 +94,6 @@ const { t } = useI18n()
 
 const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.png'))
 
-const isMaximized = ref(false)
 const updateAvailable = ref(false)
 const updateInfo = ref<any>(null)
 const showDebugMenu = ref(false)

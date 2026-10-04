@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
-import { ref, computed, type Ref } from 'vue'
-import type { Session, SessionState, SessionSettings, QueuedMessage, StreamStatus } from '@/types/session'
+import { ref, type Ref } from 'vue'
+import type { Session, SessionState, QueuedMessage, StreamStatus } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -22,17 +22,6 @@ export const useSessionStore = defineStore('session', () => {
      * 取代旧的 sessionsList，按 ID 索引便于快速查找和更新
      */
     const sessionsMap: Ref<Map<string, Session>> = ref(new Map())
-
-    /**
-     * 兼容旧代码：基于 sessionsMap 的计算属性，按 lastActiveAt 降序排列
-     */
-    const sessionsList = computed((): Session[] => {
-        return Array.from(sessionsMap.value.values()).sort((a, b) => {
-            const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
-            const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
-            return timeB - timeA
-        })
-    })
 
     /**
      * 每个分组已加载的会话数量 Map<groupId, count>
@@ -557,16 +546,6 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // =====================
-
-    /**
-     * 清理会话状态（删除会话时调用）
-     * @param sessionId - 会话 ID
-     */
-    const clearSessionState = (sessionId: string): void => {
-        sessions.value.delete(sessionId)
-        sessionsMap.value.delete(sessionId)
-        clearSidebarState(sessionId)
-    }
 
     /**
      * 清空会话消息（清空聊天记录时调用）

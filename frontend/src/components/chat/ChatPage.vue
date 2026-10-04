@@ -357,8 +357,6 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
-/** 分栏容器（LiteSplitpanes 根，总宽稳定不随切换变化） */
-const splitContainerRef = ref<HTMLElement | null>(null);
 // 工作目录分割比例（目录树 / 预览 / Git 统一使用单一宽度）
 const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
 // 控制设置模态框的显示与隐藏
