@@ -254,6 +254,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
@@ -652,9 +653,9 @@ const handleArchiveSession = async (session: any) => {
       }
       toast.success(t('ui.sidebar.archived'))
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('归档失败:', error)
-    toast.error(error?.response?.data?.message || t('ui.sidebar.archiveFailed'))
+    toast.error(getErrorMessage(error) || t('ui.sidebar.archiveFailed'))
   }
 }
 

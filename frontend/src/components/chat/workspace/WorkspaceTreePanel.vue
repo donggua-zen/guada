@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -501,14 +502,14 @@ async function handleRename() {
             // 清除旧路径的文件变更版本号
             treeStore.clearFileChangeVersion(oldPath);
         }
-    } catch (error: any) {
+    } catch (error) {
         // ElMessageBox.prompt 取消会抛异常，忽略
         if (error === 'cancel' || error === 'close') {
             closeContextMenu();
             return;
         }
         console.error('[WorkspaceTreePanel] Rename failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.renameFailed'));
+        ElMessage.error(getErrorMessage(error) || t('chat.workspace.renameFailed'));
     }
     closeContextMenu();
 }
@@ -553,14 +554,14 @@ async function handleDelete() {
                 tabStore.removeTab(deleteTab.key);
             }
         }
-    } catch (error: any) {
+    } catch (error) {
         // ElMessageBox.confirm 取消会抛异常，忽略
         if (error === 'cancel' || error === 'close') {
             closeContextMenu();
             return;
         }
         console.error('[WorkspaceTreePanel] Delete failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.deleteFailed'));
+        ElMessage.error(getErrorMessage(error) || t('chat.workspace.deleteFailed'));
     }
     closeContextMenu();
 }

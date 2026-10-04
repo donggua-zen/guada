@@ -119,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search, Loading } from '@element-plus/icons-vue'
@@ -204,9 +205,9 @@ async function handleSearch() {
     } else {
       toast.success(t('knowledge.search.foundResults', { count: searchResults.value.length }))
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('搜索失败:', error)
-    toast.error(error.response?.data?.detail || t('knowledge.search.searchFailed'))
+    toast.error(getErrorMessage(error) || t('knowledge.search.searchFailed'))
   } finally {
     isSearching.value = false
   }
