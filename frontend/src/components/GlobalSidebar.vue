@@ -75,8 +75,8 @@
                 @mouseleave="hoveredSessionId = null">
                 <!-- 状态指示器 -->
                 <div class="status-indicator w-3 h-3 shrink-0 flex items-center justify-center">
-                  <div v-if="getSessionWorking(session.id)"
-                    class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <!-- 工作中：TurnItem 同款点阵动画（currentColor 着色，沿用蓝色语义） -->
+                  <ThinkingStatus v-if="getSessionWorking(session.id)" :show-text="false" class="text-blue-500" />
                   <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"
                     class="w-1 h-1 rounded-full bg-red-500" />
                   <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
@@ -265,6 +265,7 @@ import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
 import SessionTitle from './SessionTitle.vue'
+import ThinkingStatus from './chat/ThinkingStatus.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
