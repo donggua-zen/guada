@@ -259,10 +259,10 @@ const handlePasswordToggle = async (enabled: boolean | string | number) => {
       authStore.passwordSet = false
       notify.success(t('common.updateSuccess'), t('settings.general.passwordClearedSuccess'))
     }
-  } catch (e: any) {
+  } catch (e) {
     // 用户取消：开关状态由 authStore.passwordSet 决定，无需回滚
     if (e !== 'cancel' && e !== 'close') {
-      notify.error(t('common.saveFailed'), e?.message || t('settings.general.passwordOpFailed'))
+      notify.error(t('common.saveFailed'), getErrorMessage(e) || t('settings.general.passwordOpFailed'))
     }
   }
 }

@@ -229,6 +229,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Search, Document } from '@element-plus/icons-vue'
@@ -466,9 +467,9 @@ async function handleKbSave() {
       // 刷新列表
       await store.fetchKnowledgeBases()
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('操作失败:', error)
-    toast.error(error.response?.data?.detail || t('common.operationFailed'))
+    toast.error(getErrorMessage(error) || t('common.operationFailed'))
   }
 }
 
@@ -516,10 +517,10 @@ async function handleDelete(kb: KnowledgeBase) {
 
     // 删除后处理：自动选中下一个知识库
     handleAfterDelete(deletedKbId, currentIndex)
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      toast.error(error.response?.data?.detail || t('common.deleteFailed'))
+      toast.error(getErrorMessage(error) || t('common.deleteFailed'))
     }
   }
 }
@@ -651,10 +652,10 @@ async function handleRetryFile(file: KBFile) {
       console.log('[DEBUG] 重新处理后，手动启动轮询')
       await fileTreeRef.value.startFileProcessingPolling()
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('重新处理失败:', error)
-      toast.error(error.response?.data?.detail || error.message || t('knowledge.page.retryFailed'))
+      toast.error(getErrorMessage(error) || t('knowledge.page.retryFailed'))
     }
   }
 }
@@ -687,8 +688,8 @@ async function handleSearchResultClick(result: any) {
       store.setActiveKnowledgeBase(kbId)
     }
     handleViewFile(file as KBFile)
-  } catch (error: any) {
-    toast.error(error?.response?.data?.detail || t('knowledge.search.resultUnavailable'))
+  } catch (error) {
+    toast.error(getErrorMessage(error) || t('knowledge.search.resultUnavailable'))
   }
 }
 
@@ -730,10 +731,10 @@ async function handleDeleteFile(file: KBFile) {
       console.log('[DEBUG] 删除文件后本地更新文件树')
       fileTreeRef.value.removeFileLocally(file.id)
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      toast.error(error.response?.data?.detail || '删除失败')
+      toast.error(getErrorMessage(error) || '删除失败')
     }
   }
 }

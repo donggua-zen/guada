@@ -294,9 +294,9 @@ async function handleUninstall(pluginId: string) {
       ElMessage.success(t('plugins.localTools.uninstallSuccess'))
       await loadGlobalTools()
     }
-  } catch (err: any) {
-    if (err !== 'cancel' && err?.message !== 'cancel') {
-      ElMessage.error(err.message || t('plugins.localTools.uninstallFailed'))
+  } catch (err) {
+    if (err !== 'cancel' && getErrorMessage(err) !== 'cancel') {
+      ElMessage.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
     }
   }
 }

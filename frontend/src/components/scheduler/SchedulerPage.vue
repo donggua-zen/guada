@@ -418,10 +418,10 @@ async function handleDeleteTask(task: ScheduledTask) {
     await apiService.deleteScheduledTask(task.id)
     tasks.value = tasks.value.filter(t => t.id !== task.id)
     toast.success(t('common.deleteSuccess'))
-  } catch (err: any) {
+  } catch (err) {
     if (err !== 'cancelled') {
       console.error('删除任务失败:', err)
-      toast.error(err.message || t('common.deleteFailed'))
+      toast.error(getErrorMessage(err) || t('common.deleteFailed'))
     }
   }
 }

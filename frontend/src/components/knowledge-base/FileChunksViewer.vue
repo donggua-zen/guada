@@ -46,6 +46,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading, Document } from '@element-plus/icons-vue'
@@ -123,9 +124,9 @@ async function loadChunks() {
 
         // 使用文件记录中的totalChunks字段作为总分块数
         totalChunks.value = props.selectedFile.totalChunks || 0
-    } catch (error: any) {
+    } catch (error) {
         console.error('获取文件分块失败:', error)
-        toast.error(error.response?.data?.detail || t('knowledge.chunks.loadFailed'))
+        toast.error(getErrorMessage(error) || t('knowledge.chunks.loadFailed'))
         chunks.value = []
         totalChunks.value = 0
     } finally {

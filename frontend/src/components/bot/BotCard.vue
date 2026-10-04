@@ -91,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
@@ -152,8 +153,8 @@ const fetchQrStatus = async () => {
     } else {
       qrMessage.value = result.message || ''
     }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || t('bot.card.getQrFailed'))
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error) || t('bot.card.getQrFailed'))
   }
 }
 
@@ -201,8 +202,8 @@ const handleLogout = async () => {
     } else {
       ElMessage.warning(result.message)
     }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || t('bot.card.logoutFailed'))
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error) || t('bot.card.logoutFailed'))
   }
 }
 

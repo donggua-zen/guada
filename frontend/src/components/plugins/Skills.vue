@@ -829,10 +829,10 @@ async function handleUninstallSkill(skillId: string) {
         } else {
             ElMessage.error(response.message || t('plugins.skills.uninstallFailed'))
         }
-    } catch (err: any) {
+    } catch (err) {
         if (err !== 'cancel' && err !== 'close') {
             console.error('卸载 Skill 失败:', err)
-            ElMessage.error(err.message || t('plugins.skills.uninstallFailed'))
+            ElMessage.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
         }
     } finally {
         uninstallingSkills.value.delete(skillId)
