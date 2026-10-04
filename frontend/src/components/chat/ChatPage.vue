@@ -505,7 +505,7 @@ async function openWorkspaceWith(mode: OpenWithMode) {
     } else {
       await window.electronAPI.openWithEditor(response.workspacePath, mode);
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Failed to open workspace with ${mode}:`, error);
     // openVSCodeFailed 只对 VSCode 成立（提示装 code 命令），其余用通用文案
     ElMessage.error(t(mode === 'vscode' ? 'chat.workspace.openVSCodeFailed' : 'chat.workspace.openFailed'));
@@ -571,7 +571,7 @@ const handleSaveSessionSettings = async () => {
         settings: targetSession.settings,
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存对话设置失败:', error);
   }
 };
@@ -586,7 +586,7 @@ const handleSelectAgent = async (agent: Agent) => {
     await apiService.updateSession(mainSession.value.id, { agentId: agent.id });
     mainSession.value.agent = agent;
     mainSession.value.agentId = agent.id;
-  } catch (error: any) {
+  } catch (error) {
     console.error('切换智能体失败:', error);
     toast.error(t('common.error.operationFailed'));
   }

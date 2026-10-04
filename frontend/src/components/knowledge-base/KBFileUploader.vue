@@ -538,7 +538,7 @@ async function executeUpload(
                     }
                 }
             )
-        } catch (error: any) {
+        } catch (error) {
             console.error(`${relativePath} 上传失败:`, error)
             ElMessage.error(t('knowledge.upload.uploadFailed', { path: relativePath }))
             failCount++

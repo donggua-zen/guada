@@ -139,7 +139,7 @@ const handleProviderChange = async (val: string) => {
   await handleSave()
   try {
     await apiService.reloadPlugin('web-search')
-  } catch (error: any) {
+  } catch (error) {
     console.error('重新加载插件失败:', error)
   }
 }

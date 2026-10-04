@@ -343,7 +343,7 @@ const loadEmbeddingModels = async () => {
         name: provider.name,
         models: provider.models.filter((m: any) => m.modelType === 'embedding')
       }))
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取嵌入模型列表失败:', error)
   }
 }

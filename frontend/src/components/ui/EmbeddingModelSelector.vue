@@ -150,7 +150,7 @@ const loadModels = async () => {
         if (props.modelId) {
             tempSelectedModelId.value = props.modelId
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('获取模型列表失败:', error)
         ElMessage.error(t('ui.embeddingModel.loadFailed'))
     }

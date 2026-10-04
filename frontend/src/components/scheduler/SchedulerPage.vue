@@ -327,7 +327,7 @@ async function loadTasks() {
 async function loadCronPresets() {
   try {
     cronPresets.value = await apiService.fetchCronPresets()
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载 Cron 预设失败:', err)
   }
 }
