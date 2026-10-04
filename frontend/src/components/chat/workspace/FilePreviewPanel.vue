@@ -615,7 +615,7 @@ async function handleOpenInExplorerForCurrent(): Promise<void> {
             fullPath = fullPath.substring(0, lastSep)
         }
         await window.electronAPI!.openFolder(fullPath)
-    } catch (error: any) {
+    } catch (error) {
         console.error('[FilePreviewPanel] Open in explorer failed:', error)
         ElMessage.error(t('chat.workspace.openFailed'))
     }

@@ -353,7 +353,7 @@ async function handleCopyFilePath() {
 
         await writeToClipboard(fullPath);
         ElMessage.success(t('chat.workspace.pathCopied'));
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to get workspace path for copy:', error);
         ElMessage.error(t('common.copyFailed'));
     }
@@ -389,7 +389,7 @@ async function handleOpenInExplorer() {
             // 文件：在资源管理器中显示并选中
             await window.electronAPI!.showItemInFolder(fullPath);
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to open in explorer:', error);
         ElMessage.error(t('chat.workspace.openFailed'));
     }
@@ -428,7 +428,7 @@ async function handleOpenInVSCode() {
 
         await window.electronAPI!.openWithEditor(fullPath, 'vscode');
         ElMessage.success(t('chat.workspace.openedInVSCode'));
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to open in VSCode:', error);
         ElMessage.error(t('chat.workspace.openVSCodeFailed'));
     }

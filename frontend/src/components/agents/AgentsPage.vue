@@ -44,7 +44,7 @@ const loadAgents = async (): Promise<void> => {
   try {
     const data = await apiService.fetchAgents()
     agents.value = data.items
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取智能体列表失败:', error)
     toast.error(t('agents.page.loadFailed'))
   } finally {
@@ -69,7 +69,7 @@ const deleteAgent = async (agent: any): Promise<void> => {
     await apiService.deleteAgent(agent.id)
     await loadAgents()
     toast.success(t('agents.page.agentDeleteSuccess'))
-  } catch (error: any) {
+  } catch (error) {
     toast.error(t('agents.page.deleteFailed'))
     console.error('删除智能体失败:', error)
   }

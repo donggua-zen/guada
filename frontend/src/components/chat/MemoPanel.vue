@@ -313,7 +313,7 @@ async function loadSummaries() {
     const res = await apiService.fetchSessionSummaries(props.sessionId, 10);
     summaries.value = res.items;
     summaryTotal.value = res.total;
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载摘要失败:', error);
     toast.error(t('chat.memo.loadSummaryFailed'));
   }

@@ -74,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
             startAuthRefreshTimer()
 
             return true
-        } catch (error: any) {
+        } catch (error) {
             console.error("登录失败:", error)
             // 直接抛出原始错误，保留 statusCode 等信息
             throw error
