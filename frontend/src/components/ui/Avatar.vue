@@ -17,11 +17,9 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-// @ts-ignore - icons 类型缺失
 import {
     UserOutlined,
 } from '@vicons/antd'
-// @ts-ignore - icons 类型缺失
 import { OpenAI } from '@/components/icons'
 
 // Props 类型化

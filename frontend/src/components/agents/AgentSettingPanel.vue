@@ -271,7 +271,7 @@
 
                       <!-- 启用/禁用开关 -->
                       <el-switch :model-value="isMcpServerEnabled(server.id)"
-                        @update:model-value="(val) => handleMcpServerToggle(server.id, val)"
+                        @update:model-value="(val) => handleMcpServerToggle(server.id, !!val)"
                         :disabled="allMcpDisabled" />
                     </div>
                   </div>
@@ -324,7 +324,7 @@
                       <div class="flex items-center gap-1.5 shrink-0">
                         <el-switch :model-value="getSkillEffectiveEnabled(skill)"
                           :loading="updatingSkills.has(skill.id)"
-                          @update:model-value="(val) => handleSkillToggle(skill.id, val)" :disabled="allSkillsDisabled"
+                          @update:model-value="(val) => handleSkillToggle(skill.id, !!val)" :disabled="allSkillsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
                         <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('agents.setting.sourceBuiltin') }}</el-tag>
                         <el-tag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{
@@ -378,7 +378,7 @@
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ char.name }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
                         <el-switch :model-value="getAgentEffectiveEnabled(char)"
-                          @update:model-value="(val) => handleAgentToggle(char.id, val)" :disabled="allAgentsDisabled"
+                          @update:model-value="(val) => handleAgentToggle(char.id, !!val)" :disabled="allAgentsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
                       </div>
                     </div>
@@ -395,7 +395,6 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck - AgentSettingPanel 组件复杂度高，临时使用@ts-nocheck
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
@@ -426,7 +425,9 @@ import {
 import { Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular } from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
-
+import type { Model, ModelProvider, McpServer } from '@/types/api'
+import type { FormInstance } from 'element-plus'
+import type { CompressionTier } from '@/constants'
 
 import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
@@ -444,7 +445,7 @@ import {
   type UnrenderedRefs,
 } from '../../utils/agentPluginConfig'
 
-const { toast, notify } = usePopup()
+const { toast } = usePopup()
 const { t } = useI18n()
 
 // 工具栏目"全部禁用/自定义"分段按钮选项
@@ -489,26 +490,25 @@ const props = defineProps({
 const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 
 // 响应式数据
-const isSimpleStyle = computed(() => props.simple)
 const pageLoading = ref(false)
 
 // 模型数据
-const models = ref([]);
-const providers = ref([]);
+const models = ref<Model[]>([]);
+const providers = ref<ModelProvider[]>([]);
 
 // 表单引用
-const basicFormRef = ref(null)
-const promptFormRef = ref(null)
+const basicFormRef = ref<FormInstance | null>(null)
+const promptFormRef = ref<FormInstance | null>(null)
 
 const tabsValue = ref(props.tab)
 
 // 初始表单数据对照（用于检测是否有未保存的变更）
 // 在 loadAllData 全部就绪后记录
 // 必须用 ref，否则 hasChanges computed 无法追踪变化
-const _initialFormData = ref<any>(null)
+const _initialFormData = ref<Record<string, unknown> | null>(null)
 
 // 深度比较两个值（忽略对象 key 顺序）
-function deepEqual(a: any, b: any): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (a == null || b == null) return a === b
   if (typeof a !== typeof b) return false
@@ -517,9 +517,11 @@ function deepEqual(a: any, b: any): boolean {
     return a.every((v, i) => deepEqual(v, b[i]))
   }
   if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a), kb = Object.keys(b)
+    const ra = a as Record<string, unknown>
+    const rb = b as Record<string, unknown>
+    const ka = Object.keys(ra), kb = Object.keys(rb)
     if (ka.length !== kb.length) return false
-    return ka.every(k => k in b && deepEqual(a[k], b[k]))
+    return ka.every(k => k in rb && deepEqual(ra[k], rb[k]))
   }
   return a === b
 }
@@ -545,7 +547,23 @@ const sidebarGroups = computed(() => [
 ])
 
 // 表单数据
-const agentForm = reactive({
+interface AgentFormData {
+  id: string
+  name: string
+  description: string
+  avatarUrl: string
+  avatarFile: File | null
+  assistantName: string
+  assistantIdentity: string
+  systemPrompt: string
+  modelId: string | null
+  memoryType: string
+  /** 按智能体启用的技能 { skillId: true/false } */
+  enabledSkills: Record<string, boolean>
+  compressionTier: CompressionTier
+}
+
+const agentForm = reactive<AgentFormData>({
   id: '',
   name: '',
   description: '',
@@ -556,8 +574,8 @@ const agentForm = reactive({
   systemPrompt: '',
   modelId: null,
   memoryType: '',
-  enabledSkills: {},       // 按智能体启用的技能 { skillId: true/false }
-  compressionTier: DEFAULT_COMPRESSION_TIER, // 压缩策略档位：'off' | 'conservative' | 'aggressive'
+  enabledSkills: {},
+  compressionTier: DEFAULT_COMPRESSION_TIER,
 })
 
 // 验证规则
@@ -570,7 +588,7 @@ const basicRules = computed(() => ({
   // 一旦填写必须是 ASCII slug —— 禁止中文，否则跨平台会有目录名风险
   id: [
     {
-      validator: (_rule: any, value: string, callback: (err?: Error) => void) => {
+      validator: (_rule: unknown, value: string, callback: (err?: Error) => void) => {
         if (!value) return callback()
         return /^[a-z0-9][a-z0-9-]*$/.test(value)
           ? callback()
@@ -591,13 +609,6 @@ const promptRules = {}
 //     { label: 'Claude 2', value: 'claude-2' },
 //     { label: 'Llama 2', value: 'llama-2' }
 // ]
-
-const memoryOptions = computed(() => [
-  { label: t('agents.setting.memorySlidingWindow'), value: 'sliding_window' },
-  { label: t('agents.setting.memorySummaryAugmented'), value: 'summary_augmented_sliding_window' },
-  { label: t('agents.setting.memorySlidingWindowWithRag'), value: 'sliding_window_with_rag' },
-  { label: t('agents.setting.memoryless'), value: 'memoryless' }
-]);
 
 // 模型选择选项（按供应商分组）
 const modelOptions = computed(() => {
@@ -644,15 +655,35 @@ const modelOptions = computed(() => {
 const mcpDeniedServers = ref<string[]>([]);
 
 // MCP 服务器数据
-const mcpServers = ref([]);
+const mcpServers = ref<McpServer[]>([]);
 
-// Skills 数据
-const skillsList = ref([]);
+// Skills 数据（面板仅消费 id/enabled/source/manifest，最小结构即可）
+interface SkillListItem {
+  id: string
+  enabled?: boolean
+  source?: string
+  manifest?: { name?: string; version?: string; description?: string }
+}
+const skillsList = ref<SkillListItem[]>([]);
 const loadingSkills = ref(false);
-const updatingSkills = ref(new Set());
+const updatingSkills = ref(new Set<string>());
 
-// 本地工具数据
-const localTools = ref([]);
+// 本地工具数据（queryPlugins 返回的插件条目，仅消费插件与工具包标识字段）
+interface ToolkitInfo {
+  id: string
+  name?: string
+  description?: string
+  enabled?: boolean
+  toolCount?: number
+  promptCount?: number
+}
+interface LocalToolPlugin {
+  pluginId: string
+  displayName?: string
+  enabled: boolean
+  toolkits: ToolkitInfo[]
+}
+const localTools = ref<LocalToolPlugin[]>([]);
 
 // 卡片展示列表：只显示有工具包的插件（无能力包的插件不受智能体层控制，不在此显示）
 const visibleLocalTools = computed(() =>
@@ -707,18 +738,23 @@ const GENERIC_AGENT = computed(() => ({
 const allAgentsDisabled = ref(false);
 // 智能体偏好 { agentId: true/false }
 const enabledAgents = reactive<Record<string, boolean>>({});
-// 子代理列表（排除当前智能体，含虚拟通用子代理）
-const presetAgents = ref<any[]>([]);
+// 子代理列表（排除当前智能体，含虚拟通用子代理；通用项仅携带 id/name/description）
+interface PresetAgent {
+  id: string
+  name?: string
+  description?: string | null
+}
+const presetAgents = ref<PresetAgent[]>([]);
 const loadingAgents = ref(false);
 
 
 
 
 // 能力包 key 构造
-const kitKey = (pluginId, kitId) => `${pluginId}::${kitId}`;
+const kitKey = (pluginId: string, kitId: string) => `${pluginId}::${kitId}`;
 
 // 判断某个能力包是否启用（用于 Switch 显示）
-const isKitEnabled = (pluginId, kitId) => {
+const isKitEnabled = (pluginId: string, kitId: string) => {
   const key = kitKey(pluginId, kitId);
   if (key in agentToolSettings.value) return agentToolSettings.value[key];
   // 未初始化时回退到查询结果（已含智能体配置的生效状态）
@@ -728,7 +764,7 @@ const isKitEnabled = (pluginId, kitId) => {
 };
 
 // 能力包开关切换
-const handleKitToggle = (pluginId, kitId, enabled) => {
+const handleKitToggle = (pluginId: string, kitId: string, enabled: boolean) => {
   // 从全部禁用模式切回正常模式
   if (allDisabled.value) allDisabled.value = false;
   agentToolSettings.value = {
@@ -738,7 +774,7 @@ const handleKitToggle = (pluginId, kitId, enabled) => {
 };
 
 // 计算技能的最终显示状态（不受模式影响，始终 = 用户显式值 → 全局继承）
-const getSkillEffectiveEnabled = (skill) => {
+const getSkillEffectiveEnabled = (skill: SkillListItem) => {
   if (skill.id in agentForm.enabledSkills) {
     return agentForm.enabledSkills[skill.id];
   }
@@ -760,7 +796,7 @@ const visibleSkills = computed(() => {
 });
 
 // 判断 MCP 服务器是否启用（根据当前模式）
-const isMcpServerEnabled = (serverId) => {
+const isMcpServerEnabled = (serverId: string) => {
   if (mcpAllowlistMode.value) {
     // 白名单：在白名单列表中才显示启用
     return mcpAllowlistServers.value.includes(serverId);
@@ -819,7 +855,7 @@ watch(() => props.data, (newVal, oldVal) => {
     agentForm.enabledSkills = {};
     for (const [skillId, val] of Object.entries(skillsConfig)) {
       if (skillId === '__default') continue;
-      agentForm.enabledSkills[skillId] = val;
+      agentForm.enabledSkills[skillId] = val as boolean;
     }
   } else {
     agentForm.enabledSkills = {};
@@ -845,12 +881,12 @@ watch(() => props.data, (newVal, oldVal) => {
 
 }, { immediate: true })
 
-const handleAvatarChanged = (file) => {
+const handleAvatarChanged = (file: File) => {
   agentForm.avatarFile = file
 }
 
 // MCP 服务器开关切换处理（根据当前模式决定存到拒绝列表或允许列表）
-const handleMcpServerToggle = (serverId, enabled) => {
+const handleMcpServerToggle = (serverId: string, enabled: boolean) => {
   if (mcpAllowlistMode.value) {
     // 白名单：启用时加入允许列表，禁用时移出
     const index = mcpAllowlistServers.value.indexOf(serverId);
@@ -871,19 +907,19 @@ const handleMcpServerToggle = (serverId, enabled) => {
 }
 
 // ── Skills 切换 ──
-const handleSkillToggle = (skillId, enabled) => {
+const handleSkillToggle = (skillId: string, enabled: boolean) => {
   agentForm.enabledSkills[skillId] = enabled;
   agentForm.enabledSkills = { ...agentForm.enabledSkills };
 };
 
 // ── 子代理 ──
-const getAgentEffectiveEnabled = (char) => {
+const getAgentEffectiveEnabled = (char: PresetAgent) => {
   return enabledAgents[char.id] ?? false;
 };
-const handleAgentToggle = (charId, enabled) => {
+const handleAgentToggle = (charId: string, enabled: boolean) => {
   enabledAgents[charId] = enabled;
 };
-const handleAllAgentsDisabledToggle = async (val) => {
+const handleAllAgentsDisabledToggle = async (val: boolean) => {
   allAgentsDisabled.value = val;
 };
 const loadPresetAgents = async () => {
@@ -918,14 +954,14 @@ async function loadAllData() {
     // 模型
     models.value = []
     providers.value = []
-    modelsResp.items.forEach((provider: any) => {
-      models.value.push(...provider.models)
+    modelsResp.items.forEach((provider) => {
+      models.value.push(...(provider.models ?? []))
       delete provider.models
       providers.value.push(provider)
     })
 
     // MCP 服务器
-    mcpServers.value = mcpsResp.items.filter((s: any) => s.enabled)
+    mcpServers.value = mcpsResp.items.filter((s) => s.enabled)
 
     // Skills
     skillsList.value = Array.isArray(skillsResp?.items)
@@ -943,7 +979,7 @@ async function loadAllData() {
     const allChars = charsResp.items || []
     presetAgents.value = [
       GENERIC_AGENT.value,
-      ...allChars.filter((c: any) => c.id !== agentForm.id),
+      ...allChars.filter((c) => c.id !== agentForm.id),
     ]
 
     // 所有数据就绪后记录初始快照
@@ -962,39 +998,18 @@ watch(() => agentForm.id, () => {
   }
 })
 
-// 模式切换时同步初始状态
-const handleMcpModeChange = (mode) => {
-  if (mode === 'custom' && agentForm.enabledMcpServers.length === 0) {
-    // 默认全选当前可用服务器
-    agentForm.enabledMcpServers = mcpServers.value
-      .filter(s => s.enabled)
-      .map(s => s.id);
-  }
-};
-
-const handleSkillsModeChange = (mode) => {
-  if (mode === 'custom' && Object.keys(agentForm.enabledSkills).length === 0) {
-    // 默认全选当前可用技能
-    const initial = {};
-    skillsList.value
-      .filter(s => s.enabled !== false)
-      .forEach(s => { initial[s.id] = true; });
-    agentForm.enabledSkills = initial;
-  }
-};
-
 // 全部禁用开关切换处理
-const handleAllDisabledToggle = async (val) => {
+const handleAllDisabledToggle = async (val: boolean) => {
   allDisabled.value = val;
   await loadLocalTools();
 };
 
-const handleAllMcpDisabledToggle = async (val) => {
+const handleAllMcpDisabledToggle = async (val: boolean) => {
   allMcpDisabled.value = val;
   await loadMCPServers();
 };
 
-const handleAllSkillsDisabledToggle = async (val) => {
+const handleAllSkillsDisabledToggle = async (val: boolean) => {
   allSkillsDisabled.value = val;
 };
 
@@ -1050,7 +1065,7 @@ async function loadLocalTools() {
     const stored = { ...agentToolSettings.value };
     // 根据当前 UI 状态动态构建查询配置（工具包粒度预览）
     if (!allDisabled.value) {
-      const queryConfig: any = {
+      const queryConfig: Record<string, unknown> = {
         __strategy: 'custom',
         __default: allowlistMode.value ? false : true,
       };
@@ -1064,7 +1079,7 @@ async function loadLocalTools() {
 
       const response = await apiService.queryPlugins(queryConfig, getLocale());
 
-      const plugins = response.plugins || [];
+      const plugins: LocalToolPlugin[] = response.plugins || [];
       // 本地工具列表：后端已过滤 system 插件；此处只保留全局启用的插件
       // （全局关闭的插件其工具包对智能体层不可见，二级过滤）
       localTools.value = plugins.filter(p => p.enabled);
@@ -1075,7 +1090,7 @@ async function loadLocalTools() {
         __strategy: 'deny_nonsystem',
       }, getLocale());
 
-      const plugins = response.plugins || [];
+      const plugins: LocalToolPlugin[] = response.plugins || [];
       // 全部禁用模式下仍只展示全局启用的插件（全局关闭的插件工具包不可见）
       localTools.value = plugins.filter(p => p.enabled);
       initKitSettings(stored);
@@ -1083,22 +1098,6 @@ async function loadLocalTools() {
   } catch (error) {
     console.error('加载本地工具失败:', error);
     toast.error(t('agents.setting.loadLocalToolsFailed'));
-  }
-}
-
-const loadModels = async () => {
-  try {
-    const response = await apiService.fetchModels()
-
-    response.items.forEach(provider => {
-      models.value.push(...provider.models)
-      delete provider.models
-      providers.value.push(provider)
-    })
-
-  } catch (error) {
-    console.error('获取模型列表失败:', error)
-    notify.error(t('agents.setting.loadModelsFailed'), error)
   }
 }
 
@@ -1117,7 +1116,7 @@ const loadMCPServers = async () => {
 // 迁移逻辑刻意放在显式 handler 而非 watch：watch 会被回读赋值（props.data 变化时
 // 从配置重建 mcpAllowlistMode）触发，从而把刚解析出的 toolkits_allow 放大成"全部服务器"，
 // 切黑名单方向则会被改写成"拒绝全部"。
-const handleMcpAllowlistModeChange = (newMode) => {
+const handleMcpAllowlistModeChange = (newMode: string | number | boolean) => {
   mcpAllowlistMode.value = !!newMode;
   if (mcpServers.value.length === 0) return;
   if (newMode) {
@@ -1134,10 +1133,6 @@ const handleMcpAllowlistModeChange = (newMode) => {
     mcpAllowlistServers.value = [];
   }
 };
-
-const findModelById = (modelId) => {
-  return models.value.find(model => model.id === modelId)
-}
 
 // localTools 加载完成后，自定义模式下初始化能力包开关
 watch(localTools, (tools) => {
@@ -1166,12 +1161,6 @@ onUnmounted(() => {
 
 
 
-const handleSave = async () => {
-  // 验证逻辑已移至父组件调用 validate() 时执行
-  // 此方法现在仅用于返回最终数据
-  return getFormData();
-}
-
 // 获取表单数据
 const getFormData = () => {
   let finalData = {
@@ -1181,7 +1170,6 @@ const getFormData = () => {
     'description': agentForm.description,
     'avatarUrl': agentForm.avatarUrl,
     'avatarFile': agentForm.avatarFile,
-    'identity': agentForm.identity,
     'modelId': agentForm.modelId === '' ? null : agentForm.modelId,
     'settings': {
       'assistantName': agentForm.assistantName,

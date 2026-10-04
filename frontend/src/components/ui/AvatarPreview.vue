@@ -29,14 +29,10 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import Avatar from './Avatar.vue'
 import GdTooltip from './GdTooltip.vue'
-// @ts-ignore - Element Plus 类型缺失
-import { ElButton } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
-// @ts-ignore - icons 类型缺失
-import {
-} from '@vicons/material'
+import { usePopup } from '../../composables/usePopup'
 
 // 禁用属性继承，避免警告
 defineOptions({
@@ -61,6 +57,8 @@ const props = defineProps<{
     type?: 'user' | 'assistant';
     name?: string;  // 用于生成首字头像的名称
 }>()
+
+const { toast } = usePopup()
 
 // 监听 src 变化 - 类型化
 watch(() => props.src, (newValue: string | undefined) => {
@@ -112,13 +110,11 @@ const handleAvatarChanged = (event: Event): void => {
     const file = target.files?.[0]
     if (file) {
         if (!file.type.startsWith('image/')) {
-            // @ts-ignore - toast 未迁移
             toast.error('请选择图片文件')
             return
         }
 
         if (file.size > 5 * 1024 * 1024) {
-            // @ts-ignore - toast 未迁移
             toast.error('图片大小不能超过 5MB')
             return
         }

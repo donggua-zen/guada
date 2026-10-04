@@ -44,7 +44,6 @@
 </div>
 </template>
 
-<!-- @ts-ignore - Element Plus 组件类型缺失 -->
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'

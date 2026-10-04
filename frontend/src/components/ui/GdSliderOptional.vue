@@ -1,5 +1,4 @@
 <template>
-    <!-- @ts-ignore - Element Plus 类型缺失 -->
     <div class="flex w-full gap-4">
         <el-slider v-model="sliderValue" :min="sliderMin" :max="sliderMax" :step="step" :size="size"
             :format-tooltip="formatTooltip" />
@@ -11,8 +10,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { computed } from 'vue';
-// @ts-ignore - Element Plus 类型缺失
-import { ElSlider, ElInput } from 'element-plus';
 // const value = ref(50);
 const inputValue = ref<number | string>(50);
 
