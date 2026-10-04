@@ -3,7 +3,8 @@
  */
 
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
-import type { MessageContent, FileAttachment, MessageBundle } from "@/types/message";
+import type { MessageContent, FileAttachment, MessageBundle, ToolCallResponseEntry } from "@/types/message";
+import type { ToolCall } from "./toolDisplay";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 
 /**
@@ -43,10 +44,7 @@ export interface KbRefLike {
  * 与 {id,...}[] 两种形态，统一归一化为 {id, name}）。
  */
 export function collectReferencedKbs(
-  bundle:
-    | { blocks?: Array<{ kbRefs?: KbRefLike[] }>; metadata?: Record<string, any> | null }
-    | null
-    | undefined,
+  bundle: MessageBundle | null | undefined,
 ): KbRefLike[] {
   if (!bundle) return [];
   const fromBlocks = (bundle.blocks ?? []).flatMap((b) => b.kbRefs ?? []);
@@ -54,14 +52,18 @@ export function collectReferencedKbs(
   const legacy = bundle.metadata?.referencedKbs;
   if (!Array.isArray(legacy)) return [];
   return legacy
-    .map((kb: any) => {
-      if (typeof kb === "string") return { id: kb, name: kb };
-      return {
-        id: kb?.id,
-        name: kb?.name || kb?.id,
-        ...(kb?.description ? { description: kb.description } : {}),
-      };
-    })
+    .map(
+      (
+        kb: string | { id?: string; name?: string; description?: string },
+      ): KbRefLike => {
+        if (typeof kb === "string") return { id: kb, name: kb };
+        return {
+          id: kb?.id,
+          name: kb?.name || kb?.id,
+          ...(kb?.description ? { description: kb.description } : {}),
+        } as KbRefLike;
+      },
+    )
     .filter((kb: KbRefLike) => !!kb.id);
 }
 
@@ -103,9 +105,10 @@ export interface DisplayItem {
   content?: string;
   // think 类型的内容
   reasoningContent?: string;
-  // tool 类型的内容
-  toolCalls?: any[];
-  toolResponses?: any[];
+  // tool 类型的内容（toolCalls 与 metadata.toolCalls / toolResponses 与
+  // metadata.toolCallsResponse 同构，条目契约见 ToolCallEntry/ToolCallResponseEntry）
+  toolCalls?: ToolCall[];
+  toolResponses?: ToolCallResponseEntry[];
   // 引用原始 MessageContent，用于获取状态等元数据
   source: MessageContent;
 }
@@ -275,16 +278,13 @@ export function groupContentsForDisplay(
  * @returns true = 应隐藏，不作为用户消息/锚点展示
  */
 export function isHiddenBlock(
-  block?:
-    | { metadata?: Record<string, any> | null; kind?: string }
-    | Record<string, any>
-    | null,
+  block?: { metadata?: Record<string, unknown> | null; kind?: string } | null,
 ): boolean {
   if (!block) return false;
-  const metadata = (block as any).metadata as Record<string, any> | undefined;
+  const metadata = block.metadata;
   if (metadata && metadata.hidden === true) return true;
   // 无 metadata 的历史数据兜底：kind='model' 即模型工作流注入
-  return (block as any).kind === "model";
+  return block.kind === "model";
 }
 
 /**

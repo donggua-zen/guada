@@ -19,6 +19,38 @@ export interface TabMenuActionPayload {
   [key: string]: unknown
 }
 
+/** Webview 创建事件载荷（主进程 → 前端） */
+export interface WebviewCreatePayload {
+  windowId: string
+  partition: string
+  url: string
+  preloadUrl: string
+  metadata?: Record<string, unknown>
+}
+
+/** Webview 销毁事件载荷（主进程 → 前端） */
+export interface WebviewDestroyPayload {
+  windowId: string
+}
+
+/** Webview 显隐切换事件载荷（主进程 → 前端） */
+export interface WebviewVisibilityPayload {
+  windowId: string
+  visible: boolean
+}
+
+/** Webview 可渲染切换事件载荷（主进程 → 前端） */
+export interface WebviewRenderablePayload {
+  windowId: string
+  renderable: boolean
+}
+
+/** 窗口图标更新事件载荷（主进程 → 前端） */
+export interface WindowFaviconPayload {
+  windowId: string
+  favicon: string
+}
+
 export interface ElectronAPI {
   platform: string
   versions: {
@@ -83,11 +115,11 @@ export interface ElectronAPI {
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
 
   // Webview 生命周期事件（主进程 → 前端）
-  onCreateWebview?: (callback: (event: unknown, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: Record<string, unknown> }) => void) => void
-  onDestroyWebview?: (callback: (event: unknown, data: { windowId: string }) => void) => void
-  onSetWebviewVisibility?: (callback: (event: unknown, data: { windowId: string; visible: boolean }) => void) => void
-  onSetWebviewRenderable?: (callback: (event: unknown, data: { windowId: string; renderable: boolean }) => void) => void
-  onWindowFaviconUpdated?: (callback: (event: unknown, data: { windowId: string; favicon: string }) => void) => void
+  onCreateWebview?: (callback: (event: unknown, data: WebviewCreatePayload) => void) => void
+  onDestroyWebview?: (callback: (event: unknown, data: WebviewDestroyPayload) => void) => void
+  onSetWebviewVisibility?: (callback: (event: unknown, data: WebviewVisibilityPayload) => void) => void
+  onSetWebviewRenderable?: (callback: (event: unknown, data: WebviewRenderablePayload) => void) => void
+  onWindowFaviconUpdated?: (callback: (event: unknown, data: WindowFaviconPayload) => void) => void
 
   // 清空所有浏览器自动化 session 数据
   clearBrowserData: () => Promise<{ success: boolean; error?: string }>

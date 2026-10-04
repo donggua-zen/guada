@@ -247,7 +247,7 @@ import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
 import { groupContentsForDisplay, type DisplayGroup, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
-import type { Turn, MessageContent, TurnContent } from '@/types/message';
+import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -321,7 +321,8 @@ let userScrolledAway = false;
 
 // ref 绑定函数
 const setActiveBodyRef = (el: Element | { $el: HTMLElement } | null) => {
-  activeBodyRef.value = (el as any)?.$el || (el as HTMLElement) || null;
+  activeBodyRef.value =
+    (el && "$el" in el ? el.$el : undefined) || (el as HTMLElement) || null;
 };
 
 // 用户滚动检测：距底部超过 40px 视为手动滚动
@@ -597,7 +598,7 @@ const renderSkillBadges = (text: string): string => {
  * 流式瞬态（重试提示等）为回合级 turn.state，不挂消息 metadata（v1.9 迁移）。
  * 审批卡/暂停卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
  */
-const assistantMetadata = computed<Record<string, any> | null>(() => {
+const assistantMetadata = computed<Record<string, unknown> | null>(() => {
   const turnMeta = props.turn?.metadata || {};
   return {
     ...turnMeta,
@@ -620,7 +621,9 @@ const retryState = computed<{
 
 const currentModelName = computed(() => {
   const modelName = assistantMetadata.value?.modelName;
-  return modelName ? getModelDisplayName(modelName) : "unknown";
+  return typeof modelName === "string" && modelName
+    ? getModelDisplayName(modelName)
+    : "unknown";
 });
 
 const displayName = computed(() => {
@@ -629,7 +632,7 @@ const displayName = computed(() => {
 
 const modelAvatarPath = computed(() => {
   const modelName = assistantMetadata.value?.modelName;
-  if (!modelName) return undefined;
+  if (typeof modelName !== "string" || !modelName) return undefined;
   const parts = modelName.split("/");
   const providerName = parts.length > 1 ? parts[0] : undefined;
   return getModelAvatarPath(modelName, providerName) || undefined;
@@ -706,8 +709,8 @@ const previewList = computed(() => {
   // 仅可内联的位图进入大图预览（svg/ico 等 image/* 前缀但不渲染的类型排除），
   // 绝对化后取原图 url（无缩略图路径时回退）
   return files
-    .filter((f: any) => isVisionImageMediaType(f.type))
-    .map((f: any) => toResourceUrl(f.url || f.previewUrl));
+    .filter((f) => isVisionImageMediaType(f.type))
+    .map((f) => toResourceUrl(f.url || f.previewUrl));
 });
 
 /**
@@ -716,8 +719,8 @@ const previewList = computed(() => {
  * 同一条消息现在可以同时有图片和普通文件（类型限制已取消），
  * 用外层下标会让预览取错图、甚至越界。
  */
-const handleImageClick = (file: any) => {
-  const images = (userFiles.value || []).filter((f: any) => isVisionImageMediaType(f.type));
+const handleImageClick = (file: FileAttachment) => {
+  const images = (userFiles.value || []).filter((f) => isVisionImageMediaType(f.type));
   const index = images.indexOf(file);
   if (index < 0) return;
   currentPreViewIndex.value = index;

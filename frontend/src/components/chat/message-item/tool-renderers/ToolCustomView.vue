@@ -39,12 +39,13 @@ import {
   type TerminalResultInfo,
 } from "@/utils/terminalOutput";
 import type { ToolRendererInfo } from "@/utils/toolDisplay";
+import type { ToolCallResponseEntry } from "@/types/message";
 
 const props = defineProps<{
   /** getToolRenderer + getRendererArgs 的解析结果 */
   info: ToolRendererInfo;
   /** 对应 toolResponses 条目（结果），terminal 视图展示其输出 */
-  response?: any;
+  response?: ToolCallResponseEntry;
   isError?: boolean;
   executing?: boolean;
 }>();
@@ -57,9 +58,9 @@ const outputText = computed(() => {
   return typeof content === "string" ? content : JSON.stringify(content, null, 2);
 });
 
-/** 工具结果 meta（card: "terminal" 时为新契约的结构化来源） */
+/** 工具结果 meta（card: "terminal" 时为新契约的结构化来源；后端 meta 即 card + 各卡片自定义字段的开放字典） */
 const resultMeta = computed<Record<string, any> | null>(() => {
-  const m = (props.response as any)?.meta;
+  const m = props.response?.meta;
   return m && m.card === "terminal" ? m : null;
 });
 
