@@ -4,6 +4,7 @@
  */
 
 import type { FileRef } from "@/types/stream/content-block.types";
+import type { StreamEvent } from "@/types/service";
 import type { MockConfig } from "../mockStreamService";
 
 /**
@@ -69,7 +70,7 @@ export function createMockMethods() {
         knowledgeBaseIds?: string[];
       };
     }
-  ): AsyncGenerator<any, void, unknown> {
+  ): AsyncGenerator<StreamEvent, void, unknown> {
     // 首次调用时加载配置
     const config = await loadMockConfig();
 

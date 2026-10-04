@@ -133,8 +133,10 @@ import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
 import { useTitle } from '@/composables/useTitle';
-import type { Session } from '@/types/session';
+import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
+import type { SessionEvent } from '@/services/modules/SessionEventsService';
+import type { SnipData } from './workspace/FilePreviewPanel.vue';
 import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
@@ -271,7 +273,7 @@ const subSessions = ref<Session[]>([]);
  *
  * 仅负责在 subSessions 中登记，不管理状态。状态由 stream_started/stream_finished 统一处理。
  */
-function handleSubAgentCreate(event: any) {
+function handleSubAgentCreate(event: SessionEvent) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   const name = payload.name || t('chat.panel.subTask');
@@ -294,7 +296,7 @@ function handleSubAgentCreate(event: any) {
  * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭；
  * 冻结的子代理也可随时从概览"已结束"组重开回放）。
  */
-function handleSubAgentClosed(event: any) {
+function handleSubAgentClosed(event: SessionEvent) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   if (!subSessionId) return;
@@ -450,16 +452,18 @@ function onPaneResized(size: number) {
  * 根据会话 ID 更新会话信息
  * 直接更新 sessionStore 中的统一数据源
  */
-const updateSessionById = async (sessionId: string, data: any) => {
+const updateSessionById = async (sessionId: string, data: Session) => {
   const session = sessionStore.getSession(sessionId);
   if (session) {
     // 定义需要更新的字段
     const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
 
+    // 兼容历史 snake_case 字段（不在 Session 类型上）→ 断言为可索引读法，仍只复制 allowedFields
+    const source = data as unknown as Record<string, unknown>;
     // 只复制允许的字段并批量更新
     for (const field of allowedFields) {
-      if (field in data) {
-        (session as unknown as Record<string, unknown>)[field] = data[field];
+      if (field in source) {
+        (session as unknown as Record<string, unknown>)[field] = source[field];
       }
     }
   }
@@ -539,7 +543,7 @@ const updateSelectedSession = async (sessionId: string) => {
 };
 
 
-const handleCreateSessionWithMessage = async (session: any, inputMessage: any) => {
+const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inputMessage: InputMessageState) => {
   if (!authStore.isAuthenticated)
     return;
   try {
@@ -660,7 +664,7 @@ function handleInsertToInput(path: string) {
 /**
  * 将选区 snip 徽标插入到聊天输入框
  */
-function handleInsertSnip(data: any) {
+function handleInsertSnip(data: SnipData) {
   const chatPanel = chatPanelRef.value;
   if (chatPanel && chatPanel.insertBadge) {
     chatPanel.insertBadge(data);

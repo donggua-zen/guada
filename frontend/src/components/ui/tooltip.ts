@@ -158,7 +158,7 @@ export function refreshTooltip(
   tipEl.setAttribute('data-placement', actual)
 }
 
-// Global listeners — hide on any scroll or resize.
+// Global listeners — hide on scroll or resize.
 // capture:true catches scroll events from all nested scroll containers.
 // passive:true avoids blocking the scroll thread.
 // The handler only does a style write (no layout read) — zero reflow.

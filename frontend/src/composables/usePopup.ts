@@ -4,6 +4,7 @@ import {
     ElMessageBox,
     ElMessage,
     ElNotification,
+    type MessageHandler,
     type NotificationOptions
 } from 'element-plus'
 import { t } from '@/locales'
@@ -50,7 +51,8 @@ export interface ToastApi {
     error: (content: string, duration?: number) => void
     warning: (content: string, duration?: number) => void
     info: (content: string, duration?: number) => void
-    loading: (content: string, duration?: number) => any
+    /** ElMessage.loading 的返回句柄（带 .close()；运行时始终有值，类型上保留 undefined 余地） */
+    loading: (content: string, duration?: number) => MessageHandler | undefined
 }
 
 /**
@@ -228,10 +230,17 @@ export function usePopup(): UsePopupReturn {
                 showCancelButton: true,
                 distinguishCancelAndClose: true,
                 customClass: 'w-full',
-                beforeClose: (action, instance: any, done) => {
+                beforeClose: (action, instance, done) => {
                     if (action === 'confirm') {
                         // 通过查询 DOM 获取 textarea 的值
-                        const textarea = instance.message?.el?.querySelector('textarea')
+                        // （beforeClose 的 instance 为 MessageBoxState；message 传入 VNode 时
+                        // 运行时在 state.message 上持有该 VNode，其 el 即消息容器元素）
+                        const msgEl = (instance.message as unknown as VNode | undefined)?.el as
+                            | HTMLElement
+                            | undefined
+                        const textarea = msgEl
+                            ? (msgEl.querySelector('textarea') as HTMLTextAreaElement | null)
+                            : null
                         const value = textarea ? textarea.value.trim() : ''
 
                         if (required && !value) {
@@ -308,10 +317,10 @@ export function usePopup(): UsePopupReturn {
             })
         },
 
-        loading: (content: string, duration: number = 0) => {
+        loading: (content: string, duration: number = 0): MessageHandler | undefined => {
             // ElMessage.loading 不在 Element Plus 类型定义中，但运行时可用
             const messageFn = ElMessage as typeof ElMessage & {
-                loading(opts: Record<string, unknown>): unknown
+                loading(opts: Record<string, unknown>): MessageHandler
             };
             return messageFn.loading({
                 message: content,
@@ -367,7 +376,9 @@ export function usePopup(): UsePopupReturn {
      */
     const loading: LoadingApi = {
         start: (text?: string): (() => void) | undefined => {
-            return toast.loading(text || t('session.popup.processing'))
+            // ElMessage 句柄实为 { close() } 对象而非可调用函数；这里沿用既有契约声明，
+            // wrap 内的 typeof 守卫保持原运行时行为不变
+            return toast.loading(text || t('session.popup.processing')) as unknown as (() => void) | undefined
         },
 
         wrap: async <T>(promiseFn: Promise<T>, loadingText: string = t('session.popup.processing')): Promise<T> => {

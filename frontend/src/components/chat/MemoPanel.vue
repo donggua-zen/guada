@@ -232,6 +232,7 @@ import { useSessionTokenStats, applyContextStatsFromEvents, clearTokenStats } fr
 import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
+import type { SessionSummaryItem } from '@/services/modules/session.api';
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage';
 import { usePopup } from '@/composables/usePopup';
 import { Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
@@ -251,7 +252,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   sessionId: string | null;
 }>();
-const summaries = ref<any[]>([]);
+const summaries = ref<SessionSummaryItem[]>([]);
 const summaryTotal = ref(0);
 const showBreakdown = ref(false);
 const historyDialogVisible = ref(false);

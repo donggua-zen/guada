@@ -101,7 +101,12 @@ export function applyContextStatsFromEvents(
 ): boolean {
   if (!sessionId || !Array.isArray(events)) return false
   for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i] as Record<string, any> | null | undefined
+    // eventLog 混合两类载体：live chunk（contextStats）与领域事件（data.usedTokens），
+    // 其余字段全部走运行时 typeof 收窄
+    const e = events[i] as
+      | { contextStats?: Record<string, unknown>; data?: Record<string, unknown> }
+      | null
+      | undefined
     if (!e) continue
     const live = e.contextStats
     if (

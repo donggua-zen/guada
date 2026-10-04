@@ -42,7 +42,7 @@ defineOptions({
 const showCropModal = ref(false)
 const cropImageSrc = ref('')
 const cropFile = ref<File | null>(null)
-const cropperAvatar = ref<any>(null)
+const cropperAvatar = ref<InstanceType<typeof Cropper> | null>(null)
 const avatarInput = ref<HTMLInputElement | null>(null)
 const previewUrl = ref('')
 
@@ -86,7 +86,8 @@ const cropAvatar = (): void => {
 
     const { canvas } = cropperAvatar.value.getResult()
 
-    canvas.toBlob((blob: Blob | null) => {
+    // 裁剪弹窗打开且已设置 src 时 canvas 必已就绪（沿用本函数既有的非空断言风格）
+    canvas!.toBlob((blob: Blob | null) => {
         if (!blob) return
 
         // 创建新文件对象 - 使用非空断言

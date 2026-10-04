@@ -30,7 +30,7 @@
   </div>
 
   <!-- 工作目录选择弹窗 -->
-  <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
+  <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
     :current-workspace-path="config?.workspacePath || null" :public-path="publicPath"
     :current-attachments="config?.attachments" @select="handleWorkspaceSelect"
     @toggle-attachment="handleToggleAttachment" />
@@ -74,20 +74,26 @@ const props = defineProps({
   config: { type: Object, default: () => ({}) },
 })
 
+/** config-change 载荷：本组件每次只整包下发一个字段（消费方按字段合并） */
+type ConfigChangePayload =
+  | { groupId: string | null }
+  | { workspacePath: string | null }
+  | { attachments: Record<string, string[]> }
+
 const emit = defineEmits<{
-  (e: 'config-change', payload: any): void
+  (e: 'config-change', payload: ConfigChangePayload): void
 }>()
 
 const sessionGroupStore = useSessionGroupStore()
 const workspaceStore = useWorkspaceStore()
 
-// 工作目录设置相关
-const workspaceButtonRef = ref<any>(null)
+// 工作目录设置相关（仅需 $el 供弹层锚定，结构化类型收窄组件实例）
+const workspaceButtonRef = ref<{ $el: HTMLElement } | null>(null)
 const workspacePopoverVisible = ref(false)
 
 // 分组选择相关
 const groupSelectorVisible = ref(false)
-const groupButtonRef = ref<any>(null)
+const groupButtonRef = ref<{ $el: HTMLElement } | null>(null)
 
 // 初始化时加载分组列表
 sessionGroupStore.loadGroups()

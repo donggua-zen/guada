@@ -44,7 +44,8 @@ const { t } = useI18n()
 // 曾导致本组件 outlineItems 恒为空而永不渲染）
 const props = defineProps<{
   turns: Turn[]
-  chatPanelRef: any
+  /** ChatPanel 实例：仅消费 getScrollElement()（结构化切片，避免引入组件循环依赖） */
+  chatPanelRef: { getScrollElement?: () => HTMLElement | null } | null
 }>()
 
 const emit = defineEmits<{

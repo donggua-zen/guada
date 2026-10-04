@@ -14,6 +14,8 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
 import { TerminalSocketService } from "@/services/modules/TerminalSocketService";
 import { useTheme } from "@/composables/useTheme";
 import type { ServerTerminalMessage } from "@/types/terminal.types";
+import type { Terminal } from "@xterm/xterm";
+import type { FitAddon } from "@xterm/addon-fit";
 
 const props = defineProps<{
     sessionId: string;
@@ -30,8 +32,8 @@ const { isDark } = useTheme();
 const terminalRef = ref<HTMLDivElement | null>(null);
 const errorHint = ref("");
 
-let term: any = null;
-let fitAddon: any = null;
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
 let disposers: Array<() => void> = [];
 
 // xterm 主题（跟随 --gd-* token）
@@ -116,7 +118,8 @@ async function initTerminal() {
             return;
         }
         t.open(terminalRef.value);
-        fitAddon.fit();
+        // openWhenSized 仅在 initTerminal 末尾（fitAddon 已赋值后）首次执行
+        fitAddon!.fit();
         t.focus();
         connectSocket();
     };
@@ -157,7 +160,8 @@ async function initTerminal() {
         terminalSocket.onStatus((s) => {
             if (s === "open" && t.element) {
                 try {
-                    fitAddon.fit();
+                    // onStatus("open") 仅在 initTerminal 建连流程后才可能触发（fitAddon 已赋值）
+                    fitAddon!.fit();
                 } catch {
                     /* ignore */
                 }

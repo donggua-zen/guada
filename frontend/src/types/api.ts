@@ -74,7 +74,7 @@ export interface Model {
         topP?: number | null
         frequencyPenalty?: number | null
         vectorDimensions?: number | null
-        customParameters?: Record<string, any>
+        customParameters?: Record<string, unknown>
     }
 }
 
@@ -145,7 +145,12 @@ export interface ModelPreset {
 export interface McpTool {
     name: string
     description?: string
-    inputSchema?: Record<string, any>
+    /** MCP 工具 JSON Schema（前端消费的子集 + 开放索引签名） */
+    inputSchema?: {
+        properties?: Record<string, { description?: string; type?: string; default?: unknown }>
+        required?: string[]
+        [key: string]: unknown
+    }
     enabled: boolean
 }
 
@@ -158,7 +163,7 @@ export interface McpServer {
     url?: string | null
     type?: string | null
     description?: string | null
-    headers?: Record<string, any> | null
+    headers?: Record<string, string> | null
     command?: string | null
     args?: string[] | null
     env?: Record<string, string> | null

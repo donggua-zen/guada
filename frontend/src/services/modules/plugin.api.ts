@@ -8,8 +8,8 @@ export interface PluginSlotItem {
   component: string
   order: number
   mode?: string
-  props?: Record<string, any>
-  meta?: Record<string, any>
+  props?: Record<string, unknown>
+  meta?: Record<string, unknown>
 }
 
 export interface ConfigField {
@@ -35,7 +35,7 @@ export interface AttachmentItem {
   id: string;
   name: string;
   description?: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }
 
 export interface PluginAttachmentList {
@@ -82,7 +82,7 @@ export interface PluginApi {
     session: GuaDaSharedRuntime['session'];
   }>;
   /** 插件键值存储（值形状由插件自定义，动态结构） */
-  getPluginData(pluginId: string): Promise<Record<string, any>>;
+  getPluginData(pluginId: string): Promise<Record<string, unknown>>;
   setPluginData(pluginId: string, key: string, value: unknown): Promise<{ success: boolean }>;
   deletePluginData(pluginId: string, key: string): Promise<{ success: boolean }>;
   /**
@@ -93,7 +93,7 @@ export interface PluginApi {
    * config（智能体层工具包过滤）与 lang（NLS 本地化）被静默丢弃。
    * 此处让位给 settings.api.ts 的实现；测试通过后再删除本段。
    */
-  // queryPlugins(): Promise<{ plugins: any[] }>;
+  // queryPlugins(): Promise<{ plugins: unknown[] }>;
   /** 从分发源安装插件（后台任务，返回 jobId，轮询 install-log 看进度） */
   installPlugin(source: string): Promise<{ jobId: string }>;
   /** 查询安装任务日志（假终端） */
@@ -142,7 +142,7 @@ export const pluginApi: PluginApi = {
   },
 
   async getPluginData(this: ApiContext, pluginId: string) {
-    return await this._request<Record<string, any>>(`/plugins/${pluginId}/data`);
+    return await this._request<Record<string, unknown>>(`/plugins/${pluginId}/data`);
   },
 
   async setPluginData(this: ApiContext, pluginId: string, key: string, value: unknown) {

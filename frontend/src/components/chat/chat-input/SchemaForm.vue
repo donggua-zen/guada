@@ -62,6 +62,8 @@ import type { ConfigField } from '@/services/modules/plugin.api'
 
 const props = defineProps<{
   fields: ConfigField[]
+  // 插件配置表单值袋：值类型由插件自定义（ConfigField.default/options 均为 unknown），
+  // 无法收窄为具体键值类型，且 unknown 会让 el-input/el-select 的 model-value 绑定失配
   modelValue: Record<string, any>
 }>()
 
@@ -76,7 +78,7 @@ const visibleFields = computed(() => {
   })
 })
 
-function updateField(key: string, value: any) {
+function updateField(key: string, value: unknown) {
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 </script>

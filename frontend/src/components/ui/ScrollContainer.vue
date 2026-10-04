@@ -26,7 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     scroll: [event: Event];
     "scroll-to-bottom": [];
-    "scroll-state-change": [state: any];
+    "scroll-state-change": [state: unknown];
     "is-at-bottom-change": [value: boolean];
 }>();
 

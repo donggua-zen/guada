@@ -9,7 +9,7 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
-import { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, defaultHighlightStyle, type LanguageSupport } from '@codemirror/language';
 import { html } from '@codemirror/lang-html';
 import { css } from '@codemirror/lang-css';
 import { javascript } from '@codemirror/lang-javascript';
@@ -41,7 +41,7 @@ let view: EditorView | null = null;
 
 // 根据扩展名选语言
 function languageForExt(ext: string) {
-    const map: Record<string, () => any> = {
+    const map: Record<string, () => LanguageSupport> = {
         '.html': html, '.htm': html, '.css': css, '.scss': css, '.less': css,
         '.js': () => javascript({ jsx: false }), '.mjs': () => javascript({ jsx: false }),
         '.ts': () => javascript({ jsx: true, typescript: true }),

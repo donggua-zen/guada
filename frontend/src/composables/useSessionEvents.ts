@@ -55,7 +55,8 @@ export function useSessionEvents() {
     // 按 sessionId 路由 → 有缓存写缓存 / 无缓存暂存 finish 后事件。
     // 与发送链路(handleSendMessage → apiService.chat)完全独立。
     unsubscribers.push(
-      streamReceiver.subscribeAll((chunk: any) => {
+      // subscribeAll 已声明 HubStreamEvent（WireStreamEvent），chunk 按判别联合收窄
+      streamReceiver.subscribeAll((chunk) => {
         const sid = chunk.sessionId;
         if (!sid) return;
         // 压缩失败/取消：瞬态提示（成功由对话区结果卡承载，不额外打扰）

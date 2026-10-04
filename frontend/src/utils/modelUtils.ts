@@ -6,6 +6,7 @@
 import { computed } from "vue";
 import { fixFrontendAssetUrl } from "./url";
 import { t } from "@/locales";
+import type { Model, ModelProvider } from "@/types/api";
 
 // 已知提供商的标识符映射（用于匹配头像文件）
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -173,8 +174,8 @@ export function useModelDisplay(modelName: string, providerName?: string) {
  * @returns 思考强度选项数组，如 ['none', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
  */
 export function getModelThinkingEfforts(
-  model: any,
-  _providers: any[],
+  model: Model | null | undefined,
+  _providers: ModelProvider[],
 ): string[] {
   if (!model) {
     return [];
@@ -196,7 +197,7 @@ export function getModelThinkingEfforts(
 /**
  * 检查模型是否支持思考功能
  */
-export function isThinkingSupported(model: any, providers: any[]): boolean {
+export function isThinkingSupported(model: Model | null | undefined, providers: ModelProvider[]): boolean {
   const efforts = getModelThinkingEfforts(model, providers);
   return efforts.length > 0;
 }

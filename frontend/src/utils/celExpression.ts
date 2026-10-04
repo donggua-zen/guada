@@ -130,10 +130,15 @@ export function validatePatchExpr(expr: string): CelDiagnostic | null {
 
 /** 错误 → 诊断（解析/求值错误带 range，可给编辑器做定位） */
 export function toDiagnostic(err: unknown): CelDiagnostic {
-  const anyErr = err as any
-  const raw = String(anyErr?.summary ?? anyErr?.message ?? err ?? '表达式求值失败')
+  const candidate = err as {
+    summary?: unknown
+    message?: unknown
+    range?: { start?: unknown; end?: unknown }
+    node?: { range?: { start?: unknown; end?: unknown } }
+  }
+  const raw = String(candidate?.summary ?? candidate?.message ?? err ?? '表达式求值失败')
   const message = raw.split('\n')[0].trim() || '表达式求值失败'
-  const range = anyErr?.range ?? anyErr?.node?.range
+  const range = candidate?.range ?? candidate?.node?.range
   return {
     message,
     start: typeof range?.start === 'number' ? range.start : undefined,

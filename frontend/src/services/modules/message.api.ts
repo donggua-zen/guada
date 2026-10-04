@@ -11,7 +11,7 @@ interface TurnLike {
   id: string;
   /** 前端展示链路（display 视图）透传后端 kind：'turn' 普通回合 / 'event' 事件外壳（command/compaction） */
   kind: "turn" | "event";
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   messages: Array<{
     id: string;
     role: MessageRole;
@@ -21,7 +21,7 @@ interface TurnLike {
     source?: { kind: string; [key: string]: unknown };
     /** 后端为 Unix 毫秒时间戳（replayer 从事件 time 还原），前端转 ISO 串使用 */
     createdAt?: number;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
     content: Array<{
       type: string;
       text?: string;
@@ -58,8 +58,8 @@ export function extFromMediaType(mediaType?: string): string | undefined {
  * 必须剔除，否则 reasoning/text 块也会携带 toolCalls 被 flattenSingleContent 误判为 tool item（双渲染）。 */
 function blockToContent(
   block: TurnLike["messages"][number]["content"][number],
-  msgMeta: Record<string, any>,
-  toolResultsMap?: Record<string, any>,
+  msgMeta: Record<string, unknown>,
+  toolResultsMap?: Record<string, unknown>,
   createdAt?: string,
   /** 块在消息内的序号 + 消息 id：P6c 起作为块唯一标识（原 contentId 已删除） */
   blockRef?: { index: number; messageId: string },
@@ -146,7 +146,7 @@ function blockToContent(
  */
 export function messageToTurnContent(
   msg: TurnLike["messages"][number],
-  msgMeta: Record<string, any> = msg.metadata || {},
+  msgMeta: Record<string, unknown> = msg.metadata || {},
 ): TurnContent[] {
   // 消息级时间(后端 Unix ms → ISO 串)下放到内容桶；缺失时不伪造
   const createdAtIso = msg.createdAt

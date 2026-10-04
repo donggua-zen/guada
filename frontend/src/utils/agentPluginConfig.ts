@@ -61,14 +61,17 @@ export function parsePluginConfig(raw: unknown): ParsedPluginConfig {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return { allDisabled: false, allowlistMode: false, perPlugin }
   }
-  const cfg = raw as Record<string, any>
+  // wire 数据在这里断言成条目形状，字段级合法性仍由下方 typeof/Array.isArray 运行时校验兜底
+  const cfg = raw as RawPluginConfig
   for (const [pluginId, entry] of Object.entries(cfg)) {
     if (pluginId.startsWith('__')) continue
     if (typeof entry !== 'object' || entry === null) continue
 
-    const filter = entry.toolkits_filter
-    const deny = Array.isArray(entry.toolkits_deny) ? [...entry.toolkits_deny] : []
-    const allow = Array.isArray(entry.toolkits_allow) ? [...entry.toolkits_allow] : []
+    // 经上方运行时守卫收窄为非空对象，此处断言到条目 wire 形状（列表键再由 Array.isArray 校验）
+    const toolkit = entry as RawToolkitEntry
+    const filter = toolkit.toolkits_filter
+    const deny = Array.isArray(toolkit.toolkits_deny) ? [...toolkit.toolkits_deny] : []
+    const allow = Array.isArray(toolkit.toolkits_allow) ? [...toolkit.toolkits_allow] : []
 
     // 只接受真正的工具包条目：显式 filter，或非空列表。
     // 遗留的插件级开关（{ enabled: false } / 裸布尔）既无 filter 也无列表 → 忽略，
@@ -210,6 +213,24 @@ export function buildPluginConfig(
 
 // ── 各管理页的条目解析（与上面同源，集中在此以便单测）──
 
+/** `settings.plugins` 里单个插件条目的 wire 形状（列表键为字符串数组；字段级合法性由调用处运行时校验） */
+interface RawToolkitEntry {
+  toolkits_filter?: unknown
+  toolkits_deny?: string[]
+  toolkits_allow?: string[]
+}
+
+/** `settings.plugins` 顶层的 wire 形状（键 = 插件 id，另有 mcp/skill/sub_agent 专属条目与顶层姿态键） */
+interface RawPluginConfig {
+  mcp?: RawToolkitEntry
+  skill?: RawToolkitEntry
+  sub_agent?: RawToolkitEntry
+  __strategy?: unknown
+  __default?: unknown
+  /** 其余键 = 各插件的条目（对象形状经 parsePluginConfig 的运行时守卫校验） */
+  [pluginId: string]: unknown
+}
+
 const stripMcpPrefix = (id: unknown) => String(id).replace(/^mcp_/, '')
 
 export interface McpGateState {
@@ -230,7 +251,8 @@ export interface McpGateState {
  * "全部禁用"与"白名单+空列表"，这里按前者解读，避免升级后"全部禁用"开关莫名显示为开。
  */
 export function parseMcpGate(raw: unknown): McpGateState {
-  const cfg = (raw as any)?.mcp;
+  // wire 数据断言（字段级合法性由下方 Array.isArray / hasOwnProperty 运行时校验兜底）
+  const cfg = (raw as RawPluginConfig | null | undefined)?.mcp;
   const rawFilter = cfg?.toolkits_filter;
   const hasAllowKey =
     !!cfg && Object.prototype.hasOwnProperty.call(cfg, 'toolkits_allow');
@@ -252,12 +274,12 @@ export function parseMcpGate(raw: unknown): McpGateState {
 
 /** Skills 管理页：能力包是否整体被禁用（禁用 = allow 过滤 + 空允许列表） */
 export function parseAllSkillsDisabled(raw: unknown): boolean {
-  const cfg = (raw as any)?.skill
-  return cfg?.toolkits_filter === 'allow' && !(cfg?.toolkits_allow?.length > 0)
+  const cfg = (raw as RawPluginConfig | null | undefined)?.skill
+  return cfg?.toolkits_filter === 'allow' && (cfg?.toolkits_allow?.length ?? 0) === 0
 }
 
 /** 子代理管理页：能力包是否未放行（固定白名单语义，未配置即视为禁用） */
 export function parseAllAgentsDisabled(raw: unknown): boolean {
-  const cfg = (raw as any)?.sub_agent
+  const cfg = (raw as RawPluginConfig | null | undefined)?.sub_agent
   return !(cfg?.toolkits_filter === 'allow' && cfg?.toolkits_allow?.includes('subagent'))
 }

@@ -45,12 +45,13 @@
 import { computed, ref, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Apps20Regular } from '@vicons/fluent';
+import type { SkillCommand } from '@/types/skills';
 
 const { t } = useI18n();
 
 const props = defineProps<{
   visible: boolean;
-  items: any[];
+  items: SkillCommand[];
   query: string;
   selectedIndex: number;
   trigger: 'slash' | 'mention';
@@ -59,7 +60,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean];
   'update:selected-index': [value: number];
-  select: [item: any];
+  select: [item: SkillCommand];
   close: [];
 }>();
 
@@ -93,7 +94,7 @@ const filteredCommands = computed(() => {
   const q = props.query;
   if (!q) return props.items;
   const lower = q.toLowerCase();
-  return props.items.filter((s: any) => {
+  return props.items.filter((s) => {
     const name = s.name || '';
     const desc = s.description || '';
     return name.toLowerCase().includes(lower) || desc.toLowerCase().includes(lower);
@@ -119,7 +120,7 @@ const scrollToSelectedItem = () => {
   });
 };
 
-const handleSelect = (item: any) => {
+const handleSelect = (item: SkillCommand) => {
   emit('select', item);
 };
 

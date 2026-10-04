@@ -14,7 +14,8 @@ import type { FileRef, FileRefType } from './stream/content-block.types'
 export interface SessionSettings {
     thinkingEffort?: string // 思考强度级别：'none' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
     systemPrompt?: string
-    [key: string]: any
+    /** 后端 session.settings 为开放字典（attachments/referencedKbs/sandboxMode/maxTokensLimit 等按需写入） */
+    [key: string]: unknown
 }
 
 /**

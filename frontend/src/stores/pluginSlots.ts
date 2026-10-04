@@ -24,9 +24,9 @@ export interface SlotItem {
   /** 渲染模式（list 等，语义由 slot 消费方决定） */
   mode?: string
   /** 透传给 slot 组件的 props */
-  props?: Record<string, any>
+  props?: Record<string, unknown>
   /** slot 消费方读取的元数据（如设置页的 label） */
-  meta?: Record<string, any>
+  meta?: Record<string, unknown>
   /** 插件资源版本号，拼静态资源 URL 用 */
   rev?: string
 }
@@ -107,8 +107,8 @@ export const usePluginSlots = defineStore('pluginSlots', {
       }))
     },
 
-    metaOf: (state) => (name: string): any[] =>
-      (state.slots[name] || []).map((i) => i.meta).filter(Boolean),
+    metaOf: (state) => (name: string): NonNullable<SlotItem['meta']>[] =>
+      (state.slots[name] || []).map((i) => i.meta).filter((m): m is NonNullable<SlotItem['meta']> => Boolean(m)),
 
     hasSlot: (state) => (name: string): boolean => (state.slots[name] || []).length > 0,
   },

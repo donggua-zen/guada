@@ -2,9 +2,14 @@ import { ref, type Ref } from "vue";
 import { useSessionStore } from "@/stores/session";
 import type { Session } from "@/types/session";
 
+/** 标题生成所需的 ApiService 结构切片（调用方传全局单例，按最小依赖声明） */
+type TitleApiService = {
+  generateSessionTitle(sessionId: string): Promise<{ title: string; skipped?: boolean }>;
+};
+
 export function useSessionChat(
   sessionStore: ReturnType<typeof useSessionStore>,
-  apiService: any,
+  apiService: TitleApiService,
 ) {
 
   const hasGeneratedTitle = ref(false);
