@@ -9,7 +9,8 @@ export interface ConfigField {
   placeholder?: string;
   description?: string;
   options?: { value: string; label: string }[];
-  defaultValue?: any;
+  /** 配置缺省值（形状随 type 变化） */
+  defaultValue?: unknown;
 }
 
 /**

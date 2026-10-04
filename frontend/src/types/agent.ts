@@ -33,7 +33,8 @@ export interface AgentSettings {
     top_p?: number
     frequency_penalty?: number
     presence_penalty?: number
-    [key: string]: any
+    /** 兼容后端 settings 分组下的扩展键（memory/skills/plugins 等由各消费方收窄读取） */
+    [key: string]: unknown
 }
 
 /**

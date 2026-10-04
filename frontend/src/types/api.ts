@@ -69,6 +69,11 @@ export interface Model {
         features?: string[]
         contextWindow?: number | null
         maxOutputTokens?: number | null
+        /** 模型默认参数（不建议设置；管理面可编辑） */
+        temperature?: number | null
+        topP?: number | null
+        frequencyPenalty?: number | null
+        vectorDimensions?: number | null
         customParameters?: Record<string, any>
     }
 }
@@ -87,7 +92,8 @@ export interface ModelProvider {
     apiKeySet: boolean
     isActive: boolean
     avatarUrl?: string
-    attributes?: any
+    /** 实例级附加属性（当前仅 headers 参与请求） */
+    attributes?: { headers?: Record<string, string> }
     /** 实例级 wire 兼容开关覆盖（缺省 = 继承类型卡） */
     compat?: ThinkingCompatConfig
     createdAt?: string
@@ -105,7 +111,8 @@ export interface ProviderTemplate {
     avatarUrl?: string
     defaultApiUrl?: string
     description?: string
-    attributes?: any
+    /** 类型卡附加属性（当前仅 headers） */
+    attributes?: { headers?: Record<string, string> }
 }
 
 /**
@@ -122,7 +129,10 @@ export interface ModelPreset {
         features?: string[]
         contextWindow?: number | null
         maxOutputTokens?: number | null
+        vectorDimensions?: number | null
     }
+    /** 匹配用模式（后端为 RegExp 源串，前端按 new RegExp(src) 使用） */
+    patterns?: string[]
     /** 能力声明：能不能思考（缺省 = 未声明，fail-safe 不能思考） */
     supportsThinking?: boolean
     /** 强度档位菜单（仅 supportsThinking: true 时有意义） */

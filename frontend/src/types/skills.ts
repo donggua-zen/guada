@@ -45,6 +45,8 @@ export interface SkillCommand {
     providerId: string
     /** 触发方式 */
     trigger: 'slash' | 'mention'
+    /** 友好展示名（技能提供者附加；缺省回退 name） */
+    label?: string
     /** 各提供者附加的自定义字段 */
     [key: string]: unknown
 }

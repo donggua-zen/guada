@@ -187,6 +187,7 @@ import {
 } from "@/services/modules/streamProjector"
 import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
 import type { Agent } from '@/types/agent';
+import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
@@ -446,7 +447,7 @@ function immediateScrollToBottom() {
 /**
  * 处理滚动事件
  */
-function handleScroll(event: any) {
+function handleScroll(event: Event) {
   // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 FloatingTodoBar 的注释），
   // 而 scrollTicking 守卫会让 rAF 未回调时的后续滚动事件全部被丢弃——若只在 rAF 里更新，
   // 按钮会永不出现。防抖收在 updateScrollButtonVisibility 内部，逐次调用无额外开销。
@@ -458,7 +459,7 @@ function handleScroll(event: any) {
   requestAnimationFrame(() => {
     // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
-    const scrollTop = scrollElement?.scrollTop ?? event.target?.scrollTop ?? 0;
+    const scrollTop = scrollElement?.scrollTop ?? (event.target as HTMLElement | null)?.scrollTop ?? 0;
     const isAtBottom =
       scrollElement?.scrollHeight - scrollTop - scrollElement?.clientHeight <= 5;
 
@@ -513,8 +514,8 @@ const activeTurns = computed(() => {
 
 // 从回合中取用户锚点块（role=user 且为人类输入），渲染与操作均基于该块（二级结构：turn → block）
 // 后端注入的 hidden user 消息（拦截器/图片/待办/压缩）同 role 但非用户输入，须排除
-const userOfTurn = (turn: any): any =>
-  turn?.messages?.find((m: any) => m.role === 'user' && !isHiddenBlock(m)) ?? null;
+const userOfTurn = (turn: Turn | undefined): MessageBundle | null =>
+  turn?.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null;
 
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
@@ -618,7 +619,18 @@ const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
  * 处理 ChatInput 配置变更
  * 与 chatInputConfig 计算属性中的字段一一对应
  */
-const handleConfigChange = (config: any) => {
+/** ChatInput 配置回传（字段与下方 chatInputConfig 计算属性一一对应） */
+interface ChatInputConfigChange {
+  modelId?: string | null
+  thinkingEffort?: string
+  maxTokensLimit?: number
+  knowledgeBaseIds?: string[]
+  workspacePath?: string | null
+  sandboxMode?: string
+  [key: string]: unknown
+}
+
+const handleConfigChange = (config: ChatInputConfigChange) => {
   if (!currentSession.value) return;
 
   // 处理模型 ID 变更
@@ -687,7 +699,7 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
       visibleTurns.value.length === 1 &&
       !!userOfTurn(firstTurn) &&
       (firstTurn?.messages || []).some(
-        (m: any) => m.role === 'assistant' && m.blocks?.some((b: any) => b?.content),
+        (m) => m.role === 'assistant' && m.blocks?.some((b) => b?.content),
       );
     if (firstExchangeDone && !hasGeneratedTitle.value) {
       await generateTitleIfNeeded(currentSessionId.value!, currentSession);
@@ -915,7 +927,7 @@ function abortResponse() {
   }
 }
 
-async function deleteTurnMessage(turn: any) {
+async function deleteTurnMessage(turn: Turn) {
   try {
     if (
       await confirm(
@@ -939,7 +951,7 @@ async function deleteTurnMessage(turn: any) {
 
 // 分支会话：以该回合（助手消息所在，必为完整一轮）为节点，复制出新会话并跳转过去
 // 分支只复制主对话（工作流、子代理等历史不跟随），故先弹窗告知该取舍
-async function branchFromTurn(turn: any) {
+async function branchFromTurn(turn: Turn) {
   if (!currentSessionId.value || !turn?.id) return;
   const confirmed = await confirm(
     t('chat.panel.branchConfirmTitle'),
@@ -959,7 +971,9 @@ async function branchFromTurn(turn: any) {
   }
 }
 
-async function editMessage(block: any) {
+type MessageActionTarget = TurnContent | ReturnType<typeof toUserMessageView> | null
+
+async function editMessage(block: MessageActionTarget) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 无可编辑内容，提前返回
     if (!block) {
@@ -990,7 +1004,7 @@ async function editMessage(block: any) {
   }
 }
 
-async function copyMessage(block: any) {
+async function copyMessage(block: MessageActionTarget) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 复制空内容
     if (!block) {

@@ -530,11 +530,12 @@ import {
 } from '@/utils/celExpression'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import CelExpressionEditor from './CelExpressionEditor.vue'
+import type { Model, ModelProvider, ModelPreset } from '@/types/api'
 
 const props = defineProps<{
-  provider: any
-  models: any[]
-  modelPresets: any[]
+  provider: ModelProvider
+  models: Model[]
+  modelPresets: ModelPreset[]
 }>()
 
 const emit = defineEmits<{
@@ -562,7 +563,7 @@ watch(showEditModal, (open) => {
 
 // ========== 思考调节（能力三态 + 档位菜单 + wire 映射 + 拼法）==========
 /** 条目级覆盖 → 表单三态；无覆盖 = 跟随继承链 */
-const thinkingModeFromModel = (model: any): 'auto' | 'true' | 'false' => {
+const thinkingModeFromModel = (model: Model): 'auto' | 'true' | 'false' => {
   const override = model?.supportsThinkingOverride
   if (override === true) return 'true'
   if (override === false) return 'false'
@@ -570,7 +571,7 @@ const thinkingModeFromModel = (model: any): 'auto' | 'true' | 'false' => {
 }
 
 /** 覆盖态 → 表单档位菜单（仅取条目显式覆盖；继承链的菜单不回填，避免保存时误写覆盖） */
-const effortsMenuFromModel = (model: any): string[] => {
+const effortsMenuFromModel = (model: Model): string[] => {
   const override = model?.thinkingEffortsOverride
   return Array.isArray(override) ? [...override] : []
 }
@@ -680,7 +681,7 @@ const loadFormatSuggestion = async () => {
   if (suggestionLoaded.value) return
   suggestionLoaded.value = true
   try {
-    const res: any = await apiService.getThinkingFormatSuggestion(props.provider?.apiUrl || '')
+    const res = await apiService.getThinkingFormatSuggestion(props.provider?.apiUrl || '')
     formatSuggestion.value = res?.suggestion ?? null
   } catch {
     formatSuggestion.value = null
@@ -696,7 +697,7 @@ const loadPatchTemplates = async () => {
   if (templatesLoaded.value) return
   templatesLoaded.value = true
   try {
-    const res: any = await apiService.getThinkingPatchTemplates()
+    const res = await apiService.getThinkingPatchTemplates()
     patchTemplates.value = Array.isArray(res?.templates) ? res.templates : []
     patchTemplateVars.value = Array.isArray(res?.variables) ? res.variables : []
   } catch {
@@ -860,14 +861,15 @@ const matchedPreset = computed(() => {
   if (!editModelForm.value.modelName) return null
   const lower = editModelForm.value.modelName.toLowerCase()
   const bare = lower.split('/').pop() || lower
-  return props.modelPresets.find((p: any) =>
-    p.patterns.some((src: string) => new RegExp(src).test(lower)) ||
-    (bare !== lower && p.patterns.some((src: string) => new RegExp(src).test(bare)))
-  ) || null
+  return props.modelPresets.find((p) => {
+    const patterns = p.patterns ?? []
+    return patterns.some((src) => new RegExp(src).test(lower)) ||
+      (bare !== lower && patterns.some((src) => new RegExp(src).test(bare)))
+  }) || null
 })
 
 // 应用预设配置到表单
-const applyPreset = (preset: any) => {
+const applyPreset = (preset: ModelPreset) => {
   editModelForm.value.modelType = preset.modeType
   editModelForm.value.config = {
     inputCapabilities: preset.config.inputCapabilities || ['text'],
@@ -889,7 +891,7 @@ const editModelRules = computed(() => ({
   'config.contextWindow': {
     required: false,
     type: 'number' as const,
-    validator: (rule: any, value: any) => !value || value > 0,
+    validator: (_rule: unknown, value: number | undefined) => !value || value > 0,
     message: t('settings.providerDetail.contextWindowInvalid'),
     trigger: 'blur' as const
   },
@@ -925,11 +927,13 @@ const getModelAvatarForSetting = (model: { modelName: string }) => {
 
 /** 「模型默认参数」折叠态：默认收起（不建议设置）；条目已有值时自动展开，不隐藏存量配置 */
 const defaultParamsExpanded = ref(false)
-const hasCustomDefaultParams = (config: any): boolean =>
-  config?.temperature != null ||
-  config?.topP != null ||
-  config?.frequencyPenalty != null ||
-  (config?.customParameters && Object.keys(config.customParameters).length > 0)
+const hasCustomDefaultParams = (config: Model['config']): boolean =>
+  Boolean(
+    config?.temperature != null ||
+    config?.topP != null ||
+    config?.frequencyPenalty != null ||
+    (config?.customParameters && Object.keys(config.customParameters).length > 0)
+  )
 
 // 从获取列表中选择模型（预填充到编辑表单，不调用API）
 const handleSelectFromFetch = (model: any) => {

@@ -5,7 +5,8 @@ import {
     ElMessage,
     ElNotification,
     ElButton,
-    type ElMessageBoxOptions
+    type ElMessageBoxOptions,
+    type NotificationOptions
 } from 'element-plus'
 import { t } from '@/locales'
 
@@ -58,17 +59,18 @@ export interface ToastApi {
  * 通知消息接口
  */
 export interface NotifyApi {
-    success: (title: string, content: string, options?: any) => void
-    error: (title: string, content: string, options?: any) => void
-    warning: (title: string, content: string, options?: any) => void
-    info: (title: string, content: string, options?: any) => void
+    success: (title: string, content: string, options?: Partial<NotificationOptions>) => void
+    error: (title: string, content: string, options?: Partial<NotificationOptions>) => void
+    warning: (title: string, content: string, options?: Partial<NotificationOptions>) => void
+    info: (title: string, content: string, options?: Partial<NotificationOptions>) => void
 }
 
 /**
  * 加载状态接口
  */
 export interface LoadingApi {
-    start: (text?: string) => any
+    /** 返回关闭函数（ElLoading/通知句柄）；实现不可用时可能为 undefined */
+    start: (text?: string) => (() => void) | undefined
     wrap: <T>(promiseFn: Promise<T>, loadingText?: string) => Promise<T>
 }
 
@@ -325,7 +327,7 @@ export function usePopup(): UsePopupReturn {
      * 通知消息
      */
     const notify: NotifyApi = {
-        success: (title: string, content: string, options: any = {}): void => {
+        success: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
             ElNotification.success({
                 title,
                 message: content,
@@ -334,7 +336,7 @@ export function usePopup(): UsePopupReturn {
             })
         },
 
-        error: (title: string, content: string, options: any = {}): void => {
+        error: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
             ElNotification.error({
                 title,
                 message: content,
@@ -343,7 +345,7 @@ export function usePopup(): UsePopupReturn {
             })
         },
 
-        warning: (title: string, content: string, options: any = {}): void => {
+        warning: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
             ElNotification.warning({
                 title,
                 message: content,
@@ -352,7 +354,7 @@ export function usePopup(): UsePopupReturn {
             })
         },
 
-        info: (title: string, content: string, options: any = {}): void => {
+        info: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
             ElNotification.info({
                 title,
                 message: content,
@@ -366,7 +368,7 @@ export function usePopup(): UsePopupReturn {
      * 加载状态管理
      */
     const loading: LoadingApi = {
-        start: (text?: string): any => {
+        start: (text?: string): (() => void) | undefined => {
             return toast.loading(text || t('session.popup.processing'))
         },
 

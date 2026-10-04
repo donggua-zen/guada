@@ -111,7 +111,8 @@ export interface Session {
     title: string
     agent: Agent
     agentId: string
-    modelId: string
+    /** null = 未绑定模型（后端允许） */
+    modelId: string | null
     model?: SessionModel
     settings: SessionSettings
     createdAt: ISODateString
@@ -163,7 +164,8 @@ export interface CreateSessionRequest {
  */
 export interface UpdateSessionRequest {
     title?: string
-    modelId?: string
+    /** null = 清除模型绑定（后端 assertResolvableModelRef 对 null 直接放行） */
+    modelId?: string | null
     settings?: Partial<SessionSettings>
     /** null = 移出分组（后端按 !== undefined 透传） */
     groupId?: string | null

@@ -1,3 +1,24 @@
+/** 浏览器自动化窗口句柄（IPC 返回的最小字段集） */
+export interface BrowserWindowHandle {
+  windowId: string
+  [key: string]: unknown
+}
+
+/** 自动更新状态推送（主进程 → 前端；status 取值对齐 electron-updater 事件名） */
+export interface UpdateStatusPayload {
+  status: string
+  info?: { version?: string; [key: string]: unknown }
+  error?: string
+  [key: string]: unknown
+}
+
+/** 标签页右键菜单动作（主进程 → 前端） */
+export interface TabMenuActionPayload {
+  action: string
+  tabId?: string
+  [key: string]: unknown
+}
+
 export interface ElectronAPI {
   platform: string
   versions: {
@@ -50,10 +71,10 @@ export interface ElectronAPI {
   }
 
   // 窗口管理（新 API - 浏览器自动化窗口）
-  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any; error?: string }>
+  createBrowserWindow: (url?: string, metadata?: Record<string, unknown>) => Promise<{ success: boolean; window?: BrowserWindowHandle; error?: string }>
   activateBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   closeBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
-  getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
+  getBrowserWindows: () => Promise<{ success: boolean; windows?: BrowserWindowHandle[] }>
 
   // 浏览器窗口后台/前台模式控制
   hideBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
@@ -62,11 +83,11 @@ export interface ElectronAPI {
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
 
   // Webview 生命周期事件（主进程 → 前端）
-  onCreateWebview?: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => void
-  onDestroyWebview?: (callback: (event: any, data: { windowId: string }) => void) => void
-  onSetWebviewVisibility?: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => void
-  onSetWebviewRenderable?: (callback: (event: any, data: { windowId: string; renderable: boolean }) => void) => void
-  onWindowFaviconUpdated?: (callback: (event: any, data: { windowId: string; favicon: string }) => void) => void
+  onCreateWebview?: (callback: (event: unknown, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: Record<string, unknown> }) => void) => void
+  onDestroyWebview?: (callback: (event: unknown, data: { windowId: string }) => void) => void
+  onSetWebviewVisibility?: (callback: (event: unknown, data: { windowId: string; visible: boolean }) => void) => void
+  onSetWebviewRenderable?: (callback: (event: unknown, data: { windowId: string; renderable: boolean }) => void) => void
+  onWindowFaviconUpdated?: (callback: (event: unknown, data: { windowId: string; favicon: string }) => void) => void
 
   // 清空所有浏览器自动化 session 数据
   clearBrowserData: () => Promise<{ success: boolean; error?: string }>
@@ -85,11 +106,11 @@ export interface ElectronAPI {
 
   // 右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
-  onTabMenuAction: (callback: (event: any, data: any) => void) => void
+  onTabMenuAction: (callback: (event: unknown, data: TabMenuActionPayload) => void) => void
 
   // 自动更新相关
-  checkForUpdates: () => Promise<{ success: boolean; data?: any; error?: string }>
-  onUpdateStatus: (callback: (status: any) => void) => void
+  checkForUpdates: () => Promise<{ success: boolean; data?: unknown; error?: string }>
+  onUpdateStatus: (callback: (status: UpdateStatusPayload) => void) => void
 
   // 打开外部链接
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
