@@ -6,7 +6,7 @@
         <span v-for="(delay, i) in DOT_DELAYS" :key="i" class="ts-dot" :style="{ animationDelay: `${delay}s` }" />
       </span>
     </span>
-    <Transition name="ts-fade" mode="out-in">
+    <Transition v-if="props.showText" name="ts-fade" mode="out-in">
       <span :key="displayText" class="ts-text">{{ displayText }}</span>
     </Transition>
     <span v-if="props.durationText" class="ts-duration">· {{ props.durationText }}</span>
@@ -22,9 +22,12 @@ const props = withDefaults(defineProps<{
   durationText?: string | null;
   /** 文案轮播间隔（ms） */
   cycleInterval?: number;
+  /** 是否显示轮播文案（侧边栏等窄场景只要点阵） */
+  showText?: boolean;
 }>(), {
   durationText: "",
   cycleInterval: 10000,
+  showText: true,
 });
 
 const { t, tm } = useI18n();
@@ -45,6 +48,7 @@ const displayText = computed(() => pool.value[index.value] ?? t("chat.turn.worki
 let cycleTimer: number | null = null;
 
 onMounted(() => {
+  if (!props.showText) return;
   const len = pool.value.length;
   index.value = len > 0 ? Math.floor(Math.random() * len) : 0;
   if (len < 2) return;
