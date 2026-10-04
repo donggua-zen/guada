@@ -484,10 +484,11 @@ async function createBrowser(): Promise<void> {
       sessionId: props.sessionId,
       createdBy: props.sessionId,
     });
-    if (result.success && result.window?.windowId) {
+    const windowId = result.window?.windowId;
+    if (result.success && windowId) {
       layoutStore.setWorkspaceVisible(true);
       nextTick(() => {
-        tabStore.selectTab(`browser:${result.window.windowId}`);
+        tabStore.selectTab(`browser:${windowId}`);
       });
     }
   } catch (e) {

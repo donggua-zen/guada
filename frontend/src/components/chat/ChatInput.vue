@@ -154,6 +154,7 @@ import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { FileRefType } from '@/types/stream/content-block.types';
+import type { SkillCommand } from '@/types/skills';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -260,7 +261,7 @@ const editor = ref<Editor>();
 const commandPickerVisible = ref(false);
 const pickerQuery = ref('');
 const selectedIndex = ref(0);
-const commandsCache = reactive<{ slash: any[]; mention: any[] }>({
+const commandsCache = reactive<{ slash: SkillCommand[]; mention: SkillCommand[] }>({
   slash: [],
   mention: [],
 });
@@ -1348,7 +1349,7 @@ const handlePickerKeydown = (e: KeyboardEvent) => {
   }
 };
 
-const selectCommand = (item: any) => {
+const selectCommand = (item: SkillCommand) => {
   if (!editor.value) return;
 
   const { state } = editor.value;
