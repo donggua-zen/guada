@@ -44,6 +44,7 @@
                 <!-- 目录树显隐开关（每个文件标签独立记忆，样式与 Git 审阅面板一致） -->
                 <GdTooltip :content="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
                     placement="bottom">
+                    <!-- eslint-disable vue/no-mutating-props -- tab 对象即标签缓存实体，属性写入是本面板与缓存同步的既定模式 -->
                     <button class="preview-tool-btn" :class="{ 'preview-tool-btn--active': treeVisible }"
                         :title="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
                         @click="props.tab.treeVisible = !treeVisible">
@@ -51,6 +52,7 @@
                             <TextboxAlignTopRotate9020Regular />
                         </el-icon>
                     </button>
+                    <!-- eslint-enable vue/no-mutating-props -->
                 </GdTooltip>
             </div>
         </div>

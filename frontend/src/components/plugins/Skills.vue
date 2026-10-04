@@ -155,8 +155,8 @@
                     </p>
 
                     <div class="flex items-center justify-between gap-2 mt-3">
-                        <div class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
-                            <el-tag v-if="skill.labels && skill.labels.length > 0" v-for="label in skill.labels"
+                        <div v-if="skill.labels && skill.labels.length > 0" class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+                            <el-tag v-for="label in skill.labels"
                                 :key="label" size="small" effect="light">
                                 {{ label }}
                             </el-tag>

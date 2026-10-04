@@ -15,7 +15,7 @@
 
         <template v-if="type === 'image'">
             <div class="image-preview w-15 h-15 rounded-lg overflow-hidden">
-                <img :src="previewUrl" class="w-full h-full object-cover"></img>
+                <img :src="previewUrl" class="w-full h-full object-cover" />
             </div>
         </template>
         <template v-else>
