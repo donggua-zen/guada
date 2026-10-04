@@ -18,6 +18,7 @@
  */
 
 import type { StreamChunk, StreamUsage } from "./stream-chunk.types";
+import type { ContentBlock } from "./content-block.types";
 
 // ==================== 回合级事件 ====================
 
@@ -46,6 +47,11 @@ export interface TurnEndEvent {
     usedTokens: number;
     effectiveContextWindow: number;
   };
+  /**
+   * 回合模型名：live 广播不带此字段；由领域事件 turn/finish 映射而来的 turn_end 会带上
+   * （折叠器统一按可选字段读取）。
+   */
+  modelName?: string;
 }
 
 /** 回合删除（重答）：从视图直接移除该回合 */
@@ -56,12 +62,29 @@ export interface TurnDeleteEvent {
 
 // ==================== 消息级事件 ====================
 
+/**
+ * 后端三层 Message 的线上镜像（user_message 广播载荷）。
+ * 与 types/message.ts 的展示型 Message 不同层：content 是 ContentBlock[]（后端块协议）。
+ */
+export interface WireMessage {
+  id: string;
+  /** 与前端 MessageRole 同域：system 消息不进流广播 */
+  role: "user" | "assistant" | "tool" | "event";
+  kind?: "user" | "model";
+  /** 消息来源（判断"是不是人说的话"的单一真相） */
+  source?: { kind: string; [key: string]: unknown };
+  metadata: Record<string, any>;
+  content: ContentBlock[];
+  /** Unix 毫秒时间戳（replayer 从事件 time 还原） */
+  createdAt?: number;
+}
+
 /** 用户消息入库广播（携带三层 userMessage 对象） */
 export interface UserMessageEvent {
   type: "user_message";
   messageId?: string;
   turnId?: string;
-  userMessage: any;
+  userMessage: WireMessage;
 }
 
 /** LLM 流重试信号（引擎级，非模型输出）——轮次级瞬态，前端挂 turn.state.retry（不落库） */

@@ -19,14 +19,20 @@ export interface StreamUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  cachedTokens?: {
-    /** 从缓存读取的 token 数（缓存命中） */
-    read?: number;
-    /** 写入缓存的 token 数（首次创建缓存，Anthropic 特有） */
-    written?: number;
-    /** 缓存未命中的 token 数（DeepSeek 特有） */
-    missed?: number;
-  };
+  /**
+   * 缓存 token 明细：live SSE 为对象形态（read/written/missed）；
+   * 领域事件 turn/finish 落库的是单个数值，折叠映射时按 number 透传。
+   */
+  cachedTokens?:
+    | {
+        /** 从缓存读取的 token 数（缓存命中） */
+        read?: number;
+        /** 写入缓存的 token 数（首次创建缓存，Anthropic 特有） */
+        written?: number;
+        /** 缓存未命中的 token 数（DeepSeek 特有） */
+        missed?: number;
+      }
+    | number;
 }
 
 /**
