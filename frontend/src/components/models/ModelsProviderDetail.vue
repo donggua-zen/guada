@@ -1066,6 +1066,7 @@ const handleSaveModel = async () => {
 
     showEditModal.value = false
     emit('changed')
+    return true
   } catch (errors) {
     // 验证失败，不关闭模态框
     return false
@@ -1073,7 +1074,7 @@ const handleSaveModel = async () => {
 }
 
 // 删除模型
-const handleDeleteClick = async (model: any) => {
+const handleDeleteClick = async (model: Model) => {
   const result = await confirm(t('settings.providerDetail.deleteModel'), t('settings.providerDetail.deleteModelConfirm'))
   if (!result) return
   await apiService.deleteModel(model.id)
@@ -1082,7 +1083,7 @@ const handleDeleteClick = async (model: any) => {
 }
 
 // 切换模型启用状态
-const handleToggleModelActive = async (model: any) => {
+const handleToggleModelActive = async (model: Model) => {
   try {
     const result = await apiService.toggleModelActive(model.id)
     model.isActive = result.isActive

@@ -194,6 +194,7 @@ import { useSessionChat } from '@/composables/useSessionChat'
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
+import { getErrorMessage } from '@/utils/errorMessage'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -912,7 +913,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   } catch (error) {
     if (token !== sessionChangeToken) return;
     console.error('加载会话失败:', error);
-    notify.error('加载会话失败', error.message);
+    notify.error('加载会话失败', getErrorMessage(error));
   } finally {
     if (token !== sessionChangeToken) return;
     isLoading.value = false;
