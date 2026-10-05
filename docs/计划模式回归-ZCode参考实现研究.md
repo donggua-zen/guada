@@ -451,6 +451,7 @@ function resolveApprovedPlanFilePath(input: { sessionId; workspaceRoot }): strin
 
 - **审批通过时原子写入**（`writeApprovedPlanFile`，`atomic:true, createParents:true`），且**在状态翻转之前**写（`handlers/plan-mode.ts:210-242`）。写失败则整个退出被中止；计划为空抛 `"ExitPlanMode plan cannot be empty"`。
 - **路径是推导的，不是存储的**——没有 `planFilePath` 状态字段，`<workspaceRoot>/.zcode/plans/plan-<sessionId>.md` 由 sessionId 决定。少一个状态就少一处不一致。
+  （口径澄清：ZCode 的落盘文件是**每会话一份**，只服务"压缩后重注入"；它的**计划历史/列表**来自转录（终态 ExitPlanMode 行的目录，见 §8）与文件无关。本项目 v2 在此基础上把文件也改成**每计划一份**（toolCallId 命名）以便文件树里能看到历史，属于超出 ZCode 的选择——见《计划模式实施方案》§13。）
 - **压缩后重新注入**（`compact-active.ts:484-501`）：每次 compaction 完成后读回该文件，构造 `plan_file_reference` system reminder 条目，并**持久化为真实消息**（`compact-persistence.ts:367-377`），因此重启后依然存在：
 
 ```
@@ -485,6 +486,7 @@ If this plan is relevant to the current work and not already complete, continue 
 
 - `EnterPlanMode` 在回合渲染里被**完全隐藏**（`conversationTurnRenderUnits.ts:107-117`），`ExitPlanMode` 则明确**不被收进回合尾部**（`:273-277`）——避免"计划卡片被折叠进 work 流"。
 - `ExitPlanMode` 被刻意排除在"聊天加载中阻塞交互"之外（`chatLoadingVisibility.ts:7-21`），即审批弹窗不阻塞会话加载指示。
+- **计划正文随流式参数实时渲染**：`plan` 被加入半截 JSON 预览键（`packages/shared/src/streaming-tool-input-preview.ts` 注释原话："计划卡片与侧边详情才能从**首个流式 chunk** 开始更新，而不是等 `input_end` 才突然出现"）。后端把该字段加进预览键，前端在工具卡片里增量渲染——这是"长计划不必等写完"的完整答案。
 
 ---
 
