@@ -32,7 +32,7 @@ export interface ToolCall {
 
 /** 定制渲染器配置（kind → 前端 tool-renderers 通用组件） */
 export interface ToolRendererConfig {
-  kind: "diff" | "content" | "terminal";
+  kind: "diff" | "content" | "terminal" | "plan";
   /** 语义字段 → arguments 字段名映射 */
   fields: {
     file?: string;
@@ -226,6 +226,8 @@ const DEFAULT_RENDERER_FIELDS: Record<
   diff: { file: "file_path", oldValue: "old_text", newValue: "new_text" },
   content: { file: "file_path", content: "content" },
   terminal: { command: "command" },
+  // ExitPlanMode 的计划正文：流式期间半截 JSON 也能提取，首段即渲染（对齐 ZCode）
+  plan: { content: "plan" },
 };
 
 /**
@@ -240,6 +242,8 @@ const BUILTIN_RENDERERS: Record<string, ToolRendererConfig> = {
   remote_write: { kind: "content", fields: DEFAULT_RENDERER_FIELDS.content },
   run_command: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
   remote_bash: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
+  // 计划提交：正文边流边渲染（不必等整份计划输出完才可见）
+  ExitPlanMode: { kind: "plan", fields: DEFAULT_RENDERER_FIELDS.plan },
 };
 
 /** 校验并归一化后端下发的 renderer 声明（fields 缺省补默认映射） */
@@ -248,7 +252,7 @@ function normalizeRenderer(
 ): ToolRendererConfig | null {
   if (!decl || typeof decl !== "object") return null;
   const kind: ToolRendererConfig["kind"] | undefined = decl.kind;
-  if (kind !== "diff" && kind !== "content" && kind !== "terminal") {
+  if (kind !== "diff" && kind !== "content" && kind !== "terminal" && kind !== "plan") {
     return null;
   }
   return {
@@ -278,6 +282,7 @@ const RENDERER_REQUIRED_KEYS: Record<
   diff: ["oldValue", "newValue"],
   content: ["content"],
   terminal: ["command"],
+  plan: ["content"],
 };
 
 /**

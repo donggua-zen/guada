@@ -59,7 +59,7 @@
         <!-- 定制渲染：按 renderer 声明（后端 display.renderer / 内置映射）优先展示参数 -->
         <ToolCustomView v-if="rendererInfos[toolIndex]" :info="rendererInfos[toolIndex]!"
           :response="getToolResponses(toolIndex)" :is-error="tool.outcome === 'error'"
-          :executing="isToolExecuting(tool, toolIndex)" />
+          :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId" />
 
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
@@ -154,25 +154,41 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 };
 
 // ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
+// 例外：计划行（plan renderer）默认展开——正文就是内容本身，
+// 模型还在写计划时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
 
 const expandedIndexes = ref<Set<number>>(new Set());
+const collapsedIndexes = ref<Set<number>>(new Set());
 
 watch(() => props.autoExpand, (auto) => {
   expandedIndexes.value = auto
     ? new Set(props.toolCalls.map((_, i) => i))
     : new Set();
+  collapsedIndexes.value = new Set();
 }, { immediate: true });
 
-const isExpanded = (index: number): boolean => expandedIndexes.value.has(index);
+/** 默认展开的行（计划正文） */
+const isDefaultExpandedRow = (index: number): boolean =>
+  rendererInfos.value[index]?.kind === 'plan';
+
+const isExpanded = (index: number): boolean => {
+  if (expandedIndexes.value.has(index)) return true;
+  return isDefaultExpandedRow(index) && !collapsedIndexes.value.has(index);
+};
 
 const toggleExpand = (index: number): void => {
-  const next = new Set(expandedIndexes.value);
-  if (next.has(index)) {
-    next.delete(index);
+  const nowExpanded = isExpanded(index);
+  const nextExpanded = new Set(expandedIndexes.value);
+  const nextCollapsed = new Set(collapsedIndexes.value);
+  if (nowExpanded) {
+    nextExpanded.delete(index);
+    nextCollapsed.add(index);
   } else {
-    next.add(index);
+    nextExpanded.add(index);
+    nextCollapsed.delete(index);
   }
-  expandedIndexes.value = next;
+  expandedIndexes.value = nextExpanded;
+  collapsedIndexes.value = nextCollapsed;
 };
 
 /** 结果直接取后端返回的 toolResponses[index]（无懒加载） */

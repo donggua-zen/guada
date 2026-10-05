@@ -20,6 +20,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
+import { PlanHistoryService } from "./plan-history.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { CreateSessionDto } from "./dto/create-session.dto";
@@ -44,6 +45,7 @@ export class SessionsController {
     private readonly workspaceService: WorkspaceService,
     private readonly eventBus: EventBusService,
     private readonly jwtService: JwtService,
+    private readonly planHistoryService: PlanHistoryService,
   ) { }
 
   @Get("sessions")
@@ -261,6 +263,24 @@ export class SessionsController {
       }
       throw e;
     }
+  }
+
+  /**
+   * 会话计划历史（计划模式产物）。
+   *
+   * 列表来自转录（计划身份 = ExitPlanMode 的 toolCallId），每项含状态（待审/已批准/已拒绝）
+   * 与正文；item.path 为已落盘文件的工作区相对路径（未落盘为 null）——前端打开文件走
+   * workspace/file 接口，绝对路径会被路径牢笼拒绝，故只回传相对路径。
+   */
+  @Get("sessions/:id/plans")
+  async getSessionPlans(@Param("id") id: string) {
+    const session = await this.sessionService.getSessionById(id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
+    return { plans: await this.planHistoryService.listPlans(id, workspacePath) };
   }
 
   @Get("sessions/:id/workspace/tree")

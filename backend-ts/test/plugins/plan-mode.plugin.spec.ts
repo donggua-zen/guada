@@ -87,7 +87,7 @@ describe("PlanModePlugin", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content).toContain("Not in plan mode");
-    const found = await planFile.readApprovedPlan({
+    const found = await planFile.readLatestPlan({
       workspacePath: workspaceDir,
       sessionId: session.sessionId,
     });
@@ -102,14 +102,15 @@ describe("PlanModePlugin", () => {
 
     expect(result.isError).toBeUndefined();
 
-    // 落盘：路径由 workspace + sessionId 推导
-    const found = await planFile.readApprovedPlan({
+    // 落盘：路径由 workspace + sessionId + planId(toolCallId) 推导（每份计划一个文件）
+    const found = await planFile.readPlan({
       workspacePath: workspaceDir,
       sessionId: session.sessionId,
+      planId: "tc1",
     });
     expect(found?.content).toContain("步骤一");
     expect(found?.path).toBe(
-      path.join(workspaceDir, ".guada", "plans", `plan-${session.sessionId}.md`),
+      path.join(workspaceDir, ".guada", "plans", session.sessionId, "tc1.md"),
     );
 
     // 状态翻转 + 持久化调用
@@ -190,6 +191,7 @@ describe("PlanModePlugin", () => {
       await planFile.writeApprovedPlan({
         workspacePath: workspaceDir,
         sessionId: "s-plan-1",
+        planId: "tc-compact-1",
         plan: "# 已批准计划",
       });
       const injectUserPrompt = jest.fn().mockResolvedValue(undefined);

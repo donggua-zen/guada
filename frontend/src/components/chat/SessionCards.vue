@@ -4,7 +4,9 @@
        共用一张卡：多问题分页（单选点选自动翻页、多选勾选后"下一步"）、
        选项按钮 + 自定义回复（提交后按 requestId 凭证回传匹配等待者，无超时）。 -->
   <div class="session-cards flex flex-col gap-2">
-    <Transition name="card-slide">
+    <!-- :duration 显式给时长：transitionend 不可靠时（后台标签页 rAF 冻结、元素曾处于
+         不可见容器等）Vue 也会按定时器移除节点，避免卡片卡在过渡里以 opacity:0 残留并占住布局 -->
+    <Transition name="card-slide" :duration="200">
       <div v-if="askCtx"
         class="ask-card bg-(--gd-color-surface) border border-(--gd-color-surface-border) rounded-(--gd-size-dialog-rounded-radius) px-4 py-3 shadow-sm">
         <!-- 头部：kind 分支标题 + 卡片标题 -->
@@ -33,7 +35,23 @@
             <span class="text-sm text-gray-800 dark:text-[#e5e7eb]">{{ question.question }}</span>
             <span v-if="total > 1" class="shrink-0 text-xs text-gray-400">{{ pageIdx + 1 }}/{{ total }}</span>
           </div>
-          <div v-if="question.detail" class="mt-1 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-all">
+          <!-- 计划审批（ExitPlanMode）：md 渲染 + 限高滚动（对齐 ZCode 卡片裁切），
+               完整文档经「查看完整计划」在右侧工作区面板打开 -->
+          <div v-if="question.detail && isPlanApproval" class="plan-detail mt-1">
+            <div class="plan-detail-scroll-wrap">
+              <div class="plan-detail-scroll">
+                <MarkdownContent :content="question.detail" />
+              </div>
+              <div class="plan-detail-mask"></div>
+            </div>
+            <div class="plan-detail-footer">
+              <button class="plan-open-btn" @click="openPlanDoc">
+                <el-icon :size="13"><Notepad20Regular /></el-icon>
+                <span>{{ t('chat.plan.viewFullDoc') }}</span>
+              </button>
+            </div>
+          </div>
+          <div v-else-if="question.detail" class="mt-1 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-all">
             {{ question.detail }}
           </div>
 
@@ -83,11 +101,14 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch } from "vue";
-import { ElButton, ElInput } from "element-plus";
+import { ElButton, ElIcon, ElInput } from "element-plus";
+import { Notepad20Regular } from "@vicons/fluent";
 import { useI18n } from "vue-i18n";
 import { apiService } from "@/services/ApiService";
 import { useSessionStore } from "@/stores/session";
 import { usePopup } from "../../composables/usePopup";
+import MarkdownContent from "@/components/ui/MarkdownContent.vue";
+import { openSessionPlanPanel } from "@/utils/sessionPlan";
 
 const props = defineProps<{
   sessionId?: string;
@@ -141,6 +162,17 @@ const kindBadgeClass = computed(() =>
 
 function letter(i: number): string {
   return String.fromCharCode(65 + i);
+}
+
+/** 计划审批（ExitPlanMode 的 approval）：正文走 md 渲染 + 完整文档入口 */
+const isPlanApproval = computed(
+  () => askCtx.value?.kind === "approval" && askCtx.value?.toolName === "ExitPlanMode",
+);
+
+/** 打开完整计划：计划面板（列表 + 详情）在右侧工作区打开，默认展示最近一份（即当前审批中的这份） */
+async function openPlanDoc() {
+  if (!props.sessionId) return;
+  await openSessionPlanPanel(props.sessionId);
 }
 
 function isSelected(label: string): boolean {
@@ -256,5 +288,59 @@ async function submit() {
 .card-slide-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+/* ── 计划审批：正文限高滚动 + 底部渐隐（ZCode 卡片同款裁切）+ 完整文档入口 ── */
+
+.plan-detail {
+  position: relative;
+  border: 1px solid var(--gd-color-surface-border, rgba(0, 0, 0, 0.08));
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.plan-detail-scroll-wrap {
+  position: relative;
+}
+
+.plan-detail-scroll {
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+}
+
+/* 底部渐隐：提示"还有更多"，盖在滚动区底缘之上（pointer-events 关闭不挡滚动） */
+.plan-detail-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.5rem;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--gd-color-surface));
+}
+
+.plan-detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--gd-color-surface-border, rgba(0, 0, 0, 0.08));
+}
+
+.plan-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--gd-color-text-gray);
+  transition: color 0.15s ease;
+}
+
+.plan-open-btn:hover {
+  color: var(--gd-color-text);
 }
 </style>

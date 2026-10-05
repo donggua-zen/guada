@@ -304,6 +304,23 @@
     noDiff: 'This file type has no line-by-line diff preview',
   },
 
+  // ── Plan history (plan-mode artifact: approval-card entry + workspace plan panel) ──
+  plan: {
+    title: 'Plans',
+    empty: 'No plans yet',
+    selectHint: 'Select a plan to view details',
+    openFile: 'Open as file',
+    refresh: 'Refresh',
+    refreshFailed: 'Failed to refresh plans',
+    viewFullDoc: 'View full plan',
+    streamingHint: 'Writing the plan…',
+    status: {
+      pending: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+    },
+  },
+
   // ── 工作区 ──
   workspace: {
     back: 'Back',
@@ -358,6 +375,7 @@
     noPreviewFile: 'No preview file',
     newBrowser: 'New Browser',
     newFile: 'File',
+    planTab: 'Plans',
     gitTab: 'Git Review',
     newTabHint: 'Pick a file from the right tree to start previewing',
     saveSuccess: 'Saved',

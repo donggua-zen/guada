@@ -238,6 +238,18 @@ export const useTabStore = defineStore('tab', () => {
         selectTab(id)
     }
 
+    /**
+     * 打开计划面板标签（每会话唯一）：列出该会话的全部计划（转录构建，含待审/已批/被拒），
+     * 点击条目查看正文。入口常驻——有无计划都可进入（空态提示）。
+     */
+    function openPlanTab(sessionId: string): void {
+        const id = `plan:${sessionId}`
+        if (!tabs.value.some(t => t.key === id)) {
+            tabs.value.push({ type: 'plan', key: id })
+        }
+        selectTab(id)
+    }
+
     // ── 标签选中（幂等，不加载内容） ──
 
     function selectTab(key: string | null): void {
@@ -391,6 +403,7 @@ export const useTabStore = defineStore('tab', () => {
         openProcessLogTab,
         openSubAgentTab,
         openWorkflowTab,
+        openPlanTab,
         openDiffTab,
         getDiffEntry,
         selectTab,

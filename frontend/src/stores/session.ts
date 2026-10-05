@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -473,6 +473,28 @@ export const useSessionStore = defineStore('session', () => {
         }
     }
 
+    // ─── 计划历史缓存（计划模式产物：转录构建的列表，含状态）───
+
+    /** 读取缓存的计划列表（未刷新过为 undefined） */
+    const sessionPlans = (sessionId: string): SessionPlanItem[] | undefined => {
+        return getSessionState(sessionId).plans
+    }
+
+    /** 写入计划列表缓存（拉取统一走 utils/sessionPlan.refreshSessionPlans，store 保持纯状态） */
+    const setSessionPlans = (sessionId: string, plans: SessionPlanItem[] | undefined): void => {
+        getSessionState(sessionId).plans = plans
+    }
+
+    /**
+     * 计划列表缓存刷新（fire-and-forget，供 streamProjector 的 turn_end / plan_mode_changed 钩子调用）。
+     * 动态 import 拉取实现：store 不静态依赖服务层（后者反向依赖本 store）。
+     */
+    const refreshPlans = (sessionId: string): void => {
+        void import('@/utils/sessionPlan')
+            .then((m) => m.refreshSessionPlans(sessionId))
+            .catch(() => { /* 缓存刷新失败静默：面板/入口按未刷新处理 */ })
+    }
+
     /**
      * 获取输入消息
      * @param sessionId - 会话 ID
@@ -628,6 +650,9 @@ export const useSessionStore = defineStore('session', () => {
         sessionPlanEnabled,
         setSessionPlanEnabled,
         applyRemotePlanEnabled,
+        sessionPlans,
+        setSessionPlans,
+        refreshPlans,
         enqueueMessage,
         dequeueMessage,
         peekQueue,

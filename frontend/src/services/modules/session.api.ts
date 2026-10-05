@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, CreateSessionRequest, UpdateSessionRequest } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem } from "@/types/session";
 
 export interface SessionApi {
   createSession(data: CreateSessionRequest): Promise<Session>;
@@ -7,6 +7,8 @@ export interface SessionApi {
   branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<Session>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
+  /** 计划历史（转录构建：身份 = ExitPlanMode toolCallId，含状态与正文；「计划」面板用） */
+  fetchSessionPlans(sessionId: string): Promise<{ plans: SessionPlanItem[] }>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
   fetchSidebarSessions(limit?: number): Promise<SidebarSessionsResponse>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
@@ -338,6 +340,12 @@ export const sessionApi: SessionApi = {
 
   async fetchSession(this: ApiContext, sessionId: string) {
     return await this._request(`/sessions/${sessionId}`);
+  },
+
+  async fetchSessionPlans(this: ApiContext, sessionId: string) {
+    return await this._request<{ plans: SessionPlanItem[] }>(
+      `/sessions/${sessionId}/plans`,
+    );
   },
 
   async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean) {
