@@ -195,7 +195,7 @@ export interface MessageApi {
   updateMessage(sessionId: string, messageId: string, data: Record<string, unknown>): Promise<Message>;
   /** 后端暂无此路由（web 搜索由插件侧实现），保留占位待接 */
   webSearch(messageId: string): Promise<unknown>;
-  /** 统一交互应答（审批/询问/迭代暂停继续共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
+  /** 统一交互应答（审批/询问共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
    * 唤醒后端原地阻塞的工具/引擎，无超时） */
   respond(
     sessionId: string,

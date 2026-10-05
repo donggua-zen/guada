@@ -21,6 +21,7 @@ import {
   SEGMENT_MAX_BYTES,
   AskAskedData,
   AskAnsweredData,
+  SessionModeChangedData,
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
@@ -1075,6 +1076,33 @@ export class JsonlMessageService implements IMessageStore {
         requestId: data.requestId,
         ...data.answers === undefined ? {} : { answers: data.answers },
         ...data.cancelled === undefined ? {} : { cancelled: data.cancelled },
+      },
+    });
+  }
+
+  /** 追加会话模式变更事件（session/mode_changed，审计；事实源仍是 session.settings） */
+  async appendSessionModeChanged(
+    sessionId: string,
+    data: SessionModeChangedData,
+  ): Promise<void> {
+    return this.runExclusive(sessionId, () => this.appendSessionModeChangedInternal(sessionId, data));
+  }
+
+  private async appendSessionModeChangedInternal(
+    sessionId: string,
+    data: SessionModeChangedData,
+  ): Promise<void> {
+    const seq = await this.getNextSeq(sessionId);
+    await this.append(sessionId, {
+      type: 'session/mode_changed',
+      seq,
+      time: Date.now(),
+      data: {
+        planEnabled: data.planEnabled,
+        previousPlanEnabled: data.previousPlanEnabled,
+        sandboxMode: data.sandboxMode,
+        source: data.source,
+        ...(data.toolCallId === undefined ? {} : { toolCallId: data.toolCallId }),
       },
     });
   }

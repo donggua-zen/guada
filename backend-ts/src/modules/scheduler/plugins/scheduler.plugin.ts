@@ -155,6 +155,7 @@ export class SchedulerPlugin extends PluginBase {
         aggregate: { executing: "%scheduler_list_tasks.aggregate.executing%", completed: "%scheduler_list_tasks.aggregate.completed%" },
         icon: "time",
       },
+      readOnly: true,
     });
 
     schedKit.registerTool({

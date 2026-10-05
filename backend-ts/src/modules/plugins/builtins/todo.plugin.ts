@@ -176,6 +176,8 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
         argsKey: "action",
         icon: "generic",
       },
+      allowedInPlanMode: true,
+      // 计划阶段维护待办有助于计划成型；只写会话状态，不触碰工作区
     });
 
     // ── 待办状态提醒：由 MEMORY_COMPACTED 处理器在压缩后落库注入隐藏消息（见 handleCompacted）──

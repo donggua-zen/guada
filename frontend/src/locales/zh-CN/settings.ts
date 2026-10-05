@@ -41,8 +41,6 @@ export default {
     loadFailed: '获取通用设置失败',
     updated: '通用设置已更新',
     agent: 'Agent 设置',
-    maxToolIterations: '最大工具调用轮次',
-    maxToolIterationsDesc: 'AI 在单次对话中连续调用工具的最大轮次。达到上限后将暂停并等待用户确认。默认 100。',
     llmRequestTimeout: '请求超时',
     llmRequestTimeoutDesc: 'LLM 请求的总体硬截止时间（含流式传输）。超时后请求将被中止。默认 600 秒。',
     llmIdleTimeout: '空闲超时',

@@ -120,6 +120,7 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "url",
             icon: "browser",
           },
+          allowedInPlanMode: true,
         });
 
         // ── 2. 标签管理 ──
@@ -170,6 +171,7 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "action",
             icon: "browser",
           },
+          allowedInPlanMode: true,
         });
 
         // ── 3. 页面快照 ──
@@ -210,6 +212,7 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "type",
             icon: "browser",
           },
+          readOnly: true,
         });
 
         // ── 4. 交互操作 ──
@@ -320,6 +323,7 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "action",
             icon: "browser",
           },
+          allowedInPlanMode: true,
         });
 
         // ── 5. 执行 JavaScript ──
@@ -374,6 +378,8 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "code",
             icon: "browser",
           },
+          allowedInPlanMode: true,
+          // 浏览器是临时调研环境，不属于用户工作区/系统资产，计划阶段放行
         });
 
         // ── 6. 导航操作 ──
@@ -424,6 +430,7 @@ export class BrowserPlugin extends PluginBase {
             argsKey: "action",
             icon: "browser",
           },
+          allowedInPlanMode: true,
         });
 
         // ── 7. 控制台日志 ──
@@ -455,6 +462,7 @@ export class BrowserPlugin extends PluginBase {
             },
             icon: "browser",
           },
+          readOnly: true,
         });
 
         // ── 8. 截图 ──
@@ -529,6 +537,7 @@ export class BrowserPlugin extends PluginBase {
             },
             icon: "browser",
           },
+          readOnly: true,
         });
 
         // ── 使用说明 ──

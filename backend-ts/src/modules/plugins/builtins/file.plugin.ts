@@ -172,6 +172,7 @@ export class FilePlugin extends PluginBase {
         icon: "read",
       },
       dangerLevel: "safe",
+      readOnly: true,
     });
 
     fileKit.registerTool({
@@ -309,6 +310,7 @@ export class FilePlugin extends PluginBase {
         icon: "search",
       },
       dangerLevel: "safe",
+      readOnly: true,
     });
 
     fileKit.registerTool({
@@ -622,6 +624,7 @@ export class FilePlugin extends PluginBase {
         icon: "search",
       },
       dangerLevel: "safe",
+      readOnly: true,
     });
 
     fileKit.registerPrompt({

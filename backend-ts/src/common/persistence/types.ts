@@ -36,7 +36,8 @@ export type EventType =
   | 'command/done'
   | 'message/meta'
   | 'ask/asked'
-  | 'ask/answered';
+  | 'ask/answered'
+  | 'session/mode_changed';
 
 // ─── 基础事件 ───
 
@@ -251,13 +252,13 @@ export interface CommandDoneData {
   metadata?: Record<string, unknown> | null;
 }
 
-// ─── 统一交互（审批/询问/迭代暂停共用，对齐 DSH user-questions；无超时）───
+// ─── 统一交互（审批/询问共用，对齐 DSH user-questions；无超时）───
 
 /** 交互请求事件：工具/引擎发起 ask（挂起等待用户应答） */
 export interface AskAskedData {
   /** 临时凭证 id（uuid，发起时生成；前端应答回传匹配等待者） */
   requestId: string;
-  /** 卡片分类：approval=审批（ask 特例）/ ask=询问 / continue=迭代暂停继续 */
+  /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
   kind: import("../types/ask.types").AskKind;
   title?: string;
   questions: import("../types/ask.types").AskQuestion[];
@@ -268,6 +269,27 @@ export interface AskAnsweredData {
   requestId: string;
   answers?: import("../types/ask.types").AskAnswerItem[];
   cancelled?: boolean;
+}
+
+// ─── 会话模式变更（协作状态 + 安全档位快照，审计/还原用）───
+
+/**
+ * 会话模式变更事件：计划模式开关（协作状态）与安全档位的快照。
+ *
+ * 无状态透传（replayer 不折叠）——**事实源是 session.settings**，本事件只作审计与
+ * 切换历史；前端指示器由 stream 帧驱动，不依赖本事件重放。
+ * 携带 sandboxMode 是为了让后续把安全档位切换也升级为 log 事件时无需改结构。
+ */
+export interface SessionModeChangedData {
+  /** 计划模式（协作状态，正交于 sandboxMode） */
+  planEnabled: boolean;
+  previousPlanEnabled: boolean;
+  /** 变更时的安全档位快照（本事件不改变它，仅记录） */
+  sandboxMode: import("../services/sandbox-policy").SandboxMode;
+  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  source: 'user' | 'tool';
+  /** source='tool' 时的关联工具调用 id */
+  toolCallId?: string;
 }
 
 // ─── 回放产物（扁平消息 surface，对齐 DSH）───

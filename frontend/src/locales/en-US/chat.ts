@@ -21,6 +21,9 @@
     runModeReadOnly: 'Read-Only',
     runModeWorkspaceWrite: 'Workspace-Write',
     runModeFullAccess: 'Unrestricted Editing',
+    // Plan mode toggle (ChatInput.vue; collaboration state, orthogonal to sandbox mode)
+    planMode: 'Plan',
+    planModeTip: 'Plan mode: investigate read-only, propose a plan, implement only after you approve',
 
     // AttachmentPopover.vue
     uploadImage: 'Upload Image',
@@ -257,11 +260,10 @@
     branchFromHere: 'Branch From Here',
   },
 
-  // ── 统一交互卡（审批/询问/迭代暂停继续共用） ──
+  // ── 统一交互卡（审批/询问共用） ──
   ask: {
     approval: 'Approval required',
     input: 'Your input needed',
-    continue: 'Maximum tool call iterations reached',
     customReply: 'Type a custom reply',
     next: 'Next',
     submit: 'Submit',

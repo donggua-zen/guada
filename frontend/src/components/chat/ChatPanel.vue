@@ -73,7 +73,7 @@
                 </div>
               </Transition>
 
-              <!-- 会话级全局卡：审批卡 / 暂停卡（对齐 DSH：sessionId 唯一锚点，不挂回合） -->
+              <!-- 会话级全局卡：审批卡 / 询问卡（对齐 DSH：sessionId 唯一锚点，不挂回合） -->
               <SessionCards :session-id="currentSessionId || undefined" />
 
               <!-- 编辑模式提示条 -->
@@ -608,6 +608,11 @@ const chatInputConfig = computed(() => {
     knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || settings?.referencedKbs || [],
     workspacePath: currentSession.value?.workspacePath || null,
     sandboxMode: settings?.sandboxMode || 'workspace-write',
+    // 计划模式读 UI 投影（不是设置直读）：模型经 ExitPlanMode 退出时流帧只更新投影与会话对象，
+    // 由下方 watcher 与设置收敛，这里始终取当前生效值。
+    planEnabled: currentSessionId.value
+      ? sessionStore.sessionPlanEnabled(currentSessionId.value)
+      : false,
     attachments: settings?.attachments || {},
   };
 });
@@ -643,6 +648,7 @@ interface ChatInputConfigChange {
   knowledgeBaseIds?: string[]
   workspacePath?: string | null
   sandboxMode?: string
+  planEnabled?: boolean
   [key: string]: unknown
 }
 
@@ -683,6 +689,12 @@ const handleConfigChange = (config: ChatInputConfigChange) => {
     currentSession.value.settings.sandboxMode = config.sandboxMode;
   }
 
+  // 处理计划模式（协作状态）：设置是事实源，同时写投影让指示器立即生效
+  if (typeof config.planEnabled !== 'undefined') {
+    currentSession.value.settings.planEnabled = config.planEnabled;
+    sessionStore.setSessionPlanEnabled(currentSession.value.id, config.planEnabled);
+  }
+
   // 处理附加连接
   if (typeof config.attachments !== 'undefined') {
     currentSession.value.settings.attachments = config.attachments;
@@ -703,6 +715,20 @@ watch(() => props.session?.id || props.sessionId, async (newSessionId: string | 
   await handleSessionChange(newId, effectiveOldId);
   needScrollToBottom.value = true;
 }, { immediate: true });
+
+/**
+ * 计划模式 UI 投影：从会话设置（事实源）单向同步。
+ *
+ * 覆盖三个来源——会话切换/刷新加载、用户开关（写设置后回流）、模型经 ExitPlanMode 退出
+ * （流帧写设置后回流）。收敛成"设置 → 投影"一条方向，避免两处各写一半导致刷新后回退。
+ */
+watch(
+  () => [currentSessionId.value, currentSession.value?.settings?.planEnabled] as const,
+  ([id, enabled]) => {
+    if (id) sessionStore.setSessionPlanEnabled(id, enabled === true);
+  },
+  { immediate: true },
+);
 
 // 监听流式状态变化，在第一次对话完成后生成标题
 watch(() => isStreaming.value, async (newVal, oldVal) => {

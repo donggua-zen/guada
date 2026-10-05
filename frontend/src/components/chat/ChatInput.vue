@@ -83,6 +83,16 @@
             </button>
             <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
               :current-value="currentSandboxMode" @select="handleSandboxModeChange" />
+            <!-- 计划模式开关：只读调研 → 出方案待批；与安全档位正交（互不改写） -->
+            <GdTooltip :content="t('chat.input.planModeTip')" placement="top">
+              <button class="tool-btn" :class="{ 'plan-mode-active': planModeEnabled }" @click.stop="togglePlanMode">
+                <el-icon size="16">
+                  <Lightbulb24Regular :class="planModeEnabled ? 'text-amber-500' : 'text-gray-600'" />
+                </el-icon>
+                <span class="text-xs font-medium" :class="planModeEnabled ? 'text-amber-600' : ''">{{
+                  t('chat.input.planMode') }}</span>
+              </button>
+            </GdTooltip>
             <!-- <el-divider direction="vertical"></el-divider> -->
           </template>
 
@@ -177,7 +187,8 @@ import { extensionFromName, planAttachment, type AttachmentPlan } from '@/utils/
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
-  ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled
+  ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled,
+  Lightbulb24Regular
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
 
@@ -221,6 +232,8 @@ interface ChatConfig {
   maxTokensLimit?: number | null
   knowledgeBaseIds?: string[]
   sandboxMode?: string
+  /** 计划模式（协作状态，正交于 sandboxMode；开启后后端强制只读） */
+  planEnabled?: boolean
   attachments?: Record<string, string[]>
 }
 
@@ -530,6 +543,13 @@ const toggleSandboxModePopover = () => {
 
 const handleSandboxModeChange = (mode: string) => {
   emit('config-change', { sandboxMode: mode });
+};
+
+// 计划模式（协作状态）：单键开关，无弹层——只有一个布尔，不需要选择面板
+const planModeEnabled = computed(() => props.config?.planEnabled === true);
+
+const togglePlanMode = () => {
+  emit('config-change', { planEnabled: !planModeEnabled.value });
 };
 
 const thinkingEffortOptions = computed(() => {
@@ -1731,6 +1751,16 @@ defineExpose({ insertText, insertBadge });
 
 .tool-btn:active {
   background: var(--gd-color-sidebar-bg-active);
+}
+
+/* 计划模式激活态 - 琥珀色文字与图标（与自由编辑的红色警示区分：一个是协作状态，一个是风险档位） */
+.plan-mode-active {
+  color: #d97706 !important;
+  font-weight: 500;
+}
+
+.plan-mode-active:hover {
+  color: #d97706 !important;
 }
 
 /* 自由编辑（danger-full-access）按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */

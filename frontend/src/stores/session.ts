@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -435,7 +435,7 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).isCompressing = isCompressing
     }
 
-    // ─── 会话级统一交互卡（审批/询问/迭代暂停共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+    // ─── 会话级统一交互卡（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
 
     /** 读取会话级统一交互卡状态 */
     const sessionPendingAsk = (sessionId: string) => {
@@ -445,6 +445,32 @@ export const useSessionStore = defineStore('session', () => {
     /** 写入/清除会话级统一交互卡状态 */
     const setSessionPendingAsk = (sessionId: string, pendingAsk: SessionState['pendingAsk']): void => {
         getSessionState(sessionId).pendingAsk = pendingAsk
+    }
+
+    // ─── 计划模式（协作状态；UI 投影，事实源是会话设置）───
+
+    /** 读取会话的计划模式开关 */
+    const sessionPlanEnabled = (sessionId: string): boolean => {
+        return getSessionState(sessionId).planEnabled === true
+    }
+
+    /** 写入会话的计划模式开关（用户开关乐观写入） */
+    const setSessionPlanEnabled = (sessionId: string, enabled: boolean): void => {
+        getSessionState(sessionId).planEnabled = enabled
+    }
+
+    /**
+     * 模型发起的计划模式变更（plan_mode_changed 流帧）：同时更新 UI 投影与会话设置。
+     *
+     * 设置是事实源且后端已落库——这里必须一并更新，否则刷新后指示器会按旧设置回退。
+     */
+    const applyRemotePlanEnabled = (sessionId: string, enabled: boolean): void => {
+        getSessionState(sessionId).planEnabled = enabled
+        const session = sessionsMap.value.get(sessionId)
+        if (session) {
+            if (!session.settings) session.settings = {} as SessionSettings
+            session.settings.planEnabled = enabled
+        }
     }
 
     /**
@@ -599,6 +625,9 @@ export const useSessionStore = defineStore('session', () => {
         setSessionIsCompressing,
         sessionPendingAsk,
         setSessionPendingAsk,
+        sessionPlanEnabled,
+        setSessionPlanEnabled,
+        applyRemotePlanEnabled,
         enqueueMessage,
         dequeueMessage,
         peekQueue,

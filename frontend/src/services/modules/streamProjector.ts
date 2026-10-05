@@ -51,6 +51,8 @@ export interface ProjectorSessionStore {
   setSessionIsCompressing(sessionId: string, compressing: boolean): void;
   sessionIsCompressing(sessionId: string): boolean;
   setSessionPendingAsk(sessionId: string, pendingAsk: SessionState["pendingAsk"]): void;
+  /** 模型发起的计划模式变更（同时更新投影与会话设置）；可选：无此概念的实现可省略 */
+  applyRemotePlanEnabled?(sessionId: string, enabled: boolean): void;
   sessionIsStreaming?(sessionId: string): boolean;
 }
 
@@ -790,7 +792,7 @@ export function applyChunkToStore(
     return;
   }
   if (chunk.type === "ask_requested") {
-    // 统一交互请求（审批/询问/迭代暂停继续共用）：执行内原地阻塞（无 turn_end、流保持 running）。
+    // 统一交互请求（审批/询问共用）：执行内原地阻塞（无 turn_end、流保持 running）。
     // 会话级交互卡（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方全局展示。
     sessionStore.setSessionPendingAsk(sessionId, {
       requestId: chunk.requestId,
@@ -805,6 +807,13 @@ export function applyChunkToStore(
   if (chunk.type === "ask_resolved") {
     // 交互终结（answered/cancelled）：清会话级交互卡（多窗口同步收卡由此保证）。
     sessionStore.setSessionPendingAsk(sessionId, undefined);
+    return;
+  }
+  if (chunk.type === "plan_mode_changed") {
+    // 计划模式变更（协作状态）。用户从界面开关时前端已乐观写入，此处幂等覆盖；
+    // 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
+    // 会话设置（事实源），否则刷新后指示器按旧设置回退。
+    sessionStore.applyRemotePlanEnabled?.(sessionId, chunk.planEnabled);
     return;
   }
   if (chunk.type === "subagent_link") {

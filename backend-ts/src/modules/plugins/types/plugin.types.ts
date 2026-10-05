@@ -186,6 +186,24 @@ export interface ToolHandlerDef {
   /** 危险等级标记 */
   dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   /**
+   * 只读执行能力：本工具不会改动用户的工作区或系统状态。
+   * 计划模式权限门的唯一依据；缺省 false（保守：未声明即视为可写）。
+   * 与 dangerLevel 无关——后者是风险展示语义，本字段是执行能力判定。
+   */
+  readOnly?: boolean;
+  /**
+   * 计划模式逃生舱：非只读工具但需在计划模式下放行的少数特例
+   * （计划审批工具、浏览器调研、只读子代理等）。
+   * 子会话（sub_agent）对"需要人类应答"的工具不享受本豁免——见 ToolExecutor 的计划门。
+   */
+  allowedInPlanMode?: boolean;
+  /**
+   * 本工具会阻塞等待人类应答（审批 / 提问）。
+   * 子会话没有独立的应答面：在子会话里放行这类工具会把交互卡挂到用户看不见的子会话上、
+   * 卡死父回合。计划门据此对子会话收窄 allowedInPlanMode。
+   */
+  requiresUserInteraction?: boolean;
+  /**
    * 所属工具集 ID（用于按工具集分组加载，由 @ToolSet 统一控制加载模式）
    */
   toolSet?: string;
@@ -259,6 +277,12 @@ export interface ToolKitHandle {
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
     display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
+    /** 只读执行能力（计划模式权限门依据）；缺省 false */
+    readOnly?: boolean;
+    /** 计划模式逃生舱；缺省 false。子会话对 requiresUserInteraction 的工具不享受本豁免 */
+    allowedInPlanMode?: boolean;
+    /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
+    requiresUserInteraction?: boolean;
   }): void;
   registerRawTool(def: ToolHandlerDef): void;
   registerPrompt(def: {

@@ -41,8 +41,6 @@
     loadFailed: 'Failed to load general settings',
     updated: 'General settings updated',
     agent: 'Agent Settings',
-    maxToolIterations: 'Max Tool Iterations',
-    maxToolIterationsDesc: 'Maximum number of consecutive tool-call rounds in a single conversation. When the limit is reached, execution pauses and waits for user confirmation. Default 100.',
     llmRequestTimeout: 'Request Timeout',
     llmRequestTimeoutDesc: 'Hard deadline for the entire LLM request lifecycle (including streaming). The request is aborted when exceeded. Default 600 seconds.',
     llmIdleTimeout: 'Idle Timeout',

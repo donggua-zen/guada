@@ -1,6 +1,6 @@
 <template>
   <!-- 会话级全局统一交互卡（对齐 DSH：sessionId 唯一锚点，不挂回合）。
-       审批（kind=approval，ask 特例）/ 询问（kind=ask）/ 迭代暂停继续（kind=continue）
+       审批（kind=approval，ask 特例）/ 询问（kind=ask）
        共用一张卡：多问题分页（单选点选自动翻页、多选勾选后"下一步"）、
        选项按钮 + 自定义回复（提交后按 requestId 凭证回传匹配等待者，无超时）。 -->
   <div class="session-cards flex flex-col gap-2">
@@ -131,7 +131,6 @@ const needFooter = computed(
 
 const kindTitle = computed(() => {
   if (askCtx.value?.kind === "approval") return t("chat.ask.approval");
-  if (askCtx.value?.kind === "continue") return t("chat.ask.continue");
   return t("chat.ask.input");
 });
 const kindBadgeClass = computed(() =>

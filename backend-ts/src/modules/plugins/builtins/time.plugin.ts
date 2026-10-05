@@ -56,6 +56,7 @@ export class TimePlugin extends PluginBase {
         aggregate: { executing: "%get_current_time.aggregate.executing%", completed: "%get_current_time.aggregate.completed%" },
         icon: "time",
       },
+      readOnly: true,
     });
 
     // 当前时间信息随工具包注入：智能体层禁用 time 工具包时一并隐藏

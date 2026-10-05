@@ -19,6 +19,7 @@ import { TokenMeterService } from './token-meter.service';
 import { SessionStreamManager } from './session-stream.manager';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
+import { SessionMetaStore } from './session-meta.store';
 
 @Injectable()
 export class JsonlSessionContextFactory {
@@ -33,6 +34,7 @@ export class JsonlSessionContextFactory {
     private readonly streamManager: SessionStreamManager,
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly bindingState: RemoteBindingStateService,
+    private readonly sessionMetaStore: SessionMetaStore,
   ) {}
 
   async createFromSession(session: any): Promise<JsonlSessionContext> {
@@ -48,6 +50,7 @@ export class JsonlSessionContextFactory {
       this.streamManager,
       this.knowledgeBaseService,
       this.bindingState,
+      this.sessionMetaStore,
     );
     await context.initialize();
     return context;

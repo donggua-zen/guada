@@ -90,6 +90,7 @@ export class DocumentPlugin extends PluginBase {
         argsKey: "file_path",
         icon: "read",
       },
+      readOnly: true,
     });
 
     docKit.registerTool({
@@ -153,6 +154,7 @@ export class DocumentPlugin extends PluginBase {
         aggregate: { executing: "%doc_batch_parse.aggregate.executing%", completed: "%doc_batch_parse.aggregate.completed%" },
         icon: "read",
       },
+      readOnly: true,
     });
 
     docKit.registerPrompt({

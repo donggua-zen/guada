@@ -109,6 +109,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             argsKey: "image_path",
             icon: "vision",
           },
+          readOnly: true,
         });
       },
     });
@@ -169,6 +170,7 @@ export class ImageRecognitionPlugin extends PluginBase {
             argsKey: "image_path",
             icon: "vision",
           },
+          readOnly: true,
         });
       },
     });
