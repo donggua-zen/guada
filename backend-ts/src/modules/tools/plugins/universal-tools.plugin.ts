@@ -91,6 +91,7 @@ export class UniversalToolsPlugin extends PluginBase {
         argsKey: "name",
         icon: "tool",
       },
+      readOnly: true,
     });
 
     // tool_use

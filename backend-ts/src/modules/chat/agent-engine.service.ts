@@ -2,11 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs";
 import { ToolExecutor } from "../tools/tool-executor.service";
-import { SettingsService } from "../settings/settings.service";
-import {
-  SG_SYSTEM,
-  SK_SYS_MAX_TOOL_ITERATIONS,
-} from "../../constants/settings.constants";
 import type {
   Message,
   ContentBlock,
@@ -20,8 +15,7 @@ import { SessionStreamEvent } from "./types/event-chunk.types";
 import { BlockAssembler } from "./block-assembler";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
 import { EventBusService } from "../../common/events/event-bus.service";
-import { AskService } from "../../common/services/ask.service";
-import { AskDeniedError } from "../../common/types/ask.types";
+import { buildPlanModeTurnEntries } from "./plan-mode-reminder.util";
 import {
   HOOKS,
   type RequestErrorAction,
@@ -63,7 +57,7 @@ import {
  * - 直发模式：流式事件经 sessionContext.publishStream 直发（对齐 DSH session.append 深层直发），
  *   不经生成器 yield 冒泡——主循环与深层模块（钩子订阅者/审批服务）共用同一发布面
  * - 容错降级：完善的错误捕获和分类处理机制，确保异常不会导致会话崩溃
- * - 防御性编程：多重安全检查（迭代次数限制、JSON 解析容错、空值保护）
+ * - 防御性编程：多重安全检查（JSON 解析容错、空值保护）
  */
 @Injectable()
 export class AgentEngine {
@@ -71,34 +65,9 @@ export class AgentEngine {
 
   constructor(
     private toolExecutor: ToolExecutor,
-    private settingsService: SettingsService,
     private llmService: LLMService,
     private eventBus: EventBusService,
-    private askService: AskService,
   ) {}
-
-  /**
-   * 从系统设置读取最大工具调用轮次
-   * 值非法或未配置时回退到默认值 100
-   */
-  private async getMaxToolIterations(): Promise<number> {
-    const DEFAULT_MAX_TOOL_ITERATIONS = 100;
-    try {
-      const raw = await this.settingsService.getSettingValue(
-        SG_SYSTEM,
-        SK_SYS_MAX_TOOL_ITERATIONS,
-        DEFAULT_MAX_TOOL_ITERATIONS,
-      );
-      const val = Number(raw);
-      if (Number.isInteger(val) && val >= 1) return val;
-      this.logger.warn(
-        `Invalid maxToolIterations setting (${raw}), falling back to ${DEFAULT_MAX_TOOL_ITERATIONS}`,
-      );
-      return DEFAULT_MAX_TOOL_ITERATIONS;
-    } catch {
-      return DEFAULT_MAX_TOOL_ITERATIONS;
-    }
-  }
 
   /**
    * 主循环 LLM 流式请求：纯传输 + 重试壳（agent 循环局部语义，对齐 DSH retryPolicy 在 agent 层）。
@@ -295,7 +264,7 @@ export class AgentEngine {
     regenerationMode: string = "overwrite",
     abortSignal?: AbortSignal,
     resumeData?: any,
-  ): Promise<{ finishReason: string }> {
+  ): Promise<{ finishReason: string; followUpUserInput?: string }> {
     const sessionId = sessionContext.sessionId;
 
     // overwrite 模式:开回合(turn/start)与用户消息(user/message)的入库 + 发布移入
@@ -319,7 +288,7 @@ export class AgentEngine {
       }
     }
 
-    const finishReason = await RequestContext.run(
+    const { finishReason, followUpUserInput } = await RequestContext.run(
       {
         abortSignal,
         sessionId,
@@ -336,7 +305,10 @@ export class AgentEngine {
           userMessage,
         ),
     );
-    return { finishReason };
+    return {
+      finishReason,
+      ...(followUpUserInput ? { followUpUserInput } : {}),
+    };
   }
 
   /**
@@ -349,7 +321,7 @@ export class AgentEngine {
    * - 每轮迭代都会持久化助手回复和工具响应
    *
    * 安全机制：
-   * - 最大迭代次数限制（100 次），防止无限循环
+   * - 无迭代次数上限（对齐参考实现主循环：长任务不被上限截断，唯一出口是模型不再请求工具或用户中止）
    * - SessionStreamManager 确保同一会话不会同时启动多个流
    *
    * @param sessionContext 类型安全的会话上下文（包含对话状态）
@@ -357,7 +329,8 @@ export class AgentEngine {
    * @param regenerationMode 再生模式标识（'overwrite' | 'resume'）
    * @param abortSignal 中断信号（可选）
    * @param resumeData 断点续传数据（如审批决策、表单数据等）
-   * @returns 回合结束原因（businessReason 或 "stop"）
+   * @returns 回合结束原因（businessReason 或 "stop"）；工具转交用户输入（计划审批反馈）时
+   *          另带 followUpUserInput，由调用方（chat-runner）作为真实用户消息开启新轮次
    */
   private async executeAgentLoop(
     sessionContext: ISessionContext,
@@ -367,7 +340,7 @@ export class AgentEngine {
     resumeData?: any,
     preGenAssistantId?: string,
     userMessage?: any,
-  ): Promise<string> {
+  ): Promise<{ finishReason: string; followUpUserInput?: string }> {
     const resolved = sessionContext.getResolvedPlugins();
     const tools =
       resolved.length > 0
@@ -376,7 +349,7 @@ export class AgentEngine {
 
     // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
     // 在本方法开头同位置发布,与末尾 turn_end 配对成对(同一方法内成对闭合)。
-    // v1.8：resume 分支已删除（审批/迭代暂停均为回合内原地阻塞），仅 overwrite 有效。
+    // v1.8：resume 分支已删除（审批等统一交互均为回合内原地阻塞），仅 overwrite 有效。
     if (regenerationMode !== "overwrite") {
       this.logger.warn(
         `未知的 regenerationMode "${regenerationMode}"，回退为 overwrite`,
@@ -448,9 +421,6 @@ export class AgentEngine {
     // 记录 ReAct 循环开始时间，用于计算总耗时
     const loopStartTime = Date.now();
 
-    // 从系统设置读取最大工具调用轮次，默认 100
-    const maxToolIterations = await this.getMaxToolIterations();
-
     // 工具调用轮次计数器
     let iterationCount = 0;
     // 回合拦截器触发次数（防止无限循环）
@@ -461,6 +431,8 @@ export class AgentEngine {
     // 业务层结束原因：完全独立于上游适配器的 finishReason
     // 上游 finishReason 留在 MessageContent.metadata 供审计，不参与业务判断
     let businessReason: string | undefined;
+    /** 工具转交的用户输入（计划审批反馈）：终止回合时随返回值交回 chat-runner 开新轮 */
+    let pendingFollowUpInput: string | undefined;
     do {
       iterationCount++;
       needToContinue = false;
@@ -481,6 +453,18 @@ export class AgentEngine {
       // 副作用后重读完整请求消息列表（含 system prompt、摘要和历史）——压缩等已生效
       let historyMessages = await sessionContext.getHistory();
 
+      // 计划模式引导（每轮临时注入，不落库）：不改 system、不写 JSONL、不进压缩输入，
+      // 追加在消息尾部（novel 区）→ KV 前缀（getSystemText + getTools）逐字节不变。
+      // 历史里查不到这些条目，所以每个迭代都要重新追加，否则模型在第二次工具往返后就看不见约束了。
+      const planModeEntries = buildPlanModeTurnEntries(
+        sessionContext,
+        iterationCount,
+      );
+      const requestMessages =
+        planModeEntries.length > 0
+          ? [...historyMessages, ...planModeEntries]
+          : historyMessages;
+
       // 生成本轮助手回复的内容 ID（= 落库消息 id，与 SSE 消息级事件一致）
       // 累积统一走 BlockAssembler（全链路唯一 StreamChunk→ContentBlock 组装实现），
       // 不再存在 MessageRecord 平铺累积对象与双向转换。
@@ -500,7 +484,7 @@ export class AgentEngine {
           // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
           const streamResult = this.streamWithRetry(
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
-              messages: historyMessages,
+              messages: requestMessages,
               abortSignal,
             }),
           );
@@ -656,70 +640,28 @@ export class AgentEngine {
           assistantMessage?.content.some((b) => b.type === "tool-call") ??
           false;
         if (hasToolCalls && tools && !abortSignal?.aborted) {
-          // 【工具轮次限制：统一 Ask 迭代暂停】达到最大轮次时不终止回合——
-          // 落库当前消息 → 系统发起 ask（kind='continue'：继续执行/停止，支持自定义回复）
-          // → 原地等待应答（无超时）→ 继续则重置迭代计数执行 pending 工具；
-          // 停止/自定义/取消（用户停止）→ user_cancel 收尾（不执行工具）。
-          let iterationPaused = false;
-          if (iterationCount >= maxToolIterations) {
-            this.logger.warn(
-              `工具调用达到最大轮次限制 (${maxToolIterations})，暂停执行等待用户确认`,
-            );
-
-            try {
-              const answers = await this.askService.ask(
-                sessionContext,
-                {
-                  kind: "continue",
-                  title: "已达到最大工具调用轮次限制",
-                  toolCallId: undefined,
-                  questions: [
-                    {
-                      id: "continue",
-                      question: "是否继续执行剩余工具？",
-                      options: [{ label: "继续执行" }, { label: "停止" }],
-                    },
-                  ],
-                },
-                abortSignal,
-              );
-              const answer = answers[0];
-              if (answer.custom?.trim() || answer.selected.includes("停止")) {
-                businessReason = "user_cancel";
-                needToContinue = false;
-                iterationPaused = true; // 停止/自定义：跳过工具执行
-              } else {
-                iterationCount = 0; // 授权新一轮迭代批次（对齐原 resume 重启循环语义）
-                this.logger.log(`用户确认继续，重置迭代计数，执行剩余工具`);
-              }
-            } catch (e) {
-              if (e instanceof AskDeniedError) {
-                // 用户停止（abort 竞速胜出）→ 撤回等待走 user_cancel
-                businessReason = "user_cancel";
-                needToContinue = false;
-                iterationPaused = true;
-              } else {
-                throw e;
-              }
-            }
-          }
-
-          // 暂停后中止时不执行工具；正常继续则执行 pending 工具（可能再触发审批）
-          if (!iterationPaused && !abortSignal?.aborted) {
-            // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
-            // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
-            const execResult = await this.executeToolsAndBuildParts(
-              assistantMessage!,
-              turnId,
-              sessionContext,
-              abortSignal,
-            );
-            if (execResult.toolParts.length > 0) {
-              await sessionContext.appendMessages(execResult.toolParts);
-              await sessionContext.publishStream(execResult.toolEvent!);
+          // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
+          // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
+          const execResult = await this.executeToolsAndBuildParts(
+            assistantMessage!,
+            turnId,
+            sessionContext,
+            abortSignal,
+          );
+          if (execResult.toolParts.length > 0) {
+            await sessionContext.appendMessages(execResult.toolParts);
+            await sessionContext.publishStream(execResult.toolEvent!);
+            if (execResult.followUpUserInput) {
+              // 工具转交了用户的话（计划审批反馈）：用户开了口 → 本轮到此结束。
+              // 输入随 run() 返回值交回 chat-runner，作为真实用户消息开启新轮次；
+              // 不设 needToContinue → 循环自然退出（isNormalFinish 为 false，
+              // TURN_STOPPING 拦截器不会在用户拒绝后再注入续跑消息）。
+              businessReason = "plan_rejected";
+              pendingFollowUpInput = execResult.followUpUserInput;
+            } else {
               needToContinue = true;
             }
-          } // 暂停后中止守卫闭合（iterationPaused/abort 时不执行工具）
+          }
         }
       }
 
@@ -756,7 +698,7 @@ export class AgentEngine {
     } while (needToContinue);
 
     // 业务层结束原因：完全独立于上游适配器
-    // businessReason 在各业务决策点设置（abort/审批/最大轮次/频率限制/异常）
+    // businessReason 在各业务决策点设置（用户中止/计划审批拒绝/超时/限流/异常）
     // 未设置 → 模型正常结束 → "stop"
     const finalFinishReason = businessReason || "stop";
 
@@ -788,7 +730,10 @@ export class AgentEngine {
       contextStats: await sessionContext.getContextStats(),
     });
 
-    return finalFinishReason;
+    return {
+      finishReason: finalFinishReason,
+      ...(pendingFollowUpInput ? { followUpUserInput: pendingFollowUpInput } : {}),
+    };
   }
 
   /**
@@ -851,6 +796,8 @@ export class AgentEngine {
   ): Promise<{
     toolParts: Message[];
     toolEvent?: SessionStreamEvent;
+    /** 工具转交的用户输入（计划审批反馈）：非空表示本轮应终止 */
+    followUpUserInput?: string;
   }> {
     const toolCalls = assistantMessage.content.filter(
       (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
@@ -933,6 +880,8 @@ export class AgentEngine {
     // 构建 parts（tool 结果消息 + 图片注入消息，三层 Message[]）——
     // 每个工具结果是独立消息（独立 id），与含调用的 assistant 消息 id 无关（对齐 DSH：独立节点 + callId 关联）。
     const toolParts: Message[] = [];
+    /** 本批工具结果里转交的用户输入（followUpUserInput，取第一个非空） */
+    let followUpUserInput: string | undefined;
     // SSE 事件条目：携带独立 tool 结果消息 id（= 入库 tool/result.messageId），与持久化路径一致
     const responseEntries: Array<{
       messageId: string;
@@ -996,6 +945,13 @@ export class AgentEngine {
           content: imageBlocks,
         });
       }
+
+      // 工具转交的用户输入（计划审批反馈）：只收集不注入——它不属于本轮，
+      // 由调用方终止回合后交回 chat-runner，作为**真实用户消息开启新轮次**
+      // （在本轮塞隐藏消息会让用户的话在界面上消失、且错误归属到助手轮次）。
+      if (!followUpUserInput && res.followUpUserInput?.trim()) {
+        followUpUserInput = res.followUpUserInput.trim();
+      }
     }
 
     // 构建 SSE 事件：结果按 toolCallId 关联（对齐回放 tool/result 聚类语义），
@@ -1006,6 +962,10 @@ export class AgentEngine {
       toolCallsResponse: responseEntries,
     };
 
-    return { toolParts, toolEvent };
+    return {
+      toolParts,
+      toolEvent,
+      ...(followUpUserInput ? { followUpUserInput } : {}),
+    };
   }
 }

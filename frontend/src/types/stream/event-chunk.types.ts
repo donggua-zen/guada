@@ -178,7 +178,7 @@ export interface CompactionSummaryEvent {
 }
 
 /**
- * 统一人机交互（审批 / 询问 / 迭代暂停继续共用一个闭环）。
+ * 统一人机交互（审批 / 询问共用一个闭环）。
  * 与后端 ask/asked 审计事件的区别：这是流内 UI 信号（eventBuffer 可重放 + SSE 直投）。
  * 无超时：等待只有三种终结——用户应答、用户停止（abort）、重启丢表（404）。
  * 与后端 common/types/ask.types.ts 逐字段同构。
@@ -207,7 +207,7 @@ export interface AskAnswerItem {
   custom?: string;
 }
 
-export type AskKind = "approval" | "ask" | "continue";
+export type AskKind = "approval" | "ask";
 
 export interface AskRequestedEvent {
   type: "ask_requested";
@@ -264,6 +264,20 @@ export interface SubAgentLinkEvent {
   name?: string;
 }
 
+/**
+ * 计划模式变更（协作状态，正交于安全档位）。
+ * 事实源是会话设置；本帧驱动指示器与多窗口同步。模型经 ExitPlanMode 审批通过后
+ * 关闭计划模式时，本帧是前端的唯一知情渠道。
+ */
+export interface PlanModeChangedEvent {
+  type: "plan_mode_changed";
+  planEnabled: boolean;
+  previousPlanEnabled: boolean;
+  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  source: "user" | "tool";
+  toolCallId?: string;
+}
+
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
@@ -281,6 +295,7 @@ export type SessionStreamEvent =
   | AskResolvedEvent
   | WorkflowEvent
   | SubAgentLinkEvent
+  | PlanModeChangedEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

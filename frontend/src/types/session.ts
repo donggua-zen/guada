@@ -14,6 +14,8 @@ import type { FileRef, FileRefType } from './stream/content-block.types'
 export interface SessionSettings {
     thinkingEffort?: string // 思考强度级别：'none' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
     systemPrompt?: string
+    /** 计划模式（协作状态，正交于 sandboxMode；开启后后端强制只读） */
+    planEnabled?: boolean
     /** 后端 session.settings 为开放字典（attachments/referencedKbs/sandboxMode/maxTokensLimit 等按需写入） */
     [key: string]: unknown
 }
@@ -105,14 +107,14 @@ export interface SessionState {
     /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩伪流，buffer 无回合历史） */
     streamKind?: 'chat' | 'maintenance'
     /**
-     * 会话级统一交互卡（审批/询问/迭代暂停继续共用，对齐 DSH：sessionId 唯一锚点，不挂回合
+     * 会话级统一交互卡（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合
      * ——ask_requested 事件标记，ask_resolved / turn_end 清除）。全局卡在输入区上方展示。
      */
     pendingAsk?: {
         /** 临时凭证 id（uuid，应答提交时回传匹配等待者） */
         requestId: string
-        /** 卡片分类：approval=审批（ask 特例）/ ask=询问 / continue=迭代暂停继续 */
-        kind: 'approval' | 'ask' | 'continue'
+        /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
+        kind: 'approval' | 'ask'
         /** 卡片标题（如"进行文档处理"） */
         title?: string
         toolCallId?: string
@@ -120,6 +122,12 @@ export interface SessionState {
         /** 问题单（前端分页收集答案） */
         questions: import('./stream/event-chunk.types').AskQuestion[]
     }
+    /**
+     * 计划模式（协作状态，正交于安全档位）。事实源是会话设置；
+     * 本字段是 UI 投影——用户从界面开关时乐观写入，模型经 ExitPlanMode 审批通过后
+     * 由 plan_mode_changed 流帧写入（此时前端是唯一知情方）。
+     */
+    planEnabled?: boolean
     /** 会话内容缓存已加载标记:二次打开时不再向后端拉取,仅靠订阅增量补新 */
     loaded?: boolean
     /** 历史是否还有更早回合(分页游标状态,按会话记忆;组件级单例 ref 切会话会串) */

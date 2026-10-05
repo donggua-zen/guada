@@ -596,7 +596,7 @@ const renderSkillBadges = (text: string): string => {
  * - 历史：replayer turn/finish 折叠合并（finishReason/errorDetail/usage/modelName）
  * - 流式：turn_start 写 modelName、turn_end 写 finishReason/errorDetail/usage
  * 流式瞬态（重试提示等）为回合级 turn.state，不挂消息 metadata（v1.9 迁移）。
- * 审批卡/暂停卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
+ * 审批卡/询问卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
  */
 const assistantMetadata = computed<Record<string, unknown> | null>(() => {
   const turnMeta = props.turn?.metadata || {};

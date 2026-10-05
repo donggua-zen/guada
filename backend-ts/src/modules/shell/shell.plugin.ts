@@ -165,11 +165,21 @@ export class ShellPlugin extends PluginBase {
           session?.getSandboxMode?.() ?? "workspace-write";
         let sandbox: SandboxOptions | undefined = sandboxForMode(mode);
 
+        // 计划模式（协作状态）：强制以只读沙盒执行，无视会话安全档位——
+        // 计划阶段必须能跑 git status / ls 这类只读命令做调研，写入则由沙盒拒绝。
+        // 只改本次调用的沙盒选项，不改写 session.sandboxMode（两者正交）。
+        const planMode = session?.getPlanEnabled?.() === true;
+        if (planMode) {
+          sandbox = sandboxForMode("read-only");
+        }
+        /** 错误信息里呈现的有效档位（计划模式下真实生效的是 read-only） */
+        const effectiveMode: SandboxMode = planMode ? "read-only" : mode;
+
         // sandbox 不可用时提前报错（execute/background 内部也会检查，fail-closed 不静默放行）
         if (sandbox?.enabled) {
           if (!(await this.processManager.isSandboxAvailable())) {
             throw new Error(
-              `The session sandbox mode is ${mode}, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
+              `The session sandbox mode is ${effectiveMode}, but the sandbox binary is currently unavailable. Please use other tools or inform the user.`,
             );
           }
         }
@@ -180,6 +190,12 @@ export class ShellPlugin extends PluginBase {
           args.justification,
         );
         if (escalation) {
+          // 计划模式下提权不可用：否则模型可绕过计划门的只读语义（用户要的是"先给方案，别动手"）
+          if (planMode) {
+            throw new Error(
+              `sandbox_permissions is unavailable in plan mode. Exit plan mode first if a write is required.`,
+            );
+          }
           if (!sandbox?.enabled) {
             throw new Error(
               `Sandbox is not enabled in this session (mode: ${mode}); sandbox_permissions is unavailable.`,
@@ -284,6 +300,8 @@ export class ShellPlugin extends PluginBase {
         renderer: { kind: "terminal", fields: { command: "command" } },
       },
       dangerLevel: "critical",
+      // 计划模式放行，但 handler 强制以只读沙盒执行并拒绝提权参数（见本文件 getPlanEnabled 分支）
+      allowedInPlanMode: true,
     });
 
     // ── process 管理工具 ──

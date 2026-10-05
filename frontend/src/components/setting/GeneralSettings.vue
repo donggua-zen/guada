@@ -95,16 +95,6 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.agent') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
-          <!-- 最大工具调用轮次 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
-            <div class="flex flex-col gap-1 min-w-0 flex-1">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.maxToolIterations') }}</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.maxToolIterationsDesc') }}</span>
-            </div>
-            <div class="shrink-0">
-              <el-input-number v-model="settingsForm.maxToolIterations" :min="1" :max="500" :step="1" size="default" controls-position="right" />
-            </div>
-          </div>
           <!-- 请求超时 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
             <div class="flex flex-col gap-1 min-w-0 flex-1">
@@ -163,7 +153,6 @@ const settingsForm = reactive({
   // 会话工作目录下的聊天附件子目录名（空 = 用默认 uploads）
   chatUploadSubdir: '',
   kbStorageRoot: '',
-  maxToolIterations: 100,
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
 })
@@ -184,7 +173,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -197,7 +186,6 @@ const loadSettings = async () => {
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
     settingsForm.chatUploadSubdir = response.chatUploadSubdir || ''
     settingsForm.kbStorageRoot = response.kbStorageRoot || ''
-    settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
     // 备份原始数据
@@ -304,7 +292,6 @@ const handleSave = async () => {
       workspaceBaseDir: path || null,
       chatUploadSubdir: subdir || null,
       kbStorageRoot: kbRoot || null,
-      maxToolIterations: settingsForm.maxToolIterations,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
     }

@@ -169,6 +169,7 @@ interface DraftSessionSettings {
   modelName?: string | null
   thinkingEffort?: string | null
   sandboxMode?: string
+  planEnabled?: boolean
   maxTokensLimit?: number | null
   attachments?: Record<string, string[]>
   [key: string]: unknown
@@ -198,6 +199,7 @@ const currentSession = ref<DraftSession>({
     // 未选择过（''）不写入：让会话保持"未设置"，由档位菜单决定默认中间档
     thinkingEffort: userSelectedThinkingEffort.value || null,
     sandboxMode: 'workspace-write',
+    planEnabled: false,
     maxTokensLimit: null
   }
 })
@@ -449,6 +451,9 @@ const chatInputConfig = computed(() => ({
   // 运行模式
   sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
 
+  // 计划模式（协作状态，正交于 sandboxMode）：新建页无会话，草稿值随 create-session 一并提交
+  planEnabled: currentSession.value?.settings?.planEnabled === true,
+
   // 工作目录路径
   workspacePath: currentSession.value?.workspacePath || null,
 
@@ -471,6 +476,7 @@ interface ChatInputConfigChange {
   knowledgeBaseIds?: string[]
   workspacePath?: string | null
   sandboxMode?: string
+  planEnabled?: boolean
   groupId?: string | null
   attachments?: Record<string, string[]>
 }
@@ -515,6 +521,12 @@ const handleConfigChange = (config: ChatInputConfigChange): void => {
   if (typeof config.sandboxMode !== 'undefined') {
     currentSession.value.settings.sandboxMode = config.sandboxMode;
     console.log('保存 sandboxMode 到会话:', config.sandboxMode);
+  }
+
+  // 处理计划模式（协作状态）：仅写草稿——新建页尚无会话，不走 store/API，
+  // 值随 sendMessage 的 create-session 载荷一并提交（后端 POST /sessions 接收 settings.planEnabled）
+  if (typeof config.planEnabled !== 'undefined') {
+    currentSession.value.settings.planEnabled = config.planEnabled;
   }
 
   // 处理分组选择

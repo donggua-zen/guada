@@ -30,7 +30,13 @@ export interface StreamCallbacks {
 export type QueueSource =
   | { kind: "sub_agent"; subSessionId?: string; agentName?: string; [key: string]: any }
   | { kind: "scheduler"; schedulerId?: string; dryRun?: boolean; [key: string]: any }
-  | { kind: "process_monitor"; processId?: string; event?: string; [key: string]: any };
+  | { kind: "process_monitor"; processId?: string; event?: string; [key: string]: any }
+  /**
+   * 计划审批反馈（工具转交的用户输入）：ExitPlanMode 被拒且用户留下文字时，
+   * 引擎终止本轮并把文字随 run() 返回值交回，这里作为**真实用户消息**入队开启新轮次。
+   * 刻意不进 toMessageSource 映射——折叠时走默认 kind='user'，渲染与手打消息无异。
+   */
+  | { kind: "plan_feedback"; [key: string]: any };
 
 /**
  * QueueSource → MessageSource（P4b：队列来源真正进入三层消息的 source）
@@ -536,6 +542,8 @@ export class ChatRunnerService {
   ): Promise<void> {
     const sessionId = sessionContext.sessionId;
     let lastFinishReason: string | undefined;
+    /** 工具转交的用户输入（计划审批反馈）：在 finally 入队开新轮（try 内 const 对 finally 不可见） */
+    let followUpUserInput: string | undefined;
     try {
       // 流开始:广播会话"工作中"状态(统一状态改变事件,running)
       const startEvent: StreamStatusChangedEvent = {
@@ -552,14 +560,15 @@ export class ChatRunnerService {
 
       // 引擎直发模式：流式事件由引擎经 sessionContext.publishStream 发布（prevSeq 在发布点组装），
       // chat-runner 只 await 完成并做流生命周期收尾（supervisor 职责）
-      const { finishReason } = await this.agentEngine.run(
+      const result = await this.agentEngine.run(
         sessionContext,
         userMessage,
         regenerationMode,
         abortController.signal,
         resumeData,
       );
-      lastFinishReason = finishReason;
+      lastFinishReason = result.finishReason;
+      followUpUserInput = result.followUpUserInput;
 
       // Agent 引擎内部已捕获 abort 并发布 finish/turn_end 事件，这里自然结束
       const reason = abortController.signal.aborted
@@ -616,10 +625,24 @@ export class ChatRunnerService {
         throw error;
       }
     } finally {
-      // 队列消息仅在回合正常结束时自动消费。approval / 迭代暂停（max_iterations / rate_limited）
-      // 均为回合内原地阻塞（回合不闭合、无暂停态 finish），无需在此处理；用户"停止"后以
-      // user_cancel 收尾，同样不自动消费（暂停中的任务由用户操作解除，不重复触发）。
-      const NORMAL_FINISH = new Set(["stop", undefined]);
+      // 队列消息仅在回合正常结束时自动消费。approval 等统一交互为回合内原地阻塞
+      // （回合不闭合、无 finish），无需在此处理；user_cancel / 限流 / 异常收尾的回合
+      // 同样不自动消费（控制权交回用户，不重复触发）。plan_rejected 计入正常收尾：
+      // 下面 plan_feedback 的入队消费依赖这扇门。
+
+      // 计划审批反馈（工具转交的用户输入）：用户在审批卡里留下的文字 →
+      // 作为**真实用户消息**入队并立即消费，开启新轮次。此刻已在 stopStream 之后
+      // （finally 晚于 stopStream 执行，流互斥已释放），enqueueMessage 走即时消费路径；
+      // 即使消费被抢占，下面的 NORMAL_FINISH 门也会把反馈带走。
+      if (followUpUserInput?.trim()) {
+        await this.enqueueMessage({
+          sessionId,
+          blocks: [{ type: "text", text: followUpUserInput.trim() }],
+          source: { kind: "plan_feedback" },
+        });
+      }
+
+      const NORMAL_FINISH = new Set(["stop", undefined, "plan_rejected"]);
       if (NORMAL_FINISH.has(lastFinishReason)) {
         await this.processQueue(sessionId);
       }

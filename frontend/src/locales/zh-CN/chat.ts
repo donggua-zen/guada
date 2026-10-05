@@ -21,6 +21,9 @@ export default {
     runModeReadOnly: '只读',
     runModeWorkspaceWrite: '工作区可写',
     runModeFullAccess: '自由编辑',
+    // 计划模式开关（ChatInput.vue；协作状态，正交于安全档位）
+    planMode: '计划',
+    planModeTip: '计划模式：只读调研后产出方案，经你批准再实施',
 
     // AttachmentPopover.vue
     uploadImage: '上传图片',
@@ -257,11 +260,10 @@ export default {
     branchFromHere: '从此分支新会话',
   },
 
-  // ── 统一交互卡（审批/询问/迭代暂停继续共用） ──
+  // ── 统一交互卡（审批/询问共用） ──
   ask: {
     approval: '需要审批',
     input: '需要你的输入',
-    continue: '已达到最大工具调用轮次限制',
     customReply: '请输入自定义回复',
     next: '下一步',
     submit: '提交',

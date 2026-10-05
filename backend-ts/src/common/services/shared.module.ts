@@ -10,6 +10,7 @@ import { FileNamingService } from "./file-naming.service";
 import { EventBusService } from "../events/event-bus.service";
 import { InteractionWaitService } from "./interaction-wait.service";
 import { AskService } from "./ask.service";
+import { PlanFileService } from "./plan-file.service";
 
 /**
  * 共享服务模块
@@ -18,7 +19,7 @@ import { AskService } from "./ask.service";
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService],
-  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService],
+  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService, PlanFileService],
+  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, TokenizerService, FileNamingService, EventBusService, InteractionWaitService, AskService, PlanFileService],
 })
 export class SharedModule {}

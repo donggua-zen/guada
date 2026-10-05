@@ -159,7 +159,7 @@ export interface CompactionSummaryEvent {
 }
 
 /**
- * 统一人机交互（审批 / 询问 / 迭代暂停继续共用一个闭环，见 common/types/ask.types.ts）。
+ * 统一人机交互（审批 / 询问共用一个闭环，见 common/types/ask.types.ts）。
  * 与审计事件 ask/asked 的区别：这是流内 UI 信号（eventBuffer 可重放 + SSE 直投），
  * ask/asked 是落日志的持久化审计（JSONL）。
  * 无超时：等待只有三种终结——用户应答、用户停止（abort）、重启丢表（404）。
@@ -206,6 +206,23 @@ export interface SubAgentLinkEvent {
  * block_start/text_delta/reasoning_delta/tool_call_delta/block_end/usage/finish
  * 全部按 messageId 归属到同一条 assistant 消息（消息 id = messageId，与落库一致）。
  */
+/**
+ * 计划模式变更（协作状态，正交于安全档位）。
+ *
+ * 事实源是 session.settings.planEnabled（持久化）；本事件是流内 UI 信号，用于驱动
+ * 前端指示器与多窗口同步。用户从界面开关时前端已自知，但仍会收到本帧以统一路径；
+ * 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端唯一的知情渠道。
+ */
+export interface PlanModeChangedEvent {
+  type: "plan_mode_changed";
+  planEnabled: boolean;
+  previousPlanEnabled: boolean;
+  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  source: "user" | "tool";
+  /** source='tool' 时的关联工具调用 id */
+  toolCallId?: string;
+}
+
 export type MessageChunkEvent = StreamChunk & {
   /** 所属 assistant 消息 id（= 落库消息 id） */
   messageId: string;
@@ -230,6 +247,7 @@ export type SessionStreamEvent =
   | AskResolvedEvent
   | WorkflowEvent
   | SubAgentLinkEvent
+  | PlanModeChangedEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

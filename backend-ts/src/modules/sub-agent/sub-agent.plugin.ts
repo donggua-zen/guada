@@ -184,6 +184,8 @@ The sub-agent has its own independent conversation context and tool capabilities
         argsKey: "name",
         icon: "generic",
       },
+      // 计划阶段派只读子代理做调研；子代理继承 planEnabled，无法自我提权
+      allowedInPlanMode: true,
     });
 
     // ── manager：管理子代理（wait / list / close / send_message）──
@@ -312,6 +314,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         argsKey: "action",
         icon: "generic",
       },
+      allowedInPlanMode: true,
     });
 
     // ── Prompt: 子代理使用指南 + 可用智能体列表 ──

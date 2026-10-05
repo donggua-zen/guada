@@ -222,7 +222,6 @@ export interface SystemGroupSettings {
     workspaceBaseDir?: string
     chatUploadSubdir?: string
     kbStorageRoot?: string
-    maxToolIterations?: number
     /** 后端以 ms 存储 */
     llmRequestTimeoutMs?: number
     /** 后端以 ms 存储 */

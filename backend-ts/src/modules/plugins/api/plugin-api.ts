@@ -35,6 +35,17 @@ export interface ToolResultObject {
    * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。
    */
   meta?: Record<string, any>;
+  /**
+   * 工具转交的用户输入正文（见 ToolCallResponse.followUpUserInput）。
+   * 非空 ⇒ 引擎终止当前轮，文字作为真实用户消息开启新轮次；计划审批反馈是唯一生产者。
+   */
+  followUpUserInput?: string;
+  /**
+   * 本结果表达"执行未成功"（进 isError 通道、outcome=error）。
+   * 供需要**返回结构化错误**（同时携带 followUpUserInput 等附加字段）的处理器使用；
+   * 只需错误文本时直接 throw 更简单。
+   */
+  isError?: boolean;
 }
 
 export type ToolResult = string | ToolResultObject | Record<string, any>;
@@ -57,6 +68,12 @@ export interface PluginApi {
     ) => ToolResult | Promise<ToolResult>;
       display?: ToolDisplay;
       dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
+      /** 只读执行能力（计划模式权限门依据）；缺省 false */
+      readOnly?: boolean;
+      /** 计划模式逃生舱；缺省 false */
+      allowedInPlanMode?: boolean;
+      /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
+      requiresUserInteraction?: boolean;
     }): void;
 
     /**
@@ -75,6 +92,12 @@ export interface PluginApi {
       ) => ToolResult | Promise<ToolResult>;
       display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
+    /** 只读执行能力（计划模式权限门依据）；缺省 false */
+    readOnly?: boolean;
+    /** 计划模式逃生舱；缺省 false */
+    allowedInPlanMode?: boolean;
+    /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
+    requiresUserInteraction?: boolean;
   }): void;
 
   registerPrompt(def: {
@@ -254,6 +277,9 @@ export class PluginApiImpl implements PluginApi {
         },
         dangerLevel: def.dangerLevel,
         toolSet: def.toolSet,
+        readOnly: def.readOnly,
+        allowedInPlanMode: def.allowedInPlanMode,
+        requiresUserInteraction: def.requiresUserInteraction,
         icon: def.display?.icon,
         actionType: def.display?.actionType,
         argsKey,
@@ -301,6 +327,9 @@ export class PluginApiImpl implements PluginApi {
       },
       dangerLevel: def.dangerLevel,
       toolSet: def.toolSet,
+      readOnly: def.readOnly,
+      allowedInPlanMode: def.allowedInPlanMode,
+      requiresUserInteraction: def.requiresUserInteraction,
       icon: def.display?.icon,
       actionType: def.display?.actionType,
       argsKey,
