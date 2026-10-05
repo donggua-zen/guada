@@ -116,6 +116,17 @@ const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffor
 // 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
 
+// 沙盒模式：记住上次选择，新会话草稿默认沿用（与上面几处偏好同构的本地记忆）。
+// 词表校验兜底：本地值损坏/过期时回落默认档——后端 DTO 有 @IsIn 校验，发坏值会 400。
+// 计划模式刻意不随此记忆（任务级意图、默认关；对齐 ZCode 新任务 plan→build 归零）。
+const SANDBOX_MODE_VALUES = ['read-only', 'workspace-write', 'danger-full-access'] as const;
+const userSelectedSandboxMode = useStorage<string>('userSelectedSandboxMode', 'workspace-write');
+const rememberedSandboxMode = computed(() =>
+  (SANDBOX_MODE_VALUES as readonly string[]).includes(userSelectedSandboxMode.value)
+    ? userSelectedSandboxMode.value
+    : 'workspace-write'
+);
+
 const inputMessage = ref({
   content: "",
   files: []
@@ -198,7 +209,7 @@ const currentSession = ref<DraftSession>({
     modelName: null,
     // 未选择过（''）不写入：让会话保持"未设置"，由档位菜单决定默认中间档
     thinkingEffort: userSelectedThinkingEffort.value || null,
-    sandboxMode: 'workspace-write',
+    sandboxMode: rememberedSandboxMode.value,
     planEnabled: false,
     maxTokensLimit: null
   }
@@ -517,9 +528,10 @@ const handleConfigChange = (config: ChatInputConfigChange): void => {
     console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
 
-  // 处理安全模式变更
+  // 处理安全模式变更：同时写入本地记忆，供下次新建会话作为草稿默认
   if (typeof config.sandboxMode !== 'undefined') {
     currentSession.value.settings.sandboxMode = config.sandboxMode;
+    userSelectedSandboxMode.value = config.sandboxMode;
     console.log('保存 sandboxMode 到会话:', config.sandboxMode);
   }
 
