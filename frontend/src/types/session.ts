@@ -98,6 +98,25 @@ export interface QueuedMessage {
  */
 export type StreamStatus = "idle" | "pending" | "running" | "completed" | "error";
 
+/** 计划状态：待审批 / 已批准 / 已拒绝 */
+export type SessionPlanStatus = 'pending' | 'approved' | 'rejected'
+
+/** 计划历史条目（GET /sessions/:id/plans；计划身份 = 提交它的 ExitPlanMode toolCallId） */
+export interface SessionPlanItem {
+    planId: string
+    /** 所属回合（可在对话里定位；回合被删除的条目不返回） */
+    turnId: string | null
+    /** 列表标题：计划首个 Markdown 标题，缺省取首个非空行 */
+    title: string
+    /** 计划正文（Markdown 全文） */
+    content: string
+    status: SessionPlanStatus
+    /** 提交时间（Unix 毫秒） */
+    createdAt: number
+    /** 已落盘文件的工作区相对路径（未落盘为 null） */
+    path: string | null
+}
+
 export interface SessionState {
     turns: Turn[]  // 回合外壳列表（后端 getTurns 直连，渲染用）
     isStreaming: boolean
@@ -128,6 +147,12 @@ export interface SessionState {
      * 由 plan_mode_changed 流帧写入（此时前端是唯一知情方）。
      */
     planEnabled?: boolean
+    /**
+     * 计划历史缓存（计划模式产物：由转录构建的列表，含待审/已批/被拒状态）。
+     * 刷新触发：会话切换、plan_mode_changed 帧、turn_end（批准/拒绝/修订各路径兜底）；
+     * 消费方：计划面板、起始页入口、审批卡「查看完整计划」。
+     */
+    plans?: SessionPlanItem[]
     /** 会话内容缓存已加载标记:二次打开时不再向后端拉取,仅靠订阅增量补新 */
     loaded?: boolean
     /** 历史是否还有更早回合(分页游标状态,按会话记忆;组件级单例 ref 切会话会串) */

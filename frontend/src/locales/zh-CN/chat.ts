@@ -304,6 +304,23 @@ export default {
     noDiff: '该文件类型不支持逐行差异预览',
   },
 
+  // ── 计划历史（计划模式产物：审批卡入口 + 工作区计划面板） ──
+  plan: {
+    title: '计划',
+    empty: '暂无计划',
+    selectHint: '从左侧选择一个计划查看详情',
+    openFile: '在文件中打开',
+    refresh: '刷新',
+    refreshFailed: '计划列表刷新失败',
+    viewFullDoc: '查看完整计划',
+    streamingHint: '计划生成中…',
+    status: {
+      pending: '待审批',
+      approved: '已批准',
+      rejected: '已拒绝',
+    },
+  },
+
   // ── 工作区 ──
   workspace: {
     back: '后退',
@@ -358,6 +375,7 @@ export default {
     noPreviewFile: '暂无预览文件',
     newBrowser: '新建浏览器',
     newFile: '文件',
+    planTab: '计划',
     gitTab: 'Git 审阅',
     newTabHint: '从右侧目录树选择文件开始预览',
     saveSuccess: '保存成功',

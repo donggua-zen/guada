@@ -10,6 +10,12 @@
     :file-path="info.args.file || ''"
     :content="info.args.content || ''"
   />
+  <ToolPlanView
+    v-else-if="info.kind === 'plan'"
+    :content="info.args.content || ''"
+    :executing="executing"
+    :session-id="sessionId"
+  />
   <ToolTerminalView
     v-else
     :command="info.args.command || ''"
@@ -32,6 +38,7 @@ import { computed } from "vue";
 import ToolDiffView from "./ToolDiffView.vue";
 import ToolContentView from "./ToolContentView.vue";
 import ToolTerminalView from "./ToolTerminalView.vue";
+import ToolPlanView from "./ToolPlanView.vue";
 import { extractResultContent } from "@/utils/toolResult";
 import {
   parseTerminalResult,
@@ -48,6 +55,8 @@ const props = defineProps<{
   response?: ToolCallResponseEntry;
   isError?: boolean;
   executing?: boolean;
+  /** 所在会话（plan 视图的「查看完整计划」打开计划面板用） */
+  sessionId?: string;
 }>();
 
 /** 工具结果文本（含元数据标记；terminal 卡片从这里解析剥离） */

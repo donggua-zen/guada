@@ -73,7 +73,8 @@ export class PlanModePlugin extends PluginBase {
   }): Promise<void> {
     try {
       const ctx = payload.sessionContext;
-      const found = await this.planFile.readApprovedPlan({
+      // 每份计划一个文件（planId = 当次 ExitPlanMode 的 toolCallId），重注入取最近一份
+      const found = await this.planFile.readLatestPlan({
         workspacePath: ctx.getWorkspacePath(),
         sessionId: ctx.sessionId,
       });
@@ -167,10 +168,13 @@ Ensure your plan is complete and unambiguous:
     }
 
     // 先落盘、后翻转状态：写失败即中止本次退出（审批通过即代表计划已定稿，
-    // 不能出现"已退出但没有计划文件"的半截状态）
+    // 不能出现"已退出但没有计划文件"的半截状态）。
+    // planId = 本次工具调用 id（计划身份与转录对齐；每份计划一个文件，历史计划互不覆盖）
+    const planId = ctx?.toolCallId ?? `plan-${Date.now().toString(36)}`;
     const planPath = await this.planFile.writeApprovedPlan({
       workspacePath: session.getWorkspacePath(),
       sessionId: session.sessionId,
+      planId,
       plan: args.plan,
     });
 

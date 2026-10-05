@@ -53,6 +53,8 @@ export interface ProjectorSessionStore {
   setSessionPendingAsk(sessionId: string, pendingAsk: SessionState["pendingAsk"]): void;
   /** 模型发起的计划模式变更（同时更新投影与会话设置）；可选：无此概念的实现可省略 */
   applyRemotePlanEnabled?(sessionId: string, enabled: boolean): void;
+  /** 计划列表缓存刷新（plan_mode_changed / turn_end 触发）；可选：无此概念的实现可省略 */
+  refreshPlans?(sessionId: string): void;
   sessionIsStreaming?(sessionId: string): boolean;
 }
 
@@ -713,6 +715,8 @@ export function applyChunkToStore(
   if (chunk.type === "turn_end") {
     // 回合收尾：按 turnId 复位工作态 + 写回合级收尾元数据；同时清除会话级交互卡
     sessionStore.setSessionPendingAsk(sessionId, undefined);
+    // 计划列表缓存兜底刷新：批准/拒绝/修订各路径的新计划都在回合收尾后进入缓存
+    sessionStore.refreshPlans?.(sessionId);
     const turns = sessionStore.getTurns(sessionId) || [];
     const turn = turns.find((t) => t.id === chunk.turnId);
     if (turn) {
@@ -814,6 +818,8 @@ export function applyChunkToStore(
     // 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
     // 会话设置（事实源），否则刷新后指示器按旧设置回退。
     sessionStore.applyRemotePlanEnabled?.(sessionId, chunk.planEnabled);
+    // 开关变化的同一时刻也是新计划可能刚刚提交/被修订的信号，顺手刷新列表缓存
+    sessionStore.refreshPlans?.(sessionId);
     return;
   }
   if (chunk.type === "subagent_link") {
