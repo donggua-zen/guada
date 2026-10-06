@@ -264,9 +264,12 @@ export default {
   ask: {
     approval: '需要审批',
     input: '需要你的输入',
-    customReply: '请输入自定义回复',
+    customReply: '输入你的回答…',
     next: '下一步',
     submit: '提交',
+    ignore: '忽略',
+    ignoreTip: '不回答并停止当前轮',
+    keyboardHint: '使用上下键移动选取，回车提交',
     staleCredential: '交互凭证已失效，请刷新后重试',
     submitFailed: '应答提交失败',
   },
