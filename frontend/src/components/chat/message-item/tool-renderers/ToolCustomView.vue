@@ -14,6 +14,7 @@
     v-else-if="info.kind === 'plan'"
     :content="info.args.content || ''"
     :executing="executing"
+    :pending-approval="pendingApproval"
     :session-id="sessionId"
   />
   <ToolTerminalView
@@ -57,6 +58,8 @@ const props = defineProps<{
   executing?: boolean;
   /** 所在会话（plan 视图的「查看完整计划」打开计划面板用） */
   sessionId?: string;
+  /** 本工具调用正处于待审批（会话级交互卡的 toolCallId 命中）：plan 视图据此放行面板入口 */
+  pendingApproval?: boolean;
 }>();
 
 /** 工具结果文本（含元数据标记；terminal 卡片从这里解析剥离） */

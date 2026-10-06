@@ -45,8 +45,10 @@
         </el-icon>
       </div>
 
-      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容） -->
-      <div v-if="isExpanded(toolIndex)" class="tool-result-inline">
+      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容）。
+           独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框。 -->
+      <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
+        :class="{ 'is-plain': isStandaloneRow(toolIndex) }">
         <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空） -->
         <div v-if="tool.outcome === 'error' || tool.outcome === 'rejected'"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
@@ -59,7 +61,8 @@
         <!-- 定制渲染：按 renderer 声明（后端 display.renderer / 内置映射）优先展示参数 -->
         <ToolCustomView v-if="rendererInfos[toolIndex]" :info="rendererInfos[toolIndex]!"
           :response="getToolResponses(toolIndex)" :is-error="tool.outcome === 'error'"
-          :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId" />
+          :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId"
+          :pending-approval="isPendingApproval(tool)" />
 
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
@@ -92,6 +95,7 @@ import {
   getToolConfig, getToolIcon,
   getToolArgs, getArgsText,
   getToolRenderer, getRendererArgs,
+  isStandaloneRendererKind,
 } from '@/utils/toolDisplay';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
@@ -99,6 +103,7 @@ import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
+import { useSessionStore } from '@/stores/session';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
@@ -110,6 +115,16 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const sessionStore = useSessionStore();
+
+// ── 待审批锚点：会话级交互卡的 toolCallId 命中本行 → 该工具正在等用户批准
+//    （参数已定稿、结果未回；plan 视图据此在 executing 期间也放行「查看完整计划」）──
+
+const pendingApprovalToolCallId = computed(
+  () => sessionStore.sessionPendingAsk(props.sessionId || '')?.toolCallId,
+);
+const isPendingApproval = (tool: ToolCall): boolean =>
+  !!pendingApprovalToolCallId.value && tool.id === pendingApprovalToolCallId.value;
 
 // ── 子代理跳转（工具行 → 侧边栏工作区打开 subagent 标签）──
 
@@ -154,7 +169,7 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 };
 
 // ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
-// 例外：计划行（plan renderer）默认展开——正文就是内容本身，
+// 例外：独立渲染工具（计划行等，isStandaloneRendererKind）默认展开——正文就是内容本身，
 // 模型还在写计划时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
 
 const expandedIndexes = ref<Set<number>>(new Set());
@@ -167,13 +182,22 @@ watch(() => props.autoExpand, (auto) => {
   collapsedIndexes.value = new Set();
 }, { immediate: true });
 
-/** 默认展开的行（计划正文） */
-const isDefaultExpandedRow = (index: number): boolean =>
-  rendererInfos.value[index]?.kind === 'plan';
+/** 默认展开的行（独立渲染工具卡：正文即内容，与分组判定共用同一 kind 集合） */
+const isDefaultExpandedRow = (index: number): boolean => {
+  const kind = rendererInfos.value[index]?.kind;
+  return kind !== undefined && isStandaloneRendererKind(kind);
+};
 
 const isExpanded = (index: number): boolean => {
   if (expandedIndexes.value.has(index)) return true;
   return isDefaultExpandedRow(index) && !collapsedIndexes.value.has(index);
+};
+
+/** 独立渲染工具行（计划卡等）：结果区不套通用外框——卡片自带边框，避免双边框 */
+const isStandaloneRow = (index: number): boolean => {
+  const tool = props.toolCalls[index];
+  const kind = tool ? getToolRenderer(tool)?.kind : undefined;
+  return kind !== undefined && isStandaloneRendererKind(kind);
 };
 
 const toggleExpand = (index: number): void => {
@@ -278,6 +302,17 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   border-radius: 4px;
   /* 微微透明：透出下方正文一点底色，视觉更轻 */
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+}
+
+/* 独立渲染工具行（计划卡等）：不套第二层外框与底色——卡片自带边框（ZCode 同款
+   "不再套一层通用工具卡"）。--tool-card-pad-x 归零，避免内部视图的负边距把内容
+   顶出卡片（该变量本是用来抵消本层横向内边距的）。 */
+.tool-result-inline.is-plain {
+  --tool-card-pad-x: 0px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
 }
 
 /* 通用展示：输入 / 输出 两段式 */

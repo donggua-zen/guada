@@ -274,6 +274,26 @@ export function getToolRenderer(tool: ToolCall): ToolRendererConfig | null {
   return normalizeRenderer(backendDecl) ?? BUILTIN_RENDERERS[name] ?? null;
 }
 
+/**
+ * 独立成块的 renderer kind：命中时该工具不并入「中间处理过程」分组，
+ * 单独成组、不可折叠、直接渲染（分组消费方见 messageUtils.doGrouping）。
+ *
+ * plan：计划正文是待审阅的产物，折进"已执行 N 个步骤"标题后默认不可见，
+ * 行级"默认展开"救不了被折叠的分组整体。后续若有同类产物（如问答卡），加进集合即可。
+ */
+const STANDALONE_RENDERER_KINDS: ReadonlySet<ToolRendererConfig["kind"]> = new Set(["plan"]);
+
+/** kind 是否独立成块渲染（分组与行级默认展开共用同一集合） */
+export function isStandaloneRendererKind(kind: ToolRendererConfig["kind"]): boolean {
+  return STANDALONE_RENDERER_KINDS.has(kind);
+}
+
+/** 工具是否独立成块（按 renderer kind 判定，与行级判定同一来源；无 renderer 的工具不独立） */
+export function isStandaloneTool(tool: ToolCall): boolean {
+  const kind = getToolRenderer(tool)?.kind;
+  return kind !== undefined && isStandaloneRendererKind(kind);
+}
+
 /** 各 kind 至少要有一个语义字段可解析才值得定制渲染 */
 const RENDERER_REQUIRED_KEYS: Record<
   ToolRendererConfig["kind"],
