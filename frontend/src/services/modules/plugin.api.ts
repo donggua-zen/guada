@@ -1,14 +1,27 @@
 import type { ApiContext } from "./api-context";
+import type { GuaDaSharedRuntime } from "@/types/plugin-runtime";
+
+/** /plugins/slots 的条目（与 stores/pluginSlots 的 SlotItem 同构） */
+export interface PluginSlotItem {
+  pluginId: string
+  /** 组件标识：'builtin:<key>' 走内置 import map，其余按插件产物文件名解析 */
+  component: string
+  order: number
+  mode?: string
+  props?: Record<string, unknown>
+  meta?: Record<string, unknown>
+}
 
 export interface ConfigField {
   key: string;
   label: string;
   type: "text" | "password" | "number" | "select" | "textarea";
   required?: boolean;
-  default?: any;
+  /** 缺省值（插件自定义，形状随字段类型变化） */
+  default?: unknown;
   placeholder?: string;
-  showIf?: { field: string; equals: any };
-  options?: { label: string; value: any }[];
+  showIf?: { field: string; equals: unknown };
+  options?: { label: string; value: unknown }[];
 }
 
 export interface AttachmentTypeInfo {
@@ -22,7 +35,7 @@ export interface AttachmentItem {
   id: string;
   name: string;
   description?: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }
 
 export interface PluginAttachmentList {
@@ -60,13 +73,17 @@ export interface PluginApi {
   getPluginAttachments(pluginId: string): Promise<PluginAttachmentList[]>;
   getPluginUiPages(area?: string): Promise<UiPageInfo[]>;
   /** 获取所有插件的 slot 注册清单（v2 插件 UI）与插件主题清单 */
-  getPluginSlots(): Promise<{ slots: Record<string, any[]>; themes?: PluginThemeManifest[] }>;
-  /** 调用插件后端 RPC 方法 */
-  call(pluginId: string, method: string, args?: any): Promise<any>;
-  /** 获取共享运行时上下文（用户/会话等基础信息） */
-  getSharedContext(): Promise<{ user?: any; session?: any }>;
-  getPluginData(pluginId: string): Promise<Record<string, any>>;
-  setPluginData(pluginId: string, key: string, value: any): Promise<{ success: boolean }>;
+  getPluginSlots(): Promise<{ slots: Record<string, PluginSlotItem[]>; themes?: PluginThemeManifest[] }>;
+  /** 调用插件后端 RPC 方法（args/返回值形状由插件自定义） */
+  call(pluginId: string, method: string, args?: unknown): Promise<unknown>;
+  /** 获取共享运行时上下文（用户/会话等基础信息，形状 = plugin-runtime.d.ts 的共享 reactive） */
+  getSharedContext(): Promise<{
+    user: GuaDaSharedRuntime['user'];
+    session: GuaDaSharedRuntime['session'];
+  }>;
+  /** 插件键值存储（值形状由插件自定义，动态结构） */
+  getPluginData(pluginId: string): Promise<Record<string, unknown>>;
+  setPluginData(pluginId: string, key: string, value: unknown): Promise<{ success: boolean }>;
   deletePluginData(pluginId: string, key: string): Promise<{ success: boolean }>;
   /**
    * ⚠️ 已注释：与 settings.api.ts 的同名方法重复（同一端点 POST /plugins/query）。
@@ -76,7 +93,7 @@ export interface PluginApi {
    * config（智能体层工具包过滤）与 lang（NLS 本地化）被静默丢弃。
    * 此处让位给 settings.api.ts 的实现；测试通过后再删除本段。
    */
-  // queryPlugins(): Promise<{ plugins: any[] }>;
+  // queryPlugins(): Promise<{ plugins: unknown[] }>;
   /** 从分发源安装插件（后台任务，返回 jobId，轮询 install-log 看进度） */
   installPlugin(source: string): Promise<{ jobId: string }>;
   /** 查询安装任务日志（假终端） */
@@ -88,7 +105,7 @@ export interface PluginApi {
   /** 更新插件（git 分发） */
   updatePlugin(pluginId: string): Promise<{ success: boolean }>;
   /** 启用/停用插件 */
-  setPluginEnabled(pluginId: string, enabled: boolean): Promise<any>;
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
 }
 
 export const pluginApi: PluginApi = {
@@ -105,13 +122,13 @@ export const pluginApi: PluginApi = {
     return await this._request(`/plugins/ui-pages${q}`);
   },
   async getPluginSlots(this: ApiContext) {
-    return await this._request("/plugins/slots");
+    return await this._request<{ slots: Record<string, PluginSlotItem[]>; themes?: PluginThemeManifest[] }>("/plugins/slots");
   },
 
-  async call(this: ApiContext, pluginId: string, method: string, args?: any) {
+  async call(this: ApiContext, pluginId: string, method: string, args?: unknown) {
     const sessionId = window.__GuaDaShared__?.runtime?.session?.id;
     const workspaceId = window.__GuaDaShared__?.runtime?.session?.workspaceId;
-    return await this._request(`/plugins/${pluginId}/rpc/${method}`, {
+    return await this._request<unknown>(`/plugins/${pluginId}/rpc/${method}`, {
       method: "POST",
       data: { args, sessionId, workspaceId },
     });
@@ -125,11 +142,11 @@ export const pluginApi: PluginApi = {
   },
 
   async getPluginData(this: ApiContext, pluginId: string) {
-    return await this._request(`/plugins/${pluginId}/data`);
+    return await this._request<Record<string, unknown>>(`/plugins/${pluginId}/data`);
   },
 
-  async setPluginData(this: ApiContext, pluginId: string, key: string, value: any) {
-    return await this._request(`/plugins/${pluginId}/data/${key}`, {
+  async setPluginData(this: ApiContext, pluginId: string, key: string, value: unknown) {
+    return await this._request<{ success: boolean }>(`/plugins/${pluginId}/data/${key}`, {
       method: "PUT",
       data: { value },
     });
@@ -171,7 +188,7 @@ export const pluginApi: PluginApi = {
   },
 
   async setPluginEnabled(this: ApiContext, pluginId: string, enabled: boolean) {
-    return await this._request("/plugins/global", {
+    return await this._request<{ success: boolean }>("/plugins/global", {
       method: "PUT",
       data: { pluginId, enabled },
     });

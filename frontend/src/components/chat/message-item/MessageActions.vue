@@ -77,7 +77,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';

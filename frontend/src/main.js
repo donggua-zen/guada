@@ -28,7 +28,6 @@ import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
 import { registerUiPrimitives } from "@/components/ui/register";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
-import { useLayoutStore } from "./stores/layout";
 import {
   backendReady,
   backendError,
@@ -131,10 +130,9 @@ const routes = [
         component: () => import("./components/scheduler/SchedulerPage.vue"),
       },
       {
+        // 模型管理已并入设置页「模型供应商」分区，此路径仅重定向兜底旧链接
         path: "models",
-        name: "Models",
-        meta: { titleKey: "common.route.models", requiresAuth: true },
-        component: () => import("./components/models/ModelsPage.vue"),
+        redirect: "/setting/providers",
       },
     ],
   },

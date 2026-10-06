@@ -1,138 +1,141 @@
 <template>
   <div class="h-full overflow-hidden flex flex-col">
-    <PageHeader :title="t('settings.models.title')" />
-    <div class="flex-1 flex flex-col overflow-hidden">
-      <template v-if="!showDetail">
-        <!-- 标题区（固定不滚动） -->
-        <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-260 md:mx-auto">
-          <div class="min-w-0">
-            <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
-            <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
-          </div>
-          <el-button type="primary" @click="handleCreateGroup">
-            <template #icon><PlusOutlined /></template>
-            {{ t('settings.models.addCustom') }}
-          </el-button>
+    <template v-if="!showDetail">
+      <!-- 标题区（固定不滚动） -->
+      <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-220 md:mx-auto">
+        <div class="min-w-0">
+          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
+          <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
         </div>
+        <el-button type="primary" @click="handleCreateGroup">
+          <template #icon><PlusOutlined /></template>
+          {{ t('settings.models.addCustom') }}
+        </el-button>
+      </div>
 
-        <!-- 内容区（独立滚动，满屏宽度） -->
-        <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
-          <div class="px-4 pb-4 w-full md:max-w-260 md:mx-auto">
-            <ModelsProviderList :items="providers" :templates="availableTemplates"
-              @item-click="handleItemClick"
-              @item-toggle="handleToggleProvider"
-              @item-edit="handleEditProvider"
-              @item-delete="handleDeleteProviderFromList"
-              @template-click="handleTemplateClick">
-            </ModelsProviderList>
-          </div>
+      <!-- 内容区（独立滚动，满屏宽度） -->
+      <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
+        <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
+          <ModelsProviderList :items="providers" :templates="availableTemplates"
+            @item-click="handleItemClick"
+            @item-toggle="handleToggleProvider"
+            @item-edit="handleEditProvider"
+            @item-delete="handleDeleteProviderFromList"
+            @template-click="handleTemplateClick">
+          </ModelsProviderList>
         </div>
-      </template>
-      <template v-else>
-        <ModelsProviderDetail
-          :provider="currentProvider"
-          :models="currentModels"
-          :model-presets="modelPresets"
-          @back="showDetail = false"
-          @changed="reloadProvidersAndModels"
-        />
-      </template>
+      </div>
+    </template>
+    <template v-else>
+      <ModelsProviderDetail
+        :provider="currentProvider"
+        :models="currentModels"
+        :model-presets="modelPresets"
+        @back="showDetail = false"
+        @changed="reloadProvidersAndModels"
+      />
+    </template>
 
-      <!-- 供应商编辑弹窗 -->
-      <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
-        class="provider-modal dialog-with-scroll">
-        <div class="dialog-content">
-          <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-            label-position="left" hide-required-asterisk>
-            <el-form-item :label="t('settings.models.name')" prop="name">
-              <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
-            </el-form-item>
-            <el-form-item :label="t('settings.models.protocol')" prop="protocol">
-              <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
-                :disabled="!isProtocolEditable">
-                <el-option label="OpenAI" value="openai" />
-                <el-option label="OpenAI-Response" value="openai-response" />
-                <el-option label="Gemini" value="gemini" />
-                <el-option label="Anthropic" value="anthropic" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
-              <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
-            </el-form-item>
-            <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
-              <div class="api-key-input-wrapper">
-                <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
-                <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
-                  :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
-                  {{ t('settings.models.test') }}
-                </el-button>
-              </div>
-              <!-- API Key 获取链接（仅非自定义供应商显示） -->
-              <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
-                <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
-                  <el-icon class="mr-1">
-                    <LinkOutlined />
-                  </el-icon>
-                  {{ t('settings.models.getApiKey') }}
-                </el-link>
-              </div>
-            </el-form-item>
-            <!-- 自定义请求头（仅自定义供应商可编辑） -->
-            <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
-              <el-input
-                v-model="currentProviderEdit.headers"
-                type="textarea"
-                :rows="4"
-                class="w-full"
-                :placeholder="t('settings.models.customHeadersPlaceholder')"
-              />
-              <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
-            </el-form-item>
-          </el-form>
-        </div>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
-            <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
-          </span>
-        </template>
-      </GdDialog>
-    </div>
+    <!-- 供应商编辑弹窗 -->
+    <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
+      class="provider-modal dialog-with-scroll">
+      <div class="dialog-content">
+        <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
+          label-position="left" hide-required-asterisk>
+          <el-form-item :label="t('settings.models.name')" prop="name">
+            <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
+          </el-form-item>
+          <el-form-item :label="t('settings.models.protocol')" prop="protocol">
+            <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
+              :disabled="!isProtocolEditable">
+              <el-option label="OpenAI" value="openai" />
+              <el-option label="OpenAI-Response" value="openai-response" />
+              <el-option label="Gemini" value="gemini" />
+              <el-option label="Anthropic" value="anthropic" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
+            <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
+          </el-form-item>
+          <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
+            <div class="api-key-input-wrapper">
+              <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
+              <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
+                :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
+                {{ t('settings.models.test') }}
+              </el-button>
+            </div>
+            <!-- API Key 获取链接（仅非自定义供应商显示） -->
+            <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
+              <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
+                <el-icon class="mr-1">
+                  <LinkOutlined />
+                </el-icon>
+                {{ t('settings.models.getApiKey') }}
+              </el-link>
+            </div>
+          </el-form-item>
+          <!-- 自定义请求头（仅自定义供应商可编辑） -->
+          <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
+            <el-input
+              v-model="currentProviderEdit.headers"
+              type="textarea"
+              :rows="4"
+              class="w-full"
+              :placeholder="t('settings.models.customHeadersPlaceholder')"
+            />
+            <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
+        </span>
+      </template>
+    </GdDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ModelsProviderList from '../setting/ModelsProviderList.vue'
-import ModelsProviderDetail from './ModelsProviderDetail.vue'
+import ModelsProviderList from './ModelsProviderList.vue'
+import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
 import {
   PlusOutlined,
   LinkOutlined
 } from '@vicons/material'
-import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import type { Model, ModelPreset, ModelProvider, ProviderTemplate } from '@/types/api'
+import type { CreateProviderPayload, UpdateProviderPayload } from '../../services/modules/model.api'
 
 // Element Plus 组件导入
 import { ElInput, ElFormItem, ElForm, ElButton, ElSelect, ElOption } from 'element-plus'
-import type { FormInstance } from 'element-plus'
+import type { FormInstance, FormItemRule } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
+
+// wire 数据含 enabled（列表开关读写，setProviderEnabled 返回 { id, enabled }），共享接口未收录该字段
+type ProviderRow = ModelProvider & { enabled?: boolean }
+// bundled-providers/*.yaml 模板携带 apiKeyUrl（"获取 API Key"跳转用），ProviderTemplate 接口未收录
+type ProviderTemplateRow = ProviderTemplate & { apiKeyUrl?: string }
 
 const { t } = useI18n()
 const { notify, confirm } = usePopup()
 const currentProviderId = ref<string | null>(null)
 
 // 使用响应式数据替代伪数据
-const providers = ref<any[]>([])
-const models = ref<any[]>([])
+const providers = ref<ProviderRow[]>([])
+const models = ref<Model[]>([])
 const showDetail = ref(false)
 
 // 供应商模板相关
-const providerTemplates = ref<any[]>([])
+const providerTemplates = ref<ProviderTemplateRow[]>([])
 // 模型预设库
-const modelPresets = ref<any[]>([])
+const modelPresets = ref<ModelPreset[]>([])
 
 // 模板全量展示（同类型可添加多实例；内置类型即预置配置文件，不再限制一个）
 const availableTemplates = computed(() => providerTemplates.value)
@@ -203,7 +206,7 @@ const providerRules = computed(() => ({
     trigger: ['blur']
   },
   headers: {
-    validator: (rule: any, value: string, callback: any) => {
+    validator: (_rule: FormItemRule, value: string, callback: (error?: string | Error) => void) => {
       const errors = validateHeadersText(value)
       if (errors.length > 0) {
         callback(new Error(errors.join('；')))
@@ -248,10 +251,12 @@ const reloadProvidersAndModels = async () => {
   })
 }
 
-const currentProvider = computed(() => {
+const currentProvider = computed<ModelProvider>(() => {
   const provider = providers.value.find(p => p.id === currentProviderId.value)
   if (!provider) {
-    return { name: "", apiUrl: "", apiKey: "" }
+    // 未选中供应商时的显示占位：详情视图仅在选中具体供应商（handleItemClick 先写 id）后渲染，
+    // 该兜底对象只参与标题展示，缺失字段不会被任何请求读取
+    return { name: "", apiUrl: "", apiKey: "" } as ModelProvider
   }
   return provider
 })
@@ -287,7 +292,7 @@ const handleSaveProvider = async () => {
     const headers = parseHeaders(currentProviderEdit.value.headers)
 
     if (isProviderEditMode.value) {
-      const updateData: any = {
+      const updateData: UpdateProviderPayload = {
         apiKey: currentProviderEdit.value.apiKey,
         apiUrl: currentProviderEdit.value.apiUrl,
         attributes: {
@@ -319,7 +324,7 @@ const handleSaveProvider = async () => {
 
       showProviderModal.value = false
     } else {
-      const payload: any = {
+      const payload: CreateProviderPayload = {
         name: currentProviderEdit.value.name,
         apiUrl: currentProviderEdit.value.apiUrl,
         apiKey: currentProviderEdit.value.apiKey,
@@ -402,24 +407,24 @@ const handleOpenApiKeyUrl = () => {
 const parseHeaders = (text: string): Record<string, string> => {
   const headers: Record<string, string> = {}
   const lines = text.trim().split('\n')
-  
+
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (!trimmedLine) continue
-    
+
     const colonIndex = trimmedLine.indexOf(':')
     if (colonIndex === -1) {
       continue
     }
-    
+
     const key = trimmedLine.substring(0, colonIndex).trim()
     const value = trimmedLine.substring(colonIndex + 1).trim()
-    
+
     if (key) {
       headers[key] = value
     }
   }
-  
+
   return headers
 }
 
@@ -427,11 +432,11 @@ const parseHeaders = (text: string): Record<string, string> => {
 const validateHeadersText = (text: string): string[] => {
   const errors: string[] = []
   const lines = text.trim().split('\n')
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
-    
+
     const colonIndex = line.indexOf(':')
     if (colonIndex === -1) {
       errors.push(t('settings.models.headerFormatError', { line: i + 1 }))
@@ -442,18 +447,18 @@ const validateHeadersText = (text: string): string[] => {
       }
     }
   }
-  
+
   return errors
 }
 
 
-const handleItemClick = (provider: any) => {
+const handleItemClick = (provider: ProviderRow) => {
   showDetail.value = true
   currentProviderId.value = provider.id
 }
 
 // 编辑供应商配置
-const handleEditProvider = (provider: any) => {
+const handleEditProvider = (provider: ProviderRow) => {
   currentProviderId.value = provider.id
   isProviderEditMode.value = true
   const existingHeaders = provider.attributes?.headers || {}
@@ -477,7 +482,7 @@ const handleEditProvider = (provider: any) => {
 }
 
 // 处理模板点击（从网格中添加）
-const handleTemplateClick = (template: any) => {
+const handleTemplateClick = (template: ProviderTemplateRow) => {
   currentProviderId.value = null
   isProviderEditMode.value = false
 
@@ -498,7 +503,7 @@ const handleTemplateClick = (template: any) => {
 }
 
 // 启用/禁用开关
-const handleToggleProvider = async (provider: any, enabled: boolean) => {
+const handleToggleProvider = async (provider: ProviderRow, enabled: boolean) => {
   try {
     await apiService.setProviderEnabled(provider.id, enabled)
     provider.enabled = enabled
@@ -520,7 +525,7 @@ const deleteProviderInstance = async (providerId: string) => {
 // 删除供应商实例（真删文件）：
 // 内置类型实例删掉后不会自动补种，可从「可添加的供应商」随时重新添加；
 // 停用请用卡片开关（enabled: false），删除是不可逆的移除。
-const handleDeleteProviderFromList = async (provider: any) => {
+const handleDeleteProviderFromList = async (provider: ProviderRow) => {
   const isBuiltinType = provider.provider && provider.provider !== 'custom'
   const result = await confirm(
     t('settings.models.deleteProvider'),

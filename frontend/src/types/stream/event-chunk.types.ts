@@ -18,6 +18,7 @@
  */
 
 import type { StreamChunk, StreamUsage } from "./stream-chunk.types";
+import type { ContentBlock } from "./content-block.types";
 
 // ==================== 回合级事件 ====================
 
@@ -46,6 +47,11 @@ export interface TurnEndEvent {
     usedTokens: number;
     effectiveContextWindow: number;
   };
+  /**
+   * 回合模型名：live 广播不带此字段；由领域事件 turn/finish 映射而来的 turn_end 会带上
+   * （折叠器统一按可选字段读取）。
+   */
+  modelName?: string;
 }
 
 /** 回合删除（重答）：从视图直接移除该回合 */
@@ -56,12 +62,29 @@ export interface TurnDeleteEvent {
 
 // ==================== 消息级事件 ====================
 
+/**
+ * 后端三层 Message 的线上镜像（user_message 广播载荷）。
+ * 与 types/message.ts 的展示型 Message 不同层：content 是 ContentBlock[]（后端块协议）。
+ */
+export interface WireMessage {
+  id: string;
+  /** 与前端 MessageRole 同域：system 消息不进流广播 */
+  role: "user" | "assistant" | "tool" | "event";
+  kind?: "user" | "model";
+  /** 消息来源（判断"是不是人说的话"的单一真相） */
+  source?: { kind: string; [key: string]: unknown };
+  metadata: Record<string, unknown>;
+  content: ContentBlock[];
+  /** Unix 毫秒时间戳（replayer 从事件 time 还原） */
+  createdAt?: number;
+}
+
 /** 用户消息入库广播（携带三层 userMessage 对象） */
 export interface UserMessageEvent {
   type: "user_message";
   messageId?: string;
   turnId?: string;
-  userMessage: any;
+  userMessage: WireMessage;
 }
 
 /** LLM 流重试信号（引擎级，非模型输出）——轮次级瞬态，前端挂 turn.state.retry（不落库） */
@@ -94,7 +117,7 @@ export interface ToolCallsResponseEvent {
     toolCallId: string;
     outcome?: "success" | "error" | "rejected";
     /** UI 渲染元数据（仅前端消费，不进 LLM 上下文），来自工具返回的 meta */
-    meta?: Record<string, any>;
+    meta?: Record<string, unknown>;
   }>;
 }
 
@@ -155,7 +178,7 @@ export interface CompactionSummaryEvent {
 }
 
 /**
- * 统一人机交互（审批 / 询问 / 迭代暂停继续共用一个闭环）。
+ * 统一人机交互（审批 / 询问共用一个闭环）。
  * 与后端 ask/asked 审计事件的区别：这是流内 UI 信号（eventBuffer 可重放 + SSE 直投）。
  * 无超时：等待只有三种终结——用户应答、用户停止（abort）、重启丢表（404）。
  * 与后端 common/types/ask.types.ts 逐字段同构。
@@ -184,7 +207,7 @@ export interface AskAnswerItem {
   custom?: string;
 }
 
-export type AskKind = "approval" | "ask" | "continue";
+export type AskKind = "approval" | "ask";
 
 export interface AskRequestedEvent {
   type: "ask_requested";
@@ -227,6 +250,34 @@ export interface WorkflowEvent {
   event: import("./workflow.types").WorkflowEventData;
 }
 
+/**
+ * 子代理已创建（与后端 event-chunk.types.ts 同构）：工具调用 ↔ 子会话的关联键。
+ * 它比工具结果早到——前台 spawn 阻塞期间工具结果尚未落库，只有这条流事件能建立关联；
+ * 走流通道（进 eventBuffer）故随 SSE 建连重放回来，刷新不丢。
+ */
+export interface SubAgentLinkEvent {
+  type: "subagent_link";
+  /** 派生子代理的那次工具调用 id */
+  toolCallId: string;
+  subSessionId: string;
+  /** 子代理名称，仅用于展示 */
+  name?: string;
+}
+
+/**
+ * 计划模式变更（协作状态，正交于安全档位）。
+ * 事实源是会话设置；本帧驱动指示器与多窗口同步。模型经 ExitPlanMode 审批通过后
+ * 关闭计划模式时，本帧是前端的唯一知情渠道。
+ */
+export interface PlanModeChangedEvent {
+  type: "plan_mode_changed";
+  planEnabled: boolean;
+  previousPlanEnabled: boolean;
+  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  source: "user" | "tool";
+  toolCallId?: string;
+}
+
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
@@ -243,6 +294,8 @@ export type SessionStreamEvent =
   | AskRequestedEvent
   | AskResolvedEvent
   | WorkflowEvent
+  | SubAgentLinkEvent
+  | PlanModeChangedEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

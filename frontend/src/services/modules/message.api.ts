@@ -11,14 +11,17 @@ interface TurnLike {
   id: string;
   /** 前端展示链路（display 视图）透传后端 kind：'turn' 普通回合 / 'event' 事件外壳（command/compaction） */
   kind: "turn" | "event";
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   messages: Array<{
     id: string;
-    role: string;
-    kind?: string;
+    role: MessageRole;
+    /** 消息种类：user=人类输入 / model=模型产出（与前端 TurnContent.kind 同一取值域） */
+    kind?: "user" | "model";
+    /** 消息来源（后端 Message.source）——"是否人类输入"的单一真相载体 */
+    source?: { kind: string; [key: string]: unknown };
     /** 后端为 Unix 毫秒时间戳（replayer 从事件 time 还原），前端转 ISO 串使用 */
     createdAt?: number;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
     content: Array<{
       type: string;
       text?: string;
@@ -55,8 +58,8 @@ export function extFromMediaType(mediaType?: string): string | undefined {
  * 必须剔除，否则 reasoning/text 块也会携带 toolCalls 被 flattenSingleContent 误判为 tool item（双渲染）。 */
 function blockToContent(
   block: TurnLike["messages"][number]["content"][number],
-  msgMeta: Record<string, any>,
-  toolResultsMap?: Record<string, any>,
+  msgMeta: Record<string, unknown>,
+  toolResultsMap?: Record<string, unknown>,
   createdAt?: string,
   /** 块在消息内的序号 + 消息 id：P6c 起作为块唯一标识（原 contentId 已删除） */
   blockRef?: { index: number; messageId: string },
@@ -143,16 +146,16 @@ function blockToContent(
  */
 export function messageToTurnContent(
   msg: TurnLike["messages"][number],
-  msgMeta: Record<string, any> = (msg as any).metadata || {},
+  msgMeta: Record<string, unknown> = msg.metadata || {},
 ): TurnContent[] {
   // 消息级时间(后端 Unix ms → ISO 串)下放到内容桶；缺失时不伪造
-  const createdAtIso = (msg as any).createdAt
-    ? new Date((msg as any).createdAt).toISOString()
+  const createdAtIso = msg.createdAt
+    ? new Date(msg.createdAt).toISOString()
     : undefined;
-  const role = (msg.role as MessageRole) || "user";
+  const role = msg.role || "user";
   // 来源透传：source.kind 是"是否人类输入"的单一真相，下游据此过滤注入消息
-  const source = (msg as any).source as TurnContent["source"] | undefined;
-  const kind = (msg as any).kind as TurnContent["kind"] | undefined;
+  const source = msg.source;
+  const kind = msg.kind;
   return (msg.content || []).map((b, index) => ({
     ...blockToContent(b, msgMeta, undefined, createdAtIso, { index, messageId: msg.id }),
     role,
@@ -178,20 +181,21 @@ export interface MessageApi {
     nextBeforeSeq: number | null;
     hasMore: boolean;
   }>;
-  importMessages(sessionId: string, messages: any[]): Promise<any>;
+  importMessages(sessionId: string, messages: Array<Record<string, unknown>>): Promise<{ imported: number }>;
   createMessage(
     sessionId: string,
     content: string,
-    files?: any[],
+    files?: FileRef[],
     replaceTurnId?: string | null,
     knowledgeBaseIds?: string[],
   ): Promise<Message>;
   clearSessionMessages(sessionId: string): Promise<boolean>;
   /** 删除本轮对话（按回合 id，整轮遮蔽） */
   deleteTurn(sessionId: string, turnId: string): Promise<{ success: boolean }>;
-  updateMessage(sessionId: string, messageId: string, data: any): Promise<Message>;
-  webSearch(messageId: string): Promise<any>;
-  /** 统一交互应答（审批/询问/迭代暂停继续共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
+  updateMessage(sessionId: string, messageId: string, data: Record<string, unknown>): Promise<Message>;
+  /** 后端暂无此路由（web 搜索由插件侧实现），保留占位待接 */
+  webSearch(messageId: string): Promise<unknown>;
+  /** 统一交互应答（审批/询问共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
    * 唤醒后端原地阻塞的工具/引擎，无超时） */
   respond(
     sessionId: string,
@@ -223,8 +227,8 @@ export const messageApi: MessageApi = {
     }>(url);
   },
 
-  async importMessages(this: ApiContext, sessionId: string, messages: any[]) {
-    return await this._request(`/sessions/${sessionId}/messages/import`, {
+  async importMessages(this: ApiContext, sessionId: string, messages: Array<Record<string, unknown>>) {
+    return await this._request<{ imported: number }>(`/sessions/${sessionId}/messages/import`, {
       method: "POST",
       data: messages,
     });
@@ -234,11 +238,11 @@ export const messageApi: MessageApi = {
     this: ApiContext,
     sessionId: string,
     content: string,
-    files: any[] = [],
+    files: FileRef[] = [],
     replaceTurnId: string | null = null,
     knowledgeBaseIds?: string[],
   ) {
-    return await this._request(`/sessions/${sessionId}/messages`, {
+    return await this._request<Message>(`/sessions/${sessionId}/messages`, {
       method: "POST",
       data: {
         content,
@@ -260,15 +264,15 @@ export const messageApi: MessageApi = {
     return await this._request(`/sessions/${sessionId}/turns/${turnId}`, { method: "DELETE" });
   },
 
-  async updateMessage(this: ApiContext, sessionId: string, messageId: string, data: any) {
-    return await this._request(`/sessions/${sessionId}/messages/${messageId}`, {
+  async updateMessage(this: ApiContext, sessionId: string, messageId: string, data: Record<string, unknown>) {
+    return await this._request<Message>(`/sessions/${sessionId}/messages/${messageId}`, {
       method: "PUT",
       data,
     });
   },
 
   async webSearch(this: ApiContext, messageId: string) {
-    return await this._request(`/messages/${messageId}/web_search`, {
+    return await this._request<unknown>(`/messages/${messageId}/web_search`, {
       method: "GET",
     });
   },

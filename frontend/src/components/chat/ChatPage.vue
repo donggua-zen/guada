@@ -15,7 +15,7 @@
                 <template #title-actions>
                   <DropdownMenu @command="handleMoreSelect">
                     <div class="header-icon-btn">
-                      <MoreVertOutlined class="w-5 h-5" />
+                      <MoreHorizontal24Regular class="w-5 h-5" />
                     </div>
                     <template #dropdown>
                       <DropdownMenuItem command="clear">
@@ -28,12 +28,13 @@
                   </DropdownMenu>
                 </template>
                 <template #actions>
-                  <!-- 工作目录打开操作（仅 Electron）：主按钮 VSCode + 下拉箭头选其他方式 -->
+                  <!-- 工作目录打开操作（仅 Electron）：主按钮 = 上次选择的方式，下拉箭头切换 -->
                   <template v-if="isElectron && mainSession?.id">
                     <div class="relative inline-flex items-center">
-                      <GdTooltip :content="t('chat.workspace.openInVSCode')" placement="bottom">
-                        <div class="header-icon-btn" @click="openWorkspaceInVSCode">
-                          <VsCode class="w-5 h-5" />
+                      <GdTooltip :content="openWithCurrent.label" placement="bottom">
+                        <div class="header-icon-btn" @click="openWorkspaceWith(openWithMode)">
+                          <!-- WindowsExplorer 是 <img>（尺寸走 font-size），VsCode 是 <svg>（走 w/h） -->
+                          <component :is="openWithCurrent.icon" class="w-5 h-5" style="font-size: 20px" />
                         </div>
                       </GdTooltip>
                       <GdTooltip :content="t('chat.workspace.openWith')" placement="bottom">
@@ -44,13 +45,10 @@
                       </GdTooltip>
                       <GdPopover v-model:show="openWithMenuVisible" :anchor-el="openWithBtnRef" :width="190">
                         <div class="py-1">
-                          <div class="open-with-item" @click="handleOpenWith('explorer')">
-                            <WindowsExplorer class="w-4 h-4" />
-                            <span>{{ t('chat.workspace.openInFileManager') }}</span>
-                          </div>
-                          <div class="open-with-item" @click="handleOpenWith('terminal')">
-                            <TerminalOutlined class="w-4 h-4" />
-                            <span>{{ t('chat.workspace.openInTerminal') }}</span>
+                          <div v-for="option in openWithOptions" :key="option.mode" class="open-with-item"
+                            @click="handleSelectOpenWith(option.mode)">
+                            <component :is="option.icon" class="w-4 h-4" style="font-size: 16px" />
+                            <span>{{ option.label }}</span>
                           </div>
                         </div>
                       </GdPopover>
@@ -82,7 +80,6 @@
                   :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                   @container-resize="onChatContainerResize"
                   @save-settings="handleSaveSessionSettings"
-                  @attachments-change="handleAttachmentsChange"
                   @select-agent="handleSelectAgent">
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
@@ -136,8 +133,10 @@ import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
 import { useTitle } from '@/composables/useTitle';
-import type { Session } from '@/types/session';
+import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
+import type { SessionEvent } from '@/services/modules/SessionEventsService';
+import type { SnipData } from './workspace/FilePreviewPanel.vue';
 import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
@@ -147,12 +146,11 @@ import GdTooltip from "@/components/ui/GdTooltip.vue";
 import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
-  MoreVertOutlined,
   DeleteTwotone,
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular } from "@vicons/fluent";
+import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular } from "@vicons/fluent";
 import { VsCode, WindowsExplorer } from "@/components/icons";
 import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";
@@ -275,7 +273,7 @@ const subSessions = ref<Session[]>([]);
  *
  * 仅负责在 subSessions 中登记，不管理状态。状态由 stream_started/stream_finished 统一处理。
  */
-function handleSubAgentCreate(event: any) {
+function handleSubAgentCreate(event: SessionEvent) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   const name = payload.name || t('chat.panel.subTask');
@@ -298,7 +296,7 @@ function handleSubAgentCreate(event: any) {
  * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭；
  * 冻结的子代理也可随时从概览"已结束"组重开回放）。
  */
-function handleSubAgentClosed(event: any) {
+function handleSubAgentClosed(event: SessionEvent) {
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   if (!subSessionId) return;
@@ -361,8 +359,6 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
-/** 分栏容器（LiteSplitpanes 根，总宽稳定不随切换变化） */
-const splitContainerRef = ref<HTMLElement | null>(null);
 // 工作目录分割比例（目录树 / 预览 / Git 统一使用单一宽度）
 const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
 // 控制设置模态框的显示与隐藏
@@ -456,63 +452,52 @@ function onPaneResized(size: number) {
  * 根据会话 ID 更新会话信息
  * 直接更新 sessionStore 中的统一数据源
  */
-const updateSessionById = async (sessionId: string, data: any) => {
+const updateSessionById = async (sessionId: string, data: Session) => {
   const session = sessionStore.getSession(sessionId);
   if (session) {
     // 定义需要更新的字段
     const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
 
+    // 兼容历史 snake_case 字段（不在 Session 类型上）→ 断言为可索引读法，仍只复制 allowedFields
+    const source = data as unknown as Record<string, unknown>;
     // 只复制允许的字段并批量更新
     for (const field of allowedFields) {
-      if (field in data) {
-        (session as unknown as Record<string, unknown>)[field] = data[field];
+      if (field in source) {
+        (session as unknown as Record<string, unknown>)[field] = source[field];
       }
     }
   }
 };
 
-/**
- * 在文件管理器中打开当前会话的工作目录（仅 Electron；由 Header 工作目录按钮触发）
- */
-async function openInFileManager() {
-  const sessionId = mainSession.value?.id;
-  if (!sessionId || !isElectron) return;
+// ── 工作目录打开方式（Header 主按钮 + 下拉箭头） ──
+// 下拉选过就记住（持久化），主按钮图标/点击行为跟随上次选择。
+// VSCode 也作为菜单项：否则切到其他方式后主按钮不再是 VSCode，无法切回
+type OpenWithMode = 'vscode' | 'explorer' | 'terminal';
+const OPEN_WITH_MODES: OpenWithMode[] = ['vscode', 'explorer', 'terminal'];
 
-  try {
-    const response = await apiService.getWorkspacePath(sessionId);
-    if (response.workspacePath && window.electronAPI) {
-      await window.electronAPI.openFolder(response.workspacePath);
-    }
-  } catch (error: any) {
-    console.error('Failed to open workspace folder:', error);
-  }
-}
+/** 上次选择的方式；宽松读取，脏值由 openWithMode 收敛回默认 vscode */
+const storedOpenWith = useStorage<string>('workspaceOpenWith', 'vscode');
+const openWithMode = computed<OpenWithMode>(() =>
+  OPEN_WITH_MODES.includes(storedOpenWith.value as OpenWithMode)
+    ? (storedOpenWith.value as OpenWithMode)
+    : 'vscode'
+);
 
-/**
- * 以 VSCode 打开当前会话的工作目录（仅 Electron；由 Header 工作目录按钮触发）
- */
-async function openWorkspaceInVSCode() {
-  const sessionId = mainSession.value?.id;
-  if (!sessionId || !isElectron) return;
+/** 打开方式候选：顺序即下拉顺序。vscode 用短标签：长标签（Open Working Directory in VSCode）
+ *  会把 190px 弹窗撑破；与目录树右键菜单的 openInVSCodeShort 保持同一文案 */
+const openWithOptions = computed(() => [
+  { mode: 'vscode' as OpenWithMode, label: t('chat.workspace.openInVSCodeShort'), icon: VsCode },
+  { mode: 'explorer' as OpenWithMode, label: t('chat.workspace.openInFileManager'), icon: WindowsExplorer },
+  { mode: 'terminal' as OpenWithMode, label: t('chat.workspace.openInTerminal'), icon: TerminalOutlined },
+]);
 
-  try {
-    const response = await apiService.getWorkspacePath(sessionId);
-    if (response.workspacePath && window.electronAPI) {
-      await window.electronAPI.openWithEditor(response.workspacePath, 'vscode');
-    }
-  } catch (error: any) {
-    console.error('Failed to open workspace in VSCode:', error);
-    ElMessage.error(t('chat.workspace.openVSCodeFailed'));
-  }
-}
+/** 主按钮当前展示/执行的选项 */
+const openWithCurrent = computed(
+  () => openWithOptions.value.find(o => o.mode === openWithMode.value) ?? openWithOptions.value[0]
+);
 
-// ── 工作目录打开方式下拉（Header 箭头按钮） ──
-const openWithMenuVisible = ref(false);
-const openWithBtnRef = ref<HTMLElement | null>(null);
-
-/** 选择下拉中的其他打开方式：explorer = 资源管理器，terminal = 系统终端 */
-async function handleOpenWith(mode: 'explorer' | 'terminal') {
-  openWithMenuVisible.value = false;
+/** 以指定方式打开当前会话的工作目录（仅 Electron） */
+async function openWorkspaceWith(mode: OpenWithMode) {
   const sessionId = mainSession.value?.id;
   if (!sessionId || !isElectron) return;
 
@@ -522,12 +507,24 @@ async function handleOpenWith(mode: 'explorer' | 'terminal') {
     if (mode === 'explorer') {
       await window.electronAPI.openFolder(response.workspacePath);
     } else {
-      await window.electronAPI.openWithEditor(response.workspacePath, 'terminal');
+      await window.electronAPI.openWithEditor(response.workspacePath, mode);
     }
-  } catch (error: any) {
-    console.error(`Failed to open workspace in ${mode}:`, error);
-    ElMessage.error(t('chat.workspace.openVSCodeFailed'));
+  } catch (error) {
+    console.error(`Failed to open workspace with ${mode}:`, error);
+    // openVSCodeFailed 只对 VSCode 成立（提示装 code 命令），其余用通用文案
+    ElMessage.error(t(mode === 'vscode' ? 'chat.workspace.openVSCodeFailed' : 'chat.workspace.openFailed'));
   }
+}
+
+// ── 打开方式下拉：显示状态 ──
+const openWithMenuVisible = ref(false);
+const openWithBtnRef = ref<HTMLElement | null>(null);
+
+/** 下拉选择：记住本次选择（主按钮随即跟随），并立即用它打开 */
+async function handleSelectOpenWith(mode: OpenWithMode) {
+  openWithMenuVisible.value = false;
+  storedOpenWith.value = mode;
+  await openWorkspaceWith(mode);
 }
 
 
@@ -546,7 +543,7 @@ const updateSelectedSession = async (sessionId: string) => {
 };
 
 
-const handleCreateSessionWithMessage = async (session: any, inputMessage: any) => {
+const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inputMessage: InputMessageState) => {
   if (!authStore.isAuthenticated)
     return;
   try {
@@ -572,27 +569,15 @@ const handleSaveSessionSettings = async () => {
   try {
     const targetSession = mainSession.value;
     if (targetSession) {
+      // workspacePath 不在后端 updateSession 白名单内（服务端会丢弃），此处不再发送
       await apiService.updateSession(targetSession.id, {
         modelId: targetSession.modelId,
         settings: targetSession.settings,
-        workspacePath: targetSession.workspacePath
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存对话设置失败:', error);
   }
-};
-
-/**
- * 附加工作目录（远程连接）绑定变更（来源：输入框下方的工作目录条 WorkingDirBar，
- * 经 ChatPanel 转发）：写回 mainSession.settings.attachments 后复用既有保存链路
- * （PUT /sessions/:id）；后端在下回合开始时 diff 绑定快照并注入增量提醒
- */
-const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
-  const targetSession = mainSession.value;
-  if (!targetSession) return;
-  targetSession.settings.attachments = attachments;
-  void handleSaveSessionSettings();
 };
 
 /**
@@ -605,7 +590,7 @@ const handleSelectAgent = async (agent: Agent) => {
     await apiService.updateSession(mainSession.value.id, { agentId: agent.id });
     mainSession.value.agent = agent;
     mainSession.value.agentId = agent.id;
-  } catch (error: any) {
+  } catch (error) {
     console.error('切换智能体失败:', error);
     toast.error(t('common.error.operationFailed'));
   }
@@ -679,7 +664,7 @@ function handleInsertToInput(path: string) {
 /**
  * 将选区 snip 徽标插入到聊天输入框
  */
-function handleInsertSnip(data: any) {
+function handleInsertSnip(data: SnipData) {
   const chatPanel = chatPanelRef.value;
   if (chatPanel && chatPanel.insertBadge) {
     chatPanel.insertBadge(data);

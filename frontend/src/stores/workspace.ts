@@ -17,11 +17,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const recentWorkspaces = useStorage<string[]>('recentWorkspaces', [])
   const lastChoice = useStorage<WorkspaceChoice | null>('lastWorkspaceChoice', null, undefined, {
     serializer: {
-      read: (v: any) => {
+      read: (v) => {
         if (!v) return null
-        try { return JSON.parse(v) } catch { return null }
+        try { return JSON.parse(v) as WorkspaceChoice } catch { return null }
       },
-      write: (v: any) => JSON.stringify(v),
+      write: (v) => JSON.stringify(v),
     },
   })
   const baseDir = ref<string | null>(null)

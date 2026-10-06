@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElButton, ElMessage } from 'element-plus'
@@ -104,17 +105,18 @@ import { PlusOutlined, DeleteOutlineOutlined, UploadOutlined } from '@vicons/mat
 import { QuestionCircleOutlined } from '@vicons/antd'
 import { Avatar } from '../ui'
 import { apiService } from '../../services/ApiService'
+import type { Agent } from '@/types/agent'
 
 defineProps<{
-  agents: any[]
+  agents: Agent[]
   loading: boolean
 }>()
 
 const emit = defineEmits<{
   createAgent: []
-  editAgent: [agent: any]
-  deleteAgent: [agent: any]
-  startNewChat: [agent: any]
+  editAgent: [agent: Agent]
+  deleteAgent: [agent: Agent]
+  startNewChat: [agent: Agent]
   openDocs: []
   imported: []
 }>()
@@ -122,7 +124,7 @@ const emit = defineEmits<{
 // 内置默认智能体：后端保证恒排第一且禁止删除，前端同步隐藏删除入口
 const DEFAULT_AGENT_ID = 'assistant-agent'
 
-const canDelete = (agent: any): boolean => agent.id !== DEFAULT_AGENT_ID
+const canDelete = (agent: Agent): boolean => agent.id !== DEFAULT_AGENT_ID
 
 const fileInputRef = ref<HTMLInputElement>()
 
@@ -153,8 +155,8 @@ const handleFileSelect = async (event: Event) => {
       ElMessage.warning(t('agents.list.importPartial', { count: failCount }))
     }
     emit('imported')
-  } catch (err: any) {
-    ElMessage.error(err.message || t('agents.list.importFailed'))
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err) || t('agents.list.importFailed'))
   }
 
   // 重置 input 以便重复选择同一文件

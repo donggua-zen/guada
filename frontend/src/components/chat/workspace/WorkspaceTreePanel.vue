@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -61,7 +62,7 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
-import type { WorkspaceNode } from './WorkspaceTree.vue';
+import type { WorkspaceNode } from '@/types/workspace';
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree';
 import { useTabStore } from '@/stores/tab';
 
@@ -353,7 +354,7 @@ async function handleCopyFilePath() {
 
         await writeToClipboard(fullPath);
         ElMessage.success(t('chat.workspace.pathCopied'));
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to get workspace path for copy:', error);
         ElMessage.error(t('common.copyFailed'));
     }
@@ -389,7 +390,7 @@ async function handleOpenInExplorer() {
             // 文件：在资源管理器中显示并选中
             await window.electronAPI!.showItemInFolder(fullPath);
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to open in explorer:', error);
         ElMessage.error(t('chat.workspace.openFailed'));
     }
@@ -428,7 +429,7 @@ async function handleOpenInVSCode() {
 
         await window.electronAPI!.openWithEditor(fullPath, 'vscode');
         ElMessage.success(t('chat.workspace.openedInVSCode'));
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to open in VSCode:', error);
         ElMessage.error(t('chat.workspace.openVSCodeFailed'));
     }
@@ -501,14 +502,14 @@ async function handleRename() {
             // 清除旧路径的文件变更版本号
             treeStore.clearFileChangeVersion(oldPath);
         }
-    } catch (error: any) {
+    } catch (error) {
         // ElMessageBox.prompt 取消会抛异常，忽略
         if (error === 'cancel' || error === 'close') {
             closeContextMenu();
             return;
         }
         console.error('[WorkspaceTreePanel] Rename failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.renameFailed'));
+        ElMessage.error(getErrorMessage(error) || t('chat.workspace.renameFailed'));
     }
     closeContextMenu();
 }
@@ -553,14 +554,14 @@ async function handleDelete() {
                 tabStore.removeTab(deleteTab.key);
             }
         }
-    } catch (error: any) {
+    } catch (error) {
         // ElMessageBox.confirm 取消会抛异常，忽略
         if (error === 'cancel' || error === 'close') {
             closeContextMenu();
             return;
         }
         console.error('[WorkspaceTreePanel] Delete failed:', error);
-        ElMessage.error(error?.response?.data?.message || error.message || t('chat.workspace.deleteFailed'));
+        ElMessage.error(getErrorMessage(error) || t('chat.workspace.deleteFailed'));
     }
     closeContextMenu();
 }

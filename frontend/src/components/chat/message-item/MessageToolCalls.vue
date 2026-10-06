@@ -26,6 +26,17 @@
             <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--el-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
           </span>
         </div>
+        <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
+             无 provide 的宿主如 BotSessionDialog 下不渲染） -->
+        <GdTooltip v-if="subAgentLinks[toolIndex]"
+          :content="t('chat.toolCalls.openSubAgentPanel')" placement="top"
+          class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <span class="open-subagent-btn" @click.stop="openSubAgentPanel(toolIndex)">
+            <el-icon size="14">
+              <PanelRightExpand20Filled />
+            </el-icon>
+          </span>
+        </GdTooltip>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
         <el-icon class="shrink-0 ml-2 text-gray-400 transition-opacity duration-200"
           :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'" size="12">
@@ -34,8 +45,10 @@
         </el-icon>
       </div>
 
-      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容） -->
-      <div v-if="isExpanded(toolIndex)" class="tool-result-inline">
+      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容）。
+           独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框。 -->
+      <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
+        :class="{ 'is-plain': isStandaloneRow(toolIndex) }">
         <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空） -->
         <div v-if="tool.outcome === 'error' || tool.outcome === 'rejected'"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
@@ -48,7 +61,8 @@
         <!-- 定制渲染：按 renderer 声明（后端 display.renderer / 内置映射）优先展示参数 -->
         <ToolCustomView v-if="rendererInfos[toolIndex]" :info="rendererInfos[toolIndex]!"
           :response="getToolResponses(toolIndex)" :is-error="tool.outcome === 'error'"
-          :executing="isToolExecuting(tool, toolIndex)" />
+          :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId"
+          :pending-approval="isPendingApproval(tool)" />
 
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
@@ -70,10 +84,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { ErrorCircle16Regular, ChevronDown12Regular } from '@vicons/fluent';
+import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import {
   type ToolCall,
@@ -81,14 +95,19 @@ import {
   getToolConfig, getToolIcon,
   getToolArgs, getArgsText,
   getToolRenderer, getRendererArgs,
+  isStandaloneRendererKind,
 } from '@/utils/toolDisplay';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
+import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
+import type { ToolCallResponseEntry } from '@/types/message';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
+import { useSessionStore } from '@/stores/session';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
-  toolResponses?: any[];
+  toolResponses?: ToolCallResponseEntry[];
   isStreaming?: boolean;
   sessionId?: string;
   /** 所在分组可见且仅含本步骤时由父级置真：展开分组即展开全部调用（单步骤分组免二次点击） */
@@ -96,15 +115,40 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const sessionStore = useSessionStore();
+
+// ── 待审批锚点：会话级交互卡的 toolCallId 命中本行 → 该工具正在等用户批准
+//    （参数已定稿、结果未回；plan 视图据此在 executing 期间也放行「查看完整计划」）──
+
+const pendingApprovalToolCallId = computed(
+  () => sessionStore.sessionPendingAsk(props.sessionId || '')?.toolCallId,
+);
+const isPendingApproval = (tool: ToolCall): boolean =>
+  !!pendingApprovalToolCallId.value && tool.id === pendingApprovalToolCallId.value;
+
+// ── 子代理跳转（工具行 → 侧边栏工作区打开 subagent 标签）──
+
+/** ChatPage provide；无 provide 的宿主（BotSessionDialog 等）下为 null → 不渲染入口 */
+const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
+  'workspace:openSubAgentSession',
+  null,
+);
+
+/** 每行可跳转的子代理会话（null = 该行无唯一目标，不显示按钮） */
+const subAgentLinks = computed(() =>
+  openSubAgentSession
+    ? props.toolCalls.map((tool, index) =>
+        resolveSubAgentLink(tool, findToolResponse(tool, index, props.toolResponses)),
+      )
+    : [],
+);
+
+const openSubAgentPanel = (index: number): void => {
+  const link = subAgentLinks.value[index];
+  if (link) openSubAgentSession?.(link.subSessionId);
+};
 
 // ── 执行状态 ──
-
-const isExecuting = computed(() => {
-  if (props.isStreaming === false) return false;
-  if (props.toolResponses && props.toolResponses.length > 0) return false;
-  if (props.toolCalls?.some((tc) => tc.outcome)) return false;
-  return true;
-});
 
 const isToolExecuting = (tool: ToolCall, index: number): boolean => {
   if (tool.outcome) return false;
@@ -125,29 +169,54 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 };
 
 // ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
+// 例外：独立渲染工具（计划行等，isStandaloneRendererKind）默认展开——正文就是内容本身，
+// 模型还在写计划时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
 
 const expandedIndexes = ref<Set<number>>(new Set());
+const collapsedIndexes = ref<Set<number>>(new Set());
 
 watch(() => props.autoExpand, (auto) => {
   expandedIndexes.value = auto
     ? new Set(props.toolCalls.map((_, i) => i))
     : new Set();
+  collapsedIndexes.value = new Set();
 }, { immediate: true });
 
-const isExpanded = (index: number): boolean => expandedIndexes.value.has(index);
+/** 默认展开的行（独立渲染工具卡：正文即内容，与分组判定共用同一 kind 集合） */
+const isDefaultExpandedRow = (index: number): boolean => {
+  const kind = rendererInfos.value[index]?.kind;
+  return kind !== undefined && isStandaloneRendererKind(kind);
+};
+
+const isExpanded = (index: number): boolean => {
+  if (expandedIndexes.value.has(index)) return true;
+  return isDefaultExpandedRow(index) && !collapsedIndexes.value.has(index);
+};
+
+/** 独立渲染工具行（计划卡等）：结果区不套通用外框——卡片自带边框，避免双边框 */
+const isStandaloneRow = (index: number): boolean => {
+  const tool = props.toolCalls[index];
+  const kind = tool ? getToolRenderer(tool)?.kind : undefined;
+  return kind !== undefined && isStandaloneRendererKind(kind);
+};
 
 const toggleExpand = (index: number): void => {
-  const next = new Set(expandedIndexes.value);
-  if (next.has(index)) {
-    next.delete(index);
+  const nowExpanded = isExpanded(index);
+  const nextExpanded = new Set(expandedIndexes.value);
+  const nextCollapsed = new Set(collapsedIndexes.value);
+  if (nowExpanded) {
+    nextExpanded.delete(index);
+    nextCollapsed.add(index);
   } else {
-    next.add(index);
+    nextExpanded.add(index);
+    nextCollapsed.delete(index);
   }
-  expandedIndexes.value = next;
+  expandedIndexes.value = nextExpanded;
+  collapsedIndexes.value = nextCollapsed;
 };
 
 /** 结果直接取后端返回的 toolResponses[index]（无懒加载） */
-const getToolResponses = (index: number): any => {
+const getToolResponses = (index: number): ToolCallResponseEntry | undefined => {
   return props.toolResponses && props.toolResponses[index];
 };
 
@@ -193,7 +262,7 @@ const formatToolArgs = (tool: ToolCall): string => {
   }
 };
 
-const formatToolResponse = (response: any): string => {
+const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   if (!response) return t('chat.toolCalls.noResponse');
   const content = extractResultContent(response);
   if (content) {
@@ -205,6 +274,21 @@ const formatToolResponse = (response: any): string => {
 </script>
 
 <style scoped>
+/* 打开子代理面板：与展开箭头同节奏显隐（整行 hover 时出现，故预留位置不引起跳动） */
+.open-subagent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.open-subagent-btn:hover {
+  color: var(--el-color-primary);
+}
+
 /* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文；
    margin-left 21px = 工具图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标。
    横向内边距抽成 --tool-card-pad-x：内部各视图的滚动区用等量负边距抵消，
@@ -218,6 +302,17 @@ const formatToolResponse = (response: any): string => {
   border-radius: 4px;
   /* 微微透明：透出下方正文一点底色，视觉更轻 */
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+}
+
+/* 独立渲染工具行（计划卡等）：不套第二层外框与底色——卡片自带边框（ZCode 同款
+   "不再套一层通用工具卡"）。--tool-card-pad-x 归零，避免内部视图的负边距把内容
+   顶出卡片（该变量本是用来抵消本层横向内边距的）。 */
+.tool-result-inline.is-plain {
+  --tool-card-pad-x: 0px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
 }
 
 /* 通用展示：输入 / 输出 两段式 */

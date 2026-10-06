@@ -95,16 +95,6 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.agent') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
-          <!-- 最大工具调用轮次 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
-            <div class="flex flex-col gap-1 min-w-0 flex-1">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.maxToolIterations') }}</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.maxToolIterationsDesc') }}</span>
-            </div>
-            <div class="shrink-0">
-              <el-input-number v-model="settingsForm.maxToolIterations" :min="1" :max="500" :step="1" size="default" controls-position="right" />
-            </div>
-          </div>
           <!-- 请求超时 -->
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
             <div class="flex flex-col gap-1 min-w-0 flex-1">
@@ -136,10 +126,12 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDebounceFn } from '@vueuse/core'
+import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { useAuthStore } from '@/stores/auth'
@@ -161,13 +153,12 @@ const settingsForm = reactive({
   // 会话工作目录下的聊天附件子目录名（空 = 用默认 uploads）
   chatUploadSubdir: '',
   kbStorageRoot: '',
-  maxToolIterations: 100,
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
 })
 
 // 原始设置备份，用于对比是否有改动
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 计算是否有改动
 const hasChanges = computed(() => {
@@ -182,27 +173,26 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, maxToolIterations: settingsForm.maxToolIterations, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
   debouncedSave()
 }, { deep: true })
 
 // 加载 system 分组设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('system')
+    const response = await apiService.fetchGroupSettings<SystemGroupSettings>('system')
 
     // 填充表单
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
     settingsForm.chatUploadSubdir = response.chatUploadSubdir || ''
     settingsForm.kbStorageRoot = response.kbStorageRoot || ''
-    settingsForm.maxToolIterations = Number(response.maxToolIterations) || 100
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取通用设置失败:', error)
-    notify.error(t('settings.general.loadFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('settings.general.loadFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 
@@ -257,10 +247,10 @@ const handlePasswordToggle = async (enabled: boolean | string | number) => {
       authStore.passwordSet = false
       notify.success(t('common.updateSuccess'), t('settings.general.passwordClearedSuccess'))
     }
-  } catch (e: any) {
+  } catch (e) {
     // 用户取消：开关状态由 authStore.passwordSet 决定，无需回滚
     if (e !== 'cancel' && e !== 'close') {
-      notify.error(t('common.saveFailed'), e?.message || t('settings.general.passwordOpFailed'))
+      notify.error(t('common.saveFailed'), getErrorMessage(e) || t('settings.general.passwordOpFailed'))
     }
   }
 }
@@ -302,7 +292,6 @@ const handleSave = async () => {
       workspaceBaseDir: path || null,
       chatUploadSubdir: subdir || null,
       kbStorageRoot: kbRoot || null,
-      maxToolIterations: settingsForm.maxToolIterations,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
     }
@@ -314,9 +303,9 @@ const handleSave = async () => {
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
     notify.success(t('common.saveSuccess'), t('settings.general.updated'))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 

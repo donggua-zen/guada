@@ -51,10 +51,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue';
-import { Editor, EditorContent } from '@tiptap/vue-3';
+import { Editor } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import { Node, mergeAttributes } from '@tiptap/core';
-import { Tools, Delete } from '@element-plus/icons-vue';
 
 // 自定义 Skill 节点
 const SkillNode = Node.create({
@@ -137,11 +136,6 @@ const filteredSkills = computed(() => {
   );
 });
 
-const pickerStyle = computed(() => ({
-  top: `${pickerPosition.value.top}px`,
-  left: `${pickerPosition.value.left}px`,
-}));
-
 // 功能测试标记
 const testedFeatures = ref({
   insert: false,
@@ -168,24 +162,6 @@ const syncOutput = () => {
   htmlStructure.value = editor.value.getHTML();
   jsonStructure.value = JSON.stringify(editor.value.getJSON(), null, 2);
   testedFeatures.value.rawSync = true;
-};
-
-// 插入技能徽标
-const insertSkill = (skillName: string) => {
-  if (!editor.value) return;
-
-  editor.value
-    .chain()
-    .focus()
-    .insertContent({
-      type: 'skill',
-      attrs: { name: skillName },
-    })
-    .run();
-
-  testedFeatures.value.insert = true;
-  addLog('insert', `插入技能徽标: ${skillName}`);
-  syncOutput();
 };
 
 // 从弹窗选择技能后插入
@@ -281,8 +257,8 @@ const handlePickerKeydown = (e: KeyboardEvent) => {
   }
 };
 
-// 处理发送事件
-const handleSend = (data: { content: string; files: any[] }) => {
+// 处理发送事件（files 载荷本页仅记录日志，不做字段级消费）
+const handleSend = (data: { content: string; files: unknown[] }) => {
   addLog('send', `发送消息: ${data.content.slice(0, 50)}${data.content.length > 50 ? '...' : ''}`);
 };
 
@@ -324,20 +300,12 @@ const checkSkillTrigger = () => {
   openSkillPicker(query);
 };
 
-// 清空编辑器
-const clearEditor = () => {
-  if (!editor.value) return;
-  editor.value.chain().clearContent().focus().run();
-  addLog('clear', '清空编辑器');
-  syncOutput();
-};
-
 onMounted(() => {
   editor.value = new Editor({
     extensions: [StarterKit, SkillNode],
     content: '',
     editable: true,
-    onUpdate: ({ editor: ed }) => {
+    onUpdate: ({ editor: _ed }) => {
       syncOutput();
       checkSkillTrigger();
       addLog('input', '内容变化');

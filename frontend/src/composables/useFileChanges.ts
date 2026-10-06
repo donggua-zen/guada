@@ -27,16 +27,19 @@ export interface FileChangeEntry {
 
 const WRITE_TOOLS = new Set(["write", "edit"]);
 
-function parseArgs(raw: any): Record<string, any> | null {
+/** 工具入参字典（模型产出的 JSON，字段按 write/edit 工具的约定读取） */
+type ToolArgsBag = Record<string, unknown>
+
+function parseArgs(raw: unknown): ToolArgsBag | null {
   if (!raw) return null;
   if (typeof raw === "string") {
     try {
-      return JSON.parse(raw);
+      return JSON.parse(raw) as ToolArgsBag;
     } catch {
       return null;
     }
   }
-  if (typeof raw === "object") return raw;
+  if (typeof raw === "object") return raw as ToolArgsBag;
   return null;
 }
 
@@ -61,13 +64,14 @@ export function useFileChanges(turnsCache: Ref<MessageContent[]>) {
         const args = parseArgs(tc.arguments);
         if (!args) continue;
 
-        const filePath: string = args.file_path || args.path || "";
+        // JSON 入参为开放字典，读取点按工具契约收窄为 string
+        const filePath: string = (args.file_path || args.path || "") as string;
         if (!filePath) continue;
 
         const toolName = name as "write" | "edit";
-        const oldText: string = toolName === "edit" ? (args.old_text ?? "") : "";
+        const oldText: string = toolName === "edit" ? ((args.old_text as string | undefined) ?? "") : "";
         const newText: string =
-          toolName === "edit" ? (args.new_text ?? "") : (args.content ?? "");
+          toolName === "edit" ? ((args.new_text as string | undefined) ?? "") : ((args.content as string | undefined) ?? "");
 
         const { added, removed } = countDiffLines(oldText, newText);
 

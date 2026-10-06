@@ -21,6 +21,9 @@ export default {
     runModeReadOnly: '只读',
     runModeWorkspaceWrite: '工作区可写',
     runModeFullAccess: '自由编辑',
+    // 计划模式开关（ChatInput.vue；协作状态，正交于安全档位）
+    planMode: '计划',
+    planModeTip: '计划模式：只读调研后产出方案，经你批准再实施',
 
     // AttachmentPopover.vue
     uploadImage: '上传图片',
@@ -42,6 +45,7 @@ export default {
     selectModelHint: '选择模型，鼠标悬停此处以选择模式',
     reasoningEffort: '推理强度',
     favoriteModels: '收藏模型',
+    manageModels: '模型管理',
 
     // RemoteConnectionDialog.vue
     remoteDir: '远端目录',
@@ -256,14 +260,16 @@ export default {
     branchFromHere: '从此分支新会话',
   },
 
-  // ── 统一交互卡（审批/询问/迭代暂停继续共用） ──
+  // ── 统一交互卡（审批/询问共用） ──
   ask: {
     approval: '需要审批',
     input: '需要你的输入',
-    continue: '已达到最大工具调用轮次限制',
-    customReply: '请输入自定义回复',
+    customReply: '输入你的回答…',
     next: '下一步',
     submit: '提交',
+    ignore: '忽略',
+    ignoreTip: '不回答并停止当前轮',
+    keyboardHint: '使用上下键移动选取，回车提交',
     staleCredential: '交互凭证已失效，请刷新后重试',
     submitFailed: '应答提交失败',
   },
@@ -288,6 +294,7 @@ export default {
     terminalTruncated: '输出已截断，完整日志：{path}',
     inputLabel: '输入',
     outputLabel: '输出',
+    openSubAgentPanel: '打开子代理面板',
   },
 
   // ── 文件变更 ──
@@ -298,6 +305,23 @@ export default {
     dialogTitle: '文件变更',
     dialogTitleWithName: '文件变更: {name}',
     noDiff: '该文件类型不支持逐行差异预览',
+  },
+
+  // ── 计划历史（计划模式产物：审批卡入口 + 工作区计划面板） ──
+  plan: {
+    title: '计划',
+    empty: '暂无计划',
+    selectHint: '从左侧选择一个计划查看详情',
+    openFile: '在文件中打开',
+    refresh: '刷新',
+    refreshFailed: '计划列表刷新失败',
+    viewFullDoc: '查看完整计划',
+    streamingHint: '计划生成中…',
+    status: {
+      pending: '待审批',
+      approved: '已批准',
+      rejected: '已拒绝',
+    },
   },
 
   // ── 工作区 ──
@@ -354,6 +378,7 @@ export default {
     noPreviewFile: '暂无预览文件',
     newBrowser: '新建浏览器',
     newFile: '文件',
+    planTab: '计划',
     gitTab: 'Git 审阅',
     newTabHint: '从右侧目录树选择文件开始预览',
     saveSuccess: '保存成功',
@@ -389,14 +414,6 @@ export default {
     killProcess: '终止进程',
     addAttachedDir: '添加附加目录',
     removeAttachedDir: '解除附加目录',
-    connHost: '主机',
-    connName: '连接名称',
-    unknownConnection: '未知连接',
-    connPath: '远程目录',
-    connPerm: '权限模式',
-    permReadonly: '只读',
-    permWorkspace: '工作区可写',
-    permUnrestricted: '完全访问',
     noConnections: '暂无连接，去设置页创建',
     processLogEmpty: '暂无输出',
     processLogGone: '进程已结束或不存在',

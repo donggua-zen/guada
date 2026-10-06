@@ -131,6 +131,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -138,20 +139,9 @@ import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
 const { t } = useI18n()
-
-interface ToolMetadata {
-  pluginId: string
-  name: string
-  displayName: string
-  description: string
-  enabled: boolean
-  isMcp: boolean
-  icon?: string
-  source?: 'builtin' | 'dev' | 'user'
-  tools?: any[]
-}
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -159,20 +149,15 @@ const updatingTools = ref<Set<string>>(new Set())
 const installSource = ref('')
 const installing = ref(false)
 
-const globalTools = ref<ToolMetadata[]>([])
+const globalTools = ref<PluginQueryPlugin[]>([])
 
 // Detail dialog
 const detailVisible = ref(false)
-const currentTool = ref<ToolMetadata | null>(null)
+const currentTool = ref<PluginQueryPlugin | null>(null)
 
-function showDetail(tool: ToolMetadata) {
+function showDetail(tool: PluginQueryPlugin) {
   currentTool.value = tool
   detailVisible.value = true
-}
-
-async function handleInstall() {
-  // 兼容保留：直接同步安装（无轮询）。UI 用 startInstallDialog（假终端）。
-  await startInstall()
 }
 
 // ── 安装假终端（轮询日志）──
@@ -219,8 +204,8 @@ async function startInstall() {
       }
       await new Promise((r) => setTimeout(r, 500))
     }
-  } catch (err: any) {
-    installLog.value += '\n❌ ' + (err.message || String(err))
+  } catch (err) {
+    installLog.value += '\n❌ ' + (getErrorMessage(err))
     installing.value = false
   }
 }
@@ -254,9 +239,9 @@ async function loadGlobalTools() {
   try {
     const response = await apiService.queryPlugins(undefined, getLocale())
     globalTools.value = response.plugins
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载全局工具失败:', err)
-    const errorMsg = err.message || t('plugins.localTools.loadFailed')
+    const errorMsg = getErrorMessage(err) || t('plugins.localTools.loadFailed')
     error.value = errorMsg
     ElMessage.error(errorMsg)
   } finally {
@@ -273,9 +258,9 @@ async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
         tool.enabled = enabled
       }
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('更新全局工具状态失败:', err)
-    ElMessage.error(err.message || t('plugins.localTools.updateFailed'))
+    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.updateFailed'))
   }
 }
 
@@ -288,10 +273,10 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
   try {
     updatingTools.value.add(pluginId)
     updateGlobalToolStatus(pluginId, enabled)
-  } catch (err: any) {
+  } catch (err) {
     console.error('更新工具状态失败:', err)
     tool.enabled = previousState
-    ElMessage.error(err.message || t('plugins.localTools.toggleFailed'))
+    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.toggleFailed'))
   } finally {
     updatingTools.value.delete(pluginId)
   }
@@ -309,9 +294,9 @@ async function handleUninstall(pluginId: string) {
       ElMessage.success(t('plugins.localTools.uninstallSuccess'))
       await loadGlobalTools()
     }
-  } catch (err: any) {
-    if (err !== 'cancel' && err?.message !== 'cancel') {
-      ElMessage.error(err.message || t('plugins.localTools.uninstallFailed'))
+  } catch (err) {
+    if (err !== 'cancel' && getErrorMessage(err) !== 'cancel') {
+      ElMessage.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
     }
   }
 }

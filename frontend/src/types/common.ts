@@ -5,7 +5,7 @@
 /**
  * API 响应基础接口
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data?: T
   error?: string
   message?: string
@@ -32,7 +32,7 @@ export interface PaginatedResponse<T> {
 export type ISODateString = string
 
 /**
- * 可选的任意值（比 any 更安全）
+ * 可选的任意值（以显式 null 代替宽松的隐式类型）
  */
 export type Nullable<T> = T | null
 

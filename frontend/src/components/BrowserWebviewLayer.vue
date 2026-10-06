@@ -18,6 +18,13 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
+import type {
+  WebviewCreatePayload,
+  WebviewDestroyPayload,
+  WebviewRenderablePayload,
+  WebviewVisibilityPayload,
+  WindowFaviconPayload,
+} from '@/types/electron'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { loadDefaultViewport } from '@/utils/browserViewport'
@@ -187,7 +194,7 @@ function getOverlayStyle(): Record<string, string> {
 
 // ── Webview 事件处理 ──
 
-function onNavigate(event: any, windowId: string): void {
+function onNavigate(event: ElectronWebviewNavigateEvent, windowId: string): void {
   if (event?.url) {
     store.updateWebview(windowId, { url: event.url })
   }
@@ -198,21 +205,21 @@ function onNavigate(event: any, windowId: string): void {
   }
 }
 
-function onNavigateInPage(event: any, windowId: string): void {
+function onNavigateInPage(event: ElectronWebviewNavigateEvent, windowId: string): void {
   if (event?.isMainFrame && event?.url) {
     store.updateWebview(windowId, { url: event.url })
   }
 }
 
-function onTitleUpdated(event: any, windowId: string): void {
+function onTitleUpdated(event: ElectronWebviewTitleUpdatedEvent, windowId: string): void {
   if (event?.title) {
     store.updateWebview(windowId, { title: event.title })
   }
 }
 
 function handleWindowFaviconUpdated(
-  _event: any,
-  data: { windowId: string; favicon: string },
+  _event: unknown,
+  data: WindowFaviconPayload,
 ): void {
   if (data?.windowId && data.favicon) {
     console.info('[Favicon] renderer received', {
@@ -226,13 +233,13 @@ function handleWindowFaviconUpdated(
   }
 }
 
-function onStartLoading(_event: any, windowId: string): void {
+function onStartLoading(_event: unknown, windowId: string): void {
   if (windowId === store.activeWindowId) {
     store.setNavState({ isLoading: true })
   }
 }
 
-function onStopLoading(_event: any, windowId: string): void {
+function onStopLoading(_event: unknown, windowId: string): void {
   if (windowId === store.activeWindowId) {
     store.setNavState({ isLoading: false })
     const el = webviewEls.get(windowId)
@@ -266,13 +273,7 @@ watch(
 
 // ── IPC 监听 ──
 
-function handleCreateWebview(_event: any, data: {
-  windowId: string
-  partition: string
-  url: string
-  preloadUrl: string
-  metadata?: any
-}): void {
+function handleCreateWebview(_event: unknown, data: WebviewCreatePayload): void {
   store.addWebview({
     windowId: data.windowId,
     url: data.url,
@@ -297,12 +298,12 @@ function handleCreateWebview(_event: any, data: {
   }
 }
 
-function handleDestroyWebview(_event: any, data: { windowId: string }): void {
+function handleDestroyWebview(_event: unknown, data: WebviewDestroyPayload): void {
   webviewEls.delete(data.windowId)
   store.removeWebview(data.windowId)
 }
 
-function handleSetVisibility(_event: any, data: { windowId: string; visible: boolean }): void {
+function handleSetVisibility(_event: unknown, data: WebviewVisibilityPayload): void {
   if (data.visible) {
     store.setActive(data.windowId)
   } else {
@@ -312,7 +313,7 @@ function handleSetVisibility(_event: any, data: { windowId: string; visible: boo
   }
 }
 
-function handleSetRenderable(_event: any, data: { windowId: string; renderable: boolean }): void {
+function handleSetRenderable(_event: unknown, data: WebviewRenderablePayload): void {
   store.setRenderableOverride(data.windowId, data.renderable)
 }
 

@@ -63,7 +63,9 @@
     step4Title: '🎯 Step 4: Choose Your Preferred Model',
     step4Desc: 'Specify a default model in settings for a smoother experience.',
     step4Action: 'Set Default Model',
-    skip: 'Skip',
+    back: 'Back',
+    skipGuide: 'Skip Guide',
+    stepIndicator: 'Step {current} of {total}',
     finish: 'Finish',
     next: 'Next',
     viewGuide: 'View Setup Guide',
@@ -87,8 +89,9 @@
   // ── 后端启动等待 ──
   backend: {
     starting: 'Starting backend service',
-    startingDesc: 'First launch requires database initialization. Please wait…',
+    startingDesc: 'First launch requires data initialization and may take longer. Please hold on.',
     startFailed: 'Startup failed',
+    retry: 'Retry',
   },
 
   // ── 标题栏 ──
@@ -116,7 +119,6 @@
     navKnowledgeBase: 'Knowledge Base',
     navPlugins: 'Plugin Market',
     navScheduler: 'Scheduled Tasks',
-    navModels: 'Model Management',
     noTasks: 'No tasks',
     loadingMore: 'Loading...',
     loadMore: 'Click to load more',

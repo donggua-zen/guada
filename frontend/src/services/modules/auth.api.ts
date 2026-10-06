@@ -1,6 +1,20 @@
 import type { ApiContext } from "./api-context";
 import type { LoginRequest, LoginResponse, User } from "@/types/service";
 
+/** updateProfile 请求体（镜像后端 user.service.updateProfile 参数表） */
+export interface UpdateProfilePayload {
+  username?: string
+  nickname?: string
+  avatarUrl?: string
+  wallpaperUrl?: string | null
+}
+
+/** 密码操作结果（changePassword / clearPassword 共用） */
+export interface PasswordOperationResult {
+  success: boolean
+  passwordSet: boolean
+}
+
 /**
  * 认证与账户 API（单账户）
  *
@@ -12,41 +26,43 @@ export interface AuthApi {
   login(credentials: LoginRequest): Promise<LoginResponse>;
   autoLogin(): Promise<{ accessToken: string; user: User }>;
   getProfile(): Promise<User>;
-  updateProfile(data: any): Promise<User>;
+  updateProfile(data: UpdateProfilePayload): Promise<User>;
   checkUsername(username: string): Promise<{ available: boolean }>;
   changePassword(
     oldPassword: string | undefined,
     newPassword: string,
-  ): Promise<any>;
-  clearPassword(): Promise<any>;
+  ): Promise<PasswordOperationResult>;
+  clearPassword(): Promise<PasswordOperationResult>;
 }
 
 export const authApi: AuthApi = {
   async getAuthStatus(this: ApiContext) {
-    return await this._request("/auth/status");
+    return await this._request<{ passwordSet: boolean }>("/auth/status");
   },
 
   async login(this: ApiContext, credentials: LoginRequest) {
-    return await this._request("/auth/login", {
+    return await this._request<LoginResponse>("/auth/login", {
       method: "POST",
       data: credentials,
     });
   },
 
   async autoLogin(this: ApiContext) {
-    return await this._request("/auth/auto-login", { method: "POST" });
+    return await this._request<{ accessToken: string; user: User }>("/auth/auto-login", {
+      method: "POST",
+    });
   },
 
   async getProfile(this: ApiContext) {
-    return await this._request("/user/profile");
+    return await this._request<User>("/user/profile");
   },
 
-  async updateProfile(this: ApiContext, data: any) {
-    return await this._request("/user/profile", { method: "PUT", data });
+  async updateProfile(this: ApiContext, data: UpdateProfilePayload) {
+    return await this._request<User>("/user/profile", { method: "PUT", data });
   },
 
   async checkUsername(this: ApiContext, username: string) {
-    return await this._request("/user/check-username", {
+    return await this._request<{ available: boolean }>("/user/check-username", {
       params: { username },
     });
   },
@@ -56,7 +72,7 @@ export const authApi: AuthApi = {
     oldPassword: string | undefined,
     newPassword: string,
   ) {
-    return await this._request("/user/password/change", {
+    return await this._request<PasswordOperationResult>("/user/password/change", {
       method: "POST",
       data: { oldPassword, newPassword },
     });
@@ -64,6 +80,6 @@ export const authApi: AuthApi = {
 
   /** 清除密码 → 回到免登录模式 */
   async clearPassword(this: ApiContext) {
-    return await this._request("/user/password", { method: "DELETE" });
+    return await this._request<PasswordOperationResult>("/user/password", { method: "DELETE" });
   },
 };

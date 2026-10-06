@@ -18,7 +18,7 @@ export interface ChatStreamParams {
   sessionId: string;
   regenerationMode?: string | null;
   assistantMessageId?: string | null;
-  resumeData?: any;
+  resumeData?: unknown;
   // 用户消息参数
   // overwrite 模式：按需设置 content/files/replaceTurnId/knowledgeBaseIds，不设置 id
   // resume 模式：只需设置 id;resume 复用既有回合,另带 turnId(回合外壳 id,与消息 id 解耦)

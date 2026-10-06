@@ -52,6 +52,10 @@
                         <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
                             <el-icon :size="13"><Flowchart20Regular /></el-icon>
                         </span>
+                        <!-- 计划面板图标 -->
+                        <span v-else-if="tab.type === 'plan'" class="tab-favicon tab-git">
+                            <el-icon :size="13"><Notepad20Regular /></el-icon>
+                        </span>
                         <!-- 差异/编辑记录图标 -->
                         <span v-else-if="tab.type === 'diff'" class="tab-favicon tab-git">
                             <el-icon :size="13"><Code20Regular /></el-icon>
@@ -95,7 +99,8 @@
             <div class="flex-1 min-w-0 relative">
                 <!-- 起始页：无任何标签 或 点击 + 号时显示（不占用标签栏） -->
                 <WorkspaceStartPage v-if="showStartPage" @open-file="onNewTabOpenFile" @open-terminal="onNewTabOpenTerminal"
-                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-workflow="onNewTabOpenWorkflow" />
+                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-workflow="onNewTabOpenWorkflow"
+                    @open-plan="onNewTabOpenPlan" />
 
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
@@ -113,6 +118,9 @@
                     :session="resolveSubSession(subSessionIdOf(activeTab.key))" />
                 <!-- 工作流审阅标签（终态归档 + 运行中快照合并，行展开看成员/日志/结果） -->
                 <WorkflowHistoryPanel v-if="activeTab?.type === 'workflow' && sessionId" class="h-full"
+                    :session-id="sessionId" />
+                <!-- 计划面板标签（转录构建的计划列表 + Markdown 详情） -->
+                <PlanPanel v-if="activeTab?.type === 'plan' && sessionId" class="h-full"
                     :session-id="sessionId" />
                 <!-- 差异/编辑记录标签（文件变更历史，多次操作用 op-tabs 展示） -->
                 <FileDiffPanel v-if="activeTab?.type === 'diff'" class="h-full"
@@ -143,12 +151,13 @@ import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Plus, Close } from '@element-plus/icons-vue';
-import { Folder16Regular, Window16Regular, Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SubagentChatTab from './SubagentChatTab.vue';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel.vue';
+import PlanPanel from './PlanPanel.vue';
 import FileDiffPanel from './FileDiffPanel.vue';
 import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
@@ -161,6 +170,7 @@ import { useSessionStore } from '@/stores/session';
 import { useTabStore } from '@/stores/tab';
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree';
 import { usePreviewTabCache, type UnifiedTab } from '@/composables/usePreviewTabCache';
+import { openSessionPlanPanel } from '@/utils/sessionPlan';
 
 const props = defineProps<{
     sessionId: string | null;
@@ -189,6 +199,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
     if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
     if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
+    if (tab.type === 'plan') return t('chat.workspace.planTab');
     if (tab.type === 'diff') return tab.name || tab.path || tab.key;
     return tab.title || t('chat.workspace.unnamedWindow');
 }
@@ -262,12 +273,19 @@ function onTabDblClick(tab: UnifiedTab): void {
 }
 
 // 标签与起始页状态
-const gitPanelRef = ref<InstanceType<typeof GitChangesPanel> | null>(null);
 const tabs = computed(() => tabStore.tabs);
 const activeTabKey = computed(() => tabStore.activeTabKey);
 const tabBarRef = ref<HTMLElement | null>(null);
 // 起始页显示条件：无激活标签（空态或点击 + 号）
 const showStartPage = computed(() => !activeTabKey.value);
+
+// ── 计划面板（计划模式产物）：入口常驻，面板内列出历史计划 ──
+
+/** 起始页「计划」：打开计划面板标签（有无计划都可进入，空态提示） */
+async function onNewTabOpenPlan(): Promise<void> {
+    if (!props.sessionId) return;
+    await openSessionPlanPanel(props.sessionId);
+}
 
 // ── 浏览器标签操作 ──
 

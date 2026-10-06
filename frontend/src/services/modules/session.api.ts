@@ -1,19 +1,21 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem } from "@/types/session";
 
 export interface SessionApi {
-  createSession(data: any): Promise<Session>;
+  createSession(data: CreateSessionRequest): Promise<Session>;
   /** 分支会话：以指定回合（助手消息所在回合）为节点完整复制源会话 */
   branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<Session>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
+  /** 计划历史（转录构建：身份 = ExitPlanMode toolCallId，含状态与正文；「计划」面板用） */
+  fetchSessionPlans(sessionId: string): Promise<{ plans: SessionPlanItem[] }>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
   fetchSidebarSessions(limit?: number): Promise<SidebarSessionsResponse>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
   searchSessions(keyword: string, cursor?: string, limit?: number, includeArchived?: boolean): Promise<SearchSessionResponse>;
-  archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: any }>;
+  archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: Session }>;
   batchArchiveSessions(sessionIds: string[], archived: boolean): Promise<{ success: boolean; skipped: string[] }>;
-  updateSession(sessionId: string, data: any): Promise<Session>;
+  updateSession(sessionId: string, data: UpdateSessionRequest): Promise<Session>;
   fetchSessionGroups(): Promise<SessionGroup[]>;
   createSessionGroup(data: { name: string }): Promise<SessionGroup>;
   updateSessionGroup(groupId: string, data: { name: string }): Promise<SessionGroup>;
@@ -268,8 +270,11 @@ export interface SessionApi {
 
 
 
-  compressSession(sessionId: string): Promise<any>;
-  fetchSessionSummaries(sessionId: string, limit?: number): Promise<{ items: any[]; total: number }>;
+  compressSession(sessionId: string): Promise<{ success: boolean; started: boolean }>;
+  fetchSessionSummaries(
+    sessionId: string,
+    limit?: number,
+  ): Promise<{ items: SessionSummaryItem[]; total: number }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
   getSessionProcesses(sessionId: string): Promise<{ processes: UiProcessInfo[] }>;
@@ -302,9 +307,24 @@ export interface UiProcessLog {
   content: string;
 }
 
+/** 压缩历史条目（GET /sessions/:id/summaries，与后端 CompactionHistoryItem 同构） */
+export interface SessionSummaryItem {
+  /** 摘要括号 = summaryMessageId；纯裁剪 = `prune_<seq>` */
+  id: string;
+  createdAt: string;
+  /** 摘要文本；纯裁剪为 null */
+  summaryContent: string | null;
+  shadowedCount: number;
+  cleaningStrategy: "summarized" | "discarded" | "pruned_only";
+  compressionStats: {
+    beforeTokenCount?: number;
+    afterTokenCount?: number;
+  };
+}
+
 export const sessionApi: SessionApi = {
-  async createSession(this: ApiContext, data: any) {
-    return await this._request("/sessions", { method: "POST", data });
+  async createSession(this: ApiContext, data: CreateSessionRequest) {
+    return await this._request<Session>("/sessions", { method: "POST", data });
   },
 
   async branchSession(this: ApiContext, sessionId: string, data: { turnId: string; title?: string }) {
@@ -320,6 +340,12 @@ export const sessionApi: SessionApi = {
 
   async fetchSession(this: ApiContext, sessionId: string) {
     return await this._request(`/sessions/${sessionId}`);
+  },
+
+  async fetchSessionPlans(this: ApiContext, sessionId: string) {
+    return await this._request<{ plans: SessionPlanItem[] }>(
+      `/sessions/${sessionId}/plans`,
+    );
   },
 
   async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean) {
@@ -377,8 +403,8 @@ export const sessionApi: SessionApi = {
     });
   },
 
-  async updateSession(this: ApiContext, sessionId: string, data: any) {
-    return await this._request(`/sessions/${sessionId}`, {
+  async updateSession(this: ApiContext, sessionId: string, data: UpdateSessionRequest) {
+    return await this._request<Session>(`/sessions/${sessionId}`, {
       method: "PUT",
       data,
     });

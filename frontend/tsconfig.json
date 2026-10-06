@@ -10,7 +10,7 @@
     "noEmit": true,
     
     /* 类型检查 - 初期宽松模式 */
-    "strict": false,
+    "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -19,11 +19,11 @@
     "noImplicitThis": true,
     "alwaysStrict": true,
     
-    /* 未使用的代码检查 - 初期关闭 */
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitReturns": false,
-    "noFallthroughCasesInSwitch": false,
+    /* 未使用的代码检查 */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     
     /* 互操作性 */
     "esModuleInterop": true,

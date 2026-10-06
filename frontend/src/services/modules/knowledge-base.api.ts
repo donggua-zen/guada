@@ -23,14 +23,44 @@ export interface KnowledgeBaseApi {
   uploadKBFile(kbId: string, file: File): Promise<KBFile>;
   getKBFile(kbId: string, fileId: string): Promise<KBFile>;
   deleteKBFile(kbId: string, fileId: string): Promise<{ success: boolean }>;
-  renameKBFile(kbId: string, fileId: string, newName: string): Promise<{ success: boolean; message: string; data: any }>;
-  moveKBFile(kbId: string, fileId: string, targetParentFolderId: string | null): Promise<{ success: boolean; message: string; data: any }>;
-  createKBFolder(kbId: string, folderName: string, parentFolderId?: string | null): Promise<any>;
+  renameKBFile(kbId: string, fileId: string, newName: string): Promise<{ success: boolean; message: string; data: KBFile }>;
+  moveKBFile(kbId: string, fileId: string, targetParentFolderId: string | null): Promise<{ success: boolean; message: string; data: KBFile }>;
+  createKBFolder(kbId: string, folderName: string, parentFolderId?: string | null): Promise<KBFile>;
   getFileProcessingStatus(kbId: string, fileId: string): Promise<KBFile>;
   batchGetFileProcessingStatus(kbId: string, fileIds: string[]): Promise<KBFile[]>;
   retryKBFile(kbId: string, fileId: string): Promise<{ success: boolean; message: string }>;
-  getKBFileChunks(kbId: string, fileId: string, skip?: number, limit?: number): Promise<any[]>;
-  searchKnowledgeBase(kbId: string, query: string, topK?: number, filterFileId?: string): Promise<any>;
+  getKBFileChunks(kbId: string, fileId: string, skip?: number, limit?: number): Promise<KBChunk[]>;
+  searchKnowledgeBase(kbId: string, query: string, topK?: number, filterFileId?: string): Promise<{ results: KBSearchResult[] }>;
+}
+
+/** 文件分块条目（GET files/:id/chunks） */
+export interface KBChunk {
+  id: string
+  chunkIndex: number
+  tokenCount?: number
+  content: string
+}
+
+/** 搜索结果 metadata（后端 mergeMetadata 产物：分块快照元信息 + 条目当前信息 + chunkId/chunkIndex 定位列，其余键动态） */
+export type KBSearchResultMetadata = {
+  fileId?: string
+  knowledgeBaseId?: string
+  fileName?: string
+  chunkIndex?: number | null
+  [key: string]: unknown
+}
+
+/** 语义搜索结果条目（POST /:kbId/search；type 别名以获得隐式索引签名，可赋给索引签名消费方） */
+export type KBSearchResult = {
+  id?: string
+  content: string
+  fileName?: string
+  fileId?: string
+  semanticScore?: number
+  keywordScore?: number
+  finalScore?: number
+  similarity?: number
+  metadata?: KBSearchResultMetadata
 }
 
 export const knowledgeBaseApi: KnowledgeBaseApi = {
@@ -145,7 +175,7 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
   },
 
   async renameKBFile(this: ApiContext, kbId: string, fileId: string, newName: string) {
-    return await this._request(
+    return await this._request<{ success: boolean; message: string; data: KBFile }>(
       `/knowledge-bases/${kbId}/files/${fileId}/rename`,
       {
         method: "POST",
@@ -155,7 +185,7 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
   },
 
   async moveKBFile(this: ApiContext, kbId: string, fileId: string, targetParentFolderId: string | null) {
-    return await this._request(
+    return await this._request<{ success: boolean; message: string; data: KBFile }>(
       `/knowledge-bases/${kbId}/files/${fileId}/move`,
       {
         method: "POST",
@@ -165,7 +195,7 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
   },
 
   async createKBFolder(this: ApiContext, kbId: string, folderName: string, parentFolderId: string | null = null) {
-    return await this._request(`/knowledge-bases/${kbId}/files/folder`, {
+    return await this._request<KBFile>(`/knowledge-bases/${kbId}/files/folder`, {
       method: "POST",
       data: { folderName, parentFolderId },
     });
@@ -194,13 +224,13 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
   },
 
   async getKBFileChunks(this: ApiContext, kbId: string, fileId: string, skip: number = 0, limit: number = 10) {
-    return await this._request(
+    return await this._request<KBChunk[]>(
       `/knowledge-bases/${kbId}/files/${fileId}/chunks?skip=${skip}&limit=${limit}`,
     );
   },
 
   async searchKnowledgeBase(this: ApiContext, kbId: string, query: string, topK: number = 5, filterFileId?: string) {
-    return await this._request(`/knowledge-bases/${kbId}/search`, {
+    return await this._request<{ results: KBSearchResult[] }>(`/knowledge-bases/${kbId}/search`, {
       method: "POST",
       data: {
         query,

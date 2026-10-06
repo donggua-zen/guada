@@ -22,6 +22,9 @@ export interface SessionEvent {
   type: SessionEventType;
   sessionId: string;
   timestamp: string;
+  // 各事件类型的载荷形状互不相同且为后端开放字典（useSessionEvents 等消费方按需深读
+  // payload.session/status 等），无法收敛为 Record<string, unknown> 而不改动范围外消费方
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   payload?: Record<string, any>;
   source?: string;
 }

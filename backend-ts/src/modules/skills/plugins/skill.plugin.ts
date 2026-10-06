@@ -146,6 +146,7 @@ export class SkillPlugin extends PluginBase {
         icon: "book",
       },
       dangerLevel: "info",
+      readOnly: true,
     });
 
     // ── Prompt（toolkit 的 prompt 随 loadMode 自动注入/隐藏）──

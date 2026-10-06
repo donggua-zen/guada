@@ -1,5 +1,5 @@
 /**
- * AskService - 统一人机交互服务（审批 / 询问 / 迭代暂停共用一个闭环）
+ * AskService - 统一人机交互服务（审批 / 询问共用一个闭环）
  *
  * 审批是 ask 的特例：requestApproval = 预置单问题（同意/拒绝/自定义回复）+ 答案解释器。
  * 无超时：等待只有两种终结——用户应答（POST /chat/respond 经 InteractionWaitService 唤醒）

@@ -88,7 +88,17 @@ describe('预设库：顺序（具体模式必须先于 catch-all）', () => {
     ['gemini-2.5-flash', 'gemini-2.5'],
     // 既有家族不回归
     ['claude-opus-5', 'claude-opus-5'],
-    ['deepseek-v4-pro', 'deepseek-v4'],
+    // V4.1 起有专属预设（deepseek-v4-pro / deepseek-flash），不再被 deepseek-v4 兜底吞掉
+    ['deepseek-v4-pro', 'deepseek-v4-pro'],
+    ['deepseek-flash', 'deepseek-v4.1-flash'],
+    ['deepseek-v4', 'deepseek-v4'],
+    // GLM-5.3 系有专属预设（1M / 131K；flash 支持图片），不再被 glm-5 兜底
+    ['glm-5.3-flash', 'glm-5.3-flash'],
+    ['glm-5.3-highspeed', 'glm-5.3'],
+    ['glm-5.2', 'glm-5.2'],
+    // Step 5 Preview 有专属预设（1M / 输出 1M / reasoning_effort 三档）
+    ['step-5-preview', 'step-5'],
+    ['stepfun/step-5-preview', 'step-5'],
     ['kimi-k2.5', 'kimi-general'],
     ['glm-5', 'glm-5'],
     ['qwen3.5-397b-a17b', 'qwen-general'],
@@ -105,7 +115,8 @@ describe('预设库：顺序（具体模式必须先于 catch-all）', () => {
     ['doubao-seed-1.6', 'seed-doubao'],
     ['hy3', 'hunyuan'],
     ['tencent/hy3-preview', 'hunyuan'],
-    ['step-3.7-flash', 'stepfun'],
+    ['step-3.7-flash', 'step-3.7-flash'],
+    ['step-2', 'stepfun'],
     ['nvidia/nemotron-3-ultra-550b-a55b', 'nemotron'],
     ['amazon/nova-pro-v1', 'nova-amazon'],
     ['amazon.nova-lite-v1:0', 'nova-amazon'],

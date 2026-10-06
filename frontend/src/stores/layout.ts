@@ -4,6 +4,7 @@ import { useStorage } from '@vueuse/core'
 import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useTheme } from '@/composables/useTheme'
+import type { AppearanceGroupSettings } from '@/types/service'
 import { useSessionStore } from '@/stores/session'
 
 /**
@@ -17,6 +18,9 @@ import { useSessionStore } from '@/stores/session'
 export const useLayoutStore = defineStore('layout', () => {
   // 侧边栏可见性（持久化到 localStorage）
   const sidebarVisible = useStorage('sidebarVisible', true)
+
+  // 侧边栏宽度（持久化；SidebarLayout 拖拽把手调整，emit 前已按其钳制范围取整）
+  const sidebarWidth = useStorage('sidebarWidth', 285)
 
   // 工作目录可见性（会话级，持久化，按 sessionId 记录各会话自己的开关）
   const workspaceVisibleBySession = useStorage<Record<string, boolean>>('workspaceVisibleBySession', {})
@@ -100,6 +104,13 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const setSidebarVisible = (visible: boolean): void => {
     sidebarVisible.value = visible
+  }
+
+  /**
+   * 设置侧边栏宽度（像素；由 SidebarLayout 拖拽把手调用，值已钳制取整）
+   */
+  const setSidebarWidth = (width: number): void => {
+    sidebarWidth.value = width
   }
 
   /**
@@ -236,7 +247,7 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const loadAppearanceSettings = async (): Promise<void> => {
     try {
-      const response = await apiService.fetchGroupSettings('appearance')
+      const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
 
       if (response.wallpaperUrl !== undefined) {
         wallpaperUrl.value = response.wallpaperUrl || null
@@ -289,6 +300,7 @@ export const useLayoutStore = defineStore('layout', () => {
 
   return {
     sidebarVisible,
+    sidebarWidth,
     workspaceVisible,
     workspaceSplitSize,
     workspaceFullscreen,
@@ -302,6 +314,7 @@ export const useLayoutStore = defineStore('layout', () => {
     floatWidgetOpacity,
     toggleSidebar,
     setSidebarVisible,
+    setSidebarWidth,
     toggleWorkspace,
     setWorkspaceVisible,
     setWorkspaceSplitSize,

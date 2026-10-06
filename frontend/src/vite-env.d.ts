@@ -1,32 +1,25 @@
 /// <reference types="vite/client" />
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- *.vue 兜底声明与无类型三方库声明里 DefineComponent<{}, {}> 的 {} 是社区惯例写法（组件内部数据不可知，按 unknown 处理） */
+
 // 全局 Vue 类型声明
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'
-  const component: DefineComponent<{}, {}, any>
+  const component: DefineComponent<{}, {}, unknown>
   export default component
 }
 
 // 第三方库类型声明（没有官方类型定义的）
-declare module 'diff-dom' {
-  export class DiffDOM {
-    constructor(options?: any)
-    apply(element: Element, diff: any[]): Element | false
-    remove(element: Element, diff: any[]): Element | false
-  }
-  export default DiffDOM
-}
-
 declare module 'simplebar-vue' {
   import type { DefineComponent } from 'vue'
-  const component: DefineComponent<{}, {}, any>
+  const component: DefineComponent<{}, {}, unknown>
   export default component
 }
 
 declare module 'splitpanes' {
   import type { DefineComponent } from 'vue'
-  export const Splitpanes: DefineComponent<{}, {}, any>
-  export const Pane: DefineComponent<{}, {}, any>
+  export const Splitpanes: DefineComponent<{}, {}, unknown>
+  export const Pane: DefineComponent<{}, {}, unknown>
 }
 
 // 图片资源声明
@@ -81,6 +74,18 @@ interface ElectronWebviewElement extends HTMLElement {
   stop(): void
   loadURL(url: string): Promise<void>
   setAudioMuted(muted: boolean): void
+}
+
+/** Electron <webview> did-navigate / did-navigate-in-page 事件载荷（DOM Event 附加字段） */
+interface ElectronWebviewNavigateEvent extends Event {
+  url: string
+  /** 仅 did-navigate-in-page 携带：是否主框架内导航 */
+  isMainFrame?: boolean
+}
+
+/** Electron <webview> page-title-updated 事件载荷 */
+interface ElectronWebviewTitleUpdatedEvent extends Event {
+  title: string
 }
 
 /** Chrome 专有 performance.memory */

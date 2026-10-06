@@ -26,15 +26,27 @@
           </div>
           <!-- P5b：通知类折叠区（极简显示，可展开看全文；内容为剥离 <system_reminder> 标签后的全文） -->
           <div v-if="isNotificationUser && notificationText" class="user-reminder">
-            <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
-              <el-icon size="12">
-                <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
-                <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
-              </el-icon>
-              <span class="user-reminder__label">
-                {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
-              </span>
-            </button>
+            <div class="user-reminder__row">
+              <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
+                <el-icon size="12">
+                  <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
+                  <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
+                </el-icon>
+                <span class="user-reminder__label">
+                  {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
+                </span>
+              </button>
+              <!-- 子代理结果通知：直接点进派生子代理的会话（source.subSessionId 由后端结构化携带，
+                   实时与回放两条路径都透传，刷新后仍在） -->
+              <GdTooltip v-if="notificationSubSessionId && openSubAgentSession"
+                :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
+                <span class="open-subagent-btn" @click="openNotificationSubAgent">
+                  <el-icon size="14">
+                    <PanelRightExpand20Filled />
+                  </el-icon>
+                </span>
+              </GdTooltip>
+            </div>
             <div v-if="reminderExpanded" class="user-reminder__body">{{ notificationText }}</div>
           </div>
         </div>
@@ -122,7 +134,7 @@
                 :class="{ 'is-expanded': isGroupContentVisible(groupIndex, group) }">
                 <div class="process-group__body">
                   <div class="process-group__body-scroll space-y-2"
-                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
+                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }"
                     :ref="isLastActive(groupIndex) ? setActiveBodyRef : undefined"
                     @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
                     <template v-for="item in group.items" :key="item.id">
@@ -226,34 +238,31 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, inject } from "vue";
-import { ElAlert, ElIcon, ElImageViewer, ElButton } from "element-plus";
+import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
-import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
-import { Loading } from "@element-plus/icons-vue";
+import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, PanelRightExpand20Filled } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
-import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
-import type { Turn, MessageContent, TurnContent } from '@/types/message';
+import { groupContentsForDisplay, type DisplayGroup, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
+import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
-import { usePopup } from "../../composables/usePopup";
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
 import EventCard from './EventCard.vue';
 import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChanges';
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
-import { apiService } from '@/services/ApiService';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
 
-const { toast } = usePopup();
 const { t } = useI18n();
 
 const props = defineProps<{
@@ -312,7 +321,8 @@ let userScrolledAway = false;
 
 // ref 绑定函数
 const setActiveBodyRef = (el: Element | { $el: HTMLElement } | null) => {
-  activeBodyRef.value = (el as any)?.$el || (el as HTMLElement) || null;
+  activeBodyRef.value =
+    (el && "$el" in el ? el.$el : undefined) || (el as HTMLElement) || null;
 };
 
 // 用户滚动检测：距底部超过 40px 视为手动滚动
@@ -340,9 +350,12 @@ const isGroupExpanded = (groupId: string): boolean => {
 
 /** 分组内容当前是否可见（与模板 collapsible 的 is-expanded 判定保持同一表达式） */
 const isGroupContentVisible = (groupIndex: number, group: DisplayGroup): boolean => {
+  // 不可折叠组（独立渲染工具卡，如计划）永远直接渲染：
+  // 不参与 last-active 的"进行中收成一行"处理，否则待审批/流式最后一组时又被藏住
+  if (!group.isCollapsible) return true;
   return isLastActive(groupIndex)
     ? isGroupExpanded('last-active')
-    : (!group.isCollapsible || isGroupExpanded(group.id));
+    : isGroupExpanded(group.id);
 };
 
 /**
@@ -512,6 +525,25 @@ const notificationLabel = computed(() => {
     : t('chat.turn.viewSubagentResult');
 });
 
+/** 子代理结果通知目标会话（仅 kind='sub_agent' 有；process_monitor 不参与跳转） */
+const notificationSubSessionId = computed(() => {
+  const source = user.value?.source;
+  if (source?.kind !== 'sub_agent') return '';
+  return typeof source.subSessionId === 'string' ? source.subSessionId : '';
+});
+
+/** 打开子代理面板（ChatPage provide；无 provide 的宿主如 BotSessionDialog 下为 null → 不渲染入口） */
+const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
+  'workspace:openSubAgentSession',
+  null,
+);
+
+const openNotificationSubAgent = (): void => {
+  if (notificationSubSessionId.value) {
+    openSubAgentSession?.(notificationSubSessionId.value);
+  }
+};
+
 const userTime = computed(() => {
   return {
     firendly: formatTime(user.value?.createdAt || '', 'friendly'),
@@ -528,7 +560,6 @@ const isSystemMessage = computed(() => {
 const systemMessageLabel = computed(() => {
   const meta = user.value?.metadata;
   const type = meta?.type || '';
-  const name = meta?.subAgentName || '';
   switch (type) {
     case 'scheduler': return t('chat.turn.systemMessageScheduler');
     case 'sub_agent': return t('chat.turn.systemMessageSubAgent');
@@ -541,7 +572,7 @@ const renderSkillBadges = (text: string): string => {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return escaped.replace(
     /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g,
-    (match, prefix, provider, name, attrsStr) => {
+    (_match, prefix, provider, name, attrsStr) => {
       const attrs: Record<string, string> = { label: '' };
       if (attrsStr) {
         const attrRegex = /(\w+)="([^"]*)"/g;
@@ -568,9 +599,9 @@ const renderSkillBadges = (text: string): string => {
  * - 历史：replayer turn/finish 折叠合并（finishReason/errorDetail/usage/modelName）
  * - 流式：turn_start 写 modelName、turn_end 写 finishReason/errorDetail/usage
  * 流式瞬态（重试提示等）为回合级 turn.state，不挂消息 metadata（v1.9 迁移）。
- * 审批卡/暂停卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
+ * 审批卡/询问卡为会话级全局卡（SessionCards.vue），不再挂回合（对齐 DSH：sessionId 唯一锚点）。
  */
-const assistantMetadata = computed<Record<string, any> | null>(() => {
+const assistantMetadata = computed<Record<string, unknown> | null>(() => {
   const turnMeta = props.turn?.metadata || {};
   return {
     ...turnMeta,
@@ -593,7 +624,9 @@ const retryState = computed<{
 
 const currentModelName = computed(() => {
   const modelName = assistantMetadata.value?.modelName;
-  return modelName ? getModelDisplayName(modelName) : "unknown";
+  return typeof modelName === "string" && modelName
+    ? getModelDisplayName(modelName)
+    : "unknown";
 });
 
 const displayName = computed(() => {
@@ -602,7 +635,7 @@ const displayName = computed(() => {
 
 const modelAvatarPath = computed(() => {
   const modelName = assistantMetadata.value?.modelName;
-  if (!modelName) return undefined;
+  if (typeof modelName !== "string" || !modelName) return undefined;
   const parts = modelName.split("/");
   const providerName = parts.length > 1 ? parts[0] : undefined;
   return getModelAvatarPath(modelName, providerName) || undefined;
@@ -679,8 +712,8 @@ const previewList = computed(() => {
   // 仅可内联的位图进入大图预览（svg/ico 等 image/* 前缀但不渲染的类型排除），
   // 绝对化后取原图 url（无缩略图路径时回退）
   return files
-    .filter((f: any) => isVisionImageMediaType(f.type))
-    .map((f: any) => toResourceUrl(f.url || f.previewUrl));
+    .filter((f) => isVisionImageMediaType(f.type))
+    .map((f) => toResourceUrl(f.url || f.previewUrl));
 });
 
 /**
@@ -689,8 +722,8 @@ const previewList = computed(() => {
  * 同一条消息现在可以同时有图片和普通文件（类型限制已取消），
  * 用外层下标会让预览取错图、甚至越界。
  */
-const handleImageClick = (file: any) => {
-  const images = (userFiles.value || []).filter((f: any) => isVisionImageMediaType(f.type));
+const handleImageClick = (file: FileAttachment) => {
+  const images = (userFiles.value || []).filter((f) => isVisionImageMediaType(f.type));
   const index = images.indexOf(file);
   if (index < 0) return;
   currentPreViewIndex.value = index;
@@ -774,6 +807,24 @@ const handleImageClick = (file: any) => {
   align-items: flex-start;
   margin-top: 4px;
   max-width: 100%;
+}
+/* 折叠按钮与"打开子代理面板"同行（后者仅子代理结果通知出现） */
+.user-reminder__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 打开子代理面板：与工具行的同名入口保持同一视觉/交互 */
+.open-subagent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary, #999);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.open-subagent-btn:hover {
+  color: var(--el-color-primary);
 }
 .user-reminder__toggle {
   display: inline-flex;

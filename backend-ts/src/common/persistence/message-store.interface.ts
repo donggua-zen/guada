@@ -220,7 +220,7 @@ export interface IMessageStore {
     },
   ): Promise<number>;
 
-  // ─── 统一交互（审批/询问/迭代暂停共用 ask/* 事件溯源；无超时）───
+  // ─── 统一交互（审批/询问共用 ask/* 事件溯源；无超时）───
   /** 交互请求事件（发起 ask 时写日志，审计源） */
   appendAskAsked(
     sessionId: string,
@@ -230,6 +230,12 @@ export interface IMessageStore {
   appendAskAnswered(
     sessionId: string,
     data: import('./types').AskAnsweredData,
+  ): Promise<void>;
+
+  /** 追加会话模式变更事件（session/mode_changed，审计；事实源仍是 session.settings） */
+  appendSessionModeChanged(
+    sessionId: string,
+    data: import('./types').SessionModeChangedData,
   ): Promise<void>;
 
   // ─── 会话生命周期 / 内部维护 ───

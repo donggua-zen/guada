@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Upload, Folder, Document } from '@element-plus/icons-vue'
@@ -229,7 +230,7 @@ function detectUploadConflicts(
     const conflicts: UploadConflict[] = []
     const checkedPaths = new Set<string>()  // 用于去重
     
-    for (const { file, relativePath } of filesToUpload) {
+    for (const { relativePath } of filesToUpload) {
         // 提取需要检查的名称和路径
         let checkName: string
         let checkPath: string  // 用于去重的键
@@ -328,7 +329,6 @@ function applyConflictResolution(
             if (relativePath.includes('/')) {
                 // 文件夹：替换顶级目录名
                 const parts = relativePath.split('/')
-                const oldTopDir = parts[0]
                 parts[0] = newName  // 只替换第一层
                 const newPath = parts.join('/')
                 console.log(`[DEBUG]   → 新路径: ${newPath}`)
@@ -503,7 +503,7 @@ async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativeP
  */
 async function executeUpload(
     filesWithPath: Array<{ file: File, relativePath: string }>,
-    mode: 'overwrite' | 'keep-both'
+    _mode: 'overwrite' | 'keep-both'
 ) {
     let successCount = 0
     let failCount = 0
@@ -539,7 +539,7 @@ async function executeUpload(
                     }
                 }
             )
-        } catch (error: any) {
+        } catch (error) {
             console.error(`${relativePath} 上传失败:`, error)
             ElMessage.error(t('knowledge.upload.uploadFailed', { path: relativePath }))
             failCount++
@@ -609,8 +609,8 @@ async function confirmCreateFolder() {
         
         // 通知父组件刷新
         emit('folder-created')
-    } catch (error: any) {
-        ElMessage.error(error.message || t('knowledge.upload.folderCreateFailed'))
+    } catch (error) {
+        ElMessage.error(getErrorMessage(error) || t('knowledge.upload.folderCreateFailed'))
     } finally {
         createFolderLoading.value = false
     }

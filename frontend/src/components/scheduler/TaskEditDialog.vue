@@ -38,13 +38,13 @@
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-4.5 h-4.5 shrink-0" />
               <span class="text-xs font-medium ml-1 max-w-32 truncate">{{ modelButtonLabel }}</span>
-              <span v-if="displayThinkingEffort" class="text-xs text-gray-400">{{ getThinkingEffortLabel(displayThinkingEffort) }}</span>
+              <span v-if="displayThinkingEffort" class="text-xs text-gray-400">{{ getThinkingEffortLabelWithKey(displayThinkingEffort) }}</span>
               <el-icon size="14" class="ml-0.5"><ChevronUpDown16Regular /></el-icon>
             </button>
           </div>
 
           <!-- 工作目录选择弹窗 -->
-          <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
+          <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
             :current-workspace-path="form.workspacePath || null" :public-path="publicPath"
             :current-attachments="form.attachments" @select="handleWorkspaceSelect"
             @toggle-attachment="handleToggleAttachment" />
@@ -242,12 +242,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted } from 'vue'
+import { getErrorMessage } from '@/utils/errorMessage'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElForm, ElFormItem, ElInput, ElRadioGroup, ElRadioButton, ElSwitch, ElInputNumber, ElIcon, ElButton, ElCheckboxGroup, ElCheckboxButton, ElTimePicker, ElDatePicker, ElMessage } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 import { AddCircleOutlineRound, LogInRound } from '@vicons/material'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Checkmark16Filled } from '@vicons/fluent'
-import type { ScheduledTask } from '../../types/scheduler'
+import type { ScheduledTask, UpdateTaskRequest } from '../../types/scheduler'
 import type { Agent } from '../../types/agent'
 import type { Model, ModelProvider } from '../../types/api'
 import { apiService } from '../../services/ApiService'
@@ -257,8 +259,8 @@ import Avatar from '@/components/ui/Avatar.vue'
 import WorkspaceSelectorPopover from '@/components/chat/chat-input/WorkspaceSelectorPopover.vue'
 import ModelSelectorPanel from '@/components/chat/chat-input/ModelSelectorPanel.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
-import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabel } from '@/utils/modelUtils'
+import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
+import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabelWithKey } from '@/utils/modelUtils'
 
 const { t } = useI18n()
 const DEFAULT_AGENT_ID = 'assistant-agent'
@@ -275,7 +277,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  'save': [data: any]
+  'save': [data: UpdateTaskRequest]
 }>()
 
 const dialogVisible = computed({
@@ -283,7 +285,7 @@ const dialogVisible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const formRef = ref<any>(null)
+const formRef = ref<FormInstance | null>(null)
 const submitting = ref(false)
 const testing = ref(false)
 const formError = ref('')
@@ -291,7 +293,7 @@ const formError = ref('')
 // 工作目录选择
 const workspaceStore = useWorkspaceStore()
 const workspacePopoverVisible = ref(false)
-const workspaceButtonRef = ref<any>(null)
+const workspaceButtonRef = ref<{ $el: HTMLElement } | null>(null)
 const publicPath = computed(() => workspaceStore.getPublicPath())
 
 // 时间模式
@@ -599,7 +601,7 @@ async function handleSubmit() {
 
     const cronExpression = generateCron()
 
-    const data: any = {
+    const data: UpdateTaskRequest = {
       name: form.value.name.trim(),
       prompt: form.value.prompt.trim(),
       scheduleType: timeMode.value === 'once' ? 'once' : 'cron',
@@ -642,7 +644,7 @@ async function handleSubmit() {
 
     // 思考强度走 task.settings 透传（executor 把 task.settings 并入 session.settings，thinkingEffort 本就在白名单）
     if (form.value.targetMode === 'new_session') {
-      const settings: Record<string, any> = { ...(props.task?.settings || {}) }
+      const settings: Record<string, unknown> = { ...(props.task?.settings || {}) }
       if (form.value.thinkingEffort) settings.thinkingEffort = form.value.thinkingEffort
       else delete settings.thinkingEffort
       data.settings = settings
@@ -665,9 +667,9 @@ async function handleTest() {
   try {
     const result = await apiService.testScheduledTask(props.task.id)
     ElMessage.success(result.message || t('scheduler.edit.testSuccess'))
-  } catch (err: any) {
+  } catch (err) {
     console.error('测试触发失败:', err)
-    ElMessage.error(err.message || t('scheduler.edit.testFailed'))
+    ElMessage.error(getErrorMessage(err) || t('scheduler.edit.testFailed'))
   } finally {
     testing.value = false
   }
@@ -697,12 +699,7 @@ function handleWorkspaceSelect(workspacePath: string | null) {
 }
 
 function handleToggleAttachment(connectionId: string) {
-  const current = form.value.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
-  const ids = Array.isArray(current) ? current : []
-  const nextIds = ids.includes(connectionId)
-    ? ids.filter((id) => id !== connectionId)
-    : [...ids, connectionId]
-  form.value.attachments = { ...(form.value.attachments || {}), [SSH_CONNECTION_ATTACHMENT_TYPE]: nextIds }
+  form.value.attachments = toggleConnectionBinding(form.value.attachments, connectionId)
 }
 
 // ── 智能体选择（工具条同款轻量弹层）──

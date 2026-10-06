@@ -4,7 +4,7 @@
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-20">
     <div class="w-full flex items-center justify-center mb-20">
       <div class="banner w-20 mb-4">
-        <img :src="bannerPath" alt=""></img>
+        <img :src="bannerPath" alt="" />
       </div>
       <h1 class="text-4xl mb-6 text-(--gd-color-text) ml-5">
         <span class="typewriter-text">{{ displayedText }}</span>
@@ -65,7 +65,11 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { useStorage } from "@vueuse/core"
-import { apiService } from '@/services/ApiService';
+import { apiService } from '@/services/ApiService'
+import { getErrorMessage } from '@/utils/errorMessage';
+import type { Agent } from '@/types/agent';
+import type { Model } from '@/types/api';
+import type { Session, CreateSessionRequest, InputMessageState, ChatFileView } from '@/types/session';
 import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
 import { useRouter, useRoute } from 'vue-router';
@@ -78,11 +82,6 @@ import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
-
-// UI 组件导入
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
-
-const breakpoints = useBreakpoints(breakpointsTailwind)
 
 // 弹出层工具
 const { notify } = usePopup();
@@ -99,13 +98,13 @@ const title = useTitle();
 const bannerPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 
 // 智能体数据
-const agents = ref<any[]>([]);
+const agents = ref<Agent[]>([]);
 
 // 模型数据
-const models = ref<any[]>([]);
+const models = ref<Model[]>([]);
 
 // const lastSelectedModelId = useStorage('lastSelectedModelId', '');
-const lastModelConfig = useStorage<any>('lastModelConfig', {});
+const lastModelConfig = useStorage<Record<string, unknown>>('lastModelConfig', {});
 const lastSelectedAgentId = useStorage('lastSelectedAgentId', '');
 
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
@@ -116,6 +115,17 @@ const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffor
 
 // 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
+
+// 沙盒模式：记住上次选择，新会话草稿默认沿用（与上面几处偏好同构的本地记忆）。
+// 词表校验兜底：本地值损坏/过期时回落默认档——后端 DTO 有 @IsIn 校验，发坏值会 400。
+// 计划模式刻意不随此记忆（任务级意图、默认关；对齐 ZCode 新任务 plan→build 归零）。
+const SANDBOX_MODE_VALUES = ['read-only', 'workspace-write', 'danger-full-access'] as const;
+const userSelectedSandboxMode = useStorage<string>('userSelectedSandboxMode', 'workspace-write');
+const rememberedSandboxMode = computed(() =>
+  (SANDBOX_MODE_VALUES as readonly string[]).includes(userSelectedSandboxMode.value)
+    ? userSelectedSandboxMode.value
+    : 'workspace-write'
+);
 
 const inputMessage = ref({
   content: "",
@@ -163,7 +173,32 @@ const clearTypewriterTimer = (): void => {
 };
 
 // 计算属性
-const currentSession = ref<any>({
+/** 草稿态 settings：thinkingEffort 以 null 表示"未设置"（比 SessionSettings.thinkingEffort?: string 宽），
+ *  其余开放键与 SessionSettings 的索引签名兼容 */
+interface DraftSessionSettings {
+  referencedKbs?: string[]
+  modelName?: string | null
+  thinkingEffort?: string | null
+  sandboxMode?: string
+  planEnabled?: boolean
+  maxTokensLimit?: number | null
+  attachments?: Record<string, string[]>
+  [key: string]: unknown
+}
+
+/** 新建会话草稿（本地表单态；model_id / avatar_url 沿用 wire 的 snake_case 键）。
+ *  groupId 不在初始对象里，由路由参数/配置变更动态写入，故为可选。 */
+interface DraftSession {
+  agentId: string | null
+  model_id: string | null
+  avatar_url: string | null
+  title: string
+  workspacePath: string | null
+  groupId?: string | null
+  settings: DraftSessionSettings
+}
+
+const currentSession = ref<DraftSession>({
   agentId: null,  // 必须绑定智能体
   model_id: null,
   avatar_url: null,
@@ -174,7 +209,8 @@ const currentSession = ref<any>({
     modelName: null,
     // 未选择过（''）不写入：让会话保持"未设置"，由档位菜单决定默认中间档
     thinkingEffort: userSelectedThinkingEffort.value || null,
-    sandboxMode: 'workspace-write',
+    sandboxMode: rememberedSandboxMode.value,
+    planEnabled: false,
     maxTokensLimit: null
   }
 })
@@ -272,13 +308,13 @@ watch(() => currentSession.value.agentId, (newCharId, oldCharId) => {
 
 // Props & Emits - 类型化
 const props = defineProps<{
-  session?: any;
+  /** 父组件传入的既有会话（当前面板未消费，保留 prop 兼容既有调用方） */
+  session?: Session;
 }>();
 
-// @ts-ignore - emit 类型定义
 const emit = defineEmits<{
-  'update:session': [session: any]
-  'create-session': [sessionData: any, messageData?: any]
+  'update:session': [session: Session]
+  'create-session': [sessionData: CreateSessionRequest, messageData: InputMessageState]
 }>();
 
 
@@ -294,12 +330,12 @@ const loadModels = async (): Promise<void> => {
     const response = await apiService.fetchModels();
     // 提取所有 text 类型的模型
     response.items.forEach(provider => {
-      const textModels = provider.models?.filter((m: any) => m.modelType === 'text') || [];
+      const textModels = provider.models?.filter((m) => m.modelType === 'text') || [];
       models.value.push(...textModels);
     });
   } catch (error) {
     console.error('获取模型列表失败:', error);
-    notify.error(t('common.error.loadFailed'), error);
+    notify.error(t('common.error.loadFailed'), getErrorMessage(error));
   }
 };
 
@@ -360,14 +396,14 @@ const loadAgents = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('获取智能体列表失败:', error);
-    notify.error(t('common.error.loadFailed'), error);
+    notify.error(t('common.error.loadFailed'), getErrorMessage(error));
     // 即使出错也要恢复标志
     isInitializing.value = false;
   }
 };
 
 // 选择智能体（从抽屉中选择）
-const handleAgentSelect = (agent: any): void => {
+const handleAgentSelect = (agent: Agent): void => {
   currentSession.value.agentId = agent.id;
   lastSelectedAgentId.value = agent.id;
 
@@ -399,11 +435,6 @@ const handleAgentSelect = (agent: any): void => {
   }
 };
 
-const handleAgentSelectById = (agentId: string): void => {
-  const agent = agents.value.find(c => c.id === agentId);
-  if (agent) handleAgentSelect(agent);
-};
-
 // 前往智能体页面切换智能体
 const goToAgents = (): void => {
   router.push({ name: 'Agents' });
@@ -431,6 +462,9 @@ const chatInputConfig = computed(() => ({
   // 运行模式
   sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
 
+  // 计划模式（协作状态，正交于 sandboxMode）：新建页无会话，草稿值随 create-session 一并提交
+  planEnabled: currentSession.value?.settings?.planEnabled === true,
+
   // 工作目录路径
   workspacePath: currentSession.value?.workspacePath || null,
 
@@ -445,7 +479,20 @@ const chatInputConfig = computed(() => ({
  * 处理 ChatInput 配置变更
  * 与 chatInputConfig 计算属性中的字段一一对应
  */
-const handleConfigChange = (config: any): void => {
+/** ChatInput / ChatInputToolbar 配置回传（字段与下方 chatInputConfig 计算属性一一对应） */
+interface ChatInputConfigChange {
+  modelId?: string | null
+  thinkingEffort?: string
+  maxTokensLimit?: number | null
+  knowledgeBaseIds?: string[]
+  workspacePath?: string | null
+  sandboxMode?: string
+  planEnabled?: boolean
+  groupId?: string | null
+  attachments?: Record<string, string[]>
+}
+
+const handleConfigChange = (config: ChatInputConfigChange): void => {
   // 处理模型 ID 变更
   if (typeof config.modelId !== 'undefined') {
     currentSession.value.model_id = config.modelId;
@@ -481,10 +528,17 @@ const handleConfigChange = (config: any): void => {
     console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
 
-  // 处理安全模式变更
+  // 处理安全模式变更：同时写入本地记忆，供下次新建会话作为草稿默认
   if (typeof config.sandboxMode !== 'undefined') {
     currentSession.value.settings.sandboxMode = config.sandboxMode;
+    userSelectedSandboxMode.value = config.sandboxMode;
     console.log('保存 sandboxMode 到会话:', config.sandboxMode);
+  }
+
+  // 处理计划模式（协作状态）：仅写草稿——新建页尚无会话，不走 store/API，
+  // 值随 sendMessage 的 create-session 载荷一并提交（后端 POST /sessions 接收 settings.planEnabled）
+  if (typeof config.planEnabled !== 'undefined') {
+    currentSession.value.settings.planEnabled = config.planEnabled;
   }
 
   // 处理分组选择
@@ -609,12 +663,14 @@ const autoTitle = (): string => {
  * @param payload ChatInput 的 send 载荷。附件以载荷为准——它带的是 ChatInput 内部
  *   归一后的列表；直接读 inputMessage.files 在双向绑定之外的场景（粘贴等）可能还是旧的。
  */
-const sendMessage = async (payload?: { content?: string; files?: any[]; knowledgeBaseIds?: string[] }): Promise<void> => {
+const sendMessage = async (payload?: { content?: string; files?: ChatFileView[]; knowledgeBaseIds?: string[] }): Promise<void> => {
   if (!currentSession.value.agentId) {
     notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoAgent'));
     return;
   }
   // 修复：传递完整的 payload，包含 knowledgeBaseIds
+  // modelId / groupId 运行时可为 null（未绑定模型 / 未分组，后端创建接口接受 null），
+  // 而 CreateSessionRequest 仅声明 string | undefined，故按实际 wire 形状断言
   emit("create-session", {
     agentId: currentSession.value.agentId,
     modelId: currentModelId.value,
@@ -622,10 +678,12 @@ const sendMessage = async (payload?: { content?: string; files?: any[]; knowledg
     settings: currentSession.value.settings,
     workspacePath: currentSession.value.workspacePath || null,
     groupId: currentSession.value.groupId || null
-  }, {
+  } as CreateSessionRequest, {
     content: payload?.content ?? inputMessage.value.content,
     files: payload?.files ?? inputMessage.value.files ?? [],
-    knowledgeBaseIds: payload?.knowledgeBaseIds ?? currentSession.value.settings?.referencedKbs ?? []
+    knowledgeBaseIds: payload?.knowledgeBaseIds ?? currentSession.value.settings?.referencedKbs ?? [],
+    // isWaiting 初值：ChatPage 在消费前必置 true，此处仅为满足 InputMessageState 契约
+    isWaiting: false
   });
 }
 

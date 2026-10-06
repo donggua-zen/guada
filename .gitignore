@@ -12,6 +12,10 @@ backend/static/*
 .env
 frontend/stats.html
 frontend/src/types/components.d.ts
+frontend/src/types/auto-imports.d.ts
+frontend/components.d.ts
+frontend/auto-imports.d.ts
+/src/types/auto-imports.d.ts
 backend/experiment/**
 backend/tests/verification/**
 backend/build/**
@@ -54,4 +58,5 @@ memory/**
 outputs/**
 MEMORY.md
 # AI 工具元信息不入库：开源项目各人工具不同，避免污染他人工作区
+.zcode/**
 .zcodeignore

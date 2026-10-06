@@ -27,7 +27,7 @@ export interface UploadTask {
     rawFile?: File // 原始文件对象(用于延迟上传)
     relativePath?: string // 相对路径(用于文件夹上传)
     createdAt: number // 创建时间戳(用于队列排序)
-    serverFileRecord?: any // 后端返回的完整文件记录
+    serverFileRecord?: KBFile // 后端返回的完整文件记录
     onProgressUpdate?: (status: UploadTask) => void  // 进度更新回调
 }
 
@@ -44,9 +44,6 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
     /** 最大并发上传数 */
     const MAX_CONCURRENT_UPLOADS = 3
-
-    /** 上传队列定时器 */
-    let queueProcessorTimer: ReturnType<typeof setTimeout> | null = null
 
 
     // ========== Actions ==========
@@ -269,7 +266,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     async function uploadToKnowledgeBase(
         kbId: string,
         file: File,
-        onProgressUpdate?: (status: UploadTask) => void
+        _onProgressUpdate?: (status: UploadTask) => void
     ) {
         try {
             // 从文件名提取扩展名

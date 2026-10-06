@@ -229,6 +229,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Search, Document } from '@element-plus/icons-vue'
@@ -237,8 +238,10 @@ import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
+import type { Model } from '@/types/api'
+import type { KBSearchResult, KBSearchResultMetadata } from '@/services/modules/knowledge-base.api'
+import type ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
-import { useStorage, useDebounceFn } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
 import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
 import { MenuBookOutlined } from '@vicons/material'
@@ -259,15 +262,20 @@ const router = useRouter()
 // ========== 状态 ==========
 const showKbDialog = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
-const showUploadModal = ref(false)
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
 const activeTab = ref('files')  // 当前激活的 Tab: 'files' 或 'search'
 const viewMode = ref<'list' | 'detail'>('list')  // 视图模式：列表或详情
 const searchKeyword = ref('')  // 知识库搜索关键词
-const embeddingModels = ref<any[]>([]) // 嵌入模型列表
-const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
+/** 嵌入模型供应商分组（loadEmbeddingModels 过滤出 embedding 模型后的产物） */
+type EmbeddingProviderGroup = {
+  id: string
+  name: string
+  models: Model[]
+}
+const embeddingModels = ref<Model[]>([]) // 嵌入模型列表
+const embeddingProviders = ref<EmbeddingProviderGroup[]>([]) // 嵌入模型供应商列表
 
 // 上传任务列表(独立于文件列表)
 const uploadTasksList = ref<KBFile[]>([])
@@ -282,8 +290,8 @@ let autoCloseModalTimer: number | null = null
 let cachedCurrentFolderPath: string | null = null
 
 // 无限滚动相关状态
-const fileListContainer = ref<any>(null) // 文件列表容器引用（ScrollContainer 组件）
-const fileTreeRef = ref<any>(null) // 文件树组件引用
+const fileListContainer = ref<InstanceType<typeof ScrollContainer> | null>(null) // 文件列表容器引用（ScrollContainer 组件）
+const fileTreeRef = ref<InstanceType<typeof KBFileTree> | null>(null) // 文件树组件引用
 const scrollThreshold = 50 // 滚动触发阈值(像素)
 
 // ========== 对话框表单（创建/编辑共用） ==========
@@ -334,18 +342,18 @@ const loadEmbeddingModels = async () => {
     // 只保留 embedding 类型的模型
     embeddingModels.value = []
     embeddingProviders.value = response.items
-      .filter((provider: any) => {
-        const embeddingModels_ = provider.models.filter(
-          (m: any) => m.modelType === 'embedding'
-        )
+      .filter((provider) => {
+        const embeddingModels_ = provider.models?.filter(
+          (m) => m.modelType === 'embedding'
+        ) ?? []
         return embeddingModels_.length > 0
       })
-      .map((provider: any) => ({
+      .map((provider) => ({
         id: provider.id,
         name: provider.name,
-        models: provider.models.filter((m: any) => m.modelType === 'embedding')
+        models: provider.models?.filter((m) => m.modelType === 'embedding') ?? []
       }))
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取嵌入模型列表失败:', error)
   }
 }
@@ -377,17 +385,6 @@ function backToList() {
   viewMode.value = 'list'
   store.setActiveKnowledgeBase(null)
   router.replace({ name: 'KnowledgeBase' })
-}
-
-/**
- * 处理下拉菜单命令
- */
-function handleDropdownCommand(command: string, kb: KnowledgeBase) {
-  if (command === 'edit') {
-    handleEdit(kb)
-  } else if (command === 'delete') {
-    handleDelete(kb)
-  }
 }
 
 /**
@@ -479,9 +476,9 @@ async function handleKbSave() {
       // 刷新列表
       await store.fetchKnowledgeBases()
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('操作失败:', error)
-    toast.error(error.response?.data?.detail || t('common.operationFailed'))
+    toast.error(getErrorMessage(error) || t('common.operationFailed'))
   }
 }
 
@@ -529,10 +526,10 @@ async function handleDelete(kb: KnowledgeBase) {
 
     // 删除后处理：自动选中下一个知识库
     handleAfterDelete(deletedKbId, currentIndex)
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      toast.error(error.response?.data?.detail || t('common.deleteFailed'))
+      toast.error(getErrorMessage(error) || t('common.deleteFailed'))
     }
   }
 }
@@ -585,7 +582,7 @@ async function handleUploadComplete(task: UploadTask) {
   console.log('[DEBUG] 转换后的 KBFile relativePath:', uploadedFile.relativePath)
 
   // 智能插入到当前目录（如果需要）
-  if (fileTreeRef.value && fileTreeRef.value.insertUploadedFile) {
+  if (fileTreeRef.value) {
     await fileTreeRef.value.insertUploadedFile(uploadedFile)
     console.log('[DEBUG] 已尝试智能插入文件')
   }
@@ -600,7 +597,7 @@ async function handleFolderCreated() {
   console.log('[DEBUG] 文件夹创建成功，刷新当前目录')
 
   // 刷新当前目录以显示新创建的文件夹
-  if (fileTreeRef.value && fileTreeRef.value.forceReload) {
+  if (fileTreeRef.value) {
     await fileTreeRef.value.forceReload()
   }
 }
@@ -609,7 +606,7 @@ async function handleFolderCreated() {
 /**
  * 处理滚动事件（带防抖）
  */
-function handleScroll(event: Event) {
+function handleScroll(_event: Event) {
   if (!fileListContainer.value || !fileTreeRef.value) return
 
   const container = fileListContainer.value.getScrollElement?.() || fileListContainer.value.$el
@@ -621,7 +618,7 @@ function handleScroll(event: Event) {
   const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
   // 如果距离底部小于阈值，且没有正在加载，则加载更多
-  if (distanceToBottom <= scrollThreshold && fileTreeRef.value.loadMoreFiles) {
+  if (distanceToBottom <= scrollThreshold) {
     console.log('[DEBUG] 触发无限滚动加载')
     fileTreeRef.value.loadMoreFiles()
   }
@@ -648,7 +645,7 @@ async function handleRetryFile(file: KBFile) {
     toast.success(t('knowledge.page.retryStarted'))
 
     // 关键修复：通过 KBFileTree 更新文件状态
-    if (fileTreeRef.value && fileTreeRef.value.updateFileStatus) {
+    if (fileTreeRef.value) {
       fileTreeRef.value.updateFileStatus(file.id, {
         processingStatus: 'pending',
         progressPercentage: 0,
@@ -660,14 +657,14 @@ async function handleRetryFile(file: KBFile) {
 
     // 关键修复：重新处理后需要手动启动轮询
     // 因为 updateFileStatus 不会自动触发 startFileProcessingPolling
-    if (fileTreeRef.value && fileTreeRef.value.startFileProcessingPolling) {
+    if (fileTreeRef.value) {
       console.log('[DEBUG] 重新处理后，手动启动轮询')
       await fileTreeRef.value.startFileProcessingPolling()
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('重新处理失败:', error)
-      toast.error(error.response?.data?.detail || error.message || t('knowledge.page.retryFailed'))
+      toast.error(getErrorMessage(error) || t('knowledge.page.retryFailed'))
     }
   }
 }
@@ -681,8 +678,8 @@ async function handleRetryFile(file: KBFile) {
  * 才能判断"是否可查看"），所以这里先按 id 取一次条目详情。取不到（文件已被删）就明确提示，
  * 不要静默什么都不做。
  */
-async function handleSearchResultClick(result: any) {
-  const meta = result?.metadata ?? {}
+async function handleSearchResultClick(result: KBSearchResult) {
+  const meta: KBSearchResultMetadata = result?.metadata ?? {}
   const kbId = meta.knowledgeBaseId || store.activeKnowledgeBaseId
   const fileId = meta.fileId
   if (!kbId || !fileId) {
@@ -700,8 +697,8 @@ async function handleSearchResultClick(result: any) {
       store.setActiveKnowledgeBase(kbId)
     }
     handleViewFile(file as KBFile)
-  } catch (error: any) {
-    toast.error(error?.response?.data?.detail || t('knowledge.search.resultUnavailable'))
+  } catch (error) {
+    toast.error(getErrorMessage(error) || t('knowledge.search.resultUnavailable'))
   }
 }
 
@@ -739,14 +736,14 @@ async function handleDeleteFile(file: KBFile) {
     toast.success(t('common.deleteSuccess'))
 
     // 关键优化:通知 KBFileTree 从本地列表中移除文件,避免重建 DOM 树
-    if (fileTreeRef.value && fileTreeRef.value.removeFileLocally) {
+    if (fileTreeRef.value) {
       console.log('[DEBUG] 删除文件后本地更新文件树')
       fileTreeRef.value.removeFileLocally(file.id)
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      toast.error(error.response?.data?.detail || '删除失败')
+      toast.error(getErrorMessage(error) || '删除失败')
     }
   }
 }
@@ -777,7 +774,7 @@ function handleFilesLoaded(files: KBFile[]) {
  * 获取当前文件夹路径（从 KBFileTree 组件）
  */
 function getCurrentFolderPath(): string | null {
-  if (fileTreeRef.value && fileTreeRef.value.getCurrentFolderPath) {
+  if (fileTreeRef.value) {
     return fileTreeRef.value.getCurrentFolderPath()
   }
   return null
@@ -787,7 +784,7 @@ function getCurrentFolderPath(): string | null {
  * 获取当前目录下的文件列表（从 KBFileTree 组件）
  */
 function getCurrentFiles(): KBFile[] {
-  if (fileTreeRef.value && fileTreeRef.value.getCurrentFiles) {
+  if (fileTreeRef.value) {
     return fileTreeRef.value.getCurrentFiles()
   }
   return []
@@ -937,7 +934,7 @@ function refreshUploadTasksList() {
  * 自动移除已完成的任务
  * @param allTasks 所有上传任务列表(UploadTask[])
  */
-function autoRemoveCompletedTasks(allTasks: any[]) {
+function autoRemoveCompletedTasks(allTasks: UploadTask[]) {
   const completedTaskIds = allTasks
     .filter(task => task.status === 'uploaded' || task.status === 'failed')
     .map(task => task.id)
@@ -953,7 +950,7 @@ function autoRemoveCompletedTasks(allTasks: any[]) {
  * 检查并自动关闭弹窗
  * @param allTasks 所有上传任务列表(UploadTask[])
  */
-function checkAndAutoCloseModal(allTasks: any[]) {
+function checkAndAutoCloseModal(allTasks: UploadTask[]) {
   console.log(`[DEBUG] checkAndAutoCloseModal: 收到 ${allTasks.length} 个任务`)
   console.log(`[DEBUG] 任务状态:`, allTasks.map(t => ({ id: t.id.substring(0, 8), status: t.status })))
 
@@ -1004,7 +1001,7 @@ async function refreshFileList() {
 
   try {
     // 通知 KBFileTree 重新加载当前目录
-    if (fileTreeRef.value && fileTreeRef.value.forceReload) {
+    if (fileTreeRef.value) {
       console.log('[DEBUG] 触发 KBFileTree 重新加载')
       await fileTreeRef.value.forceReload()
       // 注意:forceReload 内部会触发 files-loaded 事件,自动启动轮询

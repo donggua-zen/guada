@@ -46,10 +46,12 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading, Document } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
+import type { KBChunk } from '@/services/modules/knowledge-base.api'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
@@ -72,7 +74,7 @@ const { toast } = usePopup()
 // 状态
 const showModal = ref(false)
 const loading = ref(false)
-const chunks = ref<any[]>([])
+const chunks = ref<KBChunk[]>([])
 const totalChunks = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -123,9 +125,9 @@ async function loadChunks() {
 
         // 使用文件记录中的totalChunks字段作为总分块数
         totalChunks.value = props.selectedFile.totalChunks || 0
-    } catch (error: any) {
+    } catch (error) {
         console.error('获取文件分块失败:', error)
-        toast.error(error.response?.data?.detail || t('knowledge.chunks.loadFailed'))
+        toast.error(getErrorMessage(error) || t('knowledge.chunks.loadFailed'))
         chunks.value = []
         totalChunks.value = 0
     } finally {

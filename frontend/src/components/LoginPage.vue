@@ -44,21 +44,20 @@
 </div>
 </template>
 
-<!-- @ts-ignore - Element Plus 组件类型缺失 -->
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
     PersonOutlined as UserIcon,
-    LockOutlined as LockIcon,
-    LogInOutlined as LoginIcon
+    LockOutlined as LockIcon
 } from '@vicons/material'
 
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
+import { NetworkError } from '@/utils/errors'
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { usePopup } from '../composables/usePopup'
-import { useStorage } from '@vueuse/core'
 import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
@@ -70,6 +69,7 @@ import {
   ElCheckbox,
   ElButton
 } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 
 const authStore = useAuthStore()
 // 消息提示
@@ -77,9 +77,6 @@ const { toast } = usePopup()
 const { t } = useI18n()
 
 const router = useRouter()
-
-// 登录方式 - 固定为邮箱登录
-const loginType = 'email'
 
 // 表单数据 - 类型化
 interface LoginForm {
@@ -103,7 +100,7 @@ const rules = reactive({
   username: {
     required: true,
     trigger: ['input', 'blur'],
-    validator: (rule: any, value: string, callback: any) => {
+    validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
       if (!value) {
         callback(new Error(t('ui.login.requireUsername')))
         return
@@ -124,7 +121,7 @@ const rules = reactive({
 })
 
 // 表单引用 - 类型化
-const formRef = ref<any>(null)
+const formRef = ref<FormInstance | null>(null)
 
 // 登录处理 - 类型化
 const handleLogin = async (): Promise<void> => {
@@ -142,29 +139,30 @@ const handleLogin = async (): Promise<void> => {
 
         await authStore.login(loginData)
         router.replace('/')
-      } catch (error: any) {
+      } catch (error) {
         console.error('登录失败:', error)
-        
+
         // 根据错误类型显示友好的提示信息
         let errorMessage = t('ui.login.failed')
-        
+        const msg = getErrorMessage(error)
+
         // 网络错误
-        if (error.isNetworkError || error.message?.includes('无法连接到后端服务')) {
+        if (error instanceof NetworkError) {
           errorMessage = t('ui.login.cannotConnect')
         }
         // 用户名或密码错误（401）
-        else if (error.statusCode === 401 || error.message?.includes('用户名或密码错误')) {
+        else if (getApiErrorStatus(error) === 401 || msg.includes('用户名或密码错误')) {
           errorMessage = t('ui.login.invalidCredentials')
         }
         // 必填字段缺失（400）
-        else if (error.statusCode === 400 || error.message?.includes('不能为空')) {
+        else if (getApiErrorStatus(error) === 400 || msg.includes('不能为空')) {
           errorMessage = t('ui.login.requireBoth')
         }
         // 其他已知错误
-        else if (error.message) {
-          errorMessage = error.message
+        else if (error instanceof Error && error.message) {
+          errorMessage = msg
         }
-        
+
         toast.error(errorMessage)
       } finally {
         loading.value = false

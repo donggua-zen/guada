@@ -169,7 +169,7 @@ export class ChatController {
   }
 
   /**
-   * 统一交互应答接口（审批 / 询问 / 迭代暂停共用，对齐 DSH POST /api/respond）
+   * 统一交互应答接口（审批 / 询问共用，对齐 DSH POST /api/respond）
    *
    * 前端回传 ask_requested 帧携带的凭证 requestId（uuid）与答案批。
    * 只做一件事：校验答案与挂起问题单匹配 → InteractionWaitService.resolveAnswers

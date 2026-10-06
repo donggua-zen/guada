@@ -92,6 +92,7 @@ export class WebSearchPlugin extends PluginBase {
             argsKey: "q",
             icon: "search",
           },
+          readOnly: true,
         });
 
         // ===== web_parser =====
@@ -114,6 +115,7 @@ export class WebSearchPlugin extends PluginBase {
               argsKey: "url",
               icon: "browser",
             },
+            readOnly: true,
           });
         }
 

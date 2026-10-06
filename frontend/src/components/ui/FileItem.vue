@@ -1,5 +1,4 @@
 <template>
-    <!-- @ts-ignore - fileIcon 类型推断问题 -->
     <div class="file-item flex items-center relative" :class="{ 'cursor-pointer': clickable }"
         @mouseenter="close_button_visible = true" @click="handleClick" @mouseleave="close_button_visible = false">
         <!-- 上传进度遮罩层 -->
@@ -16,7 +15,7 @@
 
         <template v-if="type === 'image'">
             <div class="image-preview w-15 h-15 rounded-lg overflow-hidden">
-                <img :src="previewUrl" class="w-full h-full object-cover"></img>
+                <img :src="previewUrl" class="w-full h-full object-cover" />
             </div>
         </template>
         <template v-else>
@@ -48,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, type Component } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 

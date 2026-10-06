@@ -10,7 +10,7 @@ import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { useMarkdown, delegateMarkdownCodeClick } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
-import DiffDOM from 'diff-dom';
+import { DiffDOM } from 'diff-dom';
 
 const { marked } = useMarkdown()
 const { t } = useI18n()
@@ -60,7 +60,9 @@ const initialRender = async () => {
  * 专业的 DOM 差异对比和更新库
  */
 const renderWithDiffDOM = async () => {
-    if (!markdownContainerRef.value || !props.content) return;
+    // 局部常量承载 ref 值：await 会使模板窄化失效，后文需以非空值调用 diff-dom
+    const container = markdownContainerRef.value;
+    if (!container || !props.content) return;
 
     // 1. 将最新的 Markdown 解析为 HTML
     const newHTML = await marked.parse(props.content) as string;
@@ -77,14 +79,13 @@ const renderWithDiffDOM = async () => {
         // 4. 计算并应用差异
         if (!diffEngine) return;
 
-        // @ts-ignore - diff-dom 库的类型定义不完整
-        const diffs = diffEngine.diff(markdownContainerRef.value, tempContainer);
+        const diffs = diffEngine.diff(container, tempContainer);
 
         if (diffs && diffs.length > 0) {
             // 应用差异
             if (!diffEngine) return;
 
-            const result = diffEngine.apply(markdownContainerRef.value, diffs);
+            const result = diffEngine.apply(container, diffs);
 
             if (result !== false && result !== undefined) {
                 // 5. 更新记录
@@ -103,7 +104,7 @@ const renderWithDiffDOM = async () => {
 
         // 降级方案：全量替换
         console.warn('[Markdown-DiffDOM] Fallback to full replacement');
-        markdownContainerRef.value.innerHTML = newHTML as string;
+        container.innerHTML = newHTML as string;
         lastRenderedHTML = newHTML as string;
     
     }

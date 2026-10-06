@@ -79,9 +79,17 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 import FolderIcon from '@/components/ui/FolderIcon.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 
+/**
+ * 目录树节点：KBFile 附加展开态与子节点（文件夹节点 children 为空数组）
+ */
+interface TreeNodeItem extends KBFile {
+    expanded?: boolean
+    children: TreeNodeItem[]
+}
+
 interface Props {
-    node: any
-    allNodes: Map<string, any>
+    node: TreeNodeItem
+    allNodes: Map<string, TreeNodeItem>
 }
 
 const props = defineProps<Props>()
@@ -107,6 +115,7 @@ function handleNodeClick() {
         // 文件夹: 切换展开/折叠
         isExpanded.value = !isExpanded.value
         // 同步回原对象
+        // eslint-disable-next-line vue/no-mutating-props -- node 是树数据实体的引用，展开态需同步回源数据
         props.node.expanded = isExpanded.value
     } else if (props.node.processingStatus === 'completed') {
         // 文件: 触发查看事件

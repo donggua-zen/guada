@@ -24,7 +24,39 @@ import { updateTokenStatsFromSSE } from "@/composables/useSessionTokenStats";
 import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
-import type { Turn, TurnContent, MessageBundle } from "@/types/message";
+import type { WireMessage } from "@/types/stream/event-chunk.types";
+import type { SessionState } from "@/types/session";
+import type { Turn, TurnContent, MessageBundle, ToolCallEntry, ToolCallResponseEntry } from "@/types/message";
+
+/**
+ * 投影器所需的最小会话 store 接口。
+ *
+ * 刻意不用 ReturnType<typeof useSessionStore>：BotSessionDialog 的本地适配器与单测 mock
+ * 都是鸭子类型实现，最小接口让它们可 satisfies 而无需实现整个 store。
+ * sessionIsStreaming 可选——Bot 适配器无此方法，缺省视为非流式。
+ */
+/** 投影器读取的会话状态切片（完整 SessionState 的最小子集，Bot 适配器只需提供这些字段） */
+export interface ProjectorSessionState {
+  loaded?: boolean;
+  turns?: Turn[];
+  eventLog?: Array<WireStreamEvent | DomainEvent>;
+  pendingAsk?: SessionState["pendingAsk"];
+}
+
+export interface ProjectorSessionStore {
+  getTurns(sessionId: string): Turn[] | undefined;
+  setTurns(sessionId: string, turns: Turn[]): void;
+  deleteTurnById(sessionId: string, turnId: string): void;
+  getSessionState(sessionId: string): ProjectorSessionState;
+  setSessionIsCompressing(sessionId: string, compressing: boolean): void;
+  sessionIsCompressing(sessionId: string): boolean;
+  setSessionPendingAsk(sessionId: string, pendingAsk: SessionState["pendingAsk"]): void;
+  /** 模型发起的计划模式变更（同时更新投影与会话设置）；可选：无此概念的实现可省略 */
+  applyRemotePlanEnabled?(sessionId: string, enabled: boolean): void;
+  /** 计划列表缓存刷新（plan_mode_changed / turn_end 触发）；可选：无此概念的实现可省略 */
+  refreshPlans?(sessionId: string): void;
+  sessionIsStreaming?(sessionId: string): boolean;
+}
 
 /**
  * 投影器处理的事件类型 = live 块级事件 ∪ 领域事件（事件页）。
@@ -33,7 +65,7 @@ export type ProjectorChunk = WireStreamEvent | DomainEvent;
 
 /** 领域事件判别（type 含 '/'，如 turn/start；live 事件为 turn_start 等无斜杠） */
 function isDomainEvent(chunk: ProjectorChunk): chunk is DomainEvent {
-  return typeof (chunk as any).type === "string" && (chunk as any).type.includes("/");
+  return typeof chunk.type === "string" && chunk.type.includes("/");
 }
 
 /**
@@ -77,13 +109,14 @@ function getCurrentTurn(sessionId: string): string | undefined {
  * 关联键是 provider 发出的 callId（一次调用唯一），不依赖 messageId——工具结果是独立消息。
  * 对齐 DSH 展示折叠：结果按 callId 挂回调用块，而非按消息 id。
  */
-function findBlockByToolCallId(turns: any[], toolCallId: string): any {
+function findBlockByToolCallId(turns: Turn[], toolCallId: string): TurnContent | undefined {
   for (const t of turns) {
     if (!Array.isArray(t.messages)) continue;
     for (const m of t.messages) {
       if (!Array.isArray(m.blocks)) continue;
       for (const b of m.blocks) {
-        if ((b.metadata?.toolCalls || []).some((tc: any) => tc.id === toolCallId)) {
+        const entries = (b.metadata?.toolCalls || []) as ToolCallEntry[];
+        if (entries.some((tc) => tc.id === toolCallId)) {
           return b;
         }
       }
@@ -207,7 +240,7 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
     if (!Array.isArray(content.metadata.toolCalls)) content.metadata.toolCalls = [];
     const list = content.metadata.toolCalls;
     let entry = block.toolCallId
-      ? list.find((tc: any) => tc.id === block.toolCallId)
+      ? (list as ToolCallEntry[]).find((tc) => tc.id === block.toolCallId)
       : undefined;
     if (!entry && list.length > 0 && !block.toolCallId) entry = list[list.length - 1];
     if (!entry) {
@@ -218,7 +251,7 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
     if (typeof block.arguments === "string" && block.arguments) entry.arguments = block.arguments;
   } else if (block.type === "image" || block.type === "file") {
     // 图片/文件块 → files（对齐 blockToContent）
-    const att = (block as any).attachment;
+    const att = block.attachment;
     content.files = [
       {
         id: att?.attachmentId || att?.url || att?.name || "",
@@ -260,22 +293,12 @@ function resetThinkingInBundle(bundle: MessageBundle): void {
  * domain user/message 共用）。消息级字段（role/kind/source/metadata）单点挂载于 bundle，
  * 块由 messageToTurnContent 产出（role/messageId 不可变戳记随块写入）。
  */
-function messageToBundle(
-  msg: {
-    id: string;
-    role?: string;
-    kind?: string;
-    source?: { kind: string; [k: string]: any };
-    metadata?: Record<string, any>;
-    content?: any[];
-    createdAt?: number;
-  },
-): MessageBundle {
-  const blocks = messageToTurnContent(msg as any);
+function messageToBundle(msg: WireMessage): MessageBundle {
+  const blocks = messageToTurnContent(msg);
   return {
     messageId: msg.id,
-    role: (msg.role as TurnContent["role"]) || "user",
-    ...(msg.kind ? { kind: msg.kind as "user" | "model" } : {}),
+    role: msg.role || "user",
+    ...(msg.kind ? { kind: msg.kind } : {}),
     ...(msg.source ? { source: msg.source } : {}),
     metadata: msg.metadata ?? {},
     blocks,
@@ -291,24 +314,31 @@ function messageToBundle(
  * - command/*、message/prune、message/meta、approval/*、compaction/start|end、session/*、envelope → 暂不处理（忽略）
  */
 function applyDomainEvent(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   ev: DomainEvent,
 ): void {
-  const data: any = ev.data;
   switch (ev.type) {
-    case "turn/start":
-    case "turn/resume":
+    case "turn/start": {
       // 开括号：建回合（幂等）+ 游标；modelName 优先取事件自带字段（turn/start 已随库
       // 自包含），旧事件缺失时由 turn/finish 随后补写
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_start",
-        turnId: data.turnId,
-        modelName: data.modelName,
-      } as any);
+        turnId: ev.data.turnId,
+        modelName: ev.data.modelName,
+      });
       return;
-    case "turn/finish":
+    }
+    case "turn/resume":
+      // 续接在途回合：语义同 turn/start（该事件不带 modelName）
+      applyChunkToStore(sessionStore, sessionId, {
+        type: "turn_start",
+        turnId: ev.data.turnId,
+      });
+      return;
+    case "turn/finish": {
       // 回合收尾：finishReason/modelName/error/usage/整轮耗时 直接来自事件数据（后端零预扫）
+      const data = ev.data;
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_end",
         turnId: data.turnId,
@@ -325,15 +355,17 @@ function applyDomainEvent(
                 ...(data.cachedTokens != null ? { cachedTokens: data.cachedTokens } : {}),
               }
             : undefined,
-      } as any);
+      });
       return;
+    }
     case "turn/delete":
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_delete",
-        turnId: data.turnId,
-      } as any);
+        turnId: ev.data.turnId,
+      });
       return;
-    case "compaction/summary":
+    case "compaction/summary": {
+      const data = ev.data;
       applyChunkToStore(sessionStore, sessionId, {
         type: "compaction_summary",
         shadowedEndId: data.shadowedEndId,
@@ -341,26 +373,28 @@ function applyDomainEvent(
         shadowedMessageIds: data.shadowedMessageIds,
         summary: data.summary ?? "",
         messageId: data.summaryMessageId,
-      } as any);
+      });
       return;
+    }
     case "user/message": {
       // 构造 user 消息束（复用 messageToBundle：text 块 + 附件块；消息级字段挂 bundle）
+      const data = ev.data;
       const turns = sessionStore.getTurns(sessionId) || [];
-      let turn = turns.find((t: any) => t.id === getCurrentTurn(sessionId));
+      let turn = turns.find((t) => t.id === getCurrentTurn(sessionId));
       if (!turn) {
         turn = { id: data.messageId, kind: "turn", metadata: {}, visible: true, messages: [] };
         turns.push(turn);
       }
       if (!Array.isArray(turn.messages)) turn.messages = [];
-      if (turn.messages.some((m: any) => m.messageId === data.messageId)) return; // 幂等
+      if (turn.messages.some((m) => m.messageId === data.messageId)) return; // 幂等
       const bundle = messageToBundle({
         id: data.messageId,
         role: "user",
         // 来源透传：后端 user_message 事件携带完整 userMessage（含 source），
         // source.kind 是"是否人类输入"的单一真相（事件顶层无 metadata 字段）
-        source: (data as any).userMessage?.source ?? (data as any).source,
+        source: data.userMessage?.source ?? data.source,
         kind: data.kind ?? "user",
-        metadata: (data as any).userMessage?.metadata ?? data.metadata ?? {},
+        metadata: data.userMessage?.metadata ?? data.metadata ?? {},
         content: [
           // P6：事件格式统一为 blocks（后端已废弃 content/files 平铺；旧事件经 rebuild 重建）
           ...(data.blocks ?? []),
@@ -371,12 +405,13 @@ function applyDomainEvent(
     }
     case "assistant/message": {
       // 一条 = 一个 assistant 消息束（终态，流式态复位；usage/finishReason 归 bundle.metadata）
+      const data = ev.data;
       const turns = sessionStore.getTurns(sessionId) || [];
-      const turn = turns.find((t: any) => t.id === getCurrentTurn(sessionId));
+      const turn = turns.find((t) => t.id === getCurrentTurn(sessionId));
       if (!turn) return;
       if (!Array.isArray(turn.messages)) turn.messages = [];
       const msgId = data.messageId;
-      if (turn.messages.some((m: any) => m.messageId === msgId)) return; // 幂等
+      if (turn.messages.some((m) => m.messageId === msgId)) return; // 幂等
       const bundle = ensureBundle(turn, msgId, "assistant");
       // 消息级元数据（usage/finishReason 等）归 bundle；块不再挂消息级字段
       bundle.metadata = { ...(data.metadata ?? {}) };
@@ -393,14 +428,16 @@ function applyDomainEvent(
       // 关联键是 toolCallId（provider 发出、唯一标识一次调用；对齐 DSH：结果按 callId 聚类）。
       // 工具结果是独立消息（独立 messageId），messageId 语义是"消息唯一 id"，不做关联键——
       // 回放/重建数据的 tool/result.messageId ≠ 含调用的 assistant 消息 id，按 messageId 必然丢结果。
+      const data = ev.data;
       const turns = sessionStore.getTurns(sessionId) || [];
       const target = findBlockByToolCallId(turns, data.toolCallId);
       if (!target) return;
       // 同一 assistant 消息可含多个调用，结果逐个到达 → 累加（勿覆盖；按 toolCallId 去重）
-      const existing: any[] = Array.isArray(target.metadata?.toolCallsResponse)
-        ? target.metadata.toolCallsResponse
-        : [];
-      if (!existing.some((r: any) => r.toolCallId === data.toolCallId)) {
+      const targetMeta = target.metadata ?? {};
+      const existing = (Array.isArray(targetMeta.toolCallsResponse)
+        ? targetMeta.toolCallsResponse
+        : []) as ToolCallResponseEntry[];
+      if (!existing.some((r) => r.toolCallId === data.toolCallId)) {
         target.metadata = {
           ...(target.metadata || {}),
           toolCallsResponse: [
@@ -416,8 +453,8 @@ function applyDomainEvent(
           ],
         };
       }
-      const tc = (target.metadata.toolCalls || []).find(
-        (c: any) => c.id === data.toolCallId,
+      const tc = ((targetMeta.toolCalls || []) as ToolCallEntry[]).find(
+        (c) => c.id === data.toolCallId,
       );
       if (tc) tc.outcome = data.isError ? "error" : "success";
       return;
@@ -437,7 +474,7 @@ function applyDomainEvent(
  * 独立 kind:'event' 回合外壳整体移除（避免空壳残留）；回合内束逐条摘除，真实消息块保留仅标记。
  */
 function removeCompactionPlaceholders(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   mode: "compressing" | "all",
 ): void {
@@ -465,9 +502,9 @@ function removeCompactionPlaceholders(
  * 落位规则与结果卡一致：有宿主回合（in-turn，自动压缩）→ 嵌入宿主回合；
  * 否则（手动压缩维护流）→ 列表末尾独立事件回合。
  */
-function upsertCompressingPlaceholder(sessionStore: any, sessionId: string): void {
+function upsertCompressingPlaceholder(sessionStore: ProjectorSessionStore, sessionId: string): void {
   const turns = sessionStore.getTurns(sessionId) || [];
-  const isCompressingBundle = (m: any) =>
+  const isCompressingBundle = (m: MessageBundle) =>
     m.role === "event" && m.metadata?.eventType === "compaction" && m.metadata?.compressing;
   for (const t of turns) {
     if (t.kind === "event" && t.metadata?.eventType === "compaction" && t.metadata?.compressing) return;
@@ -498,7 +535,7 @@ function upsertCompressingPlaceholder(sessionStore: any, sessionId: string): voi
     ],
   };
   const currentTurnId = getCurrentTurn(sessionId);
-  const hostTurn = currentTurnId ? turns.find((t: any) => t.id === currentTurnId) : undefined;
+  const hostTurn = currentTurnId ? turns.find((t) => t.id === currentTurnId) : undefined;
   if (hostTurn) {
     if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
     hostTurn.messages.push(eventBundle);
@@ -516,7 +553,7 @@ function upsertCompressingPlaceholder(sessionStore: any, sessionId: string): voi
 
 /** 按事件类型定位更新 store(无闭包,直接改响应式 store) */
 export function applyChunkToStore(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunk: ProjectorChunk,
 ): void {
@@ -541,8 +578,8 @@ export function applyChunkToStore(
     // 压缩运行结束（compacted 与纯裁剪都发）：复位 + 移除"压缩中"占位（纯裁剪的终态；
     // 摘要路径随后 compaction_summary 原位放结果卡）+ 压缩后占用 → 环形指示器即时更新
     sessionStore.setSessionIsCompressing(sessionId, false);
-    if ((chunk as any).contextStats) {
-      updateTokenStatsFromSSE(sessionId, (chunk as any).contextStats);
+    if (chunk.contextStats) {
+      updateTokenStatsFromSSE(sessionId, chunk.contextStats);
     }
     removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
     return;
@@ -552,8 +589,8 @@ export function applyChunkToStore(
     // in-turn（折叠期有宿主回合）→ 当前回合内一条 event 块；out-of-turn → 独立 kind:'event' 回合。
     sessionStore.setSessionIsCompressing(sessionId, false);
     // 压缩事件自身携带压缩后占用 → 环形指示器即时更新（无需 REST）
-    if ((chunk as any).contextStats) {
-      updateTokenStatsFromSSE(sessionId, (chunk as any).contextStats);
+    if (chunk.contextStats) {
+      updateTokenStatsFromSSE(sessionId, chunk.contextStats);
     }
     const turns = sessionStore.getTurns(sessionId) || [];
 
@@ -616,7 +653,7 @@ export function applyChunkToStore(
       ],
     };
     const hostTurn = getCurrentTurn(sessionId)
-      ? turns.find((t: any) => t.id === getCurrentTurn(sessionId))
+      ? turns.find((t) => t.id === getCurrentTurn(sessionId))
       : undefined;
     if (hostTurn) {
       if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
@@ -645,7 +682,7 @@ export function applyChunkToStore(
   // 回合级
   if (chunk.type === "turn_start") {
     const turns = sessionStore.getTurns(sessionId) || [];
-    let turn = turns.find((t: any) => t.id === chunk.turnId);
+    let turn = turns.find((t) => t.id === chunk.turnId);
     if (!turn) {
       turn = {
         id: chunk.turnId,
@@ -678,17 +715,19 @@ export function applyChunkToStore(
   if (chunk.type === "turn_end") {
     // 回合收尾：按 turnId 复位工作态 + 写回合级收尾元数据；同时清除会话级交互卡
     sessionStore.setSessionPendingAsk(sessionId, undefined);
+    // 计划列表缓存兜底刷新：批准/拒绝/修订各路径的新计划都在回合收尾后进入缓存
+    sessionStore.refreshPlans?.(sessionId);
     const turns = sessionStore.getTurns(sessionId) || [];
-    const turn = turns.find((t: any) => t.id === chunk.turnId);
+    const turn = turns.find((t) => t.id === chunk.turnId);
     if (turn) {
-      if (!turn.state) turn.state = {};
-      turn.state.isWorking = false;
-      delete turn.state.retry;
+      // 瞬态统一复位（isWorking/retry + 块级 isStreaming/isThinking）：
+      // 错误路径可能没有 finish chunk，块级状态不能只指望 finish 复位
+      resetTurnTransientState(turn);
       // 业务错误归拢回合级：finishReason/errorDetail/usage/耗时 只写 turn.metadata + 最后一条 assistant 块 usage
       turn.metadata = {
         ...(turn.metadata || {}),
         // 领域事件 turn/finish 自带 modelName（live turn_end 无此字段 → undefined 不写）
-        ...((chunk as any).modelName ? { modelName: (chunk as any).modelName } : {}),
+        ...(chunk.modelName ? { modelName: chunk.modelName } : {}),
         ...(chunk.finishReason ? { finishReason: chunk.finishReason } : {}),
         ...(chunk.error ? { errorDetail: chunk.error } : {}),
         ...(chunk.usage ? { usage: chunk.usage } : {}),
@@ -700,7 +739,7 @@ export function applyChunkToStore(
       if (!Array.isArray(turn.messages)) turn.messages = [];
       const lastAssistantBundle = [...turn.messages]
         .reverse()
-        .find((m: any) => m.role === "assistant");
+        .find((m) => m.role === "assistant");
       if (lastAssistantBundle && chunk.usage) {
         lastAssistantBundle.metadata = {
           ...(lastAssistantBundle.metadata || {}),
@@ -719,7 +758,7 @@ export function applyChunkToStore(
     // LLM 流重试瞬态（回合级）：挂 turn.state.retry（与 isWorking 同层，不落库、不进块 metadata）。
     // 重试成功后消息级 chunk 到达 / turn_end 时清除。
     const turns = sessionStore.getTurns(sessionId) || [];
-    const turn = turns.find((t: any) => t.id === chunk.turnId);
+    const turn = turns.find((t) => t.id === chunk.turnId);
     if (turn) {
       if (!turn.state) turn.state = {};
       turn.state.isWorking = true;
@@ -737,7 +776,7 @@ export function applyChunkToStore(
     const userMsg = chunk.userMessage;
     if (userMsg) {
       const turns = sessionStore.getTurns(sessionId) || [];
-      let turn = turns.find((t: any) => t.id === chunk.turnId);
+      let turn = turns.find((t) => t.id === chunk.turnId);
       if (!turn) {
         turn = {
           id: chunk.turnId || userMsg.id,
@@ -750,14 +789,14 @@ export function applyChunkToStore(
       }
       if (!Array.isArray(turn.messages)) turn.messages = [];
       // 幂等：同 messageId 已折叠则跳过（防御重复广播/重放）
-      if (!turn.messages.some((m: any) => m.messageId === userMsg.id)) {
+      if (!turn.messages.some((m) => m.messageId === userMsg.id)) {
         turn.messages.push(messageToBundle(userMsg));
       }
     }
     return;
   }
   if (chunk.type === "ask_requested") {
-    // 统一交互请求（审批/询问/迭代暂停继续共用）：执行内原地阻塞（无 turn_end、流保持 running）。
+    // 统一交互请求（审批/询问共用）：执行内原地阻塞（无 turn_end、流保持 running）。
     // 会话级交互卡（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方全局展示。
     sessionStore.setSessionPendingAsk(sessionId, {
       requestId: chunk.requestId,
@@ -774,6 +813,32 @@ export function applyChunkToStore(
     sessionStore.setSessionPendingAsk(sessionId, undefined);
     return;
   }
+  if (chunk.type === "plan_mode_changed") {
+    // 计划模式变更（协作状态）。用户从界面开关时前端已乐观写入，此处幂等覆盖；
+    // 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
+    // 会话设置（事实源），否则刷新后指示器按旧设置回退。
+    sessionStore.applyRemotePlanEnabled?.(sessionId, chunk.planEnabled);
+    // 开关变化的同一时刻也是新计划可能刚刚提交/被修订的信号，顺手刷新列表缓存
+    sessionStore.refreshPlans?.(sessionId);
+    return;
+  }
+  if (chunk.type === "subagent_link") {
+    // 子代理创建 → 把"工具调用 ↔ 子会话"关联键写到对应工具调用条目上（渲染层据此提供
+    // "打开子代理面板"入口）。它比工具结果早到：前台 spawn 阻塞期间结果尚未落库，
+    // 只有这条流事件能建立关联；刷新时它随 SSE 建连重放 + 暂存消费回到这里。
+    const turns = sessionStore.getTurns(sessionId) || [];
+    const target = findBlockByToolCallId(turns, chunk.toolCallId);
+    const tc = ((target?.metadata?.toolCalls || []) as ToolCallEntry[]).find(
+      (c) => c.id === chunk.toolCallId,
+    );
+    if (tc) {
+      tc.subAgentLink = {
+        subSessionId: chunk.subSessionId,
+        ...(chunk.name ? { name: chunk.name } : {}),
+      };
+    }
+    return;
+  }
   if (chunk.type === "tool_calls_response") {
     // 工具执行结果下发 → 交互已消费，关闭会话级卡（与 ask_resolved 幂等双保险）
     sessionStore.setSessionPendingAsk(sessionId, undefined);
@@ -781,9 +846,9 @@ export function applyChunkToStore(
     // 工具结果是独立消息，其 messageId 与含调用的 assistant 消息 id 无关，故不依赖 messageId）。
     const turns = sessionStore.getTurns(sessionId) || [];
     const responseIds = new Set(
-      (chunk.toolCallsResponse || []).map((r: any) => r.toolCallId),
+      (chunk.toolCallsResponse || []).map((r) => r.toolCallId),
     );
-    let target = responseIds.size > 0
+    const target = responseIds.size > 0
       ? findBlockByToolCallId(turns, [...responseIds][0])
       : undefined;
     if (target) {
@@ -792,8 +857,8 @@ export function applyChunkToStore(
         toolCallsResponse: chunk.toolCallsResponse || [],
       };
       for (const r of chunk.toolCallsResponse || []) {
-        const tc = (target.metadata.toolCalls || []).find(
-          (c: any) => c.id === r.toolCallId,
+        const tc = ((target.metadata.toolCalls || []) as ToolCallEntry[]).find(
+          (c) => c.id === r.toolCallId,
         );
         if (tc) tc.outcome = r.outcome;
       }
@@ -807,14 +872,14 @@ export function applyChunkToStore(
   const messageId = "messageId" in chunk ? chunk.messageId : undefined;
   if (!turnId || !messageId) return;
   const turns = sessionStore.getTurns(sessionId) || [];
-  const turn = turns.find((t: any) => t.id === turnId);
+  const turn = turns.find((t) => t.id === turnId);
   if (!turn) return;
   const bundle = ensureBundle(turn, messageId, "assistant");
   // 清除回合级重试瞬态（重试成功输出）
   if (turn.state) {
     delete turn.state.retry;
   }
-  const index = "index" in chunk ? (chunk as any).index : undefined;
+  const index = "index" in chunk ? chunk.index : undefined;
   const content = ensureBlockInBundle(bundle, index);
   if (!content) return;
 
@@ -842,8 +907,8 @@ export function applyChunkToStore(
       if (!content.metadata) content.metadata = {};
       if (!Array.isArray(content.metadata.toolCalls)) content.metadata.toolCalls = [];
       const list = content.metadata.toolCalls;
-      let entry: any;
-      if (chunk.toolCallId) entry = list.find((tc: any) => tc.id === chunk.toolCallId);
+      let entry: ToolCallEntry | undefined;
+      if (chunk.toolCallId) entry = (list as ToolCallEntry[]).find((tc) => tc.id === chunk.toolCallId);
       else if (list.length > 0) entry = list[list.length - 1];
       if (!entry) {
         entry = {
@@ -904,7 +969,7 @@ function isTerminalEvent(type: string): boolean {
  * 供常驻接收与"暂存消费"共用，保证事件数组与树一致（load-more re-fold 不丢 live 尾部）。
  */
 export function applyLiveChunk(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunk: ProjectorChunk,
 ): void {
@@ -921,7 +986,7 @@ export function applyLiveChunk(
  * 事件到达投影(接收链路常驻入口):有缓存 → applyLiveChunk;无缓存 → 暂存 finish 后事件。
  */
 export function projectChunk(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunk: ProjectorChunk,
 ): void {
@@ -941,7 +1006,7 @@ export function projectChunk(
  * 调用方需把"已加载事件页 + live 追加事件"合并传入（live 事件已在数组里，re-fold 天然保留）。
  */
 export function foldEvents(
-  sessionStore: any,
+  sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunks: ProjectorChunk[],
 ): void {
@@ -949,5 +1014,51 @@ export function foldEvents(
   sessionStore.setTurns(sessionId, []);
   for (const chunk of chunks) {
     applyChunkToStore(sessionStore, sessionId, chunk);
+  }
+  // 历史重放不复活工作态：JSONL 里 turn/start 无 turn/finish（后端重启/断连时终态未落盘）时，
+  // 折叠会置 isWorking + startedAt → 重开会话永久卡"正在流式中"。会话当前不在流式中
+  // （Bot 本地适配器无此方法，可选调用为 undefined，同样视为非流式）→ 折叠产物一律视为已终止。
+  // 流式中重折（load-more / 打开进行中的会话）跳过复位，live 事件照常接管。
+  if (!sessionStore.sessionIsStreaming?.(sessionId)) {
+    resetSessionTurnsTransientState(sessionStore, sessionId);
+  }
+}
+
+/**
+ * 复位单个回合的全部瞬态视图态（流终止的统一出口）。
+ * 此前瞬态复位散在多处且互不兜底：isWorking/retry 由 turn_end 复位；块级
+ * isStreaming/isThinking 只由 finish chunk 复位——错误路径 finish 永不到达、
+ * turn_end 分支不碰块级 state、stream_status_changed 兜底又只复位 isWorking，
+ * 任一环丢失即残留"正在流式/思考中"动画。统一在此一次清干净。
+ * 注意：展示层读取的是块级 state（TurnItem 经 item.source.state），束级
+ * bundle.state 仅类型兜底，两者一并复位。
+ */
+export function resetTurnTransientState(turn: Turn): void {
+  if (turn.state) {
+    turn.state.isWorking = false;
+    delete turn.state.retry;
+  }
+  for (const bundle of turn.messages ?? []) {
+    if (bundle.state?.isStreaming) bundle.state.isStreaming = false;
+    if (bundle.state?.isThinking) bundle.state.isThinking = false;
+    for (const block of bundle.blocks ?? []) {
+      if (block.state?.isStreaming) block.state.isStreaming = false;
+      if (block.state?.isThinking) block.state.isThinking = false;
+    }
+  }
+}
+
+/**
+ * 会话级流终止兜底：复位该会话所有回合的瞬态视图态。
+ * 由 stream_status_changed 非 running 时调用（与输入区 isStreaming 复位同源同批），
+ * 调用方须保证在子会话提前 return 之前执行——否则子代理/bot 回合会永久卡流式中。
+ */
+export function resetSessionTurnsTransientState(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  for (const turn of turns) {
+    resetTurnTransientState(turn);
   }
 }

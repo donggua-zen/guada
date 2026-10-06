@@ -63,7 +63,9 @@ export default {
     step4Title: '🎯 第四步：选择您的首选模型',
     step4Desc: '在设置中指定一个默认模型，让对话更顺手。',
     step4Action: '去设置默认模型',
-    skip: '跳过',
+    back: '上一步',
+    skipGuide: '跳过引导',
+    stepIndicator: '第 {current} 步，共 {total} 步',
     finish: '完成',
     next: '下一步',
     viewGuide: '查看设置向导',
@@ -87,8 +89,9 @@ export default {
   // ── 后端启动等待 ──
   backend: {
     starting: '正在启动后端服务',
-    startingDesc: '首次启动需初始化数据库，请稍候…',
+    startingDesc: '首次启动需要初始化数据，可能需要更久，请耐心等候',
     startFailed: '启动失败',
+    retry: '重试',
   },
 
   // ── 标题栏 ──
@@ -116,7 +119,6 @@ export default {
     navKnowledgeBase: '知识库',
     navPlugins: '插件市场',
     navScheduler: '定时任务',
-    navModels: '模型管理',
     noTasks: '暂无任务',
     loadingMore: '加载中...',
     loadMore: '点击加载更多',

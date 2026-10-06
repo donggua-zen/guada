@@ -51,11 +51,11 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
-import { foldEvents } from '@/services/modules/streamProjector'
-import { isHiddenBlock } from '@/utils/messageUtils'
+import { foldEvents, type ProjectorSessionStore } from '@/services/modules/streamProjector'
+import { isHiddenBlock, toUserMessageView } from '@/utils/messageUtils'
 import TurnItem from '../chat/TurnItem.vue'
 import type { Session } from '@/types/session'
-import type { Turn, TurnContent } from '@/types/message'
+import type { Turn, TurnContent, MessageBundle } from '@/types/message'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 const props = defineProps<{
@@ -83,7 +83,7 @@ const turns = ref<Turn[]>([])
 
 // 从回合中取用户锚点消息束（role=user 且为人类输入，结构：turn → messages → blocks）
 // 后端注入的 hidden user 消息同 role 但非用户输入，须排除
-const userOfTurn = (turn: Turn): any =>
+const userOfTurn = (turn: Turn): MessageBundle | null =>
   turn.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null
 
 // 只保留含 user 锚点块的回合
@@ -107,8 +107,8 @@ const loadMessages = async () => {
     })
     // 本地 store 适配器：foldEvents 通过 getTurns/setTurns 操作本地 turns ref
     const localStore = {
-      getTurns: () => turns.value as any,
-      setTurns: (_sid: string, t: any[]) => {
+      getTurns: () => turns.value,
+      setTurns: (_sid: string, t: Turn[]) => {
         turns.value = t
       },
       deleteTurnById: (_sid: string, id: string) => {
@@ -116,9 +116,11 @@ const loadMessages = async () => {
       },
       setSessionIsCompressing: () => {},
       sessionIsCompressing: () => false,
+      // 只读回放视图无交互卡：ask/turn_end 路径落空实现（此前缺失该方法是隐雷）
+      setSessionPendingAsk: () => {},
       getSessionState: () => ({ loaded: true, turns: turns.value, eventLog: [] }),
-    }
-    foldEvents(localStore as any, props.session.id, page.events)
+    } satisfies ProjectorSessionStore
+    foldEvents(localStore, props.session.id, page.events)
   } catch (error) {
     console.error('加载消息失败:', error)
     ElMessage.error(t('bot.sessionDialog.loadFailed'))
@@ -157,14 +159,14 @@ const handleDeleteMessage = async (turn: Turn) => {
   }
 }
 
-// 编辑消息
-const handleEditMessage = async (block: any) => {
+// 编辑消息（负载同 TurnItem 的 edit 事件：助手块或聚合的用户消息视图）
+const handleEditMessage = async (_: TurnContent | ReturnType<typeof toUserMessageView> | null) => {
   ElMessage.info(t('bot.sessionDialog.editNotImplemented'))
   // TODO: 实现编辑功能
 }
 
 // 复制消息
-const handleCopyMessage = (block: any) => {
+const handleCopyMessage = (_: TurnContent | ReturnType<typeof toUserMessageView> | null) => {
   // TurnItem 组件内部已经处理了复制逻辑
   // 这里可以添加额外的处理
 }

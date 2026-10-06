@@ -1,5 +1,5 @@
 /**
- * 统一 Ask 交互模型（审批 / 询问 / 迭代暂停共用）
+ * 统一 Ask 交互模型（审批 / 询问共用）
  *
  * 设计（docs/交互层统一Ask方案.md）：
  * - 审批是 ask 的特例：requestApproval = 预置单问题（同意/拒绝/自定义）+ 答案解释器
@@ -38,8 +38,13 @@ export interface AskAnswerItem {
   custom?: string;
 }
 
-/** ask 卡片分类（展示分支）：审批 / 询问 / 迭代暂停继续 */
-export type AskKind = "approval" | "ask" | "continue";
+/**
+ * ask 卡片分类（展示分支）：审批 / 询问。
+ *
+ * 曾有第三个取值 'continue'（最大工具轮次暂停确认），随轮次上限一并移除——
+ * 注意与 TurnStoppingDecision 的 'continue' 无关，那是回合续跑钩子的词表。
+ */
+export type AskKind = "approval" | "ask";
 
 /** 一次 ask 请求 */
 export interface AskRequest {

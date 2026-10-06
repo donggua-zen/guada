@@ -27,6 +27,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useSelectedAgent } from '../../composables/useSelectedAgent'
+import type { Agent } from '@/types/agent'
 
 const { confirm, toast } = usePopup()
 const { t } = useI18n()
@@ -34,7 +35,7 @@ const router = useRouter()
 const { setSelectedAgent } = useSelectedAgent()
 
 // ========== 智能体列表逻辑 ==========
-const agents = ref<any[]>([])
+const agents = ref<Agent[]>([])
 const showModal = ref(false)
 const currentAgentId = ref('')
 const loading = ref(false)
@@ -44,7 +45,7 @@ const loadAgents = async (): Promise<void> => {
   try {
     const data = await apiService.fetchAgents()
     agents.value = data.items
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取智能体列表失败:', error)
     toast.error(t('agents.page.loadFailed'))
   } finally {
@@ -57,25 +58,25 @@ const createAgent = (): void => {
   showModal.value = true
 }
 
-const editAgent = (agent: any): void => {
+const editAgent = (agent: Agent): void => {
   currentAgentId.value = agent.id
   showModal.value = true
 }
 
-const deleteAgent = async (agent: any): Promise<void> => {
+const deleteAgent = async (agent: Agent): Promise<void> => {
   try {
     const result = await confirm(t('agents.page.deleteAgentTitle'), t('agents.page.deleteAgentConfirm', { name: agent.name }))
     if (!result) return
     await apiService.deleteAgent(agent.id)
     await loadAgents()
     toast.success(t('agents.page.agentDeleteSuccess'))
-  } catch (error: any) {
+  } catch (error) {
     toast.error(t('agents.page.deleteFailed'))
     console.error('删除智能体失败:', error)
   }
 }
 
-const startNewChat = (agent: any): void => {
+const startNewChat = (agent: Agent): void => {
   setSelectedAgent(agent.id)
   router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
 }

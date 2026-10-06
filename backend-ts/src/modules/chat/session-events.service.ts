@@ -203,7 +203,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
 
     // 刷新安全（v1.8）：stream_status_changed 不在 eventBuffer 中、不随 catchup 重放，
     // 刷新后会话级 isStreaming/streamStatus 会丢失。对活跃流补发 running 状态，
-    // 恢复"暂停中的循环仍工作中"的会话级视图（审批/迭代暂停卡；阻止新消息撞 SESSION_BUSY）。
+    // 恢复"回合内原地阻塞等待应答仍工作中"的会话级视图（统一交互卡；阻止新消息撞 SESSION_BUSY）。
     // kind 随流类型下发：chat 流前端跳过事件页拉取靠 buffer 重放；maintenance 流
     // （手动压缩伪流）buffer 无回合历史，前端照常拉事件页，压缩中状态由 catchup 的
     // compression_start 恢复。
@@ -408,11 +408,15 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       case "compression_error": return EVENT_METHOD.STREAM_COMPRESSION_ERROR;
       case "compression_end": return EVENT_METHOD.STREAM_COMPRESSION_END;
       case "compaction_summary": return EVENT_METHOD.STREAM_COMPACTION_SUMMARY;
-      // 统一交互（审批/询问/迭代暂停共用）
+      // 统一交互（审批/询问共用）
       case "ask_requested": return EVENT_METHOD.STREAM_ASK_REQUESTED;
       case "ask_resolved": return EVENT_METHOD.STREAM_ASK_RESOLVED;
       // Workflow 编排进度
       case "workflow_event": return EVENT_METHOD.STREAM_WORKFLOW_EVENT;
+      // 子代理创建（工具调用 ↔ 子会话关联键，供工具行打开面板）
+      case "subagent_link": return EVENT_METHOD.STREAM_SUBAGENT_LINK;
+      // 计划模式变更（协作状态；事实源 session.settings，本帧驱动指示器与多窗口同步）
+      case "plan_mode_changed": return EVENT_METHOD.STREAM_PLAN_MODE_CHANGED;
       // 消息级:StreamChunk 直通
       case "block_start": return EVENT_METHOD.STREAM_BLOCK_START;
       case "text_delta": return EVENT_METHOD.STREAM_TEXT_DELTA;

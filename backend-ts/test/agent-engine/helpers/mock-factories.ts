@@ -2,8 +2,6 @@
 
 import { StreamChunk } from '../../../src/common/types/stream-chunk.types';
 import type { SessionStreamEvent } from '../../../src/modules/chat/types/event-chunk.types';
-import { AskService } from '../../../src/common/services/ask.service';
-import { InteractionWaitService } from '../../../src/common/services/interaction-wait.service';
 
 /**
  * SessionRepository Mock 工厂
@@ -116,6 +114,10 @@ export function createMockSessionContext(options?: {
     setSandboxMode: jest.fn().mockResolvedValue(undefined),
     setToolScope: jest.fn(),
     getToolScope: jest.fn(() => null),
+    getPlanEnabled: jest.fn(() => false),
+    setPlanEnabled: jest.fn().mockResolvedValue(undefined),
+    consumePlanModeExitReminder: jest.fn(() => false),
+    appendSessionModeChanged: jest.fn().mockResolvedValue(undefined),
     setPathJail: jest.fn(),
     getPathJail: jest.fn(() => null),
     getModelConfig: jest.fn((): any => ({
@@ -217,21 +219,7 @@ export function createAllMocks(options?: {
   });
   sessionContext.publishStream.mockImplementation(async (chunk: SessionStreamEvent) => {
     publishedEvents.push(chunk);
-    // 默认对迭代暂停（kind=continue）应答"停止"，防止循环触顶后 ask 永久悬挂；
-    // 专项用例（继续/abort）会整体覆盖 publishStream 实现，不受此默认影响
-    if (chunk.type === 'ask_requested' && chunk.kind === 'continue') {
-      setImmediate(() => {
-        askWait.resolveAnswers('test-session-001', chunk.requestId, [
-          { id: 'continue', selected: ['停止'] },
-        ]);
-      });
-    }
   });
-
-  // 统一 Ask：真实等待表 + 服务共享同一张表
-  // （publishStream 经 mock 捕获，等待由测试侧 askWait.resolveAnswers 唤醒）
-  const askWait = new InteractionWaitService();
-  const askService = new AskService(askWait);
 
   return {
     sessionRepo: createMockSessionRepo(options?.sessionData),
@@ -257,7 +245,5 @@ export function createAllMocks(options?: {
       publish: jest.fn(),
       stopStream: jest.fn(),
     },
-    askWait,
-    askService,
   };
 }

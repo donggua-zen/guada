@@ -275,10 +275,16 @@ export function foldEvent(
       state.openCompactionSeq = null;
       break;
 
-    // ─── 统一交互事件（ask/asked|answered 事件溯源；审批/询问/迭代暂停共用）───
+    // ─── 统一交互事件（ask/asked|answered 事件溯源；审批/询问共用）───
     // 无状态透传（纯审计源；交互为执行内瞬态，不承载恢复状态）
     case 'ask/asked':
     case 'ask/answered':
+      break;
+
+    // ─── 会话模式变更（计划模式协作状态 + 安全档位快照）───
+    // 无状态透传：事实源是 session.settings，本事件只作审计与切换历史。
+    // 刻意不折叠进 ReplayState——若从这里恢复，会与 settings 形成第二个状态源。
+    case 'session/mode_changed':
       break;
 
     // ─── command/run + command/done：不再折叠进 state.messages（S0 移除历史遗留）───

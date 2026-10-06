@@ -11,6 +11,7 @@ import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
 import { WebSearchPlugin } from "./builtins/web-search.plugin";
+import { PlanModePlugin } from "./builtins/plan-mode.plugin";
 import { RemoteWorkspaceModule } from "../remote-workspace/remote-workspace.module";
 import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
@@ -35,6 +36,7 @@ import { NlsService } from "./i18n/nls.service";
     BrowserPlugin,
     TodoPlugin,
     WebSearchPlugin,
+    PlanModePlugin,
     MetasoProvider,
     TavilyProvider,
     BochaProvider,
@@ -56,6 +58,7 @@ export class PluginsModule implements OnModuleInit {
 
     await this.pluginManager.registerPlugin(this.moduleRef.get(TodoPlugin));
     await this.pluginManager.registerPlugin(this.moduleRef.get(WebSearchPlugin));
+    await this.pluginManager.registerPlugin(this.moduleRef.get(PlanModePlugin));
 
     if (process.env.ELECTRON_APP === "true") {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));

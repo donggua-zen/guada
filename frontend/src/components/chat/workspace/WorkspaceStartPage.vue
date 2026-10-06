@@ -1,6 +1,6 @@
 <template>
   <!-- 起始页：无任何标签 或 点击 + 时显示，不占用标签栏。
-       各入口（文件 / 终端 / 新建浏览器 / Git 审阅 / 工作流）由父组件处理实际跳转。 -->
+       各入口（文件 / 终端 / 新建浏览器 / Git 审阅 / 工作流 / 计划）由父组件处理实际跳转。 -->
   <div class="workspace-start-page">
     <div class="start-content">
       <h2 class="start-title">{{ t('chat.workspace.startPageTitle') }}</h2>
@@ -36,6 +36,13 @@
           </span>
           <span class="start-item-label">{{ t('chat.workspace.workflowTab') }}</span>
         </button>
+        <!-- 计划：面板常驻入口（无论有无计划都可进入，面板内列出历史计划） -->
+        <button class="start-item" @click="emit('open-plan')">
+          <span class="start-item-icon">
+            <el-icon :size="20"><Notepad20Regular /></el-icon>
+          </span>
+          <span class="start-item-label">{{ t('chat.workspace.planTab') }}</span>
+        </button>
       </div>
     </div>
   </div>
@@ -43,7 +50,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Flowchart20Regular } from "@vicons/fluent";
+import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Flowchart20Regular, Notepad20Regular } from "@vicons/fluent";
 
 const { t } = useI18n();
 
@@ -53,6 +60,7 @@ const emit = defineEmits<{
   "open-browser": [];
   "open-git": [];
   "open-workflow": [];
+  "open-plan": [];
 }>();
 </script>
 
