@@ -59,7 +59,9 @@
           </div>
           <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位）。
                只读模式（子代理会话）仍渲染：输入区承载停止按钮（流式时可停），
-               内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。 -->
+               内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。
+               审批/询问卡待答时，输入区三件（编辑提示条 / ChatInput / 工作目录条）整体隐藏，
+               由 SessionCards 顶替其位置（见 hasPendingAsk 注释）。 -->
           <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
@@ -73,11 +75,13 @@
                 </div>
               </Transition>
 
-              <!-- 会话级全局卡：审批卡 / 询问卡（对齐 DSH：sessionId 唯一锚点，不挂回合） -->
-              <SessionCards :session-id="currentSessionId || undefined" />
+              <!-- 会话级全局卡：审批卡 / 询问卡（对齐 DSH：sessionId 唯一锚点，不挂回合）。
+                   卡片「忽略」= 不回答并停止当前轮 → 复用停止按钮的取消路径（后端仅有
+                   "用户停止"能终结一次待答；此刻输入区已隐藏，这也是唯一的停止入口） -->
+              <SessionCards :session-id="currentSessionId || undefined" @ignore="abortResponse" />
 
-              <!-- 编辑模式提示条 -->
-              <div v-if="editMode" class="max-w-full w-full flex px-4">
+              <!-- 编辑模式提示条（弹窗待答时随输入区一并隐藏：圆角外形依附输入框，单独留下不成形） -->
+              <div v-if="editMode && !hasPendingAsk" class="max-w-full w-full flex px-4">
                 <div
                   class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-(--gd-color-sidebar-bg-active) backdrop-blur-xl">
                   <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
@@ -101,7 +105,9 @@
                 </div>
               </div>
 
-              <div class="w-full flex items-center relative">
+              <!-- 弹窗待答时 v-show 隐藏：保持挂载，草稿与编辑器内部状态不丢；
+                   display:none 同时退出视觉与可访问树（对齐 ZCode 的 composer 隐藏做法） -->
+              <div v-show="!hasPendingAsk" class="w-full flex items-center relative">
 
                 <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
                   :session-id="effectiveSessionId" :agent-id="props.session?.agentId || ''"
@@ -126,8 +132,8 @@
                 </ChatInput>
               </div>
 
-              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染 -->
-              <WorkingDirBar v-if="!props.readonly && effectiveSessionId" class="mt-1"
+              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染；弹窗待答时随输入区隐藏 -->
+              <WorkingDirBar v-if="!props.readonly && effectiveSessionId && !hasPendingAsk" class="mt-1"
                 :session-id="effectiveSessionId"
                 :attachments="(props.session?.settings?.attachments as Record<string, string[]> | undefined)"
                 @attachments-change="handleAttachmentsChange" />
@@ -315,6 +321,15 @@ const { tokenStats: sharedTokenStats } = useSessionTokenStats(currentSessionIdRe
 const effectiveSessionId = computed(() => {
   return props.sessionId || props.session?.id || '';
 });
+
+/**
+ * 弹窗（审批/询问卡）待答中：隐藏输入区，让卡片占据原输入区位置。
+ * 对齐 ZCode：pending 交互期间 composer 整体隐藏但**保持挂载**（草稿/编辑器状态不丢），
+ * 而非变暗/禁用——询问时输入框本就没有有效用途（自定义回复走卡片自己的输入框）。
+ */
+const hasPendingAsk = computed(() =>
+  !!sessionStore.sessionPendingAsk(currentSessionId.value || '')
+);
 const isLoading = ref(true);
 // 使用 useSessionChat composable
 const {

@@ -264,9 +264,12 @@
   ask: {
     approval: 'Approval required',
     input: 'Your input needed',
-    customReply: 'Type a custom reply',
+    customReply: 'Enter your answer…',
     next: 'Next',
     submit: 'Submit',
+    ignore: 'Ignore',
+    ignoreTip: 'Dismiss and stop the current turn',
+    keyboardHint: 'Use arrow keys to move, Enter to submit',
     staleCredential: 'Interaction credential has expired, please refresh and retry',
     submitFailed: 'Failed to submit answer',
   },
