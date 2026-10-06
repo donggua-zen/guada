@@ -187,6 +187,7 @@ import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { ArrowDown, Close } from "@element-plus/icons-vue";
+import { getApiErrorStatus } from '@/utils/errorMessage';
 import {
   BranchFork16Regular, ArrowUpload16Regular,
   Add16Regular,
@@ -267,8 +268,8 @@ async function killProcess(p: UiProcessInfo): Promise<void> {
   try {
     await apiService.killSessionProcess(props.sessionId, p.id);
     ElMessage.success(t("chat.workspace.processKilledToast"));
-  } catch (e: any) {
-    if (e?.response?.status !== 404) {
+  } catch (e) {
+    if (getApiErrorStatus(e) !== 404) {
       console.error("Failed to kill process:", e);
       ElMessage.error(t("chat.workspace.processKillFailed"));
     }
@@ -335,10 +336,11 @@ async function loadWorkflowRuns(): Promise<void> {
 
 function handleStreamChunk(chunk: HubStreamEvent): void {
   if (chunk.type !== "workflow_event") return;
-  const sid = (chunk as any).sessionId;
+  // WireStreamEvent 信封自带 sessionId，WorkflowEvent 自带 event，无需断言
+  const sid = chunk.sessionId;
   if (!props.sessionId || sid !== props.sessionId) return;
   // 原位应用（响应式 mutation 驱动 computed 重排）
-  applyWorkflowEvent(workflowRuns.value, (chunk as any).event);
+  applyWorkflowEvent(workflowRuns.value, chunk.event);
 }
 
 /** 成员行点击 → 跳转子代理会话（复用 ChatPage provide；运行中/已知 subSessionId 才可点） */
@@ -364,7 +366,11 @@ const subagentItems = computed<SubagentItem[]>(() =>
   (props.subSessions ?? [])
     // workflow 成员子代理不进本区：其进度/状态/跳转由下方"工作流运行"区按 run 组织展示，
     // 且该类子代理为 persist 生命周期永不 close，不过滤会让列表无限增长
-    .filter((s) => !s.settings?.workflow?.runId)
+    .filter((s) => {
+      // workflow 成员的归属标记写在 settings 开放字典的 workflow 键上
+      const settings = s.settings as { workflow?: { runId?: unknown } } | undefined;
+      return !settings?.workflow?.runId;
+    })
     .map((s) => {
       const streamStatus = sessionStore.peekStreamStatus(s.id);
       return {
@@ -484,10 +490,11 @@ async function createBrowser(): Promise<void> {
       sessionId: props.sessionId,
       createdBy: props.sessionId,
     });
-    if (result.success && result.window?.windowId) {
+    const windowId = result.window?.windowId;
+    if (result.success && windowId) {
       layoutStore.setWorkspaceVisible(true);
       nextTick(() => {
-        tabStore.selectTab(`browser:${result.window.windowId}`);
+        tabStore.selectTab(`browser:${windowId}`);
       });
     }
   } catch (e) {

@@ -42,7 +42,8 @@ export interface FileAttachment {
     /** 引用形态（见 content-block.types.ts FileRefType）；缺省视为 'store' */
     refType?: FileRefType
     file?: File
-    [key: string]: any
+    /** 投影层保留开放字段（历史数据兜底）；读取时按需收窄 */
+    [key: string]: unknown
 }
 
 /**
@@ -53,7 +54,9 @@ export interface MessageContent {
     content: string | null
     reasoningContent?: string | null
     turnsId?: string
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     additionalKwargs?: Record<string, any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
     createdAt?: ISODateString
     updatedAt?: ISODateString
@@ -87,7 +90,37 @@ export interface Message {
      * 轮次级元数据（来自后端 Turn.metadata / 三层适配层）：
      * finishReason / errorDetail / modelName / totalDurationMs / compactInfo / hidden / shadowed 等
      */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
+}
+
+/**
+ * 块级 metadata 里的工具调用条目（协议化字典字段；与后端 ToolCallEntry 同构）。
+ * 由 tool-call 块 / tool_call_delta 写入，tool/result 与 subagent_link 事件补充结果与关联。
+ */
+export interface ToolCallEntry {
+    id: string
+    index?: number
+    type?: string
+    name?: string
+    arguments?: string
+    /** 工具执行结果（toolCallsResponse / tool/result 写入） */
+    outcome?: 'success' | 'error' | 'rejected'
+    /** 子代理关联（subagent_link 事件写入） */
+    subAgentLink?: { subSessionId: string; name?: string }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
+    metadata?: Record<string, any>
+}
+
+/** 块级 metadata 里的工具结果条目（与 event-chunk.types 的 ToolCallsResponseEvent 条目同构） */
+export interface ToolCallResponseEntry {
+    messageId?: string
+    name: string
+    content: string
+    toolCallId: string
+    outcome?: 'success' | 'error' | 'rejected'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
+    meta?: Record<string, any>
 }
 
 /**
@@ -133,8 +166,9 @@ export interface MessageBundle {
      * kind='user' 才是人类真实输入；其余（plugin/model/tool/sub_agent/...）
      * 为注入或产出，不作为用户消息展示。
      */
-    source?: { kind: string; [key: string]: any }
+    source?: { kind: string; [key: string]: unknown }
     /** 消息级元数据：usage/finishReason/referencedKbs/hidden/compactInfo 等 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata: Record<string, any>
     createdAt?: ISODateString
     /** 块级内容（展示派生时引用收集，不复制） */
@@ -154,7 +188,7 @@ export interface TurnContent extends MessageContent {
     messageId: string
     blockIndex?: number
     /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
-    source?: { kind: string; [key: string]: any }
+    source?: { kind: string; [key: string]: unknown }
     /** @deprecated 消息级字段已归 MessageBundle；保留仅兼容旧遍历消费（新代码读 bundle） */
     kind?: 'user' | 'model'
 }
@@ -168,6 +202,7 @@ export interface Turn {
     id: string
     /** 'turn' 对话回合 / 'event' 事件类消息外壳（command/compaction 等） */
     kind: 'turn' | 'event'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata: Record<string, any>
     visible: boolean
     /** 消息束（取代旧平铺 blocks：一条后端消息 = 一个 bundle） */

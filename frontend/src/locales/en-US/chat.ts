@@ -21,6 +21,9 @@
     runModeReadOnly: 'Read-Only',
     runModeWorkspaceWrite: 'Workspace-Write',
     runModeFullAccess: 'Unrestricted Editing',
+    // Plan mode toggle (ChatInput.vue; collaboration state, orthogonal to sandbox mode)
+    planMode: 'Plan',
+    planModeTip: 'Plan mode: investigate read-only, propose a plan, implement only after you approve',
 
     // AttachmentPopover.vue
     uploadImage: 'Upload Image',
@@ -42,6 +45,7 @@
     selectModelHint: 'Select a model, hover here to choose a mode',
     reasoningEffort: 'Reasoning Effort',
     favoriteModels: 'Favorite Models',
+    manageModels: 'Manage Models',
 
     // RemoteConnectionDialog.vue
     remoteDir: 'Remote Directory',
@@ -56,7 +60,7 @@
     // RunModePopover.vue
     runModeReadOnlyDesc: 'Files and commands are read-only, suitable for analysis and planning',
     runModeWorkspaceWriteDesc: 'File and shell writes are confined to the working directory, read-only outside',
-    runModeFullAccessDesc: 'No restrictions on tools or paths, can read/write any file (high risk)',
+    runModeFullAccessDesc: 'No restrictions on tools or paths, can read/write arbitrary files (high risk)',
 
     // ThinkingEffortPopover.vue
     thinkingEffortTitle: 'Thinking Effort',
@@ -256,14 +260,16 @@
     branchFromHere: 'Branch From Here',
   },
 
-  // ── 统一交互卡（审批/询问/迭代暂停继续共用） ──
+  // ── 统一交互卡（审批/询问共用） ──
   ask: {
     approval: 'Approval required',
     input: 'Your input needed',
-    continue: 'Maximum tool call iterations reached',
-    customReply: 'Type a custom reply',
+    customReply: 'Enter your answer…',
     next: 'Next',
     submit: 'Submit',
+    ignore: 'Ignore',
+    ignoreTip: 'Dismiss and stop the current turn',
+    keyboardHint: 'Use arrow keys to move, Enter to submit',
     staleCredential: 'Interaction credential has expired, please refresh and retry',
     submitFailed: 'Failed to submit answer',
   },
@@ -288,6 +294,7 @@
     terminalTruncated: 'Output truncated — full log: {path}',
     inputLabel: 'Input',
     outputLabel: 'Output',
+    openSubAgentPanel: 'Open sub-agent panel',
   },
 
   // ── 文件变更 ──
@@ -298,6 +305,23 @@
     dialogTitle: 'File Changes',
     dialogTitleWithName: 'File Changes: {name}',
     noDiff: 'This file type has no line-by-line diff preview',
+  },
+
+  // ── Plan history (plan-mode artifact: approval-card entry + workspace plan panel) ──
+  plan: {
+    title: 'Plans',
+    empty: 'No plans yet',
+    selectHint: 'Select a plan to view details',
+    openFile: 'Open as file',
+    refresh: 'Refresh',
+    refreshFailed: 'Failed to refresh plans',
+    viewFullDoc: 'View full plan',
+    streamingHint: 'Writing the plan…',
+    status: {
+      pending: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+    },
   },
 
   // ── 工作区 ──
@@ -354,6 +378,7 @@
     noPreviewFile: 'No preview file',
     newBrowser: 'New Browser',
     newFile: 'File',
+    planTab: 'Plans',
     gitTab: 'Git Review',
     newTabHint: 'Pick a file from the right tree to start previewing',
     saveSuccess: 'Saved',
@@ -389,14 +414,6 @@
     killProcess: 'Kill process',
     addAttachedDir: 'Add attached directory',
     removeAttachedDir: 'Unbind attached directory',
-    connHost: 'Host',
-    connName: 'Connection',
-    unknownConnection: 'Unknown connection',
-    connPath: 'Remote directory',
-    connPerm: 'Permission mode',
-    permReadonly: 'Read-only',
-    permWorkspace: 'Workspace write',
-    permUnrestricted: 'Full access',
     noConnections: 'No connections yet — create one in Settings',
     processLogEmpty: 'No output yet',
     processLogGone: 'Process has ended or no longer exists',

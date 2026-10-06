@@ -93,18 +93,17 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import type { OcrGroupSettings } from '@/types/service'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const { notify } = usePopup()
-
-// 表单引用
-const formRef = ref(null)
 
 // 表单数据
 const settingsForm = reactive({
@@ -117,7 +116,7 @@ const settingsForm = reactive({
 })
 
 // 原始设置备份，用于对比是否有改动
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 计算是否有改动
 const hasChanges = computed(() => {
@@ -149,7 +148,7 @@ const openOcrDocs = () => {
 // 加载 OCR 分组设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('ocr')
+    const response = await apiService.fetchGroupSettings<OcrGroupSettings>('ocr')
 
     // 填充表单
     settingsForm.provider = response.provider || 'none'
@@ -172,7 +171,7 @@ const loadSettings = async () => {
 const handleSave = async () => {
   try {
     // 构造保存数据
-    const dataToSave: Record<string, any> = {
+    const dataToSave: OcrGroupSettings = {
       provider: settingsForm.provider,
       ocrMode: settingsForm.ocrMode === 'force' ? 'force' : 'auto',
     }
@@ -186,15 +185,15 @@ const handleSave = async () => {
     }
 
     // 使用分组设置接口更新 ocr 分组
-    await apiService.updateGroupSettings('ocr', dataToSave)
+    await apiService.updateGroupSettings('ocr', { ...dataToSave })
 
     // 保存成功后更新原始数据备份
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
     notify.success(t('common.saveSuccess'), t('settings.ocr.updated'))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存 OCR 设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 

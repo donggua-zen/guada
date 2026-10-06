@@ -22,7 +22,7 @@
         <label>选择场景:</label>
         <select v-model="selectedScenario" @change="handleScenarioChange">
           <option value="">-- 自定义 --</option>
-          <option v-for="(config, name) in scenarios" :key="name" :value="name">
+          <option v-for="(_, name) in scenarios" :key="name" :value="name">
             {{ formatScenarioName(name) }}
           </option>
         </select>
@@ -53,13 +53,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { reinitApiService } from '@/services/ApiService'
+import type { MockConfig } from '@/services/mockStreamService'
 
 const isDev = import.meta.env.DEV
 const isVisible = ref(false)
 const isMockEnabled = ref(false)
 const selectedScenario = ref('')
-const scenarios = ref<Record<string, any>>({})
-const currentConfig = ref<any>(null)
+const scenarios = ref<Record<string, MockConfig>>({})
+const currentConfig = ref<MockConfig | null>(null)
 
 onMounted(async () => {
   // 从 localStorage 读取运行时配置

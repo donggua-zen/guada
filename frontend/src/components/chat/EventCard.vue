@@ -65,10 +65,11 @@ import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { Loading } from "@element-plus/icons-vue";
 import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
+import type { Turn, MessageBundle } from "@/types/message";
 
 const props = defineProps<{
   /** 事件源：kind='event' 外壳 turn，或 turn 内 role='event' 消息（两者均从 .metadata 读取事件字段） */
-  event?: Record<string, any> | null;
+  event?: Turn | MessageBundle | null;
 }>();
 
 const { t } = useI18n();

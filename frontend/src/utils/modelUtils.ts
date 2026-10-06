@@ -6,6 +6,7 @@
 import { computed } from "vue";
 import { fixFrontendAssetUrl } from "./url";
 import { t } from "@/locales";
+import type { Model, ModelProvider } from "@/types/api";
 
 // 已知提供商的标识符映射（用于匹配头像文件）
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -173,8 +174,8 @@ export function useModelDisplay(modelName: string, providerName?: string) {
  * @returns 思考强度选项数组，如 ['none', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
  */
 export function getModelThinkingEfforts(
-  model: any,
-  providers: any[],
+  model: Model | null | undefined,
+  _providers: ModelProvider[],
 ): string[] {
   if (!model) {
     return [];
@@ -196,7 +197,7 @@ export function getModelThinkingEfforts(
 /**
  * 检查模型是否支持思考功能
  */
-export function isThinkingSupported(model: any, providers: any[]): boolean {
+export function isThinkingSupported(model: Model | null | undefined, providers: ModelProvider[]): boolean {
   const efforts = getModelThinkingEfforts(model, providers);
   return efforts.length > 0;
 }
@@ -225,6 +226,16 @@ export function getThinkingEffortLabel(effort: string): string {
 }
 
 /**
+ * 获取思考强度的显示标签（附括号原值）——配置场景专用：
+ * 表达式变量 reasoningLevel / wireValue、thinkingEffortsMap 的键都是
+ * 原始档位键，配置界面需展示对应关系。聊天等使用场景保持纯标签。
+ */
+export function getThinkingEffortLabelWithKey(effort: string): string {
+  const label = getThinkingEffortLabel(effort);
+  return label === effort ? label : `${label} (${effort})`;
+}
+
+/**
  * 规范思考档位全集（编辑表单复选框数据源）。
  * 与后端 THINKING_EFFORTS 同集同序（none/on/minimal/low/medium/high/xhigh/max），
  * 词表增删时两处需同步（后端有漂移门控，此处靠注释约束）。
@@ -241,46 +252,22 @@ export const THINKING_EFFORT_OPTIONS: readonly string[] = [
 ];
 
 /**
- * thinkingFormat 全集（拼法下拉数据源），与后端 THINKING_FORMATS 同集。
- * 显示原样技术名——它们本身就是 wire 字段的命名约定。
+ * 表达式文本 → 拼法模板选择态：
+ * - '' = 跟随继承（表达式为空）
+ * - format 名 = 表达式与某模板逐字相等（trim 后比较）
+ * - 'custom' = 自定义表达式
+ *
+ * 模板列表来自后端 GET /models/thinking-patch-templates（与内置拼法等价，
+ * 由后端矩阵测试锁定），前端只做文本匹配，不内置模板内容。
  */
-export const THINKING_FORMAT_OPTIONS: readonly string[] = [
-  'openai',
-  'deepseek',
-  'zai',
-  'qwen',
-  'openrouter',
-  'together',
-  'baseten',
-  'ant-ling',
-  'string-thinking',
-  'qwen-chat-template',
-  'chat-template',
-];
+export const PATCH_TEMPLATE_CUSTOM = 'custom'
 
-/**
- * format 级"强度值上 wire"默认（与后端 FORMAT_SUPPORTS_REASONING_EFFORT 同表）。
- * 仅用于编辑表单的非阻断提示：开关型拼法下 on 档没有独立 wire 值。
- */
-const FORMAT_SUPPORTS_EFFORT: Record<string, boolean> = {
-  openai: true,
-  deepseek: true,
-  zai: false,
-  qwen: true,
-  openrouter: true,
-  together: false,
-  baseten: true,
-  'ant-ling': false,
-  'string-thinking': true,
-  'qwen-chat-template': true,
-  'chat-template': true,
-};
-
-/** 该拼法默认是否发送强度值；未知 format 回退 fallback（调用方传生效值） */
-export function formatSupportsEffort(
-  format: string | undefined,
-  fallback = true,
-): boolean {
-  if (!format) return fallback;
-  return FORMAT_SUPPORTS_EFFORT[format] ?? fallback;
+export function matchPatchTemplate(
+  expression: string | undefined | null,
+  templates: Array<{ format: string; expression: string }>,
+): string {
+  const source = (expression || '').trim()
+  if (!source) return ''
+  const hit = templates.find((tpl) => tpl.expression.trim() === source)
+  return hit ? hit.format : PATCH_TEMPLATE_CUSTOM
 }

@@ -3,7 +3,8 @@
  */
 
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
-import type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
+import type { MessageContent, FileAttachment, MessageBundle, ToolCallResponseEntry } from "@/types/message";
+import { isStandaloneTool, type ToolCall } from "./toolDisplay";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 
 /**
@@ -43,10 +44,7 @@ export interface KbRefLike {
  * 与 {id,...}[] 两种形态，统一归一化为 {id, name}）。
  */
 export function collectReferencedKbs(
-  bundle:
-    | { blocks?: Array<{ kbRefs?: KbRefLike[] }>; metadata?: Record<string, any> | null }
-    | null
-    | undefined,
+  bundle: MessageBundle | null | undefined,
 ): KbRefLike[] {
   if (!bundle) return [];
   const fromBlocks = (bundle.blocks ?? []).flatMap((b) => b.kbRefs ?? []);
@@ -54,14 +52,18 @@ export function collectReferencedKbs(
   const legacy = bundle.metadata?.referencedKbs;
   if (!Array.isArray(legacy)) return [];
   return legacy
-    .map((kb: any) => {
-      if (typeof kb === "string") return { id: kb, name: kb };
-      return {
-        id: kb?.id,
-        name: kb?.name || kb?.id,
-        ...(kb?.description ? { description: kb.description } : {}),
-      };
-    })
+    .map(
+      (
+        kb: string | { id?: string; name?: string; description?: string },
+      ): KbRefLike => {
+        if (typeof kb === "string") return { id: kb, name: kb };
+        return {
+          id: kb?.id,
+          name: kb?.name || kb?.id,
+          ...(kb?.description ? { description: kb.description } : {}),
+        } as KbRefLike;
+      },
+    )
     .filter((kb: KbRefLike) => !!kb.id);
 }
 
@@ -103,9 +105,10 @@ export interface DisplayItem {
   content?: string;
   // think 类型的内容
   reasoningContent?: string;
-  // tool 类型的内容
-  toolCalls?: any[];
-  toolResponses?: any[];
+  // tool 类型的内容（toolCalls 与 metadata.toolCalls / toolResponses 与
+  // metadata.toolCallsResponse 同构，条目契约见 ToolCallEntry/ToolCallResponseEntry）
+  toolCalls?: ToolCall[];
+  toolResponses?: ToolCallResponseEntry[];
   // 引用原始 MessageContent，用于获取状态等元数据
   source: MessageContent;
 }
@@ -192,6 +195,9 @@ function flattenContents(contents: MessageContent[]): DisplayItem[] {
 
 /**
  * 执行分组逻辑
+ *
+ * 分隔符有两类：content 与「独立渲染工具」（isStandaloneTool，如计划卡）。
+ * 后者单独成组且不可折叠：正文就是用户要看的产物，折进过程标题后默认不可见。
  */
 function doGrouping(items: DisplayItem[]): DisplayGroup[] {
   const groups: DisplayGroup[] = [];
@@ -219,9 +225,22 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
         isCollapsible: false,
         isExpanded: true,
       });
-    } else {
-      currentProcess.push(item);
+      continue;
     }
+    // 独立渲染工具：切断前后过程分组，单独成组且不可折叠（无标题行、直接渲染）。
+    // 同块并行调用整项独立、不拆行——避免按 toolCallId 二次过滤响应
+    if (item.type === "tool" && (item.toolCalls ?? []).some(isStandaloneTool)) {
+      flushProcess();
+      groups.push({
+        id: `standalone-${item.id}`,
+        type: "process",
+        items: [item],
+        isCollapsible: false,
+        isExpanded: true,
+      });
+      continue;
+    }
+    currentProcess.push(item);
   }
 
   flushProcess();
@@ -229,26 +248,21 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
 }
 
 /**
- * 将消息内容列表按展示规则分组（支持增量计算）
+ * 将消息内容列表按展示规则分组
  *
- * 核心规则：content（小 content）是唯一的分隔符
+ * 核心规则：分隔符 = content（小 content）与独立渲染工具（isStandaloneTool）
  * - 先把大 content 拆分为 think/content/tool 的 DisplayItem 列表
  * - 以 content 为界，把 think/tool 分别归入前后的 process 组
  * - content 自身单独成组
- * - 连续多个 think/tool 聚合成一个 process 组
- * - process 组按包含的 think/tool 数量 > 1 时可折叠
- *
- * 性能优化：
- * - 使用消息级缓存避免重复计算
- * - 流式输出时只处理新增的 content
+ * - 连续多个 think/tool 聚合成一个 process 组（一律可折叠：默认收起，点标题展开）
+ * - 独立渲染工具（plan 卡等）单独成组且不可折叠，直接渲染
  *
  * 示例：
  *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
- *   think → tool → think → content → tool → think → content
- *   分组：【process: think tool think】→【content】→【process: tool think】→【content】
+ *   tool → ExitPlanMode → tool → content
+ *   分组：【process: tool】→【standalone: plan】→【process: tool】→【content】
  *
  * @param contents - 消息内容数组
- * @param messageId - 消息 ID（用于缓存隔离）
  * @returns 展示分组数组
  */
 export function groupContentsForDisplay(
@@ -275,16 +289,13 @@ export function groupContentsForDisplay(
  * @returns true = 应隐藏，不作为用户消息/锚点展示
  */
 export function isHiddenBlock(
-  block?:
-    | { metadata?: Record<string, any> | null; kind?: string }
-    | Record<string, any>
-    | null,
+  block?: { metadata?: Record<string, unknown> | null; kind?: string } | null,
 ): boolean {
   if (!block) return false;
-  const metadata = (block as any).metadata as Record<string, any> | undefined;
+  const metadata = block.metadata;
   if (metadata && metadata.hidden === true) return true;
   // 无 metadata 的历史数据兜底：kind='model' 即模型工作流注入
-  return (block as any).kind === "model";
+  return block.kind === "model";
 }
 
 /**

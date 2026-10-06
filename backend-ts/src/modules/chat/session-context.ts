@@ -135,6 +135,24 @@ export interface ISessionContext {
   /** 读取当前路径牢笼（null = 不限制） */
   getPathJail(): string | null;
 
+  // === 计划模式（协作状态） ===
+  /**
+   * 计划模式开关。与安全模式正交：不改写 sandboxMode，也不与其共用词表。
+   * 开启后由 ToolExecutor 的计划门强制只读（写类工具硬拒、run_command 走只读沙盒），
+   * 由引擎每轮临时注入引导提示；模型只能经 ExitPlanMode 审批后退出。
+   */
+  getPlanEnabled(): boolean;
+  /**
+   * 设置计划模式（运行时切换；用户从界面开关，或 ExitPlanMode 审批通过后关闭）。
+   * 实现负责持久化——模型发起的退出必须自己落库，否则重启后计划模式复活。
+   */
+  setPlanEnabled(enabled: boolean): Promise<void>;
+  /**
+   * 取出并清除"刚退出计划模式"标记（一次性）。
+   * 退出后的下一个迭代据此临时注入一条退出提醒，让模型知道可以动手了。
+   */
+  consumePlanModeExitReminder(): boolean;
+
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */
   getModelConfig(): ModelConfig;
@@ -150,7 +168,7 @@ export interface ISessionContext {
   getResolvedPlugins(): import("../plugins/types/plugin.types").ResolvedPluginInfo[];
   /** 获取合并后的会话设置（指定字段或全部） */
   getSettings(field?: string): any;
-  // === 统一交互（审批/询问/迭代暂停共用 ask/* 审计；无超时） ===
+  // === 统一交互（审批/询问共用 ask/* 审计；无超时） ===
   /** 记录交互请求事件（发起 ask 时写日志，审计源） */
   appendAskAsked(
     data: import("../../common/persistence/types").AskAskedData,
@@ -158,6 +176,12 @@ export interface ISessionContext {
   /** 记录交互应答事件（应答/取消后写日志；每次 asked 必有 answered） */
   appendAskAnswered(
     data: import("../../common/persistence/types").AskAnsweredData,
+  ): Promise<void>;
+
+  // === 会话模式（计划模式协作状态） ===
+  /** 记录会话模式变更事件（审计/切换历史；事实源仍是 session.settings） */
+  appendSessionModeChanged(
+    data: import("../../common/persistence/types").SessionModeChangedData,
   ): Promise<void>;
 
   // === 流事件发布（唯一发布面，对齐 DSH session.append 直发） ===

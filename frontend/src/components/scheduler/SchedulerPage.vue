@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -212,7 +213,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { usePrefillInput } from '../../composables/usePrefillInput'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
-import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'
+import type { ScheduledTask, ScheduledTaskLog, UpdateTaskRequest } from '../../types/scheduler'
 import TaskEditDialog from './TaskEditDialog.vue'
 import TaskLogDrawer from './TaskLogDrawer.vue'
 
@@ -275,9 +276,9 @@ async function loadHistoryLogs() {
     historyLogs.value = response.items || []
     historyCursor.value = response.nextCursor
     historyHasMore.value = response.hasMore
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载执行历史失败:', err)
-    toast.error(err.message || t('scheduler.page.loadFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.loadFailed'))
   } finally {
     historyLoading.value = false
   }
@@ -291,9 +292,9 @@ async function loadMoreHistoryLogs() {
     historyLogs.value.push(...(response.items || []))
     historyCursor.value = response.nextCursor
     historyHasMore.value = response.hasMore
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载更多失败:', err)
-    toast.error(err.message || t('scheduler.page.loadFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.loadFailed'))
   } finally {
     historyLoading.value = false
   }
@@ -313,9 +314,9 @@ async function loadTasks() {
   try {
     const response = await apiService.fetchScheduledTasks()
     tasks.value = response.items || []
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载定时任务失败:', err)
-    toast.error(err.message || t('scheduler.page.loadFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -327,7 +328,7 @@ async function loadTasks() {
 async function loadCronPresets() {
   try {
     cronPresets.value = await apiService.fetchCronPresets()
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载 Cron 预设失败:', err)
   }
 }
@@ -342,9 +343,9 @@ async function loadTaskLogs(taskId?: string) {
   try {
     const response = await apiService.fetchScheduledTaskLogs(id)
     taskLogs.value = response.items || []
-  } catch (err: any) {
+  } catch (err) {
     console.error('加载任务日志失败:', err)
-    toast.error(err.message || t('scheduler.page.loadLogsFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.loadLogsFailed'))
   } finally {
     logsLoading.value = false
   }
@@ -389,20 +390,36 @@ function handleLogClick(log: ScheduledTaskLog) {
 /**
  * 保存任务
  */
-async function handleSaveTask(data: any) {
+async function handleSaveTask(data: UpdateTaskRequest) {
   try {
     if (isEditMode.value && currentTask.value) {
       await apiService.updateScheduledTask(currentTask.value.id, data)
       toast.success(t('common.updateSuccess'))
     } else {
-      await apiService.createScheduledTask(data)
+      // 对话框构造的是 UpdateTaskRequest 形态（可空字段允许 null）；新建分支要求非空必填字段、
+      // null 一律归一为 undefined（后端 create DTO 缺省即 null，wire 行为一致）
+      await apiService.createScheduledTask({
+        ...data,
+        name: data.name ?? '',
+        prompt: data.prompt ?? '',
+        scheduleType: data.scheduleType ?? 'cron',
+        executeAt: data.executeAt ?? undefined,
+        targetMode: data.targetMode ?? 'new_session',
+        targetSessionId: data.targetSessionId ?? undefined,
+        agentId: data.agentId ?? undefined,
+        modelId: data.modelId ?? undefined,
+        settings: data.settings ?? undefined,
+        workspacePath: data.workspacePath ?? undefined,
+        attachments: data.attachments ?? undefined,
+        expiresAt: data.expiresAt ?? undefined,
+      })
       toast.success(t('common.createSuccess'))
     }
     showEditDialog.value = false
     await loadTasks()
-  } catch (err: any) {
+  } catch (err) {
     console.error('保存任务失败:', err)
-    toast.error(err.message || t('scheduler.page.saveFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.saveFailed'))
   }
 }
 
@@ -417,10 +434,10 @@ async function handleDeleteTask(task: ScheduledTask) {
     await apiService.deleteScheduledTask(task.id)
     tasks.value = tasks.value.filter(t => t.id !== task.id)
     toast.success(t('common.deleteSuccess'))
-  } catch (err: any) {
+  } catch (err) {
     if (err !== 'cancelled') {
       console.error('删除任务失败:', err)
-      toast.error(err.message || t('common.deleteFailed'))
+      toast.error(getErrorMessage(err) || t('common.deleteFailed'))
     }
   }
 }
@@ -432,9 +449,9 @@ async function handleToggleTask(task: ScheduledTask) {
   try {
     await apiService.toggleScheduledTask(task.id)
     toast.success(task.enabled ? t('common.enabled') : t('common.disabled'))
-  } catch (err: any) {
+  } catch (err) {
     console.error('切换状态失败:', err)
-    toast.error(err.message || t('scheduler.page.toggleFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.toggleFailed'))
     task.enabled = !task.enabled
   }
 }
@@ -457,9 +474,9 @@ async function handleRunNow(task: ScheduledTask) {
     toast.success(t('scheduler.page.runNowSuccess'))
     // 触发后台回合，稍后刷新以更新执行次数/日志状态
     setTimeout(() => loadTasks(), 800)
-  } catch (err: any) {
+  } catch (err) {
     console.error('立即执行失败:', err)
-    toast.error(err.message || t('scheduler.page.runNowFailed'))
+    toast.error(getErrorMessage(err) || t('scheduler.page.runNowFailed'))
   }
 }
 

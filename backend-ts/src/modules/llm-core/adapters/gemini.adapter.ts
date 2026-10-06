@@ -255,8 +255,9 @@ export class GeminiAdapter implements IProtocolAdapter {
 
     // Gemini 思考功能配置
     // undefined 视为 'none'，禁用思考功能
+    // 拼法表达式接管时（thinkingPatchReplacesFormat）跳过内置写入，完全由表达式输出决定
     const effort = params.thinkingEffort || 'none';
-    if (effort !== 'none') {
+    if (!params.thinkingPatchReplacesFormat && effort !== 'none') {
       // Gemini API 使用 thinkingConfig.thinking_level 参数
       config.thinkingConfig = {
         thinkingLevel: effort, // 'minimal', 'low', 'medium', 'high'

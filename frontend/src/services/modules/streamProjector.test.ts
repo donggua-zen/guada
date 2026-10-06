@@ -11,33 +11,49 @@
  *   tool_calls_response 按 toolCallId 挂载到块
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ref } from "vue";
-import { setActivePinia, createPinia } from "pinia";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
-import { foldEvents, applyLiveChunk } from "./streamProjector";
-import { useSessionTokenStats } from "@/composables/useSessionTokenStats";
+import {
+  foldEvents,
+  applyLiveChunk,
+  resetTurnTransientState,
+  resetSessionTurnsTransientState,
+  type ProjectorSessionStore,
+  type ProjectorSessionState,
+} from "./streamProjector";
 import type { WireStreamEvent } from "@/types/stream";
+import type { Turn } from "@/types/message";
 
 function createStore() {
-  const state: any = { loaded: true, turns: [], eventLog: [] };
+  // 测试断言按"目标存在"编写：turns/eventLog 放宽为 any[]，让 find/index 访问不必逐处非空断言；
+  // mock 本身仍需 satisfies 接口（编译期保证 mock 与投影器契约一致）
+  const state = {
+    loaded: true,
+    turns: [] as any[],
+    eventLog: [] as any[],
+    pendingAsk: undefined as ProjectorSessionState["pendingAsk"],
+  };
   return {
     state,
     getSessionState: () => state,
     getTurns: () => state.turns,
-    setTurns: (_sid: string, t: any[]) => { state.turns = t; },
-    deleteTurnById: (_sid: string, id: string) => { state.turns = state.turns.filter((t: any) => t.id !== id); },
+    setTurns: (_sid: string, t: Turn[]) => { state.turns = t; },
+    deleteTurnById: (_sid: string, id: string) => {
+      state.turns = state.turns.filter((t) => t.id !== id);
+    },
     setSessionIsCompressing: () => {},
     sessionIsCompressing: () => false,
-    setSessionPendingAsk: (_sid: string, v: any) => { state.pendingAsk = v; },
+    sessionIsStreaming: (): boolean => false,
+    setSessionPendingAsk: (_sid: string, v: ProjectorSessionState["pendingAsk"]) => { state.pendingAsk = v; },
     sessionPendingAsk: () => state.pendingAsk,
-  };
+  } satisfies ProjectorSessionStore & { state: typeof state; sessionPendingAsk: () => typeof state.pendingAsk };
 }
 
-function blocksOf(turn: any): any[] {
-  return (turn?.messages ?? []).flatMap((m: any) => m.blocks ?? []);
+// 测试断言按"目标束/块必然存在"编写：返回值保持宽松，避免逐处非空断言噪声
+function blocksOf(turn: Turn | undefined): any[] {
+  return (turn?.messages ?? []).flatMap((m) => m.blocks ?? []);
 }
-function bundleOf(turn: any, messageId: string): any {
-  return (turn?.messages ?? []).find((m: any) => m.messageId === messageId);
+function bundleOf(turn: Turn | undefined, messageId: string): any {
+  return (turn?.messages ?? []).find((m) => m.messageId === messageId);
 }
 
 function textChunks(mid: string, tid: string, text: string): WireStreamEvent[] {
@@ -135,6 +151,34 @@ describe("StreamProjector 折叠器", () => {
     expect(block.metadata.toolCalls[0].name).toBe("web_search");
     expect(block.metadata.toolCalls[0].outcome).toBe("success");
     expect(block.metadata.toolCallsResponse[0].content).toBe("结果");
+  });
+
+  it("subagent_link 把关联键写到对应 tool-call 条目上（工具结果落库前即可用）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "subagent_spawn", argumentsDelta: '{"name":"分析架构"}' } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", contentId: "tc_c1", toolCallId: "tc1", name: "subagent_spawn", arguments: '{"name":"分析架构"}' } } as any,
+      // 工具结果尚未到达（前台 spawn 阻塞期间），关联键只能来自这条流事件
+      { type: "subagent_link", toolCallId: "tc1", subSessionId: "sub-9", name: "分析架构" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.role === "assistant");
+    expect(block.metadata.toolCalls[0].subAgentLink).toEqual({
+      subSessionId: "sub-9",
+      name: "分析架构",
+    });
+    // 结果还没到：不应误建 toolCallsResponse
+    expect(block.metadata.toolCallsResponse).toBeUndefined();
+  });
+
+  it("subagent_link 找不到对应 tool-call 时静默忽略（不抛错）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "subagent_link", toolCallId: "nope", subSessionId: "sub-9" } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    expect(() => foldEvents(store as any, "s1", events)).not.toThrow();
   });
 
   it("compaction_summary in-turn：标记遮蔽 + 回合内 event 消息束", () => {
@@ -359,5 +403,81 @@ describe("思考态跨块复位", () => {
     expect(b.state.isThinking).toBe(false);
     expect(b.reasoningContent).toBe("思考中");
     expect(b.thinkingDurationMs).toBe(2500);
+  });
+
+  // ===== 流终止瞬态复位（resetTurnTransientState / resetSessionTurnsTransientState）=====
+
+  it("turn_end 错误收尾（无 finish chunk）复位块级瞬态", () => {
+    seedLiveTurn("T1");
+    applyThinkStart("T1_a", "T1");
+    const bundle = bundleOf(store.state.turns[0], "T1_a");
+    expect(bundle.blocks[0].state.isThinking).toBe(true);
+    expect(bundle.blocks[0].state.isStreaming).toBe(true);
+
+    // 错误路径：LLM 报错后只有 turn_end，finish chunk 永不到达
+    applyLiveChunk(store as any, "s1", { type: "turn_end", turnId: "T1", finishReason: "error", error: "boom" } as any);
+    expect(store.state.turns[0].state.isWorking).toBe(false);
+    expect(bundle.blocks[0].state.isThinking).toBe(false);
+    expect(bundle.blocks[0].state.isStreaming).toBe(false);
+  });
+
+  it("resetTurnTransientState：一次性复位回合级与块级全部瞬态", () => {
+    const turn: any = {
+      id: "T9", kind: "turn", metadata: {},
+      messages: [{
+        messageId: "m1", role: "assistant", metadata: {},
+        blocks: [
+          { state: { isStreaming: true, isThinking: true } },
+          { state: { isStreaming: true, isThinking: false } },
+        ],
+        state: { isStreaming: true, isThinking: true },
+      }],
+      state: { isWorking: true, startedAt: 1, retry: { retryReason: "timeout", retryAttempt: 1, retryMaxAttempts: 3, retryDelayMs: 100 } },
+    };
+    resetTurnTransientState(turn);
+    expect(turn.state.isWorking).toBe(false);
+    expect(turn.state.retry).toBeUndefined();
+    expect(turn.messages[0].state.isStreaming).toBe(false);
+    expect(turn.messages[0].state.isThinking).toBe(false);
+    for (const b of turn.messages[0].blocks) {
+      expect(b.state.isStreaming).toBe(false);
+      expect(b.state.isThinking).toBe(false);
+    }
+  });
+
+  it("resetTurnTransientState：历史回合（无 state）安全通过", () => {
+    const turn: any = { id: "T8", kind: "turn", metadata: {}, messages: [] };
+    expect(() => resetTurnTransientState(turn)).not.toThrow();
+    expect(turn.state).toBeUndefined();
+  });
+
+  it("resetSessionTurnsTransientState：复位会话下所有回合的瞬态", () => {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      { type: "turn_start", turnId: "T2", modelName: "m1" } as any,
+    ]);
+    applyThinkStart("T1_a", "T1");
+    for (const t of store.state.turns) t.state.isWorking = true;
+
+    resetSessionTurnsTransientState(store as any, "s1");
+    expect(store.state.turns.every((t: any) => !t.state.isWorking)).toBe(true);
+    expect(thinkBlockOf("T1_a").state.isThinking).toBe(false);
+  });
+
+  it("foldEvents 重放无 turn/finish 的回合不复活工作态（后端重启残留）", () => {
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+      { type: "user_message", messageId: "T1_u", turnId: "T1", userMessage: { id: "T1_u", role: "user", kind: "user", metadata: {}, content: [{ type: "text", contentId: "T1_uc", text: "你好" }] } } as any,
+    ]);
+    // turn_start 折叠置位的工作态被折叠后复位：会话未在流式中 → 视为已终止
+    expect(store.state.turns[0].state.isWorking).toBe(false);
+  });
+
+  it("foldEvents 流式中重折保留工作态", () => {
+    store.sessionIsStreaming = () => true;
+    foldEvents(store as any, "s1", [
+      { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
+    ]);
+    expect(store.state.turns[0].state.isWorking).toBe(true);
   });
 });

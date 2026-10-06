@@ -34,7 +34,7 @@ export { i18n, STORAGE_KEY }
  * 在非组件上下文中使用翻译（stores / composables / utils）
  */
 export function t(key: string, named?: Record<string, unknown>): string {
-  return i18n.global.t(key, named as any)
+  return named === undefined ? i18n.global.t(key) : i18n.global.t(key, named)
 }
 
 /**

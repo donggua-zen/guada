@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { ArrowUp, Loading } from '@element-plus/icons-vue';
+import { Loading } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
 import { Avatar } from '../ui';

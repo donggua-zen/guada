@@ -4,12 +4,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection, dropCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
-import { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, defaultHighlightStyle, type LanguageSupport } from '@codemirror/language';
 import { html } from '@codemirror/lang-html';
 import { css } from '@codemirror/lang-css';
 import { javascript } from '@codemirror/lang-javascript';
@@ -41,7 +41,7 @@ let view: EditorView | null = null;
 
 // 根据扩展名选语言
 function languageForExt(ext: string) {
-    const map: Record<string, () => any> = {
+    const map: Record<string, () => LanguageSupport> = {
         '.html': html, '.htm': html, '.css': css, '.scss': css, '.less': css,
         '.js': () => javascript({ jsx: false }), '.mjs': () => javascript({ jsx: false }),
         '.ts': () => javascript({ jsx: true, typescript: true }),
@@ -55,6 +55,11 @@ function languageForExt(ext: string) {
 }
 
 const { isDark } = useTheme();
+
+// 主题经 Compartment 注入：主题固化在 EditorState 里，切换暗/浅色时只能用
+// reconfigure 效果热替换这一段扩展（文档、撤销历史、滚动位置、选区全部保留）
+const themeCompartment = new Compartment();
+const currentTheme = () => (isDark.value ? vscodeDark : vscodeLight);
 
 function buildState(doc: string, extension: string) {
     const langSupport = languageForExt(extension);
@@ -97,7 +102,7 @@ function buildState(doc: string, extension: string) {
                 '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--gd-font-mono, monospace)' },
             }),
             // 主题（暗色跟随系统）
-            isDark.value ? vscodeDark : vscodeLight,
+            themeCompartment.of(currentTheme()),
         ],
     });
 }
@@ -115,9 +120,29 @@ watch(() => props.modelValue, (val) => {
     }
 });
 
+// 主题切换（手动暗/浅或"跟随系统"变化）→ 热替换主题扩展
+watch(isDark, () => {
+    view?.dispatch({ effects: themeCompartment.reconfigure(currentTheme()) });
+});
+
 onBeforeUnmount(() => {
     view?.destroy();
     view = null;
+});
+
+// 选区读取：CodeMirror 自己管理选区，父组件的 window.getSelection() 取不到，
+// 右键"加入会话"需要靠它拿到文本与起止行号
+defineExpose({
+    getSelectionInfo(): { text: string; startLine: number; endLine: number } | null {
+        if (!view) return null;
+        const range = view.state.selection.main;
+        if (range.empty) return null;
+        return {
+            text: view.state.sliceDoc(range.from, range.to),
+            startLine: view.state.doc.lineAt(range.from).number,
+            endLine: view.state.doc.lineAt(range.to).number,
+        };
+    },
 });
 </script>
 

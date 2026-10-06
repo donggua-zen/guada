@@ -132,26 +132,18 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, Loading, Document } from '@element-plus/icons-vue'
+import { Search, Loading } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
+import type { KBSearchResult } from '@/services/modules/knowledge-base.api'
 import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { t } = useI18n()
 
-
-interface SearchResult {
-    content: string
-    metadata: Record<string, any>
-    similarity?: number  // 旧版字段，兼容纯语义搜索
-    semanticScore?: number  // 语义分数
-    keywordScore?: number   // 关键词分数
-    finalScore?: number     // 综合分数
-    fileName?: string
-}
 
 interface Props {
     modelValue: boolean
@@ -163,7 +155,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
     'update:modelValue': [value: boolean]
-    resultClick: [result: SearchResult]
+    resultClick: [result: KBSearchResult]
 }>()
 
 const { toast } = usePopup()
@@ -184,7 +176,7 @@ const searchForm = ref({
 // 搜索状态
 const isSearching = ref(false)
 const hasSearched = ref(false)
-const searchResults = ref<SearchResult[]>([])
+const searchResults = ref<KBSearchResult[]>([])
 
 /**
  * 是否可以执行搜索
@@ -230,9 +222,9 @@ async function handleSearch() {
         } else {
             toast.success(t('knowledge.search.foundResults', { count: searchResults.value.length }))
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('搜索失败:', error)
-        toast.error(error.response?.data?.detail || t('knowledge.search.searchFailed'))
+        toast.error(getErrorMessage(error) || t('knowledge.search.searchFailed'))
     } finally {
         isSearching.value = false
     }
@@ -294,7 +286,7 @@ function highlightText(text: string, query: string): string {
 /**
  * 判断是否有混合搜索分数
  */
-function hasHybridScores(result: SearchResult): boolean {
+function hasHybridScores(result: KBSearchResult): boolean {
     return result.semanticScore !== undefined && 
            result.keywordScore !== undefined && 
            result.finalScore !== undefined
@@ -303,7 +295,7 @@ function hasHybridScores(result: SearchResult): boolean {
 /**
  * 处理结果点击
  */
-function handleResultClick(result: SearchResult) {
+function handleResultClick(result: KBSearchResult) {
     emit('resultClick', result)
 }
 

@@ -33,6 +33,10 @@ function createMockSessionContext(): ISessionContext {
     workspacePath: "/tmp",
     getSandboxMode: () => "workspace-write",
     setSandboxMode: jest.fn(),
+    getPlanEnabled: jest.fn(() => false),
+    setPlanEnabled: jest.fn(),
+    consumePlanModeExitReminder: jest.fn(() => false),
+    appendSessionModeChanged: jest.fn(),
     setToolScope: jest.fn(),
     getToolScope: () => null,
     getModelConfig: () => ({ id: "m1", modelName: "test", name: "Test", provider: { id: "p1", provider: "test", protocol: "openai" }, modelType: "chat", config: { temperature: 0.7, topP: 1, frequencyPenalty: 0 } }),
@@ -83,6 +87,93 @@ describe("ToolExecutor", () => {
 
     orchestrator = module.get<ToolExecutor>(ToolExecutor);
     pluginManager = module.get<PluginManager>(PluginManager);
+  });
+
+  // ── 计划模式门（协作状态的强制力） ──
+
+  describe("plan mode gate", () => {
+    /** 建一个含四种能力形态的工具集，并让会话返回决议后的插件列表 */
+    async function setupPlanTools() {
+      const tools: ToolHandlerDef[] = [
+        { name: "ro_tool", description: "read only", parameters: { type: "object", properties: {} }, handler: async () => "ro", readOnly: true },
+        { name: "write_tool", description: "writes", parameters: { type: "object", properties: {} }, handler: async () => "wrote" },
+        { name: "escape_tool", description: "escape hatch", parameters: { type: "object", properties: {} }, handler: async () => "escaped", allowedInPlanMode: true },
+        { name: "approval_tool", description: "needs human", parameters: { type: "object", properties: {} }, handler: async () => "asked", allowedInPlanMode: true, requiresUserInteraction: true },
+      ];
+      const plugin = createMockPluginBase("plan_gate_test", "Plan Gate Test", tools);
+      await pluginManager.registerPlugin(plugin);
+
+      const session = createMockSessionContext();
+      const resolved = await pluginManager.resolvePlugins(session);
+      (session.getResolvedPlugins as jest.Mock).mockReturnValue(resolved);
+      return session;
+    }
+
+    it("非计划态：写类工具照常执行（门零开销跳过）", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(false);
+
+      const result = await orchestrator.executeTool("write_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(false);
+      expect(result.content).toBe("wrote");
+    });
+
+    it("计划态：readOnly 工具放行", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+
+      const result = await orchestrator.executeTool("ro_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(false);
+      expect(result.content).toBe("ro");
+    });
+
+    it("计划态：未标注工具硬拒（isError 且不改执行）", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+
+      const result = await orchestrator.executeTool("write_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain("write_tool");
+      expect(result.content).toContain("Plan mode is active");
+    });
+
+    it("计划态：allowedInPlanMode 逃生舱放行", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+
+      const result = await orchestrator.executeTool("escape_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(false);
+      expect(result.content).toBe("escaped");
+    });
+
+    it("计划态 + 子会话：需要人类应答的逃生舱被拒（否则审批卡挂到子会话、卡死父回合）", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+      (session as any).sessionType = "sub_agent";
+
+      const result = await orchestrator.executeTool("approval_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain("sub-agent");
+    });
+
+    it("计划态 + 子会话：不需要人类应答的逃生舱仍放行（保住子代理的只读调研）", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+      (session as any).sessionType = "sub_agent";
+
+      const result = await orchestrator.executeTool("escape_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(false);
+      expect(result.content).toBe("escaped");
+    });
+
+    it("计划态 + 子会话：readOnly 工具照常放行", async () => {
+      const session = await setupPlanTools();
+      (session.getPlanEnabled as jest.Mock).mockReturnValue(true);
+      (session as any).sessionType = "sub_agent";
+
+      const result = await orchestrator.executeTool("ro_tool", {}, "r1", session, undefined);
+      expect(result.isError).toBe(false);
+    });
   });
 
   // ── resolvePlugins + executeTool ──

@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Bug16Regular, Search16Regular } from '@vicons/fluent'
@@ -83,6 +84,7 @@ import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useAuthStore } from '@/stores/auth'
+import type { UpdateStatusPayload } from '@/types/electron'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
@@ -94,9 +96,8 @@ const { t } = useI18n()
 
 const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.png'))
 
-const isMaximized = ref(false)
 const updateAvailable = ref(false)
-const updateInfo = ref<any>(null)
+const updateInfo = ref<UpdateStatusPayload['info'] | null>(null)
 const showDebugMenu = ref(false)
 const showUpdateDialog = ref(false)
 const showSearchDialog = ref(false)
@@ -104,7 +105,7 @@ const skipVersion = ref<string | null>(localStorage.getItem('update-skip-version
 const migrationStatus = ref<string>('')
 const isMigrating = ref(false)
 
-const handleUpdateStatus = (status: any) => {
+const handleUpdateStatus = (status: UpdateStatusPayload) => {
   if (status.status === 'available') {
     updateInfo.value = status.info
     updateAvailable.value = true
@@ -183,8 +184,8 @@ const startMigration = async () => {
     } else {
       alert(t('ui.titlebar.migrationFailed', { reason: result.message }))
     }
-  } catch (error: any) {
-    alert(t('ui.titlebar.migrationError', { reason: error.message || error }))
+  } catch (error) {
+    alert(t('ui.titlebar.migrationError', { reason: getErrorMessage(error) }))
   } finally {
     isMigrating.value = false
   }

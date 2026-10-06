@@ -9,6 +9,21 @@ import { AgentFileStore } from "../agents/agent-file.store";
 import langZh from "./sub-agent.lang.zh.json";
 import langEn from "./sub-agent.lang.en.json";
 
+/**
+ * 子代理跳转信息：前端据此在工具行 / 结果通知上提供"打开子代理面板"入口。
+ * meta 是 UI 专用通道（不进 LLM 上下文），故可对模型隐藏 Session ID 的同时仍让用户点进会话
+ * ——one_shot 完成分支刻意不把 ID 写进 content，避免 AI 去操作已冻结的会话。
+ */
+function subAgentLinkMeta(subSessionId: string, name?: string) {
+  return {
+    link: {
+      type: "sub_agent",
+      subSessionId,
+      ...(name ? { name } : {}),
+    },
+  };
+}
+
 @Injectable()
 export class SubAgentPlugin extends PluginBase {
   private readonly logger = new Logger(SubAgentPlugin.name);
@@ -133,18 +148,26 @@ The sub-agent has its own independent conversation context and tool capabilities
             task: args.task,
             agentId: args.agentId,
             lifecycle,
+            // 透传本次调用 id：manager 在子会话创建瞬间据此发布流事件，
+            // 让前端在工具结果落库前就能把这次调用关联到子会话
+            toolCallId: ctx?.toolCallId,
           },
           args.mode || "foreground",
           abortSignal,
         );
+        const linkMeta = subAgentLinkMeta(result.subSessionId, args.name);
         if (result.status === "running") {
           const reason = result.error ? ` (${result.error})` : "";
-          return `[Sub-agent running. Session ID: ${result.subSessionId}${reason}. Use subagent_manager wait to get the result.]`;
+          return {
+            content: `[Sub-agent running. Session ID: ${result.subSessionId}${reason}. Use subagent_manager wait to get the result.]`,
+            meta: linkMeta,
+          };
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
         // one_shot 模式下会话已在结果交付后自动冻结（仅供回放），不再返回 Session ID，
-        // 避免 AI 对已冻结的会话调用 close / send_message
+        // 避免 AI 对已冻结的会话调用 close / send_message。
+        // 隐藏只针对模型：meta.link 是 UI 通道，用户仍可点开该会话回放
         const tag =
           result.status === "error"
             ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}${lifecycle === "one_shot" ? ". One-shot sub-agent auto-closed." : `. Session ID: ${result.subSessionId}`}]`
@@ -152,7 +175,7 @@ The sub-agent has its own independent conversation context and tool capabilities
               ? "[Sub-agent completed and auto-closed (one_shot).]"
               : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
         parts.push(tag);
-        return parts.join("\n");
+        return { content: parts.join("\n"), meta: linkMeta };
       },
       display: {
         actionType: "sub_agent_create",
@@ -161,6 +184,8 @@ The sub-agent has its own independent conversation context and tool capabilities
         argsKey: "name",
         icon: "generic",
       },
+      // 计划阶段派只读子代理做调研；子代理继承 planEnabled，无法自我提权
+      allowedInPlanMode: true,
     });
 
     // ── manager：管理子代理（wait / list / close / send_message）──
@@ -204,6 +229,14 @@ The sub-agent has its own independent conversation context and tool capabilities
               lines.push(tag);
               parts.push(lines.join("\n"));
             }
+            // 仅单目标时给跳转：多目标下一行只能开一个面板，不猜
+            if (completed.length === 1) {
+              const one = completed[0];
+              return {
+                content: parts.join("\n\n"),
+                meta: subAgentLinkMeta(one.subSessionId, one.name),
+              };
+            }
             return parts.join("\n\n");
           }
 
@@ -226,7 +259,10 @@ The sub-agent has its own independent conversation context and tool capabilities
                 ctx?.session.sessionId,
                 ctx?.session.workspacePath,
               );
-              return "Sub-agent closed and deleted successfully.";
+              return {
+                content: "Sub-agent closed and deleted successfully.",
+                meta: subAgentLinkMeta(sessionId),
+              };
             } catch (e: any) {
               throw new Error(e.message || "Failed to close sub-agent.");
             }
@@ -246,7 +282,10 @@ The sub-agent has its own independent conversation context and tool capabilities
                 abortSignal,
               );
               if (result.status === "running") {
-                return `[Message sent. Sub-agent is running. Session ID: ${result.subSessionId}]`;
+                return {
+                  content: `[Message sent. Sub-agent is running. Session ID: ${result.subSessionId}]`,
+                  meta: subAgentLinkMeta(result.subSessionId),
+                };
               }
               const parts: string[] = [];
               if (result.content) parts.push(result.content);
@@ -255,7 +294,10 @@ The sub-agent has its own independent conversation context and tool capabilities
                   ? `[Sub-agent ended with error. Session ID: ${result.subSessionId}${result.error ? `. Reason: ${result.error}` : ""}]`
                   : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
               parts.push(tag);
-              return parts.join("\n");
+              return {
+                content: parts.join("\n"),
+                meta: subAgentLinkMeta(result.subSessionId),
+              };
             } catch (e: any) {
               throw new Error(e.message || "Failed to send message.");
             }
@@ -272,6 +314,7 @@ The sub-agent has its own independent conversation context and tool capabilities
         argsKey: "action",
         icon: "generic",
       },
+      allowedInPlanMode: true,
     });
 
     // ── Prompt: 子代理使用指南 + 可用智能体列表 ──

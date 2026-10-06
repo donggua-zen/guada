@@ -8,6 +8,13 @@ import { createPaginatedResponse } from "../../common/types/pagination";
 import type { ProviderConfig } from "../llm-core/types/provider.types";
 import { parseProviderCompatPatch, parseThinkingPatch } from "./model-thinking.util";
 import { suggestThinkingFormat } from "./thinking-format-suggestion";
+import {
+  PATCH_EXPR_MAX_LENGTH,
+} from "../llm-core/thinking/cel-evaluator";
+import {
+  PATCH_EXPR_VARIABLES,
+  THINKING_PATCH_TEMPLATES,
+} from "../llm-core/thinking/thinking-patch-templates";
 
 /**
  * 供应商/模型管理面（providers/*.yaml 的 REST 视图）
@@ -114,6 +121,13 @@ export class ModelService {
           ...(own?.thinkingEffortsPatch !== undefined
             ? { thinkingEffortsPatchOverride: own.thinkingEffortsPatch }
             : {}),
+          // 拼法表达式（CEL）：生效值 + 条目级覆盖标记（切回继承时发 null 清除）
+          ...(view.thinkingPatchExpr
+            ? { thinkingPatchExpr: view.thinkingPatchExpr }
+            : {}),
+          ...(own?.thinkingPatchExpr !== undefined
+            ? { thinkingPatchExprOverride: own.thinkingPatchExpr }
+            : {}),
           ...(own?.supportsThinking !== undefined
             ? { supportsThinkingOverride: own.supportsThinking }
             : {}),
@@ -142,6 +156,19 @@ export class ModelService {
    */
   getThinkingFormatSuggestion(apiUrl?: string) {
     return { suggestion: suggestThinkingFormat(apiUrl) };
+  }
+
+  /**
+   * 拼法模板（前端「请求拼法」模板下拉的数据源）+ 表达式变量说明。
+   * 模板与内置拼法的等价性由 thinking-patch-templates.spec.ts 锁定，
+   * 前端选模板即把 expression 回填编辑器（同库求值，预览即运行时）。
+   */
+  getThinkingPatchTemplates() {
+    return {
+      templates: THINKING_PATCH_TEMPLATES,
+      variables: PATCH_EXPR_VARIABLES,
+      maxLength: PATCH_EXPR_MAX_LENGTH,
+    };
   }
 
   /** 测试供应商连接（不落盘） */

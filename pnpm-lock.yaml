@@ -18,6 +18,9 @@ importers:
       '@electron/rebuild':
         specifier: ^4.0.4
         version: 4.2.0
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
       concurrently:
         specifier: ^9.2.0
         version: 9.2.4
@@ -1278,7 +1281,7 @@ snapshots:
 
   '@types/minimatch@6.0.0':
     dependencies:
-      minimatch: 5.1.9
+      minimatch: 9.0.9
     optional: true
 
   '@types/ms@2.1.0': {}

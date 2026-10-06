@@ -24,7 +24,7 @@ export function useTrayStats() {
     let unread = 0
 
     // 遍历 sessionsMap（store 暴露的 Map<string, Session>）
-    const map = sessionStore.sessionsMap as Map<string, any> | undefined
+    const map = sessionStore.sessionsMap
     if (map) {
       for (const [sid] of map) {
         if (!sid) continue

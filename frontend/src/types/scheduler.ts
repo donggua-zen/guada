@@ -32,7 +32,7 @@ export interface ScheduledTask {
   mergedSessionId?: string | null
   agentId?: string | null
   modelId?: string | null
-  settings?: Record<string, any> | null
+  settings?: Record<string, unknown> | null
   /** 工作目录；null → 后端自动生成临时目录 */
   workspacePath?: string | null
   /** 附加工作目录绑定（远程连接），key=附件类型ID，value=连接ID列表 */
@@ -87,7 +87,7 @@ export interface CreateTaskRequest {
   outputMode?: 'independent' | 'merged'
   agentId?: string
   modelId?: string
-  settings?: Record<string, any>
+  settings?: Record<string, unknown>
   workspacePath?: string
   attachments?: Record<string, string[]>
   enabled?: boolean
@@ -111,7 +111,7 @@ export interface UpdateTaskRequest {
   outputMode?: 'independent' | 'merged'
   agentId?: string | null
   modelId?: string | null
-  settings?: Record<string, any> | null
+  settings?: Record<string, unknown> | null
   workspacePath?: string | null
   attachments?: Record<string, string[]> | null
   enabled?: boolean

@@ -75,8 +75,8 @@
                 @mouseleave="hoveredSessionId = null">
                 <!-- 状态指示器 -->
                 <div class="status-indicator w-3 h-3 shrink-0 flex items-center justify-center">
-                  <div v-if="getSessionWorking(session.id)"
-                    class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <!-- 工作中：TurnItem 同款点阵动画（currentColor 着色，沿用蓝色语义） -->
+                  <ThinkingStatus v-if="getSessionWorking(session.id)" :show-text="false" class="text-blue-500" />
                   <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"
                     class="w-1 h-1 rounded-full bg-red-500" />
                   <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
@@ -254,6 +254,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
@@ -265,13 +266,14 @@ import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
 import SessionTitle from './SessionTitle.vue'
+import ThinkingStatus from './chat/ThinkingStatus.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import GdTooltip from './ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
-import type { SessionGroup } from '@/types/session'
+import type { Session, SessionGroup } from '@/types/session'
 import { ElMessageBox } from 'element-plus'
 
 import {
@@ -287,7 +289,6 @@ import {
   Add12Regular,
   ClockAlarm20Regular,
   Apps20Regular,
-  Cloud20Regular,
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
@@ -324,14 +325,14 @@ const { toast, prompt, confirm } = usePopup()
 
 // 删除会话确认对话框状态
 const deleteDialogVisible = ref(false)
-const deleteSessionData = ref<any>(null)
+const deleteSessionData = ref<Session | null>(null)
 const deleteWorkspaceChecked = ref(false)
 
 // 移动会话到分组弹窗状态
 const moveGroupDialogVisible = ref(false)
 const moveGroupOptions = ref<{ label: string; value: string }[]>([])
 const moveSelectedGroupId = ref('')
-const moveTargetSession = ref<any>(null)
+const moveTargetSession = ref<Session | null>(null)
 
 // 是否正在初始化加载
 const isInitializing = ref(false)
@@ -430,11 +431,6 @@ const navItems = computed(() => [
     key: 'scheduler',
     label: t('ui.sidebar.navScheduler'),
     icon: ClockAlarm20Regular
-  },
-  {
-    key: 'models',
-    label: t('ui.sidebar.navModels'),
-    icon: Cloud20Regular
   }
 ])
 
@@ -453,7 +449,6 @@ const currentActiveTab = computed(() => {
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   if (routeName === 'Plugins') return 'plugins'
   if (routeName === 'Scheduler') return 'scheduler'
-  if (routeName === 'Models') return 'models'
   return ''
 })
 
@@ -495,15 +490,9 @@ const displayGroups = computed(() => {
 })
 
 // 获取分组内的会话（从 sessionStore 统一数据源获取）
-const getGroupSessions = (groupId: string): any[] => {
+const getGroupSessions = (groupId: string): Session[] => {
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
   return sessionStore.getSessionsByGroup(groupIdParam)
-}
-
-// 获取分组会话数量（从 sessionStore 统一数据源获取）
-const getGroupSessionCount = (groupId: string): number => {
-  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
-  return sessionStore.getGroupTotal(groupIdParam)
 }
 
 // 分组是否展开
@@ -603,7 +592,7 @@ const getSessionWorking = (sessionId: string): boolean => {
 }
 
 // 选择会话
-const selectSession = (session: any) => {
+const selectSession = (session: Session) => {
   // 进入会话时标记为已读
   sessionStore.setSidebarFlag(session.id, 'unread', false)
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
@@ -625,13 +614,11 @@ const handleNavClick = (tab: string) => {
     router.replace({ name: 'Plugins' })
   } else if (tab === 'scheduler') {
     router.replace({ name: 'Scheduler' })
-  } else if (tab === 'models') {
-    router.replace({ name: 'Models' })
   }
 }
 
 // 处理会话下拉菜单选择
-const handleDropdownSelect = (command: string, session: any) => {
+const handleDropdownSelect = (command: string, session: Session) => {
   if (command === 'rename') {
     handleRenameSession(session)
   } else if (command === 'move') {
@@ -646,7 +633,7 @@ const handleDropdownSelect = (command: string, session: any) => {
 /**
  * 归档会话
  */
-const handleArchiveSession = async (session: any) => {
+const handleArchiveSession = async (session: Session) => {
   const confirmed = await confirm(t('ui.sidebar.archiveTitle'), t('ui.sidebar.archiveConfirm', { title: session.title }), {
     type: 'info',
     confirmText: t('ui.sidebar.archive'),
@@ -666,16 +653,16 @@ const handleArchiveSession = async (session: any) => {
       }
       toast.success(t('ui.sidebar.archived'))
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('归档失败:', error)
-    toast.error(error?.response?.data?.message || t('ui.sidebar.archiveFailed'))
+    toast.error(getErrorMessage(error) || t('ui.sidebar.archiveFailed'))
   }
 }
 
 /**
  * 移动会话到分组
  */
-const handleMoveSession = (session: any) => {
+const handleMoveSession = (session: Session) => {
   // 构建分组选项，顺序与侧边栏一致
   const groupOptions = sessionGroupStore.groups.map(g => ({
     label: g.name,
@@ -718,7 +705,7 @@ const confirmMoveSession = async () => {
 /**
  * 重命名分组
  */
-const handleRenameGroup = async (group: any) => {
+const handleRenameGroup = async (group: SessionGroup) => {
   try {
     const result = await prompt(t('ui.sidebar.renameGroupTitle'), {
       placeholder: t('ui.sidebar.inputGroupName'),
@@ -740,7 +727,7 @@ const handleRenameGroup = async (group: any) => {
 /**
  * 删除分组
  */
-const handleDeleteGroup = async (group: any) => {
+const handleDeleteGroup = async (group: SessionGroup) => {
   try {
     const confirmed = await confirm(t('ui.sidebar.deleteGroupTitle'), t('ui.sidebar.deleteGroupConfirm', { name: group.name }), {
       type: 'warning',
@@ -771,7 +758,7 @@ const handleDeleteGroup = async (group: any) => {
  * 重命名会话
  * 显示输入新名称的提示框，更新会话标题
  */
-const handleRenameSession = async (session: any) => {
+const handleRenameSession = async (session: Session) => {
   try {
     const result = await prompt(t('ui.sidebar.renameSessionTitle'), {
       placeholder: t('ui.sidebar.inputSessionName'),
@@ -804,7 +791,7 @@ const handleRenameSession = async (session: any) => {
  * 删除会话
  * 显示确认删除的提示框，删除会话后从列表中移除
  */
-const handleDeleteSession = async (session: any) => {
+const handleDeleteSession = async (session: Session) => {
   // 显示自定义删除确认对话框
   deleteSessionData.value = session
   deleteWorkspaceChecked.value = false
@@ -855,8 +842,10 @@ const confirmDeleteSession = async () => {
   } catch (error) {
     console.error('删除对话失败:', error)
     // 运行中禁止删除（后端 409 SESSION_STREAMING）：给出可操作的专用提示，而非笼统失败
-    const status = (error as any)?.response?.status
-    const code = (error as any)?.response?.data?.code
+    // 探测原生 AxiosError 形态（拦截器产物 ApiError/AuthError 无 response 字段），此处用类型化形状断言，运行时行为不变
+    const axiosLike = error as { response?: { status?: number; data?: { code?: string } } } | undefined
+    const status = axiosLike?.response?.status
+    const code = axiosLike?.response?.data?.code
     if (status === 409 || code === 'SESSION_STREAMING') {
       toast.error(t('ui.sidebar.deleteSessionStreaming'))
     } else {

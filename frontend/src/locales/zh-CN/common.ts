@@ -130,7 +130,6 @@ export default {
     plugins: '插件',
     knowledgeBase: '知识库',
     scheduler: '定时任务',
-    models: '模型管理',
     login: '登录',
     password: '密码设置',
   },

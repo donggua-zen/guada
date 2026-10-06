@@ -73,7 +73,7 @@ class ContextMenuManager {
     // 第1步：捕获阶段监听器 - 确保我们的监听器最先执行
     document.addEventListener(
       "contextmenu",
-      (event: MouseEvent) => {
+      (_event: MouseEvent) => {
         console.log("[ContextMenu] 捕获阶段");
       },
       true,

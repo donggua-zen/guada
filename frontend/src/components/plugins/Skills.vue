@@ -155,8 +155,8 @@
                     </p>
 
                     <div class="flex items-center justify-between gap-2 mt-3">
-                        <div class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
-                            <el-tag v-if="skill.labels && skill.labels.length > 0" v-for="label in skill.labels"
+                        <div v-if="skill.labels && skill.labels.length > 0" class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+                            <el-tag v-for="label in skill.labels"
                                 :key="label" size="small" effect="light">
                                 {{ label }}
                             </el-tag>
@@ -265,84 +265,116 @@
             </template>
         </GdDialog>
 
-        <!-- 市场技能安装对话框 -->
-        <GdDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="420px" align-center destroy-on-close>
-            <div v-if="selectedMarketSkill" class="py-2">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
-                    {{ selectedMarketSkill.name }}
-                </h3>
-                <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3">
-                    {{ selectedMarketSkill.description || t('plugins.skills.noDescription') }}
-                </p>
-                <div v-if="selectedMarketSkill.labels && selectedMarketSkill.labels.length > 0" class="flex flex-wrap gap-1.5 mb-4">
-                    <el-tag v-for="label in selectedMarketSkill.labels" :key="label" size="small" effect="light">
-                        {{ label }}
-                    </el-tag>
+        <!-- 市场技能安装对话框：对象先行（图标+名称+版本状态），次要动作降为文字链接，
+             决策信息（安装方式/位置/覆盖影响）在点安装前给全，失败就地反馈 -->
+        <GdDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="500px"
+            align-center destroy-on-close>
+            <div v-if="selectedMarketSkill" class="market-install">
+                <!-- 主视觉 -->
+                <div class="market-install__head">
+                    <CardAvatar :src="selectedMarketSkill.icon" :name="selectedMarketSkill.name" size="lg" />
+                    <div class="market-install__title">
+                        <div class="market-install__name">{{ selectedMarketSkill.name }}</div>
+                        <div v-if="selectedMarketSkill.version || selectedMarketSkill.localVersion"
+                            class="market-install__meta">
+                            <span v-if="selectedMarketSkill.version">v{{ selectedMarketSkill.version }}</span>
+                            <span v-if="selectedMarketSkill.version && selectedMarketSkill.localVersion"> · </span>
+                            <span v-if="selectedMarketSkill.localVersion">{{
+                                t('plugins.skills.marketLocalVersion', { version: selectedMarketSkill.localVersion })
+                            }}</span>
+                        </div>
+                    </div>
+                    <el-tag v-if="selectedMarketSkill.localStatus === 'updatable'" type="warning" size="small"
+                        effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
+                    <el-tag v-else-if="selectedMarketSkill.localStatus === 'installed'" type="success" size="small"
+                        effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
                 </div>
-                <div class="flex flex-col gap-3 market-install-actions">
-                    <!-- 直接安装（ZIP） -->
-                    <el-button v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary" size="large"
-                        :loading="installingFromMarket.has(selectedMarketSkill.id)"
-                        @click="handleInstallFromMarketUrl(selectedMarketSkill)">
-                        <template #icon>
-                            <ArrowDownload16Regular />
-                        </template>
-                        {{ getMarketButtonLabel(selectedMarketSkill) }}
-                    </el-button>
-                    <!-- 访问仓库（Git） -->
-                    <el-button v-if="getInstallUrl(selectedMarketSkill, 'git')" size="large"
-                        @click="handleViewSourceCode(selectedMarketSkill)">
-                        {{ t('plugins.skills.marketViewSource') }}
-                    </el-button>
-                    <!-- 查看详情 -->
-                    <el-button v-if="selectedMarketSkill.detailUrl" size="large"
-                        @click="handleOpenDetailUrl(selectedMarketSkill)">
-                        {{ t('plugins.skills.marketViewDetail') }}
-                    </el-button>
+
+                <div v-if="selectedMarketSkill.labels?.length" class="market-install__labels">
+                    <el-tag v-for="label in selectedMarketSkill.labels" :key="label" size="small">{{ label }}</el-tag>
+                </div>
+
+                <MarkdownContent v-if="selectedMarketSkill.description" class="market-install__desc"
+                    :content="selectedMarketSkill.description" />
+                <p v-else class="market-install__desc market-install__desc--empty">
+                    {{ t('plugins.skills.noDescription') }}
+                </p>
+
+                <!-- 决策信息：从哪来、装到哪 -->
+                <div class="market-install__facts">
+                    <div v-if="getInstallUrl(selectedMarketSkill, 'zip')" class="market-install__fact">
+                        <span class="market-install__fact-k">{{ t('plugins.skills.marketInstallMethod') }}</span>
+                        <span class="market-install__fact-v">{{ t('plugins.skills.marketInstallMethodZip') }}</span>
+                    </div>
+                    <div class="market-install__fact">
+                        <span class="market-install__fact-k">{{ t('plugins.skills.marketInstallScope') }}</span>
+                        <span class="market-install__fact-v">{{ t('plugins.skills.marketInstallScopeGlobal') }}</span>
+                    </div>
+                </div>
+
+                <!-- 覆盖/升级影响 -->
+                <el-alert v-if="selectedMarketSkill.localStatus === 'updatable'" class="market-install__notice"
+                    type="warning" :closable="false"
+                    :title="t('plugins.skills.marketUpgradeNotice', { from: selectedMarketSkill.localVersion || '?', to: selectedMarketSkill.version || '?' })" />
+                <el-alert v-else-if="selectedMarketSkill.localStatus === 'installed'" class="market-install__notice"
+                    type="info" :closable="false" :title="t('plugins.skills.marketReinstallNotice')" />
+
+                <!-- 失败就地反馈（不依赖一闪而过的 toast） -->
+                <el-alert v-if="marketInstallError" class="market-install__notice" type="error" :closable="false"
+                    :title="t('plugins.skills.installFailed')" :description="marketInstallError" />
+
+                <!-- 操作区：唯一实心主按钮 + 次级文字链接 -->
+                <div class="market-install__actions">
+                    <div class="market-install__links">
+                        <el-button v-if="getInstallUrl(selectedMarketSkill, 'git')" link type="primary"
+                            @click="handleViewSourceCode(selectedMarketSkill)">
+                            {{ t('plugins.skills.marketViewSource') }}
+                            <el-icon class="market-install__ext">
+                                <TopRight />
+                            </el-icon>
+                        </el-button>
+                        <el-button v-if="selectedMarketSkill.detailUrl" link type="primary"
+                            @click="handleOpenDetailUrl(selectedMarketSkill)">
+                            {{ t('plugins.skills.marketViewDetail') }}
+                            <el-icon class="market-install__ext">
+                                <TopRight />
+                            </el-icon>
+                        </el-button>
+                    </div>
+                    <div class="market-install__cta">
+                        <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
+                        <el-button v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary"
+                            :loading="installingFromMarket.has(selectedMarketSkill.id)"
+                            @click="handleInstallFromMarketUrl(selectedMarketSkill)">
+                            <template #icon>
+                                <ArrowDownload16Regular />
+                            </template>
+                            {{ getMarketButtonLabel(selectedMarketSkill) }}
+                        </el-button>
+                    </div>
                 </div>
             </div>
-            <template #footer>
-                <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
-            </template>
         </GdDialog>
     </div>
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
-import { RefreshOutlined, InboxOutlined, DescriptionOutlined, UploadOutlined, DeleteOutlined } from '@vicons/material'
-import { RefreshRight, Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
+import type { UploadFile } from 'element-plus'
+import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material'
+import { Loading, UploadFilled, Document, Close, TopRight } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
-import { SkillMarketService, type MarketSkill, type MarketSkillWithStatus } from '@/services/SkillMarketService'
+import { SkillMarketService, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
-
-interface SkillManifest {
-    name: string
-    description?: string
-    version?: string
-    author?: string
-    tags?: string[]
-}
-
-type SkillSource = 'global' | 'system' | 'agents'
-
-interface Skill {
-    id: string
-    basePath: string
-    manifest: SkillManifest
-    contentHash: string
-    source?: SkillSource
-    /** 技能提供方（插件注册时写入 `plugin:<id>`），仅插件技能有此字段 */
-    provider?: string
-    enabled?: boolean
-}
+import type { Skill } from '@/types/skills'
 
 const loading = ref(false)
 const scanning = ref(false)
@@ -487,6 +519,8 @@ const marketError = ref<string | null>(null)
 const showMarketInstallDialog = ref(false)
 const selectedMarketSkill = ref<MarketSkillWithStatus | null>(null)
 const installingFromMarket = ref<Set<string>>(new Set())
+/** 安装失败详情（就地展示在弹窗内，避免 toast 一闪而过无法排查） */
+const marketInstallError = ref<string | null>(null)
 
 /**
  * 获取指定类型的安装 URL
@@ -500,6 +534,7 @@ function getInstallUrl(skill: MarketSkillWithStatus, type: 'zip' | 'git'): strin
  */
 function handleShowMarketInstallDialog(marketSkill: MarketSkillWithStatus) {
     selectedMarketSkill.value = marketSkill
+    marketInstallError.value = null
     showMarketInstallDialog.value = true
 }
 
@@ -514,6 +549,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     }
 
     installingFromMarket.value.add(marketSkill.id)
+    marketInstallError.value = null
 
     try {
         const response = await apiService.installSkillFromUrl(zipUrl)
@@ -524,11 +560,11 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
             // 刷新本地技能列表
             await loadSkills()
         } else {
-            ElMessage.error(response.message || '安装失败')
+            marketInstallError.value = response.message || t('plugins.skills.installFailed')
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error('从市场安装技能失败:', err)
-        ElMessage.error(err.message || t('plugins.skills.installFailed'))
+        marketInstallError.value = getErrorMessage(err) || t('plugins.skills.installFailed')
     } finally {
         installingFromMarket.value.delete(marketSkill.id)
     }
@@ -591,9 +627,9 @@ async function loadSkills() {
         skills.value = Array.isArray(response?.items) ? response.items : []
         // 加载后刷新市场技能状态
         refreshMarketSkillStatus()
-    } catch (err: any) {
+    } catch (err) {
         console.error('加载 Skills 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.loadFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.loadFailed')
         ElMessage.error(errorMsg)
         skills.value = []
     } finally {
@@ -619,11 +655,11 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
         } else {
             await apiService.disableSkill(skillId)
         }
-    } catch (err: any) {
+    } catch (err) {
         // 失败回滚
         skill.enabled = previousState
         console.error('切换技能状态失败:', err)
-        ElMessage.error(err.message || t('plugins.skills.toggleFailed'))
+        ElMessage.error(getErrorMessage(err) || t('plugins.skills.toggleFailed'))
     } finally {
         updatingSkills.value.delete(skillId)
     }
@@ -640,9 +676,9 @@ async function handleScan() {
         ElMessage.success(t('plugins.skills.scanSuccess'))
         // 扫描后重新加载列表
         await loadSkills()
-    } catch (err: any) {
+    } catch (err) {
         console.error('扫描 Skills 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.scanFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.scanFailed')
         ElMessage.error(errorMsg)
     } finally {
         scanning.value = false
@@ -653,17 +689,15 @@ async function handleScan() {
  * 重载指定 Skill
  */
 async function handleReloadSkill(skillId: string) {
-    const previousState = reloadingSkills.value.has(skillId)
-
     try {
         reloadingSkills.value.add(skillId)
         await apiService.reloadSkill(skillId)
         ElMessage.success(t('plugins.skills.reloadSuccess'))
         // 重载后重新加载列表
         await loadSkills()
-    } catch (err: any) {
+    } catch (err) {
         console.error('重载 Skill 失败:', err)
-        const errorMsg = err.message || t('plugins.skills.reloadFailed')
+        const errorMsg = getErrorMessage(err) || t('plugins.skills.reloadFailed')
         ElMessage.error(errorMsg)
     } finally {
         reloadingSkills.value.delete(skillId)
@@ -687,9 +721,9 @@ async function handleViewDocumentation(skillId: string) {
     try {
         const response = await apiService.fetchSkillDocumentation(skillId)
         documentation.value = response.content || t('plugins.skills.docNoContent')
-    } catch (err: any) {
+    } catch (err) {
         console.error('获取 Skill 文档失败:', err)
-        const errorMsg: string = err.message || t('plugins.skills.docLoadFailed')
+        const errorMsg: string = getErrorMessage(err) || t('plugins.skills.docLoadFailed')
         docError.value = errorMsg
         ElMessage.error(errorMsg)
     } finally {
@@ -709,8 +743,8 @@ function handleShowInstallDialog() {
 /**
  * 处理文件选择
  */
-function handleFileChange(file: any) {
-    selectedFile.value = file.raw
+function handleFileChange(file: UploadFile) {
+    selectedFile.value = file.raw ?? null
 }
 
 /**
@@ -759,9 +793,9 @@ async function handleInstallSkill() {
         } else {
             ElMessage.error(response.message || t('plugins.skills.installFailed'))
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error('安装 Skill 失败:', err)
-        ElMessage.error(err.message || t('plugins.skills.installFailed'))
+        ElMessage.error(getErrorMessage(err) || t('plugins.skills.installFailed'))
     } finally {
         installing.value = false
     }
@@ -796,10 +830,10 @@ async function handleUninstallSkill(skillId: string) {
         } else {
             ElMessage.error(response.message || t('plugins.skills.uninstallFailed'))
         }
-    } catch (err: any) {
+    } catch (err) {
         if (err !== 'cancel' && err !== 'close') {
             console.error('卸载 Skill 失败:', err)
-            ElMessage.error(err.message || t('plugins.skills.uninstallFailed'))
+            ElMessage.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
         }
     } finally {
         uninstallingSkills.value.delete(skillId)
@@ -842,9 +876,9 @@ async function loadMarketSkills(forceRefresh: boolean = false) {
         }))
         // 与本地技能做名字匹配，更新状态
         refreshMarketSkillStatus()
-    } catch (err: any) {
+    } catch (err) {
         console.error('加载市场技能失败:', err)
-        marketError.value = err.message || t('plugins.skills.marketError')
+        marketError.value = getErrorMessage(err) || t('plugins.skills.marketError')
     } finally {
         loadingMarket.value = false
     }
@@ -868,9 +902,123 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 市场安装弹窗中按钮垂直排列，取消 Element Plus 默认水平按钮间距 */
-.market-install-actions :deep(.el-button + .el-button) {
+/* ── 市场安装弹窗 ──
+   对象先行（图标+名称+版本为主视觉），次要动作降为文字链接、唯一实心主按钮；
+   颜色全部取自 markdown token：暗色下变量值本身会翻转，无需再写 .dark 分支 */
+.market-install {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 按钮行各自用 gap 控制间距，取消 Element Plus 相邻按钮的默认 margin */
+.market-install :deep(.el-button + .el-button) {
     margin-left: 0;
+}
+
+.market-install__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.market-install__title {
+    flex: 1;
+    min-width: 0;
+}
+
+.market-install__name {
+    font-size: calc(var(--gd-size-text-base) + 3px);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--gd-color-text);
+    word-break: break-word;
+}
+
+.market-install__meta {
+    margin-top: 2px;
+    font-size: calc(var(--gd-size-text-base) - 2px);
+    color: var(--gd-md-text-secondary);
+}
+
+.market-install__labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* 描述限高滚动：长描述不把弹窗撑成一篇文档 */
+.market-install__desc {
+    max-height: 7.5em;
+    overflow-y: auto;
+    font-size: calc(var(--gd-size-text-base) - 1px);
+    color: var(--gd-color-text);
+}
+
+.market-install__desc--empty {
+    margin: 0;
+    color: var(--gd-md-text-secondary);
+}
+
+/* 决策信息：从哪来、装到哪 */
+.market-install__facts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--gd-md-border);
+    border-radius: var(--gd-md-radius);
+}
+
+.market-install__fact {
+    display: flex;
+    gap: 12px;
+    font-size: calc(var(--gd-size-text-base) - 2px);
+}
+
+.market-install__fact-k {
+    flex: 0 0 60px;
+    color: var(--gd-md-text-secondary);
+}
+
+.market-install__fact-v {
+    flex: 1;
+    min-width: 0;
+    color: var(--gd-color-text);
+    word-break: break-word;
+}
+
+.market-install__notice {
+    margin: 0;
+}
+
+/* 操作区：左侧外链文字动作，右侧取消 + 唯一主按钮 */
+.market-install__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--gd-md-divider);
+}
+
+.market-install__links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* 外链指示：提示会跳出应用 */
+.market-install__ext {
+    margin-left: 2px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.market-install__cta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 /* 元信息表格样式

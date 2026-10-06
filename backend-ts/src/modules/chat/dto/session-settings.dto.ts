@@ -46,6 +46,10 @@ export class SessionSettingsDto {
   sandboxMode?: string; // 三档安全模式（对齐 DSH SandboxMode）
 
   @IsOptional()
+  @IsBoolean()
+  planEnabled?: boolean; // 计划模式（协作状态，正交于 sandboxMode；开启后强制只读）
+
+  @IsOptional()
   @IsNumber()
   maxTokensLimit?: number; // 会话级别 Token 上限，独立于智能体 memory 配置
 

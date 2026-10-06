@@ -119,6 +119,24 @@ describe("ToolExecutor 大结果处理与 meta", () => {
     expect(JSON.parse(res.content).warning).toContain("无法保存到工作目录");
   });
 
+  it("正文超阈值：与正文无关的 meta.link 仍保留，其余字段随正文丢弃", async () => {
+    const executor = makeExecutor(99999);
+    const link = { type: "sub_agent", subSessionId: "sub-1", name: "分析架构" };
+    const res = await executor.executeTool(
+      "todo",
+      {},
+      "tc-5",
+      makeSession(tmpRoot, async () => ({
+        content: "y".repeat(500),
+        meta: { ...META, link },
+      })),
+    );
+
+    // link 指向会话而非正文内容，不存在失配问题；丢了它会让子代理的长报告恰好
+    // 失去"打开子代理面板"入口——而长报告正是最想点进去回看的场景
+    expect(res.meta).toEqual({ link });
+  });
+
   it("返回纯字符串的工具不受影响（无 meta 可丢）", async () => {
     const executor = makeExecutor(100);
     const res = await executor.executeTool(

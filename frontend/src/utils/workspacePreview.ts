@@ -11,7 +11,6 @@
 
 import { ElMessageBox } from 'element-plus'
 import { nextTick } from 'vue'
-import { useBrowserWebviewStore } from '@/stores/browserWebview'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
@@ -120,7 +119,7 @@ async function showLinkChoiceDialog(url: string): Promise<void> {
             },
         )
         await previewUrl(url)
-    } catch (action: any) {
+    } catch (action) {
         if (action === 'cancel') {
             openInExternalBrowser(url)
         }

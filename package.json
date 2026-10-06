@@ -13,6 +13,7 @@
     "dev:electron": "pnpm run build:electron-ts && concurrently \"pnpm --dir frontend run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development GUADA_DEV_DATA=1 electron .\"",
     "dev:prod-debug": "pnpm run build:electron-ts && cross-env ELECTRON=true pnpm --dir frontend run build && cross-env GUADA_PROD_DEBUG=1 USE_STATIC_FRONTEND=true DEBUG_MODE=true PORT=0 NODE_ENV=development electron .",
     "build:web": "pnpm --dir frontend run build",
+    "lint": "pnpm --dir frontend run lint",
     "build:backend": "pnpm --dir backend-ts run build",
     "build:frontend": "pnpm --dir frontend run build",
     "build:electron-ts": "cd electron && tsc",
@@ -53,6 +54,7 @@
   "license": "ISC",
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
+    "@types/node": "^24.13.3",
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
     "electron": "^41.10.3",

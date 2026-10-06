@@ -33,6 +33,7 @@ import { MemorySyncService } from "./memory-sync.service";
 import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
 import { CompactionService } from "./compaction/compaction.service";
 import { SessionReplayService } from "./session-replay.service";
+import { PlanHistoryService } from "./plan-history.service";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
@@ -65,6 +66,8 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     SessionEventsService,
     ChatRunnerService,
     SessionReplayService,
+    // 计划历史（转录扫描：计划身份 = ExitPlanMode toolCallId，列表含状态）
+    PlanHistoryService,
 
     // 标签解析器管道
     TagParserPipeline,

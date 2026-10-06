@@ -47,7 +47,6 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElInput, ElCheckbox, ElIcon } from 'element-plus'
 import { Search12Regular } from '@vicons/fluent'
-import ScrollContainer from '../../ui/ScrollContainer.vue'
 import GdPopover from '../../ui/GdPopover.vue'
 
 const { t } = useI18n()
@@ -55,7 +54,8 @@ const { t } = useI18n()
 interface KnowledgeBase {
   id: string
   name: string
-  description?: string
+  /** store 形态为 string | null（后端可空），面板仅展示不写入 */
+  description?: string | null
 }
 
 const props = defineProps<{

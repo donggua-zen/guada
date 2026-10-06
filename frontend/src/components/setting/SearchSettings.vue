@@ -88,10 +88,12 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
 import { useDebounceFn } from '@vueuse/core'
+import type { SearchGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
@@ -111,7 +113,7 @@ const providerKeys = reactive({
 })
 
 // 原始备份，用于检测变更
-const originalSettings = ref<any>(null)
+const originalSettings = ref<Record<string, unknown> | null>(null)
 
 // 插件状态
 const pluginEnabled = ref(false)
@@ -138,7 +140,7 @@ const handleProviderChange = async (val: string) => {
   await handleSave()
   try {
     await apiService.reloadPlugin('web-search')
-  } catch (error: any) {
+  } catch (error) {
     console.error('重新加载插件失败:', error)
   }
 }
@@ -146,7 +148,7 @@ const handleProviderChange = async (val: string) => {
 // 加载设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('search')
+    const response = await apiService.fetchGroupSettings<SearchGroupSettings>('search')
     selectedProvider.value = response.provider || 'bocha'
     providerKeys.bocha = response.bocha?.apiKey || ''
     providerKeys.tavily = response.tavily?.apiKey || ''
@@ -170,7 +172,7 @@ const loadSettings = async () => {
   // 加载插件状态
   try {
     const pluginsRes = await apiService.queryPlugins(undefined, getLocale())
-    const plugin = pluginsRes.plugins?.find((p: any) => p.pluginId === 'web-search')
+    const plugin = pluginsRes.plugins?.find((p) => p.pluginId === 'web-search')
     if (plugin) {
       pluginEnabled.value = plugin.enabled
     }
@@ -182,23 +184,23 @@ const loadSettings = async () => {
 // 保存设置
 const handleSave = async () => {
   try {
-    const dataToSave: Record<string, any> = {
+    const dataToSave: SearchGroupSettings = {
       provider: selectedProvider.value,
       bocha: { apiKey: providerKeys.bocha || '' },
       tavily: { apiKey: providerKeys.tavily || '' },
       metaso: { apiKey: providerKeys.metaso || '' },
     }
 
-    await apiService.updateGroupSettings('search', dataToSave)
+    await apiService.updateGroupSettings('search', { ...dataToSave })
     originalSettings.value = JSON.parse(JSON.stringify({
       provider: selectedProvider.value,
       bocha: { apiKey: providerKeys.bocha },
       tavily: { apiKey: providerKeys.tavily },
       metaso: { apiKey: providerKeys.metaso },
     }))
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存搜索设置失败:', error)
-    notify.error(t('common.saveFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('common.saveFailed'), getErrorMessage(error) || t('common.error.unknown'))
   }
 }
 
@@ -212,10 +214,10 @@ const handlePluginToggle = async (val: string | number | boolean) => {
       pluginEnabled.value = enabled
       ElMessage.success(enabled ? t('settings.search.pluginEnabled') : t('settings.search.pluginDisabled'))
     }
-  } catch (error: any) {
+  } catch (error) {
     pluginEnabled.value = !enabled
     console.error('切换插件状态失败:', error)
-    notify.error(t('settings.search.pluginToggleFailed'), error.message || t('common.error.unknown'))
+    notify.error(t('settings.search.pluginToggleFailed'), getErrorMessage(error) || t('common.error.unknown'))
   } finally {
     pluginLoading.value = false
   }

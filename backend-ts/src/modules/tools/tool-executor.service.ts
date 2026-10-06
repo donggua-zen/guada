@@ -148,6 +148,37 @@ export class ToolExecutor {
     return responses;
   }
 
+  /**
+   * 计划模式工具门：返回拒绝原因（null = 放行）。
+   *
+   * 放行面只有两条，其余一律硬拒（返回 isError tool-result，不抛错——模型据此调整，
+   * 而不是把回合卡在等待人类上）：
+   *  1. `readOnly` 工具（声明式能力）；
+   *  2. `allowedInPlanMode` 逃生舱（浏览器调研、只读子代理、计划审批工具等）。
+   *
+   * 子会话对"需要人类应答"的逃生舱工具不享受豁免：子代理没有独立的应答面，
+   * 放行 ExitPlanMode 这类工具会把交互卡挂到用户看不见的子会话上、卡死父回合。
+   * 只收窄这一条，是为了不连带禁掉子代理的只读命令调研。
+   */
+  private static checkPlanMode(
+    toolEntry: ToolHandlerDef,
+    session: ISessionContext,
+  ): string | null {
+    if (toolEntry.readOnly) return null;
+
+    if (toolEntry.allowedInPlanMode) {
+      if (
+        session.sessionType === "sub_agent" &&
+        toolEntry.requiresUserInteraction
+      ) {
+        return `Plan mode is active and "${toolEntry.name}" needs a user response, which is not available inside a sub-agent.`;
+      }
+      return null;
+    }
+
+    return `Plan mode is active: only read-only tools are available. "${toolEntry.name}" cannot run until the user approves the plan and exits plan mode.`;
+  }
+
   async executeTool(
     fullToolName: string,
     toolArgs: any,
@@ -190,6 +221,21 @@ export class ToolExecutor {
       }
     }
 
+    // 计划模式门（协作状态的强制力所在）：开启后只放行只读工具与显式逃生舱。
+    // 与安全模式正交——此处不改写 sandboxMode，也不受其档位影响；先于沙盒判定，
+    // 避免同一写入被两套机制各拒一次、错误信息互相打架。
+    if (session.getPlanEnabled?.()) {
+      const planDenied = ToolExecutor.checkPlanMode(toolEntry, session);
+      if (planDenied) {
+        return {
+          toolCallId,
+          name: fullToolName,
+          content: planDenied,
+          isError: true,
+        };
+      }
+    }
+
     try {
       let validatedArgs = toolArgs;
       if (toolEntry._zodSchema) {
@@ -213,9 +259,11 @@ export class ToolExecutor {
 
       let images: ImageContent[] | undefined;
       let meta: Record<string, any> | undefined;
+      let followUpUserInput: string | undefined;
+      let resultIsError = false;
       let content: string;
 
-      // Distinguish ToolResultObject { content, images, meta } from legacy object / string
+      // Distinguish ToolResultObject { content, images, meta, followUpUserInput } from legacy object / string
       if (typeof result === "string") {
         content = result;
       } else if (typeof result === "object" && result !== null) {
@@ -224,6 +272,8 @@ export class ToolExecutor {
           // ToolResultObject — structured return
           images = (obj as ToolResultObject).images;
           meta = (obj as ToolResultObject).meta;
+          followUpUserInput = (obj as ToolResultObject).followUpUserInput;
+          resultIsError = (obj as ToolResultObject).isError === true;
           content = obj["content"];
         } else {
           // Legacy: plain object → JSON.stringify
@@ -243,15 +293,20 @@ export class ToolExecutor {
         content = handled.content;
         // 仅当正文真被替换（spill/截断）时才丢弃：替换后 meta 与正文失配。
         // 未超阈值时正文原样返回，meta 与正文仍然对应，必须保留。
-        if (handled.replaced) meta = undefined;
+        // 例外：meta.link 是"UI 跳转目标"（指向会话等外部对象，与正文无关，不存在失配），
+        // spill 后必须留下——否则子代理长报告恰好丢掉"打开子代理面板"入口，
+        // 而长报告正是最想点进去回看的场景。
+        if (handled.replaced) meta = meta?.link ? { link: meta.link } : undefined;
       }
       return {
         toolCallId,
         name: fullToolName,
         content,
-        isError: false,
+        isError: resultIsError,
         images,
         meta,
+        // 不随大结果处理丢弃：反馈正文是协作语义载体，与 content 的截断/spill 无关
+        ...(followUpUserInput ? { followUpUserInput } : {}),
       };
     } catch (error: any) {
       const errorMsg = error instanceof Error ? error.message : String(error);

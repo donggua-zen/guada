@@ -84,9 +84,15 @@
           <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
             <Cloud16Regular />
           </el-icon>
-          <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-            <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ conn.name }}</span>
-            <span v-if="conn.description" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
+          <div class="flex-1 flex flex-col gap-0.5 min-w-0">
+            <div class="flex items-baseline gap-1.5 min-w-0">
+              <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ conn.name }}</span>
+              <span v-if="conn.description" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
+            </div>
+            <span v-if="conn.path" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis"
+              :title="conn.path">
+              <el-icon size="11" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ conn.path }}
+            </span>
           </div>
           <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">
             <button class="attached-remove" @click="emit('toggle-attachment', conn.id)">
@@ -109,46 +115,24 @@
     </div>
   </GdPopover>
 
-  <!-- 级联：远程连接清单（点击 toggle 绑定，不关闭；已绑定显示 ✓） -->
+  <!-- 级联：远程连接清单（点击 toggle 绑定，不关闭；已绑定显示 ✓）——内容为共享绑定菜单 -->
   <GdPopover :show="cascadeVisible" @update:show="onCascadeShowChange" :width="260" :max-height="300"
     :position="cascadePosition" @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
-    <template v-if="connections.length > 0">
-      <div v-for="conn in connections" :key="conn.id"
-        class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
-        @click="emit('toggle-attachment', conn.id)">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <Cloud16Regular />
-        </el-icon>
-        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ conn.name }}</span>
-          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ conn.description }}</span>
-        </div>
-        <el-icon v-if="attachedIds.includes(conn.id)" size="14" class="shrink-0 text-(--el-color-primary)">
-          <Checkmark16Filled />
-        </el-icon>
-      </div>
-    </template>
-    <div v-else
-      class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
-      @click="goToConnectionSettings">
-      <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-        <Cloud16Regular />
-      </el-icon>
-      <div class="flex-1 text-sm text-(--gd-color-text-gray) dark:text-[#6b7280]">{{ t('chat.workspace.noConnections') }}</div>
-    </div>
+    <ConnectionBindingMenu :attached-ids="attachedIds" @toggle="emit('toggle-attachment', $event)"
+      @open-settings="emit('update:visible', false)" />
   </GdPopover>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular, Add16Regular, ChevronRight24Regular, Dismiss16Regular } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular, Add16Regular, ChevronRight24Regular, Dismiss16Regular, Folder16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import GdTooltip from '../../ui/GdTooltip.vue'
+import ConnectionBindingMenu from './ConnectionBindingMenu.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { apiService } from '@/services/ApiService'
+import { useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
 
 const props = defineProps<{
@@ -168,32 +152,16 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const recentList = computed(() => workspaceStore.recentList)
 
-// ── 附加工作目录：remote-workspace 全局连接清单（弹层首次打开时加载，失败静默为空态） ──
-interface RemoteConnectionOption { id: string; name: string; description: string }
-const connections = ref<RemoteConnectionOption[]>([])
-let connectionsLoaded = false
-
-async function loadConnections(): Promise<void> {
-  if (connectionsLoaded) return
-  connectionsLoaded = true
-  try {
-    const list = await apiService.getConnections()
-    connections.value = list.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: `${c.config.username}@${c.config.host}`,
-    }))
-  } catch {
-    connections.value = []
-  }
-}
+// ── 附加工作目录：remote-workspace 全局连接清单（store 共享，设置页新建后自动可见；
+//    弹层打开时确保已加载，失败静默为空态） ──
+interface RemoteConnectionOption { id: string; name: string; description: string; path?: string }
+const remoteWorkspaceStore = useRemoteWorkspaceStore()
 
 watch(() => props.visible, (visible) => {
-  if (visible) void loadConnections()
+  if (visible) void remoteWorkspaceStore.ensureConnections()
   else cascadeVisible.value = false
 })
 
@@ -203,7 +171,7 @@ const attachedIds = computed<string[]>(() => props.currentAttachments?.[SSH_CONN
 /** 已绑定连接的展示信息（连接清单未加载/已删连接时回退显示 ID） */
 const attachedConnections = computed<RemoteConnectionOption[]>(() =>
   attachedIds.value.map((id) =>
-    connections.value.find((c) => c.id === id) ?? { id, name: id, description: '' },
+    remoteWorkspaceStore.connectionOptions.find((c) => c.id === id) ?? { id, name: id, description: '' },
   ),
 )
 
@@ -219,20 +187,18 @@ function openCascade(): void {
     cascadeCloseTimer = null
   }
   if (cascadeVisible.value) return
-  // 先按触发行坐标计算位置再显示（右侧优先，空间不足放左侧），避免先出现在默认位置再跳变
+  // 先按触发行坐标算首选位置再显示（右侧优先，空间不足放左侧），避免先出现在默认位置再跳变。
+  // 视口边界收缩交给 GdPopover 按实测尺寸做（用假定高度收缩会把矮菜单顶到视口边缘）
   if (addTriggerRef.value) {
     const rect = addTriggerRef.value.getBoundingClientRect()
     const menuWidth = 260
-    const menuHeight = 240
     const gap = 5
     const spaceRight = window.innerWidth - rect.right
     const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= rect.left
-    const left = showOnRight ? rect.right + gap : rect.left - menuWidth - gap
-    let top = rect.top
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, window.innerHeight - menuHeight - 8)
+    cascadePosition.value = {
+      left: showOnRight ? rect.right + gap : rect.left - menuWidth - gap,
+      top: rect.top,
     }
-    cascadePosition.value = { left, top }
   }
   cascadeVisible.value = true
 }
@@ -259,12 +225,6 @@ function cancelCloseCascade(): void {
 function onMainShowChange(val: boolean): void {
   if (!val && cascadeVisible.value) return
   emit('update:visible', val)
-}
-
-/** 空态行：跳转设置页"远程工作区"创建连接 */
-function goToConnectionSettings(): void {
-  emit('update:visible', false)
-  void router.replace({ name: 'SystemSettings', params: { tab: 'connections' } })
 }
 
 // 过滤掉公共目录，避免与固定入口重复

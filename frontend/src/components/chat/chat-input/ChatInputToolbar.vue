@@ -30,7 +30,7 @@
   </div>
 
   <!-- 工作目录选择弹窗 -->
-  <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
+  <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
     :current-workspace-path="config?.workspacePath || null" :public-path="publicPath"
     :current-attachments="config?.attachments" @select="handleWorkspaceSelect"
     @toggle-attachment="handleToggleAttachment" />
@@ -66,7 +66,7 @@ import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import GdPopover from '../../ui/GdPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
+import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
 
 const { t } = useI18n()
 
@@ -74,20 +74,26 @@ const props = defineProps({
   config: { type: Object, default: () => ({}) },
 })
 
+/** config-change 载荷：本组件每次只整包下发一个字段（消费方按字段合并） */
+type ConfigChangePayload =
+  | { groupId: string | null }
+  | { workspacePath: string | null }
+  | { attachments: Record<string, string[]> }
+
 const emit = defineEmits<{
-  (e: 'config-change', payload: any): void
+  (e: 'config-change', payload: ConfigChangePayload): void
 }>()
 
 const sessionGroupStore = useSessionGroupStore()
 const workspaceStore = useWorkspaceStore()
 
-// 工作目录设置相关
-const workspaceButtonRef = ref<any>(null)
+// 工作目录设置相关（仅需 $el 供弹层锚定，结构化类型收窄组件实例）
+const workspaceButtonRef = ref<{ $el: HTMLElement } | null>(null)
 const workspacePopoverVisible = ref(false)
 
 // 分组选择相关
 const groupSelectorVisible = ref(false)
-const groupButtonRef = ref<any>(null)
+const groupButtonRef = ref<{ $el: HTMLElement } | null>(null)
 
 // 初始化时加载分组列表
 sessionGroupStore.loadGroups()
@@ -168,13 +174,8 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
 // ── 附加工作目录（远程连接绑定，多选）：toggle 后整体写回 attachments。
 //    绑定数不体现在按钮文案上——按钮宽度变化会让弹层重新锚定，产生跳变 ──
 const handleToggleAttachment = (connectionId: string) => {
-  const current = props.config?.attachments?.[SSH_CONNECTION_ATTACHMENT_TYPE]
-  const ids = Array.isArray(current) ? current : []
-  const nextIds = ids.includes(connectionId)
-    ? ids.filter((id: string) => id !== connectionId)
-    : [...ids, connectionId]
   emit('config-change', {
-    attachments: { ...(props.config?.attachments || {}), [SSH_CONNECTION_ATTACHMENT_TYPE]: nextIds },
+    attachments: toggleConnectionBinding(props.config?.attachments, connectionId),
   })
 }
 </script>

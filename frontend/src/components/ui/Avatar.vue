@@ -1,7 +1,7 @@
 <template>
     <div>
         <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
-            :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }"></img>
+            :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }" />
         <div v-else class="avatar-placeholder" :class="{
             'rounded-full': props.round,
             'rounded-lg': !props.round, 'avatar-user': props.type === 'user'
@@ -17,11 +17,9 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-// @ts-ignore - icons 类型缺失
 import {
     UserOutlined,
 } from '@vicons/antd'
-// @ts-ignore - icons 类型缺失
 import { OpenAI } from '@/components/icons'
 
 // Props 类型化

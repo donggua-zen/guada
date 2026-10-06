@@ -4,7 +4,7 @@
         <div
             class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
             <div class="flex items-center gap-2 min-w-0">
-                <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
+                <!-- 预览/源码切换按钮（仅 md/html/svg 有渲染形态），放在左侧高频操作区 -->
                 <div v-if="canTogglePreview"
                     class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
                     <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }" :title="t('chat.workspace.preview')"
@@ -44,6 +44,7 @@
                 <!-- 目录树显隐开关（每个文件标签独立记忆，样式与 Git 审阅面板一致） -->
                 <GdTooltip :content="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
                     placement="bottom">
+                    <!-- eslint-disable vue/no-mutating-props -- tab 对象即标签缓存实体，属性写入是本面板与缓存同步的既定模式 -->
                     <button class="preview-tool-btn" :class="{ 'preview-tool-btn--active': treeVisible }"
                         :title="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
                         @click="props.tab.treeVisible = !treeVisible">
@@ -51,6 +52,7 @@
                             <TextboxAlignTopRotate9020Regular />
                         </el-icon>
                     </button>
+                    <!-- eslint-enable vue/no-mutating-props -->
                 </GdTooltip>
             </div>
         </div>
@@ -146,25 +148,18 @@
                         ref="markdownIframeRef" class="w-full border-0" style="height: 100%;background-color: transparent !important;
     color-scheme: light; /* 强制使用浅色模式以确保透明生效 */" allowtransparency="true" sandbox="allow-same-origin allow-scripts" />
 
-                    <!-- 源码编辑模式（CodeMirror 编辑器，可编辑可保存） -->
-                    <template v-if="renderMode === 'source' && selectedFile">
+                    <!-- 编辑模式：md/html/svg 切到源码时，以及所有无渲染形态的文本文件
+                         （.ts/.js/.json/.txt/.log…）都落到这里，统一以可编辑的 CodeMirror 打开（Ctrl+S 保存） -->
+                    <template v-else>
                         <!-- 外部冲突横幅 -->
                         <div v-if="externalConflict" class="conflict-banner">
                             <span class="conflict-banner-text">{{ t('chat.workspace.externalConflictHint') }}</span>
                             <button class="conflict-banner-btn" @click="handleConflictReload">{{ t('chat.workspace.externalConflictReload') }}</button>
                             <button class="conflict-banner-btn primary" @click="handleConflictSave">{{ t('chat.workspace.externalConflictSave') }}</button>
                         </div>
-                        <CodeMirrorEditor :model-value="editContent"
+                        <CodeMirrorEditor v-if="selectedFile" ref="editorRef" :model-value="editContent"
                             :extension="selectedFile.extension" @update:model-value="editContent = $event" @save="handleSaveFile" />
                     </template>
-
-                    <!-- 源码高亮（rendered 模式 fallback，只读） -->
-                    <div v-else-if="highlightedCode" class="code-preview-container min-w-full"
-                        v-html="highlightedCode" />
-
-                    <!-- 普通文本预览（不支持高亮的文件） -->
-                    <pre v-else v-text="fileContent"
-                        class="text-sm leading-relaxed whitespace-pre-wrap break-all  text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
                 </template>
             </template>
             </div>
@@ -181,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -191,7 +187,7 @@ import { DocumentCopy, Plus } from '@element-plus/icons-vue'
 import { useStorage } from '@vueuse/core'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
-import { useHighlight, getPreviewKind, isUnplayableMediaFile, type FilePreviewKind } from '@/composables/useHighlight'
+import { getPreviewKind, isUnplayableMediaFile, type FilePreviewKind } from '@/composables/useHighlight'
 import { getFileIcon } from '@/composables/useFileIcon'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
@@ -247,6 +243,8 @@ const treeVisible = computed(() => props.tab.treeVisible ?? !props.tab.path)
 
 const selectedFile = ref<SelectedFile | null>(null)
 const editContent = ref('') // CodeMirror 编辑内容（source 模式）
+/** 编辑器实例：右键"加入会话"要从 CodeMirror 状态取选区（原生 Selection 取不到编辑器选区） */
+const editorRef = ref<{ getSelectionInfo: () => { text: string; startLine: number; endLine: number } | null } | null>(null)
 const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
 const externalConflict = ref(false) // 外部修改冲突（用户有未保存编辑时外部文件变化）
 
@@ -279,10 +277,13 @@ watch(() => props.workspacePath, (val) => {
     if (val) cachedWorkspacePath.value = val
 })
 
-// 预览/源码模式（per-file，初始值从全局 localStorage 读取）
+// 预览/源码模式：全局查看偏好（localStorage 持久化），只对 md/html/svg 有渲染形态的文件生效。
+// 必须双向同步：面板实例随文件标签常驻，若只写回不监听，各标签会冻结在挂载那一刻的模式，
+// 表现为"同一类文件在不同标签里行为不一致"。
 const globalDefaultMode = useStorage<'rendered' | 'source'>('filePreviewMode', 'rendered')
 const renderMode = ref<'rendered' | 'source'>(globalDefaultMode.value)
 watch(renderMode, (mode) => { globalDefaultMode.value = mode })
+watch(globalDefaultMode, (mode) => { renderMode.value = mode })
 
 // Markdown iframe ref
 const markdownIframeRef = ref<HTMLIFrameElement | null>(null)
@@ -304,7 +305,6 @@ const iframeSelection = ref('')
 // ── 依赖初始化 ──
 
 const { parseMarkdown } = usePreviewMarkdown()
-const { highlightCode, getLanguageFromExtension } = useHighlight()
 
 // ── 计算属性 ──
 
@@ -362,13 +362,6 @@ const markdownSrcDoc = computed(() => {
     }
 
     return buildMarkdownSrcDoc(markdownHtml.value, baseUrl, isDarkMode.value)
-})
-
-const highlightedCode = computed(() => {
-    if (!selectedFile.value || !fileContent.value) return ''
-    const lang = getLanguageFromExtension((selectedFile.value.extension || '').toLowerCase())
-    if (lang) return highlightCode(fileContent.value, lang)
-    return ''
 })
 
 // ── 工具方法 ──
@@ -519,9 +512,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
         if (isHtmlFile.value && renderMode.value === 'rendered') {
             htmlPreviewVersion.value++
         }
-    } catch (error: any) {
-        const status = error?.response?.status
-        const msg = error?.response?.data?.message || error.message || ''
+    } catch (error) {
+        const status = getApiErrorStatus(error)
+        const msg = getErrorMessage(error)
         if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
             fileNotFound.value = true
         } else if (msg.includes('File too large') || msg.includes('too large')) {
@@ -571,9 +564,9 @@ async function handleSaveFile(content: string): Promise<void> {
         saveStatus.value = 'saved'
         externalConflict.value = false
         ElMessage.success(t('chat.workspace.saveSuccess'))
-    } catch (e: any) {
+    } catch (e) {
         saveStatus.value = 'unsaved'
-        ElMessage.error(e?.message || t('chat.workspace.saveFailed'))
+        ElMessage.error(getErrorMessage(e) || t('chat.workspace.saveFailed'))
     }
 }
 
@@ -623,7 +616,7 @@ async function handleOpenInExplorerForCurrent(): Promise<void> {
             fullPath = fullPath.substring(0, lastSep)
         }
         await window.electronAPI!.openFolder(fullPath)
-    } catch (error: any) {
+    } catch (error) {
         console.error('[FilePreviewPanel] Open in explorer failed:', error)
         ElMessage.error(t('chat.workspace.openFailed'))
     }
@@ -656,71 +649,6 @@ const SNIPPET_HEAD = 800
 /** UTF-8 安全的 base64 编码 */
 function encodeBase64(text: string): string {
     return btoa(unescape(encodeURIComponent(text)))
-}
-
-/** 从高亮代码选区中提取行号和原始文本（保留缩进） */
-function getCodeSelectionInfo(selection: Selection): { start?: number; end?: number; text?: string } {
-    if (!selection.rangeCount || selection.isCollapsed) return {}
-    const range = selection.getRangeAt(0)
-
-    function findLineEl(node: Node): HTMLElement | null {
-        let el = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement
-        while (el && !el.classList?.contains('line')) {
-            el = el.parentElement
-        }
-        return el
-    }
-
-    const startLineEl = findLineEl(range.startContainer)
-    const endLineEl = findLineEl(range.endContainer)
-
-    let start: number | undefined
-    let end: number | undefined
-
-    if (startLineEl) {
-        const startText = startLineEl.querySelector('.line-num')?.textContent
-        const endText = endLineEl?.querySelector('.line-num')?.textContent
-        if (startText) {
-            start = parseInt(startText)
-            end = endText ? parseInt(endText) : start
-        }
-    }
-
-    // 提取选区文本：遍历 .line-content 元素的 textContent 以保留原始缩进
-    const container = startLineEl?.parentElement // .code-lines
-    if (container) {
-        const allLines = container.querySelectorAll(':scope > .line')
-        const lines: string[] = []
-        allLines.forEach((lineEl) => {
-            const lineNum = lineEl.querySelector('.line-num')?.textContent
-            if (!lineNum) return
-            const num = parseInt(lineNum)
-            const content = lineEl.querySelector('.line-content')?.textContent || ''
-            const inRange = start && end
-                ? (num >= Math.min(start, end) && num <= Math.max(start, end))
-                : false
-            if (inRange) lines.push(content)
-        })
-        if (lines.length > 0) {
-            return { start, end, text: lines.join('\n') }
-        }
-    }
-
-    // Fallback: 通过偏移量在 <pre> 中计算行号
-    const preEl = (range.startContainer as HTMLElement).closest?.('pre')
-        || range.startContainer.parentElement?.closest('pre')
-    if (preEl) {
-        const preRange = document.createRange()
-        preRange.selectNodeContents(preEl)
-        preRange.setEnd(range.startContainer, range.startOffset)
-        const beforeText = preRange.toString()
-        const startLine = beforeText.split('\n').length
-        const selectedText = selection.toString()
-        const endLine = startLine + selectedText.split('\n').length - 1
-        return { start: startLine, end: endLine, text: selectedText }
-    }
-
-    return {}
 }
 
 /** 构造 SnipData */
@@ -794,20 +722,18 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
     contextMenuVisible.value = true
 }
 
-/** 右键事件处理（代码预览 / 纯文本预览） */
+/** 右键事件处理（编辑器区域；md/html iframe 内的右键由 postMessage 触发，不走这里） */
 function handleContextMenu(event: MouseEvent) {
-    const selection = window.getSelection()
-    const selectedText = selection?.toString() || ''
-
-    if (selectedText.trim()) {
-        const info = getCodeSelectionInfo(selection!)
-        const text = info.text || selectedText
-        showContextMenu(event.clientX, event.clientY, text, info.start, info.end)
-    } else {
-        // Markdown iframe 的右键由 postMessage 触发，不走这里
-        // 非选区右键仍可添加文件
-        showContextMenu(event.clientX, event.clientY, '')
+    // 编辑器选区优先：CodeMirror 自己管理选区，window.getSelection() 拿不到
+    const info = editorRef.value?.getSelectionInfo()
+    if (info && info.text.trim()) {
+        showContextMenu(event.clientX, event.clientY, info.text, info.startLine, info.endLine)
+        return
     }
+
+    // 非编辑器区域（如 SVG 渲染态）仍支持"添加文件到会话"
+    const selectedText = window.getSelection()?.toString() || ''
+    showContextMenu(event.clientX, event.clientY, selectedText.trim() ? selectedText : '')
 }
 
 // ── 生命周期 ──
@@ -874,26 +800,12 @@ watch(() => props.tab.path, (newPath, oldPath) => {
 </script>
 
 <style>
-.code-preview-container pre code.hljs {
-    color: var(--gd-color-text, #333) !important;
-    background-color: transparent !important;
-}
-
-.code-preview-container pre {
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-}
-
-.code-preview-container code.hljs {
-    overflow: visible;
-}
-
-/* per-line 布局：每行 flex row，行号 sticky 固定 + 代码折行 */
+/* 行号高亮布局：供 highlightCode() 的输出使用（chat 的消息代码块、diff 面板等同样依赖，
+   故这里是全应用唯一定义处，不能随本面板的只读视图一起删除） */
 .code-lines {
     display: flex;
     flex-direction: column;
-    /* 与编辑模式（CodeMirror 14px）、纯文本 fallback（text-sm）统一 */
+    /* 与编辑模式（CodeMirror 14px）统一 */
     font-size: 14px;
 }
 
@@ -972,15 +884,6 @@ watch(() => props.tab.path, (newPath, oldPath) => {
 }
 .conflict-banner-btn.primary:hover {
     opacity: 0.85;
-}
-
-.code-preview-container {
-    overflow-y: auto;
-    overflow-x: auto;
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    background-color: transparent;
 }
 
 /* 预览/源码模式切换按钮 */

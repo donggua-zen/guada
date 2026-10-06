@@ -481,8 +481,11 @@ html.wallpaper-loaded body::before {
   opacity: 1;
 }
 
-/* 壁纸暗色遮罩 */
-html.dark body::after {
+/* 壁纸暗色遮罩：只为压暗壁纸，必须 gating 在 wallpaper-loaded 上——
+   否则无壁纸时常驻渲染，把 body::after 之下的 html 背景（app-backdrop）压暗，
+   卡片缝隙透出的就是 40% 黑罩下的底色（暗色 #1f1f1f→#121212），而侧栏在
+   #app 内自绘不透明背景不受影响 → 缝隙与侧栏不同色 */
+html.wallpaper-loaded.dark body::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -491,8 +494,9 @@ html.dark body::after {
   pointer-events: none;
 }
 
-/* 壁纸亮色遮罩 */
-html:not(.dark) body::after {
+/* 壁纸亮色遮罩：同上 gating（浅色 15% 白罩差异仅 1/255 不可见，
+   统一 gating 保持两模式语义一致） */
+html.wallpaper-loaded:not(.dark) body::after {
   content: "";
   position: fixed;
   inset: 0;

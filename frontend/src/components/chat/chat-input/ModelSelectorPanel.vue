@@ -52,6 +52,15 @@
         </div>
       </template>
 
+      <!-- 模型管理快速入口：跳设置页「模型供应商」分区（不加前置图标，与其它行风格一致） -->
+      <div class="section-divider"></div>
+      <div class="cascade-trigger" @click="goProviderSettings">
+        <span class="text-sm flex-1">{{ t('chat.input.manageModels') }}</span>
+        <el-icon size="14" class="text-gray-400">
+          <ChevronRight24Regular />
+        </el-icon>
+      </div>
+
       <!-- 收藏模型 -->
       <template v-if="favoriteModels.length > 0">
         <div class="section-divider"></div>
@@ -88,8 +97,8 @@
 
   <!-- 级联：全部模型列表 -->
   <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'" @update:show="onCascadeShowChange"
-    :width="300" :max-height="400" :position="cascadePosition" @mouseenter="cancelCloseCascade"
-    @mouseleave="scheduleCloseCascade">
+    :width="300" :max-height="400" :position="cascadePosition" align-item-selector=".model-item-compact"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
     <template v-for="provider in filteredProviders" :key="provider.id">
       <div class="provider-group">
         <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
@@ -132,8 +141,8 @@
 
   <!-- 级联：推理强度列表 -->
   <GdPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'" @update:show="onCascadeShowChange"
-    :width="180" :max-height="300" :position="cascadePosition" @mouseenter="cancelCloseCascade"
-    @mouseleave="scheduleCloseCascade">
+    :width="180" :max-height="300" :position="cascadePosition" align-item-selector=".te-item"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
     <div v-for="effort in thinkingEffortOptions" :key="effort"
       class="te-item flex items-center justify-between px-2 py-1 mb-0.5 last:mb-0 rounded-xl cursor-pointer transition-all text-sm"
       :class="{
@@ -148,6 +157,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
 import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
@@ -194,6 +204,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const router = useRouter()
 
 const favoriteIds = ref<Set<string>>(new Set())
 const currentModelRef = ref<HTMLElement | null>(null)
@@ -229,7 +240,7 @@ const filteredProviders = computed(() => {
   return props.providers.map(provider => ({
     ...provider,
     models: props.models.filter((model: Model) => model.providerId === provider.id),
-  })).filter((provider: any) => provider.models.length > 0)
+  })).filter((provider) => provider.models.length > 0)
 })
 
 function getProviderModels(providerId: string): Model[] {
@@ -245,6 +256,12 @@ function getModelProviderName(model: Model): string {
 
 function handleSelect(modelId: string) {
   emit('select', modelId)
+}
+
+// 模型管理快速入口：关闭面板并跳设置页「模型供应商」分区
+function goProviderSettings() {
+  emit('update:visible', false)
+  router.replace('/setting/providers')
 }
 
 async function handleToggleFavorite(modelId: string) {
@@ -269,32 +286,21 @@ async function openCascade(type: 'browse' | 'thinking', triggerEl: HTMLElement |
   }
   if (cascadeMenu.visible && cascadeMenu.type === type) return
 
-  // 先算坐标再显示，避免先出现在默认位置再跳变
+  // 先算首选坐标再显示，避免先出现在默认位置再跳变。
+  // 这里只决定"贴在触发项哪一侧 + 与触发项顶边对齐"，视口边界收缩由 GdPopover
+  // 按实测尺寸处理：用假定高度收缩会把矮菜单顶到离触发项很远的视口边缘
   if (triggerEl) {
     const rect = triggerEl.getBoundingClientRect()
     const menuWidth = type === 'browse' ? 300 : 180
-    const menuHeight = type === 'browse' ? 400 : 200
     const gap = 5
 
     const spaceRight = window.innerWidth - rect.right
     const spaceLeft = rect.left
     const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= spaceLeft
 
-    let left: number
-    if (showOnRight) {
-      left = rect.right + gap
-    } else {
-      left = rect.left - menuWidth - gap
-    }
-
-    let top = rect.top
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, window.innerHeight - menuHeight - 8)
-    }
-
     cascadePosition.value = {
-      left,
-      top,
+      left: showOnRight ? rect.right + gap : rect.left - menuWidth - gap,
+      top: rect.top,
     }
   }
 

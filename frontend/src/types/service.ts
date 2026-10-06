@@ -3,11 +3,6 @@
  * 用于 ApiService 的完整类型支持
  */
 
-import type { PaginatedResponse } from './common'
-import type { Model, ModelProvider, McpServer } from './api'
-import type { Agent, AgentListResponse } from './agent'
-import type { Session, SessionListResponse } from './session'
-import type { Message } from './message'
 import type { FileRefType } from './stream/content-block.types'
 
 // ========== 流式响应类型 ==========
@@ -79,7 +74,19 @@ export interface StreamToolCallEvent {
  */
 export interface StreamToolCallsResponseEvent {
     type: 'tool_calls_response'
-    toolCallsResponse: any[]  // 驼峰式
+    /** 工具结果条目（与 event-chunk.types 的 ToolCallsResponseEvent 条目同构；
+     *  附加 role（后端消息角色，mock/后端均为 'tool'）；legacy 事件 toolCallId 可缺失） */
+    toolCallsResponse: Array<{
+        role?: string
+        /** 独立 tool 结果消息 id（与持久化 tool/result.messageId 一致） */
+        messageId?: string
+        name: string
+        content: string
+        toolCallId?: string
+        outcome?: 'success' | 'error' | 'rejected'
+        /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */
+        meta?: Record<string, unknown>
+    }>  // 驼峰式
     usage?: TokenUsage
 }
 
@@ -194,7 +201,49 @@ export interface User {
  * 全局设置
  */
 export interface GlobalSettings {
-    [key: string]: any
+    [key: string]: unknown
+}
+
+// ── 分组设置（GET/PUT /settings/:group 的已知键；写侧为局部 patch，键可选） ──
+
+/** appearance 分组：外观/壁纸/主题预设 */
+export interface AppearanceGroupSettings {
+    wallpaperUrl?: string | null
+    sidebarOpacity?: number
+    contentOpacity?: number
+    floatWidgetEnabled?: boolean
+    floatWidgetOpacity?: number
+    lightThemePreset?: string
+    darkThemePreset?: string
+}
+
+/** system 分组：工作目录/上传子目录/知识库存储/对话引擎参数 */
+export interface SystemGroupSettings {
+    workspaceBaseDir?: string
+    chatUploadSubdir?: string
+    kbStorageRoot?: string
+    /** 后端以 ms 存储 */
+    llmRequestTimeoutMs?: number
+    /** 后端以 ms 存储 */
+    llmIdleTimeoutMs?: number
+}
+
+/** ocr 分组：OCR 提供方与密钥 */
+export interface OcrGroupSettings {
+    provider?: string
+    umiHost?: string
+    umiPort?: number
+    baiduApiKey?: string
+    baiduSecretKey?: string
+    ocrMode?: string
+}
+
+/** search 分组：联网搜索提供方与各 provider 的密钥 */
+export interface SearchGroupSettings {
+    provider?: string
+    bocha?: { apiKey?: string }
+    tavily?: { apiKey?: string }
+    metaso?: { apiKey?: string }
 }
 
 // ========== 文件上传类型 ==========

@@ -130,7 +130,6 @@
     plugins: 'Plugins',
     knowledgeBase: 'Knowledge Base',
     scheduler: 'Scheduler',
-    models: 'Models',
     login: 'Login',
     password: 'Password Settings',
   },

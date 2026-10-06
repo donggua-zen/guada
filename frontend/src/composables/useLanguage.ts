@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import { i18n, setLocale, getLocale, STORAGE_KEY, type AppLocale } from '@/locales'
+import { setLocale, getLocale, STORAGE_KEY, type AppLocale } from '@/locales'
 import { apiService } from '@/services/ApiService'
 
 /**

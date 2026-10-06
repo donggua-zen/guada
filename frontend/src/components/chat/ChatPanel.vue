@@ -59,7 +59,9 @@
           </div>
           <!-- 输入区域：sticky 底部；放入 scroll-main（消息列统一避让，不再独立占位）。
                只读模式（子代理会话）仍渲染：输入区承载停止按钮（流式时可停），
-               内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。 -->
+               内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。
+               审批/询问卡待答时，输入区三件（编辑提示条 / ChatInput / 工作目录条）整体隐藏，
+               由 SessionCards 顶替其位置（见 hasPendingAsk 注释）。 -->
           <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
@@ -73,11 +75,13 @@
                 </div>
               </Transition>
 
-              <!-- 会话级全局卡：审批卡 / 暂停卡（对齐 DSH：sessionId 唯一锚点，不挂回合） -->
-              <SessionCards :session-id="currentSessionId || undefined" />
+              <!-- 会话级全局卡：审批卡 / 询问卡（对齐 DSH：sessionId 唯一锚点，不挂回合）。
+                   卡片「忽略」= 不回答并停止当前轮 → 复用停止按钮的取消路径（后端仅有
+                   "用户停止"能终结一次待答；此刻输入区已隐藏，这也是唯一的停止入口） -->
+              <SessionCards :session-id="currentSessionId || undefined" @ignore="abortResponse" />
 
-              <!-- 编辑模式提示条 -->
-              <div v-if="editMode" class="max-w-full w-full flex px-4">
+              <!-- 编辑模式提示条（弹窗待答时随输入区一并隐藏：圆角外形依附输入框，单独留下不成形） -->
+              <div v-if="editMode && !hasPendingAsk" class="max-w-full w-full flex px-4">
                 <div
                   class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-(--gd-color-sidebar-bg-active) backdrop-blur-xl">
                   <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
@@ -101,7 +105,9 @@
                 </div>
               </div>
 
-              <div class="w-full flex items-center relative">
+              <!-- 弹窗待答时 v-show 隐藏：保持挂载，草稿与编辑器内部状态不丢；
+                   display:none 同时退出视觉与可访问树（对齐 ZCode 的 composer 隐藏做法） -->
+              <div v-show="!hasPendingAsk" class="w-full flex items-center relative">
 
                 <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
                   :session-id="effectiveSessionId" :agent-id="props.session?.agentId || ''"
@@ -126,9 +132,10 @@
                 </ChatInput>
               </div>
 
-              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染 -->
-              <WorkingDirBar v-if="!props.readonly && effectiveSessionId" class="mt-1"
-                :session-id="effectiveSessionId" :attachments="props.session?.settings?.attachments"
+              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染；弹窗待答时随输入区隐藏 -->
+              <WorkingDirBar v-if="!props.readonly && effectiveSessionId && !hasPendingAsk" class="mt-1"
+                :session-id="effectiveSessionId"
+                :attachments="(props.session?.settings?.attachments as Record<string, string[]> | undefined)"
                 @attachments-change="handleAttachmentsChange" />
             </div>
           </div>
@@ -169,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide, type VNode } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 const { t } = useI18n()
@@ -187,12 +194,15 @@ import {
 } from "@/services/modules/streamProjector"
 import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
 import type { Agent } from '@/types/agent';
+import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
+import { getErrorMessage } from '@/utils/errorMessage'
+import type { SnipData } from './workspace/FilePreviewPanel.vue'
 
 // 组件导入
 import TurnItem from "./TurnItem.vue";
@@ -280,15 +290,13 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'select-agent': [agent: Agent]  // 切换智能体
-  /** 工作目录条（输入框下方）：附加远程目录绑定变更，转发给 ChatPage 持久化 */
-  'attachments-change': [attachments: Record<string, string[]>]
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
 }>();
 
 defineSlots<{
   /** 右侧 aside 槽位：渲染于滚动条左侧、不随消息滚动；宽度由 asideWidth 控制 */
-  aside?: () => any
+  aside?: () => VNode[]
 }>();
 
 // 计算属性 - 类型化
@@ -313,6 +321,15 @@ const { tokenStats: sharedTokenStats } = useSessionTokenStats(currentSessionIdRe
 const effectiveSessionId = computed(() => {
   return props.sessionId || props.session?.id || '';
 });
+
+/**
+ * 弹窗（审批/询问卡）待答中：隐藏输入区，让卡片占据原输入区位置。
+ * 对齐 ZCode：pending 交互期间 composer 整体隐藏但**保持挂载**（草稿/编辑器状态不丢），
+ * 而非变暗/禁用——询问时输入框本就没有有效用途（自定义回复走卡片自己的输入框）。
+ */
+const hasPendingAsk = computed(() =>
+  !!sessionStore.sessionPendingAsk(currentSessionId.value || '')
+);
 const isLoading = ref(true);
 // 使用 useSessionChat composable
 const {
@@ -322,7 +339,7 @@ const {
 } = useSessionChat(sessionStore, apiService)
 
 // 响应式数据
-const scrollContainerRef = ref<any>(null);
+const scrollContainerRef = ref<InstanceType<typeof ScrollContainer> | null>(null);
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const needScrollToBottom = ref(true);
 let scrollTicking = false;
@@ -448,7 +465,7 @@ function immediateScrollToBottom() {
 /**
  * 处理滚动事件
  */
-function handleScroll(event: any) {
+function handleScroll(event: Event) {
   // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 FloatingTodoBar 的注释），
   // 而 scrollTicking 守卫会让 rAF 未回调时的后续滚动事件全部被丢弃——若只在 rAF 里更新，
   // 按钮会永不出现。防抖收在 updateScrollButtonVisibility 内部，逐次调用无额外开销。
@@ -460,9 +477,10 @@ function handleScroll(event: any) {
   requestAnimationFrame(() => {
     // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
-    const scrollTop = scrollElement?.scrollTop ?? event.target?.scrollTop ?? 0;
+    const scrollTop = scrollElement?.scrollTop ?? (event.target as HTMLElement | null)?.scrollTop ?? 0;
+    // 滚动元素缺失时原表达式为 NaN（NaN <= 5 === false），?? NaN 保持同一结果
     const isAtBottom =
-      scrollElement?.scrollHeight - scrollTop - scrollElement?.clientHeight <= 5;
+      (scrollElement?.scrollHeight ?? NaN) - scrollTop - (scrollElement?.clientHeight ?? NaN) <= 5;
 
     // 检测是否滚动到顶部附近，触发加载更多历史消息
     if (
@@ -515,8 +533,8 @@ const activeTurns = computed(() => {
 
 // 从回合中取用户锚点块（role=user 且为人类输入），渲染与操作均基于该块（二级结构：turn → block）
 // 后端注入的 hidden user 消息（拦截器/图片/待办/压缩）同 role 但非用户输入，须排除
-const userOfTurn = (turn: any): any =>
-  turn?.messages?.find((m: any) => m.role === 'user' && !isHiddenBlock(m)) ?? null;
+const userOfTurn = (turn: Turn | undefined): MessageBundle | null =>
+  turn?.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null;
 
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
@@ -586,16 +604,33 @@ const chatAttachmentUploader = {
     apiService.uploadFile(sessionId, file, onProgress),
 };
 
-const chatInputConfig = computed(() => ({
-  modelId: currentModelId.value,
-  // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
-  maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
-  knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
-  workspacePath: currentSession.value?.workspacePath || null,
-  sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
-  attachments: currentSession.value?.settings?.attachments || {},
-}));
+/** settings 开放字典（索引签名收敛为 unknown）的收窄读取切片，与下方 handleConfigChange 的写回字段一一对应 */
+type SessionSettingsView = {
+  maxTokensLimit?: number | null
+  referencedKbs?: string[]
+  sandboxMode?: string
+  attachments?: Record<string, string[]>
+}
+
+const chatInputConfig = computed(() => {
+  // 断言只作用于读取切片，运行时仍是同一个 settings 对象
+  const settings = currentSession.value?.settings as SessionSettingsView | undefined;
+  return {
+    modelId: currentModelId.value,
+    // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
+    thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
+    maxTokensLimit: settings?.maxTokensLimit ?? null,
+    knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || settings?.referencedKbs || [],
+    workspacePath: currentSession.value?.workspacePath || null,
+    sandboxMode: settings?.sandboxMode || 'workspace-write',
+    // 计划模式读 UI 投影（不是设置直读）：模型经 ExitPlanMode 退出时流帧只更新投影与会话对象，
+    // 由下方 watcher 与设置收敛，这里始终取当前生效值。
+    planEnabled: currentSessionId.value
+      ? sessionStore.sessionPlanEnabled(currentSessionId.value)
+      : false,
+    attachments: settings?.attachments || {},
+  };
+});
 
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
@@ -606,18 +641,33 @@ onUnmounted(() => {
 });
 
 /**
- * 工作目录条（输入框下方）的附加远程目录绑定变更：向上转发给 ChatPage
- * （写 mainSession.settings.attachments 并 PUT /sessions/:id 持久化）
+ * 工作目录条（输入框下方）的附加远程目录绑定变更：与 handleConfigChange 的
+ * attachments 分支同构——写 currentSession.settings.attachments 后防抖保存
+ * （两条绑定写回路径统一，均经 debouncedSaveSession → save-settings）
  */
 const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
-  emit("attachments-change", attachments);
+  if (!currentSession.value) return;
+  currentSession.value.settings.attachments = attachments;
+  debouncedSaveSession();
 };
 
 /**
  * 处理 ChatInput 配置变更
  * 与 chatInputConfig 计算属性中的字段一一对应
  */
-const handleConfigChange = (config: any) => {
+/** ChatInput 配置回传（字段与下方 chatInputConfig 计算属性一一对应） */
+interface ChatInputConfigChange {
+  modelId?: string | null
+  thinkingEffort?: string
+  maxTokensLimit?: number
+  knowledgeBaseIds?: string[]
+  workspacePath?: string | null
+  sandboxMode?: string
+  planEnabled?: boolean
+  [key: string]: unknown
+}
+
+const handleConfigChange = (config: ChatInputConfigChange) => {
   if (!currentSession.value) return;
 
   // 处理模型 ID 变更
@@ -654,6 +704,12 @@ const handleConfigChange = (config: any) => {
     currentSession.value.settings.sandboxMode = config.sandboxMode;
   }
 
+  // 处理计划模式（协作状态）：设置是事实源，同时写投影让指示器立即生效
+  if (typeof config.planEnabled !== 'undefined') {
+    currentSession.value.settings.planEnabled = config.planEnabled;
+    sessionStore.setSessionPlanEnabled(currentSession.value.id, config.planEnabled);
+  }
+
   // 处理附加连接
   if (typeof config.attachments !== 'undefined') {
     currentSession.value.settings.attachments = config.attachments;
@@ -675,6 +731,20 @@ watch(() => props.session?.id || props.sessionId, async (newSessionId: string | 
   needScrollToBottom.value = true;
 }, { immediate: true });
 
+/**
+ * 计划模式 UI 投影：从会话设置（事实源）单向同步。
+ *
+ * 覆盖三个来源——会话切换/刷新加载、用户开关（写设置后回流）、模型经 ExitPlanMode 退出
+ * （流帧写设置后回流）。收敛成"设置 → 投影"一条方向，避免两处各写一半导致刷新后回退。
+ */
+watch(
+  () => [currentSessionId.value, currentSession.value?.settings?.planEnabled] as const,
+  ([id, enabled]) => {
+    if (id) sessionStore.setSessionPlanEnabled(id, enabled === true);
+  },
+  { immediate: true },
+);
+
 // 监听流式状态变化，在第一次对话完成后生成标题
 watch(() => isStreaming.value, async (newVal, oldVal) => {
   // 当流式状态从 true 变为 false 时（即智能体回复完成）
@@ -686,7 +756,7 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
       visibleTurns.value.length === 1 &&
       !!userOfTurn(firstTurn) &&
       (firstTurn?.messages || []).some(
-        (m: any) => m.role === 'assistant' && m.blocks?.some((b: any) => b?.content),
+        (m) => m.role === 'assistant' && m.blocks?.some((b) => b?.content),
       );
     if (firstExchangeDone && !hasGeneratedTitle.value) {
       await generateTitleIfNeeded(currentSessionId.value!, currentSession);
@@ -797,9 +867,9 @@ async function loadMessages(
         }
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载消息失败:', error);
-    notify.error('加载消息失败', error.message);
+    notify.error('加载消息失败', getErrorMessage(error));
   } finally {
     isLoadingMore.value = false;
   }
@@ -899,7 +969,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   } catch (error) {
     if (token !== sessionChangeToken) return;
     console.error('加载会话失败:', error);
-    notify.error('加载会话失败', error.message);
+    notify.error('加载会话失败', getErrorMessage(error));
   } finally {
     if (token !== sessionChangeToken) return;
     isLoading.value = false;
@@ -914,7 +984,7 @@ function abortResponse() {
   }
 }
 
-async function deleteTurnMessage(turn: any) {
+async function deleteTurnMessage(turn: Turn) {
   try {
     if (
       await confirm(
@@ -938,7 +1008,7 @@ async function deleteTurnMessage(turn: any) {
 
 // 分支会话：以该回合（助手消息所在，必为完整一轮）为节点，复制出新会话并跳转过去
 // 分支只复制主对话（工作流、子代理等历史不跟随），故先弹窗告知该取舍
-async function branchFromTurn(turn: any) {
+async function branchFromTurn(turn: Turn) {
   if (!currentSessionId.value || !turn?.id) return;
   const confirmed = await confirm(
     t('chat.panel.branchConfirmTitle'),
@@ -952,13 +1022,15 @@ async function branchFromTurn(turn: any) {
     sessionStore.setSession(newSession);
     toast.success(t('chat.panel.branchSuccess'));
     router.replace({ name: 'Chat', params: { sessionId: newSession.id } });
-  } catch (error: any) {
-    toast.error(error?.message || t('chat.panel.branchFailed'));
+  } catch (error) {
+    toast.error(getErrorMessage(error) || t('chat.panel.branchFailed'));
     console.error("分支会话失败:", error);
   }
 }
 
-async function editMessage(block: any) {
+type MessageActionTarget = TurnContent | ReturnType<typeof toUserMessageView> | null
+
+async function editMessage(block: MessageActionTarget) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 无可编辑内容，提前返回
     if (!block) {
@@ -989,7 +1061,7 @@ async function editMessage(block: any) {
   }
 }
 
-async function copyMessage(block: any) {
+async function copyMessage(block: MessageActionTarget) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 复制空内容
     if (!block) {
@@ -1063,8 +1135,8 @@ async function handleSendMessage(payload?: InputMessageState) {
         },
       });
     }
-  } catch (error: any) {
-    notify.error(t('chat.panel.sendMessageFailed'), error.message);
+  } catch (error) {
+    notify.error(t('chat.panel.sendMessageFailed'), getErrorMessage(error));
     // 发送失败时由 SSE 事件驱动恢复检测
   }
 }
@@ -1097,9 +1169,9 @@ function handleEditQueued(item: QueuedMessage) {
  * TurnItem 已直接传入整轮 turn(渲染链路传递,零反查),
  * enterEditMode 直接用 turn.id 作为被编辑回合外壳 id。
  */
-function generateResponse(turn: any) {
+function generateResponse(turn: Turn) {
   const user = (turn?.messages || []).find(
-    (m: any) => m.role === "user" && !isHiddenBlock(m),
+    (m) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
   // 用户消息束 → 编辑视图（跨块聚合文本/附件），enterEditMode 消费
@@ -1111,9 +1183,9 @@ function generateResponse(turn: any) {
  * TurnItem 已直接传入整轮 turn,用户块与回合外壳 id 均从 turn 直接取(零反查),
  * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
-function regenerateResponse(turn: any) {
+function regenerateResponse(turn: Turn) {
   const user = (turn?.messages || []).find(
-    (m: any) => m.role === "user" && !isHiddenBlock(m),
+    (m) => m.role === "user" && !isHiddenBlock(m),
   );
   if (!user) return;
   // 用户消息束 → 可见视图：跨块聚合可见正文/附件；注入块（origin='system' 系统提示、
@@ -1156,7 +1228,7 @@ defineExpose({
   scrollToMessage,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
   insertText: (text: string) => chatInputRef.value?.insertText(text),
-  insertBadge: (data: any) => chatInputRef.value?.insertBadge(data),
+  insertBadge: (data: SnipData) => chatInputRef.value?.insertBadge(data),
 });
 
 /**
@@ -1179,7 +1251,8 @@ function scrollToMessage(messageId: string) {
   }
 
   // 用容器级滚动，避免 scrollIntoView 导致整个页面位移
-  container.scrollTo({ top: targetElement.offsetTop, behavior: 'smooth' })
+  // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
+  container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior: 'smooth' })
 
   // 屏外回合带 content-visibility，跳转途中它们才按真实高度展开，落点会偏；
   // 滚动结束后按实测位置校正一次

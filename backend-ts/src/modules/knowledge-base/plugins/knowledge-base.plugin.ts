@@ -139,6 +139,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         argsKey: "query",
         icon: "search",
       },
+      readOnly: true,
     });
 
     kbKit.registerTool({
@@ -186,6 +187,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         text: { executing: "%kb_list_files.executing%", completed: "%kb_list_files.completed%" },
         icon: "search",
       },
+      readOnly: true,
     });
 
     kbKit.registerTool({
@@ -243,6 +245,7 @@ export class KnowledgeBasePlugin extends PluginBase {
         argsKey: "file_id",
         icon: "search",
       },
+      readOnly: true,
     });
 
     kbKit.registerTool({

@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { t } from '@/locales'
+import { NetworkError } from '@/utils/errors'
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import type { User, LoginRequest } from '@/types/api'
 
 /**
@@ -74,7 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
             startAuthRefreshTimer()
 
             return true
-        } catch (error: any) {
+        } catch (error) {
             console.error("登录失败:", error)
             // 直接抛出原始错误，保留 statusCode 等信息
             throw error
@@ -144,23 +146,22 @@ export const useAuthStore = defineStore('auth', () => {
             }
 
             return true
-        } catch (error: any) {
+        } catch (error) {
             console.error('认证检查失败:', error)
 
             // 如果是连接错误，不要清除token，保留登录状态
-            if (error.message?.includes('无法连接到后端服务') ||
-                error.message?.includes('API服务初始化中')) {
+            if (error instanceof NetworkError ||
+                getErrorMessage(error).includes('无法连接到后端服务') ||
+                getErrorMessage(error).includes('API服务初始化中')) {
                 console.warn('后端服务未就绪，保留登录状态')
                 // 保留token和用户信息，等待后端就绪
                 return true
             }
 
             // 兼容 ApiService 拦截器转换后的 401 错误
-            if (error.response?.status === 401 ||
-                error.statusCode === 401 ||
-                error.isAuthError === true ||
-                error.message?.includes('Invalid token') ||
-                error.message?.includes('Authentication required')) {
+            if (getApiErrorStatus(error) === 401 ||
+                getErrorMessage(error).includes('Invalid token') ||
+                getErrorMessage(error).includes('Authentication required')) {
                 logout()
                 return false
             }

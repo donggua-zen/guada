@@ -76,10 +76,12 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElCheckbox } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import type { UpdateStatusPayload } from '@/types/electron'
 
 const props = defineProps<{
   visible: boolean
-  updateInfo: any
+  /** electron-updater 更新信息载荷（与 TitlebarLeftPanel 的 updateInfo 同源） */
+  updateInfo: UpdateStatusPayload['info'] | null
   isSkipped?: boolean
 }>()
 
@@ -118,14 +120,15 @@ const onVisibleChange = (val: boolean) => {
 
 const handleDownload = () => {
   if (props.updateInfo?.downloadUrl && window.electronAPI?.openExternal) {
-    window.electronAPI.openExternal(props.updateInfo.downloadUrl)
+    // downloadUrl 为开放载荷里的动态字段，消费点按 URL 字符串使用
+    window.electronAPI.openExternal(props.updateInfo.downloadUrl as string)
   }
   handleClose()
 }
 
 const handleViewChangelog = () => {
   if (props.updateInfo?.releaseNotes && window.electronAPI?.openExternal) {
-    window.electronAPI.openExternal(props.updateInfo.releaseNotes)
+    window.electronAPI.openExternal(props.updateInfo.releaseNotes as string)
   }
   handleClose()
 }

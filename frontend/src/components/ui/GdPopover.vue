@@ -23,7 +23,7 @@
 }
 </style>
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from 'vue'
 
 interface Props {
     show: boolean
@@ -33,6 +33,9 @@ interface Props {
     anchorEl?: HTMLElement | null
     /** 直接指定 fixed 坐标 { left, top }，跳过自动定位 */
     position?: { left: number; top: number } | null
+    /** position 模式下生效：把该选择器命中的第一个元素（子菜单首行）顶边对齐到 position.top。
+     *  弹窗内部首行之前还有内边距/分组标题等留白，按外框对齐会让首行明显低于触发项 */
+    alignItemSelector?: string
     /** 为 true 时暂停"点击外部/Esc 关闭"（面板内有 teleport 到 body 的子弹窗/确认框时使用） */
     pauseAutoClose?: boolean
 }
@@ -44,6 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
     popperClass: '',
     anchorEl: null,
     position: null,
+    alignItemSelector: '',
     pauseAutoClose: false,
 })
 
@@ -54,17 +58,40 @@ const emit = defineEmits<{
 }>()
 
 const popoverRef = ref<HTMLElement | null>(null)
-const positionStyle = ref<Record<string, any>>({})
+const positionStyle = ref<CSSProperties>({})
 let resizeObserver: ResizeObserver | null = null
 
 // 计算并更新位置
 const updatePosition = () => {
-    // 如果外部直接传入了坐标，直接使用
+    // 外部给定首选锚点（级联菜单）：按实测尺寸做视口收缩。
+    // 调用方只负责"贴在触发项哪一侧、与触发项顶边对齐"，它拿不到渲染后的真实高度；
+    // 若由调用方按假定高度收缩，矮菜单会被顶到离触发项很远的视口边缘
     if (props.position) {
+        const popoverElement = popoverRef.value
+        let left = props.position.left
+        let top = props.position.top
+
+        if (popoverElement) {
+            const width = popoverElement.offsetWidth
+            const height = popoverElement.offsetHeight
+
+            // 首行对齐：减掉首行之前的内边距/分组标题留白，让首行与触发项同高（偏移量与坐标无关）
+            if (props.alignItemSelector) {
+                const firstItem = popoverElement.querySelector(props.alignItemSelector)
+                if (firstItem) {
+                    top -= firstItem.getBoundingClientRect().top - popoverElement.getBoundingClientRect().top
+                }
+            }
+
+            left = Math.min(Math.max(8, left), Math.max(8, window.innerWidth - width - 8))
+            top = Math.min(Math.max(8, top), Math.max(8, window.innerHeight - height - 8))
+        }
+
         positionStyle.value = {
             position: 'fixed',
-            left: `${props.position.left}px`,
-            top: `${props.position.top}px`
+            left: `${left}px`,
+            top: `${top}px`,
+            bottom: 'auto'
         }
         return
     }
@@ -163,7 +190,7 @@ const handleEscKey = (e: KeyboardEvent) => {
 
 // 计算弹窗位置和样式
 const popoverStyle = computed(() => {
-    const style: Record<string, any> = {
+    const style: CSSProperties = {
         width: typeof props.width === 'number' ? `${props.width}px` : props.width,
         maxHeight: typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight
     }

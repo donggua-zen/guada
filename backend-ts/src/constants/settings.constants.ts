@@ -16,7 +16,6 @@ export const SK_SYS_CHAT_UPLOAD_SUBDIR = 'chatUploadSubdir';
 export const DEFAULT_CHAT_UPLOAD_SUBDIR = 'uploads';
 /** 知识库存储根（空 = 用默认位置；必须本地绝对路径，不接受 UNC） */
 export const SK_SYS_KB_STORAGE_ROOT = 'kbStorageRoot';
-export const SK_SYS_MAX_TOOL_ITERATIONS = 'maxToolIterations';
 export const SK_SYS_LLM_REQUEST_TIMEOUT_MS = 'llmRequestTimeoutMs';
 export const SK_SYS_LLM_IDLE_TIMEOUT_MS = 'llmIdleTimeoutMs';
 

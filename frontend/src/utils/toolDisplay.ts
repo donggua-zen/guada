@@ -12,21 +12,27 @@ import {
   Window16Regular,
   WindowConsole20Filled,
 } from "@vicons/fluent";
-import Terminal from "@/components/icons/Terminal.vue";
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 
 export interface ToolCall {
+  /** 工具调用 id（= 后端 toolCallId），与 toolCallsResponse[].toolCallId 对应。
+   *  运行时一直存在，仅类型未声明；并行调用的结果按它匹配，不能用数组下标（到达顺序不保证） */
+  id?: string;
   name?: string;
-  arguments?: any;
-  args?: any;
+  /** 原始 JSON 参数字符串（流式期间可能半截）或已解析的参数对象 */
+  arguments?: string | Record<string, unknown>;
+  args?: string | Record<string, unknown>;
   outcome?: "success" | "error" | "rejected" | "aborted";
-  metadata?: { [key: string]: any };
+  metadata?: Record<string, unknown>;
+  /** 子代理关联（由流事件 subagent_link 折叠写入）：工具结果落库前即可用，
+   *  供工具行提供"打开子代理面板"入口 */
+  subAgentLink?: { subSessionId: string; name?: string };
 }
 
 /** 定制渲染器配置（kind → 前端 tool-renderers 通用组件） */
 export interface ToolRendererConfig {
-  kind: "diff" | "content" | "terminal";
+  kind: "diff" | "content" | "terminal" | "plan";
   /** 语义字段 → arguments 字段名映射 */
   fields: {
     file?: string;
@@ -158,12 +164,14 @@ export function getToolIcon(tool: ToolCall): Component {
   return TOOL_ICON_MAP[DEFAULT_CONFIG.icon!];
 }
 
-export function formatArgSummary(value: any): string {
+export function formatArgSummary(value: unknown): string {
   if (typeof value !== "string") return String(value);
   return value.length > 60 ? value.substring(0, 260) : value;
 }
 
-export function getToolArgs(tool: ToolCall): any {
+export function getToolArgs(
+  tool: ToolCall,
+): string | Record<string, unknown> | undefined {
   if (tool.name === "tool_use") {
     try {
       const parsed =
@@ -218,6 +226,8 @@ const DEFAULT_RENDERER_FIELDS: Record<
   diff: { file: "file_path", oldValue: "old_text", newValue: "new_text" },
   content: { file: "file_path", content: "content" },
   terminal: { command: "command" },
+  // ExitPlanMode 的计划正文：流式期间半截 JSON 也能提取，首段即渲染（对齐 ZCode）
+  plan: { content: "plan" },
 };
 
 /**
@@ -232,13 +242,17 @@ const BUILTIN_RENDERERS: Record<string, ToolRendererConfig> = {
   remote_write: { kind: "content", fields: DEFAULT_RENDERER_FIELDS.content },
   run_command: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
   remote_bash: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
+  // 计划提交：正文边流边渲染（不必等整份计划输出完才可见）
+  ExitPlanMode: { kind: "plan", fields: DEFAULT_RENDERER_FIELDS.plan },
 };
 
 /** 校验并归一化后端下发的 renderer 声明（fields 缺省补默认映射） */
-function normalizeRenderer(decl: any): ToolRendererConfig | null {
+function normalizeRenderer(
+  decl: ToolRendererConfig | null | undefined,
+): ToolRendererConfig | null {
   if (!decl || typeof decl !== "object") return null;
   const kind: ToolRendererConfig["kind"] | undefined = decl.kind;
-  if (kind !== "diff" && kind !== "content" && kind !== "terminal") {
+  if (kind !== "diff" && kind !== "content" && kind !== "terminal" && kind !== "plan") {
     return null;
   }
   return {
@@ -260,6 +274,26 @@ export function getToolRenderer(tool: ToolCall): ToolRendererConfig | null {
   return normalizeRenderer(backendDecl) ?? BUILTIN_RENDERERS[name] ?? null;
 }
 
+/**
+ * 独立成块的 renderer kind：命中时该工具不并入「中间处理过程」分组，
+ * 单独成组、不可折叠、直接渲染（分组消费方见 messageUtils.doGrouping）。
+ *
+ * plan：计划正文是待审阅的产物，折进"已执行 N 个步骤"标题后默认不可见，
+ * 行级"默认展开"救不了被折叠的分组整体。后续若有同类产物（如问答卡），加进集合即可。
+ */
+const STANDALONE_RENDERER_KINDS: ReadonlySet<ToolRendererConfig["kind"]> = new Set(["plan"]);
+
+/** kind 是否独立成块渲染（分组与行级默认展开共用同一集合） */
+export function isStandaloneRendererKind(kind: ToolRendererConfig["kind"]): boolean {
+  return STANDALONE_RENDERER_KINDS.has(kind);
+}
+
+/** 工具是否独立成块（按 renderer kind 判定，与行级判定同一来源；无 renderer 的工具不独立） */
+export function isStandaloneTool(tool: ToolCall): boolean {
+  const kind = getToolRenderer(tool)?.kind;
+  return kind !== undefined && isStandaloneRendererKind(kind);
+}
+
 /** 各 kind 至少要有一个语义字段可解析才值得定制渲染 */
 const RENDERER_REQUIRED_KEYS: Record<
   ToolRendererConfig["kind"],
@@ -268,6 +302,7 @@ const RENDERER_REQUIRED_KEYS: Record<
   diff: ["oldValue", "newValue"],
   content: ["content"],
   terminal: ["command"],
+  plan: ["content"],
 };
 
 /**
@@ -293,7 +328,7 @@ export function getRendererArgs(
 
   const out: Record<string, string> = {};
   for (const [semantic, key] of Object.entries(renderer.fields)) {
-    const value = (parsed as Record<string, any>)[key];
+    const value = (parsed as Record<string, unknown>)[key];
     if (typeof value === "string") out[semantic] = value;
   }
   const hasRequired = RENDERER_REQUIRED_KEYS[renderer.kind].some(
@@ -302,7 +337,10 @@ export function getRendererArgs(
   return hasRequired ? out : null;
 }
 
-export function countSteps(items: any[]): number {
+/** 展示项最小结构（与 messageUtils.DisplayItem 同构，避免反向类型依赖） */
+export function countSteps(
+  items: ReadonlyArray<{ type: string; toolCalls?: ReadonlyArray<unknown> }>,
+): number {
   return items.reduce((sum, item) => {
     if (item.type === "tool" && item.toolCalls?.length) {
       return sum + item.toolCalls.length;

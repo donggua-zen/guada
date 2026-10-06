@@ -46,6 +46,7 @@ const Out65K = { maxOutputTokens: 65536 };
 const Out80K = { maxOutputTokens: 80000 };
 const Out256K = { maxOutputTokens: 256000 };
 const Out500K = { maxOutputTokens: 500000 };
+const Out1M = { maxOutputTokens: 1000000 };
 const Dim3072 = { vectorDimensions: 3072 };
 
 /**
@@ -64,7 +65,9 @@ const Dim3072 = { vectorDimensions: 3072 };
  *   强制思考模型（不可关）声明不含 none 的菜单（如 ['on']、['low','high','max']）；
  *   supportsThinking: false = 不能思考（无需档位字段）。
  *
- * 数据截至 2026-08，覆盖各供应商最新在售模型系列。
+ * 数据截至 2026-10，覆盖各供应商最新在售模型系列。
+ * V4.1 / GLM-5.3 / Step 5 系的数据取自 DSH（deepseek-harness）所用
+ * @earendil-works/pi-ai 模型目录与阶跃星辰官方文档。
  */
 export const MODEL_PRESETS: ModelPreset[] = [
   // ════════════════════════════════════════════════════════
@@ -410,10 +413,35 @@ export const MODEL_PRESETS: ModelPreset[] = [
 
   // ════════════════════════════════════════════════════════
   //  DeepSeek
-  //  V4 Pro/Flash (2026-04) 当前旗舰，1M 上下文，支持思考开关
-  //  deepseek-chat / deepseek-reasoner 已指向 V4-Flash
+  //  V4.1 Flash (deepseek-flash, 2026-09) / V4 Pro 当前旗舰，1M 上下文
+  //  deepseek-chat / deepseek-reasoner 别名仍指向 V4-Flash
   //  R1 (2025-01) 推理固定不可调节，不标记 thinking
   // ════════════════════════════════════════════════════════
+  {
+    id: 'deepseek-v4.1-flash',
+    label: 'DeepSeek V4.1 Flash',
+    patterns: [/deepseek.*4\.1/, /deepseek-flash/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out384K,
+    ),
+    supportsThinking: true,
+    // V4.1 起思考档位无 off（pi-ai thinkingLevelMap）→ 推理常开
+    thinkingEfforts: ['low', 'high', 'max'],
+  },
+  {
+    id: 'deepseek-v4-pro',
+    label: 'DeepSeek V4 Pro',
+    patterns: [/deepseek.*v4.*pro/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out384K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['high', 'max'],
+  },
   {
     id: 'deepseek-v4',
     label: 'DeepSeek V4',
@@ -604,9 +632,48 @@ export const MODEL_PRESETS: ModelPreset[] = [
 
   // ════════════════════════════════════════════════════════
   //  GLM (Zhipu AI / Z.ai)
-  //  GLM-5.2 (2026-06) 当前旗舰
-  //  GLM-4.7 (200K) → GLM-4.6 (200K) → GLM-4.5 (128K)
+  //  GLM-5.3 (2026-09) 当前旗舰，1M 上下文；flash 变体支持图片输入
+  //  GLM-5.2 (2026-06) → GLM-4.7 (200K) → GLM-4.6 (200K) → GLM-4.5 (128K)
+  //  5.2 系支持 off 档；5.3 系推理常开，档位 low/high/max
   // ════════════════════════════════════════════════════════
+  {
+    id: 'glm-5.3-flash',
+    label: 'GLM-5.3-Flash',
+    patterns: [/glm-?5\.3-?flash/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out131K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high', 'max'],
+  },
+  {
+    id: 'glm-5.3',
+    label: 'GLM-5.3',
+    // 覆盖 glm-5.3 / glm-5.3-highspeed（同规格：1M / 131K / 纯文本）
+    patterns: [/glm-?5\.3/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out131K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high', 'max'],
+  },
+  {
+    id: 'glm-5.2',
+    label: 'GLM-5.2',
+    // 覆盖 glm-5.2 / glm-5.2-highspeed（同规格）
+    patterns: [/glm-?5\.2/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out131K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['none', 'high', 'max'],
+  },
   {
     id: 'glm-5',
     label: 'GLM-5',
@@ -929,6 +996,47 @@ export const MODEL_PRESETS: ModelPreset[] = [
     ),
     supportsThinking: true,
     thinkingEfforts: ['none', 'low', 'high'],
+  },
+  // ════════════════════════════════════════════════════════
+  //  Step（阶跃星辰）
+  //  Step 5 Preview (2026-09) 旗舰：1M 上下文，reasoning_effort 三档
+  //  step-3.7-flash 多模态推理 / step-3.5-flash 纯文本推理，均 256K
+  // ════════════════════════════════════════════════════════
+  {
+    id: 'step-5',
+    label: 'Step 5 Preview',
+    patterns: [/^step-?5/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C1M, Out1M,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
+  },
+  {
+    id: 'step-3.7-flash',
+    label: 'Step 3.7 Flash',
+    patterns: [/^step-?3\.7/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.Multimodal, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'medium', 'high'],
+  },
+  {
+    id: 'step-3.5-flash',
+    label: 'Step 3.5 Flash',
+    patterns: [/^step-?3\.5/],
+    modeType: 'text',
+    config: mergeConfig(
+      ConfigFragments.TextOnly, ConfigFragments.TextOutput,
+      ConfigFragments.WithTools, C256K, Out128K,
+    ),
+    supportsThinking: true,
+    thinkingEfforts: ['low', 'high'],
   },
   {
     id: 'stepfun',

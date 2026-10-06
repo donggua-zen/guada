@@ -10,6 +10,13 @@
     :file-path="info.args.file || ''"
     :content="info.args.content || ''"
   />
+  <ToolPlanView
+    v-else-if="info.kind === 'plan'"
+    :content="info.args.content || ''"
+    :executing="executing"
+    :pending-approval="pendingApproval"
+    :session-id="sessionId"
+  />
   <ToolTerminalView
     v-else
     :command="info.args.command || ''"
@@ -32,6 +39,7 @@ import { computed } from "vue";
 import ToolDiffView from "./ToolDiffView.vue";
 import ToolContentView from "./ToolContentView.vue";
 import ToolTerminalView from "./ToolTerminalView.vue";
+import ToolPlanView from "./ToolPlanView.vue";
 import { extractResultContent } from "@/utils/toolResult";
 import {
   parseTerminalResult,
@@ -39,14 +47,19 @@ import {
   type TerminalResultInfo,
 } from "@/utils/terminalOutput";
 import type { ToolRendererInfo } from "@/utils/toolDisplay";
+import type { ToolCallResponseEntry } from "@/types/message";
 
 const props = defineProps<{
   /** getToolRenderer + getRendererArgs 的解析结果 */
   info: ToolRendererInfo;
   /** 对应 toolResponses 条目（结果），terminal 视图展示其输出 */
-  response?: any;
+  response?: ToolCallResponseEntry;
   isError?: boolean;
   executing?: boolean;
+  /** 所在会话（plan 视图的「查看完整计划」打开计划面板用） */
+  sessionId?: string;
+  /** 本工具调用正处于待审批（会话级交互卡的 toolCallId 命中）：plan 视图据此放行面板入口 */
+  pendingApproval?: boolean;
 }>();
 
 /** 工具结果文本（含元数据标记；terminal 卡片从这里解析剥离） */
@@ -57,9 +70,10 @@ const outputText = computed(() => {
   return typeof content === "string" ? content : JSON.stringify(content, null, 2);
 });
 
-/** 工具结果 meta（card: "terminal" 时为新契约的结构化来源） */
+/** 工具结果 meta（card: "terminal" 时为新契约的结构化来源；后端 meta 即 card + 各卡片自定义字段的开放字典） */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
 const resultMeta = computed<Record<string, any> | null>(() => {
-  const m = (props.response as any)?.meta;
+  const m = props.response?.meta;
   return m && m.card === "terminal" ? m : null;
 });
 

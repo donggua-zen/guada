@@ -30,6 +30,8 @@ export interface CatalogModel {
   thinkingEffortsMap?: ThinkingEffortMap;
   /** 档位→JSON merge patch 映射（该档生效时整体打进请求体） */
   thinkingEffortsPatch?: ThinkingEffortPatch;
+  /** 拼法表达式（CEL）：存在时接管思考字段写入（替换内置拼法分派） */
+  thinkingPatchExpr?: string;
   /** 逐模型 wire 兼容开关覆盖 */
   compat?: ThinkingCompatConfig;
 }
@@ -128,6 +130,9 @@ export class BundledCatalogService {
                       : undefined,
                   thinkingEffortsMap: normalizeEffortMap(m.thinkingEffortsMap),
                   thinkingEffortsPatch: normalizeEffortPatch(m.thinkingEffortsPatch),
+                  ...(typeof m.thinkingPatchExpr === 'string' && m.thinkingPatchExpr.trim()
+                    ? { thinkingPatchExpr: m.thinkingPatchExpr.trim() }
+                    : {}),
                   ...(compat ? { compat } : {}),
                 };
               })

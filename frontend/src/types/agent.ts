@@ -33,7 +33,8 @@ export interface AgentSettings {
     top_p?: number
     frequency_penalty?: number
     presence_penalty?: number
-    [key: string]: any
+    /** 兼容后端 settings 分组下的扩展键（memory/skills/plugins 等由各消费方收窄读取） */
+    [key: string]: unknown
 }
 
 /**
@@ -42,7 +43,8 @@ export interface AgentSettings {
 export interface CreateAgentRequest {
     name: string
     description?: string
-    modelId?: string
+    /** null = 清除模型绑定（与 Agent.modelId 的可空语义对齐） */
+    modelId?: string | null
     settings?: Partial<AgentSettings>
 }
 
@@ -52,7 +54,7 @@ export interface CreateAgentRequest {
 export interface UpdateAgentRequest {
     name?: string
     description?: string
-    modelId?: string
+    modelId?: string | null
     settings?: Partial<AgentSettings>
 }
 

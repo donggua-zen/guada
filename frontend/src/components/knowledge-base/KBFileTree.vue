@@ -162,7 +162,7 @@
         <!-- 文件夹树 -->
         <el-tree :data="folderTreeData" :props="{ label: 'displayName', children: 'children' }" node-key="id"
           highlight-current @node-click="selectTargetFolder" class="mt-2">
-          <template #default="{ node, data }">
+          <template #default="{ node }">
             <span class="flex items-center gap-2">
               <el-icon>
                 <Folder />
@@ -181,9 +181,10 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
+import { Folder, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -294,7 +295,16 @@ const renamingFileId = ref<string | null>(null) // 保存正在重命名的文�
  */
 const showMoveDialog = ref(false)
 const selectedTargetFolderId = ref<string | null>(null)
-const folderTreeData = ref<any[]>([])
+/**
+ * 移动对话框文件夹树节点（el-tree data 项；type 别名以获得隐式索引签名，兼容 el-tree 的 TreeNodeData）
+ */
+type FolderTreeNode = {
+  id: string
+  displayName: string
+  relativePath?: string | null
+  children: FolderTreeNode[]
+}
+const folderTreeData = ref<FolderTreeNode[]>([])
 const moveLoading = ref(false)
 const movingFileId = ref<string | null>(null) // 保存正在移动的文件ID
 
@@ -331,7 +341,7 @@ async function loadFolderContents(relativePath: string | null, isLoadMore: boole
       pageSize.value
     )
 
-    const newItems = (response.items || []).map((file: any) => ({
+    const newItems = (response.items || []).map((file) => ({
       id: file.id,
       fileId: file.id,
       knowledgeBaseId: file.knowledgeBaseId,
@@ -463,7 +473,7 @@ async function startFileProcessingPolling() {
         console.log(`[DEBUG] KBFileTree: 轮询收到 ${responses.length} 个文件的状态更新`)
 
         // 遍历结果并更新本地状态
-        responses.forEach((response: any) => {
+        responses.forEach((response) => {
           // 更新本地文件状态
           updateFileStatus(response.id, {
             processingStatus: response.processingStatus,
@@ -965,9 +975,9 @@ async function confirmRename() {
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
-  } catch (error: any) {
+  } catch (error) {
     console.error('[DEBUG] 重命名失败:', error)
-    ElMessage.error(error.message || t('common.renameFailed'))
+    ElMessage.error(getErrorMessage(error) || t('common.renameFailed'))
   } finally {
     renameLoading.value = false
   }
@@ -999,7 +1009,7 @@ async function loadFolderTree() {
     const allItems = response.items || []
 
     // 过滤出文件夹，并构建树形结构
-    const folders = allItems.filter((item: any) => item.isDirectory)
+    const folders = allItems.filter((item) => item.isDirectory)
     folderTreeData.value = buildFolderTree(folders)
   } catch (error) {
     console.error('加载文件夹树失败:', error)
@@ -1010,9 +1020,9 @@ async function loadFolderTree() {
 /**
  * 构建文件夹树
  */
-function buildFolderTree(folders: any[]): any[] {
-  const folderMap = new Map<string, any>()
-  const rootFolders: any[] = []
+function buildFolderTree(folders: KBFile[]): FolderTreeNode[] {
+  const folderMap = new Map<string, FolderTreeNode>()
+  const rootFolders: FolderTreeNode[] = []
 
   // 创建映射
   folders.forEach(folder => {
@@ -1041,7 +1051,7 @@ function buildFolderTree(folders: any[]): any[] {
 /**
  * 选择目标文件夹
  */
-function selectTargetFolder(data: any) {
+function selectTargetFolder(data: FolderTreeNode) {
   selectedTargetFolderId.value = data.id
 }
 
@@ -1078,9 +1088,9 @@ async function confirmMove() {
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
-  } catch (error: any) {
+  } catch (error) {
     console.error('[DEBUG] 移动失败:', error)
-    ElMessage.error(error.message || t('knowledge.tree.moveFailed'))
+    ElMessage.error(getErrorMessage(error) || t('knowledge.tree.moveFailed'))
   } finally {
     moveLoading.value = false
   }

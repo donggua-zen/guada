@@ -8,6 +8,35 @@ import { createAllMocks } from './helpers/mock-factories';
 import { loadChunksFromJsonl } from './helpers/chunk-replayer';
 import * as path from 'path';
 
+/**
+ * 有界 LLM 生成器：第 1 轮返回工具调用，之后返回纯文本收尾。
+ *
+ * 轮次上限已移除（对齐 ZCode：主循环不设轮次上限，靠模型自行收手），
+ * 因此 mock 不能再无限重放同一批含工具调用的 chunks——那会让 ReAct 循环永不退出。
+ * 测试必须模拟"模型最终会停止调用工具"这一真实行为。
+ */
+function boundedToolCallGenerator() {
+  let callCount = 0;
+  const toolChunks = loadChunksFromJsonl(
+    path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
+  );
+  const textChunks = loadChunksFromJsonl(
+    path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),
+  );
+  return () =>
+    (async function* () {
+      callCount++;
+      if (callCount === 1) {
+        for (const chunk of toolChunks) {
+          yield chunk;
+          if (chunk.type === 'finish') break;
+        }
+      } else {
+        for (const chunk of textChunks) yield chunk;
+      }
+    })();
+}
+
 describe('AgentEngine - completions', () => {
   describe('Session Lock', () => {
     it('应该在请求完成后释放锁', async () => {
@@ -21,14 +50,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       // 第一次请求
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
@@ -56,14 +82,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -90,14 +113,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -155,14 +175,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       // 直发模式：abort 以参数传入（修正旧用例的参数位置——signal 应为第 4 参），
       // 引擎内部捕获 AbortError 并归拢为 user_cancel 收尾，不以异常冒泡
@@ -181,12 +198,8 @@ describe('AgentEngine - completions', () => {
 
   describe('Tool Calls', () => {
     it('应该正确处理单次工具调用', async () => {
-      const chunks = loadChunksFromJsonl(
-        path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
-      );
-
       const mocks = createAllMocks({
-        llmChunks: chunks,
+        llmGenerator: boundedToolCallGenerator(),
         toolCallsResponse: [
           {
             toolCallId: 'call_00_OqvDAfT37BtLapqkSQTX2479',
@@ -199,14 +212,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -236,24 +246,17 @@ describe('AgentEngine - completions', () => {
     });
 
     it('应该生成正确的工具调用展示文案', async () => {
-      const chunks = loadChunksFromJsonl(
-        path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
-      );
-
       const mocks = createAllMocks({
-        llmChunks: chunks,
+        llmGenerator: boundedToolCallGenerator(),
       });
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -313,14 +316,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -333,8 +333,15 @@ describe('AgentEngine - completions', () => {
       expect(toolResponseEvents.length).toBeGreaterThan(0);
     });
 
-    it('应该限制最大迭代次数', async () => {
-      // Mock 始终返回 tool_calls
+  });
+
+  describe('Plan Feedback（工具转交用户输入，终止回合）', () => {
+    /**
+     * 计划审批被拒且用户留下文字时：工具结果携带 followUpUserInput →
+     * 本轮**终止**（不再继续 ReAct 循环），文字随 run() 返回值交回 chat-runner
+     * 开启新轮次。这里钉住三条不变量：终止、返回值形态、隐藏注入确已删除。
+     */
+    it('工具转交用户输入 → 回合终止，run 返回 plan_rejected + followUpUserInput', async () => {
       const chunks = loadChunksFromJsonl(
         path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
       );
@@ -343,9 +350,83 @@ describe('AgentEngine - completions', () => {
         llmChunks: chunks,
         toolCallsResponse: [
           {
-            toolCallId: 'call_00_OqvDAfT37BtLapqkSQTX2479',
-            name: 'tool_load',
-            content: '{}',
+            toolCallId: 'call_exit_plan',
+            name: 'ExitPlanMode',
+            content: 'The plan was not approved by the user.',
+            isError: true,
+            followUpUserInput: '把第二步拆成两步',
+          },
+        ],
+      });
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,      );
+
+      const result = await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+
+      // 终止语义：finishReason=plan_rejected + 反馈随返回值交回
+      expect(result).toEqual({
+        finishReason: 'plan_rejected',
+        followUpUserInput: '把第二步拆成两步',
+      });
+
+      // 回合已终止：LLM 只被调用一次（没有第二轮让模型自我重写计划）
+      expect((mocks.llmService as any).getCallCount()).toBe(1);
+
+      // 隐藏注入已删：工具批次不再产生 user 角色消息（反馈由 chat-runner 以
+      // 真实用户消息开新轮，而非塞进本轮）
+      const appended = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls
+        .flatMap((c: any[]) => c[0] as any[]);
+      const toolBatchUserMessages = appended.filter(
+        (m: any) => m.role === 'user' && m.kind === 'model' && m.source?.plugin === 'plan-mode',
+      );
+      expect(toolBatchUserMessages).toHaveLength(0);
+
+      // turn_end 携带新 finishReason（前端对未知值静默，不破渲染）
+      const turnEnds = mocks.publishedEvents.filter((e) => e.type === 'turn_end');
+      expect(turnEnds.length).toBeGreaterThan(0);
+      expect((turnEnds[turnEnds.length - 1] as any).finishReason).toBe('plan_rejected');
+    });
+
+    it('工具结果无转交输入 → 轮次照常继续并以 stop 收尾（回归保障）', async () => {
+      let callCount = 0;
+      const chunks = loadChunksFromJsonl(
+        path.join(__dirname, 'fixtures/chunks-multi-turn.jsonl'),
+      );
+
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          callCount++;
+          return (async function* () {
+            if (callCount === 1) {
+              // 第一轮：工具调用轮（到第一个 finish 为止）
+              for (const chunk of chunks) {
+                yield chunk;
+                if (chunk.type === 'finish') break;
+              }
+            } else {
+              // 第二轮：文本回答轮（第一个 finish 之后的部分）
+              let seenFinish = false;
+              for (const chunk of chunks) {
+                if (!seenFinish) {
+                  if (chunk.type === 'finish') seenFinish = true;
+                  continue;
+                }
+                yield chunk;
+              }
+            }
+          })();
+        },
+        toolCallsResponse: [
+          {
+            toolCallId: 'call_001',
+            name: 'file__read',
+            content: 'File content here',
             isError: false,
           },
         ],
@@ -353,21 +434,16 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
-      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
-      const events = mocks.publishedEvents;
+      const result = await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
 
-      // 验证迭代次数不超过 MAX_ITERATIONS (100)
-      const llmCallCount = (mocks.llmService as any).getCallCount();
-      expect(llmCallCount).toBeLessThanOrEqual(100);
+      expect(result).toEqual({ finishReason: 'stop' });
+      expect((mocks.llmService as any).getCallCount()).toBe(2);
     });
   });
 
@@ -399,11 +475,8 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
-        { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,
-        mocks.askService as any,
-      );
+        { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -437,11 +510,8 @@ describe('AgentEngine - completions', () => {
       );
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
-        { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,
-        mocks.askService as any,
-      );
+        { serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()), parallel } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -469,14 +539,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -506,14 +573,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -546,14 +610,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -591,14 +652,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -624,14 +682,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       // 直发模式：publishedEvents 全量捕获，本用例只关注 text_delta
@@ -653,14 +708,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -684,14 +736,11 @@ describe('AgentEngine - completions', () => {
 
       const agentEngine = new AgentEngine(
         mocks.toolExecutor as any,
-        { getSettingValue: jest.fn().mockResolvedValue(undefined) } as any,
         mocks.llmService as any,
         {
           serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
           parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
+        } as any,      );
 
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
@@ -709,132 +758,4 @@ describe('AgentEngine - completions', () => {
     });
   });
 
-  describe('Iteration Pause (统一 Ask：kind=continue，无超时)', () => {
-    // 工具轮次上限设为 1：第一轮即暂停，测试聚焦暂停/继续/中止语义（不跑 100 轮）
-    function maxOneMocks(overrides?: { llmGenerator?: () => AsyncGenerator<any> }) {
-      const mocks = createAllMocks({
-        llmChunks: loadChunksFromJsonl(
-          path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
-        ),
-        toolCallsResponse: [
-          { toolCallId: 'call_00_OqvDAfT37BtLapqkSQTX2479', name: 'tool_load', content: '{}', isError: false },
-        ],
-      });
-      // 覆盖 settings mock：getSettingValue → 1（maxToolIterations=1）
-      const settingsMock = { getSettingValue: jest.fn().mockResolvedValue(1) };
-      if (overrides?.llmGenerator) {
-        (mocks.llmService as any).completions.mockImplementation(overrides.llmGenerator);
-      }
-      return { mocks, settingsMock };
-    }
-
-    function buildEngine(mocks: any, settingsMock: any) {
-      return new AgentEngine(
-        mocks.toolExecutor as any,
-        settingsMock as any,
-        mocks.llmService as any,
-        {
-          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
-          parallel: jest.fn(async () => []),
-        } as any,
-        mocks.askService as any,
-      );
-    }
-
-    it('达到最大轮次暂停 → 应答"继续执行" → 重置配额、执行 pending 工具、最终 stop', async () => {
-      // LLM 第 1 轮 tool_calls（触发暂停），第 2 轮文本 stop
-      let callCount = 0;
-      const toolChunks = loadChunksFromJsonl(
-        path.join(__dirname, 'fixtures/chunks-with-tool-calls.jsonl'),
-      );
-      const { mocks, settingsMock } = maxOneMocks({
-        llmGenerator: () => {
-          callCount++;
-          if (callCount === 1) {
-            return (async function* () { for (const c of toolChunks) yield c; })();
-          }
-          return (async function* () {
-            yield { type: 'block_start', index: 0, blockType: 'text' };
-            yield { type: 'text_delta', index: 0, text: '完成。' };
-            yield { type: 'block_end', index: 0, block: { type: 'text', contentId: '', text: '完成。' } };
-            yield { type: 'usage', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
-            yield { type: 'finish', finishReason: 'stop' };
-          })();
-        },
-      });
-      const agentEngine = buildEngine(mocks, settingsMock);
-
-      // 直发模式：publishStream 捕获实现里看到 ask_requested(kind=continue) 后
-      // 延后应答（此刻引擎已注册等待者并原地挂起），模拟用户点"继续执行"
-      let paused = 0;
-      (mocks.sessionContext.publishStream as jest.Mock).mockImplementation(
-        async (chunk: SessionStreamEvent) => {
-          mocks.publishedEvents.push(chunk);
-          if (chunk.type === 'ask_requested' && chunk.kind === 'continue') {
-            paused++;
-            setImmediate(() => {
-              mocks.askWait.resolveAnswers(mocks.sessionContext.sessionId, chunk.requestId, [
-                { id: 'continue', selected: ['继续执行'] },
-              ]);
-            });
-          }
-        },
-      );
-      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
-      const events = mocks.publishedEvents;
-
-      // 暂停请求帧（携带凭证 requestId）；继续后突破原上限（maxToolIterations=1 但 LLM 被调 2 次）
-      expect(paused).toBe(1);
-      const pauseEvt = events.find(
-        (e): e is Extract<SessionStreamEvent, { type: 'ask_requested' }> => e.type === 'ask_requested',
-      );
-      expect(pauseEvt?.requestId).toBeTruthy();
-      expect(pauseEvt?.questions[0].options.map((o) => o.label)).toEqual(['继续执行', '停止']);
-      expect(callCount).toBe(2);
-      // 继续后执行了 pending 工具（第一轮被暂停的工具）
-      expect((mocks.toolExecutor.executeBatch as jest.Mock).mock.calls.length).toBe(1);
-      // 回合最终正常结束（stop，而非 max_iterations_reached / user_cancel）
-      const turnEnd = events.find((e) => e.type === 'turn_end');
-      expect(turnEnd?.finishReason).toBe('stop');
-    });
-
-    it('暂停期间 abort → user_cancel 收尾且不执行工具', async () => {
-      const { mocks, settingsMock } = maxOneMocks();
-      const abortController = new AbortController();
-      const agentEngine = buildEngine(mocks, settingsMock);
-
-      // 直发模式：publishStream 捕获实现里看到 ask_requested(kind=continue) 后延后 abort
-      // （此刻引擎已原地挂起等待），模拟用户暂停期间点"停止"
-      let aborted = false;
-      (mocks.sessionContext.publishStream as jest.Mock).mockImplementation(
-        async (chunk: SessionStreamEvent) => {
-          mocks.publishedEvents.push(chunk);
-          if (chunk.type === 'ask_requested' && chunk.kind === 'continue' && !aborted) {
-            aborted = true;
-            setImmediate(() => abortController.abort());
-          }
-        },
-      );
-      await agentEngine.run(
-        mocks.sessionContext,
-        { id: 'msg-001' },
-        'overwrite',
-        abortController.signal,
-      );
-      const events = mocks.publishedEvents;
-
-      expect(events.some((e) => e.type === 'ask_requested')).toBe(true);
-      // 暂停在工具执行前：中止后工具从未执行
-      expect((mocks.toolExecutor.executeBatch as jest.Mock).mock.calls.length).toBe(0);
-      // 等待表已撤回（abort → AskService.cancel）
-      const reqEvt = events.find(
-        (e): e is Extract<SessionStreamEvent, { type: 'ask_requested' }> => e.type === 'ask_requested',
-      );
-      expect(
-        mocks.askWait.getPendingQuestions(mocks.sessionContext.sessionId, reqEvt.requestId),
-      ).toBeUndefined();
-      const turnEnd = events.find((e) => e.type === 'turn_end');
-      expect(turnEnd?.finishReason).toBe('user_cancel');
-    });
-  });
 });

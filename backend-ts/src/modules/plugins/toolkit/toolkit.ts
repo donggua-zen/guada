@@ -45,70 +45,15 @@ export class Toolkit implements ToolKitHandle {
       ctx?: PluginContext,
       signal?: AbortSignal,
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     display?: ToolDisplay;
     dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
+    /** 只读执行能力（计划模式权限门依据）；缺省 false */
+    readOnly?: boolean;
+    /** 计划模式逃生舱；缺省 false */
+    allowedInPlanMode?: boolean;
+    /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
+    requiresUserInteraction?: boolean;
   }): void {
     const zodSchema = def.inputSchema as any;
     const rawJson = z.toJSONSchema(zodSchema) as any;
@@ -161,6 +106,9 @@ export class Toolkit implements ToolKitHandle {
       },
       dangerLevel: def.dangerLevel,
       toolSet: this.id,
+      readOnly: def.readOnly,
+      allowedInPlanMode: def.allowedInPlanMode,
+      requiresUserInteraction: def.requiresUserInteraction,
       icon: def.display?.icon,
       actionType: def.display?.actionType,
       argsKey,

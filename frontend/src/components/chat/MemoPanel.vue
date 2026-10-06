@@ -232,6 +232,8 @@ import { useSessionTokenStats, applyContextStatsFromEvents, clearTokenStats } fr
 import GdDialog from '@/components/ui/GdDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
+import type { SessionSummaryItem } from '@/services/modules/session.api';
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage';
 import { usePopup } from '@/composables/usePopup';
 import { Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
@@ -250,7 +252,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   sessionId: string | null;
 }>();
-const summaries = ref<any[]>([]);
+const summaries = ref<SessionSummaryItem[]>([]);
 const summaryTotal = ref(0);
 const showBreakdown = ref(false);
 const historyDialogVisible = ref(false);
@@ -313,7 +315,7 @@ async function loadSummaries() {
     const res = await apiService.fetchSessionSummaries(props.sessionId, 10);
     summaries.value = res.items;
     summaryTotal.value = res.total;
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载摘要失败:', error);
     toast.error(t('chat.memo.loadSummaryFailed'));
   }
@@ -415,15 +417,16 @@ async function handleCompress() {
       toast.success(t('chat.memo.compressStarted'));
       emit('close');
     } else {
-      toast.warning(res?.message || t('chat.memo.compressNotExecuted'));
+      toast.warning(t('chat.memo.compressNotExecuted'));
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('触发压缩失败:', error);
     // 409：会话正在流式输出（SESSION_STREAMING）或已有任务进行中（SESSION_BUSY）
-    if (error.status === 409 || error.message?.includes('busy') || error.message?.includes('STREAMING')) {
+    const msg = getErrorMessage(error);
+    if (getApiErrorStatus(error) === 409 || msg.includes('busy') || msg.includes('STREAMING')) {
       toast.warning(t('chat.memo.streamingWarning'));
     } else {
-      toast.error(error.message || t('chat.memo.compressFailed'));
+      toast.error(msg || t('chat.memo.compressFailed'));
     }
   }
 }

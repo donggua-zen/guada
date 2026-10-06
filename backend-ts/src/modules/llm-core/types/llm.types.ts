@@ -37,6 +37,11 @@ export interface LLMCompletionParams {
    * 装配完成后整体应用（patch 优先于 thinkingFormat/字符串映射的拼装结果）。
    */
   thinkingPatch?: Record<string, any>;
+  /**
+   * true = 该 patch 来自拼法表达式（thinkingPatchExpr）：适配器跳过内置思考
+   * 字段写入（thinkingFormat / 协议固定形状），思考字段完全由表达式输出决定。
+   */
+  thinkingPatchReplacesFormat?: boolean;
   /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据（如摘要调用标记） */
   purpose?: string;
   extraBody?: Record<string, any>;

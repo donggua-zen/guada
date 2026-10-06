@@ -10,10 +10,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { TerminalSocketService } from "@/services/modules/TerminalSocketService";
 import { useTheme } from "@/composables/useTheme";
 import type { ServerTerminalMessage } from "@/types/terminal.types";
+import type { Terminal } from "@xterm/xterm";
+import type { FitAddon } from "@xterm/addon-fit";
 
 const props = defineProps<{
     sessionId: string;
@@ -30,8 +32,8 @@ const { isDark } = useTheme();
 const terminalRef = ref<HTMLDivElement | null>(null);
 const errorHint = ref("");
 
-let term: any = null;
-let fitAddon: any = null;
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
 let disposers: Array<() => void> = [];
 
 // xterm 主题（跟随 --gd-* token）
@@ -57,6 +59,12 @@ const xtermTheme = computed(() => ({
     brightCyan: "#29b8db",
     brightWhite: "#e5e5e5",
 }));
+
+// 主题切换时热更新终端配色：xterm 主题同样在创建时固化，
+// 官方支持运行时改 options.theme（立即重绘，不影响缓冲区内容）
+watch(isDark, () => {
+    if (term) term.options.theme = xtermTheme.value;
+});
 
 async function initTerminal() {
     if (!terminalRef.value) return;
@@ -110,7 +118,8 @@ async function initTerminal() {
             return;
         }
         t.open(terminalRef.value);
-        fitAddon.fit();
+        // openWhenSized 仅在 initTerminal 末尾（fitAddon 已赋值后）首次执行
+        fitAddon!.fit();
         t.focus();
         connectSocket();
     };
@@ -151,7 +160,8 @@ async function initTerminal() {
         terminalSocket.onStatus((s) => {
             if (s === "open" && t.element) {
                 try {
-                    fitAddon.fit();
+                    // onStatus("open") 仅在 initTerminal 建连流程后才可能触发（fitAddon 已赋值）
+                    fitAddon!.fit();
                 } catch {
                     /* ignore */
                 }

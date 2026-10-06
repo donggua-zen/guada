@@ -18,15 +18,7 @@
 
 <script setup lang="ts">
 import WorkspaceTreeNode from './WorkspaceTreeNode.vue';
-
-export interface WorkspaceNode {
-    name: string;
-    path: string;
-    isDirectory: boolean;
-    children?: WorkspaceNode[];
-    size?: number;
-    hasChildren?: boolean;
-}
+import type { WorkspaceNode } from '@/types/workspace';
 
 const props = defineProps<{
     nodes: WorkspaceNode[];

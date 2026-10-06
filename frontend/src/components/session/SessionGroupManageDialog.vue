@@ -19,7 +19,7 @@
         <div v-else>
           <draggable v-model="localGroups" item-key="id" handle=".drag-handle"
             @end="onDragEnd" class="divide-y divide-(--gd-color-border)">
-            <template #item="{ element, index }">
+            <template #item="{ element }">
               <div
                 class="group-item flex items-center gap-2 px-3 py-2.5 transition-colors duration-200"
                 :class="{ 'bg-(--gd-color-surface)': editingId === element.id }">

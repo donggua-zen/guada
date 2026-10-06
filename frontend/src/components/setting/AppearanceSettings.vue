@@ -246,10 +246,13 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
 import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
+import type { AppearanceGroupSettings } from '@/types/service'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
@@ -307,7 +310,6 @@ const settingsForm = reactive({
 })
 
 const previewUrl = ref<string | null>(null)
-const uploadRef = ref<InstanceType<typeof ElUpload> | null>(null)
 
 /**
  * 将相对路径拼接为完整 URL（用于预览和显示）
@@ -356,7 +358,7 @@ watch(
 // 加载外观设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings('appearance')
+    const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
 
     settingsForm.sidebarOpacity = response.sidebarOpacity ?? 100
     settingsForm.contentOpacity = response.contentOpacity ?? 100
@@ -412,15 +414,15 @@ const handleSave = async () => {
     syncToLayoutStore()
     // 同步到 Electron 主进程
     pushFloatWidgetSettings()
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存外观设置失败:', error)
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    ElMessage.error('保存失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
 // 处理文件选择
-const handleFileChange = async (uploadFile: any) => {
-  const file = uploadFile.raw as File
+const handleFileChange = async (uploadFile: UploadFile) => {
+  const file = uploadFile.raw
   if (!file) return
 
   // 验证文件类型
@@ -442,9 +444,9 @@ const handleFileChange = async (uploadFile: any) => {
     previewUrl.value = resolveWallpaperUrl(extractRelativePath(response.url))
     await handleSave()
     ElMessage.success('壁纸上传成功')
-  } catch (error: any) {
+  } catch (error) {
     console.error('壁纸上传失败:', error)
-    ElMessage.error('壁纸上传失败: ' + (error.message || '未知错误'))
+    ElMessage.error('壁纸上传失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -455,9 +457,9 @@ const handleRemoveWallpaper = async () => {
     previewUrl.value = null
     await handleSave()
     ElMessage.success('壁纸已删除')
-  } catch (error: any) {
+  } catch (error) {
     console.error('壁纸删除失败:', error)
-    ElMessage.error('壁纸删除失败: ' + (error.message || '未知错误'))
+    ElMessage.error('壁纸删除失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 

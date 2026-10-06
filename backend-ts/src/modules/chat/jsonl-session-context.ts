@@ -52,6 +52,7 @@ import type { ThinkingEffort } from '../llm-core/thinking/thinking-vocabulary';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
+import { SessionMetaStore } from './session-meta.store';
 import {
   pickBaselineUserMessage,
   resolveBindingBaseline,
@@ -79,6 +80,8 @@ interface EffectiveSettings {
   agents?: Record<string, boolean>;
   attachments?: Record<string, string[]>;
   sandboxMode?: string;
+  /** 计划模式（协作状态，正交于 sandboxMode；布尔而非档位） */
+  planEnabled?: boolean;
   referencedKbs?: string[];
   modelName?: string | null;
 }
@@ -153,6 +156,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   private sandboxMode: SessionSandboxMode = 'workspace-write';
 
+  /**
+   * 计划模式（协作状态，正交于 sandboxMode）。
+   * 开启后由 ToolExecutor 的计划门强制只读，并由引擎每轮临时注入引导提示。
+   */
+  private planEnabled = false;
+
+  /** 刚退出计划模式（瞬态、不入库）：下一个迭代注入一次退出提醒后清除 */
+  private planModeExitReminderPending = false;
+
   /** 工具范围锁定（瞬态、不入库）：影子轮次等场景仅允许指定插件的工具 */
   private toolScope: string | null = null;
 
@@ -171,6 +183,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly streamManager: SessionStreamManager,
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly bindingState: RemoteBindingStateService,
+    /** 会话元数据存储（可选）：仅用于持久化运行期需要落库的会话设置（计划模式开关） */
+    private readonly sessionMetaStore?: SessionMetaStore,
   ) {
     this.sessionId = session.id;
     this.sessionType = session.sessionType || 'web';
@@ -222,6 +236,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     ) {
       this.sandboxMode = savedSandboxMode;
     }
+
+    // 4b. 恢复持久化的计划模式（布尔，缺省关；与 sandboxMode 各读各的，互不影响）
+    this.planEnabled = this.session.settings?.planEnabled === true;
 
     // 5. 插件决议放在最后：所有字段已赋值，handler 可通过 getSettings() 正常读取
     if (features.includes('tools')) {
@@ -521,6 +538,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     const enrichedMetadata: Record<string, any> = {
       ...options?.metadata,
       sandboxMode: this.sandboxMode,
+      planEnabled: this.planEnabled,
       sshBindings: this.liveBindingIds(),
     };
 
@@ -649,6 +667,47 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     this.sandboxMode = mode;
   }
 
+  getPlanEnabled(): boolean {
+    return this.planEnabled;
+  }
+
+  consumePlanModeExitReminder(): boolean {
+    const pending = this.planModeExitReminderPending;
+    this.planModeExitReminderPending = false;
+    return pending;
+  }
+
+  /**
+   * 设置计划模式并**持久化**（重启后据此恢复；与 sandboxMode 不同——后者只由界面写设置，
+   * 而计划模式还会被模型经 ExitPlanMode 审批通过后关闭，那条路径必须自己落库）。
+   *
+   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此必须读改写——
+   * 只传 { planEnabled } 会抹掉同一会话的其它设置。
+   */
+  async setPlanEnabled(enabled: boolean): Promise<void> {
+    if (this.planEnabled === enabled) return;
+    this.logger.debug(`Switching plan mode: ${this.planEnabled} -> ${enabled}`);
+    this.planEnabled = enabled;
+    // 退出后给模型一次明确的"可以动手了"信号（用户开关那条路径由模式叙事承担，
+    // 这里覆盖模型经 ExitPlanMode 退出的场景）
+    if (!enabled) this.planModeExitReminderPending = true;
+
+    if (!this.sessionMetaStore) return;
+    try {
+      const current = this.sessionMetaStore.getMeta(this.sessionId);
+      const settings: Record<string, any> = {
+        ...((current?.settings as Record<string, any>) ?? this.session?.settings ?? {}),
+      };
+      settings.planEnabled = enabled;
+      await this.sessionMetaStore.update(this.sessionId, { settings });
+      // 同步内存里的会话记录，避免同一上下文后续读取拿到旧值
+      if (this.session) this.session.settings = settings;
+    } catch (error: any) {
+      // 落库失败不阻断本次切换（内存态已生效，用户可再次切换纠正）
+      this.logger.warn(`Failed to persist plan mode (${enabled}): ${error?.message}`);
+    }
+  }
+
   setToolScope(pluginId: string | null): void {
     this.toolScope = pluginId;
   }
@@ -702,6 +761,13 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     data: import('../../common/persistence/types').AskAnsweredData,
   ): Promise<void> {
     await this.messageStore.appendAskAnswered(this.sessionId, data);
+  }
+
+  /** 记录会话模式变更事件（透传 messageStore；审计/切换历史，事实源仍是 session.settings） */
+  async appendSessionModeChanged(
+    data: import('../../common/persistence/types').SessionModeChangedData,
+  ): Promise<void> {
+    await this.messageStore.appendSessionModeChanged(this.sessionId, data);
   }
 
   /**
@@ -990,32 +1056,50 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    * 叙事按方向组合：进入/退出 read-only 与进入/退出 danger-full-access 可叠加。
    */
   private detectModeTransition(prevUserMsg?: Message): string | null {
+    const narrations: string[] = [];
+
+    // ── 安全档位（三档词表）──
     const prevMode = prevUserMsg?.metadata?.sandboxMode || 'workspace-write';
     const currentMode = this.sandboxMode;
 
-    if (prevMode === currentMode) return null;
+    if (prevMode !== currentMode) {
+      if (currentMode === 'read-only' && prevMode !== 'read-only') {
+        narrations.push(
+          'The user has enabled read-only mode. File writes are denied and run_command executes in a read-only sandbox — all file modifications are blocked. Use the available tools to analyze, plan, and discuss with the user; if a modification is required, explain what needs to change.',
+        );
+      }
+      if (prevMode === 'read-only' && currentMode !== 'read-only') {
+        narrations.push(
+          'The user has disabled read-only mode. File writes are available again under the session sandbox policy.',
+        );
+      }
+      if (currentMode === 'danger-full-access' && prevMode !== 'danger-full-access') {
+        narrations.push(
+          'The user has enabled unrestricted editing (danger-full-access). All path restrictions on file tools are lifted — you may read and write ANY file on the system outside the working directory. This is a high-risk operation: be extra careful, double-check the target path before writing, and never modify system-critical files unless explicitly requested.',
+        );
+      }
+      if (prevMode === 'danger-full-access' && currentMode !== 'danger-full-access') {
+        narrations.push(
+          'The user has disabled unrestricted editing. File tools are once again confined to the session sandbox policy.',
+        );
+      }
+    }
 
-    const narrations: string[] = [];
-    if (currentMode === 'read-only' && prevMode !== 'read-only') {
+    // ── 计划模式（协作状态，与安全档位各自独立判定）──
+    // 缺字段视为"与当前一致"：旧会话消息没有 planEnabled，不能把第一条带上该字段的消息
+    // 误判成一次切换（冷启动时尤其明显）。
+    const prevPlan =
+      prevUserMsg?.metadata?.planEnabled === undefined
+        ? this.planEnabled
+        : prevUserMsg.metadata.planEnabled === true;
+    if (prevPlan !== this.planEnabled) {
       narrations.push(
-        'The user has enabled read-only mode. File writes are denied and run_command executes in a read-only sandbox — all file modifications are blocked. Use the available tools to analyze, plan, and discuss with the user; if a modification is required, explain what needs to change.',
+        this.planEnabled
+          ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
+          : 'The user has disabled plan mode. You can make edits and run commands again.',
       );
     }
-    if (prevMode === 'read-only' && currentMode !== 'read-only') {
-      narrations.push(
-        'The user has disabled read-only mode. File writes are available again under the session sandbox policy.',
-      );
-    }
-    if (currentMode === 'danger-full-access' && prevMode !== 'danger-full-access') {
-      narrations.push(
-        'The user has enabled unrestricted editing (danger-full-access). All path restrictions on file tools are lifted — you may read and write ANY file on the system outside the working directory. This is a high-risk operation: be extra careful, double-check the target path before writing, and never modify system-critical files unless explicitly requested.',
-      );
-    }
-    if (prevMode === 'danger-full-access' && currentMode !== 'danger-full-access') {
-      narrations.push(
-        'The user has disabled unrestricted editing. File tools are once again confined to the session sandbox policy.',
-      );
-    }
+
     return narrations.length > 0 ? narrations.join('\n\n') : null;
   }
 
@@ -1095,6 +1179,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     merged.attachments = sessionSettings.attachments ?? {};
     merged.referencedKbs = sessionSettings.referencedKbs ?? [];
     merged.sandboxMode = sessionSettings.sandboxMode ?? 'workspace-write';
+    merged.planEnabled = sessionSettings.planEnabled === true;
     merged.modelName = sessionSettings.modelName ?? null;
 
     return merged;

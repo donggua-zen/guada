@@ -28,9 +28,11 @@
 
 <script setup lang="ts">
 import Avatar from '../ui/Avatar.vue'
+import type { Session } from '@/types/session'
 
 defineProps<{
-  session: any
+  // ChatPanel 在空会话欢迎分支渲染本组件，可能传入 null（模板以 v-if / ?. 兜底）
+  session: Session | null
 }>()
 </script>
 

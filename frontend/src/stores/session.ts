@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
-import { ref, computed, type Ref } from 'vue'
-import type { Session, SessionState, SessionSettings, QueuedMessage, StreamStatus } from '@/types/session'
+import { ref, type Ref } from 'vue'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -22,17 +22,6 @@ export const useSessionStore = defineStore('session', () => {
      * 取代旧的 sessionsList，按 ID 索引便于快速查找和更新
      */
     const sessionsMap: Ref<Map<string, Session>> = ref(new Map())
-
-    /**
-     * 兼容旧代码：基于 sessionsMap 的计算属性，按 lastActiveAt 降序排列
-     */
-    const sessionsList = computed((): Session[] => {
-        return Array.from(sessionsMap.value.values()).sort((a, b) => {
-            const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
-            const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
-            return timeB - timeA
-        })
-    })
 
     /**
      * 每个分组已加载的会话数量 Map<groupId, count>
@@ -446,7 +435,7 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).isCompressing = isCompressing
     }
 
-    // ─── 会话级统一交互卡（审批/询问/迭代暂停共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+    // ─── 会话级统一交互卡（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
 
     /** 读取会话级统一交互卡状态 */
     const sessionPendingAsk = (sessionId: string) => {
@@ -456,6 +445,54 @@ export const useSessionStore = defineStore('session', () => {
     /** 写入/清除会话级统一交互卡状态 */
     const setSessionPendingAsk = (sessionId: string, pendingAsk: SessionState['pendingAsk']): void => {
         getSessionState(sessionId).pendingAsk = pendingAsk
+    }
+
+    // ─── 计划模式（协作状态；UI 投影，事实源是会话设置）───
+
+    /** 读取会话的计划模式开关 */
+    const sessionPlanEnabled = (sessionId: string): boolean => {
+        return getSessionState(sessionId).planEnabled === true
+    }
+
+    /** 写入会话的计划模式开关（用户开关乐观写入） */
+    const setSessionPlanEnabled = (sessionId: string, enabled: boolean): void => {
+        getSessionState(sessionId).planEnabled = enabled
+    }
+
+    /**
+     * 模型发起的计划模式变更（plan_mode_changed 流帧）：同时更新 UI 投影与会话设置。
+     *
+     * 设置是事实源且后端已落库——这里必须一并更新，否则刷新后指示器会按旧设置回退。
+     */
+    const applyRemotePlanEnabled = (sessionId: string, enabled: boolean): void => {
+        getSessionState(sessionId).planEnabled = enabled
+        const session = sessionsMap.value.get(sessionId)
+        if (session) {
+            if (!session.settings) session.settings = {} as SessionSettings
+            session.settings.planEnabled = enabled
+        }
+    }
+
+    // ─── 计划历史缓存（计划模式产物：转录构建的列表，含状态）───
+
+    /** 读取缓存的计划列表（未刷新过为 undefined） */
+    const sessionPlans = (sessionId: string): SessionPlanItem[] | undefined => {
+        return getSessionState(sessionId).plans
+    }
+
+    /** 写入计划列表缓存（拉取统一走 utils/sessionPlan.refreshSessionPlans，store 保持纯状态） */
+    const setSessionPlans = (sessionId: string, plans: SessionPlanItem[] | undefined): void => {
+        getSessionState(sessionId).plans = plans
+    }
+
+    /**
+     * 计划列表缓存刷新（fire-and-forget，供 streamProjector 的 turn_end / plan_mode_changed 钩子调用）。
+     * 动态 import 拉取实现：store 不静态依赖服务层（后者反向依赖本 store）。
+     */
+    const refreshPlans = (sessionId: string): void => {
+        void import('@/utils/sessionPlan')
+            .then((m) => m.refreshSessionPlans(sessionId))
+            .catch(() => { /* 缓存刷新失败静默：面板/入口按未刷新处理 */ })
     }
 
     /**
@@ -471,7 +508,7 @@ export const useSessionStore = defineStore('session', () => {
      * @param sessionId - 会话 ID
      * @param content - 输入内容
      */
-    const setInputMessage = (sessionId: string, content: any): void => {
+    const setInputMessage = (sessionId: string, content: InputMessageState): void => {
         getSessionState(sessionId).inputMessage = content
     }
 
@@ -559,16 +596,6 @@ export const useSessionStore = defineStore('session', () => {
     // =====================
 
     /**
-     * 清理会话状态（删除会话时调用）
-     * @param sessionId - 会话 ID
-     */
-    const clearSessionState = (sessionId: string): void => {
-        sessions.value.delete(sessionId)
-        sessionsMap.value.delete(sessionId)
-        clearSidebarState(sessionId)
-    }
-
-    /**
      * 清空会话消息（清空聊天记录时调用）
      * 只清理消息和输入状态，保留会话本身
      * @param sessionId - 会话 ID
@@ -620,6 +647,12 @@ export const useSessionStore = defineStore('session', () => {
         setSessionIsCompressing,
         sessionPendingAsk,
         setSessionPendingAsk,
+        sessionPlanEnabled,
+        setSessionPlanEnabled,
+        applyRemotePlanEnabled,
+        sessionPlans,
+        setSessionPlans,
+        refreshPlans,
         enqueueMessage,
         dequeueMessage,
         peekQueue,

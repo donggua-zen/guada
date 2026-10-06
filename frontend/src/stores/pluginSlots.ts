@@ -24,9 +24,9 @@ export interface SlotItem {
   /** 渲染模式（list 等，语义由 slot 消费方决定） */
   mode?: string
   /** 透传给 slot 组件的 props */
-  props?: Record<string, any>
+  props?: Record<string, unknown>
   /** slot 消费方读取的元数据（如设置页的 label） */
-  meta?: Record<string, any>
+  meta?: Record<string, unknown>
   /** 插件资源版本号，拼静态资源 URL 用 */
   rev?: string
 }
@@ -81,8 +81,6 @@ function asyncPluginComponent(item: SlotItem): Component {
 
 // 已注册主题的插件集合：模块级而非 pinia state（Set 不适合进响应式 state）
 let registeredThemePlugins: Set<string> | null = null
-// plugins_changed 的 SSE 取消订阅函数（保留引用，供后续扩展解绑）
-let unsubPluginsChanged: (() => void) | null = null
 
 /**
  * 插件 Slot 注册表（Pinia store）
@@ -109,8 +107,8 @@ export const usePluginSlots = defineStore('pluginSlots', {
       }))
     },
 
-    metaOf: (state) => (name: string): any[] =>
-      (state.slots[name] || []).map((i) => i.meta).filter(Boolean),
+    metaOf: (state) => (name: string): NonNullable<SlotItem['meta']>[] =>
+      (state.slots[name] || []).map((i) => i.meta).filter((m): m is NonNullable<SlotItem['meta']> => Boolean(m)),
 
     hasSlot: (state) => (name: string): boolean => (state.slots[name] || []).length > 0,
   },
@@ -218,7 +216,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
     // 插件注册/卸载/启停时后端广播 plugins_changed，这里全量刷新（简单可靠）
     watchRefresh() {
       try {
-        unsubPluginsChanged = apiService.onSessionEvent('plugins_changed', async () => {
+        apiService.onSessionEvent('plugins_changed', async () => {
           try {
             const data = await apiService.getPluginSlots()
             this.slots = {}

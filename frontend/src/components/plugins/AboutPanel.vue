@@ -73,20 +73,23 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElIcon } from 'element-plus'
 import { Loading, CircleCheck, Link } from '@element-plus/icons-vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import type { UpdateStatusPayload } from '@/types/electron'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 const { t } = useI18n()
 const appVersion = ref('')
 const updateStatus = ref<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle')
-const updateInfo = ref<any>(null)
+/** electron-updater 更新信息载荷（version/downloadUrl/releaseNotes/description 为动态字段） */
+const updateInfo = ref<UpdateStatusPayload['info'] | null>(null)
 const isChecking = ref(false)
-const errorMessage = ref('')
+const errorMessage = ref<string | undefined>('')
 
 const repositories = [
     { name: 'GitHub', url: 'https://github.com/donggua-zen/guada', icon: '🐙' },
@@ -113,9 +116,9 @@ const checkForUpdates = async () => {
             updateStatus.value = 'error'
             errorMessage.value = res.error || ''
         }
-    } catch (e: any) {
+    } catch (e) {
         updateStatus.value = 'error'
-        errorMessage.value = e.message || t('plugins.about.unknownError')
+        errorMessage.value = getErrorMessage(e) || t('plugins.about.unknownError')
     } finally {
         isChecking.value = false
     }
@@ -123,15 +126,16 @@ const checkForUpdates = async () => {
 
 const handleDownload = () => {
     if (!window.electronAPI || !updateInfo.value?.downloadUrl) return
-    window.electronAPI.openExternal(updateInfo.value.downloadUrl)
+    // downloadUrl 为开放载荷里的动态字段，消费点按 URL 字符串使用
+    window.electronAPI.openExternal(updateInfo.value.downloadUrl as string)
 }
 
 const handleViewChangelog = () => {
     if (!window.electronAPI || !updateInfo.value?.releaseNotes) return
-    window.electronAPI.openExternal(updateInfo.value.releaseNotes)
+    window.electronAPI.openExternal(updateInfo.value.releaseNotes as string)
 }
 
-const handleUpdateStatus = (status: any) => {
+const handleUpdateStatus = (status: UpdateStatusPayload) => {
     switch (status.status) {
         case 'checking':
             updateStatus.value = 'checking'
