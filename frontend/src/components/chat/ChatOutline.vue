@@ -1,7 +1,7 @@
 <template>
-  <div v-if="outlineItems.length > 0" class="chat-outline-container" @mouseleave="hoveredId = null">
+  <div v-if="outlineItems.length >= 2" class="chat-outline-container" @mouseleave="hoveredId = null">
     <!-- 紧凑导航条：每个 user 消息一个短横线（视觉锚点），热区更宽且无缝 -->
-    <div class="outline-panel">
+    <div ref="panelRef" class="outline-panel" @scroll.passive="onPanelScroll">
       <div
         v-for="(item, idx) in outlineItems"
         :key="item.id"
@@ -16,16 +16,17 @@
         @mouseenter="hoveredId = item.id"
       >
         <span class="outline-line"></span>
-
-        <!-- hover 弹窗：只显示当前悬停的这一条消息，离开热区即消失（卡片本身不响应 hover、无动画） -->
-        <div v-if="hoveredId === item.id" class="outline-popover">
-          <div v-if="item.timeText" class="pop-header">
-            <span class="pop-time">{{ item.timeText }}</span>
-          </div>
-          <div class="pop-title">{{ item.title }}</div>
-          <div v-if="item.preview" class="pop-preview">{{ item.preview }}</div>
-        </div>
       </div>
+    </div>
+
+    <!-- hover 弹窗：渲染在容器根级（面板 overflow 内滚会裁剪子元素），top 由行几何
+         + 面板滚动量推算；只显示当前悬停的这一条消息，离开热区即消失（卡片不响应 hover、无动画） -->
+    <div v-if="hoveredItem" class="outline-popover" :style="{ top: popoverTop }">
+      <div v-if="hoveredItem.timeText" class="pop-header">
+        <span class="pop-time">{{ hoveredItem.timeText }}</span>
+      </div>
+      <div class="pop-title">{{ hoveredItem.title }}</div>
+      <div v-if="hoveredItem.preview" class="pop-preview">{{ hoveredItem.preview }}</div>
     </div>
   </div>
 </template>
@@ -54,6 +55,14 @@ const emit = defineEmits<{
 
 const hoveredId = ref<string | null>(null)
 const activeId = ref<string | null>(null)
+
+/**
+ * 刻度行几何（px），与 <style> 中 .outline-panel{padding} / .outline-item{height} 互指。
+ * 行高取偶数保证 2px 横线 flex 居中偏移为整数像素；12px 在 100%/125%/150%/175%
+ * 缩放下均为整数设备像素（15/18/21/24），刻度不因亚像素相位漂移而粗细不一。
+ */
+const OUTLINE_ROW_HEIGHT = 12
+const OUTLINE_PANEL_PAD_TOP = 4
 
 interface OutlineItem {
   id: string
@@ -136,6 +145,43 @@ function isAdjacentIdx(idx: number, distance: number): boolean {
   const h = hoveredIndex.value
   return h !== -1 && Math.abs(idx - h) === distance
 }
+
+/** 当前悬停项（容器根级弹窗的数据源） */
+const hoveredItem = computed(() =>
+  hoveredIndex.value === -1 ? undefined : outlineItems.value[hoveredIndex.value]
+)
+
+const panelRef = ref<HTMLElement | null>(null)
+/** 面板滚动量：弹窗锚定在容器根级，不随面板内滚，需扣除滚动量 */
+const panelScrollTop = ref(0)
+
+function onPanelScroll(event: Event) {
+  panelScrollTop.value = (event.target as HTMLElement).scrollTop
+}
+
+/** 弹窗垂直位置 = 行中心 − 面板滚动量（配合 translateY(-50%) 以此点垂直居中） */
+const popoverTop = computed(() => {
+  const center =
+    OUTLINE_PANEL_PAD_TOP + hoveredIndex.value * OUTLINE_ROW_HEIGHT + OUTLINE_ROW_HEIGHT / 2
+  return `${center - panelScrollTop.value}px`
+})
+
+// 激活刻度变化时滚入面板可视窗（nearest 语义；手动改 scrollTop，
+// 不用 scrollIntoView —— 它会连带滚动聊天容器）
+watch(activeId, () => {
+  nextTick(() => {
+    const panel = panelRef.value
+    const idx = outlineItems.value.findIndex(i => i.id === activeId.value)
+    if (!panel || idx === -1) return
+    const rowTop = OUTLINE_PANEL_PAD_TOP + idx * OUTLINE_ROW_HEIGHT
+    const rowBottom = rowTop + OUTLINE_ROW_HEIGHT
+    if (rowTop < panel.scrollTop) {
+      panel.scrollTop = rowTop
+    } else if (rowBottom > panel.scrollTop + panel.clientHeight) {
+      panel.scrollTop = rowBottom - panel.clientHeight
+    }
+  })
+})
 
 let scrollEl: Element | null = null
 let msgEls: { id: string; el: Element }[] = []
@@ -281,85 +327,92 @@ function handleItemClick(messageId: string) {
 </script>
 
 <style scoped>
-/* —— 容器：聊天区左侧垂直居中（随 GlobalSidebar 显隐自动跟随） —— */
+/* —— 容器：聊天区左侧垂直居中（随 GlobalSidebar 显隐自动跟随）。
+      max-height 对齐 ZCode（100% - 6rem），超高后由面板内部滚动；
+      flex 布局让面板在容器被 max-height 限高时收缩出滚动区 —— */
 .chat-outline-container {
   position: absolute;
   left: 8px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 6rem);
 }
 
-/* —— 窄条面板：热区加宽到 40px，横线仅为视觉锚点 —— */
+/* —— 窄条面板：热区加宽到 40px，横线仅为视觉锚点；超高时内部滚动、隐藏滚动条 —— */
 .outline-panel {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   width: 40px;
   padding: 4px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
 
-/* —— 列表项：固定 13px 高、无缝连续（无 gap/margin），hover 热区无盲区 —— */
+.outline-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* —— 列表项：固定 12px 高、无缝连续（无 gap/margin），hover 热区无盲区。
+      行高必须为偶数：2px 横线居中偏移 = (12-2)/2 = 5px 整数像素，且 12px 在
+      100%/125%/150%/175% 缩放下均为整数设备像素（15/18/21/24），刻度不因亚像素
+      相位漂移而粗细不一（ZCode 同思路：10px 行高 + 整数偏移 + 恒偶总高） —— */
 .outline-item {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start; /* 横线左对齐，加宽时向右延伸 */
+  flex-shrink: 0; /* 面板内滚时行高不被压缩，保证行距均匀 */
   width: 100%;
-  height: 13px;
+  height: 12px;
   padding-left: 4px; /* 左留白，横线不贴边 */
   box-sizing: border-box;
   cursor: pointer;
   border-radius: 4px;
 }
 
-/* —— 短横线指示器：视觉锚点，宽度随层级变化并带动画（0.18s，约 0.35s 的一倍速） —— */
+/* —— 短横线指示器：视觉锚点，宽度随层级变化并带动画。
+      scaleX 梯度对齐 ZCode（1 / 1.25 / 1.7 / 2.6），单色阶：
+      静默 = 弱化文本色，悬停/阅读位 = 前景色（暗色由 token 自适应，不写死） —— */
 .outline-line {
   width: 12px;
   height: 2px;
-  border-radius: 1px;
-  background-color: var(--el-text-color-disabled, #c0c4cc);
-  transition: width 0.18s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+  border-radius: 999px;
+  background-color: var(--gd-color-text-disabled);
+  transform-origin: left center;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out, background-color 0.15s ease-out;
 }
 
-.dark .outline-line {
-  background-color: #3a3c40;
-}
-
-.outline-item:hover .outline-line {
-  background-color: var(--el-text-color-secondary, #909399);
-}
-
-.dark .outline-item:hover .outline-line {
-  background-color: #55575c;
-}
-
-/* 阅读位置：仅高亮（蓝色），长度不变（12px）—— hover 时 is-active 条件排除 */
+/* 阅读位置：前景色 + 微降透明度，长度不变（scaleX 1）—— hover 时 is-active 条件排除 */
 .outline-item.is-active .outline-line {
-  background-color: var(--el-color-primary, #409eff);
+  background-color: var(--gd-color-text);
+  opacity: 0.9;
 }
 
-/* 层级：隔一条的项略长（16px） */
+/* 层级：隔一条的项略长（scaleX 1.25 → 15px） */
 .outline-item.is-adjacent-2 .outline-line {
-  width: 16px;
+  transform: scaleX(1.25);
 }
 
-/* 层级：紧邻项较长（24px） */
+/* 层级：紧邻项较长（scaleX 1.7 → 20.4px） */
 .outline-item.is-adjacent .outline-line {
-  width: 24px;
+  transform: scaleX(1.7);
 }
 
-/* 层级：悬停项最长（34px），高亮为主题色（优先级最高，放最后） */
+/* 层级：悬停项最长（scaleX 2.6 → 31.2px），前景色（优先级最高，放最后） */
 .outline-item.is-hovered .outline-line {
-  background-color: var(--el-color-primary, #409eff);
-  width: 34px;
+  background-color: var(--gd-color-text);
+  transform: scaleX(2.6);
 }
 
-/* —— hover 弹窗卡片：单条消息详情，向右弹出 —— */
+/* —— hover 弹窗卡片：单条消息详情，向右弹出（top 由内联样式按行几何给定） —— */
 .outline-popover {
   position: absolute;
   left: calc(100% + 10px);
-  top: 50%;
   transform: translateY(-50%);
   width: 260px;
   max-height: 220px;
