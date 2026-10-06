@@ -134,7 +134,7 @@
                 :class="{ 'is-expanded': isGroupContentVisible(groupIndex, group) }">
                 <div class="process-group__body">
                   <div class="process-group__body-scroll space-y-2"
-                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible && !isLastActive(groupIndex) }"
+                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }"
                     :ref="isLastActive(groupIndex) ? setActiveBodyRef : undefined"
                     @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
                     <template v-for="item in group.items" :key="item.id">
@@ -350,9 +350,12 @@ const isGroupExpanded = (groupId: string): boolean => {
 
 /** 分组内容当前是否可见（与模板 collapsible 的 is-expanded 判定保持同一表达式） */
 const isGroupContentVisible = (groupIndex: number, group: DisplayGroup): boolean => {
+  // 不可折叠组（独立渲染工具卡，如计划）永远直接渲染：
+  // 不参与 last-active 的"进行中收成一行"处理，否则待审批/流式最后一组时又被藏住
+  if (!group.isCollapsible) return true;
   return isLastActive(groupIndex)
     ? isGroupExpanded('last-active')
-    : (!group.isCollapsible || isGroupExpanded(group.id));
+    : isGroupExpanded(group.id);
 };
 
 /**

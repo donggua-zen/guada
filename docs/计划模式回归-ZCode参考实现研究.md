@@ -488,6 +488,20 @@ If this plan is relevant to the current work and not already complete, continue 
 - `ExitPlanMode` 被刻意排除在"聊天加载中阻塞交互"之外（`chatLoadingVisibility.ts:7-21`），即审批弹窗不阻塞会话加载指示。
 - **计划正文随流式参数实时渲染**：`plan` 被加入半截 JSON 预览键（`packages/shared/src/streaming-tool-input-preview.ts` 注释原话："计划卡片与侧边详情才能从**首个流式 chunk** 开始更新，而不是等 `input_end` 才突然出现"）。后端把该字段加进预览键，前端在工具卡片里增量渲染——这是"长计划不必等写完"的完整答案。
 
+### 审批弹窗与 composer 的布局（2026-10-05 补充核实，本轮移植依据）
+
+- 弹窗与 composer **同处底部 dock**：`SessionPane.tsx` 把 `V4InteractionDialogs` 渲染在
+  `{composerNode}` **之前**，注释写明"必须和 composer 共享 timeline bottom dock；渲染在
+  SessionPane 外层会脱离主列宽度并挤占下半屏"——in-flow，不是 overlay。
+- 待答期间 composer **`display:none` + `aria-hidden`，但保持挂载**（`ConversationComposer.tsx`：
+  "只在视觉和可访问树中隐藏，避免权限/问答卡片出现时丢失草稿和编辑器内部状态"）；
+  唯一豁免是 `workspaceHookReview`（软审核不阻塞输入）。**没有**"输入框内容 = 自定义回复"的路径：
+  自定义回复走弹窗自己的 textarea，发送拦截完全靠 composer 不可达兜底。
+- 弹窗卡片自身限高 `max-h-[min(72dvh,42rem)]`，超出在卡内滚动。
+- 弹窗只渲染问题/选项/自定义输入框，**不含计划正文**；计划正文在流内卡片
+  （`switch-mode.tsx:69-128`：`max-h-64` + 渐隐 + 标题 + 复制 + "View full plan"）
+  与 `PlanDetailSidePane`。
+
 ---
 
 ## 9. 已知缺口与不一致（抄的时候避开）
