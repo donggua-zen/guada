@@ -398,15 +398,17 @@ function handleItemClick(messageId: string) {
   transform: scaleX(1.25);
 }
 
-/* 层级：紧邻项较长（scaleX 1.7 → 20.4px） */
+/* 层级：紧邻项较长（scaleX 1.6667 → 20px 整宽；原 1.7 得 20.4px 小数，
+   静止态刻线右端会落在小数 x 上） */
 .outline-item.is-adjacent .outline-line {
-  transform: scaleX(1.7);
+  transform: scaleX(1.6667);
 }
 
-/* 层级：悬停项最长（scaleX 2.6 → 31.2px），前景色（优先级最高，放最后） */
+/* 层级：悬停项最长（scaleX 2.6667 → 32px 整宽，原 2.6 得 31.2px；偏离 ZCode 参考值 2.6
+   约 2%，肉眼不可辨，换取静止态整像素），前景色（优先级最高，放最后） */
 .outline-item.is-hovered .outline-line {
   background-color: var(--gd-color-text);
-  transform: scaleX(2.6);
+  transform: scaleX(2.6667);
 }
 
 /* —— hover 弹窗卡片：单条消息详情，向右弹出（top 由内联样式按行几何给定） —— */
@@ -443,6 +445,8 @@ function handleItemClick(messageId: string) {
 
 .pop-time {
   font-size: 11px;
+  /* 整数行高：11px 继承 1.5 会得到 16.5px 半像素行盒 */
+  line-height: 16px;
   color: var(--el-text-color-placeholder, #a8abb2);
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
 }
@@ -451,7 +455,8 @@ function handleItemClick(messageId: string) {
   font-size: 13px;
   font-weight: 500;
   color: var(--el-text-color-primary, #303133);
-  line-height: 1.4;
+  /* 整数行高：13 × 1.4 = 18.2px */
+  line-height: 18px;
   margin-bottom: 4px;
   word-break: break-word;
 }

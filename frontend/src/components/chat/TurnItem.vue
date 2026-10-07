@@ -95,7 +95,7 @@
             <div class="mr-5 flex items-center">
               <Avatar class="w-6 h-6 mr-2.5 relative top-0" :src="agentAvatar || modelAvatarPath" :round="false"
                 type="assistant" :name="displayName"></Avatar>
-              <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
+              <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-5 mr-2">{{
                 displayName }}</span>
               <span v-if="currentModelName && currentModelName !== 'unknown'" class="text-[1em] text-gray-400 mt-0.5">{{
                 currentModelName }}</span>
@@ -112,15 +112,18 @@
             </template>
             <div v-else class="process-group">
               <!-- 分组标题 -->
-              <div v-if="group.isCollapsible" class="process-group__header text-[14px] group"
+              <!-- text-sm（Tailwind v4 = 14px/20px 行盒）：原先的 text-[14px] 只给字号，
+                   行盒继承 html{line-height:1.5} = 21px（奇数），图标居中余量会随容器奇偶变半像素 -->
+              <div v-if="group.isCollapsible" class="process-group__header text-sm group"
                 :class="{ 'shimmer-text': isLastActive(groupIndex), 'text-gray-600 dark:text-gray-400': !isLastActive(groupIndex) }"
                 @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
-                  <span class="relative w-3.75 h-3.75 shrink-0 flex items-center justify-center">
+                  <!-- 图标盒 16px（偶数）：20px 行盒内居中余量 2px 整数；奇数盒会得到 X.5px 余量 -->
+                  <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
                     <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isLastActive(groupIndex)"></span> -->
                     <component :is="parts.icon" v-if="!isGroupExpanded(group.id)"
-                      class="absolute inset-0 w-3.75 h-3.75 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
-                    <ChevronDown12Regular class="absolute inset-0 w-3.75 h-3.75 transition-all duration-200"
+                      class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
+                    <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
                       :class="isGroupExpanded(group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
                       :style="isGroupExpanded(group.id) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
@@ -159,7 +162,7 @@
           <!-- Token 消耗 -->
           <div v-if="tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
             <div class="flex items-center gap-3 text-xs text-gray-400">
-              <el-icon size="13" class="text-gray-400">
+              <el-icon size="14" class="text-gray-400">
                 <InsightsTwotone />
               </el-icon>
               <span class="text-gray-500">Tokens:</span>
@@ -856,7 +859,8 @@ const handleImageClick = (file: FileAttachment) => {
   background: var(--gd-color-surface, #f5f5f5);
   color: var(--color-text-secondary, #666);
   font-size: 12px;
-  line-height: 1.6;
+  /* 整数行高：12 × 1.6 = 19.2px 会让每行基线落在设备像素之间 */
+  line-height: 20px;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 320px;
@@ -962,11 +966,6 @@ const handleImageClick = (file: FileAttachment) => {
 
 .process-group__header:hover {
   color: var(--el-text-color-primary);
-}
-
-.process-group__title {
-  line-height: 1.4;
-  min-width: 0;
 }
 
 /* 流式过程中的文字波纹效果（action + args 一起波纹） */

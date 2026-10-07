@@ -232,7 +232,8 @@ defineExpose({
 .command-picker-name {
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.4;
+  /* 整数行高：14 × 1.4 = 19.6px */
+  line-height: 20px;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -243,7 +244,8 @@ defineExpose({
 
 .command-picker-desc {
   font-size: 12px;
-  line-height: 1.4;
+  /* 整数行高：12 × 1.4 = 16.8px */
+  line-height: 17px;
   color: var(--el-text-color-secondary);
   overflow: hidden;
   text-overflow: ellipsis;

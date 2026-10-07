@@ -104,22 +104,31 @@ const currentSplitSize = ref(clampSplitSize(props.splitSize));
 /**
  * 计算两个 pane 的实际像素宽度，考虑所有约束
  * 这是唯一的布局计算入口，同时服务于非拖拽态和拖拽态
+ *
+ * 全程取整：ResizeObserver 在缩放/DPI 下给的容器宽带小数，若 pane 宽跟着小数，
+ * pane2（对话列所在）内的 .chat-column 是 mx-auto 居中（max-width 744）→ 左边缘落在
+ * 小数 x 上，整列文字与图标都会按小数位置重采样。所有中间量先落整 CSS px，
+ * 尾部再用「pane2 = available − pane1」保证两者相加恒等于可用宽（不留缝、不溢出）。
+ *
  * @param applyConstraints 是否应用约束（折叠状态时不应用，否则无法完全折叠）
  */
 function computePixelWidths(cw: number, pct: number, applyConstraints = true): { p1Px: number; p2Px: number } {
-  const available = cw - SPLITTER_SIZE;
+  const available = Math.round(cw) - SPLITTER_SIZE;
   if (available <= 0) return { p1Px: 0, p2Px: 0 };
 
-  let p1Px = available * pct / 100;
+  let p1Px = Math.round(available * pct / 100);
   let p2Px = available - p1Px;
+  // 约束边界同样落整（后面拿它们做整数比较）
+  let p1Min = 0;
+  let p1Max = available;
+  let p2Min = 0;
 
   if (applyConstraints) {
     // pane2 最小百分比约束（来自 max-size）
     const p2MinPct = 100 - props.maxSize;
-    let p2Min = 0;
-    if (p2MinPct > 0) p2Min = Math.max(p2Min, available * p2MinPct / 100);
+    if (p2MinPct > 0) p2Min = Math.max(p2Min, Math.round(available * p2MinPct / 100));
     // pane2 最小像素约束
-    if (props.minPane2Size > 0) p2Min = Math.max(p2Min, props.minPane2Size);
+    if (props.minPane2Size > 0) p2Min = Math.max(p2Min, Math.round(props.minPane2Size));
 
     if (p2Min > 0 && p2Px < p2Min) {
       p2Px = Math.min(p2Min, available);
@@ -127,10 +136,19 @@ function computePixelWidths(cw: number, pct: number, applyConstraints = true): {
     }
 
     // pane1 最小/最大百分比约束
-    const p1Min = available * props.minSize / 100;
-    const p1Max = available * props.maxSize / 100;
+    p1Min = Math.round(available * props.minSize / 100);
+    p1Max = Math.round(available * props.maxSize / 100);
     if (p1Px < p1Min) { p1Px = p1Min; p2Px = available - p1Px; }
     if (p1Px > p1Max) { p1Px = p1Max; p2Px = available - p1Px; }
+
+    // pane2 取偶数：px-5（40）、避让占位（268）、列宽（744）都是偶数，只有 pane2 偶数
+    // 才能让 .chat-column 的 mx-auto 余量为偶数、左边缘落整像素。±1px 修正，
+    // 两侧都触界时保持原值（硬约束优先于奇偶）。
+    if (p2Px % 2 !== 0) {
+      if (available - (p1Px + 1) >= p2Min && p1Px + 1 <= p1Max) p1Px += 1;
+      else if (p1Px - 1 >= p1Min) p1Px -= 1;
+      p2Px = available - p1Px;
+    }
   }
 
   // 兜底非负

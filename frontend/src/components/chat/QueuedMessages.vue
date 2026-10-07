@@ -95,7 +95,8 @@ const emit = defineEmits<{
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--gd-color-text, #333);
-  line-height: 1.5;
+  /* 整数行高：13 × 1.5 = 19.5px（.queue-item 的字号）会让文字基线落在半像素 */
+  line-height: 20px;
 }
 
 .queue-status {

@@ -121,12 +121,16 @@ function dirPath(filePath: string): string {
 }
 
 .fcb__icon-glyph {
-  width: 13px;
-  height: 13px;
+  /* 14px（偶数）：20px 圆形块内居中余量 3px 整数；13px 会得到 3.5px 半像素 */
+  width: 14px;
+  height: 14px;
 }
 
 .fcb__summary {
   font-size: 13px;
+  /* 整数行高：13px 继承 html 的 line-height:1.5 会得到 19.5px 行盒（半像素），
+     行盒高度又会把整行/后续内容顶到小数 y 上 */
+  line-height: 20px;
   font-weight: 600;
   color: var(--el-text-color-primary);
   flex: 1;
@@ -177,6 +181,8 @@ function dirPath(filePath: string): string {
 
 .fcb__file-path {
   font-size: 13px;
+  /* 整数行高：同上，13px 字号的继承行高是 19.5px */
+  line-height: 20px;
   color: var(--el-text-color-primary);
   font-weight: 500;
   white-space: nowrap;

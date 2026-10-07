@@ -3,7 +3,7 @@
     <!-- 命令执行事件 -->
     <div v-if="eventType === 'command'" class="event-card__command">
       <div class="flex items-center gap-1.5">
-        <el-icon size="13" class="text-gray-400 dark:text-gray-500">
+        <el-icon size="14" class="text-gray-400 dark:text-gray-500">
           <KeyCommand16Regular />
         </el-icon>
         <span class="font-mono text-xs text-gray-500 dark:text-gray-400">
@@ -39,7 +39,8 @@
         <div class="event-card__divider">
           <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
           <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
-            <el-icon size="13">
+            <!-- 14px（偶数）：与上方压缩中胶囊同规格；13px 在 24px 行内的居中余量是 5.5px 半像素 -->
+            <el-icon size="14">
               <Archive20Regular v-if="!expanded" />
               <ArrowUp16Regular v-else />
             </el-icon>
