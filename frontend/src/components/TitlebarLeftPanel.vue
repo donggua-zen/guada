@@ -2,7 +2,9 @@
   <div class="flex items-center px-2 h-10 select-none drag-region shrink-0">
     <div class="flex items-center h-full no-drag">
       <!-- macOS 下红绿灯占用左上角，隐藏 logo 与文案为侧边栏腾出空间 -->
-      <img v-if="!isMac" :src="logoPath" class="h-6 ml-2 mr-2" />
+      <!-- 尺寸取整数盒：只写 h-6 时宽度由图片固有比例算出（实测 22.31px），
+           会把后面的文案与搜索/调试按钮整体推到小数 x 上（实测 46.31 / 114.56） -->
+      <img v-if="!isMac" :src="logoPath" class="h-6 w-6 object-contain ml-2 mr-2" />
       <span v-if="!isMac" class="text-xs font-normal text-(--gd-titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->

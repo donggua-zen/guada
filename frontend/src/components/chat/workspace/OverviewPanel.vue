@@ -562,7 +562,10 @@ async function createBrowser(): Promise<void> {
   font-size: var(--gd-size-text-base);
   font-weight: 400;
   color: var(--gd-color-text-disabled);
-  line-height: 1.2;
+  /* 整数行高：原 1.2 × 14px = 16.8px（小数行盒）→ 区标题 16.8 + 3 = 19.8，
+     面板高度随之 99.8，内部所有行的 top 都带 .8/.3/.2 小数（实测 23 处）。
+     12px 的 .overview-section-count 也继承这里，17px 对它同样是整数。 */
+  line-height: 17px;
 }
 .overview-section-count {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
@@ -584,6 +587,9 @@ async function createBrowser(): Promise<void> {
   background: transparent;
   color: var(--gd-color-text);
   font-size: var(--gd-size-text-sm);
+  /* 整数行高且与 30px 行高同奇偶：14px 继承 1.5 是 21px 行盒，
+     (30−21)/2 = 4.5px 居中余量 → 行内文本落在半像素上（实测 top=.50） */
+  line-height: 20px;
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
@@ -886,6 +892,8 @@ async function createBrowser(): Promise<void> {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
+  /* 整数行高：11px 继承 html 的 1.5 会得到 16.5px 小数行盒 */
+  line-height: 16px;
   color: var(--gd-color-text-gray);
 }
 /* 查看全部（进工作流审阅标签） */
@@ -895,6 +903,7 @@ async function createBrowser(): Promise<void> {
   border: none;
   background: transparent;
   font-size: 11px;
+  line-height: 16px;
   color: var(--gd-color-primary, var(--gd-color-text-gray));
   cursor: pointer;
   text-align: left;
