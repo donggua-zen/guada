@@ -10,6 +10,7 @@
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint src",
+    "check:subpixel": "node scripts/check-subpixel.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
