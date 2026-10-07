@@ -1402,23 +1402,25 @@ function scrollToMessage(messageId: string) {
   max-height: 400px;
 }
 
-/* 底部渐变遮罩：位于输入区底部（bottom:0），遮罩滚动区底部消息渐隐；
+/* 底部渐变遮罩：位于输入区底部，遮罩滚动区底部消息渐隐；
    containing block = chat-input-area（现位于 scroll-main 内 = 已避让的列），
    故 left-0 right-0 宽度天然 = 消息列宽（随避让让出） */
 .chat-bottom-fade {
   position: absolute;
-  /* bottom -2px / height 78px：向下多探出 2px 盖住滚动口底部的分数缝隙。
-     非整数缩放（1080p@125% 等）下内容高度是分数（行高 ×dpr 带小数），
-     scrollTop/scrollHeight 取整后内容末端与滚动口底边之间会留 0~1px 的缝，
-     滚动消息透过 pb-2 透明带漏出（实测 720/1080@125% 漏 1px，2K@100% 严丝合缝）。
-     探出的 2px 在贴底（wrapper 底边与滚动口重合）时被滚动口裁掉，无副作用；
-     渐变顶端位置不变，过渡带 20px → 22px，视觉无感知。 */
-  bottom: -2px;
+  /* 整盒下移 8px（bottom -8px / height 84px / 断点同步 +8px）：向下多探出 8px
+     盖住滚动口底部的分数缝隙。非整数缩放（1080p@125% 等）下内容高度是分数
+     （行高 ×dpr 带小数），scrollTop/scrollHeight 取整后内容末端与滚动口底边之间
+     会留 0~1px 的缝（设备端 ×dpr 可再放大），滚动消息透过 pb-2 透明带漏出
+     （实测 720/1080p@125% 漏 1px，2K@100% 严丝合缝）。
+     贴底（wrapper 底边与滚动口重合）时探出部分被滚动口裁掉，无副作用；
+     断点整体 +8 后实心区/渐变带相对 wrapper 的位置与原设计逐像素一致。
+     历史上这里写过 bottom:0/height:76 且只下探 2px，均在部分分辨率漏 1px。 */
+  bottom: -8px;
   left: 0;
   right: 0;
-  height: 78px;
+  height: 84px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--gd-color-bg) 56px, transparent 78px);
+  background: linear-gradient(to top, var(--gd-color-bg) 64px, transparent 84px);
 }
 
 /* 加载指示器淡入淡出 */
