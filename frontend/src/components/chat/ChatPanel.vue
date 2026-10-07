@@ -7,7 +7,7 @@
       <div class="scroll-inner">
         <div class="scroll-main">
           <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
-          <div ref="messagesColumnRef" class="chat-messages chat-column w-full mx-auto pt-5 pb-5 flex-1">
+          <div class="chat-messages chat-column w-full mx-auto pt-5 pb-5 flex-1">
             <template v-if="showSkeleton">
               <div class="absolute inset-0 z-1 overflow-hidden">
                 <div class="px-5 chat-column mx-auto h-full flex flex-col py-10 ">
@@ -65,8 +65,7 @@
           <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
-            <div ref="inputColumnRef" class="chat-column mx-auto flex flex-col items-start relative"
-              style="z-index: 1;">
+            <div class="chat-column mx-auto flex flex-col items-start relative" style="z-index: 1;">
 
               <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
               <Transition name="queue-drawer">
@@ -362,8 +361,6 @@ function measureChatContainer(): void {
   const el = scrollContainerRef.value?.getScrollElement?.() as HTMLElement | null;
   if (!el) return;
   emit('container-resize', el.clientWidth);
-  // 容器尺寸变化（窗口 resize / 缩放 / 分栏拖拽）是列小数位置的来源之一
-  scheduleSnapChatColumns();
 }
 
 watch(scrollContainerRef, (ref) => {
@@ -376,130 +373,16 @@ watch(scrollContainerRef, (ref) => {
   measureChatContainer();
 }, { flush: 'post' });
 
-// ── 对话列吸附（亚像素） ──
-/* 两处小数都是实测过的：
-   1) 纵向：sticky 输入区滚到最底部时落在由内容高度决定的自然位置，带小数
-      （滚动中途贴视口底、为整数）→ 输入框/状态行/工作目录条整块按小数位置重采样；
-   2) 横向：对话列 max-width 744 + mx-auto，父级内容宽为奇数时居中余量带 0.5px
-      （实测 .chat-messages 左边缘 356.5）→ 消息气泡/卡片/1px 边框落在半像素上。
-
-   做法：rect 减去已写入的修正量得到"纯布局位置"，再把【布局位置 × dpr】取整到
-   设备像素网格，反算出需要的 translate（见 deviceGridOffset）。
-   （不在每次测量前清 transform：那会强制一次同步布局，而流式期间消息列每帧都在变尺寸。）
-
-   吸附目标必须是【设备像素网格】而不是整 CSS px——这里走过弯路：曾按整 CSS px 吸附，
-   125% 系统缩放下实测「调整分辨率后输入区（文字+边框）整体发虚、同分辨率刷新才恢复」。
-   原因：带 transform 的元素经变换矩阵（CSS × dpr）参与绘制，不做逐元素的绘制期像素
-   吸附，整 CSS px 在非整数 dpr 下就是设备半像素（759 CSS = 948.75 设备）；
-   刷新能恢复是因为合成器重建了栅格、且吸附按新状态重算。所以目标网格必须跟随 dpr，
-   dpr 变化（系统缩放/页面缩放）时重新吸附（见 watchDevicePixelRatioGrid）。
-
-   只在容器 resize / 页面缩放 / dpr 变化 / 列内容尺寸变化 / 避让占位过渡结束时需要——
-   滚动中位置恒定，所以无需逐帧测量；rAF 合帧，且只在修正量真的变化时才写 DOM。 */
-const messagesColumnRef = ref<HTMLElement | null>(null);
-const inputColumnRef = ref<HTMLElement | null>(null);
-let snapRafId: number | null = null;
-let snapFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-/** 当前已写入的修正量：用于从 rect 反推"纯布局位置"，从而不必先清 transform 再量
- *  （清 transform 会强制一次同步布局；流式期间消息列尺寸每帧都在变，
- *  这条路径必须保持"只在修正量真的变化时才写 DOM"） */
-let msgColDx = 0;
-let inputColDx = 0;
-let inputColDy = 0;
-
-/** 把 CSS 坐标对齐到设备像素网格所需的平移量（CSS px）。
- *  dpr=1 时步长 1px；125% 系统缩放（dpr=1.25）时步长 0.8px，150% 时 2/3 px。 */
-function deviceGridOffset(layoutPos: number, dpr: number): number {
-  return Math.round(layoutPos * dpr) / dpr - layoutPos;
-}
-
-function snapChatColumns(): void {
-  const msgCol = messagesColumnRef.value;
-  const inputCol = inputColumnRef.value;
-  if (!msgCol && !inputCol) return;
-  // 每次都取当前 dpr：系统缩放/页面缩放变化后网格步长随之变化
-  const dpr = window.devicePixelRatio || 1;
-
-  if (msgCol) {
-    const rect = msgCol.getBoundingClientRect();
-    const layoutLeft = rect.left - msgColDx;
-    const dx = deviceGridOffset(layoutLeft, dpr);
-    if (dx !== msgColDx) {
-      msgColDx = dx;
-      msgCol.style.transform = dx ? `translateX(${dx}px)` : '';
-    }
-  }
-
-  if (inputCol) {
-    const rect = inputCol.getBoundingClientRect();
-    const layoutLeft = rect.left - inputColDx;
-    const layoutTop = rect.top - inputColDy;
-    const dx = deviceGridOffset(layoutLeft, dpr);
-    const dy = deviceGridOffset(layoutTop, dpr);
-    if (dx !== inputColDx || dy !== inputColDy) {
-      inputColDx = dx;
-      inputColDy = dy;
-      const parts: string[] = [];
-      if (dx) parts.push(`translateX(${dx}px)`);
-      if (dy) parts.push(`translateY(${dy}px)`);
-      inputCol.style.transform = parts.join(' ');
-    }
-  }
-}
-
-function scheduleSnapChatColumns(): void {
-  if (snapRafId !== null) return;
-  snapRafId = requestAnimationFrame(() => {
-    snapRafId = null;
-    snapChatColumns();
-  });
-}
-
-/** 两列自身尺寸变化（消息列高度、输入区排队抽屉/编辑条/编辑器长高）会翻转边缘奇偶 → 重吸附 */
-let columnObserver: ResizeObserver | null = null;
-
-watch([messagesColumnRef, inputColumnRef], ([msgEl, inputEl]) => {
-  columnObserver?.disconnect();
-  columnObserver = null;
-  // 元素重建后已写入的 transform 不复存在 → 修正量缓存清零，避免按旧值反推出错误的小数
-  msgColDx = 0;
-  inputColDx = 0;
-  inputColDy = 0;
-  const els = [msgEl, inputEl].filter(Boolean) as HTMLElement[];
-  if (!els.length) return;
-  columnObserver = new ResizeObserver(scheduleSnapChatColumns);
-  els.forEach((el) => columnObserver?.observe(el));
-  scheduleSnapChatColumns();
-}, { flush: 'post' });
-
-/** 避让占位是 flex-basis 0.3s 过渡：过渡期间列左边缘连续变化，而 ResizeObserver 量不到
- *  「位移变化」（列自身尺寸不变），故过渡结束后必须补一次吸附（定时兜底，取 0.42s > 0.3s） */
-watch(() => props.asideReserve, () => {
-  scheduleSnapChatColumns();
-  if (snapFallbackTimer) clearTimeout(snapFallbackTimer);
-  snapFallbackTimer = setTimeout(() => {
-    snapFallbackTimer = null;
-    snapChatColumns();
-  }, 420);
-}, { flush: 'post' });
-
-/** dpr 变化（系统缩放 100%↔125%、页面 Ctrl+/-）时窗口 CSS 尺寸可能不变，
- *  ResizeObserver 与 resize 都不触发，但吸附的目标网格步长已经变了 → 必须重吸附。
- *  用 resolution 媒体查询监听，触发一次后按新 dpr 重新武装（经典自重置模式）。 */
-let dprMql: MediaQueryList | null = null;
-let dprMqlHandler: (() => void) | null = null;
-
-function watchDevicePixelRatioGrid(): void {
-  if (dprMql && dprMqlHandler) dprMql.removeEventListener('change', dprMqlHandler);
-  const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
-  const handler = () => {
-    scheduleSnapChatColumns();
-    watchDevicePixelRatioGrid();
-  };
-  mql.addEventListener('change', handler, { once: true });
-  dprMql = mql;
-  dprMqlHandler = handler;
-}
+// ── 关于对话列的亚像素（决策记录） ──
+/* 消息列/输入列上曾有一版 JS 吸附（把居中小数与 sticky 自然位置的小数用 transform
+   拉回像素网格），已整体移除，对齐 ZCode 基线：整数设计值 + 浏览器默认渲染
+   （未变换元素的盒边与文字基线由绘制期像素吸附保证清晰）。
+   原因：a) 模糊的主力是 CSS 整数化修复（行高/图标/边框取整），吸附只覆盖
+   居中与 sticky 两类残余；b) 列上常驻 transform 在非整数 dpr（125%/150%）下
+   经变换矩阵参与绘制、不做逐元素吸附，实测「调整分辨率后输入区整体发虚」。
+   若将来实测出现必须对齐的场景，重引入时必须按设备网格落点
+   （dx = round(布局位置 × dpr) / dpr − 布局位置，历史实现见 git 357effa1），
+   不要用整 CSS px 网格（125% 下实测发虚）。 */
 
 /**
  * 锁定自动滚动到底部，供子组件通过 inject 调用。
@@ -762,28 +645,12 @@ const chatInputConfig = computed(() => {
 
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
-  watchDevicePixelRatioGrid();
 });
 
 onUnmounted(() => {
   clearSkeletonTimers();
   chatResizeObserver?.disconnect();
   chatResizeObserver = null;
-  columnObserver?.disconnect();
-  columnObserver = null;
-  if (dprMql && dprMqlHandler) {
-    dprMql.removeEventListener('change', dprMqlHandler);
-    dprMql = null;
-    dprMqlHandler = null;
-  }
-  if (snapRafId !== null) {
-    cancelAnimationFrame(snapRafId);
-    snapRafId = null;
-  }
-  if (snapFallbackTimer) {
-    clearTimeout(snapFallbackTimer);
-    snapFallbackTimer = null;
-  }
 });
 
 /**
@@ -1413,6 +1280,9 @@ function scrollToMessage(messageId: string) {
 </script>
 
 <style scoped>
+/* translateZ(0)/will-change 的用途是滚动性能与 sticky 跟手（让滚动容器独立成层，
+   相关经验见 CODELY.md「滚动容器强制合成」），不是像素对齐手段——像素对齐走
+   CSS 整数设计值，勿删亦勿仿此做法去做对齐 */
 .chat-scroll-container {
   will-change: transform;
   transform: translateZ(0);
@@ -1629,10 +1499,9 @@ function scrollToMessage(messageId: string) {
    包含块 = .chat-column（已 relative），left/right:0 宽度等同原 width:100%。
    pointer-events 收口：浮层空白区透传点击，子控件自身可点。
    本行继承输入区的小数位置（输入区 sticky bottom-0，滚到底时落到由内容高度决定的
-   自然位置，实测带小数），该小数由 .chat-column 的确定性吸附统一拉回设备网格
-   （见 script 的 snapChatColumns）。原先这里的 will-change: transform 已移除：
-   吸附改由 snapChatColumns 按设备网格确定性完成后它不再承担任何功能，
-   常驻合成层反而多一层栅格/显存开销，并在合成 sticky 内叠加变换层放大重采样模糊。
+   自然位置），该小数随浏览器绘制期像素吸附处理，不再用 JS 修正（见 script 顶部的
+   决策记录；原先挂在状态行上的 will-change: transform 已随 JS 吸附一并移除——
+   常驻合成层多一层栅格/显存开销，且在合成 sticky 内叠加变换层会放大重采样模糊）。
    注意：图标自身的半像素是另一回事——「容器尺寸 − 图标尺寸 = 奇数」会让居中余量为半像素
    （16px 容器放 13px 图标 → 上下各 1.5px），这是几何问题，应按尺寸取偶数修
    （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。 */

@@ -18,10 +18,10 @@
  * 4) JS 计算的像素尺寸（宽度 / 偏移 / 滚动量）一律 Math.round：
  *    小数宽会让元素内部居中与相邻元素一起落到小数位置
  *    （参考 GitChangesPanel 的滚动偏移、GdSplitpanes 的 pane 宽）。
- * 5) 合成层（will-change: transform / translateZ(0)）的位置继承自布局：
- *    布局小数会让整层位图按小数位置重采样（整块发虚）。
- *    需要时用确定性吸附（见 ChatPanel 的 snapInputColumn），
- *    落点用整 CSS px、不按 devicePixelRatio 换算（125% 下会得到 0.2px 的 translate）。
+ * 5) 不用 JS 做像素吸附（对齐 ZCode 基线：曾引入、已移除）。未变换元素的盒边与
+ *    文字基线由绘制期像素吸附保证清晰，小数源优先在 CSS/结构层消除（见 1-4 条）。
+ *    确需重引入吸附时必须按设备网格落点 dx = round(布局 × dpr) / dpr − 布局
+ *    （历史实现见 git 357effa1），不要用整 CSS px 网格（125% 下实测发虚）。
  *
  * 排查手段：dev 启动后在控制台执行 __subpixelAudit()
  * （扫描结果按组件分组，跳过动画中/带 transform 的元素）。
