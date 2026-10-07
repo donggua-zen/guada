@@ -252,7 +252,7 @@ onUnmounted(() => {
 .wh-log-line {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-size: 11px;
-  line-height: 1.6;
+  line-height: 18px;
   color: var(--gd-color-text-gray);
   word-break: break-all;
 }
@@ -271,7 +271,7 @@ onUnmounted(() => {
   background: var(--gd-color-surface, rgba(128, 128, 128, 0.06));
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-size: 11px;
-  line-height: 1.6;
+  line-height: 18px;
   color: var(--gd-color-text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -305,7 +305,7 @@ onUnmounted(() => {
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 1.5px solid var(--gd-color-success, #22c55e);
+  border: 1px solid var(--gd-color-success, #22c55e);
   opacity: 0;
   animation: wh-pulse 1.6s ease-out infinite;
 }

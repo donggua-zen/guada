@@ -10,7 +10,7 @@
   >
     <div class="git-diff-gap-inner">
       <!-- 收起态（gap）：→ 可展开；展开态（gap-close）：→ 旋转 90° = ↓ 可收起（对齐文件树惯例） -->
-      <el-icon :size="11" class="git-diff-gap-icon"><ArrowRight /></el-icon>
+      <el-icon :size="12" class="git-diff-gap-icon"><ArrowRight /></el-icon>
       <span>{{ gapText }}</span>
     </div>
   </div>
@@ -244,6 +244,7 @@ html.dark .git-diff-line.git-diff-del .git-diff-line-num::before {
   background:
     repeating-linear-gradient(
       -45deg,
+      /* subpixel-ok: -45° 斜线轴周期取 10/√2，垂直投影才是整 10px；整数化会破坏 tile 相位对齐出现接缝 */
       transparent 0 5.6569px,
       color-mix(in srgb, var(--gd-color-text-disabled) 25%, transparent) 5.6569px 7.0711px
     ),

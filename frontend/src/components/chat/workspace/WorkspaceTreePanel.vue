@@ -11,7 +11,7 @@
                 <!-- 刷新按钮 -->
                 <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
                     <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
-                        <el-icon size="15">
+                        <el-icon size="16">
                             <Refresh />
                         </el-icon>
                     </el-button>

@@ -6,7 +6,7 @@
                 <span class="text-xs font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
                 <GdTooltip :content="t('chat.plan.refresh')" placement="bottom">
                     <button class="plan-icon-btn" @click="refresh">
-                        <el-icon :size="13"><ArrowClockwise16Regular /></el-icon>
+                        <el-icon :size="14"><ArrowClockwise16Regular /></el-icon>
                     </button>
                 </GdTooltip>
             </div>
