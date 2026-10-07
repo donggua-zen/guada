@@ -76,7 +76,7 @@
               <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存） -->
               <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器（aside 槽位随之） -->
               <Teleport :disabled="teleportDisabled" to="#floating-chat">
-                <ChatPanel ref="chatPanelRef" :session="mainSession"
+                <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
                   :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                   @container-resize="onChatContainerResize"
                   @save-settings="handleSaveSessionSettings"
@@ -345,6 +345,13 @@ const title = useTitle();
 
 // 主会话对象（侧边栏选中的根会话），包含会话的基本信息和设置
 const mainSession: Ref<Session | null> = ref(null);
+
+// 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载
+// 输入区/工作目录条等按 ID 依赖（new-session 时 ChatPanel 整体不挂载，无需排除）
+const routeSessionId = computed<string | null>(() => {
+  const p = route.params.sessionId;
+  return Array.isArray(p) ? (p[0] ?? null) : (p ?? null);
+});
 
 // 会话切换时同步浏览器 webview store（隐藏活跃预览，webview 不销毁）
 watch(() => mainSession.value?.id, (sessionId) => {
