@@ -24,7 +24,7 @@
 
     <!-- 二进制 / 办公文件：无法逐行 diff，仅提示 -->
     <div v-if="!diffable" class="fdp__nodiff">
-      <el-icon :size="15"><Info24Regular /></el-icon>
+      <el-icon :size="16"><Info24Regular /></el-icon>
       <span>{{ t('chat.fileChanges.noDiff') }}</span>
     </div>
 
@@ -246,7 +246,7 @@ function highlightLine(line: string): string {
   border-collapse: collapse;
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 22px;
 }
 
 .fdp__table td {

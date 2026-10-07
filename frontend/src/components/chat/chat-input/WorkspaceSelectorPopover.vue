@@ -91,7 +91,7 @@
             </div>
             <span v-if="conn.path" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis"
               :title="conn.path">
-              <el-icon size="11" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ conn.path }}
+              <el-icon size="12" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ conn.path }}
             </span>
           </div>
           <GdTooltip :content="t('chat.workspace.removeAttachedDir')" placement="bottom">

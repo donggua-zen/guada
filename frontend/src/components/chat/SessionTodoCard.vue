@@ -11,10 +11,10 @@
     <div v-if="!expanded" class="todo-pill flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
       @click="expanded = true">
       <span class="flex h-4 w-4 shrink-0 items-center justify-center">
-        <el-icon v-if="currentItem?.status === 'in_progress'" size="13" class="todo-icon--active">
+        <el-icon v-if="currentItem?.status === 'in_progress'" size="14" class="todo-icon--active">
           <ArrowRight16Regular />
         </el-icon>
-        <el-icon v-else-if="currentItem?.status === 'completed'" size="13" class="todo-icon--done">
+        <el-icon v-else-if="currentItem?.status === 'completed'" size="14" class="todo-icon--done">
           <Check />
         </el-icon>
         <span v-else class="todo-ring"></span>
@@ -49,10 +49,10 @@
       <div class="mt-2 flex flex-col gap-0.5">
         <div v-for="(item, i) in items" :key="i" class="flex items-start gap-2 rounded px-1 py-0.5">
           <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-            <el-icon v-if="item.status === 'completed'" size="13" class="todo-icon--done">
+            <el-icon v-if="item.status === 'completed'" size="14" class="todo-icon--done">
               <Check />
             </el-icon>
-            <el-icon v-else-if="item.status === 'in_progress'" size="13" class="todo-icon--active">
+            <el-icon v-else-if="item.status === 'in_progress'" size="14" class="todo-icon--active">
               <ArrowRight16Regular />
             </el-icon>
             <span v-else class="todo-ring"></span>
@@ -189,7 +189,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1.5px solid var(--gd-color-text-disabled);
+  border: 1px solid var(--gd-color-text-disabled);
 }
 
 .todo-head:hover span:first-child {

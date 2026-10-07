@@ -35,30 +35,30 @@
                         </template>
                         <!-- Git 审阅图标 -->
                         <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
-                            <el-icon :size="13"><Branch20Regular /></el-icon>
+                            <el-icon :size="14"><Branch20Regular /></el-icon>
                         </span>
                         <!-- 进程日志图标 -->
                         <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
-                            <el-icon :size="13"><Pulse20Regular /></el-icon>
+                            <el-icon :size="14"><Pulse20Regular /></el-icon>
                         </span>
                         <!-- 子代理会话图标（运行中带状态点） -->
                         <template v-else-if="tab.type === 'subagent'">
                             <span class="tab-favicon tab-git">
-                                <el-icon :size="13"><Bot20Regular /></el-icon>
+                                <el-icon :size="14"><Bot20Regular /></el-icon>
                             </span>
                             <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
                         </template>
                         <!-- 工作流审阅图标 -->
                         <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
-                            <el-icon :size="13"><Flowchart20Regular /></el-icon>
+                            <el-icon :size="14"><Flowchart20Regular /></el-icon>
                         </span>
                         <!-- 计划面板图标 -->
                         <span v-else-if="tab.type === 'plan'" class="tab-favicon tab-git">
-                            <el-icon :size="13"><Notepad20Regular /></el-icon>
+                            <el-icon :size="14"><Notepad20Regular /></el-icon>
                         </span>
                         <!-- 差异/编辑记录图标 -->
                         <span v-else-if="tab.type === 'diff'" class="tab-favicon tab-git">
-                            <el-icon :size="13"><Code20Regular /></el-icon>
+                            <el-icon :size="14"><Code20Regular /></el-icon>
                         </span>
                         <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                         <span class="tab-close"

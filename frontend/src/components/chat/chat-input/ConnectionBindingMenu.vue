@@ -16,7 +16,7 @@
           </div>
           <span v-if="opt.path" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis"
             :title="opt.path">
-            <el-icon size="11" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ opt.path }}
+            <el-icon size="12" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ opt.path }}
           </span>
         </div>
         <el-icon v-if="attachedIds.includes(opt.id)" size="14" class="shrink-0 text-(--el-color-primary)">

@@ -431,7 +431,7 @@ onUnmounted(() => {
 .loading-spinner {
   width: 12px;
   height: 12px;
-  border: 1.5px solid var(--gd-color-border, #ccc);
+  border: 1px solid var(--gd-color-border, #ccc);
   border-top-color: var(--gd-color-primary, #4a90d9);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;

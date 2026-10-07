@@ -692,7 +692,7 @@ async function createBrowser(): Promise<void> {
 .overview-process-spinner {
   width: 9px;
   height: 9px;
-  border: 1.5px solid var(--gd-color-primary-200);
+  border: 1px solid var(--gd-color-primary-200);
   border-top-color: var(--gd-color-primary);
   border-radius: 50%;
   animation: overview-spin 0.8s linear infinite;
@@ -792,7 +792,7 @@ async function createBrowser(): Promise<void> {
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 1.5px solid var(--gd-color-success, #22c55e);
+  border: 1px solid var(--gd-color-success, #22c55e);
   opacity: 0;
   animation: wf-pulse 1.6s ease-out infinite;
 }

@@ -242,7 +242,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1.5px solid var(--gd-color-text-disabled);
+  border: 1px solid var(--gd-color-text-disabled);
 }
 
 /* 面板出入动画：只动 transform，不动 opacity。

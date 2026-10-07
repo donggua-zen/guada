@@ -218,7 +218,7 @@ onUnmounted(() => {
 .pl-spinner {
     width: 9px;
     height: 9px;
-    border: 1.5px solid var(--gd-color-primary-200, #93c5fd);
+    border: 1px solid var(--gd-color-primary-200, #93c5fd);
     border-top-color: var(--gd-color-primary, #3b82f6);
     border-radius: 50%;
     animation: pl-spin 0.8s linear infinite;
