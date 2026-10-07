@@ -249,8 +249,6 @@ const { t } = useI18n()
 const CHAT_UPLOAD_MAX_MB = 100
 
 // 响应式数据
-const isInputExpanded = ref(false);
-const messageInputRef = ref<HTMLElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 let fileIdCounter = 0;
@@ -441,15 +439,8 @@ watch(
 
 // 计算属性
 const styleClass = computed(() => {
-  const classes = [];
-  if (isInputExpanded.value) {
-    classes.push('expanded');
-  }
-  // if (props.mode === 'create') {
   // 输入区阴影弱化，聚焦不再加重（层次感交给边框）
-  classes.push('shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:shadow-none');
-  // }
-  return classes.join(' ') + ' ' + props.class;
+  return 'shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:shadow-none ' + props.class;
 });
 
 const inputContent = computed({
@@ -1260,17 +1251,6 @@ const sendMessage = async () => {
 };
 
 
-const adjustTextareaHeight = () => {
-  const textarea = messageInputRef.value;
-  if (!textarea) return;
-
-  textarea.style.height = "auto";
-  let height = Math.min(textarea.scrollHeight, 240);
-  if (height < 45) height = 45;
-  textarea.style.height = height + "px";
-  isInputExpanded.value = textarea.scrollHeight > 60;
-};
-
 const abortResponse = () => {
   emit('abort')
 }
@@ -1409,7 +1389,6 @@ watch(editorContent, () => {
     if (pmEl) {
       pmEl.style.minHeight = '48px';
       pmEl.style.maxHeight = '240px';
-      isInputExpanded.value = pmEl.scrollHeight > 60;
     }
   });
 });
@@ -1435,7 +1414,6 @@ watch(() => props.buttons, (value) => {
 }, { immediate: true });
 
 onMounted(() => {
-  adjustTextareaHeight();
   loadModels();
   initThinkingEffort(); // 初始化思考强度
 
@@ -1502,7 +1480,6 @@ onMounted(() => {
             // 与 mount 分支同值：两处不一致会在首次输入时把输入框顶跳 6px
             pmEl.style.minHeight = '48px';
             pmEl.style.maxHeight = '240px';
-            isInputExpanded.value = pmEl.scrollHeight > 60;
             // 自动滚动光标到可见区域（修复 Shift+Enter 换行时光标被遮挡）
             ed.commands.scrollIntoView();
           }

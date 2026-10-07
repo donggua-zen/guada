@@ -779,50 +779,6 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-/* Splitpanes 自定义样式 - 适配暗色模式 */
-:deep(.splitpanes.default-theme .splitpanes__pane) {
-  background-color: transparent;
-}
-
-:deep(.splitpanes.default-theme .splitpanes__splitter) {
-  background-color: var(--gd-color-sidebar-bg, #f5f5f5);
-  position: relative;
-  transition: background-color 0.2s ease;
-}
-
-:deep(.dark .splitpanes.default-theme .splitpanes__splitter) {
-  background-color: #25262a;
-}
-
-/* 悬停时显示主题色（中等浅色） */
-:deep(.splitpanes.default-theme .splitpanes__splitter:hover) {
-  background-color: var(--el-color-primary-light-8, #d9ecff) !important;
-}
-
-/* 移除 Pane 的边框，避免与分割线重叠 */
-:deep(.splitpanes.default-theme .splitpanes__pane) {
-  background-color: transparent;
-  border: none !important;
-}
-
-/* 隐藏悬停指示器 */
-:deep(.splitpanes.default-theme .splitpanes__splitter:before),
-:deep(.splitpanes.default-theme .splitpanes__splitter:after) {
-  display: none !important;
-}
-
-:deep(.splitpanes.default-theme.splitpanes--vertical .splitpanes__splitter) {
-  border-top: 0;
-  border-bottom: 0;
-  width: 4px !important;
-}
-
-/* Splitpanes 过渡动画 */
-:deep(.splitpanes__pane) {
-  /* transition: width 0.3s ease-out, height 0.3s ease-out; */
-  transition: none !important;
-  will-change: width;
-}
 
 .chat-pane-content {
   contain: layout style;
