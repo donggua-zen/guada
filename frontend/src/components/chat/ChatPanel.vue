@@ -1422,7 +1422,7 @@ function scrollToMessage(messageId: string) {
   right: 0;
   height: 76px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--gd-color-bg) 56px, transparent 76px);
+  background: var(--gd-color-bg);
 }
 
 /* 滚动口底部余量覆盖条：非整数缩放（1080p@125% 等）下内容高度是分数（行高 ×dpr
@@ -1431,7 +1431,7 @@ function scrollToMessage(messageId: string) {
    放在滚动容器外：a) 不受滚动裁剪，无论缝隙大小都稳定盖住底边；b) 不画出 sticky 盒外，
    保住合成器驱动的 sticky（避免滚动时输入区抖动）。left/right 10px = 滚动条 gutter
    （stable both-edges），避免盖住自绘滚动条；高度 3px 只覆盖工作目录条下方的背景带。 */
-.chat-bottom-residue-cover {
+/* .chat-bottom-residue-cover {
   position: absolute;
   left: 10px;
   right: 10px;
@@ -1440,7 +1440,7 @@ function scrollToMessage(messageId: string) {
   background: var(--gd-color-bg);
   pointer-events: none;
   z-index: 15;
-}
+} */
 
 /* 加载指示器淡入淡出 */
 .fade-slide-enter-active,
