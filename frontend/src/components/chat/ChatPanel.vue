@@ -378,16 +378,24 @@ watch(scrollContainerRef, (ref) => {
 
 // ── 对话列吸附（亚像素） ──
 /* 两处小数都是实测过的：
-   1) 纵向：sticky 输入区滚到最底部时落在由内容高度决定的自然位置，带 0.5px 小数
+   1) 纵向：sticky 输入区滚到最底部时落在由内容高度决定的自然位置，带小数
       （滚动中途贴视口底、为整数）→ 输入框/状态行/工作目录条整块按小数位置重采样；
    2) 横向：对话列 max-width 744 + mx-auto，父级内容宽为奇数时居中余量带 0.5px
       （实测 .chat-messages 左边缘 356.5）→ 消息气泡/卡片/1px 边框落在半像素上。
-   做法：rect 减去已写入的修正量得到"纯布局位置"，取小数部分后用等量反向 translate 拉回整像素
-   （不在每次测量前清 transform：那会强制一次同步布局，而流式期间消息列每帧都在变尺寸）。
-   落点用整 CSS px，不按 devicePixelRatio 换算：125% 下换算会得到 0.2px 的 translate
-   （反而重新引入小数），而浏览器自己会把整 CSS px 落到物理像素网格上。
-   只在容器 resize / 页面缩放 / 列内容尺寸变化 / 避让占位过渡结束时需要——滚动中位置恒定，
-   所以无需逐帧测量；rAF 合帧，且只在修正量真的变化时才写 DOM。 */
+
+   做法：rect 减去已写入的修正量得到"纯布局位置"，再把【布局位置 × dpr】取整到
+   设备像素网格，反算出需要的 translate（见 deviceGridOffset）。
+   （不在每次测量前清 transform：那会强制一次同步布局，而流式期间消息列每帧都在变尺寸。）
+
+   吸附目标必须是【设备像素网格】而不是整 CSS px——这里走过弯路：曾按整 CSS px 吸附，
+   125% 系统缩放下实测「调整分辨率后输入区（文字+边框）整体发虚、同分辨率刷新才恢复」。
+   原因：带 transform 的元素经变换矩阵（CSS × dpr）参与绘制，不做逐元素的绘制期像素
+   吸附，整 CSS px 在非整数 dpr 下就是设备半像素（759 CSS = 948.75 设备）；
+   刷新能恢复是因为合成器重建了栅格、且吸附按新状态重算。所以目标网格必须跟随 dpr，
+   dpr 变化（系统缩放/页面缩放）时重新吸附（见 watchDevicePixelRatioGrid）。
+
+   只在容器 resize / 页面缩放 / dpr 变化 / 列内容尺寸变化 / 避让占位过渡结束时需要——
+   滚动中位置恒定，所以无需逐帧测量；rAF 合帧，且只在修正量真的变化时才写 DOM。 */
 const messagesColumnRef = ref<HTMLElement | null>(null);
 const inputColumnRef = ref<HTMLElement | null>(null);
 let snapRafId: number | null = null;
@@ -399,16 +407,23 @@ let msgColDx = 0;
 let inputColDx = 0;
 let inputColDy = 0;
 
+/** 把 CSS 坐标对齐到设备像素网格所需的平移量（CSS px）。
+ *  dpr=1 时步长 1px；125% 系统缩放（dpr=1.25）时步长 0.8px，150% 时 2/3 px。 */
+function deviceGridOffset(layoutPos: number, dpr: number): number {
+  return Math.round(layoutPos * dpr) / dpr - layoutPos;
+}
+
 function snapChatColumns(): void {
   const msgCol = messagesColumnRef.value;
   const inputCol = inputColumnRef.value;
   if (!msgCol && !inputCol) return;
+  // 每次都取当前 dpr：系统缩放/页面缩放变化后网格步长随之变化
+  const dpr = window.devicePixelRatio || 1;
 
   if (msgCol) {
     const rect = msgCol.getBoundingClientRect();
     const layoutLeft = rect.left - msgColDx;
-    const fx = layoutLeft - Math.round(layoutLeft);
-    const dx = fx ? -fx : 0;
+    const dx = deviceGridOffset(layoutLeft, dpr);
     if (dx !== msgColDx) {
       msgColDx = dx;
       msgCol.style.transform = dx ? `translateX(${dx}px)` : '';
@@ -419,10 +434,8 @@ function snapChatColumns(): void {
     const rect = inputCol.getBoundingClientRect();
     const layoutLeft = rect.left - inputColDx;
     const layoutTop = rect.top - inputColDy;
-    const fx = layoutLeft - Math.round(layoutLeft);
-    const fy = layoutTop - Math.round(layoutTop);
-    const dx = fx ? -fx : 0;
-    const dy = fy ? -fy : 0;
+    const dx = deviceGridOffset(layoutLeft, dpr);
+    const dy = deviceGridOffset(layoutTop, dpr);
     if (dx !== inputColDx || dy !== inputColDy) {
       inputColDx = dx;
       inputColDy = dy;
@@ -469,6 +482,24 @@ watch(() => props.asideReserve, () => {
     snapChatColumns();
   }, 420);
 }, { flush: 'post' });
+
+/** dpr 变化（系统缩放 100%↔125%、页面 Ctrl+/-）时窗口 CSS 尺寸可能不变，
+ *  ResizeObserver 与 resize 都不触发，但吸附的目标网格步长已经变了 → 必须重吸附。
+ *  用 resolution 媒体查询监听，触发一次后按新 dpr 重新武装（经典自重置模式）。 */
+let dprMql: MediaQueryList | null = null;
+let dprMqlHandler: (() => void) | null = null;
+
+function watchDevicePixelRatioGrid(): void {
+  if (dprMql && dprMqlHandler) dprMql.removeEventListener('change', dprMqlHandler);
+  const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  const handler = () => {
+    scheduleSnapChatColumns();
+    watchDevicePixelRatioGrid();
+  };
+  mql.addEventListener('change', handler, { once: true });
+  dprMql = mql;
+  dprMqlHandler = handler;
+}
 
 /**
  * 锁定自动滚动到底部，供子组件通过 inject 调用。
@@ -731,6 +762,7 @@ const chatInputConfig = computed(() => {
 
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
+  watchDevicePixelRatioGrid();
 });
 
 onUnmounted(() => {
@@ -739,6 +771,11 @@ onUnmounted(() => {
   chatResizeObserver = null;
   columnObserver?.disconnect();
   columnObserver = null;
+  if (dprMql && dprMqlHandler) {
+    dprMql.removeEventListener('change', dprMqlHandler);
+    dprMql = null;
+    dprMqlHandler = null;
+  }
   if (snapRafId !== null) {
     cancelAnimationFrame(snapRafId);
     snapRafId = null;
@@ -1592,8 +1629,10 @@ function scrollToMessage(messageId: string) {
    包含块 = .chat-column（已 relative），left/right:0 宽度等同原 width:100%。
    pointer-events 收口：浮层空白区透传点击，子控件自身可点。
    本行继承输入区的小数位置（输入区 sticky bottom-0，滚到底时落到由内容高度决定的
-   自然位置，实测带 0.5px），该小数由 .chat-column 的确定性吸附统一拉回整像素
-   （见 script 的 snapInputColumn）——这里的 will-change 只作合成提示，不再承担吸附。
+   自然位置，实测带小数），该小数由 .chat-column 的确定性吸附统一拉回设备网格
+   （见 script 的 snapChatColumns）。原先这里的 will-change: transform 已移除：
+   吸附改由 snapChatColumns 按设备网格确定性完成后它不再承担任何功能，
+   常驻合成层反而多一层栅格/显存开销，并在合成 sticky 内叠加变换层放大重采样模糊。
    注意：图标自身的半像素是另一回事——「容器尺寸 − 图标尺寸 = 奇数」会让居中余量为半像素
    （16px 容器放 13px 图标 → 上下各 1.5px），这是几何问题，应按尺寸取偶数修
    （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。 */
@@ -1608,7 +1647,6 @@ function scrollToMessage(messageId: string) {
   gap: 8px;
   width: 100%;
   pointer-events: none;
-  will-change: transform;
 }
 
 .composer-status-row > :deep(*) {
