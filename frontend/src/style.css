@@ -1,5 +1,32 @@
 /* 通用重置和基础样式 */
 
+/* ============================================================
+ * 亚像素几何约定（改尺寸 / 行高 / 图标前先读）
+ *
+ * 浏览器把带小数的几何量按"设备像素之间"渲染 → 文字发虚，
+ * 且同一元素在两种奇偶相位间来回时视觉上"跳一个设备像素"。
+ * 100% 缩放下常看不出来，125% / 150% 系统缩放会放大成明显模糊与抖动。
+ *
+ * 1) 行高一律整数 px：小数行高（14 × 1.6 = 22.4px、12 × 1.55 = 18.6px）
+ *    会让每一行的基线都落在设备像素之间。用 calc(字号 + Npx) 或字面量整数，
+ *    不要用 1.4 / 1.55 / 1.6 这类乘数去乘奇数字号。
+ * 2) 图标/内容尺寸取偶数，且与容器同奇偶：(容器 − 内容) 为奇数 →
+ *    居中余量 X.5px → 元素随容器奇偶相位跳一个设备像素。
+ *    16px 容器配 14px 内容（余 2 ✓）、20px 行盒配 16px 图标（余 2 ✓）。
+ * 3) 不要用 transform: translate(-50%, -50%) 居中奇数尺寸内容：一半就是小数。
+ *    让内容满铺容器（inset: 0）或用 flex 居中。
+ * 4) JS 计算的像素尺寸（宽度 / 偏移 / 滚动量）一律 Math.round：
+ *    小数宽会让元素内部居中与相邻元素一起落到小数位置
+ *    （参考 GitChangesPanel 的滚动偏移、GdSplitpanes 的 pane 宽）。
+ * 5) 合成层（will-change: transform / translateZ(0)）的位置继承自布局：
+ *    布局小数会让整层位图按小数位置重采样（整块发虚）。
+ *    需要时用确定性吸附（见 ChatPanel 的 snapInputColumn），
+ *    落点用整 CSS px、不按 devicePixelRatio 换算（125% 下会得到 0.2px 的 translate）。
+ *
+ * 排查手段：dev 启动后在控制台执行 __subpixelAudit()
+ * （扫描结果按组件分组，跳过动画中/带 transform 的元素）。
+ * ============================================================ */
+
 :root {
   --gd-color-primary-0f: #fb72990f;
 
@@ -745,7 +772,8 @@ html.dark .terminal-panel .xterm-viewport {
   background: var(--gd-tooltip-bg);
   color: var(--gd-tooltip-text);
   font-size: 12px;
-  line-height: 1.4;
+  /* 整数行高：12 × 1.4 = 16.8px 会让提示文字基线落在设备像素之间 */
+  line-height: 18px;
   padding: 5px 11px;
   border-radius: 4px;
   max-width: 300px;
