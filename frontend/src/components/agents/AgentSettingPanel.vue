@@ -201,11 +201,11 @@
                     <div class="flex items-center justify-between mt-1.5 text-xs text-gray-400">
                       <div class="flex items-center gap-3">
                         <span class="flex items-center gap-1">
-                          <el-icon :size="13"><Wrench16Regular /></el-icon>
+                          <el-icon :size="14"><Wrench16Regular /></el-icon>
                           {{ card.kit.toolCount ?? 0 }}
                         </span>
                         <span class="flex items-center gap-1">
-                          <el-icon :size="13"><TextDescription20Regular /></el-icon>
+                          <el-icon :size="14"><TextDescription20Regular /></el-icon>
                           {{ card.kit.promptCount ?? 0 }}
                         </span>
                       </div>

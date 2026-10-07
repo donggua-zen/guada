@@ -298,7 +298,7 @@ select:focus {
   padding: 10px;
   border-radius: 6px;
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 16px;
   overflow-x: auto;
   margin: 0;
   border: 1px solid #e2e8f0;

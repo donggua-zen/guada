@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 亚像素静态检查（ratchet：只扫已经清理干净的对话流范围）
+ * 亚像素静态检查（棘轮：默认扫全 src，当前全绿）
  *
  * 背景：小数几何会让文字/边框落在设备像素之间（发虚，缩放后更明显），
  * 奇数尺寸的居中余量更是半像素（元素随容器奇偶跳一个设备像素）。
@@ -16,9 +16,13 @@
  *   R3 奇数图标尺寸（el-icon 的 size="13" / :size="15" 等；约定取偶数）
  *   R4 Tailwind 奇数盒（w-3.75 / h-4.25 这类 .25/.75 刻度 = 4n±1 px，必为奇数）
  *
- * 豁免：行内写 `/* subpixel-ok: 原因 *\/` 即跳过该行（原因必须写清楚）。
+ * 已知盲区（靠运行时自检补）：
+ *   - 只认 CSS 声明里的 font-size；Tailwind 类（text-[15px] / text-sm）看不到
+ *   - calc() 里的小数乘除（* 0.85 / 2.33）静态求不出来，需人工算
  *
- * 用法：node scripts/check-subpixel.mjs [路径...]     默认扫 SCOPED 列表
+ * 豁免：行内、或上方两行内写 `/* subpixel-ok: 原因 *\/` 即跳过（原因必须写清楚）。
+ *
+ * 用法：node scripts/check-subpixel.mjs [路径...]     默认扫 src/
  */
 import { readFileSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -27,13 +31,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url)); // frontend/
 
-/** 默认扫描范围：已按亚像素约定清理过的对话流相关文件 */
-const SCOPED = [
-  "src/components/chat",
-  "src/components/TitlebarLeftPanel.vue",
-  "src/assets/markdown.css",
-  "src/style.css",
-];
+/** 默认扫描范围：整个前端源码（当前全绿，用作棘轮） */
+const SCOPED = ["src"];
 
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git"]);
 

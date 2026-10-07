@@ -160,7 +160,7 @@ function retry(): void {
   margin: 8px 0 0;
   max-width: 320px;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 20px;
   text-align: center;
   color: #909399;
 }
@@ -203,7 +203,7 @@ function retry(): void {
   margin: 0;
   max-width: 360px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 22px;
   text-align: center;
   color: #909399;
   word-break: break-word;

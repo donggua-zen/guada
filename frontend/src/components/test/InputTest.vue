@@ -369,7 +369,7 @@ h2 {
   border: 2px solid #dcdfe6;
   border-radius: 8px;
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 25px;
   color: #303133;
   background: #fff;
   outline: none;
@@ -610,13 +610,13 @@ h2 {
   font-size: 13px;
   font-weight: 500;
   color: #cccccc;
-  line-height: 1.4;
+  line-height: 18px;
 }
 
 .skill-picker-desc {
   font-size: 11px;
   color: #808080;
-  line-height: 1.3;
+  line-height: 14px;
   margin-top: 1px;
 }
 
@@ -702,7 +702,7 @@ h2 {
   font-size: 14px;
   color: #303133;
   max-width: 70%;
-  line-height: 1.6;
+  line-height: 22px;
 }
 
 .mock-message.user .mock-content {
