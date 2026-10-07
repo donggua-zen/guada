@@ -89,7 +89,7 @@
             <el-tab-pane label="文件列表" name="files">
               <template #label>
                 <div class="flex items-center gap-2">
-                  <el-icon :size="17">
+                  <el-icon :size="16">
                     <BookOpen24Regular />
                   </el-icon>
                   <span class="text-[15px]">{{ t('knowledge.page.tabFiles') }}</span>
@@ -99,7 +99,7 @@
             <el-tab-pane label="搜索" name="search">
               <template #label>
                 <div class="flex items-center gap-2">
-                  <el-icon :size="17">
+                  <el-icon :size="16">
                     <Search24Regular />
                   </el-icon>
                   <span class="text-[15px]">{{ t('knowledge.page.tabSearch') }}</span>

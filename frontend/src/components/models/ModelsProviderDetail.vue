@@ -1319,6 +1319,7 @@ const handleFetchModels = async () => {
   content: '';
   width: 4px;
   height: 8px;
+  /* subpixel-ok: 45° 旋转的对角勾边（4×8px 旋转 45°），边缘本就抗锯齿、不适用奇偶栅格；1.5px 是刻意的笔画粗细 */
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg) translate(-1px, -1px);

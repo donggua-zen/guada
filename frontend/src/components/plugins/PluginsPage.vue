@@ -7,7 +7,7 @@
                     <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
                         <template #label>
                             <div class="flex items-center gap-2">
-                                <component :is="item.icon" class="w-4.25 h-4.25"></component>
+                                <component :is="item.icon" class="w-4 h-4"></component>
                                 <span class="text-[15px]">{{ item.label }}</span>
                             </div>
                         </template>

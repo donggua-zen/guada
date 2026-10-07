@@ -611,12 +611,12 @@ const abortResponse = () => {
 .skill-picker-name {
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 20px;
 }
 
 .skill-picker-desc {
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 17px;
 }
 
 .skill-picker-empty {

@@ -64,7 +64,7 @@
                 <div class="flex items-center justify-between gap-2 mt-3">
                   <div class="flex items-center gap-3 text-xs text-gray-400 dark:text-[#6b6d75] min-w-0">
                     <span class="flex items-center gap-1 shrink-0">
-                      <el-icon :size="13"><CalendarTodayOutlined /></el-icon>
+                      <el-icon :size="14"><CalendarTodayOutlined /></el-icon>
                       {{ formatTargetMode(task.targetMode) }}
                     </span>
                     <span v-if="task.executionCount !== undefined" class="shrink-0">
