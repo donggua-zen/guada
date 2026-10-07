@@ -7,7 +7,7 @@
       <div class="scroll-inner">
         <div class="scroll-main">
           <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
-          <div class="chat-messages chat-column w-full mx-auto pt-5 pb-5 flex-1">
+          <div ref="messagesColumnRef" class="chat-messages chat-column w-full mx-auto pt-5 pb-5 flex-1">
             <template v-if="showSkeleton">
               <div class="absolute inset-0 z-1 overflow-hidden">
                 <div class="px-5 chat-column mx-auto h-full flex flex-col py-10 ">
@@ -65,7 +65,8 @@
           <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
-            <div class="chat-column mx-auto flex flex-col items-start relative" style="z-index: 1;">
+            <div ref="inputColumnRef" class="chat-column mx-auto flex flex-col items-start relative"
+              style="z-index: 1;">
 
               <!-- 排队消息抽屉：比输入框窄，避开圆角，微透明毛玻璃 -->
               <Transition name="queue-drawer">
@@ -361,6 +362,8 @@ function measureChatContainer(): void {
   const el = scrollContainerRef.value?.getScrollElement?.() as HTMLElement | null;
   if (!el) return;
   emit('container-resize', el.clientWidth);
+  // 容器尺寸变化（窗口 resize / 缩放 / 分栏拖拽）是列小数位置的来源之一
+  scheduleSnapChatColumns();
 }
 
 watch(scrollContainerRef, (ref) => {
@@ -371,6 +374,100 @@ watch(scrollContainerRef, (ref) => {
   chatResizeObserver = new ResizeObserver(measureChatContainer);
   chatResizeObserver.observe(el);
   measureChatContainer();
+}, { flush: 'post' });
+
+// ── 对话列吸附（亚像素） ──
+/* 两处小数都是实测过的：
+   1) 纵向：sticky 输入区滚到最底部时落在由内容高度决定的自然位置，带 0.5px 小数
+      （滚动中途贴视口底、为整数）→ 输入框/状态行/工作目录条整块按小数位置重采样；
+   2) 横向：对话列 max-width 744 + mx-auto，父级内容宽为奇数时居中余量带 0.5px
+      （实测 .chat-messages 左边缘 356.5）→ 消息气泡/卡片/1px 边框落在半像素上。
+   做法：rect 减去已写入的修正量得到"纯布局位置"，取小数部分后用等量反向 translate 拉回整像素
+   （不在每次测量前清 transform：那会强制一次同步布局，而流式期间消息列每帧都在变尺寸）。
+   落点用整 CSS px，不按 devicePixelRatio 换算：125% 下换算会得到 0.2px 的 translate
+   （反而重新引入小数），而浏览器自己会把整 CSS px 落到物理像素网格上。
+   只在容器 resize / 页面缩放 / 列内容尺寸变化 / 避让占位过渡结束时需要——滚动中位置恒定，
+   所以无需逐帧测量；rAF 合帧，且只在修正量真的变化时才写 DOM。 */
+const messagesColumnRef = ref<HTMLElement | null>(null);
+const inputColumnRef = ref<HTMLElement | null>(null);
+let snapRafId: number | null = null;
+let snapFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+/** 当前已写入的修正量：用于从 rect 反推"纯布局位置"，从而不必先清 transform 再量
+ *  （清 transform 会强制一次同步布局；流式期间消息列尺寸每帧都在变，
+ *  这条路径必须保持"只在修正量真的变化时才写 DOM"） */
+let msgColDx = 0;
+let inputColDx = 0;
+let inputColDy = 0;
+
+function snapChatColumns(): void {
+  const msgCol = messagesColumnRef.value;
+  const inputCol = inputColumnRef.value;
+  if (!msgCol && !inputCol) return;
+
+  if (msgCol) {
+    const rect = msgCol.getBoundingClientRect();
+    const layoutLeft = rect.left - msgColDx;
+    const fx = layoutLeft - Math.round(layoutLeft);
+    const dx = fx ? -fx : 0;
+    if (dx !== msgColDx) {
+      msgColDx = dx;
+      msgCol.style.transform = dx ? `translateX(${dx}px)` : '';
+    }
+  }
+
+  if (inputCol) {
+    const rect = inputCol.getBoundingClientRect();
+    const layoutLeft = rect.left - inputColDx;
+    const layoutTop = rect.top - inputColDy;
+    const fx = layoutLeft - Math.round(layoutLeft);
+    const fy = layoutTop - Math.round(layoutTop);
+    const dx = fx ? -fx : 0;
+    const dy = fy ? -fy : 0;
+    if (dx !== inputColDx || dy !== inputColDy) {
+      inputColDx = dx;
+      inputColDy = dy;
+      const parts: string[] = [];
+      if (dx) parts.push(`translateX(${dx}px)`);
+      if (dy) parts.push(`translateY(${dy}px)`);
+      inputCol.style.transform = parts.join(' ');
+    }
+  }
+}
+
+function scheduleSnapChatColumns(): void {
+  if (snapRafId !== null) return;
+  snapRafId = requestAnimationFrame(() => {
+    snapRafId = null;
+    snapChatColumns();
+  });
+}
+
+/** 两列自身尺寸变化（消息列高度、输入区排队抽屉/编辑条/编辑器长高）会翻转边缘奇偶 → 重吸附 */
+let columnObserver: ResizeObserver | null = null;
+
+watch([messagesColumnRef, inputColumnRef], ([msgEl, inputEl]) => {
+  columnObserver?.disconnect();
+  columnObserver = null;
+  // 元素重建后已写入的 transform 不复存在 → 修正量缓存清零，避免按旧值反推出错误的小数
+  msgColDx = 0;
+  inputColDx = 0;
+  inputColDy = 0;
+  const els = [msgEl, inputEl].filter(Boolean) as HTMLElement[];
+  if (!els.length) return;
+  columnObserver = new ResizeObserver(scheduleSnapChatColumns);
+  els.forEach((el) => columnObserver?.observe(el));
+  scheduleSnapChatColumns();
+}, { flush: 'post' });
+
+/** 避让占位是 flex-basis 0.3s 过渡：过渡期间列左边缘连续变化，而 ResizeObserver 量不到
+ *  「位移变化」（列自身尺寸不变），故过渡结束后必须补一次吸附（定时兜底，取 0.42s > 0.3s） */
+watch(() => props.asideReserve, () => {
+  scheduleSnapChatColumns();
+  if (snapFallbackTimer) clearTimeout(snapFallbackTimer);
+  snapFallbackTimer = setTimeout(() => {
+    snapFallbackTimer = null;
+    snapChatColumns();
+  }, 420);
 }, { flush: 'post' });
 
 /**
@@ -638,6 +735,18 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearSkeletonTimers();
+  chatResizeObserver?.disconnect();
+  chatResizeObserver = null;
+  columnObserver?.disconnect();
+  columnObserver = null;
+  if (snapRafId !== null) {
+    cancelAnimationFrame(snapRafId);
+    snapRafId = null;
+  }
+  if (snapFallbackTimer) {
+    clearTimeout(snapFallbackTimer);
+    snapFallbackTimer = null;
+  }
 });
 
 /**
@@ -1482,13 +1591,12 @@ function scrollToMessage(messageId: string) {
    参与布局会让该行在 0↔34px 之间跳变，直接改变 scrollHeight 把上方消息顶跳。
    包含块 = .chat-column（已 relative），left/right:0 宽度等同原 width:100%。
    pointer-events 收口：浮层空白区透传点击，子控件自身可点。
-   will-change: transform 不为动效：把本行提升为合成层，让浏览器有机会把渲染吸附到设备像素网格，
-   缓解本行继承的小数位置（输入区是 sticky bottom-0，滚到最底部时落到由内容高度决定的自然位置，
-   实测带 0.5px 小数；滚动中途则贴视口底、为整数）。
+   本行继承输入区的小数位置（输入区 sticky bottom-0，滚到底时落到由内容高度决定的
+   自然位置，实测带 0.5px），该小数由 .chat-column 的确定性吸附统一拉回整像素
+   （见 script 的 snapInputColumn）——这里的 will-change 只作合成提示，不再承担吸附。
    注意：图标自身的半像素是另一回事——「容器尺寸 − 图标尺寸 = 奇数」会让居中余量为半像素
    （16px 容器放 13px 图标 → 上下各 1.5px），这是几何问题，应按尺寸取偶数修
-   （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。
-   本行吸附是尽力而为（实测有时生效、有时仍差半个像素），不是根治手段。 */
+   （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。 */
 .composer-status-row {
   position: absolute;
   left: 0;
