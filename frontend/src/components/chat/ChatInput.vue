@@ -737,7 +737,8 @@ function measureModelButtonNaturalWidth(): number {
   clone.style.maxWidth = `${MODEL_BUTTON_MAX_WIDTH}px`
   clone.style.left = '-9999px'
   document.body.appendChild(clone)
-  const width = Math.min(MODEL_BUTTON_MAX_WIDTH, Math.max(80, clone.getBoundingClientRect().width))
+  // 取整：小数宽度会让胶囊内部居中余量成小数，并把同行右侧按钮一起推到小数位置
+  const width = Math.round(Math.min(MODEL_BUTTON_MAX_WIDTH, Math.max(80, clone.getBoundingClientRect().width)))
   clone.remove()
   return width
 }
@@ -774,8 +775,8 @@ const openModelPanel = () => {
     modelCloseTimer = null
   }
 
-  // 从当前自适应宽度开始，再在下一帧过渡到最大宽度
-  modelButtonWidth.value = `${button.getBoundingClientRect().width}px`
+  // 从当前自适应宽度开始，再在下一帧过渡到最大宽度（取整：避免宽度过渡的两端带小数）
+  modelButtonWidth.value = `${Math.round(button.getBoundingClientRect().width)}px`
   modelButtonExpanded.value = true
   requestAnimationFrame(() => {
     modelButtonWidth.value = `${MODEL_BUTTON_MAX_WIDTH}px`
@@ -1406,7 +1407,7 @@ watch(editorContent, () => {
   nextTick(() => {
     const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
     if (pmEl) {
-      pmEl.style.minHeight = '52px';
+      pmEl.style.minHeight = '48px';
       pmEl.style.maxHeight = '240px';
       isInputExpanded.value = pmEl.scrollHeight > 60;
     }
@@ -1498,7 +1499,8 @@ onMounted(() => {
         nextTick(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
           if (pmEl) {
-            pmEl.style.minHeight = '58px';
+            // 与 mount 分支同值：两处不一致会在首次输入时把输入框顶跳 6px
+            pmEl.style.minHeight = '48px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
             // 自动滚动光标到可见区域（修复 Shift+Enter 换行时光标被遮挡）
@@ -1639,14 +1641,17 @@ defineExpose({ insertText, insertBadge });
 /* Tiptap 编辑器样式 - 模拟 textarea */
 :deep(.message-editor .ProseMirror) {
   width: 100%;
-  min-height: 52px;
+  /* 2 行 / 10 行的整数行高刻度：行高 24px（与 markdown 正文 --gd-md-line-height 同源），
+     48 = 2×24、240 = 10×24。原 min-height 52/58 与 line-height 22.4px 都是小数几何：
+     行高小数 → 每行基线落在设备像素之间（发虚）；min-height 在首次输入时 52→58
+     还会让输入框（含上方全部内容）跳 6px；240 ÷ 22.4 = 10.71 行 → 滚动时末行半行裁切。 */
+  min-height: 48px;
   max-height: 240px;
   border: none;
   resize: none;
   outline: none;
   font-size: var(--gd-size-text-base, 14px);
-  line-height: calc(var(--gd-size-text-base) * 1.6);
-  ;
+  line-height: calc(var(--gd-size-text-base) + 10px);
   padding: 0 8px;
   background: transparent;
   overflow-y: auto;
@@ -1686,24 +1691,6 @@ defineExpose({ insertText, insertBadge });
   border-radius: 4px;
   margin-right: 4px;
 }
-
-/* 保留旧样式兼容 */
-.message-input {
-  width: 100%;
-  height: auto;
-  border: none;
-  resize: none;
-  outline: none;
-  font-size: var(--gd-size-text-base);
-  line-height: 1.8;
-  padding: 0 8px;
-  background: transparent;
-  overflow-y: auto;
-  box-sizing: border-box;
-  transition: height 0.2s ease;
-  min-height: 58px;
-}
-
 
 .left-tools {
   display: flex;
@@ -1882,7 +1869,8 @@ defineExpose({ insertText, insertBadge });
   border: 1px solid var(--el-border-color-light, #e4e7ed);
   border-radius: 8px;
   font-size: 13px;
-  line-height: 1.7;
+  /* 整数行高：13 × 1.7 = 22.1px 会让每行基线落在设备像素之间 */
+  line-height: 22px;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Menlo', monospace;

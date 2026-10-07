@@ -133,8 +133,9 @@ const positionStyle = computed(() => {
   if (rbY - h < MARGIN + DRAG_FORBIDDEN_TOP) rbY = MARGIN + h + DRAG_FORBIDDEN_TOP
 
   return {
-    right: `${vw - rbX}px`,
-    bottom: `${vh - rbY}px`,
+    // 取整：浮窗整体在合成层上，right/bottom 带小数会让整窗文字按小数位置重采样（发虚）
+    right: `${Math.round(vw - rbX)}px`,
+    bottom: `${Math.round(vh - rbY)}px`,
   }
 })
 
@@ -160,7 +161,7 @@ function toRelative(rbX: number, rbY: number): { rx: number; ry: number } {
   }
 }
 
-/** 拖拽时 clamp：右下角 + 左上角都在视口内 + 顶部不低于标题栏 */
+/** 拖拽时 clamp：右下角 + 左上角都在视口内 + 顶部不低于标题栏（结果落整 CSS px） */
 function clampPixels(rbX: number, rbY: number, w: number, h: number): { x: number; y: number } {
   const vw = viewportW.value
   const vh = viewportH.value
@@ -179,12 +180,13 @@ function startDrag(e: MouseEvent) {
   if (!container) return
 
   const rect = container.getBoundingClientRect()
-  const w = rect.width
-  const h = rect.height
+  // 宽高与锚点取整：clamp 的输入全为整数 → 拖拽期间 right/bottom 也都是整数
+  const w = Math.round(rect.width)
+  const h = Math.round(rect.height)
   const startX = e.clientX
   const startY = e.clientY
-  let curRBX = rect.right
-  let curRBY = rect.bottom
+  let curRBX = Math.round(rect.right)
+  let curRBY = Math.round(rect.bottom)
 
   container.style.left = 'auto'
   container.style.top = 'auto'
@@ -234,8 +236,8 @@ function startBallDrag(e: MouseEvent) {
   const rect = ball.getBoundingClientRect()
   const startX = e.clientX
   const startY = e.clientY
-  const startPosX = rect.right
-  const startPosY = rect.bottom
+  const startPosX = Math.round(rect.right)
+  const startPosY = Math.round(rect.bottom)
   let moved = false
 
   document.body.style.userSelect = 'none'

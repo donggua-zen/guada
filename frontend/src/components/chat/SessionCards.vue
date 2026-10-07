@@ -424,6 +424,8 @@ async function submit() {
 /* 页脚键盘提示（上下键移动选取、回车提交；Tab 仍在但不写进提示——它只移焦点，与上下键语义不同） */
 .ask-hint {
   font-size: 0.6875rem;
+  /* 整数行高：11px 继承 1.5 会得到 16.5px 半像素行盒 */
+  line-height: 16px;
   color: var(--gd-color-text-gray, #9ca3af);
 }
 

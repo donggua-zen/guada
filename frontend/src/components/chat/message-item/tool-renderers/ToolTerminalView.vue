@@ -85,7 +85,8 @@ const pillClass = computed(() => {
 .tool-terminal-view {
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
   font-size: 12px;
-  line-height: 1.6;
+  /* 整数行高：12 × 1.6 = 19.2px 会让整块每行都落在小数偏移上 */
+  line-height: 20px;
 }
 
 .term-sandbox {

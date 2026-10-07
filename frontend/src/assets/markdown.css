@@ -32,11 +32,14 @@
   --gd-md-h4-size: calc(var(--gd-md-font-size) + 1px); /* 15 @14 */
   --gd-md-code-font-size: calc(var(--gd-md-font-size) - 1px); /* 代码块 13 @14 */
   --gd-md-code-line-height: calc(var(--gd-md-font-size) + 10px); /* 24 @14，等宽块固定行高 */
-  --gd-md-code-padding-x: calc(var(--gd-md-font-size) * 0.85); /* 代码区左右内缩 ~12 @14，与头部对齐 */
+  --gd-md-code-padding-x: calc(var(--gd-md-font-size) - 2px); /* 代码区左右内缩 12 @14，与头部对齐；
+                                                                 原 calc(font × 0.85) = 11.9px 是小数，
+                                                                 代码/语言标签的左边缘会落在小数 x 上 */
   --gd-md-code-padding-y: calc(var(--gd-md-font-size) - 2px); /* 代码上下留白 12 @14 */
   --gd-md-inline-code-font-size: calc(var(--gd-md-font-size) - 2px); /* 行内码 12 @14 */
   --gd-md-table-font-size: var(--gd-md-code-font-size); /* 表格同代码 13 @14 */
-  --gd-md-table-cell-min-width: calc(var(--gd-md-font-size) * 6.4); /* 90px @14 */
+  --gd-md-table-cell-min-width: calc(var(--gd-md-font-size) * 6.5); /* 91px @14（6.4 时是 89.6px 小数，
+                                                                        单元格边框会落在小数 x 上） */
 }
 
 .markdown-text {
@@ -311,7 +314,9 @@
   justify-content: space-between;
   gap: calc(var(--gd-md-font-size) - 2px);
   min-height: var(--gd-md-code-header-height);
-  padding: calc(var(--gd-md-font-size) / 2.33) var(--gd-md-code-padding-x);
+  /* 8px 固定（原 calc(font/2.33) = 6.0085px 小数）：20px 行盒 + 上下 8px = 36px = min-height，
+     内容高度正好吃满，align-items:center 不再产生小数余量 */
+  padding: 8px var(--gd-md-code-padding-x);
   font-family: var(--gd-md-font-family);
   color: var(--gd-md-code-header-text);
 }
@@ -341,7 +346,7 @@
   height: calc(var(--gd-md-code-header-height) - 12px);
   padding: 0;
   border: none;
-  border-radius: calc(var(--gd-md-font-size) / 2.33);
+  border-radius: 6px;
   background-color: transparent;
   color: var(--gd-md-text-tertiary);
   cursor: pointer;
@@ -366,8 +371,10 @@
 
 .code-actions button svg,
 .code-expand svg {
-  width: calc(var(--gd-md-font-size) + 1px);
-  height: calc(var(--gd-md-font-size) + 1px);
+  /* 16px（原 calc(font + 1px) = 15px 奇数）：24px 按钮内居中余量 4px 整数；
+     15px 会得到 4.5px 半像素，图标随容器相位跳一个设备像素 */
+  width: calc(var(--gd-md-font-size) + 2px);
+  height: calc(var(--gd-md-font-size) + 2px);
 }
 
 .code-scroll {

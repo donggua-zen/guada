@@ -85,7 +85,8 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
   padding: 6px 0;
   font-family: var(--font-mono, "SF Mono", Consolas, "Courier New", monospace);
   font-size: 12px;
-  line-height: 1.55;
+  /* 整数行高：12 × 1.55 = 18.6px 会让整块每行都落在小数偏移上 */
+  line-height: 19px;
   color: var(--el-text-color-regular);
 }
 

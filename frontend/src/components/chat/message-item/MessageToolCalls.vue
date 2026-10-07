@@ -5,14 +5,14 @@
       <div
         class="group flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="toggleExpand(toolIndex)">
-        <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="15"
+        <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="16"
           style="color: #f56c6c;">
           <component :is="getToolIcon(tool)" />
         </el-icon>
-        <el-icon v-else-if="tool.outcome === 'aborted'" class="shrink-0" size="15" style="color: #c0c4cc;">
+        <el-icon v-else-if="tool.outcome === 'aborted'" class="shrink-0" size="16" style="color: #c0c4cc;">
           <component :is="getToolIcon(tool)" />
         </el-icon>
-        <el-icon v-else class="shrink-0" size="15" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
+        <el-icon v-else class="shrink-0" size="16" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
           <component :is="getToolIcon(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
@@ -52,7 +52,7 @@
         <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空） -->
         <div v-if="tool.outcome === 'error' || tool.outcome === 'rejected'"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-          <el-icon size="13" style="color:#f56c6c">
+          <el-icon size="14" style="color:#f56c6c">
             <ErrorCircle16Regular />
           </el-icon>
           <span class="ml-1.5">{{ t('chat.toolCalls.resultFailed') }}</span>
@@ -290,13 +290,13 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
 }
 
 /* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文；
-   margin-left 21px = 工具图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标。
+   margin-left 22px = 工具图标 16px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标。
    横向内边距抽成 --tool-card-pad-x：内部各视图的滚动区用等量负边距抵消，
    让滚动条贴住卡片右边框，而不是被内边距顶开、悬空在中间。 */
 .tool-result-inline {
   --tool-card-pad-x: 12px;
   margin-top: 4px;
-  margin-left: 21px;
+  margin-left: 22px;
   padding: 4px var(--tool-card-pad-x);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;

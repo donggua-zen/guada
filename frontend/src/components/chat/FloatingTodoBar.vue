@@ -165,6 +165,9 @@ onUnmounted(() => {
   background: var(--gd-color-surface);
   cursor: pointer;
   user-select: none;
+  /* 13px 文本的整数行高：继承 html 的 1.5 会得到 19.5px 行盒（半像素），
+     28px 胶囊内居中余量随之成半像素 */
+  line-height: 20px;
   /* 宽度上限必须是定长：百分比上限在内在尺寸计算阶段不可解析、会被忽略，外层 flex 项
      就会按「未截断的文本宽度」定宽，胶囊右侧留出空档把两个 chip 推远（实测 103px）。
      定长 420px 后外层宽度 = 胶囊实宽，两者之间只剩行的 gap。min-width:0 保证行窄时能收缩。 */

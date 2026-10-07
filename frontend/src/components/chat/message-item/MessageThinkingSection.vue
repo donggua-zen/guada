@@ -4,7 +4,7 @@
     <div
       class="group thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
       @click.stop="handleToggle">
-      <el-icon size="15" class="shrink-0">
+      <el-icon size="16" class="shrink-0">
         <BrainCircuit20Regular />
       </el-icon>
       <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
@@ -107,10 +107,10 @@ watch(() => props.autoExpand, (auto, prevAuto) => {
 }
 
 /* 与工具展开卡片（tool-result-inline）完全一致的容器样式（微透明表面底色）；
-   margin-left 21px = 图标 15px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标 */
+   margin-left 22px = 图标 16px + 标题间距 6px，让详情块缩进与标题文字对齐、错开图标 */
 .thinking-section__content-wrapper {
   margin-top: 4px;
-  margin-left: 21px;
+  margin-left: 22px;
   padding: 8px 12px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
