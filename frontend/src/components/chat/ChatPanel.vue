@@ -1407,13 +1407,18 @@ function scrollToMessage(messageId: string) {
    故 left-0 right-0 宽度天然 = 消息列宽（随避让让出） */
 .chat-bottom-fade {
   position: absolute;
-  bottom: 0;
+  /* bottom -2px / height 78px：向下多探出 2px 盖住滚动口底部的分数缝隙。
+     非整数缩放（1080p@125% 等）下内容高度是分数（行高 ×dpr 带小数），
+     scrollTop/scrollHeight 取整后内容末端与滚动口底边之间会留 0~1px 的缝，
+     滚动消息透过 pb-2 透明带漏出（实测 720/1080@125% 漏 1px，2K@100% 严丝合缝）。
+     探出的 2px 在贴底（wrapper 底边与滚动口重合）时被滚动口裁掉，无副作用；
+     渐变顶端位置不变，过渡带 20px → 22px，视觉无感知。 */
+  bottom: -2px;
   left: 0;
   right: 0;
-  /* 56px 实心区需盖住输入框下方的工作目录条（约 36px），否则滚动消息会从条后漏出 */
-  height: 76px;
+  height: 78px;
   pointer-events: none;
-  background: linear-gradient(to top, var(--gd-color-bg) 56px, transparent 76px);
+  background: linear-gradient(to top, var(--gd-color-bg) 56px, transparent 78px);
 }
 
 /* 加载指示器淡入淡出 */
