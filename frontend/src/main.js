@@ -35,6 +35,12 @@ import {
 } from "@/composables/useBackendStatus";
 import { i18n } from "./locales";
 
+// 亚像素自检（仅 dev）：控制台执行 __subpixelAudit() 扫描小数几何。
+// 生产构建下 import.meta.env.DEV 被静态替换为 false，分支连同动态 import 一起被消除。
+if (import.meta.env.DEV) {
+  import("@/utils/devSubpixelAudit").then(({ installSubpixelAudit }) => installSubpixelAudit());
+}
+
 // 平台标记挂到 <html>：布局按平台差异处理
 // （Electron-Windows 有独立标题栏行，内容卡片顶/左不留边距；Web/Mac 卡片顶部留缝防吸顶）
 document.documentElement.classList.add(
