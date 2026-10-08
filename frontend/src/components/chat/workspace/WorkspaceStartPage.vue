@@ -3,45 +3,61 @@
        各入口（文件 / 终端 / 新建浏览器 / Git 审阅 / 工作流 / 计划）由父组件处理实际跳转。 -->
   <div class="workspace-start-page">
     <div class="start-content">
-      <h2 class="start-title">{{ t('chat.workspace.startPageTitle') }}</h2>
-      <p class="start-subtitle">{{ t('chat.workspace.startPageSubtitle') }}</p>
-      <div class="start-grid">
+      <div class="start-list">
         <button class="start-item" @click="emit('open-file')">
           <span class="start-item-icon">
-            <el-icon :size="20"><Folder16Regular /></el-icon>
+            <el-icon :size="18"><Folder16Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.newFile') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.newFile') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageFileDesc') }}</span>
+          </span>
         </button>
         <button class="start-item" @click="emit('open-terminal')">
           <span class="start-item-icon">
-            <el-icon :size="20"><WindowConsole20Regular /></el-icon>
+            <el-icon :size="18"><WindowConsole20Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.terminal') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.terminal') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageTerminalDesc') }}</span>
+          </span>
         </button>
         <button class="start-item" @click="emit('open-browser')">
           <span class="start-item-icon">
-            <el-icon :size="20"><Globe16Regular /></el-icon>
+            <el-icon :size="18"><Globe16Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.newBrowser') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.newBrowser') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageBrowserDesc') }}</span>
+          </span>
         </button>
         <button class="start-item" @click="emit('open-git')">
           <span class="start-item-icon">
-            <el-icon :size="20"><Branch20Regular /></el-icon>
+            <el-icon :size="18"><Branch20Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.gitTab') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.gitTab') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageGitDesc') }}</span>
+          </span>
         </button>
         <button class="start-item" @click="emit('open-workflow')">
           <span class="start-item-icon">
-            <el-icon :size="20"><Flowchart20Regular /></el-icon>
+            <el-icon :size="18"><Flowchart20Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.workflowTab') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.workflowTab') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageWorkflowDesc') }}</span>
+          </span>
         </button>
         <!-- 计划：面板常驻入口（无论有无计划都可进入，面板内列出历史计划） -->
         <button class="start-item" @click="emit('open-plan')">
           <span class="start-item-icon">
-            <el-icon :size="20"><Notepad20Regular /></el-icon>
+            <el-icon :size="18"><Notepad20Regular /></el-icon>
           </span>
-          <span class="start-item-label">{{ t('chat.workspace.planTab') }}</span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.planTab') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPagePlanDesc') }}</span>
+          </span>
         </button>
       </div>
     </div>
@@ -81,63 +97,49 @@ const emit = defineEmits<{
   margin: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
   width: 100%;
-  max-width: 480px;
+  max-width: 340px;
 }
 
-.start-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--gd-color-text);
-}
-
-.start-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: var(--gd-color-text-gray);
-}
-
-.start-grid {
-  display: grid;
-  /* 按可用宽度自适应列数：窄面板 3 列，宽面板一行放下全部入口 */
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 8px;
-  width: 100%;
-  margin-top: 14px;
-}
-
-/* 卡片整块承载 icon + 文字；配色统一取 surface 系列变量
-   （--gd-color-surface-hover / -border / --gd-size-surface-radius）。
-   文字恒用 --gd-color-text：hover 只换背景不换字色，避免文字与背景贴近看不清 */
-.start-item {
+.start-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  min-height: 72px;
-  padding: 12px 8px;
-  border: none;
+  width: 100%;
+}
+
+/* 卡片：左侧图标块 + 右侧「标题 / 描述」两行。
+   配色统一取 surface 系列变量（--gd-color-surface / -border / -hover / --gd-size-surface-radius）。 */
+.start-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--gd-color-surface-border);
   border-radius: var(--gd-size-surface-radius);
-  background: var(--gd-color-surface-hover);
+  background: var(--gd-color-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   color: var(--gd-color-text);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .start-item:hover {
-  background: var(--gd-color-surface-border);
+  background: var(--gd-color-surface-hover);
 }
 
 .start-item-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--gd-color-surface-hover);
   color: var(--gd-color-text-gray);
   transition: color 0.15s ease;
 }
@@ -146,10 +148,27 @@ const emit = defineEmits<{
   color: var(--gd-color-text);
 }
 
-.start-item-label {
-  font-size: 12px;
+.start-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* min-width:0 让描述可以正常截断，而不是把卡片撑宽 */
+  min-width: 0;
+}
+
+.start-item-title {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--gd-color-text);
+  line-height: 1.3;
+}
+
+.start-item-desc {
+  font-size: 12px;
+  color: var(--gd-color-text-gray);
+  line-height: 1.3;
   white-space: nowrap;
-  transition: color 0.15s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

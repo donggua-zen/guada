@@ -28,6 +28,8 @@ import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
 import { registerUiPrimitives } from "@/components/ui/register";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
+// 设备像素网格：CSS 需要 1/dpr 才能把卡片底边吸附到设备像素上（防输入区底部半行泄漏）
+import { initDevicePixelGrid } from "@/utils/devicePixelGrid";
 import {
   backendReady,
   backendError,
@@ -50,6 +52,9 @@ document.documentElement.classList.add(
       : "platform-win"
     : "platform-web",
 );
+
+// 设备像素网格变量：挂载前写入，首帧即是吸附后的几何（避免首屏一次重排）
+initDevicePixelGrid();
 
 // 页面刷新标志：首次导航时强制服务端验证 token，后续路由切换不再重复验证
 let isInitialPageLoad = true;
