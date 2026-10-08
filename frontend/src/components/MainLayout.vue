@@ -119,7 +119,8 @@ onMounted(() => {
   // 插件槽（含插件主题注册表）需在主界面即初始化：
   // 否则冷启动落在聊天页时无人触发 init，插件主题会一直 pending 不加载
   usePluginSlots().init()
-  // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
+  // 外观分组（壁纸/透明度/主题预设/语言）只在这里读一次：语言也由这次响应派生，
+  // 不再由 App.vue 单独拉一份。applyWallpaperSettings 只写 documentElement，不依赖元素存在。
   layoutStore.loadAppearanceSettings()
 
   loadToolDisplays()

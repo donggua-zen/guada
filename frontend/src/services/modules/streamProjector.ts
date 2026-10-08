@@ -63,6 +63,18 @@ export interface ProjectorSessionStore {
  */
 export type ProjectorChunk = WireStreamEvent | DomainEvent;
 
+/**
+ * 折叠模式。live 与 replay 共用同一个折叠器（保证两条路径收敛到同一棵树），但**副作用不同**：
+ * - `live`：实时流/暂存消费。带实时副作用——刷新计划列表缓存、维护会话级交互卡。
+ * - `replay`：历史重放（foldEvents）。纯重建：不产生任何 IO，也不碰会话级交互卡。
+ *
+ * 为什么必须分开：历史重放是"把已落盘的事件重新折一遍"，它既不可能产生新计划，
+ * 也无从判断某个 ask 当前是否仍在等待——重放时执行这些副作用只会造成
+ * ① 每个历史 turn/finish 打一次 GET /plans（首屏 30 回合即数十次，load-more 重折还会累加），
+ * ② 把实时补发回来的待批卡片清掉（与"刷新后待批状态不丢"的 SSE 补发设计直接矛盾）。
+ */
+export type FoldMode = "live" | "replay";
+
 /** 领域事件判别（type 含 '/'，如 turn/start；live 事件为 turn_start 等无斜杠） */
 function isDomainEvent(chunk: ProjectorChunk): chunk is DomainEvent {
   return typeof chunk.type === "string" && chunk.type.includes("/");
@@ -317,6 +329,7 @@ function applyDomainEvent(
   sessionStore: ProjectorSessionStore,
   sessionId: string,
   ev: DomainEvent,
+  mode: FoldMode,
 ): void {
   switch (ev.type) {
     case "turn/start": {
@@ -326,7 +339,7 @@ function applyDomainEvent(
         type: "turn_start",
         turnId: ev.data.turnId,
         modelName: ev.data.modelName,
-      });
+      }, mode);
       return;
     }
     case "turn/resume":
@@ -334,7 +347,7 @@ function applyDomainEvent(
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_start",
         turnId: ev.data.turnId,
-      });
+      }, mode);
       return;
     case "turn/finish": {
       // 回合收尾：finishReason/modelName/error/usage/整轮耗时 直接来自事件数据（后端零预扫）
@@ -355,14 +368,14 @@ function applyDomainEvent(
                 ...(data.cachedTokens != null ? { cachedTokens: data.cachedTokens } : {}),
               }
             : undefined,
-      });
+      }, mode);
       return;
     }
     case "turn/delete":
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_delete",
         turnId: ev.data.turnId,
-      });
+      }, mode);
       return;
     case "compaction/summary": {
       const data = ev.data;
@@ -373,7 +386,7 @@ function applyDomainEvent(
         shadowedMessageIds: data.shadowedMessageIds,
         summary: data.summary ?? "",
         messageId: data.summaryMessageId,
-      });
+      }, mode);
       return;
     }
     case "user/message": {
@@ -551,15 +564,18 @@ function upsertCompressingPlaceholder(sessionStore: ProjectorSessionStore, sessi
 }
 
 
-/** 按事件类型定位更新 store(无闭包,直接改响应式 store) */
+/** 按事件类型定位更新 store(无闭包,直接改响应式 store)。
+ *  `mode` 必填：两个入口（applyLiveChunk / foldEvents）都必须显式声明自己是实时还是重放，
+ *  漏改会在编译期暴露，不会静默保留重放期的实时副作用。 */
 export function applyChunkToStore(
   sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunk: ProjectorChunk,
+  mode: FoldMode,
 ): void {
   // 领域事件（事件页：assistant/message 一条 = 全部块等）→ 独立折叠分支
   if (isDomainEvent(chunk)) {
-    applyDomainEvent(sessionStore, sessionId, chunk);
+    applyDomainEvent(sessionStore, sessionId, chunk, mode);
     return;
   }
   // 引擎级附属（上下文压缩）
@@ -714,9 +730,13 @@ export function applyChunkToStore(
   }
   if (chunk.type === "turn_end") {
     // 回合收尾：按 turnId 复位工作态 + 写回合级收尾元数据；同时清除会话级交互卡
-    sessionStore.setSessionPendingAsk(sessionId, undefined);
-    // 计划列表缓存兜底刷新：批准/拒绝/修订各路径的新计划都在回合收尾后进入缓存
-    sessionStore.refreshPlans?.(sessionId);
+    // 清卡与刷计划缓存都是实时语义：重放历史时既不该清掉当前待批的卡，
+    // 也不该为每个历史回合打一次计划列表接口（见 FoldMode 注释）
+    if (mode === "live") {
+      sessionStore.setSessionPendingAsk(sessionId, undefined);
+      // 计划列表缓存兜底刷新：批准/拒绝/修订各路径的新计划都在回合收尾后进入缓存
+      sessionStore.refreshPlans?.(sessionId);
+    }
     const turns = sessionStore.getTurns(sessionId) || [];
     const turn = turns.find((t) => t.id === chunk.turnId);
     if (turn) {
@@ -798,28 +818,38 @@ export function applyChunkToStore(
   if (chunk.type === "ask_requested") {
     // 统一交互请求（审批/询问共用）：执行内原地阻塞（无 turn_end、流保持 running）。
     // 会话级交互卡（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方全局展示。
-    sessionStore.setSessionPendingAsk(sessionId, {
-      requestId: chunk.requestId,
-      kind: chunk.kind,
-      title: chunk.title,
-      toolCallId: chunk.toolCallId,
-      toolName: chunk.toolName,
-      questions: chunk.questions || [],
-    });
+    // 只在实时路径写：卡片的权威来源是 live 流（含 SSE 建连时对活跃流 eventBuffer 的补发，
+    // ask_requested 正在其中）；历史重放无从判断该 ask 是否仍在等待，写它只会覆盖实时真相。
+    if (mode === "live") {
+      sessionStore.setSessionPendingAsk(sessionId, {
+        requestId: chunk.requestId,
+        kind: chunk.kind,
+        title: chunk.title,
+        toolCallId: chunk.toolCallId,
+        toolName: chunk.toolName,
+        questions: chunk.questions || [],
+      });
+    }
     return;
   }
   if (chunk.type === "ask_resolved") {
     // 交互终结（answered/cancelled）：清会话级交互卡（多窗口同步收卡由此保证）。
-    sessionStore.setSessionPendingAsk(sessionId, undefined);
+    if (mode === "live") {
+      sessionStore.setSessionPendingAsk(sessionId, undefined);
+    }
     return;
   }
   if (chunk.type === "plan_mode_changed") {
     // 计划模式变更（协作状态）。用户从界面开关时前端已乐观写入，此处幂等覆盖；
     // 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
     // 会话设置（事实源），否则刷新后指示器按旧设置回退。
+    // 这条是纯状态写（无 IO），重放时同样要执行：刷新后指示器正是靠它从转录恢复。
     sessionStore.applyRemotePlanEnabled?.(sessionId, chunk.planEnabled);
-    // 开关变化的同一时刻也是新计划可能刚刚提交/被修订的信号，顺手刷新列表缓存
-    sessionStore.refreshPlans?.(sessionId);
+    if (mode === "live") {
+      // 开关变化的同一时刻也是新计划可能刚刚提交/被修订的信号，顺手刷新列表缓存
+      // （重放不刷：历史事件不可能产生新计划，面板打开时会自行拉取）
+      sessionStore.refreshPlans?.(sessionId);
+    }
     return;
   }
   if (chunk.type === "subagent_link") {
@@ -841,7 +871,9 @@ export function applyChunkToStore(
   }
   if (chunk.type === "tool_calls_response") {
     // 工具执行结果下发 → 交互已消费，关闭会话级卡（与 ask_resolved 幂等双保险）
-    sessionStore.setSessionPendingAsk(sessionId, undefined);
+    if (mode === "live") {
+      sessionStore.setSessionPendingAsk(sessionId, undefined);
+    }
     // 把执行结果挂到对应 tool-call 块：主键 toolCallId（对齐回放 tool/result 的聚类语义；
     // 工具结果是独立消息，其 messageId 与含调用的 assistant 消息 id 无关，故不依赖 messageId）。
     const turns = sessionStore.getTurns(sessionId) || [];
@@ -967,6 +999,8 @@ function isTerminalEvent(type: string): boolean {
 /**
  * live 事件应用（记录终态事件到事件数组后定位写 store）。
  * 供常驻接收与"暂存消费"共用，保证事件数组与树一致（load-more re-fold 不丢 live 尾部）。
+ * 恒为 live 模式：暂存消费的也是"实时到达但当时无缓存"的事件，副作用（刷计划缓存、维护交互卡）
+ * 必须照常执行——刷新后待批卡能恢复正是靠这条路径消费 SSE 补发的 ask_requested。
  */
 export function applyLiveChunk(
   sessionStore: ProjectorSessionStore,
@@ -979,7 +1013,7 @@ export function applyLiveChunk(
     if (!sessionState.eventLog) sessionState.eventLog = [];
     sessionState.eventLog.push(chunk);
   }
-  applyChunkToStore(sessionStore, sessionId, chunk);
+  applyChunkToStore(sessionStore, sessionId, chunk, "live");
 }
 
 /**
@@ -1013,7 +1047,7 @@ export function foldEvents(
   currentTurnBySession.set(sessionId, undefined);
   sessionStore.setTurns(sessionId, []);
   for (const chunk of chunks) {
-    applyChunkToStore(sessionStore, sessionId, chunk);
+    applyChunkToStore(sessionStore, sessionId, chunk, "replay");
   }
   // 历史重放不复活工作态：JSONL 里 turn/start 无 turn/finish（后端重启/断连时终态未落盘）时，
   // 折叠会置 isWorking + startedAt → 重开会话永久卡"正在流式中"。会话当前不在流式中

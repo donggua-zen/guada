@@ -193,6 +193,7 @@ import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import WorkspaceTreePanel from './WorkspaceTreePanel.vue'
+import { useWorkspaceTreeStore } from '@/stores/workspaceTree'
 import type { UnifiedTab } from '@/composables/usePreviewTabCache'
 
 interface SelectedFile {
@@ -272,6 +273,7 @@ watch([() => selectedFile.value?.path, () => fileContent.value], () => {
 
 // 缓存的工作目录绝对路径（用于 Electron file:// URL 拼接）
 const cachedWorkspacePath = ref<string | null>(props.workspacePath)
+const treeStore = useWorkspaceTreeStore()
 
 watch(() => props.workspacePath, (val) => {
     if (val) cachedWorkspacePath.value = val
@@ -391,13 +393,12 @@ function joinWorkspacePath(workspacePath: string, relativePath: string): string 
     return (workspacePath + separator + relativePath).replace(/\\/g, '/')
 }
 
-/** 确保已缓存工作目录绝对路径（Electron 生产形态拼 file:// 需要） */
+/** 确保已缓存工作目录绝对路径（Electron 生产形态拼 file:// 需要）
+ *  兜底走 store 的会话级缓存：正常路径由父层 :workspace-path 传入，本函数只在为空时触发 */
 async function ensureWorkspacePath(): Promise<string | null> {
     if (cachedWorkspacePath.value) return cachedWorkspacePath.value
-    try {
-        const resp = await apiService.getWorkspacePath(props.sessionId!)
-        cachedWorkspacePath.value = resp.workspacePath || null
-    } catch { /* 取不到只影响 Electron 本地形态，由调用方提示 */ }
+    const path = await treeStore.ensureWorkspacePath(props.sessionId!)
+    if (path) cachedWorkspacePath.value = path
     return cachedWorkspacePath.value
 }
 
@@ -602,8 +603,7 @@ function onMediaError(): void {
 async function handleOpenInExplorerForCurrent(): Promise<void> {
     if (!selectedFile.value || !props.sessionId || !isElectron) return
     try {
-        const resp = await apiService.getWorkspacePath(props.sessionId)
-        const wsPath = resp.workspacePath
+        const wsPath = await treeStore.ensureWorkspacePath(props.sessionId)
         if (!wsPath) {
             ElMessage.error(t('chat.workspace.workspacePathError'))
             return

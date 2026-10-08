@@ -822,24 +822,36 @@ class KbIntegrationSources {
     return out;
   }
 
-  /** 把向量贴到分块行上（按 chunk id 对齐，缺向量则留 NULL，不自动重嵌入） */
+  /**
+   * 把向量贴到分块行上（缺向量则留 NULL，不自动重嵌入）。
+   *
+   * 对齐键必须**以旧库 `vector_id` 为准**：旧向量库 `kb_<kbId>` 表的主键是
+   * `chunk_<idx>_<fileId>`，而旧 `kb_chunk.id` 是 cuid，直接按 id 匹配会全量落空
+   * （真机老数据实测：411 条分块按 id 命中 0 条，按 vector_id 命中 403 条）。
+   * 三层回退：vector_id（权威）→ id（新管线两者相同）→ 重建键
+   * `chunk_<chunkIndex>_<itemId>`（vector_id 为空的历史存量兜底）。
+   */
   private async attachVectors(
     chunksByItem: Map<string, any[]>,
     vectors: Map<string, number[]>,
   ): Promise<void> {
     if (vectors.size === 0) return;
     let attached = 0;
-    for (const rows of chunksByItem.values()) {
+    const hits = { vectorId: 0, id: 0, rebuilt: 0 };
+    for (const [itemId, rows] of chunksByItem.entries()) {
       for (const row of rows) {
-        const vector = vectors.get(row.id);
-        if (vector) {
-          row.embedding = vector;
-          row.embeddingDimensions = vector.length;
-          attached += 1;
-        }
+        const match = this.matchVector(vectors, row, itemId);
+        if (!match) continue;
+        row.embedding = match.vector;
+        row.embeddingDimensions = match.vector.length;
+        hits[match.tier] += 1;
+        attached += 1;
       }
     }
-    this.logger.log(`向量对齐：${attached} 条分块拿到向量`);
+    this.logger.log(
+      `向量对齐：${attached} 条分块拿到向量` +
+        `（vector_id ${hits.vectorId} / id ${hits.id} / 重建键 ${hits.rebuilt}）`,
+    );
     const missing = [...chunksByItem.values()]
       .flat()
       .filter((r) => !r.embedding).length;
@@ -849,6 +861,29 @@ class KbIntegrationSources {
           `如需补齐请运行：pnpm kb:reembed（只重新嵌入，不重新解析/OCR）`,
       );
     }
+  }
+
+  /** 单个分块找向量：vector_id → id → 重建键，命中层级用于日志归因 */
+  private matchVector(
+    vectors: Map<string, number[]>,
+    row: Record<string, any>,
+    itemId: string,
+  ): { vector: number[]; tier: "vectorId" | "id" | "rebuilt" } | null {
+    const vectorId = typeof row.vectorId === "string" ? row.vectorId : "";
+    if (vectorId) {
+      const hit = vectors.get(vectorId);
+      if (hit) return { vector: hit, tier: "vectorId" };
+    }
+    const id = String(row.id ?? "");
+    if (id) {
+      const hit = vectors.get(id);
+      if (hit) return { vector: hit, tier: "id" };
+    }
+    if (itemId && Number.isInteger(row.chunkIndex)) {
+      const hit = vectors.get(`chunk_${row.chunkIndex}_${itemId}`);
+      if (hit) return { vector: hit, tier: "rebuilt" };
+    }
+    return null;
   }
 
   private dbFileRowToMeta(

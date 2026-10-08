@@ -129,6 +129,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "plugins/guada-themes",
+        "to": "plugins/guada-themes",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

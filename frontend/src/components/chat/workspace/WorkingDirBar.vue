@@ -71,7 +71,7 @@ import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { useRemoteWorkspaceStore, toggleConnectionBinding } from "@/stores/remoteWorkspace";
-import { apiService } from "@/services/ApiService";
+import { useWorkspaceTreeStore } from "@/stores/workspaceTree";
 
 const props = defineProps<{
   sessionId: string | null;
@@ -86,6 +86,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const tabStore = useTabStore();
 const layoutStore = useLayoutStore();
+const treeStore = useWorkspaceTreeStore();
 
 // ── 主目录展示（不可删改）+ 附加远程目录（ssh-connection 附件）绑定管理 ──
 
@@ -141,12 +142,8 @@ async function loadWorkspacePath(): Promise<void> {
     mainWorkspacePath.value = "";
     return;
   }
-  try {
-    const res = await apiService.getWorkspacePath(props.sessionId);
-    mainWorkspacePath.value = res.workspacePath || "";
-  } catch {
-    mainWorkspacePath.value = "";
-  }
+  // 走 store 的会话级缓存：与目录树共享同一次解析，不自己再发一次 workspace-path
+  mainWorkspacePath.value = (await treeStore.ensureWorkspacePath(props.sessionId)) ?? "";
 }
 
 /** 解绑附加目录（主目录不可删；后端下回合 diff 后注入解绑提醒） */

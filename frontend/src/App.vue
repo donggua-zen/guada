@@ -29,7 +29,6 @@ import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import { useTrayStats } from './composables/useTrayStats'
 import { i18n, getLocale } from './locales'
-import { useLanguage } from './composables/useLanguage'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import SetupGuide from './components/SetupGuide.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
@@ -40,7 +39,6 @@ const theme = useTheme() //不要删除，这里会执行dark模式设置
 useTrayStats() // 托盘悬浮窗统计推送（仅 Electron 生效）
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
-const { initLanguage } = useLanguage()
 
 // Element Plus 组件内置文案随语言切换
 const elLocale = computed(() => (getLocale() === 'en-US' ? en : zhCn))
@@ -80,7 +78,6 @@ const globalMenuItems = ref([])
 
 // 初始化全局右键菜单管理器 (Electron 环境下)
 onMounted(() => {
-    initLanguage()
     const mgr = ContextMenuManager.getInstance()
     mgr.setShowMenuFn((x, y, items) => {
         globalMenuX.value = x

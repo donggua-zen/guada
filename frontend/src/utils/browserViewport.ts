@@ -9,9 +9,17 @@
  * - 全局默认视口：此处管理，后端 `browser` 设置分组持久化，作用于所有未覆盖的网页
  * - 单个网页覆盖：browserWebview store 的 viewportOverrides（预览工具栏入口），
  *   仅内存保存、按网页隔离、不持久化，关闭标签即失效
+ *
+ * 本模块同时承载 `browser` 分组的启动期唯一读取入口 `loadBrowserSettings()`
+ * （视口 + 链接打开方式 + 侧边栏自动展开三项同组下发，只发一次请求）。
  */
 
 import { useBrowserWebviewStore, type ViewportSize } from '@/stores/browserWebview'
+import {
+  setAutoShowSidebar,
+  setLinkOpenMode,
+  type LinkOpenMode,
+} from '@/utils/workspacePreview'
 
 /** 预设尺寸（含竖屏，适配竖长预览面板） */
 export const VIEWPORT_PRESETS: ReadonlyArray<ViewportSize> = [
@@ -44,18 +52,95 @@ export function isValidViewportSize(width: number, height: number): boolean {
   )
 }
 
-/** 应用启动时调用：加载后端保存的默认渲染视口并同步到 store（失败保持内置默认值） */
-export async function loadDefaultViewport(): Promise<void> {
+/** 归一化后的 browser 分组设置（缺省 = 后端未给或值非法，保持调用方现状） */
+export interface BrowserGroupSettings {
+  viewport?: ViewportSize
+  linkOpenMode?: LinkOpenMode
+  autoShowSidebar?: boolean
+}
+
+/** 链接打开方式合法取值 */
+const LINK_OPEN_MODES: readonly string[] = ['internal', 'external', 'ask']
+
+/**
+ * 纯函数：把 browser 分组响应归一化为可应用的三项。
+ * 非法/缺失的值一律不产出，避免把脏值写进 store 与 localStorage 缓存。
+ */
+export function extractBrowserSettings(
+  response: Record<string, unknown> | null | undefined,
+): BrowserGroupSettings {
+  const result: BrowserGroupSettings = {}
+
+  const width = Number(response?.viewportWidth)
+  const height = Number(response?.viewportHeight)
+  if (isValidViewportSize(width, height)) {
+    result.viewport = { width: Math.round(width), height: Math.round(height) }
+  }
+
+  const mode = response?.linkOpenMode
+  if (typeof mode === 'string' && LINK_OPEN_MODES.includes(mode)) {
+    result.linkOpenMode = mode as LinkOpenMode
+  }
+
+  if (typeof response?.autoShowSidebar === 'boolean') {
+    result.autoShowSidebar = response.autoShowSidebar
+  }
+
+  return result
+}
+
+/** 应用归一化结果（视口 → store，其余两项 → localStorage 缓存） */
+export function applyBrowserSettings(settings: BrowserGroupSettings): void {
+  if (settings.viewport) {
+    useBrowserWebviewStore().setViewportSize(settings.viewport.width, settings.viewport.height)
+  }
+  if (settings.linkOpenMode) {
+    setLinkOpenMode(settings.linkOpenMode)
+  }
+  if (settings.autoShowSidebar !== undefined) {
+    setAutoShowSidebar(settings.autoShowSidebar)
+  }
+}
+
+/** 最近一次成功拉取并归一化的分组（设置页表单复用这份 payload，不再二次请求） */
+let appliedSettings: BrowserGroupSettings | null = null
+
+/** 在途请求：并发调用（启动加载 + 设置页挂载）复用同一个 Promise */
+let pendingLoad: Promise<BrowserGroupSettings | null> | null = null
+
+/** 读取最近一次成功拉取的分组（尚未成功时为 null） */
+export function getBrowserSettings(): BrowserGroupSettings | null {
+  return appliedSettings
+}
+
+/**
+ * 应用启动时调用一次：加载后端保存的 browser 分组并应用（失败保持内置默认值与本地缓存）。
+ * 由 main.js 在后端就绪后调用；设置页也调它复用同一份结果（幂等，同一启动内只真正请求一次）。
+ *
+ * @returns 归一化后的分组；失败（后端不可用）返回 null，调用方退回默认值
+ */
+export function loadBrowserSettings(): Promise<BrowserGroupSettings | null> {
+  if (!pendingLoad) {
+    pendingLoad = fetchBrowserSettings().then((result) => {
+      // 失败不留缓存：下次调用（如稍后打开设置页）重新尝试
+      if (!result) pendingLoad = null
+      return result
+    })
+  }
+  return pendingLoad
+}
+
+async function fetchBrowserSettings(): Promise<BrowserGroupSettings | null> {
   try {
     const { apiService } = await import('@/services/ApiService')
     const response = await apiService.fetchGroupSettings(SETTINGS_GROUP)
-    const width = Number(response?.viewportWidth)
-    const height = Number(response?.viewportHeight)
-    if (isValidViewportSize(width, height)) {
-      useBrowserWebviewStore().setViewportSize(Math.round(width), Math.round(height))
-    }
+    const extracted = extractBrowserSettings(response)
+    appliedSettings = extracted
+    applyBrowserSettings(extracted)
+    return extracted
   } catch {
-    // 后端不可用时保持 store 默认值
+    // 后端不可用时保持 store 默认值 + localStorage 缓存
+    return null
   }
 }
 

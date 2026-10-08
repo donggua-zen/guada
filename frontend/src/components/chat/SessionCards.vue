@@ -82,14 +82,15 @@
             </div>
           </div>
 
-          <!-- 页脚：键盘提示 + 忽略/主操作（常驻显示） -->
+          <!-- 页脚：键盘提示 + 忽略/主操作（常驻显示；未作答时主按钮禁用，翻页仍走右上箭头） -->
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span class="ask-hint">{{ t('chat.ask.keyboardHint') }}</span>
             <div class="flex items-center gap-2">
               <el-button size="small" :disabled="busy" :title="t('chat.ask.ignoreTip')" @click="ignoreAsk">
                 {{ t('chat.ask.ignore') }}
               </el-button>
-              <el-button type="primary" size="small" :loading="busy" @click="primaryAction">
+              <el-button type="primary" size="small" :loading="busy" :disabled="busy || !hasAnswer"
+                @click="primaryAction">
                 {{ isLast ? t('chat.ask.submit') : t('chat.ask.next') }}
               </el-button>
             </div>
@@ -138,7 +139,8 @@ const optionsEl = ref<HTMLElement | null>(null);
 const customInputEl = ref<HTMLInputElement | null>(null);
 
 // 新请求到达（requestId 变化）→ 重置分页与答案，并把焦点交给卡片：
-// 全局 `* { outline: none !important }` 禁掉了焦点环，若焦点留在 body，Tab/上下键看着"没反应"。
+// 键处理挂在整卡上（@keydown），焦点若留在 body，Tab/上下键看着"没反应"；
+// 焦点本身不绘制（见样式区注释），自动聚焦首选项不会让它像"已选中"。
 watch(
   () => askCtx.value?.requestId,
   () => {
@@ -180,6 +182,12 @@ function isSelected(label: string): boolean {
 const currentCustom = computed(
   () => answers.value[question.value?.id ?? ""]?.custom !== undefined,
 );
+/** 当前题是否已作答（选中了选项，或填了自定义回复）。
+ *  未作答时主按钮禁用：与回车提交（submitCurrent）同一条件，避免"回车空转、按钮却能点"的错位 */
+const hasAnswer = computed(() => {
+  const a = answers.value[question.value?.id ?? ""];
+  return !!a && (a.selected.length > 0 || !!a.custom);
+});
 
 /** 单击选项：只选中（单选点选即选中该项并清空自定义；多选切换勾选），不提交不翻页 */
 function selectOption(label: string) {
@@ -291,12 +299,9 @@ function onOptionsKeydown(e: KeyboardEvent) {
   }
 }
 
-/** 回车提交：当前题有选取或有自定义输入才走主操作（末页提交/中间页下一步），否则空转 */
+/** 回车提交：当前题已作答才走主操作（末页提交/中间页下一步），否则空转（与主按钮禁用同条件） */
 function submitCurrent() {
-  const q = question.value;
-  if (!q || busy.value) return;
-  const a = answers.value[q.id];
-  if (!a || (a.selected.length === 0 && !a.custom)) return;
+  if (busy.value || !hasAnswer.value) return;
   primaryAction();
 }
 
@@ -371,15 +376,10 @@ async function submit() {
   background: var(--gd-color-primary-100);
 }
 
-/* 焦点指示：全局 `* { outline: none !important }` 关掉了原生焦点环，卡片自绘——
-   选中 = 主色描边 + 浅底；焦点 = 仅主色描边（细一档，不叠环，避免过重）。
-   用 :focus 而非 :focus-visible：程序化聚焦/鼠标点选也显示，焦点永远看得见 */
-.ask-option:focus {
-  border-color: var(--gd-color-primary);
-}
-.ask-option-input:focus-within {
-  border-color: var(--gd-color-primary);
-}
+/* 焦点不描边（2026-10-08 用户报障：卡片出现即自动聚焦首个选项，焦点描边与"已选中"同色，
+   无默认选择时也像已选）——主色边框只表示选中（.ask-option-active），焦点一律不绘制。
+   键盘可见性不因此丢失：单选上下键移动即选、选中态自带反馈，输入行有光标。
+   全局 `* { outline: none !important }` 已禁原生焦点环，此处刻意不再自绘。 */
 .ask-page-btn:focus,
 .ask-card :deep(.el-button:focus) {
   box-shadow: 0 0 0 1px var(--gd-color-primary);

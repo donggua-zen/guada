@@ -4,6 +4,7 @@ import { useStorage } from '@vueuse/core'
 import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useTheme } from '@/composables/useTheme'
+import { applyLanguageFromAppearance } from '@/composables/useLanguage'
 import type { AppearanceGroupSettings } from '@/types/service'
 import { useSessionStore } from '@/stores/session'
 
@@ -240,11 +241,31 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
-   * 从后端加载外观配置并应用
+   * 最近一次成功拉取的 appearance 分组。
+   * 设置页表单直接复用这份 payload，不再自己发第二次请求（同一启动内只有一次读取）。
    */
-  const loadAppearanceSettings = async (): Promise<void> => {
+  const appearanceSettings = ref<AppearanceGroupSettings | null>(null)
+
+  /** 在途请求：并发调用（启动加载 + 设置页挂载）复用同一个 Promise */
+  let appearancePending: Promise<void> | null = null
+
+  /**
+   * 从后端加载外观配置并应用（幂等：同一启动内只真正请求一次）
+   */
+  const loadAppearanceSettings = (): Promise<void> => {
+    if (!appearancePending) {
+      appearancePending = fetchAndApplyAppearance().then((ok) => {
+        // 失败不留缓存：下次调用（如稍后打开设置页）重新尝试
+        if (!ok) appearancePending = null
+      })
+    }
+    return appearancePending
+  }
+
+  const fetchAndApplyAppearance = async (): Promise<boolean> => {
     try {
       const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
+      appearanceSettings.value = response
 
       if (response.wallpaperUrl !== undefined) {
         wallpaperUrl.value = response.wallpaperUrl || null
@@ -261,6 +282,9 @@ export const useLayoutStore = defineStore('layout', () => {
       if (response.floatWidgetOpacity !== undefined) {
         floatWidgetOpacity.value = response.floatWidgetOpacity
       }
+
+      // 语言与外观同组下发：只在这里消费（App.vue 不再单独拉一次 appearance）
+      applyLanguageFromAppearance(response.language)
 
       // 同步主题预设（后端优先，覆盖本地 localStorage）
       const { setLightThemePreset, setDarkThemePreset } = useTheme()
@@ -280,10 +304,12 @@ export const useLayoutStore = defineStore('layout', () => {
           opacity: floatWidgetOpacity.value,
         })
       }
+      return true
     } catch (error) {
       console.error('加载外观设置失败:', error)
       // 使用本地存储的值作为回退
       applyWallpaperSettings()
+      return false
     }
   }
 
@@ -319,6 +345,7 @@ export const useLayoutStore = defineStore('layout', () => {
     setFloatWidgetEnabled,
     setFloatWidgetOpacity,
     applyWallpaperSettings,
+    appearanceSettings,
     loadAppearanceSettings,
   }
 })
