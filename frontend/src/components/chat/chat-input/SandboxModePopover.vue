@@ -3,6 +3,28 @@
     <template #header>
     </template>
     <div class="popover-content space-y-0.5">
+      <!-- 计划模式：与三个安全档位正交的独立开关（协作状态），故不属于下面的单选组——
+           它是勾选项，勾上 = 已开启。放在最前，因为"先规划再动手"是它前面的一步。 -->
+      <div
+        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--gd-size-dialog-rounded-radius)"
+        @click="handleTogglePlan">
+        <div class="flex items-center space-x-2">
+          <el-icon size="16" class="text-gray-500 dark:text-gray-400">
+            <Lightbulb24Regular />
+          </el-icon>
+          <div class="flex flex-col">
+            <span>{{ t('chat.input.planModeLabel') }}</span>
+            <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('chat.input.planModeDesc') }}</span>
+          </div>
+        </div>
+        <el-icon v-if="planEnabled" size="16" class="text-gray-500 dark:text-gray-400">
+          <Checkmark16Regular />
+        </el-icon>
+      </div>
+
+      <!-- 分隔线：上面是正交的协作开关，下面是三选一的安全档位，不是同一个组 -->
+      <div class="rm-divider" role="separator"></div>
+
       <div v-for="opt in options" :key="opt.value"
         class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--gd-size-dialog-rounded-radius)"
         :class="{ 'rm-item--danger': opt.danger }"
@@ -18,7 +40,7 @@
         </div>
         <el-icon v-if="currentValue === opt.value" size="16"
           :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'">
-          <CheckmarkCircle20Filled />
+          <Checkmark16Regular />
         </el-icon>
       </div>
     </div>
@@ -29,7 +51,7 @@
 import { computed, type Component } from 'vue'
 import { ElIcon } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, CheckmarkCircle20Filled } from '@vicons/fluent'
+import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, Checkmark16Regular, Lightbulb24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 
 const { t } = useI18n()
@@ -46,11 +68,14 @@ defineProps<{
   visible: boolean
   anchorEl: HTMLElement | null
   currentValue: string
+  /** 计划模式是否开启（正交于 currentValue，故单独一项、单独出勾） */
+  planEnabled: boolean
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   'select': [mode: string]
+  'toggle-plan': []
 }>()
 
 const options = computed<RunModeOption[]>(() => [
@@ -61,6 +86,11 @@ const options = computed<RunModeOption[]>(() => [
 
 function handleSelect(mode: string) {
   emit('select', mode)
+  emit('update:visible', false)
+}
+
+function handleTogglePlan() {
+  emit('toggle-plan')
   emit('update:visible', false)
 }
 </script>
@@ -76,5 +106,11 @@ function handleSelect(mode: string) {
 
 .rm-item--danger:hover {
   background: rgba(239, 68, 68, 0.08);
+}
+
+.rm-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--gd-color-surface-border);
 }
 </style>

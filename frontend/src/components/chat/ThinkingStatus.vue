@@ -79,28 +79,28 @@ onUnmounted(() => {
   position: relative;
   display: block;
   flex-shrink: 0;
-  /* 16px 盒 = 点阵自身尺寸：点阵满铺后不再需要居中变换 */
-  width: 16px;
-  height: 16px;
+  /* 13px 盒 = 点阵自身尺寸：点阵满铺后不再需要居中变换 */
+  width: 13px;
+  height: 13px;
   overflow: hidden;
 }
 
-/* 3×3 点阵：4px 点 + 2px 间隙 → 3×4 + 2×2 = 16px，行列坐标全为整数。
+/* 3×3 点阵：3px 点 + 2px 间隙 → 3×3 + 2×2 = 13px，行列坐标全为整数。
    原为 12px 盒内 2.5px 点 + space-between（间隙 2.25px）+ translate(-50%,-50%)，
    全是小数：点会发虚，动画缩放中心也落在半像素上。 */
 .ts-grid {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(3, 4px);
-  grid-template-rows: repeat(3, 4px);
+  grid-template-columns: repeat(3, 3px);
+  grid-template-rows: repeat(3, 3px);
   gap: 2px;
   line-height: 0;
 }
 
 .ts-dot {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   border-radius: 9999px;
   background: currentColor;
   opacity: 0.28;

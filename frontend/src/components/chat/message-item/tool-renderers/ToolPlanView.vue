@@ -13,7 +13,10 @@
             </el-icon>
             <span class="plan-title">{{ t('chat.plan.title') }}</span>
             <span class="flex-1"></span>
-            <span v-if="executing && !pendingApproval && content" class="plan-status">
+            <!-- 终态徽标（批准/拒绝/中断/失败）与流式提示互斥：status 存在即已非执行中。
+                 失败态的 tooltip 给出真实原因（后端工具结果文本）。 -->
+            <PlanStatusBadge v-if="status" :status="status" :title="statusDetail" />
+            <span v-else-if="executing && !pendingApproval && content" class="plan-status">
                 {{ t('chat.plan.streamingHint') }}
             </span>
             <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
@@ -51,8 +54,10 @@ import { ElButton, ElIcon } from 'element-plus'
 import { ArrowRight16Regular, Copy16Regular, Notepad20Regular } from '@vicons/fluent'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
+import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { usePopup } from '@/composables/usePopup'
 import { openSessionPlanPanel } from '@/utils/sessionPlan'
+import type { PlanCardStatus } from '@/utils/toolDisplay'
 
 const props = defineProps<{
     /** 已解析的 plan 字段（流式期间为半截内容） */
@@ -62,6 +67,10 @@ const props = defineProps<{
     /** 本工具调用正处于待审批（会话级交互卡的 toolCallId 命中）：正文已定稿，可开计划面板 */
     pendingApproval?: boolean
     sessionId?: string
+    /** 终态徽标（批准/拒绝/中断/失败）；undefined = 执行中，走流式提示 */
+    status?: PlanCardStatus
+    /** 徽标 tooltip：失败态显示工具结果原文（真实原因） */
+    statusDetail?: string
 }>()
 
 const { t } = useI18n()
@@ -145,6 +154,11 @@ watch(() => props.content, () => {
     font-weight: 500;
     line-height: 16px;
     color: var(--gd-color-text-gray);
+}
+
+/* 终态徽标与标题同行对齐：徽标默认 18px 行盒，在头部 flex-start 下文字会比标题低 1px */
+.plan-header :deep(.plan-badge) {
+    line-height: 16px;
 }
 
 /* 流式生成提示：占 ZCode 头部"计划文件路径"的同槽位（我们没有路径可显） */

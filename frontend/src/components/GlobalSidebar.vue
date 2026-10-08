@@ -66,15 +66,16 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item relative flex items-center gap-1.5 py-1.5 pr-1 pl-2 ml-0 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item relative flex items-center gap-[5px] py-1.5 pr-1 pl-2 ml-0 mr-0.5  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId
                 }" @click="selectSession(session)"
                 @mouseenter="hoveredSessionId = session.id"
                 @mouseleave="hoveredSessionId = null">
-                <!-- 状态指示器 -->
-                <div class="status-indicator w-3 h-3 shrink-0 flex items-center justify-center">
+                <!-- 状态指示器：列宽 13px + gap 5px = 18px，标题起点与分组头同为 26px；
+                     13px 同时是点阵盒尺寸（ThinkingStatus），保证点阵落在整数像素上 -->
+                <div class="status-indicator w-[13px] h-[13px] shrink-0 flex items-center justify-center">
                   <!-- 工作中：TurnItem 同款点阵动画（currentColor 着色，沿用蓝色语义） -->
                   <ThinkingStatus v-if="getSessionWorking(session.id)" :show-text="false" class="text-blue-500" />
                   <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"

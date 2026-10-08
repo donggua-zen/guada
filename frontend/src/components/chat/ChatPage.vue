@@ -73,23 +73,22 @@
                 </template>
               </PageHeader>
 
-              <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存） -->
-              <!-- 全屏模式下 ChatPanel 通过 Teleport 搬至浮动容器（aside 槽位随之） -->
-              <Teleport :disabled="teleportDisabled" to="#floating-chat">
-                <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
-                  :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
-                  @container-resize="onChatContainerResize"
-                  @save-settings="handleSaveSessionSettings"
-                  @select-agent="handleSelectAgent">
-                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
-                       overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
-                  <template #aside>
-                    <div ref="asideSlotRef" class="h-full w-full">
-                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
-                        :sub-sessions="subSessions" />
-                    </div>
-                  </template>                </ChatPanel>
-              </Teleport>
+              <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存）。
+                   工作区全屏时 pane1 整列收起（display:none），对话不可见、数据照常流式写入 -->
+              <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
+                :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
+                @container-resize="onChatContainerResize"
+                @save-settings="handleSaveSessionSettings"
+                @select-agent="handleSelectAgent">
+                <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
+                     overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
+                <template #aside>
+                  <div ref="asideSlotRef" class="h-full w-full">
+                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                      :sub-sessions="subSessions" />
+                  </div>
+                </template>
+              </ChatPanel>
 
               <!-- 大纲导航：聊天区左缘垂直居中（定位见 ChatOutline .chat-outline-container）。
                    数据源 = ChatPanel 实际渲染的 visibleTurns（回合制）；
@@ -374,17 +373,6 @@ const layoutStore = useLayoutStore();
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
-
-// 全屏模式下 Teleport 延迟一帧启用，避免与 pane collapse 同帧触发 moveTeleport 竞态
-const teleportDisabled = ref(true);
-watch(() => layoutStore.workspaceFullscreen, async (fs) => {
-  if (fs) {
-    await nextTick();
-    teleportDisabled.value = false;
-  } else {
-    teleportDisabled.value = true;
-  }
-}, { immediate: true });
 
 // 登录信息
 const authStore = useAuthStore();

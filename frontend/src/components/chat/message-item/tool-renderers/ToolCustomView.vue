@@ -16,6 +16,8 @@
     :executing="executing"
     :pending-approval="pendingApproval"
     :session-id="sessionId"
+    :status="status"
+    :status-detail="status === 'error' ? outputText : undefined"
   />
   <ToolTerminalView
     v-else
@@ -46,7 +48,7 @@ import {
   formatUptime,
   type TerminalResultInfo,
 } from "@/utils/terminalOutput";
-import type { ToolRendererInfo } from "@/utils/toolDisplay";
+import type { ToolRendererInfo, PlanCardStatus } from "@/utils/toolDisplay";
 import type { ToolCallResponseEntry } from "@/types/message";
 
 const props = defineProps<{
@@ -60,6 +62,8 @@ const props = defineProps<{
   sessionId?: string;
   /** 本工具调用正处于待审批（会话级交互卡的 toolCallId 命中）：plan 视图据此放行面板入口 */
   pendingApproval?: boolean;
+  /** 计划卡终态徽标（批准/拒绝/中断/失败）；其余 kind 忽略 */
+  status?: PlanCardStatus;
 }>();
 
 /** 工具结果文本（含元数据标记；terminal 卡片从这里解析剥离） */

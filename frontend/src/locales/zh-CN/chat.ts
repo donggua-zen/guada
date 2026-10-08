@@ -21,9 +21,12 @@ export default {
     runModeReadOnly: '只读',
     runModeWorkspaceWrite: '工作区可写',
     runModeFullAccess: '自由编辑',
-    // 计划模式开关（ChatInput.vue；协作状态，正交于安全档位）
+    // 计划模式（协作状态，正交于安全档位）：入口在安全档位弹窗里，
+    // 输入区按钮仅在开启时出现（可见即状态），点击退出
     planMode: '计划',
-    planModeTip: '计划模式：只读调研后产出方案，经你批准再实施',
+    planModeLabel: '计划模式',
+    planModeDesc: '编辑前先出计划。',
+    planModeOff: '关闭计划模式',
 
     // AttachmentPopover.vue
     uploadImage: '上传图片',
@@ -164,13 +167,6 @@ export default {
     allLoaded: '已加载全部 {n} 个会话',
   },
 
-  // ── 浮动面板 ──
-  floating: {
-    collapse: '收起',
-    hide: '隐藏',
-    chat: '对话',
-  },
-
   // ── 大纲 ──
   outline: {},
 
@@ -307,12 +303,11 @@ export default {
     noDiff: '该文件类型不支持逐行差异预览',
   },
 
-  // ── 计划历史（计划模式产物：审批卡入口 + 工作区计划面板） ──
+  // ── 计划历史（计划模式产物：流内计划卡 + 工作区计划面板；状态徽标两处共用） ──
   plan: {
     title: '计划',
     empty: '暂无计划',
-    selectHint: '从左侧选择一个计划查看详情',
-    openFile: '在文件中打开',
+    directory: '计划目录',
     refresh: '刷新',
     refreshFailed: '计划列表刷新失败',
     viewFullDoc: '查看完整计划',
@@ -321,6 +316,8 @@ export default {
       pending: '待审批',
       approved: '已批准',
       rejected: '已拒绝',
+      aborted: '已中断',
+      error: '失败',
     },
   },
 

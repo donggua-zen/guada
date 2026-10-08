@@ -82,15 +82,17 @@
                 }}</span>
             </button>
             <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
-              :current-value="currentSandboxMode" @select="handleSandboxModeChange" />
-            <!-- 计划模式开关：只读调研 → 出方案待批；与安全档位正交（互不改写） -->
-            <GdTooltip :content="t('chat.input.planModeTip')" placement="top">
-              <button class="tool-btn" :class="{ 'plan-mode-active': planModeEnabled }" @click.stop="togglePlanMode">
+              :current-value="currentSandboxMode" :plan-enabled="planModeEnabled" @select="handleSandboxModeChange"
+              @toggle-plan="handlePlanModeToggle" />
+            <!-- 计划模式退出按钮：**只在计划模式开启时存在**（按钮可见 = 计划模式开，故不再需要高亮表达状态）。
+                 入口在安全档位弹窗里（计划模式项）；此处 hover 图标变 × 表示"点击即退出"。 -->
+            <GdTooltip v-if="planModeEnabled" :content="t('chat.input.planModeOff')" placement="top">
+              <button class="tool-btn plan-mode-btn" @click.stop="exitPlanMode">
                 <el-icon size="16">
-                  <Lightbulb24Regular :class="planModeEnabled ? 'text-amber-500' : 'text-gray-600'" />
+                  <Lightbulb24Regular class="plan-mode-icon-default" />
+                  <Dismiss16Regular class="plan-mode-icon-hover" />
                 </el-icon>
-                <span class="text-xs font-medium" :class="planModeEnabled ? 'text-amber-600' : ''">{{
-                  t('chat.input.planMode') }}</span>
+                <span class="text-xs font-medium">{{ t('chat.input.planMode') }}</span>
               </button>
             </GdTooltip>
             <!-- <el-divider direction="vertical"></el-divider> -->
@@ -188,7 +190,7 @@ import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
   ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled,
-  Lightbulb24Regular
+  Lightbulb24Regular, Dismiss16Regular
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
 
@@ -539,8 +541,14 @@ const handleSandboxModeChange = (mode: string) => {
 // 计划模式（协作状态）：单键开关，无弹层——只有一个布尔，不需要选择面板
 const planModeEnabled = computed(() => props.config?.planEnabled === true);
 
-const togglePlanMode = () => {
+/** 安全档位弹窗里的「计划模式」项：正交开关，取反 */
+const handlePlanModeToggle = () => {
   emit('config-change', { planEnabled: !planModeEnabled.value });
+};
+
+/** 输入区的计划按钮：只在开启时存在，点击即退出 */
+const exitPlanMode = () => {
+  emit('config-change', { planEnabled: false });
 };
 
 const thinkingEffortOptions = computed(() => {
@@ -1718,13 +1726,18 @@ defineExpose({ insertText, insertBadge });
 }
 
 /* 计划模式激活态 - 琥珀色文字与图标（与自由编辑的红色警示区分：一个是协作状态，一个是风险档位） */
-.plan-mode-active {
-  color: #d97706 !important;
-  font-weight: 500;
+/* 计划模式按钮：hover 时图标由灯泡换成 ×（纯 CSS 切换 display，不引入 hover 状态、不触发重渲染）。
+   按钮只在计划模式开启时渲染，故无需高亮表达状态——可见性本身就是状态。 */
+.plan-mode-icon-hover {
+  display: none;
 }
 
-.plan-mode-active:hover {
-  color: #d97706 !important;
+.plan-mode-btn:hover .plan-mode-icon-default {
+  display: none;
+}
+
+.plan-mode-btn:hover .plan-mode-icon-hover {
+  display: block;
 }
 
 /* 自由编辑（danger-full-access）按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */

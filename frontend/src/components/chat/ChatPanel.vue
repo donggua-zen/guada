@@ -1316,8 +1316,7 @@ function scrollToMessage(messageId: string) {
 }
 
 /* 对话列宽度：唯一真相是 --gd-chat-column-width（style.css）。
-   原先写 Tailwind 的 max-w-186，浮动小窗要靠 :deep(.max-w-186) 反选才能覆盖，
-   类名即尺寸——改名/换刻度就静默失效，故收成本语义类。
+   原先写 Tailwind 的 max-w-186，类名即尺寸——改名/换刻度就静默失效，故收成本语义类。
    JS 侧镜像见 ChatPage.vue 的 MSG_MAX_WIDTH，改 token 时同步。 */
 .chat-column {
   max-width: var(--gd-chat-column-width);
@@ -1431,7 +1430,7 @@ function scrollToMessage(messageId: string) {
    放在滚动容器外：a) 不受滚动裁剪，无论缝隙大小都稳定盖住底边；b) 不画出 sticky 盒外，
    保住合成器驱动的 sticky（避免滚动时输入区抖动）。left/right 10px = 滚动条 gutter
    （stable both-edges），避免盖住自绘滚动条；高度 3px 只覆盖工作目录条下方的背景带。 */
-/* .chat-bottom-residue-cover {
+.chat-bottom-residue-cover {
   position: absolute;
   left: 10px;
   right: 10px;
@@ -1440,7 +1439,7 @@ function scrollToMessage(messageId: string) {
   background: var(--gd-color-bg);
   pointer-events: none;
   z-index: 15;
-} */
+}
 
 /* 加载指示器淡入淡出 */
 .fade-slide-enter-active,

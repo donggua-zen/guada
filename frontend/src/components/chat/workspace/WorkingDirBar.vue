@@ -1,11 +1,12 @@
 <template>
   <!-- 紧凑单行（输入框底部外侧）：主目录（点击打开目录树）+ 附加远程目录 chips + 添加绑定 -->
   <div class="working-dir-bar">
-    <button class="wdb-main" :title="mainWorkspacePath || t('chat.workspace.workingDir')"
-      @click="openWorkspaceTree">
-      <el-icon :size="16" class="wdb-icon"><Folder16Regular /></el-icon>
-      <span class="wdb-name">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
-    </button>
+    <GdTooltip class="wdb-main-tip" :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
+      <button class="wdb-main" @click="openWorkspaceTree">
+        <el-icon :size="16" class="wdb-icon"><Folder16Regular /></el-icon>
+        <span class="wdb-name">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
+      </button>
+    </GdTooltip>
 
     <!-- 附加目录：已绑定的远程连接；点击弹信息卡（解绑在卡内，避免 hover 按钮撑宽跳动）。
          连接清单加载期间渲染骨架占位，避免闪原始连接 ID -->
@@ -241,11 +242,19 @@ onMounted(() => {
   padding: 0;
 }
 
+/* GdTooltip 包裹层是真正的 flex 子项：宽度上限挂在这里（按钮的百分比若相对
+   inline-flex 包裹层会按自身内容收缩，导致目录名截成"p."） */
+.wdb-main-tip {
+  max-width: 60%;
+  min-width: 0;
+}
+
 .wdb-main {
   display: flex;
   align-items: center;
   gap: 5px;
-  max-width: 60%;
+  max-width: 100%;
+  min-width: 0;
   height: 24px;
   padding: 0 7px 0 0;
   border: none;
@@ -267,6 +276,7 @@ onMounted(() => {
 }
 
 .wdb-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
