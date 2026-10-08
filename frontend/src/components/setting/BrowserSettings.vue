@@ -112,7 +112,7 @@ import { apiService } from '@/services/ApiService'
 import { setLinkOpenMode, setAutoShowSidebar, type LinkOpenMode } from '@/utils/workspacePreview'
 import {
   VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX,
-  saveDefaultViewport, isValidViewportSize,
+  saveDefaultViewport, isValidViewportSize, loadBrowserSettings,
 } from '@/utils/browserViewport'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
 
@@ -164,27 +164,25 @@ async function onCustomSizeChange(): Promise<void> {
 }
 
 // 加载浏览器设置
-async function loadBrowserSettings(): Promise<void> {
+async function loadSettings(): Promise<void> {
   try {
-    const response = await apiService.fetchGroupSettings('browser')
-    const mode = response.linkOpenMode as LinkOpenMode | undefined
-    if (mode && ['internal', 'external', 'ask'].includes(mode)) {
-      linkOpenMode.value = mode
-      setLinkOpenMode(mode)
+    // 复用启动期已拉取并归一化的分组（同一份 payload）：browser 分组只读一次，本页不再二次请求
+    const settings = await loadBrowserSettings()
+    if (!settings) throw new Error('browser 分组不可用')
+
+    if (settings.linkOpenMode) {
+      linkOpenMode.value = settings.linkOpenMode
+      setLinkOpenMode(settings.linkOpenMode)
     }
-    if (typeof response.autoShowSidebar === 'boolean') {
-      autoShowSidebar.value = response.autoShowSidebar
-      setAutoShowSidebar(response.autoShowSidebar)
+    if (settings.autoShowSidebar !== undefined) {
+      autoShowSidebar.value = settings.autoShowSidebar
+      setAutoShowSidebar(settings.autoShowSidebar)
     }
-    // 渲染视口：后端值为准，同步下拉/输入框显示（不回写）
-    const vw = Number(response.viewportWidth)
-    const vh = Number(response.viewportHeight)
-    if (isValidViewportSize(vw, vh)) {
-      syncViewportControls(Math.round(vw), Math.round(vh))
+    // 渲染视口：后端值为准，同步下拉/输入框显示（不回写）；后端未给时显示 store 现值
+    if (settings.viewport) {
+      syncViewportControls(settings.viewport.width, settings.viewport.height)
     } else {
-      const current = browserStore.viewportWidth
-      const currentH = browserStore.viewportHeight
-      syncViewportControls(current, currentH)
+      syncViewportControls(browserStore.viewportWidth, browserStore.viewportHeight)
     }
   } catch {
     // 后端不可用时使用默认值
@@ -252,6 +250,6 @@ async function handleClearData(): Promise<void> {
 }
 
 onMounted(() => {
-  loadBrowserSettings()
+  loadSettings()
 })
 </script>

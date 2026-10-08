@@ -8,8 +8,10 @@ module.exports = {
       tsconfig: 'tsconfig.test.json'
     }],
     // 纯 ESM 依赖（@marcbachmann/cel-js）经 ts-jest 转 CJS 进 jest 沙箱：
-    // jest 的模块系统会拦截 createRequire(esm)，只有让 jest 自己转译才能同步加载
-    '^.+\\.js$': ['ts-jest', {
+    // jest 的模块系统会拦截 createRequire(esm)，只有让 jest 自己转译才能同步加载。
+    // 例外：随包分发的插件入口是纯 CJS（plugins/guada-themes/index.js），
+    // 生产由 Node 直接 require，jest 里也按原生 CJS 加载即可（避免 allowJs 告警）。
+    '^(?!.*plugins[\\\\/]guada-themes).+\\.js$': ['ts-jest', {
       tsconfig: {
         allowJs: true,
         module: 'commonjs',

@@ -27,7 +27,6 @@ import type {
 } from '@/types/electron'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
-import { loadDefaultViewport } from '@/utils/browserViewport'
 import { getAutoShowSidebar } from '@/utils/workspacePreview'
 import { t } from '@/locales'
 
@@ -318,9 +317,8 @@ function handleSetRenderable(_event: unknown, data: WebviewRenderablePayload): v
 }
 
 onMounted(() => {
-  // 加载默认渲染视口设置（后端为 source of truth，失败保持内置默认值）
-  void loadDefaultViewport()
-
+  // 默认渲染视口由启动流程统一加载（main.js → loadBrowserSettings，browser 分组只拉一次），
+  // 本组件只读 store 现值，不再自己发请求。
   const api = window.electronAPI
   if (!api) return
 

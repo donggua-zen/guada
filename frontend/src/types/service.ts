@@ -215,6 +215,8 @@ export interface AppearanceGroupSettings {
     floatWidgetOpacity?: number
     lightThemePreset?: string
     darkThemePreset?: string
+    /** 界面语言（前端写、后端只存；随本组一起下发，见 composables/useLanguage） */
+    language?: string
 }
 
 /** system 分组：工作目录/上传子目录/知识库存储/对话引擎参数 */

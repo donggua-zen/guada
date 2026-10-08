@@ -923,6 +923,10 @@ async function startBackend(): Promise<void> {
       console.log("Skills directory:", paths.skillsDir);
       console.log("Workspace directory:", paths.workspaceDir);
       console.log("Plugins directory:", paths.pluginsDir);
+      // 随包分发的插件目录（extraResources: plugins/guada-themes → resources/plugins）。
+      // 生产后端没有 TS loader，插件入口必须是 JS；内置主题靠这里才加载得到。
+      const builtinPluginsDir = path.join(process.resourcesPath, "plugins");
+      console.log("Builtin plugins directory:", builtinPluginsDir);
 
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -955,6 +959,7 @@ async function startBackend(): Promise<void> {
           SKILLS_DIR: paths.skillsDir, // 传递技能目录
           WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
+          PLUGINS_BUILTIN_DIR: builtinPluginsDir, // 随包分发的内置插件目录（只读）
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,

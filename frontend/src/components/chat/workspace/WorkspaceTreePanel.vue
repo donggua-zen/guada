@@ -338,9 +338,8 @@ async function handleCopyFilePath() {
     if (!node) return;
 
     try {
-        // 获取工作目录绝对路径
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        const workspacePath = response.workspacePath;
+        // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
+        const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
             ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
@@ -369,9 +368,8 @@ async function handleOpenInExplorer() {
     if (!node || !isElectron) return;
 
     try {
-        // 获取工作目录绝对路径
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        const workspacePath = response.workspacePath;
+        // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
+        const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
             ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
@@ -415,8 +413,8 @@ async function handleOpenInVSCode() {
     if (!node || !isElectron) return;
 
     try {
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        const workspacePath = response.workspacePath;
+        // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
+        const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
             ElMessage.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();

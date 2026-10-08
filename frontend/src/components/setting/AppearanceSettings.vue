@@ -252,7 +252,6 @@ import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, El
 import type { UploadFile } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
-import type { AppearanceGroupSettings } from '@/types/service'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
@@ -358,7 +357,10 @@ watch(
 // 加载外观设置
 const loadSettings = async () => {
   try {
-    const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
+    // 复用启动期已拉取的分组（同一份 payload）：外观分组只读一次，本页不再二次请求
+    await layoutStore.loadAppearanceSettings()
+    const response = layoutStore.appearanceSettings
+    if (!response) throw new Error('外观分组不可用')
 
     settingsForm.sidebarOpacity = response.sidebarOpacity ?? 100
     settingsForm.contentOpacity = response.contentOpacity ?? 100

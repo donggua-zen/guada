@@ -10,6 +10,30 @@ export const addSessionClosedFieldsMigration: Migration = {
   up: async (db) => {
     const sqlPath = resolve(dirname(__filename), "0002_add_session_closed_fields.sql");
     const sql = readFileSync(sqlPath, "utf-8");
-    db.exec(sql);
+
+    // 幂等：旧库升级路径会先把 schema 增量对齐到 baseline（closed_at 可能已被补上），
+    // 且迁移是「先执行、后写记录」——记录写入失败后的重跑也会再进这里。
+    // 逐条按列存在性过滤，避免 duplicate column name 卡住启动。
+    const existing = new Set(
+      (
+        db.prepare(`PRAGMA table_info("session")`).all() as Array<{ name: string }>
+      ).map((c) => c.name),
+    );
+    const statements = sql
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    for (const statement of statements) {
+      const addColumn = /^ALTER\s+TABLE\s+"?(\w+)"?\s+ADD\s+COLUMN\s+"?(\w+)"?/i.exec(
+        statement,
+      );
+      if (addColumn && existing.has(addColumn[2])) continue;
+      db.exec(statement);
+      if (addColumn) existing.add(addColumn[2]);
+    }
   },
 };

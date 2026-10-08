@@ -21,17 +21,43 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
   /** 并发加载代际：会话切换/强制刷新时作废旧请求结果 */
   let treeLoadGeneration = 0
 
-  // getWorkspacePath 请求去重（loadTree 与 watcher 连接竞态）
+  // 工作目录绝对路径：会话级缓存 + 在途去重。
+  //
+  // 后端的 workspace-path 是**派生值**（session.workspacePath ?? 全局 baseDir + sessionId）
+  // 且解析时确保目录存在，所以不该由多个组件各问一次——目录树、输入区工作目录条、
+  // 文件预览都共享这里的同一份结果。缓存按 sid 存而不是复用 workspacePath.value：
+  // 消费方（如 WorkingDirBar）可能早于本 store 同步到该会话，此时 sessionId 还是 null。
+  let cachedWorkspacePath: { sid: string; path: string } | null = null
   let workspacePathPromise: Promise<string | null> | null = null
   let workspacePathSessionId: string | null = null
 
-  function ensureWorkspacePath(sid: string): Promise<string | null> {
+  /**
+   * 确保拿到会话的工作目录绝对路径。
+   * @param force 跳过缓存重新解析（会话内工作目录可能被迁移/重绑时用）
+   */
+  function ensureWorkspacePath(sid: string, force = false): Promise<string | null> {
+    if (!sid) return Promise.resolve(null)
+
+    // 命中缓存：同会话且已解析过 → 不再请求
+    if (!force && cachedWorkspacePath?.sid === sid) {
+      return Promise.resolve(cachedWorkspacePath.path)
+    }
+
     if (workspacePathPromise && workspacePathSessionId === sid) {
       return workspacePathPromise
     }
+
     workspacePathSessionId = sid
     workspacePathPromise = apiService.getWorkspacePath(sid)
-      .then(resp => resp.workspacePath || null)
+      .then(resp => {
+        const path = resp.workspacePath || null
+        if (path) {
+          cachedWorkspacePath = { sid, path }
+          // 只在本 store 当前会话一致时写目录树用的值，避免串会话污染
+          if (sessionId.value === sid) workspacePath.value = path
+        }
+        return path
+      })
       .catch(() => null)
       .finally(() => {
         workspacePathPromise = null
@@ -46,6 +72,7 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
    */
   function resetForSession(sid: string | null): boolean {
     if (sessionId.value === sid) return false
+    const prevSid = sessionId.value
     sessionId.value = sid
     treeLoadGeneration++
     isLoading.value = false
@@ -54,6 +81,14 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
     loadingPaths.value = new Set()
     fileChangeVersions.value = {}
     workspacePath.value = null
+    // 路径缓存只在「切到另一个会话、且缓存不属于该会话」时失效：
+    // - 首次初始化（null → sid）不清：否则作废 WorkingDirBar 早一步解析好的结果；
+    // - 切到 sid 时若缓存已是 sid 的（WorkingDirBar 先一步解析），也不清：
+    //   这样两条消费方无论谁先跑，同一会话都只解析一次。
+    // 切走时旧会话的缓存会被丢弃，因此之后再回到该会话会重新解析（拿最新的迁移结果）。
+    if (prevSid !== null && prevSid !== sid && cachedWorkspacePath?.sid !== sid) {
+      cachedWorkspacePath = null
+    }
     return true
   }
 

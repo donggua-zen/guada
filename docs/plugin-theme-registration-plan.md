@@ -315,7 +315,7 @@ electron/preload.ts                                         (+getThemeBootstrap 
   - `external-plugin-loader.ts`：`loadExternalPlugin` 开头 `pluginDir = path.resolve(pluginDir)`——原相对路径（`../plugins`）经 `require()` 按**当前模块文件**解析导致 `Cannot find module`（hello-plugin 此前从未成功加载，属既有 bug）
   - 后端启动 node 版本：**node 25 匹配** better-sqlite3（NODE_MODULE_VERSION 141）；shell 默认 node 22（127）会报 ABI 不匹配。启动：`PATH="/d/Program Files/nodejs:$PATH" npm run start:dev`
 - **端到端验证（真实后端）**：`GET /api/v1/plugins/slots` 返回 `themes: 10`（guada-themes 全部主题，含 cssFile/rev）；`GET /plugins/guada-themes/assets/cyberpunk.css` → 200 text/css；famicom.css 含 `data:font/woff2;base64` 且无 `../fonts` 残留；契约测试 5/5
-- **第三方参考**：`plugins/guada-themes/index.ts` 即最小完整范例（registerTheme 声明 + CSS 产物布局 + 自包含约束）
+- **第三方参考**：`plugins/guada-themes/index.js` 即最小完整范例（registerTheme 声明 + CSS 产物布局 + 自包含约束；纯 JS 无依赖，随包分发形态）
 
 ### 阶段 4b：assets 契约修订为「相对插件根」（2026-09-02 已完成，方案 A）
 - **动机**：原契约硬编码 `frontend/dist` 扁平文件名（`[A-Za-z0-9_-]+\.(js|css)`，无子目录、无字体/图片），主题资源被迫塞进 slot 产物目录、famicom 字体被迫内联
@@ -326,17 +326,22 @@ electron/preload.ts                                         (+getThemeBootstrap 
 - **assetRev** 改递归扫描插件全目录（主题移出 frontend/dist 后 rev 仍能感知变化）
 - **dotfiles 坑（2026-09-02 修复）**：`res.sendFile` 默认 `dotfiles: 'ignore'`，拒绝路径中点开头段——用户插件目录（如 `C:\Users\22071\.guada-dev\plugins`）下的插件资产 sendFile 一律 404（文件存在也 404）。`sendFile(filePath, { dotfiles: "allow" }, cb)` 放行（插件资产服务场景必须显式设置）
 - **验证**：`assets/themes/cyberpunk.css` → 200 text/css；`assets/themes/fonts/*.woff2` → 200 font/woff2；编码穿越 `themes/..%2f..%2fwin.ini` → 403；`%2e%2e` 段 → 404（路由层归一化）；**点目录插件资产（example_plugin @ .guada-dev）→ 200**；契约测试 5/5；前端 vite build 通过
-- **生产部署缺口不变**（plugins/ 需打包 + 插件入口 .ts 需编译），见下节
+- **生产部署缺口**（plugins/ 需打包 + 插件入口需可在纯 Node 加载）已于 2026-10-08 修复，见下节
 
-### 生产部署缺口（2026-09-02 识别，待修复）
+### 生产部署缺口（2026-09-02 识别，**2026-10-08 已修复**）
 
 **现象**：dev 模式（ts-node-dev）下插件链路已端到端验证通过；但 **Electron 打包生产版主题会消失（只剩 default）**。三个根因叠加：
 
 1. **打包不含插件目录**：`package.json` `build.extraResources` 未包含项目根 `plugins/`（现仅打包 backend-ts/dist、node_modules、static、build-resources）
-2. **生产模式插件目录为空**：`electron/main.ts` 生产 spawn env 只注入 `PLUGINS_USER_DIR`（userData/plugins，安装后为空），未注入指向随包资源的 `PLUGINS_DEV_DIR`
+2. **生产模式插件目录为空**：`electron/main.ts` 生产 spawn env 只注入 `PLUGINS_USER_DIR`（userData/plugins，安装后为空），未注入指向随包资源的插件目录
 3. **生产无法加载 .ts 插件入口**：生产后端以纯 Node 运行 `backend-ts/dist/main.js`（无 ts-node hook），而外部插件入口是 `index.ts`（dev 靠 ts-node-dev 的 transpile hook 编译）；且插件 `import "../../backend-ts/src/modules/plugins"` 依赖源码路径，打包后仅存在 `dist/` 无 `src/`
 
-**修复清单（建议独立工程实施，需打包环境验证）**：
-- 方案 A（内置插件随包分发，推荐）：① `extraResources` 增加 `{ from: "plugins/guada-themes", to: "plugins/guada-themes" }`；② `extraResources` 增加 `backend-ts/src/modules/plugins`（插件 import 目标，含其依赖）；③ 生产 spawn env 增加 `PLUGINS_DEV_DIR: path.join(process.resourcesPath, "plugins")`；④ 插件入口提供编译产物 `index.js`（CommonJS，manifest `main` 指向之并删除 `index.ts`，避免 dev 优先级解析）
-- 方案 B（首启复制）：应用首次启动将 `resources/plugins` 复制到 `userData/plugins`（`PLUGINS_USER_DIR`），需处理版本覆盖
-- 若插件生态成熟后，可考虑将 PluginBase/PluginApi 改为从 `dist/modules/plugins` 导出并调整插件 import 路径，从源头消除 src 依赖
+**实际采用的修复**（较原方案 A 更简：不再随包分发 backend-ts/src，插件入口去依赖即可）：
+
+- ① 插件入口改写为**零依赖 CommonJS** `plugins/guada-themes/index.js`（普通类 + `manifest` + `onLoad(api)`；loader 支持「CommonJS 直出类」，无需继承 PluginBase），`manifest.main` 指向 `index.js`，删除 `index.ts`
+- ② `ExternalPluginLoader` 新增 **builtin 扫描来源**（env `PLUGINS_BUILTIN_DIR`），扫描顺序 builtin → user → dev（官方 system 插件不被用户副本遮蔽）；`getPluginSource` 返回 `builtin`，卸载被拒（随包目录只读）
+- ③ `electron/main.ts` 生产 spawn env 注入 `PLUGINS_BUILTIN_DIR = <resourcesPath>/plugins`
+- ④ `package.json` `extraResources` 增加 `{ from: "plugins/guada-themes", to: "plugins/guada-themes" }`
+- **验证**：`test/plugins/guada-themes-packaging.spec.ts`（3 例：入口为纯 JS 且不依赖 backend 源码、按 builtin 加载注册全部主题且 CSS 均存在、扫描顺序）；`electron-builder --dir` 后确认 `resources/plugins/guada-themes/`（index.js + manifest.json + 11 个 CSS + 字体）随包分发
+- 原方案 B（首启复制到 user 目录）未采用：随包目录只读更安全，也避免与市场安装的同名插件互相覆盖
+- 后续（非阻塞）：若插件生态成熟，可把 PluginBase/PluginApi 移到稳定导出路径供第三方 import

@@ -9,6 +9,8 @@
  * - 收敛：replay 完整块（block_end 覆盖）与 live delta（text_delta 累加）折叠到同一棵树
  * - 多块消息在 bundle.blocks 内按 (messageId, index) 寻址；user 多块（文本+文件）同一 bundle；
  *   tool_calls_response 按 toolCallId 挂载到块
+ * - 重放/实时的副作用分界：foldEvents（历史重放）不刷计划缓存、不动会话级交互卡；
+ *   applyLiveChunk（实时/暂存消费）两者照常执行
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
@@ -32,8 +34,12 @@ function createStore() {
     eventLog: [] as any[],
     pendingAsk: undefined as ProjectorSessionState["pendingAsk"],
   };
+  // refreshPlans 必须显式实现：它是可选成员（投影器用 ?. 调用），缺省会静默 no-op，
+  // 让"重放期是否误触发计划列表刷新"这一整类 bug 在测试里完全不可观测
+  const refreshPlans = vi.fn((_sessionId: string): void => {});
   return {
     state,
+    refreshPlans,
     getSessionState: () => state,
     getTurns: () => state.turns,
     setTurns: (_sid: string, t: Turn[]) => { state.turns = t; },
@@ -45,7 +51,11 @@ function createStore() {
     sessionIsStreaming: (): boolean => false,
     setSessionPendingAsk: (_sid: string, v: ProjectorSessionState["pendingAsk"]) => { state.pendingAsk = v; },
     sessionPendingAsk: () => state.pendingAsk,
-  } satisfies ProjectorSessionStore & { state: typeof state; sessionPendingAsk: () => typeof state.pendingAsk };
+  } satisfies ProjectorSessionStore & {
+    state: typeof state;
+    refreshPlans: typeof refreshPlans;
+    sessionPendingAsk: () => typeof state.pendingAsk;
+  };
 }
 
 // 测试断言按"目标束/块必然存在"编写：返回值保持宽松，避免逐处非空断言噪声
@@ -479,5 +489,57 @@ describe("思考态跨块复位", () => {
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
     ]);
     expect(store.state.turns[0].state.isWorking).toBe(true);
+  });
+});
+
+// ── 重放不带实时副作用 ──
+// foldEvents（历史重放）与 applyLiveChunk（实时）共用同一折叠器，但副作用必须分家：
+// 重放每个历史回合都刷计划缓存 = 首屏数十次 GET /plans（load-more 重折还会累加）；
+// 重放清会话级交互卡 = 把 SSE 补发回来的待批卡当场抹掉（刷新后待批状态丢失的真凶）。
+describe("重放不带实时副作用", () => {
+  let store: ReturnType<typeof createStore>;
+  beforeEach(() => { store = createStore(); });
+
+  /** 事件页真实形状：领域事件 turn/finish（非流式 turn_end） */
+  function domainTurnPage(tid: string): any[] {
+    return [
+      { type: "turn/start", seq: 1, data: { turnId: tid, modelName: "m1" } },
+      { type: "user/message", seq: 2, data: { messageId: `${tid}_u`, kind: "user", blocks: [{ type: "text", text: "你好" }], metadata: {} } },
+      { type: "assistant/message", seq: 3, data: { messageId: `${tid}_a`, content: [{ type: "text", text: "回答" }], metadata: {} } },
+      { type: "turn/finish", seq: 4, data: { turnId: tid, finishReason: "stop", promptTokens: 5, completionTokens: 3, totalTokens: 8 } },
+    ];
+  }
+
+  it("foldEvents 折叠历史（含 turn/finish）不触发计划列表刷新", () => {
+    foldEvents(store as any, "s1", domainTurnPage("T1"));
+    expect(store.state.turns[0].metadata.finishReason).toBe("stop");
+    expect(store.refreshPlans).not.toHaveBeenCalled();
+  });
+
+  it("applyLiveChunk 实时 turn_end 照常触发计划列表刷新", () => {
+    applyLiveChunk(store as any, "s1", { type: "turn_end", turnId: "T1", finishReason: "stop" } as any);
+    expect(store.refreshPlans).toHaveBeenCalledTimes(1);
+    expect(store.refreshPlans).toHaveBeenCalledWith("s1");
+  });
+
+  it("foldEvents 重放不清理会话级交互卡（刷新后待批卡存活的关键）", () => {
+    store.state.pendingAsk = { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } as any;
+    foldEvents(store as any, "s1", domainTurnPage("T1"));
+    expect(store.state.pendingAsk?.requestId).toBe("req1");
+  });
+
+  it("applyLiveChunk 实时 turn_end 仍清理会话级交互卡", () => {
+    store.state.pendingAsk = { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } as any;
+    applyLiveChunk(store as any, "s1", { type: "turn_end", turnId: "T1", finishReason: "stop" } as any);
+    expect(store.state.pendingAsk).toBeUndefined();
+  });
+
+  it("重放 plan_mode_changed 仍恢复计划模式状态，但不刷计划缓存", () => {
+    const applied: Array<{ sid: string; enabled: boolean }> = [];
+    (store as any).applyRemotePlanEnabled = (sid: string, enabled: boolean) => { applied.push({ sid, enabled }); };
+    // plan_mode_changed 是终态流事件：会进 eventLog，load-more 重折时会再次命中该分支
+    foldEvents(store as any, "s1", [{ type: "plan_mode_changed", planEnabled: false } as any]);
+    expect(applied).toEqual([{ sid: "s1", enabled: false }]);
+    expect(store.refreshPlans).not.toHaveBeenCalled();
   });
 });

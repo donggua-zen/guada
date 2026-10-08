@@ -328,12 +328,13 @@ watch(
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router);
 
-// 加载链接打开方式设置（从后端同步到 localStorage 缓存）。
+// 加载 browser 分组设置（默认渲染视口 + 链接打开方式 + 侧边栏自动展开，
+// 三项同组下发，只请求一次；见 utils/browserViewport 的 loadBrowserSettings）。
 // 必须在后端就绪后调用：冷启动时若抢在 NestJS 监听端口之前发请求，
 // 会产生 ERR_CONNECTION_REFUSED 噪音日志（功能无影响，但干扰排查）。
-function loadLinkOpenModeWhenReady() {
-  import("@/utils/workspacePreview").then(({ loadLinkOpenMode }) => {
-    loadLinkOpenMode();
+function loadBrowserSettingsWhenReady() {
+  import("@/utils/browserViewport").then(({ loadBrowserSettings }) => {
+    loadBrowserSettings();
   });
 }
 
@@ -344,7 +345,7 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
     if (!backendReady.value) {
       backendError.value = "后端启动超时，请检查后端进程或重启应用";
       // 兜底：后端超时仍尝试加载（内部 catch 会降级到 localStorage 缓存）
-      loadLinkOpenModeWhenReady();
+      loadBrowserSettingsWhenReady();
     }
   }, 60000);
 
@@ -361,7 +362,7 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
         // 会在加载页状态时提前放行导航，主题尚未就绪导致闪变。
         await ensureThemeReady();
         backendReady.value = true;
-        loadLinkOpenModeWhenReady();
+        loadBrowserSettingsWhenReady();
         // 如果当前在加载页，跳回原始目标
         if (router.currentRoute.value.path === "/empty") {
           const redirect = router.currentRoute.value.query.redirect || "/";
@@ -375,7 +376,7 @@ if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
   });
 } else {
   // 非 Electron（Web 直连）或后端已就绪（刷新场景）：直接加载
-  loadLinkOpenModeWhenReady();
+  loadBrowserSettingsWhenReady();
 }
 
 // ── 主题就绪前置（防首帧主题闪烁）──

@@ -143,28 +143,42 @@ describe('KbMigrationBootstrapService', () => {
 
   /** 造一个旧全局向量库（带两条分块的向量） */
   function makeLegacyVectorDb(): string {
+    return makeLegacyVectorDbWith(
+      [
+        ['chunk_0_item-1', 'item-1', '第一段：编译 userdebug 版本'],
+        ['chunk_1_item-1', 'item-1', '第二段：关闭 selinux 权限'],
+      ],
+      'kb_legacy',
+    );
+  }
+
+  /** 造旧全局向量库（表名与行可指定；行的 id 即旧库主键，也就是分块的 vector_id） */
+  function makeLegacyVectorDbWith(
+    rows: Array<[string, string, string]>,
+    tableName: string,
+  ): string {
     const dbPath = path.join(dataRoot, 'vector_db.sqlite');
     const db = new Database(dbPath);
-    db.exec(`
-      CREATE TABLE kb_legacy (id TEXT PRIMARY KEY, document_id TEXT, content TEXT, embedding BLOB, metadata_json TEXT);
-      CREATE VIRTUAL TABLE kb_legacy_fts USING fts5(content, content_rowid='rowid');
-    `);
-    const insert = db.prepare(
-      `INSERT INTO kb_legacy (id, document_id, content, embedding, metadata_json) VALUES (?,?,?,?,?)`,
-    );
-    for (const [id, content] of [
-      ['chunk_0_item-1', '第一段：编译 userdebug 版本'],
-      ['chunk_1_item-1', '第二段：关闭 selinux 权限'],
-    ]) {
-      insert.run(
-        id,
-        'item-1',
-        content,
-        Buffer.from(new Float32Array([0.5, 0.5, 0.5]).buffer),
-        '{}',
+    try {
+      db.exec(`
+        CREATE TABLE "${tableName}" (id TEXT PRIMARY KEY, document_id TEXT, content TEXT, embedding BLOB, metadata_json TEXT);
+        CREATE VIRTUAL TABLE "${tableName}_fts" USING fts5(content, content_rowid='rowid');
+      `);
+      const insert = db.prepare(
+        `INSERT INTO "${tableName}" (id, document_id, content, embedding, metadata_json) VALUES (?,?,?,?,?)`,
       );
+      for (const [id, documentId, content] of rows) {
+        insert.run(
+          id,
+          documentId,
+          content,
+          Buffer.from(new Float32Array([0.5, 0.5, 0.5]).buffer),
+          '{}',
+        );
+      }
+    } finally {
+      db.close();
     }
-    db.close();
     return dbPath;
   }
 
@@ -273,6 +287,81 @@ describe('KbMigrationBootstrapService', () => {
     expect(
       fs.existsSync(path.join(dataRoot, 'vector_db.sqlite.pre-sqlite')),
     ).toBe(true);
+  });
+
+  it('冻结主库来源：chunk.id（cuid）与 vector_id 不一致时按 vector_id 对齐（真机回归）', async () => {
+    // 真机形状：kb_chunk.id 是 Prisma cuid，vector_id 是 `chunk_<idx>_<fileId>`，
+    // 旧向量库的键是后者。只按 id 匹配会全量落空——升级后语义检索静默失效的成因。
+    const prismaLike = {
+      knowledgeBase: {
+        findMany: async () => [
+          {
+            id: 'db-kb-1',
+            name: '主库库',
+            embeddingModelId: 'p:m',
+            chunkMaxSize: 1000,
+            chunkOverlapSize: 100,
+            chunkMinSize: 50,
+            semanticWeight: 0.3,
+            keywordWeight: 0.7,
+            createdAt: new Date('2026-03-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+          },
+        ],
+      },
+      kBFile: {
+        findMany: async () => [
+          {
+            id: 'db-item-1',
+            knowledgeBaseId: 'db-kb-1',
+            fileName: 'db.txt',
+            displayName: 'db.txt',
+            fileSize: 5,
+            fileType: 'text',
+            fileExtension: 'txt',
+            contentHash: 'h',
+            filePath: null,
+            relativePath: 'db.txt',
+            parentFolderId: null,
+            isDirectory: false,
+            processingStatus: 'completed',
+            progressPercentage: 100,
+            currentStep: null,
+            errorMessage: null,
+            totalChunks: 1,
+            totalTokens: 5,
+            uploadedAt: new Date('2026-03-01T00:00:00.000Z'),
+            processedAt: null,
+          },
+        ],
+      },
+      kBChunk: {
+        findMany: async () => [
+          {
+            id: 'cmowkayvt000bo0kz7czt0i8c',
+            fileId: 'db-item-1',
+            chunkIndex: 0,
+            content: '主库里的分块内容',
+            tokenCount: 5,
+            vectorId: 'chunk_0_db-item-1',
+            embeddingDimensions: null,
+            metadata: null,
+            createdAt: new Date('2026-03-01T00:00:00.000Z'),
+          },
+        ],
+      },
+    };
+    makeLegacyVectorDbWith([['chunk_0_db-item-1', 'db-item-1', '主库里的分块内容']], 'kb_db-kb-1');
+
+    await makeImporter(prismaLike).run();
+
+    const db = await service.getDb('db-kb-1');
+    const row = db
+      .prepare(`SELECT id, embedding, embedding_dimensions FROM chunk`)
+      .get() as { id: string; embedding: Buffer | null; embedding_dimensions: number | null };
+    expect(row.id).toBe('cmowkayvt000bo0kz7czt0i8c'); // 分块 id 原值保留
+    expect(row.embedding).not.toBeNull(); // 向量按 vector_id 对齐
+    expect(row.embedding_dimensions).toBe(3);
   });
 
   it('向量缺失时留 NULL 且正文可用（可事后 kb:reembed，不必重新解析）', async () => {

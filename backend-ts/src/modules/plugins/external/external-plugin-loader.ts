@@ -26,10 +26,13 @@ interface ExternalManifest {
   main?: string;
 }
 
+/** 插件目录来源：builtin=随包分发（resources/plugins），dev=开发仓库目录，user=用户安装目录 */
+type PluginSource = "builtin" | "dev" | "user";
+
 @Injectable()
 export class ExternalPluginLoader implements OnModuleInit {
   private readonly logger = new Logger(ExternalPluginLoader.name);
-  private pluginPaths = new Map<string, { dir: string; source: "dev" | "user" }>();
+  private pluginPaths = new Map<string, { dir: string; source: PluginSource }>();
   private requireQueue: Promise<void> = Promise.resolve();
   /** 安装 job 队列（前端轮询日志/取消） */
   private installJobs = new Map<
@@ -53,8 +56,13 @@ export class ExternalPluginLoader implements OnModuleInit {
     await this.loadAllExternalPlugins();
   }
 
-  private getScanDirs(): Array<{ dir: string; source: "dev" | "user" }> {
-    const dirs: Array<{ dir: string; source: "dev" | "user" }> = [];
+  private getScanDirs(): Array<{ dir: string; source: PluginSource }> {
+    const dirs: Array<{ dir: string; source: PluginSource }> = [];
+
+    // 随包分发目录（生产为 resources/plugins，由 electron 注入 PLUGINS_BUILTIN_DIR）。
+    // 排在最前：官方插件（如内置主题）不被用户目录里的副本遮蔽。
+    const builtinDir = this.configService.get<string>("PLUGINS_BUILTIN_DIR");
+    if (builtinDir) dirs.push({ dir: builtinDir, source: "builtin" });
 
     // 用户安装目录（始终扫描）
     const userDir = this.configService.get<string>("PLUGINS_USER_DIR");
@@ -98,7 +106,7 @@ export class ExternalPluginLoader implements OnModuleInit {
 
   async loadExternalPlugin(
     pluginDir: string,
-    source: "dev" | "user",
+    source: PluginSource,
   ): Promise<void> {
     // 绝对化插件目录：scanDirs 来自 env（可为相对路径，如 ../plugins），
     // 后续 path.join / require 均基于此；require 相对路径会按当前模块文件
@@ -219,12 +227,12 @@ export class ExternalPluginLoader implements OnModuleInit {
 
   /**
    * 解析入口文件路径
-   * dev 模式优先 .ts，回退 .js；user 模式仅 .js
+   * dev 模式优先 .ts，回退 .js；builtin/user 模式仅按 manifest 声明（随包/安装产物均为 .js）
    */
   private resolveEntry(
     pluginDir: string,
     mainFile: string,
-    source: string,
+    source: PluginSource,
   ): string | null {
     // dev 模式：如果指定了 .ts，直接用
     if (source === "dev") {
@@ -310,7 +318,7 @@ export class ExternalPluginLoader implements OnModuleInit {
   }
 
   /** 获取插件来源 */
-  getPluginSource(pluginId: string): "dev" | "user" | undefined {
+  getPluginSource(pluginId: string): PluginSource | undefined {
     return this.pluginPaths.get(pluginId)?.source;
   }
 

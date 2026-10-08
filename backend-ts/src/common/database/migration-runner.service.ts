@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "./prisma.service";
 import { allMigrations } from "./migrations";
+import { reconcileLegacySchema } from "./legacy-schema-reconcile";
 import Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
@@ -26,7 +27,9 @@ const MIGRATION_TABLE_DDL = `
  * 三种安装场景：
  * 1. 全新安装（无业务表）：执行 baseline（创建最新 schema + seed），
  *    然后标记所有已注册迁移为已应用（baseline 已包含所有结构变更）
- * 2. 0.5.2 旧版升级（有业务表但无 _app_migrations）：标记所有迁移为已应用
+ * 2. 旧版安装升级（有业务表但无 _app_migrations）：先把 schema 对齐到 baseline
+ *    （只补缺失的表/列），再按 id 顺序执行全部迁移（老库可能停在任何历史版本，
+ *    少了 closed_at 等列会让冻结主库的读表直接报错）
  * 3. 已迁移版本升级：按 id 顺序执行 pending 迁移
  *
  * 关键设计：baseline.sql 和 seed-data.ts 始终代表最新完整快照。
@@ -110,9 +113,9 @@ export class MigrationRunner implements OnModuleInit {
         return;
       }
 
-      // 场景 2: 0.5.2 旧版升级（有业务表 + 无迁移记录）
+      // 场景 2: 旧版安装升级（有业务表 + 无迁移记录）
       if (migrationCount === 0 && hasSessionTable) {
-        this.bootstrapLegacyInstall(db);
+        await this.legacyInstall(db);
         return;
       }
 
@@ -181,27 +184,47 @@ export class MigrationRunner implements OnModuleInit {
   }
 
   /**
-   * 引导旧版安装（0.5.2 db push 时代）
+   * 旧版安装升级（有业务表、无 _app_migrations）
    *
-   * 检测条件: _app_migrations 表为空，但业务表已存在。
-   * 处理逻辑: 标记所有已注册迁移为已应用（schema 和数据已在 0.5.2 中就位）。
+   * 老库可能停在任何历史版本（0.5.2 及更早）：schema 里既可能缺列（closed_at 等），
+   * 也仍带着 migration 0003–0005 要解除的外键。因此不能"只补记录"，必须：
+   *   1. 备份（本路径从此会写数据）
+   *   2. 以 baseline 为真源做纯增量 schema 对齐（补表/补列）
+   *   3. 执行全部迁移（baseline 除外——结构已对齐，只补记录）
+   *
+   * 中断可续：执行到哪条就记到哪条，下次启动走场景 3 补齐剩余迁移。
    */
-  private bootstrapLegacyInstall(db: Database.Database): void {
-    this.logger.log("检测到旧版数据库安装（0.5.2），执行引导迁移...");
+  private async legacyInstall(db: Database.Database): Promise<void> {
+    this.logger.log("检测到旧版数据库安装（无迁移记录），开始 schema 对齐与迁移...");
 
-    const insertStmt = db.prepare(
-      "INSERT INTO _app_migrations (id, name) VALUES (?, ?)",
-    );
-    const insertAll = db.transaction((migrations: typeof allMigrations) => {
-      for (const m of migrations) {
-        insertStmt.run(m.id, m.name);
-      }
-    });
-    insertAll(allMigrations);
+    this.backupDatabase(db);
 
+    const report = reconcileLegacySchema(db, (m) => this.logger.log(m));
     this.logger.log(
-      `已标记 ${allMigrations.length} 个迁移为已应用（旧版 schema 已存在）`,
+      `旧库 schema 对齐完成：补表 ${report.addedTables.length} 个、补列 ${report.addedColumns.length} 个` +
+        (report.softenedColumns.length > 0
+          ? `；降级/跳过 ${report.softenedColumns.length} 个（见上方日志）`
+          : ""),
     );
+
+    const baseline = allMigrations.find((m) => m.id === 1);
+    if (!baseline) {
+      throw new Error("基线迁移 (id=1) 未注册，无法引导旧版安装");
+    }
+    // 基线不执行：结构已由 reconcile 对齐；仅补记录，避免重复建表
+    db.prepare("INSERT INTO _app_migrations (id, name) VALUES (?, ?)").run(
+      baseline.id,
+      baseline.name,
+    );
+
+    const rest = allMigrations
+      .filter((m) => m.id !== baseline.id)
+      .sort((a, b) => a.id - b.id);
+    for (const migration of rest) {
+      await this.executeMigration(db, migration);
+    }
+
+    this.logger.log(`旧版安装升级完成，共执行 ${rest.length} 个迁移`);
   }
 
   private async executeMigration(

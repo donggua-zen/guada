@@ -23,7 +23,6 @@ export type LinkOpenMode = 'internal' | 'external' | 'ask'
 
 const STORAGE_KEY = 'linkOpenMode'
 const AUTO_SHOW_SIDEBAR_KEY = 'autoShowSidebar'
-const SETTINGS_GROUP = 'browser'
 
 let cachedMode: LinkOpenMode | null = null
 
@@ -54,24 +53,8 @@ export function getLinkOpenMode(): LinkOpenMode {
     return getCachedMode()
 }
 
-/** 从后端加载设置（应用启动时调用一次即可） */
-export async function loadLinkOpenMode(): Promise<void> {
-    try {
-        const { apiService } = await import('@/services/ApiService')
-        const response = await apiService.fetchGroupSettings(SETTINGS_GROUP)
-        const mode = response.linkOpenMode as LinkOpenMode | undefined
-        if (mode && ['internal', 'external', 'ask'].includes(mode)) {
-            setLinkOpenMode(mode)
-        }
-        if (typeof response.autoShowSidebar === 'boolean') {
-            setAutoShowSidebar(response.autoShowSidebar)
-        }
-    } catch {
-        // 后端不可用时降级使用 localStorage 缓存
-    }
-}
-
 // ── AI 浏览器侧边栏自动展开管理 ──
+// （后端读取已并入 browserViewport 的 loadBrowserSettings：browser 分组启动期只拉一次）
 
 /** 同步读取 autoShowSidebar 缓存（首次调用时从 localStorage 初始化） */
 export function getAutoShowSidebar(): boolean {
