@@ -21,9 +21,12 @@
     runModeReadOnly: 'Read-Only',
     runModeWorkspaceWrite: 'Workspace-Write',
     runModeFullAccess: 'Unrestricted Editing',
-    // Plan mode toggle (ChatInput.vue; collaboration state, orthogonal to sandbox mode)
+    // Plan mode (collaboration state, orthogonal to sandbox mode): the entry lives in the
+    // sandbox popover; the input button only exists while it is on (visibility = state)
     planMode: 'Plan',
-    planModeTip: 'Plan mode: investigate read-only, propose a plan, implement only after you approve',
+    planModeLabel: 'Plan mode',
+    planModeDesc: 'Plan before editing.',
+    planModeOff: 'Turn off plan mode',
 
     // AttachmentPopover.vue
     uploadImage: 'Upload Image',
@@ -164,13 +167,6 @@
     allLoaded: 'All {n} sessions loaded',
   },
 
-  // ── 浮动面板 ──
-  floating: {
-    collapse: 'Collapse',
-    hide: 'Hide',
-    chat: 'Chat',
-  },
-
   // ── 大纲 ──
   outline: {},
 
@@ -307,12 +303,11 @@
     noDiff: 'This file type has no line-by-line diff preview',
   },
 
-  // ── Plan history (plan-mode artifact: approval-card entry + workspace plan panel) ──
+  // ── Plan history (plan-mode artifact: in-stream plan card + workspace plan panel; badge shared) ──
   plan: {
     title: 'Plans',
     empty: 'No plans yet',
-    selectHint: 'Select a plan to view details',
-    openFile: 'Open as file',
+    directory: 'Plan list',
     refresh: 'Refresh',
     refreshFailed: 'Failed to refresh plans',
     viewFullDoc: 'View full plan',
@@ -321,6 +316,8 @@
       pending: 'Pending',
       approved: 'Approved',
       rejected: 'Rejected',
+      aborted: 'Aborted',
+      error: 'Failed',
     },
   },
 

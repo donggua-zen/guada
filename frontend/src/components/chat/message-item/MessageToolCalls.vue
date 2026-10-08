@@ -2,7 +2,9 @@
   <div class="process-section tool-calls-section space-y-2">
     <div class="" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
       <!-- 循环展示每个工具调用 -->
-      <div
+      <!-- 通用工具头部：状态图标 + 状态文案 + 参数摘要 + 折叠开关。
+           独立渲染行（计划卡等）不渲染——整行只有卡片，状态由卡片头部徽标表达。 -->
+      <div v-if="!standaloneRows[toolIndex]"
         class="group flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="toggleExpand(toolIndex)">
         <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="16"
@@ -46,11 +48,13 @@
       </div>
 
       <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容）。
-           独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框。 -->
+           独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框；
+           同时整行只有卡片（见 .is-plain 清掉的 22px 左缩进）。 -->
       <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
-        :class="{ 'is-plain': isStandaloneRow(toolIndex) }">
-        <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空） -->
-        <div v-if="tool.outcome === 'error' || tool.outcome === 'rejected'"
+        :class="{ 'is-plain': standaloneRows[toolIndex] }">
+        <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空）；
+             独立渲染行不显示——其失败/拒绝状态由卡片头部徽标承担 -->
+        <div v-if="!standaloneRows[toolIndex] && (tool.outcome === 'error' || tool.outcome === 'rejected')"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
           <el-icon size="14" style="color:#f56c6c">
             <ErrorCircle16Regular />
@@ -62,7 +66,7 @@
         <ToolCustomView v-if="rendererInfos[toolIndex]" :info="rendererInfos[toolIndex]!"
           :response="getToolResponses(toolIndex)" :is-error="tool.outcome === 'error'"
           :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId"
-          :pending-approval="isPendingApproval(tool)" />
+          :pending-approval="isPendingApproval(tool)" :status="planCardStatus(toolIndex)" />
 
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
@@ -92,10 +96,12 @@ import { parse as partialParse } from 'partial-json';
 import {
   type ToolCall,
   type ToolRendererInfo,
+  type PlanCardStatus,
   getToolConfig, getToolIcon,
   getToolArgs, getArgsText,
   getToolRenderer, getRendererArgs,
-  isStandaloneRendererKind,
+  isStandaloneRendererKind, isStandaloneTool,
+  resolvePlanCardStatus,
 } from '@/utils/toolDisplay';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
@@ -193,12 +199,13 @@ const isExpanded = (index: number): boolean => {
   return isDefaultExpandedRow(index) && !collapsedIndexes.value.has(index);
 };
 
-/** 独立渲染工具行（计划卡等）：结果区不套通用外框——卡片自带边框，避免双边框 */
-const isStandaloneRow = (index: number): boolean => {
-  const tool = props.toolCalls[index];
-  const kind = tool ? getToolRenderer(tool)?.kind : undefined;
-  return kind !== undefined && isStandaloneRendererKind(kind);
-};
+/**
+ * 独立渲染行（计划卡等）：整行只有卡片——不渲染通用工具头部（状态文案/参数摘要/折叠箭头），
+ * 也不吃结果容器的 22px 左缩进。判定与分组共用 isStandaloneTool（一处集合、两处生效）。
+ */
+const standaloneRows = computed<boolean[]>(() =>
+  props.toolCalls.map((tool) => isStandaloneTool(tool)),
+);
 
 const toggleExpand = (index: number): void => {
   const nowExpanded = isExpanded(index);
@@ -227,7 +234,13 @@ const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
     const renderer = getToolRenderer(tool);
     if (!renderer) return null;
     const args = getRendererArgs(tool, renderer);
-    if (!args) return null;
+    if (!args) {
+      // 独立渲染行（计划卡）：参数未到也要把整行交给卡片——卡片自带「生成中」占位。
+      // 若在这里 return null，头部已移除、正文又未就绪，会留下一整行空白。
+      return isStandaloneRendererKind(renderer.kind)
+        ? { kind: renderer.kind, args: {} }
+        : null;
+    }
     // diff 两侧均为空无内容可展示，回退通用渲染
     if (renderer.kind === 'diff' && !args.oldValue && !args.newValue) return null;
     const info: ToolRendererInfo = { kind: renderer.kind, args };
@@ -237,6 +250,15 @@ const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
     return info;
   }),
 );
+
+/** 计划卡终态徽标（批准/拒绝/中断/失败）；undefined = 执行中，卡片显示流式提示 */
+const planCardStatus = (index: number): PlanCardStatus | undefined => {
+  const tool = props.toolCalls[index];
+  if (!tool) return undefined;
+  const meta = getToolResponses(index)?.meta;
+  const approved = typeof meta?.planApproved === 'boolean' ? meta.planApproved : undefined;
+  return resolvePlanCardStatus(tool.outcome, approved);
+};
 
 const rendererStat = (index: number): ToolRendererInfo['stat'] | undefined => {
   return rendererInfos.value[index]?.stat;
@@ -306,9 +328,13 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
 
 /* 独立渲染工具行（计划卡等）：不套第二层外框与底色——卡片自带边框（ZCode 同款
    "不再套一层通用工具卡"）。--tool-card-pad-x 归零，避免内部视图的负边距把内容
-   顶出卡片（该变量本是用来抵消本层横向内边距的）。 */
+   顶出卡片（该变量本是用来抵消本层横向内边距的）。
+   margin 也归零：没有工具头部后，22px 左缩进（= 图标 16px + 间距 6px）失去对齐对象，
+   卡片左缘与助手正文左缘对齐；4px 顶距同理（它本是头部与结果之间的间隔）。 */
 .tool-result-inline.is-plain {
   --tool-card-pad-x: 0px;
+  margin-top: 0;
+  margin-left: 0;
   padding: 0;
   border: none;
   border-radius: 0;

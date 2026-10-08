@@ -1,64 +1,81 @@
 <template>
-    <div class="plan-panel h-full flex min-h-0">
-        <!-- 左：计划列表（转录构建，最近在前） -->
-        <div class="plan-list shrink-0 flex flex-col min-h-0">
-            <div class="flex items-center justify-between px-2.5 py-1.5 shrink-0">
-                <span class="text-xs font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
-                <GdTooltip :content="t('chat.plan.refresh')" placement="bottom">
-                    <button class="plan-icon-btn" @click="refresh">
-                        <el-icon :size="14"><ArrowClockwise16Regular /></el-icon>
-                    </button>
-                </GdTooltip>
-            </div>
-            <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
-                <div v-if="plans.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
-                    {{ t('chat.plan.empty') }}
-                </div>
-                <button v-for="item in plans" :key="item.planId" class="plan-item" :class="{ 'plan-item-active': item.planId === selected?.planId }"
-                    @click="select(item)">
-                    <span class="plan-item-title">{{ item.title }}</span>
-                    <span class="flex items-center gap-1.5 mt-1">
-                        <span class="plan-badge" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
-                        <span class="text-[11px] text-(--gd-color-text-gray)">{{ formatTime(item.createdAt) }}</span>
-                    </span>
+    <div class="plan-panel h-full flex flex-col min-h-0">
+        <!-- 常驻头部：目录开关（历史图标）+ 当前计划（无计划时退化为面板名） -->
+        <div class="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-(--gd-color-surface-border)">
+            <GdTooltip :content="t('chat.plan.directory')" placement="bottom">
+                <button class="plan-icon-btn" :class="{ 'is-active': directoryOpen }" @click="toggleDirectory">
+                    <el-icon :size="16">
+                        <History16Regular />
+                    </el-icon>
                 </button>
-            </div>
+            </GdTooltip>
+            <template v-if="selected">
+                <span class="text-sm font-medium truncate">{{ selected.title }}</span>
+                <PlanStatusBadge class="shrink-0" :status="selected.status" />
+            </template>
+            <span v-else class="text-sm font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
         </div>
 
-        <!-- 右：计划详情（Markdown 全文） -->
-        <div class="flex-1 min-w-0 flex flex-col border-l border-(--gd-color-surface-border) dark:border-[#2e3035]">
-            <template v-if="selected">
-                <div class="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-(--gd-color-surface-border) dark:border-[#2e3035]">
-                    <span class="text-sm font-medium truncate">{{ selected.title }}</span>
-                    <span class="plan-badge shrink-0" :class="statusClass(selected.status)">{{ statusLabel(selected.status) }}</span>
-                    <span class="flex-1"></span>
-                    <button v-if="selected.path" class="plan-link-btn" @click="openFile">
-                        {{ t('chat.plan.openFile') }}
-                    </button>
-                </div>
-                <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 plan-detail-body">
-                    <MarkdownContent :content="selected.content" />
-                </div>
-            </template>
-            <div v-else class="flex-1 flex items-center justify-center text-xs text-(--gd-color-text-gray)">
-                {{ t('chat.plan.selectHint') }}
+        <!-- 内容区：详情 + 目录抽屉的定位上下文。
+             抽屉 top:0 因此 = 标题栏之下——标题栏（含目录开关）不会被展开的抽屉盖住。 -->
+        <div class="relative flex-1 min-h-0 flex flex-col">
+            <!-- 详情：占满整个面板宽度（默认态；目录收起时不占位、不悬浮）。
+                 排版对齐工作区「Markdown 文件预览」：挂 markdown-text 排版根（字号/行高/标题阶梯/
+                 代码块与语法高亮全部由 --gd-md-font-size 派生，与预览 iframe 共用同一份全局样式），
+                 并沿用预览的阅读列宽上限、16px 内边距与横向滚动。 -->
+            <div v-if="selected" class="flex-1 min-h-0 overflow-y-auto overflow-x-auto plan-detail-scroll">
+                <MarkdownContent class="markdown-text plan-detail-doc" :content="selected.content" />
             </div>
+            <div v-else class="flex-1 flex items-center justify-center text-xs text-(--gd-color-text-gray)">
+                {{ t('chat.plan.empty') }}
+            </div>
+
+            <!-- 目录：透明捕获层（点抽屉以外关闭，无视觉遮罩）+ 从左侧侧入的覆盖式抽屉。
+                 抽屉 absolute 定位 → 展开不挤压详情宽度（默认全宽详情）。 -->
+            <div v-if="directoryOpen" class="plan-directory-outside" @click="closeDirectory"></div>
+            <Transition name="plan-directory">
+                <div v-if="directoryOpen" class="plan-directory">
+                    <div class="flex items-center justify-between px-2.5 py-1.5 shrink-0">
+                        <span class="text-xs font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
+                        <GdTooltip :content="t('chat.plan.refresh')" placement="bottom">
+                            <button class="plan-icon-btn" @click="refresh">
+                                <el-icon :size="14">
+                                    <ArrowClockwise16Regular />
+                                </el-icon>
+                            </button>
+                        </GdTooltip>
+                    </div>
+                    <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
+                        <div v-if="plans.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
+                            {{ t('chat.plan.empty') }}
+                        </div>
+                        <button v-for="item in plans" :key="item.planId" class="plan-item"
+                            :class="{ 'plan-item-active': item.planId === selected?.planId }" @click="select(item)">
+                            <span class="plan-item-title">{{ item.title }}</span>
+                            <span class="flex items-center gap-1.5 mt-1">
+                                <PlanStatusBadge :status="item.status" />
+                                <span class="text-[11px] text-(--gd-color-text-gray)">{{ formatTime(item.createdAt) }}</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </Transition>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon } from 'element-plus'
-import { ArrowClockwise16Regular } from '@vicons/fluent'
+import { ArrowClockwise16Regular, History16Regular } from '@vicons/fluent'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
+import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { useSessionStore } from '@/stores/session'
 import { usePopup } from '@/composables/usePopup'
 import { refreshSessionPlans } from '@/utils/sessionPlan'
-import { previewFile } from '@/utils/workspacePreview'
-import type { SessionPlanItem, SessionPlanStatus } from '@/types/session'
+import type { SessionPlanItem } from '@/types/session'
 
 const props = defineProps<{
     sessionId: string
@@ -83,6 +100,24 @@ const selected = computed<SessionPlanItem | null>(() => {
     )
 })
 
+// ── 目录抽屉：可开合的覆盖层（替代原「常驻左列」，避免挤压详情宽度）──
+// 选中某项后自动关闭——目录是"选一下就走"的临时入口，不常驻占位。
+
+const directoryOpen = ref(false)
+
+function toggleDirectory(): void {
+    directoryOpen.value = !directoryOpen.value
+}
+
+function closeDirectory(): void {
+    directoryOpen.value = false
+}
+
+/** Esc 关闭：不 stopPropagation，避免影响宿主其它 Esc 处理 */
+function onKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') closeDirectory()
+}
+
 // 选中的计划被删除/列表刷新后不存在 → 回落到最新
 watch(plans, (list) => {
     if (selectedId.value && !list.some((p) => p.planId === selectedId.value)) {
@@ -90,41 +125,33 @@ watch(plans, (list) => {
     }
 })
 
-// 会话切换：重置选中并重新拉取（缓存已存在也拉一次，保证最新）
+// 会话切换：重置选中与目录，重新拉取（缓存已存在也拉一次，保证最新）
 watch(
     () => props.sessionId,
     (id) => {
         selectedId.value = null
+        directoryOpen.value = false
         if (id) void refreshSessionPlans(id)
     },
 )
 
 onMounted(() => {
+    window.addEventListener('keydown', onKeydown)
     if (props.sessionId) void refreshSessionPlans(props.sessionId)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown)
 })
 
 function select(item: SessionPlanItem): void {
     selectedId.value = item.planId
+    directoryOpen.value = false
 }
 
 async function refresh(): Promise<void> {
     const list = await refreshSessionPlans(props.sessionId)
     if (!list) toast.error(t('chat.plan.refreshFailed'))
-}
-
-/** 在文件中打开（文件已落盘时）：复用工作区文件预览 */
-function openFile(): void {
-    if (selected.value?.path) void previewFile(selected.value.path)
-}
-
-function statusLabel(status: SessionPlanStatus): string {
-    return t(`chat.plan.status.${status}`)
-}
-
-function statusClass(status: SessionPlanStatus): string {
-    if (status === 'approved') return 'plan-badge-approved'
-    if (status === 'rejected') return 'plan-badge-rejected'
-    return 'plan-badge-pending'
 }
 
 function formatTime(ms: number): string {
@@ -135,8 +162,42 @@ function formatTime(ms: number): string {
 </script>
 
 <style scoped>
-.plan-list {
-    width: 220px;
+/* 目录抽屉：绝对定位浮在详情之上，宽度不参与详情布局（开合都不挤压详情）。
+   定位上下文是标题栏之下的内容区，故 top:0 不覆盖标题栏——开关在展开时仍可见可点。 */
+.plan-directory {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 21;
+    width: min(220px, 72%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--gd-color-surface);
+    border-right: 1px solid var(--gd-color-surface-border);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+}
+
+/* 透明捕获层：只接管"点抽屉以外关闭"，无视觉遮罩（详情不被压暗） */
+.plan-directory-outside {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+}
+
+.plan-directory-enter-active,
+.plan-directory-leave-active {
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.plan-directory-enter-from,
+.plan-directory-leave-to {
+    transform: translateX(-100%);
+}
+
+.plan-icon-btn.is-active {
+    color: var(--gd-color-text);
 }
 
 .plan-item {
@@ -170,32 +231,7 @@ function formatTime(ms: number): string {
     white-space: nowrap;
 }
 
-.plan-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 5px;
-    border-radius: 4px;
-    font-size: 11px;
-    line-height: 18px;
-}
-
-.plan-badge-approved {
-    background: color-mix(in srgb, var(--el-color-success) 16%, transparent);
-    color: var(--el-color-success);
-}
-
-.plan-badge-rejected {
-    background: color-mix(in srgb, var(--el-color-danger) 16%, transparent);
-    color: var(--el-color-danger);
-}
-
-.plan-badge-pending {
-    background: color-mix(in srgb, var(--el-color-warning) 18%, transparent);
-    color: var(--el-color-warning);
-}
-
-.plan-icon-btn,
-.plan-link-btn {
+.plan-icon-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -208,12 +244,20 @@ function formatTime(ms: number): string {
     transition: color 0.15s ease;
 }
 
-.plan-icon-btn:hover,
-.plan-link-btn:hover {
+.plan-icon-btn:hover {
     color: var(--gd-color-text);
 }
 
-.plan-detail-body :deep(.markdown-content) {
-    font-size: 13px;
+/* 详情滚动区：内边距对齐预览 iframe 的 body padding（16px） */
+.plan-detail-scroll {
+    padding: 16px;
+}
+
+/* 阅读列：与预览 iframe 的 .markdown-text 同款（面板窄时无感，工作区全屏时居中限宽）。
+   注意不要再给这里或 .markdown-content 覆盖 font-size——markdown.css 的行高/标题阶梯/
+   间距全部由 --gd-md-font-size 派生，覆盖字号会让正文与派生尺寸脱节。 */
+.plan-detail-doc {
+    max-width: var(--gd-chat-column-width);
+    margin: 0 auto;
 }
 </style>

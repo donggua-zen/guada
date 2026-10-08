@@ -30,7 +30,7 @@
 | `evictFileTab()` 只遍历 `type === 'file'`，agent 标签天然不参与 LRU | `frontend/src/stores/tab.ts:99-117` |
 | `sessionsMap` 是唯一数据源且包含 sub_agent 会话（`sessionsList` 过滤视图反证） | `frontend/src/stores/session.ts:24, 150` |
 | 死代码：`SessionAgentList.vue` 已 import 未使用；`AgentTabBar.vue` 全项目无引用 | `WorkspaceSidebar.vue:169` |
-| 全屏浮动容器：Teleport + FloatingChatPanel，仅 MainLayout 一处引用 | `ChatPage.vue:69, 358-364`、`FloatingChatPanel.vue`、`MainLayout.vue:3` |
+| 全屏浮动容器（**已于 2026-10-08 摘除，见 §3.1**）：Teleport + FloatingChatPanel，仅 MainLayout 一处引用 | `ChatPage.vue:69, 358-364`、`FloatingChatPanel.vue`、`MainLayout.vue:3` |
 
 ### 后端
 
@@ -98,7 +98,12 @@ await this.sessionRepo.deleteById(sessionId);
 
 ## 3. 前端改造
 
-### 3.1 砍掉全屏浮动容器（净删 ~450 行）
+### 3.1 砍掉全屏浮动容器（净删 ~450 行）—— ✅ 已实施（2026-10-08）
+
+> 实施说明：按本表执行，`workspaceFullscreen` 语义简化为「pane1 收起、工作目录占满窗口」，全屏按钮保留。
+> 实际改动比本表多三处收尾：删除 i18n `chat.floating.*`（中英）、清理 `components.d.ts` 陈旧声明（自动生成文件，重建即可）、
+> 清理遗留 localStorage 键 `floatingChatPosition`（`stores/layout.ts` 既有遗留键清理惯例）。
+> 全屏期间主对话不可见（pane1 `display:none`），数据层照常流式写入；退出全屏滚动落点：原本贴底仍贴底，原本上滚保留位置。
 
 | 文件 | 操作 |
 |---|---|

@@ -294,6 +294,27 @@ export function isStandaloneTool(tool: ToolCall): boolean {
   return kind !== undefined && isStandaloneRendererKind(kind);
 }
 
+/** 独立卡片（计划卡）的终态徽标：批准 / 拒绝 / 中断 / 失败 */
+export type PlanCardStatus = "approved" | "rejected" | "aborted" | "error";
+
+/**
+ * 计划卡终态：undefined = 仍在执行（卡片走流式提示，不出徽标）。
+ *
+ * 批准/拒绝优先看结果 meta.planApproved——后端 ExitPlanMode 明确写入，是权威口径；
+ * 其余才回落到 outcome：aborted 是用户中断，error 是没有 meta 的真失败
+ * （例如不在计划态时误调 ExitPlanMode）。
+ */
+export function resolvePlanCardStatus(
+  outcome: ToolCall["outcome"],
+  planApproved: boolean | undefined,
+): PlanCardStatus | undefined {
+  if (!outcome) return undefined;
+  if (outcome === "aborted") return "aborted";
+  if (planApproved === true) return "approved";
+  if (planApproved === false || outcome === "rejected") return "rejected";
+  return outcome === "error" ? "error" : undefined;
+}
+
 /** 各 kind 至少要有一个语义字段可解析才值得定制渲染 */
 const RENDERER_REQUIRED_KEYS: Record<
   ToolRendererConfig["kind"],
