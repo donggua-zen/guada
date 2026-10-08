@@ -148,12 +148,6 @@
       </div>
     </ScrollContainer>
 
-    <!-- 滚动口底部余量覆盖条：非整数缩放下内容末端与滚动口底边之间有 0~1px 的分数缝，
-         滚动消息会从输入区底部透明带漏出（详见 .chat-bottom-residue-cover 注释）。
-         放在滚动容器外（不受裁剪、不画出 sticky 盒外），与页面背景同色、3px 高，
-         视觉上是底部渐变遮罩实心区的延伸 -->
-    <div v-if="!hasWallpaper" class="chat-bottom-residue-cover" aria-hidden="true"></div>
-
     <!-- 右侧 aside 槽位（工作区概览）：不随消息滚动；有占位时落在避让空位上，
          默认融入背景（视觉原语 style.css --gd-overview-panel-*）；
          无占位（临时展开）悬浮于消息上方，回退卡片底色保证可读 -->
@@ -1411,9 +1405,11 @@ function scrollToMessage(messageId: string) {
    containing block = chat-input-area（现位于 scroll-main 内 = 已避让的列），
    故 left-0 right-0 宽度天然 = 消息列宽（随避让让出）。
    56px 实心区需盖住输入框下方的工作目录条（约 36px），否则滚动消息会从条后漏出。
-   注意不要给本元素负 bottom 让它画出 sticky 盒外去盖"内容末端与滚动口底边的分数缝"
-   （非整数缩放下 0~1px，见 .chat-bottom-residue-cover）：实测负 bottom 会让 sticky
-   退回主线程更新，滚动时输入区抖动 8px——缝隙由滚动容器外的覆盖条负责。 */
+   注意不要给本元素负 bottom 让它画出 sticky 盒外：实测负 bottom 会让 sticky
+   退回主线程更新，滚动时输入区抖动 8px。
+   "输入区底边那半行会漏出滚动消息"的问题不在这里兜——已由设备像素吸附从根上消除
+   （卡片底边距吸附到设备网格 → 滚动口底边落在设备像素整数上 → 不存在半行，
+   见 style.css 的 .content-card / utils/devicePixelGrid.ts 与亚像素留档文档）。 */
 .chat-bottom-fade {
   position: absolute;
   bottom: 0;
@@ -1422,23 +1418,6 @@ function scrollToMessage(messageId: string) {
   height: 76px;
   pointer-events: none;
   background: var(--gd-color-bg);
-}
-
-/* 滚动口底部余量覆盖条：非整数缩放（1080p@125% 等）下内容高度是分数（行高 ×dpr
-   带小数），scrollTop/scrollHeight 取整后内容末端与滚动口底边之间会留 0~1px 的缝，
-   滚动消息透过输入区底部的透明带漏出（实测 720/1080p@125% 漏 1px，2K@100% 严丝合缝）。
-   放在滚动容器外：a) 不受滚动裁剪，无论缝隙大小都稳定盖住底边；b) 不画出 sticky 盒外，
-   保住合成器驱动的 sticky（避免滚动时输入区抖动）。left/right 10px = 滚动条 gutter
-   （stable both-edges），避免盖住自绘滚动条；高度 3px 只覆盖工作目录条下方的背景带。 */
-.chat-bottom-residue-cover {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 3px;
-  background: var(--gd-color-bg);
-  pointer-events: none;
-  z-index: 15;
 }
 
 /* 加载指示器淡入淡出 */
