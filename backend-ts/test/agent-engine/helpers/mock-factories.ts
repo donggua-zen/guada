@@ -112,6 +112,8 @@ export function createMockSessionContext(options?: {
     workspacePath: '',
     getSandboxMode: jest.fn(() => 'workspace-write' as const),
     setSandboxMode: jest.fn().mockResolvedValue(undefined),
+    /** 命令策略层的"有人能应答审批"判据；测试默认有人（web 会话且订阅者存在） */
+    hasAnswerSurface: jest.fn(() => true),
     setToolScope: jest.fn(),
     getToolScope: jest.fn(() => null),
     getPlanEnabled: jest.fn(() => false),

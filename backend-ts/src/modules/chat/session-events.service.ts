@@ -228,6 +228,17 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 是否有前端 SSE 连接在线（= 用户界面开着，能看见审批卡）。
+   *
+   * 命令策略层用它做 fail-closed 判定：审批卡经本服务的直投通道到达界面，
+   * `SessionStreamManager.subscribers` 只统计**进程内**消费者，看不见前端连接，
+   * 因此不能用它判断"有没有人能应答审批"。
+   */
+  hasConnectedClients(): boolean {
+    return this.subscribers.size > 0;
+  }
+
+  /**
    * 取消订阅
    * @param clientId 客户端标识（仅作日志/ sanity 校验）
    * @param connectionId 本次连接标识：订阅表按 connectionId 键控，旧连接的 req close

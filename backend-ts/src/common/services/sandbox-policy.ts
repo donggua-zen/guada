@@ -64,3 +64,30 @@ export function assertStrictlyWider(current: SandboxMode, requested: SandboxMode
     );
   }
 }
+
+/**
+ * shell 是否支持 OS 级沙盒（sandbox.exe）。
+ *
+ * Windows 已停用：受限令牌 + ACL 授权在该平台兼容性差（工作区授权失败、MSYS 工具崩溃、
+ * 受限语言模式、junction/长路径不可用等），改由命令策略层
+ * （command-policy：只读白名单 + 人工审批）承担。设 SANDBOX_WIN_ENABLE=1 可临时恢复，
+ * 用于回归对比。
+ */
+export function isShellSandboxSupported(): boolean {
+  return process.platform !== "win32" || process.env.SANDBOX_WIN_ENABLE === "1";
+}
+
+/**
+ * 命令策略层是否生效。
+ *
+ * - Windows：默认生效（沙盒停用后由其接管）；重新启用 Windows 沙盒（SANDBOX_WIN_ENABLE=1）时让位
+ * - 其它平台：默认不生效（继续用 Landlock/Seatbelt 沙盒），可用 GUADA_COMMAND_POLICY=1 显式启用
+ *   （也用于在任意平台跑策略层的端到端测试）
+ *
+ * 显式开关优先：GUADA_COMMAND_POLICY=1 强制生效，=0 强制关闭。
+ */
+export function isCommandPolicyEnforced(): boolean {
+  if (process.env.GUADA_COMMAND_POLICY === "1") return true;
+  if (process.env.GUADA_COMMAND_POLICY === "0") return false;
+  return process.platform === "win32" && !isShellSandboxSupported();
+}

@@ -78,9 +78,30 @@ const emit = defineEmits<{
   'toggle-plan': []
 }>()
 
+/**
+ * 当前平台。Windows 上 shell 没有 OS 沙盒（由命令策略层接管：只读白名单 + 审批），
+ * 档位描述必须说清真实语义，否则用户以为"工作区可写"仍限制命令写入路径。
+ * 非 Electron 环境（浏览器 dev）用 navigator.platform 兜底判 Windows。
+ */
+const isWindows = computed(() => {
+  const electronPlatform = window.electronAPI?.platform
+  if (typeof electronPlatform === 'string') return electronPlatform === 'win32'
+  return typeof navigator !== 'undefined' && navigator.platform.startsWith('Win')
+})
+
 const options = computed<RunModeOption[]>(() => [
-  { value: 'read-only', label: t('chat.input.runModeReadOnly'), desc: t('chat.input.runModeReadOnlyDesc'), icon: ClipboardTask20Regular },
-  { value: 'workspace-write', label: t('chat.input.runModeWorkspaceWrite'), desc: t('chat.input.runModeWorkspaceWriteDesc'), icon: ShieldLock20Regular },
+  {
+    value: 'read-only',
+    label: t('chat.input.runModeReadOnly'),
+    desc: isWindows.value ? t('chat.input.runModeReadOnlyDescWin') : t('chat.input.runModeReadOnlyDesc'),
+    icon: ClipboardTask20Regular,
+  },
+  {
+    value: 'workspace-write',
+    label: t('chat.input.runModeWorkspaceWrite'),
+    desc: isWindows.value ? t('chat.input.runModeWorkspaceWriteDescWin') : t('chat.input.runModeWorkspaceWriteDesc'),
+    icon: ShieldLock20Regular,
+  },
   { value: 'danger-full-access', label: t('chat.input.runModeFullAccess'), desc: t('chat.input.runModeFullAccessDesc'), icon: ShieldError16Regular, danger: true },
 ])
 

@@ -17,6 +17,12 @@ import { AsyncNotifier } from "../../common/utils/async-notifier";
 import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { safeTruncate, safeTail } from "../../common/utils/string.utils";
 import { SanitizerTransform } from "./stream-sanitizer";
+import {
+  envValue,
+  resolveWindowsShell,
+  type ShellKind,
+} from "./windows-shell-detect";
+import { isShellSandboxSupported } from "../../common/services/sandbox-policy";
 import type { ProcessChangedEvent } from "../../common/events/stream.events";
 
 // ============================================================================
@@ -221,9 +227,12 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   private gcTimer: NodeJS.Timeout | null = null;
 
-  /** 检测出的 shell：Windows 统一 PowerShell（找不到回退 cmd.exe）；Unix 为 sh/bash */
+  /**
+   * 检测出的 shell：Windows 优先 Git Bash，找不到回退 PowerShell（再回退 cmd.exe）；
+   * Unix 为 sh/bash。
+   */
   private shellInfo = {
-    kind: "sh" as "powershell" | "cmd" | "sh",
+    kind: "sh" as ShellKind,
     path: "" as string,
   };
 
@@ -255,13 +264,12 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 启动时检测可用的 shell。
-   * Windows：统一使用 PowerShell（沙盒与直连场景语法一致），找不到则回退 cmd.exe。
-   * Unix：使用默认 sh。
+   * Unix：默认 sh。
+   * Windows：优先 Git Bash（装了 Git for Windows 就有），否则 PowerShell，最后 cmd.exe。
+   * 检测细节与优先级见 windows-shell-detect.ts（全程纯 fs 探测，零子进程，避免窗口闪现）。
    *
-   * PowerShell 查找顺序（全程纯 fs 探测，零子进程，避免任何控制台窗口闪现）：
-   * 1. 环境变量 POWERSHELL（用户手动指定）
-   * 2. %SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe（Windows 自带）
-   * 3. PATH 环境变量逐项解析
+   * 注意：沙盒模式（read-only / workspace-write）下命令由 sandbox.exe 用其内置 shell 执行，
+   * 本检测只决定非沙盒路径（danger-full-access）与交互终端使用哪个壳。
    */
   private detectShell(): void {
     if (process.platform !== "win32") {
@@ -270,65 +278,23 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // 1. 环境变量
-    if (
-      process.env.POWERSHELL &&
-      fsSync.existsSync(process.env.POWERSHELL)
-    ) {
-      this.shellInfo = { kind: "powershell", path: process.env.POWERSHELL };
-      this.logger.log(
-        `Shell detected: powershell (POWERSHELL env) at ${process.env.POWERSHELL}`,
+    const resolved = resolveWindowsShell({ env: process.env });
+    this.shellInfo = { kind: resolved.kind, path: resolved.path };
+
+    const override = envValue(process.env, "GUADA_SHELL");
+    if (override && resolved.source !== "GUADA_SHELL override") {
+      this.logger.warn(
+        `GUADA_SHELL is set but unusable (missing file or unrecognized shell), ignored: ${override}`,
       );
-      return;
     }
-
-    // 2. Windows 自带 Windows PowerShell
-    const systemPs = path.join(
-      process.env["SystemRoot"] || "C:\\Windows",
-      "System32",
-      "WindowsPowerShell",
-      "v1.0",
-      "powershell.exe",
-    );
-    if (fsSync.existsSync(systemPs)) {
-      this.shellInfo = { kind: "powershell", path: systemPs };
-      this.logger.log(`Shell detected: powershell (system) at ${systemPs}`);
-      return;
-    }
-
-    // 3. PATH 逐项解析
-    const pathPs = this.findExecutableInPath("powershell.exe");
-    if (pathPs) {
-      this.shellInfo = { kind: "powershell", path: pathPs };
-      this.logger.log(`Shell detected: powershell (PATH) at ${pathPs}`);
-      return;
-    }
-
-    this.shellInfo = { kind: "cmd", path: "" };
-    this.logger.log("Shell detected: cmd.exe (powershell not found)");
-  }
-
-  /** 解析 PATH 环境变量查找指定可执行文件（纯 fs 检查，不启动子进程） */
-  private findExecutableInPath(name: string): string | null {
-    const pathEnv = process.env.PATH || "";
-    for (const dir of pathEnv.split(";")) {
-      if (!dir) continue;
-      const candidate = path.join(
-        dir.trim().replace(/^"|"$/g, ""),
-        name,
-      );
-      try {
-        if (fsSync.existsSync(candidate)) return candidate;
-      } catch {
-        // 单个目录解析失败 — 跳过继续
-      }
-    }
-    return null;
+    this.logger.log(`Shell detected: ${resolved.kind} (${resolved.source})`);
   }
 
   /** 返回检测到的 shell 的人类可读描述（供插件提示 AI） */
   getShellInfo(): string {
     switch (this.shellInfo.kind) {
+      case "gitbash":
+        return `Git Bash (${this.shellInfo.path})`;
       case "powershell":
         return `Windows PowerShell (${this.shellInfo.path})`;
       case "cmd":
@@ -338,8 +304,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 当前 shell 的 kind：powershell | cmd | sh */
-  getShellKind(): "powershell" | "cmd" | "sh" {
+  /** 当前 shell 的 kind：gitbash | powershell | cmd | sh */
+  getShellKind(): ShellKind {
     return this.shellInfo.kind;
   }
 
@@ -958,6 +924,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * 检查沙盒二进制是否可用（供插件提前校验）
    */
   async isSandboxAvailable(): Promise<boolean> {
+    if (!isShellSandboxSupported()) return false;
     const bin = await this.resolveSandboxBin();
     return bin !== null;
   }
@@ -1036,7 +1003,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
    * 沙盒启用时命令由 sandbox.exe 内部固定 shell（Windows PowerShell）执行；
-   * 无 sandbox 时，Windows 使用启动时检测的 shell（PowerShell 优先，否则 cmd.exe），
+   * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先 → PowerShell → cmd.exe），
    * Unix 使用默认 shell。
    * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
    */
@@ -1045,24 +1012,54 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     cwd: string,
     sandbox?: SandboxOptions,
   ): ChildProcess {
-    if (sandbox?.enabled) {
-      if (!this.sandboxBinPath) {
+    // 平台门（纵深防御）：Windows 已停用 OS 沙盒，调用方即使传了 enabled 也不包装，
+    // 由 shell 插件侧的 command-policy（只读白名单 + 审批）承担约束。
+    const useSandbox = sandbox?.enabled === true && isShellSandboxSupported();
+    if (sandbox?.enabled && !useSandbox) {
+      this.logger.warn(
+        "sandbox requested but unsupported on this platform (Windows); running in the detected shell instead",
+      );
+    }
+
+    if (useSandbox) {
+      const sandboxBin = this.sandboxBinPath;
+      if (!sandboxBin) {
         throw new Error(
           `Sandbox mode is enabled, but the sandbox binary is currently unavailable.`,
         );
       }
       const args = ["-c", command, "--workspace", cwd];
-      if (sandbox.readOnly) {
+      if (sandbox?.readOnly) {
         args.push("--read-only");
       }
-      return spawn(this.sandboxBinPath, args, {
+      return spawn(sandboxBin, args, {
         cwd,
         env: { ...process.env, PYTHONUNBUFFERED: "1" },
         windowsHide: true,
       });
     }
 
-    // Windows 统一使用 PowerShell（支持多行命令，与沙盒内 shell 语法一致），
+    // Git Bash：-c 执行命令；-l 走 login shell 以加载 /etc/profile——
+    // 没有它 PATH 里不含 /usr/bin，ls/grep/sed 这些 MSYS 工具都不可用。
+    // GUADA_GIT_BASH_NO_LOGIN=1 可退回非 login（用户 profile 产生噪音时的逃生舱）。
+    if (this.shellInfo.kind === "gitbash" && this.shellInfo.path) {
+      const args =
+        process.env.GUADA_GIT_BASH_NO_LOGIN === "1"
+          ? ["-c", command]
+          : ["-c", "-l", command];
+      return spawn(this.shellInfo.path, args, {
+        cwd,
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: "1",
+          SHELL: this.shellInfo.path,
+          GIT_EDITOR: "true",
+        },
+        windowsHide: true,
+      });
+    }
+
+    // Windows 的 PowerShell（支持多行命令，与沙盒内 shell 语法一致），
     // 否则 cmd.exe 兜底；Unix 使用默认 shell
     if (this.shellInfo.kind === "powershell" && this.shellInfo.path) {
       return spawn(

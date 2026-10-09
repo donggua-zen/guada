@@ -120,6 +120,13 @@ export interface ISessionContext {
   getSandboxMode(): SessionSandboxMode;
   /** 设置会话安全模式（运行时切换，如 UI 政策控件） */
   setSandboxMode(mode: SessionSandboxMode): Promise<void>;
+  /**
+   * 当前会话是否存在"人能应答审批"的面（命令策略层 fail-closed 用）。
+   *
+   * false = 没有人会看到审批卡：子代理会话、机器人会话、以及主会话但没有活跃 SSE 订阅者
+   * （页面关掉/未打开）。这类场景下需要人工批准的命令一律直接拒绝，避免无限挂起。
+   */
+  hasAnswerSurface(): boolean;
   /** 工具范围锁定（瞬态、不入库，正交于安全模式）：仅允许指定插件的工具；null = 不限制（影子轮次等场景使用） */
   setToolScope(pluginId: string | null): void;
   /** 读取当前工具范围锁定 */

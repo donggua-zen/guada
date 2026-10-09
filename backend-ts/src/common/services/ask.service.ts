@@ -15,6 +15,11 @@ import { InteractionWaitService } from "./interaction-wait.service";
 import type { AskAnswerItem, AskRequest, AskSession } from "../types/ask.types";
 import { AskDeniedError } from "../types/ask.types";
 
+/** 命令审批的三个选项（前端按 label 原样渲染） */
+export const COMMAND_ALLOW_ONCE = "本次允许";
+export const COMMAND_ALLOW_SESSION = "本会话内始终允许";
+export const COMMAND_DENY = "拒绝";
+
 @Injectable()
 export class AskService {
   private readonly logger = new Logger(AskService.name);
@@ -157,5 +162,63 @@ export class AskService {
     }
     if (answer.selected.includes("同意")) return;
     throw new AskDeniedError("用户拒绝了该请求", "rejected");
+  }
+
+  /**
+   * 命令审批（Windows 命令策略层用）：本次允许 / 本会话内始终允许 / 拒绝。
+   *
+   * 与 requestApproval 分开是为了不动既有调用方（文件写入 / 计划审批仍是两选一）。
+   * 「本会话内始终允许」的记账在调用方（command-policy 的内存表），这里只负责问。
+   *
+   * @throws AskDeniedError('rejected', feedback) 拒绝或自定义回复
+   * @throws AskDeniedError('cancelled') 用户停止
+   */
+  async requestCommandApproval(
+    session: AskSession,
+    params: {
+      toolCallId?: string;
+      /** 待批准的命令原文（展示在审批卡里） */
+      command: string;
+      /** 为什么需要批准（不在白名单的原因） */
+      reason?: string;
+      abortSignal?: AbortSignal;
+    },
+  ): Promise<"once" | "session"> {
+    const answers = await this.ask(
+      session,
+      {
+        kind: "approval",
+        title: "命令需要批准",
+        toolCallId: params.toolCallId,
+        toolName: "run_command",
+        questions: [
+          {
+            id: "command-approval",
+            question: "是否允许执行这条命令？",
+            detail: [params.reason, "", params.command]
+              .filter((part) => part !== undefined)
+              .join("\n"),
+            options: [
+              { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
+              {
+                label: COMMAND_ALLOW_SESSION,
+                description: "本会话内遇到完全相同的命令不再询问",
+              },
+              { label: COMMAND_DENY, description: "不执行，并把拒绝反馈给模型" },
+            ],
+          },
+        ],
+      },
+      params.abortSignal,
+    );
+
+    const answer = answers[0];
+    // 自定义回复 = 拒绝 + 用户文本反馈模型（与 requestApproval 同语义）
+    if (answer.custom && answer.custom.trim()) {
+      throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
+    }
+    if (answer.selected.includes(COMMAND_ALLOW_SESSION)) return "session";
+    if (answer.selected.includes(COMMAND_ALLOW_ONCE)) return "once";
+    throw new AskDeniedError("用户拒绝执行该命令", "rejected");
   }
 }

@@ -17,11 +17,18 @@ import {
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import {
   ESCALATION_TARGETS,
+  isCommandPolicyEnforced,
+  isShellSandboxSupported,
   parseEscalationArgs,
   sandboxForMode,
   assertStrictlyWider,
   type SandboxMode,
 } from "../../common/services/sandbox-policy";
+import {
+  commandApprovalMemory,
+  evaluateCommand,
+  type CommandPolicyCode,
+} from "../../common/services/command-policy";
 import { AskService } from "../../common/services/ask.service";
 import {
   WorkspaceToolRouter,
@@ -35,6 +42,17 @@ import {
 import { isTransportError } from "../remote-workspace/rpc";
 import langZh from "./shell.lang.zh.json";
 import langEn from "./shell.lang.en.json";
+
+/**
+ * 审批卡里的中文说明（用户可见）：按策略原因码给一句话。
+ * 诊断细节（英文，含具体开关/段）只进模型可见的错误文案与日志。
+ */
+const COMMAND_POLICY_CODE_ZH: Record<CommandPolicyCode, string> = {
+  "unknown-command": "该命令不在只读白名单内",
+  "unverifiable-syntax": "该命令含无法静态核验的结构（变量、命令替换、写重定向等）",
+  "write-signal": "该命令包含写 / 删除操作",
+  "no-allowlist": "当前 shell 没有可用的只读白名单",
+};
 
 /** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
 function formatDuration(ms: number): string {
@@ -85,6 +103,7 @@ export class ShellPlugin extends PluginBase {
     const shellKind = this.processManager.getShellKind();
     const isCmd = shellKind === "cmd";
     const isPowerShell = shellKind === "powershell";
+    const isGitBash = shellKind === "gitbash";
     const shellDesc = this.processManager.getShellInfo();
     const cmdWarning = isCmd
       ? `\n- WARNING: cmd.exe only executes the first line of a multi-line command and silently drops the rest. For multi-line or long commands, write them to a script file (.bat) first, then execute the script`
@@ -92,29 +111,48 @@ export class ShellPlugin extends PluginBase {
     const psWarning = isPowerShell
       ? `\n- Use PowerShell syntax: separate statements with \`;\` (\`&&\` is not supported in Windows PowerShell 5.1); bash-only syntax (\`export\`, \`source\`, heredocs, \`ls -la\`) will not work. For complex logic, write a .ps1 script file and run it: \`powershell -ExecutionPolicy Bypass -File script.ps1\``
       : "";
+    const gitBashNote = isGitBash
+      ? `\n- Use POSIX/bash syntax (Git Bash): \`&&\`, \`|\`, redirection, heredocs and \`ls -la\` all work; PowerShell-only syntax (\`Get-ChildItem\`, \`$env:OS\`, \`Select-String\`) does not. For complex logic, write a shell script file and run it: \`bash script.sh\``
+      : "";
+    // 沙盒模式读的是 sandbox.exe 内置 shell（Windows 固定 PowerShell），与上面的检测结果无关。
+    // Windows 默认已无 OS 沙盒（SANDBOX_WIN_ENABLE=1 回归时才可能命中），因此这里按能力门收敛。
+    const sandboxShellNote =
+      isGitBash && process.platform === "win32" && isShellSandboxSupported()
+        ? `\n- **Sandboxed modes use a different shell**: read-only / workspace-write execute commands through the sandbox's built-in Windows PowerShell, so the POSIX syntax above applies only in \`danger-full-access\` (unrestricted) mode.`
+        : "";
+    // 命令策略层（Windows 无 OS 沙盒）：说明白"什么会直接跑、什么会弹窗"，否则模型会乱试
+    const commandPolicyNote = isCommandPolicyEnforced()
+      ? `\n- **Command approval (no OS sandbox on this platform)**: verified read-only commands (git status/diff/log/show, ls, cat, head/tail, grep/rg, find without -delete/-exec, Get-ChildItem/Get-Content/Select-String, …) run immediately. Any other command needs the user's approval in workspace-write mode (the approval card offers: this once / always this command in this session / deny), and is denied outright in read-only or plan mode. Prefer read-only commands for inspection, and keep write or execute commands few and purposeful to limit prompts. \`sandbox_permissions\` does not exist on this platform.`
+      : "";
+    const escalationNote = isCommandPolicyEnforced()
+      ? ""
+      : `\n- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.`;
     shellKit.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
-- **Current Shell**: ${shellDesc}${psWarning}${cmdWarning}
+- **Current Shell**: ${shellDesc}${psWarning}${cmdWarning}${gitBashNote}${sandboxShellNote}${commandPolicyNote}
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- processId is typically the shell process ID, not the command's own process ID
-- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.
+- processId is typically the shell process ID, not the command's own process ID${escalationNote}
 - **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side; \`sandbox_permissions\` does not apply). Foreground timeout (60s) switches to background there too; background processIds carry the "r:" prefix and are managed with the same process tool.`,
       inputSchema: z.object({
         command: z
           .string()
           .describe(
-            isPowerShell
-              ? "PowerShell command to execute, e.g. Get-ChildItem, $env:OS, node script.js"
-              : "System command to execute, e.g. ls -la, echo hello, node script.js",
+            isGitBash
+              ? 'Shell command to execute (Git Bash / POSIX), e.g. ls -la, grep -rn "foo" src, git status'
+              : isPowerShell
+                ? "PowerShell command to execute, e.g. Get-ChildItem, $env:OS, node script.js"
+                : "System command to execute, e.g. ls -la, echo hello, node script.js",
           ),
         encoding: z
           .string()
           .optional()
           .describe(
-            "Output encoding format. Use 'gbk' for Windows Chinese environment; defaults to 'utf-8' on Unix. Auto-detected if not specified.",
+            isGitBash
+              ? "Output encoding format. Git Bash emits UTF-8 and it is auto-detected; set explicitly only when auto-detection misfires."
+              : "Output encoding format. Use 'gbk' for Windows Chinese environment; defaults to 'utf-8' on Unix. Auto-detected if not specified.",
           )
           .refine(
             (v) =>
@@ -161,16 +199,20 @@ export class ShellPlugin extends PluginBase {
         const session = ctx?.session;
 
         // 安全模式 → 沙盒选项：read-only 全盘只读 / workspace-write 工作区内可写 / danger-full-access 不沙盒
+        // Windows 上 OS 沙盒已停用（兼容性问题），由下方命令策略层（白名单 + 审批）接管。
+        const sandboxSupported = isShellSandboxSupported();
         const mode: SandboxMode =
           session?.getSandboxMode?.() ?? "workspace-write";
-        let sandbox: SandboxOptions | undefined = sandboxForMode(mode);
+        let sandbox: SandboxOptions | undefined = sandboxSupported
+          ? sandboxForMode(mode)
+          : undefined;
 
-        // 计划模式（协作状态）：强制以只读沙盒执行，无视会话安全档位——
-        // 计划阶段必须能跑 git status / ls 这类只读命令做调研，写入则由沙盒拒绝。
-        // 只改本次调用的沙盒选项，不改写 session.sandboxMode（两者正交）。
+        // 计划模式（协作状态）：强制只读执行，无视会话安全档位——
+        // 计划阶段必须能跑 git status / ls 这类只读命令做调研，写入一律拒绝。
+        // 只改本次调用的选项，不改写 session.sandboxMode（两者正交）。
         const planMode = session?.getPlanEnabled?.() === true;
         if (planMode) {
-          sandbox = sandboxForMode("read-only");
+          sandbox = sandboxSupported ? sandboxForMode("read-only") : undefined;
         }
         /** 错误信息里呈现的有效档位（计划模式下真实生效的是 read-only） */
         const effectiveMode: SandboxMode = planMode ? "read-only" : mode;
@@ -183,6 +225,9 @@ export class ShellPlugin extends PluginBase {
             );
           }
         }
+
+        // ── 命令策略门（Windows）：只读白名单自动放行，其余按档位审批或拒绝 ──
+        await this.enforceCommandPolicy(command, effectiveMode, ctx, abortSignal);
 
         // 提权请求：sandbox_permissions + justification 成对 → 严格放宽校验 → 审批 → 应用放宽模式
         const escalation = parseEscalationArgs(
@@ -198,7 +243,9 @@ export class ShellPlugin extends PluginBase {
           }
           if (!sandbox?.enabled) {
             throw new Error(
-              `Sandbox is not enabled in this session (mode: ${mode}); sandbox_permissions is unavailable.`,
+              isCommandPolicyEnforced()
+                ? `sandbox_permissions is unavailable on this platform: commands are not sandboxed here. Any command outside the read-only allowlist already triggers an approval prompt — just run the command instead (in read-only mode, ask the user to switch modes).`
+                : `Sandbox is not enabled in this session (mode: ${mode}); sandbox_permissions is unavailable.`,
             );
           }
           // 非严格放宽（平级/降级）→ 直接抛错，不打扰人（对齐 DSH）
@@ -536,6 +583,75 @@ export class ShellPlugin extends PluginBase {
   private sanitize(text: string): string {
     const s = new StreamingSanitizer();
     return s.feed(text) + s.flush();
+  }
+
+  /**
+   * 命令策略门（Windows 去沙盒后的强制层）。
+   *
+   * 语义（用户确认的方案）：
+   *   - read-only       档：只读白名单内放行，其余**直接拒绝**（不弹窗，提示切档）
+   *   - workspace-write 档：白名单内放行；其余弹窗（本次允许 / 本会话内始终允许 / 拒绝）
+   *   - danger-full-access 档：不判定
+   *   - 无人能应答审批（子代理 / 机器人 / 前端未连接）→ 直接拒绝，绝不挂起
+   *
+   * 说明：这是对 docs/交互层统一Ask方案.md「无超时」语义的**显式例外**——只在命令策略
+   * 这一条路径上 fail-closed，文件写入/计划审批的既有 ask 语义不变。
+   */
+  private async enforceCommandPolicy(
+    command: string,
+    effectiveMode: SandboxMode,
+    ctx: PluginContext | undefined,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    if (!isCommandPolicyEnforced()) return;
+    if (effectiveMode === "danger-full-access") return;
+
+    const decision = evaluateCommand({
+      command,
+      shellKind: this.processManager.getShellKind(),
+    });
+    if (decision.kind === "whitelisted") return;
+
+    const reasonText = `[${decision.code}] ${decision.reason}`;
+
+    if (effectiveMode === "read-only") {
+      throw new Error(
+        `Read-only mode denied this command: it is not a verified read-only command (${reasonText}). ` +
+          `Use read-only commands from the allowlist (git status/diff/log/show, ls, cat, head/tail, grep/rg, find without -delete/-exec, Get-ChildItem/Get-Content/Select-String, ...), ` +
+          `or ask the user to switch the session mode to workspace-write.`,
+      );
+    }
+
+    // workspace-write：本会话内已批准过同一条命令 → 直接放行
+    const session = ctx?.session;
+    const sessionId = session?.sessionId || "";
+    if (sessionId && commandApprovalMemory.has(sessionId, command)) return;
+
+    const canAsk = session?.hasAnswerSurface
+      ? session.hasAnswerSurface()
+      : session?.sessionType === "web";
+    if (!canAsk) {
+      throw new Error(
+        `Command not run: it needs the user's approval, but no approval prompt can be shown right now ` +
+          `(the desktop UI has no live connection, or this is a sub-agent / bot session), and the command is not read-only-verified (${reasonText}). ` +
+          `Use a read-only command instead, or report back to the user and let them run it in a session they are watching.`,
+      );
+    }
+
+    // 本次允许 / 本会话内始终允许 / 拒绝（拒绝与自定义回复抛 AskDeniedError，工具层已按 isError 反馈模型）
+    const approval = await this.askService.requestCommandApproval(session as any, {
+      toolCallId: ctx?.toolCallId,
+      command,
+      // 审批卡给用户看：用中文一句话说明为什么需要批准（诊断细节只进模型可见的错误与日志）
+      reason: `${COMMAND_POLICY_CODE_ZH[decision.code]}，需要你确认`,
+      abortSignal,
+    });
+    if (approval === "session" && sessionId) {
+      commandApprovalMemory.remember(sessionId, command);
+    }
+    this.logger.log(
+      `Command approved (${approval}) by policy prompt: ${command.slice(0, 120)}`,
+    );
   }
 
   /**

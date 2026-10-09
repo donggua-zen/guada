@@ -101,9 +101,58 @@ function createContext(overrides: any = {}) {
       buildChangeReminder: jest.fn(async () => null),
       ...(overrides.bindingState || {}),
     } as any,
+    // sessionMetaStore（可选）：这些用例不落库会话设置
+    undefined,
+    // answerSurfaceProbe（可选）：命令策略层"有人能应答审批"的探针
+    overrides.answerSurfaceProbe,
   );
   return { ctx, messageStore, tokenMeter, streamManager };
 }
+
+describe('hasAnswerSurface（命令策略层 fail-closed 判据）', () => {
+  it('web 会话 + 前端 SSE 在线 → true', () => {
+    const { ctx } = createContext({ answerSurfaceProbe: () => true });
+    expect(ctx.hasAnswerSurface()).toBe(true);
+  });
+
+  it('web 会话 + 前端离线且无进程内消费者 → false', () => {
+    const { ctx } = createContext({ answerSurfaceProbe: () => false });
+    expect(ctx.hasAnswerSurface()).toBe(false);
+  });
+
+  it('前端离线但进程内有订阅者（后台续跑）→ true', () => {
+    const { ctx } = createContext({
+      answerSurfaceProbe: () => false,
+      streamManager: {
+        getStreamStatus: () => ({
+          isRunning: true,
+          subscriberCount: 1,
+          bufferedEventCount: 0,
+        }),
+      },
+    });
+    expect(ctx.hasAnswerSurface()).toBe(true);
+  });
+
+  it('bot / 子代理会话一律 false（即便前端在线）', () => {
+    const bot = createContext({
+      session: { sessionType: 'bot' },
+      answerSurfaceProbe: () => true,
+    });
+    expect(bot.ctx.hasAnswerSurface()).toBe(false);
+
+    const sub = createContext({
+      session: { sessionType: 'sub_agent' },
+      answerSurfaceProbe: () => true,
+    });
+    expect(sub.ctx.hasAnswerSurface()).toBe(false);
+  });
+
+  it('缺探针（旧构造路径）时退回进程内订阅者判定，不抛错', () => {
+    const { ctx } = createContext({});
+    expect(ctx.hasAnswerSurface()).toBe(false);
+  });
+});
 
 describe('JsonlSessionContext 读取层直通', () => {
   it('publishStream 组装 prevSeq 续传游标并透传 streamManager.publish（唯一发布面）', async () => {

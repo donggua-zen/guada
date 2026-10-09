@@ -63,6 +63,9 @@
     // RunModePopover.vue
     runModeReadOnlyDesc: 'Files and commands are read-only, suitable for analysis and planning',
     runModeWorkspaceWriteDesc: 'File and shell writes are confined to the working directory, read-only outside',
+    // Windows has no OS sandbox (command policy: read-only allowlist + approval)
+    runModeReadOnlyDescWin: 'Only allowlisted read-only commands (git status, ls, grep, …); writes and everything else are denied',
+    runModeWorkspaceWriteDescWin: 'File writes stay in the working directory; allowlisted read-only commands run directly, anything else asks for your approval',
     runModeFullAccessDesc: 'No restrictions on tools or paths, can read/write arbitrary files (high risk)',
 
     // ThinkingEffortPopover.vue

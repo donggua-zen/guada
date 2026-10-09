@@ -20,6 +20,7 @@ import { SessionStreamManager } from './session-stream.manager';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
 import { SessionMetaStore } from './session-meta.store';
+import { SessionEventsService } from './session-events.service';
 
 @Injectable()
 export class JsonlSessionContextFactory {
@@ -35,6 +36,8 @@ export class JsonlSessionContextFactory {
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly bindingState: RemoteBindingStateService,
     private readonly sessionMetaStore: SessionMetaStore,
+    /** 前端 SSE 在线探测（命令策略层"有人能应答审批"的判据；见 JsonlSessionContext.hasAnswerSurface） */
+    private readonly sessionEvents: SessionEventsService,
   ) {}
 
   async createFromSession(session: any): Promise<JsonlSessionContext> {
@@ -51,6 +54,7 @@ export class JsonlSessionContextFactory {
       this.knowledgeBaseService,
       this.bindingState,
       this.sessionMetaStore,
+      () => this.sessionEvents.hasConnectedClients(),
     );
     await context.initialize();
     return context;
