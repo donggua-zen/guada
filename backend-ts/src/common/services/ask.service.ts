@@ -20,6 +20,11 @@ export const COMMAND_ALLOW_ONCE = "本次允许";
 export const COMMAND_ALLOW_SESSION = "本会话内始终允许";
 export const COMMAND_DENY = "拒绝";
 
+/** 文件写入审批的三个选项（工作区外路径；前端按 label 原样渲染） */
+export const WRITE_ALLOW_ONCE = "本次允许";
+export const WRITE_ALLOW_SESSION = "本会话内始终允许该路径";
+export const WRITE_DENY = "拒绝";
+
 @Injectable()
 export class AskService {
   private readonly logger = new Logger(AskService.name);
@@ -220,5 +225,72 @@ export class AskService {
     if (answer.selected.includes(COMMAND_ALLOW_SESSION)) return "session";
     if (answer.selected.includes(COMMAND_ALLOW_ONCE)) return "once";
     throw new AskDeniedError("用户拒绝执行该命令", "rejected");
+  }
+
+  /**
+   * 文件写入审批（工作区外路径；命令策略在文件工具上的对偶）。
+   *
+   * 模型不能自我提权：越界写在 workspace-write 档由本审批询问用户，
+   * read-only 档直接拒绝（不经此处）。「本会话内始终允许该路径」的记账在调用方
+   * （write-approval-memory），这里只负责问。
+   *
+   * @throws AskDeniedError('rejected', feedback) 拒绝或自定义回复
+   * @throws AskDeniedError('cancelled') 用户停止
+   */
+  async requestWriteApproval(
+    session: AskSession,
+    params: {
+      toolCallId?: string;
+      toolName: string;
+      /** 解析后的绝对路径（卡片展示 + 调用方记账键） */
+      resolvedPath: string;
+      operation: "write" | "edit";
+      /** 内容预览（截断片段，供用户判断写入内容） */
+      preview?: string;
+      abortSignal?: AbortSignal;
+    },
+  ): Promise<"once" | "session"> {
+    const detailParts = [
+      `Path: ${params.resolvedPath}`,
+      `Operation: ${params.operation}`,
+    ];
+    if (params.preview) {
+      detailParts.push("", params.preview);
+    }
+
+    const answers = await this.ask(
+      session,
+      {
+        kind: "approval",
+        title: "文件写入需要批准",
+        toolCallId: params.toolCallId,
+        toolName: params.toolName,
+        questions: [
+          {
+            id: "write-approval",
+            question: "是否允许写入工作区以外的这个路径？",
+            detail: detailParts.join("\n"),
+            options: [
+              { label: WRITE_ALLOW_ONCE, description: "仅本次写入" },
+              {
+                label: WRITE_ALLOW_SESSION,
+                description: "本会话内遇到完全相同的路径不再询问",
+              },
+              { label: WRITE_DENY, description: "不写入，并把拒绝反馈给模型" },
+            ],
+          },
+        ],
+      },
+      params.abortSignal,
+    );
+
+    const answer = answers[0];
+    // 自定义回复 = 拒绝 + 用户文本反馈模型（与 requestApproval 同语义）
+    if (answer.custom && answer.custom.trim()) {
+      throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
+    }
+    if (answer.selected.includes(WRITE_ALLOW_SESSION)) return "session";
+    if (answer.selected.includes(WRITE_ALLOW_ONCE)) return "once";
+    throw new AskDeniedError("用户拒绝写入该路径", "rejected");
   }
 }

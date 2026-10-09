@@ -348,21 +348,24 @@ describe('ShellPlugin', () => {
       expect(ask.requestCommandApproval).toHaveBeenCalledTimes(2);
     });
 
-    it('沙盒提权参数在策略平台上报"不可用"（模型不该再走 escalation）', async () => {
+    it('提权参数已移除：模型不能自我提权（schema/描述均不再暴露）', async () => {
       const { tool, ctx, pm } = await setupPolicy({});
 
-      await expect(
-        tool.execute(
-          {
-            command: 'npm install',
-            sandbox_permissions: 'danger-full-access',
-            justification: '需要安装依赖',
-          },
-          ctx,
-          undefined,
-        ),
-      ).rejects.toThrow(/sandbox_permissions is unavailable on this platform/);
-      expect(pm.execute).not.toHaveBeenCalled();
+      expect(tool.inputSchema.shape.sandbox_permissions).toBeUndefined();
+      expect(tool.inputSchema.shape.justification).toBeUndefined();
+      expect(tool.description).not.toContain('sandbox_permissions');
+
+      // 多余参数被 zod 丢弃：命令照常走策略门（白名单外 → 审批）后执行，不受未知字段影响
+      await tool.execute(
+        {
+          command: 'npm install',
+          sandbox_permissions: 'danger-full-access',
+          justification: '需要安装依赖',
+        },
+        ctx,
+        undefined,
+      );
+      expect(pm.execute).toHaveBeenCalledTimes(1);
     });
   });
 

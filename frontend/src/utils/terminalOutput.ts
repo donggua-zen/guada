@@ -10,7 +10,7 @@
  * 历史会话兜底的统一入口。
  *
  * 剥离语义（对齐 DSH）：exit/status 标记剥掉（UI 有 pill，避免重复显示）；
- * timeout/sandbox 提权 hint 无对应 pill，直接丢弃；截断提示剥出 logFilePath 单独成条。
+ * timeout/sandbox 提示行无对应 pill，直接丢弃；截断提示剥出 logFilePath 单独成条。
  */
 
 export interface TerminalResultInfo {
@@ -36,7 +36,8 @@ const SANDBOX_NOTE_LINE =
   /^(Sandbox mode enabled[^\n]*|Read-only mode: sandbox read-only enabled[^\n]*)\n+/;
 const TRUNCATED_NOTE =
   /\[Note: Output was truncated\.[^\]]*?at: (.*?)\. (?:You can read it using the read tool if needed|Read it with the read tool)[^\]]*\]\n?/;
-const ESCALATION_HINT = /\[sandbox: escalation available[^\]]*\]\n?/g;
+// 沙盒提示行：新文案（denied，引导用户切档）+ 旧版"提权"文案（历史会话回放）
+const SANDBOX_HINT = /\[sandbox: (?:denied|escalation available)[^\]]*\]\n?/g;
 const BACKGROUND_MARKER =
   /\[(?:Process moved to background|Command exceeded [^\]]*?switched to background)\.?[^\]]*?processId:\s*([^\s,\]]+)(?:, uptime: ([^\].]+))?\.?\s*[^\]]*\]\n?/;
 const STATUS_MARKER =
@@ -93,10 +94,10 @@ export function parseTerminalResult(content: string): TerminalResultInfo | null 
     recognized = true;
   }
 
-  // 4. 沙盒提权 hint（无对应 UI 元素，直接丢弃）
-  const afterEscalation = text.replace(ESCALATION_HINT, "");
-  if (afterEscalation !== text) {
-    text = afterEscalation;
+  // 4. 沙盒提示行（无对应 UI 元素，直接丢弃）
+  const afterSandboxHint = text.replace(SANDBOX_HINT, "");
+  if (afterSandboxHint !== text) {
+    text = afterSandboxHint;
     recognized = true;
   }
 

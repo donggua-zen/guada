@@ -5,12 +5,8 @@ import fg from "fast-glob";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
-import {
-  parseEscalationArgs,
-  type SandboxMode,
-  assertStrictlyWider,
-} from "../../../common/services/sandbox-policy";
 import { AskService } from "../../../common/services/ask.service";
+import { writeApprovalMemory } from "../../../common/services/write-approval-memory";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
 import { resolveMemoryDir } from "../../../common/utils/memory-path.util";
@@ -316,7 +312,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "write",
       description:
-        "Write content to the specified file in full, automatically creating directories. Writes are confined to the workspace unless sandbox escalation is approved.",
+        "Write content to the specified file in full, automatically creating directories. Writes are limited to the workspace (plus a few registered system paths); a path outside them needs the user's approval in workspace-write mode and is denied in read-only mode.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -328,27 +324,15 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe("File encoding, default utf-8"),
-        sandbox_permissions: z
-          .literal("danger-full-access")
-          .optional()
-          .describe(
-            "The wider sandbox mode this write needs (workspace → full access). Only valid as a one-shot retry after the workspace containment denied the path; requires justification and user approval.",
-          ),
-        justification: z
-          .string()
-          .optional()
-          .describe(
-            "Required with sandbox_permissions: one sentence for the user explaining why this exact write needs the wider access.",
-          ),
         workspace: workspaceParamField,
       }),
-      execute: async (args, ctx) => {
+      execute: async (args, ctx, abortSignal) => {
         const { file_path, content, encoding = "utf-8" } = args;
         if (!file_path) throw new Error("file_path is required");
 
         const target = await this.resolveTarget(ctx, args.workspace);
         if (target) {
-          // 远端写：路径级权限由连接 perm 控制；sandbox_permissions 提权仅作用于本地沙盒
+          // 远端写：路径级权限由连接 perm 控制，不受本地安全档位/审批管辖
           this.assertWritableSession(ctx);
           const absPath = target.provider.resolvePath(file_path);
           this.logger.log(`写入远程文件: ${target.connectionName}:${absPath}`);
@@ -357,11 +341,18 @@ export class FilePlugin extends PluginBase {
         }
 
         const resolvedPath = this.resolvePath(file_path, ctx);
-        // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
-        // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
-        const approved = await this.resolveWriteEscalation("write", args, ctx);
-        if (approved !== "danger-full-access")
-          this.validateWritePath(file_path, ctx, approved ?? undefined);
+        const verdict = this.evaluateWritePath(resolvedPath, ctx);
+        if (verdict.kind === "deny") throw new Error(verdict.message);
+        if (verdict.kind === "ask") {
+          await this.ensureWriteApproval({
+            resolvedPath,
+            operation: "write",
+            preview: safeTruncate(content, 240),
+            context: ctx,
+            toolCallId: ctx?.toolCallId,
+            abortSignal,
+          });
+        }
         this.logger.log(`写入文件: ${file_path}`);
         return this.withFileLock(resolvedPath, async () => {
           await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
@@ -385,7 +376,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "edit",
       description:
-        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. Edits are confined to the workspace unless sandbox escalation is approved.",
+        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. Edits are limited to the workspace (plus a few registered system paths); a path outside them needs the user's approval in workspace-write mode and is denied in read-only mode.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -402,21 +393,9 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe("File encoding, default utf-8"),
-        sandbox_permissions: z
-          .literal("danger-full-access")
-          .optional()
-          .describe(
-            "The wider sandbox mode this edit needs (workspace → full access). Only valid as a one-shot retry after the workspace containment denied the path; requires justification and user approval.",
-          ),
-        justification: z
-          .string()
-          .optional()
-          .describe(
-            "Required with sandbox_permissions: one sentence for the user explaining why this exact edit needs the wider access.",
-          ),
         workspace: workspaceParamField,
       }),
-      execute: async (args, ctx) => {
+      execute: async (args, ctx, abortSignal) => {
         const { file_path, old_text, new_text, encoding = "utf-8" } = args;
         if (!file_path) throw new Error("file_path is required");
         if (!old_text) throw new Error("old_text is required");
@@ -444,11 +423,18 @@ export class FilePlugin extends PluginBase {
         }
 
         const resolvedPath = this.resolvePath(file_path, ctx);
-        // 提权批准后按批准模式放行（one-shot）：danger-full-access 跳过包含检查，
-        // workspace-write 仍限工作区；未提权则照常校验（read-only 直接拒绝）
-        const approved = await this.resolveWriteEscalation("edit", args, ctx);
-        if (approved !== "danger-full-access")
-          this.validateWritePath(file_path, ctx, approved ?? undefined);
+        const verdict = this.evaluateWritePath(resolvedPath, ctx);
+        if (verdict.kind === "deny") throw new Error(verdict.message);
+        if (verdict.kind === "ask") {
+          await this.ensureWriteApproval({
+            resolvedPath,
+            operation: "edit",
+            preview: `- ${safeTruncate(old_text, 120)}\n+ ${safeTruncate(new_text, 120)}`,
+            context: ctx,
+            toolCallId: ctx?.toolCallId,
+            abortSignal,
+          });
+        }
         this.logger.log(`编辑文件: ${file_path}`);
         return this.withFileLock(resolvedPath, async () => {
           const content = await fs.readFile(resolvedPath, {
@@ -938,91 +924,106 @@ export class FilePlugin extends PluginBase {
     return resolved;
   }
 
-  private validateWritePath(
-    filePath: string,
+  /**
+   * 本地写入路径判定（无副作用、不含交互）：allow / deny / ask。
+   *
+   * 模型不能自我提权——越界写在 workspace-write 档交 ensureWriteApproval 询问用户，
+   * read-only 档直接拒绝（对齐命令策略：能力放宽只由用户授予）。
+   */
+  private evaluateWritePath(
+    resolvedPath: string,
     context?: PluginContext,
-    approvedMode?: SandboxMode,
-  ): void {
-    // 牢笼优先：记忆维护这类系统级写入不受 read-only 安全模式约束，
-    // 作用面已由牢笼收窄到单一根目录（牢笼内可写，牢笼外一律拒绝）。
+  ):
+    | { kind: "allow" }
+    | { kind: "deny"; message: string }
+    | { kind: "ask"; resolvedPath: string } {
+    // 牢笼优先：记忆维护这类系统级写入不受安全档位约束，
+    // 作用面已由牢笼收窄到单一根目录（牢笼内可写，牢笼外已由 resolvePath 抛出），且不打扰用户。
     if (this.getPathJail(context)) {
-      this.resolvePath(filePath, context);
-      return;
+      return { kind: "allow" };
     }
 
-    // 安全模式判定：read-only 拒绝一切写入（one-shot 提权到 workspace-write 除外）；
-    // danger-full-access（自由编辑）不限工作目录
     const mode = context?.session.getSandboxMode?.() ?? "workspace-write";
-    if (mode === "read-only" && approvedMode !== "workspace-write") {
+
+    if (mode === "read-only") {
       // 例外：会话自己的记忆目录（.guada/memory）始终可写——记忆是应用状态而非项目文件，
       // 且压缩前记忆维护（牢笼模式）本就绕过只读模式，前台与后台语义需一致。
-      if (this.isInSessionMemoryDir(filePath, context)) {
+      if (this.isInSessionMemoryDir(resolvedPath, context)) {
         this.logger.debug(
-          `[read-only] write allowed inside the session memory dir: ${filePath}`,
+          `[read-only] write allowed inside the session memory dir: ${resolvedPath}`,
         );
-        return;
+        return { kind: "allow" };
       }
-      throw new Error(
-        "Read-only mode: file writes are denied. To modify a file, retry once with sandbox_permissions + justification (user approval required), or ask the user to switch modes.",
-      );
-    }
-    if (mode === "danger-full-access") {
-      this.logger.warn(
-        `[danger-full-access] 跳过工作区路径校验，允许写入任意路径: ${filePath}`,
-      );
-      return;
+      return {
+        kind: "deny",
+        message:
+          "Read-only mode: file writes are denied. To modify a file, ask the user to switch the session mode to workspace-write.",
+      };
     }
 
-    const resolved = this.resolvePath(filePath, context);
+    if (mode === "danger-full-access") {
+      this.logger.warn(
+        `[danger-full-access] 跳过工作区路径校验，允许写入任意路径: ${resolvedPath}`,
+      );
+      return { kind: "allow" };
+    }
+
+    // workspace-write：工作区内或系统注册的安全路径（技能目录等）直接放行；
+    // 其余交 ensureWriteApproval 询问用户（本会话内记住过的同路径直接放行）
     const extra = context?.session.workspacePath
       ? [context.session.workspacePath]
       : [];
-    this.workspaceService.validateWritePath(resolved, extra);
+    if (this.workspaceService.isSafeWritePath(resolvedPath, extra)) {
+      return { kind: "allow" };
+    }
+    return { kind: "ask", resolvedPath };
   }
 
   /**
-   * 解析并执行一次文件写入提权（对齐 DSH escalation，one-shot）。
+   * 工作区外写入的用户审批（对齐命令策略：会话内路径记忆 + 无人应答 fail-closed）。
    *
-   * 文件写入始终受会话安全模式约束：read-only / workspace-write 下有效模式 = 会话模式，
-   * 经 assertStrictlyWider 放宽（read-only → workspace-write/danger-full-access，
-   * workspace-write → danger-full-access）；danger-full-access 下提权无意义直接报错。
-   * 返回批准的模式（本次调用按其放行）；null = 未请求提权。
+   * 「本会话内始终允许该路径」→ writeApprovalMemory 记账；拒绝/自定义回复抛 AskDeniedError
+   * （工具层以 isError tool-result 反馈模型）。
    */
-  private async resolveWriteEscalation(
-    toolName: "write" | "edit",
-    args: { sandbox_permissions?: "danger-full-access" | "workspace-write"; justification?: string },
-    context?: PluginContext,
-  ): Promise<SandboxMode | null> {
-    const escalation = parseEscalationArgs(
-      args.sandbox_permissions,
-      args.justification,
-    );
-    if (!escalation) return null;
-
-    // 牢笼模式已自带写入授权（牢笼内可写），且是后台系统流程，不应唤起用户审批
-    if (this.getPathJail(context)) {
-      this.logger.debug(
-        `[path-jail] sandbox_permissions ignored inside jail: ${toolName}`,
-      );
-      return null;
+  private async ensureWriteApproval(params: {
+    resolvedPath: string;
+    operation: "write" | "edit";
+    preview?: string;
+    context?: PluginContext;
+    toolCallId?: string;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    const session = params.context?.session;
+    const sessionId = session?.sessionId || "";
+    if (sessionId && writeApprovalMemory.has(sessionId, params.resolvedPath)) {
+      return;
     }
 
-    const currentMode: SandboxMode =
-      context?.session.getSandboxMode?.() ?? "workspace-write";
-    if (currentMode === "danger-full-access") {
+    // 无人能应答审批（子代理 / 机器人 / 界面无连接）→ 直接拒绝，绝不挂起
+    const canAsk = session?.hasAnswerSurface
+      ? session.hasAnswerSurface()
+      : session?.sessionType === "web";
+    if (!canAsk) {
       throw new Error(
-        "danger-full-access already allows arbitrary paths; sandbox_permissions is unnecessary.",
+        `File not written: approval is unavailable in this session (no one can approve it right now) and the path is outside the workspace (${params.resolvedPath}). ` +
+          `Write inside the workspace instead, or report back to the user and let them run it in a session they're watching.`,
       );
     }
 
-    assertStrictlyWider(currentMode, escalation.mode);
-    // 统一 Ask 审批（同意/拒绝/自定义回复，无超时）：批准正常返回；拒绝/中止抛 AskDeniedError
-    await this.askService.requestApproval(context!.session, {
-      toolCallId: context?.toolCallId || "",
-      toolName,
-      detail: `请求沙盒提权 ${currentMode} → ${escalation.mode}：${escalation.justification}`,
+    const approval = await this.askService.requestWriteApproval(session as any, {
+      toolCallId: params.toolCallId,
+      toolName: params.operation,
+      resolvedPath: params.resolvedPath,
+      operation: params.operation,
+      preview: params.preview,
+      abortSignal: params.abortSignal,
     });
-    return escalation.mode;
+    if (approval === "session" && sessionId) {
+      writeApprovalMemory.remember(sessionId, params.resolvedPath);
+    }
+    this.logger.log(
+      `Write approved (${approval}) by policy prompt: ${params.resolvedPath}`,
+    );
   }
 
   private findEnclosingFunction(

@@ -68,8 +68,8 @@ export interface ModelConfig {
  * - danger-full-access: 自由编辑——不启用沙盒，文件工具不限制工作目录，
  *                       可读写任意路径（高风险，UI 以红色警示）
  *
- * 提权 = 模型带 sandbox_permissions + justification 经审批 one-shot 放宽
- * （read-only < workspace-write < danger-full-access 严格放宽阶梯）。
+ * 模型不能自我提权：越界一律由系统询问用户（命令策略审批卡 / 文件写入审批卡），
+ * 无人可应答时 fail-closed 拒绝；档位切换只由用户在界面上完成。
  *
  * 计划模式（原 plan）已从安全词表移除，列入后续待办——计划协作本质是只读执行的
  * 软引导，后续以独立协作状态回归，不与安全词表混同（对齐 DSH plan-mode 正交设计）。
