@@ -200,25 +200,6 @@ const emit = defineEmits<{
 // 文件标签列表（用于 v-for 渲染 FilePreviewPanel）
 const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
 
-// ── 终端标签：常驻挂载 + 懒挂载 ──
-/** 终端标签列表（用于 v-for 渲染 TerminalPanel） */
-const terminalTabs = computed(() => tabStore.tabs.filter(t => t.type === 'terminal'));
-/**
- * 曾激活过的终端标签 key：点过才挂载（= 才向后端 spawn PTY）。
- * 从缓存恢复多个终端标签时不会一次性 eager 创建用户没看过的 shell。
- */
-const activatedTerminalKeys = reactive(new Set<string>());
-
-function isTerminalActivated(tab: UnifiedTab): boolean {
-    return activeTabKey.value === tab.key || activatedTerminalKeys.has(tab.key);
-}
-
-watch(() => tabStore.activeTabKey, (key) => {
-    if (!key) return;
-    const tab = tabStore.tabs.find(t => t.key === key);
-    if (tab?.type === 'terminal') activatedTerminalKeys.add(key);
-}, { immediate: true });
-
 // 当前激活标签（内容区按类型渲染）
 const activeTab = computed(() => tabStore.tabs.find(t => t.key === tabStore.activeTabKey) || null);
 
@@ -309,6 +290,27 @@ const activeTabKey = computed(() => tabStore.activeTabKey);
 const tabBarRef = ref<HTMLElement | null>(null);
 // 起始页显示条件：无激活标签（空态或点击 + 号）
 const showStartPage = computed(() => !activeTabKey.value);
+
+// ── 终端标签：常驻挂载 + 懒挂载 ──
+// 注意：本段必须在 useTabStore()/activeTabKey 之后（immediate watcher 在 setup 期就执行，
+// 写在前面会命中 TDZ：Cannot access 'tabStore' before initialization）
+/** 终端标签列表（用于 v-for 渲染 TerminalPanel） */
+const terminalTabs = computed(() => tabStore.tabs.filter(t => t.type === 'terminal'));
+/**
+ * 曾激活过的终端标签 key：点过才挂载（= 才向后端 spawn PTY）。
+ * 从缓存恢复多个终端标签时不会一次性 eager 创建用户没看过的 shell。
+ */
+const activatedTerminalKeys = reactive(new Set<string>());
+
+function isTerminalActivated(tab: UnifiedTab): boolean {
+    return activeTabKey.value === tab.key || activatedTerminalKeys.has(tab.key);
+}
+
+watch(activeTabKey, (key) => {
+    if (!key) return;
+    const tab = tabStore.tabs.find(t => t.key === key);
+    if (tab?.type === 'terminal') activatedTerminalKeys.add(key);
+}, { immediate: true });
 
 // ── 计划面板（计划模式产物）：入口常驻，面板内列出历史计划 ──
 

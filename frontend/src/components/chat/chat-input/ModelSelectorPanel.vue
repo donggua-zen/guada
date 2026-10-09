@@ -52,15 +52,6 @@
         </div>
       </template>
 
-      <!-- 模型管理快速入口：跳设置页「模型供应商」分区（不加前置图标，与其它行风格一致） -->
-      <div class="section-divider"></div>
-      <div class="cascade-trigger" @click="goProviderSettings">
-        <span class="text-sm flex-1">{{ t('chat.input.manageModels') }}</span>
-        <el-icon size="14" class="text-gray-400">
-          <ChevronRight24Regular />
-        </el-icon>
-      </div>
-
       <!-- 收藏模型 -->
       <template v-if="favoriteModels.length > 0">
         <div class="section-divider"></div>
@@ -92,6 +83,15 @@
           </div>
         </div>
       </template>
+
+      <!-- 模型管理快速入口：跳设置页「模型供应商」分区（不加前置图标，与其它行风格一致） -->
+      <div class="section-divider"></div>
+      <div class="cascade-trigger" @click="goProviderSettings">
+        <span class="text-sm flex-1">{{ t('chat.input.manageModels') }}</span>
+        <el-icon size="14" class="text-gray-400">
+          <ChevronRight24Regular />
+        </el-icon>
+      </div>
     </div>
   </GdPopover>
 
