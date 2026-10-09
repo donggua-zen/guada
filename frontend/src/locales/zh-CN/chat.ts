@@ -371,6 +371,11 @@ export default {
     collapseTree: '收起目录树',
   collapseOverview: '折叠概览',
   openOverview: '打开概览',
+    // 概览面板空态：会话尚未建立 / 会话已有但确实没有可概览项
+    overviewEmptyNoSession: '会话尚未开始',
+    overviewEmptyNoSessionHint: '开始对话后，Git 变更、后台进程、子代理与工作流会显示在这里',
+    overviewEmpty: '暂无可概览内容',
+    overviewEmptyHint: '当前会话没有 Git 变更、后台进程、子代理或工作流',
     openInFileManager: '在文件管理器中打开',
     openInVSCode: '以 VSCode 打开工作目录',
     openWith: '选择打开方式',

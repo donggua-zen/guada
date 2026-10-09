@@ -371,6 +371,11 @@
     collapseTree: 'Collapse file tree',
   collapseOverview: 'Collapse overview',
   openOverview: 'Open overview',
+    // Overview empty state: session not created yet / session exists with nothing to show
+    overviewEmptyNoSession: 'Session not started yet',
+    overviewEmptyNoSessionHint: 'Git changes, background processes, subagents and workflows will show up here once the conversation starts',
+    overviewEmpty: 'Nothing to overview yet',
+    overviewEmptyHint: 'No Git changes, background processes, subagents or workflows in this session',
     openInFileManager: 'Open in File Manager',
     openInVSCode: 'Open Working Directory in VSCode',
     openWith: 'Choose open method',
