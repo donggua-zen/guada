@@ -105,12 +105,24 @@
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
                     :session-id="props.sessionId" :active="activeTab?.type === 'git'" class="h-full" />
-                <!-- 终端标签（v-if 兼作 sessionId 空值收窄：TerminalPanel 的 session-id 必填 string） -->
-                <TerminalPanel v-if="activeTab?.type === 'terminal' && sessionId" :session-id="sessionId"
-                    :terminal-id="activeTab.terminalId" @terminal-id="onTerminalIdReady(activeTab, $event)" />
-                <!-- 进程日志标签（后台进程输出，轮询日志尾部） -->
+                <!-- 终端标签：常驻挂载（切换标签不断开 WS/PTY —— 后端复用已有 terminalId 要求它已
+                     标记 disconnected，重挂载的"关立刻重连"会因竞态新建第二个 PTY 并吃掉 3 个/会话的配额）。
+                     非激活用 terminal-hidden 隐藏（只 visibility/pointer-events，不改几何，避免 PTY 反复 resize）；
+                     懒挂载：曾激活过才挂载，避免恢复缓存时给没看过的标签 eager spawn shell。
+                     @terminal-id 捕获循环里的 tab（不能用 activeTab：ready 帧可能晚于切标签到达） -->
+                <template v-if="sessionId">
+                    <template v-for="tab in terminalTabs" :key="tab.key">
+                        <TerminalPanel v-if="isTerminalActivated(tab)" :session-id="sessionId"
+                            :terminal-id="tab.terminalId" :is-active="activeTabKey === tab.key"
+                            :class="{ 'terminal-hidden': activeTabKey !== tab.key }"
+                            @terminal-id="onTerminalIdReady(tab, $event)" />
+                    </template>
+                </template>
+                <!-- 进程日志标签（后台进程输出，轮询日志尾部；:key 保证每个标签持有独立面板实例） -->
                 <ProcessLogPanel v-if="activeTab?.type === 'processlog' && sessionId && activeTab.processId"
+                    :key="activeTab.key"
                     :session-id="sessionId" :process-id="activeTab.processId"
+                    :started-at="activeTab.startedAt"
                     :command="activeTab.command || activeTab.processId" :tab-key="activeTab.key" />
                 <!-- 子代理会话标签（只读查看，与中央主会话同屏并存） -->
                 <SubagentChatTab v-if="activeTab?.type === 'subagent'" class="h-full"
@@ -147,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
+import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Plus, Close } from '@element-plus/icons-vue';
@@ -188,6 +200,25 @@ const emit = defineEmits<{
 // 文件标签列表（用于 v-for 渲染 FilePreviewPanel）
 const fileTabs = computed(() => tabStore.tabs.filter(t => t.type === 'file'));
 
+// ── 终端标签：常驻挂载 + 懒挂载 ──
+/** 终端标签列表（用于 v-for 渲染 TerminalPanel） */
+const terminalTabs = computed(() => tabStore.tabs.filter(t => t.type === 'terminal'));
+/**
+ * 曾激活过的终端标签 key：点过才挂载（= 才向后端 spawn PTY）。
+ * 从缓存恢复多个终端标签时不会一次性 eager 创建用户没看过的 shell。
+ */
+const activatedTerminalKeys = reactive(new Set<string>());
+
+function isTerminalActivated(tab: UnifiedTab): boolean {
+    return activeTabKey.value === tab.key || activatedTerminalKeys.has(tab.key);
+}
+
+watch(() => tabStore.activeTabKey, (key) => {
+    if (!key) return;
+    const tab = tabStore.tabs.find(t => t.key === key);
+    if (tab?.type === 'terminal') activatedTerminalKeys.add(key);
+}, { immediate: true });
+
 // 当前激活标签（内容区按类型渲染）
 const activeTab = computed(() => tabStore.tabs.find(t => t.key === tabStore.activeTabKey) || null);
 
@@ -196,7 +227,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'file') return tab.name || tab.path || tab.key;
     if (tab.type === 'git') return t('chat.workspace.gitTab');
     if (tab.type === 'terminal') return t('chat.workspace.terminal');
-    if (tab.type === 'processlog') return t('chat.workspace.processLogTab');
+    if (tab.type === 'processlog') return tab.command ? tab.command.replace(/\s+/g, ' ').trim() : t('chat.workspace.processLogTab');
     if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
     if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
     if (tab.type === 'plan') return t('chat.workspace.planTab');
@@ -647,6 +678,15 @@ onUnmounted(() => {
     left: 0;
     right: 0;
     bottom: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* 非激活终端面板：只关可见性与交互，**不动几何**。
+   几何一变（如 panel-hidden 的 top 偏移）ResizeObserver 就会 fit → 给隐藏中的 PTY 发 resize，
+   每次切标签都让 TUI 程序重绘；终端面板本身已是 absolute inset:0，不需要靠绝对定位出流。 */
+.workspace-sidebar .terminal-hidden {
     visibility: hidden;
     pointer-events: none;
     z-index: 0;

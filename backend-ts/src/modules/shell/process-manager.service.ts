@@ -51,6 +51,34 @@ function trimUtf8Tail(buf: Buffer): string {
 }
 
 // ============================================================================
+// 日志文件名
+//
+// 文件名只带会话与进程 ID：guada-<sessionId>-<pid>.log
+// - 为什么带 sessionId：内存 entry 是唯一持有 logFilePath 的地方，进程结束约 1s 内
+//   即被消费删除；文件名里带会话，UI 就能在 entry 消失后仍定位到文件（并顺带把
+//   跨会话边界留在结构里，磁盘读取不放松归属校验）。
+// - 为什么不带时间戳：同一 (会话, 进程 ID) 只保留最近一次运行的日志。进程 ID 是会被
+//   回收的 OS PID，复用同一 ID 的新进程会覆盖上一份日志；历史运行不留档（AI 侧的
+//   完成通知消息里已带输出）。
+// ============================================================================
+
+const LOG_FILE_PREFIX = "guada";
+const LOG_FILE_EXT = ".log";
+
+/** 日志文件名的 id 必须是安全字符（防路径穿越：这两个值都来自 URL 参数） */
+function isSafeLogId(value: string): boolean {
+  return value.length > 0 && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+/** 构造日志文件名：guada-<sessionId>-<pid>.log */
+export function buildLogFileName(
+  processId: string,
+  sessionId: string,
+): string {
+  return `${LOG_FILE_PREFIX}-${sessionId}-${processId}${LOG_FILE_EXT}`;
+}
+
+// ============================================================================
 // 类型定义
 // ============================================================================
 
@@ -126,13 +154,20 @@ export interface ProcessListEntry {
   finishedAt?: Date;
 }
 
+/**
+ * UI 日志查看里的进程状态。
+ * entry 已被清理时无从得知退出码/终止方式，只能报 "ended"（进程已结束）。
+ */
+export type ProcessLogTailStatus = ProcessStatus | "ended";
+
 /** UI 日志查看（readLogTail）返回结构 */
 export interface ProcessLogTail {
   processId: string;
   command: string;
-  status: ProcessStatus;
+  status: ProcessLogTailStatus;
   exitCode: number | null;
-  startedAt: Date;
+  /** 启动时刻（进程已被清理时无从得知，留空） */
+  startedAt?: Date;
   finishedAt?: Date;
   /** 日志文件总字节数 */
   size: number;
@@ -362,9 +397,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   ): ProcessEntry {
     const childProcess = this.spawnProcess(command, cwd, options?.sandbox);
     const processId = childProcess.pid?.toString() || this.generateId();
+    const startedAt = new Date();
     const logFilePath = path.join(
       this.getLogDir(),
-      `guada-${processId}-${Date.now()}.log`,
+      buildLogFileName(processId, sessionId),
     );
     const writeStream = fsSync.createWriteStream(logFilePath);
 
@@ -382,7 +418,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       logFilePath,
       readOffset: 0,
       writeStream,
-      startedAt: new Date(),
+      startedAt,
     };
 
     this.logger.log(
@@ -731,8 +767,17 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * UI 用：读取运行中后台进程的日志尾部（UTF-8）。
-   * 返回 null = 进程不存在或不属于该会话；文件暂无内容时返回空 content。
+   * UI 用：读取后台进程的日志尾部（UTF-8）。
+   *
+   * 两级读取：
+   * 1. entry 还在（运行中或刚结束未被消费）→ entry 是权威状态源（含 running/exitCode）；
+   *    内容仍读它记录的日志文件，文件缺失时返回空 content。
+   * 2. entry 已被清理（进程结束约 1s 内即被消费删除）→ 进程一定已结束，改从磁盘读：
+   *    按 (sessionId, processId) 推出文件名定位日志，返回 status="ended"；
+   *    日志文件也不存在（被 GC/前台完成后删除）→ null（UI 提示"可能已被清理"）。
+   *
+   * 注意：同一 (sessionId, processId) 只有一个日志槽位——进程 ID 是会被回收的 OS PID，
+   * 新进程复用同一 ID 时会覆盖上一份日志（历史运行不在磁盘留档）。
    */
   async readLogTail(
     processId: string,
@@ -740,29 +785,56 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     maxBytes = 65_536,
   ): Promise<ProcessLogTail | null> {
     const entry = this.processes.get(processId);
-    if (!entry || entry.sessionId !== sessionId) {
-      return null;
+    if (entry && entry.sessionId === sessionId) {
+      const base = {
+        processId: entry.id,
+        command: entry.command,
+        status: entry.status as ProcessLogTailStatus,
+        exitCode: entry.exitCode,
+        startedAt: entry.startedAt,
+        finishedAt: entry.finishedAt,
+      };
+      const stat = await fs.stat(entry.logFilePath).catch(() => null);
+      if (!stat) {
+        // 日志文件尚未创建或已被清理（如前台完成未截断被删除）
+        return { ...base, size: 0, truncated: false, content: "" };
+      }
+      return await this.readTailFrom(entry.logFilePath, stat.size, base, maxBytes);
     }
 
-    const base = {
-      processId: entry.id,
-      command: entry.command,
-      status: entry.status,
-      exitCode: entry.exitCode,
-      startedAt: entry.startedAt,
-      finishedAt: entry.finishedAt,
-    };
+    // entry 已清理 → 从磁盘上的日志文件读（会话归属由文件名结构保证）
+    const filePath = await this.resolveLogFileOnDisk(sessionId, processId);
+    if (!filePath) return null;
 
-    const stat = await fs.stat(entry.logFilePath).catch(() => null);
-    if (!stat) {
-      // 日志文件尚未创建或已被清理（如前台完成未截断被删除）
-      return { ...base, size: 0, truncated: false, content: "" };
-    }
+    const stat = await fs.stat(filePath).catch(() => null);
+    if (!stat) return null;
 
-    const start = Math.max(0, stat.size - maxBytes);
-    const len = stat.size - start;
+    return await this.readTailFrom(
+      filePath,
+      stat.size,
+      {
+        processId,
+        // 命令/退出码/起止时间都随 entry 一起消失了：命令由前端用标签里存的那份兜底，
+        // 时间字段留空（不知道就说不知道）
+        command: "",
+        status: "ended",
+        exitCode: null,
+      },
+      maxBytes,
+    );
+  }
+
+  /** 按已知字节数读取日志文件尾部（entry 路径与磁盘路径共用） */
+  private async readTailFrom(
+    filePath: string,
+    fileSize: number,
+    base: Omit<ProcessLogTail, "size" | "truncated" | "content">,
+    maxBytes: number,
+  ): Promise<ProcessLogTail> {
+    const start = Math.max(0, fileSize - maxBytes);
+    const len = fileSize - start;
     const buf = Buffer.alloc(len);
-    const fd = await fs.open(entry.logFilePath, "r");
+    const fd = await fs.open(filePath, "r");
     try {
       await fd.read(buf, 0, len, start);
     } finally {
@@ -771,7 +843,24 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     // start > 0 时从文件中间切入，可能切在多字节字符中间 → 修剪开头不完整序列
     const content = start > 0 ? trimUtf8Tail(buf) : buf.toString("utf-8");
-    return { ...base, size: stat.size, truncated: start > 0, content };
+    return { ...base, size: fileSize, truncated: start > 0, content };
+  }
+
+  /**
+   * 在日志目录里定位某个 (sessionId, processId) 的日志文件；不存在返回 null。
+   * 路径由会话与进程 ID 唯一确定（见 buildLogFileName），无需扫描目录。
+   */
+  private async resolveLogFileOnDisk(
+    sessionId: string,
+    processId: string,
+  ): Promise<string | null> {
+    if (!isSafeLogId(sessionId) || !isSafeLogId(processId)) return null;
+    const filePath = path.join(
+      this.getLogDir(),
+      buildLogFileName(processId, sessionId),
+    );
+    const stat = await fs.stat(filePath).catch(() => null);
+    return stat?.isFile() ? filePath : null;
   }
 
   /** 通知前端后台进程列表变化（经 SSE process_changed 感知后重拉） */

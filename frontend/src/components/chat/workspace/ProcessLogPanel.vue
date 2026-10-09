@@ -1,6 +1,6 @@
 <template>
   <div class="process-log-panel h-full flex flex-col">
-    <!-- 头部：命令摘要 + 状态 + 时长 + 操作 -->
+    <!-- 头部：命令摘要 + 状态 + 操作 -->
     <div class="pl-header shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-[#2e3035]">
       <span class="pl-command" :title="log?.command || command">{{ log?.command || command }}</span>
       <span class="pl-status" :class="statusClass">
@@ -8,10 +8,9 @@
         <span v-else class="pl-dot"></span>
         {{ statusText }}
       </span>
-      <span class="pl-elapsed">{{ elapsedText }}</span>
       <div class="flex-1"></div>
       <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-        <button class="pl-btn" @click="fetchLog" :disabled="loading">
+        <button class="pl-btn" @click="fetchLog()" :disabled="loading">
           <el-icon size="14" :class="{ 'is-loading': loading }"><Refresh /></el-icon>
         </button>
       </GdTooltip>
@@ -51,6 +50,8 @@ const props = defineProps<{
     processId: string;
     command: string;
     tabKey: string;
+    /** 本次运行的启动时间（run token）；同一 PID 被新进程复用时用于识别换了一次运行 */
+    startedAt?: string;
 }>();
 
 const { t } = useI18n();
@@ -70,6 +71,7 @@ const statusClass = computed(() => ({
     completed: log.value?.status === 'completed',
     killed: log.value?.status === 'killed',
     error: log.value?.status === 'error',
+    ended: log.value?.status === 'ended',
 }));
 
 const statusText = computed(() => {
@@ -78,29 +80,11 @@ const statusText = computed(() => {
         case 'completed': return t('chat.workspace.processCompleted');
         case 'killed': return t('chat.workspace.processKilled');
         case 'error': return t('chat.workspace.processError');
+        // 进程已被清理（entry 已从后端注册表消失）：只能确定"已结束"，退出码/终止方式无从得知
+        case 'ended': return t('chat.workspace.processEnded');
         default: return '';
     }
 });
-
-/** 运行时长：运行中按 startedAt 实时计算，结束后用 finishedAt - startedAt */
-const now = ref(Date.now());
-let nowTimer: number | null = null;
-
-const elapsedText = computed(() => {
-    if (!log.value?.startedAt) return '';
-    const start = new Date(log.value.startedAt).getTime();
-    const end = log.value.finishedAt ? new Date(log.value.finishedAt).getTime() : now.value;
-    return formatDuration(Math.max(0, end - start));
-});
-
-function formatDuration(ms: number): string {
-    const sec = Math.floor(ms / 1000);
-    if (sec < 60) return `${sec}s`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m ${String(sec % 60).padStart(2, '0')}s`;
-    const hour = Math.floor(min / 60);
-    return `${hour}h ${String(min % 60).padStart(2, '0')}m`;
-}
 
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -111,6 +95,10 @@ function formatBytes(bytes: number): string {
 // ── 拉取与轮询 ──
 
 let pollTimer: number | null = null;
+/** 终态后的"落定"补拉定时器（见 settleOnTerminal） */
+let settleTimer: number | null = null;
+/** 绑定身份代际：切换进程时 +1；切换前发出的迟到响应据此丢弃（否则旧进程的响应会覆盖新日志、甚至误停轮询） */
+let reloadGeneration = 0;
 
 function stopPolling(): void {
     if (pollTimer !== null) {
@@ -119,22 +107,54 @@ function stopPolling(): void {
     }
 }
 
-async function fetchLog(): Promise<void> {
+function clearSettleTimer(): void {
+    if (settleTimer !== null) {
+        clearTimeout(settleTimer);
+        settleTimer = null;
+    }
+}
+
+/**
+ * 收到终态（结束/被杀/出错/已结束）：停止轮询，并在 1.5s 后补拉一次。
+ * 进程退出瞬间 writeStream 可能还没把最后一段刷到磁盘，这一次补拉专门兜住
+ * "结束前最后一次输出"（补拉自身不再续期）。
+ */
+function settleOnTerminal(): void {
+    stopPolling();
+    if (settleTimer !== null) return;
+    const generation = reloadGeneration;
+    settleTimer = window.setTimeout(() => {
+        settleTimer = null;
+        if (generation !== reloadGeneration) return;
+        void fetchLog({ settle: true });
+    }, 1500);
+}
+
+async function fetchLog(options?: { settle?: boolean }): Promise<void> {
+    const generation = reloadGeneration;
+    const { sessionId, processId } = props;
     loading.value = true;
     try {
-        const res = await apiService.getSessionProcessLog(props.sessionId, props.processId);
+        const res = await apiService.getSessionProcessLog(sessionId, processId);
+        if (generation !== reloadGeneration) return;
         log.value = res;
-        if (res.status !== 'running') stopPolling();
+        if (res.status !== 'running') {
+            if (options?.settle) stopPolling();
+            else settleOnTerminal();
+        }
     } catch (e) {
-        // 404 = 进程已结束且被清理（退出即从注册表消失）
+        if (generation !== reloadGeneration) return;
+        // 404 = 后端注册表里没有该进程，且磁盘上的日志文件也不存在（已被清理/回收）
         if (getApiErrorStatus(e) === 404) {
             stopPolling();
-            if (!log.value) gone.value = true;
+            clearSettleTimer();
+            log.value = null;
+            gone.value = true;
         } else {
             console.error('[ProcessLogPanel] Failed to fetch log:', e);
         }
     } finally {
-        loading.value = false;
+        if (generation === reloadGeneration) loading.value = false;
     }
 }
 
@@ -142,6 +162,23 @@ function startPolling(): void {
     void fetchLog();
     pollTimer = window.setInterval(() => { void fetchLog(); }, 2000);
 }
+
+/**
+ * 面板绑定的进程身份变化（切到另一个进程日志标签，或同一 PID 承载了新一次运行）：
+ * 旧快照与已停止的轮询都不能保留，必须清空后重新拉取。
+ */
+function resetAndReload(): void {
+    reloadGeneration += 1;
+    stopPolling();
+    clearSettleTimer();
+    log.value = null;
+    gone.value = false;
+    loading.value = false;
+    followTail.value = true;
+    startPolling();
+}
+
+watch(() => [props.sessionId, props.processId, props.startedAt], resetAndReload);
 
 // ── 终止进程 ──
 
@@ -177,15 +214,11 @@ watch(() => log.value?.content, async () => {
 
 onMounted(() => {
     startPolling();
-    nowTimer = window.setInterval(() => { now.value = Date.now(); }, 1000);
 });
 
 onUnmounted(() => {
     stopPolling();
-    if (nowTimer !== null) {
-        clearInterval(nowTimer);
-        nowTimer = null;
-    }
+    clearSettleTimer();
 });
 </script>
 
@@ -215,6 +248,7 @@ onUnmounted(() => {
 .pl-status.completed { color: #1a7f37; }
 .pl-status.killed { color: var(--gd-color-text-gray); }
 .pl-status.error { color: #cf222e; }
+.pl-status.ended { color: var(--gd-color-text-gray); }
 .pl-spinner {
     width: 9px;
     height: 9px;
@@ -231,12 +265,6 @@ onUnmounted(() => {
 }
 @keyframes pl-spin {
     to { transform: rotate(360deg); }
-}
-.pl-elapsed {
-    flex-shrink: 0;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 12px;
-    color: var(--gd-color-text-gray);
 }
 .pl-btn {
     display: flex;

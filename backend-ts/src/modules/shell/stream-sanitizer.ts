@@ -5,6 +5,10 @@ import * as iconv from "iconv-lite";
 // decodeBuffer — 按编码或平台默认解码 Buffer → string
 // ============================================================================
 
+/**
+ * 完整 buffer 的一次性解码（流式路径不用它：见 SanitizerTransform.decodeChunk，
+ * 跨 chunk 被切断的多字节字符需要 iconv 的流式解码器来缓冲）。
+ */
 export function decodeBuffer(buffer: Buffer, encoding?: string): string {
   if (!buffer || buffer.length === 0) return "";
   try {
@@ -16,6 +20,47 @@ export function decodeBuffer(buffer: Buffer, encoding?: string): string {
   } catch {
     return buffer.toString("latin1");
   }
+}
+
+/** 是否含非 ASCII 字节（ASCII 在 UTF-8/GBK 下一致，无需判定编码） */
+function hasNonAscii(buffer: Buffer): boolean {
+  for (let i = 0; i < buffer.length; i++) {
+    if (buffer[i] >= 0x80) return true;
+  }
+  return false;
+}
+
+/** 显式编码名是否指 UTF-8（几种常见写法） */
+function isUtf8Name(encoding: string): boolean {
+  const name = encoding.toLowerCase();
+  return name === "utf-8" || name === "utf8";
+}
+
+/**
+ * buffer 是否是合法 UTF-8。
+ * 末尾最多 3 字节允许是"被 chunk 边界截断的多字节序列前缀"——这种情况不算非法，
+ * 否则会把正常的 UTF-8 输出误判成 GBK（流式解码器会在下一个 chunk 里补全它）。
+ */
+function utf8LooksValid(buffer: Buffer): boolean {
+  if (buffer.length === 0) return true;
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  for (let cut = 0; cut <= 3; cut++) {
+    // cut 可以吃掉整个 buffer（chunk 恰好只含一个被截断的多字节序列前缀）
+    const end = Math.max(0, buffer.length - cut);
+    try {
+      decoder.decode(buffer.subarray(0, end));
+      return true;
+    } catch {
+      // 末尾可能截断，切掉末尾字节再试
+    }
+  }
+  return false;
+}
+
+/** iconv 流式解码器的最小结构（避免依赖图标库的类型命名空间导出） */
+interface StreamingDecoder {
+  write(buffer: Buffer): string;
+  end(): string | undefined;
 }
 
 // ============================================================================
@@ -182,8 +227,14 @@ export class SanitizerTransform extends Transform {
   private idleTimer: NodeJS.Timeout | null = null;
   /** 空闲冲刷延迟（毫秒）。curl 进度条更新间隔约 1s，500ms 足以区分进度条与交互提示 */
   private readonly IDLE_FLUSH_MS = 500;
-  /** 自动检测出的编码（首次遇到非 ASCII 字节后锁定） */
-  private detectedEncoding: string | null = null;
+  /**
+   * 流式解码器：跨 chunk 被切断的多字节字符由它内部缓冲并在下个 chunk 补全
+   * （每个 chunk 独立 iconv.decode 会把切断的字符变成 U+FFFD）。
+   */
+  private decoder: StreamingDecoder | null = null;
+  private decoderEncoding: string | null = null;
+  /** 已判定为 GBK（Windows 上首个非 ASCII chunk 非合法 UTF-8）→ 锁定，避免后续来回翻 */
+  private gbkLocked = false;
 
   constructor(
     private encoding: string,
@@ -209,48 +260,37 @@ export class SanitizerTransform extends Transform {
 
   /**
    * 解析当前 chunk 应使用的编码。
-   * - 用户显式指定 encoding → 直接使用
-   * - 非 Windows → UTF-8
-   * - Windows 未指定 → 自动检测：先尝试 UTF-8，若产生 U+FFFD 替换字符则回退 GBK
-   *   检测在首个含非 ASCII 字节的 chunk 上进行，之后锁定（sticky）
-   *   若替换字符仅出现在末尾 1-3 位，可能是 chunk 边界截断了多字节序列，推迟判定
+   *
+   * - 显式指定且不是 utf-8（gbk / gb18030 / big5 / latin1…）→ 完全尊重，不做判定
+   * - 非 Windows → UTF-8（显式 utf-8 与未指定同义）
+   * - Windows → 首个含非 ASCII 的 chunk 做严格 UTF-8 校验：不合法即判定 GBK 并锁定；
+   *   合法则不锁定（后续仍有 GBK chunk 时可纠正）。
+   *   显式声明的 utf-8 同样走这条判定：zh-CN Windows 上 powershell/python 往管道写的是
+   *   cp936 字节，光凭调用方声明的编码会解成 `��ɢ��ѧ`（实测踩过）。
    */
   private resolveEncoding(chunk: Buffer): string {
-    if (this.encoding) return this.encoding;
+    if (this.encoding && !isUtf8Name(this.encoding)) return this.encoding;
     if (process.platform !== "win32") return "utf-8";
-    if (this.detectedEncoding) return this.detectedEncoding;
-
-    // 纯 ASCII chunk 无需判定（ASCII 在 UTF-8/GBK 下一致）
-    let hasNonAscii = false;
-    for (let i = 0; i < chunk.length; i++) {
-      if (chunk[i] >= 0x80) {
-        hasNonAscii = true;
-        break;
-      }
-    }
-    if (!hasNonAscii) return "utf-8";
-
-    // 尝试 UTF-8 解码，检查是否产生替换字符
-    const utf8Text = iconv.decode(chunk, "utf-8");
-    const fffdIdx = utf8Text.indexOf("\uFFFD");
-    if (fffdIdx === -1) {
-      this.detectedEncoding = "utf-8";
-      return "utf-8";
-    }
-
-    // 替换字符仅在末尾 1-3 位 → 可能是 chunk 边界截断了多字节序列，暂不判定
-    const lastFffd = utf8Text.lastIndexOf("\uFFFD");
-    if (fffdIdx === lastFffd && fffdIdx >= utf8Text.length - 3) {
-      return "utf-8";
-    }
-
-    this.detectedEncoding = "gbk";
+    if (this.gbkLocked) return "gbk";
+    if (!hasNonAscii(chunk) || utf8LooksValid(chunk)) return "utf-8";
+    this.gbkLocked = true;
     return "gbk";
+  }
+
+  /** 按编码流式解码（切换编码时先交出上一个解码器的残留字节） */
+  private decodeChunk(chunk: Buffer, encoding: string): string {
+    if (!this.decoder || this.decoderEncoding !== encoding) {
+      const pending = this.decoder ? (this.decoder.end() ?? "") : "";
+      this.decoder = iconv.getDecoder(encoding);
+      this.decoderEncoding = encoding;
+      return pending + this.decoder.write(chunk);
+    }
+    return this.decoder.write(chunk);
   }
 
   _transform(chunk: Buffer, _enc: string, cb: () => void) {
     const encoding = this.resolveEncoding(chunk);
-    const raw = decodeBuffer(chunk, encoding);
+    const raw = this.decodeChunk(chunk, encoding);
     const cleaned = this.sanitizer.feed(raw);
     if (cleaned) {
       this.push(cleaned);
@@ -265,7 +305,13 @@ export class SanitizerTransform extends Transform {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
-    const remaining = this.sanitizer.flush();
+    // 解码器里可能还留着最后一个多字节字符的残字节：先喂给清洗器再冲刷行缓冲
+    let remaining = "";
+    if (this.decoder) {
+      const tail = this.decoder.end() ?? "";
+      if (tail) remaining += this.sanitizer.feed(tail);
+    }
+    remaining += this.sanitizer.flush();
     if (remaining) {
       this.push(remaining);
       this.onCleaned?.(remaining);

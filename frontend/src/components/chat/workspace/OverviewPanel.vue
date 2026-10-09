@@ -281,7 +281,7 @@ function openProcessLog(p: UiProcessInfo): void {
   if (!props.sessionId) return;
   layoutStore.setWorkspaceVisible(true);
   nextTick(() => {
-    tabStore.openProcessLogTab(props.sessionId!, p.id, p.command);
+    tabStore.openProcessLogTab(props.sessionId!, p.id, p.command, p.startedAt);
   });
 }
 

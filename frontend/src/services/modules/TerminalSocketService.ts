@@ -36,6 +36,13 @@ export class TerminalSocketService {
   private shouldReconnect = true;
   private terminalId: string | undefined;
   private onTerminalId: ((terminalId: string) => void) | undefined;
+  /** connect() 的固定参数（token/会话/初始几何）；URL 在每次 open 前按当前 terminalId 重建 */
+  private connectParams: {
+    token: string;
+    sessionId: string;
+    cols?: number;
+    rows?: number;
+  } | null = null;
 
   /** 获取终端 WS URL（不含 query），区分 Electron(file:) 与 Web(http/https) */
   private getWsUrl(): string {
@@ -52,17 +59,37 @@ export class TerminalSocketService {
     this.shouldReconnect = true;
     this.terminalId = options.terminalId;
     this.onTerminalId = options.onTerminalId;
-    const url = this.getWsUrl();
-    const params = new URLSearchParams({ token, sessionId });
-    if (this.terminalId) params.set("terminalId", this.terminalId);
-    // 初始几何：后端 spawn 时按此尺寸创建 PTY（仅新建时生效，恢复 orphan 时由 resize 消息同步）
-    if (options.cols && options.cols > 0) params.set("cols", String(Math.floor(options.cols)));
-    if (options.rows && options.rows > 0) params.set("rows", String(Math.floor(options.rows)));
-    this.url = `${url}?${params.toString()}`;
+    this.connectParams = {
+      token,
+      sessionId,
+      cols: options.cols,
+      rows: options.rows,
+    };
     this.open();
   }
 
+  /**
+   * 用**当前** terminalId 重建 WS URL（每次 open 前调用，不复用注册时的快照）。
+   * 重连时必须重建：ready 帧可能已把 terminalId 换成新 id（例如后端重启后旧 id 已失效、
+   * 服务端新建了终端并回填新 id），沿用旧 query 会拿已死的 id 反复请求 —— 服务端每次都
+   * 走新建分支 spawn PTY，几次就把 3 个/会话的配额打满。
+   */
+  private buildUrl(): void {
+    const p = this.connectParams;
+    if (!p) {
+      this.url = null;
+      return;
+    }
+    const params = new URLSearchParams({ token: p.token, sessionId: p.sessionId });
+    if (this.terminalId) params.set("terminalId", this.terminalId);
+    // 初始几何：后端 spawn 时按此尺寸创建 PTY（仅新建时生效，恢复 orphan 时由 resize 消息同步）
+    if (p.cols && p.cols > 0) params.set("cols", String(Math.floor(p.cols)));
+    if (p.rows && p.rows > 0) params.set("rows", String(Math.floor(p.rows)));
+    this.url = `${this.getWsUrl()}?${params.toString()}`;
+  }
+
   private open(): void {
+    this.buildUrl();
     if (!this.url) return;
     this.setStatus("connecting");
     const ws = new WebSocket(this.url);

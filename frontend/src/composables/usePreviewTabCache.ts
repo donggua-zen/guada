@@ -32,8 +32,13 @@ export interface UnifiedTab {
     cwd?: string;
     terminalId?: string;
     // processlog（后台进程日志）
-    processId?: string;   // 后台进程 ID（ProcessManagerService entry.id）
+    processId?: string;   // 后台进程 ID（ProcessManagerService entry.id，即 OS PID）
     command?: string;     // 进程命令（标签标题与日志面板头部展示）
+    /**
+     * 本次运行的启动时间（run token）。本进程 ID 就是 OS PID，会被系统回收：
+     * 同一 PID 承载新一次运行时该值变化，日志面板据此丢弃旧快照重新拉取。
+     */
+    startedAt?: string;
     // diff（编辑记录标签：仅存骨架，FileChangeEntry 由 tabStore 运行时 Map 持有，不持久化）
     turnId?: string;      // 所属回合 ID（标签 key 的一部分）
 }

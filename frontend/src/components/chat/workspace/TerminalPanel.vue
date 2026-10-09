@@ -20,6 +20,8 @@ import type { FitAddon } from "@xterm/addon-fit";
 const props = defineProps<{
     sessionId: string;
     terminalId?: string;
+    /** 是否为当前激活的终端标签（非激活面板常驻挂载但隐藏，只在激活时抢焦点） */
+    isActive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +37,8 @@ const errorHint = ref("");
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let disposers: Array<() => void> = [];
+/** 已卸载：阻止 openWhenSized 的 RAF 在卸载后再排队（否则空转 60fps） */
+let disposed = false;
 
 // xterm 主题（跟随 --gd-* token）
 const xtermTheme = computed(() => ({
@@ -64,6 +68,18 @@ const xtermTheme = computed(() => ({
 // 官方支持运行时改 options.theme（立即重绘，不影响缓冲区内容）
 watch(isDark, () => {
     if (term) term.options.theme = xtermTheme.value;
+});
+
+// 切换标签：本面板从隐藏变为激活 → 补一次 fit（隐藏期间侧栏宽度可能变过，几何由
+// ResizeObserver 持续跟踪，这里只兜底）并聚焦；隐藏面板会失去 DOM 焦点，不补 focus 就没法直接打字
+watch(() => props.isActive, (active) => {
+    if (!active || !term) return;
+    try {
+        fitAddon?.fit();
+    } catch {
+        /* ignore：容器尚未布局 */
+    }
+    term.focus();
 });
 
 async function initTerminal() {
@@ -112,17 +128,22 @@ async function initTerminal() {
 
     // 只在容器有真实尺寸后 open，避免隐藏/切换标签时 xterm renderer 尺寸为 0。
     // WS 连接也放在这里：fit 之后才拿得到真实 cols/rows。
+    let rafId = 0;
     const openWhenSized = () => {
+        if (disposed) return;
         if (!terminalRef.value || terminalRef.value.clientWidth <= 0 || terminalRef.value.clientHeight <= 0) {
-            requestAnimationFrame(openWhenSized);
+            rafId = requestAnimationFrame(openWhenSized);
             return;
         }
         t.open(terminalRef.value);
         // openWhenSized 仅在 initTerminal 末尾（fitAddon 已赋值后）首次执行
         fitAddon!.fit();
-        t.focus();
+        // 非激活面板常驻挂载（切换标签不重建，避免重连竞态）：隐藏时不要抢焦点
+        if (props.isActive) t.focus();
         connectSocket();
     };
+    // 卸载时取消未执行的帧（否则容器一直没尺寸时 RAF 会无限排队空转）
+    disposers.push(() => cancelAnimationFrame(rafId));
 
     // 先注册所有 xterm 监听，再 open/fit/连接 WS；对齐 DSH 的初始化顺序。
     // 否则切换会话/刷新时 xterm 产生的 DA 应答可能在监听器建立前丢失，
@@ -217,6 +238,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     // 会话切换/面板卸载只断开 WS，不销毁 PTY；关闭标签由父层显式 dispose
+    disposed = true;
     terminalSocket.disconnect();
     disposers.forEach((d) => d());
     disposers = [];

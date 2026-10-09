@@ -410,6 +410,8 @@
     processCompleted: 'Completed',
     processKilled: 'Terminated',
     processError: 'Error',
+    // Process already purged from the backend registry: ended for sure, outcome unknown
+    processEnded: 'Ended',
     processKilledToast: 'Process terminated',
     processKillFailed: 'Failed to kill process',
     killProcess: 'Kill process',
@@ -425,7 +427,7 @@
     permUnrestricted: 'Full access',
     noConnections: 'No connections yet — create one in Settings',
     processLogEmpty: 'No output yet',
-    processLogGone: 'Process has ended or no longer exists',
+    processLogGone: 'Process log not found — it may have been cleaned up',
     processLogTruncated: 'Log is large, showing tail only (full size {size})',
     selectFile: 'Select File',
     copyFileName: 'Copy File Name',
