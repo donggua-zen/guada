@@ -63,6 +63,8 @@ export const useSessionStore = defineStore('session', () => {
         for (const [sid, state] of sessions.value) {
             if (sid === exceptId) continue
             if (state.streamStatus === 'running') continue
+            // 待批（审批/询问等待中）的会话同样不淘汰：卡片状态丢了无法从补发重建
+            if (state.pendingAsk) continue
             if (now - (sessionLastAccess.get(sid) ?? 0) > SESSION_STATE_TTL_MS) {
                 sessions.value.delete(sid)
                 sessionLastAccess.delete(sid)
@@ -74,6 +76,7 @@ export const useSessionStore = defineStore('session', () => {
             for (const [sid] of sessions.value) {
                 if (sid === exceptId) continue
                 if (sessions.value.get(sid)!.streamStatus === 'running') continue
+                if (sessions.value.get(sid)!.pendingAsk) continue
                 const t = sessionLastAccess.get(sid) ?? 0
                 if (t < oldestTime) {
                     oldestTime = t
@@ -447,6 +450,27 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).pendingAsk = pendingAsk
     }
 
+    /**
+     * 纯读会话级交互卡（不创建缓存、绝不写响应式 Map）——渲染路径专用。
+     *
+     * getSessionState 的 miss 分支会创建缓存并触发清扫（写响应式 Map）：侧边栏等渲染路径
+     * 按会话逐项调用会造成"读路径自我触发"→ Maximum recursive updates 白屏
+     * （与 peekStreamStatus 同一约束，见其注释）。未缓存返回 undefined（语义等同无待批）。
+     */
+    const peekSessionPendingAsk = (sessionId: string): SessionState['pendingAsk'] => {
+        return sessions.value.get(sessionId)?.pendingAsk
+    }
+
+    /**
+     * 清空所有会话的待批状态（SSE 重连兜底：断线期间可能在别处应答、或后端重启导致
+     * 内存等待表清空。仍待批的 ask 会由同一条连接紧随的活跃流补发重建）。
+     */
+    const clearAllPendingAsks = (): void => {
+        for (const state of sessions.value.values()) {
+            if (state.pendingAsk) state.pendingAsk = undefined
+        }
+    }
+
     // ─── 计划模式（协作状态；UI 投影，事实源是会话设置）───
 
     /** 读取会话的计划模式开关 */
@@ -647,6 +671,8 @@ export const useSessionStore = defineStore('session', () => {
         setSessionIsCompressing,
         sessionPendingAsk,
         setSessionPendingAsk,
+        peekSessionPendingAsk,
+        clearAllPendingAsks,
         sessionPlanEnabled,
         setSessionPlanEnabled,
         applyRemotePlanEnabled,

@@ -17,6 +17,7 @@ vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 import {
   foldEvents,
   applyLiveChunk,
+  projectChunk,
   resetTurnTransientState,
   resetSessionTurnsTransientState,
   type ProjectorSessionStore,
@@ -541,5 +542,46 @@ describe("重放不带实时副作用", () => {
     foldEvents(store as any, "s1", [{ type: "plan_mode_changed", planEnabled: false } as any]);
     expect(applied).toEqual([{ sid: "s1", enabled: false }]);
     expect(store.refreshPlans).not.toHaveBeenCalled();
+  });
+});
+
+// ── projectChunk：会话级交互卡先于缓存门控 ──
+// 侧边栏等会话级消费者要看到「未打开过内容的会话」的待批状态（刷新后的非当前会话、
+// 另一窗口正在跑的会话）：ask_requested/ask_resolved 必须先于 hasCache 门控直写 store，
+// 否则这些会话只进暂存、pendingAsk 永远为空。
+describe("projectChunk 会话级交互卡先于缓存门控", () => {
+  let store: ReturnType<typeof createStore>;
+  beforeEach(() => { store = createStore(); });
+
+  it("无缓存会话收到 ask_requested 也写入交互卡（仍只暂存不建树）", () => {
+    store.state.loaded = false;
+    store.state.turns = [];
+
+    projectChunk(store as any, "s-uncached", {
+      type: "ask_requested",
+      requestId: "req1",
+      kind: "approval",
+      title: "计划审批",
+      questions: [],
+    } as any);
+
+    expect(store.state.pendingAsk?.requestId).toBe("req1");
+    expect(store.state.pendingAsk?.title).toBe("计划审批");
+    // stash 语义不变：无缓存路径不建回合树（打开会话时才应用暂存）
+    expect(store.state.turns).toHaveLength(0);
+  });
+
+  it("无缓存会话收到 ask_resolved 清除交互卡", () => {
+    store.state.loaded = false;
+    store.state.turns = [];
+    store.state.pendingAsk = { requestId: "req1", kind: "approval", questions: [] } as any;
+
+    projectChunk(store as any, "s-uncached", {
+      type: "ask_resolved",
+      requestId: "req1",
+      outcome: "answered",
+    } as any);
+
+    expect(store.state.pendingAsk).toBeUndefined();
   });
 });
