@@ -19,7 +19,7 @@ const PLAN_MODE_FULL_REMINDER = `Plan mode is active. The user does not want you
 ### Phase 1: Initial Understanding
 Goal: Gain a comprehensive understanding of the user's request by reading the code and asking questions.
 1. Focus on understanding the request and the code it touches. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.
-2. Read-only commands are available (they run in a read-only sandbox). Use them to investigate the repository state.
+2. Read-only commands are available (${process.platform === "win32" ? "only verified read-only commands are allowed; anything else is denied" : "they run in a read-only sandbox"}). Use them to investigate the repository state.
 
 ### Phase 2: Design
 Goal: Design an implementation approach.

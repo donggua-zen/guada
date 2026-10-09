@@ -63,6 +63,9 @@ export default {
     // RunModePopover.vue
     runModeReadOnlyDesc: '文件与命令均为只读，适合分析和规划',
     runModeWorkspaceWriteDesc: '文件与 Shell 仅限工作目录内写入，外部只读',
+    // Windows 无 OS 沙盒（命令策略层：只读白名单 + 审批），描述须与真实语义一致
+    runModeReadOnlyDescWin: '只允许只读白名单命令（git status、ls、grep 等），写入与其它命令一律拒绝',
+    runModeWorkspaceWriteDescWin: '文件写入限工作目录；只读白名单命令直接执行，其余命令需你批准',
     runModeFullAccessDesc: '不限制工具与路径，可读写任意文件（高风险操作）',
 
     // ThinkingEffortPopover.vue

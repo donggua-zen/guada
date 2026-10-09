@@ -185,6 +185,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly bindingState: RemoteBindingStateService,
     /** 会话元数据存储（可选）：仅用于持久化运行期需要落库的会话设置（计划模式开关） */
     private readonly sessionMetaStore?: SessionMetaStore,
+    /**
+     * "有人能应答审批"的探针（可选，由 SessionEventsService 提供：前端 SSE 是否有在线连接）。
+     * 用回调而不是直接注入服务，避免上下文对事件服务的直接依赖与潜在循环。
+     */
+    private readonly answerSurfaceProbe?: () => boolean,
   ) {
     this.sessionId = session.id;
     this.sessionType = session.sessionType || 'web';
@@ -790,6 +795,24 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return this.effectiveContextWindow;
   }
 
+  /**
+   * 是否有"人能应答审批"的面（命令策略层 fail-closed 的判据）。
+   *
+   * 两个来源任一为真即可：
+   *  1. 前端 SSE 在线（probe 由 SessionEventsService 提供）——审批卡经它直投到界面；
+   *     注意**不能**用 streamManager.subscribers 判这个：那里只有进程内消费者（runner 的
+   *     callbacks 订阅），前端连接登记在 SessionEventsService，两套注册表互不可见。
+   *  2. 进程内有消费者在位（如后台续跑经 chatRunner 带 callbacks 订阅）。
+   *
+   * bot / 子代理会话没有可见应答面（子代理的审批卡只在用户主动打开该子会话标签时可见），
+   * 一律按"无人应答"处理，避免审批无限期挂住。
+   */
+  hasAnswerSurface(): boolean {
+    if (this.sessionType === "bot" || this.sessionType === "sub_agent") return false;
+    if (this.answerSurfaceProbe?.()) return true;
+    return (this.streamManager.getStreamStatus?.(this.sessionId)?.subscriberCount ?? 0) > 0;
+  }
+
   // ═══ 压缩数据源（CompactionDataSource：压缩侧唯一访问入口）═══
 
   getCompressionConfig(): CompactionConfig {
@@ -1065,12 +1088,16 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     if (prevMode !== currentMode) {
       if (currentMode === 'read-only' && prevMode !== 'read-only') {
         narrations.push(
-          'The user has enabled read-only mode. File writes are denied and run_command executes in a read-only sandbox — all file modifications are blocked. Use the available tools to analyze, plan, and discuss with the user; if a modification is required, explain what needs to change.',
+          process.platform === 'win32'
+            ? 'The user has enabled read-only mode. File writes are denied, and run_command only allows verified read-only commands (the tool will name the allowlist when it denies one). Use the available tools to analyze, plan, and discuss with the user; if a modification is required, explain what needs to change.'
+            : 'The user has enabled read-only mode. File writes are denied and run_command executes in a read-only sandbox — all file modifications are blocked. Use the available tools to analyze, plan, and discuss with the user; if a modification is required, explain what needs to change.',
         );
       }
       if (prevMode === 'read-only' && currentMode !== 'read-only') {
         narrations.push(
-          'The user has disabled read-only mode. File writes are available again under the session sandbox policy.',
+          process.platform === 'win32'
+            ? 'The user has disabled read-only mode. File writes are available again under the session policy, and commands outside the read-only allowlist will now ask the user for approval.'
+            : 'The user has disabled read-only mode. File writes are available again under the session sandbox policy.',
         );
       }
       if (currentMode === 'danger-full-access' && prevMode !== 'danger-full-access') {
@@ -1095,7 +1122,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     if (prevPlan !== this.planEnabled) {
       narrations.push(
         this.planEnabled
-          ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
+          ? process.platform === 'win32'
+            ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command only allows verified read-only commands. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
+            : 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
           : 'The user has disabled plan mode. You can make edits and run commands again.',
       );
     }

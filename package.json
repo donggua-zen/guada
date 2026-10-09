@@ -151,12 +151,7 @@
       "sign": null,
       "signDlls": false,
       "forceCodeSigning": false,
-      "extraResources": [
-        {
-          "from": "sandbox/sandbox.exe",
-          "to": "sandbox/sandbox.exe"
-        }
-      ]
+      "extraResources": []
     },
     "mac": {
       "target": [

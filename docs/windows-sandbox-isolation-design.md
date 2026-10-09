@@ -1,5 +1,11 @@
 # Windows 沙盒隔离设计方案
 
+> **状态：已废弃（2026-10-09）**。本文是未落地的设计稿（Low Integrity + `low-launcher.exe`），
+> 实际曾长期使用 `sandbox.exe`（Restricted Token + ACL），该后端已因 Windows 兼容性问题停用，
+> 改由命令策略层（只读白名单 + 审批）承担。现行方案见
+> [windows-command-policy.md](windows-command-policy.md)，档位词表见 [安全模式三档方案.md](安全模式三档方案.md)。
+> 保留本文仅供历史参考。
+
 > **版本**: 1.0  
 > **日期**: 2026-05-05  
 > **状态**: 设计阶段  

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { PtyHandle } from "./types";
+import { envValue, resolveWindowsShell } from "../shell/windows-shell-detect";
 
 /** transcript 保留上限（字节，超出丢弃头部） */
 const TRANSCRIPT_LIMIT = 1 << 20; // 1MB
@@ -48,16 +49,37 @@ export class TerminalService implements OnModuleDestroy {
     }
   }
 
-  /** 解析默认 shell */
-  private defaultShell(): string {
+  /**
+   * 解析默认 shell。
+   *
+   * 优先级：TERMINAL_SHELL 配置 > Windows：Git Bash → PowerShell → cmd.exe > Unix：$SHELL/sh。
+   * Git Bash 用 -l 启动 login shell（/etc/profile 才会把 /usr/bin 加进 PATH）。
+   */
+  private defaultShell(): { file: string; args: string[]; env?: Record<string, string> } {
     const cfg = this.configService.get<string>("TERMINAL_SHELL");
-    if (cfg) return cfg;
+    if (cfg) return { file: cfg, args: [] };
+
     if (process.platform === "win32") {
-      // 与 DSH 一致：Windows 优先 PowerShell，避免 cmd 把
-      // xterm 的设备属性应答（ESC[?1;2c）原样回显为 ^[[?1;2c。
-      return process.env.TERMINAL_SHELL || "powershell.exe";
+      const resolved = resolveWindowsShell({ env: process.env });
+      if (resolved.kind === "gitbash") {
+        // Git Bash 不会把 xterm 的设备属性应答（ESC[?1;2c）原样回显——那是 cmd.exe 的坑，
+        // 也是这里从 cmd 换成 PowerShell 的历史原因。
+        return {
+          file: resolved.path,
+          args: ["-l"],
+          env: { SHELL: resolved.path },
+        };
+      }
+      if (resolved.kind === "cmd") {
+        return { file: envValue(process.env, "ComSpec") || "cmd.exe", args: [] };
+      }
+      return { file: resolved.path || "powershell.exe", args: [] };
     }
-    return process.env.TERMINAL_SHELL || process.env.SHELL || "/bin/sh";
+
+    return {
+      file: process.env.TERMINAL_SHELL || process.env.SHELL || "/bin/sh",
+      args: [],
+    };
   }
 
   createUiTerminal(sessionId: string, cwd: string, cols = 80, rows = 24): PtyHandle {
@@ -119,17 +141,17 @@ export class TerminalService implements OnModuleDestroy {
 
   private spawn(id: string, sessionId: string, cwd: string, cols: number, rows: number): PtyHandle {
     const shell = this.defaultShell();
-    this.logger.log(`[Terminal] spawn shell=${shell} id=${id}`);
+    this.logger.log(`[Terminal] spawn shell=${shell.file} args=[${shell.args.join(" ")}] id=${id}`);
     let pty: import("node-pty").IPty;
     try {
       // 与 DSH 完全一致的 ConPTY 配置：不传 useConptyDll，
       // 保证 resize 能正确传递到 shell（useConptyDll 会破坏 resize）。
-      pty = this.loadNodePty().spawn(shell, [], {
+      pty = this.loadNodePty().spawn(shell.file, shell.args, {
         name: "xterm-256color",
         cols,
         rows,
         cwd,
-        env: { ...process.env, TERM: "xterm-256color" },
+        env: { ...process.env, TERM: "xterm-256color", ...shell.env },
         useConpty: true,
       });
     } catch (e: any) {
