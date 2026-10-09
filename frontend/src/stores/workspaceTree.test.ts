@@ -6,7 +6,9 @@ vi.mock("@/services/ApiService", () => ({
 }));
 
 import { useWorkspaceTreeStore } from "./workspaceTree";
+import { useTabStore } from "./tab";
 import { apiService } from "@/services/ApiService";
+import type { WorkspaceNode } from "@/types/workspace";
 
 /**
  * 工作目录路径的单一来源测试
@@ -156,5 +158,147 @@ describe("workspaceTree.ensureWorkspacePath", () => {
     const store = useWorkspaceTreeStore();
     expect(await store.ensureWorkspacePath("")).toBeNull();
     expect(mockedGetPath).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * SSE 文件变化事件的本地增量更新。
+ *
+ * 背景：change / unlink 曾被「父目录节点未加载就整条丢弃」的门闸挡住——
+ * 深层文件（页面刷新后恢复的标签、聊天链接打开、树刷新后）因此收不到刷新信号，
+ * 表现为同一文件有时能自动刷新、有时毫无反应。
+ */
+describe("workspaceTree.applyFileChange", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockedGetPath.mockReset();
+  });
+
+  /** 初始树：根级 README.md + 已加载子节点的 src/（deep/ 从未展开） */
+  function seedTree(): void {
+    const store = useWorkspaceTreeStore();
+    store.treeData = [
+      {
+        name: "src",
+        path: "src",
+        isDirectory: true,
+        children: [{ name: "a.ts", path: "src/a.ts", isDirectory: false }],
+      },
+      { name: "README.md", path: "README.md", isDirectory: false },
+    ] as WorkspaceNode[];
+  }
+
+  function changeEvent(path: string) {
+    return { type: "change" as const, path, sessionId: "s1", timestamp: Date.now() };
+  }
+
+  it("change：父目录已加载时递增版本号", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange(changeEvent("src/a.ts"));
+
+    expect(store.fileChangeVersions["src/a.ts"]).toBe(1);
+  });
+
+  it("change：父目录未加载（从未展开）也必须递增版本号", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange(changeEvent("deep/nested/file.ts"));
+
+    expect(store.fileChangeVersions["deep/nested/file.ts"]).toBe(1);
+  });
+
+  it("change：反斜杠路径归一化为正斜杠键", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange(changeEvent("src\\a.ts"));
+    store.applyFileChange(changeEvent("src/a.ts"));
+
+    expect(store.fileChangeVersions["src/a.ts"]).toBe(2);
+    expect(Object.keys(store.fileChangeVersions)).toEqual(["src/a.ts"]);
+  });
+
+  it("unlink：父目录未加载时也要关闭对应文件标签", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+    const tabStore = useTabStore();
+    tabStore.tabs = [
+      { type: "file", key: "file:deep/nested/file.ts", path: "deep/nested/file.ts", name: "file.ts" },
+      { type: "file", key: "file:src/a.ts", path: "src/a.ts", name: "a.ts" },
+    ] as typeof tabStore.tabs;
+
+    store.applyFileChange({ type: "unlink", path: "deep/nested/file.ts", sessionId: "s1", timestamp: 1 });
+
+    expect(tabStore.tabs.map(t => t.key)).toEqual(["file:src/a.ts"]);
+  });
+
+  it("unlinkDir：关闭其下全部文件标签（含更深层），不误伤其他标签", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+    const tabStore = useTabStore();
+    tabStore.tabs = [
+      { type: "file", key: "file:src/a.ts", path: "src/a.ts", name: "a.ts" },
+      { type: "file", key: "file:src/sub/b.ts", path: "src/sub/b.ts", name: "b.ts" },
+      { type: "file", key: "file:src.ts", path: "src.ts", name: "src.ts" },
+    ] as typeof tabStore.tabs;
+
+    store.applyFileChange({ type: "unlinkDir", path: "src", sessionId: "s1", timestamp: 1 });
+
+    expect(tabStore.tabs.map(t => t.key)).toEqual(["file:src.ts"]);
+  });
+
+  it("unlink：已加载父目录时同步移除树节点", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange({ type: "unlink", path: "src/a.ts", sessionId: "s1", timestamp: 1 });
+
+    const src = store.findNodeByPath(store.treeData, "src");
+    expect(src?.children).toEqual([]);
+  });
+
+  it("add：父目录已加载时插入并按目录优先、名称排序", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange({ type: "add", path: "src/z.ts", sessionId: "s1", timestamp: 1 });
+    store.applyFileChange({ type: "addDir", path: "src/utils", sessionId: "s1", timestamp: 1 });
+
+    const src = store.findNodeByPath(store.treeData, "src");
+    expect(src?.children?.map(c => c.path)).toEqual(["src/utils", "src/a.ts", "src/z.ts"]);
+  });
+
+  it("add：同名子节点已存在时不重复插入", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange({ type: "add", path: "src/a.ts", sessionId: "s1", timestamp: 1 });
+
+    const src = store.findNodeByPath(store.treeData, "src");
+    expect(src?.children?.filter(c => c.name === "a.ts")).toHaveLength(1);
+  });
+
+  it("add：父目录未加载时忽略（不建节点、不报错）", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange({ type: "add", path: "deep/nested/new.ts", sessionId: "s1", timestamp: 1 });
+
+    expect(store.findNodeByPath(store.treeData, "deep")).toBeNull();
+    expect(store.fileChangeVersions["deep/nested/new.ts"]).toBeUndefined();
+  });
+
+  it("heartbeat / git / 空路径事件忽略", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    store.applyFileChange({ type: "heartbeat", path: "", sessionId: "s1", timestamp: 1 });
+    store.applyFileChange({ type: "git", path: "", sessionId: "s1", timestamp: 1 });
+    store.applyFileChange({ type: "change", path: "", sessionId: "s1", timestamp: 1 });
+
+    expect(store.fileChangeVersions).toEqual({});
   });
 });

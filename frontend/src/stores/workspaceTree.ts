@@ -230,57 +230,81 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
   /**
    * SSE 文件变化事件 → 本地增量更新（不再请求后端 API）。
    * heartbeat / git 事件忽略（分别由 SSE 客户端与 GitStore 消费）。
+   *
+   * change / unlink 不依赖目录树状态：版本号是扁平映射、标签按路径匹配，
+   * 语义上都不需要「父目录已展开」。若以父节点未加载为由丢弃，深层文件
+   * （页面刷新后恢复的标签、聊天链接打开、树刷新后）会静默收不到刷新信号。
+   * 只有 add/addDir 需要插入位置，才必须父节点已在树中。
    */
   function applyFileChange(event: FileChangeEvent): void {
     if (event.type === 'heartbeat' || event.type === 'git') return
     if (!event.path) return
 
     const normalizedPath = event.path.replace(/\\/g, '/')
+
+    if (event.type === 'change') {
+      bumpFileChangeVersion(normalizedPath)
+      return
+    }
+
+    if (event.type === 'unlink' || event.type === 'unlinkDir') {
+      closeTabsUnder(normalizedPath, event.type === 'unlinkDir')
+      removeTreeNode(normalizedPath)
+      return
+    }
+
+    // add / addDir：父节点尚未加载（未展开过）则忽略，根目录始终视为已加载
     const parts = normalizedPath.split('/')
     const fileName = parts[parts.length - 1]
     const parentPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
 
     const parentNode = findNodeByPath(treeData.value, parentPath)
     if (!parentNode) return
-
-    // 父节点尚未加载（未展开过）则忽略；根目录始终视为已加载
     if (!parentNode.children && parentNode.path !== '') return
     if (!parentNode.children) parentNode.children = []
+    if (parentNode.children.some(child => child.name === fileName)) return
 
-    switch (event.type) {
-      case 'add':
-      case 'addDir': {
-        if (parentNode.children.some(child => child.name === fileName)) break
-        const newNode: WorkspaceNode = {
-          name: fileName,
-          path: normalizedPath,
-          isDirectory: event.type === 'addDir',
-          hasChildren: event.type === 'addDir',
-        }
-        parentNode.children.push(newNode)
-        parentNode.children.sort((a, b) => {
-          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-          return a.name.localeCompare(b.name)
-        })
-        break
-      }
-      case 'unlink':
-      case 'unlinkDir': {
-        const rmIdx = parentNode.children.findIndex(child => child.name === fileName)
-        if (rmIdx !== -1) parentNode.children.splice(rmIdx, 1)
-        // 删除的是已打开的文件标签 → 关闭对应标签
-        const tabStore = useTabStore()
-        const unlinkTab = tabStore.tabs.find(t => t.key === `file:${normalizedPath}`)
-        if (unlinkTab) tabStore.removeTab(unlinkTab.key)
-        break
-      }
-      case 'change':
-        fileChangeVersions.value = {
-          ...fileChangeVersions.value,
-          [normalizedPath]: (fileChangeVersions.value[normalizedPath] || 0) + 1,
-        }
-        break
+    parentNode.children.push({
+      name: fileName,
+      path: normalizedPath,
+      isDirectory: event.type === 'addDir',
+      hasChildren: event.type === 'addDir',
+    })
+    parentNode.children.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  /** 递增某路径的变更版本号（驱动已打开的 FilePreviewPanel 重载） */
+  function bumpFileChangeVersion(normalizedPath: string): void {
+    fileChangeVersions.value = {
+      ...fileChangeVersions.value,
+      [normalizedPath]: (fileChangeVersions.value[normalizedPath] || 0) + 1,
     }
+  }
+
+  /** 关闭受删除影响的文件标签：文件按路径精确匹配，目录匹配其下全部文件 */
+  function closeTabsUnder(normalizedPath: string, isDirectory: boolean): void {
+    const prefix = `${normalizedPath}/`
+    const tabStore = useTabStore()
+    const affected = tabStore.tabs.filter(tab => {
+      if (tab.type !== 'file' || !tab.path) return false
+      const tabPath = tab.path.replace(/\\/g, '/')
+      return isDirectory ? tabPath.startsWith(prefix) : tabPath === normalizedPath
+    })
+    affected.forEach(tab => tabStore.removeTab(tab.key))
+  }
+
+  /** 从树中移除节点（父节点未加载时无树可改，静默跳过） */
+  function removeTreeNode(normalizedPath: string): void {
+    const parts = normalizedPath.split('/')
+    const parentPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
+    const parentNode = findNodeByPath(treeData.value, parentPath)
+    if (!parentNode?.children) return
+    const fileName = parts[parts.length - 1]
+    const rmIdx = parentNode.children.findIndex(child => child.name === fileName)
+    if (rmIdx !== -1) parentNode.children.splice(rmIdx, 1)
   }
 
   /** 重命名后清除旧路径的变更版本号 */
