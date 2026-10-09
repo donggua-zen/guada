@@ -178,6 +178,19 @@
           </button>
         </div>
       </section>
+
+      <!-- ── 空态 / 加载态：所有分区都无可显示内容时给出明确说明（而非一张空白卡片，
+           用户无法分辨「打开了但渲染异常」与「确实没有可概览项」）。
+           数据在途时先出加载态，避免空态闪现后被内容替换 ── -->
+      <div v-if="showEmptyState" class="overview-empty">
+        <el-icon :size="22" class="overview-empty-icon"><AppsListDetail20Regular /></el-icon>
+        <p class="overview-empty-title">{{ emptyText.title }}</p>
+        <p class="overview-empty-hint">{{ emptyText.hint }}</p>
+      </div>
+      <div v-else-if="showLoadingState" class="overview-empty">
+        <el-icon :size="16" class="overview-empty-icon is-loading"><Loading /></el-icon>
+        <p class="overview-empty-hint">{{ t('common.loading') }}</p>
+      </div>
     </div>
   </aside>
 </template>
@@ -186,12 +199,13 @@
 import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
-import { ArrowDown, Close } from "@element-plus/icons-vue";
+import { ArrowDown, Close, Loading } from "@element-plus/icons-vue";
 import { getApiErrorStatus } from '@/utils/errorMessage';
 import {
   BranchFork16Regular, ArrowUpload16Regular,
   Add16Regular,
   Flowchart20Regular,
+  AppsListDetail20Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
@@ -224,6 +238,10 @@ const sessionStore = useSessionStore();
 
 // ── 后台进程（shell 插件 run_command 转后台的运行中进程）──
 const processes = ref<UiProcessInfo[]>([]);
+/** 列表请求在途（空态判定用：在途时不显示空态） */
+const processesPending = ref(false);
+/** 首次请求已完成：之后的重取（如 process_changed 触发）不再回退到加载态，避免空态被抽换成加载态 */
+const processesSettled = ref(false);
 /** 时长显示的秒级心跳（仅驱动 elapsedText 重算） */
 const nowTick = ref(Date.now());
 let unsubscribeProcessChanged: (() => void) | null = null;
@@ -235,11 +253,15 @@ async function loadProcesses(): Promise<void> {
     processes.value = [];
     return;
   }
+  processesPending.value = true;
   try {
     const res = await apiService.getSessionProcesses(props.sessionId);
     processes.value = res.processes || [];
   } catch {
     processes.value = [];
+  } finally {
+    processesPending.value = false;
+    processesSettled.value = true;
   }
 }
 
@@ -292,6 +314,10 @@ const browserWindows = computed(() => browserStore.sessionWebviews);
 // ── 工作流运行（方案 B：进度不落 JSONL；REST 快照为基线，workflow_event SSE 为增量，
 //    两源喂 workflowRuns.ts 的同一 reducer，按 run 内 seq 幂等收敛） ──
 const workflowRuns = ref<WorkflowRunState[]>([]);
+/** 快照请求在途（空态判定用：在途时不显示空态） */
+const workflowsPending = ref(false);
+/** 首次请求已完成：之后的重取不再回退到加载态（同 processesSettled） */
+const workflowsSettled = ref(false);
 /** 运行中在前，完成后按结束时间倒序 */
 const sortedWorkflowRuns = computed(() => sortWorkflowRuns(workflowRuns.value));
 /** 概览只显示最近 5 条；完整历史进工作流审阅标签 */
@@ -325,12 +351,16 @@ async function loadWorkflowRuns(): Promise<void> {
     workflowRuns.value = [];
     return;
   }
+  workflowsPending.value = true;
   try {
     const res = await apiService.getWorkflowRuns(props.sessionId);
     workflowRuns.value = res.runs || [];
   } catch {
     // 端点不可用（旧后端/无运行记录）→ 静默置空
     workflowRuns.value = [];
+  } finally {
+    workflowsPending.value = false;
+    workflowsSettled.value = true;
   }
 }
 
@@ -406,6 +436,38 @@ function subagentStatusText(item: SubagentItem): string {
   if (item.status === "running") return t("chat.workspace.wfRunning");
   return t("chat.workspace.wfCompleted");
 }
+
+// ── 空态 / 加载态判定 ──
+// 分区可见性全在模板里以数据存在性 v-if 表达，此处镜像同一组条件（新增/删除分区需同步）。
+const hasContent = computed<boolean>(() =>
+  git.isGitRepo
+  || processes.value.length > 0
+  || subagentItems.value.length > 0
+  || workflowRuns.value.length > 0
+  || browserWindows.value.length > 0,
+);
+
+/** git 首帧在途：status 未落地时无分区可显示，但请求在跑（失败后 refreshing 归 false → 不会永久停在加载态） */
+const gitPending = computed<boolean>(() => git.refreshing && !git.status);
+/** 首屏在途：进程/工作流只认首次请求（后续重取时已有结论，不该把空态抽换成加载态） */
+const sourcesPending = computed<boolean>(
+  () => gitPending.value
+    || (processesPending.value && !processesSettled.value)
+    || (workflowsPending.value && !workflowsSettled.value),
+);
+
+const showEmptyState = computed<boolean>(() => !hasContent.value && !sourcesPending.value);
+const showLoadingState = computed<boolean>(() => !hasContent.value && sourcesPending.value);
+
+/** 空态文案：会话尚未建立 vs 会话已有但确实没有可概览项，两种语境分别措辞 */
+const emptyText = computed<{ title: string; hint: string }>(() =>
+  props.sessionId
+    ? { title: t("chat.workspace.overviewEmpty"), hint: t("chat.workspace.overviewEmptyHint") }
+    : {
+      title: t("chat.workspace.overviewEmptyNoSession"),
+      hint: t("chat.workspace.overviewEmptyNoSessionHint"),
+    },
+);
 
 function statusText(status: WorkflowMemberStatus): string {
   const map: Record<WorkflowMemberStatus, string> = {
@@ -531,6 +593,35 @@ async function createBrowser(): Promise<void> {
   padding: 5px 4px 6px;
   display: flex;
   flex-direction: column;
+}
+
+/* 空态 / 加载态：卡片随内容自适应高度，空内容时需自带体量与说明，避免退化成一条空白窄条。
+   行高全取整数（22/20/17）→ 图标 22 + 6 + 标题 20 + 6 + 说明 17 + padding 46 = 117px */
+.overview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 12px 24px;
+  text-align: center;
+}
+.overview-empty-icon {
+  color: var(--gd-color-text-disabled);
+  opacity: 0.55;
+}
+.overview-empty-title {
+  margin: 0;
+  font-size: var(--gd-size-text-sm);
+  line-height: 20px;
+  color: var(--gd-color-text-gray);
+}
+.overview-empty-hint {
+  margin: 0;
+  max-width: 200px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--gd-color-text-disabled);
 }
 
 /* ── 分组：标题 + 下属行；分组间以细分割线分隔（首组紧随头部分割线，无额外线） ── */
