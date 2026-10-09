@@ -410,6 +410,8 @@ export default {
     processCompleted: '已完成',
     processKilled: '已终止',
     processError: '出错',
+    // 进程已被后端清理：只能确定已结束（退出码/终止方式无从得知）
+    processEnded: '已结束',
     processKilledToast: '进程已终止',
     processKillFailed: '终止进程失败',
     killProcess: '终止进程',
@@ -425,7 +427,7 @@ export default {
     permUnrestricted: '完全访问',
     noConnections: '暂无连接，去设置页创建',
     processLogEmpty: '暂无输出',
-    processLogGone: '进程已结束或不存在',
+    processLogGone: '进程日志不存在，可能已经被清理',
     processLogTruncated: '日志过大，仅显示尾部（完整大小 {size}）',
     selectFile: '选择文件',
     copyFileName: '复制文件名',

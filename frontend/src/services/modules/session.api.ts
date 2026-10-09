@@ -300,7 +300,8 @@ export interface UiProcessLog {
   command: string;
   status: string;
   exitCode: number | null;
-  startedAt: string;
+  /** 启动时刻（进程已被后端清理时不再返回） */
+  startedAt?: string;
   finishedAt?: string;
   size: number;
   truncated: boolean;

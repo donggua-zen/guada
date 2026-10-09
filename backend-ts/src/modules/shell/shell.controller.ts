@@ -35,7 +35,11 @@ export class ShellController {
     return { success: true, status };
   }
 
-  /** 读取后台进程日志尾部（默认 64KB，进程不存在/不属于该会话 → 404） */
+  /**
+   * 读取后台进程日志尾部（默认 64KB）。
+   * 进程已被清理（结束约 1s 内即从注册表消失）时改从磁盘日志文件读，
+   * 返回 status="ended"；日志文件也不存在才 404。
+   */
   @Get("sessions/:id/processes/:pid/log")
   async readProcessLog(
     @Param("id") id: string,
@@ -45,7 +49,7 @@ export class ShellController {
     const tailBytes = Math.min(Math.max(Number(tail) || 65_536, 1024), 512 * 1024);
     const log = await this.processManager.readLogTail(pid, id, tailBytes);
     if (!log) {
-      throw new HttpException("Process not found", HttpStatus.NOT_FOUND);
+      throw new HttpException("Process log not found", HttpStatus.NOT_FOUND);
     }
     return log;
   }
