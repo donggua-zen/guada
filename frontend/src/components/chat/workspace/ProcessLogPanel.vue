@@ -23,6 +23,11 @@
 
     <!-- 日志正文 -->
     <div ref="logContainer" class="flex-1 min-h-0 overflow-auto pl-body" @scroll="onScroll">
+      <!-- 原始命令：sticky 常驻正文顶部，滚动翻日志时也知道这条日志是哪条命令产生的。
+           头部那条会被宽限与省略号截断，这里给一份随时可读的（超长命令默认折两行，点击展开） -->
+      <div v-if="commandLine" class="pl-cmdline sticky top-0 z-10 px-3 py-1.5 border-b border-gray-100 dark:border-[#2e3035]"
+        :class="{ 'pl-cmdline--expanded': commandExpanded }" :title="commandLine"
+        @click="commandExpanded = !commandExpanded">{{ commandLine }}</div>
       <pre v-if="log?.content" class="pl-content">{{ log.content }}</pre>
       <div v-else-if="loading" class="pl-empty">{{ t('common.loading') }}</div>
       <div v-else-if="gone" class="pl-empty">{{ t('chat.workspace.processLogGone') }}</div>
@@ -63,6 +68,16 @@ const logContainer = ref<HTMLElement | null>(null);
 const followTail = ref(true);
 /** 进程不存在（404 且从未拿到过日志，如刷新后恢复的旧标签） */
 const gone = ref(false);
+/**
+ * 正文顶部常驻的命令行（`$ <命令>`）。
+ * log.command 是权威值（entry 还在时后端返回），进程被清理后回落到标签里存的那份。
+ */
+const commandLine = computed(() => {
+    const cmd = log.value?.command || props.command;
+    return cmd ? `$ ${cmd}` : '';
+});
+/** 超长命令（如整条 ffmpeg/PowerShell 脚本）默认折两行，点击展开全文 */
+const commandExpanded = ref(false);
 
 const isRunning = computed(() => log.value?.status === 'running');
 
@@ -175,6 +190,7 @@ function resetAndReload(): void {
     gone.value = false;
     loading.value = false;
     followTail.value = true;
+    commandExpanded.value = false;
     startPolling();
 }
 
@@ -293,6 +309,26 @@ onUnmounted(() => {
 }
 .pl-body {
     background: var(--gd-color-surface);
+}
+/* 正文顶部常驻命令行：sticky 跟随滚动（背景与正文同色，滚过的日志不会透出来）；
+   超长命令默认只显示两行，点击展开全文；全文另有 title 兜底 */
+.pl-cmdline {
+    background: var(--gd-color-surface);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--gd-color-text-gray);
+    white-space: pre-wrap;
+    word-break: break-all;
+    cursor: pointer;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+.pl-cmdline--expanded {
+    display: block;
+    -webkit-line-clamp: unset;
 }
 .pl-content {
     margin: 0;

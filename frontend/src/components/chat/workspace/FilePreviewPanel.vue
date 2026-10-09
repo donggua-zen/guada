@@ -177,6 +177,7 @@
 
 <script setup lang="ts">
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
+import { decidePreviewRefresh } from '@/utils/previewRefresh'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -770,13 +771,22 @@ watch(() => props.isActive, async (active) => {
 })
 
 watch(() => props.contentVersion, (newVer, oldVer) => {
-    if (oldVer === 0 || newVer <= oldVer) return
-    if (saveStatus.value === 'unsaved') {
+    // 注意不能用 oldVer === 0 当作「无需处理」：面板打开时该路径往往还没有变更记录（版本 0），
+    // 此后第一次外部修改就是 0 → 1，丢弃它会让首个变更永远不刷新。是否已加载才是正确判据。
+    const action = decidePreviewRefresh({
+        hasLoaded: hasLoaded.value,
+        newVersion: newVer,
+        oldVersion: oldVer,
+        saveStatus: saveStatus.value,
+        isActive: props.isActive,
+    })
+    if (action === 'ignore') return
+    if (action === 'conflict') {
         // 用户有未保存编辑 + 外部文件变化 → 冲突标记，不覆盖编辑内容
         externalConflict.value = true
         return
     }
-    if (!props.isActive) {
+    if (action === 'stale') {
         isStale.value = true
         return
     }

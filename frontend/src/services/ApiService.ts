@@ -283,7 +283,10 @@ class ApiService {
     return this.workspaceWatcherService.onChange(callback);
   }
 
-  /** 设置 watcher 订阅范围（连接级；SSE 断开时后端自动清除本页订阅） */
+  /**
+   * 设置 watcher 订阅范围（连接级；SSE 断开时后端自动清除本页订阅，
+   * 重连成功后由客户端自动重放，调用方无需重建）
+   */
   setWorkspaceWatchScope(
     sessionId: string,
     scope: "file" | "git",
