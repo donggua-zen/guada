@@ -50,6 +50,16 @@ describe("FilePlugin", () => {
     mockWorkspaceService = {
       resolveFilePath: (filePath: string, workspaceDir: string) =>
         path.isAbsolute(filePath) ? path.normalize(filePath) : path.join(workspaceDir, filePath),
+      // 与真实实现同语义（resolve 归一双根前缀比较）：工作区内 → 放行，区外 → 交审批
+      isSafeWritePath: (targetPath: string, extraSafePaths: string[] = []) =>
+        [tmpDir, ...extraSafePaths].some((root) => {
+          const resolvedRoot = path.resolve(root);
+          const resolvedTarget = path.resolve(targetPath);
+          return (
+            resolvedTarget === resolvedRoot ||
+            resolvedTarget.startsWith(resolvedRoot + path.sep)
+          );
+        }),
       validateWritePath: () => {},
     };
 

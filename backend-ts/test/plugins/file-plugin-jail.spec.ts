@@ -46,6 +46,7 @@ describe("FilePlugin path jail", () => {
   let api: ReturnType<typeof capturePluginApi>;
   let workspaceService: WorkspaceService;
   let approve: jest.Mock;
+  let writeApproval: jest.Mock;
   let tmpDir: string;
   let memoryDir: string;
 
@@ -54,11 +55,13 @@ describe("FilePlugin path jail", () => {
     memoryDir = path.join(tmpDir, ".guada", "memory");
     await fs.mkdir(memoryDir, { recursive: true });
 
-    // 牢笼模式下不得唤起用户审批（后台系统流程）
+    // 牢笼模式与工作区内写入都不得唤起用户审批（哨兵：被调用即失败）
     approve = jest.fn(() => {
       throw new Error("approval must not be requested in jail mode");
     });
-
+    writeApproval = jest.fn(() => {
+      throw new Error("write approval must not be requested here");
+    });
     workspaceService = new WorkspaceService(
       { get: (key: string) => (key === "WORKSPACE_BASE_DIR" ? path.join(tmpDir, "base") : undefined) } as any,
       {} as any,
@@ -68,7 +71,10 @@ describe("FilePlugin path jail", () => {
       providers: [
         FilePlugin,
         { provide: WorkspaceService, useValue: workspaceService },
-        { provide: AskService, useValue: { requestApproval: approve } },
+        {
+          provide: AskService,
+          useValue: { requestApproval: approve, requestWriteApproval: writeApproval },
+        },
         {
           provide: WorkspaceToolRouter,
           useValue: {
@@ -212,18 +218,14 @@ describe("FilePlugin path jail", () => {
       ).rejects.toThrow(/Path jail active/);
     });
 
-    it("ignores sandbox_permissions escalation inside the jail (no user approval)", async () => {
+    it("does not request user approval for writes inside the jail (system flow)", async () => {
       const result = await getTool("write").execute(
-        {
-          file_path: path.join(memoryDir, "escalated.md"),
-          content: "x",
-          sandbox_permissions: "danger-full-access",
-          justification: "why",
-        },
+        { file_path: path.join(memoryDir, "escalated.md"), content: "x" },
         sessionCtx({ sandbox: "read-only" }),
       );
       expect(result).toContain("File written");
       expect(approve).not.toHaveBeenCalled();
+      expect(writeApproval).not.toHaveBeenCalled();
     });
   });
 
@@ -345,13 +347,34 @@ describe("FilePlugin path jail", () => {
       ).rejects.toThrow(/Read-only mode/);
     });
 
-    it("still denies writes outside the workspace root", async () => {
+    it("asks the user for writes outside the workspace root, then writes when approved", async () => {
+      const outside = path.join(tmpDir, "..", "escaped-approved.txt");
+      writeApproval.mockResolvedValueOnce("once");
+
+      const result = await getTool("write").execute(
+        { file_path: path.join(tmpDir, "..", "escaped-approved.txt"), content: "x" },
+        sessionCtx({ jail: null, sandbox: "workspace-write" }),
+      );
+
+      expect(result).toContain("File written");
+      expect(writeApproval).toHaveBeenCalledTimes(1);
+      expect(writeApproval.mock.calls[0][1].resolvedPath).toBe(path.resolve(outside));
+      await fs.rm(outside, { force: true });
+    });
+
+    it("does not write outside the workspace when the user denies", async () => {
+      const outside = path.join(tmpDir, "..", "escaped-denied.txt");
+      writeApproval.mockRejectedValueOnce(
+        new Error("AskDeniedError: 用户拒绝写入该路径"),
+      );
+
       await expect(
         getTool("write").execute(
-          { file_path: path.join(tmpDir, "..", "escaped.txt"), content: "x" },
+          { file_path: path.join(tmpDir, "..", "escaped-denied.txt"), content: "x" },
           sessionCtx({ jail: null, sandbox: "workspace-write" }),
         ),
-      ).rejects.toThrow(/不允许写入该路径/);
+      ).rejects.toThrow(/AskDeniedError/);
+      await expect(fs.access(outside)).rejects.toThrow();
     });
 
     it("allows writes inside the workspace root", async () => {

@@ -16,12 +16,9 @@ import {
 } from "../chat/types/hooks.contract";
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import {
-  ESCALATION_TARGETS,
   isCommandPolicyEnforced,
   isShellSandboxSupported,
-  parseEscalationArgs,
   sandboxForMode,
-  assertStrictlyWider,
   type SandboxMode,
 } from "../../common/services/sandbox-policy";
 import {
@@ -122,11 +119,8 @@ export class ShellPlugin extends PluginBase {
         : "";
     // 命令策略层（Windows 无 OS 沙盒）：说明白"什么会直接跑、什么会弹窗"，否则模型会乱试
     const commandPolicyNote = isCommandPolicyEnforced()
-      ? `\n- **Command approval (no OS sandbox on this platform)**: verified read-only commands (git status/diff/log/show, ls, cat, head/tail, grep/rg, find without -delete/-exec, Get-ChildItem/Get-Content/Select-String, …) run immediately. Any other command needs the user's approval in workspace-write mode (the approval card offers: this once / always this command in this session / deny), and is denied outright in read-only or plan mode. Prefer read-only commands for inspection, and keep write or execute commands few and purposeful to limit prompts. \`sandbox_permissions\` does not exist on this platform.`
+      ? `\n- **Command approval (no OS sandbox on this platform)**: verified read-only commands (git status/diff/log/show, ls, cat, head/tail, grep/rg, find without -delete/-exec, Get-ChildItem/Get-Content/Select-String, …) run immediately. Any other command needs the user's approval in workspace-write mode (the approval card offers: this once / always this command in this session / deny), and is denied outright in read-only or plan mode. Prefer read-only commands for inspection, and keep write or execute commands few and purposeful to limit prompts. There is no escalation parameter: capability changes come from the user, not from the model.`
       : "";
-    const escalationNote = isCommandPolicyEnforced()
-      ? ""
-      : `\n- **Sandbox escalation**: when a command is denied by the sandbox and a wider mode would let it succeed, retry the exact same command once with \`sandbox_permissions\` (the narrowest wider mode that suffices) plus a one-sentence \`justification\`; an approval prompt will ask the user. Never escalate speculatively: ground the request in a real denial. A rejected escalation is final for that command.`;
     shellKit.registerTool({
       name: "run_command",
       description: `Use the \`run_command\` command to execute commands
@@ -134,8 +128,8 @@ export class ShellPlugin extends PluginBase {
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- processId is typically the shell process ID, not the command's own process ID${escalationNote}
-- **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side; \`sandbox_permissions\` does not apply). Foreground timeout (60s) switches to background there too; background processIds carry the "r:" prefix and are managed with the same process tool.`,
+- processId is typically the shell process ID, not the command's own process ID
+- **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side). Foreground timeout (60s) switches to background there too; background processIds carry the "r:" prefix and are managed with the same process tool.`,
       inputSchema: z.object({
         command: z
           .string()
@@ -169,18 +163,6 @@ export class ShellPlugin extends PluginBase {
             "Whether to run in background mode immediately. Defaults to false. When true, returns process ID immediately without waiting.",
           ),
         workspace: workspaceParamField,
-        sandbox_permissions: z
-          .enum(ESCALATION_TARGETS)
-          .optional()
-          .describe(
-            "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
-          ),
-        justification: z
-          .string()
-          .optional()
-          .describe(
-            "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access.",
-          ),
       }),
       execute: async (args, ctx, abortSignal) => {
         const command: string = args.command;
@@ -229,40 +211,8 @@ export class ShellPlugin extends PluginBase {
         // ── 命令策略门（Windows）：只读白名单自动放行，其余按档位审批或拒绝 ──
         await this.enforceCommandPolicy(command, effectiveMode, ctx, abortSignal);
 
-        // 提权请求：sandbox_permissions + justification 成对 → 严格放宽校验 → 审批 → 应用放宽模式
-        const escalation = parseEscalationArgs(
-          args.sandbox_permissions,
-          args.justification,
-        );
-        if (escalation) {
-          // 计划模式下提权不可用：否则模型可绕过计划门的只读语义（用户要的是"先给方案，别动手"）
-          if (planMode) {
-            throw new Error(
-              `sandbox_permissions is unavailable in plan mode. Exit plan mode first if a write is required.`,
-            );
-          }
-          if (!sandbox?.enabled) {
-            throw new Error(
-              isCommandPolicyEnforced()
-                ? `sandbox_permissions is unavailable on this platform: commands are not sandboxed here. Any command outside the read-only allowlist already triggers an approval prompt — just run the command instead (in read-only mode, ask the user to switch modes).`
-                : `Sandbox is not enabled in this session (mode: ${mode}); sandbox_permissions is unavailable.`,
-            );
-          }
-          // 非严格放宽（平级/降级）→ 直接抛错，不打扰人（对齐 DSH）
-          assertStrictlyWider(mode, escalation.mode);
-          // 原地等待审批（统一 Ask：同意/拒绝/自定义回复，无超时）：
-          // 批准正常返回；拒绝/自定义/中止抛 AskDeniedError（命令不执行，终局）
-          await this.askService.requestApproval(session, {
-            toolCallId: ctx?.toolCallId || "",
-            toolName: "run_command",
-            detail: `请求沙盒提权 ${mode} → ${escalation.mode}：${escalation.justification}`,
-            abortSignal,
-          });
-          sandbox = sandboxForMode(escalation.mode);
-          this.logger.log(
-            `Escalation approved: ${mode} → ${escalation.mode} (call=${ctx?.toolCallId})`,
-          );
-        }
+        // 模型不能自我提权：本工具没有提权参数。能力放宽只有两条路——
+        // 命令策略的审批卡（本次允许 / 本会话内始终允许 / 拒绝），或用户在界面上切换档位。
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(
@@ -310,9 +260,9 @@ export class ShellPlugin extends PluginBase {
           const body = execResult.output || "(no output)";
           const lines: string[] = [];
           if (sandbox?.enabled && execResult.exitCode !== 0) {
-            // 沙盒拒绝提示：附提权 hint 供模型带参重试（对齐 DSH，位于末行标记之前）
+            // 沙盒拒绝提示：引导用户在界面上切换档位（模型不能自我提权）
             lines.push(
-              `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`,
+              `[sandbox: denied — if this access is really needed, ask the user to switch the session mode to a wider one]`,
             );
           }
           lines.push(
@@ -347,7 +297,7 @@ export class ShellPlugin extends PluginBase {
         renderer: { kind: "terminal", fields: { command: "command" } },
       },
       dangerLevel: "critical",
-      // 计划模式放行，但 handler 强制以只读沙盒执行并拒绝提权参数（见本文件 getPlanEnabled 分支）
+      // 计划模式放行，但 handler 强制以只读沙盒执行（见本文件 getPlanEnabled 分支）
       allowedInPlanMode: true,
     });
 
@@ -666,17 +616,10 @@ export class ShellPlugin extends PluginBase {
       command: string;
       encoding?: string;
       background?: boolean;
-      sandbox_permissions?: string;
-      justification?: string;
     },
     ctx: PluginContext,
     abortSignal?: AbortSignal,
   ): Promise<string | import("../plugins/api/plugin-api").ToolResultObject> {
-    if (args.sandbox_permissions || args.justification) {
-      throw new Error(
-        "sandbox_permissions only applies to the local sandbox; remote command execution is governed by the connection's permission mode.",
-      );
-    }
     if (abortSignal?.aborted) throw new Error("Request was aborted");
     this.logger.log(
       `Running remote command: ${args.command}, workspace: ${target.connectionName}`,

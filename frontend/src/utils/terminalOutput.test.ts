@@ -18,16 +18,16 @@ describe("parseTerminalResult", () => {
     expect(info!.recognized).toBe(true);
   });
 
-  it("新契约：非零退出 + 沙盒提权 hint（hint 位于 exit 标记之前，被丢弃）", () => {
+  it("新契约：非零退出 + 沙盒拒绝提示（提示行位于 exit 标记之前，被丢弃）", () => {
     const text = [
       "cat: /etc/shadow: Permission denied",
-      "[sandbox: escalation available — retry this exact command once with sandbox_permissions]",
+      "[sandbox: denied — if this access is really needed, ask the user to switch the session mode to a wider one]",
       "[exit code: 1, uptime: 2s]",
     ].join("\n");
     const info = parseTerminalResult(text);
     expect(info!.body).toBe("cat: /etc/shadow: Permission denied");
     expect(info!.exitCode).toBe(1);
-    expect(info!.body).not.toContain("escalation");
+    expect(info!.body).not.toContain("sandbox: denied");
   });
 
   it("新契约：空输出 → (no output) 归一为空 body", () => {
@@ -120,6 +120,7 @@ describe("parseTerminalResult", () => {
     expect(info!.exitCode).toBe(3);
     expect(info!.truncated).toBe(true);
     expect(info!.logFilePath).toBe("/tmp/x.log");
+    // 历史会话里的旧版提权 hint 同样会被剥离
     expect(info!.body).not.toContain("escalation");
   });
 
