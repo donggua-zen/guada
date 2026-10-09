@@ -149,6 +149,37 @@ describe("sessionStore 流状态机", () => {
     }
   });
 
+  it("peekSessionPendingAsk 纯读约束:不创建缓存、不写响应式 Map(渲染递归白屏回归)", () => {
+    const store = useSessionStore();
+    store.setSessionPendingAsk("probe", { requestId: "req1", kind: "approval", questions: [] });
+
+    // 侧边栏渲染路径按会话逐项 peek 未知会话:若 peek 有副作用(创建 + 清扫),
+    // 会话数超 32 硬上限时会"建了又被淘汰"→ 渲染期写响应式 Map → Maximum recursive updates
+    for (let i = 0; i < 50; i++) {
+      expect(store.peekSessionPendingAsk(`unknown_${i}`)).toBeUndefined();
+    }
+
+    // 未缓存会话不因 peek 而诞生:缓存一旦创建,streamStatus 至少是 'idle' 而非 undefined
+    expect(store.peekStreamStatus("unknown_0")).toBeUndefined();
+    // 既有待批状态正常读取
+    expect(store.peekSessionPendingAsk("probe")?.requestId).toBe("req1");
+    store.setSessionPendingAsk("probe", undefined);
+    expect(store.peekSessionPendingAsk("probe")).toBeUndefined();
+  });
+
+  it("淘汰保护:待批(审批/询问)中的会话不被 TTL 淘汰(卡片状态丢了无法从补发重建)", () => {
+    const store = useSessionStore();
+    store.getSessionState("ask_1");
+    store.setSessionPendingAsk("ask_1", { requestId: "req1", kind: "approval", questions: [] });
+    store.getSessionState("stale_1");
+
+    // 快进 3 小时清扫:stale 过期;ask_1 无续期但受待批保护
+    store.evictSessionStates(undefined, Date.now() + 3 * 60 * 60 * 1000);
+
+    expect(store.peekStreamStatus("stale_1")).toBeUndefined();
+    expect(store.peekSessionPendingAsk("ask_1")?.requestId).toBe("req1");
+  });
+
   it("硬上限兜底:灌入超过 32 个会话,running 不被淘汰,最旧非 running 被踢", () => {
     const store = useSessionStore();
     store.setStreamStatus("runner", "running");

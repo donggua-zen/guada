@@ -54,11 +54,28 @@ export function useSessionEvents() {
     // 应用启动即建立:唯一 receiver 常驻消费全局 SSE 所有会话事件,
     // 按 sessionId 路由 → 有缓存写缓存 / 无缓存暂存 finish 后事件。
     // 与发送链路(handleSendMessage → apiService.chat)完全独立。
+    // 后端进程标识（streamBootId）：变化 = 后端重启，旧进程的内存等待表已清空。
+    let lastStreamBootId: string | undefined;
+
     unsubscribers.push(
       // subscribeAll 已声明 HubStreamEvent（WireStreamEvent），chunk 按判别联合收窄
       streamReceiver.subscribeAll((chunk) => {
         const sid = chunk.sessionId;
         if (!sid) return;
+
+        // 后端重启：清掉上一个进程残留的待批状态（本帧若恰是 ask_requested，
+        // 紧随其后的 projectChunk 会重新写入；新进程仍待批的 ask 由补发帧重建）。
+        // 注意不能改成"每次建连就清"：同进程重连（网络闪断）时补发会被 hub 按
+        // streamSeq 去重丢弃，状态无法重建，清了就把仍可应答的卡片弄丢。
+        if (
+          chunk.streamBootId &&
+          lastStreamBootId &&
+          chunk.streamBootId !== lastStreamBootId
+        ) {
+          sessionStore.clearAllPendingAsks();
+        }
+        if (chunk.streamBootId) lastStreamBootId = chunk.streamBootId;
+
         // 压缩失败/取消：瞬态提示（成功由对话区结果卡承载，不额外打扰）
         if (chunk.type === "compression_error") {
           if (chunk.cancelled) {
@@ -183,6 +200,9 @@ export function useSessionEvents() {
         // 其 TurnItem 会与输入框状态脱节——永久显示流式中、动画不消失。
         if (status !== "running") {
           resetSessionTurnsTransientState(sessionStore, sessionId);
+          // 会话级交互卡兜底：流已终止 → 不可能仍有等待中的 ask（ask 阻塞期间流保持 running），
+          // 防 SSE 掉线期间错过 ask_resolved 后卡片残留。
+          sessionStore.setSessionPendingAsk(sessionId, undefined);
         }
 
         // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象

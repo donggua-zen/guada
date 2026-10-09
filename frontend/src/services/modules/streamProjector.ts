@@ -564,6 +564,22 @@ function upsertCompressingPlaceholder(sessionStore: ProjectorSessionStore, sessi
 }
 
 
+/**
+ * ask_requested 帧 → 会话级交互卡状态（projectChunk 门控前直写与 live 分支共用，防字段漂移）。
+ */
+function toPendingAsk(
+  chunk: Extract<ProjectorChunk, { type: "ask_requested" }>,
+): SessionState["pendingAsk"] {
+  return {
+    requestId: chunk.requestId,
+    kind: chunk.kind,
+    title: chunk.title,
+    toolCallId: chunk.toolCallId,
+    toolName: chunk.toolName,
+    questions: chunk.questions || [],
+  };
+}
+
 /** 按事件类型定位更新 store(无闭包,直接改响应式 store)。
  *  `mode` 必填：两个入口（applyLiveChunk / foldEvents）都必须显式声明自己是实时还是重放，
  *  漏改会在编译期暴露，不会静默保留重放期的实时副作用。 */
@@ -821,14 +837,7 @@ export function applyChunkToStore(
     // 只在实时路径写：卡片的权威来源是 live 流（含 SSE 建连时对活跃流 eventBuffer 的补发，
     // ask_requested 正在其中）；历史重放无从判断该 ask 是否仍在等待，写它只会覆盖实时真相。
     if (mode === "live") {
-      sessionStore.setSessionPendingAsk(sessionId, {
-        requestId: chunk.requestId,
-        kind: chunk.kind,
-        title: chunk.title,
-        toolCallId: chunk.toolCallId,
-        toolName: chunk.toolName,
-        questions: chunk.questions || [],
-      });
+      sessionStore.setSessionPendingAsk(sessionId, toPendingAsk(chunk));
     }
     return;
   }
@@ -1025,6 +1034,16 @@ export function projectChunk(
   chunk: ProjectorChunk,
 ): void {
   const sessionState = sessionStore.getSessionState(sessionId);
+
+  // 会话级交互卡以 sessionId 唯一锚点、与回合缓存无关：先于 hasCache 门控直写，
+  // 否则「未打开过内容的会话」（刷新后的非当前会话、另一窗口正在跑的会话）在 store 里
+  // 看不到 pendingAsk，侧边栏等会话级消费者失明。与 applyLiveChunk 的 live 分支同值幂等双写。
+  if (chunk.type === "ask_requested") {
+    sessionStore.setSessionPendingAsk(sessionId, toPendingAsk(chunk));
+  } else if (chunk.type === "ask_resolved") {
+    sessionStore.setSessionPendingAsk(sessionId, undefined);
+  }
+
   const hasCache =
     sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
   if (!hasCache) {

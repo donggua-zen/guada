@@ -89,6 +89,17 @@
                     :actions-visible="session.id === currentSessionId || hoveredSessionId === session.id"
                     :scroll-active="hoveredSessionId === session.id" />
                 </div>
+                <!-- 待批胶囊：会话级交互卡（审批/询问/计划）未应答。
+                     当前会话且窗口可见时卡片已在输入区上方，不重复提醒（沿用 unread 规则）；
+                     mr-6 为右侧「更多」按钮预留（icon 16px + padding 8px + right 2px）→ hover 无跳动 -->
+                <GdTooltip
+                  v-if="getSessionAwaiting(session.id) && (session.id !== currentSessionId || windowHidden)"
+                  class="shrink-0 mr-6" :content="getSessionAwaitingTooltip(session.id)" placement="right">
+                  <span
+                    class="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] leading-4 text-amber-600 dark:text-amber-400">
+                    {{ getSessionAwaitingLabel(session.id) }}
+                  </span>
+                </GdTooltip>
                 <!-- 操作菜单：绝对定位悬浮于右缘，不占 flex 空间，标题可占满整行 -->
                 <div class="session-actions absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center"
                   :class="session.id === currentSessionId
@@ -590,6 +601,26 @@ const getSessionUnread = (sessionId: string): boolean => {
 
 const getSessionWorking = (sessionId: string): boolean => {
   return sessionStore.getSidebarFlag(sessionId, 'working')
+}
+
+/** 该会话是否有未应答的交互卡（审批/询问）。渲染路径必须走 peek（不建缓存，见 store 注释） */
+const getSessionAwaiting = (sessionId: string): boolean => {
+  return !!sessionStore.peekSessionPendingAsk(sessionId)
+}
+
+/** 胶囊文案：审批 → 待批准；询问 → 待回复 */
+const getSessionAwaitingLabel = (sessionId: string): string => {
+  return sessionStore.peekSessionPendingAsk(sessionId)?.kind === 'ask'
+    ? t('ui.sidebar.awaitingReply')
+    : t('ui.sidebar.awaitingApproval')
+}
+
+/** 胶囊提示：优先显示卡片标题（「计划审批」「命令需要批准」…） */
+const getSessionAwaitingTooltip = (sessionId: string): string => {
+  const ask = sessionStore.peekSessionPendingAsk(sessionId)
+  return ask?.title
+    ? t('ui.sidebar.awaitingTooltipWithTitle', { title: ask.title })
+    : t('ui.sidebar.awaitingTooltip')
 }
 
 // 选择会话
