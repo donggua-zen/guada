@@ -607,7 +607,9 @@ function upsertCompressResultPlaceholder(
     eventType: "compaction",
     compressResult: {
       reason: chunk.reason ?? "auto",
+      tier: chunk.tier ?? "llm",
       pruneEvents: chunk.pruneEvents ?? 0,
+      thinkingStrippedCount: chunk.thinkingStrippedCount ?? 0,
       compacted: chunk.compacted === true,
       skipReason: chunk.skipReason,
     },

@@ -119,7 +119,7 @@ const SKIP_REASON_KEYS: Record<string, string> = {
   "tier-disabled": "chat.turn.compressSkip.tierDisabled",
 };
 
-/** 压缩结果卡文案：裁剪条数 + 是否压缩（未压缩时给出原因） */
+/** 压缩结果卡文案：裁剪/剥离条数 + 是否压缩（未压缩时给出原因；微压缩不显示"未压缩"） */
 const compressResultLabel = computed(() => {
   const r = compressResult.value;
   if (!r) return "";
@@ -127,15 +127,19 @@ const compressResultLabel = computed(() => {
   if (r.pruneEvents > 0) {
     parts.push(t("chat.turn.contextPruned", { count: r.pruneEvents }));
   }
+  if (r.thinkingStrippedCount > 0) {
+    parts.push(t("chat.turn.contextThinkingStripped", { count: r.thinkingStrippedCount }));
+  }
   if (r.compacted) {
     parts.push(t("chat.turn.contextCompacted"));
-  } else {
+  } else if (r.tier !== "micro") {
+    // 二级（LLM）压缩未发生：给出跳过原因；微压缩（tier=micro）不做二级，不显示"未压缩"
     const reason = t(
       SKIP_REASON_KEYS[r.skipReason] ?? "chat.turn.compressSkip.unknown",
     );
     parts.push(`${t("chat.turn.contextNotCompacted")}（${reason}）`);
   }
-  return parts.join(" · ");
+  return parts.join(" · ") || t("chat.turn.contextCompacted");
 });
 
 const outcomeLabel = computed(() => {

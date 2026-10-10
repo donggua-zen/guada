@@ -240,8 +240,9 @@ export default {
     contextCompactedCount: '上下文已压缩 · 折叠 {count} 条消息',
     contextCompacting: '正在压缩上下文...',
     collapseSummary: '收起摘要',
-    // EventCard.vue 压缩结果卡（纯裁剪/空跑：说明本次做了什么）
+    // EventCard.vue 压缩结果卡（微压缩/空跑：说明本次做了什么）
     contextPruned: '已裁剪 {count} 处超长工具结果',
+    contextThinkingStripped: '已剥离 {count} 条历史思考',
     contextNotCompacted: '未压缩',
     compressSkip: {
       belowThreshold: '未达触发线',

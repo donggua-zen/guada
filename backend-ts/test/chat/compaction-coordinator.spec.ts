@@ -49,8 +49,11 @@ function createCoordinator(
     shouldCompress: jest.fn(async () => true),
     compress: jest.fn(async () => [makeMsg('m1')]),
   },
+  microcompactService: any = {
+    maybeMicrocompact: jest.fn(async () => ({ applied: false })),
+  },
 ) {
-  return new CompactionCoordinatorService(compactionService);
+  return new CompactionCoordinatorService(compactionService, microcompactService);
 }
 
 function preStepPayload(ctx: CompactionDataSource): PreStepPayload {
@@ -99,6 +102,27 @@ describe('CompactionCoordinatorService', () => {
       const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
       expect(events[0].type).toBe('compression_start');
       expect(events[1].type).toBe('compression_error');
+    });
+
+    it('微压缩先于 LLM 压缩执行（同一订阅者内显式串行，对齐 zcode）', async () => {
+      const ctx = createContext();
+      const callOrder: string[] = [];
+      const microcompactService = {
+        maybeMicrocompact: jest.fn(async () => {
+          callOrder.push('micro');
+          return { applied: false };
+        }),
+      };
+      const compactionService = {
+        shouldCompress: jest.fn(async () => {
+          callOrder.push('llm');
+          return false;
+        }),
+        compress: jest.fn(),
+      };
+      const coordinator = createCoordinator(compactionService, microcompactService);
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(callOrder).toEqual(['micro', 'llm']);
     });
   });
 
@@ -233,7 +257,7 @@ describe('CompactionCoordinatorService', () => {
       expect(summary.contextStats).toEqual({ usedTokens: 600, effectiveContextWindow: 1000 });
     });
 
-    it('纯裁剪（compacted=false）→ 仍发 compression_end 携带 contextStats，不发 compaction_summary', async () => {
+    it('未压缩（compacted=false）→ 仍发 compression_end 携带 contextStats，不发 compaction_summary', async () => {
       const ctx = createContext();
       const compactionService = {
         shouldCompress: jest.fn(async () => true),

@@ -46,11 +46,13 @@
 | 端点 | 可见性 | 行为 |
 |---|---|---|
 | `GET /auth/status` | 公开 | `{ passwordSet }` —— 前端据此决定是否强制登录 |
-| `POST /auth/login` | 公开 | 校验 username + password（均大小写不敏感） |
+| `POST /auth/login` | 公开 | 校验 username + password（均大小写不敏感）；**未设密码时用户名匹配即放行**（免密实例不该有"任何密码都失败"的死路） |
 | `POST /auth/auto-login` | 公开 | **仅在未设密码时**签发凭据；已设密码返回 400 |
 | `PUT /user/password` | 需鉴权 | 设置/修改密码（已设密码时需旧密码） |
 | `POST /user/password/change` | 需鉴权 | 同上（前端用） |
 | `DELETE /user/password` | 需鉴权 | 清除密码 → 回到免登录 |
+
+**前端入口约定**：路由守卫统一走 `authStore.ensureEntry()`——已有 token 则服务端校验；否则查 `/auth/status`，未设密码（或状态未知）时由 `/auth/auto-login` 裁决（服务端权威，不会绕过密码）。`/login` 另设**反向守卫**：免密则自动进入并重定向，确保免密实例既不显示、也无法停留在登录页（兜住 401 全局跳转与"退出登录"落入 `/login` 的情况）。`/auth/status` 查询失败**不得**被当作"已设密码"。
 
 **鉴权守卫**（`AuthGuard`）：有 token → 校验并放行；无 token → 未设密码则放行，否则 401。
 三条 token 通道（HTTP Guard / WebSocket / html-preview 手写 JWT）统一从账户文件解析，不再查库。

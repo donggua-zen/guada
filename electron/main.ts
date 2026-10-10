@@ -321,6 +321,88 @@ async function forceKillBackendTree(): Promise<void> {
   }
 }
 
+/**
+ * 查询监听指定端口的进程（PID + 命令行）。
+ * 用 -File 传脚本而不是 -Command 内联，避免 exec 的引号转义问题（与退出码监视器同一套路）。
+ */
+const PORT_OWNER_PS = `param([Parameter(Mandatory = $true)][int]$Port)
+$ErrorActionPreference = 'SilentlyContinue'
+$conn = Get-NetTCPConnection -LocalPort $Port -State Listen | Select-Object -First 1
+if (-not $conn) { Write-Output "NONE"; exit 0 }
+$proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $conn.OwningProcess)
+Write-Output ("PID " + $conn.OwningProcess)
+if ($proc) { Write-Output ("CMD " + $proc.CommandLine) }
+exit 0
+`;
+
+async function findPortOwner(port: number): Promise<{ pid: number; commandLine: string } | null> {
+  if (process.platform !== "win32" || !port) return null;
+  let scriptPath: string;
+  try {
+    scriptPath = path.join(app.getPath("temp"), "guada-port-owner.ps1");
+    fs.writeFileSync(scriptPath, PORT_OWNER_PS, "utf-8");
+  } catch (err) {
+    log.error("[BackendReclaim] 写入端口查询脚本失败:", err);
+    return null;
+  }
+  const stdout = await new Promise<string>((resolve) => {
+    exec(
+      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Port ${port}`,
+      { windowsHide: true },
+      (_error, out) => resolve(String(out || "").trim()),
+    );
+  });
+  if (!stdout || stdout.startsWith("NONE")) return null;
+  const pid = Number(/^PID (\d+)/m.exec(stdout)?.[1]);
+  if (!pid) return null;
+  const commandLine = /^CMD (.*)$/m.exec(stdout)?.[1]?.trim() ?? "";
+  return { pid, commandLine };
+}
+
+/**
+ * dev 固定端口启动前对账。
+ * 上一次退出若把真实后端孤儿化，它会一直占着该端口，使本次 bind 失败（EADDRINUSE），
+ * 而 ts-node-dev 的 --respawn 不会因此重启——表现为「重启无效」。这里在 spawn 前清理：
+ * 只有确认占用者就是本仓库的后端进程（命令行含仓库根 + backend-ts/main.ts）才下手，
+ * 不是我们的进程一律只告警、绝不误杀。
+ */
+async function reclaimDevPort(port: number, repoRoot: string): Promise<void> {
+  const owner = await findPortOwner(port);
+  if (!owner) return;
+
+  const normalize = (s: string) => s.replace(/[\\/]+/g, "\\").toLowerCase();
+  const cmdLine = normalize(owner.commandLine);
+  const isOurBackend =
+    cmdLine.includes(normalize(repoRoot)) &&
+    /backend-ts\\/.test(cmdLine) &&
+    /main\.(ts|js)/.test(cmdLine);
+
+  if (!isOurBackend) {
+    log.warn(
+      `[BackendReclaim] 端口 ${port} 已被 PID=${owner.pid} 占用，但它不像本项目的后端进程，跳过清理：` +
+        ((owner.commandLine || "(命令行不可得)").slice(0, 200)),
+    );
+    return;
+  }
+
+  log.warn(`[BackendReclaim] 端口 ${port} 被遗留后端 PID=${owner.pid} 占用，清理进程树...`);
+  await new Promise<void>((resolve) => {
+    exec(`taskkill /pid ${owner.pid} /T /F`, { windowsHide: true }, (error, _out, stderr) => {
+      if (error) {
+        log.error(`[BackendReclaim] taskkill PID=${owner.pid} 失败: ${stderr || error.message}`);
+      } else {
+        log.info(`[BackendReclaim] 已清理遗留后端 PID=${owner.pid}`);
+      }
+      resolve();
+    });
+  });
+
+  // 等进程真正消失（最多 ~3s），避免紧接着 spawn 又撞上 EADDRINUSE
+  for (let i = 0; i < 15 && isPidAlive(owner.pid); i++) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
 async function doCheckForUpdates() {
   try {
@@ -408,6 +490,32 @@ process.on("unhandledRejection", (reason) => {
   if (stack) log.error("[Process] Stack:", stack);
   // 不退出，让应用继续运行
 });
+
+// ── 终端信号 → 优雅退出 ──
+// 背景：dev 下 Ctrl+C 只打到 concurrently/electron，而真实后端是 Electron 的
+// 「cmd/npx → ts-node-dev → fork」重孙进程；Electron 若不主动跑 before-quit 清理，
+// 这条链就被孤儿化，后端会一直占着 3000（2026-10-10 现场：连环 EADDRINUSE，
+// 孤儿进程每 15s 重连一个早已消失的 bridge 管道）。Node 默认的 SIGINT/SIGTERM 行为是
+// 直接终止进程、不触发 before-quit，所以必须显式接管。
+let terminationRequested = false;
+function handleTerminationSignal(signal: NodeJS.Signals): void {
+  log.warn(`[Process] received ${signal}, quitting gracefully...`);
+  if (terminationRequested) {
+    // 第二次 Ctrl+C：用户不想再等，直接退
+    log.warn(`[Process] second ${signal}, forcing exit`);
+    process.exit(1);
+  }
+  terminationRequested = true;
+  // 兜底：优雅清理若卡住，不能把 Ctrl+C 变成空操作（首次 Ctrl+C 后 12s 强制退出）
+  setTimeout(() => {
+    log.error("[Process] graceful shutdown timed out, forcing exit");
+    process.exit(1);
+  }, 12_000);
+  app.quit();
+}
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
+  process.on(signal, () => handleTerminationSignal(signal));
+}
 
 app.on("render-process-gone", (_event, webContents, details) => {
   log.error(
@@ -810,6 +918,10 @@ async function startBackend(): Promise<void> {
       console.log(
         `开发模式：使用端口 ${portDesc}${noWatch ? "（生产调试，无热重载）" : "（热重载）"}`,
       );
+      // dev 端口固定（默认 3000）：先对账清掉上一次遗留的孤儿后端，否则本次 bind 必失败
+      if (backendPort !== 0) {
+        await reclaimDevPort(backendPort, path.resolve(backendPath, ".."));
+      }
       // 开发模式：使用 spawn 启动后端
       const { spawn } = await import("child_process");
       const nodePath = process.platform === "win32" ? "npx.cmd" : "npx";

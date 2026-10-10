@@ -60,3 +60,4 @@ MEMORY.md
 # AI 工具元信息不入库：开源项目各人工具不同，避免污染他人工作区
 .zcode/**
 .zcodeignore
+AGENTS.md

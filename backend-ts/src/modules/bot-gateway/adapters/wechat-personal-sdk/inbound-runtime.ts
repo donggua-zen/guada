@@ -45,15 +45,9 @@ export function assertInboundWirePacket(value: unknown): asserts value is Inboun
     ) {
         throw new GatewayFault("INVALID_EVENT", "iLink 事件 item_list 只能包含对象");
     }
-    if (
-        event.group_id !== undefined &&
-        (typeof event.group_id !== "string" || !event.group_id.trim())
-    ) {
-        throw new GatewayFault("INVALID_EVENT", "iLink 事件 group_id 必须是非空字符串");
-    }
-    if (event.context_token !== undefined && typeof event.context_token !== "string") {
-        throw new GatewayFault("INVALID_EVENT", "iLink 事件 context_token 必须是字符串");
-    }
+    // 刻意不校验 group_id 与 context_token：线上私聊事件会把 group_id 传成空串，
+    // 且二者都可能为 null。它们既不是处理消息的必需字段（映射层用 ?? "" 与可选链兜底），
+    // 一旦拒绝就会把真实用户消息当毒事件丢掉。
 }
 
 /**

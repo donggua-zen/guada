@@ -29,13 +29,22 @@ export class AuthController {
   async login(@Body() body: { username?: string; password?: string }) {
     const { username, password } = body;
 
-    if (!username || !password) {
-      throw new BadRequestException("用户名和密码不能为空");
+    if (!username) {
+      throw new BadRequestException("用户名不能为空");
     }
 
     await this.authService.ensureReady();
 
-    const valid = await this.authService.validateCredentials(username, password);
+    // 仅已设密码时才要求密码；免密模式下允许空密码，
+    // 避免免密实例被卡在登录页（任何密码都失败的死路）。
+    if (this.authService.isPasswordSet() && !password) {
+      throw new BadRequestException("密码不能为空");
+    }
+
+    const valid = await this.authService.validateCredentials(
+      username,
+      password ?? "",
+    );
     if (!valid) {
       // 统一 401，不区分用户名不存在或密码错误
       throw new UnauthorizedException("用户名或密码错误");

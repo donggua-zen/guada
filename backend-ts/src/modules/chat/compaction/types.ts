@@ -29,7 +29,7 @@ export interface CompactionConfig {
   summaryMode?: SummaryMode;
 }
 
-/** 一级裁剪写载荷（引擎经 CompactionDataSource.appendPrune 落库） */
+/** 微压缩写载荷（MicrocompactService 经 CompactionDataSource.appendPrune 落库；strategy 区分工具裁剪/思考剥离） */
 export interface PruneWrite {
   messageId: string;
   newContent: string;
@@ -101,16 +101,16 @@ export interface CompactionDataSource {
   /** KV 前缀：工具定义（与主请求一致） */
   getTools(): ToolDefinition[];
   // ─── 压缩写（v1.4：写路径与读路径同层解耦，引擎不再直插持久化）───
-  /** 一级裁剪写入：落库 + 快照/块级 token 精确失效 */
+  /** 微压缩写入（工具结果裁剪 / 思考剥离）：落库 + 快照 revision 推进（惰性全量重建） */
   appendPrune(data: PruneWrite): Promise<void>;
   /** 二级遮蔽写入：落库 + 快照增量播种（splice view 前 shadowedCount 条为摘要节点）。
    *  @returns 摘要消息 id + 写入后版本号 */
   appendCompact(
     data: CompactWrite,
   ): Promise<{ summaryMessageId: string; endSeq: number }>;
-  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用
-   *  （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）。服务层在 prune-only 后调用。
-   *  @param opts.beforeTokens 压缩前实测占用；opts.savings 本次裁剪节省（锚点之前者被显式扣减，
+  /** 微压缩（无括号）路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用
+   *  （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）。MicrocompactService 生效后调用。
+   *  @param opts.beforeTokens 压缩前实测占用；opts.savings 本次裁剪/剥离节省（锚点之前者被显式扣减，
    *         否则 provider 锚点会抵消裁剪收益 → 占用不降） */
   recordContextAnchor?(opts?: ContextAnchorWrite): Promise<void>;
 }

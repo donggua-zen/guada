@@ -283,6 +283,31 @@ describe("StreamProjector 折叠器", () => {
     expect(store.state.turns.some((t: any) => t.metadata?.compressing)).toBe(false);
   });
 
+  it("compression_end（微压缩）：结果卡携带 tier=micro 与思考剥离数", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "compression_start", tier: "micro" } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "compression_end",
+      tier: "micro",
+      contextStats: { usedTokens: 100, effectiveContextWindow: 1000 },
+      pruneEvents: 2,
+      thinkingStrippedCount: 5,
+      compacted: false,
+    } as any);
+    const resultCarrier = (t: any) =>
+      t.metadata?.compressResult ??
+      t.messages?.find((m: any) => m.metadata?.compressResult)?.metadata
+        ?.compressResult;
+    const resultTurns = store.state.turns.filter((t: any) => !!resultCarrier(t));
+    expect(resultTurns.length).toBe(1);
+    expect(resultCarrier(resultTurns[0])).toMatchObject({
+      tier: "micro",
+      pruneEvents: 2,
+      thinkingStrippedCount: 5,
+      compacted: false,
+    });
+  });
+
   it("compaction_summary 旧格式 shadowedMessageIds", () => {
     foldEvents(store as any, "s1", [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,

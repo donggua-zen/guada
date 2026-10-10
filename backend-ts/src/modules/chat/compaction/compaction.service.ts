@@ -50,8 +50,6 @@ export interface CompressOutcome {
   compacted: boolean;
   /** 遮蔽消息条数（compacted 时 > 0） */
   shadowedCount: number;
-  /** 写入的一级裁剪事件数 */
-  pruneEvents?: number;
   /** 未压缩原因（compacted=false 时给出；tier-disabled/below-threshold 由本服务产出） */
   skipReason?: string;
   /** 遮蔽末位（分界点）消息 id（persistCompaction 的 lastCompactedMessageId / 前端标记依据） */
@@ -106,7 +104,6 @@ export class CompactionService {
         messages: await ds.getHistory(),
         compacted: false,
         shadowedCount: 0,
-        pruneEvents: 0,
         skipReason: 'tier-disabled',
       };
     }
@@ -125,7 +122,6 @@ export class CompactionService {
         messages: await ds.getHistory(),
         compacted: false,
         shadowedCount: 0,
-        pruneEvents: 0,
         skipReason: 'below-threshold',
       };
     }
@@ -133,7 +129,7 @@ export class CompactionService {
     // resolveSummaryMode 在会话侧合并解析（session > agent > 全局），此处归一
     const summaryMode: SummaryMode = config.summaryMode ?? SummaryMode.DEFAULT;
 
-    // 广播预压缩事件（无论最终走裁剪还是摘要，历史即将被处理）
+    // 广播预压缩事件（摘要压缩即将开始，历史即将被遮蔽）
     this.eventBus.emit(HOOKS.MEMORY_PRE_COMPACT, {
       sessionId: ds.sessionId,
       timestamp: new Date().toISOString(),
@@ -159,7 +155,7 @@ export class CompactionService {
       contextWindow: window,
       triggerRatio: config.compressionTriggerRatio ?? 0.8,
       retainRatio: config.compressionRetainRatio ?? 0.2,
-      // 溢出/手动路径：跳过触发判断 + retain 降为 0（对齐 DSH 溢出路径）
+      // 手动/溢出路径：跳过触发判断（retain 仍按配置比例，不归零）
       force: opts.force ?? false,
       modelName: ds.getModelConfig().modelName,
       summaryProvider,
@@ -181,22 +177,11 @@ export class CompactionService {
       maxSummaryTokens: 2000,
     });
     this.logger.log(
-      `[compaction] done: prune=${result.pruneEvents}, compacted=${result.compacted}`,
+      `[compaction] done: compacted=${result.compacted}, shadowed=${result.shadowedCount}`,
     );
 
     // 压缩后 surface：快照已由写路径增量播种，直接读（O(1)）
     const refreshed = await ds.getHistory();
-
-    // 纯裁剪（无括号）路径无 compaction/end 锚点 → 补写一条独立 compaction/end 携带压缩后占用
-    // （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）
-    // beforeTokens = 压缩前实测占用（方法入口 currentTokens），供压缩历史 before/after 对比；
-    // savings 让会话侧扣掉被 provider 增量口径抵消的裁剪收益（否则占用不降）
-    if (result.pruneEvents > 0 && !result.compacted) {
-      await ds.recordContextAnchor?.({
-        beforeTokens: currentTokens,
-        savings: result.savings,
-      });
-    }
 
     // 压缩后占用（两路径统一）：供 live 广播压缩事件，前端即时更新环形指示器
     const contextStats = await ds.getContextStats();
@@ -209,7 +194,6 @@ export class CompactionService {
       messages: refreshed,
       compacted: result.compacted,
       shadowedCount: result.shadowedCount,
-      pruneEvents: result.pruneEvents,
       ...(result.skipReason === undefined ? {} : { skipReason: result.skipReason }),
       shadowedEndId: result.shadowedEndId,
       summaryMessageId: result.summaryMessageId,

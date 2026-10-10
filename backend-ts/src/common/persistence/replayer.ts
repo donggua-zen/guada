@@ -25,6 +25,8 @@ import {
   MessagePruneData,
   CompactionSummaryData,
   MessageFile,
+  PRUNE_STRATEGY_USER_EDIT,
+  PRUNE_STRATEGY_THINKING_STRIP,
 } from './types';
 import type {
   Turn as ThreeTierTurn,
@@ -175,23 +177,30 @@ export function foldEvent(
       break;
     }
 
-    // ─── 内容裁剪（一级压缩）───
+    // ─── 内容裁剪/思考剥离（微压缩，一级）───
     case 'message/prune': {
       const data = (event.data as unknown) as MessagePruneData;
       const applyCompressionPrune = opts?.applyCompressionPrune !== false;
       // 用户编辑（strategy='user_edit'）：两视图一致，就地改 text 块（编辑所见即所得）；
-      // 压缩自动裁剪（head_tail_500 等）：仅默认（LLM）链路应用，applyCompressionPrune=false 保留完整原文
-      if (data.strategy !== 'user_edit' && !applyCompressionPrune) break;
+      // 微压缩自动改写（工具结果裁剪 / 思考剥离）：仅默认（LLM）链路应用，
+      // applyCompressionPrune=false 保留完整原文
+      if (data.strategy !== PRUNE_STRATEGY_USER_EDIT && !applyCompressionPrune) break;
       const node = state.messages.find((n) => n.id === data.messageId);
       if (!node) break;
       const m = node;
-      if (data.strategy === 'user_edit') {
+      if (data.strategy === PRUNE_STRATEGY_USER_EDIT) {
         const tb = m.content.find(
           (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text',
         );
         if (tb) tb.text = data.newContent;
+      } else if (data.strategy === PRUNE_STRATEGY_THINKING_STRIP) {
+        // 思考剥离：reasoning 块保留、summary 置空（不删块——读取管线按思考模式决定
+        // 填充 ' ' 还是整块剥离，块缺失会破坏该策略的判定依据）
+        for (const b of m.content) {
+          if (b.type === 'reasoning') b.summary = data.newContent;
+        }
       } else {
-        // 一级压缩目标：tool-result 块（回退到 text 块）
+        // 工具结果裁剪：tool-result 块（回退到 text 块）
         const tr = m.content.find(
           (b): b is Extract<ContentBlock, { type: 'tool-result' }> => b.type === 'tool-result',
         );

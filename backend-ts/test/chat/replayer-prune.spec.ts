@@ -251,6 +251,71 @@ describe('replayer message/prune 双链路规则', () => {
       expect((text as { text: string }).text).toBe('编辑后的助手文本');
     });
   });
+
+  describe('思考剥离（strategy=thinking_strip）：reasoning 块保留、summary 置空', () => {
+    /** 一轮：user + assistant（reasoning + text + tool-call）+ tool 结果 */
+    function thinkingRound(): BaseEvent[] {
+      return [
+        { type: 'turn/start', seq: 1, time: 1, data: { turnId: 't1', kind: 'turn', metadata: {} } },
+        { type: 'user/message', seq: 2, time: 2, data: { messageId: 'u1', kind: 'user', blocks: [{ type: 'text', text: 'hi' }], metadata: {} } },
+        {
+          type: 'assistant/message',
+          seq: 3,
+          time: 3,
+          data: {
+            messageId: 'a1',
+            content: [
+              { type: 'reasoning', summary: '这是一段很长的历史思考内容' },
+              { type: 'text', text: '可见回答' },
+              { type: 'tool-call', toolCallId: 'call_1', name: 'shell', arguments: '{}' },
+            ],
+            metadata: {},
+          },
+        },
+        {
+          type: 'tool/result',
+          seq: 4,
+          time: 4,
+          data: { messageId: 'r1', toolCallId: 'call_1', name: 'shell', content: '工具输出原文', isError: false, metadata: {} },
+        },
+      ];
+    }
+
+    const stripEvent: BaseEvent = {
+      type: 'message/prune',
+      seq: 5,
+      time: 5,
+      data: { messageId: 'a1', newContent: '', prunedBytes: 16, strategy: 'thinking_strip', prunedTokens: 20 },
+    };
+
+    it('默认链路：reasoning.summary 置空、块保留，text/tool-call 不受影响', () => {
+      const state = foldEvents([...thinkingRound(), stripEvent] as BaseEvent[]);
+      const msg = state.messages.find((n) => n.id === 'a1')!;
+      const reasoning = msg.content.find((b) => b.type === 'reasoning') as { summary: string };
+      // 块保留（不删除）——读取管线按思考模式决定填充 ' ' 还是整块剥离
+      expect(reasoning).toBeDefined();
+      expect(reasoning.summary).toBe('');
+      // 其它块不被误清（thinking_strip 必须走显式分支，不能落通用 else）
+      expect((msg.content.find((b) => b.type === 'text') as { text: string }).text).toBe('可见回答');
+      expect((msg.content.find((b) => b.type === 'tool-call') as { arguments: string }).arguments).toBe('{}');
+      expect((msg.metadata.pruneInfo as { strategy?: string })?.strategy).toBe('thinking_strip');
+    });
+
+    it('展示链路（applyCompressionPrune=false）：思考保留原文、不写 pruneInfo', () => {
+      const state = foldEvents([...thinkingRound(), stripEvent] as BaseEvent[], undefined, {
+        applyCompressionPrune: false,
+      });
+      const msg = state.messages.find((n) => n.id === 'a1')!;
+      const reasoning = msg.content.find((b) => b.type === 'reasoning') as { summary: string };
+      expect(reasoning.summary).toBe('这是一段很长的历史思考内容');
+      expect(msg.metadata.pruneInfo).toBeUndefined();
+    });
+
+    it('回归守卫：thinking_strip 不误改工具结果（通用 else 分支按 tool-result 定位）', () => {
+      const state = foldEvents([...thinkingRound(), stripEvent] as BaseEvent[]);
+      expect(toolResultText(state)).toBe('工具输出原文');
+    });
+  });
 });
 describe('replayer v1.4 分界点 id 遮蔽（shadowedCount 主表示）', () => {
   // 新格式：compaction/summary 事件带 shadowedEndId（分界点消息 id）+ shadowedCount，

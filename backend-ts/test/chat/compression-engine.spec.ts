@@ -164,7 +164,7 @@ describe('CompressionEngine', () => {
 
   describe('触发判断', () => {
     it('未达 triggerRatio 时不压缩', async () => {
-      const { ds } = createDataSource();
+      const { ds, pruned } = createDataSource();
       const engine = createEngine();
       const result = await engine.execute('s1', {
         messages,
@@ -172,7 +172,7 @@ describe('CompressionEngine', () => {
         dataSource: ds as any,
       });
       expect(result.compacted).toBe(false);
-      expect(result.pruneEvents).toBe(0);
+      expect(pruned.length).toBe(0);
       expect(result.shadowedCount).toBe(0);
     });
 
@@ -305,113 +305,30 @@ describe('CompressionEngine', () => {
     });
   });
 
-  describe('一级裁剪（prune）', () => {
-    it('只裁剪超长 tool-result，保护最近 3 条，不改写原消息', async () => {
-      // 4 条 tool 消息（5000 字符超长），保护最近 3 条 → 只裁剪最早 1 条
-      const longMessages = Array.from({ length: 4 }, (_, i) => ({
-        id: `t${i + 1}_t`,
-        role: 'tool' as const,
-        kind: 'model' as const,
-        source: { kind: 'tool' as const, toolCallId: `call_${i + 1}` },
-        metadata: {},
-        content: [{
-          type: 'tool-result' as const,
-          toolCallId: `call_${i + 1}`,
-          name: 'shell',
-          content: 'x'.repeat(5000),
-        }],
-      }));
+  describe('一级裁剪已拆分（引擎不再做 prune）', () => {
+    it('超长工具结果不再触发任何 message/prune 写入（含 force 路径）', async () => {
       const { ds, pruned } = createDataSource();
       const engine = createEngine();
-      const result = await engine.execute('s1', {
-        messages: longMessages,
-        contextWindow: 10,
-        summaryMode: SummaryMode.FAST,
-        dataSource: ds as any,
-      });
-      expect(result.pruneEvents).toBe(1);
-      expect(pruned.length).toBe(1);
-      expect(pruned[0].messageId).toBe('t1_t');
-      expect(pruned[0].newContent).toContain('[omitted');
-      expect(pruned[0].prunedTokens).toBeGreaterThan(0);
-      // 不修改原消息：输入数组保持原文（无就地改写）
-      const firstTr = longMessages[0].content[0] as Extract<ContentBlock, { type: 'tool-result' }>;
-      expect(firstTr.content).not.toContain('[omitted');
-      expect(firstTr.content.length).toBe(5000);
-    });
-
-    it('裁剪后必然更短：已裁剪内容（≈maxLength+标记）不再入候选 → 二次运行零 prune 事件', async () => {
-      // 回归：旧实现只判 `> maxLength`，而裁剪结果（头 500 + 标记 + 尾 500 ≈1025）仍 > 1000
-      // → 同一批 tool-result 每轮都是候选，被反复"裁剪"成等长（prunedBytes=0）并每次落 88 条
-      // no-op 事件（实测会话 3 轮共 264 条）。
       const longMessages = makeToolMessages(4, 5000);
-      const first = createDataSource();
-      const engine = createEngine();
-      const r1 = await engine.execute('s1', {
+      // 自动路径：无 provider → no-summary-provider 跳过（旧行为会降级为纯裁剪）
+      await engine.execute('s1', {
         messages: longMessages,
         contextWindow: 10,
         summaryMode: SummaryMode.FAST,
-        dataSource: first.ds as any,
-      });
-      expect(r1.pruneEvents).toBe(1);
-      expect(first.pruned[0].prunedBytes).toBeGreaterThan(0);
-
-      // 用第一次的裁剪结果重建视图（其余保持原文）→ 已裁剪内容不得再产生事件
-      const prunedContent = first.pruned[0].newContent;
-      const view2 = longMessages.map((m, i) =>
-        i === 0
-          ? {
-              ...m,
-              content: [
-                {
-                  ...(m.content[0] as Extract<ContentBlock, { type: 'tool-result' }>),
-                  content: prunedContent,
-                },
-              ],
-            }
-          : m,
-      );
-      const second = createDataSource();
-      const r2 = await engine.execute('s1', {
-        messages: view2,
-        contextWindow: 10,
-        summaryMode: SummaryMode.FAST,
-        dataSource: second.ds as any,
-      });
-      expect(r2.pruneEvents).toBe(0);
-      expect(second.pruned.length).toBe(0);
-    });
-
-    it('裁剪后必然更短：略超阈值的内容不会被"裁剪"成等长/更长', async () => {
-      // 旧实现：1013 字符 → newContent = 500 + 25 + 500 = 1025 → prunedBytes = -13（裁剪反而变长）
-      const [slightlyOver] = makeToolMessages(1, 1013);
-      const messages = [slightlyOver, ...makeToolMessages(3, 5000)];
-      const { ds, pruned } = createDataSource();
-      const engine = createEngine();
-      const result = await engine.execute('s1', {
-        messages,
-        contextWindow: 10,
-        summaryMode: SummaryMode.FAST,
         dataSource: ds as any,
       });
-      // 前 3 条超长被保护区跳过，第 4 条（1013）收益不足 → 无任何裁剪
-      expect(result.pruneEvents).toBe(0);
-      expect(pruned.length).toBe(0);
-    });
-
-    it('prune-only 返回节省清单（供会话侧扣减被 provider 锚点抵消的收益）', async () => {
-      const { ds } = createDataSource();
-      const engine = createEngine();
-      const result = await engine.execute('s1', {
-        messages: makeToolMessages(4, 5000),
+      // force + provider：二级摘要路径
+      await engine.execute('s1', {
+        messages: longMessages,
         contextWindow: 10,
-        summaryMode: SummaryMode.FAST,
+        force: true,
+        summaryProvider: { generate: async () => ({ summary: 's' }) },
         dataSource: ds as any,
       });
-      expect(result.compacted).toBe(false);
-      expect(result.savings?.length).toBe(1);
-      expect(result.savings?.[0].index).toBe(0);
-      expect(result.savings?.[0].tokens).toBeGreaterThan(0);
+      expect(pruned).toHaveLength(0);
+      // 引擎不改写输入消息（微压缩由 MicrocompactService 独立执行）
+      const firstTr = longMessages[0].content[0] as Extract<ContentBlock, { type: 'tool-result' }>;
+      expect(firstTr.content.length).toBe(5000);
     });
   });
 
@@ -501,7 +418,7 @@ describe('CompressionEngine', () => {
       expect(pruned.length).toBe(0);
     });
 
-    it('无 summaryProvider 且非 DISABLED 时不触发 onBeforeCompaction（一级裁剪空跑保护）', async () => {
+    it('无 summaryProvider 且非 DISABLED 时不触发 onBeforeCompaction（无摘要能力 → 不压缩）', async () => {
       const { ds } = createDataSource();
       const engine = createEngine();
       const onBefore = jest.fn(async () => {});
@@ -513,6 +430,7 @@ describe('CompressionEngine', () => {
         dataSource: ds as any,
       });
       expect(result.compacted).toBe(false);
+      expect(result.skipReason).toBe('no-summary-provider');
       expect(onBefore).not.toHaveBeenCalled();
     });
 
@@ -552,9 +470,9 @@ describe('CompressionEngine', () => {
       expect(provider.generate).toHaveBeenCalledTimes(2);
     });
 
-    it('压缩路径：遮蔽区不裁剪，摘要输入为原消息（前缀命中）', async () => {
-      // 4 条头部超长 tool（5000 字符 > 1000）+ 4 条普通消息；window=4000 → 压缩触发，
-      // 遮蔽区 = [0, boundary)。超长 t0 落在遮蔽区 → 压缩路径不裁剪它（prune 只作用于保留尾）。
+    it('摘要输入为原消息（前缀命中）：引擎不产生任何 prune 写入', async () => {
+      // 4 条头部超长 tool（5000 字符 > 1000）+ 4 条普通消息；window=4000 → 压缩触发。
+      // 一级微压缩已拆分独立执行：二级路径不裁剪任何消息（遮蔽区整段由摘要替换）。
       const toolMsgs: Message[] = Array.from({ length: 4 }, (_, i) => ({
         id: `t${i}_t`,
         role: 'tool' as const,
@@ -580,9 +498,9 @@ describe('CompressionEngine', () => {
       });
       expect(provider.generate).toHaveBeenCalled(); // 二级触发
       expect(compacted.length).toBe(1);
-      // 遮蔽区（含超长 t0）不裁剪：prune 只作用于保留尾 [boundary..n)，t0 在遮蔽区 → 无 prune 写入
+      // 引擎不做一级裁剪（微压缩独立）
       expect(pruned.length).toBe(0);
-      // 摘要输入 = 原消息（t0 为 5000 字符原文，未写入任何 prune）→ 与上次主请求一致 → 前缀命中
+      // 摘要输入 = 原消息（t0 为 5000 字符原文）→ 与上次主请求一致 → 前缀命中
       const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
       const toolInSummary = genInput.shadowed.find((m: any) => m.id === 't0_t');
       expect(toolInSummary).toBeDefined();

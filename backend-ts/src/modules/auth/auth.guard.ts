@@ -55,9 +55,9 @@ export class AuthGuard implements CanActivate {
     }
 
     try {
-      await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET,
-      });
+      // 不传 secret：复用 JwtModule 的配置（与签发同源），
+      // 避免 ConfigService 带兜底值、process.env 裸读无兜底导致的密钥不一致
+      await this.jwtService.verifyAsync(token);
       request["user"] = this.accountStore.getView();
     } catch {
       throw new UnauthorizedException("Invalid token");
@@ -96,7 +96,8 @@ export async function verifyTokenToAccount(
   token: string,
 ): Promise<AccountView | null> {
   try {
-    await jwtService.verifyAsync(token, { secret: process.env.JWT_SECRET });
+    // 不传 secret：复用 JwtModule 的配置（与签发同源）
+    await jwtService.verifyAsync(token);
     await accountStore.ensureReady();
     return accountStore.getView();
   } catch {

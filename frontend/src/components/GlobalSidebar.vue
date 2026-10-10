@@ -190,7 +190,7 @@
               <Settings16Filled class="w-4 h-4 mr-2" />
               {{ t('ui.sidebar.settingsCenter') }}
             </el-dropdown-item>
-            <el-dropdown-item command="logout" divided>
+            <el-dropdown-item v-if="authStore.passwordSet" command="logout" divided>
               <LogOutOutlined class="w-4 h-4 mr-2" />
               {{ t('ui.sidebar.logout') }}
             </el-dropdown-item>

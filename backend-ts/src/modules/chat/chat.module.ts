@@ -28,6 +28,7 @@ import { ChatRunnerService } from "./chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { JsonlSessionContextFactory } from "./jsonl-session-context.factory";
 import { CompressionEngine } from "./compaction/compression-engine";
+import { MicrocompactService } from "./compaction/microcompact.service";
 import { TokenMeterService } from "./token-meter.service";
 import { MemorySyncService } from "./memory-sync.service";
 import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
@@ -55,6 +56,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     // 会话上下文工厂与压缩引擎（依赖经全局 PersistenceModule 注入的 MESSAGE_STORE_TOKEN）
     JsonlSessionContextFactory,
     CompressionEngine,
+    MicrocompactService,
     TokenMeterService,
     MemorySyncService,
     CompactionService,
