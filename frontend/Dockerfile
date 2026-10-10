@@ -3,19 +3,22 @@
 # ========================================
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+# 与仓库布局保持一致（构建上下文是仓库根）：frontend 的 preinstall 用 ../scripts/xxx
+# 引用仓库根脚本，只有保持 frontend 与 scripts 同级才能解析到
+WORKDIR /repo/frontend
 
 # 统一使用 pnpm（与仓库其他子项目一致）
 RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+COPY scripts /repo/scripts/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY . .
+COPY frontend/ .
 
 # Build the application
 ARG VITE_API_BASE_URL=/api/v1
@@ -29,10 +32,10 @@ RUN pnpm run build
 FROM nginx:alpine AS production
 
 # Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /repo/frontend/dist /usr/share/nginx/html
 
 # Create non-root user
 RUN addgroup -g 1001 -S nginx-group && \

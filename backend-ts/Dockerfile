@@ -3,7 +3,9 @@
 # ========================================
 FROM node:20-slim AS builder
 
-WORKDIR /app
+# 与仓库布局保持一致（构建上下文是仓库根）：backend-ts 的 preinstall/postinstall
+# 用 ../scripts/xxx 引用仓库根脚本，只有保持 backend-ts 与 scripts 同级才能解析到
+WORKDIR /repo/backend-ts
 
 # Install build dependencies for native modules
 RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
@@ -14,15 +16,16 @@ RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debi
 RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches ./patches/
-COPY prisma ./prisma/
+COPY backend-ts/package.json backend-ts/pnpm-lock.yaml backend-ts/pnpm-workspace.yaml ./
+COPY backend-ts/patches ./patches/
+COPY backend-ts/prisma ./prisma/
+COPY scripts /repo/scripts/
 
 # Install all dependencies (including devDependencies for build)
 RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma pnpm install --frozen-lockfile
 
 # Copy source code
-COPY . .
+COPY backend-ts/ .
 
 # Generate Prisma Client
 RUN pnpm exec prisma generate
@@ -54,13 +57,13 @@ RUN groupadd -g 1001 nodejs && \
     useradd -r -u 1001 -g nodejs nestjs
 
 # Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /repo/backend-ts/dist ./dist
 
 # Copy package.json (运行时可能读取版本号等信息)
-COPY package.json ./
+COPY backend-ts/package.json ./
 
 # Copy the whole pruned node_modules from builder (自包含 pnpm 布局，含 .pnpm)
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /repo/backend-ts/node_modules ./node_modules
 
 # Remove unnecessary files from node_modules to reduce size
 RUN find node_modules -type f \( \
@@ -92,15 +95,15 @@ RUN mkdir -p data/uploads data/compression-states logs static && \
     chown -R nestjs:nodejs /app
 
 # Copy static files from builder
-COPY --from=builder /app/static ./static
+COPY --from=builder /repo/backend-ts/static ./static
 
 # Copy bundled skills from builder (用于同步到 skills/.system/)
-COPY --from=builder /app/bundled-skills ./bundled-skills
+COPY --from=builder /repo/backend-ts/bundled-skills ./bundled-skills
 
 
 
 # Copy entrypoint script and convert line endings
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY backend-ts/docker-entrypoint.sh /usr/local/bin/
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 

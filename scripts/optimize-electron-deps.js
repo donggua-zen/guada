@@ -17,6 +17,10 @@ console.log()
 
 const backendPath = path.join(__dirname, '..', 'backend-ts')
 const optimizedPath = path.join(backendPath, 'node_modules_production')
+const repoRoot = path.join(__dirname, '..')
+const watcherPatchScript = path.join(__dirname, 'patch-parcel-watcher.mjs')
+const shippedWatcherBinary = path.join(repoRoot, 'third_party', 'parcel-watcher', 'watcher.node')
+const watcherBinaryRelPath = path.join('node_modules', '@parcel', 'watcher-win32-x64', 'watcher.node')
 
 function getDirSize(dirPath) {
   let size = 0
@@ -71,8 +75,57 @@ function isCacheValid() {
   return currentHash === cachedHash
 }
 
+function md5File(file) {
+  return crypto.createHash('md5').update(fs.readFileSync(file)).digest('hex')
+}
+
+/**
+ * 确保生产目录里的 @parcel/watcher Windows 后端是打过补丁的二进制。
+ *
+ * 上游 2.6.0 在退订时释放仍被在途回调持有的 Subscription（use-after-free），
+ * 打包版切换会话必现 0xC0000005 静默崩溃。补丁二进制随仓库分发（third_party/），
+ * 由 patch-parcel-watcher.mjs 覆盖安装产物，这里负责兜底执行并校验结果。
+ *
+ * 缓存命中会跳过整个安装流程（含 postinstall 里的补丁），所以两条路径都要走这里。
+ * 仅 win32/x64 生效，判断条件与 patch-parcel-watcher.mjs 保持一致。
+ */
+function ensureWatcherPatched() {
+  if (process.platform !== 'win32' || process.arch !== 'x64') return
+
+  if (!fs.existsSync(shippedWatcherBinary)) {
+    console.warn(`⚠️  找不到 ${path.relative(repoRoot, shippedWatcherBinary)}，跳过 @parcel/watcher 校验`)
+    return
+  }
+
+  try {
+    execSync(`node "${watcherPatchScript}"`, { cwd: repoRoot, stdio: 'inherit', env: process.env })
+  } catch (error) {
+    console.error('❌ @parcel/watcher 补丁执行失败:', error.message)
+    process.exit(1)
+  }
+
+  const target = path.join(optimizedPath, watcherBinaryRelPath)
+  if (!fs.existsSync(target)) {
+    console.error('❌ 生产目录里没有 @parcel/watcher-win32-x64/watcher.node，打包版工作区监听会直接崩溃。')
+    console.error('   检查 backend-ts/package.json 的 dependencies 是否包含 @parcel/watcher。')
+    process.exit(1)
+  }
+
+  const expected = md5File(shippedWatcherBinary)
+  const actual = md5File(target)
+  if (actual !== expected) {
+    console.error(`❌ 生产目录中的 @parcel/watcher 未打补丁（md5=${actual}，期望 ${expected}）`)
+    console.error('   打包版切换会话会触发 0xC0000005 崩溃。')
+    console.error('   补丁二进制与重新编译步骤见 third_party/parcel-watcher/README.md。')
+    process.exit(1)
+  }
+  console.log('✓ @parcel/watcher 已打补丁（Windows 后端 use-after-free 修复）')
+}
+
 if (isCacheValid()) {
   console.log('\u2705 Cache valid, skipping dependency installation')
+  // 旧缓存可能来自未打补丁的构建，缓存命中也不能跳过校验
+  ensureWatcherPatched()
   const cachedSize = (getDirSize(optimizedPath) / (1024 * 1024)).toFixed(2)
   console.log(`\uD83D\uDCE6 Cached node_modules size: ${cachedSize} MB`)
   console.log()
@@ -111,9 +164,24 @@ console.log('Step 1: Copying package files (pnpm project files + patches)...')
 
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
 
-// 守卫脚本相对路径按本目录（backend-ts/node_modules_production）重新指向仓库根
-if (packageJson.scripts && packageJson.scripts.preinstall) {
-  packageJson.scripts.preinstall = 'node ../../scripts/ensure-pnpm.js'
+// 暂存目录比 backend-ts 深一层：所有指向仓库根脚本的 ../scripts/ 相对路径
+// （preinstall / postinstall / rebuild:electron）都要上移一级，否则这里会解析到
+// backend-ts/scripts/ 而 MODULE_NOT_FOUND，整个打包链在安装阶段就中断
+const rewrittenScripts = []
+for (const [name, cmd] of Object.entries(packageJson.scripts || {})) {
+  if (typeof cmd !== 'string' || !cmd.includes('../scripts/')) continue
+  packageJson.scripts[name] = cmd.split('../scripts/').join('../../scripts/')
+  rewrittenScripts.push(name)
+}
+if (rewrittenScripts.length > 0) {
+  console.log(`✓ Rewrote ../scripts/ paths for staging dir: ${rewrittenScripts.join(', ')}`)
+}
+
+// 暂存目录里既没有 prisma/schema.prisma，prisma 又是被 --prod 跳过的 devDependency，
+// postinstall 里的 prisma generate 必然报 "Could not find Prisma Schema" 再被 || 吞掉，
+// 只会干扰排查。真正的生成在下方 Step 3（cwd 指向 backend-ts），这里只留补丁调用。
+if (packageJson.scripts && packageJson.scripts.postinstall) {
+  packageJson.scripts.postinstall = 'node ../../scripts/patch-parcel-watcher.mjs'
 }
 
 fs.writeFileSync(
@@ -186,6 +254,11 @@ if (!fs.readFileSync(nodePtyAgentPath, 'utf-8').includes('GuaDa patch')) {
   process.exit(1)
 }
 console.log('✓ node-pty installed and patched')
+
+// Step 3.2: 校验 @parcel/watcher 补丁（install 阶段的 postinstall 已应用，这里再兜底 + 校验 md5）
+console.log()
+console.log('Verifying @parcel/watcher patch...')
+ensureWatcherPatched()
 
 // Step 4: 复制 Prisma schema 并生成客户端
 console.log()
@@ -694,6 +767,12 @@ console.log('Output directory:', optimizedPath)
 console.log()
 console.log('Next step:')
 console.log('1. Run "pnpm run build:electron" to package')
+
+// 收尾复核：后续步骤（Prisma 生成、裁剪、原生模块重建）若改写了 watcher 二进制，
+// 这里必须拦住；同时保证失败的构建不会留下有效的缓存 hash
+console.log()
+console.log('Final check: @parcel/watcher patch...')
+ensureWatcherPatched()
 
 // 保存缓存 hash
 try {
