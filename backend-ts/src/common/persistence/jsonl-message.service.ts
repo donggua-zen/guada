@@ -4,8 +4,9 @@
  * 实现 IMessageStore，底层由 PersistenceBackend（JsonlBackend）+ Replayer 驱动。
  * 回放产出扁平消息 surface（MessageNode IS-A Message，即可视消息序列）：
  * - LLM 链路（缓存折叠）：applyCompressionPrune 默认 true（压缩裁剪就地应用省 token）；
- *   压缩前缀范围直接移除（LLM 用不到被压缩内容）
- * - 展示链路（事件页）：读盘独立折叠（applyCompressionPrune=false，压缩裁剪不应用）
+ *   compaction 遮蔽前缀移除 + 摘要置消息头
+ * - 读原文场景（编辑定位/搜索）：applyCompressionPrune=false（压缩裁剪不应用）
+ * 前端展示不在此列：前端拉事件页后用 streamProjector 自折叠，compaction 只标记不移除消息。
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
@@ -741,7 +742,10 @@ export class JsonlMessageService implements IMessageStore {
    * 编辑轮次（带 sessionId）。
    * 支持：content → 内容编辑（追加 message/prune 记录新内容，简化处理）
    *
-   * 目标消息在扁平 surface（读盘 display 折叠）中定位（含被压缩消息，编辑须对完整事件流进行）。
+   * 定位用 applyCompressionPrune=false 的折叠 surface：保留压缩裁剪的完整原文。
+   * 注意未传 ignoreCompaction，compaction 遮蔽（前缀删除 + 摘要置头）仍然生效——
+   * 被遮蔽消息不在该 surface 内；若需编辑已被压缩的消息，须改用
+   * { applyCompressionPrune: false, ignoreCompaction: true }（对齐会话搜索链路）。
    */
   async updateTurn(
     sessionId: string,
