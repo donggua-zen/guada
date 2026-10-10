@@ -151,16 +151,32 @@ describe("isStandaloneTool / isStandaloneRendererKind", () => {
     setPluginToolDisplays({});
   });
 
-  it("内置映射里只有 ExitPlanMode 独立成块", () => {
+  it("内置映射：ExitPlanMode 按 kind 独立成块", () => {
     expect(isStandaloneTool({ name: "ExitPlanMode" })).toBe(true);
     expect(isStandaloneRendererKind("plan")).toBe(true);
   });
 
-  it("参与分组的工具与无 renderer 的工具都不独立", () => {
+  it("普通工具不独立（回归）", () => {
     expect(isStandaloneTool({ name: "edit" })).toBe(false);
     expect(isStandaloneTool({ name: "write" })).toBe(false);
     expect(isStandaloneTool({ name: "run_command" })).toBe(false);
     expect(isStandaloneTool({ name: "web_search" })).toBe(false);
+  });
+
+  it("子代理派生按工具名独立（无 renderer 也独立）", () => {
+    expect(isStandaloneTool({ name: "subagent_spawn" })).toBe(true);
+  });
+
+  it("子代理管理工具不独立（仍并入过程组）", () => {
+    expect(isStandaloneTool({ name: "subagent_manager" })).toBe(false);
+  });
+
+  it("legacy tool_use 二跳后子代理派生同样独立", () => {
+    const tool: ToolCall = {
+      name: "tool_use",
+      arguments: JSON.stringify({ tool_name: "subagent_spawn" }),
+    };
+    expect(isStandaloneTool(tool)).toBe(true);
   });
 
   it("tool_use 懒加载二跳后同样按真实工具名判定", () => {

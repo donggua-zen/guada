@@ -57,7 +57,8 @@ function toolBlock(id: string, names: string[]): MessageContent {
 /**
  * 分组规则：content 与「独立渲染工具」（isStandaloneTool，如计划卡）是两类分隔符。
  * 独立工具单独成组且不可折叠——折进"已执行 N 个步骤"标题后计划正文默认不可见。
- * 测试环境 pluginToolDisplays 为空 → 判定走 BUILTIN_RENDERERS 兜底（ExitPlanMode → plan）。
+ * 测试环境 pluginToolDisplays 为空 → 计划卡判定走 BUILTIN_RENDERERS 兜底（ExitPlanMode → plan），
+ * 子代理派生行走按工具名的独立集合（subagent_spawn）。
  */
 describe("groupContentsForDisplay：独立渲染工具分组", () => {
   it("ExitPlanMode 单独成组且不可折叠（不并入过程组）", () => {
@@ -97,6 +98,42 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].isCollapsible).toBe(false);
     expect(groups[0].items[0].toolCalls).toHaveLength(2);
+  });
+
+  it("子代理派生行独立成组且不可折叠（与计划卡同通路、按工具名判定）", () => {
+    const groups = groupContentsForDisplay([
+      toolBlock("t1", ["read"]),
+      toolBlock("t2", ["subagent_spawn"]),
+      toolBlock("t3", ["glob"]),
+    ]);
+
+    expect(groups.map((g) => [g.isCollapsible, g.items.length])).toEqual([
+      [true, 1],
+      [false, 1],
+      [true, 1],
+    ]);
+    expect(groups[1].items[0].toolCalls?.[0].name).toBe("subagent_spawn");
+  });
+
+  it("子代理派生与普通工具同块并行：整项独立、不拆行", () => {
+    const groups = groupContentsForDisplay([
+      toolBlock("t1", ["read", "subagent_spawn"]),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].isCollapsible).toBe(false);
+    expect(groups[0].items[0].toolCalls).toHaveLength(2);
+  });
+
+  it("subagent_manager 不独立：仍并入可折叠过程组", () => {
+    const groups = groupContentsForDisplay([
+      toolBlock("t1", ["subagent_manager"]),
+      toolBlock("t2", ["read"]),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ type: "process", isCollapsible: true });
+    expect(groups[0].items).toHaveLength(2);
   });
 
   it("普通工具（无独立渲染）仍聚成一个可折叠过程组（回归）", () => {
