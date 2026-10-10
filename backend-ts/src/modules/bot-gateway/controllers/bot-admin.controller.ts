@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../../auth/auth.guard';
 import { BotAdminService } from '../services/bot-admin.service';
-import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
+import { CreateBotDto, UpdateBotDto, SubmitBotVerificationDto } from '../dto/bot-admin.dto';
 
 /**
  * 机器人管理（单账户）
@@ -56,6 +56,17 @@ export class BotAdminController {
   @Get('instances/:id/qr')
   async getQrCode(@Param('id') id: string) {
     return this.botService.getQrCodeStatus(id);
+  }
+
+  /**
+   * 提交扫码登录的数字配对码
+   */
+  @Post('instances/:id/verification')
+  async submitVerification(
+    @Param('id') id: string,
+    @Body() dto: SubmitBotVerificationDto,
+  ) {
+    return this.botService.submitVerification(id, dto.code);
   }
 
   /**

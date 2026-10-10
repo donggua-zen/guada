@@ -84,6 +84,7 @@ export async function postPhotoBundle(
                 encrypt_type: 1,
                 taskid: staged.taskId,
             },
+            hd_size: staged.cipherBudget,
             mid_size: staged.cipherBudget,
         },
     });
@@ -110,7 +111,7 @@ export async function postVideoBundle(
                 encrypt_type: 1,
                 taskid: staged.taskId,
             },
-            video_size: staged.cipherBudget,
+            video_size: staged.plainBytes,
         },
     });
     return emitFacetChain(transport, peerKey, contextToken, chain);
@@ -138,6 +139,7 @@ export async function postFileBundle(
             },
             file_name: staged.originalName,
             len: String(staged.plainBytes),
+            md5: staged.plainMd5Hex,
         },
     });
     return emitFacetChain(transport, peerKey, contextToken, chain);

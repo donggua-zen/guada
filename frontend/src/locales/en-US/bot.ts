@@ -47,6 +47,11 @@
     qrUnavailable: 'No QR code available. Please start the bot and try again.',
     getQrFailed: 'Failed to get QR code',
     logoutFailed: 'Logout failed',
+    qrVerifyCodeHint: 'Enter the numeric pairing code shown on your phone',
+    qrVerifyCodePlaceholder: '4 to 8 digits',
+    qrVerifyCodeSubmit: 'Submit Code',
+    qrVerifyCodeInvalid: 'The pairing code must be 4 to 8 digits',
+    qrVerifyCodeFailed: 'Failed to submit the pairing code',
   },
 
   modal: {

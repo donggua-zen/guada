@@ -6,49 +6,53 @@ import type { NormalizedChatEvent } from "./chat-event";
 export function mapInboundWirePacket(packet: InboundWirePacket): NormalizedChatEvent {
     const parts = packet.item_list ?? [];
     const textPart = parts.find((p) => p.type === ItemKind.Text && p.text_item?.text);
-    const imagePart = parts.find((p) => p.type === ItemKind.Image && p.image_item?.media?.encrypt_query_param);
-    const videoPart = parts.find((p) => p.type === ItemKind.Video && p.video_item?.media?.encrypt_query_param);
-    const filePart = parts.find((p) => p.type === ItemKind.File && p.file_item?.media?.encrypt_query_param);
-    const voicePart = parts.find((p) => p.type === ItemKind.Voice && p.voice_item?.media?.encrypt_query_param);
+    const imagePart = parts.find((p) => p.type === ItemKind.Image && p.image_item?.media);
+    const videoPart = parts.find((p) => p.type === ItemKind.Video && p.video_item?.media);
+    const filePart = parts.find((p) => p.type === ItemKind.File && p.file_item?.media);
+    const voicePart = parts.find((p) => p.type === ItemKind.Voice && p.voice_item?.media);
 
     const literal = textPart?.text_item?.text ?? voicePart?.voice_item?.text;
     let facet: NormalizedChatEvent["type"] = "unknown";
     let media: NormalizedChatEvent["media"];
     let caption: string | undefined;
 
-    if (imagePart?.image_item?.media?.encrypt_query_param) {
+    if (imagePart?.image_item?.media) {
         facet = "photo";
         caption = textPart?.text_item?.text;
         media = {
             kind: "photo",
             fileId: imagePart.image_item.media.encrypt_query_param,
+            downloadUrl: imagePart.image_item.media.full_url,
             aesKey: imagePart.image_item.media.aes_key,
             item: imagePart.image_item,
         };
-    } else if (videoPart?.video_item?.media?.encrypt_query_param) {
+    } else if (videoPart?.video_item?.media) {
         facet = "video";
         caption = textPart?.text_item?.text;
         media = {
             kind: "video",
             fileId: videoPart.video_item.media.encrypt_query_param,
+            downloadUrl: videoPart.video_item.media.full_url,
             aesKey: videoPart.video_item.media.aes_key,
             item: videoPart.video_item,
         };
-    } else if (filePart?.file_item?.media?.encrypt_query_param) {
+    } else if (filePart?.file_item?.media) {
         facet = "document";
         caption = textPart?.text_item?.text;
         media = {
             kind: "document",
             fileId: filePart.file_item.media.encrypt_query_param,
+            downloadUrl: filePart.file_item.media.full_url,
             aesKey: filePart.file_item.media.aes_key,
             fileName: filePart.file_item.file_name,
             item: filePart.file_item,
         };
-    } else if (voicePart?.voice_item?.media?.encrypt_query_param) {
+    } else if (voicePart?.voice_item?.media) {
         facet = "voice";
         media = {
             kind: "voice",
             fileId: voicePart.voice_item.media.encrypt_query_param,
+            downloadUrl: voicePart.voice_item.media.full_url,
             aesKey: voicePart.voice_item.media.aes_key,
             transcript: voicePart.voice_item.text,
             item: voicePart.voice_item,
@@ -59,7 +63,7 @@ export function mapInboundWirePacket(packet: InboundWirePacket): NormalizedChatE
 
     const peer = packet.from_user_id ?? "";
     return {
-        id: packet.message_id,
+        id: packet.message_id ?? packet.client_id,
         seq: packet.seq,
         type: facet,
         chat: { id: peer, type: "private" },

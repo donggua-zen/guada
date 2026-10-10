@@ -82,6 +82,31 @@
           <span class="ml-1">{{ t('bot.card.refreshQr') }}</span>
         </el-button>
       </div>
+      <!-- 需要数字配对码 -->
+      <div v-else-if="qrStatus === 'verify_code_required'" class="w-full flex flex-col items-center">
+        <img v-if="qrImageUrl" :src="qrImageUrl" alt="微信登录二维码" class="w-48 h-48" />
+        <p class="text-xs text-gray-500 mt-3 text-center">
+          {{ qrMessage || t('bot.card.qrVerifyCodeHint') }}
+        </p>
+        <el-input
+          v-model="verifyCode"
+          class="mt-3"
+          maxlength="8"
+          inputmode="numeric"
+          clearable
+          :placeholder="t('bot.card.qrVerifyCodePlaceholder')"
+          @keyup.enter="handleSubmitVerifyCode"
+        />
+        <el-button
+          type="primary"
+          size="small"
+          class="mt-3"
+          :loading="verifySubmitting"
+          @click="handleSubmitVerifyCode"
+        >
+          {{ t('bot.card.qrVerifyCodeSubmit') }}
+        </el-button>
+      </div>
       <!-- 不可用 -->
       <div v-else class="text-sm text-gray-400 py-8">
         {{ qrMessage || t('bot.card.qrUnavailable') }}
@@ -95,7 +120,7 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
-import { ElMessage, ElIcon } from 'element-plus'
+import { ElMessage, ElIcon, ElInput } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
@@ -131,10 +156,12 @@ const handleToggle = (val: string | number | boolean) => {
 
 // 二维码弹窗状态
 const qrDialogVisible = ref(false)
-const qrStatus = ref<'qr_ready' | 'logged_in' | 'pending' | 'unavailable'>('unavailable')
+const qrStatus = ref<'qr_ready' | 'logged_in' | 'verify_code_required' | 'pending' | 'unavailable'>('unavailable')
 const qrCodeUrl = ref('')
 const qrMessage = ref('')
 const qrLoading = ref(false)
+const verifyCode = ref('')
+const verifySubmitting = ref(false)
 let qrPollTimer: ReturnType<typeof setInterval> | null = null
 
 // 二维码图片 URL（使用 qrserver API 生成）
@@ -165,6 +192,7 @@ const handleShowQrCode = async () => {
   qrStatus.value = 'unavailable'
   qrCodeUrl.value = ''
   qrMessage.value = ''
+  verifyCode.value = ''
   await fetchQrStatus()
   qrLoading.value = false
 }
@@ -187,6 +215,30 @@ const handleRefreshQrCode = async () => {
   qrMessage.value = ''
   await fetchQrStatus()
   qrLoading.value = false
+}
+
+// 提交数字配对码
+const handleSubmitVerifyCode = async () => {
+  const code = verifyCode.value.trim()
+  if (!/^\d{4,8}$/.test(code)) {
+    ElMessage.warning(t('bot.card.qrVerifyCodeInvalid'))
+    return
+  }
+  verifySubmitting.value = true
+  try {
+    const result = await apiService.submitBotVerification(props.bot.id, code)
+    if (result.success) {
+      ElMessage.success(result.message)
+      verifyCode.value = ''
+      await fetchQrStatus()
+    } else {
+      ElMessage.warning(result.message)
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error) || t('bot.card.qrVerifyCodeFailed'))
+  } finally {
+    verifySubmitting.value = false
+  }
 }
 
 // 退出登录

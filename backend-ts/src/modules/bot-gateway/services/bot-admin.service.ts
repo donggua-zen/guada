@@ -326,7 +326,7 @@ export class BotAdminService {
 
   /**
    * 获取机器人登录二维码状态
-   * @returns status: 'logged_in' | 'qr_ready' | 'pending' | 'unavailable'
+   * @returns status: 'logged_in' | 'qr_ready' | 'verify_code_required' | 'pending' | 'unavailable'
    */
   getQrCodeStatus(id: string) {
     const adapter = this.instanceManager.getAdapter(id);
@@ -341,8 +341,14 @@ export class BotAdminService {
       return { status: 'logged_in', message: '已登录' };
     }
 
-    // 连接中，检查是否有二维码
+    // 连接中，优先提示需要输入数字配对码
     if (botStatus === BotStatus.CONNECTING) {
+      if (adapter.getVerificationState?.() === 'pair_code') {
+        return {
+          status: 'verify_code_required',
+          message: '请输入手机微信显示的数字配对码',
+        };
+      }
       const qrUrl = adapter.getQrCodeUrl?.();
       if (qrUrl) {
         return { status: 'qr_ready', qrCodeUrl: qrUrl };
@@ -351,6 +357,28 @@ export class BotAdminService {
     }
 
     return { status: 'unavailable', message: '机器人未处于登录状态' };
+  }
+
+  /**
+   * 提交扫码登录的数字配对码
+   */
+  async submitVerification(id: string, code: string) {
+    const adapter = this.instanceManager.getAdapter(id);
+    if (!adapter) {
+      throw new NotFoundException('机器人未启动');
+    }
+
+    if (!adapter.submitVerificationCode) {
+      throw new BadRequestException('当前平台不支持提交数字配对码');
+    }
+
+    try {
+      adapter.submitVerificationCode(code);
+    } catch (error: any) {
+      throw new BadRequestException(error?.message ?? '数字配对码提交失败');
+    }
+
+    return { success: true, message: '数字配对码已提交' };
   }
 
   /**

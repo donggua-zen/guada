@@ -278,6 +278,17 @@ export interface IBotPlatform {
   getQrCodeUrl?(): string | null;
 
   /**
+   * 当前登录是否需要用户输入数字配对码（仅扫码登录平台实现）
+   */
+  getVerificationState?(): 'none' | 'pair_code';
+
+  /**
+   * 提交数字配对码以继续扫码登录（仅扫码登录平台实现）
+   * @param code 手机微信显示的 4-8 位数字配对码
+   */
+  submitVerificationCode?(code: string): void;
+
+  /**
    * 退出登录并清除平台会话（仅扫码登录平台实现）
    */
   logout?(): Promise<void>;

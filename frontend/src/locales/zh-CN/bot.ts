@@ -53,6 +53,11 @@ export default {
     qrUnavailable: '暂无二维码，请启动机器人后重试',
     getQrFailed: '获取二维码失败',
     logoutFailed: '退出登录失败',
+    qrVerifyCodeHint: '请输入手机微信显示的数字配对码',
+    qrVerifyCodePlaceholder: '4 至 8 位数字',
+    qrVerifyCodeSubmit: '提交配对码',
+    qrVerifyCodeInvalid: '数字配对码必须是 4 至 8 位数字',
+    qrVerifyCodeFailed: '配对码提交失败',
   },
 
   // ── Bot 弹窗 (BotModal.vue) ──

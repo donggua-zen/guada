@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsObject, IsBoolean, IsNumber, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsObject, IsBoolean, IsNumber, ValidateNested, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class ReconnectConfigDto {
@@ -92,4 +92,13 @@ export class UpdateBotDto {
   @IsOptional()
   @IsObject()
   additionalKwargs?: any;
+}
+
+/**
+ * 提交扫码登录的数字配对码（微信个人号等平台）
+ */
+export class SubmitBotVerificationDto {
+  @IsString()
+  @Matches(/^\d{4,8}$/, { message: '数字配对码必须是 4 至 8 位数字' })
+  code: string;
 }

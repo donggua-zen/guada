@@ -19,8 +19,10 @@ export interface BotApi {
   restartBotInstance(id: string): Promise<{ success: boolean }>;
   fetchBotQrCode(id: string): Promise<
     | { status: 'qr_ready'; qrCodeUrl: string }
+    | { status: 'verify_code_required'; message: string }
     | { status: 'logged_in' | 'pending' | 'unavailable'; message: string }
   >;
+  submitBotVerification(id: string, code: string): Promise<{ success: boolean; message: string }>;
   logoutBot(id: string): Promise<{ success: boolean; message: string }>;
   deleteBotInstance(id: string): Promise<{ success: boolean }>;
   fetchBotSessions(skip?: number, limit?: number, botId?: string): Promise<PaginatedResponse<Session>>;
@@ -73,6 +75,13 @@ export const botApi: BotApi = {
 
   async fetchBotQrCode(this: ApiContext, id: string) {
     return await this._request(`/bot-admin/instances/${id}/qr`);
+  },
+
+  async submitBotVerification(this: ApiContext, id: string, code: string) {
+    return await this._request(`/bot-admin/instances/${id}/verification`, {
+      method: 'POST',
+      data: { code },
+    });
   },
 
   async logoutBot(this: ApiContext, id: string) {
