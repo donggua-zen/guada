@@ -35,8 +35,11 @@ import {
   CompactionConfig,
   CompactionDataSource,
   CompactWrite,
+  CompressionSaving,
+  ContextAnchorWrite,
   PruneWrite,
 } from './compaction/types';
+import type { OccupancyAnchor } from '../../common/persistence/types';
 import {
   COMPRESSION_TIER_PRESETS,
   resolveCompressionTier,
@@ -110,6 +113,13 @@ export interface ContextSnapshot {
   perMessageTokens: readonly number[];
   /** perMessageTokens 前缀和：prefixTokens[i] = view[0..i] 的 token 累计（不含 prelude） */
   prefixTokens: readonly number[];
+  /**
+   * 视图占用锚点（回放态派生，见 OccupancyAnchor）：
+   * usage = 以最后一条带 provider usage 的助手消息为基准；
+   * compaction = 以压缩纠正值（usedTokens + 配套启发式总量）为基准——压缩改写了锚点之前的
+   * 内容，provider 增量口径会把裁剪收益抵消掉，必须以纠正值为基准。
+   */
+  occupancyAnchor: OccupancyAnchor | null;
 }
 
 export class JsonlSessionContext implements ISessionContext, CompactionDataSource {
@@ -348,7 +358,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       view,
       perMsg.map((x) => x.tokens),
       await this.getPreludeTokens(),
+      await this.readOccupancyAnchor(),
     );
+  }
+
+  /** 读取回放态的最新占用锚点（store 未实现该能力时视为无锚点 → 回退 usage 口径） */
+  private async readOccupancyAnchor(): Promise<OccupancyAnchor | null> {
+    if (!this.messageStore.getOccupancyAnchor) return null;
+    return (await this.messageStore.getOccupancyAnchor(this.sessionId)) ?? null;
   }
 
   /** 组装快照（前缀和由视图派生；request 是 getMessages 时刻的派生表达式，不在此存储） */
@@ -358,6 +375,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     view: Message[],
     perMessageTokens: number[],
     preludeTokens: number,
+    occupancyAnchor: OccupancyAnchor | null,
   ): ContextSnapshot {
     const prefixTokens: number[] = [];
     let acc = 0;
@@ -372,6 +390,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       preludeTokens,
       perMessageTokens,
       prefixTokens,
+      occupancyAnchor,
     };
   }
 
@@ -396,6 +415,13 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       addedView,
     );
     const addedTokens = perMsg.map((x) => x.tokens);
+    // 增量追加的助手消息带 provider usage → 它比此前的压缩锚点更新，接管为 usage 锚点
+    const hasUsage = addedView.some((m) => {
+      if (m.role !== 'assistant') return false;
+      const pt = (m.metadata?.usage as { promptTokens?: unknown } | undefined)
+        ?.promptTokens;
+      return typeof pt === 'number' && Number.isFinite(pt) && pt >= 0;
+    });
     this.snapshot = {
       revision,
       transformKey: this.snapshot.transformKey,
@@ -409,6 +435,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         this.snapshot.prefixTokens,
         addedTokens,
       ),
+      occupancyAnchor: hasUsage
+        ? { kind: 'usage' }
+        : this.snapshot.occupancyAnchor,
     };
   }
 
@@ -863,7 +892,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   async appendCompact(
     data: CompactWrite,
   ): Promise<{ summaryMessageId: string; endSeq: number }> {
-    // 压缩后占用锚点（写前模拟）：当前全量 − 遮蔽区 token + 摘要 token → compaction/end 携带。
+    // 压缩后占用锚点（写前模拟）：当前全量 − 本次节省 + 摘要 token → compaction/end 携带。
     // 时序：此刻快照已含尾部 prune、未遮蔽 → getTokenCount 即"压缩前占用"；
     // 摘要节点与 replayer 生成的同构，token 估算同口径。
     const contextStats = await this.computePostCompactStats(data);
@@ -879,6 +908,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     data: CompactWrite,
   ): Promise<{
     usedTokens?: number;
+    heuristicTokens?: number;
     effectiveContextWindow?: number;
     messageCount?: number;
     breakdown?: TokenBreakdown;
@@ -895,6 +925,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     for (let i = 0; i < shadowedCount && i < perMessageTokens.length; i++) {
       shadowedTokens += perMessageTokens[i];
     }
+    // 压缩前实测占用（尾部 prune 已写入、遮蔽尚未写入）
     const preTotal = await this.getTokenCount();
     // 摘要文本节点（与 replayer eventMessageFromData 生成的摘要节点同构）
     const summaryTokens = data.summary
@@ -919,27 +950,97 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         )
       : 0;
     const snap = await this.getSnapshot();
+    // 保留尾裁剪中"被 provider 增量口径抵消"的收益需显式扣减（锚点之前的条目）
+    const cancelled = this.cancelledSavings(
+      snap.view,
+      snap.occupancyAnchor,
+      data.savings,
+      shadowedCount,
+    );
+    // 遮蔽区整体移除 + 摘要置头（此刻尚未写入 → 不受增量口径影响，直接扣减）
+    const shadowedSaving = shadowedTokens - summaryTokens;
+    const usedTokens = Math.max(0, preTotal - cancelled - shadowedSaving);
+    // 与 usedTokens 配套的启发式总量 = 压缩后视图（摘要节点替换遮蔽前缀）的启发式总量，
+    // 供后续 getTokenCount 以"锚点 + 增量"继续推进
+    const historyNow =
+      snap.prefixTokens.length > 0
+        ? snap.prefixTokens[snap.prefixTokens.length - 1]
+        : 0;
+    const historyAfter = Math.max(0, historyNow - shadowedTokens + summaryTokens);
+    const breakdown = await this.getTokenBreakdown();
     return {
-      usedTokens: Math.max(0, preTotal - shadowedTokens + summaryTokens),
+      usedTokens,
+      heuristicTokens: snap.preludeTokens + historyAfter,
       effectiveContextWindow,
-      messageCount: snap.view.length,
-      breakdown: await this.getTokenBreakdown(),
+      // 细分与消息数按压缩后视图结算（避免 usedTokens 已降、细分/条数仍是压缩前）
+      messageCount: Math.max(0, snap.view.length - shadowedCount + 1),
+      breakdown: { ...breakdown, history: historyAfter },
       beforeTokens: preTotal,
     };
   }
 
-  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
-   *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。 */
+  /**
+   * 本批节省中已被 provider 增量口径"抵消"的 token 量（需从锚点口径总量显式扣减）。
+   *
+   * 仅 usage 锚点会抵消：其增量基准是"锚点消息处的视图前缀和"，锚点之前的裁剪会等额降低
+   * `heuristicNow` 与 `heuristicAtAnchor` → 总量恒定不变。compaction 锚点与无锚点路径的基准
+   * 都是当前视图的历史总量，裁剪已自然吸收，不重复扣减（anchor 缺省视为 usage 口径）。
+   * @param minIndex 只统计 >= 该 index 的条目（压缩路径传 shadowedCount：遮蔽区由 shadowedSaving 结算）
+   */
+  private cancelledSavings(
+    view: readonly Message[],
+    anchor: OccupancyAnchor | null,
+    savings: readonly CompressionSaving[] | undefined,
+    minIndex = 0,
+  ): number {
+    if (!savings?.length || anchor?.kind === 'compaction') return 0;
+    const anchorIndex = this.findUsageAnchor(view)?.index ?? -1;
+    if (anchorIndex < 0) return 0;
+    let sum = 0;
+    for (const s of savings) {
+      if (s.index >= minIndex && s.index <= anchorIndex) sum += s.tokens;
+    }
+    return sum;
+  }
+
   /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
    *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。
-   *  @param beforeTokens 压缩前实测占用（调用方在裁剪前测得），供压缩历史 before/after 对比 */
-  async recordContextAnchor(beforeTokens?: number): Promise<void> {
+   *  @param opts.beforeTokens 压缩前实测占用（压缩历史 before/after 对比）；
+   *         opts.savings 本次裁剪节省（锚点之前者被显式扣减，否则 provider 锚点会抵消裁剪收益） */
+  async recordContextAnchor(opts?: ContextAnchorWrite): Promise<void> {
+    const snap = await this.getSnapshot();
+    // 裁剪已写入 → 当前总量已含"锚点之后的"收益，只需补扣被抵消的部分
+    const currentTotal = await this.getTokenCount();
+    const cancelled = this.cancelledSavings(
+      snap.view,
+      snap.occupancyAnchor,
+      opts?.savings,
+    );
+    const usedTokens = Math.max(0, currentTotal - cancelled);
+    const historyTokens =
+      snap.prefixTokens.length > 0
+        ? snap.prefixTokens[snap.prefixTokens.length - 1]
+        : 0;
+    const heuristicTokens = snap.preludeTokens + historyTokens;
     const revision = await this.messageStore.recordContextAnchor(this.sessionId, {
-      ...(await this.getContextStats()),
-      ...(beforeTokens !== undefined ? { beforeTokens } : {}),
+      usedTokens,
+      heuristicTokens,
+      effectiveContextWindow: this.getEffectiveContextWindow(),
+      messageCount: snap.view.length,
+      breakdown: await this.getTokenBreakdown(),
+      ...(opts?.beforeTokens !== undefined
+        ? { beforeTokens: opts.beforeTokens }
+        : {}),
     });
-    // 不改变消息视图，仅版本号前进 → 续期快照 revision
+    // 不改变消息视图，仅版本号前进 → 续期快照 revision；并把新锚点写进缓存快照，
+    // 避免紧随其后的 getContextStats()/getTokenCount() 又读回被抵消的旧值
     this.refreshSnapshotRevision(revision);
+    if (this.snapshot) {
+      this.snapshot = {
+        ...this.snapshot,
+        occupancyAnchor: { kind: 'compaction', usedTokens, heuristicTokens },
+      };
+    }
   }
 
   private async ensureConversationStateLoaded(): Promise<void> {
@@ -968,6 +1069,10 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    *
    * O(1)：基于快照的前缀和（preludeTokens + prefixTokens 末项）与锚点前缀和，
    * 不再逐次遍历视图。
+   *
+   * 锚点优先级：压缩纠正锚点（compaction/end 的 usedTokens + heuristicTokens）> provider usage
+   * 锚点。压缩会改写锚点**之前**的内容，usage 增量口径下两个启发式项同额下降 → 裁剪收益被
+   * 抵消（压缩后占用不降）；故压缩后必须以纠正值为基准，待新回合写入新的 usage 锚点再切回。
    */
   async getTokenCount(): Promise<number> {
     const model = this.currentModelName();
@@ -977,6 +1082,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       (snap.prefixTokens.length > 0
         ? snap.prefixTokens[snap.prefixTokens.length - 1]
         : 0);
+
+    const compactionAnchor = snap.occupancyAnchor;
+    if (compactionAnchor?.kind === 'compaction') {
+      return Math.max(
+        0,
+        compactionAnchor.usedTokens +
+          (heuristicNow - compactionAnchor.heuristicTokens),
+      );
+    }
 
     const anchor = this.findUsageAnchor(snap.view);
     if (anchor && anchor.model === model) {

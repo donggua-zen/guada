@@ -161,3 +161,76 @@ describe('审批与 metadata 补丁事件', () => {
     expect(state.messages.map((n) => n.id)).toEqual(['u1', 'a1']);
   });
 });
+
+describe('replayer 折叠 - 视图占用锚点（OccupancyAnchor）', () => {
+  function assistantWithUsage(id: string, seq: number, promptTokens?: number) {
+    return {
+      type: 'assistant/message' as const,
+      seq,
+      time: seq,
+      data: {
+        messageId: id,
+        content: [{ type: 'text', contentId: `${id}_c`, text: 'a' }],
+        metadata:
+          promptTokens === undefined
+            ? {}
+            : { modelName: 'test-model', usage: { promptTokens } },
+      },
+    };
+  }
+  function compactionEnd(seq: number, data: Record<string, unknown>) {
+    return { type: 'compaction/end' as const, seq, time: seq, data };
+  }
+
+  it('带 provider usage 的助手消息 → usage 锚点；无 usage 的消息不设锚点', () => {
+    const withoutUsage = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2),
+    ]);
+    expect(withoutUsage.occupancyAnchor).toBeNull();
+
+    const withUsage = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+    ]);
+    expect(withUsage.occupancyAnchor).toEqual({ kind: 'usage' });
+  });
+
+  it('compaction/end 携带 usedTokens+heuristicTokens → 压缩锚点覆盖此前的 usage 锚点', () => {
+    const state = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      compactionEnd(3, {
+        usedTokens: 500,
+        heuristicTokens: 300,
+        effectiveContextWindow: 8000,
+      }),
+    ]);
+    expect(state.occupancyAnchor).toEqual({
+      kind: 'compaction',
+      usedTokens: 500,
+      heuristicTokens: 300,
+    });
+  });
+
+  it('旧格式 compaction/end（无 heuristicTokens）不设锚点 → 回退 usage 口径', () => {
+    const state = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      // 历史数据/纯审计 end：无配套启发式总量，用错口径会让占用偏离真实值
+      compactionEnd(3, { usedTokens: 500, effectiveContextWindow: 8000 }),
+    ]);
+    expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
+  });
+
+  it('压缩锚点之后的新回合 usage 消息接管锚点（顺序由回放保证）', () => {
+    const state = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      compactionEnd(3, { usedTokens: 500, heuristicTokens: 300 }),
+      turnStart('t2', 4),
+      assistantWithUsage('a2', 5, 700),
+    ]);
+    expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
+  });
+});

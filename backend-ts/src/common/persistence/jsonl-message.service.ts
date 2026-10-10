@@ -16,6 +16,7 @@ import {
   PERSISTENCE_BACKEND_TOKEN,
   PersistenceBackend,
   BaseEvent,
+  OccupancyAnchor,
   ReplayState,
   SessionMeta,
   SEGMENT_MAX_BYTES,
@@ -338,6 +339,15 @@ export class JsonlMessageService implements IMessageStore {
   async getLastProcessedSeq(sessionId: string): Promise<number> {
     const state = await this.getState(sessionId);
     return state.lastProcessedSeq;
+  }
+
+  /**
+   * 当前折叠视图的最新占用锚点（provider usage / 压缩纠正值）。
+   * 与 loadContext 共用同一回放态缓存；旧快照无该字段 → null（调用方回退 usage 口径）。
+   */
+  async getOccupancyAnchor(sessionId: string): Promise<OccupancyAnchor | null> {
+    const state = await this.getState(sessionId);
+    return state.occupancyAnchor ?? null;
   }
 
   /**
@@ -1119,6 +1129,8 @@ export class JsonlMessageService implements IMessageStore {
     usage?: import('../types/stream-chunk.types').StreamUsage;
     /** 压缩后完整请求 token（会话层结算；compaction/end 携带，前端上下文占用锚点） */
     usedTokens?: number;
+    /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+    heuristicTokens?: number;
     /** 有效上下文窗口（与 usedTokens 配套） */
     effectiveContextWindow?: number;
     /** 可见视图消息数（与 usedTokens 配套） */
@@ -1141,6 +1153,8 @@ export class JsonlMessageService implements IMessageStore {
     usage?: import('../types/stream-chunk.types').StreamUsage;
     /** 压缩后完整请求 token（会话层结算；compaction/end 携带，前端上下文占用锚点） */
     usedTokens?: number;
+    /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+    heuristicTokens?: number;
     /** 有效上下文窗口（与 usedTokens 配套） */
     effectiveContextWindow?: number;
     /** 可见视图消息数（与 usedTokens 配套） */
@@ -1179,6 +1193,9 @@ export class JsonlMessageService implements IMessageStore {
         data: {
           sourceCommandId: data.mode,
           ...data.usedTokens === undefined ? {} : { usedTokens: data.usedTokens },
+          ...data.heuristicTokens === undefined
+            ? {}
+            : { heuristicTokens: data.heuristicTokens },
           ...data.effectiveContextWindow === undefined
             ? {}
             : { effectiveContextWindow: data.effectiveContextWindow },
@@ -1203,6 +1220,8 @@ export class JsonlMessageService implements IMessageStore {
     sessionId: string,
     data: {
       usedTokens: number;
+      /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+      heuristicTokens?: number;
       effectiveContextWindow: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
@@ -1216,6 +1235,8 @@ export class JsonlMessageService implements IMessageStore {
     sessionId: string,
     data: {
       usedTokens: number;
+      /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+      heuristicTokens?: number;
       effectiveContextWindow: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
@@ -1229,6 +1250,9 @@ export class JsonlMessageService implements IMessageStore {
       time: Date.now(),
       data: {
         usedTokens: data.usedTokens,
+        ...data.heuristicTokens === undefined
+          ? {}
+          : { heuristicTokens: data.heuristicTokens },
         effectiveContextWindow: data.effectiveContextWindow,
         ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
         ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },

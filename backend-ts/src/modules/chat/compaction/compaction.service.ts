@@ -50,9 +50,13 @@ export interface CompressOutcome {
   compacted: boolean;
   /** 遮蔽消息条数（compacted 时 > 0） */
   shadowedCount: number;
+  /** 写入的一级裁剪事件数 */
+  pruneEvents?: number;
+  /** 未压缩原因（compacted=false 时给出；tier-disabled/below-threshold 由本服务产出） */
+  skipReason?: string;
   /** 遮蔽末位（分界点）消息 id（persistCompaction 的 lastCompactedMessageId / 前端标记依据） */
   shadowedEndId?: string;
-  /** 摘要消息 id（compaction_summary 占位标识） */
+  /** 摘要消息 id（compaction_summary 事件占位标识） */
   summaryMessageId?: string;
   /** 摘要文本（DISABLED 模式为空串） */
   summary?: string;
@@ -102,6 +106,8 @@ export class CompactionService {
         messages: await ds.getHistory(),
         compacted: false,
         shadowedCount: 0,
+        pruneEvents: 0,
+        skipReason: 'tier-disabled',
       };
     }
     const currentTokens = await ds.getTokenCount();
@@ -119,6 +125,8 @@ export class CompactionService {
         messages: await ds.getHistory(),
         compacted: false,
         shadowedCount: 0,
+        pruneEvents: 0,
+        skipReason: 'below-threshold',
       };
     }
 
@@ -181,9 +189,13 @@ export class CompactionService {
 
     // 纯裁剪（无括号）路径无 compaction/end 锚点 → 补写一条独立 compaction/end 携带压缩后占用
     // （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）
-    // beforeTokens = 压缩前实测占用（方法入口 currentTokens），供压缩历史 before/after 对比
+    // beforeTokens = 压缩前实测占用（方法入口 currentTokens），供压缩历史 before/after 对比；
+    // savings 让会话侧扣掉被 provider 增量口径抵消的裁剪收益（否则占用不降）
     if (result.pruneEvents > 0 && !result.compacted) {
-      await ds.recordContextAnchor?.(currentTokens);
+      await ds.recordContextAnchor?.({
+        beforeTokens: currentTokens,
+        savings: result.savings,
+      });
     }
 
     // 压缩后占用（两路径统一）：供 live 广播压缩事件，前端即时更新环形指示器
@@ -197,6 +209,8 @@ export class CompactionService {
       messages: refreshed,
       compacted: result.compacted,
       shadowedCount: result.shadowedCount,
+      pruneEvents: result.pruneEvents,
+      ...(result.skipReason === undefined ? {} : { skipReason: result.skipReason }),
       shadowedEndId: result.shadowedEndId,
       summaryMessageId: result.summaryMessageId,
       summary: result.summary,

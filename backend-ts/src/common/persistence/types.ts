@@ -324,6 +324,21 @@ export interface MessageNode extends Message {
   turnId: string | null;
 }
 
+/**
+ * 视图占用锚点：`getTokenCount` 的权威基准来源（按事件顺序"后者覆盖"）。
+ *
+ * - `usage`：最后一条带 provider usage 的 assistant 消息（真实请求实测值）。
+ * - `compaction`：compaction/end 携带的压缩后占用纠正值（usedTokens）+ 与之配套的启发式总量
+ *   （heuristicTokens）。压缩会改写锚点之前的内容，provider 增量口径下裁剪收益被抵消，
+ *   必须以纠正值为基准，否则压缩后占用不降。
+ *
+ * 顺序由回放保证：新回合的 assistant usage 事件晚于 compaction/end 时自然接管为 usage 锚点。
+ * 旧数据（无 heuristicTokens 的 compaction/end）不设锚点 → 回退 usage 口径。
+ */
+export type OccupancyAnchor =
+  | { kind: 'usage' }
+  | { kind: 'compaction'; usedTokens: number; heuristicTokens: number };
+
 /** 回放状态：纯扁平消息 surface（LLM 折叠态——零 turn 结构） */
 export interface ReplayState {
   /** 全部消息节点（seq 序），替代三层 turns */
@@ -342,6 +357,8 @@ export interface ReplayState {
    * 此字段仅用于诊断检测（不改变折叠行为）。
    */
   openCompactionSeq?: number | null;
+  /** 最新视图占用锚点（见 OccupancyAnchor）；缺省 = 无锚点（回退纯启发式） */
+  occupancyAnchor?: OccupancyAnchor | null;
 }
 
 export interface Envelope {

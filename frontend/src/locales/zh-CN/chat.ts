@@ -240,6 +240,17 @@ export default {
     contextCompactedCount: '上下文已压缩 · 折叠 {count} 条消息',
     contextCompacting: '正在压缩上下文...',
     collapseSummary: '收起摘要',
+    // EventCard.vue 压缩结果卡（纯裁剪/空跑：说明本次做了什么）
+    contextPruned: '已裁剪 {count} 处超长工具结果',
+    contextNotCompacted: '未压缩',
+    compressSkip: {
+      belowThreshold: '未达触发线',
+      pruneSufficient: '裁剪后已低于触发线',
+      noSummaryProvider: '无可用摘要模型',
+      retainBudget: '保留预算覆盖全部内容',
+      tierDisabled: '压缩已关闭',
+      unknown: '原因未知',
+    },
     // TurnItem.vue 通知类折叠（process_monitor / sub_agent）
     viewProcessOutput: '查看进程输出',
     viewSubagentResult: '查看子代理结果',

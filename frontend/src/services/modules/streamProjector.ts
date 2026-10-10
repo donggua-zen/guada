@@ -482,20 +482,39 @@ function applyDomainEvent(
 }
 
 /**
- * 移除压缩占位（"压缩中"占位与"已压缩"结果卡共用 eventType='compaction'）。
- * mode 'compressing' 仅移除"压缩中"占位；'all' 额外移除"已压缩"结果卡。
+ * 压缩占位判定（三者共用 eventType='compaction'）：
+ * - 'compressing'：压缩中占位（compaction_summary / compression_end 收口）
+ * - 'result'：压缩结果卡（纯裁剪/空跑路径：compression_end 就地替换"压缩中"占位）
+ * - 'all'：全部压缩事件占位 + 旧摘要卡（新摘要原位替换前清场）
+ */
+function matchesCompactionPlaceholder(
+  metadata: Record<string, any> | undefined,
+  mode: "compressing" | "result" | "all",
+): boolean {
+  if (metadata?.eventType !== "compaction") return false;
+  if (mode === "all") return true;
+  if (mode === "compressing") return !!metadata.compressing;
+  return !!metadata.compressResult;
+}
+
+/**
+ * 移除压缩占位（"压缩中"占位、"压缩结果"卡与"已压缩"摘要卡共用 eventType='compaction'）。
+ * mode 'compressing' 仅移除"压缩中"占位；'result' 仅移除结果卡；'all' 全部移除（旧摘要卡一并清场）。
  * 独立 kind:'event' 回合外壳整体移除（避免空壳残留）；回合内束逐条摘除，真实消息块保留仅标记。
  */
 function removeCompactionPlaceholders(
   sessionStore: ProjectorSessionStore,
   sessionId: string,
-  mode: "compressing" | "all",
+  mode: "compressing" | "result" | "all",
 ): void {
   const turns = sessionStore.getTurns(sessionId) || [];
   for (let ti = turns.length - 1; ti >= 0; ti--) {
     const t = turns[ti];
     if (t.kind === "event" && t.metadata?.eventType === "compaction") {
-      if (mode === "all" || t.metadata?.compressing || t.messages?.[0]?.metadata?.compressing) {
+      if (
+        matchesCompactionPlaceholder(t.metadata, mode) ||
+        matchesCompactionPlaceholder(t.messages?.[0]?.metadata, mode)
+      ) {
         turns.splice(ti, 1);
       }
       continue;
@@ -503,8 +522,8 @@ function removeCompactionPlaceholders(
     if (!Array.isArray(t.messages)) continue;
     for (let i = t.messages.length - 1; i >= 0; i--) {
       const m = t.messages[i];
-      if (m.role !== "event" || m.metadata?.eventType !== "compaction") continue;
-      if (mode === "compressing" && !m.metadata?.compressing) continue;
+      if (m.role !== "event") continue;
+      if (!matchesCompactionPlaceholder(m.metadata, mode)) continue;
       t.messages.splice(i, 1);
     }
   }
@@ -563,6 +582,71 @@ function upsertCompressingPlaceholder(sessionStore: ProjectorSessionStore, sessi
   }
 }
 
+/**
+ * 就地替换为"压缩结果"卡（纯裁剪/空跑路径）。
+ *
+ * 这类运行没有 compaction_summary（无遮蔽/摘要），若只摘掉"压缩中"占位则整次压缩一闪而过、
+ * 用户看不出做了什么。此处保留一张常驻结果卡（只保留最近一次；下次压缩开始/结束再替换），
+ * 展示裁剪条数与未压缩原因；摘要路径不用它（compaction_summary 原位放摘要卡）。
+ */
+function upsertCompressResultPlaceholder(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  chunk: Extract<ProjectorChunk, { type: "compression_end" }>,
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  const currentTurnId = getCurrentTurn(sessionId);
+  const hostTurn = currentTurnId ? turns.find((t) => t.id === currentTurnId) : undefined;
+  // 清掉旧的"压缩中"占位与上一次的结果卡（结果卡只保留最近一次）
+  removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
+  removeCompactionPlaceholders(sessionStore, sessionId, "result");
+
+  const now = new Date().toISOString();
+  const messageId = `__compress_result_${Date.now()}`;
+  const metadata = {
+    eventType: "compaction",
+    compressResult: {
+      reason: chunk.reason ?? "auto",
+      pruneEvents: chunk.pruneEvents ?? 0,
+      compacted: chunk.compacted === true,
+      skipReason: chunk.skipReason,
+    },
+  };
+  const eventBundle: MessageBundle = {
+    messageId,
+    role: "event",
+    metadata,
+    blocks: [
+      {
+        id: messageId,
+        role: "event",
+        messageId,
+        content: "",
+        reasoningContent: null,
+        additionalKwargs: [],
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+        thinkingStartedAt: null,
+        thinkingDurationMs: null,
+        state: { isStreaming: false, isThinking: false },
+      },
+    ],
+  };
+  if (hostTurn) {
+    if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
+    hostTurn.messages.push(eventBundle);
+  } else {
+    turns.push({
+      id: eventBundle.messageId,
+      kind: "event",
+      metadata,
+      visible: true,
+      messages: [eventBundle],
+    });
+  }
+}
+
 
 /**
  * ask_requested 帧 → 会话级交互卡状态（projectChunk 门控前直写与 live 分支共用，防字段漂移）。
@@ -596,8 +680,10 @@ export function applyChunkToStore(
   }
   // 引擎级附属（上下文压缩）
   if (chunk.type === "compression_start") {
-    // 压缩开始（auto 回合内 / manual 维护流）：置位 + "压缩中"占位卡（幂等）
+    // 压缩开始（auto 回合内 / manual 维护流）：置位 + "压缩中"占位卡（幂等）；
+    // 上一次的"压缩结果"卡先清掉（只保留最近一次结果）
     sessionStore.setSessionIsCompressing(sessionId, true);
+    removeCompactionPlaceholders(sessionStore, sessionId, "result");
     upsertCompressingPlaceholder(sessionStore, sessionId);
     return;
   }
@@ -607,13 +693,24 @@ export function applyChunkToStore(
     return;
   }
   if (chunk.type === "compression_end") {
-    // 压缩运行结束（compacted 与纯裁剪都发）：复位 + 移除"压缩中"占位（纯裁剪的终态；
-    // 摘要路径随后 compaction_summary 原位放结果卡）+ 压缩后占用 → 环形指示器即时更新
+    // 压缩运行结束（compacted 与纯裁剪都发）：复位 + 压缩后占用 → 环形指示器即时更新。
+    // 摘要路径：摘"压缩中"占位，随后 compaction_summary 原位放摘要卡；
+    // 纯裁剪/空跑路径：就地换成"压缩结果"卡（裁剪条数 + 未压缩原因），避免整次压缩一闪而过。
     sessionStore.setSessionIsCompressing(sessionId, false);
     if (chunk.contextStats) {
       updateTokenStatsFromSSE(sessionId, chunk.contextStats);
     }
-    removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
+    if (chunk.compacted === true) {
+      removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
+    } else if (
+      chunk.pruneEvents !== undefined ||
+      chunk.skipReason !== undefined
+    ) {
+      upsertCompressResultPlaceholder(sessionStore, sessionId, chunk);
+    } else {
+      // 旧后端（无结果字段）：维持原行为，只摘占位
+      removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
+    }
     return;
   }
   if (chunk.type === "compaction_summary") {

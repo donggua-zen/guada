@@ -439,6 +439,29 @@ async function submit() {
   transform: translateY(6px);
 }
 
+/* 卡片离场退流（2026-10-09 用户报障："提交后输入框与审批卡同时出现、页面跳动"）。
+   成因是互换的两侧只有卡片这侧有动画：卡片被清 → 输入区 v-show 瞬时 display:block 回来，
+   而卡片还要留在流内淡出 200ms。这 200ms 里"卡片高度 + 输入区高度"一起计入 scrollHeight，
+   输入区又是 sticky bottom-0 → 内容变高就把上方消息顶跳，同时看到两者同屏
+   （实测：输入区高度 240 → 368 → 136，顶边 476 → 348 → 580）。
+   处理方式对齐 .composer-status-row 的浮层思路：离场期间退出文档流，卡片高度不再参与布局。
+
+   锚点 bottom:0，包含块取输入区内的 .chat-column（ChatPanel 里已 relative），理由两条：
+   1. 它的底边就是输入区内容底边，而卡片在流内时是它的最后一个在流子元素（卡片待答期间
+      输入框与工作目录条都被 hasPendingAsk 隐藏）——于是 bottom:0 复现的正是卡片的原位置；
+   2. 刻意不给本组件根节点 .session-cards 加 position:relative：那样包含块会塌成 0 高度并
+      整体下移一个卡片高度，卡片跟着上跳 128px（实测过）。
+   因此卡片是原地交叉淡出：z-index 盖过同级的输入框（z-auto）。正常态本就是"卡片覆盖输入框"，
+   淡出期间同样覆盖才连续；否则卡片会被输入框切掉一半、只剩顶部一条在闪。
+   z-index 留在 .chat-column（z-index:1）这个层叠上下文内，不会抬到右侧 aside（20）之上。 */
+.card-slide-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+}
+
 /* 卡片限高 + 内部滚动（对齐 ZCode 对话框 max-h-[min(72dvh,42rem)]）：
    弹窗顶替输入区位置，绝不超过视口——问题多/选项长时在卡内滚动，而不是把消息区挤没 */
 .ask-card {
