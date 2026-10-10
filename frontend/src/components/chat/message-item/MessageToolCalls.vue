@@ -30,7 +30,7 @@
         </div>
         <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
              无 provide 的宿主如 BotSessionDialog 下不渲染） -->
-        <GdTooltip v-if="subAgentLinks[toolIndex]"
+        <GdTooltip v-if="canOpenSubAgentPanel && subAgentLinks[toolIndex]"
           :content="t('chat.toolCalls.openSubAgentPanel')" placement="top"
           class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <span class="open-subagent-btn" @click.stop="openSubAgentPanel(toolIndex)">
@@ -68,6 +68,14 @@
           :executing="isToolExecuting(tool, toolIndex)" :session-id="props.sessionId"
           :pending-approval="isPendingApproval(tool)" :status="planCardStatus(toolIndex)" />
 
+        <!-- 子代理派生行：整行只有专用行组件（图标 + 子智能体 + 名称 + 任务摘要），
+             点击打开子代理面板。无 renderer，不走走 kind → ToolCustomView 管线。 -->
+        <SubAgentToolRow v-else-if="subAgentSpawnRows[toolIndex]" :tool="tool"
+          :link="subAgentLinks[toolIndex] || null" :executing="isToolExecuting(tool, toolIndex)"
+          :failed="tool.outcome === 'error' || tool.outcome === 'rejected'"
+          :clickable="canOpenSubAgentPanel && !!subAgentLinks[toolIndex]"
+          @open="openSubAgentPanel(toolIndex)" />
+
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
           <div class="io-section">
@@ -101,14 +109,16 @@ import {
   getToolArgs, getArgsText,
   getToolRenderer, getRendererArgs,
   isStandaloneRendererKind, isStandaloneTool,
-  resolvePlanCardStatus,
+  resolvePlanCardStatus, resolveToolName,
 } from '@/utils/toolDisplay';
+import { SUB_AGENT_SPAWN_TOOL } from '@/utils/subAgentTools';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
+import SubAgentToolRow from './SubAgentToolRow.vue';
 import { useSessionStore } from '@/stores/session';
 
 const props = defineProps<{
@@ -140,13 +150,15 @@ const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
   null,
 );
 
-/** 每行可跳转的子代理会话（null = 该行无唯一目标，不显示按钮） */
+/** 宿主是否提供子代理面板入口（无入口时子代理行仍渲染，只是不可点） */
+const canOpenSubAgentPanel = openSubAgentSession !== null;
+
+/** 每行可跳转的子代理会话（null = 该行无唯一目标，不显示入口/不可点）。
+ *  与面板入口可用性解耦：行组件需要 link.name 渲染名称，宿主无入口时也要解析。 */
 const subAgentLinks = computed(() =>
-  openSubAgentSession
-    ? props.toolCalls.map((tool, index) =>
-        resolveSubAgentLink(tool, findToolResponse(tool, index, props.toolResponses)),
-      )
-    : [],
+  props.toolCalls.map((tool, index) =>
+    resolveSubAgentLink(tool, findToolResponse(tool, index, props.toolResponses)),
+  ),
 );
 
 const openSubAgentPanel = (index: number): void => {
@@ -175,8 +187,8 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 };
 
 // ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
-// 例外：独立渲染工具（计划行等，isStandaloneRendererKind）默认展开——正文就是内容本身，
-// 模型还在写计划时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
+// 例外：独立渲染工具（计划卡、子智能体行等，isStandaloneTool）默认展开——正文就是内容本身，
+// 模型还在写时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
 
 const expandedIndexes = ref<Set<number>>(new Set());
 const collapsedIndexes = ref<Set<number>>(new Set());
@@ -188,10 +200,10 @@ watch(() => props.autoExpand, (auto) => {
   collapsedIndexes.value = new Set();
 }, { immediate: true });
 
-/** 默认展开的行（独立渲染工具卡：正文即内容，与分组判定共用同一 kind 集合） */
+/** 默认展开的行（独立渲染工具：正文即内容，与分组判定共用 isStandaloneTool） */
 const isDefaultExpandedRow = (index: number): boolean => {
-  const kind = rendererInfos.value[index]?.kind;
-  return kind !== undefined && isStandaloneRendererKind(kind);
+  const tool = props.toolCalls[index];
+  return !!tool && isStandaloneTool(tool);
 };
 
 const isExpanded = (index: number): boolean => {
@@ -205,6 +217,11 @@ const isExpanded = (index: number): boolean => {
  */
 const standaloneRows = computed<boolean[]>(() =>
   props.toolCalls.map((tool) => isStandaloneTool(tool)),
+);
+
+/** 子代理派生行（专用行组件渲染，无 renderer，不走定制渲染管线） */
+const subAgentSpawnRows = computed<boolean[]>(() =>
+  props.toolCalls.map((tool) => resolveToolName(tool) === SUB_AGENT_SPAWN_TOOL),
 );
 
 const toggleExpand = (index: number): void => {

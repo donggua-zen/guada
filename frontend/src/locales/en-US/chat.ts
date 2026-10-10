@@ -305,6 +305,7 @@
     inputLabel: 'Input',
     outputLabel: 'Output',
     openSubAgentPanel: 'Open sub-agent panel',
+    subAgentLabel: 'Sub-agent',
   },
 
   // ── 文件变更 ──

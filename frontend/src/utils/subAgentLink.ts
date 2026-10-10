@@ -1,9 +1,7 @@
 import { parse as partialParse } from 'partial-json';
 import { type ToolCall, resolveToolName, getToolArgs } from './toolDisplay';
+import { SUB_AGENT_MANAGER_TOOL, SUB_AGENT_TOOLS } from './subAgentTools';
 import type { ToolCallResponseEntry } from '@/types/message';
-
-/** 子代理工具名（后端 sub-agent 插件注册；resolveToolName 已兼容 legacy tool_use 包装） */
-const SUB_AGENT_TOOLS = new Set(['subagent_spawn', 'subagent_manager']);
 
 export interface SubAgentLink {
   subSessionId: string;
@@ -68,7 +66,7 @@ export function resolveSubAgentLink(
     };
   }
 
-  if (toolName === 'subagent_manager') {
+  if (toolName === SUB_AGENT_MANAGER_TOOL) {
     const sessionId = parseArgs(tool)?.sessionId;
     if (typeof sessionId === 'string' && sessionId) {
       return { subSessionId: sessionId };

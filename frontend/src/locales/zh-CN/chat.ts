@@ -305,6 +305,7 @@ export default {
     inputLabel: '输入',
     outputLabel: '输出',
     openSubAgentPanel: '打开子代理面板',
+    subAgentLabel: '子智能体',
   },
 
   // ── 文件变更 ──

@@ -14,6 +14,7 @@ import {
 } from "@vicons/fluent";
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
+import { SUB_AGENT_SPAWN_TOOL } from "./subAgentTools";
 
 export interface ToolCall {
   /** 工具调用 id（= 后端 toolCallId），与 toolCallsResponse[].toolCallId 对应。
@@ -283,13 +284,23 @@ export function getToolRenderer(tool: ToolCall): ToolRendererConfig | null {
  */
 const STANDALONE_RENDERER_KINDS: ReadonlySet<ToolRendererConfig["kind"]> = new Set(["plan"]);
 
+/**
+ * 按工具名独立成块：无 renderer、但要求整行独立渲染的工具。
+ *
+ * 与 kind 集合的分工：kind 集合给「以 renderer 定制卡面承载正文」的工具（plan）；
+ * 名集合给「行内容由专用组件承担、不走走 kind → ToolCustomView 管线」的工具——
+ * 目前是子代理派生行（SubAgentToolRow）。同一工具不需要两处登记。
+ */
+const STANDALONE_TOOL_NAMES: ReadonlySet<string> = new Set([SUB_AGENT_SPAWN_TOOL]);
+
 /** kind 是否独立成块渲染（分组与行级默认展开共用同一集合） */
 export function isStandaloneRendererKind(kind: ToolRendererConfig["kind"]): boolean {
   return STANDALONE_RENDERER_KINDS.has(kind);
 }
 
-/** 工具是否独立成块（按 renderer kind 判定，与行级判定同一来源；无 renderer 的工具不独立） */
+/** 工具是否独立成块（按工具名或 renderer kind 判定，与行级判定同一来源） */
 export function isStandaloneTool(tool: ToolCall): boolean {
+  if (STANDALONE_TOOL_NAMES.has(resolveToolName(tool))) return true;
   const kind = getToolRenderer(tool)?.kind;
   return kind !== undefined && isStandaloneRendererKind(kind);
 }
