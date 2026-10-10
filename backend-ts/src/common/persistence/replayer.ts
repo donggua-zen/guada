@@ -52,14 +52,19 @@ export function createInitialState(): ReplayState {
 /**
  * 回放折叠规则。
  *
- * 语义边界：同一份持久事件流可被不同消费链路折叠（各自独立视图），
+ * 语义边界：同一份持久事件流可被后端不同消费链路折叠（各自独立视图），
  * 折叠产物同为扁平 surface，仅内容规则不同。
- * - LLM 链路（缓存）：压缩裁剪就地应用省 token；压缩前缀范围直接移除
- * - 前端展示链路（applyCompressionPrune=false）：压缩裁剪不应用（tool-result 保持完整原文）；
- *   用户编辑（strategy='user_edit'）无论哪条链路都应用（所见即所得，必须回显）
- * 压缩（compaction/summary）两链路一致：前缀范围删除 + 摘要置消息头（不再保留遮蔽消息）；
- * 搜索链路（ignoreCompaction=true）例外：整段忽略压缩括号（对齐前端"标记不物理移除"
- * 的重建方式），被压缩消息保留参与内容检索。
+ * - LLM 链路（默认）：压缩裁剪就地应用省 token；compaction 遮蔽前缀删除 + 摘要置消息头
+ * - applyCompressionPrune=false：压缩裁剪不应用（tool-result 保持完整原文）。
+ *   当前后端消费者：updateTurn（编辑定位）、会话内容搜索（另加 ignoreCompaction）
+ * - 用户编辑（strategy='user_edit'）无论哪条链路都应用（所见即所得，必须回显）
+ * - ignoreCompaction=true：整段忽略 compaction/* 括号（不删前缀、不插摘要），
+ *   被压缩消息保留参与内容检索；搜索链路用此对齐"界面全量显示"的语义
+ *
+ * 注意：前端展示不经过本 replayer。前端拉取原始事件页（GET sessions/:id/events）
+ * 后用自身投影器（frontend streamProjector）折叠：compaction/summary 只标记
+ * metadata.compacted + 生成事件卡，不物理移除消息。"界面全量显示、仅模型侧折叠"
+ * 是设计意图，不是遗漏。
  */
 export interface FoldOptions {
   /** 压缩自动裁剪（head_tail_500 等）是否就地改块；默认 true（LLM 链路）。false 时保留原文 */
@@ -175,7 +180,7 @@ export function foldEvent(
       const data = (event.data as unknown) as MessagePruneData;
       const applyCompressionPrune = opts?.applyCompressionPrune !== false;
       // 用户编辑（strategy='user_edit'）：两视图一致，就地改 text 块（编辑所见即所得）；
-      // 压缩自动裁剪（head_tail_500 等）：仅 LLM 链路应用，展示链路保留完整原文
+      // 压缩自动裁剪（head_tail_500 等）：仅默认（LLM）链路应用，applyCompressionPrune=false 保留完整原文
       if (data.strategy !== 'user_edit' && !applyCompressionPrune) break;
       const node = state.messages.find((n) => n.id === data.messageId);
       if (!node) break;
@@ -327,7 +332,7 @@ export function foldEvent(
 
 /**
  * 回放全部事件。
- * @param opts.applyCompressionPrune 默认 true（LLM 链路）；false（前端展示链路）时压缩裁剪不应用
+ * @param opts.applyCompressionPrune 默认 true（LLM 链路）；false 时压缩裁剪不应用（编辑定位/搜索等读原文场景）
  */
 export function foldEvents(
   events: BaseEvent[],
