@@ -413,6 +413,87 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     expect(typeof data.usedTokens).toBe('number');
     expect(data.effectiveContextWindow).toBe(8000);
   });
+
+  it('压缩锚点优先：compaction/end 的纠正值取代被抵消的 provider 增量', async () => {
+    // 回归：裁剪/遮蔽改写了锚点**之前**的内容，usage 增量口径下两个启发式项同额下降 →
+    // 压缩后占用恒定不变（实测会话真实裁掉 ~83K token 后 usedTokens 仍是 413162）。
+    const { ctx, messageStore } = createContext({
+      messageStore: {
+        getOccupancyAnchor: jest.fn(async () => ({
+          kind: 'compaction',
+          usedTokens: 500,
+          heuristicTokens: 300,
+        })),
+      },
+    });
+    await ctx.initialize();
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { _t: 100 } }),
+      makeMsg('a1', 'assistant', {
+        metadata: { _t: 200, usage: { promptTokens: 1000 }, modelName: 'test-model' },
+      }),
+      makeMsg('u2', 'user', { metadata: { _t: 100 } }),
+    ]);
+    // heuristicNow = 400；压缩锚点 = 500 + (400 - 300) = 600（若走 usage 锚点会是 1100）
+    expect(await ctx.getTokenCount()).toBe(600);
+  });
+
+  it('recordContextAnchor：扣减被 provider 锚点抵消的裁剪节省（锚点之后的节省不重复扣）', async () => {
+    const { ctx, messageStore } = createContext();
+    messageStore.recordContextAnchor = jest.fn(async () => 5);
+    await ctx.initialize();
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { _t: 100 } }),
+      makeMsg('a1', 'assistant', {
+        metadata: { _t: 200, usage: { promptTokens: 1000 }, modelName: 'test-model' },
+      }),
+      makeMsg('u2', 'user', { metadata: { _t: 100 } }),
+    ]);
+    // 当前口径 = 1000 + (400-300) = 1100；锚点 index=1 → 仅 index<=1 的节省被抵消
+    await ctx.recordContextAnchor({
+      beforeTokens: 1100,
+      savings: [
+        { index: 0, tokens: 50 }, // 锚点之前 → 显式扣减
+        { index: 2, tokens: 70 }, // 锚点之后 → 增量已吸收，不再扣
+      ],
+    });
+    const data = (messageStore.recordContextAnchor as jest.Mock).mock.calls[0][1];
+    expect(data.usedTokens).toBe(1050);
+    expect(data.heuristicTokens).toBe(400); // prelude(0) + 视图前缀和(400)
+    expect(data.beforeTokens).toBe(1100);
+  });
+
+  it('新回合写入 usage 锚点后，压缩锚点自动让位（回到 provider 增量口径）', async () => {
+    const getOccupancyAnchor = jest.fn(async () => ({
+      kind: 'compaction',
+      usedTokens: 500,
+      heuristicTokens: 300,
+    }));
+    // 版本号随写入推进（revision 契约）：快照命中增量路径，锚点在 appendToSnapshot 内切换
+    let seq = 0;
+    const { ctx, messageStore } = createContext({
+      messageStore: {
+        getOccupancyAnchor,
+        getLastProcessedSeq: jest.fn(async () => seq),
+      },
+    });
+    await ctx.initialize();
+    messageStore.loadContext.mockResolvedValue([
+      makeMsg('u1', 'user', { metadata: { _t: 100 } }),
+    ]);
+    await ctx.getHistory(); // 建快照（当前为压缩锚点：500 + (100-300) = 300）
+    expect(await ctx.getTokenCount()).toBe(300);
+
+    // 增量追加带 usage 的助手消息 → 锚点切回 usage（该请求实测 promptTokens=700）
+    const added = makeMsg('a2', 'assistant', {
+      metadata: { _t: 50, usage: { promptTokens: 700 }, modelName: 'test-model' },
+    });
+    seq = 2;
+    messageStore.appendMessages.mockResolvedValue({ added: [added], revision: 2 });
+    await ctx.appendMessages([added]);
+    // heuristicNow = 150，锚点即该消息本身 → heuristicAtAnchor = 150 → 700
+    expect(await ctx.getTokenCount()).toBe(700);
+  });
 });
 
 describe('JsonlSessionContext 压缩配置档位', () => {

@@ -100,6 +100,25 @@ function makeMessages(count: number): Message[] {
   return out;
 }
 
+/** 构造 N 条超长 tool-result 消息（默认 5000 字符） */
+function makeToolMessages(count: number, length = 5000): Message[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `t${i}_t`,
+    role: 'tool' as const,
+    kind: 'model' as const,
+    source: { kind: 'tool' as const, toolCallId: `call_${i}` },
+    metadata: {},
+    content: [
+      {
+        type: 'tool-result' as const,
+        toolCallId: `call_${i}`,
+        name: 'shell',
+        content: 'x'.repeat(length),
+      },
+    ],
+  }));
+}
+
 /** 确定性 token 估算：每消息按 text 长度 / 4 */
 function estimateTokensFor(messages: Message[]): number {
   let total = 0;
@@ -207,8 +226,8 @@ describe('CompressionEngine', () => {
       const { ds, compacted } = createDataSource();
       const engine = createEngine();
       const provider = { generate: jest.fn(async () => ({ summary: 'summary' })) };
-      // 20 条消息 ≈ 50 tokens，window=80 → retain=0.2×80=16 tokens → 保留尾 ~6 条、遮蔽 ~14 条，
-      // 远大于 MIN_RETAINED_MESSAGES=3 地板（旧 force 行为会把整个会话压到只剩 3~4 条）
+      // 20 条消息 ≈ 50 tokens，window=80 → 保留预算 = min(80,50)×0.2 = 10 tokens → 保留尾 ~4 条、
+      // 遮蔽 ~16 条，远大于 MIN_RETAINED_MESSAGES=3 地板（旧 force 行为会把整个会话压到只剩 3~4 条）
       const big = makeMessages(20);
       const result = await engine.execute('s1', {
         messages: big,
@@ -221,6 +240,68 @@ describe('CompressionEngine', () => {
       const retained = big.length - (result.shadowedCount ?? 0);
       expect(retained).toBeGreaterThan(3);
       expect(compacted[0].shadowedCount).toBe(result.shadowedCount);
+    });
+
+    it('保留预算按实际占用折算：内容远小于窗口时手动压缩仍产生可遮蔽区间', async () => {
+      // 回归：实测会话 1M 窗口 / 内容约 227K 启发式 / 保守档 retainRatio=0.4 →
+      // 旧口径 retain=400K > 整段历史 → computeBoundary 边界 0 → compacted=false，
+      // 手动压缩退化为纯裁剪且看起来"什么都没做"。
+      const history = makeMessages(40); // ≈100 tokens
+      const { ds, compacted } = createDataSource();
+      const engine = createEngine();
+      const provider = { generate: jest.fn(async () => ({ summary: 's' })) };
+      const result = await engine.execute('s1', {
+        messages: history,
+        contextWindow: 1_000_000,
+        retainRatio: 0.4,
+        force: true,
+        summaryProvider: provider,
+        dataSource: ds as any,
+      });
+      expect(result.compacted).toBe(true);
+      expect(result.shadowedCount).toBeGreaterThan(0);
+      expect(compacted.length).toBe(1);
+    });
+
+    it('未达触发线时给出 skipReason=below-threshold', async () => {
+      const { ds } = createDataSource();
+      const engine = createEngine();
+      const result = await engine.execute('s1', {
+        messages,
+        contextWindow: 100000,
+        dataSource: ds as any,
+      });
+      expect(result.compacted).toBe(false);
+      expect(result.skipReason).toBe('below-threshold');
+    });
+
+    it('无可遮蔽（消息数 ≤ MIN_RETAINED_MESSAGES）时给出 skipReason=retain-budget-exceeds-history', async () => {
+      const { ds } = createDataSource();
+      const engine = createEngine();
+      const result = await engine.execute('s1', {
+        messages: makeMessages(2),
+        contextWindow: 8,
+        force: true,
+        summaryProvider: { generate: async () => ({ summary: 's' }) },
+        dataSource: ds as any,
+      });
+      expect(result.compacted).toBe(false);
+      expect(result.skipReason).toBe('retain-budget-exceeds-history');
+    });
+
+    it('无 summaryProvider 且非 DISABLED 时给出 skipReason=no-summary-provider', async () => {
+      const { ds } = createDataSource();
+      const engine = createEngine();
+      // 触发（requestTokens 抬高全量口径），但无 provider → 只能裁剪
+      const result = await engine.execute('s1', {
+        messages,
+        requestTokens: 100000,
+        contextWindow: 100000,
+        summaryMode: SummaryMode.FAST,
+        dataSource: ds as any,
+      });
+      expect(result.compacted).toBe(false);
+      expect(result.skipReason).toBe('no-summary-provider');
     });
   });
 
@@ -257,6 +338,80 @@ describe('CompressionEngine', () => {
       const firstTr = longMessages[0].content[0] as Extract<ContentBlock, { type: 'tool-result' }>;
       expect(firstTr.content).not.toContain('[omitted');
       expect(firstTr.content.length).toBe(5000);
+    });
+
+    it('裁剪后必然更短：已裁剪内容（≈maxLength+标记）不再入候选 → 二次运行零 prune 事件', async () => {
+      // 回归：旧实现只判 `> maxLength`，而裁剪结果（头 500 + 标记 + 尾 500 ≈1025）仍 > 1000
+      // → 同一批 tool-result 每轮都是候选，被反复"裁剪"成等长（prunedBytes=0）并每次落 88 条
+      // no-op 事件（实测会话 3 轮共 264 条）。
+      const longMessages = makeToolMessages(4, 5000);
+      const first = createDataSource();
+      const engine = createEngine();
+      const r1 = await engine.execute('s1', {
+        messages: longMessages,
+        contextWindow: 10,
+        summaryMode: SummaryMode.FAST,
+        dataSource: first.ds as any,
+      });
+      expect(r1.pruneEvents).toBe(1);
+      expect(first.pruned[0].prunedBytes).toBeGreaterThan(0);
+
+      // 用第一次的裁剪结果重建视图（其余保持原文）→ 已裁剪内容不得再产生事件
+      const prunedContent = first.pruned[0].newContent;
+      const view2 = longMessages.map((m, i) =>
+        i === 0
+          ? {
+              ...m,
+              content: [
+                {
+                  ...(m.content[0] as Extract<ContentBlock, { type: 'tool-result' }>),
+                  content: prunedContent,
+                },
+              ],
+            }
+          : m,
+      );
+      const second = createDataSource();
+      const r2 = await engine.execute('s1', {
+        messages: view2,
+        contextWindow: 10,
+        summaryMode: SummaryMode.FAST,
+        dataSource: second.ds as any,
+      });
+      expect(r2.pruneEvents).toBe(0);
+      expect(second.pruned.length).toBe(0);
+    });
+
+    it('裁剪后必然更短：略超阈值的内容不会被"裁剪"成等长/更长', async () => {
+      // 旧实现：1013 字符 → newContent = 500 + 25 + 500 = 1025 → prunedBytes = -13（裁剪反而变长）
+      const [slightlyOver] = makeToolMessages(1, 1013);
+      const messages = [slightlyOver, ...makeToolMessages(3, 5000)];
+      const { ds, pruned } = createDataSource();
+      const engine = createEngine();
+      const result = await engine.execute('s1', {
+        messages,
+        contextWindow: 10,
+        summaryMode: SummaryMode.FAST,
+        dataSource: ds as any,
+      });
+      // 前 3 条超长被保护区跳过，第 4 条（1013）收益不足 → 无任何裁剪
+      expect(result.pruneEvents).toBe(0);
+      expect(pruned.length).toBe(0);
+    });
+
+    it('prune-only 返回节省清单（供会话侧扣减被 provider 锚点抵消的收益）', async () => {
+      const { ds } = createDataSource();
+      const engine = createEngine();
+      const result = await engine.execute('s1', {
+        messages: makeToolMessages(4, 5000),
+        contextWindow: 10,
+        summaryMode: SummaryMode.FAST,
+        dataSource: ds as any,
+      });
+      expect(result.compacted).toBe(false);
+      expect(result.savings?.length).toBe(1);
+      expect(result.savings?.[0].index).toBe(0);
+      expect(result.savings?.[0].tokens).toBeGreaterThan(0);
     });
   });
 

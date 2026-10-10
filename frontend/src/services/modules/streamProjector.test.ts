@@ -257,14 +257,30 @@ describe("StreamProjector 折叠器", () => {
     expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
   });
 
-  it("compression_end（纯裁剪无 summary）：移除'压缩中'占位", () => {
+  it("compression_end（纯裁剪）：'压缩中'占位替换为压缩结果卡（不再一闪而过）", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
     applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
     applyLiveChunk(store as any, "s1", {
       type: "compression_end",
       contextStats: { usedTokens: 100, effectiveContextWindow: 1000 },
+      pruneEvents: 3,
+      compacted: false,
+      skipReason: "retain-budget-exceeds-history",
     } as any);
-    expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
+    // 纯裁剪无 compaction_summary：保留一张结果卡说明本次做了什么
+    const resultCarrier = (t: any) =>
+      t.metadata?.compressResult ??
+      t.messages?.find((m: any) => m.metadata?.compressResult)?.metadata
+        ?.compressResult;
+    const resultTurns = store.state.turns.filter((t: any) => !!resultCarrier(t));
+    expect(resultTurns.length).toBe(1);
+    expect(resultCarrier(resultTurns[0])).toMatchObject({
+      pruneEvents: 3,
+      compacted: false,
+      skipReason: "retain-budget-exceeds-history",
+    });
+    // "压缩中"占位不得残留
+    expect(store.state.turns.some((t: any) => t.metadata?.compressing)).toBe(false);
   });
 
   it("compaction_summary 旧格式 shadowedMessageIds", () => {

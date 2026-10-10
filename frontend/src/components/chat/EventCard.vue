@@ -35,6 +35,17 @@
         </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
       </div>
+      <!-- 压缩结果卡（纯裁剪/空跑：没有 compaction_summary，靠它说明本次做了什么） -->
+      <div v-else-if="compressResult" class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
+          <el-icon size="14">
+            <Archive20Regular />
+          </el-icon>
+          <span class="event-card__compaction-text">{{ compressResultLabel }}</span>
+        </span>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
       <template v-else>
         <div class="event-card__divider">
           <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
@@ -78,6 +89,7 @@ const expanded = ref(false);
 
 const eventType = computed(() => props.event?.metadata?.eventType ?? "");
 const compressing = computed(() => !!props.event?.metadata?.compressing);
+const compressResult = computed(() => props.event?.metadata?.compressResult ?? null);
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
 const outcome = computed(() => props.event?.metadata?.commandOutcome ?? null);
 const compactInfo = computed(() => props.event?.metadata?.compactInfo ?? null);
@@ -96,6 +108,34 @@ const compactLabel = computed(() => {
   return shadowedCount.value > 0
     ? t("chat.turn.contextCompactedCount", { count: shadowedCount.value })
     : t("chat.turn.contextCompacted");
+});
+
+/** 未压缩原因 → i18n key（未知原因回退 unknown，不把 key 直接暴露给用户） */
+const SKIP_REASON_KEYS: Record<string, string> = {
+  "below-threshold": "chat.turn.compressSkip.belowThreshold",
+  "prune-sufficient": "chat.turn.compressSkip.pruneSufficient",
+  "no-summary-provider": "chat.turn.compressSkip.noSummaryProvider",
+  "retain-budget-exceeds-history": "chat.turn.compressSkip.retainBudget",
+  "tier-disabled": "chat.turn.compressSkip.tierDisabled",
+};
+
+/** 压缩结果卡文案：裁剪条数 + 是否压缩（未压缩时给出原因） */
+const compressResultLabel = computed(() => {
+  const r = compressResult.value;
+  if (!r) return "";
+  const parts: string[] = [];
+  if (r.pruneEvents > 0) {
+    parts.push(t("chat.turn.contextPruned", { count: r.pruneEvents }));
+  }
+  if (r.compacted) {
+    parts.push(t("chat.turn.contextCompacted"));
+  } else {
+    const reason = t(
+      SKIP_REASON_KEYS[r.skipReason] ?? "chat.turn.compressSkip.unknown",
+    );
+    parts.push(`${t("chat.turn.contextNotCompacted")}（${reason}）`);
+  }
+  return parts.join(" · ");
 });
 
 const outcomeLabel = computed(() => {

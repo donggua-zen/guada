@@ -38,6 +38,21 @@ export interface PruneWrite {
   prunedTokens?: number;
 }
 
+/**
+ * 压缩写入的 token 节省（按视图消息 index 归属）——供会话侧写压缩占用锚点时扣减。
+ *
+ * 背景：`getTokenCount` = provider 真值锚点 + 启发式增量。被裁剪/遮蔽的消息若位于
+ * 该锚点**之前**，两个启发式项同额下降 → 锚点口径的总量恒定不变（裁剪白做）。
+ * 会话侧据此对锚点做显式扣减，并记录配套的启发式总量（compaction/end.heuristicTokens），
+ * 使压缩后的占用真实下降且可冷启动重建。
+ */
+export interface CompressionSaving {
+  /** 视图消息 index（引擎方案条目 index；遮蔽区整体视为前缀，不在此列） */
+  index: number;
+  /** 启发式节省 token（原文估 − 压缩后估） */
+  tokens: number;
+}
+
 /** 二级遮蔽写载荷（分界点 id + 条数；遮蔽必为头部连续前缀，不再离散 id 清单） */
 export interface CompactWrite {
   /** 遮蔽末位（分界点）消息 id——前端标记"已压缩"的唯一依据 */
@@ -47,6 +62,16 @@ export interface CompactWrite {
   summary: string;
   mode?: string;
   usage?: import('../../../common/types/stream-chunk.types').StreamUsage;
+  /** 保留尾裁剪的节省清单（锚点之前的条目需显式扣减；遮蔽区由 shadowedTokens 结算） */
+  savings?: readonly CompressionSaving[];
+}
+
+/** 压缩占用锚点写载荷（纯裁剪路径 compaction/end） */
+export interface ContextAnchorWrite {
+  /** 压缩前实测占用（压缩历史 before/after 对比） */
+  beforeTokens?: number;
+  /** 本次裁剪的节省清单（锚点之前的条目需显式扣减） */
+  savings?: readonly CompressionSaving[];
 }
 
 /** 会话向压缩能力暴露的窄数据源接口 */
@@ -84,6 +109,8 @@ export interface CompactionDataSource {
     data: CompactWrite,
   ): Promise<{ summaryMessageId: string; endSeq: number }>;
   /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用
-   *  （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）。服务层在 prune-only 后调用。 */
-  recordContextAnchor?(beforeTokens?: number): Promise<void>;
+   *  （compacted 路径的锚点已由 appendCompact 的 compaction/end 承载）。服务层在 prune-only 后调用。
+   *  @param opts.beforeTokens 压缩前实测占用；opts.savings 本次裁剪节省（锚点之前者被显式扣减，
+   *         否则 provider 锚点会抵消裁剪收益 → 占用不降） */
+  recordContextAnchor?(opts?: ContextAnchorWrite): Promise<void>;
 }

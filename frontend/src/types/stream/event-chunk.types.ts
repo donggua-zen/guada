@@ -139,7 +139,8 @@ export interface CompressionErrorEvent {
 }
 
 /** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；compacted 与纯裁剪都发）。
- *  携带压缩后占用（contextStats）——前端据此即时更新环形指示器，无需 REST。 */
+ *  携带压缩后占用（contextStats）——前端据此即时更新环形指示器，无需 REST；
+ *  并携带本次结果（裁剪条数/是否压缩/跳过原因），用于展示"这次压缩做了什么"。 */
 export interface CompressionEndEvent {
   type: "compression_end";
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
@@ -149,6 +150,14 @@ export interface CompressionEndEvent {
     usedTokens: number;
     effectiveContextWindow: number;
   };
+  /** 本次写入的一级裁剪事件数 */
+  pruneEvents?: number;
+  /** 是否发生二级压缩（遮蔽 + 摘要/丢弃） */
+  compacted?: boolean;
+  /** 遮蔽消息条数 */
+  shadowedCount?: number;
+  /** 未压缩原因（below-threshold / prune-sufficient / no-summary-provider / retain-budget-exceeds-history / tier-disabled） */
+  skipReason?: string;
 }
 
 /**

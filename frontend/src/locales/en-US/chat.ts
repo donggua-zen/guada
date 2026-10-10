@@ -240,6 +240,17 @@
     contextCompactedCount: 'Context compacted · {count} messages folded',
     contextCompacting: 'Compacting context...',
     collapseSummary: 'Collapse summary',
+    // EventCard.vue compression result card (prune-only / no-op runs)
+    contextPruned: 'Pruned {count} oversized tool results',
+    contextNotCompacted: 'Not compacted',
+    compressSkip: {
+      belowThreshold: 'below trigger threshold',
+      pruneSufficient: 'pruning already brought it below the trigger',
+      noSummaryProvider: 'no summarization model available',
+      retainBudget: 'retain budget covers all content',
+      tierDisabled: 'compression is off',
+      unknown: 'reason unknown',
+    },
     // TurnItem.vue notification fold (process_monitor / sub_agent)
     viewProcessOutput: 'View process output',
     viewSubagentResult: 'View sub-agent result',

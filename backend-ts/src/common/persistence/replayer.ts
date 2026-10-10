@@ -45,6 +45,7 @@ export function createInitialState(): ReplayState {
     envelope: null,
     lastProcessedSeq: -1,
     openCompactionSeq: null,
+    occupancyAnchor: null,
   };
 }
 
@@ -138,6 +139,11 @@ export function foldEvent(
         seq: event.seq,
         turnId: state.currentTurnId,
       });
+      // 占用锚点：带 provider prompt usage 的助手消息即真值基准（后写者覆盖，
+      // 新回合自然接管此前的压缩锚点；见 OccupancyAnchor）
+      if (hasPromptUsage(data.metadata)) {
+        state.occupancyAnchor = { kind: 'usage' };
+      }
       break;
     }
 
@@ -273,6 +279,21 @@ export function foldEvent(
       // 闭括号：清除未闭合 seq（正常批量写入下 start→end 配对）
       if (opts?.ignoreCompaction) break;
       state.openCompactionSeq = null;
+      // 占用锚点：压缩纠正值（usedTokens + 配套启发式总量）取代被抵消的 provider 增量。
+      // 旧事件无 heuristicTokens → 不设锚点（回退 usage 口径），避免用错口径的基准。
+      {
+        const data = (event.data as unknown) as {
+          usedTokens?: unknown;
+          heuristicTokens?: unknown;
+        };
+        if (isNonNegativeNumber(data?.usedTokens) && isNonNegativeNumber(data?.heuristicTokens)) {
+          state.occupancyAnchor = {
+            kind: 'compaction',
+            usedTokens: data.usedTokens,
+            heuristicTokens: data.heuristicTokens,
+          };
+        }
+      }
       break;
 
     // ─── 统一交互事件（ask/asked|answered 事件溯源；审批/询问共用）───
@@ -321,6 +342,19 @@ export function foldEvents(
 }
 
 // ─── 消息事件 → 三层 Message（按三事件分派）───
+
+/**
+ * 消息元数据是否携带 provider prompt usage（占用真值锚点判据，与
+ * JsonlSessionContext.findUsageAnchor 同式：有限且 >= 0 的 promptTokens）。
+ */
+function hasPromptUsage(metadata: unknown): boolean {
+  const usage = (metadata as { usage?: { promptTokens?: unknown } } | null | undefined)?.usage;
+  return isNonNegativeNumber(usage?.promptTokens);
+}
+
+function isNonNegativeNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
 
 /**
  * MessageFile → FileRef（旧事件/迁移数据读取路径）。

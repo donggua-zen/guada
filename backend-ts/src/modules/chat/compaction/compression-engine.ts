@@ -23,7 +23,7 @@ import type {
   Message,
   ContentBlock,
 } from '../../../common/types/conversation.types';
-import type { CompactionDataSource } from './types';
+import type { CompactionDataSource, CompressionSaving } from './types';
 import { CompactionCancelledError } from './compaction-cancelled.error';
 import { toolPairingBalancedBefore } from './tool-pairing';
 
@@ -31,6 +31,13 @@ import { toolPairingBalancedBefore } from './tool-pairing';
 export const PRUNING_TOOL_RESULT_MAX_LENGTH = 1000;
 export const PROTECTED_RECENT_TOOL_RESULTS_COUNT = 3;
 export const MIN_RETAINED_MESSAGES = 3;
+/**
+ * 裁剪最小收益（字符）：候选内容必须比"头尾保留 + 省略标记"多出这么多才裁剪。
+ * 保证裁剪后必然更短——旧实现只判 `> maxLength`，而裁剪结果（头 500 + 标记 + 尾 500
+ * ≈1025）本身仍 > 1000，导致同一批 tool-result 每轮都成为候选、被反复"裁剪"成等长
+ * （prunedBytes=0）甚至更长（prunedBytes=-13）。提高门槛后已裁剪内容不再入候选（幂等）。
+ */
+export const MIN_PRUNE_GAIN = 200;
 
 /** 摘要生成模式 */
 export enum SummaryMode {
@@ -114,6 +121,8 @@ export interface CompressionOptions {
     protectedRecent?: number;
     /** 裁剪保留（头尾各）字符数（默认 maxLength/2） */
     headTailChars?: number;
+    /** 裁剪最小收益（字符数，默认 200）：保证裁剪后至少短这么多，否则不入方案 */
+    minPruneGain?: number;
   };
   /**
    * 压缩写入数据源（CompactionDataSource 的写子接口）：一级裁剪/二级遮蔽统一经此落库，
@@ -121,6 +130,19 @@ export interface CompressionOptions {
    */
   dataSource: Pick<CompactionDataSource, 'appendPrune' | 'appendCompact'>;
 }
+
+/**
+ * 未发生二级压缩的原因（compacted=false 时供前端/日志解释"为什么压缩没做事"）。
+ * - below-threshold：未达触发线（自动路径）
+ * - prune-sufficient：裁剪后已低于触发线（验收=触发）
+ * - no-summary-provider：无可用摘要 provider 且非 DISABLED（只能裁剪）
+ * - retain-budget-exceeds-history：保留预算 ≥ 整段历史 → 无可遮蔽（窗口大 / 内容小）
+ */
+export type CompressionSkipReason =
+  | 'below-threshold'
+  | 'prune-sufficient'
+  | 'no-summary-provider'
+  | 'retain-budget-exceeds-history';
 
 export interface CompressionResult {
   pruneEvents: number;      // 写入的 prune 事件数
@@ -132,6 +154,13 @@ export interface CompressionResult {
   /** 摘要消息 id（compaction_summary 事件占位标识） */
   summaryMessageId?: string;
   summary?: string;
+  /** 未压缩原因（compacted=false 时给出） */
+  skipReason?: CompressionSkipReason;
+  /**
+   * 本次写入的 token 节省清单（按视图 index 归属）——供会话侧写压缩占用锚点时扣减。
+   * 调用方（CompactionService）把它交给 CompactionDataSource.recordContextAnchor/appendCompact。
+   */
+  savings?: CompressionSaving[];
 }
 
 @Injectable()
@@ -177,7 +206,12 @@ export class CompressionEngine {
     const thresholdTokens = Math.floor(options.contextWindow * triggerRatio);
     const total = historyTokens + envelopeDelta;
     if (!options.force && total < thresholdTokens) {
-      return { pruneEvents: 0, compacted: false, shadowedCount: 0 };
+      return {
+        pruneEvents: 0,
+        compacted: false,
+        shadowedCount: 0,
+        skipReason: 'below-threshold',
+      };
     }
 
     // ② 纯计算 prune 方案（全 surface，保护区除外）——不改写消息、不落库
@@ -199,13 +233,24 @@ export class CompressionEngine {
       }
       // 只裁剪（无压缩 → 无遮蔽/摘要 → 无前缀问题）
       await this.applyPrunePlan(options, plan);
-      return { pruneEvents: plan.length, compacted: false, shadowedCount: 0 };
+      return {
+        pruneEvents: plan.length,
+        compacted: false,
+        shadowedCount: 0,
+        skipReason: canCompact ? 'prune-sufficient' : 'no-summary-provider',
+        savings: collectPruneSavings(plan),
+      };
     }
 
     // ④ 压缩（LLM 摘要 / DISABLED）：压缩路径裁剪只作用于保留尾，遮蔽区保持原文
-    //    手动/溢出（force）只跳过触发判断，retain 仍按配置比例（默认 0.2）——不归零
+    //    手动/溢出（force）只跳过触发判断，retain 仍按配置比例（默认 0.2）——不归零。
+    //    保留预算按"实际占用"折算（min(窗口, 实测总量)）：内容小于窗口时（手动/溢出路径）
+    //    按内容比例保留；否则预算可能超过整段历史 → 边界为 0 → 压缩退化为纯裁剪
+    //    （曾致 1M 窗口会话 retain=400K > 历史 227K → compacted=false 且无任何压缩）。
     const retainRatio = options.retainRatio ?? 0.2;
-    const retainTokens = Math.floor(options.contextWindow * retainRatio);
+    const retainTokens = Math.floor(
+      Math.min(options.contextWindow, total) * retainRatio,
+    );
     const boundary = await this.computeBoundary(
       sessionId,
       options,
@@ -218,9 +263,21 @@ export class CompressionEngine {
     if (shadowedCount === 0) {
       // 无可遮蔽（如单条超大消息撑爆预算）→ 只落 prune 兜底
       await this.applyPrunePlan(options, plan);
-      return { pruneEvents: plan.length, compacted: false, shadowedCount: 0 };
+      return {
+        pruneEvents: plan.length,
+        compacted: false,
+        shadowedCount: 0,
+        skipReason: 'retain-budget-exceeds-history',
+        savings: collectPruneSavings(plan),
+      };
     }
     const shadowedEndId = shadowedMessages[shadowedCount - 1].id;
+    // 遮蔽区 token（收敛判定 + 占用锚点扣减共用；只估一次）
+    const shadowedTokens = await this.tokenMeter.estimateMessages(
+      sessionId,
+      modelName,
+      shadowedMessages,
+    );
 
     // ④a 摘要输入 = messages[0..boundary)（原消息——此时尚未写入任何 prune → 与上次主请求一致 → 前缀命中）
     let summary = '';
@@ -243,6 +300,7 @@ export class CompressionEngine {
         options,
         modelName,
         shadowedMessages,
+        shadowedTokens,
       );
       summary = gen.summary;
       summaryUsage = gen.usage;
@@ -263,6 +321,8 @@ export class CompressionEngine {
       summary,
       mode,
       ...(summaryUsage === undefined ? {} : { usage: summaryUsage }),
+      // 保留尾裁剪节省：会话侧结算压缩后占用时，锚点之前的条目需显式扣减
+      savings: collectPruneSavings(tailPlan),
     });
 
     this.logger.log(
@@ -275,6 +335,7 @@ export class CompressionEngine {
       shadowedEndId,
       summaryMessageId,
       summary,
+      savings: collectPruneSavings(tailPlan),
     };
   }
 
@@ -283,6 +344,10 @@ export class CompressionEngine {
   /**
    * 构建裁剪方案（纯计算：不改写消息、不落库）：对超预算 tool-result 计算 newContent + 影子价格。
    * 保护区（最近 N 条 + tool_learn/todo）不裁剪。
+   *
+   * 收益保证（构造性，不做"已裁剪"字符串嗅探）：候选内容必须比"头尾保留 + 省略标记"多出
+   * minPruneGain 字符才入方案，且头尾预算按实际长度夹紧 —— 裁剪后必然更短，故已裁剪内容
+   * （约 maxLength+标记长度）不再入候选，重复压缩不会写出零收益/变长的 prune 事件。
    * @returns 方案条目（含消息 index，供"只裁剪保留尾"过滤）与影子价格累计
    */
   private async buildPrunePlan(
@@ -297,6 +362,7 @@ export class CompressionEngine {
       options.pruning?.protectedRecent ?? PROTECTED_RECENT_TOOL_RESULTS_COUNT;
     const headTailChars =
       options.pruning?.headTailChars ?? Math.floor(maxLength / 2);
+    const minPruneGain = options.pruning?.minPruneGain ?? MIN_PRUNE_GAIN;
 
     // 收集所有超预算 tool-result（按消息顺序；index 用于保留尾过滤）
     const candidates: Array<{
@@ -327,7 +393,19 @@ export class CompressionEngine {
         continue;
       }
       const content = tr.content;
-      const newContent = `${safeSubstring(content, 0, headTailChars)}...[omitted ${content.length - maxLength} agents]...${safeTail(content, headTailChars)}`;
+      const marker = buildPruneMarker(content.length, maxLength);
+      // 收益门槛：候选必须比"头尾保留 + 标记"多出 minPruneGain —— 保证裁剪后必然更短；
+      // 已裁剪内容（≈maxLength + 标记长度）低于该门槛 → 不再入候选，重复压缩幂等
+      if (content.length < maxLength + marker.length + minPruneGain) continue;
+      // 头尾预算按实际长度夹紧（配置异常/自定义 headTailChars 时也保证更短）
+      const head = Math.min(
+        headTailChars,
+        Math.floor((content.length - marker.length - minPruneGain) / 2),
+      );
+      if (head <= 0) continue;
+      const newContent = `${safeSubstring(content, 0, head)}${marker}${safeTail(content, head)}`;
+      // 防御断言：裁剪后必须更短（不满足即跳过，绝不写出零收益/变长事件）
+      if (newContent.length >= content.length) continue;
       // 影子价格：原内容估 − 裁剪后估（estimateTextTokens 走文本直算、无缓存污染）
       const prunedTokens =
         (await this.tokenMeter.estimateTextTokens(modelName, content)) -
@@ -397,20 +475,17 @@ export class CompressionEngine {
   /**
    * 生成摘要（输入 = 原消息遮蔽区，未写入任何 prune → 与上次主请求前缀一致）。
    * 收敛不变量：摘要 token 必须小于被遮蔽内容，超限在 retries 内重压。
+   * @param shadowedTokens 遮蔽区 token（调用方已估，避免重复估算）
    */
   private async generateSummary(
     sessionId: string,
     options: CompressionOptions,
     modelName: string,
     shadowedMessages: Message[],
+    shadowedTokens: number,
   ): Promise<{ summary: string; usage?: SummaryResult['usage'] }> {
     const { messages } = options;
     const retries = options.compactionRetries ?? 1;
-    const shadowedTokens = await this.tokenMeter.estimateMessages(
-      sessionId,
-      modelName,
-      shadowedMessages,
-    );
 
     let summary = '';
     let usage: SummaryResult['usage'] | undefined;
@@ -472,4 +547,20 @@ function safeSubstring(str: string, start: number, length: number): string {
 function safeTail(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.substring(str.length - length);
+}
+
+/**
+ * 裁剪省略标记：报告被省略的字符数（旧实现把"超阈值字符数"当条目数输出 "N agents"，
+ * 语义错误）。文案与 llm-summary.provider 的截断标记保持一致。
+ */
+function buildPruneMarker(originalLength: number, maxLength: number): string {
+  const omitted = Math.max(0, originalLength - maxLength);
+  return `...[omitted ${omitted} chars]...`;
+}
+
+/** 裁剪方案 → 节省清单（按视图 index 归属；零/负收益条目剔除） */
+function collectPruneSavings(plan: PrunePlanEntry[]): CompressionSaving[] {
+  return plan
+    .filter((p) => (p.prunedTokens ?? 0) > 0)
+    .map((p) => ({ index: p.index, tokens: p.prunedTokens as number }));
 }

@@ -16,7 +16,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
-import type { BaseEvent, SessionMeta } from './types';
+import type { BaseEvent, OccupancyAnchor, SessionMeta } from './types';
 
 // ============================================================================
 // 参数类型定义
@@ -77,6 +77,11 @@ export interface IMessageStore {
   loadContext(params: ContextLoadParams): Promise<Message[]>;
   /** 该会话最后一条已落盘事件的 seq（广播/增量同步去重游标） */
   getLastProcessedSeq(sessionId: string): Promise<number>;
+  /**
+   * 当前折叠视图的最新占用锚点（provider usage / 压缩纠正值；见 OccupancyAnchor）。
+   * 可选实现：未实现时调用方回退 provider usage 锚点口径。
+   */
+  getOccupancyAnchor?(sessionId: string): Promise<OccupancyAnchor | null>;
 
   // ─── 写入 ───
   // 版本号契约：revision 由写入方在写入时随返回值原子给出（本批次最后事件的 seq），
@@ -192,6 +197,8 @@ export interface IMessageStore {
       usage?: import('../types/stream-chunk.types').StreamUsage;
       /** 压缩后完整请求 token（compaction/end 携带，前端上下文占用锚点） */
       usedTokens?: number;
+      /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+      heuristicTokens?: number;
       /** 有效上下文窗口（与 usedTokens 配套） */
       effectiveContextWindow?: number;
       /** 可见视图消息数（与 usedTokens 配套） */
@@ -213,6 +220,8 @@ export interface IMessageStore {
     sessionId: string,
     data: {
       usedTokens: number;
+      /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
+      heuristicTokens?: number;
       effectiveContextWindow: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
