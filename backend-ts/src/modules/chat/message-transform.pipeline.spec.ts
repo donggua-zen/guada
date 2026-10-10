@@ -209,13 +209,13 @@ describe('reasoning-policy step', () => {
     const msgs = [makeMsg('assistant', [text('hi')])];
     const out = reasoningPolicyStep.apply(msgs, { ...baseCtx, thinkingMode: true });
     expect(out[0].content).toHaveLength(2);
-    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: '' });
   });
 
-  it('思考模式：summary 为空时填充空格', () => {
+  it('思考模式：summary 为空时填充空串（对齐 DSH/pi-ai，不用空格）', () => {
     const msgs = [makeMsg('assistant', [reasoning(''), text('hi')])];
     const out = reasoningPolicyStep.apply(msgs, { ...baseCtx, thinkingMode: true });
-    expect(out[0].content[0]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[0].content[0]).toMatchObject({ type: 'reasoning', summary: '' });
   });
 
   it('非思考模式：剥离 reasoning 块', () => {
@@ -252,14 +252,14 @@ describe('reasoning-policy step — 最后一轮判定（currentTurnId）', () =
     expect(out[2].content[0]).toMatchObject({ type: 'reasoning', summary: 'fresh thought' });
   });
 
-  it('思考模式：最后一轮无 reasoning 补占位、空 summary 填空格；同回合多条 assistant 均填充', () => {
+  it('思考模式：最后一轮无 reasoning 补占位、空 summary 填空串；同回合多条 assistant 均填充', () => {
     const msgs = [
       makeMsg('assistant', [text('tool-call-round')], { turnId: 'T2' }),
       makeMsg('assistant', [reasoning(''), text('final')], { turnId: 'T2' }),
     ];
     const out = reasoningPolicyStep.apply(msgs, thinkCtx({ currentTurnId: 'T2' }));
-    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
-    expect(out[1].content[0]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: '' });
+    expect(out[1].content[0]).toMatchObject({ type: 'reasoning', summary: '' });
   });
 
   it('思考模式：currentTurnId 在视图中无消息时历史全部剥离（无位置歧义）', () => {
@@ -278,7 +278,7 @@ describe('reasoning-policy step — 最后一轮判定（currentTurnId）', () =
       makeMsg('assistant', [reasoning('kept'), text('a2')], { turnId: 'T2' }),
     ];
     const out = reasoningPolicyStep.apply(msgs, thinkCtx());
-    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: '' });
     expect(out[1].content[0]).toMatchObject({ type: 'reasoning', summary: 'kept' });
   });
 });
@@ -298,7 +298,7 @@ describe('reasoning-policy step — fullReasoningRelay 例外（deepseek-v4 系�
     ];
     const out = reasoningPolicyStep.apply(msgs, relayCtx({ fullReasoningRelay: true }));
     expect(out[0].content[0]).toMatchObject({ type: 'reasoning', summary: 'old thought' });
-    expect(out[1].content[1]).toMatchObject({ type: 'reasoning', summary: ' ' });
+    expect(out[1].content[1]).toMatchObject({ type: 'reasoning', summary: '' });
   });
 
   it('非思考模式 + relay：仍剥离全部 reasoning（relay 仅在思考模式生效）', () => {

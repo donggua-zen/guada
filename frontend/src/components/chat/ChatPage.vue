@@ -1,7 +1,9 @@
 <template>
   <!-- 主体内容（侧边栏已移至 MainLayout） -->
   <div class="flex flex-col h-full w-full">
-    <template v-if="sessionStore.activeSessionId !== 'new-session'">
+    <!-- 守卫必须同时看路由：首帧 activeSessionId 还是 null（路由在 onMounted 才处理，晚于子组件挂载），
+         只看它会让 ChatPanel/工作目录条拿着哨兵 id "new-session" 挂载并发出 workspace-path 请求 -->
+    <template v-if="sessionStore.activeSessionId !== NEW_SESSION_ID && routeSessionId !== NEW_SESSION_ID">
       <!-- 可拖拽分割区域 -->
       <div ref="splitContainerRef" class="flex-1 overflow-hidden">
         <GdSplitpanes :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
@@ -124,6 +126,7 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComp
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { apiService } from "@/services/ApiService";
+import { NEW_SESSION_ID } from "@/constants";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
 import { useSessionStore } from "@/stores/session";
@@ -345,8 +348,8 @@ const title = useTitle();
 // 主会话对象（侧边栏选中的根会话），包含会话的基本信息和设置
 const mainSession: Ref<Session | null> = ref(null);
 
-// 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载
-// 输入区/工作目录条等按 ID 依赖（new-session 时 ChatPanel 整体不挂载，无需排除）
+// 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载。
+// 输入区/工作目录条等按 ID 依赖，故 new-session 时 ChatPanel 整体不挂载（守卫见模板首行）
 const routeSessionId = computed<string | null>(() => {
   const p = route.params.sessionId;
   return Array.isArray(p) ? (p[0] ?? null) : (p ?? null);
@@ -414,7 +417,7 @@ const goChatRoute = async (sessionId: string | null) => {
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
   } else {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } });
     mainSession.value = null;
   }
 };
@@ -524,9 +527,9 @@ async function handleSelectOpenWith(mode: OpenWithMode) {
 
 
 const updateSelectedSession = async (sessionId: string) => {
-  if (sessionId == null || sessionId === 'new-session') {
+  if (sessionId == null || sessionId === NEW_SESSION_ID) {
     mainSession.value = null;
-    sessionStore.activeSessionId = "new-session";
+    sessionStore.activeSessionId = NEW_SESSION_ID;
     return;
   }
   sessionStore.activeSessionId = sessionId;

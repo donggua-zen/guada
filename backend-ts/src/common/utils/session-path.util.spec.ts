@@ -79,6 +79,11 @@ describe("session-path.util", () => {
       // 失败时直接列出"被错误放行"的 id
       expect(bad.filter((id) => { try { assertValidId(id); return true } catch { return false } })).toEqual([]);
     });
+
+    it("路由哨兵 new-session 拒绝（否则懒创建的 ensureSession 会建出幽灵会话目录）", () => {
+      expect(() => assertValidId("new-session")).toThrow(/Invalid session id/);
+      expect(() => getSessionDir("new-session")).toThrow();
+    });
   });
 
   describe("getSessionDir", () => {

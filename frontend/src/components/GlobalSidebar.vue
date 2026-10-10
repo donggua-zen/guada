@@ -267,6 +267,7 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
+import { NEW_SESSION_ID } from '@/constants'
 import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
@@ -398,16 +399,16 @@ const openNewSession = (groupId: string) => {
   // 已在新会话页面时只更新 query 参数，不重新导航
   if (currentActiveTab.value === 'chat') {
     if (groupId === UNGROUPED_ID) {
-      router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+      router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
     } else {
-      router.replace({ name: 'Chat', params: { sessionId: 'new-session' }, query: { groupId } })
+      router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query: { groupId } })
     }
     return
   }
   if (groupId === UNGROUPED_ID) {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   } else {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' }, query: { groupId } })
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query: { groupId } })
   }
 }
 
@@ -453,7 +454,7 @@ const currentActiveTab = computed(() => {
     // 仅在新建会话时高亮"新建任务"，查看已有会话时不高亮
     const sessionId = route.params.sessionId
     const sessionIdStr = Array.isArray(sessionId) ? sessionId[0] : sessionId
-    return sessionIdStr === 'new-session' ? 'chat' : ''
+    return sessionIdStr === NEW_SESSION_ID ? 'chat' : ''
   }
   if (routeName === 'Agents') return 'agents'
   if (routeName === 'Bots') return 'bots'
@@ -633,7 +634,7 @@ const selectSession = (session: Session) => {
 // 处理导航点击
 const handleNavClick = (tab: string) => {
   if (tab === 'chat') {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   } else if (tab === 'agents') {
     router.replace({ name: 'Agents' })
   } else if (tab === 'bots') {
@@ -681,7 +682,7 @@ const handleArchiveSession = async (session: Session) => {
       sessionStore.clearSidebarState(session.id)
       // 如果归档的是当前会话，跳转到新建会话页面
       if (currentSessionId.value === session.id) {
-        router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+        router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
       }
       toast.success(t('ui.sidebar.archived'))
     }
@@ -862,7 +863,7 @@ const confirmDeleteSession = async () => {
 
     // 如果删除的是当前会话，自动切换到相邻会话
     if (currentSessionId.value === session.id) {
-      router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+      router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
     }
     sessionStore.removeSession(session.id)
     sessionStore.clearSidebarState(session.id)

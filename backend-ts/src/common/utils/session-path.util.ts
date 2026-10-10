@@ -36,6 +36,13 @@ export function resolveSessionsBasePath(): string {
 }
 
 /**
+ * 保留 id：前端路由哨兵（`/chat/new-session` 占位），后端从不产生。
+ * 它一旦进到存储层，懒创建的 ensureSession 会凭空建出幽灵会话目录
+ * （实测出现过 `<data>/sessions/new-session/`），故与 `"undefined"`/`"null"` 同级拒绝。
+ */
+const RESERVED_IDS = new Set(["new-session"]);
+
+/**
  * 会话 id 合法性校验。
  *
  * id 会直接进 `path.join(sessionsBase, id)`（建目录/整目录删除/取图路径解析），
@@ -48,7 +55,8 @@ export function assertValidId(id: string): void {
     /[\\/:*?"<>|]/.test(id) ||
     id.startsWith(".") ||
     id === "undefined" ||
-    id === "null"
+    id === "null" ||
+    RESERVED_IDS.has(id)
   ) {
     throw new Error(`Invalid session id: "${id}"`);
   }

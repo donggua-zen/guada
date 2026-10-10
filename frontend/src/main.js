@@ -8,6 +8,7 @@ import {
 } from "vue-router";
 import { createPinia } from "pinia";
 import { useAuthStore } from "./stores/auth";
+import { NEW_SESSION_ID } from "@/constants";
 import NProgress from "nprogress";
 
 import "element-plus/dist/index.css";
@@ -95,7 +96,7 @@ const routes = [
       {
         path: "",
         name: "Home",
-        redirect: "/chat/new-session",
+        redirect: `/chat/${NEW_SESSION_ID}`,
       },
       {
         path: "chat/:sessionId?",

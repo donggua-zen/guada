@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { NEW_SESSION_ID } from '@/constants'
 import { useLayoutStore } from '@/stores/layout'
 import { useSessionStore } from '@/stores/session'
 import { usePluginSlots } from '@/stores/pluginSlots'
@@ -76,7 +77,7 @@ const handleGlobalShortcut = (e: KeyboardEvent) => {
     const matched = isElectron ? !e.altKey : e.altKey
     if (!matched) return
     e.preventDefault()
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
     return
   }
 
@@ -102,7 +103,7 @@ const handleGlobalShortcut = (e: KeyboardEvent) => {
 watch(
   () => sessionStore.activeSessionId,
   (id) => {
-    if (id && id !== 'new-session') {
+    if (id && id !== NEW_SESSION_ID) {
       apiService.connectWorkspaceWatcher(id)
     } else {
       apiService.disconnectWorkspaceWatcher()

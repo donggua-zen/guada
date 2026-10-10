@@ -111,6 +111,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick, defineAsyncComponent } from 'vue'
+import { NEW_SESSION_ID } from '@/constants'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 // 模型供应商：体量大（列表+详情约 1700 行），分区级懒加载避免拖大设置页 chunk
@@ -325,7 +326,7 @@ const handleItemClick = (path: string) => {
 
 // 返回应用
 const goBack = () => {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
 }
 
 // 监听路由参数变化

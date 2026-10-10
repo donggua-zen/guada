@@ -197,6 +197,7 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { NEW_SESSION_ID } from '@/constants'
 import { ElButton, ElTag, ElSwitch, ElIcon, ElTabs, ElTabPane } from 'element-plus'
 import {
   AddOutlined,
@@ -366,7 +367,7 @@ function handleAddTask() {
 function handleCreateInChat() {
   const template = t('scheduler.page.chatTemplate')
   setPrefill(template)
-  router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
+  router.push({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
 }
 
 /**

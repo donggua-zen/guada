@@ -218,9 +218,14 @@ export function isFullReasoningRelayModel(modelName?: string): boolean {
  * 步骤 2：reasoning 策略（存储原样保留，读取时按当前模式过滤）。
  * - 非思考模式 → 剥离全部 reasoning 块；
  * - 思考模式 + fullReasoningRelay（deepseek-v4 系，端点要求 reasoning 跨轮持续回传）
- *   → 全部 assistant 消息保留/填充（无块补 `{summary:' '}`、空 summary 填 `' '`）；
+ *   → 全部 assistant 消息保留/填充（无块补 `{summary:''}`、空 summary 填 `''`）；
  * - 思考模式（默认）→ 仅最后一轮（turnId === ctx.currentTurnId 的 assistant 消息）
  *   保留/填充，历史轮次剥离。currentTurnId 缺省时全部视为最后一轮（保守回退）。
+ *
+ * 填充值用空串而非空格（对齐 DSH/pi-ai）：端点要求该字段存在时，pi-ai 对缺失思考
+ * 填 `reasoning_content: ""`；空格是非空字符串，会被取思维链哈希的网关当成真实思考
+ * 内容参与重建、也可能被模型当作一段（空白）思考。空串语义为"有字段、无思考"。
+ *
  * 剥离时同步清理消息 metadata 中的思考私有元数据（signature/redactedData）：
  * 二者是产生该思考的模型私有凭证，仅对其来源模型有效；若残留，
  * anthropic.adapter 会依据 metadata 仍注入 thinking/redacted_thinking，
@@ -243,14 +248,14 @@ export const reasoningPolicyStep: TransformStep = {
           ...msg,
           content: [
             ...msg.content,
-            { type: 'reasoning' as const, summary: ' ' },
+            { type: 'reasoning' as const, summary: '' },
           ],
         };
       }
       return {
         ...msg,
         content: msg.content.map((b) =>
-          b.type === 'reasoning' ? { ...b, summary: b.summary || ' ' } : b,
+          b.type === 'reasoning' ? { ...b, summary: b.summary || '' } : b,
         ),
       };
     };

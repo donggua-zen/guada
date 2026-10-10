@@ -12,6 +12,15 @@ export const DEFAULT_COMPRESSION_TIER: CompressionTier = 'conservative'
 /** 附加工作目录附件类型：session.settings.attachments 的键，值为远程连接 ID 数组 */
 export const SSH_CONNECTION_ATTACHMENT_TYPE = 'ssh-connection' as const
 
+/**
+ * 新建会话的路由哨兵 id（路径 `/chat/new-session`）。
+ *
+ * 它只是路由占位，**不是会话 id**：可以赋给 activeSessionId 或用作路由参数，但绝不能拿它
+ * 去调后端接口——后端的会话存储是懒创建的，会因此凭空建出 `<data>/sessions/new-session/`
+ * 幽灵目录，会话类接口也会按未知会话报错（曾实测出现该目录；后端已加 assertValidId 兜底）。
+ */
+export const NEW_SESSION_ID = 'new-session' as const
+
 /** 压缩档位选项（i18n key 指向 agents.setting.*） */
 export const COMPRESSION_TIER_OPTIONS = [
   { value: 'off', labelKey: 'agents.setting.tierOff', descKey: 'agents.setting.tierOffDesc' },

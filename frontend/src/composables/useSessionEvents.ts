@@ -11,6 +11,7 @@
 
 import { ref, type Ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { NEW_SESSION_ID } from "@/constants";
 import { t } from "@/locales";
 import { useSessionStore } from "@/stores/session";
 import { apiService } from "@/services/ApiService";
@@ -131,7 +132,7 @@ export function useSessionEvents() {
           } else {
             router.replace({
               name: "Chat",
-              params: { sessionId: "new-session" },
+              params: { sessionId: NEW_SESSION_ID },
             });
           }
         }
