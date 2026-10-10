@@ -4,8 +4,9 @@ services:
   # ========================================
   backend:
     build:
-      context: ./backend-ts
-      dockerfile: Dockerfile
+      # 构建上下文取仓库根：backend-ts 的 preinstall/postinstall 用 ../scripts/ 引用仓库根脚本
+      context: .
+      dockerfile: backend-ts/Dockerfile
     container_name: guada-backend
     restart: unless-stopped
     # 端口配置说明：
@@ -62,8 +63,9 @@ services:
   # ========================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # 同上：frontend 的 preinstall 也用 ../scripts/ 引用仓库根脚本
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         - VITE_API_BASE_URL=/api/v1
     container_name: guada-frontend

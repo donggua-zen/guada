@@ -232,11 +232,13 @@ html[data-theme="e-ink"] .assistant-section .message-item__card {
   padding: 0;
 }
 
-/* 左栏 / 右栏：细线分割，无阴影 */
+/* 左栏：不画独立边框——内容卡片（.content-card::after）自带 1px 边框，
+   两者相隔 4px 会形成双线。这里只去掉阴影 */
 html[data-theme="e-ink"] .global-sidebar {
-  border-right: 1px solid var(--gd-color-border);
+  border-right: none;
   box-shadow: none;
 }
+/* 右栏（工作区面板）：位于内容卡片内部，细线是内部划分线，保留 */
 html[data-theme="e-ink"] .workspace-sidebar {
   border-left: 1px solid var(--gd-color-border);
 }

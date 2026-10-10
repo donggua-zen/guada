@@ -28,6 +28,10 @@
 只在 win32/x64 生效；`@parcel/watcher-win32-x64` 版本不是 `2.6.0` 时**跳过并告警**，
 因为补丁二进制是按 2.6.0 源码编的。手工执行：`node scripts/patch-parcel-watcher.mjs`（幂等）。
 
+打包链路另有一道硬校验：`scripts/optimize-electron-deps.js` 在「安装生产依赖」与「缓存命中」
+两条路径上都会重新应用补丁并比对 md5，与上面的 `watcher.node` 不一致就中断打包，
+避免发出未打补丁（切换会话 0xC0000005 崩溃）的安装包。
+
 ## 重新编译（升级版本 / 改补丁时）
 
 ```bash

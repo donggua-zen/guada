@@ -151,6 +151,7 @@
     closeWorkspace: 'Close Working Directory',
     openWorkspace: 'Open Working Directory',
     moreActions: 'More Actions',
+    copySessionId: 'Copy Session ID',
     clearRecords: 'Clear Records',
     exportRecords: 'Export Records',
     importRecords: 'Import Records',

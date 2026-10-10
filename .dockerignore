@@ -5,11 +5,18 @@
 # Node modules
 node_modules
 **/node_modules
+# 打包用的生产依赖暂存目录（名字不被 **/node_modules 覆盖）
+**/node_modules_production
 
 # Build outputs
 dist
 build
 *.tsbuildinfo
+# 子包产物：不带 **/ 的模式只匹配根层，构建上下文提升到仓库根后需要显式列出
+backend-ts/dist
+frontend/dist
+backend-ts/*.tsbuildinfo
+frontend/*.tsbuildinfo
 
 # IDE
 .vscode
@@ -37,6 +44,7 @@ logs
 *.log
 
 # Environment
+.env
 .env.local
 .env.*.local
 
@@ -54,3 +62,39 @@ tmp
 backend-ts/data/*.db
 backend-ts/data/*.sqlite
 backend-ts/data/uploads/*
+backend-ts/data/temp-attachments/*
+
+# 子包原有 .dockerignore 规则：上下文提升到仓库根后那两个文件不再生效，逐条补回
+backend-ts/docs
+backend-ts/*.md
+frontend/*.md
+backend-ts/logs
+backend-ts/test-logs
+backend-ts/temp
+backend-ts/.env
+frontend/.env
+frontend/stats.html
+
+# 仓库根上下文专属：这些目录只存在于仓库根，提升上下文后必须排除，
+# 否则会作为构建上下文上传（release/ 与 onebots-temp/ 尤其大）
+release
+outputs
+onebots-temp
+memory
+mem-log
+data
+.sandbox
+.guada
+.guada_db_repair_backup*.json
+.codely
+.codely-cli
+.trae
+.atomcode
+.openclaw
+.workbuddy
+.workbuddy-ai
+.zcode
+.zcodeignore
+tmp_shell_diag
+__pycache__
+snapshot_*.json
