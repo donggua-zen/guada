@@ -224,8 +224,8 @@ export class SkillsController {
       }
       cloneCommand += ' --depth 1'; // 只克隆最新提交，加快速度
 
-      // 执行 git clone
-      await execAsync(cloneCommand, { timeout: 60000 }); // 60秒超时
+      // 执行 git clone（windowsHide：打包版后端无控制台，否则子进程会新建控制台窗口）
+      await execAsync(cloneCommand, { timeout: 60000, windowsHide: true }); // 60秒超时
 
       // 确定技能源目录
       let skillSourceDir = tempDir;
@@ -441,10 +441,11 @@ export class SkillsController {
 
       this.logger.log(`Updating skill from Git: ${skillId}`);
 
-      // 执行 git pull
+      // 执行 git pull（windowsHide：同 git clone，避免打包版闪出控制台窗口）
       await execAsync('git pull', { 
         cwd: path.join(skill.baseDir, skill.basePath),
-        timeout: 30000 
+        timeout: 30000,
+        windowsHide: true
       });
 
       // 重新加载技能

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as parcelWatcher from "@parcel/watcher";
 import { gitActivity } from "./git-activity";
+import { PARCEL_WATCH_OPTIONS } from "../utils/parcel-watch-options";
 
 export interface FileChangeEvent {
   /** git = 工作区 .git 目录内容变化（外部 commit/stage/checkout 等），前端应刷新 git 状态 */
@@ -475,7 +476,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           }
           this.handleParcelEvents(entry, events);
         },
-        { ignore: IGNORE_GLOBS },
+        { ignore: IGNORE_GLOBS, ...PARCEL_WATCH_OPTIONS },
       )
       .then((subscription) => {
         entry.fileSubscribing = false;
@@ -552,7 +553,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           }, GIT_DEBOUNCE_MS);
           entry.gitTimer.unref?.();
         },
-        { ignore: GIT_IGNORE_GLOBS },
+        { ignore: GIT_IGNORE_GLOBS, ...PARCEL_WATCH_OPTIONS },
       )
       .then((subscription) => {
         entry.gitSubscribing = false;
