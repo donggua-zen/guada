@@ -781,7 +781,7 @@ html.dark *::-webkit-scrollbar-thumb:hover {
    看起来像"默认黑色滚动条"。滚动条样式本身走全局规则，这里只处理布局与背景。
  */
 .terminal-panel .xterm-viewport {
-  background-color: var(--gd-color-bg, #fff) !important;
+  /* background-color: var(--gd-color-bg, #fff) !important; */
   overflow-x: hidden !important;
   overflow-y: scroll !important;
   scrollbar-gutter: stable !important;
