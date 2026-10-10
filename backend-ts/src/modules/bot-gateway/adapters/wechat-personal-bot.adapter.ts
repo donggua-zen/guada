@@ -26,6 +26,12 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
   private latestQrCodeUrl: string | null = null;
   private loginAbortController: AbortController | null = null;
   private loginBusy = false;
+  /** 手机端要求数字配对码时的挂起句柄；等待宿主经 submitVerificationCode 提交。 */
+  private verificationCodeRequest: {
+    resolve(code: string): void;
+    reject(error: unknown): void;
+  } | null = null;
+  private verificationPending = false;
 
   constructor(private readonly platformUtils: PlatformUtilsService) {
     super();
@@ -73,6 +79,7 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
       this.loginAbortController.abort();
     }
     this.loginAbortController = new AbortController();
+    this.resetVerificationState();
 
     try {
       if (this.client) {
@@ -173,21 +180,44 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           loginSession = await this.client.createLoginSession();
-          this.latestQrCodeUrl = (loginSession as any).qrCodeUrl ?? null;
+          this.latestQrCodeUrl = loginSession.qrCodeUrl ?? null;
           this.logger.log(
             `[wechat-personal] ${config.id} 二维码已生成（第 ${attempt}/${maxRetries} 次）: ${this.latestQrCodeUrl}`,
           );
 
+          const loginSignal = this.loginAbortController?.signal;
           const result = await this.client.waitForLogin(
             loginSession.sessionKey,
             {
               timeoutMs: config.platformConfig.qrLoginTimeoutMs ?? 480_000,
-              signal: this.loginAbortController?.signal,
+              signal: loginSignal,
+              // 二维码过期后 SDK 内部换码，必须同步到前端，否则展示旧码
+              onQrRefresh: ({ qrCodeUrl }) => {
+                this.latestQrCodeUrl = qrCodeUrl;
+                this.logger.log(
+                  `[wechat-personal] ${config.id} 二维码已自动刷新`,
+                );
+              },
+              onVerificationCode: () => this.waitForVerificationCode(loginSignal),
             },
           );
 
           if (result.connected) {
             break; // 登录成功，跳出循环
+          }
+
+          if (result.alreadyConnected) {
+            // 上游判定已绑定，重试不会有结果
+            this.logger.warn(`[wechat-personal] ${config.id} ${result.message}`);
+            this.latestQrCodeUrl = null;
+            this.status = BotStatus.DISCONNECTED;
+            this.emitDisconnected({
+              code: 409,
+              reason: result.message,
+              timestamp: new Date(),
+            });
+            this.loginBusy = false;
+            return;
           }
 
           // 登录失败（过期或超时）
@@ -239,10 +269,12 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
     }
 
     // 统一启动消息轮询
+    this.verificationPending = false;
     void this.client
       .startPolling({
         timeoutMs: config.platformConfig.pollingTimeoutMs,
         retryDelayMs: config.platformConfig.pollingRetryDelayMs,
+        retryMaxDelayMs: config.platformConfig.pollingRetryMaxDelayMs,
       })
       .catch((err: unknown) => {
         this.logger.error(`[wechat-personal] ${config.id} 轮询错误:`, err);
@@ -310,6 +342,64 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
     return this.latestQrCodeUrl;
   }
 
+  /** 当前是否需要用户输入手机微信显示的数字配对码。 */
+  getVerificationState(): "none" | "pair_code" {
+    return this.verificationPending ? "pair_code" : "none";
+  }
+
+  /**
+   * 提交手机微信显示的数字配对码，解除等待中的登录流程。
+   */
+  submitVerificationCode(code: string): void {
+    const request = this.verificationCodeRequest;
+    if (!request) {
+      throw new Error("当前没有待提交的数字配对码");
+    }
+    const normalized = code.trim();
+    if (!/^\d{4,8}$/.test(normalized)) {
+      throw new Error("数字配对码必须是 4 至 8 位数字");
+    }
+    this.verificationCodeRequest = null;
+    this.verificationPending = false;
+    request.resolve(normalized);
+  }
+
+  /** 等待宿主提交数字配对码；登录取消或流程替换时拒绝。 */
+  private waitForVerificationCode(signal?: AbortSignal): Promise<string> {
+    this.verificationCodeRequest?.reject(
+      new Error("登录流程已请求新的数字配对码"),
+    );
+    return new Promise<string>((resolve, reject) => {
+      let pending: { resolve(code: string): void; reject(error: unknown): void };
+      const abort = () => {
+        if (this.verificationCodeRequest === pending) {
+          this.verificationCodeRequest = null;
+        }
+        this.verificationPending = false;
+        reject(signal?.reason ?? new Error("登录已取消"));
+      };
+      const finish = (value: string) => {
+        signal?.removeEventListener("abort", abort);
+        resolve(value);
+      };
+      const fail = (error: unknown) => {
+        signal?.removeEventListener("abort", abort);
+        reject(error);
+      };
+      pending = { resolve: finish, reject: fail };
+      this.verificationCodeRequest = pending;
+      this.verificationPending = true;
+      if (signal?.aborted) abort();
+      else signal?.addEventListener("abort", abort, { once: true });
+    });
+  }
+
+  private resetVerificationState(): void {
+    this.verificationCodeRequest?.reject(new Error("登录流程已结束"));
+    this.verificationCodeRequest = null;
+    this.verificationPending = false;
+  }
+
   /**
    * 退出登录并清除本地会话
    */
@@ -339,6 +429,7 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
       this.loginAbortController.abort();
       this.loginAbortController = null;
     }
+    this.resetVerificationState();
 
     if (this.client) {
       try {

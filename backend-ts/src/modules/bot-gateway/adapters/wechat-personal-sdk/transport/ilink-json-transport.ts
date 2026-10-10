@@ -1,6 +1,8 @@
 import {
-    ADAPTER_COORDINATE,
     ADAPTER_SEMVER,
+    ILINK_APP_CLIENT_VERSION,
+    ILINK_APP_ID,
+    ILINK_BOT_AGENT,
     ILINK_CDN_ROOT_DEFAULT,
     ILINK_FAST_RPC_MS,
     ILINK_HTTP_ORIGIN_DEFAULT,
@@ -10,7 +12,7 @@ import {
 import { fuseAbortClock } from "../internal/async-tools";
 import { StaleCredentialFault, GatewayFault } from "../internal/errors";
 import { ephemeralWeixinHeaderTag } from "../internal/random-tags";
-import { withTrailingSlash } from "../internal/url-utils";
+import { normalizeServiceRoot, withTrailingSlash } from "../internal/url-utils";
 import type { WireChannelFingerprint } from "../protocol/wire-models";
 import type {
     CdnSlotGrant,
@@ -32,7 +34,7 @@ export interface TransportRuntimePatch {
 }
 
 function fingerprintPayload(): WireChannelFingerprint {
-    return { channel_version: `${ADAPTER_COORDINATE}@${ADAPTER_SEMVER}` };
+    return { channel_version: ADAPTER_SEMVER, bot_agent: ILINK_BOT_AGENT };
 }
 
 /** 负责与 ilinkai 网关的全部 HTTP 交互 */
@@ -43,30 +45,47 @@ export class IlinkJsonTransport {
     routeTag?: string;
 
     constructor(seed: TransportRuntimePatch = {}) {
-        this.baseUrl = seed.baseUrl?.trim() || ILINK_HTTP_ORIGIN_DEFAULT;
-        this.cdnBaseUrl = seed.cdnBaseUrl?.trim() || ILINK_CDN_ROOT_DEFAULT;
+        this.baseUrl = normalizeServiceRoot(
+            seed.baseUrl?.trim() || ILINK_HTTP_ORIGIN_DEFAULT,
+            "iLink API 根地址",
+        );
+        this.cdnBaseUrl = normalizeServiceRoot(
+            seed.cdnBaseUrl?.trim() || ILINK_CDN_ROOT_DEFAULT,
+            "iLink CDN 根地址",
+        );
         this.token = seed.token?.trim() || undefined;
         this.routeTag = seed.routeTag?.trim() || undefined;
     }
 
     patchRuntimeTargets(patch: TransportRuntimePatch): void {
-        if (patch.baseUrl?.trim()) this.baseUrl = patch.baseUrl.trim();
-        if (patch.cdnBaseUrl?.trim()) this.cdnBaseUrl = patch.cdnBaseUrl.trim();
+        // 先完整校验再一次性更新，避免第二个地址无效时留下半应用状态。
+        const nextBaseUrl = patch.baseUrl?.trim()
+            ? normalizeServiceRoot(patch.baseUrl.trim(), "iLink API 根地址")
+            : this.baseUrl;
+        const nextCdnBaseUrl = patch.cdnBaseUrl?.trim()
+            ? normalizeServiceRoot(patch.cdnBaseUrl.trim(), "iLink CDN 根地址")
+            : this.cdnBaseUrl;
+        this.baseUrl = nextBaseUrl;
+        this.cdnBaseUrl = nextCdnBaseUrl;
         if (patch.token !== undefined) this.token = patch.token?.trim() || undefined;
         if (patch.routeTag !== undefined) this.routeTag = patch.routeTag?.trim() || undefined;
     }
 
     private bareHeaders(): Record<string, string> {
-        const h: Record<string, string> = {};
+        const h: Record<string, string> = {
+            "iLink-App-Id": ILINK_APP_ID,
+            "iLink-App-ClientVersion": String(ILINK_APP_CLIENT_VERSION),
+        };
         if (this.routeTag) h.SKRouteTag = this.routeTag;
         return h;
     }
 
-    private signedJsonHeaders(payload: string, bearer?: string): Record<string, string> {
+    private signedJsonHeaders(bearer?: string): Record<string, string> {
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
             AuthorizationType: "ilink_bot_token",
-            "Content-Length": String(Buffer.byteLength(payload, "utf-8")),
+            "iLink-App-Id": ILINK_APP_ID,
+            "iLink-App-ClientVersion": String(ILINK_APP_CLIENT_VERSION),
             "X-Wechat-UIN": ephemeralWeixinHeaderTag(),
         };
         const tok = bearer ?? this.token;
@@ -75,39 +94,78 @@ export class IlinkJsonTransport {
         return headers;
     }
 
-    private async exchangeJson<T>(path: string, jsonBody: object, budgetMs: number, bearer?: string, outerSignal?: AbortSignal): Promise<T> {
+    private async exchangeJson<T>(
+        path: string,
+        jsonBody: object,
+        budgetMs: number,
+        bearer?: string,
+        outerSignal?: AbortSignal,
+    ): Promise<T> {
         const body = JSON.stringify({ ...jsonBody, base_info: fingerprintPayload() });
         const { signal, disarm } = fuseAbortClock(budgetMs, outerSignal);
         try {
             const response = await fetch(new URL(path, withTrailingSlash(this.baseUrl)), {
                 method: "POST",
-                headers: this.signedJsonHeaders(body, bearer),
+                headers: this.signedJsonHeaders(bearer),
                 body,
                 signal,
             });
             const raw = await response.text();
             if (!response.ok) {
-                throw new GatewayFault("HTTP_ERROR", `HTTP ${response.status} ${response.statusText}: ${raw}`);
+                throw new GatewayFault(
+                    "HTTP_ERROR",
+                    `HTTP ${response.status} ${response.statusText}: ${summarizeBody(raw)}`,
+                    {
+                        operation: path,
+                        status: response.status,
+                    },
+                );
             }
-            return JSON.parse(raw) as T;
+            return parseJsonObject<T>(raw, path);
         } finally {
             disarm();
         }
     }
 
-    async openLoginBitmap(params?: { botType?: string; budgetMs?: number; signal?: AbortSignal }): Promise<QrBitmapReply> {
+    async openLoginBitmap(params?: {
+        botType?: string;
+        localTokens?: readonly string[];
+        budgetMs?: number;
+        signal?: AbortSignal;
+    }): Promise<QrBitmapReply> {
         const url = new URL(
             `ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(params?.botType ?? "3")}`,
             withTrailingSlash(this.baseUrl),
         );
-        const { signal, disarm } = fuseAbortClock(params?.budgetMs ?? ILINK_FAST_RPC_MS, params?.signal);
+        const { signal, disarm } = fuseAbortClock(
+            params?.budgetMs ?? ILINK_FAST_RPC_MS,
+            params?.signal,
+        );
         try {
-            const response = await fetch(url, { headers: this.bareHeaders(), signal });
+            const body = JSON.stringify({ local_token_list: params?.localTokens ?? [] });
+            const response = await fetch(url, {
+                method: "POST",
+                // 扫码创建通过 local_token_list 识别旧绑定，不应泄露当前 Bearer token。
+                headers: this.signedJsonHeaders(""),
+                body,
+                signal,
+            });
             const raw = await response.text();
             if (!response.ok) {
-                throw new GatewayFault("HTTP_ERROR", `HTTP ${response.status} ${response.statusText}: ${raw}`);
+                throw new GatewayFault(
+                    "HTTP_ERROR",
+                    `HTTP ${response.status} ${response.statusText}: ${summarizeBody(raw)}`,
+                );
             }
-            return JSON.parse(raw) as QrBitmapReply;
+            const reply = parseJsonObject<QrBitmapReply>(raw, "ilink/bot/get_bot_qrcode");
+            this.assertApiSuccess(reply, "get_bot_qrcode");
+            if (!reply.qrcode?.trim() || !reply.qrcode_img_content?.trim()) {
+                throw new GatewayFault(
+                    "INVALID_QR_RESPONSE",
+                    "iLink get_bot_qrcode 未返回有效二维码",
+                );
+            }
+            return reply;
         } finally {
             disarm();
         }
@@ -115,35 +173,55 @@ export class IlinkJsonTransport {
 
     async probeLoginPhase(params: {
         qrcode: string;
+        baseUrl?: string;
+        verifyCode?: string;
         budgetMs?: number;
         signal?: AbortSignal;
     }): Promise<QrPhaseReply> {
-        const url = new URL(
-            `ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(params.qrcode)}`,
-            withTrailingSlash(this.baseUrl),
-        );
+        const pollingBaseUrl = params.baseUrl
+            ? normalizeServiceRoot(params.baseUrl, "iLink 扫码轮询根地址")
+            : this.baseUrl;
+        const url = new URL("ilink/bot/get_qrcode_status", withTrailingSlash(pollingBaseUrl));
+        url.searchParams.set("qrcode", params.qrcode);
+        if (params.verifyCode) url.searchParams.set("verify_code", params.verifyCode);
         const clock = fuseAbortClock(params.budgetMs ?? ILINK_LONG_WAIT_MS, params.signal);
         try {
             const response = await fetch(url, {
-                headers: { "iLink-App-ClientVersion": "1", ...this.bareHeaders() },
+                headers: this.bareHeaders(),
                 signal: clock.signal,
             });
             const raw = await response.text();
             if (!response.ok) {
-                throw new GatewayFault("HTTP_ERROR", `HTTP ${response.status} ${response.statusText}: ${raw}`);
+                throw new GatewayFault(
+                    "HTTP_ERROR",
+                    `HTTP ${response.status} ${response.statusText}: ${summarizeBody(raw)}`,
+                );
             }
-            return JSON.parse(raw) as QrPhaseReply;
-        } catch (err) {
+            const reply = parseJsonObject<QrPhaseReply>(raw, "ilink/bot/get_qrcode_status");
+            this.assertApiSuccess(reply, "get_qrcode_status");
+            if (!QR_PHASES.has(reply.status)) {
+                throw new GatewayFault(
+                    "INVALID_QR_STATUS",
+                    `iLink 返回未知扫码状态: ${String(reply.status)}`,
+                );
+            }
+            return reply;
+        } catch (error) {
+            if (params.signal?.aborted) throw params.signal.reason;
             if (clock.signal.aborted) {
                 return { status: "wait" };
             }
-            throw err;
+            throw error;
         } finally {
             clock.disarm();
         }
     }
 
-    async pullUnreadBatch(cursor: string, ceilingMs?: number, signal?: AbortSignal): Promise<PollWireBatch> {
+    async pullUnreadBatch(
+        cursor: string,
+        ceilingMs?: number,
+        signal?: AbortSignal,
+    ): Promise<PollWireBatch> {
         try {
             return await this.exchangeJson<PollWireBatch>(
                 "ilink/bot/getupdates",
@@ -152,16 +230,36 @@ export class IlinkJsonTransport {
                 undefined,
                 signal,
             );
-        } catch (e) {
-            if (e instanceof Error && e.name === "AbortError") {
-                return { ret: 0, msgs: [], get_updates_buf: cursor ?? "" };
-            }
-            throw e;
+        } catch (error) {
+            if (signal?.aborted) throw signal.reason;
+            throw error;
         }
     }
 
+    async notifyStart(signal?: AbortSignal): Promise<void> {
+        const reply = await this.exchangeJson<ApiAck>(
+            "ilink/bot/msg/notifystart",
+            {},
+            ILINK_FAST_RPC_MS,
+            undefined,
+            signal,
+        );
+        this.assertApiSuccess(reply, "notifystart");
+    }
+
+    async notifyStop(signal?: AbortSignal): Promise<void> {
+        const reply = await this.exchangeJson<ApiAck>(
+            "ilink/bot/msg/notifystop",
+            {},
+            ILINK_FAST_RPC_MS,
+            undefined,
+            signal,
+        );
+        this.assertApiSuccess(reply, "notifystop");
+    }
+
     async reserveCdnUploadSlot(req: CdnSlotRequest & { timeoutMs?: number }): Promise<CdnSlotGrant> {
-        return this.exchangeJson<CdnSlotGrant>(
+        const reply = await this.exchangeJson<CdnSlotGrant>(
             "ilink/bot/getuploadurl",
             {
                 filekey: req.filekey,
@@ -178,28 +276,27 @@ export class IlinkJsonTransport {
             },
             req.timeoutMs ?? ILINK_RPC_BUDGET_MS,
         );
+        this.assertApiSuccess(reply, "getuploadurl");
+        return reply;
     }
 
-    private sniffCredentialFault<T extends { ret?: number; errcode?: number; errmsg?: string }>(row: T): void {
+    private assertApiSuccess<T extends ApiAck>(row: T, operation: string): void {
         if ((row.errcode ?? row.ret ?? 0) === -14) {
             throw new StaleCredentialFault(row.errmsg ?? "凭证失效");
+        }
+        if ((row.errcode ?? 0) !== 0 || (row.ret ?? 0) !== 0) {
+            throw new GatewayFault(
+                "API_ERROR",
+                `${operation} 异常 ret=${String(row.ret ?? "")} errcode=${String(row.errcode ?? "")} errmsg=${String(row.errmsg ?? "")}`,
+                { operation },
+            );
         }
     }
 
     async dispatchOutboundEnvelope(envelope: OutboundWireEnvelope, budgetMs?: number): Promise<void> {
         const ms = budgetMs ?? ILINK_RPC_BUDGET_MS;
-        const row = await this.exchangeJson<{ ret?: number; errcode?: number; errmsg?: string }>(
-            "ilink/bot/sendmessage",
-            envelope as unknown as object,
-            ms,
-        );
-        this.sniffCredentialFault(row);
-        if ((row.errcode ?? 0) !== 0 || (row.ret ?? 0) !== 0) {
-            throw new GatewayFault(
-                "API_ERROR",
-                `sendmessage 异常 ret=${String(row.ret ?? "")} errcode=${String(row.errcode ?? "")} errmsg=${String(row.errmsg ?? "")}`,
-            );
-        }
+        const row = await this.exchangeJson<ApiAck>("ilink/bot/sendmessage", envelope, ms);
+        this.assertApiSuccess(row, "sendmessage");
     }
 
     async loadPeerTypingConfig(params: {
@@ -215,7 +312,7 @@ export class IlinkJsonTransport {
             },
             params.budgetMs ?? ILINK_FAST_RPC_MS,
         );
-        this.sniffCredentialFault(row);
+        this.assertApiSuccess(row, "getconfig");
         return row;
     }
 
@@ -225,7 +322,43 @@ export class IlinkJsonTransport {
             body,
             budgetMs ?? ILINK_FAST_RPC_MS,
         );
-        this.sniffCredentialFault(row);
+        this.assertApiSuccess(row, "sendtyping");
         return row;
     }
+}
+
+interface ApiAck {
+    ret?: number;
+    errcode?: number;
+    errmsg?: string;
+}
+
+const QR_PHASES = new Set<string>([
+    "wait",
+    "scaned",
+    "confirmed",
+    "expired",
+    "scaned_but_redirect",
+    "need_verifycode",
+    "verify_code_blocked",
+    "binded_redirect",
+]);
+
+function parseJsonObject<T>(raw: string, operation: string): T {
+    try {
+        const value: unknown = JSON.parse(raw);
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+            throw new TypeError("响应根必须是对象");
+        }
+        return value as T;
+    } catch (error) {
+        throw new GatewayFault("INVALID_JSON", `iLink ${operation} 返回无效 JSON`, {
+            cause: error,
+            operation,
+        });
+    }
+}
+
+function summarizeBody(raw: string): string {
+    return raw.slice(0, 500);
 }

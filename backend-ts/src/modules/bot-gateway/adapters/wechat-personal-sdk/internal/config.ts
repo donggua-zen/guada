@@ -5,7 +5,23 @@ export const ILINK_QR_BOT_CLASS_DEFAULT = "3";
 export const ILINK_LONG_WAIT_MS = 35_000;
 export const ILINK_RPC_BUDGET_MS = 15_000;
 export const ILINK_FAST_RPC_MS = 10_000;
-export const ADAPTER_COORDINATE = "@onebots/adapter-wechat-clawbot";
-export const ADAPTER_SEMVER = "1.0.0";
+export const ILINK_RETRY_INITIAL_MS = 1_000;
+export const ILINK_RETRY_MAX_MS = 30_000;
+/** iLink 在服务端登记的应用标识，不是 npm 包名。 */
+export const ILINK_APP_ID = "bot";
+/** 适配器版本；对齐 onebots 已验证指纹，参与请求头与 base_info。 */
+export const ADAPTER_SEMVER = "3.0.18";
+/** base_info.bot_agent 标识。 */
+export const ILINK_BOT_AGENT = `OneBots/${ADAPTER_SEMVER}`;
+/** iLink 约定的 0x00MMNNPP 无符号整数版本。 */
+export const ILINK_APP_CLIENT_VERSION = encodeIlinkClientVersion(ADAPTER_SEMVER);
 /** outbound client_id 前缀，仅作日志/排障区分 */
 export const OUTBOUND_TRACE_SCOPE = "ob-wxcb";
+
+/** iLink 约定的 0x00MMNNPP 无符号整数版本。 */
+export function encodeIlinkClientVersion(version: string): number {
+    const match = /^(\d+)\.(\d+)\.(\d+)/u.exec(version);
+    if (!match) return 0;
+    const [, major, minor, patch] = match.map(Number);
+    return ((major & 0xff) << 16) | ((minor & 0xff) << 8) | (patch & 0xff);
+}

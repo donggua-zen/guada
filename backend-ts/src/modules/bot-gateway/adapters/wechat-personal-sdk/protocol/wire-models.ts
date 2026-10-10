@@ -2,6 +2,7 @@
 
 export interface WireChannelFingerprint {
     channel_version?: string;
+    bot_agent?: string;
 }
 
 export const UploadKind = { Image: 1, Video: 2, File: 3, Voice: 4 } as const;
@@ -23,6 +24,8 @@ export interface WireCdnLocator {
     aes_key?: string;
     encrypt_type?: number;
     taskid?: string;
+    /** 服务端直接下发的完整下载地址，优先于 encrypt_query_param。 */
+    full_url?: string;
 }
 
 export interface WireImageSection {
@@ -125,6 +128,9 @@ export interface CdnSlotRequest {
 }
 
 export interface CdnSlotGrant {
+    ret?: number;
+    errcode?: number;
+    errmsg?: string;
     upload_param?: string;
     upload_full_url?: string;
     thumb_upload_param?: string;
@@ -155,16 +161,31 @@ export interface ConfigWireAck {
 }
 
 export interface QrBitmapReply {
+    ret?: number;
+    errcode?: number;
+    errmsg?: string;
     qrcode: string;
     qrcode_img_content: string;
 }
 
-export type QrLifecycle = "wait" | "scaned" | "confirmed" | "expired";
+export type QrLifecycle =
+    | "wait"
+    | "scaned"
+    | "confirmed"
+    | "expired"
+    | "scaned_but_redirect"
+    | "need_verifycode"
+    | "verify_code_blocked"
+    | "binded_redirect";
 
 export interface QrPhaseReply {
+    ret?: number;
+    errcode?: number;
+    errmsg?: string;
     status: QrLifecycle;
     bot_token?: string;
     ilink_bot_id?: string;
     baseurl?: string;
     ilink_user_id?: string;
+    redirect_host?: string;
 }

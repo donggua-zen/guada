@@ -163,3 +163,88 @@ describe('WechatPersonalBotAdapter - sendMedia', () => {
     );
   });
 });
+
+describe('WechatPersonalBotAdapter - 数字配对码', () => {
+  it('等待配对码时状态为 pair_code，提交后解除', async () => {
+    const adapter = createConnectedAdapter();
+    const priv = adapter as any;
+
+    const pending = priv.waitForVerificationCode(undefined);
+    expect(adapter.getVerificationState()).toBe('pair_code');
+
+    adapter.submitVerificationCode('1234');
+    await expect(pending).resolves.toBe('1234');
+    expect(adapter.getVerificationState()).toBe('none');
+  });
+
+  it('无待提交配对码时抛出错误', () => {
+    const adapter = createConnectedAdapter();
+    expect(() => adapter.submitVerificationCode('1234')).toThrow('没有待提交');
+  });
+
+  it('配对码格式非法时抛出错误且不解除等待', async () => {
+    const adapter = createConnectedAdapter();
+    const priv = adapter as any;
+
+    const pending = priv.waitForVerificationCode(undefined);
+    expect(() => adapter.submitVerificationCode('12ab')).toThrow('4 至 8 位数字');
+    expect(adapter.getVerificationState()).toBe('pair_code');
+
+    adapter.submitVerificationCode('5678');
+    await expect(pending).resolves.toBe('5678');
+  });
+
+  it('二维码自动刷新时同步 getQrCodeUrl', async () => {
+    const { IlinkBot } = jest.requireMock('./wechat-personal-sdk/ilink-bot');
+    const mockClient = {
+      ...createMockClient(),
+      getSession: jest.fn().mockResolvedValue(null),
+      createLoginSession: jest
+        .fn()
+        .mockResolvedValue({ sessionKey: 'k1', qrCodeUrl: 'https://qr.test/1' }),
+      waitForLogin: jest.fn().mockImplementation(async (_key: string, options: any) => {
+        options.onQrRefresh?.({ qrcode: 'qr-2', qrCodeUrl: 'https://qr.test/2' });
+        return { connected: true, message: 'ok' };
+      }),
+      startPolling: jest.fn().mockResolvedValue(undefined),
+    };
+    IlinkBot.mockImplementation(() => mockClient);
+
+    const adapter = new WechatPersonalBotAdapter(createMockPlatformUtils());
+    const priv = adapter as any;
+    priv.client = mockClient;
+    priv.loginAbortController = new AbortController();
+
+    await priv.loginAsync({ id: 'bot-1', name: 'bot', platformConfig: {} });
+
+    expect(adapter.getQrCodeUrl()).toBe('https://qr.test/2');
+    expect(mockClient.startPolling).toHaveBeenCalledTimes(1);
+  });
+
+  it('alreadyConnected 时不再重试', async () => {
+    const { IlinkBot } = jest.requireMock('./wechat-personal-sdk/ilink-bot');
+    const mockClient = {
+      ...createMockClient(),
+      getSession: jest.fn().mockResolvedValue(null),
+      createLoginSession: jest
+        .fn()
+        .mockResolvedValue({ sessionKey: 'k1', qrCodeUrl: 'https://qr.test/1' }),
+      waitForLogin: jest
+        .fn()
+        .mockResolvedValue({ connected: false, alreadyConnected: true, message: '已绑定' }),
+      startPolling: jest.fn(),
+    };
+    IlinkBot.mockImplementation(() => mockClient);
+
+    const adapter = new WechatPersonalBotAdapter(createMockPlatformUtils());
+    const priv = adapter as any;
+    priv.client = mockClient;
+    priv.loginAbortController = new AbortController();
+
+    await priv.loginAsync({ id: 'bot-1', name: 'bot', platformConfig: {} });
+
+    expect(mockClient.createLoginSession).toHaveBeenCalledTimes(1);
+    expect(mockClient.startPolling).not.toHaveBeenCalled();
+    expect(adapter.getQrCodeUrl()).toBeNull();
+  });
+});

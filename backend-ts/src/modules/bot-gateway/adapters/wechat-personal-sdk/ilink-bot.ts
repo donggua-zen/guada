@@ -1,12 +1,12 @@
 import { EventEmitter } from "node:events";
 
 import { ILINK_LONG_WAIT_MS, ILINK_QR_BOT_CLASS_DEFAULT } from "./internal/config";
-import { delay } from "./internal/async-tools";
-import { MissingReplyLaneFault, StaleCredentialFault, GatewayFault } from "./internal/errors";
+import { MissingReplyLaneFault, GatewayFault } from "./internal/errors";
 import { pickCredentialOrNull } from "./internal/session-snapshot";
 import { materializeUserSuppliedFile } from "./internal/load-bytes";
+import { RecentEventDeduplicator } from "./internal/recent-event-deduplicator";
 import { mapInboundWirePacket } from "./protocol/inbound-mapper";
-import { TypingPhase, UploadKind } from "./protocol/wire-models";
+import { TypingPhase, UploadKind, AuthorKind } from "./protocol/wire-models";
 import type {
     CredentialBlob,
     DownloadMediaOptions,
@@ -22,6 +22,15 @@ import type {
     SessionStore,
     WaitForLoginOptions,
 } from "./protocol/chat-event";
+import {
+    assertInboundWirePacket,
+    emitInbound,
+    inboundEventKey,
+    rememberRecentMessage,
+    runTextBindings,
+} from "./inbound-runtime";
+import type { RegexBinding } from "./inbound-runtime";
+import { runPollingLoop } from "./polling-loop";
 import { allocateLoginTicket, awaitLoginTicketResolution } from "./login/qr-handshake";
 import {
     postFileBundle,
@@ -61,8 +70,6 @@ export interface ClearSessionOptions {
     preserveContextTokens?: boolean;
 }
 
-type RegexBinding = { pattern: RegExp; listener: OnTextListener };
-
 /** iLink 会话运行时：凭证、长轮询、出站消息 */
 export class IlinkBot extends EventEmitter {
     private readonly store: SessionStore;
@@ -76,14 +83,20 @@ export class IlinkBot extends EventEmitter {
     private pollKnobs: PollingOptions;
     private readonly regexBindings: RegexBinding[] = [];
     private readonly typingPass = new Map<string, string>();
+    /** 已投递事件的有界去重窗口；仅在处理成功后才 commit。 */
+    private readonly receivedEvents = new RecentEventDeduplicator<string>();
+    /** 有界最近事件缓存，供媒体下载动作按 message_id 定位原始句柄。 */
+    private readonly recentMessages = new Map<string, NormalizedChatEvent>();
     private readonly contextTokenStore?: ClawbotContextTokenStore;
     private readonly contextTokenAccountKey?: string;
     /** 已从会话文件迁入 DB 后写回空 contextTokens（仅 DB 模式用一次） */
     private didMigrateContextTokensFromFile = false;
     /** 凭证清理时暂存的 context_token（仅无 DB 存储时） */
     private contextTokensCarryover: Record<string, string> | null = null;
+    /** 当前轮询代际；旧代际的循环退出后不再改写状态 */
+    private pollingGeneration = 0;
     /** 轮询中断控制器 */
-    private pollAbortController: AbortController | null = null;
+    private pollingAbort: AbortController | null = null;
 
     constructor(options: IlinkBotOptions = {}) {
         super();
@@ -227,10 +240,15 @@ export class IlinkBot extends EventEmitter {
         await this.persistSnapshot();
     }
 
-    async createLoginSession(options?: { botType?: string; signal?: AbortSignal }): Promise<LoginTicket> {
+    async createLoginSession(options?: {
+        botType?: string;
+        localTokens?: readonly string[];
+        signal?: AbortSignal;
+    }): Promise<LoginTicket> {
         await this.ensureSessionLoaded();
         return allocateLoginTicket(this.transport, {
             botType: options?.botType ?? ILINK_QR_BOT_CLASS_DEFAULT,
+            localTokens: options?.localTokens,
             signal: options?.signal,
         });
     }
@@ -380,87 +398,100 @@ export class IlinkBot extends EventEmitter {
         return pullUserMediaAttachment({ transport: this.transport, message, options });
     }
 
-    private async fanOutInbound(evt: NormalizedChatEvent): Promise<void> {
+    /**
+     * 将一个原始 iLink 事件交给统一事件管线。
+     * 长轮询、测试夹具和宿主已有连接均应调用此入口，确保 context_token 与 typed 事件一致。
+     */
+    async ingest(rawEvent: unknown): Promise<NormalizedChatEvent | undefined> {
+        assertInboundWirePacket(rawEvent);
+        // getupdates 会回送 BOT 副本；将它投递为入站消息会造成自触发与上下文污染。
+        if (rawEvent.message_type === AuthorKind.Bot) return undefined;
+        const eventKey = inboundEventKey(rawEvent);
+        if (this.receivedEvents.has(eventKey)) return undefined;
+        const evt = mapInboundWirePacket(rawEvent);
+        rememberRecentMessage(this.recentMessages, evt);
         await this.memorizeReplyContext(evt.chat.id, evt.contextToken);
-        this.emit("message", evt);
+        await emitInbound(this, "message", evt);
         if (evt.type !== "unknown") {
-            this.emit(evt.type, evt);
+            await emitInbound(this, evt.type, evt);
         }
-        if (evt.text) {
-            for (const { pattern, listener } of this.regexBindings) {
-                const hit = pattern.exec(evt.text);
-                pattern.lastIndex = 0;
-                if (hit) await listener(evt, hit);
-            }
-        }
+        await runTextBindings(this, this.regexBindings, evt);
+        this.receivedEvents.commit(eventKey);
+        return evt;
     }
 
+    /** 启动无限恢复的长轮询；方法在轮询建立后返回，不占用账号启动生命周期。 */
     async startPolling(options?: PollingOptions): Promise<void> {
-        if (this.pollArmed) return this.pollLoop ?? Promise.resolve();
+        if (this.pollArmed) return;
 
         await this.ensureSessionLoaded();
         const s = this.insistSnapshot(this.snapshot);
         this.pollArmed = true;
-        this.pollAbortController = new AbortController();
         const knobs = { ...this.pollKnobs, ...options };
+        const generation = ++this.pollingGeneration;
+        const controller = new AbortController();
+        this.pollingAbort = controller;
+        const abortFromOuter = () => controller.abort(knobs.signal?.reason);
+        if (knobs.signal?.aborted) abortFromOuter();
+        else knobs.signal?.addEventListener("abort", abortFromOuter, { once: true });
 
-        this.pollLoop = (async () => {
-            let ceiling = knobs.timeoutMs ?? ILINK_LONG_WAIT_MS;
-            while (this.pollArmed) {
+        // 通知 iLink 会话上线；失败只上报，不阻塞消息接收（本项目适配器为 fire-and-forget 启动）。
+        try {
+            await this.transport.notifyStart(controller.signal);
+        } catch (error) {
+            this.emit("polling_error", error);
+        }
+
+        this.pollLoop = runPollingLoop({
+            transport: this.transport,
+            session: s,
+            options: knobs,
+            signal: controller.signal,
+            isCurrent: () => this.pollArmed && generation === this.pollingGeneration,
+            persist: () => this.persistSnapshot(),
+            ingest: event => this.ingest(event),
+            credentialStale: async error => {
+                // 停止轮询并清除磁盘/内存会话，避免下次启动仍用坏凭证
+                this.pollArmed = false;
                 try {
-                    const batch = await this.transport.pullUnreadBatch(
-                        s.syncBuffer ?? "",
-                        ceiling,
-                        this.pollAbortController?.signal,
-                    );
-                    if ((batch.errcode ?? batch.ret ?? 0) === -14) {
-                        throw new StaleCredentialFault(batch.errmsg ?? "凭证失效");
-                    }
-                    if ((batch.errcode ?? 0) !== 0 || (batch.ret ?? 0) !== 0) {
-                        throw new GatewayFault(
-                            "GET_UPDATES_FAILED",
-                            `getupdates 异常 ret=${String(batch.ret ?? "")} errcode=${String(batch.errcode ?? "")}`,
-                        );
-                    }
-                    if (batch.longpolling_timeout_ms && batch.longpolling_timeout_ms > 0) {
-                        ceiling = batch.longpolling_timeout_ms;
-                    }
-                    if (typeof batch.get_updates_buf === "string") {
-                        s.syncBuffer = batch.get_updates_buf;
-                        await this.persistSnapshot();
-                    }
-                    for (const row of batch.msgs ?? []) {
-                        await this.fanOutInbound(mapInboundWirePacket(row));
-                    }
-                } catch (err) {
-                    if (err instanceof StaleCredentialFault) {
-                        // 停止轮询并清除磁盘/内存会话，避免下次启动仍用坏凭证
-                        this.pollArmed = false;
-                        try {
-                            await this.clearSession({ preserveContextTokens: true });
-                        } catch (clearErr: unknown) {
-                            this.emit("polling_error", clearErr);
-                        }
-                        this.emit("credential_stale", err);
-                        continue;
-                    }
-                    this.emit("polling_error", err);
-                    await delay(knobs.retryDelayMs ?? 2_000);
+                    await this.clearSession({ preserveContextTokens: true });
+                } catch (clearError: unknown) {
+                    this.emit("polling_error", clearError);
                 }
+                this.emit("credential_stale", error);
+            },
+            reportError: error => this.emit("polling_error", error),
+        }).finally(() => {
+            knobs.signal?.removeEventListener("abort", abortFromOuter);
+            if (generation === this.pollingGeneration) {
+                this.pollArmed = false;
+                this.pollingAbort = null;
             }
-        })();
-
-        return this.pollLoop;
+        });
+        void this.pollLoop.catch(error => {
+            if (!controller.signal.aborted) this.emit("polling_error", error);
+        });
     }
 
     async stopPolling(): Promise<void> {
         this.pollArmed = false;
-        if (this.pollAbortController) {
-            this.pollAbortController.abort();
-            this.pollAbortController = null;
-        }
+        this.pollingGeneration += 1;
+        this.pollingAbort?.abort(new DOMException("轮询已停止", "AbortError"));
+        this.pollingAbort = null;
         if (this.pollLoop) {
+            await this.pollLoop.catch(error => {
+                if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+            });
             this.pollLoop = null;
+        }
+        const session = await this.getSession();
+        if (session) {
+            // 尽力而为：下线通知失败只上报，不阻断停止流程。
+            try {
+                await this.transport.notifyStop();
+            } catch (error) {
+                this.emit("polling_error", error);
+            }
         }
     }
 }
