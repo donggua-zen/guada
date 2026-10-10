@@ -177,6 +177,7 @@ import GitChangesPanel from './GitChangesPanel.vue';
 import TerminalPanel from './TerminalPanel.vue';
 import ProcessLogPanel from './ProcessLogPanel.vue';
 import { useBrowserWebviewStore } from '@/stores/browserWebview';
+import { useGitStore } from '@/stores/git';
 import { useLayoutStore } from '@/stores/layout';
 import { useSessionStore } from '@/stores/session';
 import { useTabStore } from '@/stores/tab';
@@ -242,6 +243,7 @@ const layoutStore = useLayoutStore();
 const tabStore = useTabStore();
 const sessionStore = useSessionStore();
 const treeStore = useWorkspaceTreeStore();
+const gitStore = useGitStore();
 const previewTabCache = usePreviewTabCache();
 
 // ── 原生 HTML5 拖拽排序 ──
@@ -590,9 +592,13 @@ async function handleWorkspaceWatcherConnected(sessionId: string) {
         watchedWorkspacePath = nextWorkspacePath;
 
         if (workspaceChanged) {
-            // 工作目录变了（目录迁移/重新绑定）：重置展开态并重载目录树
+            // 工作目录变了（目录迁移/重新绑定）：重置展开态并重载目录树。
+            // git 面板的数据同样绑定旧工作目录（变更列表/分支/文件选中整块过期，
+            // 典型症状：切到「公共目录」后侧边栏还停在仓库的变更列表，且点文件报 git 错误）
+            // → 强制刷新 git 状态，让面板回到「当前工作目录不是 Git 仓库」的空态。
             treeStore.resetExpandedPaths();
             await treeStore.loadTree(sessionId, true);
+            void gitStore.refresh();
         }
     } catch (error) {
         console.error('[WorkspaceSidebar] 恢复工作目录监听失败:', error);

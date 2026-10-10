@@ -27,6 +27,12 @@ export const useGitStore = defineStore("git", () => {
   const branches = ref<GitBranch[]>([]);
   const selectedBranch = ref("");
   const refreshing = ref(false);
+  /**
+   * 正在刷新的会话 id（null = 空闲）。用会话而非布尔去重：
+   * 会话切换时上一个会话的 refresh 可能还在飞，若用布尔锁会把它当成"已在刷新"而跳过
+   * 新会话的刷新（新会话的状态会一直空着/或被旧会话响应覆盖）。
+   */
+  let refreshingSid: string | null = null;
   const committing = ref(false);
   /** 当前进行中的提交/推送动作（供按钮显示进行中 ICON；null = 空闲） */
   const commitAction = ref<"commit" | "commitAndPush" | "push" | null>(null);
@@ -93,23 +99,35 @@ export const useGitStore = defineStore("git", () => {
   }
 
   async function refresh(): Promise<void> {
-    if (!sessionId.value || refreshing.value) return;
+    // 会话可能在 await 期间被切走：把发起时的 sessionId 固定下来，后续请求与写回都用它，
+    // 写回前再校验 store 仍停在同一会话。否则上一个会话（如 git 仓库）的 status 会覆盖
+    // 新会话（如「公共目录」非仓库）—— 表现为侧边栏停留在上一个工作区的变更列表，
+    // 且 isGitRepo 仍为 true → 面板继续对非仓库工作区请求 git/diff → 400「Not a git repository」。
+    const sid = sessionId.value;
+    if (!sid || refreshingSid === sid) return; // 同一会话已在刷新：去重
+    refreshingSid = sid;
     refreshing.value = true;
     try {
-      const res = await apiService.getGitStatus(sessionId.value);
+      const res = await apiService.getGitStatus(sid);
+      if (sessionId.value !== sid) return; // 已切走：丢弃过期结果
       status.value = res;
       if (res.branch) selectedBranch.value = res.branch;
       if (res.isGitRepo) {
-        const b = await apiService.getGitBranches(sessionId.value);
+        const b = await apiService.getGitBranches(sid);
+        if (sessionId.value !== sid) return; // 同上：branches 不得写到新会话
         branches.value = b.branches;
       } else {
         branches.value = [];
       }
     } catch {
+      if (sessionId.value !== sid) return; // 切走后的失败不属于当前会话，不弹提示
       status.value = null;
       ElMessage.error(t("git.loadFailed"));
     } finally {
-      refreshing.value = false;
+      if (refreshingSid === sid) {
+        refreshingSid = null;
+        refreshing.value = false;
+      }
       refreshSeq++;
     }
   }

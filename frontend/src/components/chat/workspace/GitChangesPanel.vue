@@ -313,6 +313,7 @@ import type { GitFileChange, GitDiff } from "@/services/modules/git.api";
 import type { DiffLine, SplitDiffLine, DisplaySplitLine } from "./git-diff-types";
 import { useGitStore } from "@/stores/git";
 import { useHighlight } from "@/composables/useHighlight";
+import { getApiErrorStatus, getErrorMessage } from "@/utils/errorMessage";
 
 const { t } = useI18n();
 const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighlight();
@@ -1632,6 +1633,16 @@ function clearSelection(): void {
  */
 async function loadDiff(row: GitRow, silent = false): Promise<void> {
   if (!props.sessionId) return;
+  // 非 git 仓库（工作区是「公共目录」/普通目录）时直接不发请求：后端 assertGitRepo 会抛
+  // 400「Not a git repository」→ 前端弹「加载 Git 状态失败」，且 diff 区只剩空框。
+  if (!git.isGitRepo) {
+    if (!silent) {
+      diffLines.value = {};
+      fullHighlight.value = null;
+      loadingKey.value = null;
+    }
+    return;
+  }
   const key = rowKey(row);
   const seq = ++diffLoadSeq;
   if (!silent) {
@@ -1646,7 +1657,15 @@ async function loadDiff(row: GitRow, silent = false): Promise<void> {
       diffLines.value = { [key]: lines };
       fullHighlight.value = full;
     }
-  } catch {
+  } catch (e) {
+    // 非 git 仓库（后端 400「Not a git repository」）：会话切换期间 store 状态可能还是
+    // 上一个仓库会话的，isGitRepo 短暂为 true 而走到这里 —— 静默收起选中，不弹
+    // 「加载 Git 状态失败」，并丢弃该会话缓存的文件选中（它来自旧工作区，否则每次都复活）。
+    if (getApiErrorStatus(e) === 400 && /not a git repository/i.test(getErrorMessage(e))) {
+      clearSelection();
+      if (props.sessionId) delete sessionSelection.value[props.sessionId];
+      return;
+    }
     // 刷新重载失败：保留旧内容（silent），不打断用户预览
     if (seq === diffLoadSeq && selectedKey.value === key && !silent) {
       ElMessage.error(t("git.loadFailed"));
@@ -1860,6 +1879,13 @@ function selectNextAfterCached(cachedPath: string): boolean {
  */
 let didInitialSelect = false;
 function ensureDefaultSelection(): void {
+  // 非 git 仓库：没有可预览的文件。清空选中，并丢掉该会话缓存的文件选中 ——
+  // 它是旧工作区（曾是仓库）留下的，留着会在下次进入仓库会话时复活成幽灵路径。
+  if (!git.isGitRepo) {
+    clearSelection();
+    if (props.sessionId) delete sessionSelection.value[props.sessionId];
+    return;
+  }
   if (didInitialSelect) return;
   if (selectedKey.value) {
     didInitialSelect = true;
