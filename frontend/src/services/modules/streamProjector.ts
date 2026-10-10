@@ -486,9 +486,13 @@ function applyDomainEvent(
  * - 'compressing'：压缩中占位（compaction_summary / compression_end 收口）
  * - 'result'：压缩结果卡（纯裁剪/空跑路径：compression_end 就地替换"压缩中"占位）
  * - 'all'：全部压缩事件占位 + 旧摘要卡（新摘要原位替换前清场）
+ *
+ * metadata 取 wire 的动态 JSON 包（形状见 types/message.ts 的 metadata 字段声明），
+ * 但本函数只做等值/真值判断、不消费内部结构，故收窄为 unknown 值类型：
+ * 保留"任意来源可传入"的兼容性，同时不引入显式 any。
  */
 function matchesCompactionPlaceholder(
-  metadata: Record<string, any> | undefined,
+  metadata: Record<string, unknown> | undefined,
   mode: "compressing" | "result" | "all",
 ): boolean {
   if (metadata?.eventType !== "compaction") return false;

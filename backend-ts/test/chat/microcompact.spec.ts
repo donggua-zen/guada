@@ -275,7 +275,7 @@ describe('微压缩计划：思考剥离', () => {
     expect(plan.thinkingStripCount).toBe(0);
   });
 
-  it('幂等：已剥离（读取管线填充的空白 summary）不再入候选', async () => {
+  it('幂等：已剥离（读取管线填充的空 summary）不再入候选', async () => {
     const messages = [
       realUser('u1', 't1', NOW - 3 * HOUR_MS),
       makeMessage({
@@ -285,7 +285,7 @@ describe('微压缩计划：思考剥离', () => {
         kind: 'model',
         source: { kind: 'model', provider: 'test', model: 'deepseek-v4' },
         createdAt: NOW - 3 * HOUR_MS,
-        content: [{ type: 'reasoning', summary: ' ' }],
+        content: [{ type: 'reasoning', summary: '' }],
       }),
       realUser('u2', 't2', NOW - 1000),
     ];

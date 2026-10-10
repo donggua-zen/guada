@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { NEW_SESSION_ID } from '@/constants'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Close, QuestionFilled, Check } from '@element-plus/icons-vue'
@@ -299,7 +300,7 @@ function finishGuide(navigate = true): void {
   visible.value = false
   ElMessage.success(t('ui.setupGuide.completed'))
   if (navigate) {
-    router.replace('/chat/new-session')
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   }
 }
 

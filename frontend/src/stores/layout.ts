@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
 import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
+import { NEW_SESSION_ID } from '@/constants'
 import { useTheme } from '@/composables/useTheme'
 import { applyLanguageFromAppearance } from '@/composables/useLanguage'
 import type { AppearanceGroupSettings } from '@/types/service'
@@ -50,12 +51,12 @@ export const useLayoutStore = defineStore('layout', () => {
     },
   })
 
-  // 会话切换时自动绑定归属会话（new-session / null → 无会话，面板关闭）
+  // 会话切换时自动绑定归属会话（NEW_SESSION_ID / null → 无会话，面板关闭）
   const sessionStore = useSessionStore()
   watch(
     () => sessionStore.activeSessionId,
     (id) => {
-      workspaceVisibleSessionId.value = id && id !== 'new-session' ? id : null
+      workspaceVisibleSessionId.value = id && id !== NEW_SESSION_ID ? id : null
     },
     { immediate: true },
   )

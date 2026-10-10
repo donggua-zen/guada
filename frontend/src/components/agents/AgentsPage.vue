@@ -19,6 +19,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { NEW_SESSION_ID } from '@/constants'
 
 import PageHeader from '@/components/PageHeader.vue'
 import AgentListTab from './AgentListTab.vue'
@@ -78,7 +79,7 @@ const deleteAgent = async (agent: Agent): Promise<void> => {
 
 const startNewChat = (agent: Agent): void => {
   setSelectedAgent(agent.id)
-  router.push({ name: 'Chat', params: { sessionId: 'new-session' } })
+  router.push({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
 }
 
 const openDocs = (): void => {

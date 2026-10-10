@@ -65,4 +65,21 @@ export default ts.config(
 
   // 现存单词组件名（Login.vue、Queue.vue 等）为既定命名，不强制多词
   { rules: { 'vue/multi-word-component-names': 'off' } },
+
+  // 路由哨兵字面量防劣化：'new-session' 只允许定义在 src/constants（NEW_SESSION_ID）。
+  // 散落字面量容易再出现"把它当会话 id 去打后端接口"的旧问题（workspace-path 500 +
+  // 存储层懒创建出幽灵会话目录，见 session-path.util.ts 的 RESERVED_IDS）
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts', '**/*.vue', '**/*.js'],
+    ignores: ['src/constants/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Literal[value='new-session']",
+          message: '改用 @/constants 的 NEW_SESSION_ID（路由哨兵不是会话 id，不能拿它去调后端接口）',
+        },
+      ],
+    },
+  },
 )

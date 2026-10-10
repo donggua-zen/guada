@@ -234,7 +234,7 @@ export class SessionsController {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     // 解析会话工作目录路径（已自动确保目录存在）
@@ -276,7 +276,7 @@ export class SessionsController {
   async getSessionPlans(@Param("id") id: string) {
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
@@ -288,7 +288,7 @@ export class SessionsController {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
@@ -307,7 +307,7 @@ export class SessionsController {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     if (!filePath) {
@@ -421,7 +421,7 @@ export class SessionsController {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     if (!dirPath) {
@@ -525,7 +525,7 @@ export class SessionsController {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id);
     if (!session) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
     }
 
     if (!filePath) {
