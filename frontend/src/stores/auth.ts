@@ -71,6 +71,9 @@ export const useAuthStore = defineStore('auth', () => {
 
             token.value = accessToken
             user.value = userData
+            if (typeof userData?.passwordSet === 'boolean') {
+                passwordSet.value = userData.passwordSet
+            }
 
             // 启动定时验证
             startAuthRefreshTimer()
@@ -136,6 +139,9 @@ export const useAuthStore = defineStore('auth', () => {
             const userData = await apiService.getProfile()
             user.value = userData
             token.value = storedToken
+            if (typeof userData?.passwordSet === 'boolean') {
+                passwordSet.value = userData.passwordSet
+            }
 
             // 同步用户信息到存储，保持与 token 相同的位置
             const tokenInLocalStorage = !!localStorage.getItem('token')
@@ -199,46 +205,99 @@ export const useAuthStore = defineStore('auth', () => {
     /**
      * 查询认证状态：passwordSet=false 表示免登录模式。
      * 取代原先独立的免登录开关（密码存在与否即开关）。
+     *
+     * 失败重试后仍失败时返回 null（未知）——**不把"查询失败"误判为"已设密码"**，
+     * 否则后端未就绪的瞬间会把免密用户踢到登录页。
      */
-    async function checkAuthStatus(): Promise<boolean> {
-        try {
-            const result = await apiService.getAuthStatus()
-            passwordSet.value = result?.passwordSet === true
-            return passwordSet.value
-        } catch (error) {
-            console.error("获取认证状态失败:", error)
-            // 查询失败时保守按"需要登录"处理，避免误放行
-            passwordSet.value = true
-            return true
+    async function fetchPasswordSet(): Promise<boolean | null> {
+        const MAX_ATTEMPTS = 3
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            try {
+                const result = await apiService.getAuthStatus()
+                passwordSet.value = result?.passwordSet === true
+                return passwordSet.value
+            } catch (error) {
+                console.error(`获取认证状态失败(第 ${attempt + 1}/${MAX_ATTEMPTS} 次):`, error)
+                if (attempt < MAX_ATTEMPTS - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+                }
+            }
         }
+        return null
     }
 
-    /** 未设密码时的免登录（已设密码则后端返回 400，此处返回 false） */
-    async function tryAutoLogin(): Promise<boolean> {
+    /** 兼容旧调用：返回 passwordSet；查询失败（未知）时按"未设密码"返回 false */
+    async function checkAuthStatus(): Promise<boolean> {
+        return (await fetchPasswordSet()) === true
+    }
+
+    /**
+     * 尝试免密进入（由服务端裁决，不会绕过密码）：
+     * - 未设密码 → 签发凭据，写入 sessionStorage
+     * - 已设密码 → 后端返回 400 → 'password-required'
+     * - 网络/后端不可用 → 'unavailable'
+     */
+    async function attemptAutoLogin(): Promise<'entered' | 'password-required' | 'unavailable'> {
         try {
             const result = await apiService.autoLogin()
 
             if (!result || !result.accessToken) {
                 console.warn('自动登录失败：未获取到 token')
-                return false
+                return 'unavailable'
             }
 
-            // 自动登录使用 sessionStorage，不记住
+            // 自动登录使用 sessionStorage，不记住；先清掉可能残留的 localStorage 凭据
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
             sessionStorage.setItem('token', result.accessToken)
             sessionStorage.setItem('user', JSON.stringify(result.user))
 
             token.value = result.accessToken
             user.value = result.user
+            passwordSet.value = result.user?.passwordSet === true
 
             // 启动定时验证
             startAuthRefreshTimer()
 
             console.log('自动登录成功')
-            return true
+            return 'entered'
         } catch (error) {
+            if (getApiErrorStatus(error) === 400) {
+                // 后端明确告知：已设密码，必须显式登录
+                passwordSet.value = true
+                return 'password-required'
+            }
             console.error("自动登录失败:", error)
-            return false
+            return 'unavailable'
         }
+    }
+
+    /** 兼容旧调用：免密进入成功返回 true */
+    async function tryAutoLogin(): Promise<boolean> {
+        return (await attemptAutoLogin()) === 'entered'
+    }
+
+    /**
+     * 统一入口决策（路由守卫唯一入口）：
+     * 1. 已有 token → 服务端校验；通过即进入（401 会 logout 后继续尝试免密）
+     * 2. 无 token（或刚失效）→ 查免密状态：
+     *    - 已设密码 → 'login'
+     *    - 未设密码/状态未知 → 由 /auth/auto-login 裁决
+     *      （服务端权威：已设密码时返回 400，因此不会误放行）
+     */
+    async function ensureEntry(): Promise<'entered' | 'login' | 'unavailable'> {
+        if (token.value) {
+            const ok = await checkAuth()
+            if (ok) return 'entered'
+        }
+
+        const pwd = await fetchPasswordSet()
+        if (pwd === true) return 'login'
+
+        const result = await attemptAutoLogin()
+        if (result === 'entered') return 'entered'
+        if (result === 'password-required') return 'login'
+        return 'unavailable'
     }
 
     return {
@@ -253,6 +312,8 @@ export const useAuthStore = defineStore('auth', () => {
         initializeAuth,
         checkAuth,
         checkAuthStatus,
-        tryAutoLogin
+        tryAutoLogin,
+        fetchPasswordSet,
+        ensureEntry
     }
 })

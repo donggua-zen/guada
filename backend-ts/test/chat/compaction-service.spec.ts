@@ -56,7 +56,6 @@ function createDataSource(overrides: Partial<CompactionDataSource> = {}): Compac
 function createService(overrides: any = {}) {
   const engine = {
     execute: jest.fn(async () => ({
-      pruneEvents: 1,
       compacted: true,
       shadowedCount: 1,
       shadowedEndId: 'm0',
@@ -140,17 +139,17 @@ describe('CompactionService', () => {
       );
     });
 
-    it('纯裁剪（prune-only）→ 调 recordContextAnchor 写锚点；outcome 携带 contextStats', async () => {
+    it('服务层不再写占用锚点（一级微压缩自结算；二级锚点由 appendCompact 的 compaction/end 承载）', async () => {
       const { service, engine } = createService();
       engine.execute.mockResolvedValueOnce({
-        pruneEvents: 2,
         compacted: false,
         shadowedCount: 0,
+        skipReason: 'no-summary-provider',
       } as any);
       const recordContextAnchor = jest.fn(async () => {});
       const ds = createDataSource({ recordContextAnchor });
       const result = await service.compress(ds, { force: true });
-      expect(recordContextAnchor).toHaveBeenCalledTimes(1);
+      expect(recordContextAnchor).not.toHaveBeenCalled();
       expect(result.compacted).toBe(false);
       expect(result.contextStats).toEqual({
         usedTokens: 100,
@@ -160,20 +159,12 @@ describe('CompactionService', () => {
       });
     });
 
-    it('compacted 路径不调 recordContextAnchor（锚点已由 appendCompact 的 compaction/end 承载）', async () => {
-      const { service } = createService();
-      const recordContextAnchor = jest.fn(async () => {});
-      const ds = createDataSource({ recordContextAnchor });
-      await service.compress(ds, { force: true });
-      expect(recordContextAnchor).not.toHaveBeenCalled();
-    });
-
     it('传入 hook 时：确认二级压缩后发 compaction.before（parallel 等待订阅者，payload 完整）', async () => {
       const { eventBus } = createService();
       // 引擎在确认二级压缩后调用 onBeforeCompaction
       const engine = { execute: jest.fn(async (_sid: string, opts: any) => {
         await opts.onBeforeCompaction();
-        return { pruneEvents: 1, compacted: true, shadowedCount: 1, shadowedEndId: 'm0', summaryMessageId: 'm_sum', summary: '检查点' };
+        return { compacted: true, shadowedCount: 1, shadowedEndId: 'm0', summaryMessageId: 'm_sum', summary: '检查点' };
       }) };
       const service2 = new CompactionService(
         engine as any,

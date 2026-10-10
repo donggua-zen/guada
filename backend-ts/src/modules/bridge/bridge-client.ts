@@ -20,6 +20,19 @@ interface PendingRequest {
   timeout: NodeJS.Timeout;
 }
 
+/**
+ * 宿主消失后连续重连失败多久即自行退出（毫秒）。设为 0 可关闭该自救。
+ * 之所以要自救：Bridge 是后端的生命线，宿主（Electron）退出后管道会永久 ENOENT，
+ * 而 main.ts 刻意吞掉断管 EPIPE，后端不会因父进程死亡而退出——不设上限的话它会一直
+ * 占着 dev 固定端口 3000，并每 15s 去重连一个早已不存在的管道。
+ */
+const ORPHAN_EXIT_GRACE_MS = (() => {
+  const raw = process.env.GUADA_BRIDGE_ORPHAN_EXIT_MS;
+  if (raw === "0") return 0;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60_000;
+})();
+
 @Injectable()
 export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BridgeClient.name);
@@ -35,6 +48,10 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectDelay = 1000;
   private maxReconnectDelay = 15000;
+  /** 本轮连续连接失败的起始时刻（0 = 未在失败中）；连接成功即清零 */
+  private firstConnectFailureAt = 0;
+  /** 是否正在主动销毁：销毁触发的 close 不得计入「宿主失联」 */
+  private shuttingDown = false;
   private readyPromise: Promise<void>;
   private readyResolve!: () => void;
 
@@ -58,6 +75,7 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    this.shuttingDown = true;
     // 取消重连定时器，防止 app.close() 期间反复创建新 socket
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -90,6 +108,7 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
     this.socket.on("connect", () => {
       this.connected = true;
       this.reconnectDelay = 1000;
+      this.firstConnectFailureAt = 0; // 连上了：本轮失联窗口结束
       this.logger.log("Bridge socket connected, authenticating...");
 
       // 发送鉴权消息
@@ -123,6 +142,7 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       this.connected = false;
       this.authenticated = false;
       this.logger.warn("Bridge socket closed");
+      this.exitIfHostGone();
       this.scheduleReconnect();
     });
 
@@ -130,6 +150,28 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       this.logger.error("Bridge socket error:", err.message);
       // close 事件会触发重连
     });
+  }
+
+  /**
+   * 宿主失联自救：连续失败超过 grace 期即判定 Electron 已死并退出。
+   * 热重载不受影响——ts-node-dev 重启子进程时 Electron 的 bridge server 一直在监听，
+   * 新子进程首次连接即成功，失联窗口会被 connect 事件清零。
+   */
+  private exitIfHostGone(): void {
+    if (this.shuttingDown || ORPHAN_EXIT_GRACE_MS <= 0) return;
+    const now = Date.now();
+    if (!this.firstConnectFailureAt) {
+      this.firstConnectFailureAt = now;
+      return;
+    }
+    const failedFor = now - this.firstConnectFailureAt;
+    if (failedFor < ORPHAN_EXIT_GRACE_MS) return;
+
+    this.logger.error(
+      `Bridge host unreachable for ${Math.round(failedFor / 1000)}s ` +
+        `(pipe=${this.pipePath}); assuming Electron is gone — exiting to release the port`,
+    );
+    process.exit(1);
   }
 
   /**

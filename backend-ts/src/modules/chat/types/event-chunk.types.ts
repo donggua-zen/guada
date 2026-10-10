@@ -111,6 +111,8 @@ export interface CompressionStartEvent {
   type: "compression_start";
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
   reason?: "auto" | "manual" | "overflow";
+  /** 压缩层级：micro=微压缩（本地工具结果裁剪 + 思考剥离）/ llm=摘要压缩；缺省视为 llm（旧事件兼容） */
+  tier?: "micro" | "llm";
   message?: string;
 }
 
@@ -130,11 +132,15 @@ export interface CompressionEndEvent {
   type: "compression_end";
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
   reason?: "auto" | "manual" | "overflow";
+  /** 压缩层级：micro=微压缩（本地）/ llm=摘要压缩；缺省视为 llm（旧事件兼容） */
+  tier?: "micro" | "llm";
   /** 压缩后当前完整请求 token + 窗口（envelope + 可见视图；与 turn_end.contextStats 同构） */
   contextStats?: ContextStatsPayload;
-  /** 本次写入的一级裁剪事件数 */
+  /** 本次写入的工具结果裁剪事件数（微压缩） */
   pruneEvents?: number;
-  /** 是否发生二级压缩（遮蔽 + 摘要/丢弃）；false 时为纯裁剪或空跑 */
+  /** 本次剥离思考的消息数（微压缩） */
+  thinkingStrippedCount?: number;
+  /** 是否发生二级压缩（遮蔽 + 摘要/丢弃）；false 时为微压缩或空跑 */
   compacted?: boolean;
   /** 遮蔽消息条数（compacted 时 > 0） */
   shadowedCount?: number;

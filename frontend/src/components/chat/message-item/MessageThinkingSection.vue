@@ -115,6 +115,13 @@ watch(() => props.autoExpand, (auto, prevAuto) => {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+  /* 长思考不再撑满整屏：限高后框内自滚动。
+     column-reverse 让滚动原点落在底部 = 纯 CSS 自动贴底（流式增高时新内容始终可见，
+     用户上滚阅读不被拽回）；内容只占顶部时盒子按内容收缩，无副作用 */
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column-reverse;
 }
 
 /* 流式思考中的文字波纹（文案 + 摘要一起波纹，与分组标题 shimmer-text 同款） */

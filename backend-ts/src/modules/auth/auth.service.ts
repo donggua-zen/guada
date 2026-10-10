@@ -33,6 +33,12 @@ export class AuthService {
       this.logger.warn(`登录失败：用户名不匹配 - ${username}`);
       return false;
     }
+    // 未设密码（免密模式）：用户名匹配即放行。
+    // 免密实例不该有"任何密码都失败"的死路——这与 /auth/auto-login 的放行语义一致。
+    if (!this.accountStore.isPasswordSet()) {
+      this.logger.debug(`免密模式登录放行 - ${username}`);
+      return true;
+    }
     const ok = await this.accountStore.verifyPassword(password);
     if (!ok) this.logger.warn(`登录失败：密码错误 - ${username}`);
     return ok;
@@ -63,6 +69,11 @@ export class AuthService {
   /** 前端据此决定是否需要强制登录 */
   getStatus(): { passwordSet: boolean } {
     return { passwordSet: this.accountStore.isPasswordSet() };
+  }
+
+  /** 是否已设密码（= 是否需要登录） */
+  isPasswordSet(): boolean {
+    return this.accountStore.isPasswordSet();
   }
 
   /** 供控制器在调用前确保账户已加载（避免预热前误判免登录） */

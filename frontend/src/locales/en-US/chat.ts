@@ -240,8 +240,9 @@
     contextCompactedCount: 'Context compacted · {count} messages folded',
     contextCompacting: 'Compacting context...',
     collapseSummary: 'Collapse summary',
-    // EventCard.vue compression result card (prune-only / no-op runs)
+    // EventCard.vue compression result card (micro-compaction / no-op runs)
     contextPruned: 'Pruned {count} oversized tool results',
+    contextThinkingStripped: 'Stripped {count} historical reasoning blocks',
     contextNotCompacted: 'Not compacted',
     compressSkip: {
       belowThreshold: 'below trigger threshold',

@@ -126,6 +126,8 @@ export interface CompressionStartEvent {
   type: "compression_start";
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
   reason?: "auto" | "manual" | "overflow";
+  /** 压缩层级：micro=微压缩（本地工具结果裁剪 + 思考剥离）/ llm=摘要压缩；缺省视为 llm（旧事件兼容） */
+  tier?: "micro" | "llm";
   message?: string;
 }
 
@@ -138,25 +140,29 @@ export interface CompressionErrorEvent {
   cancelled?: boolean;
 }
 
-/** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；compacted 与纯裁剪都发）。
+/** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；微压缩与摘要压缩都发）。
  *  携带压缩后占用（contextStats）——前端据此即时更新环形指示器，无需 REST；
- *  并携带本次结果（裁剪条数/是否压缩/跳过原因），用于展示"这次压缩做了什么"。 */
+ *  并携带本次结果（裁剪条数/思考剥离数/是否压缩/跳过原因），用于展示"这次压缩做了什么"。 */
 export interface CompressionEndEvent {
   type: "compression_end";
   /** 压缩触发方式：auto（token 压力）/ manual（用户手动）/ overflow（上下文溢出恢复） */
   reason?: "auto" | "manual" | "overflow";
+  /** 压缩层级：micro=微压缩（本地）/ llm=摘要压缩；缺省视为 llm（旧事件兼容） */
+  tier?: "micro" | "llm";
   /** 压缩后当前完整请求 token + 窗口（与 turn_end.contextStats 同构） */
   contextStats?: {
     usedTokens: number;
     effectiveContextWindow: number;
   };
-  /** 本次写入的一级裁剪事件数 */
+  /** 本次写入的工具结果裁剪事件数（微压缩） */
   pruneEvents?: number;
+  /** 本次剥离思考的消息数（微压缩） */
+  thinkingStrippedCount?: number;
   /** 是否发生二级压缩（遮蔽 + 摘要/丢弃） */
   compacted?: boolean;
   /** 遮蔽消息条数 */
   shadowedCount?: number;
-  /** 未压缩原因（below-threshold / prune-sufficient / no-summary-provider / retain-budget-exceeds-history / tier-disabled） */
+  /** 未压缩原因（below-threshold / no-summary-provider / retain-budget-exceeds-history / tier-disabled；prune-sufficient 为旧事件遗留） */
   skipReason?: string;
 }
 

@@ -16,6 +16,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { isContextWindowExceeded } from "../../llm-core/utils/retry-on-error.util";
 import { CompactionService } from "./compaction.service";
+import { MicrocompactService } from "./microcompact.service";
 import type { CompactionDataSource } from "./types";
 import { CompactionCancelledError } from "./compaction-cancelled.error";
 import type { ISessionContext } from "../session-context";
@@ -55,6 +56,7 @@ export class CompactionCoordinatorService {
 
   constructor(
     private readonly compactionService: CompactionService,
+    private readonly microcompactService: MicrocompactService,
   ) {}
 
   /**
@@ -62,9 +64,16 @@ export class CompactionCoordinatorService {
    *
    * 只做副作用（压力压缩原地改写会话存储），返回 void 放行——
    * agent-engine 在钩子后重读 getMessages() 即得压缩后消息（对齐 DSH：请求消息派生自会话 surface）。
+   *
+   * 顺序（对齐 zcode）：微压缩（本地、便宜）先跑——生效后占用通常降到 LLM 阈值以下，
+   * LLM 压缩自然 didRun=false 跳过；微压缩收益不足时 LLM 同一步照常评估。
+   * 手动/溢出路径不经过本钩子，只走二级。
    */
   @OnEvent(HOOKS.PRE_STEP)
   async onPreStep(payload: PreStepPayload): Promise<void> {
+    await this.microcompactService.maybeMicrocompact(payload.sessionContext, {
+      abortSignal: payload.abortSignal,
+    });
     const outcome = await this.maybeCompress(payload.sessionContext, {
       abortSignal: payload.abortSignal,
       reason: "auto",
@@ -126,6 +135,7 @@ export class CompactionCoordinatorService {
     await context.publishStream({
       type: "compression_start",
       reason: opts.reason ?? "auto",
+      tier: "llm",
     } as CompressionStartEvent);
 
     try {
@@ -136,17 +146,15 @@ export class CompactionCoordinatorService {
         // （事件通道，替代旧 onBeforeCompaction 回调穿透；协调器不再感知发射细节）
         hook: { sessionContext: context },
       });
-      // 压缩运行结束：统一广播 compression_end（compacted 与纯裁剪都发）携带压缩后占用与本次结果，
+      // 压缩运行结束：统一广播 compression_end 携带压缩后占用与本次结果，
       // 前端据此即时更新上下文使用率环形指示器并展示"做了什么"（无需 REST）。
       await context.publishStream({
         type: "compression_end",
         reason: opts.reason ?? "auto",
+        tier: "llm",
         ...(outcome.contextStats
           ? { contextStats: outcome.contextStats }
           : {}),
-        ...(outcome.pruneEvents === undefined
-          ? {}
-          : { pruneEvents: outcome.pruneEvents }),
         compacted: outcome.compacted,
         shadowedCount: outcome.shadowedCount,
         ...(outcome.skipReason === undefined

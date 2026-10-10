@@ -131,4 +131,23 @@ describe("IlinkBot 接收与去重", () => {
         expect(event.text).toBe("no type");
         expect(listener).toHaveBeenCalledTimes(1);
     });
+
+    it("group_id 为空串或 null 时不把真实消息当毒事件丢弃", async () => {
+        const bot = new IlinkBot();
+        const listener = jest.fn();
+        bot.on("message", listener);
+
+        // 线上私聊事件实测会把 group_id 传成空串，context_token 也可能为 null
+        const event = await bot.ingest({
+            message_id: 21,
+            message_type: 1,
+            from_user_id: "peer",
+            group_id: "",
+            context_token: null,
+            item_list: [{ type: 1, text_item: { text: "hi" } }],
+        });
+
+        expect(event.text).toBe("hi");
+        expect(listener).toHaveBeenCalledTimes(1);
+    });
 });

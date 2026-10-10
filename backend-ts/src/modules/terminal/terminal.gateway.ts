@@ -75,9 +75,8 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
       if (!token) throw new Error("Missing token");
       if (!sessionIdRaw) throw new Error("Missing sessionId");
 
-      await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET,
-      });
+      // 不传 secret：复用 JwtModule 的配置（与签发同源）
+      await this.jwtService.verifyAsync(token);
       // 单账户：token 有效即代表本机唯一账户，无需再查库
       user = this.accountStore.getView();
 

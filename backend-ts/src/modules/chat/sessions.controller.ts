@@ -659,9 +659,8 @@ export class SessionsController {
     }
 
     try {
-      await this.jwtService.verifyAsync(jwtToken, {
-        secret: process.env.JWT_SECRET,
-      });
+      // 不传 secret：复用 JwtModule 的配置（与签发同源）
+      await this.jwtService.verifyAsync(jwtToken);
     } catch {
       throw new HttpException("Invalid or expired token", HttpStatus.UNAUTHORIZED);
     }

@@ -26,6 +26,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import { useAuthStore } from '../../stores/auth'
 // Element Plus 组件导入
 import {
   ElForm,
@@ -36,6 +37,7 @@ import {
 
 const { t } = useI18n()
 const { toast } = usePopup()
+const authStore = useAuthStore()
 
 const passwordFormRef = ref(null)
 
@@ -92,6 +94,8 @@ const handleChangePassword = (e) => {
     if (valid) {
       try {
         await apiService.changePassword(passwordForm.value.oldPassword, passwordForm.value.newPassword)
+        // 与设置页开关保持一致：改密成功后确实已设密码
+        authStore.passwordSet = true
         // 重置表单
         passwordForm.value = {
           oldPassword: '',

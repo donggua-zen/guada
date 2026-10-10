@@ -221,36 +221,15 @@ router.beforeEach(async (to, from, next) => {
 
   // 3. 正常的鉴权逻辑
   if (to.meta.requiresAuth) {
-    // 页面加载后的首次导航：未设密码则免登录直通
-    if (!authStore.isAuthenticated) {
-      const passwordSet = await authStore.checkAuthStatus();
-      if (!passwordSet) {
-        const success = await authStore.tryAutoLogin();
-        if (success) {
-          isInitialPageLoad = false;
-          return next();
-        }
-      }
-    }
-
-    // 页面加载后的首次导航：从 storage 恢复 token（如果尚未恢复）
-    if (!authStore.isAuthenticated) {
-      const initialized = await authStore.initializeAuth();
-      if (initialized) {
-        isInitialPageLoad = false;
-        return next();
-      }
-    }
-
-    // 页面加载后的首次导航 — 强制服务端验证 token 有效性
-    // 当 isInitialPageLoad 为 true 时，无论 isAuthenticated 是否为 true，
-    // 都调用 checkAuth() 向后端发送 /user/profile 请求验证 token
+    // 首次导航：统一入口决策（已有 token 则服务端校验；否则按免密状态自动进入或转登录页）
     if (isInitialPageLoad) {
       isInitialPageLoad = false;
-      const isValid = await authStore.checkAuth();
-      if (!isValid) {
+      const entry = await authStore.ensureEntry();
+      if (entry === "login") {
         return next("/login");
       }
+      // 'entered' 正常进入；'unavailable'（后端暂不可达）也放行，
+      // 由页面内请求自行报连接错误——绝不因查询失败误判为"需要密码"。
       return next();
     }
 
@@ -258,6 +237,20 @@ router.beforeEach(async (to, from, next) => {
     // token 过期由页面内具体 API 请求自行验证（401 会统一触发跳转）
     if (!authStore.isAuthenticated) {
       return next("/login");
+    }
+  }
+
+  // 免密模式的反向守卫：已免密则不允许停留在登录页，自动进入并重定向。
+  // 这同时兜住 401 全局跳转与"退出登录"落入 /login 的情况，避免被锁在门外。
+  if (to.name === "Login") {
+    const entry = await authStore.ensureEntry();
+    if (entry === "entered") {
+      isInitialPageLoad = false;
+      const target =
+        typeof to.query.redirect === "string" && to.query.redirect
+          ? to.query.redirect
+          : "/";
+      return next(target);
     }
   }
 

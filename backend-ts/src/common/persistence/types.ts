@@ -188,13 +188,23 @@ export interface TurnDeleteData {
 }
 
 /**
- * 内容裁剪（一级压缩）：只裁剪超长内容，不改变可见性。
+ * message/prune 策略值。
+ * - user_edit：用户编辑（两链路都应用，所见即所得）
+ * - head_tail_prune：微压缩工具结果头尾裁剪（仅默认 LLM 链路应用，展示链路保留原文）
+ * - thinking_strip：微压缩思考剥离（reasoning 块保留、summary 置空；同上仅 LLM 链路应用）
+ */
+export const PRUNE_STRATEGY_USER_EDIT = 'user_edit';
+export const PRUNE_STRATEGY_HEAD_TAIL = 'head_tail_prune';
+export const PRUNE_STRATEGY_THINKING_STRIP = 'thinking_strip';
+
+/**
+ * 内容裁剪/思考剥离（微压缩，一级）：只改写内容，不改变可见性。
  */
 export interface MessagePruneData {
   messageId: string;          // 目标消息
-  newContent: string;         // 裁剪后内容
+  newContent: string;         // 改写后内容（thinking_strip 为空串：reasoning 块保留、summary 置空）
   prunedBytes: number;        // 裁剪掉的字节数
-  strategy: string;           // 策略，如 head_tail_500
+  strategy: string;           // 策略，见 PRUNE_STRATEGY_*
   /** 影子价格：被裁剪内容的估算 token 数（供 token 计量消费方减去被遮蔽价格，对齐 DSH compaction/prune） */
   prunedTokens?: number;
 }
