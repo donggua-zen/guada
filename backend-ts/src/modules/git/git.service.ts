@@ -1,10 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { simpleGit, SimpleGit } from "simple-git";
-import { execFileSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import { markGitRead } from "../../common/services/git-activity";
+import { pathExecutableCandidates } from "../shell/windows-shell-detect";
 
 export interface GitFileChange {
   /** 相对工作目录的路径（正斜杠分隔） */
@@ -151,6 +151,42 @@ function isSkipStatusEntry(workspacePath: string, entryPath: string): boolean {
   }
 }
 
+/**
+ * PATH 上是否存在 git 可执行文件（**纯 fs，零子进程**）。
+ *
+ * 不能用 `execFileSync("git", ["--version"])` 探测：打包版后端由 Electron 以
+ * ELECTRON_RUN_AS_NODE 启动（GUI 子系统、无控制台），子进程会新建控制台窗口——
+ * 实测表现为「首次打开带 Git 标签的会话/工作目录侧边栏时闪出黑色控制台窗口」
+ * （该子进程只在 `isGitAvailable()` 首次调用时出现一次，之后走缓存）。
+ * Windows 侧复用 shell 探测（windows-shell-detect.ts）同款 PATH × PATHEXT 候选展开，
+ * 与 simple-git 自身的 `git` 解析路径同源；POSIX 直接查 PATH 并校验可执行位。
+ *
+ * 代价：只能证明「git 在 PATH 上」，不能证明它能正常运行；git 存在但损坏时
+ * git 接口会返回原始错误（与旧探针通过、命令失败时的行为一致）。
+ */
+function isGitExecutableOnPath(): boolean {
+  if (process.platform === "win32") {
+    return pathExecutableCandidates("git", process.env).some((candidate) => {
+      try {
+        return fs.existsSync(candidate);
+      } catch {
+        return false;
+      }
+    });
+  }
+  return (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some((dir) => {
+      try {
+        fs.accessSync(path.join(dir, "git"), fs.constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+}
+
 @Injectable()
 export class GitService {
   private readonly logger = new Logger(GitService.name);
@@ -178,18 +214,15 @@ export class GitService {
   private gitAvailable: boolean | null = null;
 
   /**
-   * 探测 git 是否已安装（spawn `git --version`，结果缓存）。
+   * 探测 git 是否已安装（PATH 查找，结果缓存；见 isGitExecutableOnPath 的零子进程说明）。
    * 目录是 git 仓库但系统未装 git 时，所有 simple-git 命令都会 ENOENT 抛错 →
    * 用此标志提前降级，避免每个接口反复 500。
    */
   isGitAvailable(): boolean {
     if (this.gitAvailable !== null) return this.gitAvailable;
-    try {
-      execFileSync("git", ["--version"], { stdio: "ignore", timeout: 5000 });
-      this.gitAvailable = true;
-    } catch {
+    this.gitAvailable = isGitExecutableOnPath();
+    if (!this.gitAvailable) {
       this.logger.warn("Git is not installed in this environment — Git features degraded");
-      this.gitAvailable = false;
     }
     return this.gitAvailable;
   }

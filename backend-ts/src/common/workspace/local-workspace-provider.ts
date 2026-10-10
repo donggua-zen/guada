@@ -4,6 +4,7 @@ import * as fsSync from "fs";
 import * as path from "path";
 import * as parcelWatcher from "@parcel/watcher";
 import fg from "fast-glob";
+import { PARCEL_WATCH_OPTIONS } from "../utils/parcel-watch-options";
 import {
   WorkspaceProvider,
   FileStat,
@@ -340,7 +341,7 @@ export class LocalWorkspaceProvider implements WorkspaceProvider {
               });
             }
           },
-          { ignore: ignoreGlobs },
+          { ignore: ignoreGlobs, ...PARCEL_WATCH_OPTIONS },
         )
         .then((sub) => {
           if (disposed) {
