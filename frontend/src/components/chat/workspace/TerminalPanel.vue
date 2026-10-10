@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
     min-height: 0;
     box-sizing: border-box;
     padding: 8px;
-    background: var(--gd-color-surface, #fff);
+    background: var(--gd-color-bg, #fff);
     overflow: hidden;
 }
 .terminal-container {
