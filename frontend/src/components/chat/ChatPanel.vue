@@ -50,6 +50,7 @@
                     :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                     @branch="branchFromTurn"
+                    :branching="branchingTurnId === turn.id" :branch-disabled="branchingTurnId !== null"
                     :session-id="currentSessionId || undefined" />                </template>
                 <!-- <div class="min-h-60"></div> -->
 
@@ -1021,6 +1022,10 @@ async function deleteTurnMessage(turn: Turn) {
 
 // 分支会话：以该回合（助手消息所在，必为完整一轮）为节点，复制出新会话并跳转过去
 // 分支只复制主对话（工作流、子代理等历史不跟随），故先弹窗告知该取舍
+// 分支中（branchingTurnId 非 null）：该回合分支按钮转圈、其余禁用——后端 fork 无进度
+// 事件（附件目录整树拷贝可能秒级），禁用 + 守卫双保险防并发 fork 出两个分支
+const branchingTurnId = ref<string | null>(null);
+
 async function branchFromTurn(turn: Turn) {
   if (!currentSessionId.value || !turn?.id) return;
   const confirmed = await confirm(
@@ -1028,6 +1033,8 @@ async function branchFromTurn(turn: Turn) {
     t('chat.panel.branchConfirmDesc'),
   );
   if (!confirmed) return;
+  if (branchingTurnId.value) return;
+  branchingTurnId.value = turn.id;
   try {
     const newSession = await apiService.branchSession(currentSessionId.value, {
       turnId: turn.id,
@@ -1038,6 +1045,8 @@ async function branchFromTurn(turn: Turn) {
   } catch (error) {
     toast.error(getErrorMessage(error) || t('chat.panel.branchFailed'));
     console.error("分支会话失败:", error);
+  } finally {
+    branchingTurnId.value = null;
   }
 }
 

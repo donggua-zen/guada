@@ -270,6 +270,7 @@
     editContent: 'Edit Content',
     deleteTurn: 'Delete This Turn',
     branchFromHere: 'Branch From Here',
+    branching: 'Branching…',
   },
 
   // ── 统一交互卡（审批/询问共用） ──
