@@ -86,6 +86,8 @@ class FakeMessageStore {
 function buildSourceEvents(overrides?: {
   todoMetaItems?: unknown;
   omitTodoMeta?: boolean;
+  /** 注入一条工具产出图片消息（agent-engine materializeToolImages 的持久化形态） */
+  withToolImage?: boolean;
 }): BaseEvent[] {
   const t = 1700000000000;
   const todoMeta = overrides?.omitTodoMeta
@@ -99,7 +101,7 @@ function buildSourceEvents(overrides?: {
         ],
       };
 
-  return [
+  const events: BaseEvent[] = [
     { type: "session/init", seq: 0, time: t, data: { title: "主会话" } },
     { type: "session/rotate", seq: 1, time: t + 1, data: {} },
     {
@@ -182,6 +184,35 @@ function buildSourceEvents(overrides?: {
       data: { turnId: "turn-b" },
     },
   ];
+
+  if (overrides?.withToolImage) {
+    // 工具产出图片注入（agent-engine 物化后的落库形态）：user/message + kind=model
+    // + metadata.hidden，blocks 内嵌 refType='session' 的 image 块——随 turn-a 前缀随迁
+    events.splice(6, 0, {
+      type: "user/message",
+      seq: 6,
+      time: t + 6,
+      data: {
+        messageId: "m-toolimg",
+        kind: "model",
+        blocks: [
+          { type: "text", text: "Image loaded successfully." },
+          {
+            type: "image",
+            attachment: {
+              refType: "session",
+              url: `sessions/${SOURCE_ID}/images/20261011/tool_shot.jpg`,
+              previewUrl: `sessions/${SOURCE_ID}/previews/20261011/tool_shot.jpg`,
+            },
+          },
+        ],
+        metadata: { hidden: true },
+      },
+    });
+    // 插入后按序重编 seq（保持与真实事件日志一致的单调连续）
+    return events.map((e, i) => ({ ...e, seq: i }));
+  }
+  return events;
 }
 
 async function catchHttp(promise: Promise<unknown>): Promise<HttpException> {
@@ -272,6 +303,7 @@ describe("SessionService.branchSession", () => {
     todoMetaItems?: unknown;
     omitTodoMeta?: boolean;
     sessionType?: string;
+    withToolImage?: boolean;
   }) {
     await store.create({
       id: SOURCE_ID,
@@ -298,6 +330,23 @@ describe("SessionService.branchSession", () => {
       path.join(sessionDir(SOURCE_ID), "previews", "p.png"),
       "PREVIEW",
     );
+    // 工具产出图片的物理文件（引擎物化形态：images|previews 下的日期目录）
+    if (opts?.withToolImage) {
+      fs.mkdirSync(path.join(sessionDir(SOURCE_ID), "images", "20261011"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(sessionDir(SOURCE_ID), "images", "20261011", "tool_shot.jpg"),
+        "TOOLIMG",
+      );
+      fs.mkdirSync(path.join(sessionDir(SOURCE_ID), "previews", "20261011"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(sessionDir(SOURCE_ID), "previews", "20261011", "tool_shot.jpg"),
+        "TOOLPREVIEW",
+      );
+    }
     // 子代理目录内容（用于断言未被触碰）
     fs.mkdirSync(sessionDir("session-child"), { recursive: true });
     fs.writeFileSync(
@@ -310,6 +359,7 @@ describe("SessionService.branchSession", () => {
       buildSourceEvents({
         todoMetaItems: opts?.todoMetaItems,
         omitTodoMeta: opts?.omitTodoMeta,
+        withToolImage: opts?.withToolImage,
       }),
     );
   }
@@ -393,6 +443,59 @@ describe("SessionService.branchSession", () => {
 
     expect(attachment.url).toBe(`sessions/${branched.id}/images/pic.png`);
     expect(attachment.previewUrl).toBe(`sessions/${branched.id}/previews/p.png`);
+  });
+
+  it("工具产出图片注入消息（hidden user/message）随迁：引用改写 + 物理文件拷贝", async () => {
+    await seedSource({ withToolImage: true });
+
+    const branched = await service.branchSession(SOURCE_ID, {
+      turnId: "turn-a",
+    });
+
+    const imported = messages.importCalls.find(
+      (c) => c.sessionId === branched.id,
+    )!;
+    const hiddenEvents = imported.events.filter(
+      (e) =>
+        e.type === "user/message" &&
+        (e.data as { metadata?: { hidden?: boolean } }).metadata?.hidden ===
+          true,
+    );
+    expect(hiddenEvents).toHaveLength(1);
+
+    const blocks = (hiddenEvents[0].data as {
+      blocks: Array<{
+        type: string;
+        attachment: { refType: string; url: string; previewUrl: string };
+      }>;
+    }).blocks;
+    const imageBlock = blocks.find((b) => b.type === "image")!;
+    expect(imageBlock.attachment.refType).toBe("session");
+    expect(imageBlock.attachment.url).toBe(
+      `sessions/${branched.id}/images/20261011/tool_shot.jpg`,
+    );
+    expect(imageBlock.attachment.previewUrl).toBe(
+      `sessions/${branched.id}/previews/20261011/tool_shot.jpg`,
+    );
+
+    // 物理文件随会话目录拷入新会话
+    expect(
+      fs.readFileSync(
+        path.join(sessionDir(branched.id), "images", "20261011", "tool_shot.jpg"),
+        "utf-8",
+      ),
+    ).toBe("TOOLIMG");
+    expect(
+      fs.readFileSync(
+        path.join(
+          sessionDir(branched.id),
+          "previews",
+          "20261011",
+          "tool_shot.jpg",
+        ),
+        "utf-8",
+      ),
+    ).toBe("TOOLPREVIEW");
   });
 
   it("TODO 从锚点前最后一个 todo 工具结果的 meta 重建到分支工作目录", async () => {
