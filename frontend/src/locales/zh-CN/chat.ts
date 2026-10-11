@@ -270,6 +270,7 @@ export default {
     editContent: '编辑内容',
     deleteTurn: '删除本轮对话',
     branchFromHere: '从此分支新会话',
+    branching: '分支中…',
   },
 
   // ── 统一交互卡（审批/询问共用） ──

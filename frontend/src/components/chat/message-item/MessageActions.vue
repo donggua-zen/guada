@@ -31,12 +31,17 @@
     </template>
 
     <template v-if="isAssistant">
-      <GdTooltip :content="t('chat.messageActions.branchFromHere')" placement="top">
-        <div class="message-action-button" @click="$emit('branch')">
-          <el-icon :size="16">
-            <BranchFork16Regular />
+      <GdTooltip
+        :content="branching ? t('chat.messageActions.branching') : t('chat.messageActions.branchFromHere')"
+        placement="top">
+        <!-- 真 button 而非 div：让 .message-action-button 预置的 disabled: 工具类生效 -->
+        <button type="button" class="message-action-button"
+          :disabled="branching || branchDisabled" @click="handleBranch">
+          <el-icon :size="16" :class="{ 'is-loading': branching }">
+            <LoadingOutlined v-if="branching" />
+            <BranchFork16Regular v-else />
           </el-icon>
-        </div>
+        </button>
       </GdTooltip>
     </template>
 
@@ -93,6 +98,7 @@ import {
   BranchFork16Regular,
 } from '@vicons/fluent';
 import { ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
+import { LoadingOutlined } from '@vicons/antd';
 
 const props = defineProps<{
   isAssistant: boolean;
@@ -101,6 +107,10 @@ const props = defineProps<{
   timeFull: string;
   timeFriendly: string;
   durationText?: string | null;
+  /** 本回合分支进行中：图标转圈且不可点 */
+  branching?: boolean;
+  /** 有任意分支在飞行中：禁用（防并发 fork） */
+  branchDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -118,6 +128,12 @@ const handleCommand = (command: string) => {
   } else if (command === 'delete') {
     emit('delete');
   }
+};
+
+// disabled 属性挡住鼠标，这里挡住键盘触发等边缘路径（双保险）
+const handleBranch = () => {
+  if (props.branching || props.branchDisabled) return;
+  emit('branch');
 };
 </script>
 

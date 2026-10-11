@@ -226,7 +226,8 @@
       :allow-generate="false" :time-full="assistantTime.full"
       :time-friendly="assistantTime.firendly" :duration-text="durationText" @copy="emit('copy', activeBlock)"
       @regenerate="emit('regenerate', props.turn)" @edit="emit('edit', activeBlock)"
-      @delete="emit('delete', props.turn)" @branch="emit('branch', props.turn)" />
+      @delete="emit('delete', props.turn)" @branch="emit('branch', props.turn)"
+      :branching="branching" :branch-disabled="branchDisabled" />
 
     <!-- 流式期间：思考中（点阵动画 + 轮播文案）/ 重试中状态（retry 为回合级瞬态 turn.state.retry，不落库） -->
     <div v-if="streamingState.isStreaming" class="mt-5 flex items-center gap-2 text-xs text-gray-400">
@@ -276,6 +277,10 @@ const props = defineProps<{
   agentAvatar?: string | null;
   animateIn?: boolean;
   sessionId?: string;
+  /** 本回合分支进行中（分支按钮转圈） */
+  branching?: boolean;
+  /** 有任意分支进行中（全部分支按钮禁用，防并发 fork） */
+  branchDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
