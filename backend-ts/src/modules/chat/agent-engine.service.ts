@@ -7,8 +7,22 @@ import type {
   ContentBlock,
   FileRef,
 } from "../../common/types/conversation.types";
-import { normalizeMediaType } from "../../common/utils/media-type.util";
+import {
+  normalizeMediaType,
+  mimeFromExtension,
+} from "../../common/utils/media-type.util";
 import { normalizeRefType } from "../llm-core/utils/attachment.util";
+import { FileNamingService } from "../../common/services/file-naming.service";
+import { getSessionDir } from "../../common/utils/session-path.util";
+import {
+  transcodeImage,
+  transcodePreview,
+  getImageTargetBytes,
+} from "../../common/utils/image-transcode.util";
+import type {
+  ImageContent,
+  ImageRefContent,
+} from "../plugins/api/plugin-api";
 import { RequestContext } from "../../common/context/request-context";
 import { ISessionContext } from "./session-context";
 import { SessionStreamEvent } from "./types/event-chunk.types";
@@ -42,6 +56,26 @@ import {
 } from "../llm-core/utils/retry-on-error.util";
 
 /**
+ * data: URL 形态的 FileRef——工具图片物化失败时的 legacy 降级形态（字节在手的兜底）。
+ * 正常路径不应产出：持久化契约是快照/事件日志只存路径指针不存 base64。
+ */
+function inlineDataRef(mediaType: string, base64: string, byteLength: number): FileRef {
+  const mime = mediaType || "image/png";
+  return {
+    mediaType: mime,
+    bytes: byteLength,
+    url: `data:${mime};base64,${base64}`,
+  };
+}
+
+/** 判定绝对路径是否位于会话数据目录内；是则返回目录内相对路径（POSIX 分隔），否则 null */
+function relativeToSessionDir(sessionDir: string, absolutePath: string): string | null {
+  const rel = path.relative(sessionDir, path.resolve(absolutePath));
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join("/");
+}
+
+/**
  * Agent 推理引擎
  *
  * 负责协调会话级别的 AI 代理执行流程，包括多轮工具调用循环、流式响应管理。
@@ -68,6 +102,12 @@ export class AgentEngine {
     private llmService: LLMService,
     private eventBus: EventBusService,
   ) {}
+
+  /**
+   * 文件命名服务（无 DI 依赖的无状态工具）：与上传路径共用「日期目录 + 清洗 + 去重」
+   * 命名策略。字段初始化手工实例化——避免为纯工具依赖改动构造签名（多处测试手工 new 本类）。
+   */
+  private readonly fileNaming = new FileNamingService();
 
   /**
    * 主循环 LLM 流式请求：纯传输 + 重试壳（agent 循环局部语义，对齐 DSH retryPolicy 在 agent 层）。
@@ -919,22 +959,34 @@ export class AgentEngine {
         ...(res.meta ? { meta: res.meta } : {}),
       });
 
-      if (res.images && res.images.length > 0) {
-        // 图片注入：user 消息 + image 块（hidden 标记）
+      if (
+        (res.images && res.images.length > 0) ||
+        (res.imageRefs && res.imageRefs.length > 0)
+      ) {
+        // 图片注入：统一物化进会话 images 目录，FileRef 只落路径指针——
+        // 持久化契约：快照/事件日志不存 base64（jsonl-persistence-design §3.3，dsh 明确禁止）。
+        const { refs, failures } = await this.materializeToolImages(
+          sessionContext.sessionId,
+          res.images,
+          res.imageRefs,
+        );
         const imageBlocks: ContentBlock[] = [
           {
             type: "text",
             text: res.content || "",
           },
-          ...res.images.map((img: any) => ({
+          ...refs.map((attachment) => ({
             type: "image" as const,
-            attachment: {
-              mediaType: img.media_type || "image/png",
-              bytes: 0,
-              url: `data:${img.media_type};base64,${img.data}`,
-            },
+            attachment,
           })),
         ];
+        if (failures.length > 0) {
+          // 物化彻底失败（如引用路径已失效）：以文本告知模型，避免它以为图已注入
+          imageBlocks.push({
+            type: "text",
+            text: `[image unavailable: ${failures.join("; ")}]`,
+          });
+        }
         const imageMessageId = sessionContext.generateMessageId();
         toolParts.push({
           id: imageMessageId,
@@ -966,6 +1018,149 @@ export class AgentEngine {
       toolParts,
       toolEvent,
       ...(followUpUserInput ? { followUpUserInput } : {}),
+    };
+  }
+
+  /**
+   * 工具产出图片统一物化进会话 images 目录，产出 FileRef 路径指针。两条入口：
+   * - imageRefs：字节已在磁盘（image_view / browser_screenshot）——路径已在本会话
+   *   数据目录内（如查看用户上传图）→ 直接转正为自包含引用，零复制；否则转码落副本。
+   * - images（base64）：MCP 等线上字节来源的兜底——解码后走同一落盘路径。
+   *
+   * 单张失败先降级 data: URL（legacy 形态，仅该张图）；连字节都拿不到（如引用路径
+   * 已失效）→ 记入 failures，由调用方以文本块告知模型。任何情况下不抛错、不终止回合。
+   */
+  private async materializeToolImages(
+    sessionId: string,
+    images?: ImageContent[],
+    imageRefs?: ImageRefContent[],
+  ): Promise<{ refs: FileRef[]; failures: string[] }> {
+    const refs: FileRef[] = [];
+    const failures: string[] = [];
+
+    for (const ref of imageRefs ?? []) {
+      try {
+        refs.push(await this.materializeImageRef(sessionId, ref));
+      } catch (error: any) {
+        try {
+          const buf = await fs.promises.readFile(ref.url);
+          this.logger.warn(
+            `工具图片物化失败，降级 data: URL：${ref.url}：${error.message}`,
+          );
+          refs.push(
+            inlineDataRef(
+              ref.media_type ?? mimeFromExtension(path.extname(ref.url)),
+              buf.toString("base64"),
+              buf.byteLength,
+            ),
+          );
+        } catch {
+          failures.push(`${ref.url} (${error.message})`);
+          this.logger.warn(
+            `工具图片不可用，已跳过：${ref.url}：${error.message}`,
+          );
+        }
+      }
+    }
+
+    for (const img of images ?? []) {
+      try {
+        const buf = Buffer.from(img.data, "base64");
+        refs.push(await this.materializeImageBuffer(sessionId, buf, "tool-image"));
+      } catch (error: any) {
+        this.logger.warn(`工具图片落盘失败，降级 data: URL：${error.message}`);
+        refs.push(
+          inlineDataRef(
+            img.media_type,
+            img.data,
+            Math.floor((img.data.length * 3) / 4),
+          ),
+        );
+      }
+    }
+
+    return { refs, failures };
+  }
+
+  /** 磁盘引用 → 会话图片：会话目录内直接转正，会话目录外转码落副本 */
+  private async materializeImageRef(
+    sessionId: string,
+    ref: ImageRefContent,
+  ): Promise<FileRef> {
+    const sessionDir = getSessionDir(sessionId);
+
+    if (ref.refType === "session") {
+      // 插件直接引用会话目录内文件（自包含 url：sessions/<id>/...）→ 校验存在后原样转正
+      const rel = ref.url.replace(/^sessions\/[^/]+\//, "");
+      const physical = path.join(sessionDir, rel);
+      const stat = await fs.promises.stat(physical);
+      return {
+        mediaType: ref.media_type ?? mimeFromExtension(path.extname(physical)),
+        bytes: ref.bytes ?? stat.size,
+        ...(ref.name ? { name: ref.name } : {}),
+        url: ref.url,
+        refType: "session",
+      };
+    }
+
+    const insideRel = relativeToSessionDir(sessionDir, ref.url);
+    if (insideRel) {
+      const stat = await fs.promises.stat(ref.url);
+      // 零复制转正的条件：位于 images|previews（上传/物化产物，都已过体积阶梯）
+      // 且体积 ≤ 目标预算——保证直发模型的引用永远合身（对齐旧 ensureWithinPixelLimit
+      // 的守卫语义）。其余情况（其他子目录 / 超体积文件）仍走转码落副本。
+      const isCanonicalImage =
+        /^(images|previews)\//.test(insideRel) &&
+        stat.size <= getImageTargetBytes();
+      if (isCanonicalImage) {
+        return {
+          mediaType: ref.media_type ?? mimeFromExtension(path.extname(ref.url)),
+          bytes: ref.bytes ?? stat.size,
+          ...(ref.name ? { name: ref.name } : {}),
+          url: `sessions/${sessionId}/${insideRel}`,
+          refType: "session",
+        };
+      }
+    }
+
+    const buf = await fs.promises.readFile(ref.url);
+    return this.materializeImageBuffer(
+      sessionId,
+      buf,
+      ref.name || path.basename(ref.url),
+    );
+  }
+
+  /** 字节 → 转码（体积阶梯，与上传路径同款）→ 落会话 images|previews → session 引用 */
+  private async materializeImageBuffer(
+    sessionId: string,
+    buf: Buffer,
+    baseName: string,
+  ): Promise<FileRef> {
+    const sessionDir = getSessionDir(sessionId);
+    // 输出恒为 JPEG（transcode 契约）：name/fileExtension/mediaType 跟着 jpg 走
+    const stem = baseName.replace(/\.[^.]+$/, "") || "tool-image";
+    const image = await transcodeImage(buf);
+    const preview = await transcodePreview(buf);
+    const imageRes = await this.fileNaming.generateFilePathWithDate(
+      path.join(sessionDir, "images"),
+      `${stem}.jpg`,
+    );
+    const previewRes = await this.fileNaming.generateFilePathWithDate(
+      path.join(sessionDir, "previews"),
+      `${stem}.jpg`,
+    );
+    await fs.promises.writeFile(imageRes.filePath, image.data);
+    await fs.promises.writeFile(previewRes.filePath, preview.data);
+
+    return {
+      mediaType: "image/jpeg",
+      bytes: image.data.byteLength,
+      name: imageRes.fileName,
+      url: `sessions/${sessionId}/images/${imageRes.relativePath}`,
+      previewUrl: `sessions/${sessionId}/previews/${previewRes.relativePath}`,
+      fileExtension: "jpg",
+      refType: "session",
     };
   }
 }

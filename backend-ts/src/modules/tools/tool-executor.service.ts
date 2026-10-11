@@ -258,12 +258,13 @@ export class ToolExecutor {
       );
 
       let images: ImageContent[] | undefined;
+      let imageRefs: import("../plugins/api/plugin-api").ImageRefContent[] | undefined;
       let meta: Record<string, any> | undefined;
       let followUpUserInput: string | undefined;
       let resultIsError = false;
       let content: string;
 
-      // Distinguish ToolResultObject { content, images, meta, followUpUserInput } from legacy object / string
+      // Distinguish ToolResultObject { content, images, imageRefs, meta, followUpUserInput } from legacy object / string
       if (typeof result === "string") {
         content = result;
       } else if (typeof result === "object" && result !== null) {
@@ -271,6 +272,7 @@ export class ToolExecutor {
         if (typeof obj["content"] === "string") {
           // ToolResultObject — structured return
           images = (obj as ToolResultObject).images;
+          imageRefs = (obj as ToolResultObject).imageRefs;
           meta = (obj as ToolResultObject).meta;
           followUpUserInput = (obj as ToolResultObject).followUpUserInput;
           resultIsError = (obj as ToolResultObject).isError === true;
@@ -304,6 +306,7 @@ export class ToolExecutor {
         content,
         isError: resultIsError,
         images,
+        imageRefs,
         meta,
         // 不随大结果处理丢弃：反馈正文是协作语义载体，与 content 的截断/spill 无关
         ...(followUpUserInput ? { followUpUserInput } : {}),

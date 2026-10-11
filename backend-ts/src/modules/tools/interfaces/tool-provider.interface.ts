@@ -41,6 +41,12 @@ export interface ToolCallResponse {
   /** 工具返回的图片（base64），由 agent-engine 注入为隐藏 user 消息 */
   images?: import("../../plugins/api/plugin-api").ImageContent[];
   /**
+   * 工具返回的图片**引用**（字节已在磁盘，如 image_view / browser_screenshot）。
+   * 由 agent-engine 物化/转正为会话 images 引用后注入——持久化只落路径指针，
+   * 不落 base64。优先级高于 images。
+   */
+  imageRefs?: import("../../plugins/api/plugin-api").ImageRefContent[];
+  /**
    * 工具转交的用户输入正文。语义是一体的：**非空 ⇒ 引擎终止当前轮**（finishReason=plan_rejected），
    * 文字随 run() 返回值交回 chat-runner，作为**真实用户消息入队开启新轮次**（与手打消息同一条
    * 准入路径：可见、独立回合壳、成为模式切换检测的新基准）。

@@ -1302,7 +1302,11 @@ function messageToEventContent(content: ContentBlock[]): string {
   const image = content.find(
     (b): b is Extract<ContentBlock, { type: 'image' }> => b.type === 'image',
   );
-  if (image) return image.attachment.url ?? '';
+  if (image) {
+    // 兜底序列化只落引用；data: URL 是物化失败的降级形态（含整图 base64），不进事件存储
+    const url = image.attachment.url ?? '';
+    return url.startsWith('data:') ? '[inline image unavailable]' : url;
+  }
   const file = content.find(
     (b): b is Extract<ContentBlock, { type: 'file' }> => b.type === 'file',
   );
