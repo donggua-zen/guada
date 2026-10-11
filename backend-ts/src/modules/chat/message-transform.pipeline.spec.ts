@@ -176,7 +176,8 @@ describe('image-path-annotation step', () => {
     const note = (blocks[2] as { text: string }).text;
     expect(note).toContain('[Image attachment (read-only):');
     expect(note).toContain(path.join(path.resolve(uploadRoot), 'images/img1.png'));
-    expect(note).toContain('image_recognize');
+    // 注解只附路径、不暗示调用工具（文案设计约定，见 imagePathAnnotationStep）
+    expect(note).not.toContain('image_recognize');
   });
 
   it('data: 内联图无物理路径 → 不追加注解', () => {

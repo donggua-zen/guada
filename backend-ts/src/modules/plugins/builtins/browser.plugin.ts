@@ -10,10 +10,7 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 import { PluginApi } from "../api/plugin-api";
 import { BridgeClient } from "../../bridge/bridge-client";
 import { safeTruncate } from "../../../common/utils/string.utils";
-import {
-  supportsMultimodal,
-  ensureWithinPixelLimit,
-} from "../utils/vision-utils";
+import { supportsMultimodal } from "../utils/vision-utils";
 import langZh from "./browser.lang.zh.json";
 import langEn from "./browser.lang.en.json";
 
@@ -503,21 +500,22 @@ export class BrowserPlugin extends PluginBase {
             }
             parts.push(`Dimensions: ${result.width}x${result.height}`);
 
-            // 多模态模型：直接返回图片数据，省去 AI 再调 image_view 的一轮循环
+            // 多模态模型：直接返回图片引用，省去 AI 再调 image_view 的一轮循环。
+            // 截图已由浏览器服务落盘（saved_path），回传引用即可——引擎统一物化进
+            // 会话 images 目录并注入；不在插件层读回转 base64（那条链曾把 base64
+            // 内联进快照 jsonl），体积归一化由引擎落盘步骤负责。
             if (supportsMultimodal(ctx) && result.saved_path) {
-              let imageBuffer: Buffer = await fs.promises.readFile(
-                result.saved_path,
-              );
-              imageBuffer = await ensureWithinPixelLimit(imageBuffer);
               parts.push(
                 "The screenshot will be injected as a subsequent user message for your visual analysis.",
               );
               return {
                 content: parts.join("\n"),
-                images: [
+                imageRefs: [
                   {
+                    url: result.saved_path,
+                    refType: "local" as const,
                     media_type: "image/png",
-                    data: imageBuffer.toString("base64"),
+                    name: path.basename(result.saved_path),
                   },
                 ],
               };

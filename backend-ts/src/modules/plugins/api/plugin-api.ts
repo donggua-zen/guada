@@ -27,9 +27,26 @@ export interface ImageContent {
   data: string; // base64, no data: prefix
 }
 
+/**
+ * 工具返回的图片**引用**形态：字节已在磁盘上的生产者（image_view、browser_screenshot 等）
+ * 直接回传引用，避免「读盘 → base64 → 解码 → 再落盘」的字符串往返。
+ * url/refType 语义对齐 FileRef（conversation.types）：'local' = 本机绝对路径；
+ * 'session' = 会话数据目录内的自包含引用。引擎负责物化/转正后注入。
+ * base64 的 images 形态保留给字节只存在于内存/线上的来源（MCP、第三方插件）。
+ */
+export interface ImageRefContent {
+  url: string;
+  refType: "local" | "session";
+  media_type?: string;
+  bytes?: number;
+  name?: string;
+}
+
 export interface ToolResultObject {
   content: string;
   images?: ImageContent[];
+  /** 磁盘图片引用（优先于 images）：引擎物化进会话 images 目录，持久化只落路径指针 */
+  imageRefs?: ImageRefContent[];
   /**
    * UI 渲染元数据（仅前端消费，不进 LLM 上下文）。
    * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。

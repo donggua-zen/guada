@@ -116,8 +116,10 @@ export class ImageRecognitionPlugin extends PluginBase {
 
     // ── Toolkit 2: image_view (multimodal models) ──
     // Loads only when the current model supports multimodal input.
-    // Returns the image as base64 via the structured ToolResult protocol,
-    // letting the LLM see the image directly without a separate vision model call.
+    // Returns the image as a disk reference (imageRefs) via the structured
+    // ToolResult protocol — the engine materializes it into the session images
+    // directory and injects it, letting the LLM see the image directly without
+    // a separate vision model call.
     api.registerToolKit({
       id: "image_view",
       name: "%imageRecognition.imageViewName%",
@@ -149,9 +151,11 @@ export class ImageRecognitionPlugin extends PluginBase {
               ctx?.session.workspacePath,
             );
 
-            let imageBuffer: Buffer = await fs.readFile(physicalPath);
-            imageBuffer = await ensureWithinPixelLimit(imageBuffer);
-            const base64Data = imageBuffer.toString("base64");
+            // 图片已在磁盘上：stat 校验存在性（错误反馈与旧 readFile 一致）后直接回传
+            // 引用，由引擎统一物化进会话 images 目录。不在插件层做 readFile/转 base64——
+            // 那条往返链曾把 base64 内联进快照 jsonl；体积/像素归一化由引擎落盘步骤
+            //（transcode 体积阶梯）负责。
+            const stat = await fs.stat(physicalPath);
             const ext = path
               .extname(physicalPath)
               .toLowerCase()
@@ -160,7 +164,15 @@ export class ImageRecognitionPlugin extends PluginBase {
 
             return {
               content: "Image loaded successfully. It will be injected as a subsequent user message in the current conversation for your visual analysis.",
-              images: [{ media_type: mimeType, data: base64Data }],
+              imageRefs: [
+                {
+                  url: physicalPath,
+                  refType: "local" as const,
+                  media_type: mimeType,
+                  bytes: stat.size,
+                  name: path.basename(physicalPath),
+                },
+              ],
             };
           },
           display: {
