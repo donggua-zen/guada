@@ -34,9 +34,10 @@
                     <div v-else class="plan-placeholder">{{ t('chat.plan.streamingHint') }}</div>
                 </div>
             </div>
-            <!-- 参数仍在写（流式中）不提供面板入口；待审批时正文已定稿并随 assistant
-                 消息落库，转录里查得到，放行 -->
-            <el-button v-if="!executing || pendingApproval" type="primary" round size="large" class="plan-open-btn"
+            <!-- 正文一出现就给面板入口：生成期间面板会直接读消息树里这份半截 args
+                 （见 utils/sessionPlan 的 findPlanDraft），所以半成品也是可看的。
+                 正文还没产出时不显示——没有可看的东西，放了就是"点了没反应"。 -->
+            <el-button v-if="content" type="primary" round size="large" class="plan-open-btn"
                 @click="openPanel">
                 {{ t('chat.plan.viewFullDoc') }}
                 <el-icon :size="16" class="plan-open-icon">
