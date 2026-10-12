@@ -11,7 +11,8 @@
             </GdTooltip>
             <template v-if="selected">
                 <span class="text-sm font-medium truncate">{{ selected.title }}</span>
-                <PlanStatusBadge class="shrink-0" :status="selected.status" />
+                <PlanStatusBadge v-if="selected.status" class="shrink-0" :status="selected.status" />
+                <span v-else-if="selected.streaming" class="shrink-0 plan-streaming">{{ t('chat.plan.streamingHint') }}</span>
             </template>
             <span v-else class="text-sm font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
         </div>
@@ -46,15 +47,18 @@
                         </GdTooltip>
                     </div>
                     <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
-                        <div v-if="plans.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
+                        <div v-if="entries.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
                             {{ t('chat.plan.empty') }}
                         </div>
-                        <button v-for="item in plans" :key="item.planId" class="plan-item"
+                        <button v-for="item in entries" :key="item.planId" class="plan-item"
                             :class="{ 'plan-item-active': item.planId === selected?.planId }" @click="select(item)">
                             <span class="plan-item-title">{{ item.title }}</span>
                             <span class="flex items-center gap-1.5 mt-1">
-                                <PlanStatusBadge :status="item.status" />
-                                <span class="text-[11px] text-(--gd-color-text-gray)">{{ formatTime(item.createdAt) }}</span>
+                                <PlanStatusBadge v-if="item.status" :status="item.status" />
+                                <span v-else-if="item.streaming" class="plan-item-streaming">{{
+                                    t('chat.plan.streamingHint') }}</span>
+                                <span v-if="item.createdAt" class="text-[11px] text-(--gd-color-text-gray)">{{
+                                    formatTime(item.createdAt) }}</span>
                             </span>
                         </button>
                     </div>
@@ -74,8 +78,9 @@ import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { useSessionStore } from '@/stores/session'
 import { usePopup } from '@/composables/usePopup'
-import { refreshSessionPlans } from '@/utils/sessionPlan'
-import type { SessionPlanItem } from '@/types/session'
+import { findPlanDraft, refreshSessionPlans } from '@/utils/sessionPlan'
+import type { SessionPlanItem, SessionPlanStatus } from '@/types/session'
+import type { PlanCardStatus } from '@/utils/toolDisplay'
 
 const props = defineProps<{
     sessionId: string
@@ -90,13 +95,44 @@ const plans = computed<SessionPlanItem[]>(() =>
     props.sessionId ? sessionStore.sessionPlans(props.sessionId) ?? [] : [],
 )
 
+/** 生成中的计划（尚未落库）：直接读消息树里那份半截 args，正文随流式增长 */
+const draft = computed(() => (props.sessionId ? findPlanDraft(props.sessionId) : undefined))
+
+/** 面板条目：草稿排首位 + 持久化列表。
+ *  落库后同一 planId 由持久化条目接管（findPlanDraft 见到 planId 已入库就让位），
+ *  所以不会出重复条目，交接期间也不会闪空。 */
+interface PlanEntry {
+    planId: string
+    title: string
+    content: string
+    status?: SessionPlanStatus | PlanCardStatus
+    createdAt?: number
+    /** 生成中：正文仍在增长 */
+    streaming?: boolean
+}
+
+const entries = computed<PlanEntry[]>(() => {
+    const d = draft.value
+    if (!d) return [...plans.value]
+    return [
+        {
+            planId: d.planId,
+            title: t('chat.plan.title'),
+            content: d.content,
+            status: d.status,
+            streaming: d.streaming,
+        },
+        ...plans.value,
+    ]
+})
+
 /** 手动选中（默认展示最近一份——审批卡跳进来时正是当前待审的那份） */
 const selectedId = ref<string | null>(null)
-const selected = computed<SessionPlanItem | null>(() => {
-    if (plans.value.length === 0) return null
+const selected = computed<PlanEntry | null>(() => {
+    if (entries.value.length === 0) return null
     return (
-        plans.value.find((p) => p.planId === selectedId.value) ??
-        plans.value[0]
+        entries.value.find((p) => p.planId === selectedId.value) ??
+        entries.value[0]
     )
 })
 
@@ -119,7 +155,8 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 // 选中的计划被删除/列表刷新后不存在 → 回落到最新
-watch(plans, (list) => {
+// （候选里含生成中的草稿，否则落库交接的那一瞬间选中项会被当成失效清掉）
+watch(entries, (list) => {
     if (selectedId.value && !list.some((p) => p.planId === selectedId.value)) {
         selectedId.value = null
     }
@@ -144,7 +181,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeydown)
 })
 
-function select(item: SessionPlanItem): void {
+function select(item: PlanEntry): void {
     selectedId.value = item.planId
     directoryOpen.value = false
 }
@@ -154,7 +191,8 @@ async function refresh(): Promise<void> {
     if (!list) toast.error(t('chat.plan.refreshFailed'))
 }
 
-function formatTime(ms: number): string {
+function formatTime(ms: number | undefined): string {
+    if (!ms) return ''
     const d = new Date(ms)
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -246,6 +284,20 @@ function formatTime(ms: number): string {
 
 .plan-icon-btn:hover {
     color: var(--gd-color-text);
+}
+
+/* 生成中的计划标记：与流内卡片头部的流式提示同文案、同灰阶（不新增 i18n key）。
+   头部一行用 12px，目录行与同行的 11px 时间对齐。 */
+.plan-streaming {
+    font-size: 12px;
+    color: var(--gd-color-text-gray);
+    white-space: nowrap;
+}
+
+.plan-item-streaming {
+    font-size: 11px;
+    color: var(--gd-color-text-gray);
+    white-space: nowrap;
 }
 
 /* 详情滚动区：内边距对齐预览 iframe 的 body padding（16px） */
