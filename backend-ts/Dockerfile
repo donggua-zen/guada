@@ -100,6 +100,9 @@ COPY --from=builder /repo/backend-ts/static ./static
 # Copy bundled skills from builder (用于同步到 skills/.system/)
 COPY --from=builder /repo/backend-ts/bundled-skills ./bundled-skills
 
+# Copy bundled agents / providers from builder (内置助手模板 / 供应商类型目录；与 electron 包保持一致)
+COPY --from=builder /repo/backend-ts/bundled-agents ./bundled-agents
+COPY --from=builder /repo/backend-ts/bundled-providers ./bundled-providers
 
 
 # Copy entrypoint script and convert line endings

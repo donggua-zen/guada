@@ -185,7 +185,7 @@ describe('ShellPlugin', () => {
           },
         ),
       };
-      const policyRules = policyRulesStub({ appendAllowRule: jest.fn(async () => {}) });
+      const policyRules = policyRulesStub({ appendRule: jest.fn(async () => {}) });
       const pm = {
         kill: jest.fn(),
         writeToStdin: jest.fn(),
@@ -382,7 +382,11 @@ describe('ShellPlugin', () => {
 
       await tool.execute({ command: 'ssh root@host "ls"' }, ctx, undefined);
 
-      expect(policyRules.appendAllowRule).toHaveBeenCalledWith('project', 'ssh *', 'C:\\ws');
+      expect(policyRules.appendRule).toHaveBeenCalledWith(
+        'project',
+        { action: 'allow', match: 'ssh *' },
+        'C:\\ws',
+      );
     });
 
     it('越界类询问不推导放通规则（否则 `rm *` 会把越界删除也一并放通）', async () => {
@@ -393,12 +397,12 @@ describe('ShellPlugin', () => {
       expect(ask.requestCommandApproval).toHaveBeenCalledTimes(1);
       const params = (ask.requestCommandApproval.mock.calls[0] as any[])[1];
       expect(params.allowRule).toBeNull();
-      expect(policyRules.appendAllowRule).not.toHaveBeenCalled();
+      expect(policyRules.appendRule).not.toHaveBeenCalled();
     });
 
     it('规则落盘失败 → 退回会话内记忆（同一命令本会话不再重复问）', async () => {
       const { tool, ctx, ask, policyRules } = await setupPolicy({ approval: 'global' });
-      (policyRules.appendAllowRule as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+      (policyRules.appendRule as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
 
       await tool.execute({ command: 'ssh root@host "ls"' }, ctx, undefined);
       await tool.execute({ command: 'ssh root@host "ls"' }, ctx, undefined);

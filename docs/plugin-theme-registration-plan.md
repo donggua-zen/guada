@@ -332,7 +332,7 @@ electron/preload.ts                                         (+getThemeBootstrap 
 
 **现象**：dev 模式（ts-node-dev）下插件链路已端到端验证通过；但 **Electron 打包生产版主题会消失（只剩 default）**。三个根因叠加：
 
-1. **打包不含插件目录**：`package.json` `build.extraResources` 未包含项目根 `plugins/`（现仅打包 backend-ts/dist、node_modules、static、build-resources）
+1. **打包不含插件目录**：`package.json` `build.extraResources` 未包含项目根 `plugins/`（当时的清单只有 backend-ts/dist、node_modules、static、build-resources；随包数据目录 `bundled-skills` / `bundled-agents` / `bundled-providers` 同样漏了，2026-10-12 补齐，见 `backend-ts/test/packaging/electron-packaging.spec.ts`）
 2. **生产模式插件目录为空**：`electron/main.ts` 生产 spawn env 只注入 `PLUGINS_USER_DIR`（userData/plugins，安装后为空），未注入指向随包资源的插件目录
 3. **生产无法加载 .ts 插件入口**：生产后端以纯 Node 运行 `backend-ts/dist/main.js`（无 ts-node hook），而外部插件入口是 `index.ts`（dev 靠 ts-node-dev 的 transpile hook 编译）；且插件 `import "../../backend-ts/src/modules/plugins"` 依赖源码路径，打包后仅存在 `dist/` 无 `src/`
 

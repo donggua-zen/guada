@@ -1,17 +1,17 @@
-import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import {
   PolicyRulesService,
-  type PolicyRulesFile,
+  type PolicyUserFile,
   type PolicyScope,
 } from "../../common/services/policy-rules.service";
 
 /**
- * 命令策略规则（用户可配的 allow / ask / deny + 工作区外可写路径）。
+ * 命令策略配置（出厂规则 + 你的改动）。
  *
- * 读写的是磁盘上的 YAML 文件（全局 + 项目级），UI 与手编共用同一份事实源：
- * - `GET  /policy/rules?workspacePath=…` → 生效规则 + 两级原文 + 文件路径 + 校验告警
- * - `PUT  /policy/rules`                  → 写入指定作用域（校验失败返回 500 语义的错误信息）
+ * - `GET  /policy/rules?workspacePath=…` → 生效规则 + 出厂清单 + 文件路径 + 校验告警
+ * - `PUT  /policy/rules`                 → 写入你的改动（rules / readOnlyRemove；校验失败抛错）
+ * - `POST /policy/reset`                 → 清空你的改动（覆盖前备份 .bak）
  */
 @Controller("policy")
 @UseGuards(AuthGuard)
@@ -28,11 +28,16 @@ export class PolicyController {
     @Body()
     body: {
       scope?: PolicyScope;
-      rules?: Partial<PolicyRulesFile>;
+      content?: Partial<PolicyUserFile>;
       workspacePath?: string | null;
     },
   ) {
     const scope: PolicyScope = body.scope === "project" ? "project" : "global";
-    return this.policyRules.saveScope(scope, body.rules ?? {}, body.workspacePath ?? null);
+    return this.policyRules.saveUser(scope, body.content ?? {}, body.workspacePath ?? null);
+  }
+
+  @Post("reset")
+  async reset(@Query("workspacePath") workspacePath?: string) {
+    return this.policyRules.resetUser("global", workspacePath?.trim() || null);
   }
 }

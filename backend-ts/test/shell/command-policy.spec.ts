@@ -120,7 +120,7 @@ describe("command-policy / POSIX 绕过样本（不得放行）", () => {
     ["env rm -rf /", "unknown-command"],
     ["dxargs ls", "unknown-command"],
     // 白名单命令的写形态
-    ["find . -delete", "write-signal"],
+    ["find . -delete", "unsafe-flags"],
     ["find . -exec rm {} ;", "write-signal"],
     ["find . -fprint out.txt", "write-signal"],
     ["sed -i 's/a/b/' f.txt", "write-signal"],
@@ -148,7 +148,7 @@ describe("command-policy / POSIX 绕过样本（不得放行）", () => {
     ["ls &", "unverifiable-syntax"],
     ['ls "unterminated', "unverifiable-syntax"],
     // git 写形态与危险全局开关
-    ["git push", "unknown-command"],
+    ["git push", "not-whitelisted"],
     ["git commit -m x", "unknown-command"],
     ["git checkout main", "unknown-command"],
     ["git reset --hard", "unknown-command"],
@@ -186,21 +186,21 @@ describe("command-policy / POSIX 绕过样本（不得放行）", () => {
 
   it.each(cases)("%s", (command, _code) => {
     const decision = bash(command);
-    expect(decision.kind).toBe("needs-approval");
+    expect(decision.kind).toBe("denied");
   });
 
   it.each([
-    ["find . -delete", "write-signal"],
-    ["sed -i 's/a/b/' f", "write-signal"],
+    ["find . -delete", "unsafe-flags"],
+    ["sed -i 's/a/b/' f", "unsafe-flags"],
     ["echo hi > out.txt", "write-signal"],
-    ["rm -rf x", "unknown-command"],
-    ["git push", "unknown-command"],
+    ["rm -rf x", "not-whitelisted"],
+    ["git push", "not-whitelisted"],
     ["echo $HOME", "unverifiable-syntax"],
     ["cat $(ls)", "unverifiable-syntax"],
   ])("原因码分流：%s → %s", (command, code) => {
     const decision = bash(command);
-    expect(decision.kind).toBe("needs-approval");
-    if (decision.kind === "needs-approval") {
+    expect(decision.kind).toBe("denied");
+    if (decision.kind === "denied") {
       expect(decision.code).toBe(code);
     }
   });
@@ -295,7 +295,7 @@ describe("command-policy / PowerShell 判定", () => {
     "Get-Content file.txt -Wait",
   ])("不得放行：%s", (command) => {
     const decision = ps(command);
-    expect(decision.kind).toBe("needs-approval");
+    expect(decision.kind).toBe("denied");
   });
 
   it.each([
@@ -309,7 +309,7 @@ describe("command-policy / PowerShell 判定", () => {
     "Get-ChildItem (Get-Item .)",
   ])("不可核验：%s", (command) => {
     const decision = ps(command);
-    expect(decision.kind).toBe("needs-approval");
+    expect(decision.kind).toBe("denied");
   });
 });
 
@@ -324,13 +324,13 @@ describe("command-policy / 双方言合成", () => {
   it("执行壳为 bash 时，另一方言的已知写操作仍触发审批（绊线）", () => {
     // Remove-Item 在 bash 里不存在（会报 command not found），但 PS 语义下是删除 → 保守拦下
     const decision = bash("Remove-Item -Recurse -Force x");
-    expect(decision.kind).toBe("needs-approval");
+    expect(decision.kind).toBe("denied");
   });
 
   it("cmd.exe 没有只读白名单 → 一律需审批", () => {
     const decision = evaluateCommand({ command: "dir", shellKind: "cmd" });
-    expect(decision.kind).toBe("needs-approval");
-    if (decision.kind === "needs-approval") {
+    expect(decision.kind).toBe("denied");
+    if (decision.kind === "denied") {
       expect(decision.code).toBe("no-allowlist");
     }
   });
@@ -350,16 +350,16 @@ describe("command-policy / 诊断文案（拼进模型可见的英文消息）�
     "git config --bogus",
   ])("%s", (command) => {
     const decision = bash(command);
-    expect(decision.kind).toBe("needs-approval");
-    if (decision.kind === "needs-approval") {
+    expect(decision.kind).toBe("denied");
+    if (decision.kind === "denied") {
       expect(decision.reason).toMatch(/^[\x20-\x7E]+$/);
     }
   });
 
   it("cmd 无白名单的原因同样是英文", () => {
     const decision = evaluateCommand({ command: "dir", shellKind: "cmd" });
-    expect(decision.kind).toBe("needs-approval");
-    if (decision.kind === "needs-approval") {
+    expect(decision.kind).toBe("denied");
+    if (decision.kind === "denied") {
       expect(decision.reason).toMatch(/^[\x20-\x7E]+$/);
     }
   });

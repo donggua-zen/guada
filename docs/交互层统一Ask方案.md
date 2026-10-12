@@ -62,7 +62,8 @@ DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异
   自定义→抛 AskDeniedError('rejected', feedback=用户文本)。
 - **执行许可审批**（命令策略 / 工作区外文件写入）= requestCommandApproval / requestWriteApproval
   （命令卡四选项：本次允许 / **放通此类·本项目** / **放通此类·全局** / 拒绝——「放通此类」把服务端
-  推导出的前缀规则写进 `policy.yaml`；文件写入卡三选项：本次允许 / 本会话内始终允许该路径 / 拒绝；
+  推导出的前缀规则写进 `policy.yaml` 的 `workspaceWrite.allow`；
+  文件写入卡三选项：本次允许 / 本会话内始终允许该路径 / 拒绝；
   两处均无人应答 fail-closed）。
   ~~**沙盒提权** = 插件侧组合:parseEscalationArgs/assertStrictlyWider + requestApproval + one-shot 放宽~~
   → **已移除**(2026-10)：模型不能自我提权，能力放宽只由用户在审批卡上授予，或用户自行切换档位。

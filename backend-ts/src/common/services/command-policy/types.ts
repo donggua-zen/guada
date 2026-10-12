@@ -25,10 +25,12 @@ export interface DialectAnalysis {
   offending: string[];
 }
 
-/** 工作档（黑名单 + 作用域）专属的原因分类 */
+/** 工作档（例外制）+ 两档共有的原因分类 */
 export type WorkspacePolicyCode =
   | "catastrophic"
+  | "sensitive-path"
   | "user-deny"
+  | "user-ask"
   | "out-of-scope"
   | "host-action"
   | "remote-side-effect"
@@ -36,20 +38,70 @@ export type WorkspacePolicyCode =
   | "unverifiable"
   | "no-workspace";
 
+/** 只读档（名单制 + 代码兜底）专属的原因分类 */
+export type ReadOnlyPolicyCode =
+  | "not-whitelisted"
+  | "unsafe-flags"
+  | "blocked-floor";
+
 /** 非白名单命令的原因分类（决定给模型的文案） */
 export type CommandPolicyCode =
   | "unknown-command"
   | "unverifiable-syntax"
   | "write-signal"
   | "no-allowlist"
+  | ReadOnlyPolicyCode
   | WorkspacePolicyCode;
 
 /**
  * 判定档位：
- * - `read-only`：正向只读白名单（不在白名单内即拒绝）
- * - `workspace-write`：黑名单 + 作用域（默认放行，灾难级硬拒、越界/不可核验弹窗）
+ * - `read-only`：只读名单制（不在名单内即拒绝；**不弹窗**）
+ * - `workspace-write`：例外制（默认执行；命中规则 / 越界写 / 敏感路径才拦）
  */
 export type PolicyMode = "read-only" | "workspace-write";
+
+// ==================== 规则（v3：一条有序表，两种条目） ====================
+
+export type RuleAction = "allow" | "ask" | "deny";
+
+/** 命令规则：命令前缀匹配（末尾 `*` = 其后任意；语义同 v2） */
+export interface CommandRule {
+  action: RuleAction;
+  match: string;
+}
+
+/** 路径规则：glob（`allow` = 可写根，`ask` = 敏感路径，`deny` = 一律拒绝） */
+export interface PathRule {
+  action: RuleAction;
+  path: string;
+}
+
+export type PolicyRule = CommandRule | PathRule;
+
+export function isPathRule(rule: PolicyRule): rule is PathRule {
+  return typeof (rule as PathRule).path === "string";
+}
+
+/**
+ * 生效策略（由 policy-rules.service 组装：出厂规则 + 用户改动）。
+ *
+ * 判定顺序（见 docs/windows-command-policy.md）：
+ *   T0 → deny（任意规则）→ 路径规则（用户→出厂）→ 命令规则（用户→出厂）→ 默认动作 → 越界检查
+ */
+export interface EffectivePolicy {
+  /** 用户规则（你的改动；先于出厂规则判定） */
+  userRules: readonly PolicyRule[];
+  /** 出厂规则（随版本升级自动跟随） */
+  factoryRules: readonly PolicyRule[];
+  readOnly: {
+    /** 出厂只读名单（条目 = 命令前缀，隐式"其后任意参数"） */
+    factory: readonly string[];
+    /** 用户划掉的出厂条目（UI 删行写这里） */
+    removed: readonly string[];
+    /** 出厂条目集合（归一后）：命中即"内置条目"，参数级核验交给方言分析器 */
+    builtin: ReadonlySet<string>;
+  };
+}
 
 /**
  * 执行壳的 kind（与 process-manager 的 ShellKind 结构兼容）。
@@ -63,10 +115,17 @@ export type PolicyShellKind = "gitbash" | "powershell" | "cmd" | "sh";
  * - `needs-approval`：由调用方按档位决定弹窗还是拒绝
  * - `denied`：系统硬拒（灾难级 / 用户 deny 规则），**不可经审批放通**
  */
+/** 敏感路径命中（审批卡显示目标与操作；「放通此类」写这条 glob 的路径规则） */
+export interface PolicyPathHit {
+  glob: string;
+  target: string;
+  op: "read" | "write" | "delete";
+}
+
 export type CommandDecision =
   | { kind: "whitelisted"; reason: string }
-  | { kind: "needs-approval"; code: CommandPolicyCode; reason: string }
-  | { kind: "denied"; code: CommandPolicyCode; reason: string };
+  | { kind: "needs-approval"; code: CommandPolicyCode; reason: string; pathHit?: PolicyPathHit }
+  | { kind: "denied"; code: CommandPolicyCode; reason: string; pathHit?: PolicyPathHit };
 
 /** 命令原文长度上限（超过即不可核验） */
 export const MAX_POLICY_COMMAND_LENGTH = 4096;

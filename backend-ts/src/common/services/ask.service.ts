@@ -193,41 +193,63 @@ export class AskService {
        * `null` = 不提供放通选项（例如越界类询问——推导出的 `rm *` 会把越界删除也放通）
        */
       allowRule?: string | null;
+      /** 规则种类：命令规则（默认）或路径规则（敏感路径放通用） */
+      allowRuleKind?: "command" | "path";
+      /** 敏感路径卡的补充说明（目标路径 / 操作） */
+      pathDetail?: { target: string; op: "read" | "write" | "delete" };
       abortSignal?: AbortSignal;
     },
   ): Promise<"once" | { scope: "project" | "global" }> {
     // 从命令推导"放通此类"的前缀规则（灾难级命令不提供放通选项）
     const rule =
       params.allowRule === undefined ? deriveAllowRule(params.command) : params.allowRule;
+    const isPath = params.allowRuleKind === "path";
+    const ruleLabel = isPath ? `路径「${rule}」` : `「${rule}」`;
     const options = [
       { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
       ...(rule
         ? [
             {
               label: COMMAND_ALLOW_PROJECT,
-              description: `把「${rule}」写入本项目 .guada/policy.yaml`,
+              description: isPath
+                ? `把${ruleLabel}加入本项目的放行路径`
+                : `把${ruleLabel}写入本项目 .guada/policy.yaml`,
             },
             {
               label: COMMAND_ALLOW_GLOBAL,
-              description: `把「${rule}」写入全局 policy.yaml（对所有项目生效）`,
+              description: isPath
+                ? `把${ruleLabel}加入全局放行路径（对所有项目生效）`
+                : `把${ruleLabel}写入全局 policy.yaml（对所有项目生效）`,
             },
           ]
         : []),
-      { label: COMMAND_DENY, description: "不执行，并把拒绝反馈给模型" },
+      {
+        label: COMMAND_DENY,
+        description: isPath
+          ? "不放行（模型会继续用工作区内的方式完成）"
+          : "不执行，并把拒绝反馈给模型",
+      },
     ];
 
+    const opText = { read: "读取", write: "写入", delete: "删除" } as const;
+    const sensitive = params.pathDetail;
     const answers = await this.ask(
       session,
       {
         kind: "approval",
-        title: "命令需要批准",
+        title: sensitive ? "敏感文件访问" : "命令需要批准",
         toolCallId: params.toolCallId,
         toolName: "run_command",
         questions: [
           {
             id: "command-approval",
-            question: "是否允许执行这条命令？",
-            detail: [params.reason, "", params.command]
+            question: sensitive ? "是否允许这次敏感文件访问？" : "是否允许执行这条命令？",
+            detail: [
+              sensitive ? `目标：${sensitive.target}（${opText[sensitive.op]}）` : undefined,
+              params.reason,
+              "",
+              params.command,
+            ]
               .filter((part) => part !== undefined)
               .join("\n"),
             options,
