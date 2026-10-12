@@ -308,6 +308,7 @@ export class GitController {
 
       const generator =
         this.sessionService.generateCommitMessageStream(
+          id,
           diffParts.join("\n\n"),
           constraintText,
           abortController.signal,

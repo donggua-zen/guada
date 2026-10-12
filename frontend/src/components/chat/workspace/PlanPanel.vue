@@ -25,7 +25,7 @@
                  代码块与语法高亮全部由 --gd-md-font-size 派生，与预览 iframe 共用同一份全局样式），
                  并沿用预览的阅读列宽上限、16px 内边距与横向滚动。 -->
             <div v-if="selected" class="flex-1 min-h-0 overflow-y-auto overflow-x-auto plan-detail-scroll">
-                <MarkdownContent class="markdown-text plan-detail-doc" :content="selected.content" />
+                <MarkdownContent class="markdown-text plan-detail-doc" :content="detailContent" />
             </div>
             <div v-else class="flex-1 flex items-center justify-center text-xs text-(--gd-color-text-gray)">
                 {{ t('chat.plan.empty') }}
@@ -47,18 +47,15 @@
                         </GdTooltip>
                     </div>
                     <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
-                        <div v-if="entries.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
-                            {{ t('chat.plan.empty') }}
+                        <div v-if="plans.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
+                            {{ draft ? t('chat.plan.streamingHint') : t('chat.plan.empty') }}
                         </div>
-                        <button v-for="item in entries" :key="item.planId" class="plan-item"
+                        <button v-for="item in plans" :key="item.planId" class="plan-item"
                             :class="{ 'plan-item-active': item.planId === selected?.planId }" @click="select(item)">
                             <span class="plan-item-title">{{ item.title }}</span>
                             <span class="flex items-center gap-1.5 mt-1">
-                                <PlanStatusBadge v-if="item.status" :status="item.status" />
-                                <span v-else-if="item.streaming" class="plan-item-streaming">{{
-                                    t('chat.plan.streamingHint') }}</span>
-                                <span v-if="item.createdAt" class="text-[11px] text-(--gd-color-text-gray)">{{
-                                    formatTime(item.createdAt) }}</span>
+                                <PlanStatusBadge :status="item.status" />
+                                <span class="text-[11px] text-(--gd-color-text-gray)">{{ formatTime(item.createdAt) }}</span>
                             </span>
                         </button>
                     </div>
@@ -78,6 +75,7 @@ import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { useSessionStore } from '@/stores/session'
 import { usePopup } from '@/composables/usePopup'
+import { useThrottledValue } from '@/composables/useThrottledValue'
 import { findPlanDraft, refreshSessionPlans } from '@/utils/sessionPlan'
 import type { SessionPlanItem, SessionPlanStatus } from '@/types/session'
 import type { PlanCardStatus } from '@/utils/toolDisplay'
@@ -95,12 +93,11 @@ const plans = computed<SessionPlanItem[]>(() =>
     props.sessionId ? sessionStore.sessionPlans(props.sessionId) ?? [] : [],
 )
 
-/** 生成中的计划（尚未落库）：直接读消息树里那份半截 args，正文随流式增长 */
+/** 生成中的计划（尚未落库）：直接读消息树里那份半截 args，正文随流式增长。
+ *  它是**面板的当前内容**，不是目录条目——目录是历史（对齐 ZCode：计划目录只收终态行，
+ *  流式计划的入口是流内卡片，从卡片进来时展示的正是这一份）。 */
 const draft = computed(() => (props.sessionId ? findPlanDraft(props.sessionId) : undefined))
 
-/** 面板条目：草稿排首位 + 持久化列表。
- *  落库后同一 planId 由持久化条目接管（findPlanDraft 见到 planId 已入库就让位），
- *  所以不会出重复条目，交接期间也不会闪空。 */
 interface PlanEntry {
     planId: string
     title: string
@@ -111,30 +108,37 @@ interface PlanEntry {
     streaming?: boolean
 }
 
-const entries = computed<PlanEntry[]>(() => {
+const draftEntry = computed<PlanEntry | null>(() => {
     const d = draft.value
-    if (!d) return [...plans.value]
-    return [
-        {
-            planId: d.planId,
-            title: t('chat.plan.title'),
-            content: d.content,
-            status: d.status,
-            streaming: d.streaming,
-        },
-        ...plans.value,
-    ]
+    if (!d) return null
+    return {
+        planId: d.planId,
+        title: t('chat.plan.title'),
+        content: d.content,
+        status: d.status,
+        streaming: d.streaming,
+    }
 })
 
 /** 手动选中（默认展示最近一份——审批卡跳进来时正是当前待审的那份） */
 const selectedId = ref<string | null>(null)
+/** 当前展示：生成中的计划优先（从卡片进来时就是它）；显式选过则按 planId 取目录条目。
+ *  落库后草稿让位、selectedId 仍为空 → 回落到目录首条，而列表按"最近在前"排，
+ *  所以接替的正是刚落库的那份，交接不跳。 */
 const selected = computed<PlanEntry | null>(() => {
-    if (entries.value.length === 0) return null
-    return (
-        entries.value.find((p) => p.planId === selectedId.value) ??
-        entries.value[0]
-    )
+    if (selectedId.value) {
+        return plans.value.find((p) => p.planId === selectedId.value) ?? null
+    }
+    return draftEntry.value ?? plans.value[0] ?? null
 })
+
+/** 详情正文的节流值。只在"生成中"时启用：正文随时间增长，每个 token 都让 MarkdownContent
+ *  重 parse 整篇 + 全量 DOM diff，代价随篇幅上升；而已落库的计划是静态文本，更不能节流——
+ *  在目录里切换选中时用户必须立刻看到新计划，晚 300ms 会像是没点动。 */
+const throttledDraftContent = useThrottledValue(() => draftEntry.value?.content ?? '')
+const detailContent = computed(() =>
+    selected.value?.streaming ? throttledDraftContent.value : selected.value?.content ?? '',
+)
 
 // ── 目录抽屉：可开合的覆盖层（替代原「常驻左列」，避免挤压详情宽度）──
 // 选中某项后自动关闭——目录是"选一下就走"的临时入口，不常驻占位。
@@ -155,8 +159,8 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 // 选中的计划被删除/列表刷新后不存在 → 回落到最新
-// （候选里含生成中的草稿，否则落库交接的那一瞬间选中项会被当成失效清掉）
-watch(entries, (list) => {
+// （监听目录列表：展示生成中那份时 selectedId 恒为空，无需参与）
+watch(plans, (list) => {
     if (selectedId.value && !list.some((p) => p.planId === selectedId.value)) {
         selectedId.value = null
     }
@@ -191,8 +195,7 @@ async function refresh(): Promise<void> {
     if (!list) toast.error(t('chat.plan.refreshFailed'))
 }
 
-function formatTime(ms: number | undefined): string {
-    if (!ms) return ''
+function formatTime(ms: number): string {
     const d = new Date(ms)
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -286,16 +289,9 @@ function formatTime(ms: number | undefined): string {
     color: var(--gd-color-text);
 }
 
-/* 生成中的计划标记：与流内卡片头部的流式提示同文案、同灰阶（不新增 i18n key）。
-   头部一行用 12px，目录行与同行的 11px 时间对齐。 */
+/* 生成中的计划标记：与流内卡片头部的流式提示同文案、同灰阶（不新增 i18n key） */
 .plan-streaming {
     font-size: 12px;
-    color: var(--gd-color-text-gray);
-    white-space: nowrap;
-}
-
-.plan-item-streaming {
-    font-size: 11px;
     color: var(--gd-color-text-gray);
     white-space: nowrap;
 }

@@ -650,17 +650,18 @@ async function createBrowser(): Promise<void> {
   align-items: center;
   gap: 6px;
   padding: 0 4px 3px;
-  font-size: var(--gd-size-text-base);
+  /* 小标签档：区标题要比自己的行（--gd-size-text-sm）小，故不能用会被主题抬到 15px 的 base */
+  font-size: var(--gd-size-text-xs);
   font-weight: 400;
   color: var(--gd-color-text-disabled);
-  /* 整数行高：原 1.2 × 14px = 16.8px（小数行盒）→ 区标题 16.8 + 3 = 19.8，
-     面板高度随之 99.8，内部所有行的 top 都带 .8/.3/.2 小数（实测 23 处）。
-     12px 的 .overview-section-count 也继承这里，17px 对它同样是整数。 */
+  /* 整数行高：区标题 17 + 3 = 20 整数，面板内所有行的 top 保持整数
+     （历史坑：曾用 1.2 倍行高，14px × 1.2 = 16.8 小数行盒，实测 23 处小数 top）。
+     同行内的 .overview-section-count 也继承这里，17px 对它同样是整数。 */
   line-height: 17px;
 }
 .overview-section-count {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--gd-size-text-xs);
   font-weight: 600;
   color: var(--gd-color-success);
 }
