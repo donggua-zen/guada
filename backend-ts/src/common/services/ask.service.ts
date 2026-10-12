@@ -12,12 +12,14 @@
 
 import { Injectable, Logger } from "@nestjs/common";
 import { InteractionWaitService } from "./interaction-wait.service";
+import { deriveAllowRule } from "./command-policy";
 import type { AskAnswerItem, AskRequest, AskSession } from "../types/ask.types";
 import { AskDeniedError } from "../types/ask.types";
 
-/** 命令审批的三个选项（前端按 label 原样渲染） */
+/** 命令审批的选项（前端按 label 原样渲染） */
 export const COMMAND_ALLOW_ONCE = "本次允许";
-export const COMMAND_ALLOW_SESSION = "本会话内始终允许";
+export const COMMAND_ALLOW_PROJECT = "放通此类（本项目）";
+export const COMMAND_ALLOW_GLOBAL = "放通此类（全局）";
 export const COMMAND_DENY = "拒绝";
 
 /** 文件写入审批的三个选项（工作区外路径；前端按 label 原样渲染） */
@@ -173,7 +175,7 @@ export class AskService {
    * 命令审批（Windows 命令策略层用）：本次允许 / 本会话内始终允许 / 拒绝。
    *
    * 与 requestApproval 分开是为了不动既有调用方（文件写入 / 计划审批仍是两选一）。
-   * 「本会话内始终允许」的记账在调用方（command-policy 的内存表），这里只负责问。
+   * 「放通此类」会由调用方把推导出的前缀规则写入 policy.yaml（本项目 / 全局），这里只负责问。
    *
    * @throws AskDeniedError('rejected', feedback) 拒绝或自定义回复
    * @throws AskDeniedError('cancelled') 用户停止
@@ -184,11 +186,36 @@ export class AskService {
       toolCallId?: string;
       /** 待批准的命令原文（展示在审批卡里） */
       command: string;
-      /** 为什么需要批准（不在白名单的原因） */
+      /** 为什么需要批准（命中哪条判定） */
       reason?: string;
+      /**
+       * "放通此类"要写入的前缀规则；`undefined` = 由本方法按命令推导；
+       * `null` = 不提供放通选项（例如越界类询问——推导出的 `rm *` 会把越界删除也放通）
+       */
+      allowRule?: string | null;
       abortSignal?: AbortSignal;
     },
-  ): Promise<"once" | "session"> {
+  ): Promise<"once" | { scope: "project" | "global" }> {
+    // 从命令推导"放通此类"的前缀规则（灾难级命令不提供放通选项）
+    const rule =
+      params.allowRule === undefined ? deriveAllowRule(params.command) : params.allowRule;
+    const options = [
+      { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
+      ...(rule
+        ? [
+            {
+              label: COMMAND_ALLOW_PROJECT,
+              description: `把「${rule}」写入本项目 .guada/policy.yaml`,
+            },
+            {
+              label: COMMAND_ALLOW_GLOBAL,
+              description: `把「${rule}」写入全局 policy.yaml（对所有项目生效）`,
+            },
+          ]
+        : []),
+      { label: COMMAND_DENY, description: "不执行，并把拒绝反馈给模型" },
+    ];
+
     const answers = await this.ask(
       session,
       {
@@ -203,14 +230,7 @@ export class AskService {
             detail: [params.reason, "", params.command]
               .filter((part) => part !== undefined)
               .join("\n"),
-            options: [
-              { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
-              {
-                label: COMMAND_ALLOW_SESSION,
-                description: "本会话内遇到完全相同的命令不再询问",
-              },
-              { label: COMMAND_DENY, description: "不执行，并把拒绝反馈给模型" },
-            ],
+            options,
           },
         ],
       },
@@ -222,7 +242,8 @@ export class AskService {
     if (answer.custom && answer.custom.trim()) {
       throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
     }
-    if (answer.selected.includes(COMMAND_ALLOW_SESSION)) return "session";
+    if (answer.selected.includes(COMMAND_ALLOW_PROJECT)) return { scope: "project" };
+    if (answer.selected.includes(COMMAND_ALLOW_GLOBAL)) return { scope: "global" };
     if (answer.selected.includes(COMMAND_ALLOW_ONCE)) return "once";
     throw new AskDeniedError("用户拒绝执行该命令", "rejected");
   }

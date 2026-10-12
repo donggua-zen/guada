@@ -14,9 +14,14 @@
 import { analyzePosixCommand } from "./posix-rules";
 import { analyzePowerShellCommand } from "./powershell-rules";
 import { scanCommand } from "./scan";
+import {
+  evaluateWorkspaceCommand,
+  type CommandRuleSet,
+} from "./workspace-rules";
 import type {
   CommandDecision,
   CommandPolicyCode,
+  PolicyMode,
   PolicyShellKind,
   ShellDialect,
 } from "./types";
@@ -25,6 +30,12 @@ export interface CommandPolicyInput {
   command: string;
   /** 当前执行壳（process-manager.getShellKind()） */
   shellKind: PolicyShellKind;
+  /** 档位；缺省 `read-only`（保持既有调用方语义不变） */
+  mode?: PolicyMode;
+  /** 会话工作区（工作档作用域判定的基准） */
+  workspacePath?: string;
+  /** 用户规则（工作档）；缺省即内置判定 */
+  rules?: CommandRuleSet;
 }
 
 function executingDialect(shellKind: PolicyShellKind): ShellDialect | null {
@@ -54,10 +65,29 @@ function summarize(reasons: readonly string[]): string {
 }
 
 /**
- * 判定一条命令：白名单放行 / 需人工批准。
- * 调用方按档位决定"需审批"是弹窗（workspace-write）还是直接拒绝（read-only）。
+ * 判定一条命令。
+ *
+ * - `mode === "workspace-write"`：走黑名单 + 作用域（默认放行，T0 硬拒，越界/不可核验 → 待审批）
+ * - 其余（含缺省）：走既有的只读白名单（不在白名单内 → 待审批）
  */
 export function evaluateCommand(input: CommandPolicyInput): CommandDecision {
+  if (input.mode === "workspace-write") {
+    const verdict = evaluateWorkspaceCommand({
+      command: input.command,
+      shellKind: input.shellKind,
+      workspacePath: input.workspacePath,
+      rules: input.rules,
+    });
+    if (verdict.tier === "allow") {
+      return { kind: "whitelisted", reason: `workspace-write policy: ${verdict.reason}` };
+    }
+    return {
+      kind: verdict.tier === "block" ? "denied" : "needs-approval",
+      code: verdict.code ?? "unverifiable",
+      reason: verdict.reason,
+    };
+  }
+
   const dialect = executingDialect(input.shellKind);
   if (!dialect) {
     return {

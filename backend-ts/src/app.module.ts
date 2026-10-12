@@ -11,6 +11,7 @@ import { AgentsModule } from "./modules/agents/agents.module";
 import { FilesModule } from "./modules/files/files.module";
 import { McpServersModule } from "./modules/mcp-servers/mcp-servers.module";
 import { SettingsModule } from "./modules/settings/settings.module";
+import { PolicyModule } from "./modules/policy/policy.module";
 import { UsersModule } from "./modules/users/users.module";
 import { ToolsModule } from "./modules/tools/tools.module";
 import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
@@ -58,6 +59,7 @@ import { HealthModule } from './modules/health/health.module';
     FilesModule,
     McpServersModule,
     SettingsModule,
+    PolicyModule, // 命令策略规则（policy.yaml 的读写 API）
     UsersModule,
     ToolsModule,
     KnowledgeBaseModule,

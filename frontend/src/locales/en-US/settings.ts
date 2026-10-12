@@ -224,6 +224,35 @@
     deleteGroupConfirm: 'Are you sure you want to delete group "{name}"? Sessions under this group will be automatically moved to ungrouped.',
   },
 
+  policy: {
+    title: 'Command Policy (workspace-write mode)',
+    intro:
+      'In workspace-write mode most commands run directly. Only these pause for approval: destructive actions whose targets fall outside the workspace (or in the home directory), remote side effects (ssh / scp / git push, ...), host-level operations (process / service control), and anything that cannot be verified statically (shell wrappers, variable-built targets). Catastrophic patterns (disk formatting, power state, download-and-execute) are refused outright. Read-only mode is unaffected and still allows only the read-only allowlist.',
+    fileGlobal: 'Global rules file',
+    fileProject:
+      'Project rules: <workspace>/.guada/policy.yaml (written by the "allow this kind · project" approval option)',
+    allowLabel: 'Allow',
+    allowHint:
+      'Matching commands run silently. One rule per line, token-prefix match, a trailing * means "anything after", e.g. ffmpeg *, npm run *.',
+    allowPlaceholder: 'ffmpeg *\nyt-dlp *',
+    askLabel: 'Always ask',
+    askHint: 'Matching commands always prompt (use it to tighten the built-in defaults), e.g. git push *.',
+    askPlaceholder: 'git push *',
+    denyLabel: 'Deny',
+    denyHint: 'Matching commands are refused; takes precedence over allow. Catastrophic patterns are never re-enabled here.',
+    denyPlaceholder: 'npm publish *',
+    writePathsLabel: 'Writable paths outside the workspace (writeAllowPaths)',
+    writePathsHint: 'File tools will not prompt for these directories (including subdirectories), e.g. D:/AI/videos/out.',
+    writePathsPlaceholder: 'D:/AI/videos/out',
+    save: 'Save',
+    reset: 'Clear all rules',
+    resetConfirm:
+      'Clearing falls back to the built-in policy only (dangerous actions still prompt / are refused). Continue?',
+    loadedHint: 'Takes effect immediately after saving — no restart needed.',
+    loadFailed: 'Failed to load rules',
+    saveFailed: 'Failed to save',
+  },
+
   system: {
     backToApp: 'Back to App',
     title: 'System Settings',
@@ -250,6 +279,7 @@
       profile: 'Account Overview',
       security: 'Security Settings',
       community: 'Feedback / Community',
+      policy: 'Command Policy',
     },
     community: {
       feedback: 'Feedback',

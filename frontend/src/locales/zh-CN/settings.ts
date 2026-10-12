@@ -226,6 +226,32 @@ export default {
     deleteGroupConfirm: '确定要删除分组 "{name}" 吗？该分组下的会话将自动归入未分组。',
   },
 
+  policy: {
+    title: '命令策略（工作模式）',
+    intro:
+      '工作目录可写档默认直接执行命令：只有破坏性动作越界（工作区外 / 家目录）、远程副作用（ssh / scp / git push 等）、主机级操作（杀进程 / 服务）与无法静态核验的结构（包装脚本、变量拼接）才会弹窗；灾难级操作（格式化磁盘 / 关机 / 下载即执行）一律直接拒绝。只读档不受这里影响，仍只放行只读白名单。',
+    fileGlobal: '全局规则文件',
+    fileProject: '项目级规则：<工作区>/.guada/policy.yaml（审批卡「放通此类·本项目」会自动写入）',
+    allowLabel: '放通（allow）',
+    allowHint:
+      '命中即静默执行、不再询问。一行一条，token 前缀匹配，末尾 * 表示其后任意，如 ffmpeg *、npm run *。',
+    allowPlaceholder: 'ffmpeg *\nyt-dlp *',
+    askLabel: '一律询问（ask）',
+    askHint: '命中即弹窗（用于收紧内置的默认放行），如 git push *。',
+    askPlaceholder: 'git push *',
+    denyLabel: '直接拒绝（deny）',
+    denyHint: '命中即拒绝，优先级高于放通；灾难级操作即使写在这里也不会放开。',
+    denyPlaceholder: 'npm publish *',
+    writePathsLabel: '工作区外可写路径（writeAllowPaths）',
+    writePathsHint: '让文件工具在这些目录下也不再询问（含子目录），如 D:/AI/videos/out。',
+    writePathsPlaceholder: 'D:/AI/videos/out',
+    save: '保存',
+    reset: '清空全部规则',
+    resetConfirm: '清空后会恢复为「仅内置判定」（危险动作仍会弹窗 / 拒绝）。确定继续？',
+    loadedHint: '保存后立即生效，无需重启。',
+    loadFailed: '读取规则失败',
+    saveFailed: '保存失败',
+  },
   system: {
     backToApp: '返回应用',
     title: '系统设置',
@@ -252,6 +278,7 @@ export default {
       profile: '账户概览',
       security: '安全设置',
       community: '反馈/社区',
+      policy: '命令策略',
     },
     community: {
       feedback: '问题反馈',

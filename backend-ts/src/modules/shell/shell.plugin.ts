@@ -23,10 +23,12 @@ import {
 } from "../../common/services/sandbox-policy";
 import {
   commandApprovalMemory,
+  deriveAllowRule,
   evaluateCommand,
   type CommandPolicyCode,
 } from "../../common/services/command-policy";
 import { AskService } from "../../common/services/ask.service";
+import { PolicyRulesService } from "../../common/services/policy-rules.service";
 import {
   WorkspaceToolRouter,
   workspaceParamField,
@@ -49,6 +51,15 @@ const COMMAND_POLICY_CODE_ZH: Record<CommandPolicyCode, string> = {
   "unverifiable-syntax": "该命令含无法静态核验的结构（变量、命令替换、写重定向等）",
   "write-signal": "该命令包含写 / 删除操作",
   "no-allowlist": "当前 shell 没有可用的只读白名单",
+  // 工作档（黑名单 + 作用域）
+  catastrophic: "该命令属于灾难级操作（格式化磁盘 / 关机 / 下载即执行等），已被直接拒绝",
+  "user-deny": "该命令命中你配置的拒绝规则",
+  "out-of-scope": "该命令会操作工作区以外的路径",
+  "host-action": "该命令会操作进程 / 服务 / 计划任务（与工作区无关）",
+  "remote-side-effect": "该命令带远程或不可逆副作用（推送 / 发布 / 删除容器等）",
+  "dynamic-target": "该命令的目标路径是动态拼接的，无法核验是否在工作区内",
+  unverifiable: "该命令含无法静态核验的结构",
+  "no-workspace": "当前会话没有工作区，无法判定作用域",
 };
 
 /** 格式化毫秒为人类可读时长，如 "5s", "3m 5s", "1h 3s" */
@@ -74,6 +85,7 @@ export class ShellPlugin extends PluginBase {
     private readonly processManager: ProcessManagerService,
     private readonly askService: AskService,
     private readonly workspaceRouter: WorkspaceToolRouter,
+    private readonly policyRules: PolicyRulesService,
   ) {
     super();
   }
@@ -119,7 +131,7 @@ export class ShellPlugin extends PluginBase {
         : "";
     // 命令策略层（Windows 无 OS 沙盒）：说明白"什么会直接跑、什么会弹窗"，否则模型会乱试
     const commandPolicyNote = isCommandPolicyEnforced()
-      ? `\n- **Command approval (no OS sandbox on this platform)**: verified read-only commands (git status/diff/log/show, ls, cat, head/tail, grep/rg, find without -delete/-exec, Get-ChildItem/Get-Content/Select-String, …) run immediately. Any other command needs the user's approval in workspace-write mode (the approval card offers: this once / always this command in this session / deny), and is denied outright in read-only or plan mode. Prefer read-only commands for inspection, and keep write or execute commands few and purposeful to limit prompts. There is no escalation parameter: capability changes come from the user, not from the model.`
+      ? `\n- **Command approval (no OS sandbox on this platform)**: in workspace-write mode most commands run directly. The policy only stops three things: catastrophic patterns (disk formatting, raw-device writes, power state, download-and-execute) are refused outright and cannot be approved; destructive or remote actions (rm/mv/Remove-Item/cp/mkdir/Set-Content, ssh/scp, git push, npm publish, docker rm, process/service control) whose targets fall outside the workspace, or whose targets cannot be verified statically, pause for the user's approval; and anything the scanner cannot parse (variable expansion, unknown shell wrappers) also pauses. In read-only and plan mode only verified read-only commands run and everything else is denied. Keep destructive operations inside the workspace to avoid prompts. There is no escalation parameter: capability changes come from the user, not from the model.`
       : "";
     shellKit.registerTool({
       name: "run_command",
@@ -559,10 +571,24 @@ export class ShellPlugin extends PluginBase {
     const decision = evaluateCommand({
       command,
       shellKind: this.processManager.getShellKind(),
+      // 只读档走既有正向白名单；工作档走黑名单 + 作用域（默认放行，危险才拦）
+      mode: effectiveMode === "read-only" ? "read-only" : "workspace-write",
+      workspacePath: ctx?.session.workspacePath,
+      // 用户可配规则（全局 + 项目级，mtime 缓存；缺省即内置判定）
+      rules: this.policyRules.getEffectiveSync(ctx?.session.workspacePath),
     });
     if (decision.kind === "whitelisted") return;
 
     const reasonText = `[${decision.code}] ${decision.reason}`;
+
+    // 灾难级 / 用户拒绝规则：系统硬拒，不进审批（审批也放不通）
+    if (decision.kind === "denied") {
+      throw new Error(
+        `Command refused by policy and cannot be approved (${reasonText}). ` +
+          `This class of command is permanently blocked (disk formatting, raw-device writes, power state, download-and-execute, or a user deny rule). ` +
+          `Pick a different approach and explain the blocker to the user.`,
+      );
+    }
 
     if (effectiveMode === "read-only") {
       throw new Error(
@@ -588,19 +614,36 @@ export class ShellPlugin extends PluginBase {
       );
     }
 
-    // 本次允许 / 本会话内始终允许 / 拒绝（拒绝与自定义回复抛 AskDeniedError，工具层已按 isError 反馈模型）
+    // 越界类询问不推导放通规则：`rm *` 之类会把"越界"这一条件也一起放通
+    const allowRule = decision.code === "out-of-scope" ? null : deriveAllowRule(command);
+
+    // 本次允许 / 放通此类（本项目）/ 放通此类（全局）/ 拒绝
+    // （拒绝与自定义回复抛 AskDeniedError，工具层已按 isError 反馈模型）
     const approval = await this.askService.requestCommandApproval(session as any, {
       toolCallId: ctx?.toolCallId,
       command,
       // 审批卡给用户看：用中文一句话说明为什么需要批准（诊断细节只进模型可见的错误与日志）
       reason: `${COMMAND_POLICY_CODE_ZH[decision.code]}，需要你确认`,
+      allowRule,
       abortSignal,
     });
-    if (approval === "session" && sessionId) {
+
+    let persisted = false;
+    if (approval !== "once" && allowRule) {
+      try {
+        await this.policyRules.appendAllowRule(approval.scope, allowRule, session?.workspacePath);
+        persisted = true;
+        this.logger.log(`Allow rule persisted (${approval.scope}): ${allowRule}`);
+      } catch (e: any) {
+        this.logger.warn(`failed to persist allow rule "${allowRule}": ${e?.message ?? e}`);
+      }
+    }
+    // 落盘失败（或推导不出规则）时退回会话内记忆：至少本会话不重复打扰
+    if (!persisted && approval !== "once" && sessionId) {
       commandApprovalMemory.remember(sessionId, command);
     }
     this.logger.log(
-      `Command approved (${approval}) by policy prompt: ${command.slice(0, 120)}`,
+      `Command approved (${approval === "once" ? "once" : approval.scope}) by policy prompt: ${command.slice(0, 120)}`,
     );
   }
 

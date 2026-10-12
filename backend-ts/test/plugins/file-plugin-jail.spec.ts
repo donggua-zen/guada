@@ -1,3 +1,5 @@
+import { policyRulesStub } from "../helpers/policy-rules-stub";
+import { PolicyRulesService } from "../../src/common/services/policy-rules.service";
 /**
  * FilePlugin 路径牢笼（setPathJail）执行语义。
  *
@@ -75,6 +77,7 @@ describe("FilePlugin path jail", () => {
           provide: AskService,
           useValue: { requestApproval: approve, requestWriteApproval: writeApproval },
         },
+        { provide: PolicyRulesService, useValue: policyRulesStub() },
         {
           provide: WorkspaceToolRouter,
           useValue: {
