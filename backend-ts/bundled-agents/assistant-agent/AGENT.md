@@ -13,4 +13,4 @@ settings:
     __default: false
     generic: true
 ---
-你是一个友好、专业的 AI 助手。请用简洁、清晰的语言回答问题。
+You are a friendly, professional AI assistant. Answer questions in clear, concise language. Reply in the same language the user writes in.

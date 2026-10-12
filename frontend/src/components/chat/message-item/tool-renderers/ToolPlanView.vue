@@ -30,7 +30,8 @@
         <div class="plan-preview">
             <div ref="clipEl" class="plan-preview-clip" :class="{ 'is-overflowing': overflowing }">
                 <div ref="contentEl" class="plan-preview-content">
-                    <MarkdownContent v-if="content" class="plan-markdown markdown-text" :content="content" />
+                    <MarkdownContent v-if="previewContent" class="plan-markdown markdown-text"
+                        :content="previewContent" />
                     <div v-else class="plan-placeholder">{{ t('chat.plan.streamingHint') }}</div>
                 </div>
             </div>
@@ -57,6 +58,7 @@ import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { usePopup } from '@/composables/usePopup'
+import { useThrottledValue } from '@/composables/useThrottledValue'
 import { openSessionPlanPanel } from '@/utils/sessionPlan'
 import type { PlanCardStatus } from '@/utils/toolDisplay'
 
@@ -76,6 +78,10 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const { toast } = usePopup()
+
+/** 预览用节流值：正文每个 token 都变，直接喂给 MarkdownContent 会每个 token
+ *  重新 parse 整篇 + 全量 DOM diff（代价随文档长度增长）。复制仍取完整的 props.content。 */
+const previewContent = useThrottledValue(() => props.content)
 
 function openPanel(): void {
     if (props.sessionId) void openSessionPlanPanel(props.sessionId)
@@ -120,7 +126,8 @@ onBeforeUnmount(() => {
     contentObserver = null
 })
 
-watch(() => props.content, () => {
+// 溢出判定跟着**实际渲染出来的**内容重算（节流值），而不是原始 props.content
+watch(previewContent, () => {
     void nextTick(measureOverflow)
 })
 </script>

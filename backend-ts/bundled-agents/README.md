@@ -7,6 +7,9 @@
 - **id 必须是 ASCII slug**：`^[a-z0-9][a-z0-9-]*$`（小写字母 / 数字 / 连字符），**禁止中文与大写**。
   显示名写在 `AGENT.md` 的 `name` 字段，可与 id 完全不同（如 id `assistant-agent` ↔ name「智能助手」）
 - 目录内 `AGENT.md` = 定义（YAML frontmatter + Markdown 正文即 systemPrompt）
+- **正文（systemPrompt）一律英文**：LLM 侧提示词统一英文，与插件 `description` / `inputSchema`
+  保持英文同一条约定（见 `plugins/i18n/nls.service.ts` 的头注释）；`name` / `description`
+  是展示字段（`description` 另会注入子代理候选列表），可中文
 - 目录内 `avatar.<ext>` = 可选头像
 
 用户的助手存放在 `<AGENTS_DATA_DIR>/`（Electron 下为 `~/.guada/agents/`）。

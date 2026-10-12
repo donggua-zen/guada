@@ -259,6 +259,7 @@ export class ImageRecognitionPlugin extends PluginBase {
       ];
 
       let result = "";
+      let finishReason: string | undefined;
       const stream = (await this.llmService.completions({
         model,
         messages,
@@ -269,9 +270,17 @@ export class ImageRecognitionPlugin extends PluginBase {
       })) as AsyncGenerator<any, void, unknown>;
 
       for await (const chunk of stream) {
-        if (chunk.type === "text" && chunk.content) {
-          result += chunk.content;
+        // 规范词表：正文增量为 text_delta（text 字段）；reasoning_delta 是思考内容，不计入
+        if (chunk?.type === "text_delta" && chunk.text) {
+          result += chunk.text;
+        } else if (chunk?.type === "finish") {
+          finishReason = chunk.finishReason;
         }
+      }
+      if (!result.trim()) {
+        this.logger.warn(
+          `Image recognition returned no text (model=${model}, finishReason=${finishReason ?? "unknown"})`,
+        );
       }
       return result || "Unable to recognize image content";
     } catch (error: any) {

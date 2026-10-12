@@ -139,6 +139,9 @@
 
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
+  /* 小标签档（区标题、角标）。区标题不要用 base：主题预设会把 base 抬到 15px
+     （e-ink / wandering-earth），区标题会因此比它自己的列表行还大。 */
+  --gd-size-text-xs: 12px;
   --gd-size-rounded-radius: 18px;
 
   /* ====================

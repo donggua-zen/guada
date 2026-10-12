@@ -1,0 +1,276 @@
+/**
+ * 提交信息生成模型解析（SessionService.generateCommitMessageStream）
+ *
+ * 覆盖回退链：标题总结模型 → 当前对话模型（会话自选 modelId → 全局默认对话模型）；
+ * 三者皆未配置 → no_model_configured；配置了但解析不到 → model_not_found（fail-loud）。
+ *
+ * 回归：用户只给会话选了模型、未设置全局默认对话模型/标题模型时，对话正常可用，
+ * 但生成提交信息曾报「未配置模型」——回退必须落到会话自选模型。
+ */
+import { SessionService } from "../../src/modules/chat/session.service";
+
+/// <reference types="jest" />
+
+const TITLE_MODEL = {
+  id: "inst-title:m0",
+  modelName: "m0",
+  name: "M0",
+  provider: { id: "inst-title", type: "custom", protocol: "openai" },
+};
+
+const SESSION_MODEL = {
+  id: "inst-a:m1",
+  modelName: "m1",
+  name: "M1",
+  provider: { id: "inst-a", type: "custom", protocol: "openai" },
+};
+
+const GLOBAL_MODEL = {
+  id: "inst-default:m9",
+  modelName: "m9",
+  name: "M9",
+  provider: { id: "inst-default", type: "custom", protocol: "openai" },
+};
+
+function buildService(opts: {
+  titleModelId?: string | null;
+  defaultModelId?: string | null;
+  /** undefined = 会话不存在；null = 会话存在但未选模型 */
+  sessionModelId?: string | null;
+  findModel?: (id: string) => any;
+}) {
+  const sessionStore = {
+    get: jest.fn((id: string) =>
+      opts.sessionModelId === undefined
+        ? undefined
+        : { id, modelId: opts.sessionModelId },
+    ),
+  };
+  const modelStore = {
+    findModel: jest.fn((id: string) =>
+      opts.findModel ? opts.findModel(id) : undefined,
+    ),
+  };
+  const settingsStorage = {
+    getSettingValue: jest.fn(async (group: string, key: string) => {
+      if (group !== "models") return null;
+      if (key === "defaultTitleSummaryModelId") return opts.titleModelId ?? null;
+      if (key === "defaultChatModelId") return opts.defaultModelId ?? null;
+      return null;
+    }),
+  };
+  const llmService = {
+    // 规范流式词表（StreamChunk）：正文增量为 text_delta（text 字段）
+    completions: jest.fn(async () =>
+      (async function* () {
+        yield { type: "block_start", index: 0, blockType: "text" };
+        yield { type: "text_delta", index: 0, text: "feat: 生成" };
+        yield { type: "text_delta", index: 0, text: "提交信息" };
+        yield {
+          type: "block_end",
+          index: 0,
+          block: { type: "text", text: "feat: 生成提交信息" },
+        };
+        yield { type: "finish", finishReason: "stop" };
+      })(),
+    ),
+  };
+
+  const service = new SessionService(
+    sessionStore as any, // 1 sessionStore
+    {} as any, // 2 agentStore
+    modelStore as any, // 3 modelStore
+    settingsStorage as any, // 4 settingsStorage
+    llmService as any, // 5 llmService
+    {} as any, // 6 contextManager
+    {} as any, // 7 urlService
+    {} as any, // 8 workspaceService
+    {} as any, // 9 sessionContextFactory
+    {} as any, // 10 workspaceWatcherService
+    {} as any, // 11 streamManager
+    {} as any, // 12 compactionCoordinator
+    {} as any, // 13 eventBus
+    {} as any, // 14 sessionReplayService
+    {} as any, // 15 contentSearch
+    {} as any, // 16 sessionGroupService
+  );
+  return { service, sessionStore, modelStore, settingsStorage, llmService };
+}
+
+async function collect(gen: AsyncIterable<any>): Promise<any[]> {
+  const events: any[] = [];
+  for await (const event of gen) events.push(event);
+  return events;
+}
+
+describe("提交信息生成模型解析", () => {
+  it("标题总结模型已配置 → 优先使用，不查会话模型", async () => {
+    const { service, sessionStore, llmService } = buildService({
+      titleModelId: TITLE_MODEL.id,
+      sessionModelId: SESSION_MODEL.id,
+      findModel: (id) => (id === TITLE_MODEL.id ? TITLE_MODEL : undefined),
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events[events.length - 1]).toMatchObject({
+      type: "done",
+      modelId: TITLE_MODEL.id,
+      modelSource: "title",
+    });
+    expect(sessionStore.get).not.toHaveBeenCalled();
+    expect(llmService.completions).toHaveBeenCalledWith(
+      expect.objectContaining({ model: TITLE_MODEL.modelName }),
+    );
+  });
+
+  it("无标题模型 + 会话自选模型（全局默认未配置）→ 回退会话当前模型", async () => {
+    const { service, settingsStorage, llmService } = buildService({
+      sessionModelId: SESSION_MODEL.id,
+      findModel: (id) => (id === SESSION_MODEL.id ? SESSION_MODEL : undefined),
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events[events.length - 1]).toMatchObject({
+      type: "done",
+      modelId: SESSION_MODEL.id,
+      modelSource: "chat",
+    });
+    expect(llmService.completions).toHaveBeenCalledWith(
+      expect.objectContaining({ model: SESSION_MODEL.modelName }),
+    );
+    // 会话自选模型解析成功就不应再读全局默认（不静默换模型）
+    const readKeys = settingsStorage.getSettingValue.mock.calls.map(
+      (c: any[]) => c[1],
+    );
+    expect(readKeys).not.toContain("defaultChatModelId");
+  });
+
+  it("无标题模型 + 会话未选模型 → 回退全局默认对话模型", async () => {
+    const { service, llmService } = buildService({
+      sessionModelId: null,
+      defaultModelId: GLOBAL_MODEL.id,
+      findModel: (id) => (id === GLOBAL_MODEL.id ? GLOBAL_MODEL : undefined),
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events[events.length - 1]).toMatchObject({
+      type: "done",
+      modelId: GLOBAL_MODEL.id,
+      modelSource: "chat",
+    });
+    expect(llmService.completions).toHaveBeenCalledWith(
+      expect.objectContaining({ model: GLOBAL_MODEL.modelName }),
+    );
+  });
+
+  it("三者皆未配置 → skipped no_model_configured", async () => {
+    const { service, llmService } = buildService({ sessionModelId: null });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events).toEqual([{ type: "skipped", reason: "no_model_configured" }]);
+    expect(llmService.completions).not.toHaveBeenCalled();
+  });
+
+  it("流式词表回归：text_delta 增量逐条转发并累积为 done.message", async () => {
+    // 回归：曾按旧词表读 `type: "text" / content`，与适配器实际输出的 text_delta 不匹配，
+    // 导致正文被丢弃、误报「模型未返回有效内容」（generation_failed）
+    const { service } = buildService({
+      sessionModelId: SESSION_MODEL.id,
+      findModel: (id) => (id === SESSION_MODEL.id ? SESSION_MODEL : undefined),
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    // 前端 SSE 契约仍是 { type: "text", content }，但内容来自 text_delta 增量
+    expect(
+      events
+        .filter((e) => e.type === "text")
+        .map((e) => e.content)
+        .join(""),
+    ).toBe("feat: 生成提交信息");
+    expect(events[events.length - 1]).toMatchObject({
+      type: "done",
+      message: "feat: 生成提交信息",
+    });
+  });
+
+  it("模型只返回思考内容（无 text_delta）→ skipped generation_failed", async () => {
+    const { service, llmService } = buildService({
+      sessionModelId: SESSION_MODEL.id,
+      findModel: (id) => (id === SESSION_MODEL.id ? SESSION_MODEL : undefined),
+    });
+    llmService.completions.mockResolvedValueOnce(
+      (async function* () {
+        yield { type: "reasoning_delta", index: 0, text: "思考中……" };
+        yield { type: "finish", finishReason: "stop" };
+      })(),
+    );
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events).toEqual([{ type: "skipped", reason: "generation_failed" }]);
+  });
+
+  it("会话自选模型解析不到 → fail-loud model_not_found（不静默换全局默认）", async () => {
+    const { service, settingsStorage, llmService } = buildService({
+      sessionModelId: "inst-deleted:gone",
+      defaultModelId: GLOBAL_MODEL.id,
+      findModel: (id) => (id === GLOBAL_MODEL.id ? GLOBAL_MODEL : undefined),
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events).toEqual([{ type: "skipped", reason: "model_not_found" }]);
+    expect(llmService.completions).not.toHaveBeenCalled();
+    const readKeys = settingsStorage.getSettingValue.mock.calls.map(
+      (c: any[]) => c[1],
+    );
+    expect(readKeys).not.toContain("defaultChatModelId");
+  });
+
+  it("标题模型解析不到 → skipped model_not_found", async () => {
+    const { service, llmService } = buildService({
+      titleModelId: "inst-deleted:gone",
+      sessionModelId: SESSION_MODEL.id,
+      findModel: () => undefined,
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
+    );
+
+    expect(events).toEqual([{ type: "skipped", reason: "model_not_found" }]);
+    expect(llmService.completions).not.toHaveBeenCalled();
+  });
+
+  it("空 diff → skipped empty_diff，不解析模型", async () => {
+    const { service, settingsStorage } = buildService({
+      sessionModelId: SESSION_MODEL.id,
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "   "),
+    );
+
+    expect(events).toEqual([{ type: "skipped", reason: "empty_diff" }]);
+    expect(settingsStorage.getSettingValue).not.toHaveBeenCalled();
+  });
+});

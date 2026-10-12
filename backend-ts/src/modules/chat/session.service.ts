@@ -898,15 +898,55 @@ export class SessionService {
   }
 
   /**
+   * 解析提交信息生成所用模型：标题总结模型优先，无则回退当前对话模型
+   * （会话自选 modelId → 全局默认对话模型，对齐 JsonlSessionContext.resolveModel 的两级回退）。
+   * 配置了但解析不到（模型已删除等）→ model_not_found，不静默换用其它模型。
+   */
+  private async resolveCommitMessageModel(
+    sessionId: string,
+  ): Promise<{ model: any; source: "title" | "chat" } | { reason: string }> {
+    const titleModelId = await this.settingsStorage.getSettingValue(
+      SG_MODELS,
+      SK_MOD_TITLE_MODEL,
+    );
+    if (titleModelId) {
+      const model = this.modelStore.findModel(titleModelId);
+      return model ? { model, source: "title" } : { reason: "model_not_found" };
+    }
+
+    // 会话自选模型即用户当前对话所用模型（会话创建时已回填智能体模型/全局默认）
+    const sessionModelId = this.sessionStore.get(sessionId)?.modelId as
+      | string
+      | undefined;
+    if (sessionModelId) {
+      const model = this.modelStore.findModel(sessionModelId);
+      return model ? { model, source: "chat" } : { reason: "model_not_found" };
+    }
+
+    const defaultModelId = await this.settingsStorage.getSettingValue(
+      SG_MODELS,
+      SK_MOD_CHAT,
+    );
+    if (!defaultModelId) return { reason: "no_model_configured" };
+    const fallback = this.modelStore.findModel(defaultModelId);
+    return fallback
+      ? { model: fallback, source: "chat" }
+      : { reason: "model_not_found" };
+  }
+
+  /**
    * 根据 git diff 流式生成提交信息（SSE）
-   * 模型选择：优先标题总结模型（SK_MOD_TITLE_MODEL），无则回退当前对话模型（SK_MOD_CHAT）
+   * 模型选择：优先标题总结模型（SK_MOD_TITLE_MODEL），无则回退当前对话模型
+   * （会话自选 modelId → 全局默认对话模型 SK_MOD_CHAT）
    * 事件序列：{ type: "text", content } 增量 / { type: "done", message, modelId, modelName, modelSource } /
    *          { type: "skipped", reason }
+   * @param sessionId 会话 ID（用于解析当前对话模型）
    * @param diffText git diff 文本
    * @param constraintText 项目提交约束（.guada/git/commit_constraint.md 内容，可为空）
    * @param abortSignal 取消信号
    */
   async *generateCommitMessageStream(
+    sessionId: string,
     diffText: string,
     constraintText?: string,
     abortSignal?: AbortSignal,
@@ -922,28 +962,12 @@ export class SessionService {
       }
 
       // 1. 模型选择：标题总结模型优先，无则回退当前对话模型
-      let modelId = await this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_TITLE_MODEL,
-      );
-      let modelSource = "title";
-      if (!modelId) {
-        modelId = await this.settingsStorage.getSettingValue(
-          SG_MODELS,
-          SK_MOD_CHAT,
-        );
-        modelSource = "chat";
-      }
-      if (!modelId) {
-        yield { type: "skipped", reason: "no_model_configured" };
+      const resolved = await this.resolveCommitMessageModel(sessionId);
+      if ("reason" in resolved) {
+        yield { type: "skipped", reason: resolved.reason };
         return;
       }
-
-      const model = await this.modelStore.findModel(modelId);
-      if (!model) {
-        yield { type: "skipped", reason: "model_not_found" };
-        return;
-      }
+      const { model, source: modelSource } = resolved;
 
       // 2. 构建提示词：引导输出项目提交风格（Conventional Commits + 中文标题 + 要点正文）
       const constraintSection =
@@ -984,16 +1008,23 @@ ${diffText}
       });
 
       let fullText = "";
+      let finishReason: string | undefined;
       for await (const chunk of stream) {
         if (abortSignal?.aborted) break;
-        if (chunk?.type === "text" && chunk.content) {
-          fullText += chunk.content;
-          yield { type: "text", content: chunk.content };
+        // 规范词表：正文增量为 text_delta（text 字段）；reasoning_delta 是思考内容，不计入
+        if (chunk?.type === "text_delta" && chunk.text) {
+          fullText += chunk.text;
+          yield { type: "text", content: chunk.text };
+        } else if (chunk?.type === "finish") {
+          finishReason = chunk.finishReason;
         }
       }
 
       const message = fullText.trim();
       if (!message) {
+        this.logger.warn(
+          `生成提交信息：模型未返回文本内容（model=${model.modelName}, finishReason=${finishReason ?? "unknown"}）`,
+        );
         yield { type: "skipped", reason: "generation_failed" };
         return;
       }
