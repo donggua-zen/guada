@@ -25,12 +25,31 @@ export interface DialectAnalysis {
   offending: string[];
 }
 
+/** 工作档（黑名单 + 作用域）专属的原因分类 */
+export type WorkspacePolicyCode =
+  | "catastrophic"
+  | "user-deny"
+  | "out-of-scope"
+  | "host-action"
+  | "remote-side-effect"
+  | "dynamic-target"
+  | "unverifiable"
+  | "no-workspace";
+
 /** 非白名单命令的原因分类（决定给模型的文案） */
 export type CommandPolicyCode =
   | "unknown-command"
   | "unverifiable-syntax"
   | "write-signal"
-  | "no-allowlist";
+  | "no-allowlist"
+  | WorkspacePolicyCode;
+
+/**
+ * 判定档位：
+ * - `read-only`：正向只读白名单（不在白名单内即拒绝）
+ * - `workspace-write`：黑名单 + 作用域（默认放行，灾难级硬拒、越界/不可核验弹窗）
+ */
+export type PolicyMode = "read-only" | "workspace-write";
 
 /**
  * 执行壳的 kind（与 process-manager 的 ShellKind 结构兼容）。
@@ -38,10 +57,16 @@ export type CommandPolicyCode =
  */
 export type PolicyShellKind = "gitbash" | "powershell" | "cmd" | "sh";
 
-/** 对外决策：白名单放行，或需要人工批准（只读档下直接拒绝） */
+/**
+ * 对外决策：
+ * - `whitelisted`：放行（只读白名单命中 / 工作档判定为区内安全）
+ * - `needs-approval`：由调用方按档位决定弹窗还是拒绝
+ * - `denied`：系统硬拒（灾难级 / 用户 deny 规则），**不可经审批放通**
+ */
 export type CommandDecision =
   | { kind: "whitelisted"; reason: string }
-  | { kind: "needs-approval"; code: CommandPolicyCode; reason: string };
+  | { kind: "needs-approval"; code: CommandPolicyCode; reason: string }
+  | { kind: "denied"; code: CommandPolicyCode; reason: string };
 
 /** 命令原文长度上限（超过即不可核验） */
 export const MAX_POLICY_COMMAND_LENGTH = 4096;

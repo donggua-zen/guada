@@ -74,6 +74,9 @@
                             <template v-else-if="currentTabValue === 'browser'">
                                 <BrowserSettings />
                             </template>
+                            <template v-else-if="currentTabValue === 'policy'">
+                                <CommandPolicySettings />
+                            </template>
                             <template v-else-if="currentTabValue === 'about'">
                                 <AboutPanel />
                             </template>
@@ -126,6 +129,7 @@ import ArchivedSessions from './ArchivedSessions.vue'
 import UserProfile from './UserProfile.vue'
 import UserSecurity from './UserSecurity.vue'
 import ConnectionSettings from './ConnectionSettings.vue'
+import CommandPolicySettings from './CommandPolicySettings.vue'
 import CommunityPanel from './CommunityPanel.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
@@ -142,6 +146,7 @@ import {
     Cloud24Regular,
     Chat24Regular,
     Database24Regular,
+    ShieldCheckmark16Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -163,6 +168,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     providers: t('settings.system.groups.general'),
     ocr: t('settings.system.groups.general'),
     browser: t('settings.system.groups.general'),
+    policy: t('settings.system.groups.system'),
     connections: t('settings.system.groups.general'),
     appearance: t('settings.system.groups.personalization'),
     search: t('settings.system.groups.personalization'),
@@ -227,6 +233,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.browser'),
         path: 'browser',
         icon: Globe24Regular,
+    },
+    {
+        label: t('settings.system.tabs.policy'),
+        path: 'policy',
+        icon: ShieldCheckmark16Regular,
     },
     {
         label: t('settings.system.tabs.about'),

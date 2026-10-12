@@ -1,3 +1,5 @@
+import { policyRulesStub } from "../helpers/policy-rules-stub";
+import { PolicyRulesService } from "../../src/common/services/policy-rules.service";
 /**
  * FilePlugin 工作区外写入审批（模型不能自我提权后的执行语义）。
  *
@@ -69,6 +71,7 @@ describe("FilePlugin 工作区外写入审批", () => {
           provide: AskService,
           useValue: { requestApproval: jest.fn(), requestWriteApproval: writeApproval },
         },
+        { provide: PolicyRulesService, useValue: policyRulesStub() },
         {
           provide: WorkspaceToolRouter,
           useValue: { resolveRemoteTarget: async () => null },

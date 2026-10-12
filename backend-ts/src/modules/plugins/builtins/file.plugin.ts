@@ -6,6 +6,7 @@ import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { AskService } from "../../../common/services/ask.service";
+import { PolicyRulesService } from "../../../common/services/policy-rules.service";
 import { writeApprovalMemory } from "../../../common/services/write-approval-memory";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
@@ -81,6 +82,7 @@ export class FilePlugin extends PluginBase {
     private workspaceService: WorkspaceService,
     private askService: AskService,
     private readonly workspaceRouter: WorkspaceToolRouter,
+    private readonly policyRules: PolicyRulesService,
   ) {
     super();
   }
@@ -999,6 +1001,11 @@ export class FilePlugin extends PluginBase {
       return;
     }
 
+    // 用户规则：policy.yaml 的 writeAllowPaths（工作区外长期可写目录，如 D:/AI/videos/out）
+    if (this.isPathAllowedByPolicy(params.resolvedPath, params.context)) {
+      return;
+    }
+
     // 无人能应答审批（子代理 / 机器人 / 界面无连接）→ 直接拒绝，绝不挂起
     const canAsk = session?.hasAnswerSurface
       ? session.hasAnswerSurface()
@@ -1024,6 +1031,17 @@ export class FilePlugin extends PluginBase {
     this.logger.log(
       `Write approved (${approval}) by policy prompt: ${params.resolvedPath}`,
     );
+  }
+
+  /** 目标是否命中用户配置的"工作区外可写路径"（policy.yaml 的 writeAllowPaths） */
+  private isPathAllowedByPolicy(resolvedPath: string, context?: PluginContext): boolean {
+    try {
+      const roots = this.policyRules.getWriteAllowPathsSync(context?.session.workspacePath);
+      if (roots.length === 0) return false;
+      return this.workspaceService.isPathWithin(resolvedPath, roots);
+    } catch {
+      return false;
+    }
   }
 
   private findEnclosingFunction(

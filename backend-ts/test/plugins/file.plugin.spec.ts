@@ -1,3 +1,5 @@
+import { policyRulesStub } from "../helpers/policy-rules-stub";
+import { PolicyRulesService } from "../../src/common/services/policy-rules.service";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -79,6 +81,7 @@ describe("FilePlugin", () => {
           provide: AskService,
           useValue: new AskService(new InteractionWaitService()),
         },
+        { provide: PolicyRulesService, useValue: policyRulesStub() },
         {
           provide: WorkspaceToolRouter,
           useValue: { resolveRemoteTarget: () => Promise.resolve(null) },
