@@ -295,6 +295,18 @@ function resolveCommandName(token: string): { canonical: string; fromAlias: bool
 }
 
 /**
+ * 内置只读名单条目（供默认策略物化 / 漂移测试）：只读 cmdlet + 解析到它们的别名。
+ * 别名必须列出，否则用户在配置里删/留 `ls` 时行为会与 PowerShell 的实际执行不一致。
+ */
+export function powershellReadOnlyEntries(): string[] {
+  const entries = new Set<string>(Object.keys(PS_READONLY_CMDLETS));
+  for (const [alias, canonical] of Object.entries(PS_ALIASES)) {
+    if (PS_READONLY_CMDLETS[canonical]) entries.add(alias);
+  }
+  return [...entries].sort();
+}
+
+/**
  * 以 PowerShell 语义判定整条命令。
  */
 export function analyzePowerShellCommand(command: string): DialectAnalysis {

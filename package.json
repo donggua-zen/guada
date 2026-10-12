@@ -124,6 +124,27 @@
         ]
       },
       {
+        "from": "backend-ts/bundled-skills",
+        "to": "backend-ts/bundled-skills",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "backend-ts/bundled-agents",
+        "to": "backend-ts/bundled-agents",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "backend-ts/bundled-providers",
+        "to": "backend-ts/bundled-providers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "build-resources",
         "to": "build-resources",
         "filter": [

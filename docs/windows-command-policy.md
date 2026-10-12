@@ -17,159 +17,109 @@
 
 因此 Windows 改为**进程内命令策略层**，Linux/macOS 继续使用 Landlock / Seatbelt 沙盒，行为不变。
 
-## 2. 语义（三档）
+## 2. 语义（两档各自单一）
 
-| 档位 | 判定 | 交互 |
-|---|---|---|
-| `read-only`（计划模式同此档） | 正向**只读白名单**（静态可证的只读命令） | 白名单执行；其余**拒绝**（不弹窗，错误里给可操作提示并让用户切档） |
-| `workspace-write`（默认） | **黑名单 + 作用域**（见 §3） | 默认直接执行；越界 / 主机级 / 远程副作用 / 不可核验 → **审批弹窗**；灾难级 → **直接拒绝** |
-| `danger-full-access` | 不判定，全部执行 | — |
+| 档位 | 语义 | 未命中时 | 用户怎么配 |
+|---|---|---|---|
+| `read-only`（计划模式同此档） | **名单制**（出厂只读名单） | **拒绝**（不弹窗；错误里给可操作提示） | 删掉不想放行的内置条目、加自己确认只读的命令 |
+| `workspace-write`（默认） | **例外制**（默认执行） | **直接执行** | 放通 / 收紧必问项、放通敏感路径、加可写根 |
+| `danger-full-access` | 不判定，全部执行 | — | — |
 
-**审批卡四个选项**（`requestCommandApproval`）：
+**判定顺序（一句话版：灾难级 → deny → 你的规则 → 出厂规则 → 默认动作）**：
 
-1. 「本次允许」——仅本次执行
-2. 「放通此类（本项目）」——把**推导出的前缀规则**写入 `<工作区>/.guada/policy.yaml`
-3. 「放通此类（全局）」——写入全局 `<SETTINGS_DIR>/policy.yaml`
-4. 「拒绝」——`AskDeniedError(rejected)`
+```
+1. 灾难级（代码硬底线，不可配）              → 拒绝（格式化磁盘 / 关机 / 删根 / 下载即执行…）
+2. deny 规则（任意来源、任意种类）            → 拒绝
+3. 你的路径规则 → 你的命令规则               → allow / ask
+4. 出厂命令规则（必问项）                     → ask
+5. 出厂路径规则（敏感路径 ask / 可写根 allow） → ask / allow
+6. 默认动作：只读档 = 名单命中即放行，否则拒绝；工作档 = 执行
+7. 工作档：路径型动作（rm/mv/cp/mkdir/Set-Content…）的目标不在**可写根**内 → 询问
+```
 
-- 卡片上直接显示推导结果（如 `ffmpeg -i a b` → 「把 `ffmpeg *` 写入…」），用户知道放通的到底是什么。
-- **越界类询问不提供放通选项**：`rm -rf D:\other\x` 推导出的 `rm *` 会把"越界"这一条件也一起放通，
-  因此这类只给「本次允许 / 拒绝」（想长期放开请手编规则或改档位）。
-- 灾难级命令、多段命令（`a && b`）同样不推导规则（前缀放通会顺带放行后续段落）。
-- 规则落盘失败（或推导不出）时退回**会话内记忆**（同一条命令本会话不再重复问）。
-- 放通规则也匹配 shell 包装的内层命令：`powershell -Command "ffmpeg …"` 命中 `ffmpeg *`。
+三个要点：
+- **deny 永远优先**；**你的规则整体先于出厂规则**（所以"放通一条命令"能盖住出厂必问项）。
+- **只读档不弹窗**：ask 与 deny 都按拒绝处理（包括敏感路径）。
+- **出厂规则不写进你的文件**，随版本升级自动跟随；「清空我的改动」不会动出厂规则。
 
-### 用户规则（`policy.yaml`，可手编）
+## 3. 配置（你的文件只存"改动"）
 
 ```yaml
-allow:                       # 命中即静默执行（token 前缀匹配，末尾 * 表示其后任意）
-  - "ffmpeg *"
-  - "yt-dlp *"
-  - "ssh *"
-ask:                         # 命中即弹窗（用于收紧内置的默认放行）
-  - "git push *"
-deny:                        # 命中即拒绝（优先级高于 allow）
-  - "npm publish *"
-writeAllowPaths:             # 工作区外仍可写/编辑的目录（文件工具用）
-  - "D:/AI/videos/out"
+# <数据目录>/policy.yaml —— 只存你的改动，默认几乎是空的
+rules:                       # 一条有序表，两种条目
+  - { action: allow, match: "ffmpeg *" }        # 命令规则（命令前缀，末尾 * = 其后任意）
+  - { action: ask,   match: "curl *" }          # 收紧
+  - { action: allow, path: "D:/AI/videos/out" } # 路径规则（= 工作区外的可写根）
+  - { action: allow, path: "~/.ssh/**" }        # 敏感路径的长期放通（可见、可撤）
+readOnlyRemove:              # 从出厂只读名单里划掉（设置页删行会写这里）
+  - "git config"
 ```
+- 路径规则：`~` 与 `%VAR%` 会展开，`**` 任意层级；**不加通配符 = "该目录及其子目录"**；归一后不区分大小写。
+- 出厂清单（数据文件 `command-policy/defaults/policy-defaults.yaml`，四个区）：
 
-- 两级文件**并集**：全局 + 项目级；优先级在匹配时决定：
-  **T0 灾难级 > 用户 deny > 用户 ask > 用户 allow > 内置判定**（项目级 deny 能压全局 allow）。
-- 校验：条目非空、≤120 字符、≤8 个 token、禁止 shell 元字符（规则只是前缀匹配器）、
-  单条 `*` 直接拒绝；`allow` 命中灾难级名单或放通整个 shell（`powershell *`）时给出**告警**。
-- 设置页「命令策略」可编辑全局规则；项目级规则由审批卡写入，也可手编（随项目走）。
-- **无人值守 fail-closed**：子代理 / 机器人会话，或前端 SSE 没有在线连接（应用未打开）时，
-  需要审批的命令**直接拒绝**，绝不弹窗挂起。
-  - 判定实现：`JsonlSessionContext.hasAnswerSurface()` = 「非 bot/sub_agent」且
-    （`SessionEventsService.hasConnectedClients()` 为真 **或** 该会话在 `SessionStreamManager`
-    有进程内订阅者）。注意前端连接登记在 **SessionEventsService 的用户级 SSE 表**里，
-    `SessionStreamManager.subscribers` 只统计进程内消费者，两者互不可见——早期版本误用后者，
-    导致正常使用时被判成"无人应答"而全量拒绝（已修）。
-  - 残留边界：`hasConnectedClients()` 是**用户级**的（任一台前端在线即为真），无法判断"用户此刻
-    是否停在某个具体会话上"。因此"应用开着但停在别的会话"时，审批卡会等到用户切回该会话才被看到
-    （与文件写入审批 / 计划审批的既有行为一致：无超时）。
-- 这是对 [交互层统一Ask方案.md](交互层统一Ask方案.md)「无超时、不做 fail-closed 自动拒绝」的
-  **显式例外**：只在**执行许可**类审批上成立（命令策略 + 工作区外文件写入，均为无人可应答即拒绝）；
-  计划审批等协作决策的 ask 语义保持原样。
-
-## 3. 判定算法（`backend-ts/src/common/services/command-policy/`）
-
-```
-scan.ts              引号感知的顶层切分 + 记号化；记录"写重定向"与"不可核验构造"（只读档用）
-flag-eval.ts         参数级核验（已知安全开关 / 明确危险开关 / 未知开关降级）
-posix-rules.ts       Git Bash 侧只读白名单（命令、git 子命令、Windows 只读工具）
-powershell-rules.ts  PowerShell 侧（别名解析 → 只读 cmdlet → 写 cmdlet → 回落 POSIX 表）
-workspace-rules.ts   工作档：T0 灾难级 / T1 作用域判定 / T2 不可核验 + 用户规则匹配 + 规则推导
-decision.ts          按 mode 分流：read-only → 只读白名单；workspace-write → workspace-rules
-approval-memory.ts   会话内审批记忆（放通规则落盘失败时的兜底）
-```
-
-### 只读档（不变）
-
-合成规则（`executing` = 当前执行壳方言，`other` = 另一方言）：
-
-| executing | other | 结果 |
+| 区 | 内容 | 条数 |
 |---|---|---|
-| read-only | ≠ unsafe | ✅ 白名单 |
-| read-only | unsafe | ⚠️ 审批（保守：如 bash 壳下写 `Remove-Item`，PS 语义是删除） |
-| unknown / unsafe | 任意 | ⚠️ 审批 / 拒绝 |
+| `readOnly` | 只读档名单（由分析器表生成 + 漂移测试） | 240 |
+| `ask` | 工作档必问项（远程会话 / git push / 发布 / docker rm / 杀进程…） | 26 |
+| `sensitive` | 敏感路径（`~/.ssh/**`、`~/.aws/**`、`**/.env`、`**/*.pem`…，读写都先问） | 19 |
+| `writeRoots` | 可写根（npm/pnpm/pip/conda/uv/cargo/go/m2/gradle/dotnet/docker 缓存） | 25 |
 
-判定原则是**保守失败**：任何无法静态确定的构造（`$(…)`、反引号、`$变量`、脚本块 `{}`、子壳、
-写重定向到文件、超长命令、未闭合引号）一律非白名单。段与段（`;`、`&&`、`||`、`|`）**每一段**都必须通过。
+- **旧文件自动迁移**（v1 平铺 / v2 物化 → v3 增量）：启动时换算 + 备份 `.bak`。
+  v2 里"删掉的必问项"会变成一条 `allow` 覆盖，"删掉的只读条目"变成 `readOnlyRemove`，`writeAllowPaths` 变成路径规则。
 
-### 工作档（黑名单 + 作用域，默认放行）
+## 4. 判定算法（`backend-ts/src/common/services/command-policy/`）
 
-只拦三类：
+```
+scan.ts / flag-eval.ts / posix-rules.ts / powershell-rules.ts   方言分析器（引号感知切分 + 参数级核验）
+path-glob.ts         路径规则：~/环境变量展开 + /** 通配 + basename 匹配（`**/.env` 命中裸 `.env`）
+builtin-readonly.ts  出厂只读名单（两方言条目合并 / 归一 / 前缀匹配）
+policy-defaults.ts   出厂规则文件加载（js-yaml；四个区 → 规则表）
+workspace-rules.ts   规则求值（5 趟判定）+ 路径提及收集 + 可写根作用域 + wrapper 解包 + 结构核验
+decision.ts          按档位分流：只读档（名单制 + 不弹窗）/ 工作档（例外制）
+policy-rules.service 用户文件读写 / 迁移 / 校验 / mtime 缓存
+```
 
-**T0 灾难级（`block`，硬拒且不可放通）**：`mkfs*`/`mke2fs`/`diskpart`/`bcdedit`、
-`Format-Volume`/`Clear-Disk`/`Initialize-Disk`/`Remove-Partition`、`format <盘符>:`、
-`dd of=/dev/*`、`> /dev/sd*`、`shutdown`/`reboot`/`Stop-Computer`/`Restart-Computer`、
-`Set-ExecutionPolicy`/`vssadmin`/`wbadmin`、fork bomb、`kill -9 -1`、
-`curl|wget|iwr … | sh|bash`、`… | iex`、`rm -rf /`（根或盘符根）。
-用户规则无法覆盖（写进 `allow` 也只会得到一条告警）。
+**只读档**：T0 → 你的规则（ask/deny 都按拒绝）→ 结构核验（写重定向 / `ls &` 这类未支持构造一律拒绝）
+→ 出厂名单逐段命中 + 方言分析器参数核验（`find` 放行、`find -delete` 拒绝；自加条目过**代码风险层**兜底）。
 
-**T1 作用域敏感（`ask` / 区内 `allow`）**：
+**工作档**：默认执行；只拦四类 —— 灾难级、必问项（出厂 26 条 + 你的规则）、敏感路径、越界写 / 删 / 移动。
+后两类之外的一切（`npm install`、`python script.py`、工作区内的 `rm -rf build`、写重定向到工作区内…）都直接跑。
 
-- **路径型写/删/移动**：`rm|del|erase|rd|rmdir|Remove-Item|mv|move|Move-Item|rename|ren|`
-  `cp|copy|Copy-Item|mkdir|New-Item|touch|Set-Content|Add-Content|Out-File|tee|`
-  `chmod|chown|takeown|icacls|attrib|Set-Acl|ln|mklink`，以及**写重定向到文件**，
-  再加上两个方言分析器判为 `unsafe` 的写入类参数（`find -delete`、`sort -o`、`sed -i`、`Set-Content` …）。
-  判定：所有路径候选归一后**全部落在会话工作区内 → 放行**（`rm -rf build`、`del *.tmp`、
-  `mkdir tmp`、`echo x > out.txt`）；任一越界（绝对路径 / `..` / `~`）→ 弹窗；
-  含动态构造的目标（`$VAR`/`%VAR%`/反引号）或段内无路径 token → 弹窗。
-  **相对路径基准跟随 `cd` 移动**（`cd /etc && rm passwd` 会因基准越界而弹窗）。
-- **主机级动作**：`Stop-Process|taskkill|Stop-Service|Restart-Service|sc stop|delete|schtasks|…`
-  → 弹窗（与工作区无关，可用 `Stop-Process *` 放通）。
-- **远程 / 不可逆副作用**：`ssh|scp|sftp|rsync|plink|Invoke-Command|Enter-PSSession`、
-  `git push|reset --hard|clean -f|rebase|filter-branch|branch -D`、`npm|pnpm|yarn publish`、
-  `docker rm|rmi|prune`、`kubectl delete`、`git config --global` → 弹窗（可用 `ssh *` 等放通）。
-- **shell 包装必须解包后判定**：`powershell|pwsh … -Command/-c "…"`、`cmd /c "…"`、`bash|sh -c "…"`
-  （可带尾随 `2>&1`）；`-File x` / `sh x` 这类"跑脚本"按**脚本路径**做作用域判定。
-  解包失败 → 弹窗（这是黑名单模式的反绕过必需项）。
+**敏感路径怎么判定**：对命令逐段取 token（**读类命令也算**），展开变量 + 归一后与 `sensitive` 的 glob 比对
+（`**/.env`、`**/id_rsa`、`**/*.pem` 这类"只有文件名"的条目额外按 basename 匹配，所以 `cat id_rsa`、`type .env` 也拦得住）。
+命中后：工作档弹「敏感文件访问」卡（显示目标路径 + 读/写/删；本次允许 / 放通此类（写路径规则）/ 拒绝），
+**本会话内记住该目标**（同一个文件第二次不再问）；只读档直接拒绝。
 
-**T2 不可核验（仅风险段才问）**：风险段里出现动态构造、未闭合引号（两种引号口径任一成立即算闭合，
-兼容 POSIX 的 `\"` 与"Windows 路径以 `\` 结尾"）、超长命令（>4096）；
-heredoc 正文按数据剥离——`cat > file <<EOF` 这类**写文件**的 heredoc 放行，
-`python <<EOF` 这类把 stdin 交给解释器的直接判不可核验；纯环境变量赋值段（`set VAR=x`）跳过。
-**非风险段里的动态构造不再触发弹窗**（所以 `echo "approval test $(date)"` 不会问）。
+### 放行率（真实数据测量，2367 条历史命令）
 
-### 放行率（真实数据测量）
-
-本机历史会话 **2367 条** `run_command`（239 会话，含各自工作区）实测：
-
-| 方案 | 放行 | 弹窗 | 硬拒 |
+| 档位 / 配置 | 放行 | 询问 | 拒绝 |
 |---|---|---|---|
-| 旧：只读白名单 + 工作档未知即问 | 22.4% | 77.6% | 0 |
-| 新：工作档黑名单 + 作用域 | **87.4%** | 12.6% | 0 |
-| 新 + 示例规则（`ffmpeg *` / `ffprobe *` / `yt-dlp *` / `ssh *` / `scp *` / `Stop-Process *` / `taskkill *`） | **91.5%** | **8.5%** | 0 |
+| 旧（改造前）：只读白名单 + 工作档未知即问（对照） | 22.4% | 77.6% | 0 |
+| 只读档：出厂名单（含敏感路径拒绝 + 结构核验） | 22.0% | 0（名单外直接拒绝） | 78.0% |
+| 只读档：出厂名单 + 自加 `ffmpeg` / `curl` | **30.9%** | — | 69.1% |
+| 工作档：出厂规则（26 必问项 + 敏感路径 + 可写根） | 87.1% | 12.9% | 0 |
+| 工作档：再放通 `ssh`/`taskkill`/`git push` 三条 | **90.4%** | **9.6%** | 0 |
 
-剩余弹窗集中在：远程副作用（ssh/scp 部署）、真正的工作区外路径、管道喂给 `Remove-Item` 之类的
-不可判定删除、循环/动态目标、无工作区的会话。这些正是"该问"的部分，且多数可用一条 allow 规则消除
-（这也是 user-configurable 名单的目的：视频工作者放通 `ffmpeg *`，部署流程放通 `ssh *`）。
-只读白名单仍是维护性资产：新增条目须确认"该命令没有任何写语义"或把写开关写进 `forbidden`。
+询问分布：越界写/删 93、远程副作用 92、不可核验 36、动态目标 29、无工作区 29、主机动作 16、敏感路径 11。
+**结论**：出厂默认把"该问的"压到 12.9%（这 2367 条里 93 条是真正的工作区外路径、92 条是 ssh/scp 部署）；
+把常用的两三行删掉/放通后就能到 9.6%。可写根（包管理器缓存）在这份语料里没体现（它的越界写是项目相邻目录，不是缓存），
+但对日常 `npm/pip/cargo` 场景是直接消噪的。
 
-## 4. 实现落点
+## 5. 实现落点
 
 | 位置 | 作用 |
 |---|---|
-| `common/services/command-policy/*` | 策略层（纯函数，可单测） |
-| `common/services/policy-rules.service.ts` | 用户规则：两级 YAML 读写 / 合并 / 校验 / mtime 缓存（热路径同步接口） |
-| `modules/policy/policy.controller.ts` | `GET /policy/rules`、`PUT /policy/rules`（AuthGuard） |
-| `common/services/sandbox-policy.ts` | `isShellSandboxSupported()` / `isCommandPolicyEnforced()`：平台能力门（互斥） |
-| `shell.plugin.ts` → `enforceCommandPolicy()` | 命令执行前的策略门 + 审批 + 规则落盘 + 会话记忆 + 无人值守拒绝 |
-| `ask.service.ts` → `requestCommandApproval()` | 四选项审批卡 + 「放通此类」规则推导（不动既有的 `requestApproval`） |
-| `file.plugin.ts` → `ensureWriteApproval()` | 工作区外写入审批；消费 `writeAllowPaths`（长期可写目录不再问） |
+| `command-policy/defaults/policy-defaults.yaml` | 出厂规则（数据文件；`nest-cli.json` assets 拷进 dist，`extraResources` 打包） |
+| `common/services/policy-rules.service.ts` | 用户文件：读写 / **旧 schema 迁移** / 校验 / mtime 缓存 / `appendRule` / `resetUser` |
+| `modules/policy/policy.controller.ts` | `GET /policy/rules`、`PUT /policy/rules`、`POST /policy/reset`（AuthGuard） |
+| `shell.plugin.ts` → `enforceCommandPolicy()` | 策略门 + 审批（敏感路径走「敏感文件访问」卡）+ 规则落盘 + 会话记忆 + 无人值守拒绝 |
+| `ask.service.ts` → `requestCommandApproval()` | 四选项审批卡（命令 / 路径两种规则；敏感路径卡显示目标与操作） |
+| `file.plugin.ts` | 写：`evaluateWritePath`（敏感路径 ask/deny → 可写根 → 工作区）+ `ensureWriteApproval`；读：`ensureSensitiveRead`（敏感路径工作档问一次 / 只读档拒绝） |
 | `session-context.ts` → `hasAnswerSurface()` | 是否有人能应答（子代理/机器人/无订阅者 → false） |
-| `process-manager.service.ts` | 平台门：Windows 不再包装 sandbox.exe（纵深防御） |
-| `windows-shell-detect.ts` | 执行壳检测：Git Bash 优先 → PowerShell → cmd |
-| 前端 `setting/CommandPolicySettings.vue` | 设置页「命令策略」：四个列表 + 生效状态 + 校验告警 |
+| 前端 `setting/CommandPolicySettings.vue` | 设置页：只读名单 / 必问项 + 敏感路径 / 可写根 三个视图（都能看到内置行、删除即写一条改动）+ 清空我的改动 |
 
-逃生舱（仅供回归对比）：
-
-- `SANDBOX_WIN_ENABLE=1`：恢复 Windows OS 沙盒（此时命令策略层自动让位，避免双重门禁）
-- `GUADA_SHELL=<path>`：显式指定执行壳（bash / powershell / cmd）
-- `GUADA_GIT_BASH_NO_LOGIN=1`：Git Bash 不用 login shell（用户 profile 产生噪音时）
+逃生舱（仅供回归对比）：`SANDBOX_WIN_ENABLE=1`（恢复 Windows OS 沙盒，命令策略层让位）、
+`GUADA_SHELL=<path>`（指定执行壳）、`GUADA_GIT_BASH_NO_LOGIN=1`。
 
 ## 5. 残留清理
 
@@ -190,7 +140,18 @@ node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\data\ai_chat.
 
 ## 6. 已知边界
 
-- 白名单外的一切都靠审批：**批准即全权执行**（没有路径维度的强制），档位名不再等于"写入限工作目录"。
-- `cmd.exe` 作执行壳（既无 Git Bash 也无 PowerShell，极罕见）没有白名单 → 一律需审批。
-- 判定是保守的启发式：**不能**阻止白名单命令 + 恶意外部资源的组合（如 `git` 读取被篡改的
-  `.git/config` 触发 hook）；真正的强隔离仍需容器/远程环境。
+- 工作档批准即全权执行：**没有路径维度的强制**（越界写只保证"问过你"），档位名不再等于"写入限工作目录"。
+- **不限网络**（本轮明确不做网络策略）：所以凭据保护是防外传的唯一闸门。用户选择"凭据只问不拒"，
+  于是**一旦点了"放通此类"，那条路径就不再拦**——这是一次显式授权，卡片与本文档都要说清。
+- **自己项目里的密钥**（`config/secrets.ts` 之类）不在 `sensitive` glob 里，我们看不见；要闭合这条
+  只能上网络策略或资源层拦截（见下）。
+- **敏感路径是"提到就拦"**：命令文本或文件名命中就触发（`echo "see ~/.ssh/x" > README.md` 也会问一次），
+  少量误判可接受（fail-closed），误判时用 `{ action: allow, path }` 放通即可。
+- **自加只读条目没有参数级核验**：往只读名单里加 `ffmpeg` 等价于"任意参数都执行"；兜底只管
+  灾难级 / 越界写 / 主机 / 远程四类（不会变成 `rm -rf D:\other` 的后门，但也挡不住 `ffmpeg -y` 覆盖文件）。
+- **可写根允许删**：包管理器 / 构建缓存按出厂设置可写可删（对齐主流做法）；IDE 与 Shell 历史目录刻意不加。
+- 项目级文件是**手写增量**，不会被重置覆盖；注意别把机器相关绝对路径写进随仓库提交的文件。
+- `cmd.exe` 作执行壳（既无 Git Bash 也无 PowerShell，极罕见）没有名单 → 只读档一律拒绝、工作档按规则表。
+- 判定是字符串层的保守启发式：**不能**阻止名单命令 + 恶意外部资源的组合（如 `git` 读取被篡改的
+  `.git/config` 触发 hook），也不做 syscall 拦截（对标产品 WorkBuddy 用 APC 注入 + Nt\* hook，
+  工程量与 AV 风险是另一个量级，本轮明确排除）。

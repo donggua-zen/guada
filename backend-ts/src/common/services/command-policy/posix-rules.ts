@@ -290,11 +290,14 @@ const POSIX_POLICIES: Record<string, PosixPolicy> = {
   dotnet: { match: firstArgIn(["--version", "--info", "--list-sdks", "--list-runtimes"]) },
   go: { match: firstArgIn(["version"]) },
   npm: { match: firstArgIn(["--version", "-v", "ls", "list"]) },
-  // docker 的只读子命令（ps/images/version/info/inspect）；logs 会持续输出，不列
+  // docker 的只读子命令（ps/images/version/info/inspect）；logs 会持续输出，不列。
+  // `container` 必须跟只读子子命令（ls/list）才算只读——裸 `container` 曾把
+  // `docker container run/rm/stop` 一并放行。
   docker: {
     match: (argv) =>
       argv.length > 0 &&
-      ["ps", "images", "version", "info", "inspect", "container"].includes(argv[0])
+      (["ps", "images", "version", "info", "inspect"].includes(argv[0]) ||
+        (argv[0] === "container" && ["ls", "list"].includes(argv[1] ?? "")))
         ? "ok"
         : "unknown",
   },
@@ -394,6 +397,72 @@ function evaluateGit(
     reasons,
     offending,
   );
+}
+
+/**
+ * 取 git 段的子命令名：跳过无害的全局开关（`--no-pager` 等）与 `--version`。
+ * 遇到危险/未知的全局开关返回 null（由 evaluateGit 负责给出 unsafe/unknown 结论）。
+ */
+export function gitSubcommandOf(args: readonly string[]): string | null {
+  let index = 0;
+  while (index < args.length && args[index].startsWith("-")) {
+    const flag = args[index];
+    const dangerous = GIT_DANGEROUS_GLOBAL_FLAGS.some(
+      (f) => flag === f || (f.length === 2 && flag.startsWith(f) && flag.length > 2),
+    );
+    if (dangerous) return null;
+    if (flag !== "--version" && !GIT_SAFE_GLOBAL_FLAGS.includes(flag)) return null;
+    index++;
+  }
+  return args[index] ?? null;
+}
+
+/**
+ * "只认特定形态"的工具：这些命令本体是执行器（python 能跑任何脚本、docker 能起容器），
+ * 白名单只认核验过的几种形态。物化到配置里时**展开成具体形态**（`python --version`），
+ * 避免用户在列表里看到一个裸的 `python` 而误以为"任意参数都放行"。
+ *
+ * 候选形态会再过一遍分析器（`evaluatePosixArgv` 判 read-only 才收），所以这里写多了不会失真。
+ */
+const RESTRICTED_FORM_CANDIDATES: Record<string, readonly string[]> = {
+  node: ["--version", "-v", "-V", "--help", "-h"],
+  python: ["--version", "-v", "-V", "--help", "-h"],
+  python3: ["--version", "-v", "-V", "--help", "-h"],
+  pip: ["--version", "-V"],
+  cargo: ["--version", "-V"],
+  java: ["-version", "--version"],
+  dotnet: ["--version", "--info", "--list-sdks", "--list-runtimes"],
+  go: ["version"],
+  npm: ["--version", "-v", "ls", "list"],
+  docker: ["ps", "images", "version", "info", "inspect", "container ls", "container list"],
+};
+
+/**
+ * 内置只读名单条目（供默认策略物化 / 漂移测试）。
+ *
+ * 条目是"命令前缀"：
+ * - 普通命令 → 裸命令名（`cat`）：其后参数由本表的参数级核验把关
+ * - `git` → `git <子命令>`
+ * - 只认特定形态的工具 → 展开成具体形态（`python --version`、`docker ps`）
+ */
+export function posixReadOnlyEntries(): string[] {
+  const entries = new Set<string>(ANY_ARGS_READ_ONLY);
+  for (const name of Object.keys(POSIX_POLICIES)) {
+    if (name === "git") continue; // git 由 evaluateGit 按子命令处理
+    const forms = RESTRICTED_FORM_CANDIDATES[name];
+    if (forms) {
+      for (const form of forms) {
+        const argv = [name, ...form.split(" ")];
+        if (evaluatePosixArgv(argv).verdict === "read-only") entries.add(`${name} ${form}`);
+      }
+      continue;
+    }
+    entries.add(name);
+  }
+  for (const subcommand of Object.keys(GIT_READONLY_SUBCOMMANDS)) {
+    entries.add(`git ${subcommand}`);
+  }
+  return [...entries].sort();
 }
 
 /**

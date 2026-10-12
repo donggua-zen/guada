@@ -1,42 +1,37 @@
 /**
- * 工作目录可写档（workspace-write）的判定：黑名单 + 作用域。
+ * 工作目录可写档（workspace-write）的判定：**例外制**（默认执行）。
  *
- * 与只读档的"正向白名单"相反，这里**默认放行**，只拦三类：
- *   T0 catastrophic  灾难级（格式化磁盘、写裸设备、关机、下载即执行、删根…）→ 硬拒，用户规则也不可覆盖
- *   T1 作用域敏感    破坏性/写类动作 + 远程副作用 → 目标全在会话工作区内则放行，越界或不可判定则弹窗
- *   T2 不可核验      风险段里出现动态构造 / wrapper 解包失败 / 未闭合引号 / 超长 → 弹窗
+ * 与只读档的"名单制"互补：这里什么都不用列就能跑，只有三类会被拦下来：
+ *   T0 catastrophic  灾难级（格式化磁盘、写裸设备、关机、下载即执行、删根…）→ 硬拒，任何规则不可覆盖
+ *   T1 必问 / 作用域 策略文件 ask 表命中的（ssh / taskkill / git push…）+ 路径型动作的目标越界 → 询问
+ *   T2 不可核验      风险段里出现动态构造 / wrapper 解包失败 / 未闭合引号 / 超长 → 询问
  *
  * 为什么表是双方言合一的：Windows 上的 Git Bash 频繁调用 `powershell -Command "…"`、`cmd /c "…"`，
  * 危险动作不会因为换了语言就变安全，因此 T0/T1 同时匹配 POSIX 与 PowerShell 词表（含 wrapper 解包后）。
  *
- * 用户规则（allow / ask / deny，token 前缀匹配）优先级：
- *   T0 > 用户 deny > 用户 ask > 用户 allow > 内置判定
+ * 例外表（allow / ask / deny，token 前缀匹配）优先级：
+ *   T0 > 项目级(deny > ask > allow) > 全局级(deny > ask > allow) > 内置判定
  * allow 可放通 T1/T2（"视频工作者放通 ffmpeg"的机制），但不能放通 T0。
+ *
+ * `rulesAuthoritative`（策略文件已物化）下，主机/远程的"内置必问"改由 ask 表决定（删一行 = 放通），
+ * 代码里的表只用于给询问原因分类；未置位时保留旧行为（表直接拦）。
  */
 
 import { analyzePosixCommand } from "./posix-rules";
 import { analyzePowerShellCommand } from "./powershell-rules";
+import { expandPathPattern, pathRuleMatches } from "./path-glob";
 import { scanCommand } from "./scan";
 import {
+  isPathRule,
   MAX_POLICY_COMMAND_LENGTH,
+  type PathRule,
+  type PolicyPathHit,
+  type PolicyRule,
   type PolicyShellKind,
+  type RuleAction,
   type ShellDialect,
   type WorkspacePolicyCode,
 } from "./types";
-
-// ==================== 用户规则 ====================
-
-/** 用户可配置的三张表（纯数据；文件读写见 policy-rules.service） */
-export interface CommandRuleSet {
-  /** 静默放行（token 前缀 + 末尾 `*`） */
-  allow: readonly string[];
-  /** 一律询问（用于收紧内置的默认放行） */
-  ask: readonly string[];
-  /** 直接拒绝 */
-  deny: readonly string[];
-}
-
-export const EMPTY_RULE_SET: CommandRuleSet = { allow: [], ask: [], deny: [] };
 
 // ==================== 结论 ====================
 
@@ -49,6 +44,8 @@ export interface WorkspaceVerdict {
   code?: WorkspaceCode;
   /** 给模型/日志的一句话原因 */
   reason: string;
+  /** 敏感路径命中时带上（审批卡显示目标；「放通此类」写这条 glob） */
+  pathHit?: PolicyPathHit;
 }
 
 // ==================== T0：灾难级（不可覆盖） ====================
@@ -122,7 +119,7 @@ function dialectOf(shellKind: PolicyShellKind): ShellDialect {
 }
 
 /** 取 token 的"命令名形状"：去引号、取 basename、去可执行后缀、小写 */
-function commandShape(token: string): string {
+export function commandShape(token: string): string {
   const bare = token.replace(/^["']+|["']+$/g, "");
   const idx = Math.max(bare.lastIndexOf("/"), bare.lastIndexOf("\\"));
   let base = idx === -1 ? bare : bare.slice(idx + 1);
@@ -144,10 +141,15 @@ export function matchRule(rule: string, commandTokens: readonly string[]): boole
   return fixed.every((rt, i) => commandShape(rt) === commandShape(commandTokens[i]));
 }
 
-function splitCommandTokens(command: string): string[] {
-  return (command.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((t) =>
+/** 把一段命令切成 token（去引号；供规则匹配与只读名单匹配共用） */
+export function tokenizeSegment(segment: string): string[] {
+  return (segment.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((t) =>
     t.replace(/^["']+|["']+$/g, ""),
   );
+}
+
+function splitCommandTokens(command: string): string[] {
+  return tokenizeSegment(command);
 }
 
 /** 包装载荷之后允许出现的"尾巴"：仅重定向（`2>&1`、`>nul` 等），不允许再跟命令 */
@@ -397,7 +399,7 @@ function hasCommandPayload(text: string): boolean {
  * 剥掉 heredoc 正文（正文是数据，不是语法）：按终止行切。
  * 返回剥离后的文本 + 接收程序名（`cat`/`tee` 这类写文件才放行；解释器当 stdin 脚本 → 不可核验）。
  */
-function stripHeredocBodies(command: string): {
+export function stripHeredocBodies(command: string): {
   text: string;
   sink: string | null;
   suspicious: boolean;
@@ -487,17 +489,187 @@ function ask(code: WorkspaceCode, reason: string): WorkspaceVerdict {
   return { tier: "ask", code, reason };
 }
 
-// ==================== 主判定 ====================
+// ==================== 规则求值 ====================
 
-export function evaluateWorkspaceCommand(input: {
+export interface WorkspacePolicyInput {
   command: string;
   shellKind: PolicyShellKind;
-  /** 会话工作区（作用域基准）；缺失时所有风险段一律弹窗 */
+  /** 会话工作区（作用域基准） */
   workspacePath?: string;
-  rules?: CommandRuleSet;
-}): WorkspaceVerdict {
+  /** 用户规则（先于出厂规则判定） */
+  rules?: readonly PolicyRule[];
+  /** 出厂规则（随版本升级自动跟随） */
+  factoryRules?: readonly PolicyRule[];
+}
+
+/** 路径访问（路径规则匹配 + 询问文案用） */
+export interface PathMention {
+  value: string;
+  op: "read" | "write" | "delete";
+}
+
+export interface RuleHit {
+  action: RuleAction;
+  rule: PolicyRule;
+  /** 路径规则命中时的具体目标 */
+  mention?: PathMention;
+}
+
+/** 逐段 + 整条：命令规则可能命中任意一段（`cd x && ssh host`） */
+function ruleTokenSets(command: string): string[][] {
+  return [splitCommandTokens(command), ...splitRawSegments(command).map(tokenizeSegment)];
+}
+
+function commandRuleHits(rule: string, tokenSets: readonly string[][]): boolean {
+  return tokenSets.some((tokens) => matchRule(rule, tokens));
+}
+
+/**
+ * 规则求值：**deny 永远优先**（任意来源、任意种类）；其余按
+ * 「路径规则（更具体）→ 命令规则」× 「你的规则 → 出厂规则」，同一张表内从上到下第一条命中。
+ */
+export function evaluateRules(input: {
+  userRules: readonly PolicyRule[];
+  factoryRules: readonly PolicyRule[];
+  tokenSets: readonly string[][];
+  mentions: readonly PathMention[];
+}): RuleHit | null {
+  const levels: (readonly PolicyRule[])[] = [input.userRules, input.factoryRules];
+  const matchWith = (rule: PolicyRule): { ok: boolean; mention?: PathMention } => {
+    if (isPathRule(rule)) {
+      const mention = input.mentions.find((m) => pathRuleMatches(rule.path, m.value));
+      return { ok: !!mention, mention };
+    }
+    return { ok: commandRuleHits(rule.match, input.tokenSets) };
+  };
+  // 判定顺序（5 趟）：
+  //   1. deny（任意来源、任意种类）——硬拒绝永远优先
+  //   2. 你的路径规则（更具体，先于你的命令规则）
+  //   3. 你的命令规则（所以"放通某条命令"能盖住出厂必问项）
+  //   4. 出厂命令规则（必问项：`ssh -i key host` 报"远程副作用"而不是被它读到的密钥抢了原因）
+  //   5. 出厂路径规则（敏感路径 ask / 可写根 allow）
+  const [userLevel, factoryLevel] = levels;
+  const passes: ((level: readonly PolicyRule[], rule: PolicyRule) => boolean)[] = [
+    (_level, rule) => rule.action === "deny",
+    (level, rule) => level === userLevel && isPathRule(rule),
+    (level, rule) => level === userLevel && !isPathRule(rule),
+    (level, rule) => level === factoryLevel && !isPathRule(rule) && rule.action === "ask",
+    (level, rule) => level === factoryLevel && isPathRule(rule),
+  ];
+  for (const pass of passes) {
+    for (const level of levels) {
+      for (const rule of level) {
+        if (!pass(level, rule)) continue;
+        const matched = matchWith(rule);
+        if (matched.ok) return { action: rule.action, rule, mention: matched.mention };
+      }
+    }
+  }
+  return null;
+}
+
+/** 路径规则里 action=allow 的条目 = **可写根**（工作区外仍允许写/删/建的目录） */
+export function allowedPathRules(rules: readonly PolicyRule[]): PathRule[] {
+  return rules.filter((r): r is PathRule => isPathRule(r) && r.action === "allow");
+}
+
+/** 文件工具用：该绝对路径是否被放行（可写根命中即放行） */
+export function isAllowedPath(rules: readonly PolicyRule[], path: string): boolean {
+  return allowedPathRules(rules).some((rule) => pathRuleMatches(rule.path, path));
+}
+
+/** 文件工具用：命中该路径的第一条路径规则（用于判定"敏感路径需要询问"） */
+export function matchPathRule(rules: readonly PolicyRule[], path: string): PathRule | null {
+  for (const rule of rules) {
+    if (isPathRule(rule) && pathRuleMatches(rule.path, path)) return rule;
+  }
+  return null;
+}
+
+/** 路径提及：命令里出现的路径 / 文件名（**读类命令也算**——敏感路径靠它拦） */
+const NULL_TARGETS_SET = new Set([
+  "/dev/null",
+  "nul",
+  "$null",
+  "/dev/stdout",
+  "/dev/stderr",
+  "/dev/zero",
+]);
+const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\//i;
+const DELETE_VERBS = /\b(rm|del|erase|rd|rmdir|Remove-Item)\b/i;
+
+export function collectPathMentions(segment: string): PathMention[] {
+  const op: PathMention["op"] = DELETE_VERBS.test(segment)
+    ? "delete"
+    : PATH_SCOPED_ACTIONS.test(segment) ||
+        analyzePosixCommand(segment).verdict === "unsafe" ||
+        analyzePowerShellCommand(segment).verdict === "unsafe"
+      ? "write"
+      : "read";
+  const mentions: PathMention[] = [];
+  for (const token of tokenizeSegment(segment)) {
+    if (!token || token.startsWith("-") || token === "/" || token === "//") continue;
+    if (URL_LIKE.test(token) || NULL_TARGETS_SET.has(token.toLowerCase())) continue;
+    // 不按"像不像路径"过滤：`cat id_rsa`、`type .env` 这类**裸文件名**也要能命中敏感条目
+    mentions.push({ value: token, op });
+  }
+  return mentions;
+}
+
+/**
+ * 代码风险层：T0 / 路径型动作 / 主机动作 / 远程副作用 / 执行壳方言判 unsafe。
+ *
+ * 只读档里"用户自加条目"（分析器没有语义）必须过这一关才放行——否则往只读名单里加个
+ * `rm` 就能在只读档删文件。
+ *
+ * 只看**执行壳方言**：另一方言的 unsafe 是"跨壳绊线"，对用户显式列出的命令过于激进
+ * （例如 Git Bash 下的 `curl` 在 PowerShell 语义里是 Invoke-WebRequest），这里不采用。
+ */
+export function hitsCodeRiskLayer(command: string, shellKind: PolicyShellKind): boolean {
+  if (matchCatastrophic(command)) return true;
+  const analyze =
+    dialectOf(shellKind) === "posix" ? analyzePosixCommand : analyzePowerShellCommand;
+  for (const text of splitRawSegments(command)) {
+    if (HOST_ACTIONS.test(text)) return true;
+    if (REMOTE_SIDE_EFFECTS.some((r) => r.re.test(text))) return true;
+    if (PATH_SCOPED_ACTIONS.test(text)) return true;
+    if (analyze(text).verdict === "unsafe") return true;
+  }
+  return false;
+}
+
+/** 规则命中 → 结论（询问原因按内置主机/远程表分类，审批卡文案更好懂） */
+function verdictForRuleHit(hit: RuleHit, command: string): WorkspaceVerdict {
+  const describe = isPathRule(hit.rule) ? hit.rule.path : hit.rule.match;
+  if (hit.action === "deny") {
+    return { tier: "block", code: "user-deny", reason: `matched a deny rule (${describe})` };
+  }
+  if (hit.action === "allow") {
+    return { tier: "allow", reason: `matched an allow rule (${describe})` };
+  }
+  if (isPathRule(hit.rule)) {
+    const target = hit.mention?.value ?? describe;
+    return {
+      ...ask("sensitive-path", `sensitive path ${target} (rule: ${describe})`),
+      pathHit: { glob: describe, target, op: hit.mention?.op ?? "read" },
+    };
+  }
+  if (HOST_ACTIONS.test(command)) {
+    return ask("host-action", `host-level action (${describe})`);
+  }
+  if (REMOTE_SIDE_EFFECTS.some((r) => r.re.test(command))) {
+    return ask("remote-side-effect", `remote or irreversible side effect (${describe})`);
+  }
+  return ask("user-ask", `matched an ask rule (${describe})`);
+}
+
+// ==================== 主判定 ====================
+
+export function evaluateWorkspaceCommand(input: WorkspacePolicyInput): WorkspaceVerdict {
   const { command, shellKind } = input;
-  const rules = input.rules ?? EMPTY_RULE_SET;
+  const userRules = input.rules ?? [];
+  const factoryRules = input.factoryRules ?? [];
+  const allRules: readonly PolicyRule[] = [...userRules, ...factoryRules];
 
   // 0) heredoc：正文是数据不是语法——剥离后再做引号核验与风险判定；
   //    解释器读 stdin 的 heredoc（`python <<EOF`）是"看不见的脚本" → 不可核验
@@ -525,19 +697,11 @@ export function evaluateWorkspaceCommand(input: {
     };
   }
 
-  // 2) 用户规则（优先级 deny > ask > allow）
-  const tokenSets = [splitCommandTokens(command)];
-  const hits = (list: readonly string[]) =>
-    list.some((rule) => tokenSets.some((tokens) => matchRule(rule, tokens)));
-  if (hits(rules.deny)) {
-    return { tier: "block", code: "user-deny", reason: "matched a user deny rule" };
-  }
-  if (hits(rules.ask)) {
-    return { tier: "ask", code: "unverifiable", reason: "matched a user ask rule" };
-  }
-  if (hits(rules.allow)) {
-    return { tier: "allow", reason: "matched a user allow rule" };
-  }
+  // 2) 规则：deny（任意来源）→ 路径规则（你的→出厂）→ 命令规则（你的→出厂）
+  const tokenSets = ruleTokenSets(command);
+  const mentions = splitRawSegments(core).flatMap((text) => collectPathMentions(text));
+  const hit = evaluateRules({ userRules, factoryRules, tokenSets, mentions });
+  if (hit) return verdictForRuleHit(hit, command);
 
   // 3) 结构不可核验：超长 / 引号未闭合（用自己的引号逻辑——Windows 路径常以 `\` 结尾，
   //    POSIX 扫描器会把它当成转义符而误报"未闭合"）
@@ -559,6 +723,12 @@ export function evaluateWorkspaceCommand(input: {
   }
 
   const wsNorm = input.workspacePath ? normalizeScopePath(input.workspacePath) : null;
+  /** 可写根 = 工作区 ∪ 路径 allow 规则 */
+  const allowRules = allowedPathRules(allRules);
+  const isWritable = (resolved: string): boolean =>
+    (wsNorm ? isInsideWorkspace(resolved, wsNorm) : false) ||
+    allowRules.some((rule) => pathRuleMatches(rule.path, resolved));
+
   /** 相对路径的解析基准：跟随 `cd`/`Set-Location` 移动（否则 `cd /etc && rm passwd` 会被误判为区内） */
   let cwdBase = wsNorm;
   let cwdUnknown = false;
@@ -574,28 +744,32 @@ export function evaluateWorkspaceCommand(input: {
     if (candidates.length === 0) {
       return ask("unverifiable", "destructive/write action with no verifiable target path");
     }
-    if (!wsNorm) {
-      return ask("no-workspace", "the session has no workspace to scope this action against");
-    }
     for (const c of candidates) {
       if (c.value.startsWith("~")) {
-        return ask("out-of-scope", `home-directory target (${c.value})`);
+        const resolved = normalizeScopePath(expandPathPattern(c.value));
+        if (!isWritable(resolved)) {
+          return ask("out-of-scope", `home-directory target (${c.value})`);
+        }
+        continue;
       }
       if (!isAbsolutePath(c.value) && cwdUnknown) {
         return ask("dynamic-target", "relative target with an unverifiable working directory");
       }
+      const base = cwdBase ?? wsNorm;
+      if (!base) {
+        return ask("no-workspace", "the session has no workspace to scope this action against");
+      }
       const resolved = isAbsolutePath(c.value)
         ? normalizeScopePath(c.value)
-        : normalizeScopePath(`${cwdBase ?? wsNorm}\\${c.value}`);
-      if (!isInsideWorkspace(resolved, wsNorm)) {
-        return ask("out-of-scope", `target outside the workspace (${c.value})`);
+        : normalizeScopePath(`${base}\\${c.value}`);
+      if (!isWritable(resolved)) {
+        return ask("out-of-scope", `target outside the writable roots (${c.value})`);
       }
     }
     return null;
   };
 
   for (const text of splitRawSegments(core)) {
-
     // ── 目录切换：更新相对路径基准（cd 本身不写，不触发判定）──
     const cd = text.match(/^(cd|chdir|pushd|push-location|set-location)\b\s*(.*)$/i);
     if (cd) {
@@ -626,7 +800,8 @@ export function evaluateWorkspaceCommand(input: {
           command: inner,
           shellKind,
           workspacePath: input.workspacePath,
-          rules,
+          rules: userRules,
+          factoryRules,
         });
         if (innerVerdict.tier !== "allow") return innerVerdict;
         continue;
@@ -646,21 +821,13 @@ export function evaluateWorkspaceCommand(input: {
       continue;
     }
 
-    const host = HOST_ACTIONS.test(text);
-    const remote = REMOTE_SIDE_EFFECTS.find((r) => r.re.test(text));
-    // 写入类动作：T1 动词表 ∪ 两个方言分析器的 unsafe（find -delete / sort -o / sed -i / Set-Content …）
+    // 写入类动作：路径型动词表 ∪ 两个方言分析器的 unsafe（find -delete / sort -o / sed -i / Set-Content …）
     const pathy =
       PATH_SCOPED_ACTIONS.test(text) ||
       analyzePosixCommand(text).verdict === "unsafe" ||
       analyzePowerShellCommand(text).verdict === "unsafe";
-
-    if (!host && !remote && !pathy) continue; // 非风险段 → 放行
+    if (!pathy) continue; // 非写入段 → 放行（必问项由规则表在步骤 2 判定）
     risky = true;
-
-    if (host) return ask("host-action", "host-level action needs approval");
-    if (remote) {
-      return ask("remote-side-effect", `remote or irreversible side effect (${remote.id})`);
-    }
 
     const bad = checkTargets(pathCandidates(text));
     if (bad) return bad;
@@ -673,25 +840,26 @@ export function evaluateWorkspaceCommand(input: {
     if (!target) {
       return ask("dynamic-target", "write redirect with unreadable target");
     }
-    if (!wsNorm) {
-      return ask("no-workspace", "write redirect but the session has no workspace");
-    }
     if (isAbsolutePath(target)) {
-      if (!isInsideWorkspace(normalizeScopePath(target), wsNorm)) {
-        return ask("out-of-scope", `write redirect outside the workspace (${target})`);
+      if (!isWritable(normalizeScopePath(target))) {
+        return ask("out-of-scope", `write redirect outside the writable roots (${target})`);
       }
       continue;
     }
     if (cwdUnknown) {
       return ask("dynamic-target", "relative write redirect with an unverifiable working directory");
     }
-    const resolved = normalizeScopePath(`${cwdBase ?? wsNorm}\\${target}`);
-    if (!isInsideWorkspace(resolved, wsNorm)) {
-      return ask("out-of-scope", `write redirect outside the workspace (${target})`);
+    const base = cwdBase ?? wsNorm;
+    if (!base) {
+      return ask("no-workspace", "write redirect but the session has no workspace");
+    }
+    const resolved = normalizeScopePath(`${base}\\${target}`);
+    if (!isWritable(resolved)) {
+      return ask("out-of-scope", `write redirect outside the writable roots (${target})`);
     }
   }
 
   return risky
-    ? { tier: "allow", reason: "workspace-scoped action within the workspace" }
+    ? { tier: "allow", reason: "workspace-scoped action within the writable roots" }
     : { tier: "allow", reason: "not a destructive or remote action" };
 }

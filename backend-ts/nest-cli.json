@@ -12,6 +12,10 @@
       {
         "include": "common/database/migrations/**/*.sql",
         "outDir": "dist"
+      },
+      {
+        "include": "common/services/command-policy/defaults/*.yaml",
+        "outDir": "dist"
       }
     ],
     "watchAssets": true

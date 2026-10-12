@@ -152,6 +152,7 @@ export class FilePlugin extends PluginBase {
           );
         } else {
           const resolvedPath = this.resolvePath(file_path, ctx);
+          await this.ensureSensitiveRead(resolvedPath, ctx, ctx?.toolCallId);
           this.logger.log(
             `读取文件: ${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
           );
@@ -970,6 +971,19 @@ export class FilePlugin extends PluginBase {
       return { kind: "allow" };
     }
 
+    // 敏感路径（出厂 敏感规则 / 你的规则）：命中 ask → 交审批；命中 deny → 直接拒绝。
+    // 放在"工作区内直接放行"之前，所以工作区里的 .env / 密钥文件也要问一次。
+    const sensitive = this.policyRules.matchPathRuleSync(
+      context?.session.workspacePath,
+      resolvedPath,
+    );
+    if (sensitive?.action === "deny") {
+      return { kind: "deny", message: `Denied by policy rule (${sensitive.path}): ${resolvedPath}` };
+    }
+    if (sensitive?.action === "ask") {
+      return { kind: "ask", resolvedPath };
+    }
+
     // workspace-write：工作区内或系统注册的安全路径（技能目录等）直接放行；
     // 其余交 ensureWriteApproval 询问用户（本会话内记住过的同路径直接放行）
     const extra = context?.session.workspacePath
@@ -1001,7 +1015,25 @@ export class FilePlugin extends PluginBase {
       return;
     }
 
-    // 用户规则：policy.yaml 的 writeAllowPaths（工作区外长期可写目录，如 D:/AI/videos/out）
+    // 敏感路径：走"敏感文件访问"卡（点"放通此类"写的是这条路径 glob）
+    const sensitive = this.policyRules.matchPathRuleSync(
+      params.context?.session.workspacePath,
+      params.resolvedPath,
+    );
+    if (sensitive?.action === "ask") {
+      await this.requestSensitiveAccess({
+        resolvedPath: params.resolvedPath,
+        glob: sensitive.path,
+        op: params.operation === "edit" ? "write" : "write",
+        context: params.context,
+        toolCallId: params.toolCallId,
+        sessionId,
+        abortSignal: params.abortSignal,
+      });
+      return;
+    }
+
+    // 用户规则：可写根（出厂开发缓存 + 你追加的目录）
     if (this.isPathAllowedByPolicy(params.resolvedPath, params.context)) {
       return;
     }
@@ -1033,12 +1065,89 @@ export class FilePlugin extends PluginBase {
     );
   }
 
-  /** 目标是否命中用户配置的"工作区外可写路径"（policy.yaml 的 writeAllowPaths） */
+  /**
+   * 敏感路径门：命中 `{action: "ask", path}` 的路径 → 弹"敏感文件访问"卡。
+   * 工作档才弹窗；只读档已在 evaluateWritePath / read_file 里直接拒绝。
+   */
+  private async requestSensitiveAccess(params: {
+    resolvedPath: string;
+    glob: string;
+    op: "read" | "write" | "delete";
+    context?: PluginContext;
+    toolCallId?: string;
+    sessionId: string;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    const session = params.context?.session;
+    const canAsk = session?.hasAnswerSurface
+      ? session.hasAnswerSurface()
+      : session?.sessionType === "web";
+    if (!canAsk) {
+      throw new Error(
+        `File access denied: ${params.resolvedPath} matches a sensitive path rule (${params.glob}) ` +
+          `and no one can approve it right now (sub-agent / bot / no live UI).`,
+      );
+    }
+    const approval = await this.askService.requestCommandApproval(session as any, {
+      toolCallId: params.toolCallId,
+      command: `${params.op === "read" ? "read" : "write"} ${params.resolvedPath}`,
+      reason: `命中敏感路径规则（${params.glob}）`,
+      allowRule: params.glob,
+      allowRuleKind: "path",
+      pathDetail: { target: params.resolvedPath, op: params.op },
+      abortSignal: params.abortSignal,
+    });
+    if (approval !== "once") {
+      try {
+        await this.policyRules.appendRule(
+          approval.scope,
+          { action: "allow", path: params.glob },
+          params.context?.session.workspacePath,
+        );
+      } catch (e: any) {
+        this.logger.warn(`failed to persist path rule "${params.glob}": ${e?.message ?? e}`);
+      }
+    }
+    if (params.sessionId) writeApprovalMemory.remember(params.sessionId, params.resolvedPath);
+  }
+
+  /**
+   * 读类工具的敏感路径门：工作档弹一次（本会话记住该目标），只读档直接拒绝。
+   */
+  private async ensureSensitiveRead(
+    resolvedPath: string,
+    context: PluginContext | undefined,
+    toolCallId?: string,
+  ): Promise<void> {
+    const rule = this.policyRules.matchPathRuleSync(context?.session.workspacePath, resolvedPath);
+    if (!rule || rule.action === "allow") return;
+    if (rule.action === "deny") {
+      throw new Error(`Denied by policy rule (${rule.path}): ${resolvedPath}`);
+    }
+    const mode = context?.session.getSandboxMode?.() ?? "workspace-write";
+    if (mode === "read-only") {
+      throw new Error(
+        `Read-only mode: access to a sensitive path is denied (${resolvedPath}, rule: ${rule.path}). ` +
+          `Allow it under Settings → Command policy, or switch the session mode to workspace-write.`,
+      );
+    }
+    if (mode === "danger-full-access") return;
+    const sessionId = context?.session.sessionId || "";
+    if (sessionId && writeApprovalMemory.has(sessionId, resolvedPath)) return;
+    await this.requestSensitiveAccess({
+      resolvedPath,
+      glob: rule.path,
+      op: "read",
+      context,
+      toolCallId,
+      sessionId,
+    });
+  }
+
+  /** 目标是否命中"可写根"（policy.yaml 的路径 allow 规则：出厂开发缓存 + 用户追加的目录） */
   private isPathAllowedByPolicy(resolvedPath: string, context?: PluginContext): boolean {
     try {
-      const roots = this.policyRules.getWriteAllowPathsSync(context?.session.workspacePath);
-      if (roots.length === 0) return false;
-      return this.workspaceService.isPathWithin(resolvedPath, roots);
+      return this.policyRules.isPathAllowedSync(context?.session.workspacePath, resolvedPath);
     } catch {
       return false;
     }
