@@ -259,15 +259,18 @@ codesign --force --deep --sign - /Applications/GuaDa.app
 Apple 公证（notarization）并 stapling。两步都能放进 CI（证书与 Apple ID 凭据存 GitHub
 Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执行 4.1 / 4.2 的放行步骤。
 
-#### 4.4 已知限制：Intel（x64）版缺沙盒二进制
+#### 4.4 沙盒二进制的分发现状
 
-`mac.extraResources` 目前只打包 `sandbox/sandbox-macos-arm64`，而运行时是按
-`sandbox-macos-${process.arch}` 查找的（`backend-ts/src/modules/shell/process-manager.service.ts`
-的 `resolveSandboxBin`）。因此 **x64 版 mac 包里没有可用的沙盒二进制**：用户在会话里开启
-沙盒档位后，shell 工具会直接报错拒绝执行（fail-closed，不会静默降级成无沙盒运行）。
+**Windows 版已移除沙盒功能**（刻意取舍，不是缺口）：不再随包提供 `sandbox.exe`，
+`build.win.extraResources` 为空。打包版 Windows 上 `resolveSandboxBin` 找不到二进制，
+`shell.plugin.ts` 是 fail-closed —— 用户在会话里开沙盒档位时 shell 工具会明确报错拒绝执行，
+**不会静默降级成无沙盒运行**。
 
-要支持 Intel 版的沙盒，需要先补一个 `sandbox/sandbox-macos-x64` 二进制并加进
-`mac.extraResources`；该二进制如何构建尚未写进 `sandbox/README.md`。
+**macOS 版按架构分发**：`mac.extraResources` 目前只打包 `sandbox/sandbox-macos-arm64`，
+而运行时按 `sandbox-macos-${process.arch}` 查找（`backend-ts/src/modules/shell/process-manager.service.ts`
+的 `resolveSandboxBin`）。CI 现在只出 arm64，所以两者一致；**若将来要出 Intel 版**，
+需要先补一个 `sandbox/sandbox-macos-x64` 并加进 `mac.extraResources`
+（该二进制如何构建尚未写进 `sandbox/README.md`），否则 x64 包的沙盒同样不可用（fail-closed）。
 
 #### 4.5 构建方式选择
 
