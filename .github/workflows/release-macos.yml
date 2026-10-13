@@ -122,17 +122,26 @@ jobs:
       # mac.target 同时声明了 x64 与 arm64，必须显式指定架构，否则会尝试构建两个
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
       # electron-builder 的默认发布策略会尝试发布
+      # GitHub 的 macOS runner 上 dmg 偶发失败：hdiutil detach -force 返回 16（临时挂载的
+      # 磁盘镜像被占用，常见于 Spotlight 索引）。先关掉索引，再对打包做一次重试。
+      - name: 关闭 Spotlight 索引（降低 dmg 构建偶发失败）
+        run: sudo mdutil -a -i off || true
+
       - name: 打包 dmg
         run: |
           set +e
-          npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg.log
-          code=${PIPESTATUS[0]}
-          if [ "$code" -ne 0 ]; then
-            # 注解有条数上限（约 10 条），所以先打最关键的报错行，再补尾部
-            echo "::error::打包失败（退出码 $code）"
-            grep -nE "⨯|Error:|error " /tmp/dmg.log | tail -6 | while IFS= read -r l; do echo "::error::$l"; done
-            tail -3 /tmp/dmg.log | while IFS= read -r l; do echo "::error::$l"; done
-          fi
+          code=1
+          for attempt in 1 2; do
+            npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg.log
+            code=${PIPESTATUS[0]}
+            if [ "$code" -eq 0 ]; then exit 0; fi
+            echo "::warning::打包第 $attempt 次失败（退出码 $code）"
+            [ "$attempt" -lt 2 ] && sleep 20
+          done
+          # 注解有条数上限（约 10 条），先打最关键的报错行，再补尾部
+          echo "::error::打包两次均失败（退出码 $code）"
+          grep -nE "⨯|Error:|error " /tmp/dmg.log | tail -6 | while IFS= read -r l; do echo "::error::$l"; done
+          tail -3 /tmp/dmg.log | while IFS= read -r l; do echo "::error::$l"; done
           exit "$code"
         env:
           # runner 上没有签名证书，跳过钥匙串检索
@@ -150,9 +159,10 @@ jobs:
           pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
-            # 脚本最后会打印 FAILED 清单与逐条原因；注解上限约 10 条，只取最后 8 行
+            # 注解上限约 10 条：只抓「每个包 require 成功」的进度行 + 错误行，
+            # 最后一个 ok 之后的包就是出问题的那个；再补 FAILED 清单。
             echo "::error::asar 校验失败（退出码 $code）"
-            tail -8 /tmp/verify-asar.log | while IFS= read -r l; do echo "::error::$l"; done
+            grep -nE "  ok |Error|Cannot find|✗|not found|FAILED" /tmp/verify-asar.log | tail -8 | while IFS= read -r l; do echo "::error::$l"; done
           fi
           exit "$code"
 
