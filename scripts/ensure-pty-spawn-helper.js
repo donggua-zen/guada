@@ -25,9 +25,24 @@ const DEFAULT_ROOTS = [
   path.join(REPO_ROOT, 'backend-ts', 'node_modules_production', 'node_modules'),
 ]
 
-/** node-pty 原生模块目录查找顺序，与 node-pty/lib/utils.js 的 loadNativeModule 一致 */
-function nativeDirs() {
-  return ['build/Release', 'build/Debug', `prebuilds/${process.platform}-${process.arch}`]
+/**
+ * spawn-helper 的候选目录
+ *
+ * - 源码编译：build/Release、build/Debug
+ * - 预编译包：prebuilds/<platform>-<arch>；同时枚举 prebuilds 下的其它架构目录，
+ *   覆盖「在 arm64 机器上打 x64 包」这类交叉打包（此时 x64 的 helper 也要有 x 位）
+ */
+function spawnHelperDirs(pkgDir) {
+  const dirs = ['build/Release', 'build/Debug', `prebuilds/${process.platform}-${process.arch}`]
+  try {
+    for (const name of fs.readdirSync(path.join(pkgDir, 'prebuilds'))) {
+      const rel = `prebuilds/${name}`
+      if (!dirs.includes(rel)) dirs.push(rel)
+    }
+  } catch {
+    /* 没有 prebuilds 目录：忽略 */
+  }
+  return dirs
 }
 
 /**
@@ -57,7 +72,7 @@ function ensureSpawnHelperExecutable(nodeModulesDirs, options = {}) {
     }
 
     let found = 0
-    for (const dir of nativeDirs()) {
+    for (const dir of spawnHelperDirs(pkgDir)) {
       const helper = path.join(pkgDir, dir, 'spawn-helper')
       if (!fs.existsSync(helper)) continue
       found++
@@ -93,7 +108,7 @@ function ensureSpawnHelperExecutable(nodeModulesDirs, options = {}) {
   return { ok: failed === 0, skipped: false, fixed, failed }
 }
 
-module.exports = { ensureSpawnHelperExecutable, DEFAULT_ROOTS, nativeDirs }
+module.exports = { ensureSpawnHelperExecutable, DEFAULT_ROOTS, spawnHelperDirs }
 
 if (require.main === module) {
   const argv = process.argv.slice(2)

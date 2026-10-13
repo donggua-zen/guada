@@ -7,6 +7,19 @@ const NATIVE_DIRS = ["build/Release", "build/Debug", `prebuilds/${process.platfo
 /** 已确认 helper 可执行后不再重复 stat */
 let verified = false;
 
+/**
+ * asar 内的路径改写为解包后的真实路径。
+ *
+ * 打包版里 require.resolve 拿到的是 app.asar 内的虚拟路径，而原生文件被 asarUnpack
+ * 解到 app.asar.unpacked —— node-pty 自己也是这样改写的（lib/unixTerminal.js），
+ * 不改写会对 asar 内的只读路径 chmod，必然 ENOTDIR。
+ */
+function toUnpackedPath(p: string): string {
+  return p
+    .replace(/app\.asar(?!\.unpacked)/, "app.asar.unpacked")
+    .replace(/node_modules\.asar(?!\.unpacked)/, "node_modules.asar.unpacked");
+}
+
 /** 带修复提示的错误：Gateway 会把 fixHint 透传给前端错误横幅 */
 export class PtyHelperError extends Error {
   readonly fixHint: string;
@@ -33,7 +46,7 @@ export function ensureSpawnHelperExecutable(): void {
   let pkgDir: string;
   try {
     // node-pty 的 main 是 lib/index.js，两级 dirname 即包根目录
-    pkgDir = path.dirname(path.dirname(require.resolve("node-pty")));
+    pkgDir = toUnpackedPath(path.dirname(path.dirname(require.resolve("node-pty"))));
   } catch {
     return; // 无法解析包路径：交给 loadNodePty 抛「未安装」的错误
   }
