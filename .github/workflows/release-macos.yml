@@ -1,0 +1,148 @@
+# macOS 发布构建（arm64 + x64 双架构）
+#
+# 为什么需要它：macOS 的安装包只能在 macOS 上构建 —— electron-builder 在 Windows 上构建 mac
+# 目标会直接抛错（Build for macOS is supported only on macOS），dmg 需要 hdiutil、签名需要
+# codesign，都是 macOS 专有工具。本机是 Windows 时无法出 mac 包，用 GitHub 托管的 macOS
+# runner 出包，就不必每次发版都手工跑到另一台 mac 上编译一次。
+#
+# 触发方式：
+#   - 推送 v* tag（发版）：构建 + 上传 artifact + 附到同名 GitHub Release
+#   - 带后缀的 tag（v1.0.0-rc1、v1.0.0-build-test 等预发布/测试 tag）：只构建 + 上传
+#     artifact，不建 Release，也不做版本一致性硬校验
+#   - 手动触发（Actions 页面 Run workflow）：同上，只构建 + 上传 artifact
+#
+# 产物：两个架构各一个 dmg（GuaDa-<版本>-arm64.dmg / GuaDa-<版本>-x64.dmg），未签名。
+# 用户侧安装放行步骤见 docs/ELECTRON_DEPLOYMENT.md 第 4 章。
+#
+# 注意：workflow 只在 GitHub 生效；Gitee / GitCode 需要各自平台的 CI 配置，本文件不影响它们。
+
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-macos-${{ github.ref }}
+  # 发版构建不中途取消
+  cancel-in-progress: false
+
+permissions:
+  # 写权限用于把产物附到 GitHub Release（只有 tag 触发时才会用到）
+  contents: write
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      # 一个架构失败不取消另一个，避免"只差一个架构"时白跑
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon：macos-latest 当前即 arm64
+          - arch: arm64
+            runner: macos-latest
+          # Intel：macos-13 已退役，Intel runner 现为 macos-15-intel
+          - arch: x64
+            runner: macos-15-intel
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      # 顺序不能反：setup-node 的 pnpm 缓存依赖先装好的 pnpm
+      # 版本不用传：action 从 package.json 的 packageManager 字段读取（pnpm@11.7.0）
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: 安装 Node
+        uses: actions/setup-node@v7
+        with:
+          # 24 = LTS，且满足全部依赖的 engines：electron 要 >=22.12.0、
+          # prisma 要 ^20.19 || ^22.12 || >=24.0、vite 要 ^20.19.0 || >=22.12.0
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            backend-ts/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+
+      # 正式 tag（vX.Y.Z）与 package.json 版本不一致时直接失败，避免打出名不符实的包；
+      # 带后缀的预发布/测试 tag（v1.0.0-rc1、v1.0.0-build-test）只告警不阻断。
+      # 放在安装依赖之前：这一步只需几秒，不该等依赖装完才报错。
+      - name: 校验 tag 与 package.json 版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "$tag" = "$pkg_version" ]; then
+            echo "版本一致：$pkg_version"
+          elif printf '%s' "$tag" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag $GITHUB_REF_NAME 与 package.json 的版本 $pkg_version 不一致"
+            exit 1
+          else
+            echo "::warning::非正式 tag（$GITHUB_REF_NAME），跳过版本一致性校验；产物版本号为 package.json 的 $pkg_version"
+          fi
+
+      # 根目录 install 会级联安装两个子包（根 package.json 的
+      # postinstall: pnpm --dir backend-ts install && pnpm --dir frontend install）
+      # 依赖源取自仓库 .npmrc（淘宝镜像）；若 runner 上拉取慢，可在这里改成官方源
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 准备构建（清理 release/ + 编译 Electron 主进程）
+        run: pnpm run build:electron:pre
+
+      # 这一步必须跑，不能只跑 electron-builder：electron-builder 的 extraResources 依赖它
+      # 产出的 backend-ts/node_modules_production（该目录不入库，由 optimize-electron-deps.js
+      # 安装裁剪、rebuild-native-electron.js 按 Electron ABI 重建）
+      - name: 构建后端（含原生模块裁剪与重建）
+        run: pnpm run build:electron:backend
+        env:
+          # runner 在海外，走官方源；脚本内默认值指向国内镜像
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          npm_config_disturl: https://electronjs.org/headers
+
+      - name: 构建前端
+        run: pnpm run build:electron:frontend
+
+      # mac.target 同时声明了 x64 与 arm64，必须显式指定架构，否则会尝试构建两个
+      # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
+      # electron-builder 的默认发布策略会尝试发布
+      - name: 打包 dmg
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        env:
+          # runner 上没有签名证书，跳过钥匙串检索
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: GuaDa-macos-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      # 只对正式 tag（不含 '-' 后缀）建 Release；预发布/测试 tag 只留 artifact，
+      # 避免一个 build-test tag 就在公开仓库里冒出一个 Release
+      - name: 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          # 两个架构的 job 并发执行：先到的建 Release，后到的容忍"已存在"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          gh release upload "$tag" release/*.dmg --clobber
+          if [ -f release/latest-mac.yml ]; then
+            gh release upload "$tag" release/latest-mac.yml --clobber
+          fi
