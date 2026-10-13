@@ -111,7 +111,15 @@ jobs:
       # 产出的 backend-ts/node_modules_production（该目录不入库，由 optimize-electron-deps.js
       # 安装裁剪、rebuild-native-electron.js 按 Electron ABI 重建）
       - name: 构建后端（含原生模块裁剪与重建）
-        run: pnpm run build:electron:backend
+        run: |
+          set +e
+          pnpm run build:electron:backend 2>&1 | tee /tmp/backend-build.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::后端构建失败（退出码 $code），日志尾部："
+            tail -40 /tmp/backend-build.log | while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$code"
         env:
           # runner 在海外，走官方源；脚本内默认值指向国内镜像
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
