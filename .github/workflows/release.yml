@@ -16,10 +16,10 @@
 #   - Windows x64：GuaDa Setup <版本>.exe（nsis 安装包）
 #   均未签名；mac 用户首次安装的放行步骤见 docs/ELECTRON_DEPLOYMENT.md 第 4 章。
 #
-# 镜像平台（Gitee / GitCode）**只发 release、不传二进制**：
-#   - Gitee 单附件上限 100M（官方文档），我们的安装包 200M+ 放不进去；
-#   - GitCode 的附件接口虽支持，但限额未文档化，暂不依赖。
-#   两个平台的 release 正文里会列出 GitHub 上的下载地址。未配置对应 token 时自动跳过。
+# 镜像平台：
+#   - GitCode：建同名 release **并上传安装包**（附件走「取预签名地址 → PUT」两段式）
+#   - Gitee：**只发 release、不传二进制**（单附件上限 100M，安装包 200M+ 放不进去）
+#   两者的 release 正文都会列出 GitHub 上的下载地址。未配置对应 token 时自动跳过。
 
 name: Release
 
