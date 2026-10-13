@@ -102,11 +102,13 @@
                 class="w-full h-full flex items-center justify-center">
                 <div class="text-center">
                     <p class="text-gray-400 dark:text-gray-500 text-sm">
-                        {{ isUnplayableMediaFile(props.tab.extension || '')
-                            ? t('chat.workspace.mediaNotPlayable')
-                            : t('chat.workspace.unsupportedPreview') }}
+                        {{ binaryNotPreviewable
+                            ? t('chat.workspace.binaryNotPreview')
+                            : isUnplayableMediaFile(currentExtension)
+                                ? t('chat.workspace.mediaNotPlayable')
+                                : t('chat.workspace.unsupportedPreview') }}
                     </p>
-                    <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                    <el-button v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
                         {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
                     </el-button>
                 </div>
@@ -127,7 +129,7 @@
                 <div v-else-if="previewError" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
-                        <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                        <el-button v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
                             {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
                         </el-button>
                     </div>
@@ -184,8 +186,10 @@ import { useI18n } from 'vue-i18n'
 import { apiService } from '@/services/ApiService'
 import { LoadingOutlined } from '@vicons/antd'
 import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, TextboxAlignTopRotate9020Regular } from '@vicons/fluent'
-import { DocumentCopy, Plus } from '@element-plus/icons-vue'
+import { DocumentCopy, Plus, CopyDocument } from '@element-plus/icons-vue'
 import { useStorage } from '@vueuse/core'
+import { Finder, WindowsExplorer } from '@/components/icons'
+import { writeTextToClipboard } from '@/utils/clipboard'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
 import { getPreviewKind, isUnplayableMediaFile, type FilePreviewKind } from '@/composables/useHighlight'
@@ -257,6 +261,8 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const fileNotFound = ref(false)
 const previewType = ref<FilePreviewKind | null>(null)
+/** 兜底文案分流：后缀探测判定为二进制（区别于"已知不支持的后缀"） */
+const binaryNotPreviewable = ref(false)
 /** 图片/音视频/pdf/svg 渲染态共用的直出 URL（raw-file 或 Electron 本地 file://） */
 const assetPreviewUrl = ref('')
 const htmlPreviewUrl = ref('')
@@ -331,6 +337,9 @@ const isSvgFile = computed(() => {
 })
 
 const canTogglePreview = computed(() => isMarkdownFile.value || isHtmlFile.value || isSvgFile.value)
+
+/** 当前生效的后缀：探测回填后以 selectedFile 为准，未加载时退回标签值 */
+const currentExtension = computed(() => selectedFile.value?.extension || props.tab.extension || '')
 
 /**
  * 直出资源型预览（不走文本接口）：图片/音视频/pdf，以及 SVG 的渲染态。
@@ -451,12 +460,19 @@ async function loadFilePreview(): Promise<void> {
     previewLoading.value = false
     fileContentHash.value = ''
     assetPreviewUrl.value = ''
+    binaryNotPreviewable.value = false
 
     const kind = getPreviewKind(tab.extension ?? '')
     previewType.value = kind
 
-    // 不支持的类型：直接落兜底 UI，不发任何请求
+    // 确定不支持的类型：直接落兜底 UI，不发任何请求
     if (kind === 'unsupported') return
+
+    // 后缀缺失/不认识：让后端读文件头探测，据结果决定文本 / 真实资源类型 / 不支持
+    if (kind === 'unknown') {
+        await probeUnknownFile(tab.path!)
+        return
+    }
 
     // 图片 / 音视频 / pdf：raw-file 直出，加载或解码失败由元素的 error 事件兜底
     if (kind !== 'text') {
@@ -464,21 +480,91 @@ async function loadFilePreview(): Promise<void> {
         return
     }
 
-    // 文本类：HTML 走 iframe（后端 Set-Cookie 鉴权，相对资源可用）、SVG 渲染态走直出图片
+    await prepareTextExtras(tab.path!)
+    await loadFileContent(tab.path!)
+}
+
+/**
+ * 文本类渲染前的额外准备：HTML 走 iframe（后端 Set-Cookie 鉴权，相对资源可用）、
+ * SVG 渲染态走直出图片、Markdown 渲染态在 Electron 下需要工作目录绝对路径。
+ */
+async function prepareTextExtras(filePath: string): Promise<void> {
     if (isHtmlFile.value) {
         if (isElectron && window.location.protocol === 'file:') {
-            await loadHtmlPreviewLocal()
+            await loadHtmlPreviewLocal(filePath)
         } else {
-            htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, tab.path!)
+            htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, filePath)
         }
     } else if (isSvgFile.value) {
-        assetPreviewUrl.value = (await resolveAssetUrl(tab.path!)) ?? ''
+        assetPreviewUrl.value = (await resolveAssetUrl(filePath)) ?? ''
     } else if (isMarkdownFile.value && isElectron && window.location.protocol === 'file:') {
-        // 渲染态的相对资源 base 需要工作目录绝对路径
         await ensureWorkspacePath()
     }
+}
 
-    await loadFileContent(tab.path!)
+/**
+ * 未知后缀探测：调后端嗅探文件头（sniff=1），据结果分流。
+ * - 文本 → 按文本打开（无后缀的文本文件靠这一步救回，含 GBK 等非 UTF-8 编码）；
+ * - 二进制但嗅出真实格式（png/pdf/mp4…）→ 落到对应预览形态；
+ * - 其余二进制 → 兜底 UI，提示"二进制文件，不支持预览"。
+ *
+ * 探测响应本身就带内容，文本分支直接复用，不再发第二次内容请求。
+ */
+async function probeUnknownFile(filePath: string): Promise<void> {
+    if (!props.sessionId) return
+    previewLoading.value = true
+    previewError.value = ''
+    fileNotFound.value = false
+    binaryNotPreviewable.value = false
+
+    try {
+        const response = await apiService.getWorkspaceFile(props.sessionId, filePath, { sniff: true })
+
+        // 回填嗅探出的真实后缀：图标、预览/源码切换按钮都按它判断
+        if (response.detectedExtension) {
+            selectedFile.value!.extension = response.detectedExtension
+        }
+
+        if (!response.isBinary) {
+            previewType.value = 'text'
+            applyTextContent(response.content, response.mimeType)
+            await prepareTextExtras(filePath)
+            return
+        }
+
+        const detectedKind = response.detectedExtension
+            ? getPreviewKind(response.detectedExtension)
+            : 'unsupported'
+        if (detectedKind === 'image' || detectedKind === 'audio' || detectedKind === 'video' || detectedKind === 'pdf') {
+            previewType.value = detectedKind
+            assetPreviewUrl.value = (await resolveAssetUrl(filePath)) ?? ''
+            return
+        }
+
+        previewType.value = 'unsupported'
+        binaryNotPreviewable.value = true
+    } catch (error) {
+        const status = getApiErrorStatus(error)
+        const msg = getErrorMessage(error)
+        if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
+            fileNotFound.value = true
+        } else if (msg.includes('File too large') || msg.includes('too large')) {
+            previewError.value = t('chat.workspace.fileTooLarge')
+        } else {
+            previewError.value = t('chat.workspace.loadFileFailed')
+        }
+        console.error('Failed to probe file:', error)
+    } finally {
+        previewLoading.value = false
+    }
+}
+
+/** 把已取回的内容写入面板状态（探测分支复用，避免重复请求） */
+function applyTextContent(content: string, mimeType: string): void {
+    fileContentHash.value = hashString(content)
+    selectedFile.value!.content = content
+    selectedFile.value!.mimeType = mimeType
+    fileContent.value = content
 }
 
 /** 只重建直出 URL（不发内容请求）：外部文件变更、手动刷新时用 */
@@ -498,7 +584,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
     fileNotFound.value = false
 
     try {
-        const response = await apiService.getWorkspaceFile(props.sessionId, filePath)
+        // 后缀不可信时继续让后端嗅探：否则刷新后 GBK 等非 UTF-8 文本会按 UTF-8 解出乱码
+        const sniff = getPreviewKind(currentExtension.value) === 'unknown'
+        const response = await apiService.getWorkspaceFile(props.sessionId, filePath, { sniff })
 
         const newHash = hashString(response.content)
 
@@ -507,11 +595,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
             return
         }
 
-        fileContentHash.value = newHash
-        selectedFile.value!.content = response.content
-        selectedFile.value!.extension = response.extension
-        selectedFile.value!.mimeType = response.mimeType
-        fileContent.value = response.content
+        applyTextContent(response.content, response.mimeType)
+        // 不回写空后缀：探测回填的真实后缀（如无后缀的 .md）不能被覆盖掉
+        if (response.extension) selectedFile.value!.extension = response.extension
 
         if (isHtmlFile.value && renderMode.value === 'rendered') {
             htmlPreviewVersion.value++
@@ -532,13 +618,13 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
     }
 }
 
-async function loadHtmlPreviewLocal(): Promise<void> {
+async function loadHtmlPreviewLocal(filePath: string): Promise<void> {
     const wsPath = await ensureWorkspacePath()
     if (!wsPath) {
         previewError.value = t('chat.workspace.workspacePathError')
         return
     }
-    htmlPreviewUrl.value = toLocalFileUrl(joinWorkspacePath(wsPath, props.tab.path!))
+    htmlPreviewUrl.value = toLocalFileUrl(joinWorkspacePath(wsPath, filePath))
 }
 
 // ── 操作方法 ──
@@ -603,24 +689,38 @@ function onMediaError(): void {
     previewError.value = t('chat.workspace.mediaPlaybackFailed')
 }
 
-async function handleOpenInExplorerForCurrent(): Promise<void> {
-    if (!selectedFile.value || !props.sessionId || !isElectron) return
+/** 相对路径 → 工作区绝对路径（复制路径 / 在文件管理器中打开需要）；失败返回 null 并提示 */
+async function resolveAbsolutePath(relativePath: string): Promise<string | null> {
+    if (!props.sessionId) return null
+    const wsPath = await treeStore.ensureWorkspacePath(props.sessionId)
+    if (!wsPath) {
+        ElMessage.error(t('chat.workspace.workspacePathError'))
+        return null
+    }
+    const rel = relativePath.replace(/\\/g, '/')
+    const separator = wsPath.endsWith('/') || wsPath.endsWith('\\') || rel.startsWith('/') ? '' : '/'
+    return wsPath + separator + rel
+}
+
+/** 复制当前文件的绝对路径 */
+async function handleCopyFilePath(): Promise<void> {
+    if (!selectedFile.value) return
+    const fullPath = await resolveAbsolutePath(selectedFile.value.path)
+    if (!fullPath) return
+    const ok = await writeTextToClipboard(fullPath)
+    if (ok) ElMessage.success(t('chat.workspace.pathCopied'))
+    else ElMessage.error(t('chat.workspace.copyFailed'))
+}
+
+/** 在系统文件管理器中打开并选中当前文件（Windows 资源管理器 / macOS 访达） */
+async function handleOpenInFileManager(): Promise<void> {
+    if (!selectedFile.value || !isElectron) return
+    const fullPath = await resolveAbsolutePath(selectedFile.value.path)
+    if (!fullPath) return
     try {
-        const wsPath = await treeStore.ensureWorkspacePath(props.sessionId)
-        if (!wsPath) {
-            ElMessage.error(t('chat.workspace.workspacePathError'))
-            return
-        }
-        const relativePath = selectedFile.value.path.replace(/\\/g, '/')
-        const separator = wsPath.endsWith('/') || wsPath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/'
-        let fullPath = wsPath + separator + relativePath
-        const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'))
-        if (lastSep > 0) {
-            fullPath = fullPath.substring(0, lastSep)
-        }
-        await window.electronAPI!.openFolder(fullPath)
+        await window.electronAPI!.showItemInFolder(fullPath)
     } catch (error) {
-        console.error('[FilePreviewPanel] Open in explorer failed:', error)
+        console.error('[FilePreviewPanel] Open in file manager failed:', error)
         ElMessage.error(t('chat.workspace.openFailed'))
     }
 }
@@ -641,6 +741,9 @@ function onMarkdownMessage(e: MessageEvent): void {
         // 将 iframe 内坐标转换为父页面坐标
         const rect = markdownIframeRef.value.getBoundingClientRect()
         showContextMenu(rect.left + data.x, rect.top + data.y, data.text || '')
+    } else if (data.type === 'md-preview-dismiss-menu') {
+        // iframe 内的点击/滚动不会冒泡到父页面，需由此显式关闭菜单
+        contextMenuVisible.value = false
     }
 }
 
@@ -717,6 +820,23 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
                 if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)
             },
         })
+    }
+
+    // 文件系统操作（与上面的"会话"操作分组）；空标签页没有文件，不展示
+    if (selectedFile.value) {
+        items.push({
+            label: t('chat.workspace.copyPath'),
+            icon: CopyDocument,
+            divider: true,
+            onClick: handleCopyFilePath,
+        })
+        if (isElectron) {
+            items.push({
+                label: t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorerShort'),
+                icon: isMac ? Finder : WindowsExplorer,
+                onClick: handleOpenInFileManager,
+            })
+        }
     }
 
     contextMenuItems.value = items

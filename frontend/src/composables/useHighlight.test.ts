@@ -46,9 +46,15 @@ describe('getPreviewKind（预览面板的唯一分流入口）', () => {
     expect(getPreviewKind('.PDF')).toBe('pdf')
   })
 
-  it('未知/空扩展名 → unsupported', () => {
-    for (const ext of ['', '.zip', '.exe', '.docx', '.bin', '.psd']) {
+  it('明确不可预览的后缀（归档/可执行/字体/办公文档）→ unsupported', () => {
+    for (const ext of ['.zip', '.exe', '.docx', '.bin', '.psd', '.woff2', '.sqlite', '.iso']) {
       expect(getPreviewKind(ext), ext).toBe('unsupported')
+    }
+  })
+
+  it('后缀缺失或不认识 → unknown（交给内容嗅探，无后缀的文本文件靠它救回）', () => {
+    for (const ext of ['', '.xyz', 'LICENSE', '.license', '.dat']) {
+      expect(getPreviewKind(ext), ext).toBe('unknown')
     }
   })
 })

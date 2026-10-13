@@ -475,6 +475,16 @@ ${html}
     var text = sel ? sel.toString() : '';
     parent.postMessage({ type: 'md-preview-contextmenu', text: text, x: e.clientX, y: e.clientY }, '*');
   });
+  // iframe 内的点击/滚动不会冒泡到父页面，父页面上的右键菜单因此点不掉；
+  // 捕获阶段上报，让父页面在用户于预览区内操作时关闭菜单。
+  // 右键（button===2）不上报：它随后会触发 contextmenu 打开菜单，避免与打开顺序互相打架。
+  document.addEventListener('mousedown', function(e){
+    if (e.button === 2) return;
+    parent.postMessage({ type: 'md-preview-dismiss-menu' }, '*');
+  }, true);
+  document.addEventListener('scroll', function(){
+    parent.postMessage({ type: 'md-preview-dismiss-menu' }, '*');
+  }, true);
 })();
 <\/script>
 </body></html>`;

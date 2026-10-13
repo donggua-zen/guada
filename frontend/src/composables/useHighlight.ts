@@ -276,14 +276,79 @@ const UNPLAYABLE_MEDIA_EXTENSIONS = [
   ".3gp",
 ];
 
-/** 预览面板的渲染形态（唯一分流结果，由 getPreviewKind 产出） */
-export type FilePreviewKind = 'text' | 'image' | 'audio' | 'video' | 'pdf' | 'unsupported';
+/**
+ * 明确不可预览的二进制后缀（归档 / 可执行 / 字体 / 数据库 / 办公文档 / 磁盘镜像）。
+ * 这些直接落 unsupported，不必再发内容探测请求。
+ */
+const KNOWN_BINARY_EXTENSIONS = [
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
+  ".bz2",
+  ".xz",
+  ".7z",
+  ".rar",
+  ".jar",
+  ".war",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".bin",
+  ".o",
+  ".a",
+  ".lib",
+  ".obj",
+  ".class",
+  ".pyc",
+  ".pyo",
+  ".wasm",
+  ".node",
+  ".ttf",
+  ".otf",
+  ".woff",
+  ".woff2",
+  ".eot",
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  ".mdb",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".iso",
+  ".dmg",
+  ".img",
+  ".msi",
+  ".deb",
+  ".rpm",
+  ".apk",
+  ".ipa",
+  ".psd",
+];
+
+/**
+ * 预览面板的渲染形态（唯一分流结果，由 getPreviewKind 产出）。
+ *
+ * `unknown` 与 `unsupported` 是两件事，不能合并：
+ * - `unsupported`：**确定**不可预览（已知的归档/可执行/解不了的媒体容器）→ 直接落兜底 UI；
+ * - `unknown`：后缀缺失或不认识 → **需要读文件头探测**才能定，无后缀的文本文件靠它救回来。
+ */
+export type FilePreviewKind = 'text' | 'image' | 'audio' | 'video' | 'pdf' | 'unsupported' | 'unknown';
 
 /**
  * 扩展名 → 预览形态（预览面板的唯一分流入口）。
  *
  * 判定顺序：文本优先（.svg 归 text —— 它源码可编辑，渲染成图片的能力由面板按
- * isSvgFile 另判），再位图，再音视频，最后 pdf；其余落 unsupported 走兜底 UI。
+ * isSvgFile 另判），再位图，再音视频，最后 pdf；已知不可预览的落 unsupported；
+ * 其余（含空后缀）落 unknown，由调用方走内容嗅探。
  */
 export function getPreviewKind(ext: string): FilePreviewKind {
   const normalized = ext.toLowerCase();
@@ -292,7 +357,9 @@ export function getPreviewKind(ext: string): FilePreviewKind {
   if (AUDIO_EXTENSIONS.includes(normalized)) return 'audio';
   if (VIDEO_EXTENSIONS.includes(normalized)) return 'video';
   if (normalized === '.pdf') return 'pdf';
-  return 'unsupported';
+  if (isUnplayableMediaFile(normalized)) return 'unsupported';
+  if (KNOWN_BINARY_EXTENSIONS.includes(normalized)) return 'unsupported';
+  return 'unknown';
 }
 
 /** 已知但浏览器解不了的媒体格式（用于 unsupported 分支的专门文案） */
