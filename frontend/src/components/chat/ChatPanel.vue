@@ -100,7 +100,9 @@
                 <FloatingTodoBar :session-id="currentSessionId || undefined" />
                 <!-- 0 宽插槽：按钮在插槽内绝对定位，插槽本身不占宽度。
                      行的居中因此只由胶囊决定 → 按钮出现/消失（到达或离开底部）不再把胶囊横移
-                     （实测 18px：胶囊与图标一起跳，与"到底部时图标动了"的现象一致）。 -->
+                     （实测 18px：胶囊与图标一起跳，与"到底部时图标动了"的现象一致）。
+                     无待办（无胶囊）时按钮是行内唯一元素，由 :has() 那条规则把它自身摆到中轴上；
+                     否则插槽锚点居中而按钮画在锚点右侧，会整体偏右半个身位（14px）。 -->
                 <div class="scroll-btn-slot">
                   <ScrollToBottomButton :show="showScrollToBottomBtn" @click="handleScrollToBottomClick" />
                 </div>
@@ -1526,7 +1528,10 @@ function scrollToMessage(messageId: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  /* 不用 gap：gap 计入行的内容宽（胶囊 + gap + 插槽 0），居中后胶囊被左移 gap/2 = 4px，
+     按钮显隐时行宽 0↔8 的变化还会让胶囊跟着横移同样距离。
+     与按钮的 8px 间距改由按钮自身的 margin-left 提供（插槽 0 宽、按钮绝对定位，
+     两者都不参与行的居中计算）→ 胶囊恒居中且位置恒定。 */
   width: 100%;
   pointer-events: none;
 }
@@ -1535,9 +1540,11 @@ function scrollToMessage(messageId: string) {
   pointer-events: auto;
 }
 
-/* 回到底部按钮的 0 宽插槽：按钮在插槽内绝对定位（与胶囊的间距由行的 gap 提供），
+/* 回到底部按钮的 0 宽插槽：按钮在插槽内绝对定位（与胶囊的间距由按钮的 margin 提供），
    插槽自身不占宽度 → 按钮显隐不参与行的居中计算，胶囊与图标的横向位置恒定。
-   否则按钮消失（到达底部）会让「胶囊+按钮」整组重新居中，把胶囊横移 18px。 */
+   否则按钮消失（到达底部）会让「胶囊+按钮」整组重新居中，把胶囊横移 18px。
+   插槽锚点落在行中轴（0 宽项被居中），按钮画在锚点右侧，故无胶囊时要由下面那条
+   :has() 把按钮左移半个身位。 */
 .scroll-btn-slot {
   position: relative;
   flex: 0 0 auto;
@@ -1549,5 +1556,15 @@ function scrollToMessage(messageId: string) {
   position: absolute;
   top: 0;
   left: 0;
+  /* 与胶囊的 8px 间距（行已不用 gap，见 .composer-status-row 注释） */
+  margin-left: 8px;
+}
+
+/* 无待办胶囊时，按钮是状态行里唯一可见的元素：插槽锚点被居中在行中轴，而按钮画在锚点
+   右侧 → 不修正就整体偏右 14px（半个按钮宽，28 / 2）。左移半个身位让它自身居中。
+   有胶囊时这条不生效，间距仍是上面的 8px（:has 匹配 FloatingTodoBar 的根节点，
+   无待办项时该节点不渲染）。 */
+.composer-status-row:not(:has(.floating-todo-bar)) .scroll-btn-slot > :deep(*) {
+  margin-left: -14px;
 }
 </style>
