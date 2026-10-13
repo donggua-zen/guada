@@ -119,9 +119,11 @@ jobs:
       - name: 构建前端
         run: pnpm run build:electron:frontend
 
-      # mac.target 同时声明了 x64 与 arm64，必须显式指定架构，否则会尝试构建两个
+      # 架构由 runner 架构决定（mac.target 已不再写死 arch 列表）：arm64 job 在 macos-latest 上
+      # 出 arm64 包，x64 job 在 macos-15-intel 上出 x64 包。原生模块只按构建机架构准备，这样
+      # app 与模块架构天然一致；反例见 docs/ELECTRON_DEPLOYMENT.md 2.1（1.0.1 首发即因此失败）。
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
-      # electron-builder 的默认发布策略会尝试发布
+      # electron-builder 的默认发布策略会尝试发布。
       # GitHub 的 macOS runner 上 dmg 偶发失败：hdiutil detach -force 返回 16（临时挂载的
       # 磁盘镜像被占用，常见于 Spotlight 索引）。先关掉索引，再对打包做一次重试。
       - name: 关闭 Spotlight 索引（降低 dmg 构建偶发失败）
