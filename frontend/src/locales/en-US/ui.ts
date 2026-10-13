@@ -127,6 +127,7 @@
     awaitingReply: 'Needs reply',
     awaitingTooltip: 'This session is waiting for your input',
     awaitingTooltipWithTitle: '{title} (click to handle)',
+    awaitingTooltipCount: '{n} requests are queued for you (click to handle)',
     taskList: 'Task List',
     rename: 'Rename',
     moveToGroup: 'Move to Group',

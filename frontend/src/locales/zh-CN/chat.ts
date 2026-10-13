@@ -285,6 +285,8 @@ export default {
     keyboardHint: '使用上下键移动选取，回车提交',
     staleCredential: '交互凭证已失效，请刷新后重试',
     submitFailed: '应答提交失败',
+    queueMore: '还有 {n} 个待处理',
+    queueTooltip: '同一个消息里的多个操作会并发请求授权；答完这一个会自动显示下一个',
   },
 
   // ── 工具调用 ──

@@ -117,7 +117,9 @@ const loadMessages = async () => {
       setSessionIsCompressing: () => {},
       sessionIsCompressing: () => false,
       // 只读回放视图无交互卡：ask/turn_end 路径落空实现（此前缺失该方法是隐雷）
-      setSessionPendingAsk: () => {},
+      upsertSessionPendingAsk: () => {},
+      removeSessionPendingAsk: () => {},
+      clearSessionPendingAsks: () => {},
       getSessionState: () => ({ loaded: true, turns: turns.value, eventLog: [] }),
     } satisfies ProjectorSessionStore
     foldEvents(localStore, props.session.id, page.events)

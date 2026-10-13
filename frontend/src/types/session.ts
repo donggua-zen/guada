@@ -117,6 +117,20 @@ export interface SessionPlanItem {
     path: string | null
 }
 
+/** 一次挂起中的交互（会话级统一交互卡队列的元素） */
+export interface PendingAsk {
+    /** 临时凭证 id（uuid，应答提交时回传匹配等待者） */
+    requestId: string
+    /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
+    kind: 'approval' | 'ask'
+    /** 卡片标题（如"进行文档处理"） */
+    title?: string
+    toolCallId?: string
+    toolName?: string
+    /** 问题单（前端分页收集答案） */
+    questions: import('./stream/event-chunk.types').AskQuestion[]
+}
+
 export interface SessionState {
     turns: Turn[]  // 回合外壳列表（后端 getTurns 直连，渲染用）
     isStreaming: boolean
@@ -126,21 +140,16 @@ export interface SessionState {
     /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩伪流，buffer 无回合历史） */
     streamKind?: 'chat' | 'maintenance'
     /**
-     * 会话级统一交互卡（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合
-     * ——ask_requested 事件标记，ask_resolved / turn_end 清除）。全局卡在输入区上方展示。
+     * 会话级统一交互卡**队列**（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合
+     * ——ask_requested 事件按 requestId 入队，ask_resolved 只摘对应那一个）。
+     *
+     * 为什么是队列而不是单个槽位：一个助手消息里的多个工具调用是**并发**执行的
+     * （tool-executor 是 10 并发 worker pool），每个都可能触发审批。单槽会让后一个
+     * 覆盖前一个 → 被覆盖的等待者永远没人应答 → 后端无超时 → 整个回合永久挂住。
+     *
+     * key = requestId；`Record` 保留插入顺序，即"到达顺序"（展示取队首）。
      */
-    pendingAsk?: {
-        /** 临时凭证 id（uuid，应答提交时回传匹配等待者） */
-        requestId: string
-        /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
-        kind: 'approval' | 'ask'
-        /** 卡片标题（如"进行文档处理"） */
-        title?: string
-        toolCallId?: string
-        toolName?: string
-        /** 问题单（前端分页收集答案） */
-        questions: import('./stream/event-chunk.types').AskQuestion[]
-    }
+    pendingAsks?: Record<string, PendingAsk>
     /**
      * 计划模式（协作状态，正交于安全档位）。事实源是会话设置；
      * 本字段是 UI 投影——用户从界面开关时乐观写入，模型经 ExitPlanMode 审批通过后

@@ -25,7 +25,7 @@ import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
 import type { WireMessage } from "@/types/stream/event-chunk.types";
-import type { SessionState } from "@/types/session";
+import type { PendingAsk, SessionState } from "@/types/session";
 import type { Turn, TurnContent, MessageBundle, ToolCallEntry, ToolCallResponseEntry } from "@/types/message";
 
 /**
@@ -40,7 +40,7 @@ export interface ProjectorSessionState {
   loaded?: boolean;
   turns?: Turn[];
   eventLog?: Array<WireStreamEvent | DomainEvent>;
-  pendingAsk?: SessionState["pendingAsk"];
+  pendingAsks?: SessionState["pendingAsks"];
 }
 
 export interface ProjectorSessionStore {
@@ -50,7 +50,14 @@ export interface ProjectorSessionStore {
   getSessionState(sessionId: string): ProjectorSessionState;
   setSessionIsCompressing(sessionId: string, compressing: boolean): void;
   sessionIsCompressing(sessionId: string): boolean;
-  setSessionPendingAsk(sessionId: string, pendingAsk: SessionState["pendingAsk"]): void;
+  /** 入队 / 覆盖同 requestId（幂等） */
+  upsertSessionPendingAsk(sessionId: string, ask: PendingAsk): void;
+  /** 出队：只摘对应那一个（ask_resolved 按 requestId） */
+  removeSessionPendingAsk(sessionId: string, requestId: string): void;
+  /** 清空该会话的待答队列（回合结束 / 流终止） */
+  clearSessionPendingAsks(sessionId: string): void;
+  /** 纯读待答队列（tool_calls_response 按 toolCallId 收卡用）；可选：测试替身可省略 */
+  peekSessionPendingAskQueue?(sessionId: string): PendingAsk[];
   /** 模型发起的计划模式变更（同时更新投影与会话设置）；可选：无此概念的实现可省略 */
   applyRemotePlanEnabled?(sessionId: string, enabled: boolean): void;
   /** 计划列表缓存刷新（plan_mode_changed / turn_end 触发）；可选：无此概念的实现可省略 */
@@ -659,7 +666,7 @@ function upsertCompressResultPlaceholder(
  */
 function toPendingAsk(
   chunk: Extract<ProjectorChunk, { type: "ask_requested" }>,
-): SessionState["pendingAsk"] {
+): PendingAsk {
   return {
     requestId: chunk.requestId,
     kind: chunk.kind,
@@ -852,7 +859,7 @@ export function applyChunkToStore(
     // 清卡与刷计划缓存都是实时语义：重放历史时既不该清掉当前待批的卡，
     // 也不该为每个历史回合打一次计划列表接口（见 FoldMode 注释）
     if (mode === "live") {
-      sessionStore.setSessionPendingAsk(sessionId, undefined);
+      sessionStore.clearSessionPendingAsks(sessionId);
       // 计划列表缓存兜底刷新：批准/拒绝/修订各路径的新计划都在回合收尾后进入缓存
       sessionStore.refreshPlans?.(sessionId);
     }
@@ -936,18 +943,20 @@ export function applyChunkToStore(
   }
   if (chunk.type === "ask_requested") {
     // 统一交互请求（审批/询问共用）：执行内原地阻塞（无 turn_end、流保持 running）。
-    // 会话级交互卡（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方全局展示。
+    // 会话级交互卡**队列**（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方展示队首。
     // 只在实时路径写：卡片的权威来源是 live 流（含 SSE 建连时对活跃流 eventBuffer 的补发，
     // ask_requested 正在其中）；历史重放无从判断该 ask 是否仍在等待，写它只会覆盖实时真相。
+    // 并发工具调用会连发多个（各自 requestId）→ 入队而不是覆盖。
     if (mode === "live") {
-      sessionStore.setSessionPendingAsk(sessionId, toPendingAsk(chunk));
+      sessionStore.upsertSessionPendingAsk(sessionId, toPendingAsk(chunk));
     }
     return;
   }
   if (chunk.type === "ask_resolved") {
-    // 交互终结（answered/cancelled）：清会话级交互卡（多窗口同步收卡由此保证）。
+    // 交互终结（answered/cancelled）：**只摘这一个**（多窗口同步收卡由此保证）。
+    // 不能清空整个队列：同会话可能还有别的工具在等审批。
     if (mode === "live") {
-      sessionStore.setSessionPendingAsk(sessionId, undefined);
+      sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
     }
     return;
   }
@@ -982,16 +991,19 @@ export function applyChunkToStore(
     return;
   }
   if (chunk.type === "tool_calls_response") {
-    // 工具执行结果下发 → 交互已消费，关闭会话级卡（与 ask_resolved 幂等双保险）
-    if (mode === "live") {
-      sessionStore.setSessionPendingAsk(sessionId, undefined);
-    }
-    // 把执行结果挂到对应 tool-call 块：主键 toolCallId（对齐回放 tool/result 的聚类语义；
-    // 工具结果是独立消息，其 messageId 与含调用的 assistant 消息 id 无关，故不依赖 messageId）。
+    // 工具执行结果下发 → 对应交互已消费，关闭**它的**卡（与 ask_resolved 幂等双保险）。
+    // 注意按 toolCallId 逐个摘：同会话可能还有别的工具在等审批，不能整队清空。
     const turns = sessionStore.getTurns(sessionId) || [];
     const responseIds = new Set(
       (chunk.toolCallsResponse || []).map((r) => r.toolCallId),
     );
+    if (mode === "live" && responseIds.size > 0) {
+      for (const ask of sessionStore.peekSessionPendingAskQueue?.(sessionId) ?? []) {
+        if (ask.toolCallId && responseIds.has(ask.toolCallId)) {
+          sessionStore.removeSessionPendingAsk(sessionId, ask.requestId);
+        }
+      }
+    }
     const target = responseIds.size > 0
       ? findBlockByToolCallId(turns, [...responseIds][0])
       : undefined;
@@ -1142,9 +1154,9 @@ export function projectChunk(
   // 否则「未打开过内容的会话」（刷新后的非当前会话、另一窗口正在跑的会话）在 store 里
   // 看不到 pendingAsk，侧边栏等会话级消费者失明。与 applyLiveChunk 的 live 分支同值幂等双写。
   if (chunk.type === "ask_requested") {
-    sessionStore.setSessionPendingAsk(sessionId, toPendingAsk(chunk));
+    sessionStore.upsertSessionPendingAsk(sessionId, toPendingAsk(chunk));
   } else if (chunk.type === "ask_resolved") {
-    sessionStore.setSessionPendingAsk(sessionId, undefined);
+    sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
   }
 
   const hasCache =

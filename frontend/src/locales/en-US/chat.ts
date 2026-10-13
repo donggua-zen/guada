@@ -285,6 +285,8 @@
     keyboardHint: 'Use arrow keys to move, Enter to submit',
     staleCredential: 'Interaction credential has expired, please refresh and retry',
     submitFailed: 'Failed to submit answer',
+    queueMore: '{n} more pending',
+    queueTooltip: 'Several operations in one message ask for approval at the same time; the next one appears once you answer this one',
   },
 
   // ── 工具调用 ──

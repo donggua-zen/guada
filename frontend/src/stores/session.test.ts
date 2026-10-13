@@ -151,7 +151,7 @@ describe("sessionStore 流状态机", () => {
 
   it("peekSessionPendingAsk 纯读约束:不创建缓存、不写响应式 Map(渲染递归白屏回归)", () => {
     const store = useSessionStore();
-    store.setSessionPendingAsk("probe", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("probe", { requestId: "req1", kind: "approval", questions: [] });
 
     // 侧边栏渲染路径按会话逐项 peek 未知会话:若 peek 有副作用(创建 + 清扫),
     // 会话数超 32 硬上限时会"建了又被淘汰"→ 渲染期写响应式 Map → Maximum recursive updates
@@ -163,14 +163,42 @@ describe("sessionStore 流状态机", () => {
     expect(store.peekStreamStatus("unknown_0")).toBeUndefined();
     // 既有待批状态正常读取
     expect(store.peekSessionPendingAsk("probe")?.requestId).toBe("req1");
-    store.setSessionPendingAsk("probe", undefined);
+    store.removeSessionPendingAsk("probe", "req1");
     expect(store.peekSessionPendingAsk("probe")).toBeUndefined();
+  });
+
+  it("待答队列:并发多个 ask 按到达顺序排队,出队只摘对应那一个", () => {
+    const store = useSessionStore();
+    const mk = (id: string) => ({ requestId: id, kind: "approval" as const, questions: [] });
+    store.upsertSessionPendingAsk("q", mk("r1"));
+    store.upsertSessionPendingAsk("q", mk("r2"));
+    store.upsertSessionPendingAsk("q", mk("r3"));
+
+    // 到达顺序 = 队列顺序；队首 = 最早
+    expect(store.sessionPendingAskQueue("q").map((a) => a.requestId)).toEqual(["r1", "r2", "r3"]);
+    expect(store.sessionPendingAsk("q")?.requestId).toBe("r1");
+
+    // 同 requestId 重复写入是幂等的（流帧重放/双写）
+    store.upsertSessionPendingAsk("q", mk("r2"));
+    expect(store.sessionPendingAskQueue("q").map((a) => a.requestId)).toEqual(["r1", "r2", "r3"]);
+
+    // 摘中间那个：其余不受影响，队首不变
+    store.removeSessionPendingAsk("q", "r2");
+    expect(store.sessionPendingAskQueue("q").map((a) => a.requestId)).toEqual(["r1", "r3"]);
+
+    // 摘队首 → 下一个成为队首
+    store.removeSessionPendingAsk("q", "r1");
+    expect(store.sessionPendingAsk("q")?.requestId).toBe("r3");
+
+    store.clearSessionPendingAsks("q");
+    expect(store.sessionPendingAskQueue("q")).toEqual([]);
+    expect(store.peekSessionPendingAskQueue("q")).toEqual([]);
   });
 
   it("淘汰保护:待批(审批/询问)中的会话不被 TTL 淘汰(卡片状态丢了无法从补发重建)", () => {
     const store = useSessionStore();
     store.getSessionState("ask_1");
-    store.setSessionPendingAsk("ask_1", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("ask_1", { requestId: "req1", kind: "approval", questions: [] });
     store.getSessionState("stale_1");
 
     // 快进 3 小时清扫:stale 过期;ask_1 无续期但受待批保护

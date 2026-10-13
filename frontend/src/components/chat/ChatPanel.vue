@@ -331,7 +331,7 @@ const effectiveSessionId = computed(() => {
  * 而非变暗/禁用——询问时输入框本就没有有效用途（自定义回复走卡片自己的输入框）。
  */
 const hasPendingAsk = computed(() =>
-  !!sessionStore.sessionPendingAsk(currentSessionId.value || '')
+  sessionStore.sessionPendingAskQueue(currentSessionId.value || '').length > 0
 );
 const isLoading = ref(true);
 // 使用 useSessionChat composable

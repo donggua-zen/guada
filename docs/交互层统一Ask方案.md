@@ -88,8 +88,14 @@ DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异
 - 问题分页 `i/N`:**单选点选即自动翻页**(末页提交);**多选勾选后点"下一步/提交"**。
 - 选项按钮 A/B/C…(label 即答案);末位固定"请输入自定义回复"→ 切换输入框(单选与 selected 互斥,多选附加)。
 - 提交:`apiService.respond(sessionId, requestId, answers)`(按问题单顺序逐 id 对应);卡片由 ask_resolved 清除。
-- store:`SessionState.pendingAsk`(单槽,会话内工具串行天然互斥);projector:ask_requested→set、
-  ask_resolved/tool_calls_response/turn_end→清。
+- store:`SessionState.pendingAsks`(**按 requestId 的队列**,保留到达顺序);projector:ask_requested→
+  upsert、ask_resolved→只摘对应那一个、tool_calls_response→只摘 toolCallId 命中的、turn_end→清空。
+  **一次只显示队首** + 「还有 N 个待处理」计数。
+  > 修订 2026-10-12:原为单槽(注释写"会话内工具串行天然互斥")——但一个助手消息里的多个工具调用是
+  > **并发**执行的(`tool-executor` 10 并发 worker pool),单槽会让后一个 ask 覆盖前一个,被覆盖的
+  > 等待者永远无人应答(后端无超时)→ `executeBatch` 的 `Promise.all` 永久挂起。另补
+  > `GET /chat/pending-asks`(读进程内等待表)+ 前端每次(重)建连补拉,堵住"卡片弹出时刷新页面"
+  > 导致的同类死锁。
 
 > **布局修订 2026-10-05（用户评审驱动，对齐 ZCode）**：卡片是会话级底部 dock（`ChatPanel` 的
 > `.chat-input-area`，sticky 贴底）的一员——**待答期间整块输入区隐藏、卡片全宽顶替其位置**：

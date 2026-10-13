@@ -93,6 +93,35 @@ export function useSessionEvents() {
       }),
     );
 
+    // === （重）建连补拉：挂起中的交互卡 ===
+    //
+    // ask_requested 是流帧：页面刷新 / SSE 丢帧后前端拿不到它，而历史重放刻意不重建待答卡片
+    // （无从判断该 ask 是否仍在等待）→ 卡片不回来、后端无超时 → 回合永久挂住。
+    // 这里每次（重）建连直接读后端等待表补一刀。**只 upsert、不清空**：同进程重连时补发帧
+    // 会被 hub 按 streamSeq 去重丢弃，清空会把仍可应答的卡片弄丢（与 streamBootId 分支同一约束）。
+    unsubscribers.push(
+      apiService.onConnected?.(() => {
+        void apiService
+          .fetchPendingAsks()
+          .then((res) => {
+            for (const ask of res?.pending ?? []) {
+              if (!ask?.sessionId || !ask.requestId) continue;
+              sessionStore.upsertSessionPendingAsk(ask.sessionId, {
+                requestId: ask.requestId,
+                kind: ask.kind,
+                title: ask.title,
+                toolCallId: ask.toolCallId,
+                toolName: ask.toolName,
+                questions: ask.questions ?? [],
+              });
+            }
+          })
+          .catch(() => {
+            /* 补拉失败静默：不影响主流程，下一次建连再试 */
+          });
+      }) ?? (() => {}),
+    );
+
     // === 会话 CRUD 事件 ===
 
     unsubscribers.push(
@@ -203,7 +232,7 @@ export function useSessionEvents() {
           resetSessionTurnsTransientState(sessionStore, sessionId);
           // 会话级交互卡兜底：流已终止 → 不可能仍有等待中的 ask（ask 阻塞期间流保持 running），
           // 防 SSE 掉线期间错过 ask_resolved 后卡片残留。
-          sessionStore.setSessionPendingAsk(sessionId, undefined);
+          sessionStore.clearSessionPendingAsks(sessionId);
         }
 
         // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象

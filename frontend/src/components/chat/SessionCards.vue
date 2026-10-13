@@ -10,6 +10,7 @@
          不可见容器等）Vue 也会按定时器移除节点，避免卡片卡在过渡里以 opacity:0 残留并占住布局 -->
     <Transition name="card-slide" :duration="200">
       <div v-if="askCtx"
+        :key="askCtx.requestId"
         class="ask-card w-full bg-(--gd-color-surface) border border-(--gd-color-surface-border) rounded-(--gd-size-dialog-rounded-radius) px-4 py-3 shadow-sm"
         @keydown="onOptionsKeydown">
         <!-- 头部：kind 分支标题 + 卡片标题 + 右端分页器 -->
@@ -23,6 +24,12 @@
             {{ askCtx.title }}
           </span>
           <span class="flex-1"></span>
+          <!-- 并发待答计数：同会话还有多少个在排队（后端无超时，漏答会卡住回合） -->
+          <span v-if="waitingCount > 0"
+            class="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            :title="t('chat.ask.queueTooltip')">
+            {{ t('chat.ask.queueMore', { n: waitingCount }) }}
+          </span>
           <!-- 分页器（对齐 ZCode：翻页只走箭头，选完不自动翻；单页为禁用态） -->
           <span class="shrink-0 flex items-center gap-1 text-xs text-gray-400">
             <button class="ask-page-btn" :disabled="pageIdx === 0" @click="prevPage">
@@ -126,7 +133,14 @@ const { t } = useI18n();
 
 // ── 会话级统一交互卡（ask_requested 标记；ask_resolved / turn_end 清除）──
 
-const askCtx = computed(() => sessionStore.sessionPendingAsk(props.sessionId || ""));
+/**
+ * 待答队列：一个助手消息里的多个工具调用是**并发**执行的，可能同时产生多个审批/询问。
+ * 一次只显示队首（最早到达），其余用「还有 N 个待处理」提示；答完一张，下一张自动成为队首
+ * （requestId 变化会触发下面的 watch 重置分页/答案并自动聚焦，无需额外逻辑）。
+ */
+const askQueue = computed(() => sessionStore.sessionPendingAskQueue(props.sessionId || ""));
+const askCtx = computed(() => askQueue.value[0]);
+const waitingCount = computed(() => Math.max(0, askQueue.value.length - 1));
 
 /** 当前问题页（多问题分页：箭头/「下一步」翻页；单击选项不再自动翻页） */
 const pageIdx = ref(0);

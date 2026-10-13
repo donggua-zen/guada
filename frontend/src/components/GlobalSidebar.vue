@@ -610,7 +610,12 @@ const getSessionWorking = (sessionId: string): boolean => {
 
 /** 该会话是否有未应答的交互卡（审批/询问）。渲染路径必须走 peek（不建缓存，见 store 注释） */
 const getSessionAwaiting = (sessionId: string): boolean => {
-  return !!sessionStore.peekSessionPendingAsk(sessionId)
+  return sessionStore.peekSessionPendingAskQueue(sessionId).length > 0
+}
+
+/** 待答数量（>1 时胶囊提示还有几个在排队） */
+const getSessionAwaitingCount = (sessionId: string): number => {
+  return sessionStore.peekSessionPendingAskQueue(sessionId).length
 }
 
 /** 胶囊文案：审批 → 待批准；询问 → 待回复 */
@@ -620,8 +625,10 @@ const getSessionAwaitingLabel = (sessionId: string): string => {
     : t('ui.sidebar.awaitingApproval')
 }
 
-/** 胶囊提示：优先显示卡片标题（「计划审批」「命令需要批准」…） */
+/** 胶囊提示：优先显示卡片标题（「计划审批」「命令需要批准」…）；排队多个时显示数量 */
 const getSessionAwaitingTooltip = (sessionId: string): string => {
+  const count = getSessionAwaitingCount(sessionId)
+  if (count > 1) return t('ui.sidebar.awaitingTooltipCount', { n: count })
   const ask = sessionStore.peekSessionPendingAsk(sessionId)
   return ask?.title
     ? t('ui.sidebar.awaitingTooltipWithTitle', { title: ask.title })
