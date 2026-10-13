@@ -127,6 +127,7 @@ export default {
     awaitingReply: '待回复',
     awaitingTooltip: '该会话有等待你处理的请求，点击进入处理',
     awaitingTooltipWithTitle: '{title}（点击进入处理）',
+    awaitingTooltipCount: '有 {n} 个请求在排队等你处理（点击进入）',
     taskList: '任务列表',
     rename: '重命名',
     moveToGroup: '移动到分组',

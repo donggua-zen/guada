@@ -317,6 +317,11 @@ class ApiService {
     return this.sessionEventsService.on(eventType, callback);
   }
 
+  /** （重）建连监听（返回取消订阅函数）：用于补拉挂起中的交互卡等 */
+  onConnected(callback: () => void): () => void {
+    return this.sessionEventsService.onConnected(callback);
+  }
+
   getClientId(): string {
     return getClientId();
   }

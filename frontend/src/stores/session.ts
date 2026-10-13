@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem, PendingAsk } from '@/types/session'
 import type { Turn } from '@/types/message'
 
 /**
@@ -59,12 +59,20 @@ export const useSessionStore = defineStore('session', () => {
      * ② running 保护：streamStatus === 'running' 的会话一律不淘汰（双保险）；
      * ③ 硬上限兜底：清扫后仍超过 MAX_CACHED_SESSIONS → 按最近访问淘汰非 running 最旧者。
      */
+    /** 队列视图：Record（按 requestId，插入顺序=到达顺序）→ 数组 */
+    const pendingAskQueueOf = (state: SessionState | undefined): PendingAsk[] => {
+        if (!state?.pendingAsks) return []
+        return Object.values(state.pendingAsks)
+    }
+    const hasPendingAsks = (state: SessionState): boolean =>
+        !!state.pendingAsks && Object.keys(state.pendingAsks).length > 0
+
     const evictSessionStates = (exceptId?: string, now: number = Date.now()): void => {
         for (const [sid, state] of sessions.value) {
             if (sid === exceptId) continue
             if (state.streamStatus === 'running') continue
             // 待批（审批/询问等待中）的会话同样不淘汰：卡片状态丢了无法从补发重建
-            if (state.pendingAsk) continue
+            if (hasPendingAsks(state)) continue
             if (now - (sessionLastAccess.get(sid) ?? 0) > SESSION_STATE_TTL_MS) {
                 sessions.value.delete(sid)
                 sessionLastAccess.delete(sid)
@@ -76,7 +84,7 @@ export const useSessionStore = defineStore('session', () => {
             for (const [sid] of sessions.value) {
                 if (sid === exceptId) continue
                 if (sessions.value.get(sid)!.streamStatus === 'running') continue
-                if (sessions.value.get(sid)!.pendingAsk) continue
+                if (hasPendingAsks(sessions.value.get(sid)!)) continue
                 const t = sessionLastAccess.get(sid) ?? 0
                 if (t < oldestTime) {
                     oldestTime = t
@@ -438,36 +446,65 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).isCompressing = isCompressing
     }
 
-    // ─── 会话级统一交互卡（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+    // ─── 会话级统一交互卡队列（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+    //
+    // 一个助手消息里的多个工具调用是并发执行的，每个都可能触发审批 → 队列（按 requestId 入队）。
+    // 单槽会让后一个覆盖前一个，被覆盖的等待者永远没人应答（后端无超时）→ 回合永久挂起。
 
-    /** 读取会话级统一交互卡状态 */
-    const sessionPendingAsk = (sessionId: string) => {
-        return getSessionState(sessionId).pendingAsk
+    /** 队首（最早到达）——卡片一次只显示一张 */
+    const sessionPendingAsk = (sessionId: string): PendingAsk | undefined => {
+        return pendingAskQueueOf(getSessionState(sessionId))[0]
     }
 
-    /** 写入/清除会话级统一交互卡状态 */
-    const setSessionPendingAsk = (sessionId: string, pendingAsk: SessionState['pendingAsk']): void => {
-        getSessionState(sessionId).pendingAsk = pendingAsk
+    /** 完整队列（到达顺序；当前会话组件用，创建型访问器） */
+    const sessionPendingAskQueue = (sessionId: string): PendingAsk[] => {
+        return pendingAskQueueOf(getSessionState(sessionId))
+    }
+
+    /** 入队 / 覆盖同 requestId 的既有项（幂等：流帧可能重放/双写） */
+    const upsertSessionPendingAsk = (sessionId: string, ask: PendingAsk): void => {
+        const state = getSessionState(sessionId)
+        if (!state.pendingAsks) state.pendingAsks = {}
+        state.pendingAsks[ask.requestId] = ask
+    }
+
+    /** 出队（ask_resolved 只摘对应那一个，不影响其它待答） */
+    const removeSessionPendingAsk = (sessionId: string, requestId: string): void => {
+        const state = sessions.value.get(sessionId)
+        if (!state?.pendingAsks) return
+        delete state.pendingAsks[requestId]
+        if (Object.keys(state.pendingAsks).length === 0) state.pendingAsks = undefined
     }
 
     /**
-     * 纯读会话级交互卡（不创建缓存、绝不写响应式 Map）——渲染路径专用。
+     * 纯读队列（不创建缓存、绝不写响应式 Map）——渲染路径专用。
      *
      * getSessionState 的 miss 分支会创建缓存并触发清扫（写响应式 Map）：侧边栏等渲染路径
      * 按会话逐项调用会造成"读路径自我触发"→ Maximum recursive updates 白屏
-     * （与 peekStreamStatus 同一约束，见其注释）。未缓存返回 undefined（语义等同无待批）。
+     * （与 peekStreamStatus 同一约束，见其注释）。未缓存返回空数组（语义等同无待批）。
      */
-    const peekSessionPendingAsk = (sessionId: string): SessionState['pendingAsk'] => {
-        return sessions.value.get(sessionId)?.pendingAsk
+    const peekSessionPendingAskQueue = (sessionId: string): PendingAsk[] => {
+        return pendingAskQueueOf(sessions.value.get(sessionId))
+    }
+
+    /** 纯读队首（侧边栏胶囊用：只关心"有没有 / 是哪一类"） */
+    const peekSessionPendingAsk = (sessionId: string): PendingAsk | undefined => {
+        return peekSessionPendingAskQueue(sessionId)[0]
+    }
+
+    /** 清空某个会话的待批队列（流终止 / 回合结束） */
+    const clearSessionPendingAsks = (sessionId: string): void => {
+        const state = sessions.value.get(sessionId)
+        if (state?.pendingAsks) state.pendingAsks = undefined
     }
 
     /**
      * 清空所有会话的待批状态（SSE 重连兜底：断线期间可能在别处应答、或后端重启导致
-     * 内存等待表清空。仍待批的 ask 会由同一条连接紧随的活跃流补发重建）。
+     * 内存等待表清空。仍待批的 ask 会由 /chat/pending-asks 补拉或活跃流补发重建）。
      */
     const clearAllPendingAsks = (): void => {
         for (const state of sessions.value.values()) {
-            if (state.pendingAsk) state.pendingAsk = undefined
+            if (state.pendingAsks) state.pendingAsks = undefined
         }
     }
 
@@ -635,7 +672,7 @@ export const useSessionStore = defineStore('session', () => {
             state.isStreaming = false
             state.isCompressing = false
             state.streamKind = 'chat'
-            state.pendingAsk = undefined
+            state.pendingAsks = undefined
             state.inputMessage = {
                 content: '',
                 files: [],
@@ -670,8 +707,12 @@ export const useSessionStore = defineStore('session', () => {
         sessionIsCompressing,
         setSessionIsCompressing,
         sessionPendingAsk,
-        setSessionPendingAsk,
+        sessionPendingAskQueue,
+        upsertSessionPendingAsk,
+        removeSessionPendingAsk,
         peekSessionPendingAsk,
+        peekSessionPendingAskQueue,
+        clearSessionPendingAsks,
         clearAllPendingAsks,
         sessionPlanEnabled,
         setSessionPlanEnabled,

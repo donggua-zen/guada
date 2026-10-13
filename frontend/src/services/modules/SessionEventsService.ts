@@ -46,6 +46,8 @@ import { streamEventHub } from "./StreamEventHub";
 
 export class SessionEventsService {
   private eventSource: EventSourcePolyfill | null = null;
+  /** （重）建连监听器（补拉挂起状态用） */
+  private readonly connectListeners = new Set<() => void>();
   private listeners: Map<SessionEventType | "*", Set<EventListener>> =
     new Map();
   private clientId: string;
@@ -59,6 +61,12 @@ export class SessionEventsService {
    */
   getClientId(): string {
     return this.clientId;
+  }
+
+  /** （重）建连监听（返回取消订阅函数） */
+  onConnected(listener: () => void): () => void {
+    this.connectListeners.add(listener);
+    return () => this.connectListeners.delete(listener);
   }
 
   /**
@@ -88,6 +96,15 @@ export class SessionEventsService {
 
     this.eventSource.onopen = () => {
       console.log("[SessionEvents] SSE 连接已建立");
+      // （重）建连通知：订阅方据此补拉状态（如挂起中的交互卡——ask_requested 是流帧，
+      // 刷新/丢帧后拿不到，历史重放又刻意不重建）。只补写、不清空，同进程重连安全。
+      for (const listener of this.connectListeners) {
+        try {
+          listener();
+        } catch (error) {
+          console.error("[SessionEvents] onConnected 监听器失败:", error);
+        }
+      }
     };
 
     this.eventSource.onmessage = (event) => {

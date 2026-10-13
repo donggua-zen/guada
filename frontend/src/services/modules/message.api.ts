@@ -202,6 +202,18 @@ export interface MessageApi {
     requestId: string,
     answers: import("@/types/stream/event-chunk.types").AskAnswerItem[],
   ): Promise<{ success: boolean; requestId: string; answersCount: number }>;
+  /** 挂起中的交互列表（重连/刷新后恢复待答卡片；不传 sessionId 返回全部会话） */
+  fetchPendingAsks(sessionId?: string): Promise<{
+    pending: Array<{
+      sessionId: string;
+      requestId: string;
+      kind: 'approval' | 'ask';
+      title?: string;
+      toolCallId?: string;
+      toolName?: string;
+      questions: import("@/types/stream/event-chunk.types").AskQuestion[];
+    }>;
+  }>;
 }
 
 export const messageApi: MessageApi = {
@@ -288,5 +300,11 @@ export const messageApi: MessageApi = {
       method: "POST",
       data: { sessionId, requestId, answers },
     });
+  },
+
+  /** 挂起中的交互列表（读后端进程内等待表；前端每次建连后补拉，幂等 upsert） */
+  async fetchPendingAsks(this: ApiContext, sessionId?: string) {
+    const q = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    return await this._request(`/chat/pending-asks${q}`, { method: "GET" });
   },
 };

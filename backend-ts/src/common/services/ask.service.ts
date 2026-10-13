@@ -81,6 +81,13 @@ export class AskService {
       session.sessionId,
       requestId,
       request.questions,
+      // 恢复卡片（/chat/pending-asks）要用的展示元数据
+      {
+        kind: request.kind,
+        title: request.title,
+        toolCallId: request.toolCallId,
+        toolName: request.toolName,
+      },
     );
     let resolveAbort!: (value: "abort") => void;
     const abortPromise = new Promise<"abort">((resolve) => {

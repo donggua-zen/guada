@@ -13,6 +13,7 @@ import {
   Headers,
   BadRequestException,
   NotFoundException,
+  Query,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 
@@ -166,6 +167,21 @@ export class ChatController {
         bufferedEventCount: 0,
       }
     );
+  }
+
+  /**
+   * 挂起中的交互列表（**重连后恢复待答卡片**用）。
+   *
+   * 背景：`ask_requested` 是流帧，页面刷新 / SSE 丢帧后前端拿不到它；历史重放又刻意不重建
+   * 待答卡片（无从判断该 ask 是否仍在等待）。于是"审批卡弹出时刷新"会永久挂住（后端无超时）。
+   * 这里直接读进程内等待表补一刀：前端每次（重）建连后拉一次并 upsert（幂等）。
+   *
+   * `sessionId` 可选：不传返回全部会话的待答（多窗口 / 后台会话也能自愈）。
+   */
+  @Get("pending-asks")
+  async pendingAsks(@Query("sessionId") sessionId?: string) {
+    const pending = this.interactionWait.listPending(sessionId?.trim() || undefined);
+    return { pending };
   }
 
   /**

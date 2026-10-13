@@ -25,6 +25,7 @@ import {
 } from "./streamProjector";
 import type { WireStreamEvent } from "@/types/stream";
 import type { Turn } from "@/types/message";
+import type { PendingAsk } from "@/types/session";
 
 function createStore() {
   // 测试断言按"目标存在"编写：turns/eventLog 放宽为 any[]，让 find/index 访问不必逐处非空断言；
@@ -33,7 +34,7 @@ function createStore() {
     loaded: true,
     turns: [] as any[],
     eventLog: [] as any[],
-    pendingAsk: undefined as ProjectorSessionState["pendingAsk"],
+    pendingAsks: undefined as ProjectorSessionState["pendingAsks"],
   };
   // refreshPlans 必须显式实现：它是可选成员（投影器用 ?. 调用），缺省会静默 no-op，
   // 让"重放期是否误触发计划列表刷新"这一整类 bug 在测试里完全不可观测
@@ -50,12 +51,22 @@ function createStore() {
     setSessionIsCompressing: () => {},
     sessionIsCompressing: () => false,
     sessionIsStreaming: (): boolean => false,
-    setSessionPendingAsk: (_sid: string, v: ProjectorSessionState["pendingAsk"]) => { state.pendingAsk = v; },
-    sessionPendingAsk: () => state.pendingAsk,
+    upsertSessionPendingAsk: (_sid: string, ask: PendingAsk) => {
+      state.pendingAsks = { ...(state.pendingAsks ?? {}), [ask.requestId]: ask };
+    },
+    removeSessionPendingAsk: (_sid: string, requestId: string) => {
+      if (!state.pendingAsks) return;
+      const next = { ...state.pendingAsks };
+      delete next[requestId];
+      state.pendingAsks = Object.keys(next).length > 0 ? next : undefined;
+    },
+    clearSessionPendingAsks: () => { state.pendingAsks = undefined; },
+    peekSessionPendingAskQueue: () => Object.values(state.pendingAsks ?? {}),
+    sessionPendingAskQueue: () => Object.values(state.pendingAsks ?? {}),
   } satisfies ProjectorSessionStore & {
     state: typeof state;
     refreshPlans: typeof refreshPlans;
-    sessionPendingAsk: () => typeof state.pendingAsk;
+    sessionPendingAskQueue: () => PendingAsk[];
   };
 }
 
@@ -565,15 +576,45 @@ describe("重放不带实时副作用", () => {
   });
 
   it("foldEvents 重放不清理会话级交互卡（刷新后待批卡存活的关键）", () => {
-    store.state.pendingAsk = { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } as any;
+    store.state.pendingAsks = { req1: { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } } as any;
     foldEvents(store as any, "s1", domainTurnPage("T1"));
-    expect(store.state.pendingAsk?.requestId).toBe("req1");
+    expect(store.state.pendingAsks?.req1?.requestId).toBe("req1");
   });
 
-  it("applyLiveChunk 实时 turn_end 仍清理会话级交互卡", () => {
-    store.state.pendingAsk = { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } as any;
+  it("applyLiveChunk 实时 turn_end 清空待答队列", () => {
+    store.state.pendingAsks = { req1: { requestId: "req1", kind: "approval", title: "计划审批", questions: [] } } as any;
     applyLiveChunk(store as any, "s1", { type: "turn_end", turnId: "T1", finishReason: "stop" } as any);
-    expect(store.state.pendingAsk).toBeUndefined();
+    expect(store.state.pendingAsks).toBeUndefined();
+  });
+
+  it("并发审批：连续两个 ask_requested 都入队，ask_resolved 只摘对应的那个", () => {
+    applyLiveChunk(store as any, "s1", {
+      type: "ask_requested", requestId: "A", kind: "approval", title: "写文件", toolCallId: "c1", questions: [],
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "ask_requested", requestId: "B", kind: "approval", title: "写文件", toolCallId: "c2", questions: [],
+    } as any);
+    expect(Object.keys(store.state.pendingAsks ?? {})).toEqual(["A", "B"]);
+
+    // 答掉 B：A 必须还在（旧实现会整队清空 → A 永远无人应答 → 回合挂死）
+    applyLiveChunk(store as any, "s1", { type: "ask_resolved", requestId: "B", outcome: "answered" } as any);
+    expect(Object.keys(store.state.pendingAsks ?? {})).toEqual(["A"]);
+
+    applyLiveChunk(store as any, "s1", { type: "ask_resolved", requestId: "A", outcome: "answered" } as any);
+    expect(store.state.pendingAsks).toBeUndefined();
+  });
+
+  it("tool_calls_response 只摘 toolCallId 命中的待答（不误伤同会话其它待答）", () => {
+    store.state.turns = [{ id: "T1", kind: "turn", metadata: {}, visible: true, messages: [] }] as any;
+    store.state.pendingAsks = {
+      A: { requestId: "A", kind: "approval", toolCallId: "c1", questions: [] },
+      B: { requestId: "B", kind: "approval", toolCallId: "c2", questions: [] },
+    } as any;
+    applyLiveChunk(store as any, "s1", {
+      type: "tool_calls_response",
+      toolCallsResponse: [{ toolCallId: "c1", result: "ok" }],
+    } as any);
+    expect(Object.keys(store.state.pendingAsks ?? {})).toEqual(["B"]);
   });
 
   it("重放 plan_mode_changed 仍恢复计划模式状态，但不刷计划缓存", () => {
@@ -606,8 +647,8 @@ describe("projectChunk 会话级交互卡先于缓存门控", () => {
       questions: [],
     } as any);
 
-    expect(store.state.pendingAsk?.requestId).toBe("req1");
-    expect(store.state.pendingAsk?.title).toBe("计划审批");
+    expect(store.state.pendingAsks?.req1?.requestId).toBe("req1");
+    expect(store.state.pendingAsks?.req1?.title).toBe("计划审批");
     // stash 语义不变：无缓存路径不建回合树（打开会话时才应用暂存）
     expect(store.state.turns).toHaveLength(0);
   });
@@ -615,7 +656,7 @@ describe("projectChunk 会话级交互卡先于缓存门控", () => {
   it("无缓存会话收到 ask_resolved 清除交互卡", () => {
     store.state.loaded = false;
     store.state.turns = [];
-    store.state.pendingAsk = { requestId: "req1", kind: "approval", questions: [] } as any;
+    store.state.pendingAsks = { req1: { requestId: "req1", kind: "approval", questions: [] } } as any;
 
     projectChunk(store as any, "s-uncached", {
       type: "ask_resolved",
@@ -623,6 +664,6 @@ describe("projectChunk 会话级交互卡先于缓存门控", () => {
       outcome: "answered",
     } as any);
 
-    expect(store.state.pendingAsk).toBeUndefined();
+    expect(store.state.pendingAsks).toBeUndefined();
   });
 });

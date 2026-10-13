@@ -133,14 +133,20 @@ const props = defineProps<{
 const { t } = useI18n();
 const sessionStore = useSessionStore();
 
-// ── 待审批锚点：会话级交互卡的 toolCallId 命中本行 → 该工具正在等用户批准
-//    （参数已定稿、结果未回；plan 视图据此在 executing 期间也放行「查看完整计划」）──
+// ── 待审批锚点：会话级交互卡**队列**里的 toolCallId 命中本行 → 该工具正在等用户批准
+//    （并发工具调用可能同时有多个在等，全部高亮；参数已定稿、结果未回）──
 
-const pendingApprovalToolCallId = computed(
-  () => sessionStore.sessionPendingAsk(props.sessionId || '')?.toolCallId,
+const pendingApprovalToolCallIds = computed(
+  () =>
+    new Set(
+      sessionStore
+        .sessionPendingAskQueue(props.sessionId || '')
+        .map((ask) => ask.toolCallId)
+        .filter((id): id is string => !!id),
+    ),
 );
 const isPendingApproval = (tool: ToolCall): boolean =>
-  !!pendingApprovalToolCallId.value && tool.id === pendingApprovalToolCallId.value;
+  !!tool.id && pendingApprovalToolCallIds.value.has(tool.id);
 
 // ── 子代理跳转（工具行 → 侧边栏工作区打开 subagent 标签）──
 

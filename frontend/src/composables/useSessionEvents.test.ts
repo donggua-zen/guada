@@ -23,6 +23,8 @@ vi.stubGlobal("document", {
 
 // 捕获 apiService.onSessionEvent 注册的 handler,供测试手动触发
 const registeredHandlers = new Map<string, (event: any) => void>();
+// 捕获 (重)建连监听,供测试手动触发补拉
+const connectHandlers: Array<() => void> = [];
 
 vi.mock("@/services/ApiService", () => ({
   apiService: {
@@ -31,6 +33,11 @@ vi.mock("@/services/ApiService", () => ({
       registeredHandlers.set(type, handler);
       return () => registeredHandlers.delete(type);
     },
+    onConnected: (cb: () => void) => {
+      connectHandlers.push(cb);
+      return () => {};
+    },
+    fetchPendingAsks: vi.fn(async () => ({ pending: [] })),
     chat: vi.fn(),
   },
 }));
@@ -54,6 +61,8 @@ describe("useSessionEvents 统一订阅器", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     registeredHandlers.clear();
+    connectHandlers.length = 0;
+    vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({ pending: [] });
   });
 
   it("init 注册 stream_status_changed 唯一订阅", () => {
@@ -71,7 +80,7 @@ describe("useSessionEvents 统一订阅器", () => {
       streamSeq: 1, streamBootId: "boot-A",
     } as any);
 
-    store.setSessionPendingAsk("boot-s1", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("boot-s1", { requestId: "req1", kind: "approval", questions: [] });
 
     // 新进程事件（bootId 变化）→ 残留待批被清
     streamEventHub.route({
@@ -91,7 +100,7 @@ describe("useSessionEvents 统一订阅器", () => {
       streamSeq: 1, streamBootId: "boot-C",
     } as any);
 
-    store.setSessionPendingAsk("boot-s2", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("boot-s2", { requestId: "req1", kind: "approval", questions: [] });
 
     // 同进程的后续事件（重连补发的连续帧）：不得触发全清
     streamEventHub.route({
@@ -100,6 +109,37 @@ describe("useSessionEvents 统一订阅器", () => {
     } as any);
 
     expect(store.sessionPendingAsk("boot-s2")?.requestId).toBe("req1");
+  });
+
+  it("（重）建连补拉挂起中的交互卡:刷新/丢帧后卡片自愈，且只补写不清空", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    // 本地已有一个后端不再持有的待答（例如已被别处应答但帧丢了）：补拉不得清掉它
+    store.upsertSessionPendingAsk("s-local", { requestId: "local-1", kind: "approval", questions: [] });
+
+    vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({
+      pending: [
+        {
+          sessionId: "s1",
+          requestId: "r1",
+          kind: "approval",
+          title: "写文件",
+          toolCallId: "c1",
+          questions: [],
+        },
+      ],
+    });
+
+    for (const cb of connectHandlers) cb();
+    // 等 then 链跑完
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.peekSessionPendingAsk("s1")?.requestId).toBe("r1");
+    expect(store.peekSessionPendingAsk("s1")?.title).toBe("写文件");
+    // 补写语义：本地既有的仍保留（清空会把仍可应答的卡片弄丢）
+    expect(store.peekSessionPendingAsk("s-local")?.requestId).toBe("local-1");
   });
 
   it("running 事件:streamStatus=running + 侧边栏 working=true", () => {
@@ -136,7 +176,7 @@ describe("useSessionEvents 统一订阅器", () => {
     useSessionEvents().init();
     const store = useSessionStore();
 
-    store.setSessionPendingAsk("s1", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("s1", { requestId: "req1", kind: "approval", questions: [] });
 
     emitStreamStatus({ sessionId: "s1", status: "completed" });
 
@@ -147,7 +187,7 @@ describe("useSessionEvents 统一订阅器", () => {
     useSessionEvents().init();
     const store = useSessionStore();
 
-    store.setSessionPendingAsk("s1", { requestId: "req1", kind: "approval", questions: [] });
+    store.upsertSessionPendingAsk("s1", { requestId: "req1", kind: "approval", questions: [] });
 
     emitStreamStatus({ sessionId: "s1", status: "running" });
 
