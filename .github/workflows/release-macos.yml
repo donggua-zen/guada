@@ -123,7 +123,15 @@ jobs:
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
       # electron-builder 的默认发布策略会尝试发布
       - name: 打包 dmg
-        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        run: |
+          set +e
+          npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::打包失败（退出码 $code），日志尾部："
+            tail -60 /tmp/dmg.log | while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$code"
         env:
           # runner 上没有签名证书，跳过钥匙串检索
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -135,7 +143,15 @@ jobs:
       # 这类回归在构建期看不出来（要等用户装完点开），mac 又是唯一没有本地验证途径的发布线，
       # 所以放在这里当闸门。细节见 docs/ELECTRON_DEPLOYMENT.md 2.2。
       - name: 校验 asar 布局与运行期依赖
-        run: pnpm run verify:asar
+        run: |
+          set +e
+          pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::asar 校验失败（退出码 $code），输出尾部："
+            tail -60 /tmp/verify-asar.log | while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$code"
 
       - name: 上传产物
         uses: actions/upload-artifact@v7
