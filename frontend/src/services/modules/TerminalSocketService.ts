@@ -2,6 +2,7 @@ import type {
   ClientTerminalMessage,
   ServerTerminalMessage,
 } from "@/types/terminal.types";
+import { apiService } from "@/services/ApiService";
 
 /** 终端事件监听器 */
 export type TerminalEventListener = (msg: ServerTerminalMessage) => void;
@@ -44,11 +45,29 @@ export class TerminalSocketService {
     rows?: number;
   } | null = null;
 
-  /** 获取终端 WS URL（不含 query），区分 Electron(file:) 与 Web(http/https) */
+  /**
+   * 获取终端 WS URL（不含 query），区分 Electron(file:) 与 Web(http/https)
+   *
+   * Electron 下后端端口是**动态**的（打包版随机分配，只有 dev 恰好固定 3000），
+   * 必须复用 ApiService 已解析的后端地址 —— 写死 localhost:3000 会让打包版终端连不上
+   * （WS 打到空端口，后端日志里连一条终端连接都看不到）。
+   */
   private getWsUrl(): string {
     if (typeof window === "undefined") return "";
+
+    // Electron：从 ApiService 的 baseURL 推导（http://localhost:<动态端口>/api/v1）
+    if (window.electronAPI !== undefined && apiService?.baseURL) {
+      try {
+        const base = new URL(apiService.baseURL, window.location.href);
+        const proto = base.protocol === "https:" ? "wss" : "ws";
+        return `${proto}://${base.host}/api/v1/terminal/ws`;
+      } catch {
+        /* baseURL 异常：退回下面的默认分支 */
+      }
+    }
+
     if (window.location.protocol === "file:") {
-      // Electron：后端默认 localhost:3000
+      // Electron 但 baseURL 尚未就绪：保持默认端口，靠 connect() 的端口等待 + 自动重连兜底
       return "ws://localhost:3000/api/v1/terminal/ws";
     }
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -65,7 +84,13 @@ export class TerminalSocketService {
       cols: options.cols,
       rows: options.rows,
     };
-    this.open();
+    // Electron 下端口解析是异步的：先确保 baseURL 就绪再建连，避免抢在默认 3000 上
+    void apiService
+      .ensureBackendUrlReady()
+      .catch(() => {})
+      .finally(() => {
+        if (this.shouldReconnect) this.open();
+      });
   }
 
   /**
