@@ -273,8 +273,16 @@ Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执�
 
 | 方式 | 适用 | 说明 |
 |------|------|------|
-| CI（推荐） | 正式发版 | 推 `v*` tag 触发 `.github/workflows/release-macos.yml`，arm64 + x64 双 job 分别构建，产物上传为 Actions artifact（tag 构建时同时附到 GitHub Release） |
+| CI（推荐） | 正式发版 | 推 `v*` tag 触发 `.github/workflows/release.yml`：**macOS arm64**（`macos-latest`）与 **Windows x64**（`windows-latest`）两个 job 各自构建（同一套链路 + 同一道 `verify:asar` 闸门），产物上传为 Actions artifact 并附到同名 GitHub Release；随后 `publish-mirrors` 在 Gitee / GitCode 建同名 release |
 | 本机 mac | 调试、临时验证 | `pnpm run build:electron:mac`，产物架构 = 本机架构。要出另一架构需同时指定 `TARGET_ARCH` 与 electron-builder 的 `--x64`/`--arm64`（见 2.1） |
+| 本机 Windows | 调试、临时验证 | `pnpm run build:electron`，产物为 nsis 安装包 |
+
+> CI 目前只出 macOS arm64（**Intel 版暂时不做**）与 Windows x64。
+>
+> 镜像平台（Gitee / GitCode）**只发 release、不传二进制**：Gitee 单附件上限 100M（官方文档），
+> 安装包 200M+ 放不进去；GitCode 附件接口虽支持但限额未文档化。两者的 release 正文里会列出
+> GitHub 的下载地址。需要在 GitHub 仓库里配置 `GITEE_TOKEN` / `GITCODE_TOKEN` 两个 Secret，
+> 未配置时自动跳过、不影响主发布线。
 
 ---
 

@@ -169,6 +169,9 @@ jobs:
             echo "::error::@img 源目录=[$(ls backend-ts/node_modules_production/node_modules/@img 2>/dev/null | tr '\n' ' ')]"
             bs=backend-ts/node_modules_production/node_modules/better-sqlite3/build/Release/better_sqlite3.node
             [ -f "$bs" ] && echo "::error::better-sqlite3: $(file -b "$bs")"
+          else
+            # 把校验脚本的收尾行透出成注解：这道闸门有没有真跑，在 run 摘要里可见
+            tail -1 /tmp/verify-asar.log | while IFS= read -r l; do echo "::notice::$l"; done
           fi
           exit "$code"
 
@@ -296,6 +299,9 @@ jobs:
             grep -nE "  ok |Error|Cannot find|✗|FAILED|watcher" /tmp/verify-asar.log | tail -4 | while IFS= read -r l; do echo "::error::$l"; done
             echo "::error::ciNode=$(node -p process.arch) release=[$(ls release | tr '\n' ' ')]"
             echo "::error::@parcel 源目录=[$(ls backend-ts/node_modules_production/node_modules/@parcel 2>/dev/null | tr '\n' ' ')]"
+          else
+            # 把校验脚本的收尾行透出成注解：这道闸门有没有真跑，在 run 摘要里可见
+            tail -1 /tmp/verify-asar.log | while IFS= read -r l; do echo "::notice::$l"; done
           fi
           exit "$code"
 
