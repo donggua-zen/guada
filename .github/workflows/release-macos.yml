@@ -76,15 +76,14 @@ jobs:
       # 放在安装依赖之前：这一步只需几秒，不该等依赖装完才报错。
       #
       # 判断逻辑写在 Node 里而不是 shell 里：同一段 shell 判断在本地通过、在 macOS runner
-      # 上却失败（对 -build-test 这类 tag 误判成"正式 tag 不一致"），排查发现是 runner 的
-      # shell 对 case 里的取反字符类 `[!0-9.]` 行为与本地不一致。Node 的正则到处都一样。
-      # tag 用 env 传入，避免 shell 变量插值再出变数。
+      # 上却失败（把 -build-test 这类 tag 误判成"正式 tag 不一致"）。根因是 runner 的
+      # bash 是 3.2.57（macOS 自带），与本地 bash 5 对 case 里取反字符类 [!0-9.] 的处理不同。
+      # Node 的正则到处行为一致；tag 也经 env 传入，不用 shell 变量插值。
       - name: 校验 tag 与 package.json 版本一致
         if: startsWith(github.ref, 'refs/tags/')
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          echo "::notice::shell=$0 bash=${BASH_VERSION:-未设置} tag=[$TAG_NAME]"
           node -e '
             const pkgVersion = require("./package.json").version;
             const tag = process.env.TAG_NAME.replace(/^v/, "");
@@ -111,15 +110,7 @@ jobs:
       # 产出的 backend-ts/node_modules_production（该目录不入库，由 optimize-electron-deps.js
       # 安装裁剪、rebuild-native-electron.js 按 Electron ABI 重建）
       - name: 构建后端（含原生模块裁剪与重建）
-        run: |
-          set +e
-          pnpm run build:electron:backend 2>&1 | tee /tmp/backend-build.log
-          code=${PIPESTATUS[0]}
-          if [ "$code" -ne 0 ]; then
-            echo "::error::后端构建失败（退出码 $code），日志尾部："
-            tail -40 /tmp/backend-build.log | while IFS= read -r line; do echo "::error::$line"; done
-          fi
-          exit "$code"
+        run: pnpm run build:electron:backend
         env:
           # runner 在海外，走官方源；脚本内默认值指向国内镜像
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
@@ -132,15 +123,7 @@ jobs:
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
       # electron-builder 的默认发布策略会尝试发布
       - name: 打包 dmg
-        run: |
-          set +e
-          npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg-build.log
-          code=${PIPESTATUS[0]}
-          if [ "$code" -ne 0 ]; then
-            echo "::error::打包失败（退出码 $code），日志尾部："
-            tail -40 /tmp/dmg-build.log | while IFS= read -r line; do echo "::error::$line"; done
-          fi
-          exit "$code"
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
           # runner 上没有签名证书，跳过钥匙串检索
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
