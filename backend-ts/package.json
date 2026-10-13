@@ -93,6 +93,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
     "@nestjs/cli": "^11.0.17",
     "@nestjs/schematics": "^11.0.10",
     "@nestjs/testing": "^11.1.18",
