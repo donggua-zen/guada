@@ -156,6 +156,16 @@
     "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --gd-font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "MesloLGS NF", "JetBrainsMono Nerd Font", "Hack Nerd Font", "Symbols Nerd Font",
+    "Courier New", monospace;
+  /* 终端字体：Nerd Font 必须排在系统等宽字体之前。
+     powerlevel10k 之类的提示符用的是私有区（PUA）图标码点，ui-monospace / SF Mono /
+     Menlo 这些系统字体没有对应字形——它们排在前面时只会画出空心方块（或映射到无关
+     字形），表现为终端里提示符乱码。Nerd Font 放首位后图标才会落到设计为单格宽的
+     Nerd 字形上；机器上没装 Nerd Font 时自动退到后面的原有字体链，行为与改动前一致。 */
+  --gd-font-terminal:
+    "MesloLGS NF", "JetBrainsMono Nerd Font", "Hack Nerd Font", "Symbols Nerd Font",
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
 
   --gd-md-font-size: var(--gd-size-text-base);

@@ -94,7 +94,8 @@ async function initTerminal() {
 
     const t = new Terminal({
         theme: xtermTheme.value,
-        fontFamily: "var(--gd-font-mono, 'Courier New', monospace)",
+        // 终端专用字体：Nerd Font 优先（提示符图标是 PUA 码点，见 style.css 的 --gd-font-terminal）
+        fontFamily: "var(--gd-font-terminal, 'Courier New', monospace)",
         fontSize: 13,
         cursorBlink: true,
         scrollback: 5000,
