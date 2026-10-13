@@ -341,7 +341,8 @@ jobs:
     needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 放宽：GitHub runner 往 file.gitcode.com 上传很慢，两个安装包合计 ~415MB 可能要几十分钟
+    timeout-minutes: 120
     steps:
       - name: 取回两个平台的安装包
         uses: actions/download-artifact@v7
@@ -450,11 +451,25 @@ jobs:
           echo "::notice::GitCode release $action 成功：$TAG_NAME"
 
           # 2) 上传附件：先取预签名地址（附带一组必须原样回传的 headers），再 PUT 上传
+          #
+          # 实测两点：① 从 GitHub 海外 runner 传到 file.gitcode.com 很慢（约 260KB/s，
+          # 235MB 的 dmg 需要 ~15 分钟），所以单文件超时给到 60 分钟、job 时限也放宽；
+          # ② 上传地址是预签名的，PUT 成功即注册成附件（返回 2xx 后 release 的 assets 里
+          # 会多出 type=attach 的条目），不需要额外确认调用。
+          #
+          # 重跑/重指 tag 时先删同名旧附件，避免累积重复（删除端点实测可用）。
           shopt -s nullglob
+          curl -s -H "$auth" "$api/releases/tags/$TAG_NAME" \
+            | jq -r '.assets[]? | select(.type=="attach") | "\(.name)\t\(.id)"' > /tmp/attachments.tsv
           count=0
           for f in artifacts/*.dmg artifacts/*.exe artifacts/*.yml; do
             count=$((count + 1))
             name=$(basename "$f")
+            old_id=$(awk -F'\t' -v n="$name" '$1==n{print $2}' /tmp/attachments.tsv | head -1)
+            if [ -n "$old_id" ]; then
+              echo "删除同名旧附件 $name（id=$old_id）"
+              curl -s -X DELETE -H "$auth" "$api/releases/$TAG_NAME/attach_files/$old_id" -o /dev/null
+            fi
             enc=$(jq -rn --arg v "$name" '$v|@uri')
             info=$(curl -s -H "$auth" "$api/releases/$TAG_NAME/upload_url?file_name=$enc")
             url=$(printf '%s' "$info" | jq -r '.url // empty')
@@ -466,8 +481,8 @@ jobs:
             while IFS=$'\t' read -r k v; do
               [ -n "$k" ] && hdr+=(-H "$k: $v")
             done < <(printf '%s' "$info" | jq -r '.headers | to_entries[] | "\(.key)\t\(.value)"')
-            echo "上传 $name（$(( $(stat -c%s "$f") / 1048576 )) MB）…"
-            code=$(curl -s -o /tmp/put.out -w '%{http_code}' --max-time 900 \
+            echo "上传 $name（$(( $(stat -c%s "$f") / 1048576 )) MB，海外 runner 上传慢，耐心等）…"
+            code=$(curl -s -o /tmp/put.out -w '%{http_code}' --max-time 3600 \
               -X PUT "${hdr[@]}" --data-binary "@$f" "$url")
             if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
               echo "::notice::GitCode 附件上传成功：$name"
