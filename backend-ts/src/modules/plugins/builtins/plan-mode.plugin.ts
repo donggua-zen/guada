@@ -28,6 +28,14 @@ const NOT_IN_PLAN_MODE =
 const REJECTED = "The plan was not approved by the user.";
 
 /**
+ * 并发提交被拒（同一会话已有一份计划在等待审批）。
+ * 两份计划对用户是矛盾的，而且会写两个计划文件、批准后把计划态翻转两次——后到的那次直接失败。
+ */
+const PLAN_CONCURRENT_REJECTED =
+  "Another plan from this session is already waiting for the user's approval. " +
+  "Do not submit plans concurrently: wait for that one to be resolved, or merge both into a single plan and submit it once.";
+
+/**
  * 计划模式插件。
  *
  * 提供 `ExitPlanMode`：模型在计划阶段写完方案后，用它请求用户批准。
@@ -40,6 +48,8 @@ const REJECTED = "The plan was not approved by the user.";
 @Injectable()
 export class PlanModePlugin extends PluginBase {
   private readonly logger = new Logger(PlanModePlugin.name);
+  /** 在途计划提交（按 sessionId）：同一会话只允许一份计划在等待审批 */
+  private readonly inFlight = new Set<string>();
 
   manifest = {
     id: "plan-mode",
@@ -174,6 +184,27 @@ Ensure your plan is complete and unambiguous:
       return { content: NOT_IN_PLAN_MODE, isError: true };
     }
 
+    // 并发守卫（按会话）：一个助手消息里的多个工具调用是并发执行的，但"同时提交两份计划"
+    // 对用户是矛盾的（还会写两个计划文件、批准后把计划态翻转两次）→ 后到的那次直接失败给模型。
+    // 守卫放在写盘之前：被拒的那次不留孤儿计划文件；finally 覆盖批准/拒绝/停止/异常全部路径。
+    if (this.inFlight.has(session.sessionId)) {
+      return { content: PLAN_CONCURRENT_REJECTED, isError: true };
+    }
+    this.inFlight.add(session.sessionId);
+    try {
+      return await this.submitPlan(args, session, ctx, signal);
+    } finally {
+      this.inFlight.delete(session.sessionId);
+    }
+  }
+
+  /** 真正提交计划（写盘 → 审批 → 退出计划模式）；并发串行化由 handleExitPlanMode 负责 */
+  private async submitPlan(
+    args: { plan: string },
+    session: NonNullable<PluginContext["session"]>,
+    ctx?: PluginContext,
+    signal?: AbortSignal,
+  ): Promise<ToolResultObject> {
     // 先落盘、后翻转状态：写失败即中止本次退出（审批通过即代表计划已定稿，
     // 不能出现"已退出但没有计划文件"的半截状态）。
     // planId = 本次工具调用 id（计划身份与转录对齐；每份计划一个文件，历史计划互不覆盖）

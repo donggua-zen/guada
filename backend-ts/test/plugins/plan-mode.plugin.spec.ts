@@ -4,6 +4,7 @@ import * as path from "path";
 import { PlanModePlugin } from "../../src/modules/plugins/builtins/plan-mode.plugin";
 import { PlanFileService } from "../../src/common/services/plan-file.service";
 import { AskService } from "../../src/common/services/ask.service";
+import { AskDeniedError } from "../../src/common/types/ask.types";
 import { PluginApi } from "../../src/modules/plugins/api/plugin-api";
 import { ToolHandlerDef, ToolKitDef } from "../../src/modules/plugins/types/plugin.types";
 
@@ -24,7 +25,8 @@ describe("PlanModePlugin", () => {
   function createSession(overrides: Record<string, any> = {}) {
     let planEnabled = overrides.planEnabled !== false;
     return {
-      sessionId: "s-plan-1",
+      // 允许用例指定会话 id（并发守卫是按会话隔离的）
+      sessionId: overrides.sessionId ?? "s-plan-1",
       sessionType: "web",
       workspacePath: workspaceDir,
       getPlanEnabled: jest.fn(() => planEnabled),
@@ -44,12 +46,12 @@ describe("PlanModePlugin", () => {
     return found;
   }
 
-  beforeEach(async () => {
-    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "plan-mode-spec-"));
-    planFile = new PlanFileService();
-
+  /**
+   * 装配一个插件实例（可注入自定义 ask 实现）。
+   * 每个实例自带工具表（`registered` 指向最新实例，外层 exitTool() 因此对 beforeEach 的实例仍有效）。
+   */
+  async function createPlugin(askImpl?: (...args: any[]) => Promise<any>) {
     registered = [];
-    kitDef = undefined;
     const api = {
       registerToolKit: (def: ToolKitDef) => {
         kitDef = def; // 工具包可见性用例要拿到 handler
@@ -66,11 +68,27 @@ describe("PlanModePlugin", () => {
     } as unknown as PluginApi;
 
     const askService = {
-      ask: jest.fn(async () => askResult),
-    } as unknown as AskService;
+      ask: jest.fn(askImpl ?? (async () => askResult)),
+    } as unknown as AskService & { ask: jest.Mock };
 
-    plugin = new PlanModePlugin(askService, planFile);
-    await plugin.onLoad(api);
+    const created = new PlanModePlugin(askService, planFile);
+    await created.onLoad(api);
+    return {
+      plugin: created,
+      askService,
+      exitTool: (): ToolHandlerDef => {
+        const found = registered.find((t) => t.name === "ExitPlanMode");
+        if (!found) throw new Error("ExitPlanMode not registered");
+        return found;
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "plan-mode-spec-"));
+    planFile = new PlanFileService();
+    kitDef = undefined;
+    plugin = (await createPlugin()).plugin;
   });
 
   afterEach(async () => {
@@ -189,6 +207,109 @@ describe("PlanModePlugin", () => {
 
     expect(session.setPlanEnabled).not.toHaveBeenCalled();
     expect(session.publishStream).not.toHaveBeenCalled();
+  });
+
+  describe("并发提交守卫：同一会话只允许一份计划在途", () => {
+    /** 等到 mock 被调用 n 次（第一路要先过异步写盘才到 ask） */
+    async function waitForCalls(mock: jest.Mock, n: number): Promise<void> {
+      for (let i = 0; i < 200 && mock.mock.calls.length < n; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(mock.mock.calls.length).toBeGreaterThanOrEqual(n);
+    }
+
+    /** 可控闸门：所有 ask 调用返回同一个 promise，release() 后一起放行 */
+    function gate() {
+      let release!: (answers: any) => void;
+      const promise = new Promise<any>((resolve) => {
+        release = resolve;
+      });
+      return { promise, release: (answers: any) => release(answers) };
+    }
+
+    it("同会话并发两次：后到的那次立即失败，且不写第二个计划文件", async () => {
+      const g = gate();
+      const built = await createPlugin(() => g.promise);
+      const session = createSession();
+
+      // 第一路：进入守卫后挂在审批上（用户还没答）
+      const first = built.exitTool().handler({ plan: "# 计划一" }, { session, toolCallId: "call-1" } as any);
+      await waitForCalls(built.askService.ask, 1);
+
+      // 第二路：同一会话 → 立即失败（守卫在写盘/发卡之前就拦下）
+      const second = (await built.exitTool().handler(
+        { plan: "# 计划二" },
+        { session, toolCallId: "call-2" } as any,
+      )) as any;
+      expect(second.isError).toBe(true);
+      expect(second.content).toContain("already waiting for the user's approval");
+      // 没有发第二张审批卡
+      expect(built.askService.ask).toHaveBeenCalledTimes(1);
+      // 也没有留下第二个计划文件（守卫在写盘之前）
+      const dir = path.join(workspaceDir, ".guada", "plans", session.sessionId);
+      await expect(fs.readdir(dir)).resolves.toHaveLength(1);
+
+      // 收尾：放行第一路
+      g.release([{ id: "plan", selected: ["拒绝"] }]);
+      await first;
+    });
+
+    it("守卫释放：第一路被拒之后，同一会话可以再提交", async () => {
+      const g = gate();
+      const built = await createPlugin(() => g.promise);
+      const session = createSession();
+
+      const first = built.exitTool().handler({ plan: "# 计划一" }, { session, toolCallId: "call-1" } as any);
+      g.release([{ id: "plan", selected: ["拒绝"] }]); // 拒绝 → 计划态保持
+      const firstResult = (await first) as any;
+      expect(firstResult.isError).toBe(true);
+
+      // 守卫已释放 → 再提交能正常进入（第二次 ask）
+      const second = (await built.exitTool().handler(
+        { plan: "# 计划二" },
+        { session, toolCallId: "call-2" } as any,
+      )) as any;
+      expect(second.content).not.toContain("already waiting");
+      expect(built.askService.ask).toHaveBeenCalledTimes(2);
+    });
+
+    it("会话隔离：不同会话可以各自有一份计划在途", async () => {
+      const g = gate();
+      const built = await createPlugin(() => g.promise);
+      const sessionA = createSession({ sessionId: "s-a" } as any);
+      const sessionB = createSession({ sessionId: "s-b" } as any);
+
+      const first = built.exitTool().handler({ plan: "# A" }, { session: sessionA, toolCallId: "a1" } as any);
+      const second = built.exitTool().handler({ plan: "# B" }, { session: sessionB, toolCallId: "b1" } as any);
+
+      // 两路都进入了守卫（各自挂在自己的审批上；不因会话不同而互相拦截）
+      await waitForCalls(built.askService.ask, 2);
+
+      g.release([{ id: "plan", selected: ["拒绝"] }]);
+      await Promise.all([first, second]);
+    });
+
+    it("用户停止（ask 抛 cancelled）后守卫释放，不会把会话锁死", async () => {
+      let cancelled = true;
+      const built = await createPlugin(async () => {
+        if (cancelled) throw new AskDeniedError("用户已停止", "cancelled");
+        return [{ id: "plan", selected: ["拒绝"] }];
+      });
+      const session = createSession();
+
+      await expect(
+        built.exitTool().handler({ plan: "# 计划一" }, { session, toolCallId: "call-1" } as any),
+      ).rejects.toBeInstanceOf(AskDeniedError);
+
+      // 守卫必须已释放：下一次提交能正常进入
+      cancelled = false;
+      const retry = (await built.exitTool().handler(
+        { plan: "# 计划二" },
+        { session, toolCallId: "call-2" } as any,
+      )) as any;
+      expect(retry.content).not.toContain("already waiting");
+      expect(built.askService.ask).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("工具包可见性：计划模式对子代理不可见", () => {
