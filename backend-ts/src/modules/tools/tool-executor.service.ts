@@ -285,7 +285,9 @@ export class ToolExecutor {
         content = String(result ?? "");
       }
 
-      if (content && fullToolName !== "read") {
+      // 豁免：read 自带上限+续读参数；声明 exemptFromLargeResult 的工具（如 skill_learn）
+      // 同样自管长度——它们的正文就是模型要用的内容，被换成预览等于报废。
+      if (content && !toolEntry?.exemptFromLargeResult && fullToolName !== "read") {
         const handled = await this.handleLargeResult(
           content,
           fullToolName,

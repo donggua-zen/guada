@@ -66,6 +66,31 @@ parameters:         # 工具参数定义（可选）
 
 这样 Agent 知道"有哪些技能可用"，但不会一次性加载所有技能的完整指令，大幅节省 Token。
 
+### L2 契约：`skill_learn` 返回位置头 + 自管长度
+
+L1 清单只注入名称与描述（**不含路径**）。Agent 调用 `skill_learn` 拿到 L2 正文时，正文**开头**会带一行位置头：
+
+```
+Base directory for this skill: <资源目录>
+Scripts and referenced resources live under this directory.
+```
+
+位置头解决两件事：
+
+- **技能自带脚本的落点**。带脚本的技能（如内置 `skill-creator` / `skill-installer` 的 `scripts/validate-skill.mjs`）需要知道从哪个目录执行；该目录来自技能声明的 `resourceBase`（内置技能共享 `bundled-skills/`），文件型技能则为其自身目录。
+- **即使被截断也能定位**。位置头置于正文最前，因此任何预览/截断都保留它。
+
+位置来源与退化规则（`skill-orchestrator.service.ts` 的 `skillLearn`）：
+
+| 技能来源 | `baseDirectory` | `skillMdPath` |
+|---|---|---|
+| 文件型（有磁盘 SKILL.md） | 技能自身目录 | `<技能目录>/SKILL.md` |
+| 插件注册型（内嵌正文） | 声明的 `resourceBase` 目录 | `null`（无磁盘文件） |
+| 声明 `resourceBase.kind = "url"` | `null` | `null`，位置头输出 URL |
+| 未声明且无技能目录 | `null` | `null`，位置头如实说明"未声明资源目录"（**不编造 `__plugin__/SKILL.md` 这类假路径**） |
+
+`skill_learn` 在 `registerTool` 时声明 `exemptFromLargeResult: true`，豁免执行器的通用大结果裁剪（否则正文会被换成 2048 字符预览，技能指令等于报废）。作为交换，它自管上限：正文超过 `SKILL_LEARN_MAX_CHARS`（60000 字符）即截断，并附上续读指引——有磁盘文件时给出 `read` 的 `file_path` / `unit` / `offset` / `limit`；插件注册型无文件可读则如实说明。这与 `read` 工具"自带上限 + 续读参数"的做法一致。
+
 ### 热插拔
 
 通过 `skill-watcher.service.ts` 监听 `backend-ts/skills/` 目录的文件变化（`fs.watch`）：

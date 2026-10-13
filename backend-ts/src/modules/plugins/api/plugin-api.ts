@@ -91,6 +91,8 @@ export interface PluginApi {
       allowedInPlanMode?: boolean;
       /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
       requiresUserInteraction?: boolean;
+      /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
+      exemptFromLargeResult?: boolean;
     }): void;
 
     /**
@@ -115,6 +117,8 @@ export interface PluginApi {
     allowedInPlanMode?: boolean;
     /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
     requiresUserInteraction?: boolean;
+    /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
+    exemptFromLargeResult?: boolean;
   }): void;
 
   registerPrompt(def: {
@@ -297,6 +301,7 @@ export class PluginApiImpl implements PluginApi {
         readOnly: def.readOnly,
         allowedInPlanMode: def.allowedInPlanMode,
         requiresUserInteraction: def.requiresUserInteraction,
+        exemptFromLargeResult: def.exemptFromLargeResult,
         icon: def.display?.icon,
         actionType: def.display?.actionType,
         argsKey,

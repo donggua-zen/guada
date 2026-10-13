@@ -5,6 +5,10 @@ import { PluginContext, RolePluginConfig } from "../../plugins/types/plugin.type
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import { isToolkitAllowedByRoleConfig } from "../../plugins/utils/role-toolkit-filter";
+import {
+  formatSkillLocationHeader,
+  truncateSkillInstructions,
+} from "../common/skill-location.util";
 import path from "path";
 import langZh from "./skill.lang.zh.json";
 import langEn from "./skill.lang.en.json";
@@ -70,7 +74,13 @@ export class SkillPlugin extends PluginBase {
               `The user invoked skill "${skillName}". Follow its instructions:`,
               `<skill_content name="${skillName}">`,
               "<skill_resources>",
-              `Base directory for this skill: ${learned?.path ?? skill.baseDir}. Load referenced resources only as needed.`,
+              // 与 skill_learn 工具共用同一位置头，避免两处措辞漂移
+              learned
+                ? formatSkillLocationHeader(learned)
+                : skill.baseDir
+                  ? `Base directory for this skill: ${skill.baseDir}`
+                  : "This skill declares no resource directory (no bundled scripts/resources).",
+              "Load referenced resources only as needed.",
               "</skill_resources>",
               "",
               "<skill_instructions>",
@@ -117,7 +127,7 @@ export class SkillPlugin extends PluginBase {
     skillKit.registerTool({
       name: "skill_learn",
       description:
-        "通过技能名称获取技能的完整指令内容和路径。技能内容已去除 YAML 元数据头，可直接使用",
+        "通过技能名称获取技能的完整指令内容和资源目录。指令已去除 YAML 元数据头，可直接使用；资源目录用于执行技能自带脚本、读取随附资源。",
       inputSchema: z.object({
         name: z
           .string()
@@ -128,13 +138,12 @@ export class SkillPlugin extends PluginBase {
         if (!result) {
           throw new Error(`skill "${args.name}" not found`);
         }
-        return {
-          success: true,
-          name: result.name,
-          content: result.content,
-          path: result.path,
-          resourceBase: result.resourceBase,
-        };
+        // 位置头置于正文最前：模型必须能定位技能自带脚本；
+        // 即便结果被通用大结果处理 spill，2048 字符预览里也带着它。
+        const body = formatSkillLocationHeader(result) + "\n\n" + result.content;
+        const { content } = truncateSkillInstructions(body, result);
+        // 规范 ToolResultObject：路径已在正文里，不再依赖会被执行器丢弃的 path 字段
+        return { content };
       },
       display: {
         actionType: "skill_read",
@@ -147,6 +156,9 @@ export class SkillPlugin extends PluginBase {
       },
       dangerLevel: "info",
       readOnly: true,
+      // 技能正文就是模型要用的内容，通用裁剪（换成 2048 字符预览）等于报废；
+      // 由 truncateSkillInstructions 自管上限并给出续读路径。
+      exemptFromLargeResult: true,
     });
 
     // ── Prompt（toolkit 的 prompt 随 loadMode 自动注入/隐藏）──

@@ -204,6 +204,12 @@ export interface ToolHandlerDef {
    */
   requiresUserInteraction?: boolean;
   /**
+   * 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）。
+   * read、skill_learn 属此类——它们的正文就是模型要用的内容，被换成预览等于报废。
+   * 缺省 false（保守：未声明即接受通用裁剪）。
+   */
+  exemptFromLargeResult?: boolean;
+  /**
    * 所属工具集 ID（用于按工具集分组加载，由 @ToolSet 统一控制加载模式）
    */
   toolSet?: string;
@@ -283,6 +289,8 @@ export interface ToolKitHandle {
     allowedInPlanMode?: boolean;
     /** 本工具会阻塞等待人类应答（审批/提问）；子会话放行会卡死父回合 */
     requiresUserInteraction?: boolean;
+    /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
+    exemptFromLargeResult?: boolean;
   }): void;
   registerRawTool(def: ToolHandlerDef): void;
   registerPrompt(def: {

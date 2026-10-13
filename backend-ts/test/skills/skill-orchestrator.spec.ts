@@ -1,3 +1,4 @@
+import * as path from "path";
 import { SkillOrchestrator } from "../../src/modules/skills/core/skill-orchestrator.service";
 import { SkillRegistry } from "../../src/modules/skills/core/skill-registry.service";
 import { SkillDefinition } from "../../src/modules/skills/interfaces/skill-manifest.interface";
@@ -102,6 +103,78 @@ describe("SkillOrchestrator", () => {
 
     it("should return empty string when no skills at all", () => {
       expect(orchestrator.getMetadataInjection()).toBe("");
+    });
+  });
+
+  describe("skillLearn", () => {
+    beforeEach(() => {
+      (mockLoader as any).loadInstructions = jest
+        .fn()
+        .mockResolvedValue("技能正文");
+    });
+
+    it("文件型技能：给出技能目录与 SKILL.md 绝对路径", async () => {
+      registry.register(makeSkill("my-skill", true));
+
+      const r = await orchestrator.skillLearn("my-skill");
+
+      expect(r).not.toBeNull();
+      expect(r!.content).toBe("技能正文");
+      expect(r!.baseDirectory).toBe(path.join("/tmp/skills", "my-skill"));
+      expect(r!.skillMdPath).toBe(
+        path.join("/tmp/skills", "my-skill", "SKILL.md"),
+      );
+      expect(r!.resourceBase).toEqual({
+        kind: "directory",
+        path: path.join("/tmp/skills", "my-skill"),
+      });
+    });
+
+    it("插件注册型技能：以 resourceBase 为资源根，无磁盘文件可续读", async () => {
+      registry.register({
+        id: "bundled",
+        baseDir: "",
+        basePath: "__plugin__",
+        manifest: { name: "bundled", description: "内置技能" },
+        contentHash: "h",
+        content: "内嵌正文",
+        source: "system",
+        enabled: true,
+        provider: "plugin:skill-bundled",
+        resourceBase: { kind: "directory", path: "/app/bundled-skills" },
+      });
+
+      const r = await orchestrator.skillLearn("bundled");
+
+      expect(r!.baseDirectory).toBe("/app/bundled-skills");
+      expect(r!.skillMdPath).toBeNull();
+      expect(r!.path).toBe("/app/bundled-skills");
+    });
+
+    it("未声明 resourceBase 的插件技能：路径为未知，不再拼出假路径", async () => {
+      registry.register({
+        id: "third-party",
+        baseDir: "",
+        basePath: "__plugin__",
+        manifest: { name: "third-party", description: "三方技能" },
+        contentHash: "h",
+        content: "正文",
+        source: "system",
+        enabled: true,
+        provider: "plugin:some-plugin",
+      });
+
+      const r = await orchestrator.skillLearn("third-party");
+
+      expect(r!.baseDirectory).toBeNull();
+      expect(r!.skillMdPath).toBeNull();
+      expect(r!.resourceBase).toBeNull();
+      expect(r!.path).toBe("");
+      expect(r!.path).not.toContain("__plugin__");
+    });
+
+    it("未知技能返回 null", async () => {
+      expect(await orchestrator.skillLearn("nope")).toBeNull();
     });
   });
 
