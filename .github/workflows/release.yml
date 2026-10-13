@@ -1,0 +1,430 @@
+# 三平台发布：macOS (Apple Silicon) + Windows (x64)，构建全部在 GitHub Actions 上跑
+#
+# 为什么放在这里：macOS 的包只能在 macOS 上构建（electron-builder 在 Windows 上构建 mac 目标
+# 会直接抛错 Build for macOS is supported only on macOS，dmg 依赖 hdiutil、签名依赖 codesign）。
+# 公开仓库的 GitHub 托管 runner 免费，所以 mac 与 Windows 都在这里出包，本机不用再手工跑。
+#
+# 触发方式：
+#   - 推送 v* tag（发版）：构建 + 上传 artifact + 附到同名 GitHub Release，
+#     并在 Gitee / GitCode 建同名 release
+#   - 带后缀的 tag（v1.0.0-rc1、v1.0.0-build-test 等预发布/测试 tag）：只构建 + 上传
+#     artifact，不建任何 Release，也不做版本一致性硬校验
+#   - 手动触发（Actions 页面 Run workflow）：只构建 + 上传 artifact
+#
+# 产物：
+#   - macOS arm64：GuaDa-<版本>-arm64.dmg（Intel 版暂时不做）
+#   - Windows x64：GuaDa Setup <版本>.exe（nsis 安装包）
+#   均未签名；mac 用户首次安装的放行步骤见 docs/ELECTRON_DEPLOYMENT.md 第 4 章。
+#
+# 镜像平台（Gitee / GitCode）**只发 release、不传二进制**：
+#   - Gitee 单附件上限 100M（官方文档），我们的安装包 200M+ 放不进去；
+#   - GitCode 的附件接口虽支持，但限额未文档化，暂不依赖。
+#   两个平台的 release 正文里会列出 GitHub 上的下载地址。未配置对应 token 时自动跳过。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  # 发版构建不中途取消
+  cancel-in-progress: false
+
+permissions:
+  # 写权限用于把产物附到 GitHub Release（只有 tag 触发时才会用到）
+  contents: write
+
+jobs:
+  # ------------------------------------------------------------------ macOS
+  build-macos:
+    name: macOS arm64
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      # 顺序不能反：setup-node 的 pnpm 缓存依赖先装好的 pnpm
+      # 版本不用传：action 从 package.json 的 packageManager 字段读取（pnpm@11.7.0）
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: 安装 Node
+        uses: actions/setup-node@v7
+        with:
+          # 24 = LTS，且满足全部依赖的 engines：electron 要 >=22.12.0、
+          # prisma 要 ^20.19 || ^22.12 || >=24.0、vite 要 ^20.19.0 || >=22.12.0
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            backend-ts/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+
+      # 正式 tag（vX.Y.Z）与 package.json 版本不一致时直接失败，避免打出名不符实的包；
+      # 带后缀的预发布/测试 tag（v1.0.0-rc1、v1.0.0-build-test）只告警不阻断。
+      # 放在安装依赖之前：这一步只需几秒，不该等依赖装完才报错。
+      #
+      # 判断逻辑写在 Node 里而不是 shell 里：同一段 shell 判断在本地通过、在 macOS runner
+      # 上却失败（把 -build-test 这类 tag 误判成"正式 tag 不一致"）。根因是 runner 的
+      # bash 是 3.2.57（macOS 自带），与本地 bash 5 对 case 里取反字符类 [!0-9.] 的处理不同。
+      # Node 的正则到处行为一致；tag 也经 env 传入，不用 shell 变量插值。
+      - name: 校验 tag 与 package.json 版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          node -e '
+            const pkgVersion = require("./package.json").version;
+            const tag = process.env.TAG_NAME.replace(/^v/, "");
+            if (tag === pkgVersion) {
+              console.log("版本一致：" + pkgVersion);
+            } else if (/^\d+\.\d+\.\d+$/.test(tag)) {
+              console.log("::error::tag " + process.env.TAG_NAME + " 与 package.json 的版本 " + pkgVersion + " 不一致");
+              process.exit(1);
+            } else {
+              console.log("::warning::非正式 tag（" + process.env.TAG_NAME + "），跳过版本一致性校验；产物版本号为 package.json 的 " + pkgVersion);
+            }
+          '
+
+      # 根目录 install 会级联安装两个子包（根 package.json 的
+      # postinstall: pnpm --dir backend-ts install && pnpm --dir frontend install）
+      # 依赖源取自仓库 .npmrc（淘宝镜像）；若 runner 上拉取慢，可在这里改成官方源
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 准备构建（清理 release/ + 编译 Electron 主进程）
+        run: pnpm run build:electron:pre
+
+      # 这一步必须跑，不能只跑 electron-builder：electron-builder 的 extraResources 依赖它
+      # 产出的 backend-ts/node_modules_production（该目录不入库，由 optimize-electron-deps.js
+      # 安装裁剪、rebuild-native-electron.js 按 Electron ABI 重建）
+      - name: 构建后端（含原生模块裁剪与重建）
+        run: pnpm run build:electron:backend
+        env:
+          # runner 在海外，走官方源；脚本内默认值指向国内镜像
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          npm_config_disturl: https://electronjs.org/headers
+
+      - name: 构建前端
+        run: pnpm run build:electron:frontend
+
+      # 架构由 runner 架构决定（mac.target 已不再写死 arch 列表）：macos-latest 是 arm64，
+      # 原生模块也只按构建机架构准备，app 与模块架构天然一致。反例见
+      # docs/ELECTRON_DEPLOYMENT.md 2.1（1.0.1 首发在 arm64 机器上构建 x64 包，产出的坏包
+      # 让 verify:asar 的运行期烟测当场失败）。
+      # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
+      # electron-builder 的默认发布策略会尝试发布。
+      # GitHub 的 macOS runner 上 dmg 偶发失败：hdiutil detach -force 返回 16（临时挂载的
+      # 磁盘镜像被占用，常见于 Spotlight 索引）。先关掉索引，再对打包做一次重试。
+      - name: 关闭 Spotlight 索引（降低 dmg 构建偶发失败）
+        run: sudo mdutil -a -i off || true
+
+      - name: 打包 dmg
+        run: |
+          set +e
+          code=1
+          for attempt in 1 2; do
+            npx electron-builder --mac --arm64 --publish never 2>&1 | tee /tmp/dmg.log
+            code=${PIPESTATUS[0]}
+            if [ "$code" -eq 0 ]; then exit 0; fi
+            echo "::warning::打包第 $attempt 次失败（退出码 $code）"
+            [ "$attempt" -lt 2 ] && sleep 20
+          done
+          # 注解有条数上限（约 10 条），先打最关键的报错行，再补尾部
+          echo "::error::打包两次均失败（退出码 $code）"
+          grep -nE "⨯|Error:|error " /tmp/dmg.log | tail -6 | while IFS= read -r l; do echo "::error::$l"; done
+          tail -3 /tmp/dmg.log | while IFS= read -r l; do echo "::error::$l"; done
+          exit "$code"
+        env:
+          # runner 上没有签名证书，跳过钥匙串检索
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # 这里刻意不设 ELECTRON_MIRROR：设了之后 electron-builder 会按
+          # 「镜像基址/<版本>/...」拼 URL（npmmirror 的目录结构），而 GitHub 的
+          # 目录是 /download/v<版本>/ —— 会 404。不设时它走内置的官方默认值。
+
+      # 打包后的自检：后端 node_modules 在 app.asar 内、原生模块已解包、sqlite-vec 路径重写生效。
+      # 这类回归在构建期看不出来（要等用户装完点开），所以放在这里当闸门。
+      # 细节见 docs/ELECTRON_DEPLOYMENT.md 2.2。
+      #
+      # 失败分支里的诊断是刻意留的：CI 日志需要鉴权才能读，而注解公开可读；把「哪些包 require
+      # 成功 / 错误行 / 产物架构」打成注解，失败原因在 run 摘要里就能看明白（1.0.1 的架构不匹配
+      # 就是这样定位的：app 是 x64、原生模块是 arm64）。只在失败时输出，成功时零噪音。
+      - name: 校验 asar 布局与运行期依赖
+        run: |
+          set +e
+          pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::asar 校验失败（退出码 $code）"
+            grep -nE "  ok |Error|Cannot find|✗|FAILED|@img" /tmp/verify-asar.log | tail -4 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::runner=$(uname -m) ciNode=$(node -p process.arch) release=[$(ls release | tr '\n' ' ')]"
+            for b in release/*/GuaDa.app/Contents/MacOS/GuaDa; do
+              [ -f "$b" ] && echo "::error::app二进制: $(file -b "$b") ← $b"
+            done
+            echo "::error::@img 源目录=[$(ls backend-ts/node_modules_production/node_modules/@img 2>/dev/null | tr '\n' ' ')]"
+            bs=backend-ts/node_modules_production/node_modules/better-sqlite3/build/Release/better_sqlite3.node
+            [ -f "$bs" ] && echo "::error::better-sqlite3: $(file -b "$bs")"
+          fi
+          exit "$code"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v7
+        # 产物上传偶发网络抖动（实测过一次 Failed to CreateArtifact: ENOTFOUND）。
+        # 真正的交付物是 Release 附件，不该被它的抖动连累，所以这里不阻断后续步骤。
+        continue-on-error: true
+        with:
+          name: GuaDa-macos-arm64
+          path: |
+            release/*.dmg
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      # 只对正式 tag（不含 '-' 后缀）建 Release；预发布/测试 tag 只留 artifact，
+      # 避免一个 build-test tag 就在公开仓库里冒出一个 Release
+      - name: 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          # 两个平台的 job 并发执行：先到的建 Release，后到的容忍"已存在"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          # 草稿要显式发布：删掉带 Release 的 tag 再重建时，GitHub 会把原 Release 转为草稿，
+          # 那样附件传上去了对外仍不可见（1.0.1 重指 tag 时踩到过）。
+          gh release edit "$tag" --draft=false --latest 2>/dev/null || true
+          gh release upload "$tag" release/*.dmg --clobber
+          if [ -f release/latest-mac.yml ]; then
+            gh release upload "$tag" release/latest-mac.yml --clobber
+          fi
+
+  # ---------------------------------------------------------------- Windows
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # windows runner 默认 shell 是 pwsh，这里的脚本都是 bash 写的（Git Bash 随 runner 提供）
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: 安装 Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            backend-ts/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+
+      - name: 校验 tag 与 package.json 版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          node -e '
+            const pkgVersion = require("./package.json").version;
+            const tag = process.env.TAG_NAME.replace(/^v/, "");
+            if (tag === pkgVersion) {
+              console.log("版本一致：" + pkgVersion);
+            } else if (/^\d+\.\d+\.\d+$/.test(tag)) {
+              console.log("::error::tag " + process.env.TAG_NAME + " 与 package.json 的版本 " + pkgVersion + " 不一致");
+              process.exit(1);
+            } else {
+              console.log("::warning::非正式 tag（" + process.env.TAG_NAME + "），跳过版本一致性校验；产物版本号为 package.json 的 " + pkgVersion);
+            }
+          '
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 准备构建（清理 release/ + 编译 Electron 主进程）
+        run: pnpm run build:electron:pre
+
+      - name: 构建后端（含原生模块裁剪与重建）
+        run: pnpm run build:electron:backend
+        env:
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          npm_config_disturl: https://electronjs.org/headers
+
+      - name: 构建前端
+        run: pnpm run build:electron:frontend
+
+      # Windows 的包在 Windows 上构建，原生模块（better-sqlite3 / sharp / @parcel/watcher 等）
+      # 天然是 win32-x64，不存在跨架构问题。--publish never 的理由同 mac。
+      # 不设 ELECTRON_MIRROR：理由同 mac（设了会按 npmmirror 的目录结构拼 URL）。
+      - name: 打包 nsis 安装包
+        run: |
+          set +e
+          code=1
+          for attempt in 1 2; do
+            npx electron-builder --win nsis --x64 --publish never 2>&1 | tee /tmp/win.log
+            code=${PIPESTATUS[0]}
+            if [ "$code" -eq 0 ]; then exit 0; fi
+            echo "::warning::打包第 $attempt 次失败（退出码 $code）"
+            [ "$attempt" -lt 2 ] && sleep 20
+          done
+          echo "::error::打包两次均失败（退出码 $code）"
+          grep -nE "⨯|Error:|error " /tmp/win.log | tail -6 | while IFS= read -r l; do echo "::error::$l"; done
+          tail -3 /tmp/win.log | while IFS= read -r l; do echo "::error::$l"; done
+          exit "$code"
+        env:
+          WIN_CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # 与 mac 同一道闸门：asar 布局、原生模块解包、@parcel/watcher 补丁二进制 md5（win32 专属
+      # 检查在这一步才真正生效）、以及以 ELECTRON_RUN_AS_NODE 起打包后的 exe 做运行期烟测。
+      - name: 校验 asar 布局与运行期依赖
+        run: |
+          set +e
+          pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::asar 校验失败（退出码 $code）"
+            grep -nE "  ok |Error|Cannot find|✗|FAILED|watcher" /tmp/verify-asar.log | tail -4 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::ciNode=$(node -p process.arch) release=[$(ls release | tr '\n' ' ')]"
+            echo "::error::@parcel 源目录=[$(ls backend-ts/node_modules_production/node_modules/@parcel 2>/dev/null | tr '\n' ' ')]"
+          fi
+          exit "$code"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: GuaDa-windows-x64
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          gh release edit "$tag" --draft=false --latest 2>/dev/null || true
+          gh release upload "$tag" release/*.exe --clobber
+          for f in release/*.exe.blockmap release/latest.yml; do
+            [ -f "$f" ] && gh release upload "$tag" "$f" --clobber
+          done
+
+  # ------------------------------------------------- Gitee / GitCode 镜像 release
+  # 只发 release、不传二进制（Gitee 单附件上限 100M，安装包 200M+ 放不进去；
+  # GitCode 附件接口支持但限额未文档化，暂不依赖）。正文里列出 GitHub 的下载地址。
+  # 未配置 token 时跳过；任何失败都不影响 GitHub 这条主发布线。
+  publish-mirrors:
+    name: Gitee / GitCode release
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 汇总版本说明与下载地址
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          gh release view "$tag" --json body,assets > /tmp/gh-release.json
+          jq -r '.body // ""' /tmp/gh-release.json > /tmp/body.md
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 下载"
+            echo ""
+            jq -r '.assets[] | select(.name | endswith(".dmg") or endswith(".exe")) | "- \(.name)（\(.size / 1048576 | floor) MB）：\(.url)"' /tmp/gh-release.json
+            echo ""
+            echo "> 国内访问 GitHub 较慢时，可从项目主页或应用内「设置 → 关于 → 检查更新」获取最新版。"
+          } >> /tmp/body.md
+          echo "=== 生成的正文 ==="
+          cat /tmp/body.md
+
+      - name: 建/更新 Gitee release（无二进制）
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 GITEE_TOKEN，跳过 Gitee release"
+            exit 0
+          fi
+          api="https://gitee.com/api/v5/repos/zhendongdong/guada_ai"
+          body=$(jq -Rs . < /tmp/body.md)
+          # 先按 tag 查是否已存在：存在就更新（tag 重指过的情况），否则新建
+          id=$(curl -s "$api/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" | jq -r '.id // empty')
+          if [ -n "$id" ]; then
+            payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" \
+              '{tag_name:$t, name:$n, body:$b}')
+            resp=$(curl -s -X PATCH "$api/releases/$id?access_token=$GITEE_TOKEN" \
+              -H 'Content-Type: application/json' -d "$payload")
+            action=更新
+          else
+            payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" --arg c "$GH_SHA" \
+              '{tag_name:$t, name:$n, body:$b, target_commitish:$c, prerelease:false}')
+            resp=$(curl -s -X POST "$api/releases?access_token=$GITEE_TOKEN" \
+              -H 'Content-Type: application/json' -d "$payload")
+            action=创建
+          fi
+          if printf '%s' "$resp" | jq -e '.id' >/dev/null 2>&1; then
+            echo "::notice::Gitee release $action 成功：$TAG_NAME"
+          else
+            echo "::error::Gitee release $action 失败：$(printf '%s' "$resp" | head -c 300)"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: 建/更新 GitCode release（无二进制）
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITCODE_TOKEN:-}" ]; then
+            echo "::warning::未配置 GITCODE_TOKEN，跳过 GitCode release"
+            exit 0
+          fi
+          api="https://api.gitcode.com/api/v5/repos/donggua_sherlock/GuaDaAI"
+          auth="Authorization: Bearer $GITCODE_TOKEN"
+          body=$(jq -Rs . < /tmp/body.md)
+          exists=$(curl -s -H "$auth" "$api/releases/tags/$TAG_NAME" | jq -r '.tag_name // empty')
+          if [ -n "$exists" ]; then
+            payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" \
+              '{tag_name:$t, name:$n, body:$b}')
+            resp=$(curl -s -X PATCH -H "$auth" -H 'Content-Type: application/json' \
+              -d "$payload" "$api/releases/$TAG_NAME")
+            action=更新
+          else
+            payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" --arg c "$GH_SHA" \
+              '{tag_name:$t, name:$n, body:$b, target_commitish:$c, release_status:"latest"}')
+            resp=$(curl -s -X POST -H "$auth" -H 'Content-Type: application/json' \
+              -d "$payload" "$api/releases")
+            action=创建
+          fi
+          if printf '%s' "$resp" | jq -e '.tag_name' >/dev/null 2>&1; then
+            echo "::notice::GitCode release $action 成功：$TAG_NAME"
+          else
+            echo "::error::GitCode release $action 失败：$(printf '%s' "$resp" | head -c 300)"
+            exit 1
+          fi
+        continue-on-error: true
