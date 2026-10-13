@@ -41,7 +41,7 @@
                     <div class="relative inline-flex items-center">
                       <GdTooltip :content="openWithCurrent.label" placement="bottom">
                         <div class="header-icon-btn" @click="openWorkspaceWith(openWithMode)">
-                          <!-- WindowsExplorer 是 <img>（尺寸走 font-size），VsCode 是 <svg>（走 w/h） -->
+                          <!-- WindowsExplorer / Finder 是 <img>（尺寸走 font-size），VsCode 是 <svg>（走 w/h） -->
                           <component :is="openWithCurrent.icon" class="w-5 h-5" style="font-size: 20px" />
                         </div>
                       </GdTooltip>
@@ -160,7 +160,7 @@ import {
   // FileUploadOutlined
 } from "@vicons/material";
 import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular } from "@vicons/fluent";
-import { VsCode, WindowsExplorer } from "@/components/icons";
+import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
 import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";
 import { useStorage } from '@vueuse/core';
@@ -370,6 +370,8 @@ watch(() => mainSession.value?.id, (sessionId) => {
 
 // 判断是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+// macOS 的「文件管理器」是访达（Finder），文案与图标需与 Windows 区分
+const isMac = isElectron && window.electronAPI?.platform === 'darwin';
 
 // 会话列表组件引用，用于调用组件内部方法
 // ChatPanel 组件引用，用于调用组件内部方法
@@ -489,10 +491,15 @@ const openWithMode = computed<OpenWithMode>(() =>
 );
 
 /** 打开方式候选：顺序即下拉顺序。vscode 用短标签：长标签（Open Working Directory in VSCode）
- *  会把 190px 弹窗撑破；与目录树右键菜单的 openInVSCodeShort 保持同一文案 */
+ *  会把 190px 弹窗撑破；与目录树右键菜单的 openInVSCodeShort 保持同一文案。
+ *  explorer 项在 macOS 上是访达，文案与图标随之切换 */
 const openWithOptions = computed(() => [
   { mode: 'vscode' as OpenWithMode, label: t('chat.workspace.openInVSCodeShort'), icon: VsCode },
-  { mode: 'explorer' as OpenWithMode, label: t('chat.workspace.openInFileManager'), icon: WindowsExplorer },
+  {
+    mode: 'explorer' as OpenWithMode,
+    label: t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInFileManager'),
+    icon: isMac ? Finder : WindowsExplorer,
+  },
   { mode: 'terminal' as OpenWithMode, label: t('chat.workspace.openInTerminal'), icon: TerminalOutlined },
 ]);
 

@@ -107,7 +107,7 @@
                             : t('chat.workspace.unsupportedPreview') }}
                     </p>
                     <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                        {{ t('chat.workspace.openInExplorer') }}
+                        {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
                     </el-button>
                 </div>
             </div>
@@ -128,7 +128,7 @@
                     <div class="text-center">
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
                         <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
-                            {{ t('chat.workspace.openInExplorer') }}
+                            {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
                         </el-button>
                     </div>
                 </div>
@@ -230,6 +230,8 @@ const emit = defineEmits<{
 }>()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+// macOS 的「文件管理器」是访达（Finder），文案需与 Windows 区分
+const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 const { t } = useI18n()
 
 /**
