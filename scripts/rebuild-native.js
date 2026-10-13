@@ -10,6 +10,8 @@
  *
  * 设计：先验证所有原生模块能否加载，全部正常则直接跳过（不碰任何文件，
  * 避免与正在运行的 dev 后端冲突）；只有缺失/损坏的模块才触发重建。
+ * 另外（macOS 专属）：node-pty 的 spawn-helper 必须有 x 位，加载校验覆盖不到，
+ * 这里一并校验并在缺失时补齐（见 ensureNodePtySpawnHelper）。
  *
  * 用法：
  *   pnpm run rebuild:backend-native
@@ -18,6 +20,7 @@
 const path = require('path')
 const fs = require('fs')
 const { execSync } = require('child_process')
+const { ensureSpawnHelperExecutable } = require('./ensure-pty-spawn-helper')
 
 const backendPath = path.join(__dirname, '..', 'backend-ts')
 const modulesPath = path.join(backendPath, 'node_modules')
@@ -63,6 +66,20 @@ function verifyNativeModules() {
   return broken
 }
 
+/**
+ * macOS 专属：node-pty 的 spawn-helper 必须有 x 位
+ *
+ * require('node-pty') 只 dlopen pty.node，helper 不可执行时也返回 OK（所以加载校验覆盖不到），
+ * 但真正 spawn 时 posix_spawn 会因 EACCES 失败，node-pty 原生层抛的 Napi::Error 在这条路径上
+ * 会直接 std::terminate（libc++abi: terminating due to uncaught exception of type Napi::Error），
+ * 整个后端进程被 abort。这里负责校验并补齐权限（幂等）。
+ */
+function ensureNodePtySpawnHelper() {
+  if (process.platform !== 'darwin') return true
+  console.log('\n==== node-pty spawn-helper（macOS） ====')
+  return ensureSpawnHelperExecutable([modulesPath]).ok
+}
+
 function main() {
   if (!fs.existsSync(modulesPath)) {
     console.error(`❌ ${modulesPath} 不存在，请先安装依赖（pnpm install）`)
@@ -74,9 +91,18 @@ function main() {
 
   // 1. 先验证，全部正常则无需重建
   const broken = verifyNativeModules()
-  if (broken.length === 0) {
+  // 1.1 macOS：spawn-helper 的 x 位（加载校验覆盖不到，见函数注释）
+  const helperOk = ensureNodePtySpawnHelper()
+
+  if (broken.length === 0 && helperOk) {
     console.log('\n✓ 所有原生模块已就绪，无需重建')
     return
+  }
+  if (broken.length === 0) {
+    console.error('\n❌ node-pty spawn-helper 不可执行且无法自动修复')
+    console.error('   macOS 打开终端会让后端进程直接 abort，请手动执行：')
+    console.error(`   chmod +x ${modulesPath}/node-pty/prebuilds/darwin-*/spawn-helper`)
+    process.exit(1)
   }
   console.log(`\n⚠️  以下模块二进制缺失或损坏，开始重建：${broken.join(', ')}`)
   console.log('   提示：若 dev 后端正在运行，请先停止它，否则文件被占用会导致重建失败。')
@@ -118,6 +144,10 @@ function main() {
   const stillBroken = verifyNativeModules()
   if (stillBroken.length > 0) {
     console.error(`\n❌ 仍有 ${stillBroken.length} 个原生模块加载失败：${stillBroken.join(', ')}`)
+    process.exit(1)
+  }
+  if (!ensureNodePtySpawnHelper()) {
+    console.error('\n❌ node-pty spawn-helper 仍不可执行，macOS 打开终端会崩掉后端进程')
     process.exit(1)
   }
 

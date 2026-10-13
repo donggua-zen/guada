@@ -89,12 +89,41 @@ function embedIcon(context) {
 }
 
 /**
+ * macOS：补齐 node-pty 的 spawn-helper 可执行位
+ *
+ * electron-builder 的 extraResources 拷贝不保留文件权限，源目录修好也不够；
+ * 缺 x 位时 node-pty 的 posix_spawn 会 EACCES，用户一打开终端后端进程就 abort。
+ */
+function fixPtySpawnHelper(context) {
+  if (context.electronPlatformName !== 'darwin') {
+    return;
+  }
+
+  const { ensureSpawnHelperExecutable } = require('./ensure-pty-spawn-helper');
+  const productFilename = context.packager.appInfo.productFilename || 'GuaDa';
+  const nodeModulesDir = path.join(
+    context.appOutDir,
+    `${productFilename}.app`,
+    'Contents',
+    'Resources',
+    'backend-ts',
+    'node_modules'
+  );
+
+  console.log(`[node-pty] 补齐 spawn-helper 可执行权限：${nodeModulesDir}`);
+  if (!ensureSpawnHelperExecutable([nodeModulesDir]).ok) {
+    console.error('[node-pty] ❌ spawn-helper 不可执行，打包版 macOS 打开终端会崩掉后端进程');
+  }
+}
+
+/**
  * 主处理函数
  */
 module.exports = async function (context) {
   try {
     cleanupLocales(context);
     embedIcon(context);
+    fixPtySpawnHelper(context);
   } catch (error) {
     console.error('After pack handler error:', error);
   }
