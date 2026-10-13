@@ -42,3 +42,22 @@ export interface SkillDefinition {
   /** 资源基：模型按此 + 相对路径访问脚本/资源（未声明时默认技能目录） */
   resourceBase?: SkillResourceBase;
 }
+
+/**
+ * skill_learn 的返回：技能正文 + 位置信息。
+ *
+ * 位置信息是技能自带脚本/随附资源的落点——模型必须拿到它才能执行脚本，
+ * 因此由 skill_learn 写进正文（而非返回对象里可能被丢弃的字段）。
+ */
+export interface SkillLearnResult {
+  name: string;
+  content: string;
+  /** 兼容保留：文件型=SKILL.md 绝对路径；插件注册型=资源目录；均未知时为空串 */
+  path: string;
+  /** 声明的资源基；未声明且无技能目录时为 null */
+  resourceBase: SkillResourceBase | null;
+  /** 脚本/资源根目录；来源未知时为 null（不编造路径） */
+  baseDirectory: string | null;
+  /** 文件型技能的 SKILL.md 绝对路径；插件注册型（无磁盘文件）为 null */
+  skillMdPath: string | null;
+}

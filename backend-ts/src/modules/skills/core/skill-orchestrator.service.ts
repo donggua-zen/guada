@@ -9,7 +9,7 @@ import { SkillSourceManager } from "./skill-source.manager";
 import { SkillRegistry } from "./skill-registry.service";
 import { SkillLoaderService } from "./skill-loader.service";
 import { SkillVersionManager } from "./skill-version-manager.service";
-import { SkillDefinition } from "../interfaces/skill-manifest.interface";
+import { SkillDefinition, SkillLearnResult, SkillResourceBase } from "../interfaces/skill-manifest.interface";
 import { PluginManager } from "../../plugins/plugin.manager";
 
 /**
@@ -153,35 +153,50 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 通过名称获取技能内容（纯正文，不含 YAML 头）和路径
-   * 供 skill_lean 工具调用
+   * 通过名称获取技能内容（纯正文，不含 YAML 头）和位置信息
+   * 供 skill_learn 工具调用
    */
   async skillLearn(
     name: string,
     session?: any,
-  ): Promise<{
-    name: string;
-    content: string;
-    path: string;
-    resourceBase: import("../interfaces/skill-manifest.interface").SkillResourceBase;
-  } | null> {
+  ): Promise<SkillLearnResult | null> {
     const skill = this.registry.get(name.toLowerCase());
     if (!skill) return null;
     // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）→ 该插件技能等同于不存在
     if (!this.isPluginSkillVisible(skill)) return null;
     const content = await this.loader.loadInstructions(skill);
-    // 插件注册式技能无 SKILL.md 文件：path 指向资源基目录（供定位 scripts/ 等资源）
-    const fullPath =
-      skill.resourceBase?.kind === "directory"
-        ? skill.resourceBase.path
-        : path.join(skill.baseDir, skill.basePath, "SKILL.md");
+
+    // 位置信息分两类：
+    // - 文件型技能（有磁盘 SKILL.md）：技能自身目录即资源根，SKILL.md 在其下。
+    // - 插件注册型技能（内嵌正文、无文件）：以声明的 resourceBase 目录为资源根
+    //   （内置技能共享 bundled-skills/，脚本在 scripts/ 下），无文件可续读。
+    // 都没有来源时保持 null——宁可说"未知"，也不拼出 __plugin__ 这类假路径。
+    const skillDir = skill.baseDir
+      ? path.join(skill.baseDir, skill.basePath)
+      : null;
+    const fileBacked = !skill.content && !!skillDir;
+
+    let baseDirectory: string | null = null;
+    if (skill.resourceBase?.kind === "directory") {
+      baseDirectory = skill.resourceBase.path;
+    } else if (skillDir) {
+      baseDirectory = skillDir;
+    }
+    const skillMdPath = fileBacked ? path.join(skillDir!, "SKILL.md") : null;
+
+    // 未声明且无技能目录 → 保持 null：位置头会如实说"未声明资源目录"，
+    // 而不是拼出 __plugin__ 这类假路径让模型去 read 一个不存在的文件。
+    const resourceBase: SkillResourceBase | null =
+      skill.resourceBase ??
+      (skillDir ? { kind: "directory", path: skillDir } : null);
+
     return {
       name: skill.manifest.name,
       content,
-      path: fullPath,
-      resourceBase:
-        skill.resourceBase ??
-        { kind: "directory", path: path.join(skill.baseDir, skill.basePath) },
+      path: skillMdPath ?? baseDirectory ?? "",
+      resourceBase,
+      baseDirectory,
+      skillMdPath,
     };
   }
 

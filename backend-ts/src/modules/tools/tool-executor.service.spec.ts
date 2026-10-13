@@ -22,6 +22,7 @@ const META = {
 function makeSession(
   workspacePath: string | null,
   handler: (args: any, ctx: any, signal?: AbortSignal) => any,
+  toolExtra: Record<string, any> = {},
 ): ISessionContext {
   const resolved = [
     {
@@ -41,6 +42,7 @@ function makeSession(
           parameters: { type: "object", properties: {} },
           handler,
           toolSet: "todo",
+          ...toolExtra,
         },
       ],
       allTools: [],
@@ -148,5 +150,23 @@ describe("ToolExecutor 大结果处理与 meta", () => {
 
     expect(res.content).toBe("纯文本结果");
     expect(res.meta).toBeUndefined();
+  });
+
+  it("声明 exemptFromLargeResult 的工具：超阈值仍原样返回，meta 保留", async () => {
+    const executor = makeExecutor(99999);
+    const bigContent = "z".repeat(500);
+    const res = await executor.executeTool(
+      "todo",
+      {},
+      "tc-6",
+      makeSession(tmpRoot, async () => ({ content: bigContent, meta: META }), {
+        exemptFromLargeResult: true,
+      }),
+    );
+
+    // 自管长度的工具（read / skill_learn）：正文就是模型要用的内容，
+    // 被换成 2048 字符预览等于报废，通用裁剪必须放行
+    expect(res.content).toBe(bigContent);
+    expect(res.meta).toEqual(META);
   });
 });
