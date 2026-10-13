@@ -395,6 +395,7 @@
     overviewEmpty: 'Nothing to overview yet',
     overviewEmptyHint: 'No Git changes, background processes, subagents or workflows in this session',
     openInFileManager: 'Open in File Manager',
+    openInFinder: 'Open in Finder',
     openInVSCode: 'Open Working Directory in VSCode',
     openWith: 'Choose open method',
     openInTerminal: 'Open in System Terminal',

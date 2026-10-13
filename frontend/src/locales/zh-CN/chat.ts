@@ -395,6 +395,7 @@ export default {
     overviewEmpty: '暂无可概览内容',
     overviewEmptyHint: '当前会话没有 Git 变更、后台进程、子代理或工作流',
     openInFileManager: '在文件管理器中打开',
+    openInFinder: '在访达中打开',
     openInVSCode: '以 VSCode 打开工作目录',
     openWith: '选择打开方式',
     openInTerminal: '在系统终端中打开',

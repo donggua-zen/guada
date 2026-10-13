@@ -57,7 +57,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
 import { Refresh, CopyDocument, Edit, Delete, Plus } from '@element-plus/icons-vue';
-import { VsCode, WindowsExplorer } from '@/components/icons';
+import { VsCode, WindowsExplorer, Finder } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
@@ -80,6 +80,8 @@ const tabStore = useTabStore();
 
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+// macOS 的「文件管理器」是访达（Finder），文案与图标需与 Windows 区分
+const isMac = isElectron && window.electronAPI?.platform === 'darwin';
 
 // 目录树滚动容器（TreeView 组件引用，用于滚动定位选中节点）
 const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null);
@@ -227,8 +229,8 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     ];
     if (isElectron) {
         items.push({
-            label: t('chat.workspace.openInExplorerShort'),
-            icon: WindowsExplorer,
+            label: t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorerShort'),
+            icon: isMac ? Finder : WindowsExplorer,
             onClick: handleOpenInExplorer,
         });
         // 文件/目录支持以 VSCode 打开
