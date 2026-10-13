@@ -74,27 +74,29 @@ jobs:
       # 正式 tag（vX.Y.Z）与 package.json 版本不一致时直接失败，避免打出名不符实的包；
       # 带后缀的预发布/测试 tag（v1.0.0-rc1、v1.0.0-build-test）只告警不阻断。
       # 放在安装依赖之前：这一步只需几秒，不该等依赖装完才报错。
-      # 只用 bash 内建做判断（不用 grep/管道）：macOS runner 上的 grep 行为与本地不一致，
-      # 曾导致这个步骤对 -build-test 这类 tag 误判为"正式 tag 不一致"而失败。
+      #
+      # 判断逻辑写在 Node 里而不是 shell 里：同一段 shell 判断在本地通过、在 macOS runner
+      # 上却失败（对 -build-test 这类 tag 误判成"正式 tag 不一致"），排查发现是 runner 的
+      # shell 对 case 里的取反字符类 `[!0-9.]` 行为与本地不一致。Node 的正则到处都一样。
+      # tag 用 env 传入，避免 shell 变量插值再出变数。
       - name: 校验 tag 与 package.json 版本一致
         if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          set -eu
-          tag="${GITHUB_REF_NAME#v}"
-          pkg_version="$(node -p "require('./package.json').version")"
-          echo "::notice::触发 tag=[$GITHUB_REF_NAME]，去 v 前缀=[$tag]，package.json 版本=[$pkg_version]"
-          case "$tag" in
-            *[!0-9.]*)
-              echo "::warning::非正式 tag（$GITHUB_REF_NAME），跳过版本一致性校验；产物版本号为 package.json 的 $pkg_version"
-              ;;
-            *)
-              if [ "$tag" != "$pkg_version" ]; then
-                echo "::error::tag $GITHUB_REF_NAME 与 package.json 的版本 $pkg_version 不一致"
-                exit 1
-              fi
-              echo "版本一致：$pkg_version"
-              ;;
-          esac
+          echo "::notice::shell=$0 bash=${BASH_VERSION:-未设置} tag=[$TAG_NAME]"
+          node -e '
+            const pkgVersion = require("./package.json").version;
+            const tag = process.env.TAG_NAME.replace(/^v/, "");
+            if (tag === pkgVersion) {
+              console.log("版本一致：" + pkgVersion);
+            } else if (/^\d+\.\d+\.\d+$/.test(tag)) {
+              console.log("::error::tag " + process.env.TAG_NAME + " 与 package.json 的版本 " + pkgVersion + " 不一致");
+              process.exit(1);
+            } else {
+              console.log("::warning::非正式 tag（" + process.env.TAG_NAME + "），跳过版本一致性校验；产物版本号为 package.json 的 " + pkgVersion);
+            }
+          '
 
       # 根目录 install 会级联安装两个子包（根 package.json 的
       # postinstall: pnpm --dir backend-ts install && pnpm --dir frontend install）
