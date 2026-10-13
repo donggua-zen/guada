@@ -131,6 +131,12 @@ jobs:
           # 「镜像基址/<版本>/...」拼 URL（npmmirror 的目录结构），而 GitHub 的
           # 目录是 /download/v<版本>/ —— 会 404。不设时它走内置的官方默认值。
 
+      # 打包后的自检：后端 node_modules 在 app.asar 内、原生模块已解包、sqlite-vec 路径重写生效。
+      # 这类回归在构建期看不出来（要等用户装完点开），mac 又是唯一没有本地验证途径的发布线，
+      # 所以放在这里当闸门。细节见 docs/ELECTRON_DEPLOYMENT.md 2.2。
+      - name: 校验 asar 布局与运行期依赖
+        run: pnpm run verify:asar
+
       - name: 上传产物
         uses: actions/upload-artifact@v7
         with:

@@ -15,6 +15,9 @@ importers:
         specifier: ^4.1.1
         version: 4.3.2
     devDependencies:
+      '@electron/asar':
+        specifier: ^3.4.1
+        version: 3.4.1
       '@electron/rebuild':
         specifier: ^4.0.4
         version: 4.2.0
@@ -61,6 +64,11 @@ packages:
 
   '@electron/asar@3.2.1':
     resolution: {integrity: sha512-hE2cQMZ5+4o7+6T2lUaVbxIzrOjZZfX7dB02xuapyYFJZEAiWTelq6J3mMoxzd0iONDvYLPVKecB5tyjIoVDVA==}
+    engines: {node: '>=10.12.0'}
+    hasBin: true
+
+  '@electron/asar@3.4.1':
+    resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
     engines: {node: '>=10.12.0'}
     hasBin: true
 
@@ -1153,6 +1161,12 @@ snapshots:
       minimatch: 3.1.5
     optionalDependencies:
       '@types/glob': 7.2.0
+
+  '@electron/asar@3.4.1':
+    dependencies:
+      commander: 5.0.0
+      glob: 7.2.0
+      minimatch: 3.1.5
 
   '@electron/get@5.1.0':
     dependencies:

@@ -16,7 +16,7 @@
   - `backend-ts/` — NestJS 模块化单体 API 服务（全局前缀 `api/v1`）
   - `frontend/` — Vue3 + Vite7 + Pinia + Element Plus 组件化 SPA（约 298 文件）
   - `electron/` — Electron 外壳（窗口/托盘/桥接/浏览器自动化）
-- **打包**：electron-builder 24 —— win NSIS / mac dmg (x64+arm64) / linux AppImage+deb，asar smartUnpack + extraResources 注入后端运行时（后端随包资源清单与"必须 `to === from`"的契约见 `backend-ts/test/packaging/electron-packaging.spec.ts`；漏打包会被该测试拦住）
+- **打包**：electron-builder 24 —— win NSIS / mac dmg (x64+arm64) / linux AppImage+deb，asar smartUnpack + extraResources 注入后端运行时（后端随包资源清单与"必须 `to === from`"的契约见 `backend-ts/test/packaging/electron-packaging.spec.ts`；漏打包会被该测试拦住）。**后端 node_modules 打进 `app.asar`**——安装耗时按盘上文件数计（实测 ≈18ms/文件，1.5 万个小文件 ≈ 5 分钟，与包体字节数无关）；四处约束与校验见 `docs/ELECTRON_DEPLOYMENT.md` 2.2 与 `scripts/verify-asar-layout.js`
 
 ---
 
