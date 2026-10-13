@@ -132,7 +132,15 @@ jobs:
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
       # electron-builder 的默认发布策略会尝试发布
       - name: 打包 dmg
-        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        run: |
+          set +e
+          npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg-build.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "::error::打包失败（退出码 $code），日志尾部："
+            tail -40 /tmp/dmg-build.log | while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$code"
         env:
           # runner 上没有签名证书，跳过钥匙串检索
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
