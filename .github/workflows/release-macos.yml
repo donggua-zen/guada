@@ -144,7 +144,9 @@ jobs:
         env:
           # runner 上没有签名证书，跳过钥匙串检索
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          # 这里刻意不设 ELECTRON_MIRROR：设了之后 electron-builder 会按
+          # 「镜像基址/<版本>/...」拼 URL（npmmirror 的目录结构），而 GitHub 的
+          # 目录是 /download/v<版本>/ —— 会 404。不设时它走内置的官方默认值。
 
       - name: 上传产物
         uses: actions/upload-artifact@v7
