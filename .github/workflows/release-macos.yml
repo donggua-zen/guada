@@ -180,6 +180,9 @@ jobs:
 
       - name: 上传产物
         uses: actions/upload-artifact@v7
+        # 产物上传偶发网络抖动（实测过一次 Failed to CreateArtifact: ENOTFOUND）。
+        # 真正的交付物是 Release 附件，不该被它的抖动连累，所以这里不阻断后续步骤。
+        continue-on-error: true
         with:
           name: GuaDa-macos-${{ matrix.arch }}
           path: |
