@@ -1759,6 +1759,14 @@ function createWindow() {
     if (floatWindow) floatWindow.hide();
   });
 
+  // 全屏状态推送给渲染进程：macOS 原生全屏会隐藏红绿灯，
+  // 前端据此取消标题栏/侧边栏为其预留的左侧留白
+  const sendFullscreenState = (isFullscreen: boolean) => {
+    mainWindow?.webContents.send("window-fullscreen-changed", isFullscreen);
+  };
+  mainWindow.on("enter-full-screen", () => sendFullscreenState(true));
+  mainWindow.on("leave-full-screen", () => sendFullscreenState(false));
+
   mainWindow.on("closed", () => {
     // 清理窗口管理器
     windowManager?.closeAllWindows();
@@ -1931,6 +1939,11 @@ function setupIpcHandlers() {
   // 获取窗口最大化状态
   ipcMain.handle("is-window-maximized", () => {
     return mainWindow?.isMaximized() || false;
+  });
+
+  // 获取窗口全屏状态（渲染进程挂载时查询初始值）
+  ipcMain.handle("is-window-fullscreen", () => {
+    return mainWindow?.isFullScreen() || false;
   });
 
   // 主题切换时同步 Windows 原生窗口按钮（titleBarOverlay）配色；
