@@ -11,14 +11,28 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.defaultChatModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.defaultChatModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultChatModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
-                            @visible-change="(visible) => visible && openModelDialog('chat')" class="w-full max-w-md shrink-0">
-                            <template #prefix>
-                                <OpenAI class="w-4 h-4" />
-                            </template>
-                            <el-option :value="settingsForm.defaultChatModelId" :label="chatModelName"
-                                v-if="chatModelName || settingsForm.defaultChatModelId" />
-                        </el-select>
+                        <!-- 只读触发器：选择在 GdDialog 里完成，这里不能用 el-select ——
+                             它的下拉会跟着一起弹出来，和对话框叠成两个弹层。
+                             点击/键盘监听必须挂在包裹层：ElInput 是 inheritAttrs:false，
+                             $attrs 只落到内部 <input>，点前缀或后缀箭头区域不会触发 -->
+                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('chat')"
+                            @keydown="(e) => onTriggerKeydown(e, 'chat')">
+                            <el-input :model-value="chatModelName" :placeholder="t('settings.defaultModel.selectModel')"
+                                readonly class="w-full">
+                                <template #prefix>
+                                    <OpenAI class="w-4 h-4" />
+                                </template>
+                                <template #suffix>
+                                    <el-icon v-if="settingsForm.defaultChatModelId" class="model-select-trigger__clear"
+                                        @click.stop="clearModelSelection('chat')">
+                                        <DismissCircle16Regular />
+                                    </el-icon>
+                                    <el-icon class="model-select-trigger__caret">
+                                        <ChevronDown20Regular />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </div>
                     </div>
                     <!-- 标题总结模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
@@ -26,14 +40,24 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.titleSummaryModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.titleSummaryModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultTitleSummaryModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
-                            @visible-change="(visible) => visible && openModelDialog('title')" class="w-full max-w-md shrink-0">
-                            <template #prefix>
-                                <OpenAI class="w-4 h-4" />
-                            </template>
-                            <el-option :value="settingsForm.defaultTitleSummaryModelId" :label="titleSummaryModelName"
-                                v-if="titleSummaryModelName || settingsForm.defaultTitleSummaryModelId" />
-                        </el-select>
+                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('title')"
+                            @keydown="(e) => onTriggerKeydown(e, 'title')">
+                            <el-input :model-value="titleSummaryModelName" :placeholder="t('settings.defaultModel.selectModel')"
+                                readonly class="w-full">
+                                <template #prefix>
+                                    <OpenAI class="w-4 h-4" />
+                                </template>
+                                <template #suffix>
+                                    <el-icon v-if="settingsForm.defaultTitleSummaryModelId" class="model-select-trigger__clear"
+                                        @click.stop="clearModelSelection('title')">
+                                        <DismissCircle16Regular />
+                                    </el-icon>
+                                    <el-icon class="model-select-trigger__caret">
+                                        <ChevronDown20Regular />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -47,14 +71,24 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.visualAssistantModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.visualAssistantModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultVisualAssistantModelId" :placeholder="t('settings.defaultModel.selectVisualModel')"
-                            clearable @visible-change="(visible) => visible && openModelDialog('visual')" class="w-full max-w-md shrink-0">
-                            <template #prefix>
-                                <OpenAI class="w-4 h-4" />
-                            </template>
-                            <el-option :value="settingsForm.defaultVisualAssistantModelId"
-                                :label="visualAssistantModelName" v-if="visualAssistantModelName || settingsForm.defaultVisualAssistantModelId" />
-                        </el-select>
+                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('visual')"
+                            @keydown="(e) => onTriggerKeydown(e, 'visual')">
+                            <el-input :model-value="visualAssistantModelName" :placeholder="t('settings.defaultModel.selectVisualModel')"
+                                readonly class="w-full">
+                                <template #prefix>
+                                    <OpenAI class="w-4 h-4" />
+                                </template>
+                                <template #suffix>
+                                    <el-icon v-if="settingsForm.defaultVisualAssistantModelId" class="model-select-trigger__clear"
+                                        @click.stop="clearModelSelection('visual')">
+                                        <DismissCircle16Regular />
+                                    </el-icon>
+                                    <el-icon class="model-select-trigger__caret">
+                                        <ChevronDown20Regular />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -68,14 +102,24 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.historyCompressionModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.historyCompressionModelDesc') }}</span>
                         </div>
-                        <el-select v-model="settingsForm.defaultHistoryCompressionModelId" :placeholder="t('settings.defaultModel.selectModel')" clearable
-                            @visible-change="(visible) => visible && openModelDialog('compression')" class="w-full max-w-md shrink-0">
-                            <template #prefix>
-                                <OpenAI class="w-4 h-4" />
-                            </template>
-                            <el-option :value="settingsForm.defaultHistoryCompressionModelId"
-                                :label="historyCompressionModelName" v-if="historyCompressionModelName || settingsForm.defaultHistoryCompressionModelId" />
-                        </el-select>
+                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('compression')"
+                            @keydown="(e) => onTriggerKeydown(e, 'compression')">
+                            <el-input :model-value="historyCompressionModelName" :placeholder="t('settings.defaultModel.selectModel')"
+                                readonly class="w-full">
+                                <template #prefix>
+                                    <OpenAI class="w-4 h-4" />
+                                </template>
+                                <template #suffix>
+                                    <el-icon v-if="settingsForm.defaultHistoryCompressionModelId" class="model-select-trigger__clear"
+                                        @click.stop="clearModelSelection('compression')">
+                                        <DismissCircle16Regular />
+                                    </el-icon>
+                                    <el-icon class="model-select-trigger__caret">
+                                        <ChevronDown20Regular />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -187,7 +231,8 @@ import {
     ArrowRightTwotone
 } from "@vicons/material";
 import {
-    TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular
+    TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular,
+    ChevronDown20Regular, DismissCircle16Regular
 } from '@vicons/fluent'
 
 import { apiService } from '@/services/ApiService'
@@ -307,6 +352,17 @@ const openModelDialog = (type) => {
     }
 
     modelDialogVisible.value = true
+}
+
+/**
+ * 只读触发器的键盘可达性：Enter / 空格 等效于点击。
+ * 替换掉 el-select 之前，它是可以键盘打开下拉的，这里保持同样的可达性。
+ */
+const onTriggerKeydown = (event, type) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        openModelDialog(type)
+    }
 }
 
 // 选择并自动关闭对话框
@@ -530,6 +586,34 @@ onMounted(async () => {
 <style scoped>
 .footer {
     border-top: 1px solid var(--gd-color-border);
+}
+
+/* 只读模型触发器：外观对齐 el-select（指针 + 不可选中文本），
+   但不会像 el-select 那样弹出自己的下拉层 */
+.model-select-trigger {
+    cursor: pointer;
+}
+
+.model-select-trigger :deep(.el-input__wrapper),
+.model-select-trigger :deep(.el-input__inner) {
+    cursor: pointer;
+}
+
+.model-select-trigger :deep(.el-input__inner) {
+    user-select: none;
+}
+
+.model-select-trigger__caret {
+    color: var(--el-text-color-placeholder);
+}
+
+.model-select-trigger__clear {
+    cursor: pointer;
+    color: var(--el-text-color-placeholder);
+}
+
+.model-select-trigger__clear:hover {
+    color: var(--el-text-color-secondary);
 }
 
 /* 模型选择器按钮样式 */
