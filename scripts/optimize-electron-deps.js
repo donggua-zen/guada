@@ -122,10 +122,29 @@ function ensureWatcherPatched() {
   console.log('✓ @parcel/watcher 已打补丁（Windows 后端 use-after-free 修复）')
 }
 
+/**
+ * macOS：node-pty 的 spawn-helper 必须有 x 位
+ *
+ * pnpm 物化（尤其 patchedDependencies 整包重新物化）与 electron-builder 拷贝都会丢该权限；
+ * 缺失时 posix_spawn 返回 EACCES，打开终端会让后端进程直接 abort
+ * （libc++abi: terminating due to uncaught exception of type Napi::Error）。
+ */
+function ensureNodePtySpawnHelper() {
+  if (process.platform !== 'darwin') return
+  console.log('Ensuring node-pty spawn-helper is executable (macOS)...')
+  const { ensureSpawnHelperExecutable } = require('./ensure-pty-spawn-helper')
+  if (!ensureSpawnHelperExecutable([path.join(optimizedPath, 'node_modules')]).ok) {
+    console.error('❌ node-pty 的 spawn-helper 不可执行！打包版 macOS 打开终端会崩掉后端进程。')
+    console.error('   请检查上述路径的权限（该目录需可写）后重试。')
+    process.exit(1)
+  }
+}
+
 if (isCacheValid()) {
   console.log('\u2705 Cache valid, skipping dependency installation')
   // 旧缓存可能来自未打补丁的构建，缓存命中也不能跳过校验
   ensureWatcherPatched()
+  ensureNodePtySpawnHelper()
   const cachedSize = (getDirSize(optimizedPath) / (1024 * 1024)).toFixed(2)
   console.log(`\uD83D\uDCE6 Cached node_modules size: ${cachedSize} MB`)
   console.log()
@@ -254,6 +273,10 @@ if (!fs.readFileSync(nodePtyAgentPath, 'utf-8').includes('GuaDa patch')) {
   process.exit(1)
 }
 console.log('✓ node-pty installed and patched')
+
+// Step 3.1.1: macOS 下 spawn-helper 必须有 x 位（打包版终端完全依赖它）
+console.log()
+ensureNodePtySpawnHelper()
 
 // Step 3.2: 校验 @parcel/watcher 补丁（install 阶段的 postinstall 已应用，这里再兜底 + 校验 md5）
 console.log()
