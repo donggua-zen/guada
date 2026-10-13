@@ -109,7 +109,8 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
       this.send(ws, { type: "ready", terminalId: handle.id });
     } catch (e: any) {
       this.logger.warn(`Terminal WS auth failed: ${e?.message}`);
-      this.send(ws, { type: "error", message: e?.message || "Unauthorized" });
+      // fixHint：可操作的修复提示（如 spawn-helper 权限），前端错误横幅会追加显示
+      this.send(ws, { type: "error", message: e?.message || "Unauthorized", fixHint: e?.fixHint });
       ws.close(1011, "unauthorized");
       return;
     }

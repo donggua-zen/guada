@@ -44,7 +44,7 @@
     "build:electron": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package",
     "build:electron:mac": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:mac",
     "build:electron:dir": "pnpm run build:electron-ts && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:dir",
-    "postinstall": "pnpm --dir backend-ts install && pnpm --dir frontend install"
+    "postinstall": "pnpm --dir backend-ts install && pnpm --dir frontend install && node scripts/ensure-pty-spawn-helper.js --warn-only"
   },
   "keywords": [
     "ai",

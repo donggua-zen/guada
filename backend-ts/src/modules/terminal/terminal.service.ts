@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { PtyHandle } from "./types";
+import { ensureSpawnHelperExecutable, PtyHelperError } from "./pty-helper";
 import { envValue, resolveWindowsShell } from "../shell/windows-shell-detect";
 
 /** transcript 保留上限（字节，超出丢弃头部） */
@@ -144,6 +145,8 @@ export class TerminalService implements OnModuleDestroy {
     this.logger.log(`[Terminal] spawn shell=${shell.file} args=[${shell.args.join(" ")}] id=${id}`);
     let pty: import("node-pty").IPty;
     try {
+      // macOS：helper 缺 x 位会让原生层 std::terminate（后端进程直接 abort），必须前置拦住
+      ensureSpawnHelperExecutable();
       // 与 DSH 完全一致的 ConPTY 配置：不传 useConptyDll，
       // 保证 resize 能正确传递到 shell（useConptyDll 会破坏 resize）。
       pty = this.loadNodePty().spawn(shell.file, shell.args, {
@@ -156,6 +159,7 @@ export class TerminalService implements OnModuleDestroy {
       });
     } catch (e: any) {
       this.logger.error(`Terminal spawn failed: ${e?.message}`);
+      if (e instanceof PtyHelperError) throw e;
       throw new Error(`Terminal spawn failed: ${e?.message}`);
     }
 
