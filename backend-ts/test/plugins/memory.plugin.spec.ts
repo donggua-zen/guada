@@ -12,6 +12,7 @@ import { PluginApi } from "../../src/modules/plugins/api/plugin-api";
 import {
   MEMORY_INDEX_FILE,
   MEMORY_INDEX_MAX_LINES,
+  MEMORY_INDEX_SOFT_LINES,
   resolveMemoryDir,
 } from "../../src/common/utils/memory-path.util";
 
@@ -119,6 +120,28 @@ describe("MemoryPlugin", () => {
       expect(prompt).not.toContain(`line-${MEMORY_INDEX_MAX_LINES + 1}`);
       expect(prompt).toContain(`${total} lines`);
       expect(prompt).toContain(`only the first ${MEMORY_INDEX_MAX_LINES}`);
+    });
+
+    it(`exactly ${MEMORY_INDEX_MAX_LINES} lines plus a trailing newline is NOT reported as overflow`, async () => {
+      // 行数口径（countIndexLines）忽略末尾单个换行：否则"正好 200 行"会被算成 201 行
+      await fs.mkdir(memoryDir, { recursive: true });
+      await fs.writeFile(
+        path.join(memoryDir, MEMORY_INDEX_FILE),
+        Array.from({ length: MEMORY_INDEX_MAX_LINES }, (_, i) => `line-${i + 1}`).join("\n") + "\n",
+        "utf-8",
+      );
+      const prompt = await renderPrompt();
+      expect(prompt).toContain(`line-${MEMORY_INDEX_MAX_LINES}`);
+      expect(prompt).not.toContain("only the first");
+    });
+
+    it("reports the soft cap once the index passes it but stays under the hard cap", async () => {
+      await writeIndex(
+        Array.from({ length: MEMORY_INDEX_SOFT_LINES + 10 }, (_, i) => `line-${i + 1}`),
+      );
+      const prompt = await renderPrompt();
+      expect(prompt).toContain("soft cap");
+      expect(prompt).not.toContain("only the first");
     });
 
     it("normalizes CRLF indexes", async () => {

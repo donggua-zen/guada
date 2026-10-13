@@ -30,12 +30,16 @@ export const MIN_RETAINED_MESSAGES = 3;
 export enum SummaryMode {
   /** 关闭摘要：直接丢弃待压缩内容，不生成摘要 */
   DISABLED = 'disabled',
-  /** 快速摘要：传统单次调用方式，快速生成摘要 */
+  /** 快速摘要：单次 LLM 调用生成摘要（不跑压缩前影子轮次） */
   FAST = 'fast',
-  /** 记忆同步：压缩前先让 AI 保存记忆到文件，再执行 LLM 摘要 */
+  /** 记忆同步：压缩前先让 AI 保存记忆到文件，再执行 LLM 摘要（当前禁用，见 compression-tiers.ts 开关点） */
   MEMORY_SYNC = 'memory_sync',
-  /** 默认摘要模式（指向 MEMORY_SYNC），统一修改入口 */
-  DEFAULT = 'memory_sync',
+  /**
+   * 默认摘要模式（指向 FAST）。
+   * 取 FAST 而非 MEMORY_SYNC：档位预设当前一律不跑影子轮次，默认值须与之一致，
+   * 否则任何走 `?? DEFAULT` 兜底的路径会意外重新拉起影子轮次。
+   */
+  DEFAULT = 'fast',
 }
 
 /** 摘要生成输入：遮蔽区（请求消息）+ 全部可见（提取旧检查点） */

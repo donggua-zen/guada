@@ -5,10 +5,10 @@ import { PlanModePlugin } from "../../src/modules/plugins/builtins/plan-mode.plu
 import { PlanFileService } from "../../src/common/services/plan-file.service";
 import { AskService } from "../../src/common/services/ask.service";
 import { PluginApi } from "../../src/modules/plugins/api/plugin-api";
-import { ToolHandlerDef } from "../../src/modules/plugins/types/plugin.types";
+import { ToolHandlerDef, ToolKitDef } from "../../src/modules/plugins/types/plugin.types";
 
 /**
- * 计划模式插件：审批三条路径的语义。
+ * 计划模式插件：审批三条路径的语义 + 工具包可见性。
  *
  * 重点不是"工具能跑通"，而是三条路径各自的状态后果：
  * 批准 → 退出计划态 + 落盘 + 审计 + 流帧；拒绝 → 计划态保持；有反馈 → 反馈作为真实 user 消息。
@@ -17,6 +17,7 @@ describe("PlanModePlugin", () => {
   let workspaceDir: string;
   let plugin: PlanModePlugin;
   let registered: ToolHandlerDef[];
+  let kitDef: ToolKitDef | undefined;
   let askResult: any[];
   let planFile: PlanFileService;
 
@@ -48,16 +49,20 @@ describe("PlanModePlugin", () => {
     planFile = new PlanFileService();
 
     registered = [];
+    kitDef = undefined;
     const api = {
-      registerToolKit: () => ({
-        // 真实 toolkit 会把 def.execute 包装成 handler；mock 复刻这层，否则被测代码拿不到 handler
-        registerTool: (def: any) => {
-          registered.push({
-            ...def,
-            handler: (args: any, ctx: any, signal: any) => def.execute(args, ctx, signal),
-          } as ToolHandlerDef);
-        },
-      }),
+      registerToolKit: (def: ToolKitDef) => {
+        kitDef = def; // 工具包可见性用例要拿到 handler
+        return {
+          // 真实 toolkit 会把 def.execute 包装成 handler；mock 复刻这层，否则被测代码拿不到 handler
+          registerTool: (def: any) => {
+            registered.push({
+              ...def,
+              handler: (args: any, ctx: any, signal: any) => def.execute(args, ctx, signal),
+            } as ToolHandlerDef);
+          },
+        };
+      },
     } as unknown as PluginApi;
 
     const askService = {
@@ -184,6 +189,33 @@ describe("PlanModePlugin", () => {
 
     expect(session.setPlanEnabled).not.toHaveBeenCalled();
     expect(session.publishStream).not.toHaveBeenCalled();
+  });
+
+  describe("工具包可见性：计划模式对子代理不可见", () => {
+    // 整个工具包（连同 ExitPlanMode）都不该进子代理的 enabledTools。与 subagent / workflow
+    // 工具包同一手法（handler 返回 loadMode:none）。提示词面由 buildPlanModeTurnEntries 的
+    // 会话类型前置条件对应收口——两处必须同时成立，只做一处就会出现"引导模型调一个它看不见的工具"。
+    const kitHandler = () => {
+      if (!kitDef?.handler) throw new Error("工具包未注册 handler");
+      return kitDef.handler;
+    };
+
+    it("子代理会话 → loadMode: none", async () => {
+      const runtime = await kitHandler()({ session: { sessionType: "sub_agent" } } as any);
+      expect(runtime).toEqual({ loadMode: "none" });
+    });
+
+    it("主会话 → 不改动 loadMode（沿用声明的默认 eager）", async () => {
+      const runtime = await kitHandler()({ session: { sessionType: "web" } } as any);
+      expect(runtime).toEqual({});
+    });
+
+    it("其它会话类型（bot / scheduler）不受影响", async () => {
+      for (const sessionType of ["bot", "scheduler", "web"]) {
+        const runtime = await kitHandler()({ session: { sessionType } } as any);
+        expect(runtime).toEqual({});
+      }
+    });
   });
 
   describe("压缩后重注入", () => {

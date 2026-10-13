@@ -425,3 +425,54 @@ LLMService.completions                    ← 唯一 seam（路由/序列化/流
 超限提示、CRLF、子智能体隔离路径、迁移幂等与不覆盖手写索引）、
 `memory-sync.service.spec.ts`（非 MEMORY_SYNC 零调用、作用域与牢笼的设置/恢复、
 指令语义、工具执行、fail-open、中止）。全量 119 套件 / 1552 例通过。
+
+## 11. v1.6：禁用压缩前影子轮次（预设改 FAST，代码全保留）
+
+动机：影子轮次会在二级摘要**之前**串行插入最多 5 轮 LLM 调用（拉长压缩耗时），且其交互不入库、
+不发 SSE，只能靠 `.guada/logs/compression.jsonl` 审计——审计面与压缩延迟都不划算。
+长期记忆改由模型在普通回合里用文件工具自行维护（索引与维护指南每回合注入，见
+[../memory.md](../memory.md)）。
+
+### 11.1 关键事实（决策依据）
+
+`SummaryMode` 在引擎里唯一的分支是 `DISABLED`（`compression-engine.ts` 决定"无 provider 时是否允许
+压缩"）；`FAST` 与 `MEMORY_SYNC` 共用同一个 `summaryProvider`、同一套摘要 prompt 与保留比例，
+`mode` 只被写进 compaction 事件、全仓无读取方（前端 `MemoPanel` 只看由摘要文本推导的
+`cleaningStrategy`）。因此把档位预设指向 `FAST` 就等于"照常摘要、不跑影子轮次"，且 `FAST`
+在引擎测试里本就按这个语义使用。
+
+### 11.2 改动
+
+| 位置 | 变更 |
+|------|------|
+| `compaction/compression-tiers.ts` | CONSERVATIVE / AGGRESSIVE 两档 `summaryMode` → `FAST`；预设表上方写明这是**开关点**与重新启用方式 |
+| `compaction/compression-engine.ts` | `SummaryMode.DEFAULT` 由 `MEMORY_SYNC` 重指 `FAST`（堵住 `?? DEFAULT` 兜底意外重新拉起影子轮次）；枚举值 `MEMORY_SYNC` 保留（JSONL 事件与旧智能体配置兼容） |
+| `frontend/src/locales/{zh-CN,en-US}/agents.ts` | 两档 `tierDesc` 去掉"摘要前先同步记忆"；`tip2` 改为"长期记忆由模型在对话中自行维护"；`compressionTierHint`/`tip1` 的"摘要方式"改为"是否摘要" |
+| `test/chat/compression-tiers.spec.ts` | 两档断言改 `FAST`，新增"两档都不再触发影子轮次"的禁用意图契约 |
+| `test/chat/jsonl-session-context.spec.ts` | aggressive / 缺省预设的 `summaryMode` 断言改 `'fast'` |
+
+### 11.3 保留与后果
+
+- **保留休眠**：`MemorySyncService`、`BEFORE_COMPACTION` 管线、`setToolScope`/`setPathJail`、
+  `FilePlugin` 牢笼、`compression.jsonl` 日志与相关 spec 全部未删（约 450 行不可达代码 + 2 个仍跑的
+  spec）。重新启用 = 把两档改回 `MEMORY_SYNC`。
+- **收益**：压缩路径少最多 5 轮 LLM；此后记忆写入只可能来自普通回合，天然是 SSE + JSONL + UI 里
+  可见的工具调用（审计问题随之消失）；主会话与子代理行为一致。
+- **代价**：失去"压缩前最后一次兜底扫描"。"何时写"后来由 §11.4 的提示词时机信号（任务结束检查点、
+  换线程前同步）部分补上，但仍是模型自觉——拖延即可能随压缩丢失信息。
+- **观察（未做）**：禁用后两档区别只剩保留比例（40% vs 20%），触发阈值同为 0.9，"保守/激进"与
+  "摘要方式"维度都已消失，后续若要真简化可考虑收敛档位。
+
+### 11.4 记忆侧补齐（v1.6 后续）
+
+禁用强制整理后，记忆侧改为"提示词纪律 + 写入时确定性守卫"两件套（细节见 [../memory.md](../memory.md)）：
+
+- **协议纪律**（提示词）：索引四分类 `user/feedback/project/reference`、`feedback` 与 `project`
+  明细文件要求 `Why:` / `How to apply:`、**何时写**（任务结束跑一次策展检查点、换线程前同步一次）、
+  **不要写什么**（仓库/git 已记录的内容、会腐坏的当前状态、多条并行 project 笔记、密钥值）。
+- **上限守卫**（代码）：`FilePlugin.evaluateMemoryIndexCap` 在 `write`/`edit` 本地分支的锁内判定，
+  超硬上限（200 行 / 25KB）且变长的写入被拒绝并给出瘦身指引，**缩小/持平永远放行**；超软上限
+  （150 行 / 20KB）只附提醒。行数口径 `countIndexLines`（忽略末尾换行）与注入截断共用，
+  修掉了"200 行 + 末尾换行被算成 201 行"的误报。
+- **诚实边界**：守卫只覆盖文件工具的 `write`/`edit` 本地分支（shell/远端/文件 API 通道绕过），
+  且索引的**格式**仍无校验——体积确定性强制、内容靠纪律。

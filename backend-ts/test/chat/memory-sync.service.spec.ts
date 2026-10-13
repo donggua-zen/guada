@@ -124,8 +124,11 @@ describe("MemorySyncService", () => {
     expect(sessionCtx.setPathJail).not.toHaveBeenCalled();
   });
 
-  it("treats the DEFAULT alias as MEMORY_SYNC", () => {
-    expect(SummaryMode.DEFAULT).toBe(SummaryMode.MEMORY_SYNC);
+  it("DEFAULT 指向 FAST：兜底路径不会拉起影子轮次（当前禁用）", async () => {
+    expect(SummaryMode.DEFAULT).toBe(SummaryMode.FAST);
+    await service.onBeforeCompaction(payload(SummaryMode.DEFAULT));
+    expect(llm.completions).not.toHaveBeenCalled();
+    expect(sessionCtx.setPathJail).not.toHaveBeenCalled();
   });
 
   it("skips sub-agent sessions entirely (short tasks get no forced memory sweep)", async () => {

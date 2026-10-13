@@ -72,14 +72,14 @@
     modelUseDefault: 'Use Default Model',
     // 记忆与压缩
     compressionTier: 'Compression Strategy',
-    compressionTierHint: 'Built-in presets that decide trigger point, retention, and summary method together',
+    compressionTierHint: 'Built-in presets that decide the trigger threshold, retention, and whether summarization runs',
     compressionTierPlaceholder: 'Select compression strategy',
     tierOff: 'Compression Off',
     tierOffDesc: 'Compression Off - no trimming or summaries, full history is kept',
     tierConservative: 'Conservative',
-    tierConservativeDesc: 'Conservative - triggers at 90%, keeps 40%, syncs memory before summarizing',
+    tierConservativeDesc: 'Conservative - triggers at 90%, keeps 40%',
     tierAggressive: 'Aggressive',
-    tierAggressiveDesc: 'Aggressive - triggers at 90%, keeps 20%, syncs memory before summarizing',
+    tierAggressiveDesc: 'Aggressive - triggers at 90%, keeps 20%',
     // 提示词
     systemPromptLabel: 'System Prompt (Agent Settings)',
     systemPromptPlaceholder: 'Enter detailed settings',
@@ -109,8 +109,8 @@
     noAgentsHint: 'Please create other agents first',
     // 提示
     tipTitle: 'Tips',
-    tip1: '• Compression Strategy: presets decide trigger point, retention, and summary method together',
-    tip2: '• Memory sync runs before summarizing, saving key information to memory files to prevent loss',
+    tip1: '• Compression Strategy: presets decide the trigger threshold, retention, and whether summarization runs',
+    tip2: '• Long-term memory is maintained by the model during the conversation; the memory index is injected into context',
     tip3: '• With compression off, you can still trigger a manual compression from the session panel',
     // 通用
     noDescription: 'No description',

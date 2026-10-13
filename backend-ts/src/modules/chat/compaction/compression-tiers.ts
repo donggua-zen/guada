@@ -32,10 +32,22 @@ export interface TierPreset {
   triggerRatio: number;
   /** 压缩保留尾预算 */
   retainRatio: number;
-  /** 摘要模式（memory_sync 含压缩前记忆同步影子轮） */
+  /** 摘要模式（MEMORY_SYNC 含压缩前记忆同步影子轮） */
   summaryMode: SummaryMode;
 }
 
+/**
+ * ⚠️ 压缩前影子轮次的开关点（当前**禁用**）
+ *
+ * 两档的 summaryMode 取 FAST（= 照常摘要、不跑影子轮次）：影子轮次会在摘要前串行插入
+ * 最多 5 轮 LLM 调用，拉长压缩耗时，且其交互不入库、不发 SSE，只能靠
+ * `<workspace>/.guada/logs/compression.jsonl` 审计。禁用后长期记忆改由模型在普通回合里
+ * 用文件工具自行维护（索引与维护指南每回合注入，见 builtins/memory.plugin.ts）。
+ *
+ * FAST 与 MEMORY_SYNC 在引擎里除"是否触发 onBeforeCompaction"外零行为差异
+ * （summaryProvider、摘要 prompt、保留比例均相同；见 compression-engine.ts 的 mode 使用）。
+ * 重新启用 = 把下面两档改回 SummaryMode.MEMORY_SYNC（MemorySyncService 与路径牢笼代码保留休眠）。
+ */
 export const COMPRESSION_TIER_PRESETS: Record<CompressionTier, TierPreset> = {
   [CompressionTier.OFF]: {
     enabled: false,
@@ -47,13 +59,13 @@ export const COMPRESSION_TIER_PRESETS: Record<CompressionTier, TierPreset> = {
     enabled: true,
     triggerRatio: 0.9,
     retainRatio: 0.4,
-    summaryMode: SummaryMode.MEMORY_SYNC,
+    summaryMode: SummaryMode.FAST,
   },
   [CompressionTier.AGGRESSIVE]: {
     enabled: true,
     triggerRatio: 0.9,
     retainRatio: 0.2,
-    summaryMode: SummaryMode.MEMORY_SYNC,
+    summaryMode: SummaryMode.FAST,
   },
 };
 

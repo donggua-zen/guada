@@ -10,7 +10,17 @@ import { PolicyRulesService } from "../../../common/services/policy-rules.servic
 import { writeApprovalMemory } from "../../../common/services/write-approval-memory";
 import { PluginApi } from "../api/plugin-api";
 import { safeSubstring, safeTruncate } from "../../../common/utils/string.utils";
-import { resolveMemoryDir } from "../../../common/utils/memory-path.util";
+import {
+  MEMORY_INDEX_MAX_BYTES,
+  MEMORY_INDEX_MAX_LINES,
+  MEMORY_INDEX_SOFT_BYTES,
+  MEMORY_INDEX_SOFT_LINES,
+  countIndexLines,
+  isIndexOverHardCap,
+  isIndexOverSoftCap,
+  resolveMemoryDir,
+  resolveMemoryIndexPath,
+} from "../../../common/utils/memory-path.util";
 import {
   WorkspaceToolRouter,
   workspaceParamField,
@@ -358,11 +368,24 @@ export class FilePlugin extends PluginBase {
         }
         this.logger.log(`写入文件: ${file_path}`);
         return this.withFileLock(resolvedPath, async () => {
+          // 记忆索引上限守卫：读当前内容做"是否变长"的比较，任何落盘之前判定。
+          // 只对会话自己的索引路径生效（见 evaluateMemoryIndexCap）；远程分支不适用
+          // ——记忆目录恒在主本地工作区，远端 provider 目标不可能是它。
+          const indexCap = await this.evaluateMemoryIndexCap(
+            resolvedPath,
+            content,
+            ctx,
+          );
+          if (indexCap.kind === "deny") throw new Error(indexCap.message);
+
           await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
           await fs.writeFile(resolvedPath, content, {
             encoding: encoding as BufferEncoding,
           });
-          return `File written: ${resolvedPath} (${content.length} chars)`;
+          return (
+            `File written: ${resolvedPath} (${content.length} chars)` +
+            (indexCap.notice ? `\n${indexCap.notice}` : "")
+          );
         });
       },
       display: {
@@ -452,10 +475,22 @@ export class FilePlugin extends PluginBase {
             throw new Error(`No match text found: ${old_text}`);
           }
 
+          // 记忆索引上限守卫：改写后文本已在手，与当前内容比较是否变长（缩小/持平永远放行）
+          const indexCap = await this.evaluateMemoryIndexCap(
+            resolvedPath,
+            modified,
+            ctx,
+            content,
+          );
+          if (indexCap.kind === "deny") throw new Error(indexCap.message);
+
           await fs.writeFile(resolvedPath, modified, {
             encoding: encoding as BufferEncoding,
           });
-          return `File ${resolvedPath} modified (1 replacement)`;
+          return (
+            `File ${resolvedPath} modified (1 replacement)` +
+            (indexCap.notice ? `\n${indexCap.notice}` : "")
+          );
         });
       },
       display: {
@@ -885,6 +920,98 @@ export class FilePlugin extends PluginBase {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 记忆索引（MEMORY.md）上限守卫 —— 本仓唯一的"内容级"写入否决。
+   *
+   * 为什么需要它：索引每回合整段注入（前 MEMORY_INDEX_MAX_LINES 行），超出部分**永不**
+   * 进入上下文，所以体积失控等于静默失去召回。格式/排序仍交给提示词纪律，唯有体积是
+   * 确定性强制。
+   *
+   * 规则（与 engramory 的 cap hook 同构）：
+   * - 只对**会话自己的索引路径**生效——不是任何名为 MEMORY.md 的文件（避免误拦项目里
+   *   同名的无关文件，也就省掉了 engramory 不得不提供的 indexPath 逃生阀）；
+   * - 只有"结果超硬上限**且**比当前文件更长"才拒绝 → 缩小/持平永远放行，保证可以
+   *   210 → 205 → 198 逐次瘦身；索引不存在视为 0（首次就写超限会被拒）；
+   * - 明细文件不限体积（12KB 级提示属 doctor 层，尚未实现）。
+   *
+   * 诚实边界：只拦**本工具的 write/edit**（本地分支）。shell 重定向/脚本、远端 provider、
+   * 文件 API 等其它写通道绕过它——这是纪律栏杆，不是安全边界。
+   *
+   * @param nextContent 改写后的完整文本（write = 入参 content；edit = transformEdit 结果）
+   * @param currentContent 当前磁盘内容（edit 已在锁内读过则传入，省一次读；write 省略则由本方法读）
+   */
+  private async evaluateMemoryIndexCap(
+    resolvedPath: string,
+    nextContent: string,
+    context?: PluginContext,
+    currentContent?: string,
+  ): Promise<
+    { kind: "allow"; notice?: string } | { kind: "deny"; message: string }
+  > {
+    const workspacePath = context?.session.workspacePath;
+    const sessionId = context?.session.sessionId;
+    if (!workspacePath || !sessionId) return { kind: "allow" };
+
+    let indexPath: string;
+    try {
+      indexPath = resolveMemoryIndexPath({
+        workspacePath,
+        sessionId,
+        sessionType: context?.session.sessionType,
+      });
+    } catch {
+      return { kind: "allow" };
+    }
+    if (path.resolve(resolvedPath) !== path.resolve(indexPath)) {
+      return { kind: "allow" };
+    }
+
+    let current = currentContent;
+    if (current === undefined) {
+      try {
+        current = await fs.readFile(resolvedPath, "utf-8");
+      } catch {
+        current = ""; // 索引尚不存在 → 视为空（首次写入按"变长"判定）
+      }
+    }
+
+    const nextLines = countIndexLines(nextContent);
+    const nextBytes = Buffer.byteLength(nextContent, "utf8");
+    const curLines = countIndexLines(current);
+    const curBytes = Buffer.byteLength(current, "utf8");
+
+    const hard = isIndexOverHardCap(nextLines, nextBytes);
+    const grows =
+      (nextLines > MEMORY_INDEX_MAX_LINES && nextLines > curLines) ||
+      (nextBytes > MEMORY_INDEX_MAX_BYTES && nextBytes > curBytes);
+
+    if (hard.over && grows) {
+      return {
+        kind: "deny",
+        message:
+          `Refused: this write would put the memory index over its hard cap (${hard.detail.join(", ")}). ` +
+          `The index is injected every turn and only its first ${MEMORY_INDEX_MAX_LINES} lines are ever visible, ` +
+          `so anything past the cap silently stops being recalled. Compact BEFORE writing: ` +
+          `move prose that leaked onto an index line back into the linked detail file, merge duplicate pointers, ` +
+          `drop cold entries, and keep every line to "one short hook + link". ` +
+          `A write that SHRINKS the index always passes, so you can compact step by step.`,
+      };
+    }
+
+    if (isIndexOverSoftCap(nextLines, nextBytes)) {
+      return {
+        kind: "allow",
+        notice:
+          `⚠️ memory index is at ${nextLines} lines / ${nextBytes} bytes ` +
+          `(soft cap ${MEMORY_INDEX_SOFT_LINES} lines / ${MEMORY_INDEX_SOFT_BYTES} bytes). ` +
+          `Still fully injected, but consolidate soon — writes that grow it past ` +
+          `${MEMORY_INDEX_MAX_LINES} lines / ${MEMORY_INDEX_MAX_BYTES} bytes are refused.`,
+      };
+    }
+
+    return { kind: "allow" };
   }
 
   /**

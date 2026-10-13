@@ -103,6 +103,13 @@ export class PlanModePlugin extends PluginBase {
       name: "计划模式",
       description: "只读调研后产出方案，经用户批准再实施",
       activator: "Present an implementation plan for approval while in plan mode.",
+      // 计划模式对子代理不可见：整个工具包连同 ExitPlanMode 都不进子代理的 enabledTools
+      // （与 subagent / workflow 工具包同一手法）。子代理既不该产出计划，也不该看到这个工具；
+      // 提示词面由 buildPlanModeTurnEntries 的 sessionType 前置条件对应收口。
+      handler: async (ctx) =>
+        ctx.session.sessionType === "sub_agent"
+          ? { loadMode: "none" as const }
+          : {},
     });
 
     kit.registerTool({
