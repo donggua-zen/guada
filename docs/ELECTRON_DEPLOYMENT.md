@@ -143,9 +143,12 @@ pnpm run build:electron:mac              # macOS 完整构建（.app + dmg）
 pnpm run build:electron:dir              # 只生成未打包目录（本地验证最快）
 ```
 
-> 注意：dmg 目标同时声明了 x64 与 arm64。原生模块只会按当前架构重建，
-> 因此本地构建请使用与机器一致的架构（如 Apple Silicon 执行
-> `npx electron-builder --mac --arm64`），多架构产物建议由 CI 分 Job 构建。
+> 注意：**产物架构由构建机架构决定**（`mac.target` 已不再写死 `arch` 列表）。原生模块只按
+> 当前架构准备，所以在 arm64 机器上构建 x64 包会得到一个「app 是 x64、原生模块是 arm64」的
+> 坏包 —— 1.0.1 发布时正是踩到这个：配置里的架构列表压过了命令行的 `--arm64`，一个 job
+> 同时产出两个 dmg，其中另一个架构的包模块不匹配（`verify:asar` 的运行期烟测当场报
+> `Could not load the "sharp" module using the darwin-x64 runtime`）。
+> 多架构产物请由 CI 分 Job、**在各自架构的机器上**构建（见 4.5）。
 
 ### 2.2 后端依赖打进 app.asar（决定安装耗时的是文件数，不是包体）
 
