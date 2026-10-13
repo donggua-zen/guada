@@ -128,8 +128,10 @@ jobs:
           npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee /tmp/dmg.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
-            echo "::error::打包失败（退出码 $code），日志尾部："
-            tail -60 /tmp/dmg.log | while IFS= read -r line; do echo "::error::$line"; done
+            # 注解有条数上限（约 10 条），所以先打最关键的报错行，再补尾部
+            echo "::error::打包失败（退出码 $code）"
+            grep -nE "⨯|Error:|error " /tmp/dmg.log | tail -6 | while IFS= read -r l; do echo "::error::$l"; done
+            tail -3 /tmp/dmg.log | while IFS= read -r l; do echo "::error::$l"; done
           fi
           exit "$code"
         env:
@@ -148,8 +150,9 @@ jobs:
           pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
-            echo "::error::asar 校验失败（退出码 $code），输出尾部："
-            tail -60 /tmp/verify-asar.log | while IFS= read -r line; do echo "::error::$line"; done
+            # 脚本最后会打印 FAILED 清单与逐条原因；注解上限约 10 条，只取最后 8 行
+            echo "::error::asar 校验失败（退出码 $code）"
+            tail -8 /tmp/verify-asar.log | while IFS= read -r l; do echo "::error::$l"; done
           fi
           exit "$code"
 
