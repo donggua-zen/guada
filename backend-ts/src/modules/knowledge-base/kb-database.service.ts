@@ -3,11 +3,11 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import Database from "better-sqlite3";
-import sqliteVec from "sqlite-vec";
 import {
   META_DOMAIN_KB,
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
+import { loadSqliteVec } from "../../common/utils/asar-path.util";
 import { KB_DB_FILE, migrateKbDatabase } from "./kb-schema";
 
 /** 一次最多同时持有多少个库句柄（超出按 LRU 关闭，避免累积句柄） */
@@ -233,7 +233,7 @@ export class KbDatabaseService implements OnModuleDestroy {
     let db: Database.Database;
     try {
       db = new Database(dbPath);
-      sqliteVec.load(db);
+      loadSqliteVec(db);
       db.pragma("journal_mode = WAL");
       db.pragma("busy_timeout = 5000");
       db.pragma("synchronous = NORMAL");

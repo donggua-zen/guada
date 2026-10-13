@@ -147,6 +147,59 @@ pnpm run build:electron:dir              # 只生成未打包目录（本地验�
 > 因此本地构建请使用与机器一致的架构（如 Apple Silicon 执行
 > `npx electron-builder --mac --arm64`），多架构产物建议由 CI 分 Job 构建。
 
+### 2.2 后端依赖打进 app.asar（决定安装耗时的是文件数，不是包体）
+
+**实测结论：安装耗时 ≈ 盘上文件数 × 18ms，与包体字节数几乎无关。** 同一台机器上三个
+electron-builder + NSIS 应用（用 NTFS birth time 量的安装窗口）：
+
+| 应用 | 盘上文件数 | 安装后体积 | 安装耗时 | 每文件 |
+|---|---|---|---|---|
+| ZCode 3.15.1 | 1,108 | 769 MB | 16.4 s | 15 ms |
+| WorkBuddy 5.7.7 | 5,466 | 1.26 GB | ~110 s | 17 ms |
+| GuaDa（改造前） | 17,211 | 767 MB | 347 s | 20 ms |
+
+参照项目的做法是**把 JS 依赖全部打进 `app.asar`**（ZCode 的 asar 有 31,027 个条目、
+盘上只有 1,112 个文件），我们此前把 1.5 万个 node_modules 文件以 `extraResources`
+原样铺在磁盘上——字节数一样，安装时间差 20 倍。现在改为同样的做法：
+
+- `build.files` 增加 `{ from: "backend-ts/node_modules_production/node_modules",
+  to: "backend-ts/node_modules" }`，依赖进入 `app.asar`
+- `backend-ts/dist` / `static` / `bundled-*` **仍是真实目录**（不改 `process.chdir`
+  与 `process.cwd()` 定位 bundled-* 的语义）
+- 原生模块经 `build.asarUnpack` 解包到 `app.asar.unpacked/`，盘上约 300–400 个文件
+
+改造后盘上文件数约 1,700（asar 1 个 + dist/static/bundled-* + 解包的原生文件），
+安装耗时应降到 30 s 级。安装包体积基本不变（asar 变大、压缩后总量相当）。
+
+#### 四处不能改坏的约束
+
+1. **入口仍是真实路径** → 后端由 `dist/main.js`（真实目录）启动，Node 从它出发的
+   `node_modules` 向上查找**永远走不到 asar 内**。主进程用 `NODE_PATH` 指路
+   （`electron/main.ts` 的 `getBackendNodeModulesPath`）。`ELECTRON_RUN_AS_NODE` 下
+   asar 的 fs / 模块解析补丁是有效的（已实测）。
+2. **`includeSubNodeModules: true` 必须保留**：pnpm hoisted 布局下仍有 20+ 个嵌套
+   `node_modules`，electron-builder 的 walker 默认会**静默丢弃**它们（约 700 个文件）。
+3. **`asarUnpack` 的 glob 按【源路径】书写**：electron-builder 用 appDir 相对路径匹配
+   （`backend-ts/node_modules_production/node_modules/...`），**不是** `to` 路径。
+   且 24.13.3 的 smartUnpack 只对 `.dll/.exe` 触发，`.node` 必须显式列出。
+4. **sqlite-vec 的路径必须重写**：SQLite 的 `loadExtension` 走原生 `LoadLibrary`，
+   不经过 Electron 的 dlopen 重定向，asar 虚拟路径必然加载失败（`no such module: vec0`）。
+   统一走 `backend-ts/src/common/utils/asar-path.util.ts` 的 `loadSqliteVec()`
+   （内部把 `app.asar` 段换成 `app.asar.unpacked`）。**不要改回 `sqliteVec.load(db)`。**
+
+#### 校验（改完必须跑）
+
+```bash
+pnpm run build:electron:dir      # 或完整构建
+pnpm run verify:asar             # 静态布局 + 运行期烟测（require 原生模块 + 真建 vec0 表）
+```
+
+`scripts/verify-asar-layout.js` 会检查：真实 `backend-ts/node_modules` 已消失、
+asar 内含入口包、嵌套 node_modules 没丢、`asarUnpack` 列的每个包的原生文件都已解包、
+源目录里应打包的文件一个不少、`@parcel/watcher` 补丁二进制 md5 一致，并以
+`ELECTRON_RUN_AS_NODE + NODE_PATH` 起打包后的 Electron 逐个 require 原生依赖。
+安装期回归在构建期是看不见的（要等用户装完点开），所以这一步不能省。
+
 ### 3. 构建产物
 
 构建完成后，安装包位于 `release/` 目录。本项目未覆盖 `artifactName`，以下为 electron-builder

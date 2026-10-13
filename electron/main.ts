@@ -673,6 +673,18 @@ function getBackendPath(): string {
   }
 }
 
+/**
+ * 后端 node_modules 的位置。
+ *
+ * 打包版把它打进 app.asar（安装期只需写 1 个大文件，而不是 1.5 万个小文件 ——
+ * 实测安装耗时 ≈ 文件数 × 18ms，与包体字节数无关）。入口 dist/main.js 仍是真实
+ * 目录，Node 从它出发的 node_modules 向上查找永远走不到 asar 内，所以必须用
+ * NODE_PATH 显式指路（ELECTRON_RUN_AS_NODE 下 asar 的 fs/解析补丁有效）。
+ */
+function getBackendNodeModulesPath(): string {
+  return path.join(process.resourcesPath, "app.asar", "backend-ts", "node_modules");
+}
+
 // 确保 data 目录存在（数据库迁移由后端 MigrationRunner 负责）
 function ensureDataDir(dataHome: string): void {
   const paths = computeDataPaths(dataHome);
@@ -1058,6 +1070,8 @@ async function startBackend(): Promise<void> {
             "--report-uncaught-exception",
             `--report-dir=${diagnosticReportDir(paths.logsDir)}`,
           ].filter(Boolean).join(" "),
+          // 后端依赖在 app.asar 内（见 getBackendNodeModulesPath），真实目录里没有 node_modules
+          NODE_PATH: getBackendNodeModulesPath(),
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
           DATABASE_URL: `file:${paths.dbPath}`,

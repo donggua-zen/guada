@@ -28,6 +28,8 @@
     "compare:deps-size": "node scripts/compare-node-modules-size.js",
     "analyze:modules": "node scripts/analyze-module-size.js",
     "verify:electron-setup": "node scripts/verify-electron-setup.js",
+    "verify:asar": "node scripts/verify-asar-layout.js",
+    "verify:packaged": "node scripts/verify-packaged-backend.js",
     "test:browser-snapshot:unit": "cd electron && tsc && cd .. && node scripts/test-accessibility-snapshot.js",
     "test:browser-snapshot:fixture": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js",
     "test:browser-snapshot:bilibili": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js https://www.bilibili.com/",
@@ -53,6 +55,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@electron/rebuild": "^4.0.4",
     "@types/node": "^24.13.3",
     "concurrently": "^9.2.0",
@@ -71,6 +74,17 @@
     "asar": {
       "smartUnpack": true
     },
+    "includeSubNodeModules": true,
+    "asarUnpack": [
+      "backend-ts/node_modules_production/node_modules/better-sqlite3/**",
+      "backend-ts/node_modules_production/node_modules/node-pty/**",
+      "backend-ts/node_modules_production/node_modules/sqlite-vec-*/**",
+      "backend-ts/node_modules_production/node_modules/@parcel/watcher-win32-x64/**",
+      "backend-ts/node_modules_production/node_modules/@parcel/watcher-darwin-*/**",
+      "backend-ts/node_modules_production/node_modules/@img/sharp-*/**",
+      "backend-ts/node_modules_production/node_modules/@napi-rs/canvas-*/**",
+      "backend-ts/node_modules_production/node_modules/@node-rs/jieba-*/**"
+    ],
     "afterPack": "scripts/after-pack-handler.js",
     "directories": {
       "output": "release",
@@ -79,17 +93,7 @@
     "files": [
       "electron/dist/**/*",
       "frontend/dist/**/*",
-      "build-resources/icon.ico"
-    ],
-    "extraResources": [
-      {
-        "from": "backend-ts/dist",
-        "to": "backend-ts/dist",
-        "filter": [
-          "**/*",
-          "!**/*.map"
-        ]
-      },
+      "build-resources/icon.ico",
       {
         "from": "backend-ts/node_modules_production/node_modules",
         "to": "backend-ts/node_modules",
@@ -114,6 +118,16 @@
           "!**/.github/**",
           "!**/history/**",
           "!**/man/**"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "backend-ts/dist",
+        "to": "backend-ts/dist",
+        "filter": [
+          "**/*",
+          "!**/*.map"
         ]
       },
       {

@@ -252,14 +252,21 @@ export class ExternalPluginLoader implements OnModuleInit {
   }
 
   /**
-   * 动态 require 插件入口文件，同时让插件内部能解析到 backend-ts 的 node_modules。
+   * 动态 require 插件入口文件，同时让插件内部能解析到后端的 node_modules。
    *
    * 外部插件目录没有自己的 node_modules，import zod 等依赖时 Node 会从插件目录
    * 逐级向上搜索，找不到就报错。这里临时 patch Module._resolveFilename，
-   * 将 backend-ts/node_modules 作为 fallback 搜索路径，require 完成后立即恢复。
+   * 把后端依赖目录作为 fallback 搜索路径，require 完成后立即恢复。
+   *
+   * 打包版后端依赖在 app.asar 内，真实目录里没有 node_modules —— 主进程用 NODE_PATH
+   * 给后端进程指路（见 electron/main.ts 的 getBackendNodeModulesPath），这里直接复用
+   * 同一份来源，避免两处各自硬编码路径。
    */
   private async requireWithFallback(entryPath: string): Promise<any> {
-    const backendNodeModules = path.resolve(process.cwd(), "node_modules");
+    const backendNodeModules = [
+      ...(process.env.NODE_PATH || "").split(path.delimiter).filter(Boolean),
+      path.resolve(process.cwd(), "node_modules"),
+    ];
     const mod = Module as any;
 
     const doRequire = (): any => {
@@ -283,7 +290,10 @@ export class ExternalPluginLoader implements OnModuleInit {
           return originalResolveFilename.call(
             this,
             request,
-            { ...parent, paths: [...(parent?.paths || []), backendNodeModules] },
+            {
+              ...parent,
+              paths: [...(parent?.paths || []), ...backendNodeModules],
+            },
             isMain,
             options,
           );

@@ -2,13 +2,13 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import Database from "better-sqlite3";
-import sqliteVec from "sqlite-vec";
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import {
   META_DOMAIN_KB,
   MetadataBootstrapGate,
 } from "../metadata-bootstrap.gate";
+import { loadSqliteVec } from "../../utils/asar-path.util";
 import {
   KB_DB_FILE,
   migrateKbDatabase,
@@ -215,7 +215,7 @@ export class KbMigrationBootstrapService {
         // 必须加载 sqlite-vec：分块写入会同步维护 `chunk_vec`（vec0 虚拟表），
         // 不加载扩展会在建表时报 `no such module: vec0`，整个迁移被 run() 的
         // try/catch 吞掉、只留一行日志，表现为"迁移后知识库是空的"。
-        sqliteVec.load(db);
+        loadSqliteVec(db);
         db.pragma("journal_mode = WAL");
         db.pragma("busy_timeout = 5000");
         db.pragma("synchronous = NORMAL");
