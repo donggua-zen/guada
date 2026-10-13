@@ -279,10 +279,12 @@ Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执�
 
 > CI 目前只出 macOS arm64（**Intel 版暂时不做**）与 Windows x64。
 >
-> 镜像平台（Gitee / GitCode）**只发 release、不传二进制**：Gitee 单附件上限 100M（官方文档），
-> 安装包 200M+ 放不进去；GitCode 附件接口虽支持但限额未文档化。两者的 release 正文里会列出
-> GitHub 的下载地址。需要在 GitHub 仓库里配置 `GITEE_TOKEN` / `GITCODE_TOKEN` 两个 Secret，
-> 未配置时自动跳过、不影响主发布线。
+> 镜像平台（`publish-mirrors` job）：
+> - **GitCode**：建同名 release **并上传安装包**（附件走「取预签名地址 → PUT」两段式）
+> - **Gitee**：**只发 release、不传二进制** —— 单附件上限 100M（官方文档），安装包 200M+ 放不进去
+>
+> 两者的 release 正文都会列出 GitHub 的下载地址。需要在 GitHub 仓库里配置
+> `GITEE_TOKEN` / `GITCODE_TOKEN` 两个 Secret，未配置时自动跳过、不影响主发布线。
 
 ---
 
