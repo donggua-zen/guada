@@ -16,6 +16,10 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { AsyncNotifier } from "../../common/utils/async-notifier";
 import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { safeTruncate, safeTail } from "../../common/utils/string.utils";
+import {
+  applyNodeShim,
+  type NodeShimKind,
+} from "../../common/utils/node-shim.util";
 import { SanitizerTransform } from "./stream-sanitizer";
 import {
   envValue,
@@ -1001,6 +1005,24 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 命令子进程的环境：继承进程 env，并把内置 Node 的 shim 追加到 PATH 末尾
+   * （没装 Node 的机器上让命令里的 `node` 回落到 app 内置的 Electron Node，见 node-shim.util.ts）。
+   *
+   * Git Bash 要 posix shim：bash 只按精确文件名查找，不会命中 node.cmd；
+   * PowerShell / cmd 走 node.cmd（PATHEXT 命中 .CMD）。
+   */
+  private buildChildEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+    const kind: NodeShimKind =
+      this.shellInfo.kind === "powershell" || this.shellInfo.kind === "cmd"
+        ? "win"
+        : "posix";
+    return applyNodeShim(
+      { ...process.env, PYTHONUNBUFFERED: "1", ...extra },
+      kind,
+    );
+  }
+
+  /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
    * 沙盒启用时命令由 sandbox.exe 内部固定 shell（Windows PowerShell）执行；
    * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先 → PowerShell → cmd.exe），
@@ -1034,7 +1056,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       }
       return spawn(sandboxBin, args, {
         cwd,
-        env: { ...process.env, PYTHONUNBUFFERED: "1" },
+        env: this.buildChildEnv(),
         windowsHide: true,
       });
     }
@@ -1049,12 +1071,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
           : ["-c", "-l", command];
       return spawn(this.shellInfo.path, args, {
         cwd,
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: "1",
+        env: this.buildChildEnv({
           SHELL: this.shellInfo.path,
           GIT_EDITOR: "true",
-        },
+        }),
         windowsHide: true,
       });
     }
@@ -1067,7 +1087,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
         {
           cwd,
-          env: { ...process.env, PYTHONUNBUFFERED: "1" },
+          env: this.buildChildEnv(),
           windowsHide: true,
         },
       );
@@ -1075,7 +1095,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     return spawn(command, [], {
       cwd,
-      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      env: this.buildChildEnv(),
       shell: true,
       windowsHide: true,
     });
