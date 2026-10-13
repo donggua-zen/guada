@@ -686,7 +686,9 @@ if (fs.existsSync(betterSqlite3Path)) {
       
       for (const pattern of patternsToRemove) {
         const globPath = path.join(buildPath, pattern)
-        const files = glob.sync(globPath, { nodir: true })
+        // windowsPathsNoEscape：pattern 由 path.join 拼出，Windows 上是反斜杠，而 glob 9+
+        // 默认把反斜杠当转义符——不开这个开关会静默匹配不到文件，清理变成空跑
+        const files = glob.sync(globPath, { nodir: true, windowsPathsNoEscape: true })
         for (const file of files) {
           try {
             const stats = fs.statSync(file)
