@@ -617,6 +617,26 @@ html:not(.platform-win) .content-card {
   height: calc(100% - var(--gd-layout-card-gap) - var(--card-bottom-gap, var(--gd-layout-card-gap)));
 }
 
+/* macOS：窗口圆角由系统以连续曲率（squircle）绘制，CSS border-radius 的圆弧无法贴合；
+   4px 缝隙 + 6px 圆角会让内容卡片的上/右/下角与窗口角错位。这里取消卡片的外边距、圆角、
+   外阴影与整圈描边，让内容满铺到窗口边缘，由系统裁剪出与窗口一致的圆角；
+   侧栏与内容底色接近（浅 #f6f6f6/#fdfdfd、深 #1f1f1f/#222），仅保留 1px 左分隔线。
+   本规则必须排在 html:not(.platform-win) 之后——两者特异度相同，靠源码顺序取胜。 */
+html.platform-mac .content-card {
+  margin: 0;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+html.platform-mac .content-card::after {
+  border: none;
+  border-left: 1px solid var(--gd-layout-card-border);
+}
+/* 侧栏收起后卡片左缘即窗口左缘，左分隔线失去意义 */
+html.platform-mac .content-card.sidebar-collapsed::after {
+  display: none;
+}
+
 #app {
   position: relative;
   z-index: 1;
