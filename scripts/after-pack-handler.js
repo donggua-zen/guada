@@ -91,8 +91,10 @@ function embedIcon(context) {
 /**
  * macOS：补齐 node-pty 的 spawn-helper 可执行位
  *
- * electron-builder 的 extraResources 拷贝不保留文件权限，源目录修好也不够；
+ * electron-builder 的 asarUnpack / extraResources 拷贝都不保留文件权限，源目录修好也不够；
  * 缺 x 位时 node-pty 的 posix_spawn 会 EACCES，用户一打开终端后端进程就 abort。
+ * 候选目录覆盖两种布局：node_modules 进 asar 时 node-pty 被 asarUnpack 解到
+ * app.asar.unpacked 下；走 extraResources 时在 Resources 下。
  */
 function fixPtySpawnHelper(context) {
   if (context.electronPlatformName !== 'darwin') {
@@ -101,17 +103,21 @@ function fixPtySpawnHelper(context) {
 
   const { ensureSpawnHelperExecutable } = require('./ensure-pty-spawn-helper');
   const productFilename = context.packager.appInfo.productFilename || 'GuaDa';
-  const nodeModulesDir = path.join(
-    context.appOutDir,
-    `${productFilename}.app`,
-    'Contents',
-    'Resources',
-    'backend-ts',
-    'node_modules'
-  );
+  const resourcesDir = path.join(context.appOutDir, `${productFilename}.app`, 'Contents', 'Resources');
+  const candidates = [
+    path.join(resourcesDir, 'app.asar.unpacked', 'backend-ts', 'node_modules'),
+    path.join(resourcesDir, 'backend-ts', 'node_modules'),
+  ];
+  const nodeModulesDirs = candidates.filter((dir) => fs.existsSync(dir));
 
-  console.log(`[node-pty] 补齐 spawn-helper 可执行权限：${nodeModulesDir}`);
-  if (!ensureSpawnHelperExecutable([nodeModulesDir]).ok) {
+  if (nodeModulesDirs.length === 0) {
+    console.warn('[node-pty] 未找到打包后的 node_modules，跳过 spawn-helper 权限修复');
+    console.warn(`[node-pty] 已尝试：${candidates.join('、')}`);
+    return;
+  }
+
+  console.log(`[node-pty] 补齐 spawn-helper 可执行权限：${nodeModulesDirs.join('、')}`);
+  if (!ensureSpawnHelperExecutable(nodeModulesDirs).ok) {
     console.error('[node-pty] ❌ spawn-helper 不可执行，打包版 macOS 打开终端会崩掉后端进程');
   }
 }
