@@ -77,6 +77,8 @@ export interface ElectronAPI {
   maximizeWindow: () => void
   closeWindow: () => void
   isMaximized: () => Promise<boolean>
+  isFullScreen: () => Promise<boolean>
+  onFullscreenChange: (callback: (isFullscreen: boolean) => void) => void
   setWindowControlsColor: (colors: { symbolColor: string }) => void
   toggleDevTools: () => void
   openUserDataFolder: () => void

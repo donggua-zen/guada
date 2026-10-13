@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-center justify-between gap-2 h-10 drag-region"
-    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible }">
+    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible && !isFullscreen }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
       <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
@@ -34,11 +34,15 @@ import { useLayoutStore } from '@/stores/layout'
 import { useI18n } from 'vue-i18n'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
+import { useFullscreen } from '@/composables/useFullscreen'
 
 const { t } = useI18n()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI?.platform === 'darwin'
+
+// 全屏（macOS 隐藏红绿灯）时取消为其预留的左侧留白
+const { isFullscreen } = useFullscreen()
 
 /**
  * 页面通用标题栏组件

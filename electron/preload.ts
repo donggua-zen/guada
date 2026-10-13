@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   isMaximized: () => ipcRenderer.invoke('is-window-maximized'),
+  // 全屏状态：macOS 原生全屏会隐藏红绿灯，标题栏需据此取消为其预留的左侧留白
+  isFullScreen: () => ipcRenderer.invoke('is-window-fullscreen'),
+  onFullscreenChange: (callback: (isFullscreen: boolean) => void) => {
+    ipcRenderer.on('window-fullscreen-changed', (_, isFullscreen) => callback(isFullscreen))
+  },
   setWindowControlsColor: (colors: { symbolColor: string }) =>
     ipcRenderer.send('titlebar-overlay-color', colors),
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),

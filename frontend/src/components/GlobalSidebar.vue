@@ -3,7 +3,7 @@
     <!-- 标题栏左侧面板 -->
     <!-- macOS：为系统红绿灯按钮预留左侧空间，避免遮挡 logo/菜单 -->
     <!-- Windows(Electron)：隐藏——logo/图标按钮已移入 MainLayout 的独立标题栏行 -->
-    <div v-if="!isElectron || isMac" :class="{ 'mac-sidebar-title-padding': isMac }">
+    <div v-if="!isElectron || isMac" :class="{ 'mac-sidebar-title-padding': isMac && !isFullscreen }">
       <TitlebarLeftPanel />
     </div>
     <!-- 导航菜单 -->
@@ -277,6 +277,7 @@ import { useSessionGroupStore } from '../stores/sessionGroup'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
+import { useFullscreen } from '../composables/useFullscreen'
 import { Avatar, ScrollContainer } from './ui'
 import SessionTitle from './SessionTitle.vue'
 import ThinkingStatus from './chat/ThinkingStatus.vue'
@@ -319,6 +320,9 @@ import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI?.platform === 'darwin'
+
+// 全屏（macOS 隐藏红绿灯）时取消为其预留的左侧留白
+const { isFullscreen } = useFullscreen()
 
 const router = useRouter()
 const route = useRoute()
