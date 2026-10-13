@@ -332,16 +332,25 @@ jobs:
           done
 
   # ------------------------------------------------- Gitee / GitCode 镜像 release
-  # 只发 release、不传二进制（Gitee 单附件上限 100M，安装包 200M+ 放不进去；
-  # GitCode 附件接口支持但限额未文档化，暂不依赖）。正文里列出 GitHub 的下载地址。
+  # Gitee **只发 release**：单附件上限 100M（官方文档），安装包 200M+ 放不进去。
+  # GitCode **发 release 并上传安装包**：附件走「取预签名地址 → PUT」两段式，用户实测限额够用。
+  # 两者的正文都复用 GitHub 的版本说明并附下载地址。
   # 未配置 token 时跳过；任何失败都不影响 GitHub 这条主发布线。
   publish-mirrors:
     name: Gitee / GitCode release
     needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
+      - name: 取回两个平台的安装包
+        uses: actions/download-artifact@v7
+        # 产物上传偶发抖动时这里也会失败：GitCode 会因此没有附件，但不影响 Gitee 与 GitHub
+        continue-on-error: true
+        with:
+          path: artifacts
+          merge-multiple: true
+
       - name: 汇总版本说明与下载地址
         env:
           GH_TOKEN: ${{ github.token }}
@@ -357,11 +366,11 @@ jobs:
             echo "## 下载"
             echo ""
             jq -r '.assets[] | select(.name | endswith(".dmg") or endswith(".exe")) | "- \(.name)（\(.size / 1048576 | floor) MB）：\(.url)"' /tmp/gh-release.json
-            echo ""
-            echo "> 国内访问 GitHub 较慢时，可从项目主页或应用内「设置 → 关于 → 检查更新」获取最新版。"
           } >> /tmp/body.md
           echo "=== 生成的正文 ==="
           cat /tmp/body.md
+          echo "=== 取回的安装包 ==="
+          ls -la artifacts 2>/dev/null || echo "（没有取到产物）"
 
       - name: 建/更新 Gitee release（无二进制）
         env:
@@ -375,7 +384,8 @@ jobs:
             exit 0
           fi
           api="https://gitee.com/api/v5/repos/zhendongdong/guada_ai"
-          body=$(jq -Rs . < /tmp/body.md)
+          { cat /tmp/body.md; echo ""; echo "> 本页未附安装包：Gitee 单附件上限 100M，安装包 200M+ 放不进去，下载请用上方 GitHub 链接。"; } > /tmp/body-gitee.md
+          body=$(jq -Rs . < /tmp/body-gitee.md)
           # 先按 tag 查是否已存在：存在就更新（tag 重指过的情况），否则新建
           id=$(curl -s "$api/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" | jq -r '.id // empty')
           if [ -n "$id" ]; then
@@ -399,7 +409,7 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: 建/更新 GitCode release（无二进制）
+      - name: 建/更新 GitCode release 并上传安装包
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
@@ -407,12 +417,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GITCODE_TOKEN:-}" ]; then
-            echo "::warning::未配置 GITCODE_TOKEN，跳过 GitCode release"
+            echo "::warning::未配置 GITCODE_TOKEN，跳过 GitCode"
             exit 0
           fi
           api="https://api.gitcode.com/api/v5/repos/donggua_sherlock/GuaDaAI"
           auth="Authorization: Bearer $GITCODE_TOKEN"
-          body=$(jq -Rs . < /tmp/body.md)
+          { cat /tmp/body.md; echo ""; echo "> 本页附件即安装包：macOS (Apple Silicon) 与 Windows (x64)。"; } > /tmp/body-gitcode.md
+
+          # 1) 建或更新 release（先按 tag 查，存在就 PATCH）
+          body=$(jq -Rs . < /tmp/body-gitcode.md)
           exists=$(curl -s -H "$auth" "$api/releases/tags/$TAG_NAME" | jq -r '.tag_name // empty')
           if [ -n "$exists" ]; then
             payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" \
@@ -427,10 +440,41 @@ jobs:
               -d "$payload" "$api/releases")
             action=创建
           fi
-          if printf '%s' "$resp" | jq -e '.tag_name' >/dev/null 2>&1; then
-            echo "::notice::GitCode release $action 成功：$TAG_NAME"
-          else
+          if ! printf '%s' "$resp" | jq -e '.tag_name' >/dev/null 2>&1; then
             echo "::error::GitCode release $action 失败：$(printf '%s' "$resp" | head -c 300)"
+            exit 1
+          fi
+          echo "::notice::GitCode release $action 成功：$TAG_NAME"
+
+          # 2) 上传附件：先取预签名地址（附带一组必须原样回传的 headers），再 PUT 上传
+          shopt -s nullglob
+          count=0
+          for f in artifacts/*.dmg artifacts/*.exe artifacts/*.yml; do
+            count=$((count + 1))
+            name=$(basename "$f")
+            enc=$(jq -rn --arg v "$name" '$v|@uri')
+            info=$(curl -s -H "$auth" "$api/releases/$TAG_NAME/upload_url?file_name=$enc")
+            url=$(printf '%s' "$info" | jq -r '.url // empty')
+            if [ -z "$url" ]; then
+              echo "::error::GitCode 取上传地址失败（$name）：$(printf '%s' "$info" | head -c 300)"
+              exit 1
+            fi
+            hdr=()
+            while IFS=$'\t' read -r k v; do
+              [ -n "$k" ] && hdr+=(-H "$k: $v")
+            done < <(printf '%s' "$info" | jq -r '.headers | to_entries[] | "\(.key)\t\(.value)"')
+            echo "上传 $name（$(( $(stat -c%s "$f") / 1048576 )) MB）…"
+            code=$(curl -s -o /tmp/put.out -w '%{http_code}' --max-time 900 \
+              -X PUT "${hdr[@]}" --data-binary "@$f" "$url")
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+              echo "::notice::GitCode 附件上传成功：$name"
+            else
+              echo "::error::GitCode 附件上传失败（$name，HTTP $code）：$(head -c 300 /tmp/put.out)"
+              exit 1
+            fi
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "::error::GitCode 没有可上传的安装包（产物未取到？见上一步的 ls 输出）"
             exit 1
           fi
         continue-on-error: true
