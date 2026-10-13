@@ -105,6 +105,13 @@ pnpm run build:electron
 ```
 
 > macOS 构建请使用 `pnpm run build:electron:mac`（等价命令，显式指定 `electron-builder --mac`）。
+>
+> **⚠️ macOS 包只能在 macOS 上构建。** 在 Windows 上构建 mac 目标是 electron-builder 的
+> 硬性拒绝（报错原文 `Build for macOS is supported only on macOS`），不是配置能绕过的：
+> dmg 依赖 `hdiutil`、签名依赖 `codesign`，都是 macOS 专有工具，原生模块也必须按 darwin
+> 架构重建。所以 Windows 开发机出不了 mac 包，**推荐用 CI 出包**：
+> `.github/workflows/release-macos.yml` 会在推送 `v*` tag 时自动构建 arm64 与 x64 两个 dmg
+> （GitHub 托管 runner，公开仓库免费）。手工出包则需在一台 mac 上执行上面的命令。
 
 构建过程包括：
 1. 构建后端（TypeScript → JavaScript）
@@ -142,15 +149,76 @@ pnpm run build:electron:dir              # 只生成未打包目录（本地验�
 
 ### 3. 构建产物
 
-构建完成后，安装包位于 `release/` 目录：
+构建完成后，安装包位于 `release/` 目录。本项目未覆盖 `artifactName`，以下为 electron-builder
+的默认命名（`<版本>` 取自 `package.json`）：
 
 ```
 release/
-├── GuaDa-AI-Setup-1.0.0.exe          # Windows 安装程序
-├── GuaDa-AI-1.0.0.dmg                # macOS 安装包
-├── GuaDa-AI-1.0.0.AppImage           # Linux AppImage
-└── ...
+├── GuaDa Setup 1.0.0.exe             # Windows 安装程序
+├── GuaDa-1.0.0-arm64.dmg             # macOS 安装包（Apple Silicon）
+├── GuaDa-1.0.0-x64.dmg               # macOS 安装包（Intel）
+├── GuaDa-1.0.0.AppImage              # Linux AppImage
+└── latest.yml                        # 更新元数据（随构建生成）
 ```
+
+> dmg 的产物名**恒带架构后缀**，所以一次构建只产出目标架构的那一个；两个架构要分别构建
+> （见 2.1 与 4.5）。
+
+### 4. macOS 安装与签名
+
+macOS 的 Gatekeeper 会拦截所有**未签名且未公证**的应用，而目前分发的 dmg 正属于这一类：
+没有 Apple Developer 账号时，electron-builder 会跳过签名，并在构建日志里打印
+`skipped macOS application code signing`。用户首次安装需要手动放行一次。
+
+#### 4.1 安装步骤（用户侧）
+
+1. 打开 dmg，把 **GuaDa** 拖进「应用程序」
+2. 清除隔离属性（关键步骤，否则系统会以「来源不明」为由拦截）：
+
+   ```bash
+   xattr -cr /Applications/GuaDa.app
+   ```
+
+3. 正常双击打开
+
+> 右键 →「打开」→「仍要打开」也能过，但只对当次有效，且部分系统版本上不出现「仍要打开」
+> 入口。`xattr -cr` 一次到位，是推荐做法。
+
+#### 4.2 如果提示「已损坏，无法打开」
+
+Apple Silicon 上未签名的应用常报这个错 —— **不是文件真的损坏**，是 Gatekeeper 对
+「无签名 + 有隔离属性」组合给出的误导性提示。执行完 4.1 的 `xattr -cr` 后若仍然报，
+补一次 **ad-hoc 签名**（本机自签，不需要任何证书）：
+
+```bash
+codesign --force --deep --sign - /Applications/GuaDa.app
+```
+
+再打开即可。`--deep` 会连同 `Contents/Frameworks` 下的 Electron 组件一起重签。
+
+#### 4.3 正式签名与公证（可选，当前未启用）
+
+要让用户**双击即开、零步骤**，需要 Apple Developer 账号（$99/年）并走完整链路：
+先用 `Developer ID Application` 证书签名（electron-builder 的 `mac.identity`），再提交
+Apple 公证（notarization）并 stapling。两步都能放进 CI（证书与 Apple ID 凭据存 GitHub
+Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执行 4.1 / 4.2 的放行步骤。
+
+#### 4.4 已知限制：Intel（x64）版缺沙盒二进制
+
+`mac.extraResources` 目前只打包 `sandbox/sandbox-macos-arm64`，而运行时是按
+`sandbox-macos-${process.arch}` 查找的（`backend-ts/src/modules/shell/process-manager.service.ts`
+的 `resolveSandboxBin`）。因此 **x64 版 mac 包里没有可用的沙盒二进制**：用户在会话里开启
+沙盒档位后，shell 工具会直接报错拒绝执行（fail-closed，不会静默降级成无沙盒运行）。
+
+要支持 Intel 版的沙盒，需要先补一个 `sandbox/sandbox-macos-x64` 二进制并加进
+`mac.extraResources`；该二进制如何构建尚未写进 `sandbox/README.md`。
+
+#### 4.5 构建方式选择
+
+| 方式 | 适用 | 说明 |
+|------|------|------|
+| CI（推荐） | 正式发版 | 推 `v*` tag 触发 `.github/workflows/release-macos.yml`，arm64 + x64 双 job 分别构建，产物上传为 Actions artifact（tag 构建时同时附到 GitHub Release） |
+| 本机 mac | 调试、临时验证 | `pnpm run build:electron:mac`，产物架构 = 本机架构。要出另一架构需同时指定 `TARGET_ARCH` 与 electron-builder 的 `--x64`/`--arm64`（见 2.1） |
 
 ---
 
@@ -403,9 +471,26 @@ grep "ERROR" ~/Library/Application\ Support/GuaDa/logs/error-*.log | tail -50
 
 ## 八、更新与升级
 
-### 自动更新（待实现）
+### 检查更新（已实现）
 
-未来版本将支持自动更新功能。
+「设置 → 关于 → 检查更新」会请求自建接口（实现见 `electron/main.ts` 的 `doCheckForUpdates`）：
+
+```
+https://ai.dingd.cn/api/check_update?version=<当前版本>&platform=<win|mac|linux>
+```
+
+接口返回 `hasUpdate` 及 `downloadUrl` / `releaseNotes` 等字段，界面据此显示「有新版本」并
+给出下载按钮 —— 点击后用系统浏览器打开 `downloadUrl`。**没有自动下载，也没有静默安装**，
+项目未使用 electron-updater。
+
+> 该接口由本仓库之外的服务提供，因此**发布新版本时除了产出安装包，还要同步更新它的数据**
+> （新版本号与下载地址），否则应用内的「检查更新」查不到新版本。这一步目前是手工的。
+
+### 自动更新（未实现）
+
+electron-builder 的 `publish` 配置（GitHub + 自建 generic 源）目前不参与实际分发：应用内没有
+electron-updater，`publish.owner` 也仍是占位符 `your-username`。若要启用自动更新，需要先补齐
+这两处。
 
 ### 手动更新
 
@@ -507,26 +592,42 @@ grep "ERROR" ~/Library/Application\ Support/GuaDa/logs/error-*.log | tail -50
 
 ### package.json 中的相关脚本
 
-```json
+```jsonc
 {
   "scripts": {
-    "dev:electron": "启动 Electron 开发环境",
-    "build:electron": "构建 Electron 生产版本",
-    "rebuild:electron": "重新编译原生模块"
+    // 完整构建（顶层入口）
+    "build:electron": "完整构建（当前平台，Windows 出 nsis）",
+    "build:electron:mac": "完整构建（macOS，出 dmg）",
+    "build:electron:dir": "只生成未打包目录，本地验证最快",
+
+    // 完整构建的三个阶段（一般不用单独跑）
+    "build:electron:pre": "清理 release/ + 编译 Electron 主进程 TS",
+    "build:electron:backend": "后端编译 + 依赖裁剪 + 原生模块重建（按当前平台）",
+    "build:electron:frontend": "前端构建（ELECTRON=true）",
+    "build:electron:package": "electron-builder 打包（Windows nsis）",
+    "build:electron:package:mac": "electron-builder 打包（macOS dmg）",
+
+    // 单独执行
+    "optimize:electron-deps": "按当前平台裁剪后端原生二进制",
+    "optimize:electron-deps:mac": "按 macOS 裁剪",
+    "rebuild:backend-native:electron": "只为 Electron ABI 重建原生模块"
   }
 }
 ```
 
+> 注意 `build:electron:package:mac` 等价于 `electron-builder --mac`，**不带架构参数**；而
+> `mac.target` 同时声明了 x64 与 arm64，所以它会在当前机器架构上构建。要指定架构请直接调用
+> `npx electron-builder --mac --arm64`（或 `--x64`）。
+
 ### 构建流程
 
-1. **清理**：删除之前的构建产物
-2. **后端构建**：`cd backend-ts && pnpm run build`
-3. **前端构建**：`cd frontend && pnpm run build`
-4. **Electron 打包**：使用 electron-builder 打包
-5. **原生模块重建**：针对 Electron ABI 重新编译原生模块
-6. **签名**（macOS/Windows）：代码签名
-7. **生成安装包**：创建 installer
+1. **清理**：删除 `release/` 下的旧产物
+2. **主进程编译**：`cd electron && tsc`
+3. **后端构建**：`nest build` → 按目标平台裁剪原生二进制 → 为 Electron ABI 重建原生模块
+4. **前端构建**：`cd frontend && pnpm run build`（`ELECTRON=true`）
+5. **Electron 打包**：electron-builder 生成 .app/dmg 或 nsis 安装包
+6. **签名**：Windows 未签名；macOS 未签名，安装放行步骤见第 4 章
 
 ---
 
-**最后更新**: 2026-05-12
+**最后更新**: 2026-10-13
