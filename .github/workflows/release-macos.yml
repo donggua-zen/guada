@@ -202,6 +202,9 @@ jobs:
           tag="$GITHUB_REF_NAME"
           # 两个架构的 job 并发执行：先到的建 Release，后到的容忍"已存在"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          # 草稿要显式发布：删掉带 Release 的 tag 再重建时，GitHub 会把原 Release 转为草稿，
+          # 那样附件传上去了对外仍不可见（1.0.1 重指 tag 时踩到过）。
+          gh release edit "$tag" --draft=false --latest 2>/dev/null || true
           gh release upload "$tag" release/*.dmg --clobber
           if [ -f release/latest-mac.yml ]; then
             gh release upload "$tag" release/latest-mac.yml --clobber
