@@ -509,7 +509,7 @@ describe('JsonlSessionContext 压缩配置档位', () => {
       enabled: true,
       compressionTriggerRatio: 0.9,
       compressionRetainRatio: 0.2,
-      summaryMode: 'memory_sync',
+      summaryMode: 'fast',
     });
   });
 
@@ -527,7 +527,7 @@ describe('JsonlSessionContext 压缩配置档位', () => {
       enabled: true,
       compressionTriggerRatio: 0.9,
       compressionRetainRatio: 0.4,
-      summaryMode: 'memory_sync',
+      summaryMode: 'fast',
     });
   });
 });

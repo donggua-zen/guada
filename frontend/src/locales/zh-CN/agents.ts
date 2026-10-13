@@ -72,14 +72,14 @@ export default {
     modelUseDefault: '使用默认模型',
     // 记忆与压缩
     compressionTier: '压缩策略',
-    compressionTierHint: '内置档位，同时决定触发时机、保留比例与摘要方式',
+    compressionTierHint: '内置档位，同时决定触发阈值、保留比例与是否摘要',
     compressionTierPlaceholder: '请选择压缩策略',
     tierOff: '关闭压缩',
     tierOffDesc: '关闭压缩 - 不裁剪、不摘要，完整保留全部历史',
     tierConservative: '保守',
-    tierConservativeDesc: '保守 - 90% 触发、保留 40%，摘要前先同步记忆',
+    tierConservativeDesc: '保守 - 90% 触发、保留 40%',
     tierAggressive: '激进',
-    tierAggressiveDesc: '激进 - 90% 触发、保留 20%，摘要前先同步记忆',
+    tierAggressiveDesc: '激进 - 90% 触发、保留 20%',
     // 提示词
     systemPromptLabel: '系统系提示(智能体设定)',
     systemPromptPlaceholder: '请输入详细设定',
@@ -109,8 +109,8 @@ export default {
     noAgentsHint: '请先创建其他智能体',
     // 提示
     tipTitle: '提示',
-    tip1: '• 压缩策略：档位同时决定触发时机、保留比例与摘要方式',
-    tip2: '• 摘要前会先执行记忆同步，将关键信息保存到记忆文件，防止压缩丢失',
+    tip1: '• 压缩策略：档位同时决定触发阈值、保留比例与是否摘要',
+    tip2: '• 长期记忆由模型在对话中自行维护，记忆索引随上下文注入',
     tip3: '• 关闭压缩后仍可在会话面板手动触发一次压缩',
     // 通用
     noDescription: '暂无描述',

@@ -26,22 +26,33 @@ describe('COMPRESSION_TIER_PRESETS', () => {
     });
   });
 
-  it('保守档：触发 0.9 / 保留 0.4 / memory_sync', () => {
+  it('保守档：触发 0.9 / 保留 0.4 / FAST（当前不跑压缩前影子轮次）', () => {
     expect(COMPRESSION_TIER_PRESETS[CompressionTier.CONSERVATIVE]).toEqual({
       enabled: true,
       triggerRatio: 0.9,
       retainRatio: 0.4,
-      summaryMode: SummaryMode.MEMORY_SYNC,
+      summaryMode: SummaryMode.FAST,
     });
   });
 
-  it('激进档：触发 0.9 / 保留 0.2 / memory_sync', () => {
+  it('激进档：触发 0.9 / 保留 0.2 / FAST（当前不跑压缩前影子轮次）', () => {
     expect(COMPRESSION_TIER_PRESETS[CompressionTier.AGGRESSIVE]).toEqual({
       enabled: true,
       triggerRatio: 0.9,
       retainRatio: 0.2,
-      summaryMode: SummaryMode.MEMORY_SYNC,
+      summaryMode: SummaryMode.FAST,
     });
+  });
+
+  it('两档预设都不再触发压缩前影子轮次（禁用意图契约）', () => {
+    // 重新启用影子轮次 = 把预设改回 MEMORY_SYNC；这条断言失败说明有人改了开关点，
+    // 需同步更新 docs/memory.md 的"当前禁用"说明与用户可见文案。
+    expect(COMPRESSION_TIER_PRESETS[CompressionTier.CONSERVATIVE].summaryMode).not.toBe(
+      SummaryMode.MEMORY_SYNC,
+    );
+    expect(COMPRESSION_TIER_PRESETS[CompressionTier.AGGRESSIVE].summaryMode).not.toBe(
+      SummaryMode.MEMORY_SYNC,
+    );
   });
 
   it('默认档位为保守', () => {

@@ -6,7 +6,12 @@ import { PluginContext } from "../types/plugin.types";
 import { PluginApi } from "../api/plugin-api";
 import {
   MEMORY_INDEX_FILE,
+  MEMORY_INDEX_MAX_BYTES,
   MEMORY_INDEX_MAX_LINES,
+  MEMORY_INDEX_SOFT_BYTES,
+  MEMORY_INDEX_SOFT_LINES,
+  countIndexLines,
+  isIndexOverSoftCap,
   resolveMemoryDir,
   type MemoryScopeRef,
 } from "../../../common/utils/memory-path.util";
@@ -20,12 +25,13 @@ import langEn from "./memory.lang.en.json";
  *   主会话  → <workspace>/.guada/memory/
  *   子智能体 → <workspace>/.guada/subagents/<sessionId>/memory/（完全隔离）
  *
- * MEMORY.md 是索引，只有它被注入上下文（前 INDEX_MAX_LINES 行）；明细文件由 AI
- * 用文件工具按需读取。索引与明细的写入也全部由 AI 用文件工具完成——格式、排序、
- * 瘦身都靠注入的维护指南约束，代码不做校验也不自动追加。
+ * MEMORY.md 是索引，只有它被注入上下文（前 MEMORY_INDEX_MAX_LINES 行）；明细文件由 AI
+ * 用文件工具按需读取。索引与明细的写入也全部由 AI 用文件工具完成——格式、排序、瘦身
+ * 靠本插件注入的维护指南约束（代码不校验格式），但**体积是确定性强制**的：
+ * FilePlugin 的 evaluateMemoryIndexCap 会拒绝把索引写得超硬上限且更长的写入。
  *
  * 压缩前的记忆维护影子轮次见 chat/memory-sync.service.ts：它在记忆目录牢笼内
- * 复用文件工具（setToolScope("file") + setPathJail），不走独立记忆工具。
+ * 复用文件工具（setToolScope("file") + setPathJail），不走独立记忆工具（当前禁用）。
  */
 @Injectable()
 export class MemoryPlugin extends PluginBase {
@@ -94,9 +100,13 @@ export class MemoryPlugin extends PluginBase {
     const indexPath = path.join(memoryDir, MEMORY_INDEX_FILE);
     const raw = await this.readIfExists(indexPath);
 
-    const lines = raw === null ? [] : raw.replace(/\r\n/g, "\n").split("\n");
-    const visible = lines.slice(0, MEMORY_INDEX_MAX_LINES);
-    const hiddenCount = lines.length - visible.length;
+    const normalized = raw === null ? null : raw.replace(/\r\n/g, "\n");
+    const totalLines = raw === null ? 0 : countIndexLines(raw);
+    const bytes = raw === null ? 0 : Buffer.byteLength(raw, "utf8");
+    const visible =
+      normalized === null
+        ? []
+        : normalized.split("\n").slice(0, MEMORY_INDEX_MAX_LINES);
 
     const parts: string[] = [];
     parts.push("# Memory");
@@ -107,9 +117,13 @@ export class MemoryPlugin extends PluginBase {
         ? "(no memory index yet)"
         : visible.join("\n"),
     );
-    if (hiddenCount > 0) {
+    if (totalLines > MEMORY_INDEX_MAX_LINES) {
       parts.push(
-        `... index has ${lines.length} lines; only the first ${MEMORY_INDEX_MAX_LINES} are injected. Consolidate older entries (merge or drop them) so the important ones stay visible.`,
+        `... index has ${totalLines} lines; only the first ${MEMORY_INDEX_MAX_LINES} are injected. Consolidate older entries (merge or drop them) so the important ones stay visible.`,
+      );
+    } else if (raw !== null && isIndexOverSoftCap(totalLines, bytes)) {
+      parts.push(
+        `... index is at ${totalLines} lines / ${bytes} bytes (soft cap ${MEMORY_INDEX_SOFT_LINES} lines / ${MEMORY_INDEX_SOFT_BYTES} bytes). Still fully injected, but consolidate soon — hard cap ${MEMORY_INDEX_MAX_LINES} lines / ${MEMORY_INDEX_MAX_BYTES} bytes, past which writes that grow it are refused.`,
       );
     }
     parts.push("</memory-index>");
@@ -120,7 +134,10 @@ export class MemoryPlugin extends PluginBase {
 
   /**
    * 记忆维护指南：常驻注入（原 `memory` 工具的说明搬家到这里）。
-   * 索引格式、排序与瘦身约定只在这里约束，代码不校验。
+   *
+   * 索引的**格式与排序**只在这里约束（代码不校验）；**体积**由 FilePlugin 的上限守卫
+   * 确定性强制（超硬上限且变长的写入会被拒绝），因此这里必须与 memory-path.util.ts
+   * 的常量保持同一口径。
    */
   private buildMaintenanceGuide(memoryDir: string): string {
     return [
@@ -129,14 +146,37 @@ export class MemoryPlugin extends PluginBase {
       `Long-term memory lives in this session's memory directory: ${memoryDir}`,
       `\`${MEMORY_INDEX_FILE}\` is the index and the only file injected into your context (first ${MEMORY_INDEX_MAX_LINES} lines). Detail files hold the full content and are read on demand.`,
       "",
-      "Rules:",
-      "- One index entry per line: `[title](topic/file.md) — one-line summary`",
-      "- Order entries by importance: the most load-bearing memories first",
-      `- Keep the index under ${MEMORY_INDEX_MAX_LINES} lines. Lines beyond that are never injected, so consolidate (merge or drop) old entries instead of appending forever`,
+      "## Index format",
+      "One line per memory, grouped under four headings in this order:",
+      "- `## user` — who the user is: identity, role, expertise, durable preferences about them",
+      "- `## feedback` — reusable corrections and working methods (how to work, not task-local state)",
+      "- `## project` — goals, decisions, constraints, blockers, next step needed to resume (absolute dates)",
+      "- `## reference` — pointers to external resources: URLs, dashboards, tickets, log paths",
+      "",
+      "- Entry line: `[title](topic/file.md) — one-line summary`; order entries by importance inside each heading",
+      "- A `feedback` or `project` detail file must carry a `Why:` line and a `How to apply:` line in its body",
+      "- `feedback` is how to work (applies across tasks); `project` is what we are working on (\"reply in Chinese\" = feedback; \"resume the blocked serializer test\" = project)",
+      "",
+      "## Caps",
+      `- Soft cap ${MEMORY_INDEX_SOFT_LINES} lines / ${MEMORY_INDEX_SOFT_BYTES} bytes — consolidate when you pass it`,
+      `- Hard cap ${MEMORY_INDEX_MAX_LINES} lines / ${MEMORY_INDEX_MAX_BYTES} bytes — anything past it is never injected, and a write that would grow the index past the hard cap is REFUSED; shrinking writes always pass, so you can compact step by step`,
+      "- Keep the index under the hard cap. One line = one hook + link; prose that leaked onto an index line belongs in the detail file",
+      "",
+      "## When to write",
+      "- When the user asks you to remember something, or you learn a durable preference, environment fact or recurring correction",
+      "- When a task finishes, run ONE curation checkpoint. It is a judgement, not a write: promote what is durable, retire the transient state of this task, and when nothing qualifies write nothing and say so — an empty checkpoint is a complete checkpoint",
+      "- Before starting a new thread or a large context switch, sync once",
+      "- Never append a per-turn log, and never touch a file just to mark it fresh — a timestamp is not a memory",
+      "",
+      "## What NOT to store",
+      "- Anything the repo, git history or docs already record — point at them instead; a duplicate is a second source of truth that will drift",
+      "- Current state that rots: versions, tip commits, test counts — store where to read them",
+      "- More than one live `project` note for unfinished work: update it in place, never a dated series (`state-2026-01-15.md`)",
+      "- Task progress, session results, TODO states",
+      "- Secret values (keys, tokens, passwords) — record only where a secret lives",
+      "",
       "- Put detail files in topic subdirectories you choose (e.g. `prefs/`, `feedback/`, `arch/`)",
-      "- When the user asks you to remember something, or you learn a durable preference, environment fact or recurring correction, write a detail file and add its index entry with the file tools",
       "- Prefer updating an existing entry over adding a near-duplicate one",
-      "- Do NOT store task progress, session results or TODO states in memory",
       "- Memory files go under the memory directory above (this is the prompt-specified location for `.guada` files)",
     ].join("\n");
   }
