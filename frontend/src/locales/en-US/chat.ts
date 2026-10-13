@@ -355,6 +355,7 @@
     refreshPreview: 'Refresh Preview',
     imageAlt: 'Image Preview',
     unsupportedPreview: 'This file does not support preview',
+    binaryNotPreview: 'Binary file — preview not supported',
     openInExplorer: 'Open in Explorer',
     fileNotFound: 'File no longer exists',
     closeTab: 'Close Tab',

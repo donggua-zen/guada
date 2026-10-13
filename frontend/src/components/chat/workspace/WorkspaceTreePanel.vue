@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
+import { writeTextToClipboard } from '@/utils/clipboard'
 import { ref, computed, watch, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -180,7 +181,9 @@ function handleTreeNodeSelect(node: WorkspaceNode) {
 async function handleFileSelect(node: WorkspaceNode, opts: { persistent?: boolean } = {}) {
     if (node.isDirectory) return;
 
-    const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
+    // 无点时取空串：否则 lastIndexOf('.') 为 -1、substring(-1) 被钳到 0，
+    // "扩展名"会变成整个文件名（LICENSE → .license），把无后缀文件误判成未知格式
+    const ext = node.name.includes('.') ? node.name.substring(node.name.lastIndexOf('.')).toLowerCase() : '';
     const file = { path: node.path, name: node.name, extension: ext, size: node.size || 0 };
 
     // 正常路径：树可见 ⇒ 必有激活文件标签。返回 false 仅为防御（如激活态刚被清空）
@@ -276,48 +279,11 @@ function closeContextMenu() {
 }
 
 /**
- * 安全写入剪贴板
+ * 安全写入剪贴板（实现见 utils/clipboard，失败时提示）
  */
 async function writeToClipboard(text: string): Promise<void> {
-    if (!text) return;
-
-    const electronAPI = window.electronAPI;
-
-    // 优先使用 Electron IPC 方式
-    if (electronAPI?.clipboardIPC?.writeText) {
-        try {
-            const result = await electronAPI.clipboardIPC.writeText(text);
-            if (!result.success) {
-                throw new Error(result.error);
-            }
-            return;
-        } catch (error) {
-            console.warn('[Workspace] IPC 写入失败，尝试其他方式:', error);
-        }
-    }
-
-    // 尝试直接调用 preload 暴露的 clipboard API
-    if (electronAPI?.clipboard?.writeText) {
-        try {
-            electronAPI.clipboard.writeText(text);
-            return;
-        } catch (error) {
-            console.warn('[Workspace] 直接调用失败:', error);
-        }
-    }
-
-    // 回退到 Web Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        try {
-            await navigator.clipboard.writeText(text);
-        } catch (error) {
-            console.error('[Workspace] Web Clipboard API 写入失败:', error);
-            ElMessage.error(t('chat.workspace.copyFailed'));
-        }
-    } else {
-        console.error('[Workspace] 所有剪贴板 API 都不可用');
-        ElMessage.error(t('chat.workspace.copyFailed'));
-    }
+    const ok = await writeTextToClipboard(text);
+    if (!ok) ElMessage.error(t('chat.workspace.copyFailed'));
 }
 
 /**

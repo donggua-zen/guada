@@ -4,6 +4,7 @@ import {
   resolveServingMimeType,
   isVisionImageMediaType,
   isRasterImageExtension,
+  isKnownExtension,
   RASTER_IMAGE_EXTENSIONS,
 } from './media-type.util';
 
@@ -114,6 +115,26 @@ describe('media-type.util', () => {
       for (const ext of ['svg', 'ico', 'psd', 'ai', 'eps']) {
         expect(isRasterImageExtension(ext)).toBe(false);
       }
+    });
+  });
+
+  describe('isKnownExtension（工作区预览：已知则信任后缀，未知才嗅探内容）', () => {
+    it('契约表与文本/代码覆盖层里的扩展名 → true（带点/大小写无关）', () => {
+      for (const ext of ['png', '.PNG', 'mp4', 'pdf', 'svg', 'ico', 'psd', 'md', 'json', 'css', '.ts', 'vue', 'yaml']) {
+        expect([ext, isKnownExtension(ext)]).toEqual([ext, true]);
+      }
+    });
+
+    it('空/未登记扩展名 → false（无后缀文件必须走内容嗅探）', () => {
+      for (const ext of ['', undefined, null, '.xyz', 'LICENSE']) {
+        expect([ext, isKnownExtension(ext as string)]).toEqual([ext, false]);
+      }
+    });
+
+    it('判定只看「表里有没有」，不看 MIME 值（octet-stream 也可能是未登记格式）', () => {
+      // 未登记的扩展名即便回退成 octet-stream，也必须判为未知 → 触发嗅探
+      expect(mimeFromExtension('xyz')).toBe('application/octet-stream');
+      expect(isKnownExtension('xyz')).toBe(false);
     });
   });
 

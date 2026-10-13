@@ -1,17 +1,29 @@
 import type { ApiContext } from "./api-context";
 import type { WorkspaceNode } from "@/types/workspace";
 
+export interface WorkspaceFileResponse {
+  path: string;
+  name: string;
+  extension: string;
+  size: number;
+  content: string;
+  mimeType: string;
+  /** 是否为二进制（仅 sniff 请求会真正判定；普通请求恒为 false） */
+  isBinary: boolean;
+  /** 嗅探出的文本编码（iconv-lite 名称），未嗅探时为 'utf-8' */
+  encoding?: string;
+  /** 嗅探出的真实后缀（带点，如 '.png'）；未命中为 '' */
+  detectedExtension?: string;
+}
+
 export interface WorkspaceApi {
   getWorkspaceTree(sessionId: string): Promise<{ tree: WorkspaceNode[] }>;
   getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: WorkspaceNode[] }>;
-  getWorkspaceFile(sessionId: string, filePath: string): Promise<{
-    path: string;
-    name: string;
-    extension: string;
-    size: number;
-    content: string;
-    mimeType: string;
-  }>;
+  getWorkspaceFile(
+    sessionId: string,
+    filePath: string,
+    options?: { sniff?: boolean },
+  ): Promise<WorkspaceFileResponse>;
   getWorkspaceRawFileUrl(sessionId: string, filePath: string): string;
   getWorkspaceHtmlPreviewUrl(sessionId: string, filePath: string): string;
   deleteWorkspaceFile(sessionId: string, filePath: string): Promise<{ success: boolean; isDirectory?: boolean }>;
@@ -31,19 +43,19 @@ export const workspaceApi: WorkspaceApi = {
     );
   },
 
-  async getWorkspaceFile(this: ApiContext, sessionId: string, filePath: string) {
+  async getWorkspaceFile(
+    this: ApiContext,
+    sessionId: string,
+    filePath: string,
+    options?: { sniff?: boolean },
+  ) {
     // 非 file:// 页面（Web / Electron Dev）覆盖为相对路径，走 Vite proxy（同源），
     // 使 Set-Cookie 作用在页面源上，后续 img 请求才能携带 cookie
     const isFileProto = typeof window !== 'undefined' && window.location.protocol === 'file:';
-    return await this._request<{
-      path: string;
-      name: string;
-      extension: string;
-      size: number;
-      content: string;
-      mimeType: string;
-    }>(
-      `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
+    // sniff=1：后缀不可信时让后端读文件头判定文本/二进制与真实格式（见 file-sniff.util）
+    const sniffQuery = options?.sniff ? '&sniff=1' : '';
+    return await this._request<WorkspaceFileResponse>(
+      `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}${sniffQuery}`,
       isFileProto ? undefined : { baseURL: '/api/v1' },
     );
   },

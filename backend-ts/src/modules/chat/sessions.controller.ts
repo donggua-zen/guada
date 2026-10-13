@@ -30,7 +30,8 @@ import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import { resolveSessionAttachmentPath } from '../../common/utils/session-path.util';
 import { resolveAttachmentResponseHeaders } from '../../common/utils/attachment-serving.util';
-import { resolveServingMimeType } from '../../common/utils/media-type.util';
+import { resolveServingMimeType, isKnownExtension } from '../../common/utils/media-type.util';
+import { sniffFileHead, decodeTextWithEncoding, type FileSniffResult } from '../../common/utils/file-sniff.util';
 
 /** 预览类资源（位图/音视频/pdf）上限：浏览器按 Range 分块取，此处仅兜底防呆 */
 const MAX_PREVIEW_ASSET_SIZE = 2 * 1024 * 1024 * 1024;
@@ -301,6 +302,7 @@ export class SessionsController {
   async getWorkspaceFile(
     @Param("id") id: string,
     @Query("path") filePath: string,
+    @Query("sniff") sniff: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -340,13 +342,40 @@ export class SessionsController {
 
     // 检查文件大小（限制为 5MB）
     const MAX_FILE_SIZE = 5 * 1024 * 1024;
-    if (stat.size > MAX_FILE_SIZE) {
-      throw new Error("File too large to preview (max 5MB)");
+
+    const ext = path.extname(filePath).toLowerCase();
+
+    // 后缀未知（前端探针请求 sniff=1）→ 先嗅探文件头，判断文本/二进制与真实格式。
+    // 已知后缀不走嗅探，热路径行为与 I/O 完全不变。
+    const wantSniff = sniff === '1' || sniff === 'true';
+    let isBinary = false;
+    let encoding: FileSniffResult['encoding'] = 'utf-8';
+    let detectedExtension = '';
+    let mimeType = this.getMimeType(ext);
+    if (wantSniff) {
+      const sniffResult = await sniffFileHead(resolvedPath);
+      isBinary = sniffResult.isBinary;
+      encoding = sniffResult.encoding;
+      detectedExtension = sniffResult.detectedExtension;
+      if (sniffResult.mimeType) {
+        mimeType = sniffResult.mimeType;
+      } else if (!isBinary) {
+        // 无后缀/未登记后缀的纯文本：报 text/plain，而不是扩展名表的 octet-stream 兜底
+        mimeType = 'text/plain';
+      }
     }
 
-    // 读取文件内容
-    const content = await fsPromises.readFile(resolvedPath, 'utf-8');
-    const ext = path.extname(filePath).toLowerCase();
+    // 只有文本才读内容：二进制直接返回元数据，既不再把 mojibake 当文本传出去，
+    // 也避免超大二进制先撞上 5MB 上限（前端据此显示「二进制不可预览」而不是报错）
+    let content = '';
+    if (!isBinary) {
+      if (stat.size > MAX_FILE_SIZE) {
+        throw new Error("File too large to preview (max 5MB)");
+      }
+      content = wantSniff
+        ? decodeTextWithEncoding(await fsPromises.readFile(resolvedPath), encoding)
+        : await fsPromises.readFile(resolvedPath, 'utf-8');
+    }
 
     // 设置预览 Cookie：让后续 html-preview 图片请求自动携带鉴权（URL 无需 token）
     const authHeader = req.headers.authorization;
@@ -362,7 +391,10 @@ export class SessionsController {
       extension: ext,
       size: stat.size,
       content: content,
-      mimeType: this.getMimeType(ext)
+      mimeType,
+      isBinary,
+      encoding,
+      detectedExtension,
     });
   }
 
@@ -555,7 +587,14 @@ export class SessionsController {
     // 根据扩展名设置 Content-Type（音视频/位图/pdf 走前后端契约表，否则 .mp4 会发成
     // application/octet-stream，<video>/<audio> 认不出容器）
     const ext = path.extname(filePath).toLowerCase();
-    const mimeType = this.getMimeType(ext);
+    let mimeType = this.getMimeType(ext);
+    // 后缀未知（无后缀/未登记）→ 嗅探文件头拿真实格式，否则无后缀的 png/pdf/mp4
+    // 会被发成 application/octet-stream，<img>/<video>/iframe 全都认不出来；
+    // assertServableSize 的分层上限也依赖这个 MIME 才判得对
+    if (!isKnownExtension(ext)) {
+      const sniffResult = await sniffFileHead(resolvedPath);
+      if (sniffResult.mimeType) mimeType = sniffResult.mimeType;
+    }
     this.assertServableSize(mimeType, stat.size);
     res.setHeader('Content-Type', mimeType);
 

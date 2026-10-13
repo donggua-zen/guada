@@ -355,6 +355,7 @@ export default {
     refreshPreview: '刷新预览',
     imageAlt: '图片预览',
     unsupportedPreview: '此文件暂不支持预览',
+    binaryNotPreview: '二进制文件，不支持预览',
     openInExplorer: '在资源管理器中打开',
     fileNotFound: '文件已不存在',
     closeTab: '关闭标签',

@@ -140,6 +140,20 @@ export function resolveServingMimeType(ext?: string | null): string {
   return TEXT_CODE_MIME_TYPES[normalized] ?? mimeFromExtension(normalized);
 }
 
+/**
+ * 扩展名是否已被已知表覆盖。
+ *
+ * 工作区预览分流的判据：**已知 → 信任后缀、不读文件头**；未知（含无后缀）才去嗅探内容
+ * （见 file-sniff.util）。判据只认「表里有没有」，不认 MIME 值——`application/octet-stream`
+ * 也可能是未登记的真实格式，那正是需要嗅探的情况。
+ */
+export function isKnownExtension(ext?: string | null): boolean {
+  const normalized = normalizeExtension(ext);
+  if (!normalized) return false;
+  return Object.prototype.hasOwnProperty.call(EXT_TO_MIME, normalized)
+    || Object.prototype.hasOwnProperty.call(TEXT_CODE_MIME_TYPES, normalized);
+}
+
 /** MIME 形态判定：type/subtype（含 + 后缀，如 image/svg+xml） */
 function looksLikeMime(value?: string | null): boolean {
   return !!value && /^[a-z]+\/[a-z0-9.+-]+$/i.test(value.trim());
