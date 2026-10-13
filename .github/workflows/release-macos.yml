@@ -159,10 +159,16 @@ jobs:
           pnpm run verify:asar 2>&1 | tee /tmp/verify-asar.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
-            # 注解上限约 10 条：只抓「每个包 require 成功」的进度行 + 错误行，
-            # 最后一个 ok 之后的包就是出问题的那个；再补 FAILED 清单。
+            # 注解上限约 10 条，全部额度都给诊断
             echo "::error::asar 校验失败（退出码 $code）"
-            grep -nE "  ok |Error|Cannot find|✗|not found|FAILED" /tmp/verify-asar.log | tail -8 | while IFS= read -r l; do echo "::error::$l"; done
+            grep -nE "  ok |Error|Cannot find|✗|FAILED|@img" /tmp/verify-asar.log | tail -4 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::runner=$(uname -m) ciNode=$(node -p process.arch) release=[$(ls release | tr '\n' ' ')]"
+            for b in release/*/GuaDa.app/Contents/MacOS/GuaDa; do
+              [ -f "$b" ] && echo "::error::app二进制: $(file -b "$b") ← $b"
+            done
+            echo "::error::@img 源目录=[$(ls backend-ts/node_modules_production/node_modules/@img 2>/dev/null | tr '\n' ' ')]"
+            bs=backend-ts/node_modules_production/node_modules/better-sqlite3/build/Release/better_sqlite3.node
+            [ -f "$bs" ] && echo "::error::better-sqlite3: $(file -b "$bs")"
           fi
           exit "$code"
 
