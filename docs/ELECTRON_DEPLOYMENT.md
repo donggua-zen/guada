@@ -259,6 +259,53 @@ codesign --force --deep --sign - /Applications/GuaDa.app
 Apple 公证（notarization）并 stapling。两步都能放进 CI（证书与 Apple ID 凭据存 GitHub
 Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执行 4.1 / 4.2 的放行步骤。
 
+#### 4.3.1 本地网络权限：打包版 ping 不通局域网（免费自签名即可解决）
+
+macOS 的「本地网络」权限（系统设置 → 隐私与安全性 → 本地网络）按 **app 的代码签名身份** 记录授权，
+并且按 **权限主体**（responsible process）判定，所以会出现「同一份 app 表现不同」：
+
+- 从终端启动（`/Applications/GuaDa.app/Contents/MacOS/GuaDa`）时权限主体是终端，继承终端的授权
+  → 终端里 `ping 192.168.3.245` 正常；
+- 正常启动（Finder/Dock/`open`）时权限主体是 app 自己 → **未签名 / ad-hoc 包拿不到授权**，系统连
+  询问都不弹，直接静默拦截局域网（`ping: sendto: No route to host`），而外网不受影响。
+
+`mac.extendInfo.NSLocalNetworkUsageDescription` 已加（没有它系统连询问都不会弹），但**光有声明不够**：
+没有稳定签名身份时授权落不到实处。已验证的免费解法是**自签名证书**（不需要 Apple 账号，$99 那套只在
+"双击即开"时才需要）：
+
+```bash
+# 1) 生成自签名代码签名证书。OpenSSL 3 必须用 -legacy 导出 p12，
+#    否则 macOS 的 security import 会报 "MAC verification failed during PKCS12 import"
+openssl req -x509 -newkey rsa:2048 -keyout guada-sign.key -out guada-sign.crt -days 3650 -nodes \
+  -subj "/CN=GuaDa Local Sign/O=GuaDa" -addext "keyUsage=digitalSignature" \
+  -addext "extendedKeyUsage=codeSigning" -addext "basicConstraints=critical,CA:FALSE"
+openssl pkcs12 -export -legacy -inkey guada-sign.key -in guada-sign.crt -out guada-sign.p12 \
+  -passout pass:<密码> -name "GuaDa Local Sign"
+base64 -i guada-sign.p12 | tr -d '\n' > guada-sign.p12.base64
+
+# 2) 放到 ~/.guada-mac-signing/（不入库）：guada-sign.p12.base64 + password.txt（密码单行）
+```
+
+打包时由 `scripts/after-pack-handler.js` 的 `signMacApp` 完成签名：
+
+```bash
+# 本地（一条命令出带签名的 dmg；也可只用 build:electron:package:mac:sign 复用已构建产物）
+pnpm run build:electron:mac:sign
+
+# CI：secret MAC_SIGN_LINK = p12.base64 的内容、MAC_SIGN_PASSWORD = 密码；
+#     .github/workflows/release.yml 的 mac 打包步骤已读取它们（secret 缺失时跳过签名）
+```
+
+四条注意：
+
+- **不用 electron-builder 的 `CSC_LINK`**：它只认「有效（受信任）」身份（`security find-identity -v`），
+  自签名证书默认不受信任 → 找不到身份直接打包失败。`signMacApp` 自己导入临时钥匙串、按 SHA1 指定
+  身份 codesign，**不需要把证书加进系统信任、也不需要 sudo**，本地与 CI 同一条路径。
+- **证书要长期保存并复用**：TCC 按签名身份记授权，换证书 = 换身份 = 用户要重新授权一次。
+- 自签名 ≠ 公证：用户首次打开仍需 4.1 / 4.2 的放行步骤（与未签名包一致，不会更差）。
+- 验证：正常启动 app 后在终端里 `ping <局域网设备>`；`codesign -dv --verbose=2 GuaDa.app` 看
+  `Authority=` 是否为该证书名。
+
 #### 4.4 沙盒二进制的分发现状
 
 **Windows 版已移除沙盒功能**（刻意取舍，不是缺口）：不再随包提供 `sandbox.exe`，

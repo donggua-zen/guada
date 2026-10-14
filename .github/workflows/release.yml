@@ -143,6 +143,16 @@ jobs:
         env:
           # runner 上没有签名证书，跳过钥匙串检索
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # 自签名证书（可选）：把 .p12 的 base64 存进仓库 secret 即可让 CI 签名。
+          # 免费、无需 Apple 账号，但要的是「稳定身份」——macOS 的本地网络权限
+          # （Local Network Privacy）按 app 的代码签名身份记录授权：未签名/每次换身份的包
+          # 既拿不到授权也不弹询问，表现为打包版终端 ping 局域网报 "No route to host"、
+          # 外网正常（详见 docs/ELECTRON_DEPLOYMENT.md 4.3.1）。
+          # 走的是 scripts/after-pack-handler.js 的 signMacApp（不设 CSC_*：electron-builder
+          # 只认受信任身份，自签名证书会被判"找不到身份"而让打包失败）。
+          # secret 缺失时这两个变量为空，afterPack 跳过签名 → 照旧出未签名包。
+          MAC_SIGN_LINK: ${{ secrets.MAC_SIGN_LINK }}
+          MAC_SIGN_PASSWORD: ${{ secrets.MAC_SIGN_PASSWORD }}
           # 这里刻意不设 ELECTRON_MIRROR：设了之后 electron-builder 会按
           # 「镜像基址/<版本>/...」拼 URL（npmmirror 的目录结构），而 GitHub 的
           # 目录是 /download/v<版本>/ —— 会 404。不设时它走内置的官方默认值。
