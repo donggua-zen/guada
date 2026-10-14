@@ -5,7 +5,13 @@ import {
   OnModuleDestroy,
 } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { ChildProcess, exec, execSync, spawn } from "child_process";
+import {
+  ChildProcess,
+  SpawnOptions,
+  exec,
+  execSync,
+  spawn,
+} from "child_process";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -415,12 +421,20 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     childProcess.stderr?.on("end", onStdioEnd);
 
     childProcess.on("close", (code) => {
-      if (entry.status !== "running") return;
-      this.handleProcessEnd(
-        entry,
-        code === 0 ? "completed" : "error",
-        code ?? 1,
-      );
+      if (entry.status === "running") {
+        this.handleProcessEnd(
+          entry,
+          code === 0 ? "completed" : "error",
+          code ?? 1,
+        );
+        return;
+      }
+      // 手动终止（killed）：由 close 收尾清理。不在这里投递系统消息（kill 是 AI 主动行为），
+      // 但也不能在 kill() 里立刻清理——entry 要留到进程真正退出，看门狗才来得及补杀残留进程组。
+      if (entry.status === "killed") {
+        entry.exitCode = code ?? entry.exitCode;
+        this.cleanupProcess(entry.id, entry.sessionId);
+      }
     });
 
     childProcess.on("error", (err) => {
@@ -552,19 +566,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     if (entry.status !== "running") return entry.status;
 
-    const isWindows = process.platform === "win32";
-    if (isWindows) {
-      const pid = entry.childProcess.pid;
+    const pid = entry.childProcess.pid;
+    if (process.platform === "win32") {
       if (pid) {
         // 异步执行 taskkill（spawn 不阻塞主进程事件循环），失败自动重试一次，
         // 避免同步 execSync 卡住主进程；taskkill 作为独立进程执行，可靠性不降低。
         this.killWindowsProcess(pid, entry);
       }
-    } else {
-      entry.childProcess.kill("SIGTERM");
-      setTimeout(() => {
-        if (!entry.childProcess.killed) entry.childProcess.kill("SIGKILL");
-      }, 2000);
+    } else if (pid) {
+      this.killUnixProcess(pid, entry);
     }
 
     entry.status = "killed";
@@ -574,10 +584,64 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
 
-    // kill 是 AI 主动行为，立即清理 entry（不投递系统消息）
-    this.cleanupProcess(entry.id, entry.sessionId);
+    if (!pid) {
+      // 拿不到 pid（spawn 失败等）→ 没有 close 可等，直接清理
+      this.cleanupProcess(entry.id, entry.sessionId);
+    }
+    // 有 pid 时不在 kill() 里清理 entry：留给 createProcess 的 close 事件收尾，
+    // 这样看门狗在进程真正退出前仍能补杀残留的进程组成员。
 
     return "killed";
+  }
+
+  /** 判断子进程是否已真正退出（exitCode/signalCode 产生即视为退出） */
+  private isProcessExited(child: ChildProcess): boolean {
+    return child.exitCode !== null || child.signalCode !== null;
+  }
+
+  /**
+   * Unix/Linux/macOS：终止整个进程组。
+   *
+   * spawnProcess 在非 Windows 平台用 detached:true 起进程，子进程即**进程组组长**，
+   * 因此 `process.kill(-pid)` 能一次带走命令派生出的所有子孙进程（组杀）。
+   * 只给直接子进程发信号是不够的：`npm run x` / `sh -c` 这类命令的真正工作进程是孙进程，
+   * 漏掉它们就会出现「面板显示已终止、进程还在跑」。
+   *
+   * 升级策略：SIGTERM 整组 → 2s 后（或组长退出时立即）SIGKILL 整组 + 直接 SIGKILL 兜底。
+   * 组长退出时补一次组杀，是为了处理忽略 SIGTERM 的残留组员（组长退出不代表组内清空）。
+   */
+  private killUnixProcess(pid: number, entry: ProcessEntry): void {
+    const child = entry.childProcess;
+
+    const killGroup = (signal: NodeJS.Signals) => {
+      try {
+        // 负 PID = 向整个进程组发信号
+        process.kill(-pid, signal);
+      } catch {
+        // ESRCH：进程组已不存在（全部退出）
+      }
+    };
+
+    killGroup("SIGTERM");
+
+    let watchdog: NodeJS.Timeout | null = null;
+    const escalate = () => {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+      killGroup("SIGKILL");
+      if (!this.isProcessExited(child)) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    watchdog = setTimeout(escalate, 2_000);
+    child.once("exit", escalate);
   }
 
   /**
@@ -857,6 +921,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     for (const entry of [...this.processes.values()]) {
       if (entry.sessionId !== sessionId) continue;
       if (entry.status === "running") continue;
+      // 被主动 kill 的进程不投递（kill 是 AI 自己的动作）；entry 由 close 事件清理
+      if (entry.status === "killed") continue;
 
       // 进程刚结束且 enqueue 路径在进行中 → 等它完成（与 poll 一致）。
       // 否则与 enqueue 的读取竞争可能读到空输出后又清掉 entry，
@@ -1023,6 +1089,23 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 子进程 spawn 选项（四个 spawn 分支共用）。
+   *
+   * Unix 下 detached=true 让子进程成为**进程组组长**（setsid）：只有这样才能在 kill 时用
+   * `process.kill(-pid)` 整组终止，把命令派生出的子孙进程一起带走。不 detached 时子进程与
+   * 后端同组，负 PID 指向的是「不存在的组」，只能杀掉直接子进程，命令树会残留。
+   * Windows 保持不 detached：终止走 taskkill /F /T（自带进程树），detached 还会额外弹控制台。
+   */
+  private spawnOptions(cwd: string, env: NodeJS.ProcessEnv): SpawnOptions {
+    return {
+      cwd,
+      env,
+      windowsHide: true,
+      ...(process.platform === "win32" ? {} : { detached: true }),
+    };
+  }
+
+  /**
    * 内部 spawn：根据 sandbox 选项决定是否使用沙盒包装。
    * 沙盒启用时命令由 sandbox.exe 内部固定 shell（Windows PowerShell）执行；
    * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先 → PowerShell → cmd.exe），
@@ -1054,11 +1137,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (sandbox?.readOnly) {
         args.push("--read-only");
       }
-      return spawn(sandboxBin, args, {
-        cwd,
-        env: this.buildChildEnv(),
-        windowsHide: true,
-      });
+      return spawn(sandboxBin, args, this.spawnOptions(cwd, this.buildChildEnv()));
     }
 
     // Git Bash：-c 执行命令；-l 走 login shell 以加载 /etc/profile——
@@ -1069,14 +1148,17 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         process.env.GUADA_GIT_BASH_NO_LOGIN === "1"
           ? ["-c", command]
           : ["-c", "-l", command];
-      return spawn(this.shellInfo.path, args, {
-        cwd,
-        env: this.buildChildEnv({
-          SHELL: this.shellInfo.path,
-          GIT_EDITOR: "true",
-        }),
-        windowsHide: true,
-      });
+      return spawn(
+        this.shellInfo.path,
+        args,
+        this.spawnOptions(
+          cwd,
+          this.buildChildEnv({
+            SHELL: this.shellInfo.path,
+            GIT_EDITOR: "true",
+          }),
+        ),
+      );
     }
 
     // Windows 的 PowerShell（支持多行命令，与沙盒内 shell 语法一致），
@@ -1085,19 +1167,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       return spawn(
         this.shellInfo.path,
         ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
-        {
-          cwd,
-          env: this.buildChildEnv(),
-          windowsHide: true,
-        },
+        this.spawnOptions(cwd, this.buildChildEnv()),
       );
     }
 
     return spawn(command, [], {
-      cwd,
-      env: this.buildChildEnv(),
+      ...this.spawnOptions(cwd, this.buildChildEnv()),
       shell: true,
-      windowsHide: true,
     });
   }
 
