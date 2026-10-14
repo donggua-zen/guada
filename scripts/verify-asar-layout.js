@@ -10,9 +10,10 @@
  *   2. asar 内容：入口包在 asar 内；嵌套 node_modules 没被 walker 丢掉（includeSubNodeModules）
  *   3. asarUnpack 生效：配置里列的每个包，其源目录里的原生文件（.node/.dll/.exe/.so/.dylib）
  *      都出现在 app.asar.unpacked 下
- *   4. 不漏文件：源目录里过滤后应打包的文件，逐个能在 asar 或 unpacked 里找到
- *   5. @parcel/watcher 补丁二进制（win32）md5 与 third_party 一致
- *   6. 运行期烟测：以 ELECTRON_RUN_AS_NODE + NODE_PATH 起打包后的 Electron，逐个 require
+ *   4. VC++ 运行时随包分发：动态链接 vcruntime140*.dll 的原生模块要有单份 resources/vc-runtime
+ *   5. 不漏文件：源目录里过滤后应打包的文件，逐个能在 asar 或 unpacked 里找到
+ *   6. @parcel/watcher 补丁二进制（win32）md5 与 third_party 一致
+ *   7. 运行期烟测：以 ELECTRON_RUN_AS_NODE + NODE_PATH 起打包后的 Electron，逐个 require
  *      原生/关键依赖，并真加载一次 sqlite-vec（唯一必须走路径重写的原生扩展）
  *
  * 用法：
@@ -28,6 +29,7 @@ const { spawnSync } = require('child_process');
 const asar = require('@electron/asar');
 const { globSync } = require('glob');
 const { repoRoot, resolveLayout, countFiles } = require('./packaged-layout');
+const { peImportInfo, crtImports, collectNativeBinaries } = require('./pe-imports');
 
 const pkg = require(path.join(repoRoot, 'package.json'));
 
@@ -210,8 +212,78 @@ function checkUnpacked(layout) {
   return { unpackedFiles };
 }
 
+/**
+ * VC++ 运行时随包分发校验（Windows）。
+ *
+ * 动态链接 vcruntime140*.dll 的 .node（当前只有 @node-rs/jieba，其余原生模块都静态链接
+ * CRT）在没装 VC++ 运行时的干净系统上加载失败，而它是在模块顶层被 require 的，会把整个
+ * 后端带崩（已发生过一次：全新 Win10 虚拟机装完包后端起不来）。机制：打包期把需要的 DLL
+ * 收敛到单份 vc-runtime/ → resources/vc-runtime，主进程再注入后端 PATH
+ * （见 electron/main.ts 的 backendCrtPathEnv）。这里从打包后的原生文件现算所需 DLL 逐个
+ * 核对：漏了它、或又把它散成多份副本，都在这里拦住。
+ */
+function checkVcRuntime(layout) {
+  console.log('\n[4] VC++ 运行时随包分发');
+  if (process.platform !== 'win32') {
+    ok('非 Windows 平台，跳过');
+    return;
+  }
+
+  const unpackedRoot = path.join(layout.resourcesDir, 'app.asar.unpacked');
+  const appMachine = peImportInfo(layout.electronBin).machine;
+  const required = new Set();
+  const users = new Map();
+
+  for (const file of collectNativeBinaries(path.join(unpackedRoot, 'backend-ts', 'node_modules'))) {
+    let info;
+    try {
+      info = peImportInfo(file);
+    } catch {
+      continue; // 其它平台的 .node 产物
+    }
+    if (info.machine !== appMachine) continue; // 非本产物架构（如 node-pty 的 arm64 预编译）
+    for (const name of crtImports(info)) {
+      required.add(name);
+      if (!users.has(name)) users.set(name, []);
+      users.get(name).push(path.relative(unpackedRoot, file).split(path.sep).join('/'));
+    }
+  }
+
+  if (required.size === 0) {
+    ok('没有动态链接 MSVC 运行时的原生模块');
+    return;
+  }
+
+  const crtDir = path.join(layout.resourcesDir, 'vc-runtime');
+  const missing = [...required].filter((n) => !fs.existsSync(path.join(crtDir, n)));
+  if (missing.length) {
+    fail(
+      `resources/vc-runtime 缺少 ${missing.join('、')}（${users.get(missing[0])[0]} 需要它）——干净系统上后端会起不来`,
+    );
+  } else {
+    const src = [...required].map((n) => `${n}`).join('、');
+    ok(`resources/vc-runtime 备齐 ${src}`);
+  }
+
+  // 单份约束：这些 DLL 只能有一份（散进各包目录既冗余、又难维护）
+  const dupes = globSync('**/*', { cwd: unpackedRoot, nodir: true, windowsPathsNoEscape: true }).filter(
+    (p) => required.has(path.basename(p).toLowerCase()),
+  );
+  const inAsar = asar
+    .listPackage(layout.asarPath)
+    .filter((p) => required.has(path.basename(p).toLowerCase()));
+  if (dupes.length || inAsar.length) {
+    fail(
+      `VC++ 运行时出现重复副本（应只有 resources/vc-runtime 一份）：` +
+        [...dupes, ...inAsar].slice(0, 3).join('、'),
+    );
+  } else {
+    ok('无重复副本（仅 resources/vc-runtime 一份）');
+  }
+}
+
 function checkCompleteness(layout, entrySet, unpackedFiles) {
-  console.log('\n[4] 不漏文件');
+  console.log('\n[5] 不漏文件');
   const filesEntry = (pkg.build?.files ?? []).find(
     (f) => typeof f === 'object' && f.from === 'backend-ts/node_modules_production/node_modules',
   );
@@ -247,7 +319,7 @@ function checkCompleteness(layout, entrySet, unpackedFiles) {
 }
 
 function runRuntimeSmoke(layout) {
-  console.log('\n[5] 运行期烟测（ELECTRON_RUN_AS_NODE + NODE_PATH）');
+  console.log('\n[6] 运行期烟测（ELECTRON_RUN_AS_NODE + NODE_PATH）');
   if (!fs.existsSync(layout.electronBin)) {
     fail(`找不到 Electron 二进制：${layout.electronBin}`);
     return;
@@ -325,6 +397,7 @@ function main() {
   checkLayout(layout);
   const { entrySet } = checkAsar(layout);
   const { unpackedFiles } = checkUnpacked(layout);
+  checkVcRuntime(layout);
   checkCompleteness(layout, entrySet, unpackedFiles);
   if (!skipRuntime) runRuntimeSmoke(layout);
 

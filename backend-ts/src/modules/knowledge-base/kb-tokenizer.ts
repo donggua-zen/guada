@@ -1,5 +1,5 @@
 import { Logger } from "@nestjs/common";
-import { Jieba } from "@node-rs/jieba";
+import type { Jieba } from "@node-rs/jieba";
 
 /**
  * 知识库检索分词（**写入与查询必须共用同一个实例与口径**）
@@ -18,7 +18,11 @@ const logger = new Logger("KbTokenizer");
 function getJieba(): Jieba | null {
   if (jieba || jiebaFailed) return jieba;
   try {
-    jieba = new Jieba();
+    // 延迟 require，不能用顶层 import：jieba 的原生绑定动态链接 VC++ 运行时
+    // （vcruntime140*.dll），干净系统上 require 阶段就会抛（拿不到绑定，回退 WASI
+    // 也不存在），顶层 import 会让整个后端进程在启动时退出。降级才符合本模块约定。
+    const { Jieba: JiebaImpl } = require("@node-rs/jieba") as typeof import("@node-rs/jieba");
+    jieba = new JiebaImpl();
   } catch (err: any) {
     // 失败只记一次：jieba 是可选增强，缺失时中文按整串匹配（能力下降但不崩）
     jiebaFailed = true;

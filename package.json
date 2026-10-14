@@ -189,7 +189,15 @@
       "sign": null,
       "signDlls": false,
       "forceCodeSigning": false,
-      "extraResources": []
+      "extraResources": [
+        {
+          "from": "vc-runtime",
+          "to": "vc-runtime",
+          "filter": [
+            "**/*.dll"
+          ]
+        }
+      ]
     },
     "mac": {
       "target": [

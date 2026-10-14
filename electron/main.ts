@@ -685,6 +685,28 @@ function getBackendNodeModulesPath(): string {
   return path.join(process.resourcesPath, "app.asar", "backend-ts", "node_modules");
 }
 
+/**
+ * 把随包分发的 VC++ 运行时目录挂到后端进程 PATH 首位（仅 Windows）。
+ *
+ * @node-rs/jieba 的原生二进制动态链接 vcruntime140*.dll（全包唯一，其余原生模块都静态
+ * 链接 CRT），干净系统没装 VC++ 运行时会 dlopen 失败，而它是在模块顶层被 require 的，
+ * 会把整个后端进程带崩（实测：全新 Win10 虚拟机装完包后端起不来）。DLL 单份放在
+ * resources/vc-runtime（打包时由 scripts/rebuild-native-electron.js 收集），靠 PATH
+ * 让所有原生模块都能解析到。放「可执行文件同级」无效：libuv 用
+ * LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH) 加载 .node，搜索顺序是
+ * 「.node 同目录 → System32 → Windows → cwd → PATH」，应用目录那一档会被替换掉。
+ *
+ * 键名沿用 process.env 里的原始大小写：Windows 环境块按 key 字符串存储，多造一个 "PATH"
+ * 会与已有的 "Path" 并存、取值取前一个，注入就会静默失效。
+ */
+function backendCrtPathEnv(): Record<string, string> {
+  if (process.platform !== "win32") return {};
+  const crtDir = path.join(process.resourcesPath, "vc-runtime");
+  if (!fs.existsSync(crtDir)) return {};
+  const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") || "PATH";
+  return { [pathKey]: `${crtDir}${path.delimiter}${process.env[pathKey] ?? ""}` };
+}
+
 // 确保 data 目录存在（数据库迁移由后端 MigrationRunner 负责）
 function ensureDataDir(dataHome: string): void {
   const paths = computeDataPaths(dataHome);
@@ -973,6 +995,9 @@ async function startBackend(): Promise<void> {
         cwd: backendPath,
         env: {
           ...process.env,
+          // Windows：VC++ 运行时目录进 PATH 首位（见 backendCrtPathEnv），
+          // 保证 @node-rs/jieba 这类动态链接运行时的原生模块在干净系统上也能加载
+          ...backendCrtPathEnv(),
           NODE_ENV: "development",
           PORT: String(backendPort),
           BASE_URL: "__auto__", // 与生产一致：动态设置 BASE_URL，后端返回的资源 URL 指向实际端口
@@ -1057,6 +1082,9 @@ async function startBackend(): Promise<void> {
         cwd: backendPath,
         env: {
           ...process.env,
+          // Windows：VC++ 运行时目录进 PATH 首位（见 backendCrtPathEnv），
+          // 保证 @node-rs/jieba 这类动态链接运行时的原生模块在干净系统上也能加载
+          ...backendCrtPathEnv(),
           NODE_ENV: "production",
           ELECTRON_RUN_AS_NODE: "1", // 关键：以纯 Node 模式运行
           NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
