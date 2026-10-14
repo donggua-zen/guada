@@ -1,4 +1,4 @@
-import { IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SessionSettingsDto } from './session-settings.dto';
 
@@ -37,6 +37,13 @@ export class UpdateSessionDto {
   @IsOptional()
   @IsString()
   groupId?: string;
+
+  /**
+   * 是否置顶（侧边栏「已置顶」分区；true/false）
+   */
+  @IsOptional()
+  @IsBoolean()
+  pinned?: boolean;
 
   /**
    * 会话设置

@@ -75,6 +75,8 @@ export class SessionService {
     groupId?: string | null;
     keyword?: string;
     includeArchived?: boolean;
+    /** undefined = 不按置顶过滤；false = 排除置顶（分组区）；true = 仅置顶 */
+    pinned?: boolean;
   }): Promise<{ items: any[]; total: number }> {
     const {
       skip = 0,
@@ -82,11 +84,13 @@ export class SessionService {
     groupId,
     keyword,
     includeArchived = false,
+    pinned,
   } = opts;
     const { rows, total } = this.sessionStore.queryPaged(
       {
         sessionType: "web",
         archived: includeArchived ? undefined : false,
+        pinned,
         groupId,
         keyword,
       },
@@ -163,6 +167,10 @@ export class SessionService {
    */
   /**
    * 获取用户会话列表，支持按分组查询
+   *
+   * 端点是侧边栏「加载更多」专用（GET /sessions），与 sidebar 首屏同口径：
+   * 排除置顶项（pinned: false）——否则置顶的旧会话会占用分页槽位，
+   * 被前端过滤后表现为"少了一条"。置顶会话由 GET /sessions/pinned 提供。
    * @param groupId 分组ID，null表示未分组，undefined表示全部
    */
   async getSessions(
@@ -172,7 +180,14 @@ export class SessionService {
     keyword?: string,
     includeArchived: boolean = false,
   ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.querySessions({ skip, limit, groupId, keyword, includeArchived });
+    const { items, total } = await this.querySessions({
+      skip,
+      limit,
+      groupId,
+      keyword,
+      includeArchived,
+      pinned: false,
+    });
 
     // 转换所有 session 的 URL（使用 agent 的 avatarUrl），并注入流式状态
     const transformedItems = items.map((item) => ({
@@ -193,6 +208,9 @@ export class SessionService {
   /**
    * 侧边栏批量获取：一次请求返回所有分组 + 各分组的前 N 条会话
    * 替代前端 N+2 次串行 HTTP 请求
+   *
+   * 分组区排除置顶项（pinned: false）——置顶会话由 getPinnedSessions 单独提供，
+   * 两者互斥避免同一会话在侧边栏出现两次；total 同步排除，保证分页计数一致。
    */
   async getSidebarSessions(limit: number = 10) {
     const groups = await this.sessionGroupService.getGroups();
@@ -201,7 +219,13 @@ export class SessionService {
     const groupIds: (string | null)[] = [...groups.map((g) => g.id), null];
     const results = await Promise.all(
       groupIds.map((gid) =>
-        this.querySessions({ skip: 0, limit, groupId: gid, includeArchived: false }),
+        this.querySessions({
+          skip: 0,
+          limit,
+          groupId: gid,
+          includeArchived: false,
+          pinned: false,
+        }),
       ),
     );
 
@@ -219,6 +243,26 @@ export class SessionService {
     });
 
     return { groups, groupSessions };
+  }
+
+  /**
+   * 置顶会话清单（侧边栏顶部「已置顶」分区）。
+   *
+   * 归集所有「已置顶且未归档」的 web 会话，lastActiveAt desc。
+   * 不分页——置顶数量天然有限；与分组区互斥（分组区查询传 pinned: false）。
+   */
+  async getPinnedSessions() {
+    const rows = this.sessionStore.query(
+      { sessionType: "web", archived: false, pinned: true },
+      "lastActiveDesc",
+    );
+    const items = await this.hydrateMany(rows.map((m) => toRow(m)));
+    return {
+      items: items.map((item) => ({
+        ...item,
+        isStreaming: this.streamManager.hasActiveStream(item.id),
+      })),
+    };
   }
 
   /**
@@ -645,7 +689,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
-    const allowedFields = ["modelId", "settings", "title", "groupId", "agentId"];
+    const allowedFields = ["modelId", "settings", "title", "groupId", "agentId", "pinned"];
     const updateData: any = {};
 
     for (const key of allowedFields) {

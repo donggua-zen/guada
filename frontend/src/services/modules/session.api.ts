@@ -11,6 +11,8 @@ export interface SessionApi {
   fetchSessionPlans(sessionId: string): Promise<{ plans: SessionPlanItem[] }>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
   fetchSidebarSessions(limit?: number): Promise<SidebarSessionsResponse>;
+  /** 置顶会话清单（侧边栏顶部「已置顶」分区；与分组区互斥） */
+  fetchPinnedSessions(): Promise<{ items: Session[] }>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
   searchSessions(keyword: string, cursor?: string, limit?: number, includeArchived?: boolean): Promise<SearchSessionResponse>;
   archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: Session }>;
@@ -366,6 +368,10 @@ export const sessionApi: SessionApi = {
   async fetchSidebarSessions(this: ApiContext, limit?: number) {
     const url = limit ? `/sessions/sidebar?limit=${limit}` : "/sessions/sidebar";
     return await this._request(url);
+  },
+
+  async fetchPinnedSessions(this: ApiContext) {
+    return await this._request<{ items: Session[] }>("/sessions/pinned");
   },
 
   async fetchArchivedSessions(this: ApiContext, skip?: number, limit?: number, keyword?: string, groupId?: string | null) {

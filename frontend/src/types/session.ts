@@ -215,6 +215,7 @@ export interface Session {
     workspacePath?: string | null  // 自定义工作目录路径
     groupId?: string | null         // 会话分组ID
     archived?: boolean               // 是否已归档
+    pinned?: boolean                 // 是否置顶（侧边栏顶部「已置顶」分区）
     // ==================================
 
     // === 侧边栏状态字段（后端注入或前端维护） ===
@@ -246,7 +247,7 @@ export interface CreateSessionRequest {
 }
 
 /**
- * 更新会话请求数据（后端 updateSession 白名单：modelId/settings/title/groupId/agentId，
+ * 更新会话请求数据（后端 updateSession 白名单：modelId/settings/title/groupId/agentId/pinned，
  * 工作目录路径明确不允许经此接口更新）
  */
 export interface UpdateSessionRequest {
@@ -257,6 +258,8 @@ export interface UpdateSessionRequest {
     /** null = 移出分组（后端按 !== undefined 透传） */
     groupId?: string | null
     agentId?: string
+    /** 是否置顶 */
+    pinned?: boolean
 }
 
 /**

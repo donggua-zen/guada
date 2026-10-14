@@ -33,6 +33,8 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
     data: null,
     sessionType: row.sessionType ?? "web",
     archived: row.archived === true,
+    // 冻结库无 pinned 列（置顶 2026-10 引入，仅存在于 SQLite 元库）
+    pinned: false,
     botId: row.botId ?? null,
     platform: row.platform ?? null,
     externalId: row.externalId ?? null,

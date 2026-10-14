@@ -45,7 +45,7 @@ import { ID_PREFIXES } from "../../common/utils/id.util";
 
 export const META_DB_FILE = "_meta.db";
 /** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
-export const SESSION_META_DB_VERSION = 3;
+export const SESSION_META_DB_VERSION = 4;
 /** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
 export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
 
@@ -71,6 +71,8 @@ export interface SessionMeta {
   data: Record<string, any> | null;
   sessionType: string;
   archived: boolean;
+  /** 置顶：侧边栏「已置顶」分区展示，并从所属分组区排除（互斥，避免重复） */
+  pinned: boolean;
   botId: string | null;
   platform: string | null;
   externalId: string | null;
@@ -100,10 +102,12 @@ export interface SessionGroupMeta {
  * 结构化查询过滤（tri-state 语义）：
  * - `groupId`：null = 仅未分组，undefined = 不过滤
  * - `archived`：undefined = 不过滤
+ * - `pinned`：undefined = 不过滤（true = 仅置顶，false = 排除置顶）
  */
 export interface SessionQueryFilter {
   sessionType?: string;
   archived?: boolean;
+  pinned?: boolean;
   groupId?: string | null;
   /** 标题子串（大小写不敏感） */
   keyword?: string;
@@ -138,7 +142,7 @@ const SORT_SQL: Record<SessionSortKey, string> = {
 export const META_COLUMNS =
   "id, parent_id, root_id, session_type, title, avatar_url, description, " +
   "model_id, agent_id, group_id, data, workspace_path, bot_id, platform, " +
-  "external_id, archived, closed_at, close_reason, created_at, updated_at, last_active_at";
+  "external_id, archived, pinned, closed_at, close_reason, created_at, updated_at, last_active_at";
 
 const V1_DDL = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -158,6 +162,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   platform TEXT,
   external_id TEXT,
   archived INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
   closed_at TEXT,
   close_reason TEXT,
   created_at TEXT NOT NULL,
@@ -170,6 +175,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
 CREATE INDEX IF NOT EXISTS idx_sessions_group ON sessions(group_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_bot ON sessions(bot_id, external_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned);
 CREATE TABLE IF NOT EXISTS session_groups (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -257,6 +263,7 @@ export function rowToMeta(r: any): SessionMeta {
     platform: r.platform ?? null,
     externalId: r.external_id ?? null,
     archived: r.archived === 1,
+    pinned: r.pinned === 1,
     closedAt: r.closed_at ?? null,
     closeReason: r.close_reason ?? null,
     createdAt: r.created_at,
@@ -332,7 +339,25 @@ export function migrateMetaDbSchema(db: Database.Database): void {
   // 把 user_version 误标记而实际没跑迁移，纯版本门控会永久跳过——
   // 因此后续步骤一律按**列存在性**判断，任何误标记状态都可自愈
   if (version < 3) migrateToDataColumn(db);
+  if (version < 4) migrateToPinnedColumn(db);
   db.pragma(`user_version = ${SESSION_META_DB_VERSION}`);
+}
+
+/**
+ * v4：sessions 增 `pinned` 列（置顶，参与「已置顶」分区查询）。
+ * 同样按 table_info 列存在性判断，幂等自愈（勿用版本号门控，见上方教训）。
+ */
+function migrateToPinnedColumn(db: Database.Database): void {
+  const tx = db.transaction(() => {
+    const cols = new Set(
+      (db.pragma("table_info(sessions)") as { name: string }[]).map((c) => c.name),
+    );
+    if (!cols.has("pinned")) {
+      db.exec(`ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned)`);
+  });
+  tx();
 }
 
 /**
@@ -369,7 +394,7 @@ function migrateToDataColumn(db: Database.Database): void {
 export function upsertMetaRow(db: Database.Database, meta: SessionMeta): void {
   db.prepare(
     `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
-      `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     meta.id,
     meta.parentId,
@@ -387,6 +412,7 @@ export function upsertMetaRow(db: Database.Database, meta: SessionMeta): void {
     meta.platform,
     meta.externalId,
     meta.archived ? 1 : 0,
+    meta.pinned ? 1 : 0,
     meta.closedAt,
     meta.closeReason,
     meta.createdAt,
@@ -521,7 +547,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     this.db = db;
     this.upsertStmt = db.prepare(
       `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
-        `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     this.deleteRowStmt = db.prepare(`DELETE FROM sessions WHERE id = ?`);
     this.touchStmt = db.prepare(
@@ -579,6 +605,7 @@ export class SessionMetaStore implements OnModuleDestroy {
         data: null,
         sessionType: "web",
         archived: false,
+        pinned: false,
         botId: null,
         platform: null,
         externalId: null,
@@ -700,6 +727,10 @@ export class SessionMetaStore implements OnModuleDestroy {
     if (filter.archived !== undefined) {
       where.push("archived = ?");
       params.push(filter.archived ? 1 : 0);
+    }
+    if (filter.pinned !== undefined) {
+      where.push("pinned = ?");
+      params.push(filter.pinned ? 1 : 0);
     }
     if (filter.groupId !== undefined) {
       if (filter.groupId === null) {
@@ -830,6 +861,7 @@ export class SessionMetaStore implements OnModuleDestroy {
       data: isPlainObject(data.data) ? data.data : null,
       sessionType: data.sessionType ?? "web",
       archived: data.archived === true,
+      pinned: data.pinned === true,
       botId: data.botId ?? null,
       platform: data.platform ?? null,
       externalId: data.externalId ?? null,
@@ -1061,6 +1093,7 @@ export class SessionMetaStore implements OnModuleDestroy {
       meta.platform,
       meta.externalId,
       meta.archived ? 1 : 0,
+      meta.pinned ? 1 : 0,
       meta.closedAt,
       meta.closeReason,
       meta.createdAt,
