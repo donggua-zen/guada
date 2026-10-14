@@ -3,7 +3,9 @@
  *
  * 覆盖 OverviewPanel 后台进程区块依赖的三个方法：
  * - listRunningBySession：只返回该会话运行中的进程
- * - killIfOwned：会话归属校验 + 终止语义
+ * - killIfOwned：会话归属校验 + 终止语义。注意 entry 由子进程 close 事件清理
+ *   （kill 路径不再立即 remove，留给看门狗补杀进程组，见 9c1c6657）：
+ *   kill 后列表按状态立即为空，但"entry 已不存在"与通知事件都要等 close 清理后才成立
  * - readLogTail：日志尾部读取；entry 被清理后改从磁盘读（status="ended"），
  *   日志文件也不存在才是 null（404）
  *
@@ -81,6 +83,21 @@ describe('ProcessManagerService UI methods', () => {
     throw new Error(`process ${processId} still running after ${timeoutMs}ms`);
   }
 
+  /**
+   * 轮询等待 entry 被清理（从内存移除）。
+   *
+   * kill 路径的 entry 由子进程 close 事件清理（不在 kill() 里立即 remove，
+   * 留给看门狗补杀进程组成员），因此"已不存在"与 process.changed 通知都要等这一刻。
+   */
+  async function waitForCleanup(processId: string, timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!svc.get(processId)) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`entry ${processId} not cleaned within ${timeoutMs}ms`);
+  }
+
   it('listRunningBySession 只返回该会话的运行中进程', async () => {
     const processId = await runBackground(
       'sess-ui',
@@ -132,10 +149,18 @@ describe('ProcessManagerService UI methods', () => {
     expect(svc.listRunningBySession('sess-kill')).toHaveLength(1);
 
     expect(svc.killIfOwned(processId, 'sess-kill')).toBe('killed');
+    // 列表按 status 过滤，状态已置 killed → 立即为空
     expect(svc.listRunningBySession('sess-kill')).toHaveLength(0);
-    expect(svc.killIfOwned(processId, 'sess-kill')).toBeNull();
+    // entry 由 close 事件清理（kill 路径不再立即 remove）：清理前再 kill 返回当前状态
+    // 'killed'（幂等语义），而不是 null
+    expect(svc.killIfOwned(processId, 'sess-kill')).toBe('killed');
 
-    // kill → cleanup 发射 process.changed（结束通知链路）
+    // kill → close 清理发射 process.changed（结束通知链路）。
+    // 先清空累积：runBackground 转后台时已为同一 sessionId 发过一次事件，
+    // 不清空则这条断言无法区分是不是清理路径发的。
+    emitted.length = 0;
+    await waitForCleanup(processId);
+    expect(svc.killIfOwned(processId, 'sess-kill')).toBeNull();
     expect(emitted.some((e) => e.name === 'process.changed' && e.payload.sessionId === 'sess-kill')).toBe(true);
   });
 
