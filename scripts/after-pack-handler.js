@@ -157,12 +157,28 @@ function signMacApp(context) {
   const p12 = path.join(dir, 'cert.p12');
   const keychainPassword = `guada-sign-${process.pid}`;
 
+  const unquote = (s) => s.trim().replace(/^"|"$/g, '');
+  const originalKeychains = execSync('security list-keychains -d user')
+    .toString()
+    .split('\n')
+    .map(unquote)
+    .filter(Boolean);
+  const originalDefault = unquote(execSync('security default-keychain -d user').toString());
+
   try {
     fs.writeFileSync(p12, Buffer.from(link.trim(), 'base64'));
     sh(['security', 'create-keychain', '-p', keychainPassword, keychain]);
     sh(['security', 'unlock-keychain', '-p', keychainPassword, keychain]);
     sh(['security', 'import', p12, '-k', keychain, '-P', password, '-T', '/usr/bin/codesign', '-T', '/usr/bin/security']);
     sh(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', keychainPassword, keychain]);
+
+    // 必须把临时钥匙串放进用户搜索列表并设为默认，否则 codesign 找不到身份：
+    // 只把证书导入临时钥匙串时，哪怕 find-identity 列得出来、显式传 SHA1 或 --keychain，
+    // codesign 也一律报 "no identity found"（1.0.3 的 CI 在 macos-26 runner 上实测）。
+    // 证书未受信任（CSSMERR_TP_NOT_TRUSTED）不影响签名，所以不要用
+    // security add-trusted-cert —— 非交互会话里它会挂住（实测卡死直到 job 超时）。
+    sh(['security', 'list-keychains', '-d', 'user', '-s', keychain, ...originalKeychains]);
+    sh(['security', 'default-keychain', '-d', 'user', '-s', keychain]);
 
     // 身份名未知（自签名证书 CN 任意），直接按 SHA1 指定；不带 -v 才能看到未受信任身份
     const listed = execSync(`security find-identity -p codesigning "${keychain}"`).toString();
@@ -171,14 +187,28 @@ function signMacApp(context) {
       throw new Error('临时钥匙串里没有可用的签名身份');
     }
 
-    sh(['codesign', '--force', '--deep', '--sign', sha1, '--keychain', keychain, appPath]);
+    sh(['codesign', '--force', '--deep', '--sign', sha1, appPath]);
     sh(['codesign', '--verify', '--deep', '--strict', appPath]);
     const authority = execSync(`codesign -dv --verbose=2 "${appPath}" 2>&1 || true`).toString();
     const name = (authority.match(/Authority=(.+)/) || [])[1] || sha1;
     console.log(`[sign] ✓ 已签名并通过严格校验（Authority=${name.trim()}）`);
+  } catch (error) {
+    console.error(`[sign] ❌ 自签名失败：${error.message}`);
+    // 注解公开可读（CI 日志要鉴权），失败原因在 run 摘要里就能看到
+    console.error('::error::[sign] macOS 自签名失败——产物若是未签名包，局域网权限修复会失效');
+    throw error;
   } finally {
+    // 恢复原搜索列表 / 默认钥匙串（本机开发机也会跑这条路径，不能留下临时状态）
     try {
-      execSync(`security delete-keychain "${keychain}"`, { stdio: 'ignore' });
+      if (originalDefault) {
+        sh(['security', 'default-keychain', '-d', 'user', '-s', originalDefault]);
+      }
+      sh(['security', 'list-keychains', '-d', 'user', '-s', ...originalKeychains]);
+    } catch {
+      /* 恢复失败不影响产物 */
+    }
+    try {
+      execFileSync('security', ['delete-keychain', keychain], { stdio: 'ignore' });
     } catch {
       /* 清理失败不影响产物 */
     }
@@ -194,8 +224,10 @@ module.exports = async function (context) {
     cleanupLocales(context);
     embedIcon(context);
     fixPtySpawnHelper(context);
-    signMacApp(context);
   } catch (error) {
     console.error('After pack handler error:', error);
   }
+  // 签名刻意放在 try 外：带 secret 的构建若签名失败必须让打包失败 ——
+  // afterPack 吞错会让 CI 绿着发布未签名包，静默丢掉 macOS 局域网权限修复（1.0.3 漏过一次）
+  signMacApp(context);
 };
