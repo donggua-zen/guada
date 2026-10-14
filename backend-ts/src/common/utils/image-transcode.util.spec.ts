@@ -3,6 +3,8 @@ import * as crypto from "crypto";
 import sharp from "sharp";
 import {
   IMAGE_LIMIT_INPUT_PIXELS,
+  getImageTargetBytes,
+  getToolImageTargetBytes,
   transcodeImage,
   transcodePreview,
 } from "./image-transcode.util";
@@ -215,4 +217,38 @@ describe("transcodePreview", () => {
     expect(result.data[0]).toBe(0xff);
     expect(result.data[1]).toBe(0xd8);
   }, 30_000);
+});
+
+describe("image budget getters", () => {
+  const OLD_UPLOAD = process.env.CHAT_IMAGE_TARGET_KB;
+  const OLD_TOOL = process.env.CHAT_TOOL_IMAGE_TARGET_KB;
+
+  afterEach(() => {
+    if (OLD_UPLOAD === undefined) delete process.env.CHAT_IMAGE_TARGET_KB;
+    else process.env.CHAT_IMAGE_TARGET_KB = OLD_UPLOAD;
+    if (OLD_TOOL === undefined) delete process.env.CHAT_TOOL_IMAGE_TARGET_KB;
+    else process.env.CHAT_TOOL_IMAGE_TARGET_KB = OLD_TOOL;
+  });
+
+  it("默认预算分渠道：上传 384KB / 工具 150KB，互不影响", () => {
+    delete process.env.CHAT_IMAGE_TARGET_KB;
+    delete process.env.CHAT_TOOL_IMAGE_TARGET_KB;
+
+    expect(getImageTargetBytes()).toBe(384 * 1024);
+    expect(getToolImageTargetBytes()).toBe(150 * 1024);
+  });
+
+  it("各自 env 可覆盖，非法值回退默认、越界夹紧", () => {
+    process.env.CHAT_IMAGE_TARGET_KB = "200";
+    process.env.CHAT_TOOL_IMAGE_TARGET_KB = "64";
+    expect(getImageTargetBytes()).toBe(200 * 1024);
+    expect(getToolImageTargetBytes()).toBe(64 * 1024);
+
+    process.env.CHAT_TOOL_IMAGE_TARGET_KB = "abc";
+    expect(getToolImageTargetBytes()).toBe(150 * 1024);
+
+    // 下限 8KB（0 会被夹到下限，不落到"全拒"语义）
+    process.env.CHAT_TOOL_IMAGE_TARGET_KB = "0";
+    expect(getToolImageTargetBytes()).toBe(8 * 1024);
+  });
 });

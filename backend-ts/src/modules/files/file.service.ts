@@ -265,7 +265,7 @@ export class FileService {
         outputFileName,
       );
 
-      // 1. 原图：≤ 目标体积（默认 100KB，CHAT_IMAGE_TARGET_KB 可配），最长边 ≤ 1920px
+      // 1. 原图：≤ 目标体积（默认 384KB，CHAT_IMAGE_TARGET_KB 可配），最长边 ≤ 1920px
       const image = await transcodeImage(file.buffer);
       // 2. 缩略图：固定 256px / 64KB 预算，供列表与附件卡片展示
       const preview = await transcodePreview(file.buffer);

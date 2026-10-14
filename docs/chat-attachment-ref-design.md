@@ -77,7 +77,8 @@ uploadFile(sessionId, file)
 大图很容易产出数百 KB，直接变成模型的图片 token 成本。
 
 ```
-目标：单图 ≤ CHAT_IMAGE_TARGET_KB（默认 100KB）
+目标：用户上传 ≤ CHAT_IMAGE_TARGET_KB（默认 384KB，画质优先）
+      工具产出图 ≤ CHAT_TOOL_IMAGE_TARGET_KB（默认 150KB，成本优先）
 上限：最长边 ≤ CHAT_IMAGE_MAX_EDGE（默认 1920px）
 防护：limitInputPixels = 64MP（解压炸弹）
 阶梯：[1920,85] [1920,70] [1280,70] [960,60] [720,50] [480,40] [240,40] [128,40]
