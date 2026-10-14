@@ -38,10 +38,11 @@ import { MockAdapter } from './adapters/mock.adapter';
   exports: [AdapterRegistry, BundledCatalogService, LLMService, ProviderFileStore, ModelCapabilityService],
 })
 export class LlmCoreModule implements OnModuleInit {
-  // ProviderFileStore 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，
-  // 此刻迁移导出已完成，扫描成本留在启动期而非首个请求。
-  // （对齐 ChatModule/BotGatewayModule/McpServersModule 的域内预热契约；
-  //   ProviderBootstrapService 脚手架自持的 store 实例仅服务迁移本身，与 DI 单例无关）
+  // ProviderFileStore 索引预热。
+  // ⚠️ 本模块在 app.module.ts 中排在 PersistenceModule **之前**（@Global 基座），
+  // 且 Nest 的模块钩子跨模块串行 await——所以 store 内部**不阻塞**等迁移门控：
+  // 先按磁盘现状预热，门控（providers 域）放行后再扫一次把迁移导出的实例纳入，
+  // 详情见 ProviderFileStore.doInitialize。预热成本仍留在启动期而非首个请求。
   constructor(private providerStore: ProviderFileStore) {}
 
   async onModuleInit(): Promise<void> {

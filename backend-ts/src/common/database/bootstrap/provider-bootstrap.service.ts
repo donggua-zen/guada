@@ -26,6 +26,10 @@ import {
   parseAgentMarkdown,
   serializeAgentMarkdown,
 } from '../../../modules/agents/agent-file.mapper';
+import {
+  META_DOMAIN_PROVIDERS,
+  MetadataBootstrapGate,
+} from '../metadata-bootstrap.gate';
 
 const MIGRATED_MARKER = '.migrated-from-db';
 /** 历史遗留：曾把「引用改写」拆成独立 marker，现已与上面合并，见到就清掉 */
@@ -62,11 +66,23 @@ export class ProviderBootstrapService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settingsStorage: SettingsStorage,
+    private readonly gate: MetadataBootstrapGate,
   ) {
+    // 脚手架自持 store：不传门控（它是导出方本身，等待门控会自锁）
     this.store = new ProviderFileStore(new BundledCatalogService());
   }
 
   async run(): Promise<void> {
+    try {
+      await this.runMigration();
+    } finally {
+      // 无论导出成败都放行门控：域 store 只等「导出尝试已结束」，失败时读到的是
+      // 磁盘现状（下次启动靠 marker 缺失重试）——与 sessions/bots/mcp/kb/account 同语义
+      this.gate.complete(META_DOMAIN_PROVIDERS);
+    }
+  }
+
+  private async runMigration(): Promise<void> {
     await this.seedReadme();
 
     const markerPath = path.join(this.store.getDirectory(), MIGRATED_MARKER);

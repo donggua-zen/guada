@@ -66,3 +66,9 @@ export const META_DOMAIN_KB = "kb";
 export const META_DOMAIN_MCP = "mcp";
 /** 单账户：启动期从 DB 导入既有账户（防升级丢密码）后才可读账户文件 */
 export const META_DOMAIN_ACCOUNT = "account";
+/**
+ * 供应商：LlmCoreModule（@Global 基座）在 app.module.ts 中位于 PersistenceModule
+ * **之前**，其 ProviderFileStore 预热会先于 DB→文件导出跑完——不门控则把空索引
+ * 缓存一整个会话（升级后首次启动"供应商全丢"，新增一个才触发全量重扫显示出来）。
+ */
+export const META_DOMAIN_PROVIDERS = "providers";
