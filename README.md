@@ -124,6 +124,25 @@ pnpm install
 pnpm run build:electron   # 安装包输出在 release/ 目录
 ```
 
+**macOS（Apple Silicon）安装注意**：安装包带自签名证书、但**未做 Apple 公证**，从浏览器
+下载后**首次打开会被系统拦截**（提示「无法验证开发者」，或「已损坏，无法打开」）——
+这是 Gatekeeper 的拦截，不是文件损坏。把 GuaDa 拖进「应用程序」后，先在「终端」执行：
+
+```bash
+xattr -cr /Applications/GuaDa.app
+```
+
+再正常双击打开即可。若仍提示「已损坏」，追加一次本机 ad-hoc 重签（无需任何证书）：
+
+```bash
+codesign --force --deep --sign - /Applications/GuaDa.app
+```
+
+> 原理与更多细节见 [Electron 部署文档 4.1 / 4.2](docs/ELECTRON_DEPLOYMENT.md#41-安装步骤用户侧)。
+
+**Windows**：直接运行安装包即可；未签名的安装包可能触发 SmartScreen 提示
+（「Windows 已保护你的电脑」），选择「更多信息 → 仍要运行」继续。
+
 ### 方式三：源码开发
 
 ```bash
