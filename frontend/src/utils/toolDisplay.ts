@@ -15,6 +15,7 @@ import {
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 import { SUB_AGENT_SPAWN_TOOL } from "./subAgentTools";
+import { WORKFLOW_RUN_TOOL } from "./workflowTools";
 
 export interface ToolCall {
   /** 工具调用 id（= 后端 toolCallId），与 toolCallsResponse[].toolCallId 对应。
@@ -289,9 +290,13 @@ const STANDALONE_RENDERER_KINDS: ReadonlySet<ToolRendererConfig["kind"]> = new S
  *
  * 与 kind 集合的分工：kind 集合给「以 renderer 定制卡面承载正文」的工具（plan）；
  * 名集合给「行内容由专用组件承担、不走走 kind → ToolCustomView 管线」的工具——
- * 目前是子代理派生行（SubAgentToolRow）。同一工具不需要两处登记。
+ * 子代理派生行（SubAgentToolRow）与工作流运行卡（WorkflowRunInlineCard）。
+ * 同一工具不需要两处登记。
  */
-const STANDALONE_TOOL_NAMES: ReadonlySet<string> = new Set([SUB_AGENT_SPAWN_TOOL]);
+const STANDALONE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  SUB_AGENT_SPAWN_TOOL,
+  WORKFLOW_RUN_TOOL,
+]);
 
 /** kind 是否独立成块渲染（分组与行级默认展开共用同一集合） */
 export function isStandaloneRendererKind(kind: ToolRendererConfig["kind"]): boolean {

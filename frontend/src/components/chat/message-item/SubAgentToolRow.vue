@@ -1,6 +1,6 @@
 <template>
   <GdTooltip class="block" :content="clickable ? t('chat.toolCalls.openSubAgentPanel') : ''" placement="top">
-    <div class="flex items-center text-sm min-w-0 rounded-md -mx-1.5 px-1.5 py-0.5 transition-colors duration-200"
+    <div class="group flex items-center text-sm min-w-0 rounded-md -mx-1.5 px-1.5 py-0.5 transition-colors duration-200"
       :class="clickable ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5' : ''" @click.stop="onClick">
       <!-- 子智能体行：图标 + 「子智能体」+ 名称（同标签色加粗）+ · + 任务摘要。
            标签与名称统一用过程组标题的深灰（非主题色），任务摘要用浅灰（同组标题的
@@ -15,15 +15,24 @@
         <span class="truncate min-w-0 ml-1 text-gray-400 dark:text-gray-500"
           :class="{ 'is-shimmer': executing && !failed, 'is-failed': failed }">{{ task }}</span>
       </template>
+      <!-- 子代理列表「详情」入口（hover 显现）：打开本会话子代理列表面板
+           （活跃 + 已结束回放），对标工作流卡片的详情按钮 -->
+      <GdTooltip v-if="openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="top" class="shrink-0 ml-2">
+        <button class="open-list-btn" @click.stop="onOpenList">
+          <el-icon :size="14">
+            <PeopleTeam20Regular />
+          </el-icon>
+        </button>
+      </GdTooltip>
     </div>
   </GdTooltip>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { Bot20Regular } from '@vicons/fluent';
+import { Bot20Regular, PeopleTeam20Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { getToolArgs, type ToolCall } from '@/utils/toolDisplay';
@@ -79,9 +88,43 @@ const task = computed(() => {
 const onClick = (): void => {
   if (props.clickable) emit('open');
 };
+
+/** 子代理列表面板入口（ChatPage provide；无 provide 的宿主不渲染按钮） */
+const openSubagentList = inject<((sessionId?: string) => void) | null>(
+  'workspace:openSubagentList',
+  null,
+);
+
+const onOpenList = (): void => {
+  openSubagentList?.();
+};
 </script>
 
 <style scoped>
+/* 「详情」入口：hover 显现（与行内其它交互同节奏，不占常态视觉） */
+.open-list-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+/* 「详情」入口：hover 显现（行根节点带 tailwind 的 group 标记类） */
+.group:hover .open-list-btn {
+  opacity: 1;
+}
+.open-list-btn:hover {
+  color: var(--gd-color-text);
+}
+
 /* 失败态：图标/摘要转红（标签与名称保持中性灰——它们是子代理身份，不随状态变色） */
 .is-failed {
   color: #f56c6c;

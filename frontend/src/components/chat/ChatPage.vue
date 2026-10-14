@@ -84,6 +84,7 @@
               <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存）。
                    工作区全屏时 pane1 整列收起（display:none），对话不可见、数据照常流式写入 -->
               <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
+                :sub-sessions="subSessions"
                 :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                 @container-resize="onChatContainerResize"
                 @save-settings="handleSaveSessionSettings"
@@ -92,8 +93,7 @@
                      overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
                 <template #aside>
                   <div ref="asideSlotRef" class="h-full w-full">
-                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
-                      :sub-sessions="subSessions" />
+                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null" />
                   </div>
                 </template>
               </ChatPanel>
@@ -140,6 +140,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
+import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
@@ -278,11 +279,14 @@ const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 const subSessions = ref<Session[]>([]);
 
 /**
- * 处理子 Agent 创建事件（来自 SSE 全局广播）
+ * 处理子 Agent 创建事件（来自 SSE 全局广播，sessionId = 父会话 id）
  *
  * 仅负责在 subSessions 中登记，不管理状态。状态由 stream_started/stream_finished 统一处理。
+ * 必须按父会话过滤：事件是全局广播，不过滤会把别的会话派生的子代理混进本会话的
+ * 输入区胶囊/侧边栏标签列表（会话切换时的重置只能掩盖切换那一刻，掩盖不了并发会话）。
  */
 function handleSubAgentCreate(event: SessionEvent) {
+  if (event.sessionId !== mainSession.value?.id) return;
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   const name = payload.name || t('chat.panel.subTask');
@@ -290,7 +294,7 @@ function handleSubAgentCreate(event: SessionEvent) {
   if (!subSessionId) return;
 
   if (!subSessions.value.some(s => s.id === subSessionId)) {
-    // 事件未携带会话元数据时构造最小存根（保证概览区行立即可见），完整数据由 fetchSession 兜底
+    // 事件未携带会话元数据时构造最小存根（保证胶囊/列表行立即可见），完整数据由 fetchSession 兜底
     subSessions.value.push(
       session || ({ id: subSessionId, title: name, isStreaming: true } as Session),
     );
@@ -298,14 +302,16 @@ function handleSubAgentCreate(event: SessionEvent) {
 }
 
 /**
- * 处理子 Agent 关闭事件（来自 SSE 全局广播）
+ * 处理子 Agent 关闭事件（来自 SSE 全局广播，sessionId = 父会话 id）
  *
  * 后端已将子会话冻结（closedAt 标记，仅供回放），此处就地标记而非移除：
- * 概览"子代理"区把该行折叠进"已结束"组，与刷新后 fetchSession 返回的表现一致。
+ * 子代理列表面板把该行收进"已结束"段，与刷新后 fetchSession 返回的表现一致。
  * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭；
- * 冻结的子代理也可随时从概览"已结束"组重开回放）。
+ * 冻结的子代理也可随时从列表面板"已结束"段重开回放）。
+ * 过滤理由同 handleSubAgentCreate。
  */
 function handleSubAgentClosed(event: SessionEvent) {
+  if (event.sessionId !== mainSession.value?.id) return;
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   if (!subSessionId) return;
@@ -343,6 +349,37 @@ function openSubAgentSessionById(subSessionId: string) {
   nextTick(() => tabStore.openSubAgentTab(subSessionId, name));
 }
 provide('workspace:openSubAgentSession', openSubAgentSessionById);
+
+// 工作流 run 缓存（内联卡片与审阅标签共用；会话清空/删除时按会话释放）
+const workflowRunsStore = useWorkflowRunsStore();
+
+/**
+ * 打开工作流审阅标签（对话流内联卡片「详情」入口消费）：
+ * 在侧边栏工作区打开该会话的 workflow 审阅标签（成员/日志/返回值详览）。
+ * 与 openSubAgentSessionById 同款时序要求：工作区隐藏时先展开，nextTick 让开标签
+ * 排在 WorkspaceSidebar 挂载之后，避免被挂载期 clearAll 吃掉。
+ * sessionId 可选：卡片在自己的会话语境下传入；缺省用主会话（概览面板同款入口已随区块移除）。
+ */
+function openWorkflowTabById(sessionId?: string) {
+  const sid = sessionId || mainSession.value?.id;
+  if (!sid) return;
+  layoutStore.setWorkspaceVisible(true);
+  nextTick(() => tabStore.openWorkflowTab(sid));
+}
+provide('workspace:openWorkflowTab', openWorkflowTabById);
+
+/**
+ * 打开子代理列表面板（对话流子代理行的「详情」/ 运行时胶囊子代理段的「详情」消费）：
+ * 列出本会话全部子代理（活跃 + 已结束回放），对标工作流审阅标签的入口模式。
+ * 时序与 openWorkflowTabById 一致：先展开工作区，nextTick 后再开标签。
+ */
+function openSubagentListById(sessionId?: string) {
+  const sid = sessionId || mainSession.value?.id;
+  if (!sid) return;
+  layoutStore.setWorkspaceVisible(true);
+  nextTick(() => tabStore.openSubagentListTab(sid));
+}
+provide('workspace:openSubagentList', openSubagentListById);
 
 // 组合式函数
 const { toast, confirm } = usePopup();
@@ -698,6 +735,8 @@ async function clearChat() {
     try {
       await apiService.clearSessionMessages(mainSession.value.id);
       sessionStore.clearSessionMessages(mainSession.value.id);
+      // 工作流 run 缓存随记录清空释放（避免陈旧进度卡挂在下一次渲染上）
+      workflowRunsStore.clearSession(mainSession.value.id);
       // 重新加载消息列表
       const chatPanel = chatPanelRef.value;
       if (chatPanel && chatPanel.loadMessages) {

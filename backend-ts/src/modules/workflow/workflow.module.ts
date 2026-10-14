@@ -15,7 +15,7 @@ import { WorkflowPlugin } from "./workflow.plugin";
  *
  * 引擎复用 SubAgentManager 创建独立会话子代理（同一 AgentEngine 完整循环）。
  * 运行进度不落 JSONL：引擎维护内存折叠快照，WorkflowController 提供快照端点
- * （概览面板数据源），实时增量走 workflow_event SSE 流通道。
+ * （前端 workflowRuns store 基线），实时增量走 workflow_event SSE 流通道。
  */
 @Module({
   imports: [SubAgentModule, AuthModule, ChatModule, AgentsModule],

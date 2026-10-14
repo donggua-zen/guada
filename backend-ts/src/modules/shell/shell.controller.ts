@@ -1,7 +1,8 @@
 /**
  * 后台进程 UI 管理端点
  *
- * 供前端 OverviewPanel 后台进程区块使用：列出运行中进程、终止进程、查看日志尾部。
+ * 供前端输入区运行时胶囊的「进程」段使用（composables/useRunningProcesses.ts）：
+ * 列出运行中进程、终止进程、查看日志尾部。
  * 与 AI 侧的 process 工具（kill/poll/write）共享 ProcessManagerService，
  * 但按 HTTP 语义校验会话归属，防止跨会话操作。
  */

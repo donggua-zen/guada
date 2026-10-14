@@ -273,6 +273,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
+import { useWorkflowRunsStore } from '../stores/workflowRuns'
 import { useSessionGroupStore } from '../stores/sessionGroup'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
@@ -329,6 +330,8 @@ const route = useRoute()
 const authStore = useAuthStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
+// 工作流 run 缓存（内联卡片/审阅标签共用）：会话删除时按会话释放
+const workflowRunsStore = useWorkflowRunsStore()
 const { themeMode, setTheme } = useTheme()
 
 const { t } = useI18n()
@@ -878,6 +881,8 @@ const confirmDeleteSession = async () => {
     }
     sessionStore.removeSession(session.id)
     sessionStore.clearSidebarState(session.id)
+    // 工作流 run 缓存随会话删除释放（内联卡片/审阅标签共用 store）
+    workflowRunsStore.clearSession(session.id)
     toast.success(t('ui.sidebar.sessionDeleted'))
 
     // 关闭对话框

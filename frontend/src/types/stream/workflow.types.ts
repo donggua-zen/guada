@@ -38,7 +38,7 @@ export interface WorkflowEventData {
   kind: WorkflowEventKind;
   time: number;
   payload:
-    | { name: string; description?: string; phases?: WorkflowPhaseMeta[] }
+    | { name: string; description?: string; phases?: WorkflowPhaseMeta[]; toolCallId?: string }
     | { title: string }
     | { message: string }
     | {
@@ -61,6 +61,12 @@ export interface WorkflowEventData {
 /** 卡片消费的运行状态（由 reducer 从事件流累积，live 与回放收敛同一形态） */
 export interface WorkflowRunState {
   runId: string;
+  /**
+   * 触发本次运行的工具调用 id（run-start 下发 / REST 快照携带）。
+   * 内联卡片据此把 run 绑回对话流里的 workflow_run 工具行；
+   * 旧归档无此字段 → 该 run 绑不到卡片（卡片只按工具结果出终态，不出进度树）。
+   */
+  toolCallId?: string;
   name: string;
   description?: string;
   phases?: WorkflowPhaseMeta[];

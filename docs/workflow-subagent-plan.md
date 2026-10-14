@@ -1,7 +1,39 @@
 # Workflow 子代理编排方案（对齐 deepseek-harness）
 
-> 状态：已实现（v1）
+> 状态：执行机制 v1 已实现；**进度展示已演进到方案 C（见第零节，2026-10-14）**
 > 竞品参照：`D:\AI\work\public\deepseek-harness` 的 `packages/workflow/*` + `packages/subagent/*` + `packages/client/ui-workflow-run`
+>
+> 阅读提示：第一节「机制概述」、第二节「架构与数据流」、第五节「安全与继承」、第六节「与 DSH 的差异」
+> 描述的是**执行机制**，仍然有效；第三节「文件清单」与第四节「事件双通道」是 **v1 落地时的历史记录**，
+> 其中进度持久化与前端渲染位置已被后续两次迁移取代（见第零节）。
+
+## 零、进度展示的现状（方案 C，取代 v1 与方案 B 的展示部分）
+
+| 维度 | 现状 | 取代了什么 |
+|---|---|---|
+| 进度持久化 | **不落 JSONL**（方案 B，commit `43afee84`）：引擎维护内存折叠快照 + `workflow_event` SSE；终态一次性原子归档 `sessions/<sid>/workflows/<runId>.json` | v1 的 `workflow/event` 领域事件落库 + 双通道回放重建（与父循环共享 seq 分配，曾出现重复 seq 损坏会话的硬故障） |
+| 后端接口 | `GET sessions/:id/workflow/runs`（内存快照 ∪ 磁盘归档，同 runId 内存优先） | — |
+| 前端数据层 | `frontend/src/stores/workflowRuns.ts`：按会话缓存，**单一** REST 基线 + **单一常驻** SSE 订阅（不依赖面板挂载，避免"条件渲染导致订阅断链"）；基线按 `lastSeq` 防回退合并；`run-end` 后去抖补拉快照取 `result` | 概览面板与审阅标签各自 fetch + 各自订阅的两份重复逻辑 |
+| 渲染位置 | **对话流内 `workflow_run` 工具调用处原地渲染**（方案 C，2026-10-14）：`components/chat/message-item/WorkflowRunInlineCard.vue` 作为独立渲染行（`STANDALONE_TOOL_NAMES`）；头行＝状态点/名称/进度/耗时 + 成员树（可跳子代理）+ 日志折叠 + 失败错误行 | 概览面板「工作流」区块（已删除）；v1 的 `WorkflowRunCard.vue` 事件卡（已随方案 B 删除） |
+| 关联键 | `runId ↔ toolCallId`：插件把 `ctx.toolCallId` 传进 `startRun`，随 `run-start` 事件下发并进快照（对齐 `subagent_link` 范式）。旧归档无此字段 → 卡片绑不到 run，只按工具结果出终态头 + 返回值（不出进度树） | v1 靠事件落库在回合内现场合成消息束，不需要关联键 |
+| 详情/历史 | 工作流审阅标签 `WorkflowHistoryPanel.vue`（成员树/日志/返回值/错误）；入口＝内联卡片「详情」+ 侧边栏起始页 | 概览区块的「查看全部」（已删除） |
+
+渲染数据流（单链路）：
+
+```
+workflow_run 工具调用（JSONL 原生落库，工具执行前即已可读）
+   ↕ toolCallId 绑定
+workflowRuns store ── REST 快照（基线，含 logs/error/result）──► WorkflowRunInlineCard
+                   └─ workflow_event SSE（增量，run 内 seq 幂等）──►   （对话流调用处）
+                                                                    WorkflowHistoryPanel（审阅标签）
+```
+
+**终态收口**：`settle()` 是所有终态路径（worker `result`/`error` 消息、worker `error`/`exit` 兜底、
+宽限期强杀、worker 构造失败）的唯一汇聚点。它除了归档快照，还负责①补发缺失的 `run-end`
+（正常两个分支自己发过 → `runEndEmitted` 幂等跳过，seq 不重复占号）②把 `status/errorCode/errorMessage/durationMs`
+同步进快照且先于归档。缺这一步时，崩溃/强杀分支只落到磁盘而没有事件：前端实时视图永久停在「运行中」，
+刷新后归档里同样写着 `running`。
+
 
 ## 一、机制概述
 
@@ -96,9 +128,14 @@ WorkflowEngineService.startRun (宿主)
 | `components/chat/ChatPage.vue` | provide `workflow:openSubAgentSession`（member 点击跳子代理 Tab，缺失时补建） |
 | `locales/zh-CN|en-US/chat.ts` | `chat.workflow.*` 文案 |
 
-## 四、事件双通道（对齐压缩事件先例）
+## 四、事件双通道（v1 历史记录 —— 已被方案 B 取代，见第零节）
 
-| 通道 | 事件 | 消费方 |
+> 下列双通道（领域事件 `workflow/event` 落 JSONL）已在 commit `43afee84` 整体移除：
+> 进度事件与父循环共享 per-session seq 分配（`getNextSeq` 读改写非原子），并发追加会写出重复 seq
+> 触发 JSONL 连续性校验拒绝加载；现仅保留流通道 `workflow_event` + REST 快照基线的收敛。
+> 本节的 reducer 幂等规则（`runId + run 内 seq`）仍是现行口径，只是不再有"回放"那一路。
+
+| 通道 | 事件 | 消费方（v1） |
 |---|---|---|
 | 实时 | 流事件 `workflow_event`（SessionStreamManager → SSE，method `stream/workflow_event`） | StreamEventHub → streamProjector |
 | 持久 | 领域事件 `workflow/event`（JSONL，载荷原样；后端 replayer 未知类型忽略，**绝不进 LLM 上下文**） | `GET /events` 事件页 → foldEvents |
@@ -127,9 +164,11 @@ WorkflowEngineService.startRun (宿主)
 
 ## 七、测试
 
-- `backend-ts/test/workflow/workflow-engine.spec.ts`（22 用例）：同步校验（META_INVALID/SCRIPT_PARSE/abort 已中止）、正常运行（串行/args 注入/失败 null/aborted 映射/parallel/pipeline/phase+log）、上限与安全（白名单 AGENT_START/INVALID_ARGUMENT/RESULT_UNSERIALIZABLE/parallel 普通异常容错）、取消（abort 配对合成）、事件双发（seq 递增/落库失败不中断）
-- `frontend/src/services/modules/streamProjector.test.ts`（+4 用例）：live 建卡与累积、回放与 live 收敛（seq 幂等）、end-先于-start 防御、多 run 并存与日志封顶
-- 回归：`test/chat`、`test/plugins`、`test/common` 等全套后端 775/790 通过（3 个失败套件 embedding/browser/skill-hot-reload 为存量问题，与本改动无关）
+- `backend-ts/test/workflow/`（`workflow-engine.spec.ts` / `workflow-file-store.spec.ts` / `workflow.controller.spec.ts`，36 用例）：同步校验、正常运行、上限与安全、取消配对、快照归档、REST 端点合并、工具调用关联键、终态收口（漏发的 run-end 由 settle 补发且只一条）
+- `frontend/src/services/modules/workflowRuns.test.ts`：reducer 幂等与累积（含 `run-start` 关联键 `toolCallId` 落进状态、旧归档无关联键）
+- `frontend/src/stores/workflowRuns.test.ts`（方案 C 新增）：基线幂等加载、SSE 增量与未加载会话、基线按 `lastSeq` 防回退合并、`run-end` 去抖补拉 result、`clearSession`
+- `frontend/src/utils/toolDisplay.test.ts`：独立成块判定（`ExitPlanMode` / `subagent_spawn` / `workflow_run`）
+- 回归：`test/chat`、`test/plugins`、`test/common` 等后端套件；前端 `pnpm --dir frontend test`（vitest）+ `typecheck` + `lint`
 
 ## 八、已知边界（后续可扩展）
 

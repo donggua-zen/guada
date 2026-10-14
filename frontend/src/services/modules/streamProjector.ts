@@ -480,7 +480,8 @@ function applyDomainEvent(
       return;
     }
     case "workflow/event":
-      // Workflow 编排进度已迁移至概览面板（方案 B，不落 JSONL）——回放流中忽略历史事件
+      // Workflow 编排进度不落 JSONL（方案 B）——回放流中忽略历史事件；
+      // 现行渲染位置：workflow_run 工具行原地（数据源 stores/workflowRuns.ts）
       return;
     default:
       // command/*、message/prune、message/meta、approval/*、compaction/start|end、session/*、envelope → 暂不处理
@@ -819,7 +820,7 @@ export function applyChunkToStore(
     sessionStore.setSessionIsCompressing(sessionId, false);
   }
 
-  // workflow_event 流块已迁移至概览面板消费（方案 B）——投影器不再处理
+  // workflow_event 流块由 stores/workflowRuns.ts 常驻消费（方案 B/C）——投影器不再处理
 
   // 回合级
   if (chunk.type === "turn_start") {

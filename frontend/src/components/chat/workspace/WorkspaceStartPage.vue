@@ -40,6 +40,17 @@
             <span class="start-item-desc">{{ t('chat.workspace.startPageGitDesc') }}</span>
           </span>
         </button>
+        <!-- 子代理：面板常驻入口（无论有无子代理都可进入，面板内列出活跃 + 已结束回放） -->
+        <button class="start-item" @click="emit('open-subagents')">
+          <span class="start-item-icon">
+            <el-icon :size="18"><Bot20Regular /></el-icon>
+          </span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.subagents') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageSubagentDesc') }}</span>
+          </span>
+        </button>
+        <!-- 工作流：面板常驻入口（无论有无运行都可进入，面板内列出历史 run） -->
         <button class="start-item" @click="emit('open-workflow')">
           <span class="start-item-icon">
             <el-icon :size="18"><Flowchart20Regular /></el-icon>
@@ -66,7 +77,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Flowchart20Regular, Notepad20Regular } from "@vicons/fluent";
+import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Bot20Regular, Flowchart20Regular, Notepad20Regular } from "@vicons/fluent";
 
 const { t } = useI18n();
 
@@ -75,6 +86,7 @@ const emit = defineEmits<{
   "open-terminal": [];
   "open-browser": [];
   "open-git": [];
+  "open-subagents": [];
   "open-workflow": [];
   "open-plan": [];
 }>();

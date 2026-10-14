@@ -48,6 +48,10 @@
                             </span>
                             <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
                         </template>
+                        <!-- 子代理列表面板图标（与单个子代理标签的 Bot 图标区分） -->
+                        <span v-else-if="tab.type === 'subagentlist'" class="tab-favicon tab-git">
+                            <el-icon :size="14"><PeopleTeam20Regular /></el-icon>
+                        </span>
                         <!-- 工作流审阅图标 -->
                         <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
                             <el-icon :size="14"><Flowchart20Regular /></el-icon>
@@ -99,8 +103,8 @@
             <div class="flex-1 min-w-0 relative">
                 <!-- 起始页：无任何标签 或 点击 + 号时显示（不占用标签栏） -->
                 <WorkspaceStartPage v-if="showStartPage" @open-file="onNewTabOpenFile" @open-terminal="onNewTabOpenTerminal"
-                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-workflow="onNewTabOpenWorkflow"
-                    @open-plan="onNewTabOpenPlan" />
+                    @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-subagents="onNewTabOpenSubagents"
+                    @open-workflow="onNewTabOpenWorkflow" @open-plan="onNewTabOpenPlan" />
 
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
@@ -128,6 +132,9 @@
                 <SubagentChatTab v-if="activeTab?.type === 'subagent'" class="h-full"
                     :sub-session-id="subSessionIdOf(activeTab.key)"
                     :session="resolveSubSession(subSessionIdOf(activeTab.key))" />
+                <!-- 子代理列表标签（活跃 + 已结束回放；已结束回放的唯一入口） -->
+                <SubagentListPanel v-if="activeTab?.type === 'subagentlist' && sessionId" class="h-full"
+                    :session-id="sessionId" :sub-sessions="props.subSessions" />
                 <!-- 工作流审阅标签（终态归档 + 运行中快照合并，行展开看成员/日志/结果） -->
                 <WorkflowHistoryPanel v-if="activeTab?.type === 'workflow' && sessionId" class="h-full"
                     :session-id="sessionId" />
@@ -163,11 +170,12 @@ import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Plus, Close } from '@element-plus/icons-vue';
-import { Branch20Regular, Pulse20Regular, Bot20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SubagentChatTab from './SubagentChatTab.vue';
+import SubagentListPanel from './SubagentListPanel.vue';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel.vue';
 import PlanPanel from './PlanPanel.vue';
 import FileDiffPanel from './FileDiffPanel.vue';
@@ -211,6 +219,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'terminal') return t('chat.workspace.terminal');
     if (tab.type === 'processlog') return tab.command ? tab.command.replace(/\s+/g, ' ').trim() : t('chat.workspace.processLogTab');
     if (tab.type === 'subagent') return tab.name || t('chat.workspace.subagentTab');
+    if (tab.type === 'subagentlist') return t('chat.workspace.subagentListTab');
     if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
     if (tab.type === 'plan') return t('chat.workspace.planTab');
     if (tab.type === 'diff') return tab.name || tab.path || tab.key;
@@ -371,6 +380,11 @@ function onNewTabOpenGit(): void {
 function onNewTabOpenWorkflow(): void {
     if (!props.sessionId) return;
     tabStore.openWorkflowTab(props.sessionId);
+}
+
+function onNewTabOpenSubagents(): void {
+    if (!props.sessionId) return;
+    tabStore.openSubagentListTab(props.sessionId);
 }
 
 function onNewTabOpenBrowser(): void {

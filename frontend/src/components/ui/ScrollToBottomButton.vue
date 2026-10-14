@@ -47,7 +47,7 @@ defineExpose({
     justify-content: center;
     width: 28px;
     height: 28px;
-    /* 与 TODO 胶囊同圆角：同一行的两个 chip 必须同形（改这里要同步 FloatingTodoBar） */
+    /* 与运行时状态胶囊同圆角：同一行的两个 chip 必须同形（改这里要同步 ComposerStatusBar） */
     border-radius: 8px;
     background: var(--gd-color-surface);
     border: 1px solid var(--gd-color-border);
