@@ -181,13 +181,30 @@ export const useSessionStore = defineStore('session', () => {
 
     /**
      * 按分组获取会话列表（已按 lastActiveAt 降序排序）
-     * 自动排除已归档会话（archived === true）
+     * 自动排除已归档会话（archived === true）与置顶会话（pinned === true）——
+     * 置顶项由 getPinnedSessions 单独聚合到侧边栏顶部「已置顶」分区，两者互斥不重复。
      * @param groupId - 分组ID，null 表示未分组
      */
     const getSessionsByGroup = (groupId: string | null): Session[] => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId && !s.archived && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
+            .filter(s => (s.groupId || null) === targetGroupId && !s.archived && !s.pinned && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
+            .sort((a, b) => {
+                const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
+                const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
+                return timeB - timeA
+            })
+    }
+
+    /**
+     * 置顶会话列表（侧边栏顶部「已置顶」分区，跨分组聚合，按 lastActiveAt 降序）。
+     *
+     * 直接从 sessionsMap 派生（而非另设一份数据源）：远程清单拉取失败时，
+     * 本地已置顶（乐观写入 pinned=true）的会话仍在，不会凭空"消失"。
+     */
+    const getPinnedSessions = (): Session[] => {
+        return Array.from(sessionsMap.value.values())
+            .filter(s => s.pinned && !s.archived && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
             .sort((a, b) => {
                 const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
                 const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
@@ -202,7 +219,7 @@ export const useSessionStore = defineStore('session', () => {
     const getGroupTotal = (groupId: string | null): number => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent').length
+            .filter(s => (s.groupId || null) === targetGroupId && !s.pinned && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent').length
     }
 
     /**
@@ -588,6 +605,18 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 设置会话置顶状态（本地乐观更新；最终一致性由后端 SSE 广播保证）
+     * @param sessionId - 会话 ID
+     * @param pinned - 是否置顶
+     */
+    const setSessionPinned = (sessionId: string, pinned: boolean): void => {
+        const session = sessionsMap.value.get(sessionId)
+        if (session) {
+            session.pinned = pinned
+        }
+    }
+
+    /**
      * 更新会话最后活跃时间
      * @param sessionId - 会话 ID
      * @param timestamp - 时间戳
@@ -738,8 +767,10 @@ export const useSessionStore = defineStore('session', () => {
         removeSession,
         getSessionsByGroup,
         getGroupTotal,
+        getPinnedSessions,
         moveSession,
         setSessionGroupId,
+        setSessionPinned,
         setLoadedCount,
         getLoadedCount,
         setHasMore,

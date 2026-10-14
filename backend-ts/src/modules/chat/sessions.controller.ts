@@ -109,6 +109,15 @@ export class SessionsController {
     return this.sessionService.getSidebarSessions(Number(limit));
   }
 
+  /**
+   * 置顶会话清单（侧边栏顶部「已置顶」分区）。
+   * 注意：必须声明在 `GET sessions/:id` 之前，否则会被 `:id` 路由吞掉。
+   */
+  @Get("sessions/pinned")
+  async getPinnedSessions() {
+    return this.sessionService.getPinnedSessions();
+  }
+
   @Put("sessions/:id/archive")
   async archiveSession(
     @Param("id") id: string,

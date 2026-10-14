@@ -222,3 +222,66 @@ describe("sessionStore 流状态机", () => {
     expect(store.peekStreamStatus("flood_39")).toBe("idle");
   });
 });
+
+/**
+ * 置顶（pin）在侧边栏的聚合契约：
+ * 「已置顶」分区（getPinnedSessions）与分组区（getSessionsByGroup）互斥，避免同一会话出现两次。
+ */
+describe("sessionStore 置顶分区聚合", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  /** 造一个最小 Session（仅置顶/分组/排序相关字段） */
+  const mkSession = (id: string, over: Record<string, any> = {}) =>
+    ({
+      id,
+      title: id,
+      sessionType: "web",
+      lastActiveAt: "2026-01-01T00:00:00.000Z",
+      ...over,
+    }) as any;
+
+  it("置顶会话从所属分组区排除（互斥，不重复展示）", () => {
+    const store = useSessionStore();
+    store.setSession(mkSession("a", { groupId: "g1", lastActiveAt: "2026-01-03T00:00:00.000Z" }));
+    store.setSession(mkSession("b", { groupId: "g1", pinned: true, lastActiveAt: "2026-01-02T00:00:00.000Z" }));
+
+    expect(store.getSessionsByGroup("g1").map((s) => s.id)).toEqual(["a"]);
+    expect(store.getPinnedSessions().map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("未分组区同样排除置顶；getGroupTotal 同步排除", () => {
+    const store = useSessionStore();
+    store.setSession(mkSession("a"));
+    store.setSession(mkSession("b", { pinned: true }));
+
+    expect(store.getSessionsByGroup(null).map((s) => s.id)).toEqual(["a"]);
+    expect(store.getGroupTotal(null)).toBe(1);
+  });
+
+  it("getPinnedSessions：跨分组聚合、按 lastActiveAt 降序、排除归档与子会话", () => {
+    const store = useSessionStore();
+    store.setSession(mkSession("p-old", { pinned: true, groupId: "g1", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+    store.setSession(mkSession("p-new", { pinned: true, lastActiveAt: "2026-01-05T00:00:00.000Z" }));
+    store.setSession(mkSession("p-archived", { pinned: true, archived: true, lastActiveAt: "2026-01-09T00:00:00.000Z" }));
+    store.setSession(mkSession("p-sub", { pinned: true, sessionType: "sub_agent", lastActiveAt: "2026-01-09T00:00:00.000Z" }));
+
+    expect(store.getPinnedSessions().map((s) => s.id)).toEqual(["p-new", "p-old"]);
+  });
+
+  it("setSessionPinned：本地翻转 + 立即反映到两个分区", () => {
+    const store = useSessionStore();
+    store.setSession(mkSession("a", { groupId: "g1" }));
+    expect(store.getSessionsByGroup("g1").map((s) => s.id)).toEqual(["a"]);
+
+    store.setSessionPinned("a", true);
+    expect(store.getSession("a")!.pinned).toBe(true);
+    expect(store.getSessionsByGroup("g1")).toEqual([]);
+    expect(store.getPinnedSessions().map((s) => s.id)).toEqual(["a"]);
+
+    store.setSessionPinned("a", false); // 回滚语义
+    expect(store.getSessionsByGroup("g1").map((s) => s.id)).toEqual(["a"]);
+    expect(store.getPinnedSessions()).toEqual([]);
+  });
+});

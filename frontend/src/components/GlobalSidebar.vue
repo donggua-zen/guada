@@ -31,21 +31,24 @@
           <!-- 分组标题栏 -->
           <div
             class="group-header flex items-center justify-between pl-0.5 pr-1 py-1 ml-1 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
-            @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
+            @click="toggleGroupExpand(group.id)" @contextmenu.prevent="handleGroupContextMenu($event, group)">
             <div class="flex items-center gap-1">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
-                <FolderOpen16Regular class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
+                <Pin20Regular v-if="group.id === PINNED_GROUP_ID"
+                  class="absolute inset-0 w-4 h-4 text-(--gd-color-primary)" />
+                <FolderOpen16Regular v-else class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
                 <!-- <svg class="w-3.5 h-3.5 absolute inset-0 transition-opacity duration-200 group-hover:opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                 </svg> -->
-                <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
-                  :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
+                <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
+                  :class="[isGroupExpanded(group.id) ? '' : '-rotate-90', group.id === PINNED_GROUP_ID ? '' : 'opacity-0 group-hover:opacity-100']" />
               </span>
               <span class="text-sm font-medium">{{ group.name }}</span>
             </div>
             <div class="flex items-center gap-1">
-              <!-- 新建会话按钮（始终显示） -->
-              <GdTooltip :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
+              <!-- 新建会话按钮（始终显示；置顶分区无此操作） -->
+              <GdTooltip v-if="group.id !== PINNED_GROUP_ID"
+                :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
                 <div @click.stop="openNewSession(group.id)">
                   <div
                     class="session-action-trigger p-0.5 bg-(--gd-color-surface) dark:bg-gray-700 border border-(--gd-color-surface-border) dark:border-gray-700">
@@ -112,6 +115,11 @@
                       </el-icon>
                     </div>
                       <template #dropdown>
+                        <DropdownMenuItem command="pin">
+                          <Pin20Regular v-if="!session.pinned" class="w-4 h-4 mr-2 inline-block" />
+                          <PinOff20Regular v-else class="w-4 h-4 mr-2 inline-block" />
+                          {{ session.pinned ? t('ui.sidebar.unpin') : t('ui.sidebar.pin') }}
+                        </DropdownMenuItem>
                         <DropdownMenuItem command="rename">
                           <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
                           {{ t('ui.sidebar.rename') }}
@@ -309,6 +317,8 @@ import {
   Folder20Regular,
   FolderOpen16Regular,
   Archive20Regular,
+  Pin20Regular,
+  PinOff20Regular,
   ChevronDown12Regular,
   WeatherSunny20Regular,
   WeatherMoon20Filled,
@@ -335,6 +345,14 @@ const workflowRunsStore = useWorkflowRunsStore()
 const { themeMode, setTheme } = useTheme()
 
 const { t } = useI18n()
+
+/**
+ * 置顶分区虚拟分组 ID（不对应后端实体，仅用于侧边栏顶部「已置顶」分区渲染）。
+ * 会话数据由 sessionStore.getPinnedSessions() 提供，与真实分组区互斥。
+ */
+const PINNED_GROUP_ID = '__pinned__'
+/** 置顶分区折叠态（本地，不落分组 store） */
+const pinnedExpanded = ref(true)
 
 const themeOptions = computed(() => [
   { label: t('ui.sidebar.themeLight'), value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
@@ -498,6 +516,16 @@ const isLoadingGroup = (groupId: string) => {
 // 展示的分组列表（包含虚拟的未分组）
 const displayGroups = computed(() => {
   const groups = [...sessionGroupStore.sortedGroups]
+  // 置顶分区：跨分组聚合，固定在最顶部；无置顶会话时整段不渲染
+  if (sessionStore.getPinnedSessions().length > 0) {
+    groups.unshift({
+      id: PINNED_GROUP_ID,
+      name: t('ui.sidebar.pinnedSection'),
+      sortOrder: -1,
+      createdAt: '',
+      updatedAt: ''
+    })
+  }
   // 始终在最后添加未分组
   groups.push({
     id: UNGROUPED_ID,
@@ -511,12 +539,14 @@ const displayGroups = computed(() => {
 
 // 获取分组内的会话（从 sessionStore 统一数据源获取）
 const getGroupSessions = (groupId: string): Session[] => {
+  if (groupId === PINNED_GROUP_ID) return sessionStore.getPinnedSessions()
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
   return sessionStore.getSessionsByGroup(groupIdParam)
 }
 
-// 分组是否展开
+// 分组是否展开（置顶分区用独立本地折叠态，不落分组 store）
 const isGroupExpanded = (groupId: string): boolean => {
+  if (groupId === PINNED_GROUP_ID) return pinnedExpanded.value
   if (groupId === UNGROUPED_ID) {
     return sessionGroupStore.isExpanded(UNGROUPED_ID)
   }
@@ -525,12 +555,23 @@ const isGroupExpanded = (groupId: string): boolean => {
 
 // 切换分组展开/折叠
 const toggleGroupExpand = (groupId: string): void => {
+  if (groupId === PINNED_GROUP_ID) {
+    pinnedExpanded.value = !pinnedExpanded.value
+    return
+  }
   sessionGroupStore.toggleExpand(groupId)
 }
 
-// 分组是否还有更多会话
+// 分组是否还有更多会话（置顶分区不分页）
 const groupHasMoreSessions = (groupId: string): boolean => {
+  if (groupId === PINNED_GROUP_ID) return false
   return sessionStore.groupHasMore(groupId)
+}
+
+// 分组右键菜单：置顶分区无分组级操作（不支持重命名/删除）
+const handleGroupContextMenu = (event: MouseEvent, group: SessionGroup) => {
+  if (group.id === PINNED_GROUP_ID) return
+  openGroupContextMenu(event, group)
 }
 
 // 初始化加载所有分组的前N个会话（单次请求获取分组+各分组会话）
@@ -538,10 +579,24 @@ const loadSessions = async () => {
   isInitializing.value = true
   try {
     const pageSize = window.innerHeight > 1080 ? 15 : 10
-    const data = await apiService.fetchSidebarSessions(pageSize)
+    // 分组区与置顶区并行拉取（置顶失败不拖垮主列表）
+    const [data, pinnedData] = await Promise.all([
+      apiService.fetchSidebarSessions(pageSize),
+      apiService
+        .fetchPinnedSessions()
+        .catch(() => ({ items: [] as Session[] })),
+    ])
 
     // 设置分组列表
     sessionGroupStore.setGroups(data.groups || [])
+
+    // 置顶会话写入统一数据源（「已置顶」分区由 sessionsMap 派生）
+    for (const session of pinnedData?.items || []) {
+      sessionStore.setSession(session)
+      if (session.isStreaming) {
+        sessionStore.syncStreamingState(session.id, true)
+      }
+    }
 
     // 处理各分组的会话
     for (const gs of data.groupSessions || []) {
@@ -666,7 +721,9 @@ const handleNavClick = (tab: string) => {
 
 // 处理会话下拉菜单选择
 const handleDropdownSelect = (command: string, session: Session) => {
-  if (command === 'rename') {
+  if (command === 'pin') {
+    handlePinSession(session)
+  } else if (command === 'rename') {
     handleRenameSession(session)
   } else if (command === 'move') {
     handleMoveSession(session)
@@ -674,6 +731,28 @@ const handleDropdownSelect = (command: string, session: Session) => {
     handleArchiveSession(session)
   } else if (command === 'delete') {
     handleDeleteSession(session)
+  }
+}
+
+/**
+ * 置顶 / 取消置顶会话
+ *
+ * 乐观更新：先本地改（侧边栏「已置顶」分区立即响应），再落后端；失败回滚 + 报错。
+ * 本窗口自己发起的变更不会被自身 SSE 回环覆盖（useSessionEvents 过滤 source===self），
+ * 因此本地更新是必需的而非可选优化。
+ * 无二次确认——与 zcode 的 pin 语义一致（归档才有确认）。
+ */
+const handlePinSession = async (session: Session) => {
+  const next = !session.pinned
+  sessionStore.setSessionPinned(session.id, next)
+  try {
+    await apiService.updateSession(session.id, { pinned: next })
+    toast.success(next ? t('ui.sidebar.pinned') : t('ui.sidebar.unpinned'))
+  } catch (error) {
+    // 回滚到原状态
+    sessionStore.setSessionPinned(session.id, !next)
+    console.error('置顶会话失败:', error)
+    toast.error(t('ui.sidebar.pinFailed'))
   }
 }
 
@@ -783,10 +862,11 @@ const handleDeleteGroup = async (group: SessionGroup) => {
     })
 
     if (confirmed) {
-      // 将该分组下的所有会话移到未分组（统一数据源中批量更新）
-      const sessionsToMove = sessionStore.getSessionsByGroup(group.id)
-      for (const s of sessionsToMove) {
-        s.groupId = null
+      // 将该分组下的所有会话移到未分组（统一数据源中批量更新）。
+      // 注意：不能只遍历 getSessionsByGroup（它排除了置顶项）——置顶会话同样属于该分组，
+      // 后端 deleteGroup 会一并解绑，本地必须同步，否则取消置顶后会"消失"。
+      for (const s of sessionStore.sessionsMap.values()) {
+        if (s.groupId === group.id) s.groupId = null
       }
 
       // 删除分组

@@ -322,7 +322,9 @@ describe("SessionMetaStore", () => {
       probe.close();
       expect(cols).toContain("data");
       expect(cols).not.toContain("settings");
-      expect(version).toBe(3);
+      // v4：pinned 列（置顶）由迁移补齐
+      expect(cols).toContain("pinned");
+      expect(version).toBe(4);
     });
   });
 
@@ -411,6 +413,39 @@ describe("SessionMetaStore", () => {
       const all = store.queryPaged({ sessionType: "web" }, "lastActiveDesc", {});
       expect(all.rows.map((m) => m.id)).toEqual(store.query({ sessionType: "web" }).map((m) => m.id));
       expect(all.total).toBe(3);
+    });
+
+    it("pinned：默认 false，update 可置顶/取消，query 双向过滤", async () => {
+      // 默认不置顶
+      expect(store.getMeta("a1")!.pinned).toBe(false);
+
+      await store.update("a1", { pinned: true });
+      expect(store.getMeta("a1")!.pinned).toBe(true);
+
+      // 仅置顶 / 排除置顶（tri-state）
+      expect(
+        store.query({ sessionType: "web", pinned: true }).map((m) => m.id),
+      ).toEqual(["a1"]);
+      expect(
+        store.query({ sessionType: "web", archived: false, pinned: false }).map((m) => m.id),
+      ).toEqual(["a3"]);
+      // undefined = 不过滤
+      expect(store.query({ sessionType: "web" })).toHaveLength(3);
+
+      // 取消置顶
+      await store.update("a1", { pinned: false });
+      expect(store.getMeta("a1")!.pinned).toBe(false);
+      expect(store.query({ sessionType: "web", pinned: true })).toHaveLength(0);
+    });
+
+    it("create 支持显式置顶；pinned 不参与排序（仍按 lastActiveDesc）", async () => {
+      await store.create({ id: "p1", sessionType: "web", pinned: true, lastActiveAt: "2026-01-01T00:00:00.000Z" });
+      expect(store.getMeta("p1")!.pinned).toBe(true);
+      // 置顶不改变 SORT_SQL：p1 最旧 → 排在最后（置顶靠分区互斥，不靠排序）
+      const ids = store.query({ sessionType: "web", archived: false, pinned: true }).map((m) => m.id);
+      expect(ids).toEqual(["p1"]);
+      const all = store.query({ sessionType: "web", archived: false }).map((m) => m.id);
+      expect(all[all.length - 1]).toBe("p1");
     });
   });
 
