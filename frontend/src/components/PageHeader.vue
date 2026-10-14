@@ -1,9 +1,9 @@
 <template>
   <div class="flex items-center justify-between gap-2 h-10 drag-region"
-    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarVisible && !isFullscreen }">
+    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarEffectiveVisible && !isFullscreen }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
-      <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
+      <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarEffectiveVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
         <div class="header-icon-btn" @click="layoutStore.toggleSidebar()">
           <LeftBarIcon class="w-5 h-5" />
         </div>

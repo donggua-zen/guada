@@ -27,3 +27,15 @@ export const COMPRESSION_TIER_OPTIONS = [
   { value: 'conservative', labelKey: 'agents.setting.tierConservative', descKey: 'agents.setting.tierConservativeDesc' },
   { value: 'aggressive', labelKey: 'agents.setting.tierAggressive', descKey: 'agents.setting.tierAggressiveDesc' },
 ] as const
+
+/**
+ * 小窗阈值（CSS px）：窗口宽度小于它时，侧边栏自动收起，避免内容区被侧栏挤成一条。
+ *
+ * 自动收起只切换「当前是否显示」的运行时状态，不改写用户偏好（sidebarVisible 持久化值）——
+ * 窗口回到阈值以上即自动交还给偏好，所以在大窗里启动不会出现侧栏凭空少一次展开。
+ *
+ * 取值等于 Tailwind 默认 lg 断点，也正是原先移动端悬浮抽屉的启用宽度
+ * （见 SidebarLayout 的 max-lg:absolute 与 MOBILE_DRAWER_ENABLED）：两处「小窗」必须是同一阈值，
+ * 后续做移动端适配时沿用本常量，不要再另起一套断点。
+ */
+export const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1024

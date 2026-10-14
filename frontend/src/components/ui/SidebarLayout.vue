@@ -1,19 +1,20 @@
 <template>
   <div class="flex relative overflow-hidden">
-    <!-- 遮罩层：仅在移动端且 sidebarVisible 时显示 -->
-    <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-19"
+    <!-- 遮罩层：仅在移动端悬浮抽屉启用时显示 -->
+    <div v-if="isMobileDrawer && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-19"
       @click="$emit('update:sidebarVisible', false)"></div>
     <!-- 侧边栏容器 -->
-    <!-- z-index 仅移动端（absolute 浮动覆盖）生效：桌面端侧栏与内容卡片并排无重叠， -->
-    <!-- 且桌面端不需要它——内容卡片的左侧外阴影要绘制在侧栏右缘之上 -->
+    <!-- 并排布局（桌面与小窗统一）：容器不带 z-index——内容卡片的左侧外阴影要绘制在侧栏右缘之上；
+         只有悬浮抽屉（absolute 浮层覆盖内容区）才需要 absolute + z-index，见 isMobileDrawer -->
     <div :class="[
-      'h-full absolute lg:relative transform transition-all duration-300 ease-in-out justify-content-end shrink-0',
+      'h-full relative transform transition-all duration-300 ease-in-out justify-content-end shrink-0',
+      isMobileDrawer ? 'max-lg:absolute' : '',
       isResizing ? 'sidebar-resizing' : ''
     ]" :style="{
           width: sidebarContainerWidth,
           maxWidth: sidebarContainerWidth,
           minWidth: sidebarContainerWidth,
-          zIndex: isMobile ? zIndex : undefined
+          zIndex: isMobileDrawer ? zIndex : undefined
         }">
       <div class="absolute right-0 h-full"
         :style="{ width: (sidebarWidth ?? 278) < 0 ? '100vw' : `${sidebarWidth ?? 278}px` }">
@@ -21,7 +22,7 @@
       </div>
 
       <!-- 折叠展开按钮 -->
-      <button v-if="showToggleButton || isMobile" @click="$emit('update:sidebarVisible', !sidebarVisible)"
+      <button v-if="showToggleButton || isMobileDrawer" @click="$emit('update:sidebarVisible', !sidebarVisible)"
         class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-(--gd-color-surface) dark:bg-gray-800 shadow-sm hover:bg-(--gd-color-surface-hover) focus:outline-none z-10  border-(--gd-color-surface-border) dark:border-gray-800 dark:hover:bg-gray-600"
         :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
         :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-lg border'">
@@ -31,9 +32,9 @@
         </slot>
       </button>
 
-      <!-- 拖拽调宽把手：桌面端且未折叠时显示；定位与折叠按钮同款（右缘外探一半跨过缝隙）， -->
-      <!-- z-10 需盖过内容卡片绘到侧栏右缘上的左阴影（容器桌面端故意不带 z-index，见上方注释） -->
-      <div v-if="resizable && sidebarVisible && !isMobile"
+      <!-- 拖拽调宽把手：并排布局（含小窗）且未折叠时显示；定位与折叠按钮同款（右缘外探一半跨过缝隙）， -->
+      <!-- z-10 需盖过内容卡片绘到侧栏右缘上的左阴影（容器不带 z-index，见上方注释） -->
+      <div v-if="resizable && sidebarVisible"
         class="sidebar-resize-handle absolute top-0 bottom-0 right-0 z-10 w-1.5 translate-x-1/2 cursor-col-resize"
         :class="{ 'sidebar-resize-handle--active': isResizing }" @mousedown="handleResizeMouseDown"
         @dblclick="handleResizeReset"></div>
@@ -61,10 +62,19 @@ import {
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone
 } from "@vicons/material";
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { useWindowSize } from '@vueuse/core'
+import { SIDEBAR_AUTO_COLLAPSE_WIDTH } from '@/constants'
 
-const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('lg') // md = 768px
+const { width: windowWidth } = useWindowSize()
+/** 小窗 = 侧栏自动收起的同一阈值（Tailwind 默认 lg 断点），也是悬浮抽屉的启用条件 */
+const isSmallWindow = computed(() => windowWidth.value > 0 && windowWidth.value < SIDEBAR_AUTO_COLLAPSE_WIDTH)
+
+/** 小窗下侧栏改为覆盖内容区的悬浮抽屉（class 上的 max-lg:absolute 与之一致）。
+ *  当前停用——悬浮抽屉层受制于自身 z-index：它低于弹窗浮层（GdDialog 遮罩 2000），
+ *  于是内容区弹窗的层级会随抽屉开合而变（弹窗被抽屉连同其遮罩一起压住）。
+ *  待移动端专项适配时重新启用，并一并处理层级与「抽屉 / 弹窗共存」策略。 */
+const MOBILE_DRAWER_ENABLED: boolean = false
+const isMobileDrawer = computed(() => MOBILE_DRAWER_ENABLED && isSmallWindow.value)
 // Props 类型化
 const props = withDefaults(defineProps<{
   sidebarVisible?: boolean;
