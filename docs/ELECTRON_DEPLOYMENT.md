@@ -203,6 +203,32 @@ asar 内含入口包、嵌套 node_modules 没丢、`asarUnpack` 列的每个包
 `ELECTRON_RUN_AS_NODE + NODE_PATH` 起打包后的 Electron 逐个 require 原生依赖。
 安装期回归在构建期是看不见的（要等用户装完点开），所以这一步不能省。
 
+### 2.3 VC++ 运行时随包分发（Windows：vc-runtime）
+
+**症状**：全新 Windows（没装 VC++ 可再发行组件）上装完包，后端起不来，崩溃日志里是
+`Cannot find module '@node-rs/jieba-wasm32-wasi'` / `Cannot find module './jieba.wasi.cjs'`
+一类的 WASI 回退错误 —— 那是次级错误，真正的原因是 `jieba.win32-x64-msvc.node` 依赖
+`VCRUNTIME140.dll` / `VCRUNTIME140_1.dll`，干净系统上没有（**全包只有它动态链接 MSVC
+运行时**，sharp / canvas / watcher / better-sqlite3 / node-pty / sqlite-vec 都是静态链接）。
+
+**机制**：
+
+- 构建期：`scripts/rebuild-native-electron.js` 扫描所有原生二进制（.node/.dll）的 PE
+  导入表，把需要的 `vcruntime140*.dll` 收集到**单份** `vc-runtime/`（gitignore，来源按
+  VS Redist > Windows SDK Redist > 系统目录；缺 DLL 直接构建失败，不静默出包）。
+  DLL 清单不写死，将来任何原生模块新增运行时依赖都会被自动覆盖。
+- 打包期：`build.win.extraResources` 把它放到 `resources/vc-runtime`（仅 Windows）。
+- 运行期：主进程把该目录挂到后端进程 `PATH` 首位（`electron/main.ts` 的
+  `backendCrtPathEnv`）。**不能放在可执行文件同级**：libuv 用
+  `LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH)` 加载 .node，搜索顺序是
+  「.node 同目录 → System32 → Windows 目录 → cwd → PATH」，应用目录那一档会被替换掉
+  （实测：PATH ✅、cwd ✅、.node 同目录 ✅、应用目录 ❌）。
+- 校验：`pnpm run verify:asar` 第 [4] 项从打包后的原生文件现算所需 DLL，核对
+  `resources/vc-runtime` 备齐且全包只有一份（散成多份副本同样报错）。
+
+**兜底**：`kb-tokenizer.ts` 里 jieba 是延迟 `require` + try/catch —— 即使绑定彻底不可用，
+也只是中文分词退化为整串匹配（打一条 WARN），不会把后端进程带崩。
+
 ### 3. 构建产物
 
 构建完成后，安装包位于 `release/` 目录。本项目未覆盖 `artifactName`，以下为 electron-builder

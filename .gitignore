@@ -27,6 +27,9 @@ backend-ts/data/**
 backend-ts/node_modules_production/
 backend-ts/skills/**
 
+# 构建期生成的 VC++ 运行时（scripts/rebuild-native-electron.js 从本机 VS/系统目录收集）
+vc-runtime/
+
 # Electron
 release/
 electron/dist/
