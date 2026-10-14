@@ -283,17 +283,25 @@ openssl pkcs12 -export -legacy -inkey guada-sign.key -in guada-sign.crt -out gua
   -passout pass:<密码> -name "GuaDa Local Sign"
 base64 -i guada-sign.p12 | tr -d '\n' > guada-sign.p12.base64
 
-# 2) 本地打包时签名（electron-builder 原生读这两个变量，无需改配置）
-CSC_LINK="$(cat guada-sign.p12.base64)" CSC_KEY_PASSWORD=<密码> \
-  npx electron-builder --mac --arm64 --publish never
-
-# 3) CI：secret MAC_CSC_LINK = guada-sign.p12.base64 的内容，MAC_CSC_KEY_PASSWORD = 密码；
-#    .github/workflows/release.yml 的打包步骤已读取它们（secret 缺失时照旧出未签名包）
+# 2) 放到 ~/.guada-mac-signing/（不入库）：guada-sign.p12.base64 + password.txt（密码单行）
 ```
 
-三条注意：
+打包时由 `scripts/after-pack-handler.js` 的 `signMacApp` 完成签名：
 
-- **证书要长期保存并复用**：TCC 按签名身份记授权，换证书 = 换身份 = 用户需重新授权一次。
+```bash
+# 本地（一条命令出带签名的 dmg；也可只用 build:electron:package:mac:sign 复用已构建产物）
+pnpm run build:electron:mac:sign
+
+# CI：secret MAC_SIGN_LINK = p12.base64 的内容、MAC_SIGN_PASSWORD = 密码；
+#     .github/workflows/release.yml 的 mac 打包步骤已读取它们（secret 缺失时跳过签名）
+```
+
+四条注意：
+
+- **不用 electron-builder 的 `CSC_LINK`**：它只认「有效（受信任）」身份（`security find-identity -v`），
+  自签名证书默认不受信任 → 找不到身份直接打包失败。`signMacApp` 自己导入临时钥匙串、按 SHA1 指定
+  身份 codesign，**不需要把证书加进系统信任、也不需要 sudo**，本地与 CI 同一条路径。
+- **证书要长期保存并复用**：TCC 按签名身份记授权，换证书 = 换身份 = 用户要重新授权一次。
 - 自签名 ≠ 公证：用户首次打开仍需 4.1 / 4.2 的放行步骤（与未签名包一致，不会更差）。
 - 验证：正常启动 app 后在终端里 `ping <局域网设备>`；`codesign -dv --verbose=2 GuaDa.app` 看
   `Authority=` 是否为该证书名。

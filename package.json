@@ -40,6 +40,8 @@
     "build:electron:frontend": "cross-env ELECTRON=true pnpm --dir frontend run build",
     "build:electron:package": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ WIN_CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON=true electron-builder",
     "build:electron:package:mac": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ WIN_CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON=true electron-builder --mac",
+    "build:electron:package:mac:sign": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ node scripts/package-mac-signed.js",
+    "build:electron:mac:sign": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:mac:sign",
     "build:electron:package:dir": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ WIN_CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON=true electron-builder --dir",
     "build:electron": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package",
     "build:electron:mac": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:mac",

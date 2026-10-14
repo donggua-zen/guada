@@ -1,9 +1,15 @@
 /**
- * 打包后处理脚本：清理语言包 + 嵌入图标
+ * 打包后处理脚本：清理语言包 + 嵌入图标 + 补 spawn-helper 权限 + 可选自签名
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
+
+/** 执行外部命令（失败即抛，stdout/stderr 直通） */
+function sh(cmd, opts = {}) {
+  execFileSync(cmd[0], cmd.slice(1), { stdio: 'inherit', ...opts });
+}
 
 /**
  * 获取 rcedit 可执行文件路径
@@ -123,6 +129,64 @@ function fixPtySpawnHelper(context) {
 }
 
 /**
+ * macOS：用自签名证书签名 app（可选，不设 MAC_SIGN_LINK 则跳过）
+ *
+ * 为什么不交给 electron-builder 的 CSC_LINK：它只认「有效（受信任）」身份
+ * （`security find-identity -v -p codesigning`），自签名证书默认不受信任 → 找不到身份
+ * 直接失败。这里自己导入临时钥匙串、按 SHA1 指定身份 codesign —— 不需要把证书加入
+ * 系统信任（也不需要 sudo），本地与 CI 走同一条路径。
+ *
+ * 为什么要签名：macOS 的本地网络权限按 app 的代码签名身份记授权，未签名包拿不到授权
+ * 也不弹询问（打包版终端连不上局域网）。详见 docs/ELECTRON_DEPLOYMENT.md 4.3.1。
+ */
+function signMacApp(context) {
+  if (context.electronPlatformName !== 'darwin') {
+    return;
+  }
+  const link = process.env.MAC_SIGN_LINK;
+  const password = process.env.MAC_SIGN_PASSWORD;
+  if (!link || !password) {
+    console.log('[sign] 未提供 MAC_SIGN_LINK / MAC_SIGN_PASSWORD，跳过签名（产物未签名）');
+    return;
+  }
+
+  const productFilename = context.packager.appInfo.productFilename || 'GuaDa';
+  const appPath = path.join(context.appOutDir, productFilename + '.app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guada-sign-'));
+  const keychain = path.join(dir, 'sign.keychain');
+  const p12 = path.join(dir, 'cert.p12');
+  const keychainPassword = `guada-sign-${process.pid}`;
+
+  try {
+    fs.writeFileSync(p12, Buffer.from(link.trim(), 'base64'));
+    sh(['security', 'create-keychain', '-p', keychainPassword, keychain]);
+    sh(['security', 'unlock-keychain', '-p', keychainPassword, keychain]);
+    sh(['security', 'import', p12, '-k', keychain, '-P', password, '-T', '/usr/bin/codesign', '-T', '/usr/bin/security']);
+    sh(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', keychainPassword, keychain]);
+
+    // 身份名未知（自签名证书 CN 任意），直接按 SHA1 指定；不带 -v 才能看到未受信任身份
+    const listed = execSync(`security find-identity -p codesigning "${keychain}"`).toString();
+    const sha1 = (listed.match(/[0-9A-F]{40}/) || [])[0];
+    if (!sha1) {
+      throw new Error('临时钥匙串里没有可用的签名身份');
+    }
+
+    sh(['codesign', '--force', '--deep', '--sign', sha1, '--keychain', keychain, appPath]);
+    sh(['codesign', '--verify', '--deep', '--strict', appPath]);
+    const authority = execSync(`codesign -dv --verbose=2 "${appPath}" 2>&1 || true`).toString();
+    const name = (authority.match(/Authority=(.+)/) || [])[1] || sha1;
+    console.log(`[sign] ✓ 已签名并通过严格校验（Authority=${name.trim()}）`);
+  } finally {
+    try {
+      execSync(`security delete-keychain "${keychain}"`, { stdio: 'ignore' });
+    } catch {
+      /* 清理失败不影响产物 */
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
  * 主处理函数
  */
 module.exports = async function (context) {
@@ -130,6 +194,7 @@ module.exports = async function (context) {
     cleanupLocales(context);
     embedIcon(context);
     fixPtySpawnHelper(context);
+    signMacApp(context);
   } catch (error) {
     console.error('After pack handler error:', error);
   }
