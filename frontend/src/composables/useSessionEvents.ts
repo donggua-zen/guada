@@ -241,6 +241,16 @@ export function useSessionEvents() {
         // 主会话:侧边栏"工作中"(后端确认 running 才显示)
         sessionStore.setSidebarFlag(sessionId, "working", status === "running");
 
+        // 流开始即置顶：本方窗口发起的流同样要续期「最近活跃」时间。
+        // 侧边栏按 lastActiveAt 降序排序(见 stores/session.ts getSessionsByGroup)，
+        // 而自身事件会在下方 source 过滤处被忽略、走不到末尾的更新时间——不在此处补一刀，
+        // 给老会话发消息后它就不会被顶到列表最前(发送链路 ChatPanel.handleSendMessage
+        // 只调 apiService.chat，本地不写 lastActiveAt；后端只落库不发事件)。
+        // 仅 running 置顶；终态不改序(避免流结束后会话又跳回顶部)。
+        if (status === "running") {
+          sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+        }
+
         // 流结束后自动消费队列——放在 source 过滤之前：
         // 队列是本窗口 store 的本地状态,任何本窗可见的流完成都应尝试消费
         // (自身流完成触发单窗口排队补发;他窗流完成触发多窗口补发)。
@@ -263,6 +273,9 @@ export function useSessionEvents() {
           }
         }
 
+        // 非自身事件：续期最近活跃。此处必须保留（running 已在 source 过滤前置顶，
+        // 但对"事件携带新会话、本地刚由 payload.session 建对象"的非自身场景，
+        // 置顶要发生在对象落库之后，故这里不再按状态区分——同值重复写无副作用）。
         sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
 
         if (
