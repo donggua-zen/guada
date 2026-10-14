@@ -176,6 +176,51 @@ describe("AgentEngine - tool image materialization", () => {
     expect(entries).toEqual([]);
   });
 
+  it("imageRefs（会话内 150KB~384KB 的上传尺寸图）→ 仍零复制转正（门槛取两预算较大者）", async () => {
+    // 构造一张体积落在工具预算(150KB)与上传预算(384KB)之间的合法 JPEG：
+    // 从高质量向下找第一个 ≤384KB 的编码（质量阶梯步进小，首个达标者贴近 384KB）
+    let jpg: Buffer | null = null;
+    for (const quality of [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40]) {
+      const candidate = await sharp({
+        create: {
+          width: 900,
+          height: 900,
+          channels: 3,
+          background: { r: 128, g: 128, b: 128 },
+          noise: { type: "gaussian", mean: 128, sigma: 30 },
+        },
+      })
+        .jpeg({ quality })
+        .toBuffer();
+      if (candidate.byteLength <= 384 * 1024) {
+        jpg = candidate;
+        break;
+      }
+    }
+    expect(jpg).not.toBeNull();
+    expect(jpg!.byteLength).toBeGreaterThan(150 * 1024);
+
+    const bandDir = path.join(getSessionDir(SESSION_ID), "images", "band");
+    fs.mkdirSync(bandDir, { recursive: true });
+    const insidePath = path.join(bandDir, "uploaded.jpg");
+    fs.writeFileSync(insidePath, jpg!);
+
+    const toolParts = await runWithResponse({
+      content: "ok",
+      imageRefs: [
+        { url: insidePath, refType: "local", media_type: "image/jpeg" },
+      ],
+    });
+
+    const msg = hiddenImageMessage(toolParts);
+    const imageBlock: any = msg.content.find((b: any) => b.type === "image");
+    // 转正为原引用（未被压缩到 150KB 工具预算）
+    expect(imageBlock.attachment.url).toBe(
+      "sessions/test-session-001/images/band/uploaded.jpg",
+    );
+    expect(imageBlock.attachment.bytes).toBe(jpg!.byteLength);
+  });
+
   it("imageRefs（会话目录内但超体积）→ 不转正，缩放落副本", async () => {
     // 高斯噪声 JPEG 压缩率极差，稳定超过 100KB 预算
     const oversize = await sharp({
@@ -217,6 +262,8 @@ describe("AgentEngine - tool image materialization", () => {
       imageBlock.attachment.url.replace(/^sessions\/[^/]+\/images\//, ""),
     );
     expect(fs.existsSync(physical)).toBe(true);
+    // 工具图走独立预算（CHAT_TOOL_IMAGE_TARGET_KB 默认 150KB），不是上传预算 384KB
+    expect(fs.statSync(physical).size).toBeLessThanOrEqual(150 * 1024);
     expect(fs.statSync(physical).size).toBeLessThan(oversize.byteLength);
   });
 

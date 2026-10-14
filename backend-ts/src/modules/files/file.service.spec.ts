@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as crypto from "crypto";
+import { getImageTargetBytes } from "../../common/utils/image-transcode.util";
 
 /**
  * 附件上传的落点与契约测试
@@ -256,8 +257,8 @@ describe("FileService upload routing", () => {
     );
     const stored = fs.statSync(imageAbs).size;
 
-    // 体积保证：落盘字节 ≤ 默认 100KB 目标
-    expect(stored).toBeLessThanOrEqual(100 * 1024);
+    // 体积保证：落盘字节 ≤ 上传预算（默认 384KB，env CHAT_IMAGE_TARGET_KB 可配）
+    expect(stored).toBeLessThanOrEqual(getImageTargetBytes());
     // bytes 报的是**转码后实际落盘**的字节数，不是上传的原始大小
     expect(ref.bytes).toBe(stored);
     expect(ref.bytes).toBeLessThan(pngBytes.length);

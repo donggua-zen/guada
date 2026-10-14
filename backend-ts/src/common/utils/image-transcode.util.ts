@@ -5,6 +5,9 @@
  * 目标约束是**输出体积**，不是最长边。边长只是达成体积的手段——固定「1024px + q85」
  * 无法回答「这张图到底多大」，大图很容易产出数百 KB，直接变成模型的图片 token 成本。
  *
+ * 预算分两条渠道（见 getImageTargetBytes / getToolImageTargetBytes）：
+ * 用户上传偏画质（384KB），工具产出图偏成本（150KB）。
+ *
  * 四个刻意的设计点：
  *
  * 1. **快速通道**：已是安全 JPEG、已 ≤ 目标体积、已 ≤ 最长边，且没有 EXIF 方向待修正
@@ -32,8 +35,15 @@ import sharp from "sharp";
 
 /** 默认最长边（px）。超过则等比缩小 */
 export const DEFAULT_IMAGE_MAX_EDGE = 1920;
-/** 默认单图目标体积（KB） */
-export const DEFAULT_IMAGE_TARGET_KB = 100;
+/** 默认单图目标体积（KB）——用户上传路径（聊天附件等） */
+export const DEFAULT_IMAGE_TARGET_KB = 384;
+/**
+ * 工具产出图片的目标体积（KB）——引擎物化的落盘副本（MCP 图、浏览器截图、
+ * image_view 查看的外部图）。比上传预算收紧一档：工具图多为一次性信息载体，
+ * 一次会话可能积累很多张，token 成本的优先级高于画质。
+ * 参考：ZCode 工具图预算 ≈200KB base64（raw ≈150KB）；Qoder 上传取 100KB。
+ */
+export const DEFAULT_TOOL_IMAGE_TARGET_KB = 150;
 
 /** 解压炸弹防护：输入像素上限（64MP，与 Qoder 取值一致） */
 export const IMAGE_LIMIT_INPUT_PIXELS = 64 * 1024 * 1024;
@@ -71,11 +81,20 @@ export function getImageMaxEdge(): number {
 }
 
 /**
- * 单图目标体积（字节）：env CHAT_IMAGE_TARGET_KB，非法/缺省回退 100KB，夹在 8KB..4MB。
+ * 上传路径单图目标体积（字节）：env CHAT_IMAGE_TARGET_KB，非法/缺省回退 384KB，夹在 8KB..4MB。
  * 调大 → 画质更好但模型图片 token 成本更高；调小 → 反之。
  */
 export function getImageTargetBytes(): number {
   return readIntEnv("CHAT_IMAGE_TARGET_KB", DEFAULT_IMAGE_TARGET_KB, 8, 4096) * 1024;
+}
+
+/**
+ * 工具产出图片目标体积（字节）：env CHAT_TOOL_IMAGE_TARGET_KB，非法/缺省回退 150KB，夹在 8KB..4MB。
+ * 与上传预算分开的原因：工具图（截图/识别图）单次会话可能积累很多张且多是一次性信息，
+ * 收紧一档可显著压低 token 成本；用户上传则画质优先。
+ */
+export function getToolImageTargetBytes(): number {
+  return readIntEnv("CHAT_TOOL_IMAGE_TARGET_KB", DEFAULT_TOOL_IMAGE_TARGET_KB, 8, 4096) * 1024;
 }
 
 // ─── 串行化 ───

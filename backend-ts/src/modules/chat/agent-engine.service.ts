@@ -18,6 +18,7 @@ import {
   transcodeImage,
   transcodePreview,
   getImageTargetBytes,
+  getToolImageTargetBytes,
 } from "../../common/utils/image-transcode.util";
 import type {
   ImageContent,
@@ -1106,12 +1107,16 @@ export class AgentEngine {
     const insideRel = relativeToSessionDir(sessionDir, ref.url);
     if (insideRel) {
       const stat = await fs.promises.stat(ref.url);
-      // 零复制转正的条件：位于 images|previews（上传/物化产物，都已过体积阶梯）
-      // 且体积 ≤ 目标预算——保证直发模型的引用永远合身（对齐旧 ensureWithinPixelLimit
-      // 的守卫语义）。其余情况（其他子目录 / 超体积文件）仍走转码落副本。
+      // 零复制转正的条件：位于 images|previews（上传/物化产物，都已过体积阶梯）且体积
+      // 已合身。既有会话图可能来自上传（384KB 预算）或工具物化（150KB 预算）——
+      // 取两者较大者作为合身判据，避免查看用户上传图时被再次压缩。
+      // 其余情况（其他子目录 / 超体积文件）仍走转码落副本，保证直发模型的引用可控。
+      const acceptBytes = Math.max(
+        getImageTargetBytes(),
+        getToolImageTargetBytes(),
+      );
       const isCanonicalImage =
-        /^(images|previews)\//.test(insideRel) &&
-        stat.size <= getImageTargetBytes();
+        /^(images|previews)\//.test(insideRel) && stat.size <= acceptBytes;
       if (isCanonicalImage) {
         return {
           mediaType: ref.media_type ?? mimeFromExtension(path.extname(ref.url)),
@@ -1131,7 +1136,9 @@ export class AgentEngine {
     );
   }
 
-  /** 字节 → 转码（体积阶梯，与上传路径同款）→ 落会话 images|previews → session 引用 */
+  /**
+   * 字节 → 转码（同款体积阶梯，工具图独立预算 150KB）→ 落会话 images|previews → session 引用
+   */
   private async materializeImageBuffer(
     sessionId: string,
     buf: Buffer,
@@ -1140,7 +1147,9 @@ export class AgentEngine {
     const sessionDir = getSessionDir(sessionId);
     // 输出恒为 JPEG（transcode 契约）：name/fileExtension/mediaType 跟着 jpg 走
     const stem = baseName.replace(/\.[^.]+$/, "") || "tool-image";
-    const image = await transcodeImage(buf);
+    const image = await transcodeImage(buf, {
+      targetBytes: getToolImageTargetBytes(),
+    });
     const preview = await transcodePreview(buf);
     const imageRes = await this.fileNaming.generateFilePathWithDate(
       path.join(sessionDir, "images"),
