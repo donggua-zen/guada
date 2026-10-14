@@ -67,3 +67,6 @@ USER.md
 IDENTITY.md
 HEARTBEAT.md
 TOOLS.md
+
+# macOS Finder（每个目录都可能生成）
+.DS_Store
