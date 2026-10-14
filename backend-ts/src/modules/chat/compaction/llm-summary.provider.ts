@@ -135,6 +135,27 @@ export class LLMSummaryProvider implements SummaryProvider {
       `[summary] generating (model=${this.model.modelName}, shadowed=${input.shadowed.length} msgs, maxTokens=${maxSummaryTokens}, kvPrefix=${this.options.prefix ? 'yes' : 'no'})`,
     );
 
+    // 摘要请求规模诊断（只读，调用前打印——失败时也有数）：
+    // 摘要请求 = 前缀（system+tools） + 遮蔽区 + 指令；字符量按 ~3.5 字符/token 粗估。
+    {
+      const shadowedChars = input.shadowed.reduce(
+        (n, m) => n + JSON.stringify(m.content ?? '').length,
+        0,
+      );
+      const instruction =
+        requestMessages.messages[requestMessages.messages.length - 1];
+      const instructionChars = JSON.stringify(instruction?.content ?? '').length;
+      const prefixSystemChars = this.options.prefix?.system?.length ?? 0;
+      const prefixTools = this.options.prefix?.tools?.length ?? 0;
+      const approx = (chars: number) => Math.ceil(chars / 3.5);
+      this.logger.log(
+        `[compact.diag.summary] shadowedMsgs=${input.shadowed.length} shadowedChars=${shadowedChars}` +
+          ` prefixSystemChars=${prefixSystemChars} prefixTools=${prefixTools} instructionChars=${instructionChars}` +
+          ` approxPrefixTokens=${approx(prefixSystemChars)} approxShadowedTokens=${approx(shadowedChars)}` +
+          ` maxTokens=${maxSummaryTokens}`,
+      );
+    }
+
     // 流式调用（对齐 DSH ctx.llm.stream() 单次、无重试）：BlockAssembler 累积并捕获 usage。
     // 优先复用 builder（buildParams）——thinkingEffort/temperature 等与主请求同源，前缀缓存最大命中；
     // 仅 override system/tools（前缀一致）与 maxTokens。未注入 buildParams 时回退手工组装（兼容）。
@@ -176,6 +197,18 @@ export class LLMSummaryProvider implements SummaryProvider {
     if (!summary) {
       throw new Error('LLM summary provider returned empty content');
     }
+    // 摘要调用成功：记录 provider 侧 usage（口径对照的地面真值；缺失即代表 provider 不返回）
+    this.logger.log(
+      `[compact.diag.summary.result] summaryChars=${summary.length} usage=${
+        usage === undefined
+          ? 'none'
+          : JSON.stringify({
+              promptTokens: (usage as any).promptTokens,
+              completionTokens: (usage as any).completionTokens,
+              cachedTokens: (usage as any).cachedTokens,
+            })
+      }`,
+    );
     return { summary, ...(usage === undefined ? {} : { usage }) };
   }
 

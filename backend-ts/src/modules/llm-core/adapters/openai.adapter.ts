@@ -300,6 +300,33 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
     const requestTimeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
+    // provider 口径诊断（只读）：请求体积 / 思考回传统计 / purpose。
+    // 与响应 usage、本地估算一起看，可直接量化"本地口径 vs provider 口径"的差距。
+    {
+      const wireMessages = (finalRequestParams.messages ?? []) as any[];
+      let reasoningMsgs = 0;
+      let reasoningChars = 0;
+      for (const m of wireMessages) {
+        const rc = m?.reasoning_content;
+        if (typeof rc === 'string') {
+          reasoningMsgs += 1;
+          reasoningChars += rc.length;
+        }
+      }
+      let bodyBytes = -1;
+      try {
+        bodyBytes = JSON.stringify(finalRequestParams).length;
+      } catch {
+        bodyBytes = -1;
+      }
+      this.logger.debug(
+        `[llm.diag.request] purpose=${params.purpose ?? 'chat'} model=${params.model} msgs=${wireMessages.length}` +
+          ` tools=${Array.isArray(finalRequestParams.tools) ? finalRequestParams.tools.length : 0}` +
+          ` bodyBytes=${bodyBytes} systemChars=${(params.system ?? '').length}` +
+          ` reasoningMsgs=${reasoningMsgs} reasoningChars=${reasoningChars}`,
+      );
+    }
+
     let response: any = null;
 
     try {
@@ -475,7 +502,11 @@ export class OpenAIAdapter implements IProtocolAdapter {
     // [DONE] 收尾：先闭所有块，再 usage，最后 finish
     for (const c of tracker.closeAll()) yield c;
     if (pendingUsage) {
+      this.logger.debug(`[llm.diag.usage] stream=1 ${JSON.stringify(pendingUsage)}`);
       yield { type: "usage", usage: pendingUsage };
+    } else {
+      // 缺失即代表 provider 不返回 usage（锚点会静默失效，占用退化为纯启发式）
+      this.logger.debug('[llm.diag.usage] stream=1 missing (provider returned no usage)');
     }
     yield { type: "finish", finishReason: pendingFinish || "stop" };
   }
@@ -538,7 +569,12 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }
 
     if (response.usage) {
+      this.logger.debug(
+        `[llm.diag.usage] stream=0 ${JSON.stringify(this.mapUsage(response.usage))}`,
+      );
       yield { type: "usage", usage: this.mapUsage(response.usage) };
+    } else {
+      this.logger.debug('[llm.diag.usage] stream=0 missing (provider returned no usage)');
     }
     yield { type: "finish", finishReason: choice.finish_reason || "stop" };
   }

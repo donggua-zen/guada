@@ -780,3 +780,240 @@ describe('TokenMeterService', () => {
     expect(total).toBe(8);
   });
 });
+
+describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () => {
+  /** 构造 N 轮（user + assistant + 超长 tool-result），每轮 ≈ toolChars/4 token */
+  function makeRounds(rounds: number, toolChars = 8000): Message[] {
+    const out: Message[] = [];
+    for (let i = 0; i < rounds; i++) {
+      out.push({
+        id: `r${i}_u`,
+        role: 'user',
+        kind: 'user',
+        source: { kind: 'user' },
+        metadata: {},
+        content: [{ type: 'text', text: `ask ${i}` }],
+      });
+      out.push({
+        id: `r${i}_a`,
+        role: 'assistant',
+        kind: 'model',
+        source: { kind: 'model', provider: 't', model: 'm' },
+        metadata: {},
+        content: [{ type: 'text', text: `answer ${i}` }],
+      });
+      out.push({
+        id: `r${i}_t`,
+        role: 'tool',
+        kind: 'model',
+        source: { kind: 'tool', toolCallId: `c${i}` },
+        metadata: {},
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: `c${i}`,
+            name: 'shell',
+            content: 'x'.repeat(toolChars),
+          },
+        ],
+      });
+    }
+    return out;
+  }
+
+  /** 模拟 provider：输入（遮蔽区 + 600 指令）超过 limit 时按网关文案报错 */
+  function makeLimitedProvider(limit: number) {
+    return {
+      generate: jest.fn(async (input: { shadowed: Message[] }) => {
+        const tokens = estimateTokensFor(input.shadowed);
+        if (tokens + 600 > limit) {
+          throw new Error(
+            `400 Input exceeds the context limit (${limit} tokens). Please shorten the input.`,
+          );
+        }
+        return { summary: 'S' };
+      }),
+    };
+  }
+
+  it('resolveSummaryInputBudgetTokens：窗口 − 输出预留 − max(8K, 5%)；缺省窗口 128000', async () => {
+    const { resolveSummaryInputBudgetTokens } = await import(
+      '../../src/modules/chat/compaction/compression-engine'
+    );
+    expect(resolveSummaryInputBudgetTokens(1_000_000)).toBe(948_000);
+    expect(resolveSummaryInputBudgetTokens(128_000)).toBe(118_000);
+    expect(resolveSummaryInputBudgetTokens(undefined)).toBe(118_000);
+  });
+
+  it('预算下界：比率预算不足时抬高保留量，保证 遮蔽区+前缀+指令 ≤ 预算', async () => {
+    const messages = makeRounds(20, 8000);
+    const total = estimateTokensFor(messages);
+    const budget = Math.floor(total * 0.75);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.1, // 比率预算远低于下限（旧口径会把遮蔽区撑到 90%）
+      summaryInputBudgetTokens: budget,
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    // 诊断：临时用对象断言暴露实际返回值
+    expect(result).toMatchObject({ compacted: true });
+    const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+    const shadowedTokens = estimateTokensFor(genInput.shadowed);
+    expect(shadowedTokens + 600).toBeLessThanOrEqual(budget);
+    expect(genInput.shadowed.length).toBeLessThan(messages.length);
+    expect(compacted.length).toBe(1);
+  });
+
+  it('预算缺省：退化为纯比率口径（回归）', async () => {
+    const messages = makeRounds(20, 8000);
+    const total = estimateTokensFor(messages);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds } = createDataSource();
+    const engine = createEngine();
+
+    await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.1, // 保留 10% → 遮蔽约 90%
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+    const shadowedTokens = estimateTokensFor(genInput.shadowed);
+    expect(shadowedTokens / total).toBeGreaterThan(0.85);
+  });
+
+  it('合同外（预算太小，两侧约束不可能同时满足）→ 抛带数字的明确错误', async () => {
+    const messages = makeRounds(20, 8000);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds } = createDataSource();
+    const engine = createEngine();
+
+    await expect(
+      engine.execute('s1', {
+        messages,
+        contextWindow: 1_000_000,
+        force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+        retainRatio: 0.4,
+        summaryInputBudgetTokens: 10_000,
+        summaryProvider: provider,
+        dataSource: ds as any,
+      }),
+    ).rejects.toThrow(/exceeds the model context window/);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('provider 仍拒绝 → 解析上限、收紧预算抬高保留后重试成功', async () => {
+    const messages = makeRounds(60, 16000); // ≈ 240K token
+    const provider = makeLimitedProvider(140_000);
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.4,
+      // 初始预算宽松（300K）→ 首试输入 ≈145K > provider 上限 140K 被拒
+      summaryInputBudgetTokens: 300_000,
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(provider.generate).toHaveBeenCalledTimes(2);
+    const first = (provider.generate as jest.Mock).mock.calls[0][0];
+    const second = (provider.generate as jest.Mock).mock.calls[1][0];
+    const firstTokens = estimateTokensFor(first.shadowed);
+    const secondTokens = estimateTokensFor(second.shadowed);
+    expect(secondTokens).toBeLessThan(firstTokens);
+    expect(secondTokens + 600).toBeLessThanOrEqual(140_000);
+    expect(compacted.length).toBe(1);
+    // 遮蔽记账按最终 boundary（大于摘要输入本身）
+    expect(compacted[0].shadowedCount).toBeGreaterThanOrEqual(second.shadowed.length);
+  });
+
+  it('手动路径：budget 收紧仍不可行时截断最旧遮蔽区（插标记；boundary 记账不变）', async () => {
+    const leadingAssistant: Message = {
+      id: 'lead_a',
+      role: 'assistant',
+      kind: 'model',
+      source: { kind: 'model', provider: 't', model: 'm' },
+      metadata: {},
+      content: [{ type: 'text', text: 'lead' }],
+    };
+    const messages = [leadingAssistant, ...makeRounds(60, 16000)];
+    const provider = makeLimitedProvider(60_000); // 任何 boundary 都装不下 → 必须截断
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 300_000,
+      trigger: 'manual',
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    const calls = (provider.generate as jest.Mock).mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    const lastInput = calls[calls.length - 1][0];
+    const lastTokens = estimateTokensFor(lastInput.shadowed);
+    expect(lastTokens + 600).toBeLessThanOrEqual(60_000);
+    // 首条为 assistant → 截断标记（zcode 同款文案）
+    const firstMsg = lastInput.shadowed[0];
+    expect(firstMsg.role).toBe('user');
+    expect(JSON.stringify(firstMsg.content)).toContain(
+      'earlier conversation truncated for compaction retry',
+    );
+    // 遮蔽记账按原 boundary（截断只改摘要输入）
+    expect(compacted[0].shadowedCount).toBeGreaterThan(lastInput.shadowed.length);
+  });
+
+  it('auto 路径：同一超紧上限下不截断，直接以带数字错误终结', async () => {
+    const messages = makeRounds(60, 16000);
+    const provider = makeLimitedProvider(60_000);
+    const { ds } = createDataSource();
+    const engine = createEngine();
+
+    await expect(
+      engine.execute('s1', {
+        messages,
+        contextWindow: 1_000_000,
+        force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+        retainRatio: 0.4,
+        summaryInputBudgetTokens: 300_000,
+        trigger: 'auto',
+        summaryProvider: provider,
+        dataSource: ds as any,
+      }),
+    ).rejects.toThrow(/exceeds the model context window/);
+  });
+
+  it('isContextWindowExceeded 覆盖第三方网关文案（"context limit"）', async () => {
+    const { isContextWindowExceeded } = await import(
+      '../../src/modules/llm-core/utils/retry-on-error.util'
+    );
+    expect(
+      isContextWindowExceeded({
+        message: '400 Input exceeds the context limit (1048568 tokens). Please shorten the input.',
+        code: 'InvalidParameter',
+      }),
+    ).toBe(true);
+  });
+});
+

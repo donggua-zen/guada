@@ -10,7 +10,7 @@
  * 会话（Session 等价物）只暴露数据，不含任何压缩语义。
  */
 import { Injectable, Logger } from "@nestjs/common";
-import { CompressionEngine, SummaryMode } from "./compression-engine";
+import { CompressionEngine, SummaryMode, resolveSummaryInputBudgetTokens } from "./compression-engine";
 import { LLMSummaryProvider } from "./llm-summary.provider";
 import { LLMService } from "../../llm-core/llm.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
@@ -36,6 +36,8 @@ export interface CompressOptions {
   abortSignal?: AbortSignal;
   /** 强制压缩（溢出恢复/手动路径）：跳过阈值判断 */
   force?: boolean;
+  /** 触发来源（透传引擎：manual 允许"超窗时截断最旧遮蔽区"，auto/overflow 不允许） */
+  reason?: 'auto' | 'manual' | 'overflow';
   /**
    * 钩子 payload 来源：确认二级压缩（摘要/丢弃）后发 compaction.before 事件
    * （记忆同步等订阅者须先于摘要完成；事件通道为唯一机制，替代旧 onBeforeCompaction 回调穿透）
@@ -48,6 +50,12 @@ export interface CompressOutcome {
   messages: Message[];
   /** 是否发生了二级压缩（遮蔽+摘要/丢弃） */
   compacted: boolean;
+  /**
+   * 是否真正替换了会话 surface（compacted 且遮蔽数 > 0）。
+   * 溢出恢复据此决定能否 retry（对齐 DSH：只有 surface 真被替换才重试原请求）；
+   * 未替换（跳过/失败）时调用方必须保留原始 provider 错误。
+   */
+  replaced: boolean;
   /** 遮蔽消息条数（compacted 时 > 0） */
   shadowedCount: number;
   /** 未压缩原因（compacted=false 时给出；tier-disabled/below-threshold 由本服务产出） */
@@ -103,6 +111,7 @@ export class CompactionService {
       return {
         messages: await ds.getHistory(),
         compacted: false,
+        replaced: false,
         shadowedCount: 0,
         skipReason: 'tier-disabled',
       };
@@ -121,10 +130,20 @@ export class CompactionService {
       return {
         messages: await ds.getHistory(),
         compacted: false,
+        replaced: false,
         shadowedCount: 0,
         skipReason: 'below-threshold',
       };
     }
+
+    // 压缩账目诊断（只读，一行）：三方口径 + 保留预算。超限类问题靠这行定位
+    // （视图口径 vs 展示口径 vs 前缀规模；锚点命中/被拒）。
+    await this.logCompactAccountDiagnostics(ds, {
+      currentTokens,
+      window,
+      triggerRatio: config.compressionTriggerRatio ?? 0.8,
+      retainRatio: config.compressionRetainRatio ?? 0.2,
+    });
 
     // resolveSummaryMode 在会话侧合并解析（session > agent > 全局），此处归一
     const summaryMode: SummaryMode = config.summaryMode ?? SummaryMode.DEFAULT;
@@ -135,11 +154,12 @@ export class CompactionService {
       timestamp: new Date().toISOString(),
     });
 
-    // 摘要 Provider 工厂：压缩模型解析 + KV 前缀（prelude/tools 与主请求一致）
-    const summaryProvider =
+    // 摘要 Provider + 摘要输入硬预算（按**摘要模型窗口**计算）：
+    // 压缩模型解析 + KV 前缀（prelude/tools 与主请求一致）
+    const summaryRuntime =
       summaryMode === SummaryMode.DISABLED
         ? undefined
-        : await this.buildSummaryProvider(ds, opts.abortSignal);
+        : await this.buildSummaryRuntime(ds, opts.abortSignal);
     this.throwIfCancelled(opts.abortSignal);
 
     const result = await this.compressionEngine.execute(ds.sessionId, {
@@ -155,10 +175,14 @@ export class CompactionService {
       contextWindow: window,
       triggerRatio: config.compressionTriggerRatio ?? 0.8,
       retainRatio: config.compressionRetainRatio ?? 0.2,
+      // 摘要输入硬上限（摘要模型窗口 − 输出预留 − 安全余量）：超窗会话据此抬高保留量
+      summaryInputBudgetTokens: summaryRuntime?.summaryInputBudgetTokens,
+      // 触发来源：manual 允许超窗时截断最旧遮蔽区（auto/溢出不截断）
+      trigger: opts.reason ?? (opts.force ? 'manual' : 'auto'),
       // 手动/溢出路径：跳过触发判断（retain 仍按配置比例，不归零）
       force: opts.force ?? false,
       modelName: ds.getModelConfig().modelName,
-      summaryProvider,
+      summaryProvider: summaryRuntime?.provider,
       summaryMode,
       // 压缩写经数据源窄接口（v1.4：引擎不再直插持久化，会话在写时增量播种快照）
       dataSource: ds,
@@ -193,6 +217,7 @@ export class CompactionService {
     return {
       messages: refreshed,
       compacted: result.compacted,
+      replaced: result.compacted && result.shadowedCount > 0,
       shadowedCount: result.shadowedCount,
       ...(result.skipReason === undefined ? {} : { skipReason: result.skipReason }),
       shadowedEndId: result.shadowedEndId,
@@ -204,6 +229,46 @@ export class CompactionService {
 
   // ─── 摘要 Provider 工厂 ───
 
+  /**
+   * 压缩账目诊断（只读，一行日志）：把三方口径对齐——
+   * - viewTokens：视图逐消息之和（压缩边界与保留预算的实际单位）
+   * - total：getTokenCount()（环形指示器/usedTokens 口径，可能走锚点公式）
+   * - prelude：系统+工具+插件前缀（摘要请求的前缀部分）
+   * 以及命中的锚点 / 被模型不匹配拒掉的锚点（静默退化为纯启发式的元凶）。
+   */
+  private async logCompactAccountDiagnostics(
+    ds: CompactionDataSource,
+    input: {
+      currentTokens: number;
+      window: number;
+      triggerRatio: number;
+      retainRatio: number;
+    },
+  ): Promise<void> {
+    if (typeof ds.getTokenDiagnostics !== 'function') return;
+    try {
+      const diag = await ds.getTokenDiagnostics();
+      const retainTokensEst = Math.floor(
+        Math.min(input.window, Math.max(diag.viewTokens, diag.total)) *
+          input.retainRatio,
+      );
+      this.logger.log(
+        `[compact.diag.account] path=${diag.path} total=${diag.total} viewTokens=${diag.viewTokens}` +
+          ` viewMsgs=${diag.viewMessageCount} prelude=${diag.preludeTokens} prefixSumLast=${diag.prefixSumLast}` +
+          ` window=${input.window} triggerRatio=${input.triggerRatio} retainRatio=${input.retainRatio}` +
+          ` retainTokensEst=${retainTokensEst} currentTokens=${input.currentTokens}` +
+          (diag.anchor
+            ? ` anchor=${diag.anchor.model}@${diag.anchor.messageIndex}:${diag.anchor.promptTokens}`
+            : '') +
+          (diag.rejectedAnchor
+            ? ` rejectedAnchor=${diag.rejectedAnchor.model}@${diag.rejectedAnchor.messageIndex}:${diag.rejectedAnchor.promptTokens}`
+            : ''),
+      );
+    } catch (e) {
+      this.logger.warn(`[compact.diag.account] failed: ${e}`);
+    }
+  }
+
   /** 用户中止检查：压缩各阶段边界快速退出（与引擎内检查点同语义） */
   private throwIfCancelled(abortSignal?: AbortSignal): void {
     if (abortSignal?.aborted) {
@@ -212,22 +277,38 @@ export class CompactionService {
   }
 
   /**
-   * 构建摘要 Provider：
-   * - 摘要模型 = SK_MOD_COMPRESS_MODEL 配置优先，回退会话当前模型
-   * - KV 缓存友好前缀：prelude + tools 与主请求一致（对齐 DSH requestHeader 重放）
+   * 构建摘要运行环境：
+   * - provider：摘要模型 = SK_MOD_COMPRESS_MODEL 配置优先，回退会话当前模型
+   * - summaryInputBudgetTokens：摘要输入硬上限（按**摘要模型窗口**计算；超窗会话据此抬高保留量）
+   * KV 缓存友好前缀：prelude + tools 与主请求一致（对齐 DSH requestHeader 重放）
    */
-  private async buildSummaryProvider(
+  private async buildSummaryRuntime(
     ds: CompactionDataSource,
     abortSignal?: AbortSignal,
-  ): Promise<LLMSummaryProvider | undefined> {
+  ): Promise<{ provider?: LLMSummaryProvider; summaryInputBudgetTokens?: number }> {
     const fallbackModel = ds.getModelConfig();
     const model = await this.resolveCompressionModel(fallbackModel);
-    if (!model?.modelName) return undefined;
+    if (!model?.modelName) return {};
 
     const system = ds.getSystemText();
     const tools = ds.getTools();
 
-    return new LLMSummaryProvider(
+    // 前缀诊断：摘要请求 = 前缀（system+tools）+ 遮蔽区 + 指令。
+    // 前缀规模是"遮蔽区还剩多少余量"的关键未知量，这里落一行字符量便于换算。
+    this.logger.log(
+      `[compact.diag.prefix] systemChars=${system.length} tools=${tools.length} toolsJsonChars=${JSON.stringify(tools).length}`,
+    );
+
+    // 摘要输入硬预算：摘要模型窗口 − 输出预留（2000）− 安全余量 max(8K, 5%)。
+    // 用**摘要模型自身**的窗口（专用压缩模型可能与会话模型不同）；网关计数差异由重试阶梯兜底。
+    const summaryInputBudgetTokens = resolveSummaryInputBudgetTokens(
+      model.config?.contextWindow,
+    );
+    this.logger.log(
+      `[compact.diag.budget] modelWindow=${model.config?.contextWindow ?? 128000} summaryInputBudgetTokens=${summaryInputBudgetTokens}`,
+    );
+
+    const provider = new LLMSummaryProvider(
       this.llmService,
       {
         modelName: model.modelName,
@@ -255,6 +336,7 @@ export class CompactionService {
           }),
       },
     );
+    return { provider, summaryInputBudgetTokens };
   }
 
   /** 压缩模型解析：SK_MOD_COMPRESS_MODEL 配置优先，回退会话模型 */

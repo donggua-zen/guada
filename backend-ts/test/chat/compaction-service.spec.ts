@@ -139,6 +139,45 @@ describe('CompactionService', () => {
       );
     });
 
+    it('摘要输入硬预算：按摘要模型窗口计算传给引擎（窗口缺省 128000 → 118000）；trigger 透传', async () => {
+      const { service, engine } = createService();
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      await service.compress(ds, { force: true, reason: 'manual' });
+      expect(engine.execute).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({
+          summaryInputBudgetTokens: 118_000, // 128000 − 2000 − max(8000, 6400)
+          trigger: 'manual',
+        }),
+      );
+    });
+
+    it('摘要输入硬预算：优先用专用压缩模型自身的 contextWindow', async () => {
+      const { service, settingsStorage, modelRepository, engine } = createService();
+      settingsStorage.getSettingValue.mockResolvedValueOnce('custom_id');
+      modelRepository.findModel.mockReturnValueOnce({
+        modelName: 'deepseek-v4-flash',
+        provider: { provider: 'deepseek' },
+        config: { contextWindow: 1_000_000 },
+      });
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      await service.compress(ds, { force: true, reason: 'manual' });
+      expect(engine.execute).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({ summaryInputBudgetTokens: 948_000 }), // 1M − 2000 − 50000
+      );
+    });
+
+    it('trigger 透传：reason=overflow → 引擎收到 overflow（自动/溢出不允许截断）', async () => {
+      const { service, engine } = createService();
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      await service.compress(ds, { force: true, reason: 'overflow' });
+      expect(engine.execute).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({ trigger: 'overflow' }),
+      );
+    });
+
     it('服务层不再写占用锚点（一级微压缩自结算；二级锚点由 appendCompact 的 compaction/end 承载）', async () => {
       const { service, engine } = createService();
       engine.execute.mockResolvedValueOnce({
