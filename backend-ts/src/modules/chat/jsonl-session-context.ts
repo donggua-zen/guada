@@ -38,6 +38,7 @@ import {
   CompressionSaving,
   ContextAnchorWrite,
   PruneWrite,
+  TokenDiagnostics,
 } from './compaction/types';
 import type { OccupancyAnchor } from '../../common/persistence/types';
 import {
@@ -1075,33 +1076,79 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    * 抵消（压缩后占用不降）；故压缩后必须以纠正值为基准，待新回合写入新的 usage 锚点再切回。
    */
   async getTokenCount(): Promise<number> {
+    return (await this.computeTokenAccounting()).total;
+  }
+
+  /** token 账目诊断（压缩排查）：返回总数、命中路径与三方口径的中间量（只读，无额外估算开销） */
+  async getTokenDiagnostics(): Promise<TokenDiagnostics> {
+    return this.computeTokenAccounting();
+  }
+
+  /**
+   * token 账目计算（getTokenCount 与诊断共用）：
+   * 视图口径（viewTokens/perMessageTokens）与展示口径（total）在此对齐，
+   * `path`/`anchor`/`rejectedAnchor` 暴露锚点命中与静默降级。
+   */
+  private async computeTokenAccounting(): Promise<TokenDiagnostics> {
     const model = this.currentModelName();
     const snap = await this.getSnapshot();
-    const heuristicNow =
-      snap.preludeTokens +
-      (snap.prefixTokens.length > 0
+    const viewTokens =
+      snap.prefixTokens.length > 0
         ? snap.prefixTokens[snap.prefixTokens.length - 1]
-        : 0);
+        : 0;
+    const heuristicNow = snap.preludeTokens + viewTokens;
+    const common = {
+      preludeTokens: snap.preludeTokens,
+      viewTokens,
+      viewMessageCount: snap.view.length,
+      prefixSumLast: viewTokens,
+    };
 
     const compactionAnchor = snap.occupancyAnchor;
     if (compactionAnchor?.kind === 'compaction') {
-      return Math.max(
-        0,
-        compactionAnchor.usedTokens +
-          (heuristicNow - compactionAnchor.heuristicTokens),
-      );
+      return {
+        ...common,
+        total: Math.max(
+          0,
+          compactionAnchor.usedTokens +
+            (heuristicNow - compactionAnchor.heuristicTokens),
+        ),
+        path: 'compaction_anchor',
+      };
     }
 
     const anchor = this.findUsageAnchor(snap.view);
     if (anchor && anchor.model === model) {
       const heuristicAtAnchor =
         snap.preludeTokens + (snap.prefixTokens[anchor.index] ?? 0);
-      return Math.max(
-        0,
-        anchor.promptTokens + (heuristicNow - heuristicAtAnchor),
-      );
+      return {
+        ...common,
+        total: Math.max(
+          0,
+          anchor.promptTokens + (heuristicNow - heuristicAtAnchor),
+        ),
+        path: 'usage_anchor',
+        anchor: {
+          model: anchor.model,
+          promptTokens: anchor.promptTokens,
+          messageIndex: anchor.index,
+        },
+      };
     }
-    return heuristicNow;
+    return {
+      ...common,
+      total: heuristicNow,
+      path: 'heuristic',
+      ...(anchor
+        ? {
+            rejectedAnchor: {
+              model: anchor.model,
+              promptTokens: anchor.promptTokens,
+              messageIndex: anchor.index,
+            },
+          }
+        : {}),
+    };
   }
 
   async getTokenBreakdown(): Promise<TokenBreakdown> {

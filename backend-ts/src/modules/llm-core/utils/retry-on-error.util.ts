@@ -201,6 +201,9 @@ export function isContextWindowExceeded(error: any): boolean {
     msg.includes("maximum context length") ||
     msg.includes("context length exceeded") ||
     msg.includes("context window") ||
+    // 第三方网关文案（如 easyapi）："Input exceeds the context limit (1048568 tokens).
+    // Please shorten the input."——不含上述任何关键词，必须单独覆盖，否则溢出恢复不会触发。
+    msg.includes("context limit") ||
     msg.includes("prompt is too long") ||
     msg.includes("too many tokens") ||
     msg.includes("token limit") ||

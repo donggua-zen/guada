@@ -44,10 +44,23 @@ function createContext(overrides: Partial<CompactionDataSource> = {}): any {
   };
 }
 
+/** 压缩成功（替换 surface）的 CompressOutcome 形状——旧用例曾直接返回 Message[]，与现状失真 */
+function replacedOutcome(): any {
+  return {
+    messages: [makeMsg('m1')],
+    compacted: true,
+    replaced: true,
+    shadowedCount: 1,
+    shadowedEndId: 'm0',
+    summaryMessageId: 'm_sum',
+    summary: '检查点',
+  };
+}
+
 function createCoordinator(
   compactionService: any = {
     shouldCompress: jest.fn(async () => true),
-    compress: jest.fn(async () => [makeMsg('m1')]),
+    compress: jest.fn(async () => replacedOutcome()),
   },
   microcompactService: any = {
     maybeMicrocompact: jest.fn(async () => ({ applied: false })),
@@ -69,7 +82,7 @@ describe('CompactionCoordinatorService', () => {
       const ctx = createContext();
       const compactionService = {
         shouldCompress: jest.fn(async () => true),
-        compress: jest.fn(async () => [makeMsg('m1')]),
+        compress: jest.fn(async () => replacedOutcome()),
       };
       const coordinator = createCoordinator(compactionService);
       const result = await coordinator.onPreStep(preStepPayload(ctx));
@@ -124,6 +137,52 @@ describe('CompactionCoordinatorService', () => {
       await coordinator.onPreStep(preStepPayload(ctx));
       expect(callOrder).toEqual(['micro', 'llm']);
     });
+
+    it('auto 熔断：连续 3 次未替换 surface 后，跳过后续 auto 压缩', async () => {
+      const ctx = createContext();
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        // 压缩"跑了"但没替换 surface（例如摘要输入超窗被拒）
+        compress: jest.fn(async () => ({
+          messages: [makeMsg('m1')],
+          compacted: false,
+          replaced: false,
+          shadowedCount: 0,
+        })),
+      };
+      const coordinator = createCoordinator(compactionService);
+      await coordinator.onPreStep(preStepPayload(ctx));
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(compactionService.compress).toHaveBeenCalledTimes(2);
+      // 第 3 次仍失败 → 计数达上限
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(compactionService.compress).toHaveBeenCalledTimes(3);
+      expect((coordinator as any).autoCompactFailures.get('s1')).toBe(3);
+      // 熔断打开：后续 pre_step 不再调用压缩
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(compactionService.compress).toHaveBeenCalledTimes(3);
+    });
+
+    it('auto 熔断：一次成功替换后计数清零（恢复尝试）', async () => {
+      const ctx = createContext();
+      const compress = jest
+        .fn()
+        .mockResolvedValueOnce({
+          messages: [makeMsg('m1')],
+          compacted: false,
+          replaced: false,
+          shadowedCount: 0,
+        })
+        .mockResolvedValueOnce(replacedOutcome());
+      const coordinator = createCoordinator({
+        shouldCompress: jest.fn(async () => true),
+        compress,
+      });
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect((coordinator as any).autoCompactFailures.get('s1')).toBe(1);
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect((coordinator as any).autoCompactFailures.has('s1')).toBe(false);
+    });
   });
 
   describe('onRequestError（agent/request_error）', () => {
@@ -140,7 +199,7 @@ describe('CompactionCoordinatorService', () => {
         shouldCompress: jest.fn(async () => true),
         compress: jest.fn(async (_ds: any, opts: any) => {
           expect(opts.force).toBe(true);
-          return [makeMsg('m1')];
+          return replacedOutcome();
         }),
       };
       const coordinator = createCoordinator(compactionService);
@@ -158,6 +217,24 @@ describe('CompactionCoordinatorService', () => {
       const action2 = await coordinator.onRequestError(requestErrorPayload(ctx, overflowError)); // 第二次 → undefined
       expect(action2).toBeUndefined();
     });
+
+    it('压缩未替换 surface（replaced=false）→ 不 retry，保留原始 provider 错误', async () => {
+      const ctx = createContext();
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        // 压缩跑了但被跳过/失败（如摘要输入超窗终结）
+        compress: jest.fn(async () => {
+          throw new Error('Compaction failed: the summary input exceeds the model context window');
+        }),
+      };
+      const coordinator = createCoordinator(compactionService);
+      const overflowError = { message: 'context length exceeded' };
+      const action = await coordinator.onRequestError(requestErrorPayload(ctx, overflowError));
+      expect(action).toBeUndefined();
+      expect(compactionService.compress).toHaveBeenCalled();
+      // 未替换不占用溢出重试额度：后续仍可尝试（错误被保留给上层）
+      expect((coordinator as any).overflowRetries.has('s1')).toBe(false);
+    });
   });
 
   describe('maybeCompress（手动路径）', () => {
@@ -168,7 +245,7 @@ describe('CompactionCoordinatorService', () => {
         shouldCompress: jest.fn(async () => true),
         compress: jest.fn(async (_ds: any, opts: any) => {
           hookOpts = opts;
-          return [makeMsg('m1')];
+          return replacedOutcome();
         }),
       };
       const coordinator = createCoordinator(compactionService);
@@ -189,6 +266,7 @@ describe('CompactionCoordinatorService', () => {
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: true,
+          replaced: true,
           shadowedCount: 2,
           shadowedEndId: 'a1',
           summaryMessageId: 'm_sum',
@@ -220,6 +298,7 @@ describe('CompactionCoordinatorService', () => {
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: false,
+          replaced: false,
           shadowedMessageIds: [],
         })),
       };
@@ -239,6 +318,7 @@ describe('CompactionCoordinatorService', () => {
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: true,
+          replaced: true,
           shadowedCount: 2,
           shadowedEndId: 'a1',
           summaryMessageId: 'm_sum',
@@ -264,6 +344,7 @@ describe('CompactionCoordinatorService', () => {
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: false,
+          replaced: false,
           shadowedCount: 0,
           contextStats: { usedTokens: 500, effectiveContextWindow: 1000 },
         })),
@@ -294,6 +375,7 @@ describe('CompactionCoordinatorService', () => {
         compress: jest.fn(async () => ({
           messages: [makeMsg('m1')],
           compacted: true,
+          replaced: true,
           shadowedCount: 1,
           shadowedEndId: 'a1',
           summaryMessageId: 'm_sum',
@@ -303,7 +385,7 @@ describe('CompactionCoordinatorService', () => {
       const coordinator = createCoordinator(compactionService);
 
       const bypassed = await coordinator.maybeCompress(ctx as any);
-      expect(bypassed).toEqual({ messages: null, didRun: false });
+      expect(bypassed).toEqual({ messages: null, didRun: false, replaced: false });
       expect(compactionService.compress).not.toHaveBeenCalled();
       expect((ctx.publishStream as jest.Mock).mock.calls.length).toBe(0);
 

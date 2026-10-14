@@ -37,6 +37,8 @@ import type {
 export interface CompactionOutcome {
   messages: Message[] | null;
   didRun: boolean;
+  /** 是否真正替换了会话 surface（溢出恢复据此决定能否 retry；失败/跳过时为 false） */
+  replaced: boolean;
 }
 
 export interface MaybeCompressOptions {
@@ -53,6 +55,9 @@ export class CompactionCoordinatorService {
   /** 溢出恢复重试计数（每会话；压力解除时重置，防死循环） */
   private readonly overflowRetries = new Map<string, number>();
   private static readonly MAX_OVERFLOW_RETRIES = 1;
+  /** auto 压缩连续失败计数（成功/无须压缩时清零；达上限后停用 auto 压缩，对齐 zcode 熔断） */
+  private readonly autoCompactFailures = new Map<string, number>();
+  private static readonly MAX_AUTO_COMPACT_FAILURES = 3;
 
   constructor(
     private readonly compactionService: CompactionService,
@@ -74,13 +79,33 @@ export class CompactionCoordinatorService {
     await this.microcompactService.maybeMicrocompact(payload.sessionContext, {
       abortSignal: payload.abortSignal,
     });
+    const sessionId = payload.sessionContext.sessionId;
+    // auto 熔断：连续失败达上限后跳过自动压缩（上下文仍超阈值时每步重试一次摘要调用代价过高）
+    if (
+      (this.autoCompactFailures.get(sessionId) ?? 0) >=
+      CompactionCoordinatorService.MAX_AUTO_COMPACT_FAILURES
+    ) {
+      this.logger.warn(
+        `[compaction] auto compact circuit open (consecutive failures=${this.autoCompactFailures.get(sessionId)}); skipping`,
+      );
+      return;
+    }
     const outcome = await this.maybeCompress(payload.sessionContext, {
       abortSignal: payload.abortSignal,
       reason: "auto",
     });
     // 压力未触发（didRun=false）→ 上下文已瘦，重置溢出重试计数
     if (!outcome.didRun) {
-      this.overflowRetries.delete(payload.sessionContext.sessionId);
+      this.overflowRetries.delete(sessionId);
+      this.autoCompactFailures.delete(sessionId);
+      return;
+    }
+    if (outcome.replaced) {
+      this.autoCompactFailures.delete(sessionId);
+    } else {
+      // didRun 但未替换 surface（压缩失败/被跳过）→ 累计失败；达上限由上面的短路停用 auto
+      const failures = (this.autoCompactFailures.get(sessionId) ?? 0) + 1;
+      this.autoCompactFailures.set(sessionId, failures);
     }
   }
 
@@ -101,10 +126,15 @@ export class CompactionCoordinatorService {
       force: true,
       reason: "overflow",
     });
-    if (outcome.didRun) {
+    // 只有 surface 真被替换才重试原请求（对齐 DSH：压缩失败/无进展时保留原始 provider 错误）
+    if (outcome.replaced) {
       this.overflowRetries.set(sessionId, retries + 1);
       return { kind: "retry" };
     }
+    if (!outcome.didRun) return undefined;
+    this.logger.warn(
+      "[overflow] compaction did not replace the surface; preserving the original request error",
+    );
     return undefined;
   }
 
@@ -124,12 +154,12 @@ export class CompactionCoordinatorService {
     // 0. 档位关闭（enabled=false）：非 force 直接旁路，不发 compression_start；
     //    force（手动/溢出恢复）不受门控，保留逃生口
     if (!opts.force && ds.getCompressionConfig().enabled === false) {
-      return { messages: null, didRun: false };
+      return { messages: null, didRun: false, replaced: false };
     }
 
     // 1. 决策（force=溢出恢复路径，跳过阈值）——委托 CompactionService
     if (!opts.force && !(await this.compactionService.shouldCompress(ds))) {
-      return { messages: null, didRun: false };
+      return { messages: null, didRun: false, replaced: false };
     }
 
     await context.publishStream({
@@ -142,6 +172,8 @@ export class CompactionCoordinatorService {
       const outcome = await this.compactionService.compress(ds, {
         abortSignal: opts.abortSignal,
         force: opts.force,
+        // 触发来源：引擎据此决定超窗时是否允许截断最旧遮蔽区（仅 manual）
+        reason: opts.reason ?? "auto",
         // 钩子 payload 来源：确认需要二级压缩后由 CompactionService 发 compaction.before
         // （事件通道，替代旧 onBeforeCompaction 回调穿透；协调器不再感知发射细节）
         hook: { sessionContext: context },
@@ -174,7 +206,7 @@ export class CompactionCoordinatorService {
           ...(outcome.contextStats ? { contextStats: outcome.contextStats } : {}),
         } as CompactionSummaryEvent);
       }
-      return { messages: outcome.messages, didRun: true };
+      return { messages: outcome.messages, didRun: true, replaced: outcome.replaced };
     } catch (e: any) {
       // 取消（用户中止维护流）与失败区分记录并随事件下发；
       // abortSignal 主判据（覆盖 OpenAI SDK 的 APIUserAbortError 等各类中止错误名），
@@ -194,7 +226,7 @@ export class CompactionCoordinatorService {
         error: e?.message ?? String(e),
         ...(cancelled ? { cancelled: true } : {}),
       } as CompressionErrorEvent);
-      return { messages: null, didRun: true };
+      return { messages: null, didRun: true, replaced: false };
     }
   }
 }

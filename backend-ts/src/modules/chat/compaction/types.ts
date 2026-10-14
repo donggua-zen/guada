@@ -74,6 +74,34 @@ export interface ContextAnchorWrite {
   savings?: readonly CompressionSaving[];
 }
 
+/**
+ * token 账目诊断（压缩排查专用；只读，不影响任何决策）。
+ *
+ * 用途：把三方口径在一行日志里对齐——
+ * - 视图口径（viewTokens = perMessageTokens 求和，压缩边界与保留预算用它）
+ * - 展示口径（total = getTokenCount()，环形指示器/usedTokens 用它，可能走锚点公式）
+ * - 前缀口径（preludeTokens = 系统+工具+插件前缀）
+ * `path`/`anchor`/`rejectedAnchor` 用于暴露"锚点被拒 → 静默退化为纯启发式"这类降级。
+ */
+export interface TokenDiagnostics {
+  /** getTokenCount() 当前结果 */
+  total: number;
+  /** 本次取数命中的路径 */
+  path: 'compaction_anchor' | 'usage_anchor' | 'heuristic';
+  /** prelude（系统+工具+插件前缀）启发式 token */
+  preludeTokens: number;
+  /** 视图逐消息 token 之和（= perMessageTokens 求和） */
+  viewTokens: number;
+  /** 视图消息条数 */
+  viewMessageCount: number;
+  /** 快照前缀和末项（应等于 viewTokens） */
+  prefixSumLast: number;
+  /** 命中的 usage 锚点（若有） */
+  anchor?: { model: string; promptTokens: number; messageIndex: number };
+  /** 存在 usage 锚点但因模型不匹配被拒（退化为纯启发式的静默降级元凶） */
+  rejectedAnchor?: { model: string; promptTokens: number; messageIndex: number };
+}
+
 /** 会话向压缩能力暴露的窄数据源接口 */
 export interface CompactionDataSource {
   readonly sessionId: string;
@@ -113,4 +141,6 @@ export interface CompactionDataSource {
    *  @param opts.beforeTokens 压缩前实测占用；opts.savings 本次裁剪/剥离节省（锚点之前者被显式扣减，
    *         否则 provider 锚点会抵消裁剪收益 → 占用不降） */
   recordContextAnchor?(opts?: ContextAnchorWrite): Promise<void>;
+  /** token 账目诊断（压缩排查专用；只读）。返回三方口径中间量，见 TokenDiagnostics。 */
+  getTokenDiagnostics?(): Promise<TokenDiagnostics>;
 }
