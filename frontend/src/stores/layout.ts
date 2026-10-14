@@ -1,9 +1,9 @@
 // stores/layout.ts
 import { defineStore } from 'pinia'
-import { useStorage } from '@vueuse/core'
+import { useStorage, useWindowSize } from '@vueuse/core'
 import { watch, ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
-import { NEW_SESSION_ID } from '@/constants'
+import { NEW_SESSION_ID, SIDEBAR_AUTO_COLLAPSE_WIDTH } from '@/constants'
 import { useTheme } from '@/composables/useTheme'
 import { applyLanguageFromAppearance } from '@/composables/useLanguage'
 import type { AppearanceGroupSettings } from '@/types/service'
@@ -18,8 +18,22 @@ import { useSessionStore } from '@/stores/session'
  * 工作区显示完全由激活标签驱动（tabStore.activeTabKey），不再有独立的面板模式。
  */
 export const useLayoutStore = defineStore('layout', () => {
-  // 侧边栏可见性（持久化到 localStorage）
+  // 侧边栏可见性（持久化到 localStorage）：存的是**用户偏好**。
+  // 小窗自动收起绝不改写它——否则在小窗里收起一次，之后在大窗启动也会跟着少一次展开。
   const sidebarVisible = useStorage('sidebarVisible', true)
+
+  // 小窗自动收起（运行时状态，不持久化）：窗口过窄时临时收起侧栏
+  const sidebarAutoCollapsed = ref(false)
+
+  /** 侧栏最终是否显示 = 用户偏好 && 未被小窗自动收起。渲染方一律读这个，不要读 sidebarVisible */
+  const sidebarEffectiveVisible = computed(() => sidebarVisible.value && !sidebarAutoCollapsed.value)
+
+  // 窗口宽度跨过阈值时切换；immediate 保证在小窗里启动也直接是收起态
+  const { width: windowWidth } = useWindowSize()
+  const isNarrowWindow = computed(() => windowWidth.value > 0 && windowWidth.value < SIDEBAR_AUTO_COLLAPSE_WIDTH)
+  watch(isNarrowWindow, (narrow) => {
+    sidebarAutoCollapsed.value = narrow
+  }, { immediate: true })
 
   // 侧边栏宽度（持久化；SidebarLayout 拖拽把手调整，emit 前已按其钳制范围取整）
   const sidebarWidth = useStorage('sidebarWidth', 285)
@@ -97,15 +111,22 @@ export const useLayoutStore = defineStore('layout', () => {
 
   /**
    * 切换侧边栏显示/隐藏
+   *
+   * 以「实际是否显示」为准：小窗自动收起时按一次应当展开——若翻的是用户偏好，
+   * 第一下只会把偏好改成 false，界面上看起来毫无反应，得点两次才展开。
    */
   const toggleSidebar = (): void => {
-    sidebarVisible.value = !sidebarVisible.value
+    const next = !sidebarEffectiveVisible.value
+    sidebarAutoCollapsed.value = false
+    sidebarVisible.value = next
   }
 
   /**
    * 设置侧边栏显隐状态
+   * （用户显式操作：折叠按钮 / 小窗遮罩 / Ctrl+B，优先于「小窗自动收起」）
    */
   const setSidebarVisible = (visible: boolean): void => {
+    sidebarAutoCollapsed.value = false
     sidebarVisible.value = visible
   }
 
@@ -324,6 +345,7 @@ export const useLayoutStore = defineStore('layout', () => {
 
   return {
     sidebarVisible,
+    sidebarEffectiveVisible,
     sidebarWidth,
     workspaceVisible,
     workspaceSplitSize,

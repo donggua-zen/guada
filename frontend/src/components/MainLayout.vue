@@ -3,7 +3,7 @@
        Mac 无此行（红绿灯悬浮侧栏顶部），Web 无窗口按钮需求 -->
   <CustomTitlebar v-if="isElectron && !isMac" />
 
-  <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
+  <SidebarLayout :sidebarVisible="layoutStore.sidebarEffectiveVisible" @update:sidebarVisible="handleSidebarUpdate"
     :sidebarWidth="layoutStore.sidebarWidth" resizable @update:sidebarWidth="layoutStore.setSidebarWidth"
     :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
@@ -13,7 +13,7 @@
     <template #content>
       <div
         class="content-card relative flex-1 min-w-0 overflow-hidden content-clear-wallpaper"
-        :class="{ 'sidebar-collapsed': !effectiveSidebarVisible }">
+        :class="{ 'sidebar-collapsed': !layoutStore.sidebarEffectiveVisible }">
         <RouterView />
       </div>
     </template>
@@ -50,8 +50,6 @@ const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI?.platform === 'darwin'
-
-const effectiveSidebarVisible = computed(() => layoutStore.sidebarVisible)
 
 const handleSidebarUpdate = (val: boolean) => {
   layoutStore.setSidebarVisible(val)
