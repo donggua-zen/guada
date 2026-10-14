@@ -282,12 +282,22 @@ Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执�
 
 > CI 目前只出 macOS arm64（**Intel 版暂时不做**）与 Windows x64。
 >
-> 镜像平台（`publish-mirrors` job）：
-> - **GitCode**：建同名 release **并上传安装包**（附件走「取预签名地址 → PUT」两段式）
+> **完整发版流程**（以 1.0.2 为例）：
+> 1. 升版本号（`package.json` + `backend-ts/package.json`）→ 提交 `chore: bump version to X`
+> 2. 打 tag `vX` 并推三个远端 → CI 出 mac/Windows 两个包、建 GitHub Release、在 Gitee/GitCode 建同名 release
+> 3. **在国内机器**执行 `node scripts/upload-gitcode-release.mjs vX` —— 把安装包补到 GitCode 发行版
+>
+> 为什么第 3 步不在 CI 里做：实测 GitHub 的海外 runner 传到 `file.gitcode.com` 只有约 60KB/s，
+> 235MB 的 dmg 传满 60 分钟都没完成（`curl exit 28`）；国内上传约 7.5MB/s，两个包不到一分钟。
+> 脚本会自动从 GitHub 下载缺的包、先删同名旧附件再上传（可重复执行），token 取
+> `GITCODE_TOKEN` 或 git 凭据（`host=gitcode.com`）。
+>
+> 镜像平台说明：
+> - **GitCode**：CI 建 release + 写说明，安装包由上面第 3 步补
 > - **Gitee**：**只发 release、不传二进制** —— 单附件上限 100M（官方文档），安装包 200M+ 放不进去
 >
-> 两者的 release 正文都会列出 GitHub 的下载地址。需要在 GitHub 仓库里配置
-> `GITEE_TOKEN` / `GITCODE_TOKEN` 两个 Secret，未配置时自动跳过、不影响主发布线。
+> 两者正文都会列出 GitHub 的下载地址。需要在 GitHub 仓库里配置 `GITEE_TOKEN` / `GITCODE_TOKEN`
+> 两个 Secret（**token 必须来自对该仓库有写权限的账号**，否则 403），未配置时自动跳过。
 
 ---
 
