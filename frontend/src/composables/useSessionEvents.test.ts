@@ -236,6 +236,51 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.getSession("s1")?.title).toBe("其他窗口会话");
   });
 
+  it("自身发起的流开始(running):续期 lastActiveAt,把老会话顶到侧边栏最前", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    // 两个老会话：s-old 更旧，正常排序在后
+    store.setSession({ id: "s-old", title: "老会话", lastActiveAt: "2026-08-01T00:00:00Z" } as any);
+    store.setSession({ id: "s-new", title: "新会话", lastActiveAt: "2026-08-02T00:00:00Z" } as any);
+    expect(store.getSessionsByGroup(null)[0].id).toBe("s-new");
+
+    // 在自身窗口给老会话发消息 → 流开始事件(source === clientId)
+    emitStreamStatus({ sessionId: "s-old", status: "running" }, "client-self");
+
+    // lastActiveAt 被续期（emitStreamStatus 注入的固定时间戳）
+    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-24T00:00:00Z");
+    // 排序副作用：老会话跃居第一
+    expect(store.getSessionsByGroup(null)[0].id).toBe("s-old");
+  });
+
+  it("自身发起的流终态(completed):不置顶(避免流结束后会话又跳回顶部)", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    store.setSession({ id: "s-old", title: "老会话", lastActiveAt: "2026-08-01T00:00:00Z" } as any);
+    store.setSession({ id: "s-new", title: "新会话", lastActiveAt: "2026-08-02T00:00:00Z" } as any);
+
+    emitStreamStatus({ sessionId: "s-old", status: "completed" }, "client-self");
+
+    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-01T00:00:00Z");
+    expect(store.getSessionsByGroup(null)[0].id).toBe("s-new");
+  });
+
+  it("子 Agent 的流开始:不置顶(子会话不出现在侧边栏)", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    store.setSession({ id: "s-old", title: "老会话", lastActiveAt: "2026-08-01T00:00:00Z" } as any);
+
+    emitStreamStatus(
+      { sessionId: "s-old", status: "running", sessionType: "sub_agent" },
+      "client-self",
+    );
+
+    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-01T00:00:00Z");
+  });
+
   it("流结束后自动消费队列(有排队消息时调用 chat)", () => {
     useSessionEvents().init();
     const store = useSessionStore();
