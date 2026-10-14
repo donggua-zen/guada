@@ -1,0 +1,72 @@
+name: Sign probe
+
+# 临时诊断工作流（用完即删）：在 macOS runner 上定位自签名 codesign 报
+# 「no identity found」的根因，一次性对比多种可用路径。
+# 触发：推送 probe-sign-* tag。
+on:
+  push:
+    tags:
+      - 'probe-sign-*'
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: 探测自签名 codesign 的可用路径
+        env:
+          MAC_SIGN_LINK: ${{ secrets.MAC_SIGN_LINK }}
+          MAC_SIGN_PASSWORD: ${{ secrets.MAC_SIGN_PASSWORD }}
+        run: |
+          set -e
+          if [ -z "$MAC_SIGN_LINK" ]; then echo "MAC_SIGN_LINK 为空"; exit 1; fi
+          work=$(mktemp -d)
+          cd "$work"
+          printf '%s' "$MAC_SIGN_LINK" | base64 -D > cert.p12 2>/dev/null || printf '%s' "$MAC_SIGN_LINK" | base64 -d > cert.p12
+          echo "p12 bytes: $(wc -c < cert.p12)"
+          kc="$work/sign.keychain"
+          kcpass="probe-pass"
+          security create-keychain -p "$kcpass" "$kc"
+          security unlock-keychain -p "$kcpass" "$kc"
+          security import cert.p12 -k "$kc" -P "$MAC_SIGN_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$kc"
+
+          echo "===== 1) find-identity 列表 ====="
+          security find-identity -p codesigning "$kc" || true
+          echo "===== 2) 证书 SHA1（权威）====="
+          security find-certificate -a -p "$kc" > cert.pem
+          openssl x509 -in cert.pem -noout -subject -fingerprint -sha1 || true
+
+          HASH=$(security find-identity -p codesigning "$kc" | grep -oE '[0-9A-F]{40}' | head -1)
+          echo "find-identity 里取到的 hash = $HASH"
+
+          sign_one() {
+            label="$1"; shift
+            cp /bin/ls dummy
+            if codesign --force --sign "$@" dummy >/dev/null 2>err.txt; then
+              echo "RESULT $label: OK"
+            else
+              echo "RESULT $label: FAIL -> $(head -2 err.txt | tr '\n' ' ')"
+            fi
+          }
+
+          echo "===== 3) 基础路径（复现现状）====="
+          sign_one "A-hash+keychain" "$HASH" --keychain "$kc"
+          sign_one "B-hash-only" "$HASH"
+          sign_one "C-name+keychain" "GuaDa Local Sign" --keychain "$kc"
+          sign_one "D-name-only" "GuaDa Local Sign"
+
+          echo "===== 4) 加入搜索列表 + 设为默认钥匙串后 ====="
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$kc"
+          sign_one "E-name-afterlist" "GuaDa Local Sign"
+          sign_one "F-hash-afterlist" "$HASH"
+
+          echo "===== 5) 加用户域信任后 ====="
+          security add-trusted-cert -r trustRoot -p codeSign -k "$kc" cert.pem && echo "add-trusted-cert OK" || echo "add-trusted-cert FAIL"
+          sign_one "G-name-aftertrust" "GuaDa Local Sign"
+          sign_one "H-hash-aftertrust" "$HASH"
+
+          echo "===== 6) 最终签名详情 ====="
+          cp /bin/ls dummy
+          codesign --force --sign "GuaDa Local Sign" dummy && codesign -dv --verbose=2 dummy 2>&1 | head -15
