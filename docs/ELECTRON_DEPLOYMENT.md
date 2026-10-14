@@ -298,6 +298,12 @@ Secrets）。当前未启用，因此对外分发的 mac 包都需要用户执�
 >
 > 两者正文都会列出 GitHub 的下载地址。需要在 GitHub 仓库里配置 `GITEE_TOKEN` / `GITCODE_TOKEN`
 > 两个 Secret（**token 必须来自对该仓库有写权限的账号**，否则 403），未配置时自动跳过。
+>
+> **这套流程与踩坑目录已固化成技能**（**本地技能，不入库**）：`.agents/skills/guada-release/`
+> —— `SKILL.md`（发版三步 + 验证清单）、`references/pitfalls.md`（15 类症状 → 真因 → 修法）、
+> `references/platforms.md`（三平台能力/限额/API）、`scripts/check-undeclared-deps.mjs`（发版预检）。
+> `.agents/` 已在 `.gitignore` 里（AI 工具元信息不入库）；本机有这份技能时，
+> 发版前先跑预检脚本、遇到流水线报错先查 pitfalls。
 
 ---
 
