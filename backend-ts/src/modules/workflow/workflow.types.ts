@@ -8,7 +8,7 @@
  *   钩子编排子代理（对齐 DSH dynamic workflows）
  * - WorkflowEventData 是进度事件的统一载荷：经 workflow_event SSE 实时广播，
  *   引擎同步折叠进内存快照（WorkflowRunSnapshot）——进度不落 JSONL，
- *   前端概览面板以 REST 快照为基线、SSE 为增量（方案 B）
+ *   前端以 REST 快照为基线、SSE 为增量（方案 B）
  */
 
 // ─── Workflow 元信息（纯 JSON，永不求值）───
@@ -59,6 +59,13 @@ export interface WorkflowRunStartPayload {
   name: string;
   description?: string;
   phases?: WorkflowPhaseMeta[];
+  /**
+   * 触发本次运行的 workflow_run 工具调用 id（关联键，对齐 subagent_link 范式）。
+   *
+   * 让前端把跑起来的 run 绑回对话流里那次工具调用（工具调用处原地渲染）；
+   * run-start 是首条事件即最早绑定点，快照同字段保证刷新后仍可绑定。
+   */
+  toolCallId?: string;
 }
 
 /** agent-start / agent-end 载荷（start 与 end 复用同一结构，按存在性区分） */
@@ -158,7 +165,7 @@ export interface WorkflowAgentSnapshot {
   callId: string;
   label: string;
   phase: string | null;
-  /** 子代理会话 id（概览面板点击跳转子会话） */
+  /** 子代理会话 id（卡片/审阅面板点击跳转子会话） */
   subSessionId?: string;
   status: WorkflowMemberStatus;
   outputSummary?: string;
@@ -172,6 +179,8 @@ export interface WorkflowAgentSnapshot {
  */
 export interface WorkflowRunSnapshot {
   runId: string;
+  /** 触发本次运行的工具调用 id（旧归档无此字段 → 前端卡片只按工具结果出终态，不出进度树） */
+  toolCallId?: string;
   name: string;
   description?: string;
   phases?: WorkflowPhaseMeta[];

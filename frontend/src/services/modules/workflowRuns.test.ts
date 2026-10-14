@@ -1,8 +1,9 @@
 /**
- * Workflow 运行进度 reducer 测试（方案 B：概览面板数据源）
+ * Workflow 运行进度 reducer 测试（数据层：store 与审阅面板共用）
  *
  * 覆盖：live workflow_event 与 REST 快照基线喂同一 reducer，按 run 内 seq 幂等去重；
- * agent-end 先于 agent-start 的防御建条目；多 run 并存；run-log 封顶。
+ * run-start 关联键（toolCallId）落进状态；agent-end 先于 agent-start 的防御建条目；
+ * 多 run 并存；run-log 封顶。
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -25,10 +26,10 @@ const wfEvent = (
   payload,
 } as WorkflowEventData);
 
-describe("WorkflowRunState reducer（概览面板）", () => {
+describe("WorkflowRunState reducer（数据层）", () => {
   it("live workflow_event 序列累积出完整 run 状态", () => {
     const runs: WorkflowRunState[] = [];
-    applyWorkflowEvent(runs, wfEvent("wfr_1", 1, "run-start", { name: "审查", phases: [{ title: "P1" }] }));
+    applyWorkflowEvent(runs, wfEvent("wfr_1", 1, "run-start", { name: "审查", phases: [{ title: "P1" }], toolCallId: "tc_1" }));
     applyWorkflowEvent(runs, wfEvent("wfr_1", 2, "agent-start", { callId: "a1", label: "分析", phase: "P1", subSessionId: "sub_1" }));
     applyWorkflowEvent(runs, wfEvent("wfr_1", 3, "agent-end", { callId: "a1", label: "分析", phase: "P1", status: "completed", outputSummary: "完成" }));
     applyWorkflowEvent(runs, wfEvent("wfr_1", 4, "run-end", { runStatus: "completed", agentCount: 1, durationMs: 5000 }));
@@ -38,6 +39,8 @@ describe("WorkflowRunState reducer（概览面板）", () => {
     expect(wf.name).toBe("审查");
     expect(wf.phases).toEqual([{ title: "P1" }]);
     expect(wf.status).toBe("completed");
+    // 关联键：内联卡片据此把 run 绑回对话流里的那次工具调用
+    expect(wf.toolCallId).toBe("tc_1");
     expect(wf.agents).toHaveLength(1);
     expect(wf.agents[0]).toMatchObject({
       callId: "a1",
@@ -49,6 +52,13 @@ describe("WorkflowRunState reducer（概览面板）", () => {
     });
     expect(wf.durationMs).toBe(5000);
     expect(wf.endedAt).toBe(1700000000000 + 4);
+  });
+
+  it("旧归档（无 toolCallId）不产生关联键，也不被后续事件伪造", () => {
+    const runs: WorkflowRunState[] = [];
+    applyWorkflowEvent(runs, wfEvent("wfr_old", 1, "run-start", { name: "老 run" }));
+    applyWorkflowEvent(runs, wfEvent("wfr_old", 2, "run-end", { runStatus: "completed", agentCount: 0 }));
+    expect(runs[0]!.toolCallId).toBeUndefined();
   });
 
   it("REST 快照基线 + SSE 重复事件收敛（seq 幂等去重）", () => {

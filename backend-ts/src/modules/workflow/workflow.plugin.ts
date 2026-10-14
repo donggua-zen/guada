@@ -122,7 +122,13 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
         );
         const result = await this.workflowEngine.startRun(
           ctx.session,
-          { script: args.script, meta, args: args.args },
+          {
+            script: args.script,
+            meta,
+            args: args.args,
+            // 关联键：把 run 绑回本次 workflow_run 工具调用（前端在调用处原地渲染进度）
+            toolCallId: ctx.toolCallId,
+          },
           abortSignal,
         );
 

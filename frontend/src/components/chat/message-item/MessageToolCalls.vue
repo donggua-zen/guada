@@ -76,6 +76,13 @@
           :clickable="canOpenSubAgentPanel && !!subAgentLinks[toolIndex]"
           @open="openSubAgentPanel(toolIndex)" />
 
+        <!-- 工作流运行行：workflow_run 在调用处原地渲染进度卡（run 行 + 成员树 + 日志 +
+             返回值折叠）。整行由卡片承担，不走通用 IO 区——返回值由卡片内的折叠承载，
+             避免长达 30k 字符的返回值被无折叠地摊进对话流。 -->
+        <WorkflowRunInlineCard v-else-if="workflowRunRows[toolIndex]" :tool="tool"
+          :response="getToolResponses(toolIndex)" :executing="isToolExecuting(tool, toolIndex)"
+          :session-id="props.sessionId" />
+
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
         <div v-else class="io-layout">
           <div class="io-section">
@@ -112,6 +119,7 @@ import {
   resolvePlanCardStatus, resolveToolName,
 } from '@/utils/toolDisplay';
 import { SUB_AGENT_SPAWN_TOOL } from '@/utils/subAgentTools';
+import { WORKFLOW_RUN_TOOL } from '@/utils/workflowTools';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
@@ -119,6 +127,7 @@ import type { ToolCallResponseEntry } from '@/types/message';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 import SubAgentToolRow from './SubAgentToolRow.vue';
+import WorkflowRunInlineCard from './WorkflowRunInlineCard.vue';
 import { useSessionStore } from '@/stores/session';
 
 const props = defineProps<{
@@ -228,6 +237,18 @@ const standaloneRows = computed<boolean[]>(() =>
 /** 子代理派生行（专用行组件渲染，无 renderer，不走定制渲染管线） */
 const subAgentSpawnRows = computed<boolean[]>(() =>
   props.toolCalls.map((tool) => resolveToolName(tool) === SUB_AGENT_SPAWN_TOOL),
+);
+
+/**
+ * 工作流运行行：workflow_run 在调用处原地渲染进度卡（专用行组件，同子代理行范式）。
+ *
+ * 无「回退通用 IO 行」分支：分组层的独立成块判定（messageUtils.doGrouping 读 isStandaloneTool）
+ * 只看工具名、拿不到 run 绑定状态，回退会让老会话的脚本与返回值被无折叠地摊开
+ * （独立组 isExpanded 且不可折叠）。历史兼容改由卡片内部承担：绑不到 run 时按工具结果
+ * 给出终态头 + 返回值，不再渲染进度树。
+ */
+const workflowRunRows = computed<boolean[]>(() =>
+  props.toolCalls.map((tool) => resolveToolName(tool) === WORKFLOW_RUN_TOOL),
 );
 
 const toggleExpand = (index: number): void => {

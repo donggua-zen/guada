@@ -50,6 +50,7 @@ export function applyWorkflowEvent(
       state.name = p.name;
       if (p.description) state.description = p.description;
       if (p.phases) state.phases = p.phases;
+      if (p.toolCallId) state.toolCallId = p.toolCallId;
       state.status = "running";
       state.startedAt = data.time;
       break;

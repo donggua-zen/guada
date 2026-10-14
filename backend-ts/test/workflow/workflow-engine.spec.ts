@@ -10,7 +10,8 @@
  * - 角色白名单拒绝（AGENT_START fatal 杀死脚本）
  * - abort 取消（全部在途子代理中止 + run cancelled）
  * - RESULT_UNSERIALIZABLE（return 函数等不可序列化值）
- * - 事件双发：JSONL appendWorkflowEvent（run 内 seq 严格递增）+ publishStream
+ * - 终态收口：settle 补发漏发的 run-end 并把终态同步进快照/归档（只发一条，seq 连续）
+ * - 事件广播：publishStream（run 内 seq 严格递增；进度不落 JSONL）
  */
 import * as os from "os";
 import * as path from "path";
@@ -314,6 +315,34 @@ describe("WorkflowEngineService 正常运行", () => {
   });
 });
 
+// ── 工具调用关联键（前端在 workflow_run 调用处原地渲染的绑定锚点）──
+
+describe("WorkflowEngineService 工具调用关联键", () => {
+  it("toolCallId 随 run-start 下发并进内存快照（刷新后仍可绑定）", async () => {
+    const { engine, ctx, broadcasted } = createEngine();
+    await engine.startRun(ctx, {
+      meta: { name: "关联" },
+      script: "return 1;",
+      toolCallId: "tc_abc",
+    });
+
+    const runStart = broadcasted.find((e) => e.kind === "run-start")!;
+    expect((runStart.payload as any).toolCallId).toBe("tc_abc");
+
+    // 快照即 REST 端点（sessions/:id/workflow/runs）的数据源 → 刷新后仍能把 run 绑回工具行
+    const [snap] = engine.getSessionRunStates("s_parent");
+    expect(snap?.toolCallId).toBe("tc_abc");
+  });
+
+  it("未传入时不产生该字段（直接调用引擎的旧路径不受影响）", async () => {
+    const { engine, ctx, broadcasted } = createEngine();
+    await engine.startRun(ctx, { meta: { name: "无关联" }, script: "return 1;" });
+
+    const runStart = broadcasted.find((e) => e.kind === "run-start")!;
+    expect(Object.prototype.hasOwnProperty.call(runStart.payload, "toolCallId")).toBe(false);
+  });
+});
+
 // ── 终态归档（sessions/<sid>/workflows/<runId>.json）──
 
 describe("WorkflowEngineService 终态归档", () => {
@@ -338,6 +367,55 @@ describe("WorkflowEngineService 终态归档", () => {
       result: { ok: 42 },
     });
     expect(mine!.endedAt).toBeGreaterThan(0);
+  });
+});
+
+// ── 终态收口（settle 是所有终态路径的唯一汇聚点）──
+
+describe("WorkflowEngineService 终态收口", () => {
+  it("worker 构造失败（args 不可序列化）也广播 run-end 并落终态（不再永久挂在 running）", async () => {
+    const { engine, ctx, broadcasted, fileStore } = createEngine();
+    const result = await engine.startRun(ctx, {
+      meta: { name: "坏 args" },
+      script: "return 1;",
+      // 函数无法 structured clone → new Worker 同步抛 DataCloneError → INVALID_ARGUMENT
+      args: { fn: () => 1 },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.errorCode).toBe("INVALID_ARGUMENT");
+
+    // 回归点：该分支原先只 settle 不发事件——run-start 已广播（status=running）却没有 run-end，
+    // 前端实时视图会永久停在"运行中"。现由 settle 补发，且只有一条 run-end。
+    const kinds = broadcasted.map((e) => e.kind);
+    expect(kinds).toEqual(["run-start", "run-end"]);
+    const runEnd = broadcasted.find((e) => e.kind === "run-end")!;
+    expect((runEnd.payload as any).runStatus).toBe("failed");
+    expect((runEnd.payload as any).errorCode).toBe("INVALID_ARGUMENT");
+
+    // 内存快照（REST 数据源）与磁盘归档同为终态
+    const [snap] = engine.getSessionRunStates("s_parent");
+    expect(snap?.status).toBe("failed");
+    expect(snap?.endedAt).toBeGreaterThan(0);
+
+    let archived: Awaited<ReturnType<WorkflowFileStore["listRunSnapshots"]>>[number] | undefined;
+    for (let i = 0; i < 100 && !archived; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      archived = (await fileStore.listRunSnapshots("s_parent")).find((s) => s.runId === result.runId);
+    }
+    expect(archived).toMatchObject({ status: "failed", errorCode: "INVALID_ARGUMENT" });
+  });
+
+  it("正常路径 run-end 只发一条（settle 补发幂等，不重复占 seq）", async () => {
+    const { engine, ctx, broadcasted } = createEngine();
+    await engine.startRun(ctx, { meta: { name: "n" }, script: "return 1;" });
+
+    expect(broadcasted.filter((e) => e.kind === "run-end")).toHaveLength(1);
+    // seq 仍严格递增（补发若重复会破坏连续性）
+    const seqs = seqList(broadcasted);
+    for (let i = 1; i < seqs.length; i++) {
+      expect(seqs[i]).toBe(seqs[i - 1] + 1);
+    }
   });
 });
 

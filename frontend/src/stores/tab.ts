@@ -230,6 +230,18 @@ export const useTabStore = defineStore('tab', () => {
     }
 
     /**
+     * 打开子代理列表面板标签（每会话唯一）：列出该会话全部子代理
+     * （活跃 + 已结束回放），对标工作流审阅标签的入口模式。
+     */
+    function openSubagentListTab(sessionId: string): void {
+        const id = `subagentlist:${sessionId}`
+        if (!tabs.value.some(t => t.key === id)) {
+            tabs.value.push({ type: 'subagentlist', key: id })
+        }
+        selectTab(id)
+    }
+
+    /**
      * 打开工作流审阅标签（每会话唯一）：审阅该会话全部 workflow run
      * （终态快照归档于 sessions/<sid>/workflows/，运行中 run 由引擎内存快照合并）。
      */
@@ -405,6 +417,7 @@ export const useTabStore = defineStore('tab', () => {
         openTerminalTab,
         openProcessLogTab,
         openSubAgentTab,
+        openSubagentListTab,
         openWorkflowTab,
         openPlanTab,
         openDiffTab,

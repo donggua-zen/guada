@@ -8,8 +8,8 @@ export interface UnifiedTab {
      * 'newtab' 仅作遗留兼容：起始页不占用标签栏（openNewTab 只清空 activeTabKey），
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
-    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'workflow' | 'diff' | 'plan' | 'newtab';
-    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'subagent:<subSessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'newtab:<id>'
+    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'subagentlist' | 'workflow' | 'diff' | 'plan' | 'newtab';
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'subagent:<subSessionId>' / 'subagentlist:<sessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;

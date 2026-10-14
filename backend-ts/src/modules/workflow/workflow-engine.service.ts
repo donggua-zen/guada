@@ -115,7 +115,7 @@ interface LiveAgent {
  * worker 管理、消息路由、并发槽 FIFO、事件广播（SSE + 内存快照折叠）、取消收敛。
  *
  * 状态持久化策略（方案 B）：run 进度不落 JSONL——引擎维护内存折叠快照
- * （snapshot()），REST 快照端点 + workflow_event SSE 实时增量喂前端概览面板；
+ * （snapshot()），REST 快照端点 + workflow_event SSE 实时增量喂前端 workflowRuns store；
  * 对话流只保留原生 workflow_run 工具调用行。
  */
 class WorkflowRun {
@@ -143,6 +143,8 @@ class WorkflowRun {
   private settled = false;
   private cancelRequested = false;
   private cancelReason: string | null = null;
+  /** run-end 是否已广播（settle 的补发以此幂等；正常路径的两个分支自己发） */
+  private runEndEmitted = false;
   private graceTimer: NodeJS.Timeout | null = null;
   private settledResult: WorkflowRunResult | null = null;
   private doneResolve!: (r: WorkflowRunResult) => void;
@@ -158,6 +160,8 @@ class WorkflowRun {
     subAgentManager: SubAgentManager;
     fileStore: WorkflowFileStore;
     options: WorkflowEngineOptions;
+    /** 触发本次运行的工具调用 id（关联键，随 run-start 下发并进快照） */
+    toolCallId?: string;
   }) {
     this.runId = params.runId;
     this.parentContext = params.parentContext;
@@ -170,6 +174,7 @@ class WorkflowRun {
     this.maxTotal = params.options.maxTotalAgents ?? DEFAULT_MAX_TOTAL_AGENTS;
     this.snapshot = {
       runId: params.runId,
+      ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
       name: "",
       status: "running",
       agents: [],
@@ -197,8 +202,9 @@ class WorkflowRun {
       time: Date.now(),
       payload,
     };
+    if (kind === "run-end") this.runEndEmitted = true;
     this.applyToSnapshot(data);
-    // 广播走宿主流通道（SSE→前端概览实时增量）；失败仅告警
+    // 广播走宿主流通道（SSE → 前端 workflowRuns store 实时增量，喂内联卡片与审阅面板）；失败仅告警
     this.parentContext
       .publishStream({ type: "workflow_event", event: data })
       .catch((err) => {
@@ -208,7 +214,7 @@ class WorkflowRun {
       });
   }
 
-  /** 单一 reducer：与前端概览面板 reducer 同构，按 kind 折叠进快照 */
+  /** 单一 reducer：与前端 workflowRuns reducer 同构，按 kind 折叠进快照 */
   private applyToSnapshot(data: WorkflowEventData): void {
     const state = this.snapshot;
     if (data.seq <= state.lastSeq) return;
@@ -219,6 +225,7 @@ class WorkflowRun {
         state.name = p.name;
         if (p.description) state.description = p.description;
         if (p.phases) state.phases = p.phases;
+        if (p.toolCallId) state.toolCallId = p.toolCallId;
         state.status = "running";
         state.startedAt = data.time;
         break;
@@ -582,8 +589,26 @@ class WorkflowRun {
     // worker 已终态即回收（result/error/crash 后事件循环不再需要）
     this.worker?.terminate().catch(() => {});
     this.worker = null;
-    // 终态归档：快照写 sessions/<sid>/workflows/<runId>.json（历史审阅；
-    // 所有终态路径在此汇聚，覆盖 completed/failed/cancelled/worker 崩溃）
+    // 终态收口：settle 是所有终态路径（result / error / worker 崩溃 / 宽限期强杀 / worker 构造失败）
+    // 的唯一汇聚点，不能只依赖各分支自己发 run-end——漏发的分支会让内存快照与磁盘归档永久停留在
+    // "running"，前端卡片/审阅面板即使刷新也恢复不出终态。此处补齐：
+    //   ① 补发 run-end（正常路径两个分支已发过 → runEndEmitted 幂等跳过，不重复占 seq）；
+    //   ② 把终态字段同步进快照，且必须先于归档——盘上落的才是终态而非 "running"。
+    const durationMs = result.durationMs ?? Date.now() - this.startedAt;
+    this.snapshot.status = result.status;
+    if (result.errorCode) this.snapshot.errorCode = result.errorCode;
+    if (result.errorMessage) this.snapshot.errorMessage = result.errorMessage;
+    this.snapshot.durationMs = durationMs;
+    if (!this.runEndEmitted) {
+      this.emit("run-end", {
+        runStatus: result.status,
+        agentCount: result.agentCount,
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+        ...(result.errorMessage ? { errorMessage: result.errorMessage } : {}),
+        durationMs,
+      });
+    }
+    // 终态归档：快照写 sessions/<sid>/workflows/<runId>.json（历史审阅数据源）
     if (!this.snapshot.endedAt) this.snapshot.endedAt = Date.now();
     if (result.value !== undefined) this.snapshot.result = result.value;
     this.fileStore
@@ -624,7 +649,7 @@ export class WorkflowEngineService {
     private readonly fileStore: WorkflowFileStore,
   ) {}
 
-  /** 概览面板数据源：某会话的全部已知 run 快照（运行中 + 近期完成） */
+  /** 前端数据源：某会话的全部已知 run 快照（运行中 + 近期完成） */
   getSessionRunStates(sessionId: string): WorkflowRunSnapshot[] {
     const byRun = this.runStatesBySession.get(sessionId);
     return byRun ? [...byRun.values()] : [];
@@ -658,7 +683,7 @@ export class WorkflowEngineService {
    */
   async startRun(
     parentContext: ISessionContext,
-    params: { script: string; meta: unknown; args?: unknown },
+    params: { script: string; meta: unknown; args?: unknown; toolCallId?: string },
     abortSignal?: AbortSignal,
   ): Promise<WorkflowRunResult> {
     const meta = validateMeta(params.meta);
@@ -682,6 +707,7 @@ export class WorkflowEngineService {
       subAgentManager: this.subAgentManager,
       fileStore: this.fileStore,
       options,
+      ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
     });
     this.runs.set(runId, run);
     this.registerRunState(parentContext.sessionId, run.getSnapshot());
@@ -690,6 +716,7 @@ export class WorkflowEngineService {
       name: meta.name,
       ...(meta.description ? { description: meta.description } : {}),
       ...(meta.phases ? { phases: meta.phases } : {}),
+      ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
     });
 
     try {

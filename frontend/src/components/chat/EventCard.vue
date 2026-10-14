@@ -65,7 +65,8 @@
       </template>
     </div>
 
-    <!-- 其他事件类消息：通用兜底（workflow 进度已迁移至概览面板，历史事件不再渲染卡片） -->
+    <!-- 其他事件类消息：通用兜底（workflow 进度不落 JSONL，改由 workflow_run 工具行原地渲染，
+         历史事件不再渲染卡片） -->
     <div v-else class="text-xs text-gray-400 dark:text-gray-500">
       {{ commandName || '事件' }}
     </div>

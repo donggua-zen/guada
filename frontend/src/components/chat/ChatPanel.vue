@@ -40,8 +40,14 @@
                 </Transition>
 
                 <template v-for="(turn, index) in visibleTurns" :key="turn.id">
-                  <!-- 事件类消息外壳（turn.kind='event'，compaction/command 等）：渲染专门事件卡片 -->
-                  <EventCard v-if="turn.kind === 'event'" :event="turn" />
+                  <!-- 事件类消息外壳（turn.kind='event'，compaction/command 等）：渲染专门事件卡片。
+                       尾部外边距与普通回合同款（25px）——状态胶囊是不占布局高度的浮层，末尾事件卡
+                       没有这层留白会被它盖住（实测重叠 14px；补 25px 后实测净空 11px）。
+                       刻意不加 last:min-h-[60vh]：那是整段对话末尾的呼吸位，短小的事件卡套上会
+                       留一大片空白（用户反馈）。 -->
+                  <div v-if="turn.kind === 'event'" class="event-turn">
+                    <EventCard :event="turn" />
+                  </div>
                   <TurnItem v-else :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
                     :turn="turn" :avatar="userAvater"
                     :agent-name="currentSession?.agent?.name"
@@ -93,15 +99,17 @@
                 </div>
               </div>
 
-              <!-- 输入区上方状态行：TODO 胶囊 + 回到底部，并排居中。
+              <!-- 输入区上方状态行：运行时状态胶囊（待办 / 后台进程 / 子代理）+ 回到底部，并排居中。
                    绝对定位浮层，不占布局高度（见 .composer-status-row 样式注释）。
-                   位于避让过侧边栏的 .chat-column 内 → 开侧边栏时与输入框同轴居中。 -->
+                   位于避让过侧边栏的 .chat-column 内 → 开侧边栏时与输入框同轴居中。
+                   子代理段数据由 ChatPage 经 props 下传（含已冻结项，胶囊内部只取活跃项）。 -->
               <div class="composer-status-row">
-                <FloatingTodoBar :session-id="currentSessionId || undefined" />
+                <ComposerStatusBar v-if="!props.readonly"
+                  :session-id="currentSessionId || undefined" :sub-sessions="props.subSessions" />
                 <!-- 0 宽插槽：按钮在插槽内绝对定位，插槽本身不占宽度。
                      行的居中因此只由胶囊决定 → 按钮出现/消失（到达或离开底部）不再把胶囊横移
                      （实测 18px：胶囊与图标一起跳，与"到底部时图标动了"的现象一致）。
-                     无待办（无胶囊）时按钮是行内唯一元素，由 :has() 那条规则把它自身摆到中轴上；
+                     三段全空（无胶囊）时按钮是行内唯一元素，由 :has() 那条规则把它自身摆到中轴上；
                      否则插槽锚点居中而按钮画在锚点右侧，会整体偏右半个身位（14px）。 -->
                 <div class="scroll-btn-slot">
                   <ScrollToBottomButton :show="showScrollToBottomBtn" @click="handleScrollToBottomClick" />
@@ -210,7 +218,7 @@ import type { SnipData } from './workspace/FilePreviewPanel.vue'
 // 组件导入
 import TurnItem from "./TurnItem.vue";
 import EventCard from "./EventCard.vue";
-import FloatingTodoBar from "./FloatingTodoBar.vue";
+import ComposerStatusBar from "./ComposerStatusBar.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
@@ -282,6 +290,8 @@ const props = defineProps<{
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
+  /** 子会话列表（ChatPage 维护，含已冻结项）：输入区运行时胶囊的「子代理」段数据源 */
+  subSessions?: Session[];
   /** 浮层面板视觉宽（px，0 = 不渲染）；恒为浮层渲染，与占位解耦 */
   asideWidth?: number;
   /** 避让占位宽（px，0 = 不占位）：消息列让位的唯一来源，与浮层面板各管各的 */
@@ -480,7 +490,7 @@ function immediateScrollToBottom() {
  * 处理滚动事件
  */
 function handleScroll(event: Event) {
-  // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 FloatingTodoBar 的注释），
+  // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 ComposerStatusBar 的注释），
   // 而 scrollTicking 守卫会让 rAF 未回调时的后续滚动事件全部被丢弃——若只在 rAF 里更新，
   // 按钮会永不出现。防抖收在 updateScrollButtonVisibility 内部，逐次调用无额外开销。
   updateScrollButtonVisibility();
@@ -1519,7 +1529,7 @@ function scrollToMessage(messageId: string) {
    常驻合成层多一层栅格/显存开销，且在合成 sticky 内叠加变换层会放大重采样模糊）。
    注意：图标自身的半像素是另一回事——「容器尺寸 − 图标尺寸 = 奇数」会让居中余量为半像素
    （16px 容器放 13px 图标 → 上下各 1.5px），这是几何问题，应按尺寸取偶数修
-   （见 FloatingTodoBar / EventCard 的注释），不要靠这里兜。 */
+   （见 ComposerStatusBar / EventCard 的注释），不要靠这里兜。 */
 .composer-status-row {
   position: absolute;
   left: 0;
@@ -1560,11 +1570,20 @@ function scrollToMessage(messageId: string) {
   margin-left: 8px;
 }
 
-/* 无待办胶囊时，按钮是状态行里唯一可见的元素：插槽锚点被居中在行中轴，而按钮画在锚点
+/* 无运行时胶囊时，按钮是状态行里唯一可见的元素：插槽锚点被居中在行中轴，而按钮画在锚点
    右侧 → 不修正就整体偏右 14px（半个按钮宽，28 / 2）。左移半个身位让它自身居中。
-   有胶囊时这条不生效，间距仍是上面的 8px（:has 匹配 FloatingTodoBar 的根节点，
-   无待办项时该节点不渲染）。 */
-.composer-status-row:not(:has(.floating-todo-bar)) .scroll-btn-slot > :deep(*) {
+   有胶囊时这条不生效，间距仍是上面的 8px（:has 匹配 ComposerStatusBar 的根节点，
+   三段全空时该节点不渲染）。 */
+.composer-status-row:not(:has(.composer-status-bar)) .scroll-btn-slot > :deep(*) {
   margin-left: -14px;
+}
+
+/* 事件回合外壳（compaction/command 等事件卡）：
+   尾部外边距对齐 .turn-wrapper 的 margin-bottom——浮层状态胶囊（absolute，不占布局高度）
+   会盖住末尾没有留白的事件卡（实测重叠 14px）；补 25px 后实测净空 11px，不加 60vh 预留
+   （那是整段对话末尾的呼吸位，事件卡套上会留大片空白）。 */
+.event-turn {
+  width: 100%;
+  margin-bottom: 25px;
 }
 </style>
