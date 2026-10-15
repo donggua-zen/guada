@@ -73,3 +73,9 @@ TOOLS.md
 
 # macOS Finder（每个目录都可能生成）
 .DS_Store
+
+# 评测（eval/）：本地配置与运行产物不入库
+eval/.env.local
+eval/**/__pycache__/
+# remote_transfer 的宿主落点（评测中容器文件可能被拉到这里）
+backend-ts/work/

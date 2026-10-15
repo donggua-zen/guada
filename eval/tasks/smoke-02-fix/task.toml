@@ -1,0 +1,32 @@
+# 冒烟任务 02：读代码 → 定位缺陷 → 修好并通过验收
+# 目的：比 smoke-01 多覆盖 read / edit / run_command 三个工具与"跑测试自检"的闭环。
+version = "1.0"
+
+artifacts = ["/app/greet.sh"]
+
+[metadata]
+author_name = "GuaDa Eval"
+category = "smoke"
+tags = ["smoke", "bug-fix", "shell"]
+difficulty_explanation = "一处引号/标点缺陷，修好后验收脚本通过"
+
+[verifier]
+timeout_sec = 60.0
+environment_mode = "separate"
+
+[verifier.environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048
+gpus = 0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048
+gpus = 0

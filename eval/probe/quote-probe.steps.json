@@ -1,0 +1,23 @@
+[
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo NO_QUOTES_OK" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo \"double-quoted ok\"" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo 'single-quoted ok'" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "grep -c . /etc/hostname && echo 'grep with single quotes ok'" }
+  },
+  { "type": "text", "content": "QUOTE_PROBE_DONE" }
+]

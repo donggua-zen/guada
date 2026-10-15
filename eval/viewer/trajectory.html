@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GuaDa 解题过程查看器</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161922; --panel2:#1d2129; --line:#2a2f3a;
+    --fg:#e6e9ef; --dim:#8b93a7; --accent:#5aa9ff; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#ffb454;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#161922,#161922e6);border-bottom:1px solid var(--line);padding:12px 18px;backdrop-filter:blur(6px)}
+  h1{margin:0 0 6px;font-size:16px;font-weight:600}
+  .meta{color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+  .meta b{color:var(--fg);font-weight:600}
+  .layout{display:grid;grid-template-columns:260px 1fr;gap:0;min-height:calc(100vh - 62px)}
+  aside{border-right:1px solid var(--line);padding:14px;position:sticky;top:62px;align-self:start;max-height:calc(100vh - 62px);overflow:auto}
+  main{padding:18px 22px;max-width:1100px}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:40px;text-align:center;color:var(--dim)}
+  .drop.hover{border-color:var(--accent);color:var(--fg)}
+  button,input[type=search]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+  input[type=search]{width:100%;cursor:text;margin-bottom:10px}
+  button:hover{border-color:var(--accent)}
+  .toolstat{display:flex;justify-content:space-between;gap:8px;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:13px}
+  .toolstat:hover{background:var(--panel2)}
+  .toolstat.active{background:#22304a;color:#cfe6ff}
+  .toolstat span:last-child{color:var(--dim)}
+  .section-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+  .block{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:var(--panel);overflow:hidden}
+  .block>.hd{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel2);cursor:pointer;user-select:none}
+  .block>.hd .name{font-weight:600;font-size:13px}
+  .block>.hd .spacer{flex:1}
+  .block>.bd{padding:10px 12px;border-top:1px solid var(--line)}
+  .block.collapsed>.bd{display:none}
+  .badge{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .badge.ok{color:var(--ok);border-color:#24604a}
+  .badge.bad{color:var(--bad);border-color:#6b2b2b}
+  .badge.tool{color:var(--accent);border-color:#26456b}
+  .sub{font-family:var(--mono);font-size:11.5px;color:var(--dim);max-width:46ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .empty{color:var(--dim);font-size:12px;padding:4px 6px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12.5px;background:#0c0e13;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:520px;overflow:auto}
+  .reasoning{color:#a9b3c9;font-style:italic}
+  .reasoning pre{background:#12141b;color:#a9b3c9}
+  .user .bd{color:#ffe6b3}
+  .args-key{color:var(--dim)}
+  .fail{border-color:#5a2626}
+  .fail>.hd{background:#2a1a1a}
+  .copy{font-size:11px;padding:2px 8px}
+  .tokens{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .turnline{display:flex;gap:10px;align-items:center;margin:18px 0 6px;color:var(--dim);font-size:12px}
+  .turnline:before,.turnline:after{content:'';height:1px;background:var(--line);flex:1}
+  .hidden{display:none !important}
+  mark{background:#3d3418;color:#ffe6b3}
+  .hint{color:var(--dim);font-size:12px;margin-top:8px}
+  details>summary{cursor:pointer;color:var(--dim);font-size:12px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>GuaDa 解题过程查看器</h1>
+  <div class="meta" id="meta">
+    <span>把 <code>guada-transcript.jsonl</code> 拖进来，或 <label style="text-decoration:underline;cursor:pointer">选择文件<input id="file" type="file" accept=".jsonl,.json,.txt" class="hidden"></label></span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside id="side" class="hidden">
+    <input id="search" type="search" placeholder="搜索命令/路径/输出…" />
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="expandAll">全部展开</button>
+      <button id="collapseAll">全部折叠</button>
+    </div>
+    <div class="section-title">工具调用</div>
+    <div id="tools"></div>
+    <div class="section-title">回合</div>
+    <div id="turns"></div>
+  </aside>
+  <main id="main">
+    <div class="drop" id="drop">
+      <p style="font-size:15px;margin:0 0 8px">拖入轨迹文件开始</p>
+      <p style="margin:0">agent 目录下的 <code>guada-transcript.jsonl</code>（Harbor 每次 trial 都会导出）</p>
+      <p class="hint">也可以直接访问 <code>trajectory.html?src=相对路径.jsonl</code></p>
+    </div>
+  </main>
+</div>
+
+<script>
+const TOOL_KEY_ARG = ['command','file_path','path','pattern','url','query','selector','text'];
+const state = { blocks: [], filterTool: null, query: '' };
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+
+function parseText(text){
+  const out=[];
+  const trimmed = text.trim();
+  if (trimmed.startsWith('[')) { try { JSON.parse(trimmed).forEach(b=>out.push(b)); return out; } catch(e){} }
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line)); } catch(e){ /* 忽略坏行 */ }
+  }
+  return out;
+}
+
+/** 工具结果是否像失败：退出码非 0 / Traceback / FAIL 等 */
+function looksFailed(content){
+  const c = String(content||'');
+  if (/\[exit code: (?!0\b)\d+/.test(c)) return true;
+  if (/Traceback \(most recent call last\)/.test(c)) return true;
+  if (/^\s*(FAIL|Error|error:|fatal:)/m.test(c)) return true;
+  return false;
+}
+
+/** tool-call → 结果 的配对表 */
+function indexResults(blocks){
+  const map = new Map();
+  for (const b of blocks) if (b.type==='tool/result' && b.data?.toolCallId) map.set(b.data.toolCallId, b.data);
+  return map;
+}
+
+function renderArgs(argsStr){
+  let args = null;
+  try { args = JSON.parse(argsStr); } catch(e){}
+  if (!args || typeof args !== 'object') return `<pre>${esc(argsStr||'')}</pre>`;
+  const keys = Object.keys(args);
+  const primary = TOOL_KEY_ARG.find(k => k in args);
+  let h = '';
+  if (primary) h += `<pre><span class="args-key">${esc(primary)}:</span> ${esc(args[primary])}</pre>`;
+  const rest = keys.filter(k => k !== primary);
+  if (rest.length) {
+    const restObj = {}; rest.forEach(k=>restObj[k]=args[k]);
+    h += `<details style="margin-top:6px"><summary>其余参数 (${rest.length})</summary><pre>${esc(JSON.stringify(restObj,null,2))}</pre></details>`;
+  }
+  return h;
+}
+
+function blockCard({title, badge, badgeClass='', bodyHtml, extraClass='', collapsed=false, searchText='', subtitle=''}){
+  const node = el(`<div class="block ${extraClass} ${collapsed?'collapsed':''}">
+    <div class="hd"><span class="name">${esc(title)}</span>${badge?`<span class="badge ${badgeClass}">${esc(badge)}</span>`:''}
+      ${subtitle?`<span class="sub">${esc(subtitle)}</span>`:''}
+      <span class="spacer"></span>
+      <button class="copy">复制</button></div>
+    <div class="bd">${bodyHtml}</div></div>`);
+  node.querySelector('.hd').addEventListener('click', e=>{
+    if (e.target.classList.contains('copy')) return;
+    node.classList.toggle('collapsed');
+  });
+  node.querySelector('.copy').addEventListener('click', async e=>{
+    e.stopPropagation();
+    const text = node.querySelector('.bd').innerText;
+    try { await navigator.clipboard.writeText(text); e.target.textContent='已复制'; setTimeout(()=>e.target.textContent='复制',1200); } catch(err){}
+  });
+  node.dataset.search = (searchText || title).toLowerCase();
+  return node;
+}
+
+function render(blocks, srcName){
+  const results = indexResults(blocks);
+  const main = document.getElementById('main'); main.innerHTML='';
+  const toolCounts = {}; const turns = [];
+  let totals = {prompt:0, completion:0, total:0, cache:0, n:0};
+  const consumed = new Set();
+
+  for (const b of blocks){
+    const d = b.data || {};
+    if (b.type === 'session/init'){
+      main.appendChild(el(`<div class="turnline">会话 ${esc(d.sessionId||'')} · ${esc(d.title||'')}</div>`));
+    } else if (b.type === 'turn/start'){
+      main.appendChild(el(`<div class="turnline">回合 ${esc(d.turnId||'')}</div>`));
+    } else if (b.type === 'user/message'){
+      const blocksArr = d.content || d.blocks || [];
+      const text = blocksArr.map(x=>x.text||x.content||'').join('\n') || JSON.stringify(d).slice(0,2000);
+      main.appendChild(blockCard({title:'任务指令 / 用户消息', badge:`${text.length} 字符`, bodyHtml:`<div style="white-space:pre-wrap">${esc(text)}</div>`, extraClass:'user', collapsed:text.length>1200, searchText:text}));
+    } else if (b.type === 'assistant/message'){
+      for (const c of (d.content||[])){
+        if (c.type === 'reasoning' && c.summary){
+          main.appendChild(blockCard({title:'思考', badge:'reasoning', bodyHtml:`<div class="reasoning"><pre>${esc(c.summary)}</pre></div>`, collapsed:true, searchText:c.summary}));
+        } else if (c.type === 'text' && c.text){
+          main.appendChild(blockCard({title:'输出', bodyHtml:`<div style="white-space:pre-wrap">${esc(c.text)}</div>`, collapsed:c.text.length>2000, searchText:c.text}));
+        } else if (c.type === 'tool-call'){
+          const key = c.name || 'tool';
+          toolCounts[key] = (toolCounts[key]||0)+1;
+          const r = results.get(c.toolCallId);
+          if (r) consumed.add(c.toolCallId);
+          const failed = r ? looksFailed(r.content) : false;
+          const outText = r ? String(r.content||'') : '（无结果记录）';
+          const outLines = outText.split('\n').length;
+          // 折叠状态下也能一眼看到"干了什么"（命令 / 文件路径 / 搜索词）
+          let subtitle = '';
+          try {
+            const a = JSON.parse(c.arguments || '{}');
+            const p = TOOL_KEY_ARG.find(k => k in a);
+            if (p) subtitle = String(a[p]).replace(/\s+/g,' ').slice(0, 100);
+          } catch(e){}
+          const body = renderArgs(c.arguments)
+            + `<div style="margin-top:10px;color:var(--dim);font-size:12px">结果${r?`（${outText.length} 字符 / ${outLines} 行）`:''}</div>`
+            + `<pre>${esc(outText)}</pre>`;
+          main.appendChild(blockCard({
+            title: key,
+            badge: failed ? '失败' : (r ? 'ok' : '无结果'),
+            badgeClass: failed ? 'bad' : (r ? 'ok' : ''),
+            bodyHtml: body,
+            extraClass: 'tool' + (failed ? ' fail' : ''),
+            collapsed: outLines > 25,
+            searchText: (c.arguments||'') + ' ' + outText,
+            subtitle
+          }));
+        }
+      }
+    } else if (b.type === 'tool/result'){
+      if (consumed.has(d.toolCallId)) continue;
+      const outText = String(d.content||'');
+      main.appendChild(blockCard({title:(d.name||'工具')+'（未配对的独立结果）', badge:'——', bodyHtml:`<pre>${esc(outText)}</pre>`, collapsed:outText.split('\n').length>25, searchText:outText}));
+    } else if (b.type === 'turn/finish'){
+      totals.prompt += d.promptTokens||0; totals.completion += d.completionTokens||0;
+      totals.total += d.totalTokens||0; totals.cache += d.cachedTokens||0; totals.n++;
+      turns.push(d);
+      main.appendChild(el(`<div class="turnline">回合结束 · 原因=${esc(d.finishReason||'?')} · 累计 token=${(d.totalTokens||0).toLocaleString()}</div>`));
+    }
+  }
+
+  // 侧栏
+  document.getElementById('side').classList.remove('hidden');
+  const toolsEl = document.getElementById('tools'); toolsEl.innerHTML='';
+  Object.entries(toolCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+    const row = el(`<div class="toolstat"><span>${esc(k)}</span><span>${v}</span></div>`);
+    row.addEventListener('click', ()=>{
+      state.filterTool = state.filterTool===k ? null : k;
+      document.querySelectorAll('.toolstat').forEach(x=>x.classList.remove('active'));
+      if (state.filterTool) row.classList.add('active');
+      applyFilters();
+    });
+    toolsEl.appendChild(row);
+  });
+  const turnsEl = document.getElementById('turns'); turnsEl.innerHTML='';
+  if (!turns.length) {
+    turnsEl.appendChild(el(`<div class="empty">无回合结束记录——本轮被 stop 打断或仍在进行中，因此没有 token 统计</div>`));
+  }
+  turns.forEach((t,i)=>{
+    turnsEl.appendChild(el(`<div class="toolstat"><span>#${i+1} ${esc(t.modelName||'')}</span><span class="tokens">${((t.totalTokens||0)/1000).toFixed(1)}k</span></div>`));
+  });
+
+  // 头部统计
+  const nCalls = Object.values(toolCounts).reduce((a,b)=>a+b,0);
+  document.getElementById('meta').innerHTML =
+    `<span>文件 <b>${esc(srcName||'')}</b></span>
+     <span>块数 <b>${blocks.length}</b></span>
+     <span>工具调用 <b>${nCalls}</b></span>
+     <span>回合 <b>${totals.n}</b></span>
+     <span>prompt <b>${totals.prompt.toLocaleString()}</b> · completion <b>${totals.completion.toLocaleString()}</b> · cache <b>${totals.cache.toLocaleString()}</b> · total <b>${totals.total.toLocaleString()}</b></span>
+     <label style="text-decoration:underline;cursor:pointer">换文件<input id="file2" type="file" accept=".jsonl,.json,.txt" class="hidden"></label>`;
+  document.getElementById('file2').addEventListener('change', e=>loadFiles(e.target.files));
+
+  applyFilters();
+}
+
+function applyFilters(){
+  const q = state.query.trim().toLowerCase();
+  document.querySelectorAll('#main .block').forEach(node=>{
+    const text = node.dataset.search || '';
+    const okTool = !state.filterTool || node.querySelector('.name')?.textContent === state.filterTool;
+    const okQuery = !q || text.includes(q);
+    node.classList.toggle('hidden', !(okTool && okQuery));
+  });
+}
+
+async function loadFiles(files){
+  const f = files && files[0]; if (!f) return;
+  const text = await f.text();
+  state.blocks = parseText(text);
+  render(state.blocks, f.name);
+}
+
+document.getElementById('file').addEventListener('change', e=>loadFiles(e.target.files));
+document.getElementById('expandAll').addEventListener('click', ()=>document.querySelectorAll('#main .block').forEach(n=>n.classList.remove('collapsed')));
+document.getElementById('collapseAll').addEventListener('click', ()=>document.querySelectorAll('#main .block').forEach(n=>n.classList.add('collapsed')));
+document.getElementById('search').addEventListener('input', e=>{ state.query = e.target.value; applyFilters(); });
+
+const drop = document.getElementById('drop');
+document.body.addEventListener('dragover', e=>{e.preventDefault(); drop && drop.classList.add('hover');});
+document.body.addEventListener('dragleave', ()=>{ drop && drop.classList.remove('hover'); });
+document.body.addEventListener('drop', e=>{
+  e.preventDefault(); drop && drop.classList.remove('hover');
+  if (e.dataTransfer.files?.length) loadFiles(e.dataTransfer.files);
+});
+
+// ?src=相对路径 直接加载（配合任意静态服务器使用）
+const src = new URLSearchParams(location.search).get('src');
+if (src){
+  fetch(src).then(r=>r.text()).then(t=>{ state.blocks = parseText(t); render(state.blocks, src); })
+    .catch(err=>{ document.getElementById('main').innerHTML = `<pre>加载 ${esc(src)} 失败：${esc(err.message)}</pre>`; });
+}
+</script>
+</body>
+</html>
