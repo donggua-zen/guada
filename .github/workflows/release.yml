@@ -391,16 +391,29 @@ jobs:
           curl -sS -f -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$tag" -o /tmp/gh-release.json
           jq -r '.body // ""' /tmp/gh-release.json > /tmp/body.md
+          # 更新说明来自 GitHub Release 正文（= 仓库里的 docs/releases/<tag>.md，与官网 changelog 同一份内容）
+          # GitCode 镜像：说明 + GitHub 直链（二进制由国内机器补传到 GitCode）
           {
+            cat /tmp/body.md
             echo ""
             echo "---"
             echo ""
-            echo "## 下载"
+            echo "### GitHub 直链"
             echo ""
             jq -r '.assets[] | select(.name | endswith(".dmg") or endswith(".exe")) | "- \(.name)（\(.size / 1048576 | floor) MB）：\(.browser_download_url)"' /tmp/gh-release.json
-          } >> /tmp/body.md
-          echo "=== 生成的正文 ==="
-          cat /tmp/body.md
+          } > /tmp/body-gitcode.md
+          # Gitee 镜像：说明 + 官网下载页（不附二进制，也不列 GitHub 直链）
+          {
+            cat /tmp/body.md
+            echo ""
+            echo "---"
+            echo ""
+            echo "> 本页不附安装包（Gitee 单附件上限 100M，安装包 200M+ 放不进去）。下载请走官网下载页：<https://ai.dingd.cn/download>"
+          } > /tmp/body-gitee.md
+          echo "=== GitCode 正文 ==="
+          cat /tmp/body-gitcode.md
+          echo "=== Gitee 正文 ==="
+          cat /tmp/body-gitee.md
           echo "=== 取回的安装包 ==="
           ls -la artifacts 2>/dev/null || echo "（没有取到产物）"
 
@@ -416,7 +429,6 @@ jobs:
             exit 0
           fi
           api="https://gitee.com/api/v5/repos/zhendongdong/guada_ai"
-          { cat /tmp/body.md; echo ""; echo "> 本页未附安装包：Gitee 单附件上限 100M，安装包 200M+ 放不进去，下载请用上方 GitHub 链接。"; } > /tmp/body-gitee.md
           body=$(jq -Rs . < /tmp/body-gitee.md)
           # 先按 tag 查是否已存在：存在就更新（tag 重指过的情况），否则新建
           id=$(curl -s "$api/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" | jq -r '.id // empty')
@@ -457,7 +469,7 @@ jobs:
 
           # 建或更新 release（先按 tag 查，存在就 PATCH）—— 这里只写说明，不传二进制：
           # 见本 job 头部注释（GitHub 海外 runner 传到 GitCode 太慢，二进制由国内机器补传）
-          body=$(jq -Rs . < /tmp/body.md)
+          body=$(jq -Rs . < /tmp/body-gitcode.md)
           exists=$(curl -s -H "$auth" "$api/releases/tags/$TAG_NAME" | jq -r '.tag_name // empty')
           if [ -n "$exists" ]; then
             payload=$(jq -n --arg t "$TAG_NAME" --arg n "$TAG_NAME" --argjson b "$body" \
