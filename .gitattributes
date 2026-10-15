@@ -1,0 +1,7 @@
+# ── 评测目录（eval/）强制 LF ─────────────────────────────────────────────
+# 这些文件会在 **Linux 容器内**执行或被 Docker 解析：
+#   - *.sh：CRLF 会让 shebang 变成 `#!/bin/bash\r` → "bad interpreter"
+#   - Dockerfile：CRLF 可能让 RUN 行解析失败
+#   - task.toml / *.py / *.mjs：由 Linux 工具链读取，统一 LF 避免噪音
+# Windows 上 core.autocrlf=true 时，若不钉死，checkout 会转成 CRLF 而弄坏它们。
+eval/** text eol=lf

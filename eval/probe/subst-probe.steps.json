@@ -1,0 +1,23 @@
+[
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo \"pwd=$(pwd)\"" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo \"ls=$(ls -a | head -3)\"" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "echo \"n=$(ls -a | head -3 | tr '\\n' ',')\"" }
+  },
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": { "command": "tr '\\n' '|' < /etc/hostname" }
+  },
+  { "type": "text", "content": "SUBST_PROBE_DONE" }
+]

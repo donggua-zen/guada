@@ -1,0 +1,10 @@
+[
+  {
+    "type": "tool",
+    "name": "run_command",
+    "args": {
+      "command": "echo STUB_IN_WORKSPACE; echo \"pwd=$(pwd)\"; echo \"host=$(hostname)\"; echo \"arch=$(uname -m)\"; echo \"cwd-ls=$(ls -a | head -5 | tr '\\n' ',')\""
+    }
+  },
+  { "type": "text", "content": "REPRO_DONE" }
+]
