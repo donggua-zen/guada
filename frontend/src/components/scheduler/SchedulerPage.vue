@@ -127,6 +127,12 @@
                       <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                   </div>
+                  <div v-else-if="log.status === 'missed'" class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center">
+                    <svg class="w-2 h-2 text-white" viewBox="0 0 12 12" fill="none">
+                      <path d="M6 2.5V6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                      <path d="M6 8.6V9.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                  </div>
                   <div v-else class="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-[#4a4c52] bg-(--gd-color-surface)"></div>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -136,6 +142,8 @@
                       class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">{{ t('scheduler.page.running') }}</span>
                     <span v-else-if="log.status === 'failed'"
                       class="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">{{ t('scheduler.page.failed') }}</span>
+                    <span v-else-if="log.status === 'missed'"
+                      class="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">{{ t('scheduler.page.missed') }}</span>
                     <span v-else-if="log.status === 'pending'"
                       class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] text-gray-500 dark:text-[#8b8d95]">{{ t('scheduler.page.pending') }}</span>
                   </div>
@@ -143,6 +151,7 @@
                     {{ formatTime(log.startedAt) }}
                   </div>
                   <div v-if="log.error" class="text-xs text-red-500 mt-1.5 line-clamp-2">{{ log.error }}</div>
+                  <div v-else-if="log.reason" class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 line-clamp-2">{{ log.reason }}</div>
                 </div>
               </div>
               <div v-if="historyHasMore" class="flex justify-center mt-2">

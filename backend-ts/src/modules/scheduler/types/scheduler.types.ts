@@ -10,8 +10,10 @@ export type TaskTargetMode = "new_session" | "existing_session";
 
 /**
  * 定时任务状态
+ *
+ * missed：计划窗口被错过（电脑休眠、应用未运行、进程长时间阻塞），不补跑、只留痕。
  */
-export type TaskStatus = "pending" | "running" | "completed" | "failed";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "missed";
 
 /**
  * 定时任务实体
@@ -95,6 +97,8 @@ export interface ScheduledTaskLog {
   sessionId?: string | null;
   status: TaskStatus;
   error?: string | null;
+  /** missed 状态专用：错过窗口的说明（含次数与原因），与 error 分开以便 UI 中性展示 */
+  reason?: string | null;
   startedAt: string;
   finishedAt?: string | null;
 }

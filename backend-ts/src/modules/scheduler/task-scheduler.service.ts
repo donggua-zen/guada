@@ -4,6 +4,27 @@ import * as cronParser from "cron-parser";
 import { TaskStorageService } from "./task-storage.service";
 import { TaskExecutorService } from "./task-executor.service";
 import { ScheduledTask } from "./types/scheduler.types";
+import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
+
+/**
+ * 错过窗口的宽限：计划时刻比「现在」早出这个量，才算错过，不补跑。
+ *
+ * 取值参考同类实现（zcode 的 misfire 宽限同为 5 分钟）：明显大于一次正常 tick 延迟，
+ * 又能容忍短暂卡顿。注意 node-cron 的补跑上限还会被槽位间隔进一步压住
+ * （槽位间隔 < 宽限时以间隔为准），所以「每分钟」任务最多只会晚 1 分钟补跑，
+ * 不会出现漏几拍后连跑多次。
+ */
+const MISSED_WINDOW_GRACE_MS = 5 * 60_000;
+/** 错过槽位的合并窗口：一次长休眠可能连丢多个槽位，合并成一条日志再落盘 */
+const MISSED_BURST_FLUSH_MS = 2_000;
+/** 单次对账的错过次数上限：超长停机时避免把日志写爆 */
+const MISSED_COUNT_CAP = 500;
+
+/** 计划时刻的展示格式（本机时区，分钟精度足够；cron 计算用 Asia/Shanghai） */
+function formatSlotTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
  * 定时任务调度管理服务
@@ -12,6 +33,7 @@ import { ScheduledTask } from "./types/scheduler.types";
  * 1. 启动时从文件加载所有启用的任务并注册到 cron
  * 2. 运行时动态添加/移除/更新任务调度
  * 3. 模块销毁时清理所有定时器
+ * 4. 记录「错过窗口」：电脑休眠/应用未运行/进程阻塞导致的漏跑，不补跑但必须留痕
  */
 @Injectable()
 export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -20,6 +42,11 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly activeTimeouts = new Map<string, NodeJS.Timeout>();
   /** 重叠守卫：正在派发执行中的任务 id，防止上一次未结束时被再次触发 */
   private readonly runningTasks = new Set<string>();
+  /** 待落盘的错过槽位突发（taskId → 合并窗口），见 recordMissedSlot */
+  private readonly missedBursts = new Map<
+    string,
+    { count: number; firstAt: Date; lastAt: Date; timer: NodeJS.Timeout }
+  >();
 
   constructor(
     private storage: TaskStorageService,
@@ -43,6 +70,9 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
           await this.expireTask(task);
           continue;
         }
+        // 启动对账要早于 scheduleTask：后者会立刻把 nextRunAt 推进到未来，
+        // 一旦推进，过去那些槽位就再也无从判断
+        await this.reconcileMissedWindowsOnStartup(task);
         if (this.scheduleTask(task)) scheduled++;
       }
 
@@ -69,6 +99,11 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`已清除一次性任务: ${id}`);
     }
     this.activeTimeouts.clear();
+
+    for (const burst of this.missedBursts.values()) {
+      clearTimeout(burst.timer);
+    }
+    this.missedBursts.clear();
   }
 
   /**
@@ -105,7 +140,13 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
     const delay = executeTime.getTime() - now.getTime();
 
     if (delay <= 0) {
-      this.logger.warn(`一次性任务执行时间已过，跳过调度: ${task.id}`);
+      // 一次性任务的语义是「在某个确定时刻执行一次」，时刻已过即终态：
+      // 补记一条 missed（用户要能看到它为什么没跑）并停用，不留一个永远不触发的启用任务。
+      this.logger.warn(`一次性任务执行时间已过，记为错过并停用: ${task.id}`);
+      void this.recordOnceMissed(task, executeTime);
+      this.storage.updateTask(task.id, { enabled: false }).catch((err) => {
+        this.logger.error(`停用错过的一次性任务失败: ${task.id}`, err);
+      });
       return false;
     }
 
@@ -142,16 +183,29 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
     const job = cron.schedule(
       task.cronExpression,
       async () => {
-        const fired = await this.fireTask(task, "Cron");
-        // 仅在成功派发后推进下次执行时间
-        if (fired) await this.updateNextRunAt(task);
+        // 派发尝试过就推进 nextRunAt：无论成功、失败还是被重叠守卫挡下，该槽位都已被消费。
+        // 不推进会让它定格在过去，下次启动对账时被误判成「错过窗口」。
+        await this.fireTask(task, "Cron");
+        await this.updateNextRunAt(task);
       },
       {
         scheduled: true,
         timezone: "Asia/Shanghai",
         runOnInit: false,
+        // 迟到不超过宽限的槽位照常补跑（电脑刚从短暂休眠醒来/事件循环短暂卡顿）；
+        // 更晚的槽位由 node-cron 判为 missed，落到下面的留痕逻辑
+        missedExecutionTolerance: MISSED_WINDOW_GRACE_MS,
+        // 错过告警自己记（且做了合并），不需要 node-cron 再按槽位刷日志
+        suppressMissedWarning: true,
       } as any,
     );
+
+    job.on("execution:missed", (context) => {
+      const raw = context?.date as unknown;
+      const slot = raw instanceof Date ? raw : new Date(String(raw));
+      if (isNaN(slot.getTime())) return;
+      this.recordMissedSlot(task, slot);
+    });
 
     this.activeJobs.set(task.id, job);
 
@@ -256,7 +310,7 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 统一的触发派发入口：重读最新任务、到期检查、重叠守卫、执行
-   * @returns 是否成功派发执行（用于决定是否推进 nextRunAt）
+   * @returns 是否成功派发执行（供日志/诊断；nextRunAt 的推进与否不再取决于它）
    */
   private async fireTask(task: ScheduledTask, label: string): Promise<boolean> {
     // 重读最新任务，反映运行期间对 enabled/expiresAt 的改动
@@ -284,6 +338,132 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
       return false;
     } finally {
       this.runningTasks.delete(task.id);
+    }
+  }
+
+  /**
+   * 记录一个被错过的 cron 槽位（node-cron 的 execution:missed）。
+   *
+   * 一次长休眠会连着丢多个槽位，这里按 MISSED_BURST_FLUSH_MS 窗口合并成一条含次数的日志；
+   * 否则「每分钟」类任务睡一小时就会刷出 60 条。不补跑是刻意的：错过 5 分钟以上的
+   * 任务在醒来后立刻执行往往已无意义（zcode 的 misfire 策略同样是不补跑、只留痕）。
+   */
+  private recordMissedSlot(task: ScheduledTask, slot: Date): void {
+    const existing = this.missedBursts.get(task.id);
+    if (existing) {
+      existing.count += 1;
+      if (slot.getTime() < existing.firstAt.getTime()) existing.firstAt = slot;
+      if (slot.getTime() > existing.lastAt.getTime()) existing.lastAt = slot;
+      return;
+    }
+    const timer = setTimeout(() => {
+      void this.flushMissedBurst(task.id);
+    }, MISSED_BURST_FLUSH_MS);
+    this.missedBursts.set(task.id, { count: 1, firstAt: slot, lastAt: slot, timer });
+  }
+
+  private async flushMissedBurst(taskId: string): Promise<void> {
+    const burst = this.missedBursts.get(taskId);
+    if (!burst) return;
+    this.missedBursts.delete(taskId);
+    clearTimeout(burst.timer);
+    await this.writeMissedLog({
+      taskId,
+      count: burst.count,
+      firstAt: burst.firstAt,
+      lastAt: burst.lastAt,
+      cause: "电脑休眠、应用被挂起或进程长时间阻塞",
+    });
+  }
+
+  /** 一次性任务的执行时刻已过：记一条 missed（停用由调用方完成） */
+  private async recordOnceMissed(task: ScheduledTask, executeTime: Date): Promise<void> {
+    await this.writeMissedLog({
+      taskId: task.id,
+      count: 1,
+      firstAt: executeTime,
+      lastAt: executeTime,
+      cause: "一次性任务的执行时刻已过（应用未运行或电脑休眠）",
+    });
+  }
+
+  /**
+   * 启动对账：上次运行后应用可能一直没开（关机/休眠/强退），nextRunAt 定格在过去。
+   * 这些槽位 node-cron 再也看不到（它只从 now 往后排），所以在这里补记，避免用户完全无感知。
+   * 任务本身照常重新排程，不受影响。
+   */
+  private async reconcileMissedWindowsOnStartup(task: ScheduledTask): Promise<void> {
+    if (task.scheduleType !== "cron" || !task.nextRunAt || !task.cronExpression) return;
+    const plannedAt = new Date(task.nextRunAt);
+    if (isNaN(plannedAt.getTime())) return;
+    if (Date.now() - plannedAt.getTime() <= MISSED_WINDOW_GRACE_MS) return;
+
+    const { count, firstAt, lastAt } = this.countMissedSlots(task.cronExpression, plannedAt);
+    await this.writeMissedLog({
+      taskId: task.id,
+      count,
+      firstAt,
+      lastAt,
+      cause: "应用未运行期间（关机/休眠/退出）",
+    });
+  }
+
+  /** 从 from 起按 cron 表达式数到今天为止错过的槽位（带上限，避免超长停机把日志写爆） */
+  private countMissedSlots(
+    cronExpression: string,
+    from: Date,
+  ): { count: number; firstAt: Date; lastAt: Date } {
+    let count = 0;
+    let firstAt = from;
+    let lastAt = from;
+    try {
+      const interval = cronParser.CronExpressionParser.parse(cronExpression, {
+        tz: "Asia/Shanghai",
+        // 从计划时刻的前一刻起算，firstAt 才能取到计划时刻本身
+        currentDate: new Date(from.getTime() - 1),
+      });
+      const nowMs = Date.now();
+      while (count < MISSED_COUNT_CAP) {
+        const next = interval.next().toDate();
+        if (next.getTime() > nowMs) break;
+        if (count === 0) firstAt = next;
+        lastAt = next;
+        count += 1;
+      }
+    } catch (error) {
+      this.logger.warn(`统计错过槽位失败，按单次处理: ${cronExpression}`, error);
+    }
+    return { count: Math.max(count, 1), firstAt, lastAt };
+  }
+
+  /**
+   * 写一条「错过窗口」日志。
+   * startedAt 用最近一次计划时刻而非写入时刻：历史时间线按 startedAt 排序，
+   * 用计划时刻才能让这条记录落在它本该出现的位置。
+   */
+  private async writeMissedLog(params: {
+    taskId: string;
+    count: number;
+    firstAt: Date;
+    lastAt: Date;
+    cause: string;
+  }): Promise<void> {
+    const reason =
+      params.count > 1
+        ? `错过 ${params.count} 次计划执行（${formatSlotTime(params.firstAt)} ~ ${formatSlotTime(params.lastAt)}）：${params.cause}`
+        : `错过 ${formatSlotTime(params.lastAt)} 的计划执行：${params.cause}`;
+    try {
+      await this.storage.createLog({
+        id: mintId(ID_PREFIXES.taskLog),
+        taskId: params.taskId,
+        status: "missed",
+        reason,
+        startedAt: params.lastAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+      });
+      this.logger.warn(`任务错过执行窗口: task=${params.taskId} count=${params.count}`);
+    } catch (error) {
+      this.logger.error(`写入错过窗口日志失败: ${params.taskId}`, error);
     }
   }
 
