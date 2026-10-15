@@ -237,6 +237,8 @@ export async function verifyAndDeployAgent(
     // 工作目录预校验:连接配置的 path 就是 agent 的 --root(命令默认 cwd)。
     // 路径不存在时 agent(0.5.1+)会拒绝启动;这里提前给出明确原因,
     // 避免用户在执行命令时只看到 "fork/exec /bin/sh: no such file or directory" 这类间接报错。
+    // 向导中目录先于本步骤选定,因此这里通常不会触发;命中说明目录在选定后被删除/改名,
+    // 提示用户回上一步重新选择即可。
     throwIfAborted();
     const workspacePath = uri.path || "/";
     push(`Checking remote workspace path: ${workspacePath}`);
@@ -247,7 +249,7 @@ export async function verifyAndDeployAgent(
     if (!pathCheck.includes("OK")) {
       push(
         `Remote workspace path does not exist on ${sshConfig.host}: ${workspacePath} — ` +
-          `fix the connection's path in workspace settings ` +
+          `go back to "Select Directory" and pick an existing directory ` +
           `(on macOS home directories live under /Users/<user>).`,
       );
       return { success: false, installed: false, version: "", log };
