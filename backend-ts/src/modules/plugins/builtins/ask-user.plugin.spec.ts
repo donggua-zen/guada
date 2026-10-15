@@ -75,16 +75,16 @@ const QUESTION_FIXTURES = [
   {
     question: "用哪种认证方式？",
     header: "Auth method",
-    options: [{ label: "OAuth" }, { label: "JWT", description: "更简单" }],
+    options: ["OAuth", "JWT"],
   },
   {
     question: "需要哪些能力？",
-    options: [{ label: "A" }, { label: "B" }],
+    options: ["A", "B"],
     multiSelect: true,
   },
   {
     question: "先部署到哪？",
-    options: [{ label: "本地" }, { label: "云端" }],
+    options: ["本地", "云端"],
   },
 ];
 
@@ -107,9 +107,10 @@ describe("AskUserPlugin / ask_user", () => {
     expect(pending.questions[0].detail).toBe("Auth method");
     expect(pending.questions[1].multiSelect).toBe(true);
     expect(pending.questions[2].detail).toBeUndefined();
+    // 对外是裸字符串，落到内部契约 AskOption（label 即答案值）
     expect(pending.questions[0].options).toEqual([
       { label: "OAuth" },
-      { label: "JWT", description: "更简单" },
+      { label: "JWT" },
     ]);
 
     // 审计先写、再发帧
@@ -208,6 +209,17 @@ describe("AskUserPlugin / ask_user", () => {
     });
   });
 
+  it("对外形态：选项就是裸字符串；工具文档只讲字符串，不提对象", async () => {
+    const { tool } = await loadTool();
+    // 一行示例胜过散落的字段说明（模型对示例的遵循度最高）
+    expect(tool.description).toContain(
+      '"options":["Postgres (Recommended)","SQLite","MySQL"]',
+    );
+    // 暴露给模型的定义只保留最简形态：不再出现 label/description 那套对象形状
+    expect(tool.description).not.toContain('"label"');
+    expect(tool.description).not.toContain("## Option shape");
+  });
+
   it("能力声明：计划模式放行 + 只读 + 阻塞人类 + 子代理不可见", async () => {
     const { tool, kit } = await loadTool();
 
@@ -228,7 +240,7 @@ describe("AskUserPlugin / ask_user", () => {
 describe("ask_user 入参 schema 边界", () => {
   const q = (text: string) => ({
     question: text,
-    options: [{ label: "A" }, { label: "B" }],
+    options: ["A", "B"],
   });
 
   it("1–4 题合法", () => {
@@ -265,6 +277,27 @@ describe("ask_user 入参 schema 边界", () => {
     expect(result.success).toBe(false);
   });
 
+  it("选项形态：只收裸字符串（对象形态已移除，不再有隐形容错）", () => {
+    // 唯一合法形态
+    expect(
+      ASK_USER_INPUT_SCHEMA.safeParse({
+        questions: [{ question: "Q", options: ["A", "B", "C"] }],
+      }).success,
+    ).toBe(true);
+    // 空字符串不是有意义的选项
+    expect(
+      ASK_USER_INPUT_SCHEMA.safeParse({
+        questions: [{ question: "Q", options: ["", "B"] }],
+      }).success,
+    ).toBe(false);
+    // 对象形态不再被接受：形状契约由工具 description（含 JSON 示例）承载
+    expect(
+      ASK_USER_INPUT_SCHEMA.safeParse({
+        questions: [{ question: "Q", options: [{ label: "A" }, { label: "B" }] }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("header 超过 12 字符被拒", () => {
     const result = ASK_USER_INPUT_SCHEMA.safeParse({
       questions: [{ ...q("Q"), header: "1234567890123" }],
@@ -275,8 +308,8 @@ describe("ask_user 入参 schema 边界", () => {
 
 describe("formatAnswers 单元", () => {
   const questions = [
-    { question: "Q1", options: [{ label: "A" }, { label: "B" }] },
-    { question: "Q2", options: [{ label: "C" }, { label: "D" }], multiSelect: true },
+    { question: "Q1" },
+    { question: "Q2" },
   ];
 
   it("自定义文本优先于选项（纯询问语义下它是答案，不是拒绝）", () => {
