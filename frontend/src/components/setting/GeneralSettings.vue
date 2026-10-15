@@ -121,6 +121,26 @@
           </div>
         </div>
       </div>
+
+      <!-- 桌面行为分组：防休眠由 Electron 主进程持 powerSaveBlocker 实现，Web 端只存不生效 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.desktop') }}</h3>
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.keepAwake') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.keepAwakeDesc') }}</span>
+            </div>
+            <div class="shrink-0">
+              <el-radio-group v-model="settingsForm.keepAwakeMode" size="default" @change="handleKeepAwakeChange">
+                <el-radio-button value="off">{{ t('settings.general.keepAwakeOff') }}</el-radio-button>
+                <el-radio-button value="busy">{{ t('settings.general.keepAwakeBusy') }}</el-radio-button>
+                <el-radio-button value="always">{{ t('settings.general.keepAwakeAlways') }}</el-radio-button>
+              </el-radio-group>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -155,6 +175,7 @@ const settingsForm = reactive({
   kbStorageRoot: '',
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
+  keepAwakeMode: 'busy' as 'off' | 'busy' | 'always',
 })
 
 // 原始设置备份，用于对比是否有改动
@@ -173,9 +194,19 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs, keepAwakeMode: settingsForm.keepAwakeMode }), () => {
   debouncedSave()
 }, { deep: true })
+
+/**
+ * 防休眠模式：除了防抖落盘，还要立刻推给 Electron 主进程。
+ * 主进程不订阅后端设置变更，慢一拍会让「刚开就休眠」的窗口继续存在。
+ */
+function handleKeepAwakeChange(val: string | number | boolean | undefined) {
+  if (val === 'off' || val === 'busy' || val === 'always') {
+    window.electronAPI?.updateKeepAwakeMode(val)
+  }
+}
 
 // 加载 system 分组设置
 const loadSettings = async () => {
@@ -188,6 +219,9 @@ const loadSettings = async () => {
     settingsForm.kbStorageRoot = response.kbStorageRoot || ''
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
+    settingsForm.keepAwakeMode = response.keepAwakeMode || 'busy'
+    // 读到的值顺手推一次主进程：主进程启动时直接读文件，这里是二者的兜底对账点
+    handleKeepAwakeChange(settingsForm.keepAwakeMode)
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
   } catch (error) {
@@ -294,6 +328,7 @@ const handleSave = async () => {
       kbStorageRoot: kbRoot || null,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
+      keepAwakeMode: settingsForm.keepAwakeMode,
     }
 
     // 使用分组设置接口更新 system 分组

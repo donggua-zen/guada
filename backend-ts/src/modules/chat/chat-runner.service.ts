@@ -388,6 +388,19 @@ export class ChatRunnerService {
   }
 
   /**
+   * 是否还有会话在工作（正在跑一轮或队列里还有待处理消息）。
+   *
+   * 供 keep-awake 判定「后端是否在执行任务」：用户对话、定时任务派发、
+   * 子 Agent/工作流、Bot 入站消息都经本队列，故这一处即可覆盖。
+   */
+  hasActiveWork(): boolean {
+    for (const state of this.queues.values()) {
+      if (state.isProcessing || state.items.length > 0) return true;
+    }
+    return false;
+  }
+
+  /**
    * 从会话队列中查找并移除匹配指定条件的消息
    *
    * 适用于 waitForComplete、poll 撤回等场景：已通过其他方式获取了消息内容，

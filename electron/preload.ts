@@ -140,4 +140,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTraySettings: (settings: { enabled: boolean; opacity: number }) =>
     ipcRenderer.send('tray:update-settings', settings),
 
+  // 防休眠模式：off 不干预 / busy 仅执行任务时 / always 始终（落盘由后端负责）
+  updateKeepAwakeMode: (mode: 'off' | 'busy' | 'always') =>
+    ipcRenderer.send('power:update-keep-awake-mode', mode),
+
 })

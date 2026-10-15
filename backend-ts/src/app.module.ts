@@ -26,6 +26,7 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
 import { ShellModule } from './modules/shell/shell.module';
 import { CommandsModule } from './modules/commands/commands.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
+import { RuntimeModule } from './modules/runtime/runtime.module';
 import { GitModule } from './modules/git/git.module';
 import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
@@ -73,6 +74,7 @@ import { HealthModule } from './modules/health/health.module';
     ShellModule,      // Shell 命令行模块
     CommandsModule,   // 命令提供者注册 & 聚合接口
     BridgeModule,     // Electron ↔ Backend 通信桥（全局）
+    RuntimeModule,    // 运行态广播（keep-awake 忙碌状态 → Electron）
     GitModule,        // Git 源码管理模块
     TerminalModule,   // 终端模块（后端 PTY + WebSocket）
     HealthModule,      // 健康检查端点（Electron 看门狗探测用）

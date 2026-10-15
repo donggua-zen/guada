@@ -132,6 +132,9 @@ export interface ElectronAPI {
   // 托盘悬浮窗配置（显隐 + 透明度）
   updateTraySettings: (settings: { enabled: boolean; opacity: number }) => void
 
+  // 防休眠模式（桌面端生效；落盘由后端负责，这里只驱动主进程的 powerSaveBlocker）
+  updateKeepAwakeMode: (mode: 'off' | 'busy' | 'always') => void
+
   // Debug 菜单
   showDebugMenu: () => Promise<void>
 
