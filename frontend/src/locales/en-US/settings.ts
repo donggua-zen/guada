@@ -145,8 +145,8 @@
     nameRequired: 'Please enter a connection name',
     stepConfig: 'Configuration',
     stepTest: 'Test Connection',
-    stepDeploy: 'Deploy Agent',
     stepBrowse: 'Select Directory',
+    stepDeploy: 'Deploy Agent',
     fillConfig: 'Connection Configuration',
     fillConfigDesc: 'Enter SSH server information',
     testing: 'Connecting to',
@@ -167,7 +167,7 @@
     privateKeyPathPlaceholderWeb: 'Enter the absolute path of the private key file',
     // Deploy verification
     deployTitle: 'Deploy Agent',
-    deployDesc: 'This step installs and starts the remote agent on your server. It powers all file operations and command execution in the next steps. The agent is kept up-to-date automatically; once installed, you can continue.',
+    deployDesc: 'This step installs and starts the remote agent on your server. It powers all file operations and command execution. The agent is kept up-to-date automatically; once installed, you can save the connection.',
     deploying: 'Deploying Agent...',
     deployInstalled: 'Agent already installed with matching version',
     deploySuccess: 'Agent deployed successfully',
@@ -186,6 +186,8 @@
     goTo: 'Go',
     loading: 'Loading...',
     emptyDir: 'Empty directory',
+    dirNotExist: 'This directory does not exist. Please select another directory.',
+    pathMissingFallback: 'The saved working directory no longer exists; switched to the home directory. Please select again.',
     selectDir: 'Select This Directory',
   },
 

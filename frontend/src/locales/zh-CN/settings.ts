@@ -146,8 +146,8 @@ export default {
     // 向导步骤
     stepConfig: '填写配置',
     stepTest: '测试连接',
-    stepDeploy: '部署验证',
     stepBrowse: '选择目录',
+    stepDeploy: '部署验证',
     fillConfig: '填写连接配置',
     fillConfigDesc: '输入 SSH 服务器信息',
     testing: '正在连接',
@@ -168,7 +168,7 @@ export default {
     privateKeyPathPlaceholderWeb: '请输入私钥文件绝对路径',
     // 部署验证
     deployTitle: '部署 Agent',
-    deployDesc: '此步骤会在服务器上安装并启动远程代理(Agent),它是后续文件操作与命令执行的基础。Agent 会自动保持最新版本,安装成功后即可继续下一步。',
+    deployDesc: '此步骤会在服务器上安装并启动远程代理(Agent),它是后续文件操作与命令执行的基础。Agent 会自动保持最新版本,安装成功后即可保存连接。',
     deploying: '正在部署 Agent...',
     deployInstalled: 'Agent 已安装且版本匹配,无需部署',
     deploySuccess: 'Agent 部署成功',
@@ -188,6 +188,8 @@ export default {
     goTo: '前往',
     loading: '加载中...',
     emptyDir: '空目录',
+    dirNotExist: '该目录不存在,请选择其他目录',
+    pathMissingFallback: '原工作目录已不存在,已切换到用户主目录,请重新选择',
     selectDir: '选择此目录',
   },
 

@@ -23,6 +23,14 @@ export interface DirEntry {
   size: number;
 }
 
+export interface BrowseResult {
+  /** 实际浏览的目录（空路径由后端解析为主目录后回传） */
+  path: string;
+  /** 该路径是否为存在的目录 */
+  exists: boolean;
+  entries: DirEntry[];
+}
+
 export interface DeployResult {
   success: boolean;
   installed: boolean;
@@ -49,7 +57,7 @@ export interface RemoteWorkspaceApi {
   deployConnection(config: RemoteConnection["config"]): Promise<DeployJob>;
   getDeployLog(jobId: string): Promise<DeployLogState>;
   cancelDeploy(jobId: string): Promise<{ cancelled: boolean }>;
-  browsePath(config: RemoteConnection["config"], path: string): Promise<DirEntry[]>;
+  browsePath(config: RemoteConnection["config"], path: string): Promise<BrowseResult>;
 }
 
 export const remoteWorkspaceApi: RemoteWorkspaceApi = {

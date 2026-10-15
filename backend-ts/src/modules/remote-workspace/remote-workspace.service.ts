@@ -283,13 +283,15 @@ export class RemoteWorkspaceService {
   }
 
   /**
-   * Browse remote directories via SSH — returns subdirectories of the given path.
+   * Browse remote directories via SSH — 返回被浏览的路径、该路径是否存在目录、以及目录项。
    * Used by the frontend directory picker.
+   *
+   * dirPath 为空时由远端解析为 $HOME(前端不需要硬编码 /home/<user>,root 与 macOS 也正确)。
    */
   async browsePath(
     config: RemoteConnection["config"],
     dirPath: string,
-  ): Promise<{ name: string; isDirectory: boolean; size: number }[]> {
+  ): Promise<RemoteBrowseResult> {
     const { Client } = require("ssh2");
     const client = new Client();
 
@@ -301,11 +303,7 @@ export class RemoteWorkspaceService {
 
       client.on("ready", () => {
         clearTimeout(timer);
-        // List directories only (for path picker usability)
-        // Output format: name/isDir/size per line
-        // 注意:不要用 --time-style(GNU 专属),macOS BSD ls 不支持会导致命令失败;
-        // BSD/GNU 的 -l 输出中 size 始终是 $5、文件名始终是 $NF,兼容两者。
-        const cmd = `ls -la "${dirPath}" 2>/dev/null | awk 'NR>1 {print $NF "/" ($1 ~ /^d/ ? "1" : "0") "/" $5}'`;
+        const cmd = buildBrowseCommand(dirPath);
         client.exec(cmd, (err, stream) => {
           if (err) {
             client.end();
@@ -317,23 +315,7 @@ export class RemoteWorkspaceService {
           stream.stderr.on("data", (data: Buffer) => { /* ignore stderr */ });
           stream.on("close", () => {
             client.end();
-            const entries: { name: string; isDirectory: boolean; size: number }[] = [];
-            for (const line of output.trim().split("\n")) {
-              if (!line) continue;
-              const parts = line.split("/");
-              if (parts.length < 3) continue;
-              const name = parts.slice(0, -2).join("/");
-              const isDir = parts[parts.length - 2] === "1";
-              const size = parseInt(parts[parts.length - 1], 10) || 0;
-              if (name === "." || name === "..") continue;
-              entries.push({ name, isDirectory: isDir, size });
-            }
-            // Sort: directories first, then alphabetically
-            entries.sort((a, b) => {
-              if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-              return a.name.localeCompare(b.name);
-            });
-            resolve(entries);
+            resolve(parseBrowseOutput(output));
           });
         });
       });
@@ -370,4 +352,77 @@ export class RemoteWorkspaceService {
       [SETTINGS_KEY]: encrypted,
     });
   }
+}
+
+export interface RemoteDirEntry {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+}
+
+export interface RemoteBrowseResult {
+  /** 实际浏览的目录(空路径由远端解析为主目录后回传) */
+  path: string;
+  /** 该路径是否为存在的目录 */
+  exists: boolean;
+  entries: RemoteDirEntry[];
+}
+
+/** browse 命令的分段标记:与文件列表同行输出,解析时先摘出再处理其余行 */
+const BROWSE_PATH_PREFIX = "GUADA_PATH:";
+const BROWSE_EXISTS_MARK = "GUADA_EXISTS";
+const BROWSE_MISSING_MARK = "GUADA_MISSING";
+
+/**
+ * 构造 browse 命令:一次 SSH exec 同时得到「解析后的路径 / 是否存在 / 目录项」。
+ * 路径用单引号包裹(内嵌单引号转义),避免远端 shell 展开路径里的 $ 与反引号。
+ * 注意:不要用 --time-style(GNU 专属),macOS BSD ls 不支持会导致命令失败;
+ * BSD/GNU 的 -l 输出中 size 始终是 $5、文件名始终是 $NF,兼容两者。
+ */
+export function buildBrowseCommand(dirPath: string): string {
+  const quoted = `'${(dirPath || "").replace(/'/g, `'\\''`)}'`;
+  return (
+    `d=${quoted}; [ -z "$d" ] && d="$HOME"; echo "${BROWSE_PATH_PREFIX}$d"; ` +
+    `if [ -d "$d" ]; then echo ${BROWSE_EXISTS_MARK}; ` +
+    `ls -la "$d" 2>/dev/null | awk 'NR>1 {print $NF "/" ($1 ~ /^d/ ? "1" : "0") "/" $5}'; ` +
+    `else echo ${BROWSE_MISSING_MARK}; fi`
+  );
+}
+
+/**
+ * 解析 browse 命令输出。条目行格式 name/isDir/size;标记行单独摘出,
+ * 因此目录内存在同名文件(如 GUADA_EXISTS/0/12)也不会被误判。
+ */
+export function parseBrowseOutput(raw: string): RemoteBrowseResult {
+  let path = "";
+  let exists = false;
+  const entries: RemoteDirEntry[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith(BROWSE_PATH_PREFIX)) {
+      path = line.slice(BROWSE_PATH_PREFIX.length);
+      continue;
+    }
+    if (line === BROWSE_EXISTS_MARK) {
+      exists = true;
+      continue;
+    }
+    if (line === BROWSE_MISSING_MARK) {
+      exists = false;
+      continue;
+    }
+    const parts = line.split("/");
+    if (parts.length < 3) continue;
+    const name = parts.slice(0, -2).join("/");
+    const isDir = parts[parts.length - 2] === "1";
+    const size = parseInt(parts[parts.length - 1], 10) || 0;
+    if (name === "." || name === "..") continue;
+    entries.push({ name, isDirectory: isDir, size });
+  }
+  // Sort: directories first, then alphabetically
+  entries.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return { path, exists, entries };
 }
