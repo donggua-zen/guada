@@ -1,0 +1,9 @@
+{
+  "askUser.name": "Ask User",
+  "askUser.toolkitDescription": "Ask the user clarifying questions and continue with their answers",
+  "askUser.display.executing": "Asking the user",
+  "askUser.display.completed": "Asked the user",
+  "askUser.display.questionsUnit": "question(s)",
+  "askUser.display.aggregateExecuting": "Asking the user {n} times",
+  "askUser.display.aggregateCompleted": "Asked the user {n} times"
+}

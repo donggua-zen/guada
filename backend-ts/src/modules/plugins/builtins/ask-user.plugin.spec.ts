@@ -48,6 +48,7 @@ async function loadTool() {
   let tool: any;
   let kit: any;
   const api: any = {
+    registerNls: () => {},
     registerToolKit: (def: any) => {
       kit = def;
       return {
@@ -74,7 +75,6 @@ async function pendingOf(wait: InteractionWaitService, sessionId: string) {
 const QUESTION_FIXTURES = [
   {
     question: "用哪种认证方式？",
-    header: "Auth method",
     options: ["OAuth", "JWT"],
   },
   {
@@ -104,9 +104,9 @@ describe("AskUserPlugin / ask_user", () => {
     // 一次 ask = 一个 requestId 带 3 题，答案按 q1..q3 回显
     expect(pending.questions.map((q: any) => q.id)).toEqual(["q1", "q2", "q3"]);
     expect(pending.questions[0].question).toBe("用哪种认证方式？");
-    expect(pending.questions[0].detail).toBe("Auth method");
     expect(pending.questions[1].multiSelect).toBe(true);
-    expect(pending.questions[2].detail).toBeUndefined();
+    // 无 header/detail：对外只有 question/options/multiSelect 三个字段
+    expect(pending.questions[0].detail).toBeUndefined();
     // 对外是裸字符串，落到内部契约 AskOption（label 即答案值）
     expect(pending.questions[0].options).toEqual([
       { label: "OAuth" },
@@ -220,6 +220,23 @@ describe("AskUserPlugin / ask_user", () => {
     expect(tool.description).not.toContain("## Option shape");
   });
 
+  it("行展示：只报问题数、不展示回答；文案走 NLS 而非写死中文", async () => {
+    const { tool, kit } = await loadTool();
+
+    // 计数来源 = questions 数组长度，单位由 NLS 下发 → 前端渲染「已询问用户 3 个问题」
+    expect(tool.display.argsKey).toBe("questions");
+    expect(tool.display.argsCountUnit).toBe("%askUser.display.questionsUnit%");
+    // 文案走 %key%（zh/en 两份语言包），不再写死中文
+    expect(tool.display.text.executing).toBe("%askUser.display.executing%");
+    expect(tool.display.text.completed).toBe("%askUser.display.completed%");
+    expect(tool.display.aggregate.completed).toBe(
+      "%askUser.display.aggregateCompleted%",
+    );
+    expect(kit.name).toBe("%askUser.name%");
+    // 回答不进行文案：答案由工具结果承载，展开可见
+    expect(tool.display.text.completed).not.toContain("回答");
+  });
+
   it("能力声明：计划模式放行 + 只读 + 阻塞人类 + 子代理不可见", async () => {
     const { tool, kit } = await loadTool();
 
@@ -298,11 +315,24 @@ describe("ask_user 入参 schema 边界", () => {
     ).toBe(false);
   });
 
-  it("header 超过 12 字符被拒", () => {
-    const result = ASK_USER_INPUT_SCHEMA.safeParse({
-      questions: [{ ...q("Q"), header: "1234567890123" }],
+  it("对外字段面：只有 question / options / multiSelect（header 已删除）", () => {
+    const parsed = ASK_USER_INPUT_SCHEMA.safeParse({
+      questions: [
+        {
+          question: "Q",
+          options: ["A", "B"],
+          multiSelect: false,
+          // 旧字段：schema 非 strict，多传的键被剥离而不是报错（宽容）
+          header: "Legacy",
+        },
+      ],
     });
-    expect(result.success).toBe(false);
+    expect(parsed.success).toBe(true);
+    expect(Object.keys(parsed.data!.questions[0]).sort()).toEqual([
+      "multiSelect",
+      "options",
+      "question",
+    ]);
   });
 });
 

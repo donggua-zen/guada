@@ -1,0 +1,9 @@
+{
+  "askUser.name": "用户提问",
+  "askUser.toolkitDescription": "向用户提出选择题并等待回答后继续",
+  "askUser.display.executing": "正在询问用户",
+  "askUser.display.completed": "已询问用户",
+  "askUser.display.questionsUnit": "个问题",
+  "askUser.display.aggregateExecuting": "正在询问用户{n}次",
+  "askUser.display.aggregateCompleted": "已询问用户{n}次"
+}

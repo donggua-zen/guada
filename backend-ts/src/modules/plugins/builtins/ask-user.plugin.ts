@@ -5,14 +5,14 @@ import { PluginContext } from "../types/plugin.types";
 import { PluginApi, ToolResultObject } from "../api/plugin-api";
 import { AskService } from "../../../common/services/ask.service";
 import type { AskAnswerItem, AskQuestion } from "../../../common/types/ask.types";
+import langZh from "./ask-user.lang.zh.json";
+import langEn from "./ask-user.lang.en.json";
 
 /** 一次调用允许的问题数上限（对齐 ZCode 的 AskUserQuestion：1–4 题） */
 const MAX_QUESTIONS = 4;
 /** 每题最少/最多选项（至少 2 个才有"选择"的意义） */
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 4;
-/** 问题短标签长度上限（对齐 ZCode header 的 12 字符 chip） */
-const MAX_HEADER_CHARS = 12;
 
 const TOOL_NAME = "ask_user";
 /** 卡片标题 */
@@ -33,7 +33,7 @@ const ASK_USER_DESCRIPTION = [
   '- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of it.',
   "",
   "## Example",
-  '{"questions":[{"question":"Which database should we use?","header":"Database","options":["Postgres (Recommended)","SQLite","MySQL"],"multiSelect":false}]}',
+  '{"questions":[{"question":"Which database should we use?","options":["Postgres (Recommended)","SQLite","MySQL"],"multiSelect":false}]}',
   "",
   'Plan mode note: To enter plan mode use EnterPlanMode (not this tool). Once in plan mode, use this tool to clarify requirements or choose between approaches BEFORE finalizing your plan. Do NOT use this tool to ask "Is my plan ready?", "Should I proceed?", or otherwise reference "the plan" in questions — the user cannot see the plan until you call ExitPlanMode for approval.',
   "",
@@ -57,18 +57,6 @@ export const ASK_USER_INPUT_SCHEMA = z
             .describe(
               'The complete question to ask the user. Should be clear, specific, and end with a question mark. Example: "Which library should we use for date formatting?" If multiSelect is true, phrase it accordingly.',
             ),
-          header: z
-            .string()
-            .max(MAX_HEADER_CHARS)
-            .optional()
-            .describe(
-              'Very short label shown above the question (max 12 chars). Examples: "Auth method", "Library", "Approach".',
-            ),
-          // 对外只广告"裸字符串"这一种形态，解析层也只收这一种——
-          // 不再为同族工具的对象写法（{label, description}）留隐形容错：
-          // 那是未文档化的行为，且在展平器修好后会变成对模型的额外 token。
-          // 形状契约由工具 description（含完整 JSON 示例）+ 本字段的顶层 description 承载
-          //（嵌套 schema 到不了模型，见 toolkit.ts 展平逻辑）。
           options: z
             .array(z.string().min(1))
             .min(MIN_OPTIONS)
@@ -131,10 +119,13 @@ export class AskUserPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi): Promise<void> {
+    api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
+
     const kit = api.registerToolKit({
       id: "ask-user",
-      name: "用户提问",
-      description: "向用户提出选择题并等待回答后继续",
+      name: "%askUser.name%",
+      description: "%askUser.toolkitDescription%",
       activator: "Ask the user clarifying questions and continue with their answers.",
       // 子代理不可见：交互卡按会话渲染，子会话的卡用户看不到 → 会永久卡死父回合。
       // （与 plan-mode 工具包同一手法；ZCode 是把子代理的提问路由回父会话，本项目暂无该路由。）
@@ -151,9 +142,19 @@ export class AskUserPlugin extends PluginBase {
       execute: async (args, ctx, signal) => this.handleAsk(args, ctx, signal),
       display: {
         actionType: "ask",
-        text: { executing: "等待你的回答", completed: "已收到回答" },
-        aggregate: { executing: "向用户提问", completed: "已收到回答" },
+        // 行文案只说"问了几个"，不展示回答——回答看展开后的工具结果
+        text: {
+          executing: "%askUser.display.executing%",
+          completed: "%askUser.display.completed%",
+        },
+        aggregate: {
+          executing: "%askUser.display.aggregateExecuting%",
+          completed: "%askUser.display.aggregateCompleted%",
+        },
+        // argsKey 指向**数组**（questions）：前端按「项数 + 单位」渲染，即「3 个问题」。
+        // 单位随 NLS 下发（argsCountUnit），与 text 同一条 %key% 解析链。
         argsKey: "questions",
+        argsCountUnit: "%askUser.display.questionsUnit%",
         icon: "generic",
       },
       // 计划模式逃生舱：计划阶段"问清需求"正是本工具的主场，必须放行
@@ -185,9 +186,7 @@ export class AskUserPlugin extends PluginBase {
     const questions: AskQuestion[] = args.questions.map((q, i) => ({
       id: questionIdOf(i),
       question: q.question,
-      // header 是短标签，落到卡片的 detail（纯文本支撑行）呈现
-      ...(q.header ? { detail: q.header } : {}),
-      // 归一：内部 AskOption.label 是**答案值**（前端按 label 提交 selected、
+      // 裸字符串归一：内部 AskOption.label 是**答案值**（前端按 label 提交 selected、
       // /chat/respond 按 o.label === label 校验），故此处把字符串包成对象。
       // 适配只发生在这层映射，内部契约不动。
       options: q.options.map((label) => ({ label })),

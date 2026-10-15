@@ -6,6 +6,7 @@ import {
   setPluginToolDisplays,
   getToolRenderer,
   getRendererArgs,
+  getArgsText,
   isStandaloneTool,
   isStandaloneRendererKind,
   resolvePlanCardStatus,
@@ -205,6 +206,59 @@ describe("isStandaloneTool / isStandaloneRendererKind", () => {
     expect(isStandaloneRendererKind("diff")).toBe(false);
     expect(isStandaloneRendererKind("content")).toBe(false);
     expect(isStandaloneRendererKind("terminal")).toBe(false);
+  });
+});
+
+describe("getArgsText（行内参数摘要）", () => {
+  beforeEach(() => {
+    setPluginToolDisplays({});
+  });
+
+  it("argsKey 指向数组：渲染「项数 + NLS 单位」（已询问用户 3 个问题）", () => {
+    setPluginToolDisplays({
+      ask_user: {
+        text: { executing: "正在询问用户", completed: "已询问用户" },
+        argsKey: "questions",
+        argsCountUnit: "个问题",
+      },
+    });
+    const tool = {
+      name: "ask_user",
+      arguments: { questions: [{ question: "A" }, { question: "B" }, { question: "C" }] },
+    } as ToolCall;
+    expect(getArgsText(tool)).toBe("3 个问题");
+  });
+
+  it("argsKey 指向数组但无单位：只给项数", () => {
+    setPluginToolDisplays({
+      ask_user: { text: { executing: "", completed: "" }, argsKey: "questions" },
+    });
+    const tool = { name: "ask_user", arguments: { questions: ["A", "B"] } } as ToolCall;
+    expect(getArgsText(tool)).toBe("2");
+  });
+
+  it("argsKey 指向对象：不显示摘要（绝不 String(value) 打出 [object Object]）", () => {
+    setPluginToolDisplays({
+      weird_tool: { text: { executing: "", completed: "" }, argsKey: "payload" },
+    });
+    const tool = {
+      name: "weird_tool",
+      arguments: { payload: { a: 1, b: 2 } },
+    } as ToolCall;
+    expect(getArgsText(tool)).toBeUndefined();
+  });
+
+  it("argsKey 指向标量：字符串截断展示 / 数字转字符串", () => {
+    setPluginToolDisplays({
+      read: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+      task_output: { text: { executing: "", completed: "" }, argsKey: "timeout" },
+    });
+    expect(
+      getArgsText({ name: "read", arguments: { file_path: "src/a.ts" } } as ToolCall),
+    ).toBe("src/a.ts");
+    expect(
+      getArgsText({ name: "task_output", arguments: { timeout: 30000 } } as ToolCall),
+    ).toBe("30000");
   });
 });
 
