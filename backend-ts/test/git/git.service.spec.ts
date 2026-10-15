@@ -1,80 +1,63 @@
 /**
  * GitService 子进程环境回归测试
  *
- * 背景：git 读命令（status/diff/show）在 stat 缓存过期时会刷新并写 .git/index，
- * 被 .git watcher 捕获后推送 → 前端刷新 → 再读命令，形成自激循环。修复手段是给
- * simple-git 实例设 GIT_OPTIONAL_LOCKS=0，让读命令不再做 optional 的 index 落盘
- * （借鉴 ZCode 的做法，见 packages/services/src/git/config.ts）。
+ * 事故背景：为让 git 读命令不再写 .git/index，曾给 simple-git 实例设
+ * `.env({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })`。但 simple-git 的
+ * block-unsafe-operations 插件会扫描「显式传入的 env」，命中 EDITOR / PAGER / GIT_PAGER
+ * 等键就直接抛错（Use of "EDITOR" is not permitted without enabling allowUnsafeEditor），
+ * 于是**所有** git 命令在开发机上全部 500。
  *
- * 同时锁定一个易错点：simple-git 的 `.env(对象)` 是**整体替换**子进程环境
- * （内部直接赋值 _executor.env，spawn 时作为完整 env 传入），所以必须展开 process.env，
- * 只传增量会让子进程丢掉 PATH 等变量、连 git 都找不到。
+ * 本测试用真实 git 复现该环境：只要实现不向 simple-git 传 env（子进程走默认继承
+ * process.env），在 EDITOR 等变量存在时也必须能正常出结果。
  */
+import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-
-const mockEnv = jest.fn();
-const mockSimpleGit = jest.fn();
-
-jest.mock("simple-git", () => ({
-  simpleGit: (...args: unknown[]) => mockSimpleGit(...args),
-}));
 
 import { GitService } from "../../src/modules/git/git.service";
 
 /// <reference types="jest" />
 
-/** 最小 SimpleGit 桩：env 链式返回自身（真实用法是 simpleGit(...).env({...})），status/raw 返回空结果 */
-function makeFakeGit(): Record<string, unknown> {
-  const fake: Record<string, unknown> = {
-    env: mockEnv,
-    status: jest.fn(async () => ({
-      files: [],
-      current: null,
-      ahead: 0,
-      behind: 0,
-    })),
-    raw: jest.fn(async () => ""),
-  };
-  mockEnv.mockImplementation(() => fake);
-  return fake;
-}
+/** 会被 simple-git 插件判定为 unsafe 的常见环境变量（覆盖开发机与 CI） */
+const UNSAFE_ENV_KEYS = ["EDITOR", "PAGER", "GIT_PAGER"] as const;
 
 describe("GitService 子进程环境", () => {
   let ws: string;
+  let hasGit = false;
+  /** 被改写的环境变量原值（同一 jest worker 内多个测试文件共用 process.env，测后必须还原） */
+  let saved: Record<string, string | undefined> = {};
+
+  beforeAll(() => {
+    hasGit = new GitService().isGitAvailable();
+  });
 
   beforeEach(() => {
     ws = fs.mkdtempSync(path.join(os.tmpdir(), "git-service-"));
-    mockSimpleGit.mockReset();
-    mockEnv.mockReset();
-    mockSimpleGit.mockImplementation(() => makeFakeGit());
+    saved = {};
+    for (const key of UNSAFE_ENV_KEYS) saved[key] = process.env[key];
   });
 
   afterEach(() => {
+    for (const key of UNSAFE_ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
     fs.rmSync(ws, { recursive: true, force: true });
-    jest.clearAllMocks();
   });
 
-  it("实例带 GIT_OPTIONAL_LOCKS=0，且展开 process.env（.env 对象是整体替换）", async () => {
-    const service = new GitService();
-    await service.getStatus(ws);
+  it("环境含 EDITOR/PAGER 时仍能执行 git 命令（实现不得向 simple-git 传 env）", async () => {
+    if (!hasGit) return; // 环境无 git：无法验证真实 git 行为，跳过
 
-    expect(mockEnv).toHaveBeenCalledTimes(1);
-    const env = mockEnv.mock.calls[0][0] as NodeJS.ProcessEnv;
-    expect(env.GIT_OPTIONAL_LOCKS).toBe("0");
-    expect(env.GIT_PAGER).toBe("cat");
-    expect(env.PAGER).toBe("cat");
-    // 必须保留完整环境：只传增量会让子进程丢 PATH，git 都找不到
-    expect(env.PATH).toBe(process.env.PATH);
-  });
+    execFileSync("git", ["init", "-q", ws], { windowsHide: true });
+    fs.writeFileSync(path.join(ws, "a.txt"), "one");
 
-  it("同一工作目录复用实例：simpleGit 与 env 都只调用一次", async () => {
-    const service = new GitService();
-    await service.getStatus(ws);
-    await service.getStatus(ws);
+    process.env.EDITOR = "vim";
+    process.env.PAGER = "less";
+    process.env.GIT_PAGER = "less";
 
-    expect(mockSimpleGit).toHaveBeenCalledTimes(1);
-    expect(mockEnv).toHaveBeenCalledTimes(1);
-  });
+    const status = await new GitService().getStatus(ws);
+
+    expect(status.files.map((f) => f.path)).toContain("a.txt");
+  }, 30000);
 });
