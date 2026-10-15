@@ -3,8 +3,9 @@
  *
  * 语义（主工作目录 / 附加工作目录模型）：
  * - 参数缺省 / "main" / "local" → 主工作目录（固定本地），返回 null，工具走本地代码路径；
- * - 其他取值 → 附加（远程）工作目录的连接名：解析连接配置、校验会话绑定
+ * - 其他取值 → 附加（远程/容器）工作目录的连接名：解析连接配置、校验会话绑定
  *   （复用 RemoteAgentManager.getAgent 的完整校验与缓存链路），返回远程操作目标。
+ *   连接类型（SSH 主机 / Docker 容器）由连接的 config.kind 决定，传输细节对工具层透明。
  *
  * 连接名清单由 ssh-tools 工具包的 prompt 随会话绑定注入，AI 直接抄写连接名。
  */
@@ -13,9 +14,9 @@ import { z } from "zod";
 import * as iconv from "iconv-lite";
 import { RemoteAgentManager } from "./remote-workspace-agent-manager";
 import {
-  SshWorkspaceProvider,
+  AgentWorkspaceProvider,
   buildRemoteProcessId,
-} from "./ssh-workspace-provider";
+} from "./agent-workspace-provider";
 
 /**
  * workspace 参数 schema（file / shell 工具共用）：
@@ -28,14 +29,14 @@ export const workspaceParamField = z
     "Target workspace: omit or 'main' for the primary local workspace; otherwise the name of a remote connection bound to this session (see bound connections in context)",
   );
 
-/** 附加（远程）工作目录操作目标 */
+/** 附加（远程/容器）工作目录操作目标 */
 export interface RemoteToolTarget {
   /** 连接名（= workspace 参数原值） */
   connectionName: string;
-  /** 远端工作目录基准（相对路径解析用，posix 语义） */
+  /** 目标工作目录基准（相对路径解析用，posix 语义） */
   basePath: string;
-  /** 远程操作面（WorkspaceProvider 实现） */
-  provider: SshWorkspaceProvider;
+  /** 目标操作面（WorkspaceProvider 实现；SSH 与 Docker 共用） */
+  provider: AgentWorkspaceProvider;
 }
 
 /** 主工作目录标识（本地）：这些取值不启用远程分支 */
@@ -74,19 +75,21 @@ export class WorkspaceToolRouter {
     if (!workspace || MAIN_WORKSPACE_VALUES.has(workspace)) {
       return null;
     }
-    // getAgent 内含：连接存在性、会话绑定校验、按需部署/连接、断线自动重建
+    // getAgent 内含：连接存在性、会话绑定校验、按需部署/连接（SSH 部署或容器注入）、断线自动重建
     const agent = await this.manager.getAgent(
       workspace,
       sessionId,
       sessionAttachments,
     );
+    // 连接类型（ssh / docker）决定 provider.scheme；传输差异对工具层透明
+    const scheme = agent.connectionKind;
     this.logger.log(
-      `Tool target resolved: workspace='${workspace}', sessionId=${sessionId}`,
+      `Tool target resolved: workspace='${workspace}' (${scheme}), sessionId=${sessionId}`,
     );
     return {
       connectionName: workspace,
       basePath: agent.basePath,
-      provider: new SshWorkspaceProvider(agent, workspace),
+      provider: new AgentWorkspaceProvider(agent, workspace, scheme),
     };
   }
 

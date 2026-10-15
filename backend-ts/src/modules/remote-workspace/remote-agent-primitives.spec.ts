@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { RemoteAgent } from "./remote-workspace-agent-manager";
-import { RpcClient } from "./rpc";
+import { RpcClient, WsRpcTransport } from "./rpc";
 
 /**
  * RemoteAgent 原语层测试（真实 WebSocket 回环）：
@@ -44,7 +44,7 @@ describe("RemoteAgent 原语层", () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     return new Promise<RemoteAgent>((resolve, reject) => {
       ws.once("open", () => {
-        const rpc = new RpcClient(ws);
+        const rpc = new RpcClient(new WsRpcTransport(ws));
         rpc.setConnected();
         resolve(new RemoteAgent(rpc, { path: "/remote/proj" }));
       });

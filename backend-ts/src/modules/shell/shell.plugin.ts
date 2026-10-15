@@ -38,7 +38,7 @@ import {
 import {
   buildRemoteProcessId,
   parseRemoteProcessId,
-} from "../remote-workspace/ssh-workspace-provider";
+} from "../remote-workspace/agent-workspace-provider";
 import { isTransportError } from "../remote-workspace/rpc";
 import langZh from "./shell.lang.zh.json";
 import langEn from "./shell.lang.en.json";

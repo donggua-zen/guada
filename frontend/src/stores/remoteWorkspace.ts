@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
-import type { RemoteConnection } from '@/services/modules/remote-workspace.api'
+import {
+  connectionKind,
+  connectionTargetLine,
+  type RemoteConnection,
+  type RemoteConnectionConfig,
+} from '@/services/modules/remote-workspace.api'
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
 
 /**
@@ -51,8 +56,11 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
     connections.value.map((c) => ({
       id: c.id,
       name: c.name,
-      description: `${c.config.username}@${c.config.host}`,
-      /** 远端工作目录（清单行与提示展示用；未配置时兜底空串） */
+      /** 连接类型：绑定入口据此选图标（SSH 云 / 容器方块） */
+      kind: connectionKind(c),
+      /** 目标摘要：SSH → user@host；Docker → 容器名 */
+      description: connectionTargetLine(c.config),
+      /** 工作目录（清单行与提示展示用；未配置时兜底空串） */
       path: c.config.path || '',
     })),
   )
@@ -95,7 +103,7 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
   /**
    * 创建连接；失败抛出（调用方负责 ElMessage）
    */
-  const createConnection = async (name: string, config: RemoteConnection['config']): Promise<RemoteConnection> => {
+  const createConnection = async (name: string, config: RemoteConnectionConfig): Promise<RemoteConnection> => {
     const conn = await apiService.createConnection(name, config)
     upsertConnection(conn)
     return conn
@@ -106,7 +114,7 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
    */
   const updateConnection = async (
     id: string,
-    data: { name?: string; config?: RemoteConnection['config'] },
+    data: { name?: string; config?: RemoteConnectionConfig },
   ): Promise<RemoteConnection> => {
     const conn = await apiService.updateConnection(id, data)
     upsertConnection(conn)

@@ -1,12 +1,15 @@
 /**
- * remote-workspace builtin plugin — 附加（远程）工作目录支持。
+ * remote-workspace builtin plugin — 附加（远程 / 容器）工作目录支持。
  *
  * 职责：
- * 1. 注册 ssh-connection 附件类型（会话绑定远程连接的入口）；
- * 2. 注册 ssh-tools 工具包：条件注入连接清单 prompt（说明 workspace 参数用法）
- *    + remote_transfer 工具（本地 ↔ 远端文件传输）；
- * 3. 提供 SshWorkspaceProvider / WorkspaceToolRouter（经 file/shell 工具的
- *    workspace 参数操作远端，见 workspace-router.ts）。
+ * 1. 注册 ssh-tools 工具包：条件注入连接清单 prompt（说明 workspace 参数用法）
+ *    + remote_transfer 工具（本地 ↔ 目标端文件传输）；
+ * 2. 提供 AgentWorkspaceProvider / WorkspaceToolRouter（经 file/shell 工具的
+ *    workspace 参数操作目标端，见 workspace-router.ts）。
+ *
+ * 连接类型由连接的 config.kind 决定（对工具层与提示词透明）：
+ * - ssh：远程主机（agent 经 SFTP 推送 + SSH 端口转发 + WebSocket，见 agent-deploy.ts）；
+ * - docker：运行中的容器（agent 经 docker cp 注入 + docker exec stdio，见 docker-agent-connect.ts）。
  *
  * 历史：本插件曾注册 remote_read/write/edit/grep/bash 五个独立工具，
  * 已合并进标准文件与命令工具（workspace 参数路由），历史会话中的
@@ -81,13 +84,13 @@ export class RemoteWorkspacePlugin extends PluginBase {
       description: "%remoteWorkspace.toolkitDescription%",
       loadMode: "eager",
       activator:
-        "Use these tools when the user asks to operate on remote servers via SSH connections.",
+        "Use these tools when the user asks to operate on remote servers (SSH) or bound Docker containers as additional workspaces.",
     });
     // 提示词按冻结快照渲染（RemoteBindingStateService 两态状态机）：
     // 绑定变更以注入块跟随下一条用户消息，系统提示词仅冷启动/压缩后刷新 → 前缀缓存稳定。
     sshKit.registerPrompt({
       frequency: "STATIC",
-      description: "Remote SSH connections info",
+      description: "Remote / container workspace connections info",
       content: async (ctx: PluginContext) => {
         const liveIds: string[] =
           ctx.session.getSettings?.()?.attachments?.["ssh-connection"] || [];
@@ -97,18 +100,18 @@ export class RemoteWorkspacePlugin extends PluginBase {
         );
         if (!list) {
           return [
-            "# Additional Workspaces (Remote)",
+            "# Additional Workspaces (Remote / Container)",
             "No remote workspaces are currently bound to this session.",
             'If the user binds one, the connection list will be provided via a follow-up reminder; operate on it with workspace="<connection name>" on the standard file tools.',
           ].join("\n");
         }
         return [
-          "# Remote SSH Connections (Additional Workspaces)",
-          "The following remote connections are bound to this session as additional workspaces:",
+          "# Remote / Container Connections (Additional Workspaces)",
+          "The following connections are bound to this session as additional workspaces:",
           list,
           "",
-          'To operate on a remote workspace, pass workspace="<connection name>" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.',
-          'Paths are then relative to that remote workspace\'s directory. Omit workspace (or use "main") for the primary local workspace.',
+          'To operate on a remote or container workspace, pass workspace="<connection name>" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.',
+          'Paths are then relative to that workspace\'s directory (on the remote host, or inside the container). Omit workspace (or use "main") for the primary local workspace.',
           "remote_transfer keeps its own 'connection' parameter to move files between local and remote.",
           "If bindings change mid-session, an updated list arrives as a follow-up reminder (it supersedes this list).",
         ].join("\n");

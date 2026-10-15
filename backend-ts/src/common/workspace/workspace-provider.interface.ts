@@ -180,7 +180,7 @@ export interface WorkspaceProvider {
  *   scheme: "ssh",
  *   label: "SSH 远程",
  *   configSchema: [...],
- *   create: (uri) => new SshWorkspaceProvider(uri),
+ *   create: (uri) => new AgentWorkspaceProvider(uri),
  *   makeCacheKey: (uri) => `ssh:${uri.username}@${uri.host}:${uri.port || 22}`,
  * });
  */

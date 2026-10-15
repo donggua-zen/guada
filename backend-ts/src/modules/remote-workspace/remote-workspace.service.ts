@@ -4,23 +4,41 @@ import * as fs from "fs";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { verifyAndDeployAgent, type DeployResult } from "./agent-deploy";
+import {
+  DockerConnectionConfig,
+  listDockerContainers as listRunningDockerContainers,
+  browseDockerPath,
+  testDockerConnection,
+  verifyAndDeployDockerAgent,
+} from "./docker-agent-connect";
 import { encryptSecret, decryptSecret } from "./secret-crypto.util";
+
+/** SSH 连接配置（kind 判别字段与旧数据兼容：读时缺省归一为 "ssh"） */
+export interface SshConnectionConfig {
+  kind: "ssh";
+  host: string;
+  port: number;
+  username: string;
+  authMethod: "password" | "privateKey";
+  password?: string;
+  /** 私钥文件绝对路径(不再存储私钥内容明文) */
+  privateKeyPath?: string;
+  path: string;
+  /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
+  perm?: string;
+}
+
+/** 连接配置联合类型：SSH 远程主机 / Docker 容器（判别字段 kind） */
+export type RemoteConnectionConfig = SshConnectionConfig | DockerConnectionConfig;
+
 export interface RemoteConnection {
   id: string;
   name: string;
-  config: {
-    host: string;
-    port: number;
-    username: string;
-    authMethod: "password" | "privateKey";
-    password?: string;
-    /** 私钥文件绝对路径(不再存储私钥内容明文) */
-    privateKeyPath?: string;
-    path: string;
-    /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
-    perm?: string;
-  };
+  config: RemoteConnectionConfig;
 }
+
+/** 连接类型（由 config.kind 派生） */
+export type RemoteConnectionType = RemoteConnectionConfig["kind"];
 
 const SETTINGS_GROUP = "remote-workspace";
 const SETTINGS_KEY = "connections";
@@ -42,13 +60,16 @@ export class RemoteWorkspaceService {
       [],
     );
     const conns = Array.isArray(data) ? data : [];
-    // 解密密码(磁盘上只存密文,内存/返回时解密)
-    return conns.map((c: RemoteConnection) => ({
-      ...c,
-      config: c.config?.password
-        ? { ...c.config, password: decryptSecret(c.config.password) }
-        : c.config,
-    }));
+    // 解密密码(磁盘上只存密文,内存/返回时解密);
+    // 旧数据无 kind 字段 → 归一为 ssh(零迁移:JSON 文件存储,读时补齐)
+    return conns.map((c: RemoteConnection) => {
+      const raw: any = c.config || {};
+      const config: RemoteConnectionConfig = { ...raw, kind: raw.kind || "ssh" };
+      if (config.kind === "ssh" && config.password) {
+        config.password = decryptSecret(config.password);
+      }
+      return { ...c, config };
+    });
   }
 
   async createConnection(
@@ -100,6 +121,12 @@ export class RemoteWorkspaceService {
   async testConnection(
     config: RemoteConnection["config"],
   ): Promise<{ success: boolean; error?: string; log?: string }> {
+    // Docker 容器：inspect + 注入校验 + stdio 握手（同一入口按 kind 分派）
+    if (config.kind === "docker") {
+      const downloadUrl = await this.getAgentDownloadUrl();
+      const latestVersionUrl = await this.getAgentLatestVersionUrl();
+      return testDockerConnection(config, { downloadUrl, latestVersionUrl });
+    }
     try {
       const { Client } = require("ssh2");
       const client = new Client();
@@ -219,11 +246,13 @@ export class RemoteWorkspaceService {
     this.deployJobs.set(jobId, job);
 
     const params = new URLSearchParams();
-    if (config.authMethod === "password" && config.password) {
-      params.set("password", config.password);
-    }
-    if (config.authMethod === "privateKey" && config.privateKeyPath) {
-      params.set("privateKeyPath", config.privateKeyPath);
+    if (config.kind === "ssh") {
+      if (config.authMethod === "password" && config.password) {
+        params.set("password", config.password);
+      }
+      if (config.authMethod === "privateKey" && config.privateKeyPath) {
+        params.set("privateKeyPath", config.privateKeyPath);
+      }
     }
     const query = params.toString();
 
@@ -232,21 +261,30 @@ export class RemoteWorkspaceService {
       try {
         const downloadUrl = await this.getAgentDownloadUrl();
         const latestVersionUrl = await this.getAgentLatestVersionUrl();
-        const result = await verifyAndDeployAgent(
-          {
-            scheme: "ssh",
-            host: config.host,
-            port: config.port || 22,
-            username: config.username || "root",
-            password: config.password,
-            path: config.path || "/",
-            query: query ? Object.fromEntries(params) : undefined,
-          },
-          downloadUrl,
-          latestVersionUrl,
-          (line) => job.log.push(line),
-          controller.signal,
-        );
+        const result =
+          config.kind === "docker"
+            ? await verifyAndDeployDockerAgent(
+                config,
+                downloadUrl,
+                latestVersionUrl,
+                (line) => job.log.push(line),
+                controller.signal,
+              )
+            : await verifyAndDeployAgent(
+                {
+                  scheme: "ssh",
+                  host: config.host,
+                  port: config.port || 22,
+                  username: config.username || "root",
+                  password: config.password,
+                  path: config.path || "/",
+                  query: query ? Object.fromEntries(params) : undefined,
+                },
+                downloadUrl,
+                latestVersionUrl,
+                (line) => job.log.push(line),
+                controller.signal,
+              );
         job.result = result;
         job.done = true;
       } catch (err: any) {
@@ -292,6 +330,10 @@ export class RemoteWorkspaceService {
     config: RemoteConnection["config"],
     dirPath: string,
   ): Promise<RemoteBrowseResult> {
+    // Docker 容器：复用同一 POSIX browse 命令，经 docker exec 在容器内执行
+    if (config.kind === "docker") {
+      return browseDockerPath(config, buildBrowseCommand, parseBrowseOutput, dirPath);
+    }
     const { Client } = require("ssh2");
     const client = new Client();
 
@@ -340,14 +382,21 @@ export class RemoteWorkspaceService {
     });
   }
 
+  /** 列出运行中的 Docker 容器（连接向导的容器选择器用） */
+  async listContainers(
+    dockerHost?: string,
+  ): Promise<{ name: string; image: string; status: string }[]> {
+    return listRunningDockerContainers(dockerHost ? { dockerHost } : {});
+  }
+
   private async save(connections: RemoteConnection[]): Promise<void> {
     // 保存前加密密码(encryptSecret 对已是密文的值幂等:仅加密明文/旧数据)
-    const encrypted = connections.map((c) => ({
-      ...c,
-      config: c.config?.password
-        ? { ...c.config, password: encryptSecret(c.config.password) }
-        : c.config,
-    }));
+    const encrypted = connections.map((c) => {
+      if (c.config.kind === "ssh" && c.config.password) {
+        return { ...c, config: { ...c.config, password: encryptSecret(c.config.password) } };
+      }
+      return c;
+    });
     await this.settingsStorage.updateSettings(SETTINGS_GROUP, {
       [SETTINGS_KEY]: encrypted,
     });

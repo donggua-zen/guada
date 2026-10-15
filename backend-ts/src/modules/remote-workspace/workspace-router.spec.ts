@@ -29,7 +29,10 @@ describe("WorkspaceToolRouter", () => {
   });
 
   it("连接名 → 返回远程目标（provider + basePath + 连接名）", async () => {
-    const getAgent = jest.fn(async () => ({ basePath: "/remote/proj" }));
+    const getAgent = jest.fn(async () => ({
+      basePath: "/remote/proj",
+      connectionKind: "ssh",
+    }));
     const router = buildRouter(getAgent);
     const attachments = { "ssh-connection": ["conn-1"] };
     const target = await router.resolveRemoteTarget(
@@ -42,6 +45,20 @@ describe("WorkspaceToolRouter", () => {
     expect(target!.connectionName).toBe("my-server");
     expect(target!.basePath).toBe("/remote/proj");
     expect(target!.provider.scheme).toBe("ssh");
+  });
+
+  it("Docker 连接 → provider.scheme=docker（传输差异对工具层透明）", async () => {
+    const getAgent = jest.fn(async () => ({
+      basePath: "/workspace",
+      connectionKind: "docker",
+    }));
+    const router = buildRouter(getAgent);
+    const target = await router.resolveRemoteTarget("my-container", "s1", {
+      "ssh-connection": ["conn-d1"],
+    });
+    expect(target).not.toBeNull();
+    expect(target!.basePath).toBe("/workspace");
+    expect(target!.provider.scheme).toBe("docker");
   });
 
   it("getAgent 抛错（连接不存在/未绑定会话）→ 原样向上传播", async () => {

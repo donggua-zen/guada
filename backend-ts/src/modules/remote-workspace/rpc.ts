@@ -72,8 +72,72 @@ export function isUnknownMethodError(e: any): boolean {
   return String(e?.message || e).startsWith("unknown method");
 }
 
+// ── 传输抽象 ──
+
+/**
+ * RPC 传输：把"消息收发 + 关闭通知"从具体通道中剥离，使同一套 RPC 语义
+ * （请求/响应匹配、心跳判死、超时兜底、cancel、shutdown 推送）可用于多种通道。
+ *
+ * 实现：
+ * - WsRpcTransport：WebSocket（SSH 部署链路 / devMode 直连）；
+ * - StreamRpcTransport：子进程 stdio 管道（容器工作区，`docker exec -i ... --stdio`，
+ *   见 rpc-stream-transport.ts）。
+ */
+export interface RpcTransport {
+  /** 传输类型标签，用于错误文案（如 "WebSocket closed" / "stdio pipe closed"） */
+  readonly label: string;
+  /** 发送一条文本消息；cb 收到错误表示发送失败（消息可能未送达） */
+  send(data: string, cb?: (err?: Error) => void): void;
+  /** 主动关闭（必须触发 onClose 回调链，让挂起请求被 reject） */
+  close(): void;
+  onMessage(handler: (raw: string) => void): void;
+  onClose(handler: () => void): void;
+  /** 传输是否可用（ws OPEN / 子进程存活且管道可写） */
+  isOpen(): boolean;
+}
+
+/** WebSocket 传输（SSH / devMode 直连的既有通道） */
+export class WsRpcTransport implements RpcTransport {
+  readonly label = "WebSocket";
+  private readonly messageHandlers: Array<(raw: string) => void> = [];
+  private readonly closeHandlers: Array<() => void> = [];
+  private closed = false;
+
+  constructor(private readonly ws: WebSocket) {
+    ws.on("message", (raw: WebSocket.RawData) => {
+      const text = raw.toString();
+      for (const h of this.messageHandlers) h(text);
+    });
+    ws.on("close", () => {
+      this.closed = true;
+      for (const h of this.closeHandlers) h();
+    });
+  }
+
+  send(data: string, cb?: (err?: Error) => void): void {
+    this.ws.send(data, (err) => cb?.(err ?? undefined));
+  }
+
+  close(): void {
+    this.closed = true;
+    this.ws.close();
+  }
+
+  onMessage(handler: (raw: string) => void): void {
+    this.messageHandlers.push(handler);
+  }
+
+  onClose(handler: () => void): void {
+    this.closeHandlers.push(handler);
+  }
+
+  isOpen(): boolean {
+    return !this.closed && this.ws.readyState === WebSocket.OPEN;
+  }
+}
+
 export class RpcClient {
-  private ws: WebSocket;
+  private transport: RpcTransport;
   private pending = new Map<
     string,
     { resolve: (v: any) => void; reject: (e: Error) => void }
@@ -86,17 +150,17 @@ export class RpcClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastActivity = 0;
 
-  constructor(ws: WebSocket, heartbeat?: HeartbeatOptions) {
-    this.ws = ws;
+  constructor(transport: RpcTransport, heartbeat?: HeartbeatOptions) {
+    this.transport = transport;
     this.heartbeat = {
       intervalMs: heartbeat?.intervalMs ?? 60_000,
       deadlineMs: heartbeat?.deadlineMs ?? 180_000,
     };
-    this.ws.on("message", (raw: WebSocket.RawData) => {
+    this.transport.onMessage((raw: string) => {
       // 任何消息到达都视为连接活跃(含心跳响应)
       this.lastActivity = Date.now();
       try {
-        const msg = JSON.parse(raw.toString());
+        const msg = JSON.parse(raw);
         if (msg.id !== undefined) {
           // Response to a request
           const pending = this.pending.get(msg.id);
@@ -135,11 +199,13 @@ export class RpcClient {
       }
     });
 
-    this.ws.on("close", () => {
+    this.transport.onClose(() => {
       this.connected = false;
       this.stopHeartbeat();
       for (const [, { reject }] of this.pending) {
-        reject(transportError("WebSocket closed", RPC_ERROR_WS_CLOSED));
+        reject(
+          transportError(`${this.transport.label} closed`, RPC_ERROR_WS_CLOSED),
+        );
       }
       this.pending.clear();
       // 通知断开(供上层清理缓存/重建连接)
@@ -156,7 +222,7 @@ export class RpcClient {
   }
 
   /**
-   * 注册断开回调:WebSocket 关闭时触发。
+   * 注册断开回调:传输关闭时触发。
    * 用于上层(RemoteAgentManager)清理失效缓存,使下次调用自动重建连接。
    */
   onDisconnect(handler: () => void): void {
@@ -189,15 +255,15 @@ export class RpcClient {
     // 1) 发心跳 ping(不挂 pending,响应到达会更新 lastActivity)
     try {
       const pingReq: RPCRequest = { id: `hb-${++this.msgId}`, method: "ping" };
-      this.ws.send(JSON.stringify(pingReq));
+      this.transport.send(JSON.stringify(pingReq));
     } catch {
-      /* ws 已关闭 */
+      /* 传输已关闭 */
     }
     // 2) 判死:超过 deadlineMs 无任何消息(含心跳响应)→ 主动断开
     //    触发 close → pending reject → onDisconnect → 上层清理缓存 + 下次调用自动重建
     if (Date.now() - this.lastActivity > this.heartbeat.deadlineMs) {
       try {
-        this.ws.close();
+        this.transport.close();
       } catch {}
     }
   }
@@ -242,9 +308,9 @@ export class RpcClient {
             method: "cancel",
             params: { requestId: id },
           };
-          this.ws.send(JSON.stringify(cancelReq));
+          this.transport.send(JSON.stringify(cancelReq));
         } catch {
-          /* ws 可能已关闭,忽略 */
+          /* 传输可能已关闭,忽略 */
         }
       };
       if (signal) {
@@ -264,7 +330,7 @@ export class RpcClient {
         };
       }
 
-      this.ws.send(JSON.stringify(req), (err) => {
+      this.transport.send(JSON.stringify(req), (err) => {
         if (err) {
           if (timer) clearTimeout(timer);
           this.pending.delete(id);
@@ -290,6 +356,6 @@ export class RpcClient {
 
   close(): void {
     this.stopHeartbeat();
-    this.ws.close();
+    this.transport.close();
   }
 }

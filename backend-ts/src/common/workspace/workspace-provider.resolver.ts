@@ -23,7 +23,7 @@ interface CachedProvider {
  *
  * Routing is driven by URI scheme in `session.workspacePath`:
  * - No scheme prefix (e.g. `D:/projects`, `/home/user`) → LocalWorkspaceProvider (not cached)
- * - `ssh://user@host:22/path` → SshWorkspaceProvider (cached, lazy init, idle timeout)
+ * - `ssh://user@host:22/path` → AgentWorkspaceProvider（SSH/容器 agent 后端，cached, lazy init, idle timeout）
  *
  * Connection lifecycle:
  * - Lazy init: first resolve() creates and connects the provider

@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import {
   RpcClient,
+  WsRpcTransport,
   isTransportError,
   RPC_ERROR_AGENT_SHUTDOWN,
   RPC_ERROR_TIMEOUT,
@@ -51,7 +52,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
 
     const disconnected = jest.fn();
@@ -75,7 +76,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     rpc.onDisconnect(() => {});
 
@@ -91,7 +92,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws, { intervalMs: 50, deadlineMs: 150 });
+    const rpc = new RpcClient(new WsRpcTransport(ws), { intervalMs: 50, deadlineMs: 150 });
     rpc.setConnected();
 
     const disconnected = jest.fn();
@@ -110,7 +111,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws, { intervalMs: 50, deadlineMs: 150 });
+    const rpc = new RpcClient(new WsRpcTransport(ws), { intervalMs: 50, deadlineMs: 150 });
     rpc.setConnected();
 
     const disconnected = jest.fn();
@@ -130,7 +131,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     rpc.onDisconnect(() => {});
 
@@ -149,7 +150,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     rpc.onDisconnect(() => {});
 
@@ -165,7 +166,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     rpc.onDisconnect(() => {});
 
@@ -193,7 +194,7 @@ describe("RpcClient disconnect notification", () => {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     const disconnected = jest.fn();
     rpc.onDisconnect(disconnected);
@@ -232,7 +233,7 @@ describe("RpcClient error classification", () => {
   async function connectRpc(): Promise<RpcClient> {
     const ws = new WebSocket(serverUrl());
     await new Promise<void>((resolve) => ws.once("open", () => resolve()));
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
     rpc.onDisconnect(() => {});
     return rpc;

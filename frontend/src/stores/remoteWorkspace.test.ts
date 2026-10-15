@@ -33,7 +33,15 @@ function makeConn(id: string, name: string, user: string, host: string): RemoteC
   return {
     id,
     name,
-    config: { host, port: 22, username: user, authMethod: "password", password: "secret", path: `/home/${user}` },
+    config: { kind: "ssh", host, port: 22, username: user, authMethod: "password", password: "secret", path: `/home/${user}` },
+  };
+}
+
+function makeDockerConn(id: string, name: string, container: string): RemoteConnection {
+  return {
+    id,
+    name,
+    config: { kind: "docker", container, path: "/workspace" },
   };
 }
 
@@ -171,7 +179,7 @@ describe("remoteWorkspace Store", () => {
   });
 
   describe("connectionOptions 投影", () => {
-    it("映射为 {id, name, description: user@host}", () => {
+    it("映射为 {id, name, kind, description: user@host}", () => {
       const store = useRemoteWorkspaceStore();
       store.connections = [
         makeConn("conn_a", "alpha", "root", "10.0.0.1"),
@@ -179,8 +187,32 @@ describe("remoteWorkspace Store", () => {
       ];
 
       expect(store.connectionOptions).toEqual([
-        { id: "conn_a", name: "alpha", description: "root@10.0.0.1", path: "/home/root" },
-        { id: "conn_b", name: "beta", description: "dev@10.0.0.2", path: "/home/dev" },
+        { id: "conn_a", name: "alpha", kind: "ssh", description: "root@10.0.0.1:22", path: "/home/root" },
+        { id: "conn_b", name: "beta", kind: "ssh", description: "dev@10.0.0.2:22", path: "/home/dev" },
+      ]);
+    });
+
+    it("Docker 连接：kind=docker，描述为容器名", () => {
+      const store = useRemoteWorkspaceStore();
+      store.connections = [makeDockerConn("conn_d", "my-container", "guada-dev")];
+
+      expect(store.connectionOptions).toEqual([
+        { id: "conn_d", name: "my-container", kind: "docker", description: "容器 guada-dev", path: "/workspace" },
+      ]);
+    });
+
+    it("旧数据无 kind 字段时视作 ssh", () => {
+      const store = useRemoteWorkspaceStore();
+      store.connections = [
+        {
+          id: "conn_legacy",
+          name: "legacy",
+          config: { host: "10.0.0.9", port: 22, username: "root", authMethod: "password", path: "/srv" },
+        },
+      ];
+
+      expect(store.connectionOptions).toEqual([
+        { id: "conn_legacy", name: "legacy", kind: "ssh", description: "root@10.0.0.9:22", path: "/srv" },
       ]);
     });
 
@@ -191,7 +223,7 @@ describe("remoteWorkspace Store", () => {
       store.connections = [noPath];
 
       expect(store.connectionOptions).toEqual([
-        { id: "conn_c", name: "gamma", description: "ops@10.0.0.3", path: "" },
+        { id: "conn_c", name: "gamma", kind: "ssh", description: "ops@10.0.0.3:22", path: "" },
       ]);
     });
   });

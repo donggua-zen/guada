@@ -13,7 +13,7 @@
     <template v-for="conn in attachedConnections" :key="conn.id">
       <span v-if="connectionsLoading" class="wdb-attach wdb-attach-skeleton" aria-hidden="true"></span>
       <span v-else class="wdb-attach" @click="openConnCard(conn, $event)">
-        <el-icon :size="16" class="wdb-icon"><Cloud16Regular /></el-icon>
+        <el-icon :size="16" class="wdb-icon"><component :is="conn.kind === 'docker' ? Cube16Regular : Cloud16Regular" /></el-icon>
         <span class="wdb-name">{{ conn.missing ? t('chat.workspace.unknownConnection') : conn.name }}</span>
       </span>
     </template>
@@ -62,12 +62,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { Folder16Regular, Cloud16Regular, Add16Regular } from "@vicons/fluent";
+import { Folder16Regular, Cloud16Regular, Cube16Regular, Add16Regular } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
 import GdPopover from "../../ui/GdPopover.vue";
 import ConnectionBindingMenu from "../chat-input/ConnectionBindingMenu.vue";
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
+import { connectionKind, connectionTargetLine } from "@/services/modules/remote-workspace.api";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { useRemoteWorkspaceStore, toggleConnectionBinding } from "@/stores/remoteWorkspace";
@@ -101,9 +102,11 @@ const mainWorkspaceBasename = computed(() => {
 interface AttachableConnection {
   id: string;
   name: string;
-  /** 信息卡展示：user@host:port */
+  /** 连接类型：chip 图标（SSH 云 / 容器方块）与信息卡文案按类型分派 */
+  kind?: "ssh" | "docker";
+  /** 信息卡展示：SSH → user@host:port；Docker → 容器名 */
   hostLine?: string;
-  /** 信息卡展示：远程工作目录 */
+  /** 信息卡展示：工作目录（远端 / 容器内） */
   path?: string;
   /** 信息卡展示：agent 权限模式 */
   perm?: string;
@@ -114,14 +117,15 @@ interface AttachableConnection {
 const remoteWorkspaceStore = useRemoteWorkspaceStore();
 /**
  * chip 与信息卡的展示信息源。不用 store 的 connectionOptions 投影：那个投影是
- * 绑定入口下拉用的（只含 id/name/description/path），信息卡还要 port 与 perm，
+ * 绑定入口下拉用的（只含 id/name/kind/description/path），信息卡还要 port 与 perm，
  * 故直接读 store 原始清单——增删改仍共享同一份，设置页新建后此处自动可见。
  */
 const availableConnections = computed<AttachableConnection[]>(() =>
   remoteWorkspaceStore.connections.map((c) => ({
     id: c.id,
     name: c.name,
-    hostLine: `${c.config.username}@${c.config.host}:${c.config.port}`,
+    kind: connectionKind(c),
+    hostLine: connectionTargetLine(c.config),
     path: c.config.path,
     perm: c.config.perm,
   })),
