@@ -26,9 +26,14 @@ const ASK_USER_DESCRIPTION = [
   "",
   "Usage notes:",
   "- Ask up to 4 questions in a SINGLE call — batch related questions together instead of calling this tool several times, since each call blocks the turn and the user answers one card at a time.",
+  "- Each option is a plain string; that exact string is the answer value sent back, so make it self-contained (1-5 words).",
+  "- Put the trade-off context in the question text, not inside the option.",
   "- Users can always type a custom answer instead of picking one of the options.",
   "- Use multiSelect: true to allow multiple answers to be selected for a question.",
-  '- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label.',
+  '- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of it.',
+  "",
+  "## Example",
+  '{"questions":[{"question":"Which database should we use?","header":"Database","options":["Postgres (Recommended)","SQLite","MySQL"],"multiSelect":false}]}',
   "",
   'Plan mode note: To enter plan mode use EnterPlanMode (not this tool). Once in plan mode, use this tool to clarify requirements or choose between approaches BEFORE finalizing your plan. Do NOT use this tool to ask "Is my plan ready?", "Should I proceed?", or otherwise reference "the plan" in questions — the user cannot see the plan until you call ExitPlanMode for approval.',
   "",
@@ -59,25 +64,18 @@ export const ASK_USER_INPUT_SCHEMA = z
             .describe(
               'Very short label shown above the question (max 12 chars). Examples: "Auth method", "Library", "Approach".',
             ),
+          // 对外只广告"裸字符串"这一种形态，解析层也只收这一种——
+          // 不再为同族工具的对象写法（{label, description}）留隐形容错：
+          // 那是未文档化的行为，且在展平器修好后会变成对模型的额外 token。
+          // 形状契约由工具 description（含完整 JSON 示例）+ 本字段的顶层 description 承载
+          //（嵌套 schema 到不了模型，见 toolkit.ts 展平逻辑）。
           options: z
-            .array(
-              z.object({
-                label: z
-                  .string()
-                  .min(1)
-                  .describe(
-                    "The display text for this option that the user will see and select. Should be concise (1-5 words) and clearly describe the choice.",
-                  ),
-                description: z
-                  .string()
-                  .optional()
-                  .describe(
-                    "Explanation of what this option means or what will happen if chosen. Useful for describing trade-offs.",
-                  ),
-              }),
-            )
+            .array(z.string().min(1))
             .min(MIN_OPTIONS)
-            .max(MAX_OPTIONS),
+            .max(MAX_OPTIONS)
+            .describe(
+              'Options (2-4 items). Each item is a plain string: the exact text the user picks and the value sent back. Keep each 1-5 words; append " (Recommended)" to your preferred one.',
+            ),
           multiSelect: z
             .boolean()
             .optional()
@@ -189,10 +187,10 @@ export class AskUserPlugin extends PluginBase {
       question: q.question,
       // header 是短标签，落到卡片的 detail（纯文本支撑行）呈现
       ...(q.header ? { detail: q.header } : {}),
-      options: q.options.map((opt) => ({
-        label: opt.label,
-        ...(opt.description ? { description: opt.description } : {}),
-      })),
+      // 归一：内部 AskOption.label 是**答案值**（前端按 label 提交 selected、
+      // /chat/respond 按 o.label === label 校验），故此处把字符串包成对象。
+      // 适配只发生在这层映射，内部契约不动。
+      options: q.options.map((label) => ({ label })),
       ...(q.multiSelect ? { multiSelect: true } : {}),
     }));
 
@@ -219,11 +217,14 @@ export class AskUserPlugin extends PluginBase {
 /**
  * 把答案组织成给模型看的文本。
  *
+ * 参数类型刻意收窄到 `{ question }`：本函数只按题序取题面回显，与选项形状无关
+ * （选项形态是 LLM 面的事，不该让格式化逻辑跟着变）。
+ *
  * 与审批不同：这里的自定义文本是**正常答案**（不是拒绝），因此它优先于选项参与回显；
  * 未作答的题目明确告知"跳过"，并禁止模型编造用户偏好。
  */
 export function formatAnswers(
-  questions: AskUserInputQuestion[],
+  questions: readonly { question: string }[],
   answers: AskAnswerItem[],
 ): string {
   const byId = new Map(answers.map((a) => [a.id, a]));
