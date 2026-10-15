@@ -342,11 +342,25 @@ pnpm run build:electron:mac:sign
 `shell.plugin.ts` 是 fail-closed —— 用户在会话里开沙盒档位时 shell 工具会明确报错拒绝执行，
 **不会静默降级成无沙盒运行**。
 
-**macOS 版按架构分发**：`mac.extraResources` 目前只打包 `sandbox/sandbox-macos-arm64`，
-而运行时按 `sandbox-macos-${process.arch}` 查找（`backend-ts/src/modules/shell/process-manager.service.ts`
-的 `resolveSandboxBin`）。CI 现在只出 arm64，所以两者一致；**若将来要出 Intel 版**，
-需要先补一个 `sandbox/sandbox-macos-x64` 并加进 `mac.extraResources`
-（该二进制如何构建尚未写进 `sandbox/README.md`），否则 x64 包的沙盒同样不可用（fail-closed）。
+**macOS 版按架构分发，两个架构都已随包**：`mac.extraResources` 同时打包
+`sandbox/sandbox-macos-arm64` 与 `sandbox/sandbox-macos-x64`，运行时按
+`sandbox-macos-${process.arch}` 查找（`backend-ts/src/modules/shell/process-manager.service.ts`
+的 `resolveSandboxBin`），所以 arm64 包与 Intel 包各自命中自己的那一份。
+
+两个二进制取自 fence-sandbox **v1.4.0** Release 资产（`sandbox/README.md` 记录构建方式：
+最低部署目标 11.0，Intel 版由 CI 的 `macos-15-intel` runner 原生构建并跑测试），
+与 `sandbox/sandbox`（Linux x64）同批更新——**vendored 二进制与上游 tag 一一对应**，
+而不是各自来自不同版本。上游 v1.3.0 → v1.4.0 无 C++ 源码改动，仅 macOS 部署目标从
+「跟随构建机系统版本」改为固定 11.0（v1.3.0 的 mac 二进制在 macOS 15/26 runner 上构建，
+要求的系统版本过新，老 Mac 跑不起来）。
+
+**macOS 不再回落到裸名 `sandbox`**：仓库里的裸名是 Linux ELF，而 `fs.access(X_OK)` 对它是通过的，
+回落到它等于把 ELF 交给 `spawn`——只在 exec 时才失败，把「本架构没有沙盒二进制」伪装成一条难懂的
+spawn 报错。现在 darwin 只认 `sandbox-macos-${process.arch}`，缺失即 `resolveSandboxBin` 返回 null，
+fail-closed 并打印明确原因。
+
+> CI 目前只出 macOS arm64（**Intel 版暂时不做**）；随包附带 Intel 二进制是为了**自行编译 Intel 版的用户**
+> ——本机 `--x64` 构建出来的 dmg 直接可用，不必自己再编译沙盒。
 
 #### 4.5 构建方式选择
 

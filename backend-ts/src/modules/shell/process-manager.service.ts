@@ -1009,7 +1009,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /**
    * 解析 sandbox 二进制路径（跨平台）
    *
-   * Windows: sandbox.exe  |  Linux: sandbox
+   * Windows: sandbox.exe  |  Linux: sandbox  |  macOS: sandbox-macos-{arch}
    *
    * 开发环境：项目根目录下的 sandbox/{name}
    * 生产环境：resources/sandbox/{name}（extraResources 打包）
@@ -1020,14 +1020,16 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (this.sandboxBinPath !== undefined) return this.sandboxBinPath;
 
     const isWindows = process.platform === "win32";
-    // macOS and Linux share the extension-less `sandbox` name in the repo
-    // layout, but they are different binaries. A macOS build therefore ships
-    // an architecture-suffixed name and is preferred there, falling back to the
-    // bare name so a Linux-only checkout still resolves.
+    // macOS and Linux share the extension-less `sandbox` name in the repo layout,
+    // but they are different binaries: the bare name is the Linux ELF. So macOS
+    // resolves by architecture only — the bare-name fallback used to hand a Linux
+    // ELF to spawn (the X_OK probe passes; only exec fails), turning "no sandbox
+    // binary for this arch" into a confusing spawn error. Both architectures are
+    // vendored and packaged, so the arch-suffixed name always has a hit.
     const binNames = isWindows
       ? ["sandbox.exe"]
       : process.platform === "darwin"
-        ? [`sandbox-macos-${process.arch}`, "sandbox"]
+        ? [`sandbox-macos-${process.arch}`]
         : ["sandbox"];
 
     const candidates: string[] = [];

@@ -214,6 +214,10 @@
         {
           "from": "sandbox/sandbox-macos-arm64",
           "to": "sandbox/sandbox-macos-arm64"
+        },
+        {
+          "from": "sandbox/sandbox-macos-x64",
+          "to": "sandbox/sandbox-macos-x64"
         }
       ]
     },

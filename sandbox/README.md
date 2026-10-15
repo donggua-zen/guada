@@ -27,7 +27,7 @@
 |------|------|
 | Windows | Vista 及以上（x64） |
 | Linux | 内核 ≥ 5.13，Docker ≥ 20.10.21（如在容器内运行） |
-| macOS | macOS 10.10+（自带 `/usr/bin/sandbox-exec`）。注意：`sandbox-exec` 自 macOS 10.15 起被 Apple 标记为 deprecated，但当前仍可用 |
+| macOS | macOS 11.0+（自带 `/usr/bin/sandbox-exec`）。注意：`sandbox-exec` 自 macOS 10.15 起被 Apple 标记为 deprecated，但当前仍可用 |
 
 无需额外运行时依赖。构建工具：CMake 3.20+、C++17 编译器（MSVC 2022+ / GCC 12+）。
 
@@ -63,6 +63,17 @@ cmake --build build --config Release
 docker build -t sandbox-dev -f sandbox/docker/Dockerfile .
 docker run --rm -v "$(pwd):/workspace" sandbox-dev bash -c "cd /workspace && bash build_project.sh"
 ```
+
+### macOS
+
+```bash
+cmake -S sandbox -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+输出：`build/bin/sandbox`。默认最低部署目标为 macOS 11.0，可用 `-DCMAKE_OSX_DEPLOYMENT_TARGET=` 覆盖；在 Apple Silicon 上交叉编译 Intel 版本可加 `-DCMAKE_OSX_ARCHITECTURES=x86_64`。
+
+发布产物由 GitHub Actions 自动构建（CI 在 Intel runner 上原生构建并跑测试）：`fence-sandbox-macos-arm64.tar.gz`（Apple Silicon）与 `fence-sandbox-macos-x64.tar.gz`（Intel）。
 
 ## 使用
 
@@ -158,13 +169,19 @@ proc.on('exit', (code) => {
 
 ### Windows: Restricted Token + ACL
 
-1. **生成随机 SID**：每次执行生成 `S-1-5-10-{rand}-{rand}-{rand}-{rand}` 格式的唯一标识
-2. **授予写权限**：将该 SID 的 `GENERIC_WRITE | GENERIC_EXECUTE` ACE 添加到工作目录的 DACL
+1. **派生工作区 SID**：由规范化工作区路径确定性派生 `S-1-4-{x}-{y}`（`sha256("ai-sandbox-workspace\0" + canonical path)`）——同一工作区跨会话、跨进程重启、跨调用始终是同一身份
+2. **授予写权限（常驻）**：将该 SID 的显式掩码 ACE（写 + 执行 + 删除 + 子项删除，剔除 `WRITE_DAC | WRITE_OWNER`）加到工作目录 DACL，并**保留**（不回收）——它就是跨调用的复用缓存
 3. **创建 Restricted Token**：用 `CreateRestrictedToken` + `WRITE_RESTRICTED` 限制令牌，仅允许写该 SID 有权访问的目录
 4. **启动子进程**：用受限令牌执行 `<命令>`（默认 `powershell.exe -NoProfile -NonInteractive -Command`，`--shell cmd` 切换为 `cmd.exe /c`），工作目录内可读写，目录外自动拒绝
-5. **清理**：执行完毕后删除 ACE，删除 lock 文件
+5. **收尾**：删除 lock 文件；**不回收工作区 ACE**
 
-**心跳与僵尸清理**：后台线程每 10 分钟更新 lock 文件时间戳，每次启动时自动清理超过 30 分钟未更新的残留 ACE。
+**为什么授权是常驻的**：`SetNamedSecurityInfoW` 写入继承型 ACE 时会**立即遍历每个后代**（eager inheritance）——大工作区上实测单次授权约 233 s、单次回收约 292 s。工作区身份既然是确定性的，就没有理由每条命令都付这两遍：授权一次，之后命中「精确 ACE 已存在」快路径（只读一次 DACL，**完全不调用** `SetNamedSecurityInfoW`），每条命令的 ACL 成本降到 O(1)。工作区改名会派生新 SID，旧 ACE 变成惰性残留（可手动 `icacls` 清理）。
+
+**并发**：在 `<workspace>\.sandbox\acl.lock` 上用 `LockFileEx` 加**跨进程**独占锁，把 DACL 的「读-判定-写」整段串行化。既修掉并发丢更新，也让 N 条并发首命令只做**一次**全树传播——其余在锁上等待后命中快路径，而不是各自再传一遍。
+
+**心跳与僵尸清理**：后台线程每 10 分钟更新 lock 文件时间戳；每次启动清理超过 30 分钟未更新的残留 ACE。清理只针对**旧随机命名空间（`S-1-5-10-*`）**；工作区能力 SID（`S-1-4-*`）被显式排除、**永不回收**——回收它等于删掉缓存、把成本打回每条命令。
+
+**只读模式**：restricting SID 列表为 `[logon SID, Everyone]`，**不含**工作区能力 SID。该 SID 的 ACE 是常驻的，若把它留在只读列表里，上一次 `workspace-write` 留下的授权会满足受限写检查、**把只读重新打开**。
 
 ### Linux: Landlock LSM
 
@@ -192,7 +209,7 @@ proc.on('exit', (code) => {
 - Windows: 受限令牌的 restricting SID 列表为 `{workspace SID, logon SID, Everyone}`——三者缺一会导致进程无法初始化（`powershell.exe` 报 `0xC0000142`、`where.exe` 一类工具静默失败）。历史上曾把列表收窄为仅 workspace SID（`ee5c242`），默认 shell 改为 powershell 后该回归在默认路径上必现，现已恢复。详见 CHANGELOG
 - Windows: 受限令牌启动的 `powershell.exe` 在部分环境（如 GitHub Windows runner）曾出现阻塞，CI 通过 `SANDBOX_TEST_SKIP_DEFAULT_SHELL` 跳过默认 shell 用例；该阻塞是否随上述 restricting SID 修复一并消失，尚待在 runner 上复测
 - Windows（已知限制）: Restricted Token 回退后端能否拦截工作目录外的文件删除取决于内核对 `WRITE_RESTRICTED` 的实现——Win11 25H2（build 26200）实测已覆盖 `DELETE`（删除被拦截），更旧的 Windows 构建上可能仍存在缺口；Linux（Landlock）与 macOS（Seatbelt）不受影响。详见 CHANGELOG "Known issues"
-- Windows: 24H2+ 默认走 Sandbox API（AppContainer）后端——默认拒绝、每次运行使用唯一 profile 名并即时清理；为保持"目录外只读"语义，各本地盘根会以 `fs_read_only` 声明（网络盘除外）。PowerShell 在该后端下会打印一条 `InitializeDefaultDrives` 失败噪音，不影响行为。设置环境变量 `SANDBOX_FORCE_RESTRICTED_TOKEN=1` 可强制走 Restricted Token 回退后端（用于 24H2+ 机器上的回归测试）
+- Windows: **只使用 Restricted Token + ACL 后端**。AppContainer 后端（`Experimental_CreateProcessInSandbox`，mxc BaseContainer 层）已退出默认选择路径，代码保留、`SANDBOX_FORCE_APPCONTAINER=1` 可启用——原因是结构性不兼容：引擎拒绝任何「曾经注册过」的 identity（复用即 `ERROR_ALREADY_EXISTS`），故 profile 名必须每次全新 → 派生 SID 每次变化 → 工作区 ACE 无法常驻 → 每次调用都要付两遍 eager 全树传播。详见 CHANGELOG「Retired」。设置 `SANDBOX_FORCE_RESTRICTED_TOKEN=1` 仍表示「不要尝试 AppContainer」，两者同时设置时它优先
 - 工作目录路径不存在时会自动创建
 - Windows: `.sandbox/` 目录用于存放 lock 文件（隐藏属性），请勿手动删除
 - Linux: 无额外文件，无残留
