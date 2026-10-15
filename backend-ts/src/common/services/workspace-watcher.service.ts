@@ -6,14 +6,18 @@ import { gitActivity } from "./git-activity";
 import { PARCEL_WATCH_OPTIONS } from "../utils/parcel-watch-options";
 
 export interface FileChangeEvent {
-  /** git = 工作区 .git 目录内容变化（外部 commit/stage/checkout 等），前端应刷新 git 状态 */
+  /**
+   * git = 工作区 git 状态可能已变化，前端应重新拉取 git 状态。
+   * 两个来源：.git 目录内容变化（外部 commit/stage/checkout 等），
+   * 以及工作树文件的增删改（编辑文件不触碰 .git，只有根 watcher 看得到）。
+   */
   type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "git";
   path: string;
   sessionId: string;
   timestamp: number;
 }
 
-/** watcher 订阅范围：file=工作区根目录文件事件；git=.git 目录变化（独立 watcher） */
+/** watcher 订阅范围：file=工作区根目录文件事件；git=git 状态变化（.git 目录 + 工作树文件） */
 export type WatchScope = "file" | "git";
 
 /** 订阅范围校验/规范化 */
@@ -43,8 +47,10 @@ interface WatchEntry {
   /** 事件合并缓冲：absolutePath → 待推送事件 */
   pendingEvents: Map<string, PendingChangeEvent>;
   coalesceTimer: ReturnType<typeof setTimeout> | null;
-  /** .git 变化待推送标志 + 防抖定时器 */
+  /** .git 目录变化待推送标志（受读命令抑制窗口约束） */
   gitDirty: boolean;
+  /** 工作树文件变化待推送标志（与 gitDirty 共用防抖定时器，但不受读命令抑制窗口约束） */
+  gitDirtyFromWorkTree: boolean;
   gitTimer: ReturnType<typeof setTimeout> | null;
   /** 熔断：事件风暴时增大合并窗口 */
   degraded: boolean;
@@ -89,6 +95,12 @@ const EVENT_RATE_THRESHOLD = 5_000;
 const MAX_EVENTS_PER_FLUSH = 500;
 /** .git 变化防抖：一次 commit 会连续写 HEAD/refs/index 等，合并为单次「git 已变化」通知 */
 const GIT_DEBOUNCE_MS = 300;
+/**
+ * 工作树文件变化防抖（刻意长于 GIT_DEBOUNCE_MS）：保存文件 / agent 批量写文件会连续产生大量
+ * 事件，300ms 窗口仍会把一个批次拆成多轮 git status。参考成熟实现（ZCode）的取舍 —— 它的 git
+ * 自动刷新防抖远长于文件 watcher 防抖，正是为了压低大工作区里的重复 Git I/O。
+ */
+const GIT_WORKTREE_DEBOUNCE_MS = 1000;
 /** .git 内部需要忽略的路径：loose objects 每次提交大量写入（refs/HEAD 已足以触发）；
     *.lock 为 git 写操作的瞬时锁文件（index.lock 等），其 create/delete 无状态意义 */
 const GIT_IGNORE_GLOBS = ["**/objects/**", "**/*.lock"];
@@ -97,6 +109,9 @@ const GIT_IGNORE_GLOBS = ["**/objects/**", "**/*.lock"];
  * （创建 index.lock + 写 index），这些是「本端读命令引发的噪声」；窗口内到达的
  * .git 事件一律忽略，避免 读命令 → 事件 → 刷新 → 读命令 的死循环。
  * 窗口外的 index 变化（外部 git add / reset）仍会正常推送。
+ *
+ * 只作用于 .git 目录来源的事件：工作树文件来源的事件由编辑动作直接产生，与读命令无关，
+ * 必须放行 —— 否则刚保存的文件若落在窗口内会被静默丢弃（表现为变更数停在旧值）。
  */
 const GIT_READ_SUPPRESS_MS = 1000;
 
@@ -346,6 +361,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       pendingEvents: new Map(),
       coalesceTimer: null,
       gitDirty: false,
+      gitDirtyFromWorkTree: false,
       gitTimer: null,
       degraded: false,
       eventTimestamps: [],
@@ -428,12 +444,18 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
   /** 按激活范围增删两个独立 parcel watcher（root / .git），幂等、防重入 */
   private updateWatcherSubscriptions(entry: WatchEntry): void {
     const { file, git } = this.computeEntryScopes(entry);
+    // git 目录只解析一次，供根 watcher 与 .git watcher 共用
+    const gitDir = git ? this.resolveGitDir(entry.absolutePath) : null;
+    // 根 watcher 对 git scope 同样必要：工作树文件的增删改不触碰 .git（index 只由 git 命令写），
+    // 但同样改变 git 状态/变更数，而这类变化只有根 watcher 看得到。
+    // 非仓库工作区没有 git 状态可刷新，不为 git 订阅整棵树。
+    const wantRoot = file || gitDir !== null;
 
     // 根 watcher（工作区文件事件）
     // 在途标记（fileSubscribing）防止 subscribe Promise resolve 前 scope 重入造成重复订阅
-    if (file && !entry.subscription && !entry.fileSubscribing) {
+    if (wantRoot && !entry.subscription && !entry.fileSubscribing) {
       this.subscribeRoot(entry);
-    } else if (!file && entry.subscription) {
+    } else if (!wantRoot && entry.subscription) {
       const sub = entry.subscription;
       entry.subscription = null;
       entry.ready = false;
@@ -445,9 +467,9 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     }
 
     // .git watcher（git 事件，独立订阅）
-    if (git && !entry.gitSubscription && !entry.gitSubscribing) {
-      this.subscribeGitEntry(entry);
-    } else if (!git && entry.gitSubscription) {
+    if (gitDir && !entry.gitSubscription && !entry.gitSubscribing) {
+      this.subscribeGitEntry(entry, gitDir);
+    } else if (!gitDir && entry.gitSubscription) {
       const sub = entry.gitSubscription;
       entry.gitSubscription = null;
       sub.unsubscribe().catch((error: unknown) => {
@@ -456,6 +478,15 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         );
       });
     }
+  }
+
+  /**
+   * 根目录 watcher 是否需要：file scope，或（git scope + 该目录确实是仓库）。
+   * 后者用于「工作树文件变化也要刷新 git 状态」—— 编辑文件不触碰 .git。
+   */
+  private needsRootWatcher(entry: WatchEntry): boolean {
+    const { file, git } = this.computeEntryScopes(entry);
+    return file || (git && this.resolveGitDir(entry.absolutePath) !== null);
   }
 
   /** 订阅工作区根目录（文件事件），激活期间有效 */
@@ -481,7 +512,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       .then((subscription) => {
         entry.fileSubscribing = false;
         // 订阅完成前 scope 可能已撤销 → 撤销后立刻退订
-        if (!this.computeEntryScopes(entry).file) {
+        if (!this.needsRootWatcher(entry)) {
           subscription.unsubscribe().catch(() => undefined);
           return;
         }
@@ -524,14 +555,13 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
   /**
    * 订阅 .git 目录：内部任一文件变化 → 防抖（合并一次 commit 的连续写入）→
-   * 向该工作区的全部会话推送 type:"git" 事件（前端刷新 git 状态，对齐 VS Code 的
-   * 「监听 .git + 防抖 + status」自动刷新机制）。
+   * 向该工作区的全部会话推送 type:"git" 事件（前端刷新 git 状态）。
    * 当前还不是 git 仓库时不订阅 —— 由前端「重新检测」按钮触发刷新感知 git init。
+   *
+   * 这只是 git 状态的两个触发源之一：工作树文件的增删改不会触碰 .git，由根 watcher
+   * 经 scheduleGitNotify(entry, true) 补齐（见 flushEvents）。
    */
-  private subscribeGitEntry(entry: WatchEntry): void {
-    const gitDir = this.resolveGitDir(entry.absolutePath);
-    if (!gitDir) return;
-
+  private subscribeGitEntry(entry: WatchEntry, gitDir: string): void {
     entry.gitSubscribing = true;
     parcelWatcher
       .subscribe(
@@ -543,15 +573,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
             );
             return;
           }
-          if (entry.gitDirty) return;
-          entry.gitDirty = true;
-          if (entry.gitTimer) clearTimeout(entry.gitTimer);
-          entry.gitTimer = setTimeout(() => {
-            entry.gitTimer = null;
-            entry.gitDirty = false;
-            this.notifyGitChangedForEntry(entry);
-          }, GIT_DEBOUNCE_MS);
-          entry.gitTimer.unref?.();
+          this.scheduleGitNotify(entry, false);
         },
         { ignore: GIT_IGNORE_GLOBS, ...PARCEL_WATCH_OPTIONS },
       )
@@ -573,10 +595,39 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       });
   }
 
-  /** 向 entry 关联的全部会话推送 type:"git"（含读命令噪声抑制） */
-  private notifyGitChangedForEntry(entry: WatchEntry): void {
-    // 本端读命令刚写过 index（stat 缓存刷新）→ 这是自己引发的噪声，忽略
-    if (Date.now() - gitActivity.lastReadAt < GIT_READ_SUPPRESS_MS) {
+  /**
+   * 标记「git 状态可能已变化」并防抖推送（两个触发源共用同一个定时器）。
+   * fromWorkTree=true 表示触发源是工作树文件变化：窗口取 GIT_WORKTREE_DEBOUNCE_MS 以合并
+   * 保存/批量写文件产生的连续事件，且推送时不受读命令抑制窗口约束（见 notifyGitChangedForEntry）。
+   */
+  private scheduleGitNotify(entry: WatchEntry, fromWorkTree: boolean): void {
+    if (fromWorkTree) entry.gitDirtyFromWorkTree = true;
+    else entry.gitDirty = true;
+
+    if (entry.gitTimer) clearTimeout(entry.gitTimer);
+    entry.gitTimer = setTimeout(() => {
+      entry.gitTimer = null;
+      const workTreeChanged = entry.gitDirtyFromWorkTree;
+      entry.gitDirty = false;
+      entry.gitDirtyFromWorkTree = false;
+      // 定时器挂起期间 git 订阅可能已被撤销（会话切走/关闭）→ 不再推送
+      if (!this.computeEntryScopes(entry).git) return;
+      this.notifyGitChangedForEntry(entry, workTreeChanged);
+    }, fromWorkTree ? GIT_WORKTREE_DEBOUNCE_MS : GIT_DEBOUNCE_MS);
+    entry.gitTimer.unref?.();
+  }
+
+  /** 向 entry 关联的全部会话推送 type:"git"（.git 来源含读命令噪声抑制） */
+  private notifyGitChangedForEntry(
+    entry: WatchEntry,
+    fromWorkTree: boolean,
+  ): void {
+    // 本端读命令刚写过 index（stat 缓存刷新）→ 这是自己引发的噪声，忽略。
+    // 工作树来源的事件不是这类噪声（由编辑动作直接产生），必须放行。
+    if (
+      !fromWorkTree &&
+      Date.now() - gitActivity.lastReadAt < GIT_READ_SUPPRESS_MS
+    ) {
       return;
     }
     const now = Date.now();
@@ -750,6 +801,11 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
     const events = Array.from(entry.pendingEvents.values());
     entry.pendingEvents.clear();
+
+    // 工作树文件事件同样意味着 git 状态可能已变化（编辑文件不触碰 .git，只有根 watcher 看得到）
+    if (this.computeEntryScopes(entry).git) {
+      this.scheduleGitNotify(entry, true);
+    }
 
     // 事件风暴平息后恢复
     if (entry.degraded) {

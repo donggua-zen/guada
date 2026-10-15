@@ -33,6 +33,11 @@ export const useGitStore = defineStore("git", () => {
    * 新会话的刷新（新会话的状态会一直空着/或被旧会话响应覆盖）。
    */
   let refreshingSid: string | null = null;
+  /**
+   * 在飞刷新期间又收到刷新请求 → 标记尾随重跑（见 refresh）。
+   * 不能直接丢弃：在飞响应可能早于本次请求对应的变更，丢弃会让「最后一次变更」永不生效。
+   */
+  let refreshAgain = false;
   const committing = ref(false);
   /** 当前进行中的提交/推送动作（供按钮显示进行中 ICON；null = 空闲） */
   const commitAction = ref<"commit" | "commitAndPush" | "push" | null>(null);
@@ -81,7 +86,8 @@ export const useGitStore = defineStore("git", () => {
   /**
    * 会话绑定（幂等）：切换会话 → 重置并刷新。概览与面板均可调用。
    * 同时订阅 git 事件范围（消费方订阅）：SSE 连接由 MainLayout 持有，
-   * 这里按会话订阅/退订 git scope —— 后端据此激活 .git watcher。
+   * 这里按会话订阅/退订 git scope —— 后端据此激活 .git watcher 与工作区根 watcher
+   * （工作树文件变化同样要刷新 git 状态）。
    */
   function bindSession(id: string | null): void {
     const oldId = sessionId.value;
@@ -95,16 +101,39 @@ export const useGitStore = defineStore("git", () => {
     selectedBranch.value = "";
     commitMessage.value = "";
     commitDialogVisible.value = false;
+    refreshAgain = false; // 作废上个会话的尾随重跑（新会话的 refresh 在下行重新发起）
     if (id) void refresh();
   }
 
-  async function refresh(): Promise<void> {
+  /**
+   * 刷新 git 状态。
+   * @param opts.withBranches 是否同时拉取分支列表（默认 true）。事件驱动的自动刷新传 false：
+   *   分支列表只有下拉框用、极少变化，而自动刷新会随工作树文件变化频繁触发，省掉这组 git 进程
+   *   （对齐 ZCode「只取需要的数据」的取舍）；branches 保持原值不闪空，selectedBranch 仍来自 status。
+   */
+  async function refresh(opts: { withBranches?: boolean } = {}): Promise<void> {
+    const sid = sessionId.value;
+    if (!sid) return;
+    if (refreshingSid === sid) {
+      // 同一会话已在刷新：标记尾随重跑而非丢弃（在飞响应可能早于本次请求对应的变更）
+      refreshAgain = true;
+      return;
+    }
+    try {
+      await doRefresh(sid, opts.withBranches !== false);
+    } finally {
+      if (refreshAgain) {
+        refreshAgain = false;
+        void refresh();
+      }
+    }
+  }
+
+  async function doRefresh(sid: string, withBranches: boolean): Promise<void> {
     // 会话可能在 await 期间被切走：把发起时的 sessionId 固定下来，后续请求与写回都用它，
     // 写回前再校验 store 仍停在同一会话。否则上一个会话（如 git 仓库）的 status 会覆盖
     // 新会话（如「公共目录」非仓库）—— 表现为侧边栏停留在上一个工作区的变更列表，
     // 且 isGitRepo 仍为 true → 面板继续对非仓库工作区请求 git/diff → 400「Not a git repository」。
-    const sid = sessionId.value;
-    if (!sid || refreshingSid === sid) return; // 同一会话已在刷新：去重
     refreshingSid = sid;
     refreshing.value = true;
     try {
@@ -112,12 +141,12 @@ export const useGitStore = defineStore("git", () => {
       if (sessionId.value !== sid) return; // 已切走：丢弃过期结果
       status.value = res;
       if (res.branch) selectedBranch.value = res.branch;
-      if (res.isGitRepo) {
+      if (!res.isGitRepo) {
+        branches.value = [];
+      } else if (withBranches) {
         const b = await apiService.getGitBranches(sid);
         if (sessionId.value !== sid) return; // 同上：branches 不得写到新会话
         branches.value = b.branches;
-      } else {
-        branches.value = [];
       }
     } catch {
       if (sessionId.value !== sid) return; // 切走后的失败不属于当前会话，不弹提示
@@ -132,7 +161,9 @@ export const useGitStore = defineStore("git", () => {
     }
   }
 
-  // ── 外部 git 操作自动刷新（后端 .git watcher 推送 type:"git"） ──
+  // ── git 变更自动刷新（后端 watcher 推送 type:"git"） ──
+  // 触发源有两个：外部 git 操作（.git 目录变化），以及工作树文件被增删改
+  // （编辑文件不触碰 .git，由后端根 watcher 补齐）。
   // 自身 commit/stage 等写操作也会触发事件，OWN_GIT_WRITE_SUPPRESS_MS 内抑制，
   // 避免刚操作完立刻被事件再刷一次。
   let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -150,7 +181,8 @@ export const useGitStore = defineStore("git", () => {
     if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
     gitRefreshTimer = setTimeout(() => {
       gitRefreshTimer = null;
-      void refresh();
+      // 事件驱动：不拉分支列表（省一组 git 进程，见 refresh 的 withBranches）
+      void refresh({ withBranches: false });
     }, 200);
   }
 
