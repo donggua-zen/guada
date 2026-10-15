@@ -15,6 +15,8 @@ import {
   SK_SYS_CHAT_UPLOAD_SUBDIR,
   DEFAULT_CHAT_UPLOAD_SUBDIR,
   SK_SYS_KB_STORAGE_ROOT,
+  SK_SYS_KEEP_AWAKE_MODE,
+  KEEP_AWAKE_MODES,
 } from '../../constants/settings.constants';
 
 @Injectable()
@@ -72,6 +74,16 @@ export class SettingsService {
       if (typeof incoming === "string" && incoming.trim() && !isValidChatUploadSubdir(incoming)) {
         throw new BadRequestException(
           "附件子目录名只能是单层目录名（不能包含路径分隔符、盘符或 ..）",
+        );
+      }
+    }
+    if (group === SG_SYSTEM && SK_SYS_KEEP_AWAKE_MODE in data) {
+      // 该值经 bridge 驱动 Electron 主进程的 powerSaveBlocker，非法值会让主进程静默回退，
+      // 用户以为改成了却仍按缺省跑 —— 与 chatUploadSubdir 同理，这里直接拒。
+      const incoming = data[SK_SYS_KEEP_AWAKE_MODE];
+      if (!KEEP_AWAKE_MODES.includes(incoming)) {
+        throw new BadRequestException(
+          `keepAwakeMode 只能是 ${KEEP_AWAKE_MODES.join(' / ')}`,
         );
       }
     }

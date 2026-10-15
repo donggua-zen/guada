@@ -173,6 +173,24 @@ describe("BridgeClient", () => {
 
       expect(() => client.emit("port_ready", { port: 3000 })).not.toThrow();
     });
+
+    it("isConnected 反映真实连接：连上为 true，宿主断开后回落 false", async () => {
+      delete process.env.GUADA_BRIDGE_PATH;
+      const disabled = new BridgeClient();
+      clients.push(disabled);
+      disabled.onModuleInit();
+      await disabled.ready;
+      expect(disabled.isConnected).toBe(false);
+
+      const client = await connectClient("is-connected");
+      expect(client.isConnected).toBe(true);
+
+      await bridge!.close();
+      bridge = undefined;
+      await waitUntil(() => client.isConnected === false);
+      // 周期性上报（keep-awake）据此跳过 emit，避免断线期间刷告警
+      expect(client.isConnected).toBe(false);
+    });
   });
 
   describe("request / response 配对", () => {

@@ -46,6 +46,12 @@ export default {
     llmIdleTimeout: '空闲超时',
     llmIdleTimeoutDesc: '流式传输中两个数据块之间的最大间隔时间。超过此时间无数据则判定为卡死并中止。默认 120 秒。',
     secondsUnit: '秒',
+    desktop: '桌面行为',
+    keepAwake: '保持电脑运行',
+    keepAwakeDesc: '阻止系统因空闲自动休眠，避免对话、定时任务执行到一半被中断。合盖或手动睡眠不受影响，仅桌面端生效。',
+    keepAwakeOff: '关闭',
+    keepAwakeBusy: '仅执行任务时',
+    keepAwakeAlways: '始终',
   },
 
   browser: {

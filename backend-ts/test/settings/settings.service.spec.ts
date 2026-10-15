@@ -24,6 +24,7 @@ import {
   SK_MOD_CHAT,
   SK_SYS_CHAT_UPLOAD_SUBDIR,
   SK_SYS_KB_STORAGE_ROOT,
+  SK_SYS_KEEP_AWAKE_MODE,
   SK_SYS_WORKSPACE_BASE_DIR,
 } from "../../src/constants/settings.constants";
 
@@ -170,6 +171,25 @@ describe("SettingsService", () => {
       await service.setChatUploadSubdir("  files  ");
 
       await expect(service.getChatUploadSubdir()).resolves.toBe("files");
+    });
+  });
+
+  describe("updateGroupSettings：防休眠模式校验", () => {
+    it.each(["off", "busy", "always"])("合法模式 %s → 落盘并可读回", async (mode) => {
+      await service.updateGroupSettings(SG_SYSTEM, { [SK_SYS_KEEP_AWAKE_MODE]: mode });
+
+      await expect(service.getGroupSettings(SG_SYSTEM)).resolves.toMatchObject({
+        [SK_SYS_KEEP_AWAKE_MODE]: mode,
+      });
+    });
+
+    it.each(["sometimes", "", 1, null, true])("非法模式 %p → 抛 BadRequestException 且不落盘", async (bad) => {
+      await expect(
+        service.updateGroupSettings(SG_SYSTEM, { [SK_SYS_KEEP_AWAKE_MODE]: bad }),
+      ).rejects.toThrow(BadRequestException);
+
+      const saved = await service.getGroupSettings(SG_SYSTEM);
+      expect(saved[SK_SYS_KEEP_AWAKE_MODE]).toBeUndefined();
     });
   });
 

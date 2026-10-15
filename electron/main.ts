@@ -11,6 +11,7 @@ import {
   screen,
   crashReporter,
   nativeImage,
+  powerSaveBlocker,
 } from "electron";
 import * as path from "path";
 import * as os from "os";
@@ -45,6 +46,56 @@ let trayStats = { running: 0, unread: 0 };
 /** 悬浮窗设置（默认隐藏，用户在设置页开启后生效） */
 let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
+
+/**
+ * 防休眠（keep-awake）：主进程持有 powerSaveBlocker("prevent-app-suspension")，
+ * 只阻止系统因空闲休眠（屏幕可照常关闭），防不了合盖/手动睡眠。
+ * 三个来源驱动：启动时直读 system.json、设置页 IPC 推送、后端经 bridge 上报的忙碌状态。
+ */
+type KeepAwakeMode = "off" | "busy" | "always";
+let keepAwakeMode: KeepAwakeMode = "busy"; // 与后端 KEEP_AWAKE_MODE_DEFAULT 一致
+let keepAwakeBusy = false; // 后端是否有对话/定时任务在执行（bridge keep_awake_state）
+let powerSaveBlockerId: number | null = null;
+
+function isKeepAwakeMode(value: unknown): value is KeepAwakeMode {
+  return value === "off" || value === "busy" || value === "always";
+}
+
+/** 幂等开关 blocker：模式与忙碌状态任一变化后调用 */
+function reconcileKeepAwakeBlocker(): void {
+  const shouldBlock =
+    keepAwakeMode === "always" || (keepAwakeMode === "busy" && keepAwakeBusy);
+  if (shouldBlock && powerSaveBlockerId === null) {
+    powerSaveBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+    console.log(
+      `[keep-awake] blocker started id=${powerSaveBlockerId} mode=${keepAwakeMode} busy=${keepAwakeBusy}`,
+    );
+  } else if (!shouldBlock && powerSaveBlockerId !== null) {
+    try {
+      powerSaveBlocker.stop(powerSaveBlockerId);
+    } catch {
+      // id 可能已失效，忽略
+    }
+    console.log(`[keep-awake] blocker stopped id=${powerSaveBlockerId}`);
+    powerSaveBlockerId = null;
+  }
+}
+
+/**
+ * 启动时直读设置文件。后端设置按「一组一文件」落盘，而 Electron 传给后端的
+ * SETTINGS_DIR 就是 detectDataPath() 的数据根目录，故路径为 <dataHome>/system.json。
+ * 走文件而不是等前端拉取，保证窗口（渲染进程）还没就绪时设置已经生效。
+ */
+function readKeepAwakeModeFromSettings(): KeepAwakeMode {
+  try {
+    const file = path.join(detectDataPath(), "system.json");
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (isKeepAwakeMode(raw?.keepAwakeMode)) return raw.keepAwakeMode;
+  } catch {
+    // 文件不存在/不可读/非法 JSON：按缺省走，不打断启动
+  }
+  return "busy";
+}
 
 // —— 后端健康看门狗状态（仅记录日志，不自动重启）——
 // 背景：dev 模式 Electron 只持有 cmd/npx 包装进程，真实 NestJS 进程是孙进程；
@@ -1952,6 +2003,14 @@ function setupIpcHandlers() {
     },
   );
 
+  // 防休眠模式：设置页「通用 → 桌面行为」变更时推送（落盘由后端负责，这里只管 blocker）
+  ipcMain.on("power:update-keep-awake-mode", (_, mode: unknown) => {
+    if (!isKeepAwakeMode(mode)) return;
+    if (mode === keepAwakeMode) return;
+    keepAwakeMode = mode;
+    reconcileKeepAwakeBlocker();
+  });
+
   // 浮窗就绪后主动发送缓存的设置
   ipcMain.on("float:ready", () => {
     applyTraySettings();
@@ -2697,6 +2756,10 @@ app.whenReady().then(async () => {
     log.info("Application starting...");
     setupIpcHandlers();
 
+    // 防休眠：启动即按设置持有 blocker，不等设置页打开或任何前端请求
+    keepAwakeMode = readKeepAwakeModeFromSettings();
+    reconcileKeepAwakeBlocker();
+
     // 立即创建窗口，不用等后端启动
     createWindow();
 
@@ -2714,6 +2777,20 @@ app.whenReady().then(async () => {
     const bridgeToken = generateBridgeToken();
     bridgeServer = new BridgeServer(bridgePipePath, bridgeToken);
     await bridgeServer.start();
+
+    // 防休眠：后端每 5s 幂等上报忙碌状态（有对话/定时任务在跑 = true）。
+    // 后端断开/热重载时复位为 false —— 没有后端在干活，就不该继续占着 blocker。
+    bridgeServer.onEvent("keep_awake_state", (data: any) => {
+      const busy = data?.busy === true;
+      if (busy === keepAwakeBusy) return;
+      keepAwakeBusy = busy;
+      reconcileKeepAwakeBlocker();
+    });
+    bridgeServer.onClientDisconnected(() => {
+      if (!keepAwakeBusy) return;
+      keepAwakeBusy = false;
+      reconcileKeepAwakeBlocker();
+    });
 
     // 将 Bridge 路径和 token 通过环境变量传递给后端
     process.env.GUADA_BRIDGE_PATH = bridgePipePath;

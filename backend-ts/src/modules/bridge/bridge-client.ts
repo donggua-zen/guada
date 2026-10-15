@@ -98,6 +98,14 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 当前是否已连上宿主。周期性上报（如 keep-awake）先查这个，
+   * 免得断线期间每个 tick 都刷一条 emit 失败告警。
+   */
+  get isConnected(): boolean {
+    return this.connected && this.authenticated;
+  }
+
+  /**
    * 连接 Electron BridgeServer
    */
   private connect(): void {

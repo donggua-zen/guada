@@ -51,6 +51,7 @@ export class BridgeServer {
   private defaultHandler: MethodHandler | null = null;
   private eventListeners = new Map<string, Set<EventCallback>>();
   private connections = new Set<net.Socket>();
+  private clientDisconnectedCallbacks = new Set<() => void>();
   private clientAuthenticatedAt = 0;
 
   constructor(pipePath: string, token: string) {
@@ -166,6 +167,14 @@ export class BridgeServer {
   }
 
   /**
+   * 监听「已鉴权后端断开」：后端进程死亡或热重载时触发。
+   * 消费方（如 keep-awake）据此清理依赖后端心跳的状态，避免残留。
+   */
+  onClientDisconnected(callback: () => void): void {
+    this.clientDisconnectedCallbacks.add(callback);
+  }
+
+  /**
    * 处理新连接
    */
   private handleConnection(socket: net.Socket): void {
@@ -210,6 +219,13 @@ export class BridgeServer {
           : 0;
         log.info(`BridgeServer: client disconnected (连接时长 ${connectedSec}s)`);
         this.clientAuthenticatedAt = 0;
+        for (const callback of this.clientDisconnectedCallbacks) {
+          try {
+            callback();
+          } catch (err) {
+            log.error("BridgeServer: disconnect callback failed:", err);
+          }
+        }
       }
     });
 

@@ -228,6 +228,8 @@ export interface SystemGroupSettings {
     llmRequestTimeoutMs?: number
     /** 后端以 ms 存储 */
     llmIdleTimeoutMs?: number
+    /** 防休眠模式：off 不干预 / busy 仅执行任务时 / always 始终（仅桌面端生效） */
+    keepAwakeMode?: 'off' | 'busy' | 'always'
 }
 
 /** ocr 分组：OCR 提供方与密钥 */

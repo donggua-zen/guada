@@ -46,6 +46,12 @@
     llmIdleTimeout: 'Idle Timeout',
     llmIdleTimeoutDesc: 'Maximum interval between stream chunks with no data. If exceeded, the stream is considered stuck and aborted. Default 120 seconds.',
     secondsUnit: 's',
+    desktop: 'Desktop Behavior',
+    keepAwake: 'Keep computer running',
+    keepAwakeDesc: 'Prevents the system from sleeping while idle so conversations and scheduled tasks are not interrupted halfway. Closing the lid or manual sleep is not affected. Desktop app only.',
+    keepAwakeOff: 'Off',
+    keepAwakeBusy: 'While tasks run',
+    keepAwakeAlways: 'Always',
   },
 
   browser: {
