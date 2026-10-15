@@ -183,7 +183,8 @@ export class TerminalService implements OnModuleDestroy {
     return handle;
   }
 
-  private loadNodePty(): typeof import("node-pty") {
+  /** 受保护而非私有：供测试子类替换 PTY 工厂，避免单测触发原生模块编译产物 */
+  protected loadNodePty(): typeof import("node-pty") {
     try {
       return require("node-pty") as typeof import("node-pty");
     } catch (e: any) {

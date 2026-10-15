@@ -14,7 +14,7 @@ let verified = false;
  * 解到 app.asar.unpacked —— node-pty 自己也是这样改写的（lib/unixTerminal.js），
  * 不改写会对 asar 内的只读路径 chmod，必然 ENOTDIR。
  */
-function toUnpackedPath(p: string): string {
+export function toUnpackedPath(p: string): string {
   return p
     .replace(/app\.asar(?!\.unpacked)/, "app.asar.unpacked")
     .replace(/node_modules\.asar(?!\.unpacked)/, "node_modules.asar.unpacked");
