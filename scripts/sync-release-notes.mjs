@@ -68,7 +68,20 @@ const ghHeaders = {
 };
 const gcHeaders = { Authorization: `Bearer ${gcToken}`, 'Content-Type': 'application/json' };
 
-for (const version of versions) {
+// Gitee 的「最新版」标记 = 最近创建的那个发行版，列表也按创建时间倒序 —— 所以补历史版本时
+// **必须从旧到新**创建，否则最后建的那个旧版本会被顶成「最新版」（1.0.2/1.0.3/1.0.4 踩过）。
+// 这里统一按版本号升序处理，与传参顺序无关。
+const ordered = [...versions].sort((a, b) => {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  return 0;
+});
+if (ordered.join(',') !== versions.join(',')) {
+  console.log(`（按版本升序处理：${ordered.join(' → ')} —— Gitee 最新版看创建时间）`);
+}
+
+for (const version of ordered) {
   const tag = `v${version}`;
   const notes = notesFor(version);
   console.log(`\n===== ${tag} =====`);
