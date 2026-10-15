@@ -178,6 +178,10 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
    * 自动重连，指数退避
    */
   private scheduleReconnect(): void {
+    // 已进入销毁流程则不再排重连：onModuleDestroy 会 destroy socket，
+    // 而 destroy 触发的 close 事件同样会走到这里——不拦的话组件永远退不掉，
+    // 反而违背 onModuleDestroy「防止 app.close() 期间反复创建新 socket」的本意。
+    if (this.shuttingDown) return;
     if (this.reconnectTimer) return;
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
