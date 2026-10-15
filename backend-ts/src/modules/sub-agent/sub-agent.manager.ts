@@ -367,7 +367,8 @@ export class SubAgentManager implements OnModuleInit {
    * - 不走 states Map / completer / 信箱：workflow 引擎自己就是等待者，
    *   结果直接经返回的 Promise 交付，绝不投递 <system_reminder> 唤醒父循环
    * - 跳过每父会话 10 个上限（并发由 workflow 引擎的槽位控制）
-   * - lifecycle 固定 persist（子会话保留，供用户在概览面板工作流运行区回看执行过程）
+   * - lifecycle 固定 one_shot：本轮结束即冻结子会话以释放每父会话子代理名额；
+   *   冻结只标记 closedAt、不删除，执行过程仍可回放
    * - settings.workflow 记录来源（runId/label/phase），照常广播 subagent.created
    */
   async spawnForWorkflow(
@@ -390,7 +391,7 @@ export class SubAgentManager implements OnModuleInit {
       // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
       sandboxMode: parentContext.getSandboxMode(),
       attachments: parentContext.getSettings("attachments") ?? {},
-      lifecycle: "persist",
+      lifecycle: "one_shot",
       workflow: {
         runId: params.workflow.runId,
         ...(params.workflow.label ? { label: params.workflow.label } : {}),
@@ -449,12 +450,24 @@ export class SubAgentManager implements OnModuleInit {
 
     // 直接等待流执行结果：不走 settle/信箱（workflow 引擎是唯一等待者）；
     // abortSignal 中止时 runSubAgentStream 内部联动 cancelStream 并以 aborted 结算
-    return this.runSubAgentStream(
+    const result = await this.runSubAgentStream(
       subSession.id,
       params.task,
       parentSessionId,
       abortSignal,
     );
+
+    // one_shot：本轮结束即冻结子会话，释放每父会话子代理名额（冻结不删除，仍可回放）。
+    // 本路径绕过 executeSubAgentStream 与 settle，是唯一没有自动清理调用点的分支，
+    // 必须在此显式冻结，否则子会话永不关闭、持续占用 spawn() 的 10 个名额。
+    await this.maybeAutoDispose(
+      subSession.id,
+      parentSessionId,
+      "one_shot",
+      result,
+    );
+
+    return result;
   }
 
   /**
@@ -628,9 +641,9 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
     lifecycle: "persist" | "one_shot",
     result?: SubAgentResult,
-  ): void {
-    if (lifecycle !== "one_shot") return;
-    this.disposeSession(subSessionId, parentSessionId, {
+  ): Promise<void> {
+    if (lifecycle !== "one_shot") return Promise.resolve();
+    return this.disposeSession(subSessionId, parentSessionId, {
       stopReason: result
         ? result.stopReason ??
           (result.status === "error" ? "error" : "completed")

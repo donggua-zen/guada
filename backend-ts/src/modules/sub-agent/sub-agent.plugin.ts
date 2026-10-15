@@ -125,7 +125,7 @@ The sub-agent has its own independent conversation context and tool capabilities
           .enum(["persist", "one_shot"])
           .optional()
           .describe(
-            'Sub-agent lifecycle: one_shot (default) = the sub-session is automatically closed and deleted once its result is delivered, no close call needed; persist = keep the session for further interaction (send_message), must be closed manually with subagent_manager close',
+            'Sub-agent lifecycle: one_shot (default) = the sub-session is automatically closed (frozen, kept for replay) once its result is delivered, no close call needed; persist = keep the session for further interaction (send_message), must be closed manually with subagent_manager close',
           ),
       }),
       execute: async (args, ctx, abortSignal) => {
@@ -264,7 +264,7 @@ The sub-agent has its own independent conversation context and tool capabilities
                 ctx?.session.workspacePath,
               );
               return {
-                content: "Sub-agent closed and deleted successfully.",
+                content: "Sub-agent closed (frozen, kept for replay).",
                 meta: subAgentLinkMeta(sessionId),
               };
             } catch (e: any) {
@@ -385,7 +385,7 @@ The sub-agent has its own independent conversation context and tool capabilities
           "",
           "### 5. Critical Operational Guidelines (Cautions)",
           "   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.",
-          "   - Resource release: Sub-agents are one_shot by default: the sub-session is automatically closed and deleted once its result is delivered to you, so no close call is needed. Only if you explicitly spawned with lifecycle \"persist\" and the task has finished with no further interaction required, you must immediately call close to release session resources in a timely manner.",
+          "   - Resource release: Sub-agents are one_shot by default: the sub-session is automatically closed (frozen, kept for replay) once its result is delivered to you, so no close call is needed. Only if you explicitly spawned with lifecycle \"persist\" and the task has finished with no further interaction required, you must immediately call close to release session resources in a timely manner.",
           "   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.",
         ];
 
