@@ -160,6 +160,11 @@ export interface ToolDisplay {
   aggregate?: { executing: string; completed: string };
   /** 从 args 中提取摘要的字段名 */
   argsKey?: string;
+  /**
+   * `argsKey` 指向**数组**时，项数后缀（如"个问题"）。
+   * 前端渲染为「3 个问题」；随 display 一起走 NLS（%key%）。
+   */
+  argsCountUnit?: string;
   /** 前端图标标识 */
   icon?: string;
   /** 定制渲染器声明（前端按 kind 选择渲染组件） */

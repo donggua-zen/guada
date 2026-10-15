@@ -58,6 +58,11 @@ export interface ToolDisplayConfig {
   /** 聚合展示文案，{n} 为数量占位符 */
   aggregate?: { executing: string; completed: string };
   argsKey?: string;
+  /**
+   * `argsKey` 指向**数组**时，项数后缀（如"个问题"）。
+   * 由插件经 NLS 下发（%key%），前端渲染为「3 个问题」。
+   */
+  argsCountUnit?: string;
   /** 图标标识（TOOL_ICON_MAP 的 key） */
   icon?: string;
   /** 定制渲染器声明（后端插件 display.renderer 下发） */
@@ -167,8 +172,13 @@ export function getToolIcon(tool: ToolCall): Component {
 }
 
 export function formatArgSummary(value: unknown): string {
-  if (typeof value !== "string") return String(value);
-  return value.length > 60 ? value.substring(0, 260) : value;
+  if (typeof value === "string") {
+    return value.length > 60 ? value.substring(0, 260) : value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  // 数组/对象没有"一行摘要"的通用表示 → 返回空串（调用方按 falsy 不渲染）。
+  // 此前是 String(value)，数组会打出 "[object Object],[object Object]"。
+  return "";
 }
 
 export function getToolArgs(
@@ -204,8 +214,19 @@ export function getArgsText(tool: ToolCall): string | undefined {
   const config = getToolConfig(tool);
   const isKnownTool = resolveToolName(tool) in pluginToolDisplays.value;
 
-  if (config.argsKey && parsedParams[config.argsKey]) {
-    return formatArgSummary(parsedParams[config.argsKey]);
+  if (config.argsKey) {
+    const value = parsedParams[config.argsKey];
+    // 数组型参数（如 ask_user 的 questions）：渲染「项数 + 单位」，单位由插件 NLS 下发
+    //（argsCountUnit）。用于"已询问用户 3 个问题"这类只报数量的行。
+    if (Array.isArray(value)) {
+      const unit = config.argsCountUnit ? ` ${config.argsCountUnit}` : "";
+      return `${value.length}${unit}`;
+    }
+    // argsKey 约定指向**标量**字段（file_path / pattern / action / q / plan …）；
+    // 对象等非标量没有一行摘要的通用表示 → 不显示，绝不 String(value) 打出 [object Object]
+    if (typeof value === "string" || typeof value === "number") {
+      return formatArgSummary(value);
+    }
   }
 
   if (isKnownTool) return undefined;
