@@ -376,13 +376,17 @@ const BROWSE_MISSING_MARK = "GUADA_MISSING";
 /**
  * 构造 browse 命令:一次 SSH exec 同时得到「解析后的路径 / 是否存在 / 目录项」。
  * 路径用单引号包裹(内嵌单引号转义),避免远端 shell 展开路径里的 $ 与反引号。
+ * 未指定路径时按 $HOME → 登录目录 → / 回退:部分 NAS 账号的 $HOME 指向不存在的目录,
+ * 直接拿它当起点只会得到「目录不存在」而无法选择工作目录。
  * 注意:不要用 --time-style(GNU 专属),macOS BSD ls 不支持会导致命令失败;
  * BSD/GNU 的 -l 输出中 size 始终是 $5、文件名始终是 $NF,兼容两者。
  */
 export function buildBrowseCommand(dirPath: string): string {
   const quoted = `'${(dirPath || "").replace(/'/g, `'\\''`)}'`;
   return (
-    `d=${quoted}; [ -z "$d" ] && d="$HOME"; echo "${BROWSE_PATH_PREFIX}$d"; ` +
+    `d=${quoted}; ` +
+    `if [ -z "$d" ]; then d="$HOME"; [ -d "$d" ] || d="$PWD"; [ -d "$d" ] || d=/; fi; ` +
+    `echo "${BROWSE_PATH_PREFIX}$d"; ` +
     `if [ -d "$d" ]; then echo ${BROWSE_EXISTS_MARK}; ` +
     `ls -la "$d" 2>/dev/null | awk 'NR>1 {print $NF "/" ($1 ~ /^d/ ? "1" : "0") "/" $5}'; ` +
     `else echo ${BROWSE_MISSING_MARK}; fi`
