@@ -16,6 +16,7 @@ import { Logger } from "@nestjs/common";
 import { RpcClient } from "./rpc";
 import { StreamRpcTransport } from "./rpc-stream-transport";
 import { ensureLocalBinary, fetchLatestVersion } from "./agent-deploy";
+import { MIN_STDIO_AGENT_VERSION, versionAtLeast } from "./agent-version";
 
 const logger = new Logger("DockerAgent");
 
@@ -28,29 +29,11 @@ const DOCKER_CMD_TIMEOUT_MS = 30_000;
 const DOCKER_TRANSFER_TIMEOUT_MS = 120_000;
 
 /**
- * 容器工作区所需的最低 agent 版本：0.6.0 起提供 `--stdio` 传输。
- * 低于该版本的 agent 无法在容器内工作（实测：旧版 agent 收到 --stdio 会打印
- * flag usage 并退出，握手静默失败）——因此 Docker 链路：
- * 1) 复用容器内既有 agent 前先校验版本满足下限；
- * 2) latest 接口返回的版本低于下限时忽略之（避免把"线上未更新的旧版"降级注入），
- *    退回本地缓存二进制；
- * 3) 注入后仍不满足下限则明确报错，而不是留下一个必然失败的连接。
+ * 容器工作区所需的最低 agent 版本（= stdio 传输门槛 0.6.0，与 SSH stdio 共用同一常量）。
+ * 保留容器侧别名供既有引用；版本判定实现见 agent-version.ts。
  */
-export const MIN_AGENT_VERSION_FOR_CONTAINER = "0.6.0";
-
-/** 比较点分版本号：a >= b 返回 true（仅数字段，位数不同按 0 补齐） */
-export function versionAtLeast(a: string, b: string): boolean {
-  const pa = String(a || "").trim().split(".").map((s) => parseInt(s, 10) || 0);
-  const pb = String(b || "").trim().split(".").map((s) => parseInt(s, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const va = pa[i] ?? 0;
-    const vb = pb[i] ?? 0;
-    if (va > vb) return true;
-    if (va < vb) return false;
-  }
-  return true;
-}
+export const MIN_AGENT_VERSION_FOR_CONTAINER = MIN_STDIO_AGENT_VERSION;
+export { versionAtLeast } from "./agent-version";
 
 export interface DockerConnectionConfig {
   /** 连接类型判别字段（与 SSH 配置共同构成 RemoteConnectionConfig 联合类型） */

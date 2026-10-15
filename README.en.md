@@ -126,6 +126,7 @@ Embedded Linux development is where this design shines: a Windows host for editi
 - **One session, many machines**: local plus multiple remotes mounted together — cross-machine diffs, patch porting, and log-vs-source analysis all happen in one conversation.
 - **Model keys never leave your machine**: the remote side holds only a Bearer token; scheduled tasks and sub-agents inherit the session's remote bindings, so unattended runs work as well.
 - **Permissions enforced on the server side**: `readonly / workspace / unrestricted`, defaulting to "read-write inside the working directory, read-only outside", with symlink-escape protection before any write.
+- **No special sshd configuration**: with agent ≥ 0.6.0 the client speaks stdio over an SSH exec channel, so port forwarding does not need to be enabled (stock Alpine openssh ships `AllowTcpForwarding no`); older agents fall back to the port-forward transport automatically — no forced upgrade.
 - **Zero footprint on the remote**: the agent exits as soon as the connection closes — no resident daemon; real-world NAS quirks (missing `$HOME`, chrooted SFTP) already have built-in fallbacks (automatic install-dir fallback, byte-verified upload over the exec channel).
 
 > Design docs: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker container workspace](docs/docker容器工作区方案.md)

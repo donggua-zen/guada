@@ -21,6 +21,42 @@ const STDERR_TAIL_LIMIT = 8 * 1024;
 /** 关闭时等待子进程自行退出的上限（ms），超时则 kill 本地 docker 客户端 */
 const CLOSE_GRACE_MS = 3000;
 
+/**
+ * NDJSON 行分帧器（stdio 类传输共用：容器 docker exec 子进程 / SSH exec channel）。
+ *
+ * 一行一条消息；跨 chunk 的行在内部缓冲拼接；不设行长上限（readFile/writeFile
+ * 的请求与响应可达数 MB）。调用方只需把每个数据块喂进来。
+ */
+export function createNdjsonSplitter(onLine: (line: string) => void): (chunk: Buffer | string) => void {
+  let buf = "";
+  return (chunk: Buffer | string) => {
+    buf += chunk.toString();
+    let idx: number;
+    while ((idx = buf.indexOf("\n")) >= 0) {
+      // 行尾 \r 容错（正常情况下 stdio 两侧都是纯 \n）
+      const line = buf.slice(0, idx).replace(/\r$/, "");
+      buf = buf.slice(idx + 1);
+      if (line) onLine(line);
+    }
+  };
+}
+
+/** stderr 尾部窗口（容器子进程与 SSH channel 共用） */
+export class StderrTail {
+  private tail = "";
+
+  append(chunk: Buffer | string): void {
+    this.tail += chunk.toString();
+    if (this.tail.length > STDERR_TAIL_LIMIT) {
+      this.tail = this.tail.slice(-STDERR_TAIL_LIMIT);
+    }
+  }
+
+  get(): string {
+    return this.tail.trim();
+  }
+}
+
 export interface StreamRpcTransportOptions {
   /** 子进程退出回调（code / signal），用于日志与诊断 */
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
@@ -34,8 +70,9 @@ export class StreamRpcTransport implements RpcTransport {
   private readonly messageHandlers: Array<(raw: string) => void> = [];
   private readonly closeHandlers: Array<() => void> = [];
   /** 独占的 stderr 尾部缓冲（诊断用；标准 stderr 不落日志，避免刷屏） */
-  private stderrTail = "";
-  private buf = "";
+  private readonly stderrTail = new StderrTail();
+  /** NDJSON 分帧（跨 chunk 拼接；与 SSH channel 传输共用同一实现） */
+  private readonly feed: (chunk: Buffer | string) => void;
   private closed = false;
   private closeNotified = false;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -46,9 +83,10 @@ export class StreamRpcTransport implements RpcTransport {
     opts?: StreamRpcTransportOptions,
   ) {
     this.label = opts?.label || "stdio pipe";
+    this.feed = createNdjsonSplitter((line) => this.dispatchLine(line));
 
-    this.child.stdout?.on("data", (chunk: Buffer) => this.onData(chunk));
-    this.child.stderr?.on("data", (chunk: Buffer) => this.appendStderr(chunk));
+    this.child.stdout?.on("data", (chunk: Buffer) => this.feed(chunk));
+    this.child.stderr?.on("data", (chunk: Buffer) => this.stderrTail.append(chunk));
     this.child.on("error", (err) => {
       // spawn 失败（命令不存在等）：记录后按传输关闭处理
       this.logger.warn(`transport ${this.describeCommand} spawn error: ${err.message}`);
@@ -120,31 +158,16 @@ export class StreamRpcTransport implements RpcTransport {
 
   /** stderr 尾部（错误诊断：docker daemon 报错、agent 启动失败原因等） */
   getStderrTail(): string {
-    return this.stderrTail.trim();
+    return this.stderrTail.get();
   }
 
-  /** 转发到子进程 stderr 的诊断信息（供错误文案拼接） */
-  private appendStderr(chunk: Buffer): void {
-    this.stderrTail += chunk.toString("utf-8");
-    if (this.stderrTail.length > STDERR_TAIL_LIMIT) {
-      this.stderrTail = this.stderrTail.slice(-STDERR_TAIL_LIMIT);
-    }
-  }
-
-  /** stdout 分帧：NDJSON，一行一条消息；跨 chunk 的行在 buf 中拼接 */
-  private onData(chunk: Buffer): void {
-    this.buf += chunk.toString("utf-8");
-    let idx: number;
-    while ((idx = this.buf.indexOf("\n")) >= 0) {
-      const line = this.buf.slice(0, idx).replace(/\r$/, "");
-      this.buf = this.buf.slice(idx + 1);
-      if (!line) continue;
-      for (const h of this.messageHandlers) {
-        try {
-          h(line);
-        } catch (err: any) {
-          this.logger.warn(`message handler failed: ${err?.message || err}`);
-        }
+  /** 单行消息分发给已注册的处理器（分帧器回调） */
+  private dispatchLine(line: string): void {
+    for (const h of this.messageHandlers) {
+      try {
+        h(line);
+      } catch (err: any) {
+        this.logger.warn(`message handler failed: ${err?.message || err}`);
       }
     }
   }
@@ -158,9 +181,10 @@ export class StreamRpcTransport implements RpcTransport {
     if (this.closeNotified) return;
     this.closeNotified = true;
     if (code !== 0 && code !== null) {
+      const tail = this.stderrTail.get();
       this.logger.warn(
         `transport ${this.describeCommand} exited with code=${code} signal=${signal || "-"}` +
-          (this.stderrTail ? ` stderr: ${this.stderrTail.trim().slice(-500)}` : ""),
+          (tail ? ` stderr: ${tail.slice(-500)}` : ""),
       );
     }
     for (const h of this.closeHandlers) {

@@ -7,12 +7,11 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import WebSocket from "ws";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as iconv from "iconv-lite";
-import { deployAgent } from "./agent-deploy";
 import { connectDockerAgent } from "./docker-agent-connect";
-import { RpcClient, WsRpcTransport, isUnknownMethodError, isTransportError } from "./rpc";
+import { connectSshAgent } from "./ssh-agent-connect";
+import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
 import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
@@ -267,7 +266,11 @@ export class RemoteAgentManager implements OnModuleDestroy {
     };
   }
 
-  /** SSH 链路（既有）：部署 Go agent → SSH 端口转发 → WebSocket 连接 */
+  /**
+   * SSH 链路：供给（按需部署）后按远端 agent 版本选择传输——
+   * agent ≥ 0.6.0 走 ssh exec + stdio（无需端口转发），旧版回退端口转发 + WebSocket。
+   * 见 ssh-agent-connect.ts。
+   */
   private async connectSsh(conn: RemoteConnection): Promise<{
     rpc: RpcClient;
     isOpen: () => boolean;
@@ -291,7 +294,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     const downloadUrl = await this.service.getAgentDownloadUrl();
     const latestVersionUrl = await this.service.getAgentLatestVersionUrl();
 
-    const connInfo = await deployAgent(
+    const result = await connectSshAgent(
       {
         scheme: "ssh",
         host: config.host,
@@ -301,44 +304,13 @@ export class RemoteAgentManager implements OnModuleDestroy {
         path: config.path || "/",
         query: query ? Object.fromEntries(params) : undefined,
       },
-      downloadUrl,
-      latestVersionUrl,
+      { downloadUrl, latestVersionUrl },
     );
 
-    // 使用 agent 访问令牌进行 WebSocket 握手鉴权(dev 模式 token 为空则不携带)
-    const ws = new WebSocket(connInfo.wsUrl, {
-      headers: connInfo.token
-        ? { Authorization: `Bearer ${connInfo.token}` }
-        : undefined,
-    });
-    await new Promise<void>((resolve, reject) => {
-      ws.once("open", () => resolve());
-      ws.once("error", (err) => reject(err));
-    });
-
-    const rpc = new RpcClient(new WsRpcTransport(ws));
-    rpc.setConnected();
-
-    // Verify connection(版本一致性由部署链路保证:不一致会自动重新下载推送)
-    try {
-      const result = await rpc.call<{ pong: string }>("ping");
-      if (!result.pong) throw new Error("Agent ping failed");
-    } catch (err) {
-      ws.close();
-      throw new Error(`Agent handshake failed: ${err}`);
-    }
-
     return {
-      rpc,
-      isOpen: () => ws.readyState === WebSocket.OPEN,
-      dispose: () => {
-        try {
-          ws.close();
-        } catch {}
-        try {
-          connInfo.sshClient?.end();
-        } catch {}
-      },
+      rpc: result.rpc,
+      isOpen: result.isOpen,
+      dispose: result.dispose,
     };
   }
 }
