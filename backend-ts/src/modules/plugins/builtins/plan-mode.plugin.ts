@@ -137,8 +137,10 @@ Only use this tool when the task requires planning the implementation steps of a
 
 ## Before Using This Tool
 Ensure your plan is complete and unambiguous:
-- If you have unresolved questions about requirements or approach, ask the user before finalizing your plan.
+- If you have unresolved questions about requirements or approach, use the ask_user tool before finalizing your plan.
 - Once your plan is finalized, use THIS tool to request approval.
+
+**Important:** Do NOT use ask_user to ask "Is this plan okay?" or "Should I proceed?" — that is exactly what THIS tool does. ExitPlanMode inherently requests user approval of your plan. ask_user is only for clarifying requirements or choosing between approaches.
 
 ## What Happens Next
 - Approved → plan mode ends, the plan is saved to a file, and you may start implementing.

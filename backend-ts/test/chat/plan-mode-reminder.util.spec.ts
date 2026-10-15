@@ -150,4 +150,62 @@ describe("buildPlanModeTurnEntries", () => {
     );
     expect(entries).toHaveLength(0);
   });
+
+  // ── 提问工具（ask_user）面：在册才引导，且"批准"必须留给 ExitPlanMode ──
+
+  it("ask_user 在册：Phase 1/3/4 都改成用 ask_user 提问，不收尾于纯文本问题", () => {
+    const entries = buildPlanModeTurnEntries(
+      createContext({
+        planEnabled: true,
+        tools: ["ExitPlanMode", "subagent_spawn", "ask_user"],
+      }),
+      1,
+    );
+    const text = textOf(entries[0] as any);
+    // Phase 1：有疑问用工具问，而不是靠猜
+    expect(text).toContain("ask with the ask_user tool instead of guessing");
+    // Phase 3：替换掉"结束回合用文本提问"
+    expect(text).toContain(
+      "Use the ask_user tool to clarify any remaining questions with the user before finalizing your plan.",
+    );
+    expect(text).not.toContain("end your turn with your question");
+    // Phase 4：只允许这两种收尾
+    expect(text).toContain(
+      "your turn must only end with either the ask_user tool (to clarify requirements) or ExitPlanMode (to request plan approval)",
+    );
+    // 职责切分：批准只能走 ExitPlanMode，不许用 ask_user 问
+    expect(text).toContain("Ask for plan approval ONLY via ExitPlanMode");
+    expect(text).not.toContain("Do NOT ask for plan approval in plain text. ExitPlanMode is what requests approval.");
+  });
+
+  it("ask_user 不在册（插件关 / 智能体 deny）：退回文本提问，且全篇不提 ask_user", () => {
+    const entries = buildPlanModeTurnEntries(
+      createContext({ planEnabled: true, tools: ["ExitPlanMode", "subagent_spawn"] }),
+      1,
+    );
+    const text = textOf(entries[0] as any);
+    expect(text).toContain("end your turn with your question");
+    expect(text).toContain("Do NOT ask for plan approval in plain text");
+    // 引导指向不存在的工具 = 让模型空转
+    expect(text).not.toContain("ask_user");
+  });
+
+  it("稀疏提醒：ask_user 在册时收尾改为二选一，不在册时仍是 ExitPlanMode 单出口", () => {
+    const withAsk = textOf(
+      buildPlanModeTurnEntries(
+        createContext({ planEnabled: true, tools: ["ExitPlanMode", "ask_user"] }),
+        2,
+      )[0] as any,
+    );
+    expect(withAsk).toContain("the ask_user tool (for clarifications) or ExitPlanMode (for plan approval)");
+
+    const withoutAsk = textOf(
+      buildPlanModeTurnEntries(
+        createContext({ planEnabled: true, tools: ["ExitPlanMode"] }),
+        2,
+      )[0] as any,
+    );
+    expect(withoutAsk).toContain("End your turn with ExitPlanMode when the plan is ready.");
+    expect(withoutAsk).not.toContain("ask_user");
+  });
 });
