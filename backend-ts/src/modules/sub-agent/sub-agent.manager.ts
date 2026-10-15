@@ -44,7 +44,7 @@ const SUB_AGENT_DEFAULT_PROMPT = `You are a Sub Agent, delegated by the main Age
  * merge-extensible：新增原因不破坏既有消费者；
  * 未知/缺失原因一律按 error 处理（DSH 原则：未知原因不误报成功）。
  */
-type SubAgentStopReason =
+export type SubAgentStopReason =
   | "completed"
   | "aborted"
   | "error"
@@ -58,7 +58,7 @@ type SubAgentStopReason =
  * error 场景由调用方显式置位（event.error / onError / abort），不走本映射；
  * 无显式原因（undefined/空）视为正常完成。
  */
-function mapFinishReason(reason?: string): SubAgentStopReason {
+export function mapFinishReason(reason?: string): SubAgentStopReason {
   if (!reason) return "completed";
   switch (reason) {
     case "stop":

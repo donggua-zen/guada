@@ -189,7 +189,7 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
 }
 
 /** 剥离 transcript 回放中的 DA（Device Attributes）握手序列 */
-function stripDaHandshake(text: string): string {
+export function stripDaHandshake(text: string): string {
   return text
     // DA 查询 ESC[c / ESC[0c —— 回放会导致 xterm 二次应答
     .replace(/\x1b\[0?c/g, "")
