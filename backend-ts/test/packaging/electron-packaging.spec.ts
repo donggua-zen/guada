@@ -119,3 +119,62 @@ describe("Electron 打包契约：后端依赖打进 app.asar", () => {
     }
   });
 });
+
+/**
+ * 随包沙盒二进制的契约。
+ *
+ * 运行时按 `sandbox-macos-${process.arch}` 查找（`process-manager.service.ts` 的 `resolveSandboxBin`），
+ * 所以「打包了哪些架构」必须与「查找用的名字」严格对齐：名字对不上，那个架构的安装包就静默没有沙盒
+ * （fail-closed，用户只看到 shell 工具拒绝执行）。macOS 曾只随包 arm64，Intel 用户自行编译的包一直拿不到
+ * 沙盒；补上 x64 后这里钉住两件事——两个架构都在 `extraResources` 里，且**各自真的是那个架构**
+ * （复制错文件是最容易犯的错，只看文件名看不出来）。
+ *
+ * 同时钉住「裸名 `sandbox` 是 Linux ELF」这一事实：darwin 不得回落到它。`fs.access(X_OK)` 对 ELF 是通过的，
+ * 回落到它等于把 ELF 交给 `spawn`，失败推迟到 exec，把「本架构没有二进制」伪装成一条难懂的 spawn 报错。
+ */
+describe("Electron 打包契约：随包沙盒二进制", () => {
+  // Mach-O 64-bit（0xFEEDFACF 以小端存储）+ cputype
+  const MACHO_MAGIC = 0xfeedfacf;
+  const CPU_TYPE_ARM64 = 0x0100000c;
+  const CPU_TYPE_X86_64 = 0x01000007;
+
+  const MAC_BINARIES = [
+    { file: "sandbox/sandbox-macos-arm64", cpuType: CPU_TYPE_ARM64 },
+    { file: "sandbox/sandbox-macos-x64", cpuType: CPU_TYPE_X86_64 },
+  ];
+
+  it("两个 macOS 架构的二进制都在 mac.extraResources 里，且 to === from", () => {
+    const macResources: ResourceEntry[] = pkg.build?.mac?.extraResources ?? [];
+    for (const { file } of MAC_BINARIES) {
+      const entry = macResources.find((e) => e.from === file);
+      expect(entry).toBeDefined();
+      expect(entry?.to).toBe(file);
+    }
+  });
+
+  it("二进制在仓库里存在，且各自是对应架构的 Mach-O（防止同一份被复制成两个名字）", () => {
+    for (const { file, cpuType } of MAC_BINARIES) {
+      const buf = fs.readFileSync(path.join(repoRoot, file));
+      expect([file, buf.readUInt32LE(0)]).toEqual([file, MACHO_MAGIC]);
+      expect([file, buf.readUInt32LE(4)]).toEqual([file, cpuType]);
+    }
+  });
+
+  it("裸名 sandbox 是 Linux ELF：darwin 的候选列表里没有它", () => {
+    const elf = fs.readFileSync(path.join(repoRoot, "sandbox", "sandbox"));
+    expect(elf.readUInt32LE(0)).toBe(0x464c457f); // \x7fELF
+
+    const resolver = fs.readFileSync(
+      path.join(repoRoot, "backend-ts", "src", "modules", "shell", "process-manager.service.ts"),
+      "utf-8",
+    );
+    const block = resolver.slice(
+      resolver.indexOf("const binNames"),
+      resolver.indexOf("const candidates"),
+    );
+    expect(block).toContain("`sandbox-macos-${process.arch}`");
+    expect(block).toContain('["sandbox"]'); // Linux 分支保留裸名
+    // darwin 分支若加了裸名回落，形如 `sandbox-macos-${process.arch}`, "sandbox"
+    expect(block).not.toMatch(/sandbox-macos-\$\{process\.arch\}`\s*,\s*"sandbox"/);
+  });
+});
