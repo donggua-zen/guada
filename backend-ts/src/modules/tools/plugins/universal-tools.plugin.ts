@@ -292,37 +292,31 @@ export class UniversalToolsPlugin extends PluginBase {
   ): Promise<string> {
     const parts: string[] = [];
 
-    // 1. 工具定义 XML
+    // 1. 工具定义
     if (tools.length > 0) {
       const toolDescriptions = tools
         .map((tool) => {
-          const params = tool.parameters?.properties || {};
-          const required = tool.parameters?.required || [];
+          // 按原生 function-calling 形状序列化为**单个 JSON 对象**：
+          // {name, description, parameters} —— 与 openai.adapter 的 function 字段
+          // 及内部 ToolDefinition 同构，模型对这套三件套最熟悉；同一次对话里 eager 工具
+          // 也以同样的键名下发，词表一致。
+          // parameters 直接复用 toolkit 已转换好的 JSON Schema（z.toJSONSchema + 限深展平），
+          // 此前这里手写投影只留 5 个顶层字段，嵌套 items/properties 被丢弃
+          // （workflow 的 phases 被写成字符串数组、触发参数校验失败，即此因）。
+          // 走 JSON 也顺带转义了描述里的裸尖括号（如 `return <value>`），不再产生畸形标签。
+          const toolJson = JSON.stringify(
+            {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters,
+            },
+            null,
+            2,
+          );
 
-          const paramList = Object.entries(params)
-            .map(([key, value]: [string, any]) => {
-              const isRequired = required.includes(key);
-              const entry: Record<string, any> = {
-                type: value.type || "string",
-                description: value.description || "",
-                required: isRequired,
-              };
-              if (value.enum) entry.enum = value.enum;
-              if (value.default !== undefined) entry.default = value.default;
-              return `        "${key}": ${JSON.stringify(entry)}`;
-            })
-            .join(",\n");
-
-          return [
-            `  <tool name="${tool.name}">`,
-            `    <description>${tool.description}</description>`,
-            `    <parameters>`,
-            paramList,
-            `    </parameters>`,
-            `  </tool>`,
-          ].join("\n");
+          return [`<tool_definition>`, toolJson, `</tool_definition>`].join("\n");
         })
-        .join("\n");
+        .join("\n\n");
 
       parts.push(`toolkit ${kitName}`, "", toolDescriptions);
     }
