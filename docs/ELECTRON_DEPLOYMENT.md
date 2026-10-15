@@ -359,18 +359,20 @@ pnpm run build:electron:mac:sign
 spawn 报错。现在 darwin 只认 `sandbox-macos-${process.arch}`，缺失即 `resolveSandboxBin` 返回 null，
 fail-closed 并打印明确原因。
 
-> CI 目前只出 macOS arm64（**Intel 版暂时不做**）；随包附带 Intel 二进制是为了**自行编译 Intel 版的用户**
-> ——本机 `--x64` 构建出来的 dmg 直接可用，不必自己再编译沙盒。
+> **Intel (x64) 版为实验性支持**：CI 已经会出 `GuaDa-<版本>-x64.dmg`（`macos-15-intel` runner），
+> 但**未经过广泛测试**（真机验证尚未做），定位是"给 Intel 用户一个能装的包"，不是正式支持 ——
+> 正式支持的只有 Apple Silicon（arm64）版。随包附带两个架构的沙盒二进制，本机 `--x64` 构建出来的
+> dmg 也直接可用，不必自己再编译沙盒。
 
 #### 4.5 构建方式选择
 
 | 方式 | 适用 | 说明 |
 |------|------|------|
-| CI（推荐） | 正式发版 | 推 `v*` tag 触发 `.github/workflows/release.yml`：**macOS arm64**（`macos-latest`）与 **Windows x64**（`windows-latest`）两个 job 各自构建（同一套链路 + 同一道 `verify:asar` 闸门），产物上传为 Actions artifact 并附到同名 GitHub Release；随后 `publish-mirrors` 在 Gitee / GitCode 建同名 release |
+| CI（推荐） | 正式发版 | 推 `v*` tag 触发 `.github/workflows/release.yml`：**macOS arm64**（`macos-latest`）+ **macOS x64**（`macos-15-intel`，实验性）双架构矩阵与 **Windows x64**（`windows-latest`）各自构建（同一套链路 + 同一道 `verify:asar` 闸门），产物上传为 Actions artifact 并附到同名 GitHub Release；随后 `publish-mirrors` 在 Gitee / GitCode 建同名 release |
 | 本机 mac | 调试、临时验证 | `pnpm run build:electron:mac`，产物架构 = 本机架构。要出另一架构需同时指定 `TARGET_ARCH` 与 electron-builder 的 `--x64`/`--arm64`（见 2.1） |
 | 本机 Windows | 调试、临时验证 | `pnpm run build:electron`，产物为 nsis 安装包 |
 
-> CI 目前只出 macOS arm64（**Intel 版暂时不做**）与 Windows x64。
+> CI 出 macOS arm64（正式支持）、macOS x64（**实验性，未广泛测试**）与 Windows x64。
 >
 > **完整发版流程**（以 1.0.2 为例）：
 > 1. 升版本号（`package.json` + `backend-ts/package.json`）→ 提交 `chore: bump version to X`
