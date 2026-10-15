@@ -95,6 +95,20 @@ function turnPage(tid: string, userText: string, answer: string): WireStreamEven
   ];
 }
 
+/** 一条消息里 N 个并行 tool-call 块（块 index 从 startIndex 起，与真实流一致：tool-call 不占 index 0） */
+function parallelToolCalls(
+  mid: string,
+  tid: string,
+  startIndex: number,
+  ids: string[],
+): WireStreamEvent[] {
+  return ids.flatMap((id, i) => [
+    { type: "block_start", messageId: mid, turnId: tid, index: startIndex + i, blockType: "tool-call" } as any,
+    { type: "tool_call_delta", messageId: mid, turnId: tid, index: startIndex + i, toolCallId: id, name: "subagent_spawn", argumentsDelta: `{"name":"${id}"}` } as any,
+    { type: "block_end", messageId: mid, turnId: tid, index: startIndex + i, block: { type: "tool-call", toolCallId: id, name: "subagent_spawn", arguments: `{"name":"${id}"}` } } as any,
+  ]);
+}
+
 describe("StreamProjector 折叠器", () => {
   let store: ReturnType<typeof createStore>;
   beforeEach(() => { store = createStore(); });
@@ -173,6 +187,133 @@ describe("StreamProjector 折叠器", () => {
     expect(block.metadata.toolCalls[0].name).toBe("web_search");
     expect(block.metadata.toolCalls[0].outcome).toBe("success");
     expect(block.metadata.toolCallsResponse[0].content).toBe("结果");
+  });
+
+  it("并行调用：一条 tool_calls_response 逐条挂回各自的块（首条失败不吞掉其它工具终态）", () => {
+    // 并行调用各占一个块（wire index 0 / 1）——后端按 wire index 分通道，前端按 index 建块
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "read_file", argumentsDelta: "{}" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", toolCallId: "tc1", name: "read_file", arguments: "{}" } } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 1, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 1, toolCallId: "tc2", name: "web_search", argumentsDelta: "{}" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 1, block: { type: "tool-call", toolCallId: "tc2", name: "web_search", arguments: "{}" } } as any,
+      // 后端整批结果只发一条事件，两条条目一次到达
+      {
+        type: "tool_calls_response",
+        turnId: "T1",
+        toolCallsResponse: [
+          { messageId: "m_t1", name: "read_file", content: "Error: 文件不存在", toolCallId: "tc1", outcome: "error" },
+          { messageId: "m_t2", name: "web_search", content: "搜索结果", toolCallId: "tc2", outcome: "success" },
+        ],
+      } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const blocks = blocksOf(store.state.turns[0]).filter((b: any) => b.metadata?.toolCalls?.length);
+    expect(blocks).toHaveLength(2);
+
+    // 块 0（tc1 失败）：自己的终态 + 只挂自己那一条结果
+    expect(blocks[0].metadata.toolCalls[0].outcome).toBe("error");
+    expect(blocks[0].metadata.toolCallsResponse).toHaveLength(1);
+    expect(blocks[0].metadata.toolCallsResponse[0].toolCallId).toBe("tc1");
+    expect(blocks[0].metadata.toolCallsResponse[0].content).toBe("Error: 文件不存在");
+
+    // 块 1（tc2 成功）：不能被首块吞掉——否则该行永远停在"执行中"，只能刷新才恢复
+    expect(blocks[1].metadata.toolCalls[0].outcome).toBe("success");
+    expect(blocks[1].metadata.toolCallsResponse).toHaveLength(1);
+    expect(blocks[1].metadata.toolCallsResponse[0].toolCallId).toBe("tc2");
+    expect(blocks[1].metadata.toolCallsResponse[0].content).toBe("搜索结果");
+  });
+
+  it("live 路径重复下发同一条 tool_calls_response 不重复累加（SSE 重连重放幂等）", () => {
+    const blockEvents: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "read_file", argumentsDelta: "{}" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", toolCallId: "tc1", name: "read_file", arguments: "{}" } } as any,
+    ];
+    for (const e of blockEvents) applyLiveChunk(store as any, "s1", e);
+    const response = {
+      type: "tool_calls_response",
+      turnId: "T1",
+      toolCallsResponse: [
+        { messageId: "m_t1", name: "read_file", content: "Error: 文件不存在", toolCallId: "tc1", outcome: "error" },
+      ],
+    } as any;
+    applyLiveChunk(store as any, "s1", response);
+    applyLiveChunk(store as any, "s1", response);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.metadata?.toolCalls?.length);
+    expect(block.metadata.toolCallsResponse).toHaveLength(1);
+    expect(block.metadata.toolCalls[0].outcome).toBe("error");
+  });
+
+  it("并行调用（真实形状）：reasoning+text 之后的 3 个 tool-call 块各自拿到终态与结果", () => {
+    // 复刻线上真实形状（会话 f7394c82 13:26:13 那批 subagent_spawn）：
+    // 一条 assistant 消息 = reasoning(0) + text(1) + tool-call(2/3/4)，整批结果只发一条事件。
+    // 修复前只取首个 toolCallId 定位块 → 另外两个块永远没有 outcome/结果，
+    // 行内一直显"执行中"（子代理行是水波纹），直到整轮结束 isStreaming 转 false 才停。
+    const ids = ["call_00_spawn", "call_01_spawn", "call_02_spawn"];
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "reasoning" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "reasoning", summary: "先盘点现状" } } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 1, blockType: "text" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 1, block: { type: "text", text: "派三个只读调研" } } as any,
+      ...parallelToolCalls("T1_a", "T1", 2, ids),
+      {
+        type: "tool_calls_response",
+        turnId: "T1",
+        toolCallsResponse: ids.map((id) => ({
+          messageId: `m_${id}`,
+          name: "subagent_spawn",
+          content: `[Sub-agent completed. Session ID: sub-${id}]`,
+          toolCallId: id,
+          outcome: "success" as const,
+        })),
+      } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const toolBlocks = blocksOf(store.state.turns[0]).filter(
+      (b: any) => b.metadata?.toolCalls?.length,
+    );
+    expect(toolBlocks).toHaveLength(3);
+    toolBlocks.forEach((b: any, i: number) => {
+      expect(b.metadata.toolCalls[0].outcome).toBe("success");
+      expect(b.metadata.toolCallsResponse).toHaveLength(1);
+      expect(b.metadata.toolCallsResponse[0].toolCallId).toBe(ids[i]);
+    });
+  });
+
+  it("并行调用（真实形状）：12 个 tool-call 同批全部拿到终态（subagent_manager 批量关停）", () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `call_${String(i).padStart(2, "0")}_close`);
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "reasoning" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "reasoning", summary: "关掉一些" } } as any,
+      ...parallelToolCalls("T1_a", "T1", 1, ids),
+      {
+        type: "tool_calls_response",
+        turnId: "T1",
+        toolCallsResponse: ids.map((id) => ({
+          messageId: `m_${id}`,
+          name: "subagent_spawn",
+          content: "closed",
+          toolCallId: id,
+          outcome: "success" as const,
+        })),
+      } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const toolBlocks = blocksOf(store.state.turns[0]).filter(
+      (b: any) => b.metadata?.toolCalls?.length,
+    );
+    expect(toolBlocks).toHaveLength(12);
+    const missing = toolBlocks.filter((b: any) => !b.metadata.toolCalls[0].outcome);
+    expect(missing).toHaveLength(0);
   });
 
   it("subagent_link 把关联键写到对应 tool-call 条目上（工具结果落库前即可用）", () => {

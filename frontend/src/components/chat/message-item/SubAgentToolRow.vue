@@ -1,51 +1,51 @@
 <template>
-  <GdTooltip class="block" :content="clickable ? t('chat.toolCalls.openSubAgentPanel') : ''" placement="top">
-    <div class="group flex items-center text-sm min-w-0 rounded-md -mx-1.5 px-1.5 py-0.5 transition-colors duration-200"
-      :class="clickable ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5' : ''" @click.stop="onClick">
-      <!-- 子智能体行：图标 + 「子智能体」+ 名称（同标签色加粗）+ · + 任务摘要。
-           标签与名称统一用过程组标题的深灰（非主题色），任务摘要用浅灰（同组标题的
-           args 文案）；整行即卡片内容（无工具头部/折叠箭头），点击打开子代理面板。 -->
+  <div class="subagent-block">
+    <!-- 子智能体行：图标 + 「子智能体」+ 名称 + · + 任务摘要。
+         名称与任务摘要是**两个各自独立**的可点链接（都打开同一个子代理面板）：视觉上它们
+         颜色不同、本就是两段，hover 只提亮被指向的那一段；中间分隔符 · 不可点也不变色。
+         整行不给背景色、不加整行提示——行内交互只留这两段文字（列表入口在输入框状态栏与侧栏）。 -->
+    <div class="flex items-center text-sm min-w-0">
       <el-icon class="shrink-0 text-gray-500" :class="{ 'is-failed': failed }" size="16">
         <Bot20Regular />
       </el-icon>
       <span class="shrink-0 ml-1.5 text-gray-600 dark:text-gray-400">{{ t('chat.toolCalls.subAgentLabel') }}</span>
-      <span v-if="displayName" class="shrink-0 ml-1.5 font-medium text-gray-600 dark:text-gray-400">{{ displayName }}</span>
-      <template v-if="task">
-        <span v-if="displayName" class="shrink-0 ml-1 text-gray-400 dark:text-gray-500">·</span>
-        <span class="truncate min-w-0 ml-1 text-gray-400 dark:text-gray-500"
-          :class="{ 'is-shimmer': executing && !failed, 'is-failed': failed }">{{ task }}</span>
-      </template>
-      <!-- 子代理列表「详情」入口（hover 显现）：打开本会话子代理列表面板
-           （活跃 + 已结束回放），对标工作流卡片的详情按钮 -->
-      <GdTooltip v-if="openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="top" class="shrink-0 ml-2">
-        <button class="open-list-btn" @click.stop="onOpenList">
-          <el-icon :size="14">
-            <PeopleTeam20Regular />
-          </el-icon>
-        </button>
-      </GdTooltip>
+      <span v-if="displayName" class="sa-link shrink-0 ml-1.5 font-medium text-gray-600 dark:text-gray-400"
+        :class="{ 'is-clickable': clickable }" @click.stop="onClick">{{ displayName }}</span>
+      <span v-if="displayName && task" class="shrink-0 mx-1 text-gray-400 dark:text-gray-500">·</span>
+      <span v-if="task" class="sa-link truncate min-w-0 text-gray-400 dark:text-gray-500"
+        :class="{ 'is-clickable': clickable, 'is-shimmer': executing && !failed }"
+        @click.stop="onClick">{{ task }}</span>
     </div>
-  </GdTooltip>
+
+    <!-- 失败原因：子代理是独立渲染行（standaloneRows），既不套通用失败横幅、也走不到
+         「输入/输出」区（见 MessageToolCalls 的互斥分支），原因没有别的 DOM 承载。
+         且校验类失败时 link 为空（子会话都没建起来）→ 文字不可点、面板无从打开，
+         这里就是唯一能看到原因的入口。原因文本本身即说明，不再加标题行。 -->
+    <pre v-if="failed && failureReason" class="sa-error-pre">{{ failureReason }}</pre>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject } from 'vue';
+import { computed } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { Bot20Regular, PeopleTeam20Regular } from '@vicons/fluent';
+import { Bot20Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { getToolArgs, type ToolCall } from '@/utils/toolDisplay';
+import { resolveSubAgentFailure } from '@/utils/subAgentFailure';
 import type { SubAgentLink } from '@/utils/subAgentLink';
+import type { ToolCallResponseEntry } from '@/types/message';
 
 const props = defineProps<{
   /** 工具调用（取 args.name / args.task；流式期间为半截 JSON） */
   tool: ToolCall;
   /** 会话关联（resolveSubAgentLink 结果）；有 name 时优先于 args.name */
   link?: SubAgentLink | null;
+  /** 工具结果（失败原因的载体；无结果时为空） */
+  response?: ToolCallResponseEntry;
   /** 工具执行中（流式 / 等待子代理跑完）：任务摘要走 shimmer */
   executing?: boolean;
-  /** 失败（error / rejected）：图标与任务摘要转红 */
+  /** 失败（error / rejected）：图标转红 + 展示原因块 */
   failed?: boolean;
   /** 有面板入口且已解析出唯一目标会话才可点 */
   clickable?: boolean;
@@ -85,49 +85,51 @@ const task = computed(() => {
   return value.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 });
 
-const onClick = (): void => {
-  if (props.clickable) emit('open');
-};
-
-/** 子代理列表面板入口（ChatPage provide；无 provide 的宿主不渲染按钮） */
-const openSubagentList = inject<((sessionId?: string) => void) | null>(
-  'workspace:openSubagentList',
-  null,
+/** 失败原因（从工具结果正文剥出「人话」）；取不到则整块不渲染 */
+const failureReason = computed(() =>
+  props.failed ? resolveSubAgentFailure(props.response) : undefined,
 );
 
-const onOpenList = (): void => {
-  openSubagentList?.();
+/** 点击名称/任务摘要 → 打开该子代理会话面板（无唯一目标会话时不可点） */
+const onClick = (): void => {
+  if (props.clickable) emit('open');
 };
 </script>
 
 <style scoped>
-/* 「详情」入口：hover 显现（与行内其它交互同节奏，不占常态视觉） */
-.open-list-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--gd-color-text-gray);
+/* 名称 / 任务摘要各自是可点链接（都打开同一个子代理面板）：
+   hover 只提亮被指向的那一段，不加背景色、不影响整行。
+   两段颜色本就不同、视觉上各自独立，统一变色会让人以为它们是一个整体。 */
+.sa-link.is-clickable {
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
-}
-/* 「详情」入口：hover 显现（行根节点带 tailwind 的 group 标记类） */
-.group:hover .open-list-btn {
-  opacity: 1;
-}
-.open-list-btn:hover {
-  color: var(--gd-color-text);
 }
 
-/* 失败态：图标/摘要转红（标签与名称保持中性灰——它们是子代理身份，不随状态变色） */
+.sa-link.is-clickable:hover {
+  color: var(--el-text-color-regular);
+}
+
+/* 失败原因块：红色微底等宽正文，视觉对齐工作流卡的 .wf-card-error；
+   缩进 22px = 图标 16px + 间距 6px，与工具卡详情区缩进规则一致。 */
+.sa-error-pre {
+  margin: 4px 0 0 22px;
+  padding: 6px 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--gd-color-danger) 8%, transparent);
+  color: var(--gd-color-danger);
+  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  /* 原因可选中复制（用户常要拿去搜索/贴给模型）；长行折行 + 限高内滚，不撑爆对话流 */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 失败态：图标转红（标签/名称/任务摘要保持中性灰——它们是子代理身份与上下文，
+   不随状态变色；原因由下方 .sa-error-pre 承载） */
 .is-failed {
-  color: #f56c6c;
+  color: var(--gd-color-danger);
 }
 
 /* 运行中波纹（与 TurnItem/MessageThinkingSection 的 shimmer-text 同款视觉；

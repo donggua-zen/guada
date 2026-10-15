@@ -1005,20 +1005,26 @@ export function applyChunkToStore(
         }
       }
     }
-    const target = responseIds.size > 0
-      ? findBlockByToolCallId(turns, [...responseIds][0])
-      : undefined;
-    if (target) {
-      target.metadata = {
-        ...(target.metadata || {}),
-        toolCallsResponse: chunk.toolCallsResponse || [],
-      };
-      for (const r of chunk.toolCallsResponse || []) {
-        const tc = ((target.metadata.toolCalls || []) as ToolCallEntry[]).find(
-          (c) => c.id === r.toolCallId,
-        );
-        if (tc) tc.outcome = r.outcome;
+    // 逐条按 toolCallId 分发到各自的块：并行调用各占一个块（后端按 wire index 分通道），
+    // 一条事件里的多个条目属于不同块。若只取首个 id 定位块、把整批结果挂上去，其余工具
+    // 永远拿不到 outcome（行内恒显"执行中"）与结果正文，只能刷新才恢复（刷新走 tool/result
+    // 逐条回放）。规则与 tool/result 分支一致：按 toolCallId 去重累加，不整批覆盖。
+    for (const r of chunk.toolCallsResponse || []) {
+      const target = findBlockByToolCallId(turns, r.toolCallId);
+      if (!target) continue;
+      const meta = target.metadata ?? {};
+      const existing = (Array.isArray(meta.toolCallsResponse)
+        ? meta.toolCallsResponse
+        : []) as ToolCallResponseEntry[];
+      if (!existing.some((e) => e.toolCallId === r.toolCallId)) {
+        meta.toolCallsResponse = [...existing, r];
       }
+      target.metadata = meta;
+      const tc = ((meta.toolCalls || []) as ToolCallEntry[]).find(
+        (c) => c.id === r.toolCallId,
+      );
+      // 条目缺 outcome 时不清空已有终态
+      if (tc && r.outcome) tc.outcome = r.outcome;
     }
     return;
   }

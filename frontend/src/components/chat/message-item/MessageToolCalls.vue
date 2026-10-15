@@ -69,9 +69,10 @@
           :pending-approval="isPendingApproval(tool)" :status="planCardStatus(toolIndex)" />
 
         <!-- 子代理派生行：整行只有专用行组件（图标 + 子智能体 + 名称 + 任务摘要），
-             点击打开子代理面板。无 renderer，不走走 kind → ToolCustomView 管线。 -->
+             点击名称/任务摘要打开子代理面板。无 renderer，不走走 kind → ToolCustomView 管线。 -->
         <SubAgentToolRow v-else-if="subAgentSpawnRows[toolIndex]" :tool="tool"
-          :link="subAgentLinks[toolIndex] || null" :executing="isToolExecuting(tool, toolIndex)"
+          :link="subAgentLinks[toolIndex] || null" :response="getToolResponses(toolIndex)"
+          :executing="isToolExecuting(tool, toolIndex)"
           :failed="tool.outcome === 'error' || tool.outcome === 'rejected'"
           :clickable="canOpenSubAgentPanel && !!subAgentLinks[toolIndex]"
           @open="openSubAgentPanel(toolIndex)" />
@@ -186,7 +187,7 @@ const openSubAgentPanel = (index: number): void => {
 const isToolExecuting = (tool: ToolCall, index: number): boolean => {
   if (tool.outcome) return false;
   if (props.isStreaming === false) return false;
-  if (props.toolResponses && props.toolResponses[index]) return false;
+  if (getToolResponses(index)) return false;
   return true;
 };
 
@@ -266,9 +267,12 @@ const toggleExpand = (index: number): void => {
   collapsedIndexes.value = nextCollapsed;
 };
 
-/** 结果直接取后端返回的 toolResponses[index]（无懒加载） */
+/** 结果取后端返回的工具结果：按 toolCallId 优先匹配（并行调用结果到达顺序不保证与
+ *  调用顺序一致，纯下标会错位串结果），id 缺失或未到达时回退下标 */
 const getToolResponses = (index: number): ToolCallResponseEntry | undefined => {
-  return props.toolResponses && props.toolResponses[index];
+  const tool = props.toolCalls[index];
+  if (!tool) return undefined;
+  return findToolResponse(tool, index, props.toolResponses) as ToolCallResponseEntry | undefined;
 };
 
 // ── 定制渲染（renderer 声明：后端 display.renderer 优先，内置映射兜底） ──
