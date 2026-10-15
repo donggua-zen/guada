@@ -138,3 +138,15 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 | 外部插件可自declare `category` / `essential` | `validateManifest` 只校验 id/name/version/description，不剥离这两个字段；外部插件借此获得"不可启停 + 免于批量禁用"。`governance` 已堵，`category`/`essential` 未堵 | `modules/plugins/external/external-plugin-loader.ts` |
 | Skills 的逐技能过滤只在 prompt 生效 | `settings.skills` 的过滤作用在 skill 插件的提示词上，`skill_learn` 工具本身不校验 → 被角色关掉的技能仍可被 learn 到 | `modules/skills/plugins/skill.plugin.ts` |
 | `category: "system"` 兼任三种职责 | 不可启停、不进通用启停列表、`/plugins/query` 的过滤判据。工具包治理已拆为工具包级 `governance`，插件级的这三项仍混在 `category` 上 | `modules/plugins/plugin.manager.ts`、`plugins.controller.ts` |
+
+### 暂缓项 · 防休眠与错过窗口（2026-10-15）
+
+本轮实现「保持电脑运行」（`keepAwakeMode`：关闭 / 仅执行任务时 / 始终）与定时任务错过窗口留痕时，明确不处理的边界。
+
+| 问题 | 现状 | 关联文件 |
+|---|---|---|
+| 防不了合盖/手动睡眠 | `powerSaveBlocker("prevent-app-suspension")` 只阻止系统因空闲休眠，合盖、手动睡眠、企业电源策略仍会中断任务（设置页文案已如实说明） | `electron/main.ts`（`reconcileKeepAwakeBlocker`） |
+| 「执行中」判据不含游离后台进程 | 忙碌状态只看 ChatRunner 队列（所有对话/定时任务/子 Agent/工作流都经它）。工具起的后台 shell 进程若在回合结束后仍在跑，不计入 busy，机器可能休眠把它挂起 | `modules/runtime/keep-awake.service.ts`、`modules/shell/process-manager.service.ts`（`ProcessManagerService` 未导出，接入需先补 exports） |
+| ChatRunner 卡死会一直不休眠 | `isProcessing` 长期为 true 时 busy 恒真 → 阻塞器不释放。现有兜底是 LLM 空闲/请求超时，但没有「连续忙 N 小时后强制放行」的自保 | `modules/chat/chat-runner.service.ts`（`hasActiveWork`）、`modules/runtime/keep-awake.service.ts` |
+| Web 端改设置不通知桌面主进程 | 通过浏览器（非桌面窗口）改 `keepAwakeMode` 时没有 IPC 通道，主进程要等下次启动读文件才生效；桌面窗口内改动是即时的（IPC + 设置页读回对账） | `electron/main.ts`（`readKeepAwakeModeFromSettings`）、`components/setting/GeneralSettings.vue` |
+| 错过窗口的跳过策略不可配置 | 迟到超过 5 分钟一律只留痕不补跑，没有「按任务选择补跑」的开关；一次性任务错过即停用，不可恢复 | `modules/scheduler/task-scheduler.service.ts`（`MISSED_WINDOW_GRACE_MS`） |
