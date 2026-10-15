@@ -235,6 +235,98 @@ describe('CompactionCoordinatorService', () => {
       // 未替换不占用溢出重试额度：后续仍可尝试（错误被保留给上层）
       expect((coordinator as any).overflowRetries.has('s1')).toBe(false);
     });
+
+    it('工具配对非法（Console Go/DeepSeek 实测文案）→ 修复悬空调用并返回 retry，且不走压缩', async () => {
+      const repair = jest.fn(async () => 2);
+      const ctx = createContext({ repairDanglingToolCalls: repair } as any);
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(),
+      };
+      const coordinator = createCoordinator(compactionService);
+      const action = await coordinator.onRequestError(
+        requestErrorPayload(
+          ctx,
+          new Error(
+            "LLM API Error: 400 - 400 Error from provider (Console Go): Upstream request failed: " +
+              "[invalid_request_error] An assistant message with 'tool_calls' must be followed by tool " +
+              "messages responding to each 'tool_call_id'. (insufficient tool messages following tool_calls message)",
+          ),
+        ),
+      );
+
+      expect(repair).toHaveBeenCalledTimes(1);
+      expect(action).toEqual({ kind: 'retry' });
+      // 这类 400 与上下文长度无关：必须修历史，绝不能去压缩（白花一次摘要调用且救不了）
+      expect(compactionService.compress).not.toHaveBeenCalled();
+    });
+
+    it('无悬空调用可修（0 条）→ 不重试、不占额度，保留原始错误', async () => {
+      const repair = jest.fn(async () => 0);
+      const ctx = createContext({ repairDanglingToolCalls: repair } as any);
+      const coordinator = createCoordinator();
+      const action = await coordinator.onRequestError(
+        requestErrorPayload(
+          ctx,
+          new Error('insufficient tool messages following tool_calls message'),
+        ),
+      );
+
+      expect(repair).toHaveBeenCalledTimes(1);
+      expect(action).toBeUndefined();
+      expect((coordinator as any).pairingRepairRetries.has('s1')).toBe(false);
+    });
+
+    it('配对修复重试达到上限后返回 undefined（防死循环）', async () => {
+      const repair = jest.fn(async () => 1);
+      const ctx = createContext({ repairDanglingToolCalls: repair } as any);
+      const coordinator = createCoordinator();
+      const error = new Error('insufficient tool messages following tool_calls message');
+
+      expect(await coordinator.onRequestError(requestErrorPayload(ctx, error))).toEqual({
+        kind: 'retry',
+      });
+      expect(await coordinator.onRequestError(requestErrorPayload(ctx, error))).toBeUndefined();
+    });
+
+    it('配对修复预算在下一步迭代（pre_step）复位 → 后续步骤仍可自愈', async () => {
+      const repair = jest.fn(async () => 1);
+      const ctx = createContext({ repairDanglingToolCalls: repair } as any);
+      const coordinator = createCoordinator();
+      const error = new Error('insufficient tool messages following tool_calls message');
+
+      expect(await coordinator.onRequestError(requestErrorPayload(ctx, error))).toEqual({
+        kind: 'retry',
+      });
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(await coordinator.onRequestError(requestErrorPayload(ctx, error))).toEqual({
+        kind: 'retry',
+      });
+    });
+
+    it('修复抛错 / 会话不支持该能力 → 不重试（退化为请求侧配对兜底）', async () => {
+      const throwing = jest.fn(async () => {
+        throw new Error('io fail');
+      });
+      const coordinator = createCoordinator();
+      expect(
+        await coordinator.onRequestError(
+          requestErrorPayload(
+            createContext({ repairDanglingToolCalls: throwing } as any),
+            new Error('insufficient tool messages following tool_calls message'),
+          ),
+        ),
+      ).toBeUndefined();
+      // 会话未实现可选能力（如内存态实现）
+      expect(
+        await coordinator.onRequestError(
+          requestErrorPayload(
+            createContext(),
+            new Error('insufficient tool messages following tool_calls message'),
+          ),
+        ),
+      ).toBeUndefined();
+    });
   });
 
   describe('maybeCompress（手动路径）', () => {

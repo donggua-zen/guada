@@ -28,6 +28,11 @@ import { RequestContext } from "../../common/context/request-context";
 import { ISessionContext } from "./session-context";
 import { SessionStreamEvent } from "./types/event-chunk.types";
 import { BlockAssembler } from "./block-assembler";
+import {
+  isToolCallBlock,
+  SYNTHETIC_TOOL_INTERRUPTED_TEXT,
+  toolResultCallIdOf,
+} from "../../common/utils/tool-pairing.util";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { buildPlanModeTurnEntries } from "./plan-mode-reminder.util";
@@ -639,59 +644,77 @@ export class AgentEngine {
         // 注：429 限流通常发生在请求阶段（模型尚无输出）→ 空消息路径自然覆盖；罕见的流中段
         // 429（已有部分内容）按普通有内容消息处理，部分内容照常落库，不做额外拦截。
         if (assistantMessage !== null) {
+          // 上游可能漏发/缓发 toolCallId：落库前合成稳定 id 并写回块。
+          // 必须在 appendMessages 之前——落库后再合成，assistant 事件里的 tool_calls 就是空 id，
+          // 而工具结果带的是合成 id，磁盘上即成为「tool_calls 无结果回应」（重启后上游 400）。
+          const synthesizedIds = this.ensureToolCallIds(assistantMessage);
+          if (synthesizedIds > 0) {
+            this.logger.warn(
+              `[TOOLCALL-SYNTH-ID] session=${sessionContext.sessionId} 合成 ${synthesizedIds} 个空 toolCallId（上游未颁发调用 id）`,
+            );
+          }
+
           await sessionContext.appendMessages([assistantMessage]);
 
-          // 中止时在助手消息之后注入合成工具响应（保证顺序：assistant → tool）
-          if (streamAborted) {
-            const abortedToolCalls = assistantMessage.content.filter(
-              (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
-                b.type === "tool-call",
-            );
-            const parts: Message[] = [];
-            for (const tc of abortedToolCalls) {
-              const abortedToolResultId = sessionContext.generateMessageId();
-              parts.push({
-                id: abortedToolResultId,
-                role: "tool",
-                kind: "model",
-                source: { kind: "tool", toolCallId: tc.toolCallId },
-                metadata: {},
-                content: [
-                  {
-                    type: "tool-result",
-                    toolCallId: tc.toolCallId,
-                    name: tc.name,
-                    content:
-                      "<system_reminder>Request aborted by user</system_reminder>",
-                  },
-                ],
-              });
-            }
-            if (abortedToolCalls.length > 0) {
-              await sessionContext.appendMessages(parts);
-              parts.length = 0;
+          const hasToolCalls = assistantMessage.content.some(
+            (b) => b.type === "tool-call",
+          );
+
+          // 工具执行：仅在流正常结束且未中止时执行。流异常中止（断网/超时/限流）与用户中止
+          // 都不执行——调用参数可能是半截产物（assembler 的 partialParse 会补出"可解析但残缺"
+          // 的 JSON），执行风险高于收益；未执行带来的配对缺口由下方收口统一补桩。
+          let execResult:
+            | {
+                toolParts: Message[];
+                toolEvent?: SessionStreamEvent;
+                followUpUserInput?: string;
+              }
+            | undefined;
+          /** 已落库的结果消息（落库成功才登记：落库失败时配对缺口由收口补桩） */
+          let appendedResults: Message[] = [];
+          if (hasToolCalls && tools && !streamAborted && !abortSignal?.aborted) {
+            try {
+              // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
+              // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
+              const result = await this.executeToolsAndBuildParts(
+                assistantMessage,
+                turnId,
+                sessionContext,
+                abortSignal,
+              );
+              if (result.toolParts.length > 0) {
+                await sessionContext.appendMessages(result.toolParts);
+                appendedResults = result.toolParts;
+                await sessionContext.publishStream(result.toolEvent!);
+              }
+              execResult = result;
+            } catch (error) {
+              // 执行阶段异常（含结果批内空洞等）：就地抛出会穿透本循环 → finalizeTurn 被跳过
+              // （回合永不闭合、turn_end 不发），且工具结果一条不落。收敛为业务错误，
+              // 配对完整性与回合闭合交给下方收口与循环后的收尾保证。
+              const execError =
+                error instanceof Error ? error : new Error(String(error));
+              this.logger.error(
+                `Tool execution failed in agent loop: ${execError.message}`,
+                execError.stack,
+              );
+              businessReason = businessReason ?? "error";
+              finalError = finalError ?? execError.message;
             }
           }
-        }
 
-        // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-        // 中止时不执行工具（已在上方注入合成响应）
-        // 空消息（立即报错/中止无任何产出，assistantMessage 为 null）→ 无工具调用，跳过
-        const hasToolCalls =
-          assistantMessage?.content.some((b) => b.type === "tool-call") ??
-          false;
-        if (hasToolCalls && tools && !abortSignal?.aborted) {
-          // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
-          // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
-          const execResult = await this.executeToolsAndBuildParts(
-            assistantMessage!,
+          // 收口不变量：已落库的 assistant 声明的每条 tool-call 都必须有结果。
+          // 覆盖「未执行」（中止 / 流异常 / 无可用工具）与「执行后仍缺结果」（批内中断、
+          // 执行阶段异常）两类残留；未配对的按补桩写入，避免历史在此后每次请求都被上游拒绝。
+          await this.closeToolPairing(
+            assistantMessage,
+            appendedResults,
             turnId,
             sessionContext,
-            abortSignal,
+            abortSignal?.aborted === true,
           );
-          if (execResult.toolParts.length > 0) {
-            await sessionContext.appendMessages(execResult.toolParts);
-            await sessionContext.publishStream(execResult.toolEvent!);
+
+          if (execResult && appendedResults.length > 0) {
             if (execResult.followUpUserInput) {
               // 工具转交了用户的话（计划审批反馈）：用户开了口 → 本轮到此结束。
               // 输入随 run() 返回值交回 chat-runner，作为真实用户消息开启新轮次；
@@ -820,6 +843,104 @@ export class AgentEngine {
   }
 
   /**
+   * 落库前补齐空 toolCallId：上游漏发/缓发时合成稳定 id 并写回块。
+   *
+   * 时机是契约的一部分——必须在 assistant 消息 appendMessages **之前**：
+   * 落库后再合成，事件里的 tool_calls 是空 id，而工具结果携带合成 id，
+   * 磁盘上即成为「无 tool 消息回应声明的 tool_call_id」的非法形状（重启后每次请求 400）。
+   *
+   * @returns 合成的条数（>0 时由调用方告警）
+   */
+  private ensureToolCallIds(message: Message): number {
+    let synthesized = 0;
+    for (const block of message.content) {
+      if (block.type !== "tool-call" || block.toolCallId) continue;
+      block.toolCallId = `call_${crypto.randomUUID()}`;
+      synthesized += 1;
+    }
+    return synthesized;
+  }
+
+  /**
+   * 收口不变量：已落库的 assistant 声明的每条 tool-call 都必须有工具结果。
+   *
+   * 未被真实结果覆盖的调用补一条合成结果（isError），覆盖「未执行」（中止 / 流异常 /
+   * 无可用工具）与「执行后仍缺结果」（批内中断、执行阶段异常）两类残留：
+   * 上游对 wire 形状有硬要求（assistant 的 tool_calls 之后必须有回应它的 tool 消息），
+   * 缺口留在历史里会让此后每次请求都 400，且只有冷加载修复（还要有坏行）能救。
+   *
+   * 永不抛错：补桩失败只告警——本方法在回合收尾前的关键路径上，抛错会跳过
+   * finalizeTurn（回合不闭合），代价高于一次补桩失败。
+   *
+   * @param assistantMessage 本轮已落库的 assistant 消息
+   * @param appendedResults 本轮已落库的真实结果消息（未落库的不算）
+   * @param aborted 用户中止（文案区分为"请求被中止"而非"中断未派发"）
+   */
+  private async closeToolPairing(
+    assistantMessage: Message,
+    appendedResults: Message[],
+    turnId: string,
+    sessionContext: ISessionContext,
+    aborted: boolean,
+  ): Promise<void> {
+    try {
+      const toolCalls = assistantMessage.content.filter(isToolCallBlock);
+      if (toolCalls.length === 0) return;
+
+      const paired = new Set<string>();
+      for (const message of appendedResults) {
+        const callId = toolResultCallIdOf(message);
+        if (callId) paired.add(callId);
+      }
+      const missing = toolCalls.filter((call) => !paired.has(call.toolCallId));
+      if (missing.length === 0) return;
+
+      const abortText =
+        "<system_reminder>Request aborted by user</system_reminder>";
+      const parts: Message[] = missing.map((call) => ({
+        id: sessionContext.generateMessageId(),
+        role: "tool",
+        kind: "model",
+        source: { kind: "tool", toolCallId: call.toolCallId },
+        metadata: {},
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: call.toolCallId,
+            name: call.name,
+            content: aborted ? abortText : SYNTHETIC_TOOL_INTERRUPTED_TEXT,
+            isError: true,
+          },
+        ],
+      }));
+      await sessionContext.appendMessages(parts);
+      await sessionContext.publishStream({
+        type: "tool_calls_response",
+        turnId,
+        toolCallsResponse: parts.map((message, index) => ({
+          messageId: message.id,
+          name: missing[index].name,
+          content: String(
+            (message.content[0] as Extract<ContentBlock, { type: "tool-result" }>)
+              .content,
+          ),
+          toolCallId: missing[index].toolCallId,
+          outcome: "error" as const,
+        })),
+      });
+      this.logger.warn(
+        `[tool-pairing] session=${sessionContext.sessionId} 回合 ${turnId}: ` +
+          `为 ${missing.length} 条无结果的 tool-call 补合成结果 (aborted=${aborted}, ` +
+          `calls=${missing.map((c) => c.toolCallId).join(",")})`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `[tool-pairing] 补合成工具结果失败 session=${sessionContext.sessionId} turn=${turnId}: ${error?.message ?? error}`,
+      );
+    }
+  }
+
+  /**
    * 执行工具并构建入库数据和事件（不发布，不入库）
    *
    * 由 executeAgentLoop 调用，返回执行结果后由调用方负责发布和 persist。
@@ -846,13 +967,12 @@ export class AgentEngine {
     );
     if (toolCalls.length === 0) return { toolParts: [] };
 
-    // 上游可能漏发/缓发 toolCallId：为空则合成稳定 id 并写回块，
-    // 保证 tool-result 配对一致，避免 tool 消息缺 tool_call_id 触发上游 422
+    // toolCallId 由调用方在落库前保证（ensureToolCallIds）：此处只做不变量断言，
+    // 空 id 会产出无法配对的 tool 结果，属调用契约破坏，不静默兜底。
     for (const tc of toolCalls) {
       if (!tc.toolCallId) {
-        tc.toolCallId = `call_${crypto.randomUUID()}`;
-        this.logger.warn(
-          `[TOOLCALL-SYNTH-ID] synthesized id for tool call name=${tc.name || "(no-name)"}`,
+        this.logger.error(
+          `[TOOLCALL-ID-MISSING] tool call 进入执行时仍无 toolCallId (name=${tc.name || "(no-name)"})，配对将不完整`,
         );
       }
     }
@@ -887,7 +1007,9 @@ export class AgentEngine {
         sessionContext,
         abortSignal,
       );
-      toolResponses.push(...results);
+      // 结果数组与请求同序（executeBatch 已把空洞补成显式中断结果）；这里再滤一次空槽，
+      // 保证下面按 res.toolCallId 建消息的循环不会因 undefined 抛 TypeError（那会丢掉整批结果）
+      toolResponses.push(...results.filter((result) => !!result));
 
       // 结果 outcome 回填到响应事件（瞬态；不写回内容块——块只承载模型产出）
       for (let i = 0; i < validToolCalls.length; i++) {

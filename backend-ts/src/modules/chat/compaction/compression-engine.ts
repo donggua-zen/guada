@@ -734,6 +734,20 @@ export class CompressionEngine {
     }
     if (shadowedTokens + input.staticTokens > input.budget) return null;
     if (retainedTokens > input.maxRetain) return null;
+
+    // 配对再平衡：上面的左移可能把边界停在「assistant(tool_calls) 与回应它的结果之间」，
+    // 摘要输入就会以未配对的 tool_calls 结尾 → 上游拒整次请求
+    // （"insufficient tool messages following tool_calls message"）。
+    // computeBoundary 的配对平衡发生在预算校正**之前**，校正后必须重做（平衡只会继续左移，
+    // 遮蔽区变小、保留区变大，故需复核 retainedTokens 上限）。
+    const balanced = toolPairingBalancedBefore(input.messages, boundary);
+    if (balanced !== boundary) {
+      boundary = balanced;
+      shadowedTokens = await sliceTokens(0, boundary);
+      retainedTokens = await sliceTokens(boundary, input.messages.length);
+      if (retainedTokens > input.maxRetain) return null;
+      if (shadowedTokens + input.staticTokens > input.budget) return null;
+    }
     return boundary;
   }
 

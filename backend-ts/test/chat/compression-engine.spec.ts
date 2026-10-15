@@ -574,6 +574,82 @@ describe('toolPairingBalancedBefore（消息级）', () => {
   });
 });
 
+describe('enforceSummaryInputBudget（预算校正后必须重做配对平衡）', () => {
+  /** [user, assistant(tool-call), tool-result, user, assistant]：切点落在 call 与 result 之间即非法 */
+  function makePairingSensitiveMessages(): Message[] {
+    return [
+      ...makeMessages(1), // m0 user
+      {
+        id: 'a1',
+        role: 'assistant',
+        kind: 'model',
+        source: { kind: 'model', provider: 'test', model: 'm' },
+        metadata: {},
+        content: [
+          { type: 'tool-call', toolCallId: 'call_1', name: 'shell', arguments: '{}' },
+        ],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        kind: 'model',
+        source: { kind: 'tool', toolCallId: 'call_1' },
+        metadata: {},
+        content: [
+          { type: 'tool-result', toolCallId: 'call_1', name: 'shell', content: 'result' },
+        ],
+      },
+      ...makeMessages(1), // m3 user
+      {
+        id: 'a2',
+        role: 'assistant',
+        kind: 'model',
+        source: { kind: 'model', provider: 'test', model: 'm' },
+        metadata: {},
+        content: [{ type: 'text', text: 'answer' }],
+      },
+    ];
+  }
+
+  /** 预算把边界从 3 左移到 2（正好停在 call 与 result 之间）→ 必须再左移到 1 */
+  function budgetInput(messages: Message[], maxRetain: number) {
+    return {
+      sessionId: 's1',
+      modelName: 'm',
+      messages,
+      perMessageTokens: messages.map(() => 10),
+      boundary: 3,
+      budget: 25,
+      staticTokens: 0,
+      maxRetain,
+    };
+  }
+
+  it('左移后的边界若切断配对 → 继续前移到配对之外（摘要输入不以未配对 tool_calls 结尾）', async () => {
+    const engine = createEngine();
+    const messages = makePairingSensitiveMessages();
+    const boundary = await (engine as any).enforceSummaryInputBudget(
+      budgetInput(messages, 10_000),
+    );
+
+    // 预算校正会把边界移到 2（遮蔽 20 tokens ≤ 25）；但 messages[1] 是未配对 tool-call
+    // 消息 → 平衡再前移到 1，摘要输入 = [m0]，不再以 tool_calls 结尾
+    expect(boundary).toBe(1);
+    expect(toolPairingBalancedBefore(messages, 2)).toBe(1);
+    expect(messages[boundary - 1].content.some((b) => b.type === 'tool-call')).toBe(false);
+  });
+
+  it('平衡后保留区越过 maxRetain → 返回 null（走既有不可行分支，不发注定失败的请求）', async () => {
+    const engine = createEngine();
+    const messages = makePairingSensitiveMessages();
+    // 边界 1 → 保留 messages[1..4] = 40 tokens > 上限 35
+    const boundary = await (engine as any).enforceSummaryInputBudget(
+      budgetInput(messages, 35),
+    );
+    expect(boundary).toBeNull();
+  });
+});
+
 describe('LLMSummaryProvider', () => {
   /** 构造流式 mock：text_delta + finish（对齐 BlockAssembler 输入） */
   function streamMock(text: string): AsyncGenerator<any> {

@@ -145,6 +145,24 @@ export class ToolExecutor {
         worker(),
       ),
     );
+
+    // 中止退出（worker 的 break）会留下未认领的空洞槽位。结果数组的契约是
+    // 「与 requests 同序、每条请求一条响应」——调用方逐条解引用（读 toolCallId
+    // 建 tool 结果消息），空洞会让它抛错并把整个回合拖成"工具结果一条不落"。
+    // 因此这里把空洞补齐为显式中断结果（模型据此知道未派发，而非误判为失败重试）。
+    for (let index = 0; index < requests.length; index += 1) {
+      if (responses[index]) continue;
+      const request = requests[index];
+      responses[index] = {
+        toolCallId: request.id,
+        name: request.name,
+        content:
+          "Error: tool call not executed (request aborted before dispatch). Retry only read-only/idempotent operations.",
+        isError: true,
+        outcome: "error",
+      };
+    }
+
     return responses;
   }
 

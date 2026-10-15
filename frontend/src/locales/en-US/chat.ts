@@ -194,6 +194,7 @@
     requestTimeout: 'Request Timeout',
     serverNoResponse: 'The server has not responded with data for a while, please try again later',
     manuallyTerminated: 'Manually Terminated',
+    interruptedRecovered: 'This reply was interrupted unexpectedly (client or backend process). It has been closed out automatically; you can continue the conversation.',
     maxIterationsReached: 'Maximum tool call iterations reached',
     rateLimitedPaused: 'Request was rate limited, please retry later',
     working: 'Working',

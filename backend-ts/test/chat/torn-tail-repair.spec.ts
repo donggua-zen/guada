@@ -174,3 +174,140 @@ describe("torn-tail 修复补未配对 tool-call 错误结果（对齐 DSH inter
     expect(finish?.data.finishReason).toBe("interrupted");
   });
 });
+
+describe("冷加载收口：事件流完整但停在未闭合回合（无坏行，torn 尾修复不触发）", () => {
+  const sid = "clean-interrupt-close";
+  let backend: JsonlBackend;
+
+  beforeEach(async () => {
+    backend = new JsonlBackend();
+    if (await backend.hasSession(sid)) await backend.deleteSession(sid);
+    await backend.createSession(sid, { title: "t" });
+  });
+
+  /** 造一个未闭合回合：user + assistant(tool-call)，无 tool/result、无 turn/finish */
+  async function seedOpenTurnWithDanglingCall(service: JsonlMessageService): Promise<void> {
+    await service.beginTurn(sid);
+    await service.appendMessages(sid, [
+      { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        kind: "model",
+        source: { kind: "model", provider: "test", model: "m" },
+        metadata: {},
+        content: [
+          { type: "tool-call", toolCallId: "call_9", name: "shell", arguments: "{}" },
+        ],
+      },
+    ]);
+  }
+
+  it("冷加载即补合成结果并闭合回合（不依赖坏行）", async () => {
+    await seedOpenTurnWithDanglingCall(new JsonlMessageService(backend));
+
+    // 无坏行：进程被杀在两次 append 之间的典型残留
+    const { truncateTo } = await backend.scanActiveSegment(sid);
+    expect(truncateTo).toBeNull();
+
+    const cold = new JsonlMessageService(backend);
+    const state = await (cold as any).getState(sid);
+
+    const all = await backend.getAllEvents(sid);
+    const toolResults = all.filter((e) => e.type === "tool/result");
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0].data.toolCallId).toBe("call_9");
+    expect(String(toolResults[0].data.content)).toContain("interrupted before dispatch");
+    expect(toolResults[0].data.isError).toBe(true);
+    expect(all.find((e) => e.type === "turn/finish")?.data.finishReason).toBe("interrupted");
+    // 折叠态与磁盘一致：回合已闭合
+    expect(state.currentTurnId).toBeNull();
+  });
+
+  it("同进程内再次重建不重复收口（TTL 过期重建不得误闭在途回合）", async () => {
+    // 写入方与冷加载方是两个实例（生产语义：写入发生在重启前的进程里，收口发生在启动后）
+    const writer = new JsonlMessageService(backend);
+    await seedOpenTurnWithDanglingCall(writer);
+
+    const cold = new JsonlMessageService(backend);
+    await (cold as any).getState(sid);
+    const afterCold = await backend.getAllEvents(sid);
+    expect(afterCold.filter((e) => e.type === "tool/result")).toHaveLength(1);
+    expect(afterCold.filter((e) => e.type === "turn/finish")).toHaveLength(1);
+
+    // 冷加载后同进程内开新回合（在途）→ 强制重建（TTL 过期路径）不得当成中断收口
+    await seedOpenTurnWithDanglingCall(cold);
+    await (cold as any).getState(sid, true);
+
+    const afterRebuild = await backend.getAllEvents(sid);
+    expect(afterRebuild.filter((e) => e.type === "turn/start")).toHaveLength(2);
+    expect(afterRebuild.filter((e) => e.type === "tool/result")).toHaveLength(1);
+    expect(afterRebuild.filter((e) => e.type === "turn/finish")).toHaveLength(1);
+  });
+});
+
+describe("repairDanglingToolCalls（配对非法错误的自愈入口）", () => {
+  const sid = "heal-dangling";
+  let backend: JsonlBackend;
+
+  beforeEach(async () => {
+    backend = new JsonlBackend();
+    if (await backend.hasSession(sid)) await backend.deleteSession(sid);
+    await backend.createSession(sid, { title: "t" });
+  });
+
+  function assistantWithCall(id: string, callId: string) {
+    return {
+      id,
+      role: "assistant" as const,
+      kind: "model" as const,
+      source: { kind: "model" as const, provider: "test", model: "m" },
+      metadata: {},
+      content: [{ type: "tool-call" as const, toolCallId: callId, name: "shell", arguments: "{}" }],
+    };
+  }
+
+  it("未闭合回合末条 assistant 的悬空调用 → 补 isError 结果（紧邻调用，配对完整）", async () => {
+    const service = new JsonlMessageService(backend);
+    await service.beginTurn(sid);
+    await service.appendMessages(sid, [assistantWithCall("a1", "call_x")]);
+
+    const repaired = await service.repairDanglingToolCalls(sid);
+    expect(repaired).toBe(1);
+
+    const state = await (service as any).getState(sid);
+    const ids = state.messages.map((n: any) => n.id);
+    // 结果紧邻调用之后 → wire 上形状合法（不是"结果隔在别的消息之后"）
+    expect(ids).toEqual(["a1", expect.stringContaining("m_")]);
+    const result = state.messages[1];
+    expect(result.source).toEqual({ kind: "tool", toolCallId: "call_x" });
+    expect(result.content[0]).toMatchObject({ isError: true, toolCallId: "call_x" });
+    expect(String(result.content[0].content)).toContain("interrupted before dispatch");
+    // 自愈不闭合回合：回合仍在进行中（后续消息继续归属当前回合）
+    expect(state.currentTurnId).not.toBeNull();
+  });
+
+  it("末条不是 assistant（悬空调用在更早的消息里）→ 不补（补了会被别的消息隔开，仍非法）", async () => {
+    const service = new JsonlMessageService(backend);
+    await service.beginTurn(sid);
+    await service.appendMessages(sid, [
+      assistantWithCall("a1", "call_x"),
+      { id: "u2", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "next" }] },
+    ]);
+
+    expect(await service.repairDanglingToolCalls(sid)).toBe(0);
+    const all = await backend.getAllEvents(sid);
+    expect(all.filter((e) => e.type === "tool/result")).toHaveLength(0);
+  });
+
+  it("已闭合回合里的悬空调用 → 不补（消息事件会错归到当前回合；该残骸由请求侧占位兜底）", async () => {
+    const service = new JsonlMessageService(backend);
+    const { turnId } = await service.beginTurn(sid);
+    await service.appendMessages(sid, [assistantWithCall("a1", "call_x")]);
+    await service.finalizeTurn(sid, turnId, 5, { finishReason: "error" } as any);
+
+    expect(await service.repairDanglingToolCalls(sid)).toBe(0);
+    const all = await backend.getAllEvents(sid);
+    expect(all.filter((e) => e.type === "tool/result")).toHaveLength(0);
+  });
+});

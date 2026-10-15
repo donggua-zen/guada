@@ -19,7 +19,7 @@ import type { Message } from '../../../common/types/conversation.types';
  * @returns 平衡后的边界索引（只可能 <= 初始值）
  */
 export function toolPairingBalancedBefore(
-  messages: Message[],
+  messages: readonly Message[],
   boundaryIndex: number,
 ): number {
   let idx = boundaryIndex;

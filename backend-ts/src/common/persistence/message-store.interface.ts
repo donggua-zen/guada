@@ -146,6 +146,12 @@ export interface IMessageStore {
   ): Promise<{ success: boolean }>;
   /** 删除轮次：删 user 外壳 → 其全部 assistant 版本遮蔽 */
   deleteTurn(sessionId: string, turnId: string): Promise<void>;
+  /**
+   * 修复当前未闭合回合末尾的悬空 tool-call（配对非法错误的自愈入口，见实现注释）。
+   * 可选能力：不实现则自愈路径退化为「仅请求侧兜底 + 重试」。
+   * @returns 补写的合成结果条数
+   */
+  repairDanglingToolCalls?(sessionId: string): Promise<number>;
   /** 清空会话全部轮次 */
   clearSessionTurns(sessionId: string): Promise<void>;
   /** 批量导入轮次（重建/导入路径）。

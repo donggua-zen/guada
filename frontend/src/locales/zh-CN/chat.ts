@@ -194,6 +194,7 @@ export default {
     requestTimeout: '请求超时',
     serverNoResponse: '服务器长时间未响应数据，请稍后重试',
     manuallyTerminated: '已手动终止',
+    interruptedRecovered: '本次回复被意外中断（客户端或后端进程中断），已完成自动收尾，可继续对话',
     maxIterationsReached: '已达到最大工具调用轮次限制',
     rateLimitedPaused: '请求触发限流，请稍后继续',
     working: '工作中',

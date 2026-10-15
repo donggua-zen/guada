@@ -537,6 +537,17 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /**
+   * 修复未闭合回合末尾的悬空 tool-call（命中上游「配对非法」错误后的自愈）。
+   * 委托 store 补写合成结果；视图结构变化 → 作废快照，主循环重试时会重读修好的历史。
+   */
+  async repairDanglingToolCalls(): Promise<number> {
+    const repaired =
+      (await this.messageStore.repairDanglingToolCalls?.(this.sessionId)) ?? 0;
+    if (repaired > 0) this.snapshot = null;
+    return repaired;
+  }
+
+  /**
    * 追加用户消息:写 user/message(后于 turn/start,归属由当前回合括号界定)。
    * 事件实时落盘,返回用户消息(三层 Message,供广播 user_message 事件)。
    */

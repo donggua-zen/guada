@@ -253,6 +253,17 @@ export interface ISessionContext {
   deleteTurn(turnId: string): Promise<void>;
 
   /**
+   * 修复未闭合回合末尾的悬空 tool-call（补齐 isError 合成结果）。
+   *
+   * 命中上游「工具配对非法」错误后的自愈入口：这类 400 不是上下文长度问题，
+   * 压缩无用，要动的是历史本身；修复成功即可重试原请求。可选能力——不支持时
+   * 自愈退化为「请求侧 tool-pairing.guard 占位兜底 + 重试一次」。
+   *
+   * @returns 补写的合成结果条数（0 = 无开放回合或无悬空调用）
+   */
+  repairDanglingToolCalls?(): Promise<number>;
+
+  /**
    * 追加用户消息:写 user/message(后于 turn/start),不建回合外壳、不返回三层结构。
    * 返回用户消息(三层 Message),供 agent-engine 广播 user_message 事件。
    * @param options.blocks 原生内容块（S2：结构化入站消息，存在时优先于 content/files 构造）
