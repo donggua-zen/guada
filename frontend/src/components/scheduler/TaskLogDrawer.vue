@@ -36,6 +36,11 @@
               {{ log.error }}
             </div>
 
+            <!-- 错过窗口：不是失败，用中性色说明原因（含次数） -->
+            <div v-if="log.reason" class="text-xs text-gray-500 dark:text-[#8b8d95] bg-gray-50 dark:bg-[#2a2c30] p-2 rounded mt-2">
+              {{ log.reason }}
+            </div>
+
             <div v-if="log.finishedAt" class="text-xs text-gray-400 mt-2">
               {{ t('scheduler.log.finishedAt') }}: {{ formatDateTime(log.finishedAt) }}
             </div>
@@ -97,6 +102,8 @@ function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warnin
       return 'primary'
     case 'failed':
       return 'danger'
+    case 'missed':
+      return 'warning'
     case 'pending':
     default:
       return 'info'
@@ -114,6 +121,8 @@ function getStatusLabel(status: string): string {
       return t('scheduler.log.statusRunning')
     case 'failed':
       return t('scheduler.log.statusFailed')
+    case 'missed':
+      return t('scheduler.log.statusMissed')
     case 'pending':
       return t('scheduler.log.statusPending')
     default:

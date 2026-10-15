@@ -72,9 +72,21 @@ export class TaskExecutorService {
     };
     await this.storage.createLog(log);
 
+    try {
+      await this.runWithRetries(task, log);
+    } finally {
+      // 日志量随执行与「错过窗口」记录持续增长，清理必须真的执行到。
+      // 旧版把它放在所有分支都 return 的循环之后，实际从未跑过。
+      await this.storage.cleanupOldLogs(200);
+    }
+  }
+
+  /**
+   * 重试循环本体：成功、失败、重试耗尽都只 return，不向上抛
+   */
+  private async runWithRetries(task: ScheduledTask, log: ScheduledTaskLog): Promise<void> {
     const maxRetries = task.maxRetries ?? 0;
     const retryInterval = (task.retryInterval ?? 60) * 1000;
-    let lastError: any = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
@@ -90,7 +102,6 @@ export class TaskExecutorService {
         await this.incrementExecutionCount(task);
         return;
       } catch (error: any) {
-        lastError = error;
         const isRetryable = isRetryableError(error);
 
         if (!isRetryable || attempt >= maxRetries) {
@@ -112,9 +123,6 @@ export class TaskExecutorService {
         );
       }
     }
-
-    // 清理过期日志
-    await this.storage.cleanupOldLogs(200);
   }
 
   /**

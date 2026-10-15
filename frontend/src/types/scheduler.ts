@@ -11,8 +11,10 @@ export type TargetMode = 'new_session' | 'existing_session'
 
 /**
  * 任务执行状态
+ *
+ * missed：计划窗口被错过（电脑休眠、应用未运行、进程阻塞），不补跑、只留痕
  */
-export type TaskLogStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type TaskLogStatus = 'pending' | 'running' | 'completed' | 'failed' | 'missed'
 
 /**
  * 定时任务对象
@@ -61,6 +63,8 @@ export interface ScheduledTaskLog {
   sessionId?: string | null
   status: TaskLogStatus
   error?: string | null
+  /** missed 状态专用：错过窗口的说明（含次数与原因） */
+  reason?: string | null
   startedAt: string
   finishedAt?: string | null
 }
