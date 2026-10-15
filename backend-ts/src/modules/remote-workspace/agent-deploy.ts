@@ -1,16 +1,15 @@
 /**
- * Agent deployer — SSH 自动部署 Go Agent 二进制 + 端口转发 + WebSocket 连接
+ * Agent 部署与 SSH 连接支撑 — 与 agent-version.ts / ssh-agent-connect.ts / ssh-stdio-transport.ts 配合。
  *
- * 流程:
- * 1. SSH 连接到远端
- * 2. 检查 ~/.guada-agent/guada-agent 是否存在且版本匹配
- * 3. 不存在或版本不匹配 → 检测远端 OS+架构 → 获取对应二进制（调试阶段:本地缓存文件夹复制;TODO: 下载地址待配置）→ 上传到远端
- * 4. 启动 agent: ~/.guada-agent/guada-agent --port 0 (随机端口)
- * 5. 解析 stdout 获取 "listening on 127.0.0.1:PORT"
- * 6. SSH 端口转发: 本地随机端口 → 远端 127.0.0.1:PORT
- * 7. 返回本地 WebSocket URL
+ * 本文件提供三块能力：
+ * 1. **供给（provisionRemoteAgent）**：SSH 连接 → 探测可写安装目录 → 写入访问令牌 →
+ *    版本检查（latest 低于 stdio 下限时忽略，绝不降级）→ 按需下载并上传二进制（SFTP，失败回退 exec 通道）。
+ * 2. **legacy 起点（startLegacyWsAgent）**：nohup 启动 `agent --port 0` + SSH 端口转发 → `ws://127.0.0.1:<port>/ws`。
+ *    仅用于 agent < 0.6.0（无 --stdio）与 devMode 调试；要求远端 sshd 允许端口转发。
+ * 3. **部署验证（verifyAndDeployAgent）**：向导「部署验证」步骤，握手方式与实际连接链路一致
+ *    （≥ 0.6.0 走 stdio，旧版走端口转发 + WS），避免"验证通过但实际连不上"。
  *
- * dev 模式跳过部署，直接连接手动启动的 agent。
+ * agent ≥ 0.6.0 的默认连接链路见 ssh-agent-connect.ts（ssh exec + stdio，无需端口转发）。
  */
 
 import { Client, type ConnectConfig } from "ssh2";
@@ -23,6 +22,8 @@ import * as https from "https";
 import * as crypto from "crypto";
 import type { ParsedWorkspaceUri } from "../../common/workspace/workspace-provider.interface";
 import { RpcClient, WsRpcTransport } from "./rpc";
+import { SshStdioTransport } from "./ssh-stdio-transport";
+import { MIN_STDIO_AGENT_VERSION, selectSshAgentTransport, versionAtLeast } from "./agent-version";
 
 const REMOTE_DIR = ".guada-agent";
 const REMOTE_BINARY_NAME = "guada-agent";
@@ -142,23 +143,60 @@ export interface AgentConnectionInfo {
   token: string;
 }
 
-export async function deployAgent(
+/** 远端 agent 供给结果（部署 + 版本确认；连接方式由调用方按 `version` 选择） */
+export interface RemoteAgentProvision {
+  /** 已建立的 SSH 连接（由调用方负责在连接生命周期结束时 end） */
+  sshClient: Client;
+  sshConfig: ConnectConfig;
+  /** 远端安装目录（`<可写根>/.guada-agent`） */
+  remoteDir: string;
+  /** 远端 agent 二进制绝对路径 */
+  remoteBinary: string;
+  /** 访问令牌（WS 链路鉴权用；stdio 链路不需要，但一并写入以便随时回退） */
+  token: string;
+  /** 远端当前 agent 版本（上传后以再查为准）；未安装且未部署成功时为空串 */
+  version: string;
+  /** 本次是否上传/覆盖了二进制 */
+  uploaded: boolean;
+  log: string[];
+}
+
+/**
+ * 远端供给：连上 SSH → 解析安装目录 → 写入访问令牌 → 版本检查 → 按需下载并上传二进制。
+ *
+ * 两条链路共用（stdio 与 legacy WS），差别只在调用方随后如何启动/连接。
+ *
+ * 版本策略（与容器链路一致）：latest 接口返回的版本**低于 stdio 下限（0.6.0）时忽略**，
+ * 退回本地缓存/已安装版本 —— 否则"跟随 latest"会把 0.6+ 的远端降级回旧版
+ * （实测旧版 agent 收到 --stdio 会静默失败）；latest 不可达时容忍并照常继续。
+ */
+export async function provisionRemoteAgent(
   uri: ParsedWorkspaceUri,
   downloadUrl?: string,
   latestVersionUrl?: string,
-): Promise<AgentConnectionInfo> {
-  // Dev mode: connect to manually started agent
-  if (uri.query?.devMode === "1") {
-    const port = parseInt(uri.query?.agentPort || "19876", 10);
-    return { wsUrl: `ws://127.0.0.1:${port}/ws`, localPort: port, sshClient: null, token: "" };
-  }
+  opts: {
+    onLog?: (line: string) => void;
+    signal?: AbortSignal;
+  } = {},
+): Promise<RemoteAgentProvision> {
+  const log: string[] = [];
+  const push = (line: string) => {
+    log.push(line);
+    opts.onLog?.(line);
+  };
+  const throwIfAborted = (): void => {
+    if (opts.signal?.aborted) {
+      const err = new Error("Deployment cancelled");
+      (err as any).cancelled = true;
+      throw err;
+    }
+  };
 
   const sshConfig = buildSshConfig(uri);
   const sshClient = await sshConnect(sshConfig);
 
   try {
-    // Step 1: ensure remote dir exists
-    // $HOME 可能不存在且不可创建(部分 NAS):探测可写目录后再安装
+    // Step 1: 确保远端安装目录（$HOME 可能不存在且不可创建：探测可写目录后回退）
     const remoteBase = await resolveRemoteBaseDir(sshClient);
     if (!remoteBase.path) {
       throw new Error(
@@ -169,47 +207,152 @@ export async function deployAgent(
     const remoteDir = `${remoteBase.path}/${REMOTE_DIR}`;
     const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
+    if (!remoteBase.isHome) {
+      push(
+        `Home directory is missing or not writable on ${sshConfig.host}; ` +
+          `installing the agent under ${remoteBase.path} instead — ` +
+          `if that location is a temp filesystem, the agent is re-deployed after a reboot.`,
+      );
+    }
 
-    // Step 1.5: ensure access token file exists on remote (agent auth)
+    // Step 1.5: 访问令牌（远端 600 权限；stdio 链路用不到，保留以便回退到 WS）
+    throwIfAborted();
     const token = getOrCreateToken();
     await writeRemoteToken(sshClient, remoteDir, token);
 
-    // Step 2: check if agent exists + version
+    // Step 2: 远端版本
+    throwIfAborted();
     const versionCheck = await execCommand(
       sshClient,
       `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
     );
-    const remoteVersion = versionCheck.trim();
+    const installed = versionCheck.trim() === "NOT_FOUND" ? "" : versionCheck.trim().split("\n")[0].trim();
 
-    // 期望版本:配置了 latest 接口时取最新版本号,与远端严格比较;
-    // 不一致(或未安装)即重新下载推送;未配置 latest 时按 NOT_FOUND 判断。
-    const expectedVersion = latestVersionUrl
-      ? (await fetchLatestVersion(latestVersionUrl)).version
-      : "";
-    const needDeploy = expectedVersion
-      ? remoteVersion !== expectedVersion
-      : remoteVersion === "NOT_FOUND";
-
-    if (needDeploy) {
-      // Step 3: detect remote OS + arch
-      const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
-      const archRaw = (await execCommand(sshClient, "uname -m")).trim();
-
-      const osName = osRaw === "darwin" ? "darwin" : "linux";
-      const goArch = (archRaw === "aarch64" || archRaw === "arm64") ? "arm64" : "amd64";
-
-      // Download binary to local cache (if not cached, and download URL configured)
-      const localBinary = await ensureLocalBinary(osName, goArch, downloadUrl, latestVersionUrl);
-
-      // 先清理远端旧 agent 进程:运行中的二进制被占用时,fastPut 覆盖会失败(ETXTBSY → code 4)
-      await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
-
-      // Upload via SFTP(不可用时回退 exec 通道)
-      await uploadBinary(sshClient, localBinary, remoteBinary);
-      await execCommand(sshClient, `chmod +x ${remoteBinary}`);
+    // 期望版本：跟随 latest，但低于 stdio 下限的 latest 被忽略（绝不降级）
+    let expectedVersion = "";
+    if (latestVersionUrl) {
+      throwIfAborted();
+      try {
+        const latest = (await fetchLatestVersion(latestVersionUrl)).version;
+        if (versionAtLeast(latest, MIN_STDIO_AGENT_VERSION)) {
+          expectedVersion = latest;
+          push(`Latest agent version: v${expectedVersion}`);
+        } else {
+          push(
+            `Latest published agent v${latest} is older than the stdio minimum v${MIN_STDIO_AGENT_VERSION}; ` +
+              `keeping the installed/local binary (no downgrade).`,
+          );
+        }
+      } catch (err: any) {
+        push(`Latest version check failed (ignored): ${err?.message || err}`);
+      }
     }
 
-    // Step 4: start agent process (session-scoped, random port)
+    const needDeploy = expectedVersion ? installed !== expectedVersion : !installed;
+    if (!needDeploy) {
+      push(`Agent already installed with matching version (v${installed})`);
+      return { sshClient, sshConfig, remoteDir, remoteBinary, token, version: installed, uploaded: false, log };
+    }
+
+    // Step 3: 探测远端平台 → 取本地二进制（缓存优先/按需下载）
+    throwIfAborted();
+    const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
+    const archRaw = (await execCommand(sshClient, "uname -m")).trim();
+    const osName = osRaw === "darwin" ? "darwin" : "linux";
+    const goArch = (archRaw === "aarch64" || archRaw === "arm64") ? "arm64" : "amd64";
+    push(`Remote platform: ${osName}/${goArch}`);
+
+    const localBinary = await ensureLocalBinary(
+      osName,
+      goArch,
+      downloadUrl,
+      // 忽略旧版 latest 时不要把它透传给缓存/下载逻辑（否则会去找/下载那个旧版本）
+      expectedVersion ? latestVersionUrl : undefined,
+      // 下载进度：节流输出（每前进 ≥5% 且 ≥2MB 才一行），避免部署日志刷屏
+      (() => {
+        let lastPct = -1;
+        let lastLoggedBytes = 0;
+        return (downloaded: number, total: number) => {
+          if (total > 0) {
+            const pct = Math.min(100, Math.round((downloaded / total) * 100));
+            if (pct >= lastPct + 5 && downloaded - lastLoggedBytes >= 2 * 1048576) {
+              lastPct = pct;
+              lastLoggedBytes = downloaded;
+              push(
+                `Downloading agent binary: ${(downloaded / 1048576).toFixed(1)}MB / ` +
+                  `${(total / 1048576).toFixed(1)}MB (${pct}%)`,
+              );
+            }
+          } else {
+            push(`Downloading agent binary: ${(downloaded / 1048576).toFixed(1)}MB`);
+          }
+        };
+      })(),
+      opts.signal,
+    );
+
+    // Step 4: 清理旧进程（运行中的二进制被占用时 fastPut 覆盖会失败）→ 上传 → 授权
+    throwIfAborted();
+    await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
+    await uploadBinary(sshClient, localBinary, remoteBinary, push);
+    await execCommand(sshClient, `chmod +x ${remoteBinary}`);
+
+    // Step 5: 再查版本作为权威值（同时验证上传结果可执行）
+    const after = (await execCommand(
+      sshClient,
+      `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
+    )).trim();
+    if (after === "NOT_FOUND") {
+      throw new Error(
+        `agent 上传后无法执行：${remoteBinary}（远端可能不允许在该目录执行，或上传被截断）`,
+      );
+    }
+    push(`Agent v${after.split("\n")[0].trim()} installed at ${remoteBinary}`);
+
+    return {
+      sshClient,
+      sshConfig,
+      remoteDir,
+      remoteBinary,
+      token,
+      version: after.split("\n")[0].trim(),
+      uploaded: true,
+      log,
+    };
+  } catch (err) {
+    sshClient.end();
+    throw err;
+  }
+}
+
+/**
+ * legacy 起点：在既有 SSH 连接上启动 `agent --port 0`（nohup 后台）并做端口转发，
+ * 返回 `ws://127.0.0.1:<localPort>/ws`。
+ *
+ * 仅用于 agent < 0.6.0（无 stdio 能力）与 devMode 调试；该路径要求远端 sshd
+ * 允许端口转发（AllowTcpForwarding），硬化环境请升级 agent 走 stdio。
+ */
+export async function startLegacyWsAgent(
+  provision: RemoteAgentProvision,
+  uri: ParsedWorkspaceUri,
+): Promise<AgentConnectionInfo> {
+  const { sshClient, remoteDir, remoteBinary, token } = provision;
+  try {
+    // 工作目录预校验：连接配置的 path 就是 agent 的 --root（命令默认 cwd）。
+    // 路径不存在时 agent(0.5.1+) 会拒绝启动；这里提前给出明确原因，
+    // 避免用户在执行命令时只看到 "fork/exec /bin/sh: no such file or directory" 这类间接报错。
+    const workspacePath = uri.path || "/";
+    const pathCheck = await execCommand(
+      sshClient,
+      `test -d '${workspacePath}' && echo OK || echo MISSING`,
+    );
+    if (!pathCheck.includes("OK")) {
+      throw new Error(
+        `远端工作目录不存在：${workspacePath} — 请回到「选择目录」重新选择一个已存在的目录` +
+          `（macOS 的主目录在 /Users/<user> 下）。`,
+      );
+    }
+
     const remotePort = await ensureAgentRunning(
       sshClient,
       remoteBinary,
@@ -218,12 +361,10 @@ export async function deployAgent(
       uri.query?.perm,
     );
 
-    // Step 5: port forward
-    // 先探测:被 sshd 拒绝端口转发时(AllowTcpForwarding no)提前报明确原因,
+    // 先探测：被 sshd 拒绝端口转发时(AllowTcpForwarding no)提前报明确原因，
     // 否则上层只会看到 WS 的 socket hang up
     await probePortForward(sshClient, remotePort);
     const localPort = await setupPortForward(sshClient, remotePort);
-
     return {
       wsUrl: `ws://127.0.0.1:${localPort}/ws`,
       localPort,
@@ -234,6 +375,25 @@ export async function deployAgent(
     sshClient.end();
     throw err;
   }
+}
+
+/**
+ * @deprecated 生产链路请用 connectSshAgent（按版本自动选 stdio / legacy）。
+ * 保留本入口用于：devMode 直连调试、SSH 传输形态对比基准（scripts/ssh-stdio-vs-forward-bench.ts）、
+ * 以及 agent < 0.6.0 环境的显式回退。
+ */
+export async function deployAgent(
+  uri: ParsedWorkspaceUri,
+  downloadUrl?: string,
+  latestVersionUrl?: string,
+): Promise<AgentConnectionInfo> {
+  // Dev mode: connect to manually started agent
+  if (uri.query?.devMode === "1") {
+    const port = parseInt(uri.query?.agentPort || "19876", 10);
+    return { wsUrl: `ws://127.0.0.1:${port}/ws`, localPort: port, sshClient: null, token: "" };
+  }
+  const provision = await provisionRemoteAgent(uri, downloadUrl, latestVersionUrl);
+  return startLegacyWsAgent(provision, uri);
 }
 
 export interface DeployResult {
@@ -279,7 +439,6 @@ export async function verifyAndDeployAgent(
     return { success: true, installed: true, version: "", log: ["dev mode, skipping deployment"] };
   }
 
-  const sshConfig = buildSshConfig(uri);
   let sshClient: Client | null = null;
   // 中止时立即断开 SSH,使进行中的 exec/upload 快速失败
   const onAbort = () => {
@@ -291,29 +450,14 @@ export async function verifyAndDeployAgent(
   try {
     throwIfAborted();
     push("Connecting to remote server via SSH...");
-    sshClient = await sshConnect(sshConfig);
-    throwIfAborted();
-    // 安装目录根:优先 $HOME,部分 NAS 账号的 $HOME 不存在且不可创建,回退到可写目录
-    const remoteBase = await resolveRemoteBaseDir(sshClient);
-    throwIfAborted();
-    if (!remoteBase.path) {
-      push(
-        `No writable directory found on ${sshConfig.host} to install the agent ` +
-          `(tried: ${REMOTE_BASE_CANDIDATES.join(", ")}).`,
-      );
-      return { success: false, installed: false, version: "", log };
-    }
-    const remoteDir = `${remoteBase.path}/${REMOTE_DIR}`;
-    const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
-    await execCommand(sshClient, `mkdir -p ${remoteDir}`);
-    push(`Remote directory ready: ${remoteDir}`);
-    if (!remoteBase.isHome) {
-      push(
-        `Home directory is missing or not writable on ${sshConfig.host}; ` +
-          `installing the agent under ${remoteBase.path} instead — ` +
-          `if that location is a temp filesystem, the agent is re-deployed after a reboot.`,
-      );
-    }
+
+    // 供给（连 SSH → 安装目录 → 令牌 → 版本检查 → 按需上传）；版本下限策略见 provisionRemoteAgent
+    const provision = await provisionRemoteAgent(uri, downloadUrl, latestVersionUrl, {
+      onLog: push,
+      signal,
+    });
+    sshClient = provision.sshClient;
+    const { sshConfig, remoteBinary } = provision;
 
     // 工作目录预校验:连接配置的 path 就是 agent 的 --root(命令默认 cwd)。
     // 路径不存在时 agent(0.5.1+)会拒绝启动;这里提前给出明确原因,
@@ -337,148 +481,68 @@ export async function verifyAndDeployAgent(
     }
     push("Remote workspace path exists");
 
-    // 确保访问令牌文件已写入远端(agent 鉴权)
+    // 握手验证：连接链路怎么连，这里就怎么验——避免"验证通过但实际连不上"。
+    // agent >= 0.6.0 走 stdio（不需要端口转发；硬化 sshd 下同样可验证）；
+    // 旧版 agent 回退端口转发 + WebSocket。
     throwIfAborted();
-    const token = getOrCreateToken();
-    await writeRemoteToken(sshClient, remoteDir, token);
-    push("Access token written to remote");
-
-    // 检测是否已安装 + 版本
-    throwIfAborted();
-    push("Checking remote agent version...");
-    const versionCheck = await execCommand(
-      sshClient,
-      `${remoteBinary} --version 2>/dev/null || echo "NOT_FOUND"`,
-    );
-    throwIfAborted();
-    const remoteVersion = versionCheck.trim();
-    push(remoteVersion === "NOT_FOUND" ? "Agent not installed on remote" : `Remote agent version: ${remoteVersion}`);
-
-    // 期望版本:配置了 latest 接口时取最新版本号,与远端严格比较;
-    // 一致则复用,不一致(或未安装)则重新下载推送。
-    let expectedVersion = "";
-    if (latestVersionUrl) {
-      throwIfAborted();
-      push("Checking for latest version...");
-      expectedVersion = (await fetchLatestVersion(latestVersionUrl)).version;
-      push(`Latest version: v${expectedVersion}`);
-    }
-    const needDeploy = expectedVersion
-      ? remoteVersion !== expectedVersion
-      : remoteVersion === "NOT_FOUND";
-
-    if (!needDeploy) {
-      push(`Agent already installed with matching version (v${remoteVersion})`);
-      return { success: true, installed: true, version: remoteVersion, log };
-    }
-
-    push(
-      remoteVersion === "NOT_FOUND"
-        ? "Agent not installed, starting deployment"
-        : `Remote version ${remoteVersion} differs from expected ${expectedVersion}, redeploying`,
-    );
-
-    // 检测远端 OS + 架构
-    throwIfAborted();
-    push("Detecting remote platform...");
-    const osRaw = (await execCommand(sshClient, "uname -s")).trim().toLowerCase();
-    const archRaw = (await execCommand(sshClient, "uname -m")).trim();
-    const osName = osRaw === "darwin" ? "darwin" : "linux";
-    const goArch = (archRaw === "aarch64" || archRaw === "arm64") ? "arm64" : "amd64";
-    push(`Remote platform: ${osName}/${goArch}`);
-
-    // 获取本地二进制(本地缓存优先;配置下载地址/latest 接口时自动获取最新版)
-    throwIfAborted();
-    push("Acquiring deployment resource (local cache / download)...");
-    const localBinary = await ensureLocalBinary(
-      osName,
-      goArch,
-      downloadUrl,
-      latestVersionUrl,
-      // 下载进度回调:节流输出(每 ≥5% 或 ≥2MB 才一行),避免频繁日志刷屏
-      (() => {
-        let lastPct = -1;
-        let lastLoggedBytes = 0;
-        return (downloaded: number, total: number) => {
-          if (total > 0) {
-            const pct = Math.min(100, Math.round((downloaded / total) * 100));
-            // 节流:进度前进 ≥5% 或字节数前进 ≥2MB 才输出
-            if (pct >= lastPct + 5 && downloaded - lastLoggedBytes >= 2 * 1048576) {
-              lastPct = pct;
-              lastLoggedBytes = downloaded;
-              const mb = (downloaded / 1048576).toFixed(1);
-              const totalMb = (total / 1048576).toFixed(1);
-              push(`Downloading deployment resource: ${mb}MB / ${totalMb}MB (${pct}%)`);
-            }
-          } else {
-            push(`Downloading deployment resource: ${(downloaded / 1048576).toFixed(1)}MB`);
-          }
-        };
-      })(),
-      signal,
-    );
-    throwIfAborted();
-    push(`Using local binary: ${localBinary}`);
-
-    // 先清理远端旧 agent 进程(避免运行中的二进制被占用,fastPut 覆盖失败)
-    throwIfAborted();
-    push("Stopping old agent processes on remote...");
-    await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
-
-    // 上传 + 授权(SFTP 不可用时回退 exec 通道)
-    throwIfAborted();
-    push("Uploading deployment resource...");
-    await uploadBinary(sshClient, localBinary, remoteBinary, push);
-    throwIfAborted();
-    await execCommand(sshClient, `chmod +x ${remoteBinary}`);
-    push("Binary uploaded");
-
-    // 启动验证(随机端口启动,会话级独立进程)
-    throwIfAborted();
-    push("Starting agent...");
-    const remotePort = await ensureAgentRunning(
-      sshClient,
-      remoteBinary,
-      `${remoteDir}/.token`,
-      uri.path,
-      uri.query?.perm,
-    );
-    push(`Agent started successfully, listening on port ${remotePort}`);
-
-    // 握手验证:建立临时 WS 连接 ping 确认可联通,随后断开。
-    // agent 为"断开即退出"模式,验证完成后连接关闭 → agent 自动退出,不留残留进程。
-    // 先探测端口转发:被 sshd 拒绝(AllowTcpForwarding no)时给出明确原因,
-    // 否则 WS 只会报 "socket hang up",用户无从判断。
-    push("Verifying agent handshake...");
-    await probePortForward(sshClient, remotePort);
-    try {
-      const localPort = await setupPortForward(sshClient, remotePort);
-      const verifyWs = new WebSocket(`ws://127.0.0.1:${localPort}/ws`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    const transportKind = selectSshAgentTransport(provision.version);
+    if (transportKind === "stdio") {
+      push("Verifying agent handshake over SSH stdio...");
+      const transport = await SshStdioTransport.openAgent(sshClient, {
+        binaryPath: remoteBinary,
+        rootPath: uri.path,
+        perm: uri.query?.perm,
       });
-      await new Promise<void>((resolve, reject) => {
-        verifyWs.once("open", () => resolve());
-        verifyWs.once("error", (err) => reject(err));
-      });
-      const verifyRpc = new RpcClient(new WsRpcTransport(verifyWs));
+      const verifyRpc = new RpcClient(transport);
       verifyRpc.setConnected();
-      const ping = await verifyRpc.call<{ pong: string }>("ping");
-      if (!ping.pong) throw new Error("Agent ping failed");
-      verifyWs.close();
-      push("Agent handshake verified");
-    } catch (err: any) {
-      throw new Error(`Agent handshake failed: ${err?.message || err}`);
+      try {
+        const ping = await verifyRpc.call<{ pong: string }>("ping", undefined, signal, 20000);
+        if (!ping.pong) throw new Error("Agent ping failed");
+      } catch (err: any) {
+        const tail = transport.getStderrTail();
+        throw new Error(
+          `Agent handshake failed: ${err?.message || err}` + (tail ? ` — ${tail.slice(-300)}` : ""),
+        );
+      } finally {
+        // 关闭通道 → agent 读到 EOF 自行退出，不留残留进程
+        verifyRpc.close();
+      }
+    } else {
+      push("Verifying agent handshake over port forward...");
+      // 旧版 agent 回退路径：启动 → 端口转发 → WS ping（agent 断开即退出）
+      const connInfo = await startLegacyWsAgent(provision, uri);
+      try {
+        const verifyWs = new WebSocket(connInfo.wsUrl, {
+          headers: connInfo.token ? { Authorization: `Bearer ${connInfo.token}` } : undefined,
+        });
+        await new Promise<void>((resolve, reject) => {
+          verifyWs.once("open", () => resolve());
+          verifyWs.once("error", (err) => reject(err));
+        });
+        const verifyRpc = new RpcClient(new WsRpcTransport(verifyWs));
+        verifyRpc.setConnected();
+        const ping = await verifyRpc.call<{ pong: string }>("ping");
+        if (!ping.pong) throw new Error("Agent ping failed");
+        verifyWs.close();
+      } catch (err: any) {
+        throw new Error(`Agent handshake failed: ${err?.message || err}`);
+      }
     }
+    push("Agent handshake verified");
 
     push("Deployment verified");
-
-    return { success: true, installed: false, version: expectedVersion, log };
+    return {
+      success: true,
+      installed: !provision.uploaded,
+      version: provision.version,
+      log,
+    };
   } catch (err: any) {
     if (err?.cancelled) {
       push("Deployment cancelled");
     } else {
       // 多行错误(可能含 agent 原始输出,如 --root 校验失败原因)按行展开,前端逐行渲染更易读
-      const lines = String(err?.message || err).split("\n");
+      const lines = String(err?.message || err).split(/\r?\n/);
       push(`Deployment failed: ${lines[0]}`);
       for (const line of lines.slice(1)) push(`  | ${line}`);
     }

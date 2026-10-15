@@ -34,11 +34,15 @@ AI 直接用 `workspace="连接名"` 在容器内读写文件、搜索与执行�
 
 | 环节 | SSH | Docker |
 |---|---|---|
-| 传输 | SSH 端口转发 → `ws://127.0.0.1:<port>/ws`（Bearer token） | `docker exec -i <c> <agent> --stdio`（NDJSON 管道，免 token） |
+| 传输 | **agent ≥ 0.6.0：`ssh exec '<agent> --stdio'`（NDJSON over exec channel）**；< 0.6.0：端口转发 → `ws://127.0.0.1:<port>/ws`（Bearer token，legacy 回退） | `docker exec -i <c> <agent> --stdio`（NDJSON 管道，免 token） |
 | 推送二进制 | SFTP `fastPut`，失败回退 `cat >` + 字节校验 | `docker cp`，失败回退 `docker exec -i sh -c 'cat >'` |
-| 起进程 | `nohup agent --port 0`（断开即由 tracker 退出） | 长驻 `docker exec -i`（stdin EOF = 退出） |
-| 版本/架构探测 | `uname -s/-m` | `docker inspect` + `docker image inspect`（不经容器内任何命令） |
+| 起进程 | `ssh exec` 长驻通道（stdin EOF = 退出）；legacy 为 `nohup agent --port 0` | 长驻 `docker exec -i`（stdin EOF = 退出） |
+| 版本/架构探测 | `uname -s/-m`（+ 本地二进制 `--version` 校验） | `docker inspect` + `docker image inspect`（不经容器内任何命令） |
 | 权限 | agent `--perm readonly/workspace/unrestricted` | 同左（同一 agent、同一套服务端强制） |
+| 版本门禁 | 远端 < 0.6.0 自动回退端口转发；latest 低于 0.6.0 时忽略（不降级） | 要求 ≥ 0.6.0；latest 低于下限时忽略并退回本地缓存 |
+
+两侧都改走 stdio 后，**容器与 SSH 共用同一个传输实现**（`rpc-stream-transport.ts` 的 NDJSON 分帧 +
+`ssh-stdio-transport.ts` 的通道生命周期），差别只在"谁来提供 stdin/stdout"（子进程 vs SSH exec channel）。
 
 **完全复用、零改动**的层：`RemoteAgent` 包装、`AgentWorkspaceProvider`（原 `SshWorkspaceProvider`）、
 `WorkspaceToolRouter` 的 `workspace` 参数路由与会话绑定校验、`r:<连接名>:<pid>` 进程命名空间、
@@ -161,7 +165,24 @@ docker inspect（运行状态 + 镜像 Os/Architecture + WorkingDir）
 
 ---
 
-## 7. 后续可扩展（未实施）
+## 7. 传输形态对比（端口转发 vs stdio，实测）
+
+本机 loopback（Alpine 容器 + sshd，同一 agent 二进制、同一 RPC 电池）：
+
+| 指标 | 端口转发 + WS | ssh exec + stdio |
+|---|---|---|
+| 小 RPC（stat ×300） | p50 ≈ 1.06ms | p50 ≈ 0.89–1.09ms（两次运行翻转，**无实质差异**） |
+| 单条 5MB 读 | 33–49 MB/s | **16–17 MB/s**（exec 的 stdout 是管道，sshd 需多一层拷贝进 channel） |
+| 1MB 分块读 ×5（工具层真实读法） | 42–45 MB/s | 25–36 MB/s |
+| 5MB 写（1MB 分块） | 19–24 MB/s | 21–26 MB/s（无差异） |
+| 连接建立 / 重连 | 78ms / 106ms | 38–68ms / 39–68ms |
+
+结论：时延与写方向无差别，读方向 stdio 慢 1.4–2.8 倍（工具层本就是 1MB 分块读，且真实网络下
+由链路带宽与 SSH 加密主导，差距被稀释）；换来的是**不再要求端口转发**——实测 Alpine 的 openssh
+默认 `AllowTcpForwarding no`，旧链路在该环境下直接失败，stdio 不受影响。
+对比脚本：`backend-ts/src/scripts/ssh-stdio-vs-forward-bench.ts`。
+
+## 8. 后续可扩展（未实施）
 
 - **GuaDa 托管容器**：按镜像 + 挂载创建会话级容器（挂载项目目录到 `/workspace`），连接即建即用；
   需要额外的容器命名、回收与 `--rm` 策略（属独立能力，本方案已为其留出连接层插入点）。
