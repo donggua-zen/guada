@@ -39,7 +39,7 @@ GuaDa is a **local-first** open-source AI workstation — it's not just a chat b
 
 **One Agent engine, three ways to use it:** the **Desktop** app works out of the box, the **Web** version supports private deployment, and you can summon it directly in **QQ / WeCom / Feishu / Discord / WeChat** groups. Combined with the RAG knowledge base, long-term memory, and scheduled tasks, it remembers your materials, works the way you do, and keeps going while you sleep. Data stays on your own machine by default — safe and controllable.
 
-When the work lives on a **server, NAS, VM, or dev board**, it can mount several of them into the same session over SSH — the AI stays on your machine and just reaches in. See [🖥️ Remote Workspace](#-remote-workspace-local-brain-remote-hands).
+When the work lives on a **server, NAS, VM, or dev board**, it can mount several of them into the same session over SSH — or attach a **running Docker container** — while the AI stays on your machine and just reaches in. See [🖥️ Remote Workspace](#-remote-workspace-local-brain-remote-hands).
 
 Whether you're a **content creator** writing scripts and chasing trends, a **programmer** who wants the Agent to write code, a **writer** who needs it to remember character settings, or a **team** that wants an internal AI assistant with a bound knowledge base and IM integration — GuaDa is ready to use out of the box. If this project helps you, please light up the Star ⭐ — your support keeps the updates coming.
 
@@ -99,7 +99,7 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 | **🌐 Browser Automation** | Electron-embedded Chromium, Agent real-time visual control | [→ Details](docs/browser-automation.md) |
 | **🧩 Multi-Model Management** | 5 protocol adapters × **17 vendors** (OpenAI / Claude / Gemini / Azure / DeepSeek / Qwen / ERNIE / Zhipu / Kimi / Volcano / MiniMax etc.), role-level/session-level/global-level config | [→ Details](docs/models.md) |
 | **🛡️ Sandbox Mode** | Shell commands execute in an isolated sandbox process, Agent acts more safely | [→ Details](docs/windows-sandbox-isolation-design.md) |
-| **🖥️ Remote Workspace** | Attach servers·NAS·VMs·dev boards as "additional working directories" over SSH; local + multiple remotes in one session, remote needs only a ~10 MB static binary | [→ Details](#-remote-workspace-local-brain-remote-hands) |
+| **🖥️ Remote Workspace** | Attach servers·NAS·VMs·dev boards (SSH) **and running Docker containers** as "additional working directories"; local + multiple remotes in one session, remote needs only a ~10 MB static binary, containers stay untouched | [→ Details](#-remote-workspace-local-brain-remote-hands) |
 | **🔗 MCP Integration** | Native MCP protocol support, connect to external tool ecosystem | — |
 | **📦 Multiple Deployment Options** | Electron desktop + Web app + Docker containerization, ready out of the box | [→ Deployment Guide](#-quick-start-5-minute-setup) |
 | **🗄️ Enterprise-Grade Data** | SQLite by default, Prisma 7 ORM for seamless switch to MySQL / PostgreSQL | — |
@@ -111,6 +111,8 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 
 **Don't move your dev environment onto the server — just let the AI reach in.** The primary working directory always stays local; remote directories are attached to the same session as "additional working directories", so the local machine and several remotes are **usable at the same time**. The Agent picks a target with `workspace="connection-name"`.
 
+Two kinds of attachable targets: **SSH hosts** (server / NAS / VM / dev board) and **running Docker containers** (devcontainers, `docker compose` services, and so on).
+
 Embedded Linux development is where this design shines: a Windows host for editing, serial console and flashing tools; one Linux VM per project for cross-compilation; the target board at runtime — all three are needed at once, and the AI only needs one entry point.
 
 | The three layers of embedded development | What it does | In GuaDa |
@@ -120,12 +122,13 @@ Embedded Linux development is where this design shines: a Windows host for editi
 | **Target board** | Device tree, rootfs, kernel modules, serial logs | **Additional remote directory** — read `dmesg`, swap `.ko` files, optionally read-only |
 
 - **Zero remote dependencies**: the execution agent is a single static binary (~10 MB, no cgo, no Node or glibc required); current builds cover linux / macOS × amd64 / arm64, so lean systems with older glibc work too.
+- **Zero container intrusion**: the agent is injected into an existing container's `/tmp` via `docker cp` and talks over a stdio pipe — no image changes, no published ports, automatic reconnect after a container restart, and GuaDa never stops or removes your container.
 - **One session, many machines**: local plus multiple remotes mounted together — cross-machine diffs, patch porting, and log-vs-source analysis all happen in one conversation.
 - **Model keys never leave your machine**: the remote side holds only a Bearer token; scheduled tasks and sub-agents inherit the session's remote bindings, so unattended runs work as well.
 - **Permissions enforced on the server side**: `readonly / workspace / unrestricted`, defaulting to "read-write inside the working directory, read-only outside", with symlink-escape protection before any write.
 - **Zero footprint on the remote**: the agent exits as soon as the connection closes — no resident daemon; real-world NAS quirks (missing `$HOME`, chrooted SFTP) already have built-in fallbacks (automatic install-dir fallback, byte-verified upload over the exec channel).
 
-> Design doc: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md)
+> Design docs: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker container workspace](docs/docker容器工作区方案.md)
 
 ---
 
@@ -181,7 +184,7 @@ pnpm run dev
 |------|------|----------|
 | **Frontend Entry** | User interaction | Vue 3, Electron (embedded Chromium), QQ/WeCom/Feishu/Discord/WeChat Bot |
 | **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway, Bridge (named pipe ↔ Electron) |
-| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, Remote Workspace (SSH), LLM Adapters |
+| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, Remote Workspace (SSH / Docker containers), LLM Adapters |
 | **Data Layer** | Persistent storage | SQLite (Prisma 7, switchable to MySQL/PostgreSQL), sqlite-vec + FTS5, file system |
 
 **Browser automation chain:** Agent decision (backend) → named-pipe Bridge → Electron controls embedded Chromium → accessibility snapshot compressed in 6 layers back → Agent continues reasoning.
@@ -206,7 +209,7 @@ ai_chat/
 │   │       ├── bot-gateway/     # Bot gateway (QQ/WeCom/Feishu/Discord/WeChat)
 │   │       ├── scheduler/       # Scheduled tasks (Cron, session isolation)
 │   │       ├── shell/           # Shell execution + lightweight sandbox
-│   │       ├── remote-workspace/ # ⭐ Remote workspace (SSH attached dirs, tool routing, deploy & RPC)
+│   │       ├── remote-workspace/ # ⭐ Remote workspace (SSH / Docker attached dirs, tool routing, deploy & RPC)
 │   │       ├── bridge/          # Named-pipe communication (↔ Electron)
 │   │       ├── tools/           # Tool orchestration
 │   │       ├── mcp-servers/     # MCP server integration
