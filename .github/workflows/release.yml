@@ -1,4 +1,4 @@
-# 三平台发布：macOS (Apple Silicon) + Windows (x64)，构建全部在 GitHub Actions 上跑
+# 三平台发布：macOS (Apple Silicon + Intel) + Windows (x64)，构建全部在 GitHub Actions 上跑
 #
 # 为什么放在这里：macOS 的包只能在 macOS 上构建（electron-builder 在 Windows 上构建 mac 目标
 # 会直接抛错 Build for macOS is supported only on macOS，dmg 依赖 hdiutil、签名依赖 codesign）。
@@ -12,9 +12,11 @@
 #   - 手动触发（Actions 页面 Run workflow）：只构建 + 上传 artifact
 #
 # 产物：
-#   - macOS arm64：GuaDa-<版本>-arm64.dmg（Intel 版暂时不做）
+#   - macOS arm64：GuaDa-<版本>-arm64.dmg（macos-latest = macOS 26 arm64）
+#   - macOS x64（Intel）：GuaDa-<版本>-x64.dmg（macos-15-intel）
 #   - Windows x64：GuaDa Setup <版本>.exe（nsis 安装包）
-#   均未签名；mac 用户首次安装的放行步骤见 docs/ELECTRON_DEPLOYMENT.md 第 4 章。
+#   Windows 未签名；mac 带自签名证书（未公证），首次安装的放行步骤见
+#   docs/ELECTRON_DEPLOYMENT.md 4.1 / 4.2。
 #
 # 镜像平台：
 #   - GitCode：建同名 release **并上传安装包**（附件走「取预签名地址 → PUT」两段式）
@@ -41,9 +43,21 @@ permissions:
 jobs:
   # ------------------------------------------------------------------ macOS
   build-macos:
-    name: macOS arm64
-    runs-on: macos-latest
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      # 一个架构失败不取消另一个：只差一个架构时不该白跑
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon：macos-latest 当前即 macOS 26 arm64
+          - arch: arm64
+            runner: macos-latest
+          # Intel：macos-13 已退役，Intel 的标准 runner 现为 macos-15-intel
+          # （更新的 macOS 26 x64 镜像是 macos-26-intel）
+          - arch: x64
+            runner: macos-15-intel
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -113,10 +127,10 @@ jobs:
       - name: 构建前端
         run: pnpm run build:electron:frontend
 
-      # 架构由 runner 架构决定（mac.target 已不再写死 arch 列表）：macos-latest 是 arm64，
-      # 原生模块也只按构建机架构准备，app 与模块架构天然一致。反例见
-      # docs/ELECTRON_DEPLOYMENT.md 2.1（1.0.1 首发在 arm64 机器上构建 x64 包，产出的坏包
-      # 让 verify:asar 的运行期烟测当场失败）。
+      # 架构由 runner 架构决定（mac.target 不写死 arch 列表）：每个 matrix 腿跑在**自己架构**的
+      # 机器上（arm64→macos-latest、x64→macos-15-intel），原生模块也只按构建机架构准备，
+      # app 与模块架构天然一致。反例见 docs/ELECTRON_DEPLOYMENT.md 2.1（1.0.1 首发在 arm64
+      # 机器上构建 x64 包，产出的坏包让 verify:asar 的运行期烟测当场失败）。
       # --publish never：package.json 的 publish.owner 仍是占位符，且 tag 构建下
       # electron-builder 的默认发布策略会尝试发布。
       # GitHub 的 macOS runner 上 dmg 偶发失败：hdiutil detach -force 返回 16（临时挂载的
@@ -129,7 +143,11 @@ jobs:
           set +e
           code=1
           for attempt in 1 2; do
-            npx electron-builder --mac --arm64 --publish never 2>&1 | tee /tmp/dmg.log
+            # 产物名带架构后缀：electron-builder 的默认命名只给非 x64 加后缀（x64 会出成
+            # GuaDa-<版本>.dmg，和 arm64 并列时分不清哪个是哪个），所以显式钉住
+            # GuaDa-<版本>-<arch>.dmg —— arm64 的既有名字不变，官网/GitCode 的链接不受影响。
+            npx electron-builder --mac --${{ matrix.arch }} --publish never \
+              -c.artifactName='GuaDa-${version}-${arch}.dmg' 2>&1 | tee /tmp/dmg.log
             code=${PIPESTATUS[0]}
             if [ "$code" -eq 0 ]; then exit 0; fi
             echo "::warning::打包第 $attempt 次失败（退出码 $code）"
@@ -192,7 +210,7 @@ jobs:
         # 真正的交付物是 Release 附件，不该被它的抖动连累，所以这里不阻断后续步骤。
         continue-on-error: true
         with:
-          name: GuaDa-macos-arm64
+          name: GuaDa-macos-${{ matrix.arch }}
           path: |
             release/*.dmg
             release/latest-mac.yml
