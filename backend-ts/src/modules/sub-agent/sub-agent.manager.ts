@@ -462,7 +462,7 @@ export class SubAgentManager implements OnModuleInit {
    *
    * 统一架构（参考 shell execute）：
    * - 始终 fire-and-forget 启动 runSubAgentStream
-   * - 前台模式：Promise.race 等待结果（5min 超时），完成直接返回，超时转后台
+   * - 前台模式：Promise.race 等待结果（20min 超时），完成直接返回，超时转后台
    * - 后台模式：不等待，pending 完成后入队通知
    * - one_shot 生命周期：结果交付后自动冻结子会话（前台=结果返回时；后台=信箱消费时）
    */
@@ -518,8 +518,8 @@ export class SubAgentManager implements OnModuleInit {
       return { subSessionId, status: "running", content: "" };
     }
 
-    // 前台模式：等待结果，超时 5 分钟转后台
-    const FOREGROUND_TIMEOUT_MS = 5 * 60 * 1000;
+    // 前台模式：等待结果，超时 20 分钟转后台
+    const FOREGROUND_TIMEOUT_MS = 20 * 60 * 1000;
     let settled = false;
     let timeoutHandle: NodeJS.Timeout | undefined;
 
@@ -585,8 +585,7 @@ export class SubAgentManager implements OnModuleInit {
         subSessionId,
         status: "running",
         content: "",
-        error:
-          "Sub-agent exceeded 5-minute foreground timeout and was moved to background.",
+        error: `Sub-agent exceeded ${FOREGROUND_TIMEOUT_MS / 60_000}-minute foreground timeout and was moved to background.`,
       };
     } finally {
       // 清理定时器
