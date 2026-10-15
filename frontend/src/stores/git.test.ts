@@ -3,10 +3,14 @@ import { setActivePinia, createPinia } from "pinia";
 
 // 只桩掉后端调用：ApiService 真实模块在加载期会读 localStorage（mock 开关），
 // node 测试环境没有它。store 的竞态逻辑全部在这里被测，无需真实服务。
+// onWorkspaceChange 带回调参数类型：测试里要取出 store 注册的事件处理器手动触发。
 const apiMocks = vi.hoisted(() => ({
   getGitStatus: vi.fn(),
   getGitBranches: vi.fn(),
-  onWorkspaceChange: vi.fn(() => () => {}),
+  onWorkspaceChange: vi.fn(
+    (_cb: (event: import("@/services/modules/WorkspaceWatcherService").FileChangeEvent) => void) =>
+      () => {},
+  ),
   setWorkspaceWatchScope: vi.fn(async () => ({ success: true })),
 }));
 vi.mock("@/services/ApiService", () => ({ apiService: apiMocks }));
@@ -44,6 +48,9 @@ describe("gitStore 会话切换竞态", () => {
     setActivePinia(createPinia());
     apiMocks.getGitStatus.mockReset();
     apiMocks.getGitBranches.mockReset();
+    // 每个测试都是新 pinia → store setup 会重新订阅一次事件；清掉调用记录，
+    // 保证 mock.calls[0] 拿到的是当前测试实例注册的处理器
+    apiMocks.onWorkspaceChange.mockClear();
   });
 
   it("切走后到达的旧会话 status 不得覆盖新会话，且不得用新会话 id 请求 branches", async () => {
@@ -91,5 +98,54 @@ describe("gitStore 会话切换竞态", () => {
     expect(apiMocks.getGitBranches).toHaveBeenCalledWith("s1");
     expect(git.isGitRepo).toBe(true);
     expect(git.branches).toHaveLength(1);
+  });
+
+  it("在飞刷新期间到达的刷新请求会尾随重跑（不丢最后一次变更）", async () => {
+    const git = useGitStore();
+
+    let resolveFirst: (v: GitStatus) => void = () => {};
+    const firstPending = new Promise<GitStatus>((r) => {
+      resolveFirst = r;
+    });
+    let calls = 0;
+    apiMocks.getGitStatus.mockImplementation(() => {
+      calls++;
+      return calls === 1 ? firstPending : Promise.resolve(repoStatus(["b.ts"]));
+    });
+    apiMocks.getGitBranches.mockResolvedValue({ branches: [] });
+
+    git.bindSession("s1");
+    await Promise.resolve();
+    expect(apiMocks.getGitStatus).toHaveBeenCalledTimes(1);
+
+    // 第一次刷新还在飞：这次请求必须被记住（旧实现直接 return 丢弃 → 计数停在旧值）
+    void git.refresh();
+    await Promise.resolve();
+    expect(apiMocks.getGitStatus).toHaveBeenCalledTimes(1);
+
+    resolveFirst(repoStatus(["a.ts"]));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(apiMocks.getGitStatus).toHaveBeenCalledTimes(2);
+    expect(git.status?.files.map((f) => f.path)).toEqual(["b.ts"]);
+  });
+
+  it("事件驱动的自动刷新不拉分支列表（省一组 git 进程），绑定/手动刷新仍拉", async () => {
+    const git = useGitStore();
+    apiMocks.getGitStatus.mockResolvedValue(repoStatus(["a.ts"]));
+    apiMocks.getGitBranches.mockResolvedValue({
+      branches: [{ name: "main", current: true }],
+    });
+
+    git.bindSession("s1");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(apiMocks.getGitBranches).toHaveBeenCalledTimes(1);
+
+    const handler = apiMocks.onWorkspaceChange.mock.calls[0][0];
+    handler({ type: "git", path: "", sessionId: "s1", timestamp: Date.now() });
+
+    await new Promise((r) => setTimeout(r, 250)); // 事件侧 200ms 防抖
+    expect(apiMocks.getGitStatus).toHaveBeenCalledTimes(2);
+    expect(apiMocks.getGitBranches).toHaveBeenCalledTimes(1); // 未增加
   });
 });

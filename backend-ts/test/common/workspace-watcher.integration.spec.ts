@@ -33,11 +33,14 @@ async function waitReady(service: WorkspaceWatcherService): Promise<void> {
  * 真实文件系统 watcher 事件非确定性（订阅武装窗口 / 负载下偶发丢失）：单次 fs 操作的事件
  * 可能被丢，周期性重复操作保证「事件最终可达」——前提是 watcher 订阅仍存活，因此该方法
  * 同时隐式验证订阅未被意外释放。
+ *
+ * @param interval 重复间隔。谓词依赖防抖通知时必须大于该防抖窗口（否则定时器被每轮重置）。
  */
 async function waitForEvent(
   mutate: () => void,
   predicate: () => boolean,
   timeout = 10000,
+  interval = 250,
 ): Promise<void> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -45,7 +48,7 @@ async function waitForEvent(
       return;
     }
     mutate();
-    await sleep(250);
+    await sleep(interval);
   }
   throw new Error("Timed out waiting for file watcher event");
 }
@@ -206,4 +209,22 @@ describe("WorkspaceWatcherService 真实文件系统集成", () => {
     );
     expect(parentEvents).toHaveLength(0);
   }, 15000);
+
+  it("仅 git scope 时工作树文件变化也推 type:'git'（编辑文件不改 .git）", async () => {
+    fs.mkdirSync(path.join(workspacePath, ".git"));
+    const events: FileChangeEvent[] = [];
+    service.startWatching("session", workspacePath, "client");
+    service.setWatchScope("session", "client", "git", true);
+    service.onFileChange("session", (event) => events.push(event));
+    await waitReady(service);
+
+    const target = path.join(childPath, "worktree.txt");
+    // 间隔取 1200ms：工作树来源的 git 信号走 1s 防抖，间隔小于它会让定时器每轮重置、永不触发
+    await waitForEvent(
+      () => fs.writeFileSync(target, String(Date.now())),
+      () => events.some((event) => event.type === "git"),
+      15000,
+      1200,
+    );
+  }, 20000);
 });

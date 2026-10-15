@@ -7,7 +7,10 @@
  * - create → stat 判定 add/addDir；update → change；delete → unlink
  * - 合并窗口内同路径只保留最新事件
  * - scope 关闭 → 立即退订；stopWatchingSession → force-close + TTL 惰性释放
- * - .git 订阅（setWatchScope 'git'）→ 防抖后推 type:'git'
+ * - git 订阅（setWatchScope 'git'）→ 订阅 .git 目录 **与工作区根目录**（工作树文件的增删改
+ *   不触碰 .git，只有根 watcher 看得到），两路来源共用防抖定时器后推 type:'git'
+ *   （.git 300ms / 工作树 1000ms）
+ * - 读命令抑制窗口只作用于 .git 来源，工作树来源一律放行
  * - onModuleDestroy → 清理全部订阅与回调
  */
 import * as fs from "fs";
@@ -240,8 +243,8 @@ describe("WorkspaceWatcherService", () => {
     fs.mkdirSync(path.join(ws, ".git"));
     service.startWatching("session", ws, "client");
     service.setWatchScope("session", "client", "git", true);
-    // ready 仅由根(file)订阅置位，git-only 不置位 → 用短等待代替 waitReady
-    await sleep(20);
+    // git-only 现在也会订阅根 watcher（工作树变化同样要刷新 git 状态）→ ready 会置位
+    await waitReady(service);
 
     const gitDir = path.join(ws, ".git");
     const gitCap = caps.find(
@@ -263,6 +266,110 @@ describe("WorkspaceWatcherService", () => {
     expect(gitCalls[0][0]).toEqual(
       expect.objectContaining({ type: "git", sessionId: "session" }),
     );
+  });
+
+  it("git scope（无 file）也监听工作树：编辑文件不改 .git，仍推 type:'git'", async () => {
+    fs.mkdirSync(path.join(ws, ".git"));
+    service.startWatching("session", ws, "client");
+    service.setWatchScope("session", "client", "git", true);
+    await waitReady(service);
+
+    // 根 watcher（工作树）+ .git watcher 各一份订阅
+    expect(caps).toHaveLength(2);
+    expect(caps.some((c) => path.resolve(c.dir) === path.resolve(ws))).toBe(true);
+
+    const listener = jest.fn();
+    service.onFileChange("session", listener);
+
+    fireParcel(caps, ws, [
+      { type: "update", path: path.join(ws, "src", "index.ts") },
+    ]);
+    await sleep(1200); // GIT_WORKTREE_DEBOUNCE_MS(1000) 窗口
+
+    const gitCalls = listener.mock.calls.filter((c) => c[0].type === "git");
+    expect(gitCalls).toHaveLength(1);
+    expect(gitCalls[0][0]).toEqual(
+      expect.objectContaining({ type: "git", sessionId: "session" }),
+    );
+  });
+
+  it("仅 file scope（无 git）时工作树变化不推 type:'git'", async () => {
+    fs.mkdirSync(path.join(ws, ".git"));
+    service.startWatching("session", ws, "client");
+    service.setWatchScope("session", "client", "file", true);
+    await waitReady(service);
+
+    const listener = jest.fn();
+    service.onFileChange("session", listener);
+
+    fireParcel(caps, ws, [{ type: "update", path: path.join(ws, "a.ts") }]);
+    await sleep(1200);
+
+    expect(listener.mock.calls.filter((c) => c[0].type === "git")).toHaveLength(0);
+    // 文件事件本身照常推送（file scope 语义未变）
+    expect(
+      listener.mock.calls.filter((c) => c[0].type === "change"),
+    ).toHaveLength(1);
+  });
+
+  it("读命令抑制窗口只作用于 .git 来源：工作树变化仍推送，.git 变化被抑制", async () => {
+    fs.mkdirSync(path.join(ws, ".git"));
+    service.startWatching("session", ws, "client");
+    service.setWatchScope("session", "client", "git", true);
+    await waitReady(service);
+
+    const listener = jest.fn();
+    service.onFileChange("session", listener);
+    const gitCalls = () =>
+      listener.mock.calls.filter((c) => c[0].type === "git");
+
+    // 全程保持「本端刚跑过读命令」，让抑制窗口在两个断言时刻都有效
+    const keepRecentRead = setInterval(() => {
+      gitActivity.lastReadAt = Date.now();
+    }, 20);
+    try {
+      // ① 工作树来源：由编辑动作直接产生，与读命令噪声无关 → 必须放行
+      fireParcel(caps, ws, [{ type: "update", path: path.join(ws, "a.ts") }]);
+      await sleep(1200);
+      expect(gitCalls()).toHaveLength(1);
+
+      // ② .git 来源：窗口内一律忽略，否则形成 读命令→事件→刷新→读命令 的死循环
+      const gitCap = caps.find(
+        (c) => path.resolve(c.dir) === path.resolve(path.join(ws, ".git")),
+      );
+      gitCap!.cb(null);
+      await sleep(400);
+      expect(gitCalls()).toHaveLength(1);
+    } finally {
+      clearInterval(keepRecentRead);
+    }
+  });
+
+  it("防抖分档：.git 来源 300ms 推送，工作树来源 1s 才推送", async () => {
+    fs.mkdirSync(path.join(ws, ".git"));
+    service.startWatching("session", ws, "client");
+    service.setWatchScope("session", "client", "git", true);
+    await waitReady(service);
+
+    const listener = jest.fn();
+    service.onFileChange("session", listener);
+    const gitCalls = () =>
+      listener.mock.calls.filter((c) => c[0].type === "git");
+
+    const gitCap = caps.find(
+      (c) => path.resolve(c.dir) === path.resolve(path.join(ws, ".git")),
+    );
+    gitCap!.cb(null);
+    await sleep(400); // GIT_DEBOUNCE_MS(300) 窗口
+    expect(gitCalls()).toHaveLength(1);
+
+    // 工作树来源用更长窗口：400ms 时尚未推送（否则批量写文件会被拆成多轮 git status）
+    fireParcel(caps, ws, [{ type: "update", path: path.join(ws, "a.ts") }]);
+    await sleep(400);
+    expect(gitCalls()).toHaveLength(1);
+
+    await sleep(800);
+    expect(gitCalls()).toHaveLength(2);
   });
 
   it("非 git 仓库：git scope 不订阅（resolveGitDir 为 null）", async () => {
