@@ -193,19 +193,25 @@ export class GitService {
   /** 每个工作目录一个 SimpleGit 实例，复用连接池 */
   private readonly gitInstances = new Map<string, SimpleGit>();
 
+  constructor() {
+    // 进程级 git 策略：读命令（status/diff/show）在 stat 缓存过期时会刷新并写 .git/index，
+    // 被 .git watcher 捕获后推送 → 前端刷新 → 再读命令，形成自激循环。GIT_OPTIONAL_LOCKS=0
+    // 让 git 不做这类 optional 的 index 落盘，从源头断掉该循环（借鉴 ZCode：其
+    // packages/services/src/git/config.ts 给每个 git 子进程都注入该变量）。
+    //
+    // 写在 process.env 而不是 simple-git 的 .env()：simple-git 的 block-unsafe-operations
+    // 插件会扫描「显式传入的 env」，EDITOR / PAGER / GIT_PAGER / GIT_SSH_COMMAND 等键命中即
+    // 抛错（Use of "EDITOR" is not permitted without enabling allowUnsafeEditor），而
+    // .env(对象) 又是**整体替换**子进程环境、必须展开 process.env —— 于是所有 git 命令 500。
+    // 该限制是 simple-git 自身的策略（git 本身没有，这也是 ZCode 能直接传 PAGER 的原因）；
+    // 走 process.env 时 simple-git 不传 env，插件只看到空对象，不做任何检查。
+    process.env.GIT_OPTIONAL_LOCKS = "0";
+  }
+
   private getGit(workspacePath: string): SimpleGit {
     let git = this.gitInstances.get(workspacePath);
     if (!git) {
-      // 不要用 .env({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }) 给读命令关 optional locks：
-      // simple-git 的 .env(对象) 是**整体替换**子进程环境，必须展开 process.env，而
-      // process.env 里的 EDITOR / PAGER / GIT_PAGER 等会命中它的 block-unsafe-operations
-      // 插件，使**所有** git 命令直接抛错（Use of "EDITOR" is not permitted without
-      // enabling allowUnsafeEditor），开发机上必现。
-      // 命令行 `--no-optional-locks` 同样不可用：它只能作全局选项放在子命令之前
-      // （`git status --no-optional-locks` 被 git 拒绝），而 simple-git 的 status()/branch()
-      // 只支持把自定义参数追加到子命令之后。
-      // 因此「读命令写 index」的自激循环继续由读命令抑制窗口兜住（见 git-activity.ts 与
-      // workspace-watcher.service.ts 的 GIT_READ_SUPPRESS_MS）。
+      // 不要在这里加 .env(...)：见构造函数里关于 simple-git 插件与 GIT_OPTIONAL_LOCKS 的说明
       git = simpleGit({
         baseDir: workspacePath,
         binary: "git",
