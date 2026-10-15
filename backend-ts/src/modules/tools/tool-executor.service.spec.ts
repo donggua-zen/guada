@@ -170,3 +170,51 @@ describe("ToolExecutor 大结果处理与 meta", () => {
     expect(res.meta).toEqual(META);
   });
 });
+
+describe("ToolExecutor 批量执行的中止契约（结果数组不留空洞）", () => {
+  let tmpRoot: string;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tool-executor-abort-spec-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("中止退出时未派发的调用也各有一条显式中断结果（空洞会让调用方逐条解引用抛错、丢整批结果）", async () => {
+    const executor = makeExecutor(100);
+    // 并发上限 10 → 12 条请求里必有槽位未被认领；abort 后 worker 直接 break
+    const session = makeSession(tmpRoot, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return { content: "done" };
+    });
+    const abortController = new AbortController();
+    const requests = Array.from({ length: 12 }, (_, i) => ({
+      id: `tc-${i}`,
+      name: "todo",
+      arguments: {},
+    }));
+
+    const pending = executor.executeBatch(
+      requests,
+      session,
+      abortController.signal,
+    );
+    setTimeout(() => abortController.abort(), 10);
+    const responses = await pending;
+
+    expect(responses).toHaveLength(12);
+    expect(responses.every((res) => !!res)).toBe(true);
+    // 未派发的槽位：显式中断结果 + 原 toolCallId（调用方据此建 tool 结果消息）
+    const untouched = responses.filter((res) =>
+      String(res.content).includes("aborted before dispatch"),
+    );
+    expect(untouched.length).toBeGreaterThan(0);
+    for (const res of untouched) {
+      expect(res.isError).toBe(true);
+      expect(res.outcome).toBe("error");
+      expect(requests.some((req) => req.id === res.toolCallId)).toBe(true);
+    }
+  });
+});

@@ -27,6 +27,7 @@ import {
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
+import { SYNTHETIC_TOOL_INTERRUPTED_TEXT } from '../utils/tool-pairing.util';
 import { CorruptSessionLogError } from './errors';
 import type {
   Turn,
@@ -57,6 +58,13 @@ export class JsonlMessageService implements IMessageStore {
    * LRU 会与真实活跃度脱节——冷的占坑挤掉热的导致抖动）。
    */
   private stateCache = new Map<string, { state: ReplayState; lastActiveAt: number }>();
+  /**
+   * 本进程内已冷加载过的会话（冷加载收口只在该进程对某会话的**首次**加载时执行）。
+   * 为什么需要这个门：rebuildState 不只在进程启动时触发——stateCache 的 30 分钟 TTL
+   * 过期会在进程存活期间重建，此时可能有在途回合（活跃写路径），无条件收口会把正常
+   * 进行的回合误判为中断并闭合。而进程刚启动时的首次加载不存在在途回合，语义安全。
+   */
+  private coldLoadedSessions = new Set<string>();
   /** 缓存 TTL：30 分钟未活动即逐出（写入即续期，进行中的长对话不会误逐） */
   private static CACHE_TTL_MS = 30 * 60 * 1000;
   /** 周期清扫间隔（远小于 TTL，及时释放停更会话内存） */
@@ -157,9 +165,31 @@ export class JsonlMessageService implements IMessageStore {
    * 冷加载先修复活跃段 torn 尾（坏行截断 + 合成 interrupted），保证后续增量读取 seq 连续。
    */
   private async rebuildState(sessionId: string): Promise<ReplayState> {
+    // 首次加载标记必须在任何 append/fold 之前置位：收口过程中会经
+    // getNextSeq → getState → rebuildState 递归回到这里，靠该标记止步（否则无限递归）。
+    const firstLoadInProcess = !this.coldLoadedSessions.has(sessionId);
+    this.coldLoadedSessions.add(sessionId);
+
     // 先修复活跃段 torn 尾（seq 缺口 → 抛 CorruptSessionLogError，fail-fast）
     await this.repairActiveSegmentIfNeeded(sessionId);
 
+    const state = await this.readStateFromSnapshotOrReplay(sessionId);
+
+    // 冷加载收口：事件流本身完整、但停在「回合未闭合」的干净中断点（进程被杀在两次
+    // append 之间、结果批未落盘等）——此时 torn 尾修复不触发，历史会停在
+    // assistant(有 tool_calls) 缺 tool 消息的形状上，此后每次请求都被上游 400。
+    // 与 torn 尾修复共用收口逻辑（补齐未配对调用 + 闭合回合），修复结果落盘并反映到折叠态。
+    if (firstLoadInProcess && state.currentTurnId) {
+      const closeEvents = await this.closeInterruptedTurn(sessionId, state);
+      if (closeEvents.length > 0) foldEvents(closeEvents, state);
+    }
+    return state;
+  }
+
+  /** 快照 + 跨卷增量（衔接校验失败回退全量重放） */
+  private async readStateFromSnapshotOrReplay(
+    sessionId: string,
+  ): Promise<ReplayState> {
     const snapshot = await this.backend.readSnapshot(sessionId);
     if (!snapshot) {
       const events = await this.backend.getAllEvents(sessionId);
@@ -226,57 +256,142 @@ export class JsonlMessageService implements IMessageStore {
 
     // 2. 未闭合回合 → 合成 tool 错误结果 + turn/finish(interrupted)（append 走正常写路径：落盘 + 增量 fold 缓存）
     const state = foldEvents(events, createInitialState());
-    if (state.currentTurnId) {
-      // 对齐 DSH interruptedTurnClosers：为未配对的 tool-call 合成显式错误结果，
-      // 使恢复后的 transcript 平衡（模型看到"被中断的工具 = 错误结果"，决定是否只读/幂等重试）
-      const currentTurnMessages = state.messages.filter(
-        (n) => n.turnId === state.currentTurnId,
-      );
-      if (currentTurnMessages.length > 0) {
-        const paired = new Set<string>();
-        for (const m of currentTurnMessages) {
-          if (m.role !== 'tool') continue;
-          for (const b of m.content) {
-            if (b.type === 'tool-result') paired.add(b.toolCallId);
-          }
-        }
-        for (const m of currentTurnMessages) {
-          if (m.role !== 'assistant') continue;
-          for (const b of m.content) {
-            if (b.type !== 'tool-call' || paired.has(b.toolCallId)) continue;
-            await this.append(sessionId, {
-              type: 'tool/result',
-              seq: await this.getNextSeq(sessionId),
-              time: Date.now(),
-              data: {
-                messageId: generateOrderedMessageId('m'),
-                toolCallId: b.toolCallId,
-                name: b.name,
-                content:
-                  'Error: tool call interrupted before dispatch. Retry only read-only/idempotent operations.',
-                isError: true,
-                metadata: {},
-              },
-            });
-            this.logger.warn(
-              `[jsonl] synthesized interrupted tool/result for ${sessionId} call=${b.toolCallId}`,
-            );
-          }
+    await this.closeInterruptedTurn(sessionId, state);
+  }
+
+  /**
+   * 收口未闭合回合（torn 尾修复与冷加载收口共用）。
+   *
+   * 对齐 DSH interruptedTurnClosers：为未配对的 tool-call 合成显式错误结果，使恢复后的
+   * transcript 配对平衡（模型看到「被中断的工具 = 错误结果」，自行决定是否只读/幂等重试），
+   * 再写 turn/finish(interrupted) 闭合回合。
+   *
+   * 两类残骸共用本逻辑：torn 尾（事件流被截断）与干净中断点（事件流完整但停在两次
+   * append 之间）——对配对与回合闭合的要求完全相同。
+   *
+   * seq 基准取一次后顺序递增：冷加载语义下无并发写者，与 beginTurnInternal 同款做法。
+   *
+   * @returns 已落盘的事件（调用方按需 fold 进自己的折叠态）
+   */
+  private async closeInterruptedTurn(
+    sessionId: string,
+    state: ReplayState,
+  ): Promise<BaseEvent[]> {
+    if (!state.currentTurnId) return [];
+    const turnId = state.currentTurnId;
+
+    const pending: Array<Pick<BaseEvent, "type" | "data">> = [];
+    const currentTurnMessages = state.messages.filter((n) => n.turnId === turnId);
+    if (currentTurnMessages.length > 0) {
+      const paired = new Set<string>();
+      for (const m of currentTurnMessages) {
+        if (m.role !== 'tool') continue;
+        for (const b of m.content) {
+          if (b.type === 'tool-result') paired.add(b.toolCallId);
         }
       }
-      await this.append(sessionId, {
-        type: 'turn/finish',
-        seq: await this.getNextSeq(sessionId),
-        time: Date.now(),
-        data: {
-          turnId: state.currentTurnId,
-          finishReason: 'interrupted',
-        },
-      });
-      this.logger.warn(
-        `[jsonl] synthesized interrupted turn/finish for ${sessionId} turn=${state.currentTurnId}`,
-      );
+      for (const m of currentTurnMessages) {
+        if (m.role !== 'assistant') continue;
+        for (const b of m.content) {
+          if (b.type !== 'tool-call' || paired.has(b.toolCallId)) continue;
+          pending.push({
+            type: 'tool/result',
+            data: {
+              messageId: generateOrderedMessageId('m'),
+              toolCallId: b.toolCallId,
+              name: b.name,
+              content: SYNTHETIC_TOOL_INTERRUPTED_TEXT,
+              isError: true,
+              metadata: {},
+            },
+          });
+        }
+      }
     }
+    pending.push({
+      type: 'turn/finish',
+      data: {
+        turnId,
+        finishReason: 'interrupted',
+      },
+    });
+
+    const appended: BaseEvent[] = [];
+    let nextSeq = await this.getNextSeq(sessionId);
+    for (const item of pending) {
+      const event: BaseEvent = {
+        type: item.type,
+        seq: nextSeq++,
+        time: Date.now(),
+        data: item.data,
+      };
+      await this.append(sessionId, event);
+      appended.push(event);
+    }
+    this.logger.warn(
+      `[jsonl] synthesized interrupted turn close for ${sessionId} turn=${turnId} ` +
+        `(${appended.length - 1} synthesized tool/result, reason=interrupted)`,
+    );
+    return appended;
+  }
+
+  /**
+   * 修复当前未闭合回合末尾的悬空 tool-call（命中「配对非法」上游错误后的自愈入口）。
+   *
+   * 只修**回合末条 assistant 消息**上的悬空调用，两条约束决定：
+   * - 归属：消息事件按当前回合游标归入，补写的 tool/result 必须落在这个回合里才对；
+   * - 相邻：事件只能追加在末尾，只有「悬空调用属于末条消息」时补写结果才紧邻调用，
+   *   否则结果会隔在别的消息之后（对严格上游仍是非法形状）。
+   * 已闭合回合里的悬空调用在此无法安全补写（会被折叠忽略或错归到当前回合），
+   * 那类残骸由请求侧 tool-pairing.guard 在出站视图里就地补占位结果。
+   *
+   * @returns 补写的合成结果条数（0 = 无开放回合或无悬空调用）
+   */
+  async repairDanglingToolCalls(sessionId: string): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const state = await this.getState(sessionId);
+      const turnId = state.currentTurnId;
+      if (!turnId) return 0;
+      const last = state.messages[state.messages.length - 1];
+      if (!last || last.role !== 'assistant' || last.turnId !== turnId) return 0;
+
+      const paired = new Set<string>();
+      const dangling: Array<{ toolCallId: string; name: string }> = [];
+      for (const message of state.messages) {
+        if (message.turnId !== turnId || message.role !== 'tool') continue;
+        for (const block of message.content) {
+          if (block.type === 'tool-result') paired.add(block.toolCallId);
+        }
+      }
+      for (const block of last.content) {
+        if (block.type !== 'tool-call' || paired.has(block.toolCallId)) continue;
+        if (dangling.some((d) => d.toolCallId === block.toolCallId)) continue;
+        dangling.push({ toolCallId: block.toolCallId, name: block.name });
+      }
+      if (dangling.length === 0) return 0;
+
+      let nextSeq = await this.getNextSeq(sessionId);
+      for (const call of dangling) {
+        await this.append(sessionId, {
+          type: 'tool/result',
+          seq: nextSeq++,
+          time: Date.now(),
+          data: {
+            messageId: generateOrderedMessageId('m'),
+            toolCallId: call.toolCallId,
+            name: call.name,
+            content: SYNTHETIC_TOOL_INTERRUPTED_TEXT,
+            isError: true,
+            metadata: {},
+          },
+        });
+      }
+      this.logger.warn(
+        `[jsonl] repaired ${dangling.length} dangling tool call(s) on open turn ${turnId} of ${sessionId} ` +
+          `(calls=${dangling.map((d) => d.toolCallId).join(',')})`,
+      );
+      return dangling.length;
+    });
   }
 
   /**

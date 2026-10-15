@@ -211,8 +211,40 @@ export function isContextWindowExceeded(error: any): boolean {
   );
 }
 
-// ==================== Core retry loop ====================
+/**
+ * 检测「工具调用配对非法」错误（上游对 wire 形状的硬校验）。
+ *
+ * 触发条件：assistant 消息声明了 tool_calls，但后面没有回应其 tool_call_id 的
+ * tool 消息（或数量不足）。成因是历史被写脏——assistant 与其工具结果分两批落盘，
+ * 中间中断即留下悬空调用（见 agent-engine 的 closeToolPairing 收口）。
+ *
+ * 这类错误退避重试无用（重试发的是同一份历史），正确动作是修复历史里的悬空调用后
+ * 重试一次（见 compaction-coordinator 的配对恢复路径）；请求侧还有 tool-pairing.guard
+ * 兜底，正常情况下此错误不该再出现，命中即为诊断信号。
+ */
+export function isToolPairingInvalid(error: any): boolean {
+  if (!error) return false;
 
+  const rawMessages = [
+    error?.message,
+    error?.error?.message,
+    error?.error?.error?.message,
+    typeof error === "string" ? error : undefined,
+  ].filter(Boolean);
+  const msg = rawMessages.join(" ").toLowerCase();
+
+  return (
+    // OpenAI / DeepSeek / 三方网关（Console Go）实测文案
+    msg.includes("insufficient tool messages") ||
+    msg.includes("must be followed by tool messages") ||
+    // 变体：tool 消息本身缺失或无法关联（Anthropic / Gemini 侧措辞）
+    msg.includes("tool_calls") &&
+      (msg.includes("tool_call_id") || msg.includes("tool_use")) &&
+      (msg.includes("must be") || msg.includes("missing") || msg.includes("insufficient"))
+  );
+}
+
+// ==================== Core retry loop ====================
 /**
  * Execute an async function with retry on timeout/rate_limited/network_error.
  *

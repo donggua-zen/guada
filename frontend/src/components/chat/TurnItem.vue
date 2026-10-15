@@ -217,6 +217,13 @@
         class="mt-2 text-sm text-gray-400 dark:text-gray-500">
         {{ t('chat.turn.manuallyTerminated') }}
       </div>
+
+      <!-- 中断收尾提示：冷加载/自愈把停在中断点的回合闭合（工具配对已补齐），
+           而不是失败——用户需要知道"这条回复是被打断的，可以继续" -->
+      <div v-if="assistantMetadata.finishReason === 'interrupted'"
+        class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+        {{ t('chat.turn.interruptedRecovered') }}
+      </div>
     </template>
 
     <!-- 操作按钮：移到门外、置于状态提示之后——控制条永远在最下方。

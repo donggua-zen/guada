@@ -10,6 +10,7 @@ import type { LLMCompletionParams } from "../llm-core/types/llm.types";
 import type { Message } from "../../common/types/conversation.types";
 import type { ISessionContext } from "./session-context";
 import { ToolExecutor } from "../tools/tool-executor.service";
+import { ensureToolPairing } from "../llm-core/tool-pairing.guard";
 
 export interface BuildCompletionParamsOptions {
   messages: Message[];
@@ -31,8 +32,10 @@ export function buildSessionLlmParams(
     model: modelConfig.modelName,
     // envelope：system 提示词独立字段（协议槽位由 adapter 映射，对齐 DSH LlmCallConfig.system）
     system: ctx.getSystemText(),
-    // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）
-    messages: opts.messages,
+    // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）。
+    // 出站前统一做工具配对兜底（主请求/摘要/记忆同步共用本组装器）：
+    // 历史里残留的「有 tool_calls 无 tool 消息」脏形状不报送上游 400，而是补占位结果。
+    messages: ensureToolPairing(opts.messages, { sessionId: ctx.sessionId }),
     tools: ToolExecutor.toFlatToolDefs(ctx.getResolvedPlugins()),
     temperature: modelConfig.config.temperature,
     topP: modelConfig.config.topP,
