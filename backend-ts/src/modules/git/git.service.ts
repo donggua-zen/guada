@@ -196,25 +196,21 @@ export class GitService {
   private getGit(workspacePath: string): SimpleGit {
     let git = this.gitInstances.get(workspacePath);
     if (!git) {
+      // 不要用 .env({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }) 给读命令关 optional locks：
+      // simple-git 的 .env(对象) 是**整体替换**子进程环境，必须展开 process.env，而
+      // process.env 里的 EDITOR / PAGER / GIT_PAGER 等会命中它的 block-unsafe-operations
+      // 插件，使**所有** git 命令直接抛错（Use of "EDITOR" is not permitted without
+      // enabling allowUnsafeEditor），开发机上必现。
+      // 命令行 `--no-optional-locks` 同样不可用：它只能作全局选项放在子命令之前
+      // （`git status --no-optional-locks` 被 git 拒绝），而 simple-git 的 status()/branch()
+      // 只支持把自定义参数追加到子命令之后。
+      // 因此「读命令写 index」的自激循环继续由读命令抑制窗口兜住（见 git-activity.ts 与
+      // workspace-watcher.service.ts 的 GIT_READ_SUPPRESS_MS）。
       git = simpleGit({
         baseDir: workspacePath,
         binary: "git",
         maxConcurrentProcesses: 1,
-      })
-        // 读命令（status/diff/show）关闭 optional locks → 不刷新、不写 .git/index，
-        // 从源头断掉「status 写 index → .git watcher → 前端刷新 → status」的自激循环
-        // （借鉴 ZCode：packages/services/src/git/config.ts）。写操作（add/commit/checkout/push）
-        // 不受影响 —— optional locks 只关掉读操作顺带的 index 落盘。
-        //
-        // 必须展开 process.env：simple-git 的 .env(对象) 是**整体替换**子进程环境
-        // （内部直接赋值 _executor.env，spawn 时作为完整 env 传入），只传增量会让子进程
-        // 丢掉 PATH 等变量、连 git 都找不到。
-        .env({
-          ...process.env,
-          GIT_OPTIONAL_LOCKS: "0",
-          GIT_PAGER: "cat",
-          PAGER: "cat",
-        });
+      });
       this.gitInstances.set(workspacePath, git);
     }
     return git;
@@ -244,8 +240,6 @@ export class GitService {
   async getStatus(workspacePath: string): Promise<GitStatusResult> {
     const git = this.getGit(workspacePath);
     markGitRead(); // 读命令打点：抑制 .git watcher 对本命令引发的 index 刷新噪声
-    // 注：实例已设 GIT_OPTIONAL_LOCKS=0（见 getGit），正常情况下本命令不再写 index；
-    // 打点保留为保险，且抑制窗口只作用于 .git 来源事件（工作树来源一律放行）。
     const status = await git.status();
 
     // 行数统计（顶部聚合 +N -M 用）：
