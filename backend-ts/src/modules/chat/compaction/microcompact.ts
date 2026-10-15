@@ -9,7 +9,8 @@
  *   C. 思考剥离按轮次原子（整轮全清或全留）；工具裁剪按单条候选条件。
  * - 最小收益门槛由调用方按 MICROCOMPACT_MIN_TOKEN_SAVINGS 判定：不达标整批放弃，
  *   不为一两个字符的收益打断前缀缓存。
- * - 收益范围：思考剥离只对 fullReasoningRelay（deepseek-v4 系）模型真实有效——其余模式下
+ * - 收益范围：思考剥离只对 fullReasoningRelay（DeepSeek V4/V4.1 系，含改名后的
+ *   deepseek-flash / deepseek-pro）模型真实有效——其余模式下
  *   读取管线（message-transform.pipeline 的 reasoningPolicyStep）已把历史思考从视图剥离，
  *   此处无块可剥；非思考模式同理。这是预期行为，不是漏判。
  */

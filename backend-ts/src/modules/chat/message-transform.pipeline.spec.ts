@@ -284,7 +284,7 @@ describe('reasoning-policy step — 最后一轮判定（currentTurnId）', () =
   });
 });
 
-describe('reasoning-policy step — fullReasoningRelay 例外（deepseek-v4 系）', () => {
+describe('reasoning-policy step — fullReasoningRelay 例外（deepseek-v4/v4.1 系）', () => {
   const relayCtx = (overrides: Partial<TransformContext> = {}): TransformContext => ({
     ...baseCtx,
     thinkingMode: true,
@@ -319,6 +319,12 @@ describe('isFullReasoningRelayModel', () => {
     'deepseek-v4',
     'DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-0324',
+    // 2026-09 官方改名后的 canonical 名（V4.1 Flash / V4 Pro）
+    'deepseek-flash',
+    'DeepSeek-Flash',
+    'deepseek-ai/DeepSeek-Flash',
+    'deepseek-pro',
+    'deepseek-ai/DeepSeek-Pro',
   ])('命中：%s', (name) => {
     expect(isFullReasoningRelayModel(name)).toBe(true);
   });
@@ -327,6 +333,7 @@ describe('isFullReasoningRelayModel', () => {
     'provider/deepseek_v4-turbo',
     'deepseek-chat',
     'deepseek-reasoner',
+    'deepseek-v3-pro',
     'DeepSeek-V3.2',
     'deepseek-ai/DeepSeek-R1',
     'gpt-4o',
